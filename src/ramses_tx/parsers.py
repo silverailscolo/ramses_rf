@@ -2166,9 +2166,9 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
             from .ramses import _22F1_MODE_ITHO as _33D9_FAN_MODE
 
             try:
-                assert (
-                    payload[4:6] in _33D9_FAN_MODE
-                ), f"unknown fan_mode: {payload[2:4]}"
+                assert payload[4:6] in _33D9_FAN_MODE, (
+                    f"unknown fan_mode: {payload[2:4]}"
+                )
             except AssertionError as err:
                 _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
             fan_mode = _33D9_FAN_MODE.get(payload[4:6], f"unknown_{payload[4:6]}")
