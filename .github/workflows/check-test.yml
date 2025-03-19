@@ -3,7 +3,7 @@ name: Testing
 
 on:
   push:
-    branches: [ "master", "stable" ]
+    branches: [ "master", "stable", "eb-ventura-package" ]
     paths: [
       ".github/workflows/check-test.yml",
       "src/**.py",

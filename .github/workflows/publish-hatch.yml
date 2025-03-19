@@ -37,10 +37,6 @@ jobs:
           python -m pip install build
           python -m build
 
-      - name: Publish package
-        uses: pypa/gh-action-pypi-publish@fb13cb306901256ace3dab689990e13a5550ffaa
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
+      # Publish package disabled for ventura-package branch, only github testing
 
       - run: echo "🍏 This job's status is ${{ job.status }}."

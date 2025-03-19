@@ -53,9 +53,9 @@ python client.py monitor /dev/ttyUSB0 -o packet.log
 
 To send a command to a device, type:
 ```
-python client.py execute /dev/ttyUSB0 -x “_verb [seqn] addr0 [addr1 [addr2]] code payload"
+python client.py execute /dev/ttyUSB0 -x "_verb [seqn] addr0 [addr1 [addr2]] code payload"
 ```
-Note: whitespace before I, skip empty addresses, don't enter length. Example:
+Note: add whitespace before I verb: [PP]|[RQ]|[ I]; skip empty addresses; don't enter length. Example:
 ```
 python3 client.py execute /dev/cu.usbmodemFD131 -x " I 29:091138 32:022222 22F1 000406"
 ```
