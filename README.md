@@ -1,6 +1,6 @@
-![ruff](https://github.com/zxdavb/ramses_rf/actions/workflows/check-lint.yml/badge.svg)
-![mypy](https://github.com/zxdavb/ramses_rf/actions/workflows/check-type.yml/badge.svg)
-![pytest](https://github.com/zxdavb/ramses_rf/actions/workflows/check-test.yml/badge.svg)
+![ruff](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-lint.yml/badge.svg)
+![mypy](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-type.yml/badge.svg)
+![pytest](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-test.yml/badge.svg)
 
 # Cloned Beta
 This is a beta release from a cloned repository to test the Vasco and ClimaRad PRs from @silverailscolo.
