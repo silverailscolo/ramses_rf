@@ -8,7 +8,7 @@
   dynamic = ["version"]
   description = "A stateful RAMSES-II protocol decoder & analyser."
   readme = "README.md"
-  authors = [{name = "David Bonnes", email = "zxdavb@bonnes.me"}]
+  authors = [{name = "David Bonnes", email = "zxdavb@bonnes.me"},{name = "silverailscolo", email = "dcc2@ebroerse.nl"}]
   maintainers = [{name = "David Bonnes", email = "zxdavb@bonnes.me"}]
   dependencies = [
     "colorlog>=6.8.2",
