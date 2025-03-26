@@ -289,16 +289,17 @@ class HvacDisplayRemote(HvacRemote):  # DIS
     #     )
 
 
-class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
+class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
     """The FAN (ventilation) class.
 
-    The cardinal code are 31D9, 31DA.  Signature is RP/31DA.
+    The cardinal code are 31D9, 31DA, 12A0.  Signature is RP/31DA.
     """
 
     # Itho Daalderop (NL)
     # Heatrae Sadia (UK)
     # Nuaire (UK), e.g. DRI-ECO-PIV
     # Orcon/Ventiline
+    # ClimaRad (NL)
 
     _SLUG: str = DevType.FAN
 
@@ -379,7 +380,18 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
 
     @property
     def indoor_humidity(self) -> float | None:
-        return self._msg_value(Code._31DA, key=SZ_INDOOR_HUMIDITY)
+        """
+        Extract humidity value
+        :return: percentage <= 1.0
+
+        FAN Minibox: sends as 12A0 float ; Ventura send as 31DA tuple
+        """
+        for c in (Code._12A0, Code._31DA):
+            if c in self._msgs:
+                for k, v in self._msgs[c].payload.items():
+                    if k == SZ_INDOOR_HUMIDITY and float(v) > 0:
+                        return float(v)
+        return None
 
     @property
     def indoor_temp(self) -> float | None:

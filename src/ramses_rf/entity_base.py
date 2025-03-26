@@ -322,7 +322,9 @@ class _MessageDB(_Entity):
                 msg = max(msgs.values()) if msgs else None
         elif isinstance(code, tuple):
             msgs = [m for m in self._msgs.values() if m.code in code]
-            msg = max(msgs) if msgs else None
+            msg = (
+                max(msgs) if msgs else None
+            )  # return highest value found in code:value pairs
         else:
             msg = self._msgs.get(code)
 
