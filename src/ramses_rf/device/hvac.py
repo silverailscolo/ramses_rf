@@ -52,7 +52,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 # TODO: Switch this module to utilise the (run-time) decorator design pattern...
 # - https://refactoring.guru/design-patterns/decorator/python/example
 # - will probably need setattr()?
-# BaseCompnents: FAN (HRU, PIV, EXT), SENsor (CO2, HUM, TEMp), SWItch (RF gateway?)
+# BaseComponents: FAN (HRU, PIV, EXT), SENsor (CO2, HUM, TEMp), SWItch (RF gateway?)
 # - a device could be a combination of above (e.g. Spider Gateway)
 # Track binding for SWI (HA service call) & SEN (HA trigger) to FAN/other
 
@@ -363,8 +363,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
         return self._msg_value(Code._31DA, key=SZ_CO2_LEVEL)
 
     @property
-    def exhaust_fan_speed(self) -> float | None:  # was from: (Code._31D9, Code._31DA)
-        return self._msg_value(Code._31DA, key=SZ_EXHAUST_FAN_SPEED)
+    def exhaust_fan_speed(self) -> float | None:  # need Code._31D9 for some fans
+        for c in (Code._31DA, Code._31D9):
+            if c in self._msgs:
+                for k, v in self._msgs[c].payload.items():
+                    if k == SZ_EXHAUST_FAN_SPEED:
+                        return float(v)  # pick either
+        return None
 
     @property
     def exhaust_flow(self) -> float | None:
@@ -384,7 +389,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
         Extract humidity value
         :return: percentage <= 1.0
 
-        FAN Minibox: sends as 12A0 float ; Ventura send as 31DA tuple
+        FAN Minibox: sends as 12A0 float ; Ventura sends as 31DA tuple
         """
         for c in (Code._12A0, Code._31DA):
             if c in self._msgs:
@@ -440,7 +445,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             SZ_EXHAUST_FAN_SPEED: self.exhaust_fan_speed,
             **{
                 k: v
-                for code in [c for c in (Code._31D9, Code._31DA) if c in self._msgs]
+                for code in [c for c in (Code._12A0, Code._31D9, Code._31DA) if c in self._msgs]
                 for k, v in self._msgs[code].payload.items()
                 if k != SZ_EXHAUST_FAN_SPEED
             },
