@@ -450,7 +450,7 @@ class _FileTransportAbstractor:
         self._loop = loop or asyncio.get_event_loop()
 
 
-class _PortTransportAbstractor(serial_asyncio.SerialTransport):  # type: ignore[misc, no-any-unimported]
+class _PortTransportAbstractor(serial_asyncio.SerialTransport):
     """Do the bare minimum to abstract a transport from its underlying class."""
 
     serial: Serial  # type: ignore[no-any-unimported]
@@ -801,7 +801,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
             self._reader_task.cancel()
 
 
-class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):
+class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  # type: ignore[misc]
     """Send/receive packets async to/from evofw3/HGI80 via a serial port.
 
     See: https://github.com/ghoti57/evofw3
@@ -970,15 +970,15 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):
     def _write(self, data: bytes) -> None:
         self.serial.write(data)
 
-    def _abort(self, exc: ExceptionT) -> None:  # used by serial_asyncio.SerialTransport
-        super()._abort(exc)
+    def _abort(self, exc: ExceptionT) -> None:  # type: ignore[override]  # used by serial_asyncio.SerialTransport
+        super()._abort(exc)  # type: ignore[argtype]
 
         if self._init_task:
             self._init_task.cancel()
         if self._leaker_task:
             self._leaker_task.cancel()
 
-    def _close(self, exc: exc.RamsesException | None = None) -> None:
+    def _close(self, exc: exc.RamsesException | None = None) -> None:  # type: ignore[override]
         """Close the transport (cancel any outstanding tasks)."""
 
         super()._close(exc)
@@ -1315,7 +1315,7 @@ async def transport_factory(
     if os.name == "nt" or ser_instance.portstr[:7] in ("rfc2217", "socket:"):
         issue_warning()  # TODO: add tests for these...
 
-    transport = PortTransport(
+    transport = PortTransport(  # type: ignore[assignment]
         ser_instance,
         protocol,
         disable_sending=bool(disable_sending),
