@@ -363,7 +363,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
         return self._msg_value(Code._31DA, key=SZ_CO2_LEVEL)
 
     @property
-    def exhaust_fan_speed(self) -> float | None:  # need Code._31D9 for some fans
+    def exhaust_fan_speed(
+        self,
+    ) -> float | None:  # need Code._31D9 for some fans speed + mode
         for c in (Code._31DA, Code._31D9):
             if c in self._msgs:
                 for k, v in self._msgs[c].payload.items():
@@ -394,7 +396,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             if isinstance(
                 self._msgs[Code._12A0].payload, list
             ):  # FAN Ventura sends a list, use element [0]
-                for k, v in self._msgs[Code._12A0].payload[0]:
+                for k, v in self._msgs[Code._12A0].payload[0].items():
                     if k == SZ_INDOOR_HUMIDITY:
                         return float(v)
             for k, v in self._msgs[Code._12A0].payload.items():
@@ -408,7 +410,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             if isinstance(
                 self._msgs[Code._12A0].payload, list
             ):  # FAN Ventura sends RH/temps as a list, use element [0] for indoor_temp
-                for k, v in self._msgs[Code._12A0].payload[0]:
+                for k, v in self._msgs[Code._12A0].payload[0].items():
                     if k == SZ_TEMPERATURE:
                         return float(v)
             for k, v in self._msgs[Code._12A0].payload.items():
@@ -457,7 +459,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             if isinstance(
                 self._msgs[Code._12A0].payload, list
             ):  # FAN Ventura sends RH/temps as a list, use element [2] for supply_temp
-                for k, v in self._msgs[Code._12A0].payload[2]:
+                for k, v in self._msgs[Code._12A0].payload[2].items():
                     if k == SZ_TEMPERATURE:
                         return float(v)
         return self._msg_value(Code._31DA, key=SZ_SUPPLY_TEMP)

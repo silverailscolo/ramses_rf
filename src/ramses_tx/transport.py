@@ -117,7 +117,7 @@ try:
 
     _LOGGER.debug("Using pyserial-asyncio-fast in place of pyserial-asyncio")
 except ImportError:
-    import serial_asyncio  # type: ignore[import-not-found, import-untyped, unused-ignore]
+    import serial_asyncio  # type: ignore[import-not-found, import-untyped, unused-ignore, no-redef]
 
 
 # For linux, use a modified version of comports() to include /dev/serial/by-id/* links
@@ -450,7 +450,7 @@ class _FileTransportAbstractor:
         self._loop = loop or asyncio.get_event_loop()
 
 
-class _PortTransportAbstractor(serial_asyncio.SerialTransport):  # type: ignore[misc, no-any-unimported]
+class _PortTransportAbstractor(serial_asyncio.SerialTransport):  # type: ignore[no-any-unimported]
     """Do the bare minimum to abstract a transport from its underlying class."""
 
     serial: Serial  # type: ignore[no-any-unimported]

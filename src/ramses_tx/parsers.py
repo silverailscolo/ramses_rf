@@ -1527,7 +1527,7 @@ def parser_22e9(payload: str, msg: Message) -> Mapping[str, float | str | None]:
 
 # fan_speed (switch_mode), HVAC
 def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
-    # ClimaRad VenturaV1x HRU does not send 22F1 for speed, uses 22F4
+    # ClimaRad VenturaV1x HRU does not send 22F1 for speed, uses 22F4 for mode + step
 
     try:
         assert payload[0:2] in ("00", "63")
