@@ -539,9 +539,9 @@ def parse_co2_level(value: HexStr4) -> PayDictT.CO2_LEVEL:
 
 
 def parse_humidity_element(value: str, index: str) -> PayDictT._12A0:
-    """Return the relative humidity (%) and 2 temperatures
+    """Return the relative humidity (%) and 2 temperatures.
 
-    The result may include current temperature ('C) and include dewpoint temperature ('C).
+    The result may include current temperature ('C) and dewpoint temperature ('C).
     """
     if index == "01":
         return _parse_hvac_humidity(SZ_REL_HUMIDITY, value[:2], value[2:6], value[6:10])  # type: ignore[return-value]
