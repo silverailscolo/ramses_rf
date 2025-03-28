@@ -52,7 +52,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 # TODO: Switch this module to utilise the (run-time) decorator design pattern...
 # - https://refactoring.guru/design-patterns/decorator/python/example
 # - will probably need setattr()?
-# BaseCompnents: FAN (HRU, PIV, EXT), SENsor (CO2, HUM, TEMp), SWItch (RF gateway?)
+# BaseComponents: FAN (HRU, PIV, EXT), SENsor (CO2, HUM, TEMp), SWItch (RF gateway?)
 # - a device could be a combination of above (e.g. Spider Gateway)
 # Track binding for SWI (HA service call) & SEN (HA trigger) to FAN/other
 
@@ -292,7 +292,7 @@ class HvacDisplayRemote(HvacRemote):  # DIS
 class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
     """The FAN (ventilation) class.
 
-    The cardinal code are 31D9, 31DA, 12A0.  Signature is RP/31DA.
+    The cardinal codes are 31D9, 31DA, 12A0.  Signature is RP/31DA.
     """
 
     # Itho Daalderop (NL)
@@ -363,8 +363,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
         return self._msg_value(Code._31DA, key=SZ_CO2_LEVEL)
 
     @property
-    def exhaust_fan_speed(self) -> float | None:  # was from: (Code._31D9, Code._31DA)
-        return self._msg_value(Code._31DA, key=SZ_EXHAUST_FAN_SPEED)
+    def exhaust_fan_speed(self) -> float | None:  # need Code._31D9 for some fans
+        for c in (Code._31DA, Code._31D9):
+            if c in self._msgs:
+                for k, v in self._msgs[c].payload.items():
+                    if k == SZ_EXHAUST_FAN_SPEED:
+                        return float(v)  # pick either code
+        return None
 
     @property
     def exhaust_flow(self) -> float | None:
@@ -386,19 +391,32 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
         :return: percentage <= 1.0
         """
         if Code._12A0 in self._msgs:
-            if (
-                type(self._msgs[Code._12A0].payload) is list
+            if isinstance(
+                self._msgs[Code._12A0].payload, list
             ):  # FAN Ventura sends a list, use element [0]
                 for k, v in self._msgs[Code._12A0].payload[0]:
                     if k == SZ_INDOOR_HUMIDITY:
                         return float(v)
             for k, v in self._msgs[Code._12A0].payload.items():
-                if k == SZ_INDOOR_HUMIDITY:
+                if k == SZ_INDOOR_HUMIDITY:  # ClimaRad minibox FAN sends hum in 12A0
                     return float(v)
         return self._msg_value(Code._31DA, key=SZ_INDOOR_HUMIDITY)
 
     @property
     def indoor_temp(self) -> float | None:
+        if Code._12A0 in self._msgs:
+            if isinstance(
+                self._msgs[Code._12A0].payload, list
+            ):  # FAN Ventura sends RH/temps as a list, use element [0] for indoor_temp
+                for k, v in self._msgs[Code._12A0].payload[0]:
+                    if k == SZ_TEMPERATURE:
+                        return float(v)
+            for k, v in self._msgs[Code._12A0].payload.items():
+                if (
+                    k == SZ_TEMPERATURE
+                ):  # ClimaRad minibox FAN sends supply_temp in 12A0
+                    return float(v)
+
         return self._msg_value(Code._31DA, key=SZ_INDOOR_TEMP)
 
     @property
@@ -435,6 +453,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
 
     @property
     def supply_temp(self) -> float | None:
+        if Code._12A0 in self._msgs:
+            if isinstance(
+                self._msgs[Code._12A0].payload, list
+            ):  # FAN Ventura sends RH/temps as a list, use element [2] for supply_temp
+                for k, v in self._msgs[Code._12A0].payload[2]:
+                    if k == SZ_TEMPERATURE:
+                        return float(v)
         return self._msg_value(Code._31DA, key=SZ_SUPPLY_TEMP)
 
     @property
