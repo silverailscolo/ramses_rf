@@ -450,7 +450,7 @@ class _FileTransportAbstractor:
         self._loop = loop or asyncio.get_event_loop()
 
 
-class _PortTransportAbstractor(serial_asyncio.SerialTransport):  # type: ignore[no-any-unimported]
+class _PortTransportAbstractor(serial_asyncio.SerialTransport):  # type: ignore[misc, no-any-unimported]
     """Do the bare minimum to abstract a transport from its underlying class."""
 
     serial: Serial  # type: ignore[no-any-unimported]
