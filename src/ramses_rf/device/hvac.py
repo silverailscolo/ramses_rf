@@ -19,6 +19,7 @@ from ramses_rf.const import (
     SZ_EXHAUST_TEMP,
     SZ_FAN_INFO,
     SZ_FAN_MODE,
+    SZ_FAN_RATE,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_OUTDOOR_HUMIDITY,
@@ -385,14 +386,27 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
 
     @property
     def fan_info(self) -> str | None:
+        """
+        Extract fan info description from _22F4, _31D9 or _31DA message payload
+
+        :return: string describing mode, speed
+        """
         if (
             Code._31D9 in self._msgs
-        ):  # Vasco D60 and ClimaRad minibox send mode/speed in _31D9, len=3
+        ):  # Vasco D60 and ClimaRad minibox send mode/speed in _31D9
             for k, v in self._msgs[Code._31D9].payload.items():
                 if k == SZ_FAN_MODE:
-                    return self._msg_value(Code._31D9, key=SZ_FAN_MODE)
-        return self._msg_value(
-            Code._31DA, key=SZ_FAN_INFO
+                    return str(v)
+        if Code._22F4 in self._msgs:  # ClimaRad Ventura sends mode/speed in _22F4
+            mode: str = ""
+            for k, v in self._msgs[Code._22F4].payload.items():
+                if k == SZ_FAN_MODE:
+                    mode = v
+                if k == SZ_FAN_RATE:
+                    mode = mode + " " + v
+            return mode
+        return str(
+            self._msg_value(Code._31DA, key=SZ_FAN_INFO)
         )  # a description to display in climate, e.g. speed 2, medium
 
     @property
@@ -426,7 +440,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             for k, v in self._msgs[Code._12A0].payload.items():
                 if (
                     k == SZ_TEMPERATURE
-                ):  # ClimaRad minibox FAN sends supply_temp in 12A0
+                ):  # ClimaRad minibox FAN sends (indoor) temp in 12A0
                     return float(v)
 
         return self._msg_value(Code._31DA, key=SZ_INDOOR_TEMP)

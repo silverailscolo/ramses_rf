@@ -971,7 +971,7 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
         self.serial.write(data)
 
     def _abort(self, exc: ExceptionT) -> None:  # type: ignore[override]  # used by serial_asyncio.SerialTransport
-        super()._abort(exc)  # type: ignore[argtype]
+        super()._abort(exc)  # type: ignore[arg-type]
 
         if self._init_task:
             self._init_task.cancel()
