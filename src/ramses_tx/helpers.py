@@ -49,6 +49,7 @@ from .const import (
     FaultState,
     FaultType,
 )
+from .ramses import _31D9_FAN_INFO
 from .ramses import _31DA_FAN_INFO
 
 if TYPE_CHECKING:
@@ -736,8 +737,8 @@ def parse_fan_info(value: HexStr2) -> PayDictT.FAN_INFO:
     if not isinstance(value, str) or len(value) != 2:
         raise ValueError(f"Invalid value: {value}, is not a 2-char hex string")
 
-    # if value == "EF":  # TODO: Not implemented???
-    #     return {SZ_FAN_INFO: None}
+    if value in "1F, EF, FF":  # 1F constant in HRU
+        return {SZ_FAN_INFO: "", "_unknown_fan_info_flags": []}
 
     assert int(value, 16) & 0xE0 in (
         0x00,
@@ -750,8 +751,25 @@ def parse_fan_info(value: HexStr2) -> PayDictT.FAN_INFO:
     flags = list((int(value, 16) & (1 << x)) >> x for x in range(7, 4, -1))
 
     return {
-        SZ_FAN_INFO: _31DA_FAN_INFO[int(value, 16) & 0x1F],
+        SZ_FAN_INFO: _31DA_FAN_INFO[
+            int(value, 16) & 0x1F
+        ],  # lookup description from code
         "_unknown_fan_info_flags": flags,
+    }
+
+
+# 31DA[36:38]  # TODO: WIP (3 more bits), also 22F3?
+def parse_fan_info_31d9(value: HexStr2) -> PayDictT.FAN_INFO:
+    """Return the fan info (current speed) from 31D9.
+
+    The sensor value is None if there is no sensor present (is not an error).
+    The dict does not include the key if there is a sensor fault.
+    """
+    return {
+        SZ_FAN_INFO: _31D9_FAN_INFO[
+            int(value, 16) & 0x1F
+        ],  # lookup description from code
+        "_unknown_fan_info_flags": [],
     }
 
 

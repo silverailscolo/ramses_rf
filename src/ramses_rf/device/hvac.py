@@ -18,6 +18,7 @@ from ramses_rf.const import (
     SZ_EXHAUST_FLOW,
     SZ_EXHAUST_TEMP,
     SZ_FAN_INFO,
+    SZ_FAN_MODE,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_OUTDOOR_HUMIDITY,
@@ -300,6 +301,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
     # Nuaire (UK), e.g. DRI-ECO-PIV
     # Orcon/Ventiline
     # ClimaRad (NL)
+    # Vasco (B)
 
     _SLUG: str = DevType.FAN
 
@@ -365,7 +367,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
     @property
     def exhaust_fan_speed(
         self,
-    ) -> float | None:  # need Code._31D9 for some fans speed + mode
+    ) -> float | None:  # some fans use Code._31D9 for speed + mode
         for c in (Code._31DA, Code._31D9):
             if c in self._msgs:
                 for k, v in self._msgs[c].payload.items():
@@ -383,7 +385,15 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
 
     @property
     def fan_info(self) -> str | None:
-        return self._msg_value(Code._31DA, key=SZ_FAN_INFO)
+        if (
+            Code._31D9 in self._msgs
+        ):  # Vasco D60 and ClimaRad minibox send mode/speed in _31D9, len=3
+            for k, v in self._msgs[Code._31D9].payload.items():
+                if k == SZ_FAN_MODE:
+                    return self._msg_value(Code._31D9, key=SZ_FAN_MODE)
+        return self._msg_value(
+            Code._31DA, key=SZ_FAN_INFO
+        )  # a description to display in climate, e.g. speed 2, medium
 
     @property
     def indoor_humidity(self) -> float | None:

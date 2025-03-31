@@ -1235,13 +1235,13 @@ _22F1_MODE_ORCON: dict[str, str] = {
     "07": "off",
 }
 
-_22F1_MODE_VASCO: dict[str, str] = {  # for VASCO D60 AND ClimaRad Minibox fanS/remotes
+_22F1_MODE_VASCO: dict[str, str] = {  # for VASCO D60 and ClimaRad Minibox remotes
     "00": "off",
     "01": "away",  # 000106 minimum
     "02": "low",  # 000206
     "03": "medium",  # 000306
     "04": "high",  # 000406, aka boost with 22F3
-    "05": "auto",  #
+    "05": "auto",
 }
 
 _22F1_SCHEMES: dict[str, dict[str, str]] = {
@@ -1353,7 +1353,20 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
     },
 }
 
-# ventilation speed
+# ventilation speed description
+_31D9_FAN_INFO: dict[int, str] = {
+    0x00: "off",
+    0x01: "speed 1, trickle",  # aka low
+    0x02: "speed 2, low",  # aka medium
+    0x03: "speed 3, medium",  # aka high
+    0x04: "speed 4, boost",
+    0x05: "auto",
+    0xC8: "speed III (boost)",  # same code sent for speed II and III, mode manual
+    0x50: "speed I, low",
+    0x1E: "speed 0, very low",
+}
+
+# ventilation speed description
 _31DA_FAN_INFO: dict[int, str] = {
     0x00: "off",
     0x01: "speed 1, low",  # aka low
@@ -1386,7 +1399,7 @@ _31DA_FAN_INFO: dict[int, str] = {
     0x1C: "-unknown 0x1C-",
     0x1D: "-unknown 0x1D-",
     0x1E: "-unknown 0x1E-",
-    0x1F: "-unknown 0x1F-",
+    0x1F: "-unknown 0x1F-",  # unused field
 }
 
 

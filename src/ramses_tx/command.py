@@ -1039,11 +1039,11 @@ class Command(Frame):
         src_id: DeviceIdT | str | None = None,
         idx: str = "00",  # could be e.g. "63"
     ) -> Command:
-        """Constructor to get the fan speed (and heater?) (c.f. parser_22f1).
+        """Constructor to set the fan speed (and heater?) (c.f. parser_22f1).
 
         There are two types of this packet seen (with seqn, or with src_id):
-         - I 018 --:------ --:------ 39:159057 22F1 003 000204
-         - I --- 21:039407 28:126495 --:------ 22F1 003 000407
+         - I 018 --:------ --:------ 39:159057 22F1 003 000x04
+         - I --- 21:039407 28:126495 --:------ 22F1 003 000x07
         """
         # NOTE: WIP: rate can be int or str
 
@@ -1058,7 +1058,7 @@ class Command(Frame):
 
         # Scheme 2: I --- 21:038634 18:126620 --:------ (less common)
         #  - are cast as a triplet, 0.085s apart, without a seqn (i.e. is ---)
-        #  - only payloads seen: '000.0[47A]', may accept '000.'
+        #  - only payloads seen: '000[0-9A]0[5-7A]', may accept '000.'
         # .I --- 21:038634 18:126620 --:------ 22F1 003 000507
 
         from .ramses import _22F1_MODE_ORCON
