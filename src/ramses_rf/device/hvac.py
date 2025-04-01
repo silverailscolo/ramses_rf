@@ -169,6 +169,10 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
     @property
     def filter_remaining(self) -> int | None:
+        if self._msg_value(Code._10D0, key="days_remaining") is None:
+            return int(
+                float(self._msg_value(Code._10D0, key="percent_remaining")) * 100
+            )
         return self._msg_value(Code._10D0, key="days_remaining")
 
 
