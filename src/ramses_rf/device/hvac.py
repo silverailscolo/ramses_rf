@@ -453,6 +453,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
 
     @property
     def outdoor_temp(self) -> float | None:
+        if Code._12A0 in self._msgs:
+            if isinstance(
+                self._msgs[Code._12A0].payload, list
+            ):  # FAN Ventura sends RH/temps as a list, use element [2] for outdoor (intake) temp
+                for k, v in self._msgs[Code._12A0].payload[2].items():
+                    if k == SZ_TEMPERATURE:
+                        return float(v)
         return self._msg_value(Code._31DA, key=SZ_OUTDOOR_TEMP)
 
     @property
@@ -481,13 +488,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
 
     @property
     def supply_temp(self) -> float | None:
-        if Code._12A0 in self._msgs:
-            if isinstance(
-                self._msgs[Code._12A0].payload, list
-            ):  # FAN Ventura sends RH/temps as a list, use element [2] for supply_temp
-                for k, v in self._msgs[Code._12A0].payload[2].items():
-                    if k == SZ_TEMPERATURE:
-                        return float(v)
+        if Code._31DA in self._msgs:
+            if self._msg_value(Code._31DA, key=SZ_SUPPLY_TEMP) is None:
+                # FAN Ventura sends supply_temp in payload[26:30] (outside_temp)
+                return self._msg_value(Code._31DA, key=SZ_OUTDOOR_TEMP)  # can be None
         return self._msg_value(Code._31DA, key=SZ_SUPPLY_TEMP)
 
     @property

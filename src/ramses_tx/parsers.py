@@ -2210,7 +2210,9 @@ def parser_31da(payload: str, msg: Message) -> PayDictT._31DA:
         **parse_exhaust_temp(payload[14:18]),  # to outside
         **parse_supply_temp(payload[18:22]),  # to home
         **parse_indoor_temp(payload[22:26]),  # in home
-        **parse_outdoor_temp(payload[26:30]),  # 1290?
+        **parse_outdoor_temp(
+            payload[26:30]
+        ),  # 1290? is supply_temp in ClimaRad Ventura
         **parse_capabilities(payload[30:34]),
         **parse_bypass_position(payload[34:36]),  # 22F7-ish
         **parse_supply_fan_speed(payload[40:42]),
