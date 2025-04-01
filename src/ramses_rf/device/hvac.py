@@ -395,7 +395,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             Code._31D9 in self._msgs
         ):  # Vasco D60 and ClimaRad minibox send mode/speed in _31D9
             for k, v in self._msgs[Code._31D9].payload.items():
-                if k == SZ_FAN_MODE:
+                if k == SZ_FAN_MODE and v != "FF":  # Prevent ClimaRad Ventura constant "FF" to pass
                     return str(v)
         if Code._22F4 in self._msgs:  # ClimaRad Ventura sends mode/speed in _22F4
             mode: str = ""
@@ -407,7 +407,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             return mode
         return str(
             self._msg_value(Code._31DA, key=SZ_FAN_INFO)
-        )  # a description to display in climate, e.g. speed 2, medium
+        )  # a description to display in climate, e.g. "2, medium", note i18n
 
     @property
     def indoor_humidity(self) -> float | None:

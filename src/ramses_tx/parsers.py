@@ -1666,7 +1666,7 @@ def parser_22f4(payload: str, msg: Message) -> dict[str, Any]:
         payload = payload[:6]
 
     MODE_LOOKUP = {
-        0x00: "off?",
+        0x00: "off",
         0x20: "paused",
         0x40: "auto",
         0x60: "manual",
@@ -1674,7 +1674,7 @@ def parser_22f4(payload: str, msg: Message) -> dict[str, Any]:
     mode = int(payload[2:4], 16) & 0x60
     assert mode in MODE_LOOKUP, mode
 
-    RATE_LOOKUP = {
+    RATE_LOOKUP = {  # note no i18n, passed to UI as is
         0x00: "speed 0",  # "off"?,
         0x01: "speed 1",  # "low", or trickle?
         0x02: "speed 2",  # "medium-low", or low?
