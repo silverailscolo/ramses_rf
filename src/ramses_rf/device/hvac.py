@@ -395,7 +395,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             Code._31D9 in self._msgs
         ):  # Vasco D60 and ClimaRad minibox send mode/speed in _31D9
             for k, v in self._msgs[Code._31D9].payload.items():
-                if k == SZ_FAN_MODE and v != "FF":  # Prevent ClimaRad Ventura constant "FF" to pass
+                if (
+                    k == SZ_FAN_MODE and v != "FF"
+                ):  # Prevent ClimaRad Ventura constant "FF" to pass
                     return str(v)
         if Code._22F4 in self._msgs:  # ClimaRad Ventura sends mode/speed in _22F4
             mode: str = ""
