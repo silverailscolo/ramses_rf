@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Any, Final, TypeAlias
 from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
+from paho.mqtt.enums import CallbackAPIVersion
 from serial import (  # type: ignore[import-untyped]
     Serial,
     SerialException,
@@ -1023,7 +1024,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._max_tokens: float = self._MAX_TOKENS * 2  # allow for the initial burst
         self._num_tokens: float = self._MAX_TOKENS * 2
 
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self.client = mqtt.Client(CallbackAPIVersion.VERSION2)  # type: ignore[arg-type]
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
