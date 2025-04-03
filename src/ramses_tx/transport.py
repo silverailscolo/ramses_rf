@@ -52,6 +52,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
 from paho.mqtt.enums import CallbackAPIVersion
+from paho.mqtt.reasoncodes import ReasonCode
 from serial import (  # type: ignore[import-untyped]
     Serial,
     SerialException,
@@ -396,7 +397,7 @@ def avoid_system_syncs(fnc: Callable[..., Awaitable[None]]) -> Callable[..., Any
 
 
 def track_system_syncs(fnc: Callable[..., None]) -> Callable[..., Any]:
-    """Track/remember the any new/outstanding TCS sync cycle."""
+    """Track/remember any new/outstanding TCS sync cycle."""
 
     @wraps(fnc)
     def wrapper(self: PortTransport, pkt: Packet) -> None:
@@ -1024,12 +1025,14 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._max_tokens: float = self._MAX_TOKENS * 2  # allow for the initial burst
         self._num_tokens: float = self._MAX_TOKENS * 2
 
-        self.client = mqtt.Client(CallbackAPIVersion.VERSION2)  # type: ignore[arg-type]
+        # instantiate a paho mqtt client
+        self.client = mqtt.Client(CallbackAPIVersion.VERSION2)
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.on_message = self._on_message
 
         self.client.username_pw_set(self._username, self._password)
+        # connect to the mqtt server
         self.client.connect_async(
             self._broker_url.hostname,  # type: ignore[arg-type]
             self._broker_url.port or 1883,
@@ -1038,27 +1041,41 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self.client.loop_start()
 
     def _on_connect(
-        self, client: mqtt.Client, userdata: Any | None, flags: dict[str, Any], rc: int
+        self,
+        client: mqtt.Client,
+        userdata: Any | None,
+        flags: dict[str, Any],
+        reason_code: ReasonCode,
+        properties: Any | None,
     ) -> None:
-        # _LOGGER.error("Mqtt._on_connect(%s, %s, %s, %s)", client, userdata, flags, rc)
+        # _LOGGER.error("Mqtt._on_connect(%s, %s, %s, %s)", client, userdata, flags, reason_code.getName())
 
-        self.client.subscribe(self._topic_base)  # hope for 'online' message
+        self.client.subscribe(self._topic_base)  # hope to see 'online' message
 
     def _on_connect_fail(
-        self, client: mqtt.Client, userdata: Any | None, rc: int
+        self,
+        client: mqtt.Client,
+        userdata: Any | None,
+        reason_code: ReasonCode,
+        properties: Any | None,
     ) -> None:
-        _LOGGER.error(f"Disconnected with result code {rc}")
+        _LOGGER.error(f"Disconnected with result code {reason_code.getName()}")  # type: ignore[no-untyped-call]
 
         # self._closing = False  # FIXME
-        # self._connection_lost(rc)
+        # self._connection_lost(reason_code)
 
     def _on_disconnect(
-        self, client: mqtt.Client, userdata: Any | None, rc: int
+        self,
+        client: mqtt.Client,
+        userdata: Any | None,
+        disconnectFlags: Any | None,
+        reason_code: ReasonCode,
+        properties: Any | None,
     ) -> None:
-        _LOGGER.error(f"Disconnected with result code {rc}")
+        _LOGGER.error(f"Disconnected with result code {reason_code.getName()}")  # type: ignore[no-untyped-call]
 
         # self._closing = False  # FIXME
-        # self._connection_lost(rc)
+        # self._connection_lost(reason_code)
 
     def _create_connection(self, msg: mqtt.MQTTMessage) -> None:
         """Invoke the Protocols's connection_made() callback MQTT is established."""
