@@ -410,7 +410,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
                 if k == SZ_FAN_MODE:
                     mode = v
                 if k == SZ_FAN_RATE:
-                    mode = mode + " " + v
+                    mode = mode + ", " + v
             return mode
         return str(
             self._msg_value(Code._31DA, key=SZ_FAN_INFO)
