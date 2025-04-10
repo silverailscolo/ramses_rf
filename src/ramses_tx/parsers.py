@@ -44,7 +44,6 @@ from .const import (
     SZ_DOMAIN_ID,
     SZ_DOMAIN_IDX,
     SZ_DURATION,
-    SZ_EXHAUST_TEMP,
     SZ_FAN_INFO,
     SZ_FAN_MODE,
     SZ_FAN_RATE,
