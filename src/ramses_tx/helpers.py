@@ -539,9 +539,9 @@ def parse_co2_level(value: HexStr4) -> PayDictT.CO2_LEVEL:
 
 
 def parse_humidity_element(value: str, index: str) -> PayDictT._12A0:
-    """Return the relative humidity (%) and 2 temperatures.
+    """Return the relative humidity (%) and 2 temperatures
 
-    The result may include current temperature ('C) and dewpoint temperature ('C).
+    The result may include current temperature ('C) and include dewpoint temperature ('C).
     """
     if index == "01":
         return _parse_hvac_humidity(SZ_REL_HUMIDITY, value[:2], value[2:6], value[6:10])  # type: ignore[return-value]
@@ -736,7 +736,7 @@ def parse_fan_info(value: HexStr2) -> PayDictT.FAN_INFO:
     if not isinstance(value, str) or len(value) != 2:
         raise ValueError(f"Invalid value: {value}, is not a 2-char hex string")
 
-    if value in "1F, EF, FF":  # 1F constant in HRU, which has actual fan_info in 31D9
+    if value in "EF, FF":  # 1F constant in HRU, which has actual fan_info in 31D9
         return {SZ_FAN_INFO: "", "_unknown_fan_info_flags": []}
 
     assert int(value, 16) & 0xE0 in (

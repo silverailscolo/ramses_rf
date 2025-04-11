@@ -38,6 +38,11 @@ jobs:
           python -m build
       # must install build to run
 
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
       # Manually publish package eb-ventura-package branch to testPyPi using hatch
 
       - run: echo "🍏 This job's status is ${{ job.status }}."
