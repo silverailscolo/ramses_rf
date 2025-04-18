@@ -299,15 +299,13 @@ class HvacDisplayRemote(HvacRemote):  # DIS
 class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
     """The FAN (ventilation) class.
 
-    The cardinal codes are 31D9, 31DA, 12A0.  Signature is RP/31DA.
+    The cardinal codes are 31D9, 31DA.  Signature is RP/31DA.
     """
 
     # Itho Daalderop (NL)
     # Heatrae Sadia (UK)
     # Nuaire (UK), e.g. DRI-ECO-PIV
     # Orcon/Ventiline
-    # ClimaRad (NL)
-    # Vasco (B)
 
     _SLUG: str = DevType.FAN
 
@@ -411,6 +409,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
                     k == SZ_FAN_MODE and v != "FF"
                 ):  # Prevent ClimaRad Ventura constant "FF" to pass
                     return str(v)
+            # no guard clause, just ignore
         if Code._22F4 in self._msgs:  # ClimaRad Ventura sends mode/speed in _22F4
             mode: str = ""
             for k, v in self._msgs[Code._22F4].payload.items():
@@ -421,7 +420,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
             return mode
         return str(
             self._msg_value(Code._31DA, key=SZ_FAN_INFO)
-        )  # a description to display in climate, e.g. "2, medium", note i18n
+        )  # a description to display in climate, e.g. "speed 2, medium", note localize in UI
 
     @property
     def indoor_humidity(self) -> float | None:
