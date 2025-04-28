@@ -199,31 +199,8 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
         return result
 
 
-def getRamsesLogger(name: str | None = None) -> logging.Logger:
-    """Blocking create ramses packet logger."""
-    # Acquire lock, so no-one else uses our Logger class
-    try:  # TODO: remove this ASAP
-        logging._acquireLock()  # type: ignore[attr-defined]
-    except AttributeError:  # Python 3.13+
-        logging._lock.acquire()  # type: ignore[attr-defined]
-
-    klass = logging.getLoggerClass()
-    logging.setLoggerClass(_Logger)
-
-    logger = logging.getLogger(name)
-
-    logging.setLoggerClass(klass)
-
-    try:  # TODO: remove this ASAP
-        logging._releaseLock()  # type: ignore[attr-defined]
-    except AttributeError:  # Python 3.13+
-        logging._lock.release()  # type: ignore[attr-defined]
-
-    return logger
-
-
-async def getLogger(  # permits a bespoke Logger class
-    name: str | None = None, pkt_log: bool = False
+def getLogger(  # permits a bespoke Logger class
+    self: Any, name: str | None = None, pkt_log: bool = False
 ) -> logging.Logger:
     """Return a logger with the specified name, creating it if necessary.
 
@@ -233,25 +210,18 @@ async def getLogger(  # permits a bespoke Logger class
         return logging.getLogger(name)
 
     # Acquire lock, so no-one else uses our Logger class
-    # try:  # TODO: remove this ASAP
-    #     logging._acquireLock()  # type: ignore[attr-defined]
-    # except AttributeError:  # Python 3.13+
-    #     logging._lock.acquire()  # type: ignore[attr-defined]
-    #
-    # klass = logging.getLoggerClass()
-    # logging.setLoggerClass(_Logger)
-    #
-    # logger = logging.getLogger(name)
-    #
-    # logging.setLoggerClass(klass)
-    #
-    # try:  # TODO: remove this ASAP
-    #     logging._releaseLock()  # type: ignore[attr-defined]
-    # except AttributeError:  # Python 3.13+
-    #     logging._lock.release()  # type: ignore[attr-defined]
+    logging.Handler.createLock(self)
+    logging.Handler.acquire(self)
 
-    loop = asyncio.get_running_loop()
-    logger = await loop.run_in_executor(None, getRamsesLogger, name)
+    klass = logging.getLoggerClass()
+    logging.setLoggerClass(_Logger)
+
+    logger = logging.getLogger(name)
+
+    logging.setLoggerClass(klass)
+
+    logging.Handler.release(self)
+
     return logger
 
 
