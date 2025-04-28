@@ -199,8 +199,8 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
         return result
 
 
-def getLogger(  # permits a bespoke Logger class
-    self: Any, name: str | None = None, pkt_log: bool = False
+def getLogger(  # self: Any, permits a bespoke Logger class
+    name: str | None = None, pkt_log: bool = False
 ) -> logging.Logger:
     """Return a logger with the specified name, creating it if necessary.
 
@@ -210,17 +210,18 @@ def getLogger(  # permits a bespoke Logger class
         return logging.getLogger(name)
 
     # Acquire lock, so no-one else uses our Logger class
-    logging.Handler.createLock(self)
-    logging.Handler.acquire(self)
+    # logging.Handler.createLock(self)
+    # logging.Handler.acquire(self)
 
-    klass = logging.getLoggerClass()
+    # klass = logging.getLoggerClass()
+    # The root logger's type is not affected
     logging.setLoggerClass(_Logger)
 
     logger = logging.getLogger(name)
 
-    logging.setLoggerClass(klass)
+    # logging.setLoggerClass(klass)  # is this required?
 
-    logging.Handler.release(self)
+    # logging.Handler.release(self)
 
     return logger
 
