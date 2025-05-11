@@ -115,7 +115,8 @@ class Engine:
         )
         self._kwargs: dict[str, Any] = kwargs  # HACK
 
-        self._engine_lock = Lock()  # FIXME: threading lock, or asyncio lock?
+        self._engine_lock = Lock()  # FIXME is this ramses_cc issue 217
+        # use threading lock, or asyncio lock?
         self._engine_state: (
             tuple[_MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
         ) = None
