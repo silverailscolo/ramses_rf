@@ -6,7 +6,6 @@ This module wraps logger to provide bespoke functionality, especially for timest
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import re
