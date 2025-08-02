@@ -1066,7 +1066,7 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[VerbT, Any]]] = {
         Code._22F1: {RP: {}},
         Code._22F2: {I_: {}, RP: {}},
         Code._22F3: {},
-        Code._22F4: {I_: {}},
+        Code._22F4: {I_: {}, RP: {}},
         Code._22F7: {I_: {}, RP: {}},
         Code._2411: {I_: {}, RP: {}},
         Code._2E10: {I_: {}},
@@ -1354,6 +1354,19 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
     },
+}
+
+# ventilation speed description
+_31D9_FAN_INFO_VASCO: dict[int, str] = {
+    0x00: "off",
+    0x01: "1 (trickle)",  # aka low
+    0x02: "2 (low)",  # aka medium
+    0x03: "3 (medium)",  # aka high
+    0x04: "4 (boost)",
+    0x05: "auto",
+    0xC8: "III (boost)",  # same code sent for speed II and III, mode manual
+    0x50: "I (low)",
+    0x1E: "0 (very low)",
 }
 
 # ventilation speed
