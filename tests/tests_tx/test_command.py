@@ -145,7 +145,6 @@ async def test_set_zone_mode_follow() -> None:
     #  ctl_id: DeviceIdT | str,
     #  mode: int | str | None = None,
     #  zone_idx: _ZoneIdxT,
-    #  *
     #  active: bool | None = None,
     #  until: dt | str | None = None,
     #  duration: int | None = None,
