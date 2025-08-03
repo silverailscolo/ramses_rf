@@ -12,7 +12,9 @@ from ramses_rf.const import (
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BOOST_TIMER,
+    SZ_BYPASS_MODE,
     SZ_BYPASS_POSITION,
+    SZ_BYPASS_STATE,
     SZ_CO2_LEVEL,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
@@ -368,8 +370,31 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
         return self._msg_value(Code._31DA, key=SZ_AIR_QUALITY_BASIS)
 
     @property
+    def bypass_mode(self) -> str | None:
+        """
+        :return: bypass mode as on|off|auto
+        """
+        return self._msg_value(Code._22F7, key=SZ_BYPASS_MODE)
+
+    @property
     def bypass_position(self) -> int | None:
-        return self._msg_value(Code._31DA, key=SZ_BYPASS_POSITION)
+        """
+        :return: bypass position as a percentage
+        """
+        for c in (Code._31DA, Code._22F7):
+            if v := self._msgs[c].payload.get(SZ_BYPASS_POSITION):
+                assert isinstance(v, (float | type(None)))
+                return v
+                # if both packets exist and both have the key, return the most recent
+        return None
+
+    @property
+    def bypass_state(self) -> str | None:
+        """
+        Orcon, others?
+        :return: bypass position as on/off
+        """
+        return self._msg_value(Code._22F7, key=SZ_BYPASS_STATE)
 
     @property
     def co2_level(self) -> int | None:
