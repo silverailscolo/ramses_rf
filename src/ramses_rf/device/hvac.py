@@ -381,8 +381,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
         """
         :return: bypass position as a percentage
         """
-        for c in (Code._31DA, Code._22F7):
-            if v := self._msgs[c].payload.get(SZ_BYPASS_POSITION):
+        for code in [c for c in (Code._22F7, Code._31DA) if c in self._msgs]:
+            if v := self._msgs[code].payload.get(SZ_BYPASS_POSITION):
                 assert isinstance(v, (float | type(None)))
                 return v
                 # if both packets exist and both have the key, return the most recent
@@ -404,8 +404,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
     def exhaust_fan_speed(
         self,
     ) -> float | None:  # some fans use Code._31D9 for speed + mode
-        for c in (Code._31DA, Code._31D9):
-            if v := self._msgs[c].payload.get(SZ_EXHAUST_FAN_SPEED):
+        for code in [c for c in (Code._31D9, Code._31DA) if c in self._msgs]:
+            if v := self._msgs[code].payload.get(SZ_EXHAUST_FAN_SPEED):
                 assert isinstance(v, (float | type(None)))
                 return v
                 # if both packets exist and both have the key, return the most recent
@@ -468,8 +468,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
                 assert isinstance(v, (float | type(None)))
                 return v
             return None  # prevent AttributeError: 'list' object has no attribute 'get'
-        for c in (Code._12A0, Code._31DA):
-            if v := self._msgs[c].payload.get(SZ_INDOOR_HUMIDITY):
+        for code in [c for c in (Code._12A0, Code._31DA) if c in self._msgs]:
+            if v := self._msgs[code].payload.get(SZ_INDOOR_HUMIDITY):
                 assert isinstance(v, (float | type(None)))
                 return v
         return None
