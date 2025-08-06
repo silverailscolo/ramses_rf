@@ -1,3 +1,7 @@
+![Linting](https://github.com/ramses-rf/ramses_rf/actions/workflows/check-lint.yml/badge.svg)
+![Typing](https://github.com/ramses-rf/ramses_rf/actions/workflows/check-type.yml/badge.svg)
+![Testing](https://github.com/ramses-rf/ramses_rf/actions/workflows/check-test.yml/badge.svg)
+
 [![Linting](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-lint.yml/badge.svg?branch=eb-ventura-package)](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-lint.yml)
 [![Typing](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-type.yml/badge.svg?branch=eb-ventura-package)](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-type.yml)
 [![Testing](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-test.yml/badge.svg?branch=eb-ventura-package)](https://github.com/silverailscolo/ramses_rf/actions/workflows/check-test.yml)
@@ -5,12 +9,11 @@
 # Cloned Beta
 This is a beta release from a cloned repository to test the Vasco and ClimaRad PRs from @silverailscolo.
 
-# New code owner wanted
-As of spring 2025 @zxdavb is no longer able to work on this project and active development has ceased.
-
-Please reach out to him if you feel able to take over. He promised to hand over the entire repo to the right person, and would be prepared to provide help during a transition period.
+# New code owner
+Summer 2025 @zxdavb handed over the repos to @silverailscolo
 
 ## Overview
+
 **ramses_rf** is a client library/CLI utility used to interface with some Honeywell-compatible HVAC & CH/DHW systems that use 868MHz RF, such as:
  - (Heat) **evohome**, **Sundial**, **Hometronic**, **Chronotherm**
  - (HVAC) **Itho**, **Orcon**, **Nuaire**, **Vasco**, **ClimaRad**
@@ -28,7 +31,7 @@ For CH/DHW, the simplest way to know if it will work with your system is to iden
  - **BDR91A**: Wireless Relay (also BDR91T)
  - **HC60NG**: Wireless Relay (older hardware)
 
-Other systems may well work, such as some Itho Dallderop HVAC systems, use this protocol; YMMV.
+Other systems may well work, such as some Itho Daalderop HVAC systems, use this protocol, YMMV.
 
 It includes a CLI and can be used as a standalone tool, but also is used as a client library by:
  - [ramses_cc](https://github.com/zxdavb/ramses_cc), a Home Assistant integration
@@ -36,11 +39,16 @@ It includes a CLI and can be used as a standalone tool, but also is used as a cl
 
 ## Installation
 
+To use the `ramses_rf` Integration in Home Assistant, just install `Ramses RF` from HACS. It will take care of installating this library. See the [`Ramses_cc wiki`](https://github.com/zxdavb/ramses_cc/wiki/1.-Installation) for details.
+
+To run the `ramses_rf` client or study the code:
 ```
 git clone https://github.com/zxdavb/ramses_rf
 cd ramses_rf
 pip install -r requirements.txt
 ```
+
+For development, see our [Developer's Resource](README-developers.md)
 
 ## Ramses_rf CLI
 
@@ -59,7 +67,13 @@ To send a command to a device, type:
 ```
 python client.py execute /dev/ttyUSB0 -x "_verb [seqn] addr0 [addr1 [addr2]] code payload"
 ```
-Note: add whitespace before I verb: [PP]|[RQ]|[ I]; skip empty addresses; don't enter length. Example:
+Notes:
+- Before the `I` verb, add a whitespace inside the opening double quote: [RP]|[RQ]|[ I]
+- Skip empty device addresses;
+- Don't enter the packet length.
+
+Send command example:
 ```
 python3 client.py execute /dev/cu.usbmodemFD131 -x " I 29:091138 32:022222 22F1 000406"
 ```
+See the [client.py Configuration wiki page](https://github.com/zxdavb/ramses_rf/wiki/client.py-configuration-file) for more.

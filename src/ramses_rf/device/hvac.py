@@ -12,7 +12,9 @@ from ramses_rf.const import (
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BOOST_TIMER,
+    SZ_BYPASS_MODE,
     SZ_BYPASS_POSITION,
+    SZ_BYPASS_STATE,
     SZ_CO2_LEVEL,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
@@ -301,7 +303,7 @@ class HvacDisplayRemote(HvacRemote):  # DIS
     #     )
 
 
-class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
+class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
     """The FAN (ventilation) class.
 
     The cardinal codes are 31D9, 31DA.  Signature is RP/31DA.
@@ -311,6 +313,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
     # Heatrae Sadia (UK)
     # Nuaire (UK), e.g. DRI-ECO-PIV
     # Orcon/Ventiline
+    # ClimaRad (NL)
+    # Vasco (B)
 
     _SLUG: str = DevType.FAN
 
@@ -366,8 +370,31 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
         return self._msg_value(Code._31DA, key=SZ_AIR_QUALITY_BASIS)
 
     @property
+    def bypass_mode(self) -> str | None:
+        """
+        :return: bypass mode as on|off|auto
+        """
+        return self._msg_value(Code._22F7, key=SZ_BYPASS_MODE)
+
+    @property
     def bypass_position(self) -> int | None:
-        return self._msg_value(Code._31DA, key=SZ_BYPASS_POSITION)
+        """
+        :return: bypass position as a percentage
+        """
+        for c in (Code._31DA, Code._22F7):
+            if v := self._msgs[c].payload.get(SZ_BYPASS_POSITION):
+                assert isinstance(v, (float | type(None)))
+                return v
+                # if both packets exist and both have the key, return the most recent
+        return None
+
+    @property
+    def bypass_state(self) -> str | None:
+        """
+        Orcon, others?
+        :return: bypass position as on/off
+        """
+        return self._msg_value(Code._22F7, key=SZ_BYPASS_STATE)
 
     @property
     def co2_level(self) -> int | None:
@@ -378,10 +405,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
         self,
     ) -> float | None:  # some fans use Code._31D9 for speed + mode
         for c in (Code._31DA, Code._31D9):
-            if c in self._msgs:
-                for k, v in self._msgs[c].payload.items():
-                    if k == SZ_EXHAUST_FAN_SPEED:
-                        return float(v)  # pick either code
+            if v := self._msgs[c].payload.get(SZ_EXHAUST_FAN_SPEED):
+                assert isinstance(v, (float | type(None)))
+                return v
+                # if both packets exist and both have the key, return the most recent
         return None
 
     @property
@@ -390,13 +417,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
 
     @property
     def exhaust_temp(self) -> float | None:
-        if Code._12A0 in self._msgs:
-            if isinstance(
-                self._msgs[Code._12A0].payload, list
-            ):  # FAN Ventura sends RH/temps as a list, use element [2] for exhaust temp
-                for k, v in self._msgs[Code._12A0].payload[2].items():
-                    if k == SZ_TEMPERATURE:
-                        return float(v)
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends RH/temps as a list, use element [2] for exhaust temp
+            if v := self._msgs[Code._12A0].payload[2].get(SZ_TEMPERATURE):
+                assert isinstance(v, (float | type(None)))
+                return v
+            return None
         return self._msg_value(Code._31DA, key=SZ_EXHAUST_TEMP)
 
     @property
@@ -434,33 +461,32 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], I/12A0
 
         :return: percentage <= 1.0
         """
-        if Code._12A0 in self._msgs:
-            if isinstance(
-                self._msgs[Code._12A0].payload, list
-            ):  # FAN Ventura sends a list, use element [0]
-                for k, v in self._msgs[Code._12A0].payload[0].items():
-                    if k == SZ_INDOOR_HUMIDITY:
-                        return float(v)
-            for k, v in self._msgs[Code._12A0].payload.items():
-                if k == SZ_INDOOR_HUMIDITY:  # ClimaRad minibox FAN sends hum in 12A0
-                    return float(v)
-        return self._msg_value(Code._31DA, key=SZ_INDOOR_HUMIDITY)
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends a list, use element [0]
+            if v := self._msgs[Code._12A0].payload[0].get(SZ_INDOOR_HUMIDITY):
+                assert isinstance(v, (float | type(None)))
+                return v
+            return None  # prevent AttributeError: 'list' object has no attribute 'get'
+        for c in (Code._12A0, Code._31DA):
+            if v := self._msgs[c].payload.get(SZ_INDOOR_HUMIDITY):
+                assert isinstance(v, (float | type(None)))
+                return v
+        return None
 
     @property
     def indoor_temp(self) -> float | None:
         if Code._12A0 in self._msgs:
             if isinstance(
                 self._msgs[Code._12A0].payload, list
-            ):  # FAN Ventura sends RH/temps as a list, use element [0] for indoor_temp
-                for k, v in self._msgs[Code._12A0].payload[0].items():
-                    if k == SZ_TEMPERATURE:
-                        return float(v)
-            for k, v in self._msgs[Code._12A0].payload.items():
-                if (
-                    k == SZ_TEMPERATURE
-                ):  # ClimaRad minibox FAN sends (indoor) temp in 12A0
-                    return float(v)
-
+            ):  # FAN Ventura sends RH/temps as a list; use element [0] for indoor_temp
+                if v := self._msgs[Code._12A0].payload[0].get(SZ_TEMPERATURE):
+                    assert isinstance(v, (float | type(None)))
+                    return v
+                return None
+            if v := self._msgs[Code._12A0].payload.get(SZ_TEMPERATURE):
+                assert isinstance(v, (float | type(None)))
+                return v  # ClimaRad minibox FAN sends (indoor) temp in 12A0
         return self._msg_value(Code._31DA, key=SZ_INDOOR_TEMP)
 
     @property
