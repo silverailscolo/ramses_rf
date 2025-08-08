@@ -70,6 +70,7 @@ class _BaseProtocol(asyncio.Protocol):
         self._loop = asyncio.get_running_loop()
 
         self._pause_writing = False  # FIXME: Start in R/O mode as no connection yet?
+        print("EB - we came this far...73")
         self._wait_connection_lost: asyncio.Future[None] | None = None
         self._wait_connection_made: asyncio.Future[RamsesTransportT] = (
             self._loop.create_future()
@@ -115,7 +116,7 @@ class _BaseProtocol(asyncio.Protocol):
 
         if self._wait_connection_made.done():
             return
-
+        print("EB - we came this far...118")
         self._wait_connection_lost = self._loop.create_future()
         self._wait_connection_made.set_result(transport)
         self._transport = transport
@@ -141,15 +142,17 @@ class _BaseProtocol(asyncio.Protocol):
         """
 
         assert self._wait_connection_lost  # mypy
-
         if self._wait_connection_lost.done():  # BUG: why is callback invoked twice?
+            print("EB - conn_lost done, return 147")
             return
-
+        print("EB - we came this far...147")
         self._wait_connection_made = self._loop.create_future()
         if err:
+            print("EB - we came this far...151")
             self._wait_connection_lost.set_exception(err)
         else:
             self._wait_connection_lost.set_result(None)
+            print("EB - we came this far...155")
 
     async def wait_for_connection_lost(self, timeout: float = 1) -> ExceptionT | None:
         """A courtesy function to wait until connection_lost() has been invoked.
@@ -159,15 +162,22 @@ class _BaseProtocol(asyncio.Protocol):
 
         Will raise TransportError if isn't disconnect within timeout seconds.
         """
-
+        print("EB - we came this far...165")
         if not self._wait_connection_lost:
             return None
 
         try:
-            return await asyncio.wait_for(self._wait_connection_lost, timeout)
+            print("EB - we came this far... - turned off await_lost 170")
+            # return await asyncio.wait_for(self._wait_connection_lost, timeout)
         except TimeoutError as err:
             raise exc.TransportError(
                 f"Transport did not unbind from Protocol within {timeout} secs"
+            ) from err
+        except ValueError as err:
+            print("EB - we came this far...177")
+            # happens on: client.py parse filename
+            raise exc.TransportError(
+                f"Transport File already Closed"
             ) from err
 
     def pause_writing(self) -> None:

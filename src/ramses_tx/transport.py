@@ -263,7 +263,7 @@ def _normalise(pkt_line: str) -> str:
     elif pkt_line[:2] in (I_, RQ, RP, W_):
         pkt_line = ""
 
-    # psuedo-RAMSES-II packets (encrypted payload?)...
+    # pseudo-RAMSES-II packets (encrypted payload?)...
     if pkt_line[10:14] in (" 08:", " 31:") and pkt_line[-16:] == "* Checksum error":
         pkt_line = pkt_line[:-17] + " # Checksum error (ignored)"
 
@@ -446,6 +446,9 @@ class _FileTransportAbstractor:
     ) -> None:
         # per().__init__(extra=extra)  # done in _BaseTransport
 
+        assert pkt_source is not None  # EB check non null: OK
+        if isinstance(pkt_source, TextIOWrapper):
+            assert not pkt_source.closed
         self._pkt_source = pkt_source
 
         self._protocol = protocol
@@ -575,7 +578,7 @@ class _ReadTransport(_BaseTransport):
 
     def _make_connection(self, gwy_id: DeviceIdT | None) -> None:
         self._extra[SZ_ACTIVE_HGI] = gwy_id  # or HGI_DEV_ADDR.id
-
+        print("EB - transport._make_connection...578")
         self.loop.call_soon_threadsafe(  # shouldn't call this until we have HGI-ID
             functools.partial(self._protocol.connection_made, self, ramses=True)  # type: ignore[arg-type]
         )
@@ -603,7 +606,7 @@ class _ReadTransport(_BaseTransport):
     # NOTE: all protocol callbacks should be invoked from here
     def _pkt_read(self, pkt: Packet) -> None:
         """Pass any valid Packets to the protocol's callback (_prev_pkt, _this_pkt)."""
-
+        print("EB - transport._pkt_read...606")
         self._this_pkt, self._prev_pkt = pkt, self._this_pkt
 
         # if self._reading is False:  # raise, or warn & return?
@@ -746,7 +749,9 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
     def __init__(self, *args: Any, disable_sending: bool = True, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-
+        print("EB - transport.init...749")
+        if isinstance(self._pkt_source, TextIOWrapper):
+            assert not self._pkt_source.closed
         if bool(disable_sending) is False:
             raise exc.TransportSourceInvalid("This Transport cannot send packets")
 
@@ -758,6 +763,9 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
     async def _start_reader(self) -> None:  # TODO
         self._reading = True
+        print("EB - transport._start_reader...761")
+        if isinstance(self._pkt_source, TextIOWrapper):
+            assert not self._pkt_source.closed
         try:
             await self._reader()
         except Exception as err:
@@ -772,22 +780,33 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
     # NOTE: self._frame_read() invoked from here
     async def _reader(self) -> None:  # TODO
         """Loop through the packet source for Frames and process them."""
-
+        print("EB - transport._reader...776")
         if isinstance(self._pkt_source, dict):
+            print("EB - _pkt_source is a dict")
             for dtm_str, pkt_line in self._pkt_source.items():  # assume dtm_str is OK
                 while not self._reading:
                     await asyncio.sleep(0.001)
                 self._frame_read(dtm_str, pkt_line)
                 await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
 
-        elif isinstance(self._pkt_source, TextIOWrapper):
-            for dtm_pkt_line in self._pkt_source:  # should check dtm_str is OK
-                while not self._reading:
-                    await asyncio.sleep(0.001)
-                # can be blank lines in annotated log files
-                if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[:1] != "#":
-                    self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
-                await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
+        elif isinstance(self._pkt_source, TextIOWrapper):  # file_name + ...
+            print(f"EB - transport._reader.open to read file_name {self._pkt_source}...785")
+            assert not self._pkt_source.closed
+            # open file file_name before reading
+            with open("issues.txt", "r") as f:  # added EB debug
+                # for dtm_pkt_line in f.readline():  # self._pkt_source:
+                while True:
+                    dtm_pkt_line = f.readline()  # self._pkt_source:  # should check dtm_str is OK
+                    if dtm_pkt_line == '': break
+                    # print(f"EB - transport._reader.line {dtm_pkt_line}")
+                    # dtm_pkt_line = "2025-08-07T07:24:23.267410 062  I --- 18:154951 --:------ 18:154951 1F09 003 0006B3"
+                    while not self._reading:
+                        await asyncio.sleep(0.001)
+                    # there may be blank lines in annotated log files
+                    if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[:1] != "#":
+                        print("EB - transport._reader.read line, extra check .open?...785")
+                        self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])  # <<< this is where the parsing magic happens!
+                    await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
 
         else:
             raise exc.TransportSourceInvalid(
@@ -1258,7 +1277,7 @@ async def transport_factory(
     *,
     port_name: SerPortNameT | None = None,
     port_config: PortConfigT | None = None,
-    packet_log: TextIOWrapper | None = None,
+    packet_log: TextIOWrapper | None = None,  # arriving OK?
     packet_dict: dict[str, str] | None = None,
     disable_sending: bool | None = False,
     extra: dict[str, Any] | None = None,

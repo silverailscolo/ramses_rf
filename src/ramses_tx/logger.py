@@ -268,7 +268,7 @@ def set_pkt_logging(
     logger.setLevel(logging.DEBUG)  # must be at least .INFO
 
     # as set_pkt_logging() may be called several times: to avoid duplicates in logs...
-    for handler in logger.handlers:  # dont use logger.hasHandlers() as not propagating
+    for handler in logger.handlers:  # don't use logger.hasHandlers() as not propagating
         logger.removeHandler(handler)
 
     if file_name:  # note: this opens the packet_log file IO and may block
@@ -311,7 +311,7 @@ def set_pkt_logging(
 
         handler = logging.StreamHandler(stream=sys.stderr)
         handler.setFormatter(console_fmt)
-        handler.setLevel(logging.WARNING)  # musr be .WARNING or less
+        handler.setLevel(logging.WARNING)  # must be .WARNING or less
         handler.addFilter(StdErrFilter())  # record.levelno >= .WARNING
         logger.addHandler(handler)
 

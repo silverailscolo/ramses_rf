@@ -82,6 +82,7 @@ class Engine:
         loop: asyncio.AbstractEventLoop | None = None,
         **kwargs: Any,
     ) -> None:
+        print("EB - gwy.init...85")
         if port_name and input_file:
             _LOGGER.warning(
                 "Port (%s) specified, so file (%s) ignored", port_name, input_file
@@ -95,11 +96,13 @@ class Engine:
             raise TypeError("Either a port_name or a input_file must be specified")
 
         self.ser_name = port_name
+        assert not input_file.closed  # suggest the click stream is closed as soon as it leaves client.py
         self._input_file = input_file
 
         self._port_config: PortConfigT | dict[Never, Never] = port_config or {}
         self._packet_log: PktLogConfigT | dict[Never, Never] = packet_log or {}
         self._loop = loop or asyncio.get_running_loop()
+        print("EB - gwy.init._loop...105")
 
         self._exclude: DeviceListT = block_list or {}
         self._include: DeviceListT = known_list or {}
@@ -184,14 +187,20 @@ class Engine:
         Initiate receiving (Messages) and sending (Commands).
         """
 
-        pkt_source: dict[str, Any] = {}  # [str, dict | str | TextIO]
+        pkt_source: dict[str, Any] = {}  # [str, dict | str | TextIOWrapper]
         if self.ser_name:
             pkt_source[SZ_PORT_NAME] = self.ser_name
             pkt_source[SZ_PORT_CONFIG] = self._port_config
         else:  # if self._input_file:
-            pkt_source[SZ_PACKET_LOG] = self._input_file  # io.TextIOWrapper
+            pkt_source[SZ_PACKET_LOG] = self._input_file  # io.TextIOWrapper   # error starts here?
 
         # incl. await protocol.wait_for_connection_made(timeout=5)
+        print(f"EB - gwy.start_transport...197 pkt_source={pkt_source}")
+        print(f"EB - gwy.start_transport...198 pkt_log={pkt_source[SZ_PACKET_LOG]}")
+        assert isinstance(pkt_source[SZ_PACKET_LOG], TextIOWrapper)
+        assert not self._input_file.closed
+        if isinstance(pkt_source[SZ_PACKET_LOG], TextIOWrapper):
+            assert not pkt_source[SZ_PACKET_LOG].closed  # checks added
         self._transport = await transport_factory(
             self._protocol,
             disable_sending=self._disable_sending,
@@ -205,8 +214,10 @@ class Engine:
         await self._protocol.wait_for_connection_made()
 
         # TODO: should this be removed (if so, pytest all before committing)
-        if self._input_file:
-            await self._protocol.wait_for_connection_lost()
+        # if self._input_file:
+        #     await self._protocol.wait_for_connection_lost()
+        print("EB - gwy.start dontwait...214")
+
 
     async def stop(self) -> None:
         """Close the transport (will stop the protocol)."""
