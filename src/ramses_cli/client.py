@@ -11,7 +11,7 @@ from typing import Any, Final
 
 import click
 from colorama import Fore, Style, init as colorama_init
-from io import TextIOWrapper
+# from io import TextIOWrapper
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
 from ramses_rf.const import DONT_CREATE_MESSAGES, SZ_ZONE_IDX
@@ -200,8 +200,9 @@ def cli(ctx, config_file=None, eavesdrop: None | bool = None, **kwargs: Any) -> 
 class FileCommand(click.Command):  # client.py parse <file>
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.params.insert(  # input_file
-            0, click.Argument(("input-file",), type=click.File("r"), default=sys.stdin)
+        self.params.insert(  # input_file name/ TODO path only
+            0, click.Argument(("input-file",))
+            # 0, click.Argument(("input-file",), type=click.File("r"), default=sys.stdin)
         )
         # self.params.insert(  # --packet-log  # NOTE: useful only for test/dev
         #     1,
@@ -257,11 +258,12 @@ def parse(obj, **kwargs: Any):
     config, lib_config = split_kwargs(obj, kwargs)
 
     # create file_name kwarg from config(click name + type + encoding)
-    # lib_config[SZ_INPUT_FILE] = config.pop(SZ_INPUT_FILE)  # original code
-    assert not config[SZ_INPUT_FILE].closed  # is open!!
-    input_file_wrapper: TextIOWrapper = TextIOWrapper(config.pop(SZ_INPUT_FILE))
-    assert not input_file_wrapper.closed  # is open!!
-    lib_config[SZ_INPUT_FILE] = input_file_wrapper
+    lib_config[SZ_INPUT_FILE] = config.pop(SZ_INPUT_FILE)  # just the file path
+    # now open but arrives as .closed in main()
+    # assert not config[SZ_INPUT_FILE].closed  # is open!!
+    # input_file_wrapper: TextIOWrapper = TextIOWrapper(config.pop(SZ_INPUT_FILE))
+    # assert not input_file_wrapper.closed  # is still open!!
+    # lib_config[SZ_INPUT_FILE] = input_file_wrapper
 
     return PARSE, lib_config, config
 
@@ -413,7 +415,6 @@ def _print_engine_state(gwy: Gateway, **kwargs: Any) -> None:
 
 def print_summary(gwy: Gateway, **kwargs: Any) -> None:
     entity = gwy.tcs or gwy
-    print("EB - client starting print_summary()...410")
 
     if kwargs.get("show_schema"):
         print(f"Schema[{entity}] = {json.dumps(entity.schema, indent=4)}\r\n")
@@ -457,7 +458,6 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
                     for pkt in verb.values():
                         print(f"{pkt}")
             print()
-    print("EB - client finished print_summary()...410")
 
 
 async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
@@ -468,7 +468,6 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
 
         In this case, the message is merely printed.
         """
-        print("EB - client main() handle_msg()...465")
         if kwargs["long_format"]:  # HACK for test/dev
             print(
                 f"{msg.dtm.isoformat(timespec='microseconds')} ... {msg!r}"
@@ -491,8 +490,8 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
             print(f"{COLORS.get(msg.verb)}{dtm} {msg}"[:con_cols])
 
     serial_port, lib_kwargs = normalise_config(lib_kwargs)
-    print(f"EB - client main() start gwy...494 w/kwargs: {lib_kwargs}")  # includes file
-    assert not lib_kwargs.get(SZ_INPUT_FILE).closed  # closed! suggests the click stream is closed as soon as it leaves client.py
+    assert isinstance(lib_kwargs.get(SZ_INPUT_FILE), str)
+    # assert not lib_kwargs.get(SZ_INPUT_FILE).closed == closed! suggests the click stream is closed as soon as it leaves client.py
 
     if kwargs["restore_schema"]:
         print(" - restoring client schema from a HA cache...")
@@ -518,7 +517,6 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
     print("\r\nclient.py: Starting engine...")
 
     try:  # main code here
-        print("EB - client main() gwy.start...514")
         # Issue #125: client parse filename raises: ValueError: "I/O operation on closed file"
         # origin: transport (the io.TextIOStream file is never opened)
         await gwy.start()
@@ -536,7 +534,6 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
             await gwy._protocol._wait_connection_lost
 
         elif command in (LISTEN, PARSE):
-            print("EB - await_conn_lost... - off 530")  # never reached
             await gwy._protocol._wait_connection_lost
 
     except asyncio.CancelledError:
