@@ -12,7 +12,6 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import datetime as dt
-from io import TextIOWrapper
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Never
 
@@ -74,7 +73,7 @@ class Engine:
     def __init__(
         self,
         port_name: str | None,
-        input_file: TextIOWrapper | None = None,
+        input_file: str | None = None,
         port_config: PortConfigT | None = None,
         packet_log: PktLogConfigT | None = None,
         block_list: DeviceListT | None = None,
@@ -184,7 +183,7 @@ class Engine:
         Initiate receiving (Messages) and sending (Commands).
         """
 
-        pkt_source: dict[str, Any] = {}  # [str, dict | str ]
+        pkt_source: dict[str, Any] = {}  # [str, dict | str | TextIO]
         if self.ser_name:
             pkt_source[SZ_PORT_NAME] = self.ser_name
             pkt_source[SZ_PORT_CONFIG] = self._port_config
@@ -192,7 +191,6 @@ class Engine:
             pkt_source[SZ_PACKET_LOG] = self._input_file  # filename as string
 
         # incl. await protocol.wait_for_connection_made(timeout=5)
-        assert isinstance(pkt_source[SZ_PACKET_LOG], str)
         self._transport = await transport_factory(
             self._protocol,
             disable_sending=self._disable_sending,

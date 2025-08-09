@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import fileinput
 import functools
 import glob
 import json
@@ -782,11 +783,9 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         elif isinstance(self._pkt_source, str):  # file_name + ...
             # open file file_name before reading
             try:
-                with open(self._pkt_source, "r") as file:
-                    # for dtm_pkt_line in file.readline():  # self._pkt_source:
-                    while True:
-                        dtm_pkt_line = file.readline()  # self._pkt_source:  # should check dtm_str is OK
-                        if dtm_pkt_line == '': break
+                with fileinput.input(files=(self._pkt_source), encoding='utf-8') as file:
+                    for dtm_pkt_line in file:  # self._pkt_source:
+                        # TODO check dtm_str is OK
                         while not self._reading:
                             await asyncio.sleep(0.001)
                         # there may be blank lines in annotated log files
