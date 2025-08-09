@@ -115,6 +115,7 @@ class _BaseProtocol(asyncio.Protocol):
 
         if self._wait_connection_made.done():
             return
+
         self._wait_connection_lost = self._loop.create_future()
         self._wait_connection_made.set_result(transport)
         self._transport = transport
@@ -140,8 +141,10 @@ class _BaseProtocol(asyncio.Protocol):
         """
 
         assert self._wait_connection_lost  # mypy
+
         if self._wait_connection_lost.done():  # BUG: why is callback invoked twice?
             return
+
         self._wait_connection_made = self._loop.create_future()
         if err:
             self._wait_connection_lost.set_exception(err)
@@ -156,6 +159,7 @@ class _BaseProtocol(asyncio.Protocol):
 
         Will raise TransportError if isn't disconnect within timeout seconds.
         """
+
         if not self._wait_connection_lost:
             return None
 
@@ -164,10 +168,6 @@ class _BaseProtocol(asyncio.Protocol):
         except TimeoutError as err:
             raise exc.TransportError(
                 f"Transport did not unbind from Protocol within {timeout} secs"
-            ) from err
-        except ValueError as err:
-            raise exc.TransportError(
-                f"Transport File already Closed"
             ) from err
 
     def pause_writing(self) -> None:

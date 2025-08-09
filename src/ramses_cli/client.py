@@ -11,7 +11,6 @@ from typing import Any, Final
 
 import click
 from colorama import Fore, Style, init as colorama_init
-# from io import TextIOWrapper
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
 from ramses_rf.const import DONT_CREATE_MESSAGES, SZ_ZONE_IDX
@@ -200,9 +199,8 @@ def cli(ctx, config_file=None, eavesdrop: None | bool = None, **kwargs: Any) -> 
 class FileCommand(click.Command):  # client.py parse <file>
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.params.insert(  # input_file name/ TODO path only
+        self.params.insert(  # input_file name/path only
             0, click.Argument(("input-file",))
-            # 0, click.Argument(("input-file",), type=click.File("r"), default=sys.stdin)
         )
         # self.params.insert(  # --packet-log  # NOTE: useful only for test/dev
         #     1,
@@ -257,13 +255,7 @@ def parse(obj, **kwargs: Any):
     """Command to parse a log file containing messages/packets."""
     config, lib_config = split_kwargs(obj, kwargs)
 
-    # create file_name kwarg from config(click name + type + encoding)
     lib_config[SZ_INPUT_FILE] = config.pop(SZ_INPUT_FILE)  # just the file path
-    # now open but arrives as .closed in main()
-    # assert not config[SZ_INPUT_FILE].closed  # is open!!
-    # input_file_wrapper: TextIOWrapper = TextIOWrapper(config.pop(SZ_INPUT_FILE))
-    # assert not input_file_wrapper.closed  # is still open!!
-    # lib_config[SZ_INPUT_FILE] = input_file_wrapper
 
     return PARSE, lib_config, config
 
@@ -468,6 +460,7 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
 
         In this case, the message is merely printed.
         """
+
         if kwargs["long_format"]:  # HACK for test/dev
             print(
                 f"{msg.dtm.isoformat(timespec='microseconds')} ... {msg!r}"
@@ -490,8 +483,6 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
             print(f"{COLORS.get(msg.verb)}{dtm} {msg}"[:con_cols])
 
     serial_port, lib_kwargs = normalise_config(lib_kwargs)
-    assert isinstance(lib_kwargs.get(SZ_INPUT_FILE), str)
-    # assert not lib_kwargs.get(SZ_INPUT_FILE).closed == closed! suggests the click stream is closed as soon as it leaves client.py
 
     if kwargs["restore_schema"]:
         print(" - restoring client schema from a HA cache...")
@@ -517,8 +508,6 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
     print("\r\nclient.py: Starting engine...")
 
     try:  # main code here
-        # Issue #125: client parse filename raises: ValueError: "I/O operation on closed file"
-        # origin: transport (the io.TextIOStream file is never opened)
         await gwy.start()
 
         # TODO:

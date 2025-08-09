@@ -95,7 +95,6 @@ class Engine:
             raise TypeError("Either a port_name or a input_file must be specified")
 
         self.ser_name = port_name
-        # assert not input_file.closed  # suggest the click stream is closed as soon as it leaves client.py
         self._input_file = input_file
 
         self._port_config: PortConfigT | dict[Never, Never] = port_config or {}
@@ -185,7 +184,7 @@ class Engine:
         Initiate receiving (Messages) and sending (Commands).
         """
 
-        pkt_source: dict[str, Any] = {}  # [str, dict | str | TextIOWrapper]
+        pkt_source: dict[str, Any] = {}  # [str, dict | str ]
         if self.ser_name:
             pkt_source[SZ_PORT_NAME] = self.ser_name
             pkt_source[SZ_PORT_CONFIG] = self._port_config
@@ -209,7 +208,6 @@ class Engine:
         # TODO: should this be removed (if so, pytest all before committing)
         if self._input_file:
             await self._protocol.wait_for_connection_lost()
-
 
     async def stop(self) -> None:
         """Close the transport (will stop the protocol)."""

@@ -44,7 +44,6 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime as dt, timedelta as td
 from functools import wraps
-from io import TextIOWrapper
 from string import printable
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
@@ -440,14 +439,12 @@ class _FileTransportAbstractor:
 
     def __init__(
         self,
-        pkt_source: dict[str, str] | TextIOWrapper,
+        pkt_source: dict[str, str] | str,
         protocol: RamsesProtocolT,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         # per().__init__(extra=extra)  # done in _BaseTransport
 
-        if isinstance(pkt_source, TextIOWrapper):
-            assert not pkt_source.closed
         self._pkt_source = pkt_source
 
         self._protocol = protocol
@@ -577,6 +574,7 @@ class _ReadTransport(_BaseTransport):
 
     def _make_connection(self, gwy_id: DeviceIdT | None) -> None:
         self._extra[SZ_ACTIVE_HGI] = gwy_id  # or HGI_DEV_ADDR.id
+
         self.loop.call_soon_threadsafe(  # shouldn't call this until we have HGI-ID
             functools.partial(self._protocol.connection_made, self, ramses=True)  # type: ignore[arg-type]
         )
@@ -604,6 +602,7 @@ class _ReadTransport(_BaseTransport):
     # NOTE: all protocol callbacks should be invoked from here
     def _pkt_read(self, pkt: Packet) -> None:
         """Pass any valid Packets to the protocol's callback (_prev_pkt, _this_pkt)."""
+
         self._this_pkt, self._prev_pkt = pkt, self._this_pkt
 
         # if self._reading is False:  # raise, or warn & return?
@@ -611,7 +610,7 @@ class _ReadTransport(_BaseTransport):
         if self._closing is True:  # raise, or warn & return?
             raise exc.TransportError("Transport is closing or has closed")
 
-        # TODO: can we switch to call_sson now QoS has been refactored?
+        # TODO: can we switch to call_soon now QoS has been refactored?
         # NOTE: No need to use call_soon() here, and they may break Qos/Callbacks
         # NOTE: Thus, excepts need checking
         try:  # below could be a call_soon?
@@ -746,8 +745,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
     def __init__(self, *args: Any, disable_sending: bool = True, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        if isinstance(self._pkt_source, TextIOWrapper):
-            assert not self._pkt_source.closed
+
         if bool(disable_sending) is False:
             raise exc.TransportSourceInvalid("This Transport cannot send packets")
 
@@ -759,8 +757,6 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
     async def _start_reader(self) -> None:  # TODO
         self._reading = True
-        if isinstance(self._pkt_source, TextIOWrapper):
-            assert not self._pkt_source.closed
         try:
             await self._reader()
         except Exception as err:
@@ -775,6 +771,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
     # NOTE: self._frame_read() invoked from here
     async def _reader(self) -> None:  # TODO
         """Loop through the packet source for Frames and process them."""
+
         if isinstance(self._pkt_source, dict):
             for dtm_str, pkt_line in self._pkt_source.items():  # assume dtm_str is OK
                 while not self._reading:
@@ -784,23 +781,21 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
         elif isinstance(self._pkt_source, str):  # file_name + ...
             # open file file_name before reading
-            with open(self._pkt_source, "r") as file:
-                # for dtm_pkt_line in file.readline():  # self._pkt_source:
-                while True:
-                    dtm_pkt_line = file.readline()  # self._pkt_source:  # should check dtm_str is OK
-                    if dtm_pkt_line == '': break
-                    while not self._reading:
-                        await asyncio.sleep(0.001)
-                    # there may be blank lines in annotated log files
-                    if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[:1] != "#":
-                        self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
-                        # this is where the parsing magic happens!
-                    # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
-
-        else:
-            raise exc.TransportSourceInvalid(
-                f"Packet source is not dict or file: {self._pkt_source:!r}"
-            )
+            try:
+                with open(self._pkt_source, "r") as file:
+                    # for dtm_pkt_line in file.readline():  # self._pkt_source:
+                    while True:
+                        dtm_pkt_line = file.readline()  # self._pkt_source:  # should check dtm_str is OK
+                        if dtm_pkt_line == '': break
+                        while not self._reading:
+                            await asyncio.sleep(0.001)
+                        # there may be blank lines in annotated log files
+                        if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[:1] != "#":
+                            self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
+                            # this is where the parsing magic happens!
+                        # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
+            except FileNotFoundError as err:
+                _LOGGER.warning(f"Correct the packet file name; {err}")
 
     def _close(self, exc: exc.RamsesException | None = None) -> None:
         """Close the transport (cancel any outstanding tasks)."""
@@ -1266,7 +1261,7 @@ async def transport_factory(
     *,
     port_name: SerPortNameT | None = None,
     port_config: PortConfigT | None = None,
-    packet_log: TextIOWrapper | None = None,  # arriving OK?
+    packet_log: str | None = None,
     packet_dict: dict[str, str] | None = None,
     disable_sending: bool | None = False,
     extra: dict[str, Any] | None = None,
