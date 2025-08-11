@@ -383,7 +383,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
         """
         for code in [c for c in (Code._22F7, Code._31DA) if c in self._msgs]:
             if v := self._msgs[code].payload.get(SZ_BYPASS_POSITION):
-                assert isinstance(v, (float | type(None)))
+                assert isinstance(v, (int | type(None)))
                 return v
                 # if both packets exist and both have the key, return the most recent
         return None
