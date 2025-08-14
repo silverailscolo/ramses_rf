@@ -51,8 +51,7 @@ from typing import TYPE_CHECKING, Any, Final, TypeAlias
 from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
-from paho.mqtt.enums import CallbackAPIVersion
-from paho.mqtt.reasoncodes import ReasonCode
+from paho.mqtt.enums import CallbackAPIVersion  # type: ignore[import-untyped]
 from serial import (  # type: ignore[import-untyped]
     Serial,
     SerialException,
@@ -1034,11 +1033,13 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._num_tokens: float = self._MAX_TOKENS * 2
 
         # instantiate a paho mqtt client
-        self.client = mqtt.Client(CallbackAPIVersion.VERSION2)
-        self.client.on_connect = self._on_connect  # type: ignore[assignment]
-        self.client.on_connect_fail = self._on_connect_fail  # type: ignore[assignment]
-        self.client.on_disconnect = self._on_disconnect  # type: ignore[assignment]
-        self.client.on_message = self._on_message  # type: ignore[assignment]
+        self.client = mqtt.Client(
+            protocol=mqtt.MQTTv5, callback_api_version=CallbackAPIVersion.VERSION2
+        )
+        self.client.on_connect = self._on_connect
+        self.client.on_connect_fail = self._on_connect_fail
+        self.client.on_disconnect = self._on_disconnect
+        self.client.on_message = self._on_message
         self.client.username_pw_set(self._username, self._password)
         # connect to the mqtt server
         self._attempt_connection()
@@ -1094,9 +1095,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     def _on_connect(
         self,
         client: mqtt.Client,
-        userdata: Any | None,
+        userdata: Any,
         flags: dict[str, Any],
-        reason_code: ReasonCode,
+        reason_code: Any,
         properties: Any | None,
     ) -> None:
         # _LOGGER.error("Mqtt._on_connect(%s, %s, %s, %s)", client, userdata, flags, reason_code.getName())
@@ -1123,11 +1124,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     def _on_connect_fail(
         self,
         client: mqtt.Client,
-        userdata: Any | None,
-        reason_code: ReasonCode,
-        properties: Any | None,
+        userdata: Any,
     ) -> None:
-        _LOGGER.error(f"MQTT connection failed: {reason_code.getName()}")  # type: ignore[no-untyped-call]
+        _LOGGER.error("MQTT connection failed")
 
         self._connecting = False
         self._connected = False
@@ -1138,9 +1137,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     def _on_disconnect(
         self,
         client: mqtt.Client,
-        userdata: Any | None,
-        disconnectFlags: Any | None,
-        reason_code: ReasonCode,
+        userdata: Any,
+        reason_code: Any,
         properties: Any | None,
     ) -> None:
         _LOGGER.warning(f"MQTT disconnected: {reason_code.getName()}")  # type: ignore[no-untyped-call]
@@ -1155,32 +1153,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             # Connection failed, also schedule reconnection
             self._schedule_reconnect()
 
-    def _create_connection(self, msg: mqtt.MQTTMessage) -> None:
-        """Invoke the Protocols's connection_made() callback MQTT is established."""
-        # _LOGGER.error("Mqtt._create_connection(%s)", msg)
-
-        assert msg.payload == b"online", "Coding error"
-
-        if self._connected:
-            _LOGGER.info("MQTT device came back online - resuming writing")
-            self._loop.call_soon_threadsafe(self._protocol.resume_writing)
-            return
-
-        _LOGGER.info("MQTT device is online - establishing connection")
-        self._connected = True
-
-        self._extra[SZ_ACTIVE_HGI] = msg.topic[-9:]
-
-        self._topic_pub = msg.topic + "/tx"
-        self._topic_sub = msg.topic + "/rx"
-
-        self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
-
-        self._make_connection(gwy_id=msg.topic[-9:])  # type: ignore[arg-type]
-
     # NOTE: self._frame_read() invoked from here
     def _on_message(
-        self, client: mqtt.Client, userdata: Any | None, msg: mqtt.MQTTMessage
+        self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage
     ) -> None:
         """Make a Frame from the MQTT message and process it."""
         # _LOGGER.error(
