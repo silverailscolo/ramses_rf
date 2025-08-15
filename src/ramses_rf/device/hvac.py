@@ -8,7 +8,6 @@ from typing import Any, TypeVar
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
-    FAN_MODE,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BOOST_TIMER,
@@ -277,7 +276,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
 
     @property
     def fan_mode(self) -> str | None:
-        return self._msg_value(Code._22F1, key=FAN_MODE)
+        return self._msg_value(Code._22F1, key=SZ_FAN_MODE)
 
     @property
     def boost_timer(self) -> int | None:
@@ -287,7 +286,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
     def status(self) -> dict[str, Any]:
         return {
             **super().status,
-            FAN_MODE: self.fan_mode,
+            SZ_FAN_MODE: self.fan_mode,
             SZ_BOOST_TIMER: self.boost_timer,
         }
 
@@ -437,33 +436,42 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
         return self._msg_value(Code._31DA, key=SZ_EXHAUST_TEMP)
 
     @property
+    def fan_rate(self) -> str | None:
+        """
+        Lookup fan mode description from _22F4  message payload, e.g. "low", "medium", "boost".
+        For manufacturers Orcon, Vasco, ClimaRad.
+
+        :return: int or str describing rate of fan
+        """
+        return self._msg_value(Code._22F4, key=SZ_FAN_RATE)
+
+    @property
+    def fan_mode(self) -> str | None:
+        """
+        Lookup fan mode description from _22F4  message payload, e.g. "auto", "manual", "off".
+        For manufacturers Orcon, Vasco, ClimaRad.
+
+        :return: a string describing mode
+        """
+        return self._msg_value(Code._22F4, key=SZ_FAN_MODE)
+
+    @property
     def fan_info(self) -> str | None:
         """
-        Extract fan info description from _22F4, _31D9 or _31DA message payload
+        Extract fan info description from _31D9 or _31DA message payload, e.g. "speed 2, medium".
+        By its name, the result is automatically displayed in HA Climate UI.
+        Some manufacturers (Orcon, Vasco) include the fan mode (auto, manual), others don't (Itho).
 
-        :return: string describing mode, speed
+        :return: a string describing mode, speed
         """
-        if (
-            Code._31D9 in self._msgs
-        ):  # Vasco D60 and ClimaRad minibox send mode/speed in _31D9
+        if Code._31D9 in self._msgs:
+            # Itho, Vasco D60 and ClimaRad (MiniBox fan) send mode/speed in _31D9
+            v: str
             for k, v in self._msgs[Code._31D9].payload.items():
-                if (
-                    k == SZ_FAN_MODE and v != "FF"
-                ):  # Prevent ClimaRad Ventura constant "FF" to pass
-                    return str(v)
-            # no guard clause, just ignore
-        if Code._22F4 in self._msgs:  # ClimaRad Ventura sends mode/speed in _22F4
-            mode: str = ""
-            for k, v in self._msgs[Code._22F4].payload.items():
-                if k == SZ_FAN_MODE:
-                    mode = v
-                if k == SZ_FAN_RATE:
-                    mode = mode + ", " + v
-            if mode != "":
-                return mode
-        return str(
-            self._msg_value(Code._31DA, key=SZ_FAN_INFO)
-        )  # a description to display in climate, e.g. "speed 2, medium", note localize in UI
+                if k == SZ_FAN_MODE and len(v) > 2: # prevent non-lookups to pass
+                    return v
+            # continue to 31DA
+        return str(self._msg_value(Code._31DA, key=SZ_FAN_INFO))  # Itho lookup
 
     @property
     def indoor_humidity(self) -> float | None:
