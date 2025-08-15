@@ -45,6 +45,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime as dt, timedelta as td
 from functools import wraps
+from io import TextIOWrapper
 from string import printable
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
@@ -440,7 +441,7 @@ class _FileTransportAbstractor:
 
     def __init__(
         self,
-        pkt_source: dict[str, str] | str,
+        pkt_source: dict[str, str] | str | TextIOWrapper,
         protocol: RamsesProtocolT,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
@@ -783,9 +784,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         elif isinstance(self._pkt_source, str):  # file_name + ...
             # open file file_name before reading
             try:
-                with fileinput.input(
-                    files=(self._pkt_source), encoding="utf-8"
-                ) as file:
+                with fileinput.input(files=self._pkt_source, encoding="utf-8") as file:
                     for dtm_pkt_line in file:  # self._pkt_source:
                         # TODO check dtm_str is OK
                         while not self._reading:
@@ -799,9 +798,17 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                         # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
             except FileNotFoundError as err:
                 _LOGGER.warning(f"Correct the packet file name; {err}")
+        elif isinstance(self._pkt_source, TextIOWrapper):  # used in tests
+            for dtm_pkt_line in self._pkt_source:  # should check dtm_str is OK
+                while not self._reading:
+                    await asyncio.sleep(0.001)
+                # can be blank lines in annotated log files
+                if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[:1] != "#":
+                    self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
+                await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
         else:
             raise exc.TransportSourceInvalid(
-                f"Packet source is not dict or file: {self._pkt_source:!r}"
+                f"Packet source is not dict, TextIOWrapper or str: {self._pkt_source:!r}"
             )
 
     def _close(self, exc: exc.RamsesException | None = None) -> None:

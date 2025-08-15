@@ -88,7 +88,7 @@ LIB_CONFIG_LISTEN_ = {
 }
 LIB_CONFIG_PARSE__ = {
     "config": {"reduce_processing": 0},
-    "input_file": "-",  # will be replaced by sys.stdin by fileinput()
+    "input_file": "-",  # will be replaced by sys.stdin by fileinput
     # was: "input_file": "<_io.TextIOWrapper name='<stdin>' mode='r' encoding='utf-8'>",
 }
 
