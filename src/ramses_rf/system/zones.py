@@ -390,14 +390,6 @@ class DhwZone(ZoneSchedule):  # CS92A
     ) -> asyncio.Task[Packet]:
         """Set the DHW mode (mode, active, until)."""
 
-        # debug issue #204
-        if mode == ZON_MODE_MAP.FOLLOW:
-            assert active is None and until is None
-        if mode in (ZON_MODE_MAP.PERMANENT, ZON_MODE_MAP.ADVANCED):
-            assert active is not None and until is None
-        if mode in (ZON_MODE_MAP.TEMPORARY):
-            assert active is not None and until is not None
-
         cmd = Command.set_dhw_mode(self.ctl.id, mode=mode, active=active, until=until)
         return self._gwy.send_cmd(cmd, priority=Priority.HIGH, wait_for_reply=True)
 
@@ -804,14 +796,6 @@ class Zone(ZoneSchedule):
         until: dt | str | None = None,
     ) -> asyncio.Task[Packet]:  # 2309/2349
         """Override the zone's setpoint for a specified duration, or indefinitely."""
-
-        # debug issue #204
-        if mode == ZON_MODE_MAP.FOLLOW:
-            assert setpoint is None and until is None
-        if mode in (ZON_MODE_MAP.PERMANENT, ZON_MODE_MAP.ADVANCED):
-            assert setpoint is not None and until is None
-        if mode in (ZON_MODE_MAP.TEMPORARY):
-            assert setpoint is not None and until is not None
 
         if mode is not None or until is not None:  # Hometronics doesn't support 2349
             cmd = Command.set_zone_mode(
