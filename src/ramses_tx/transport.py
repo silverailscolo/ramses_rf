@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import fileinput
 import functools
 import glob
 import json
@@ -44,7 +45,6 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime as dt, timedelta as td
 from functools import wraps
-from io import TextIOWrapper
 from string import printable
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
@@ -263,7 +263,7 @@ def _normalise(pkt_line: str) -> str:
     elif pkt_line[:2] in (I_, RQ, RP, W_):
         pkt_line = ""
 
-    # psuedo-RAMSES-II packets (encrypted payload?)...
+    # pseudo-RAMSES-II packets (encrypted payload?)...
     if pkt_line[10:14] in (" 08:", " 31:") and pkt_line[-16:] == "* Checksum error":
         pkt_line = pkt_line[:-17] + " # Checksum error (ignored)"
 
@@ -440,7 +440,7 @@ class _FileTransportAbstractor:
 
     def __init__(
         self,
-        pkt_source: dict[str, str] | TextIOWrapper,
+        pkt_source: dict[str, str] | str,
         protocol: RamsesProtocolT,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
@@ -611,7 +611,7 @@ class _ReadTransport(_BaseTransport):
         if self._closing is True:  # raise, or warn & return?
             raise exc.TransportError("Transport is closing or has closed")
 
-        # TODO: can we switch to call_sson now QoS has been refactored?
+        # TODO: can we switch to call_soon now QoS has been refactored?
         # NOTE: No need to use call_soon() here, and they may break Qos/Callbacks
         # NOTE: Thus, excepts need checking
         try:  # below could be a call_soon?
@@ -778,17 +778,27 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                 while not self._reading:
                     await asyncio.sleep(0.001)
                 self._frame_read(dtm_str, pkt_line)
-                await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
+                # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
 
-        elif isinstance(self._pkt_source, TextIOWrapper):
-            for dtm_pkt_line in self._pkt_source:  # should check dtm_str is OK
-                while not self._reading:
-                    await asyncio.sleep(0.001)
-                # can be blank lines in annotated log files
-                if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[:1] != "#":
-                    self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
-                await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
-
+        elif isinstance(self._pkt_source, str):  # file_name + ...
+            # open file file_name before reading
+            try:
+                with fileinput.input(
+                    files=(self._pkt_source), encoding="utf-8"
+                ) as file:
+                    for dtm_pkt_line in file:  # self._pkt_source:
+                        # TODO check dtm_str is OK
+                        while not self._reading:
+                            await asyncio.sleep(0.001)
+                        # there may be blank lines in annotated log files
+                        if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[
+                            :1
+                        ] != "#":
+                            self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
+                            # this is where the parsing magic happens!
+                        # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
+            except FileNotFoundError as err:
+                _LOGGER.warning(f"Correct the packet file name; {err}")
         else:
             raise exc.TransportSourceInvalid(
                 f"Packet source is not dict or file: {self._pkt_source:!r}"
@@ -1258,7 +1268,7 @@ async def transport_factory(
     *,
     port_name: SerPortNameT | None = None,
     port_config: PortConfigT | None = None,
-    packet_log: TextIOWrapper | None = None,
+    packet_log: str | None = None,
     packet_dict: dict[str, str] | None = None,
     disable_sending: bool | None = False,
     extra: dict[str, Any] | None = None,

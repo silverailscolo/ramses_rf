@@ -4,7 +4,6 @@
 import asyncio
 from collections.abc import Callable
 from datetime import datetime as dt
-from io import TextIOWrapper
 from typing import Any, Protocol, TypeVar
 
 from serial import Serial  # type: ignore[import-untyped]
@@ -105,7 +104,7 @@ class xRamsesTransportT(Protocol):
     def __init__(  # type: ignore[no-any-unimported]
         self,
         protocol: asyncio.Protocol,
-        pkt_source: Serial | dict[str, str] | TextIOWrapper,
+        pkt_source: Serial | dict[str, str] | str,
         loop: asyncio.AbstractEventLoop | None = None,
         extra: dict[str, Any] | None = None,
         **kwargs: Any,
