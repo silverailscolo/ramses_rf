@@ -468,7 +468,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
             # Itho, Vasco D60 and ClimaRad (MiniBox fan) send mode/speed in _31D9
             v: str
             for k, v in self._msgs[Code._31D9].payload.items():
-                if k == SZ_FAN_MODE and len(v) > 2: # prevent non-lookups to pass
+                if k == SZ_FAN_MODE and len(v) > 2:  # prevent non-lookups to pass
                     return v
             # continue to 31DA
         return str(self._msg_value(Code._31DA, key=SZ_FAN_INFO))  # Itho lookup
