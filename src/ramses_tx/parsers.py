@@ -1679,7 +1679,7 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
 # WIP: unknown, HVAC
 def parser_22f4(payload: str, msg: Message) -> dict[str, Any]:
     if msg.len == 13 and payload[14:] == "000000000000":
-        # ClimaRad Ventura fan/remote
+        # ClimaRad Ventura fan & remote
         _pl = payload[:4] + payload[12:14] if payload[10:12] == "00" else payload[8:14]
     else:
         _pl = payload[:6]
@@ -2147,9 +2147,9 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
 
     bitmap = int(payload[2:4], 16)
 
-    # NOTE: 31D9[4:6] is fan_rate (ClimaRad minibox, Itho) *or* fan_mode (Orcon, Vasco)
+    # NOTE: 31D9[4:6] is fan_speed (ClimaRad minibox, Itho) *or* fan_mode (Orcon, Vasco)
     result = {
-        **parse_exhaust_fan_speed(payload[4:6]),  # itho
+        **parse_exhaust_fan_speed(payload[4:6]),  # for itho
         SZ_FAN_MODE: payload[4:6],  # orcon, vasco/climarad
         "passive": bool(bitmap & 0x02),
         "damper_only": bool(bitmap & 0x04),  # i.e. valve only
@@ -2159,16 +2159,17 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
         "_flags": hex_to_flag8(payload[2:4]),
     }
 
+    # Fan Mode Lookup 1 for Vasco codes
     if msg.len == 3:  # usu: I -->20: (no seq#)
         if (
-            payload[:4] == "0000"
+            (payload[:4] == "0000" or payload[:4] == "0080")  # Senza, meaning of 0x80?
             and msg._addrs[0] == msg._addrs[2]
             and msg._addrs[1] == NON_DEV_ADDR
         ):
-            # _31D9_FAN_INFO for Vasco D60 HRU and ClimaRad minibox REM
+            # _31D9_FAN_INFO for Vasco D60 HRU and ClimaRad Minibox, S-Fan, (REM: RQ only, msg.len==1)
             try:
                 assert int(payload[4:6], 16) & 0xFF in _31D9_FAN_INFO_VASCO, (
-                    f"unknown 31D9 fan_mode: {payload[2:4]}"
+                    f"unknown 31D9 fan_mode lookup key: {payload[4:6]}"
                 )
             except AssertionError as err:
                 _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
@@ -2176,6 +2177,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
                 int(payload[4:6], 16) & 0xFF, f"unknown_{payload[4:6]}"
             )
             result[SZ_FAN_MODE] = fan_mode  # replace
+            # if not replaced, 31D9 FAN_MODE is a 2 digit string HEX
         return result
 
     try:
