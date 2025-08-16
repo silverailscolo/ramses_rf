@@ -51,7 +51,7 @@ from typing import TYPE_CHECKING, Any, Final, TypeAlias
 from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
-from paho.mqtt.enums import CallbackAPIVersion  # type: ignore[import-untyped]
+from paho.mqtt.enums import CallbackAPIVersion
 from serial import (  # type: ignore[import-untyped]
     Serial,
     SerialException,
@@ -1105,11 +1105,11 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._connecting = False
 
         if reason_code.is_failure:
-            _LOGGER.error(f"MQTT connection failed: {reason_code.getName()}")  # type: ignore[no-untyped-call]
+            _LOGGER.error(f"MQTT connection failed: {reason_code.getName()}")
             self._schedule_reconnect()
             return
 
-        _LOGGER.info(f"MQTT connected: {reason_code.getName()}")  # type: ignore[no-untyped-call]
+        _LOGGER.info(f"MQTT connected: {reason_code.getName()}")
 
         # Reset reconnect interval on successful connection
         self._current_reconnect_interval = self._reconnect_interval
@@ -1141,7 +1141,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         reason_code: Any,
         properties: Any | None,
     ) -> None:
-        _LOGGER.warning(f"MQTT disconnected: {reason_code.getName()}")  # type: ignore[no-untyped-call]
+        _LOGGER.warning(f"MQTT disconnected: {reason_code.getName()}")
 
         self._connected = False
 
@@ -1152,6 +1152,29 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         elif reason_code.is_failure and not self._closing:
             # Connection failed, also schedule reconnection
             self._schedule_reconnect()
+
+    def _create_connection(self, msg: mqtt.MQTTMessage) -> None:
+        """Invoke the Protocols's connection_made() callback MQTT is established."""
+        # _LOGGER.error("Mqtt._create_connection(%s)", msg)
+
+        assert msg.payload == b"online", "Coding error"
+
+        if self._connected:
+            _LOGGER.info("MQTT device came back online - resuming writing")
+            self._loop.call_soon_threadsafe(self._protocol.resume_writing)
+            return
+
+        _LOGGER.info("MQTT device is online - establishing connection")
+        self._connected = True
+
+        self._extra[SZ_ACTIVE_HGI] = msg.topic[-9:]
+
+        self._topic_pub = msg.topic + "/tx"
+        self._topic_sub = msg.topic + "/rx"
+
+        self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
+
+        self._make_connection(gwy_id=msg.topic[-9:])  # type: ignore[arg-type]
 
     # NOTE: self._frame_read() invoked from here
     def _on_message(
