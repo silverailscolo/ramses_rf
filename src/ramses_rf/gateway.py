@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from io import TextIOWrapper
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -89,7 +88,7 @@ class Gateway(Engine):
     def __init__(
         self,
         port_name: str | None,
-        input_file: TextIOWrapper | None = None,
+        input_file: str | None = None,
         port_config: PortConfigT | None = None,
         packet_log: PktLogConfigT | None = None,
         block_list: DeviceListT | None = None,
