@@ -781,7 +781,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                 self._frame_read(dtm_str, pkt_line)
                 # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
 
-        elif isinstance(self._pkt_source, str):  # file_name + ...
+        elif isinstance(self._pkt_source, str):  # file_name, used in client parse
             # open file file_name before reading
             try:
                 with fileinput.input(files=self._pkt_source, encoding="utf-8") as file:
@@ -798,7 +798,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                         # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
             except FileNotFoundError as err:
                 _LOGGER.warning(f"Correct the packet file name; {err}")
-        elif isinstance(self._pkt_source, TextIOWrapper):  # used in tests
+        elif isinstance(self._pkt_source, TextIOWrapper):  # used by client monitor
             for dtm_pkt_line in self._pkt_source:  # should check dtm_str is OK
                 while not self._reading:
                     await asyncio.sleep(0.001)
