@@ -199,10 +199,10 @@ def cli(ctx, config_file=None, eavesdrop: None | bool = None, **kwargs: Any) -> 
 class FileCommand(click.Command):  # client.py parse <file>
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.params.insert(  # input_file
-            0, click.Argument(("input-file",), type=click.File("r"), default=sys.stdin)
+        self.params.insert(  # input_file name/path only
+            0, click.Argument(("input-file",))
         )
-        # self.params.insert(  # --packet-log  # NOTE: useful for only for test/dev
+        # self.params.insert(  # --packet-log  # NOTE: useful only for test/dev
         #     1,
         #     click.Option(
         #         ("-o", "--packet-log"),
@@ -249,13 +249,13 @@ class PortCommand(
 
 #
 # 1/4: PARSE (a file, +/- eavesdrop)
-@click.command(cls=FileCommand)  # parse a packet log, then stop
+@click.command(cls=FileCommand)  # parse a packet log file, then stop
 @click.pass_obj
 def parse(obj, **kwargs: Any):
-    """Parse a log file for messages/packets."""
+    """Command to parse a log file containing messages/packets."""
     config, lib_config = split_kwargs(obj, kwargs)
 
-    lib_config[SZ_INPUT_FILE] = config.pop(SZ_INPUT_FILE)
+    lib_config[SZ_INPUT_FILE] = config.pop(SZ_INPUT_FILE)  # just the file path
 
     return PARSE, lib_config, config
 
@@ -483,6 +483,7 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
             print(f"{COLORS.get(msg.verb)}{dtm} {msg}"[:con_cols])
 
     serial_port, lib_kwargs = normalise_config(lib_kwargs)
+    assert isinstance(lib_kwargs.get(SZ_INPUT_FILE), str)
 
     if kwargs["restore_schema"]:
         print(" - restoring client schema from a HA cache...")
@@ -493,7 +494,7 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
     #     from tests.deprecated.mocked_rf import MockGateway  # FIXME: for test/dev
     #     gwy = MockGateway(serial_port, **lib_kwargs)
     # else:
-    gwy = Gateway(serial_port, **lib_kwargs)
+    gwy = Gateway(serial_port, **lib_kwargs)  # passes action to gateway
 
     if lib_kwargs[SZ_CONFIG][SZ_REDUCE_PROCESSING] < DONT_CREATE_MESSAGES:
         # library will not send MSGs to STDOUT, so we'll send PKTs instead
