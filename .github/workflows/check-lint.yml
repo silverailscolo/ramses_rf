@@ -3,7 +3,7 @@ name: Linting
 
 on:
   push:
-    branches: [ "master", "stable", "eb-ventura-package" ]
+    branches: [ "master", "stable" ]
     paths: [
       ".github/workflows/check-lint.yml",
       "src/**.py",
