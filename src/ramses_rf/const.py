@@ -10,7 +10,7 @@ from ramses_tx.const import (  # noqa: F401
     DEFAULT_MAX_ZONES as DEFAULT_MAX_ZONES,
     DEVICE_ID_REGEX as DEVICE_ID_REGEX,
     DOMAIN_TYPE_MAP as DOMAIN_TYPE_MAP,
-    FAN_MODE as FAN_MODE,
+    FAN_MODE as FAN_MODE,  # deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
     SYS_MODE_MAP as SYS_MODE_MAP,
     SZ_ACCEPT as SZ_ACCEPT,
     SZ_ACTUATORS as SZ_ACTUATORS,

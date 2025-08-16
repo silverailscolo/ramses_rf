@@ -885,7 +885,7 @@ class Command(Frame):
         mode: int | str | None = None,
         active: bool | None = None,
         until: dt | str | None = None,
-        duration: int | None = None,
+        duration: int | None = None,  # never supplied by DhwZone.set_mode()
         **kwargs: Any,
     ) -> Command:
         """Constructor to set/reset the mode of the DHW (c.f. parser_1f41)."""
@@ -1155,7 +1155,7 @@ class Command(Frame):
         mode: int | str | None = None,
         setpoint: float | None = None,
         until: dt | str | None = None,
-        duration: int | None = None,
+        duration: int | None = None,  # never supplied by Zone.set_mode()
     ) -> Command:
         """Constructor to set/reset the mode of a zone (c.f. parser_2349).
 

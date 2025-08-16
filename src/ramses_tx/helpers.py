@@ -724,9 +724,9 @@ def parse_bypass_position(value: HexStr2) -> PayDictT.BYPASS_POSITION:
     return {SZ_BYPASS_POSITION: bypass_pos}
 
 
-# 31DA[36:38]  # TODO: WIP (3 more bits), also 22F3?
+# 31DA[36:38]  # TODO: WIP (3 more bits), also 22F3 and 22F4?
 def parse_fan_info(value: HexStr2) -> PayDictT.FAN_INFO:
-    """Return the fan info (current speed, and...).
+    """Return the fan state (lookup table for current speed and mode).
 
     The sensor value is None if there is no sensor present (is not an error).
     The dict does not include the key if there is a sensor fault.

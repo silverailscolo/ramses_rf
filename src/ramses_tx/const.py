@@ -712,8 +712,8 @@ class SystemType(StrEnum):
 # used by 22Fx parser, and FanSwitch devices
 # SZ_BOOST_TIMER:Final = "boost_timer"  # minutes, e.g. 10, 20, 30 minutes
 HEATER_MODE: Final = "heater_mode"  # e.g. auto, off
-FAN_MODE: Final = "fan_mode"  # e.g. low. high
-FAN_RATE: Final = "fan_rate"  # percentage, 0.0 - 1.0
+FAN_MODE: Final = "fan_mode"  # e.g. low. high   # .     deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
+FAN_RATE: Final = "fan_rate"  # percentage, 0.0 - 1.0  # deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
 
 
 # RP --- 01:054173 18:006402 --:------ 0005 004 00100000  # before adding RFG100
