@@ -17,7 +17,7 @@ It does four things:
  - allows you to emulate some hardware devices
 
 > [!WARNING]
-> This integration is not affiliated with Honeywell, Airios nor any final manufacturer. The developers take no responsibility for anything that may happen to your devices because of this library.
+> This library is not affiliated with Honeywell, Airios nor any final manufacturer. The developers take no responsibility for anything that may happen to your devices because of this library.
 
 For CH/DHW, the simplest way to know if it will work with your system is to identify the box connected to your boiler/HVAC appliance as one of:
  - **R8810A**: OpenTherm Bridge
@@ -32,7 +32,7 @@ It includes a CLI and can be used as a standalone tool, but also is used as a cl
 
 ## Installation
 
-To use the `ramses_rf` Integration in Home Assistant, just install `Ramses RF` from HACS. It will take care of installing this library. See the [`Ramses_cc wiki`](https://github.com/ramses-rf/ramses_cc/wiki/1.-Installation) for details.
+To use the `ramses_cc` Integration in Home Assistant, just install `Ramses RF` from HACS. It will take care of installing this library. See the [`Ramses_cc wiki`](https://github.com/ramses-rf/ramses_cc/wiki/1.-Installation) for details.
 
 ### Ramses_rf CLI
 
@@ -44,6 +44,8 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-The CLI is called ``client.py`` and is included in the code root. See the [client.py CLI wiki page](https://github.com/ramses-rf/ramses_rf/wiki/The-client.py-command-line) for instructions.
+The CLI is called ``client.py`` and is included in the code root.
+It has options to monitor and parse Ramses-II traffic to screen or a log file, and to parse a file containing Ramses-II messages to the screen.
+See the [client.py CLI wiki page](https://github.com/ramses-rf/ramses_rf/wiki/The-client.py-command-line) for instructions.
 
 For code development, some more setup is required. Please follow the steps in our [Developer's Resource](README-developers.md)

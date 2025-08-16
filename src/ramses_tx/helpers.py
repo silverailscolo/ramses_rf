@@ -750,7 +750,9 @@ def parse_fan_info(value: HexStr2) -> PayDictT.FAN_INFO:
     flags = list((int(value, 16) & (1 << x)) >> x for x in range(7, 4, -1))
 
     return {
-        SZ_FAN_INFO: _31DA_FAN_INFO[int(value, 16) & 0x1F],
+        SZ_FAN_INFO: _31DA_FAN_INFO[
+            int(value, 16) & 0x1F
+        ],  # lookup description from code
         "_unknown_fan_info_flags": flags,
     }
 
