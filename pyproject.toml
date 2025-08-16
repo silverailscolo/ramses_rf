@@ -1,6 +1,6 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2025-08-03
+# last checked/updated: 2025-08-16
 #
 
 [project]
@@ -24,15 +24,15 @@
     "resideo",
     "round thermostat",
     "ramses",
-    "sundial",
-    "chronotherm",
-    "hometronics",
     "airios",
+    "chronotherm",
+    "climarad",
+    "hometronics",
     "itho",
     "nuaire",
     "orcon",
+    "sundial",
     "vasco",
-    "climarad",
   ]
   classifiers = [
     "Topic :: Home Automation",

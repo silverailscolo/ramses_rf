@@ -366,3 +366,5 @@
 # Back to Auto, 1h later
 2024-10-21T16:19:45.476345 061  I --- 37:153226 --:------ 37:153226 31DA 030 00EF0001BD00EF06FD7FFF07CA0743BE09001F0000000000008500850000  # {'hvac_id': '00', 'exhaust_fan_speed': 0.0, 'fan_info': '-unknown 0x1F-', '_unknown_fan_info_flags': [0, 0, 0], 'air_quality': None, 'co2_level': 445, 'indoor_humidity': 0.0, 'outdoor_humidity': None, 'exhaust_temp': 17.89, 'supply_temp': None, 'indoor_temp': 19.94, 'outdoor_temp': 18.59, 'speed_capabilities': ['off', 'timer', 'boost', 'auto', 'speed_4', 'speed_5', 'auto_night', 'pre_heater'], 'bypass_position': 0.0, 'supply_fan_speed': 0.0, 'remaining_mins': 0, 'post_heat': 0.0, 'pre_heat': 0.0, 'supply_flow_fault': 'unreliable', 'exhaust_flow_fault': 'unreliable'}
 # speed is correct, exhaust_temp rises to room temp when no fresh air passing, actual outdoor_temp is now in fact 15.3C (independent sensor), room_temp = 20.2C (independent sensor, see 12A0)
+# 2025-04-28T16:22:00.000000 000  I --- 37:153226 --:------ 37:153226 31DA 030 00EF000251D3EF085C7FFF09D208DCBE09001F0000000000008500850000 # {}
+# RH > 1.0! 0xD3 = d211/200 <<< AssertionError(D3)
