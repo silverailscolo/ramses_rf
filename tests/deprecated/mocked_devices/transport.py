@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime as dt
-from io import TextIOWrapper
 from queue import Empty, Full, PriorityQueue
 from typing import Callable
 
@@ -222,7 +221,7 @@ def create_pkt_stack(  # to use a mocked Serial port (and a sympathetic Transpor
     protocol_factory: Callable[[], _PacketProtocolT] = None,
     port_name: str = None,
     port_config: dict = None,
-    packet_log: TextIOWrapper = None,
+    packet_log: str = None,  # just the file path, must open
     packet_dict: dict = None,
 ) -> tuple[_PacketProtocolT, _PacketTransportT]:
     """Return a mocked packet stack.
