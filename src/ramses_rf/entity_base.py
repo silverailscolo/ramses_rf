@@ -300,7 +300,10 @@ class _MessageDB(_Entity):
         if isinstance(code, str | tuple):  # a code or a tuple of codes
             return self._msg_value_code(code, *args, **kwargs)
         # raise RuntimeError
-        return self._msg_value_msg(code, *args, **kwargs)  # assume is a Message
+        assert isinstance(code, Message), (
+            f"Invalid format: _msg_value({code})"
+        )  # catch invalidly formatted code
+        return self._msg_value_msg(code, *args, **kwargs)
 
     def _msg_value_code(
         self,
