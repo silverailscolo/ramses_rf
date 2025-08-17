@@ -302,8 +302,8 @@ class _MessageDB(_Entity):
         # raise RuntimeError
         assert isinstance(code, Message), (
             f"Invalid format: _msg_value({code})"
-        )  # catch invalidly formatted code
-        return self._msg_value_msg(code, *args, **kwargs)
+        )  # catch invalidly formatted code, only Message
+        return self._msg_value_msg(code, *args, **kwargs)  # assume Message
 
     def _msg_value_code(
         self,

@@ -11,7 +11,7 @@ from ramses_tx.packet import Packet
 
 
 def _test_api(api: Callable, packets: dict[str]) -> None:  # NOTE: incl. addr_set check
-    """Test a verb|code pair that has a Command constructor."""
+    """Test a verb|code pair that has a Command constructor, src and dst."""
 
     for pkt_line, kwargs in packets.items():
         pkt = _create_pkt_from_frame(pkt_line)
@@ -20,6 +20,20 @@ def _test_api(api: Callable, packets: dict[str]) -> None:  # NOTE: incl. addr_se
 
         _test_api_from_kwargs(api, pkt, **kwargs)
         _test_api_from_msg(api, msg)
+
+
+def _test_api_one(
+    api: Callable, packets: dict[str]
+) -> None:  # NOTE: incl. addr_set check
+    """Test a verb|code pair that has a Command constructor and src, but no dst."""
+
+    for pkt_line, kwargs in packets.items():
+        pkt = _create_pkt_from_frame(pkt_line)
+
+        msg = Message(pkt)
+
+        _test_api_one_from_kwargs(api, pkt, **kwargs)
+        _test_api_one_from_msg(api, msg)
 
 
 def _create_pkt_from_frame(pkt_line: str) -> Packet:
@@ -31,7 +45,8 @@ def _create_pkt_from_frame(pkt_line: str) -> Packet:
 
 
 def _test_api_from_msg(api: Callable, msg: Message) -> Command:
-    """Create a cmd from a msg and assert they're equal (*also* asserts payload)."""
+    """Create a cmd from a msg with a src_id, and assert they're equal
+    (*also* asserts payload)."""
 
     cmd: Command = api(
         msg.dst.id,
@@ -44,8 +59,35 @@ def _test_api_from_msg(api: Callable, msg: Message) -> Command:
     return cmd
 
 
+def _test_api_one_from_msg(api: Callable, msg: Message) -> Command:
+    """Create a cmd from a msg and assert they're equal (*also* asserts payload)."""
+
+    cmd: Command = api(
+        msg.dst.id,
+        **{k: v for k, v in msg.payload.items()},  # if k[:1] != "_"},
+        # requirement turned off as it skips required item like _unknown_fan_info_flags
+    )
+
+    assert cmd == msg._pkt  # must have exact same addr set
+
+    return cmd
+
+
 def _test_api_from_kwargs(api: Callable, pkt: Packet, **kwargs: Any) -> None:
+    """
+    Test comparing a created packet to an expected result.
+
+    :param api: Command lookup by Verb|Code
+    :param pkt: expected result to match
+    :param kwargs: arguments for the Command
+    """
     cmd = api(HRU, src_id=REM, **kwargs)
+
+    assert str(cmd) == str(pkt)
+
+
+def _test_api_one_from_kwargs(api: Callable, pkt: Packet, **kwargs: Any) -> None:
+    cmd = api(HRU, **kwargs)
 
     assert str(cmd) == str(pkt)
 
@@ -57,7 +99,7 @@ def test_set() -> None:
         _test_api(api, test_pkts)
 
 
-HRU = "32:155617"
+HRU = "32:155617"  # also used as a FAN
 REM = "37:171871"
 NUL = "--:------"
 
@@ -108,3 +150,31 @@ SET_22F7_KWARGS = {
     f"002  W --- {REM} {HRU} {NUL} 22F7 002 0000": {"bypass_mode": "off"},
     f"002  W --- {REM} {HRU} {NUL} 22F7 002 00C8": {"bypass_mode": "on"},
 }
+
+
+# new tests
+def test_get() -> None:
+    for test_pkts in (GET_12A0_KWARGS, GET_1298_KWARGS):
+        pkt = list(test_pkts)[0]
+        api = CODE_API_MAP[f"{pkt[4:6]}|{pkt[41:45]}"]
+        _test_api_one(api, test_pkts)
+
+
+GET_12A0_KWARGS = {
+    f"000  I --- {HRU} {NUL} {HRU} 12A0 002 00EF": {
+        "indoor_humidity": None
+    },  # shouldn't be OK
+    #
+    f"082  I --- {HRU} {NUL} {HRU} 12A0 002 0037": {"indoor_humidity": 0.55},
+}
+
+GET_1298_KWARGS = {
+    f"064  I --- {HRU} {NUL} {HRU} 1298 003 000322": {"co2_level": 802},
+}
+
+# TODO Add tests to get states from 31DA
+# (verifies SQLite refactoring)
+# set up HVAC system first from messages
+#
+# Example: current_temperature(self) in ramses_cc.climate.py
+# simulates requesting Climate self._device.indoor_temp from a system
