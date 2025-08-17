@@ -378,16 +378,11 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
     @property
     def bypass_position(self) -> float | str | None:
         """
-        Position info is found in 22F7 and in 31DA. Both are picked up, ignoring None.
+        Position info is found in 22F7 and in 31DA. The most recent packet is returned.
         :return: bypass position as percentage: 0.0 (closed) or 1.0 (open), on error: "x_faulted"
         """
-        for code in [c for c in (Code._22F7, Code._31DA) if c in self._msgs]:
-            if v := self._msgs[code].payload.get(SZ_BYPASS_POSITION):
-                if v is not None:  # skip none (to fetch other code)
-                    assert isinstance(v, (float | str))
-                    return v
-                # if both packets exist and both have the key, return the most recent
-        return None
+        # if both packets exist and both have the key, returns the most recent
+        return self._msg_value([Code._22F7, Code._31DA], key=SZ_BYPASS_POSITION)
 
     @property
     def bypass_state(self) -> str | None:
@@ -426,13 +421,6 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
 
     @property
     def exhaust_temp(self) -> float | None:
-        if Code._12A0 in self._msgs and isinstance(
-            self._msgs[Code._12A0].payload, list
-        ):  # FAN Ventura sends RH/temps as a list, use element [2] for exhaust temp
-            if v := self._msgs[Code._12A0].payload[2].get(SZ_TEMPERATURE):
-                assert isinstance(v, (float | type(None)))
-                return v
-            return None
         return self._msg_value(Code._31DA, key=SZ_EXHAUST_TEMP)
 
     @property
@@ -482,32 +470,24 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
         """
         if Code._12A0 in self._msgs and isinstance(
             self._msgs[Code._12A0].payload, list
-        ):  # FAN Ventura sends a list, use element [0]
+        ):  # FAN Ventura sends RH/temps as a list; element [0] contains indoor_hum
             if v := self._msgs[Code._12A0].payload[0].get(SZ_INDOOR_HUMIDITY):
                 assert isinstance(v, (float | type(None)))
                 return v
-            return None  # prevent AttributeError: 'list' object has no attribute 'get'
-        for code in [c for c in (Code._12A0, Code._31DA) if c in self._msgs]:
-            if v := self._msgs[code].payload.get(SZ_INDOOR_HUMIDITY):
-                if v is not None:  # skip none (to check the other code)
-                    assert isinstance(v, float)
-                    return v
-        return None
+        return self._msg_value([Code._12A0, Code._31DA], key=SZ_INDOOR_HUMIDITY)
 
     @property
     def indoor_temp(self) -> float | None:
-        if Code._12A0 in self._msgs and isinstance(
-            self._msgs[Code._12A0].payload, list
-        ):  # FAN Ventura sends RH/temps as a list; element [0] is indoor_temp
-            if v := self._msgs[Code._12A0].payload[0].get(SZ_TEMPERATURE):
-                assert isinstance(v, (float | type(None)))
-                return v
-        else:
-            return self._msg_value(Code._31DA, key=SZ_INDOOR_TEMP)
-        return None
+        return self._msg_value(Code._31DA, key=SZ_INDOOR_TEMP)
 
     @property
     def outdoor_humidity(self) -> float | None:
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends RH/temps as a list; element [1] contains outdoor_hum
+            if v := self._msgs[Code._12A0].payload[1].get(SZ_OUTDOOR_HUMIDITY):
+                assert isinstance(v, (float | type(None)))
+                return v
         return self._msg_value(Code._31DA, key=SZ_OUTDOOR_HUMIDITY)
 
     @property
@@ -540,6 +520,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
 
     @property
     def supply_temp(self) -> float | None:
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends RH/temps as a list;
+            # pass element [0] in place of supply_temp, which is always None in VenturaV1x 31DA
+            if v := self._msgs[Code._12A0].payload[1].get(SZ_TEMPERATURE):
+                assert isinstance(v, (float | type(None)))
+                return v
         return self._msg_value(Code._31DA, key=SZ_SUPPLY_TEMP)
 
     @property
@@ -557,6 +544,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
 
     @property
     def temperature(self) -> float | None:  # Celsius
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends RH/temps as a list; use element [1]
+            if v := self._msgs[Code._12A0].payload[0].get(SZ_TEMPERATURE):
+                assert isinstance(v, (float | type(None)))
+                return v
         # ClimaRad minibox FAN sends (indoor) temp in 12A0
         return self._msg_value(Code._12A0, key=SZ_TEMPERATURE)
 
