@@ -382,7 +382,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
         :return: bypass position as percentage: 0.0 (closed) or 1.0 (open), on error: "x_faulted"
         """
         # if both packets exist and both have the key, returns the most recent
-        return self._msg_value([Code._22F7, Code._31DA], key=SZ_BYPASS_POSITION)
+        return self._msg_value((Code._22F7, Code._31DA), key=SZ_BYPASS_POSITION)
 
     @property
     def bypass_state(self) -> str | None:
@@ -474,7 +474,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
             if v := self._msgs[Code._12A0].payload[0].get(SZ_INDOOR_HUMIDITY):
                 assert isinstance(v, (float | type(None)))
                 return v
-        return self._msg_value([Code._12A0, Code._31DA], key=SZ_INDOOR_HUMIDITY)
+        return self._msg_value((Code._12A0, Code._31DA), key=SZ_INDOOR_HUMIDITY)
 
     @property
     def indoor_temp(self) -> float | None:
