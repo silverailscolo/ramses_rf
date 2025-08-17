@@ -303,7 +303,7 @@ class _MessageDB(_Entity):
         assert isinstance(code, Message), (
             f"Invalid format: _msg_value({code})"
         )  # catch invalidly formatted code, only Message
-        return self._msg_value_msg(code, *args, **kwargs)  # assume Message
+        return self._msg_value_msg(code, *args, **kwargs)
 
     def _msg_value_code(
         self,
