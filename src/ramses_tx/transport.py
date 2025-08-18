@@ -778,7 +778,8 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                 while not self._reading:
                     await asyncio.sleep(0.001)
                 self._frame_read(dtm_str, pkt_line)
-                # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
+                await asyncio.sleep(0)
+                # NOTE: instable without, big performance penalty if delay >0
 
         elif isinstance(self._pkt_source, str):  # file_name, used in client parse
             # open file file_name before reading
@@ -794,7 +795,8 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                         ] != "#":
                             self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
                             # this is where the parsing magic happens!
-                        # await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
+                        await asyncio.sleep(0)
+                        # NOTE: instable without, big performance penalty if delay >0
             except FileNotFoundError as err:
                 _LOGGER.warning(f"Correct the packet file name; {err}")
         elif isinstance(self._pkt_source, TextIOWrapper):  # used by client monitor
@@ -804,7 +806,8 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                 # can be blank lines in annotated log files
                 if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[:1] != "#":
                     self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
-                await asyncio.sleep(0)  # NOTE: big performance penalty if delay >0
+                await asyncio.sleep(0)
+                # NOTE: instable without, big performance penalty if delay >0
         else:
             raise exc.TransportSourceInvalid(
                 f"Packet source is not dict, TextIOWrapper or str: {self._pkt_source:!r}"
