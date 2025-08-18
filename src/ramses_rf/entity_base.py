@@ -315,7 +315,10 @@ class _MessageDB(_Entity):
         if isinstance(code, str | tuple):  # a code or a tuple of codes
             return self._msg_value_code(code, *args, **kwargs)
         # raise RuntimeError
-        return self._msg_value_msg(code, *args, **kwargs)  # assume is a Message
+        assert isinstance(code, Message), (
+            f"Invalid format: _msg_value({code})"
+        )  # catch invalidly formatted code, only Message
+        return self._msg_value_msg(code, *args, **kwargs)
 
     def _msg_value_code(
         self,
@@ -337,7 +340,9 @@ class _MessageDB(_Entity):
                 msg = max(msgs.values()) if msgs else None
         elif isinstance(code, tuple):
             msgs = [m for m in self._msgs.values() if m.code in code]
-            msg = max(msgs) if msgs else None
+            msg = (
+                max(msgs) if msgs else None
+            )  # return highest value found in code:value pairs
         else:
             msg = self._msgs.get(code)
 

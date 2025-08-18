@@ -66,7 +66,9 @@ SZ_SENSOR_FAULT: Final = "sensor_fault"
 SZ_AIR_QUALITY: Final = "air_quality"
 SZ_AIR_QUALITY_BASIS: Final = "air_quality_basis"
 SZ_BOOST_TIMER: Final = "boost_timer"
+SZ_BYPASS_MODE: Final = "bypass_mode"
 SZ_BYPASS_POSITION: Final = "bypass_position"
+SZ_BYPASS_STATE: Final = "bypass_state"
 SZ_CO2_LEVEL: Final = "co2_level"
 SZ_DEWPOINT_TEMP: Final = "dewpoint_temp"
 SZ_EXHAUST_FAN_SPEED: Final = "exhaust_fan_speed"
@@ -83,7 +85,9 @@ SZ_OUTDOOR_TEMP: Final = "outdoor_temp"
 SZ_POST_HEAT: Final = "post_heat"
 SZ_PRE_HEAT: Final = "pre_heat"
 SZ_REL_HUMIDITY: Final = "rel_humidity"
+SZ_REMAINING_DAYS: Final = "days_remaining"
 SZ_REMAINING_MINS: Final = "remaining_mins"
+SZ_REMAINING_PERCENT: Final = "percent_remaining"
 SZ_SUPPLY_FAN_SPEED: Final = "supply_fan_speed"
 SZ_SUPPLY_FLOW: Final = "supply_flow"
 SZ_SUPPLY_TEMP: Final = "supply_temp"
@@ -708,8 +712,8 @@ class SystemType(StrEnum):
 # used by 22Fx parser, and FanSwitch devices
 # SZ_BOOST_TIMER:Final = "boost_timer"  # minutes, e.g. 10, 20, 30 minutes
 HEATER_MODE: Final = "heater_mode"  # e.g. auto, off
-FAN_MODE: Final = "fan_mode"  # e.g. low. high
-FAN_RATE: Final = "fan_rate"  # percentage, 0.0 - 1.0
+FAN_MODE: Final = "fan_mode"  # e.g. low. high   # .     deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
+FAN_RATE: Final = "fan_rate"  # percentage, 0.0 - 1.0  # deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
 
 
 # RP --- 01:054173 18:006402 --:------ 0005 004 00100000  # before adding RFG100

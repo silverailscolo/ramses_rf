@@ -8,11 +8,12 @@ from typing import Any, TypeVar
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
-    FAN_MODE,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BOOST_TIMER,
+    SZ_BYPASS_MODE,
     SZ_BYPASS_POSITION,
+    SZ_BYPASS_STATE,
     SZ_CO2_LEVEL,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
@@ -27,7 +28,9 @@ from ramses_rf.const import (
     SZ_POST_HEAT,
     SZ_PRE_HEAT,
     SZ_PRESENCE_DETECTED,
+    SZ_REMAINING_DAYS,
     SZ_REMAINING_MINS,
+    SZ_REMAINING_PERCENT,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
@@ -169,7 +172,15 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
     @property
     def filter_remaining(self) -> int | None:
-        return self._msg_value(Code._10D0, key="days_remaining")
+        _val = self._msg_value(Code._10D0, key=SZ_REMAINING_DAYS)
+        assert isinstance(_val, (int | type(None)))
+        return _val
+
+    @property
+    def filter_remaining_percent(self) -> float | None:
+        _val = self._msg_value(Code._10D0, key=SZ_REMAINING_PERCENT)
+        assert isinstance(_val, (float | type(None)))
+        return _val
 
 
 class RfsGateway(DeviceHvac):  # RFS: (spIDer gateway)
@@ -265,7 +276,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
 
     @property
     def fan_mode(self) -> str | None:
-        return self._msg_value(Code._22F1, key=FAN_MODE)
+        return self._msg_value(Code._22F1, key=SZ_FAN_MODE)
 
     @property
     def boost_timer(self) -> int | None:
@@ -275,7 +286,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
     def status(self) -> dict[str, Any]:
         return {
             **super().status,
-            FAN_MODE: self.fan_mode,
+            SZ_FAN_MODE: self.fan_mode,
             SZ_BOOST_TIMER: self.boost_timer,
         }
 
@@ -358,16 +369,51 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
         return self._msg_value(Code._31DA, key=SZ_AIR_QUALITY_BASIS)
 
     @property
-    def bypass_position(self) -> int | None:
-        return self._msg_value(Code._31DA, key=SZ_BYPASS_POSITION)
+    def bypass_mode(self) -> str | None:
+        """
+        :return: bypass mode as on|off|auto
+        """
+        return self._msg_value(Code._22F7, key=SZ_BYPASS_MODE)
+
+    @property
+    def bypass_position(self) -> float | str | None:
+        """
+        Position info is found in 22F7 and in 31DA. The most recent packet is returned.
+        :return: bypass position as percentage: 0.0 (closed) or 1.0 (open), on error: "x_faulted"
+        """
+        # if both packets exist and both have the key, returns the most recent
+        return self._msg_value((Code._22F7, Code._31DA), key=SZ_BYPASS_POSITION)
+
+    @property
+    def bypass_state(self) -> str | None:
+        """
+        Orcon, others?
+        :return: bypass position as on/off
+        """
+        return self._msg_value(Code._22F7, key=SZ_BYPASS_STATE)
 
     @property
     def co2_level(self) -> int | None:
         return self._msg_value(Code._31DA, key=SZ_CO2_LEVEL)
 
     @property
-    def exhaust_fan_speed(self) -> float | None:  # was from: (Code._31D9, Code._31DA)
-        return self._msg_value(Code._31DA, key=SZ_EXHAUST_FAN_SPEED)
+    def exhaust_fan_speed(
+        self,
+    ) -> float | None:
+        """
+        Some fans (Vasco, Itho) use Code._31D9 for speed + mode,
+        Orcon sends SZ_EXHAUST_FAN_SPEED in 31DA. See parser for details.
+        :return: speed as percentage
+        """
+        speed: float = -1
+        for code in [c for c in (Code._31D9, Code._31DA) if c in self._msgs]:
+            if v := self._msgs[code].payload.get(SZ_EXHAUST_FAN_SPEED):
+                # if both packets exist and both have the key, use the highest value
+                if v is not None:
+                    speed = max(v, speed)
+        if speed >= 0:
+            return speed
+        return None
 
     @property
     def exhaust_flow(self) -> float | None:
@@ -378,34 +424,44 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
         return self._msg_value(Code._31DA, key=SZ_EXHAUST_TEMP)
 
     @property
+    def fan_rate(self) -> str | None:
+        """
+        Lookup fan mode description from _22F4  message payload, e.g. "low", "medium", "boost".
+        For manufacturers Orcon, Vasco, ClimaRad.
+
+        :return: int or str describing rate of fan
+        """
+        return self._msg_value(Code._22F4, key=SZ_FAN_RATE)
+
+    @property
+    def fan_mode(self) -> str | None:
+        """
+        Lookup fan mode description from _22F4  message payload, e.g. "auto", "manual", "off".
+        For manufacturers Orcon, Vasco, ClimaRad.
+
+        :return: a string describing mode
+        """
+        return self._msg_value(Code._22F4, key=SZ_FAN_MODE)
+
+    @property
     def fan_info(self) -> str | None:
         """
-        Extract fan info from MessageIndex.
+        Extract fan info description from _31D9 or _31DA message payload, e.g. "speed 2, medium".
+        By its name, the result is picked up by a sensor in HA Climate UI.
+        Some manufacturers (Orcon, Vasco) include the fan mode (auto, manual), others don't (Itho).
         Just a demo for SQLite query at the moment.
         For a single key search, use _msg_qry_by_code_key helper
 
-        :return: string describing fan mode, speed
+        :return: a string describing fan mode, speed
         """
-        # if (
-        #     Code._31D9 in self._msgs
-        # ):  # Vasco D60 and ClimaRad minibox send mode/speed in _31D9
-        #     for k, v in self._msgs[Code._31D9].payload.items():
-        #         if (
-        #             k == SZ_FAN_MODE and v != "FF"
-        #         ):  # Prevent ClimaRad Ventura constant "FF" to pass
-        #             return str(v)
-        #     # no guard clause, just ignore
-        # if Code._22F4 in self._msgs:  # ClimaRad Ventura sends mode/speed in _22F4
-        #     mode: str = ""
-        #     for k, v in self._msgs[Code._22F4].payload.items():
-        #         if k == SZ_FAN_MODE:
-        #             mode = v
-        #         if k == SZ_FAN_RATE:
-        #             mode = mode + ", " + v
-        #     return mode
-        # return str(
-        #     self._msg_value(Code._31DA, key=SZ_FAN_INFO)
-        # )  # a description to display in climate, e.g. "speed 2, medium", note localize in UI
+        if Code._31D9 in self._msgs:
+            # Itho, Vasco D60 and ClimaRad (MiniBox fan) send mode/speed in _31D9
+            v: str
+            for k, v in self._msgs[Code._31D9].payload.items():
+                if k == SZ_FAN_MODE and len(v) > 2:  # prevent non-lookups to pass
+                    return v
+            # continue to 31DA
+#        return str(self._msg_value(Code._31DA, key=SZ_FAN_INFO))  # Itho lookup
         # Use SQLite query on MessageIndex
         sql = """
             SELECT pl from messages WHERE verb in (' I', 'RP')
@@ -419,18 +475,24 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
                     return str(
                         v
                     )  # display description on climate entity, e.g. "speed 2, medium", localize in UI
-        return None
+
 
     @property
     def indoor_humidity(self) -> float | None:
         """
-        Extract indoor_humidity from MessageIndex.
+        Extract indoor_humidity from MessageIndex _12A0 or _31DA payload
         Just a demo for SQLite query helper at the moment.
 
         :return: float RH value from 0.0 to 1.0 = 100%
         """
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends RH/temps as a list; element [0] contains indoor_hum
+            if v := self._msgs[Code._12A0].payload[0].get(SZ_INDOOR_HUMIDITY):
+                assert isinstance(v, (float | type(None)))
+                return v
         # return self._msg_qry_by_code_key(Code._31DA, key=SZ_INDOOR_HUMIDITY)
-        return self._msg_value(Code._31DA, key=SZ_INDOOR_HUMIDITY)
+        return self._msg_value((Code._12A0, Code._31DA), key=SZ_INDOOR_HUMIDITY)
 
     @property
     def indoor_temp(self) -> float | None:
@@ -438,6 +500,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
 
     @property
     def outdoor_humidity(self) -> float | None:
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends RH/temps as a list; element [1] contains outdoor_hum
+            if v := self._msgs[Code._12A0].payload[1].get(SZ_OUTDOOR_HUMIDITY):
+                assert isinstance(v, (float | type(None)))
+                return v
         return self._msg_value(Code._31DA, key=SZ_OUTDOOR_HUMIDITY)
 
     @property
@@ -470,6 +538,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
 
     @property
     def supply_temp(self) -> float | None:
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends RH/temps as a list;
+            # pass element [0] in place of supply_temp, which is always None in VenturaV1x 31DA
+            if v := self._msgs[Code._12A0].payload[1].get(SZ_TEMPERATURE):
+                assert isinstance(v, (float | type(None)))
+                return v
         return self._msg_value(Code._31DA, key=SZ_SUPPLY_TEMP)
 
     @property
@@ -484,6 +559,17 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
                 if k != SZ_EXHAUST_FAN_SPEED
             },
         }
+
+    @property
+    def temperature(self) -> float | None:  # Celsius
+        if Code._12A0 in self._msgs and isinstance(
+            self._msgs[Code._12A0].payload, list
+        ):  # FAN Ventura sends RH/temps as a list; use element [1]
+            if v := self._msgs[Code._12A0].payload[0].get(SZ_TEMPERATURE):
+                assert isinstance(v, (float | type(None)))
+                return v
+        # ClimaRad minibox FAN sends (indoor) temp in 12A0
+        return self._msg_value(Code._12A0, key=SZ_TEMPERATURE)
 
 
 # class HvacFanHru(HvacVentilator):

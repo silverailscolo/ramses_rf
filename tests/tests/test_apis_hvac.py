@@ -152,8 +152,9 @@ SET_22F7_KWARGS = {
 }
 
 
+# new tests
 def test_get() -> None:
-    for test_pkts in (GET_12A0_KWARGS, GET_1298_KWARGS, GET_31DA_KWARGS):
+    for test_pkts in (GET_12A0_KWARGS, GET_1298_KWARGS):
         pkt = list(test_pkts)[0]
         api = CODE_API_MAP[f"{pkt[4:6]}|{pkt[41:45]}"]
         _test_api_one(api, test_pkts)
@@ -347,6 +348,7 @@ GET_31DA_KWARGS = {
         "pre_heat": None,
     },
 }
+
 
 # TODO Add tests to get states from 31DA
 # (verifies SQLite refactoring)

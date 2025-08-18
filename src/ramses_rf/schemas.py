@@ -114,7 +114,7 @@ def ErrorRenamedKey(new_key: str) -> Callable[[Any], None]:
 
 
 #
-# 1/5: Schemas for CH/DHW systems, aka Heat/TCS (temp control systems)
+# 1/7: Schemas for CH/DHW systems, aka Heat/TCS (temp control systems)
 SCH_TCS_SYS_CLASS = (SystemType.EVOHOME, SystemType.HOMETRONICS, SystemType.SUNDIAL)
 SCH_TCS_SYS = vol.Schema(
     {
@@ -193,7 +193,7 @@ SCH_TCS = vol.Schema(
 
 
 #
-# 2/5: Schemas for Ventilation control systems, aka HVAC/VCS
+# 2/7: Schemas for Ventilation control systems, aka HVAC/VCS
 SZ_REMOTES: Final = "remotes"
 SZ_SENSORS: Final = "sensors"
 
@@ -227,7 +227,7 @@ SCH_VCS = vol.All(SCH_VCS_KEYS, SCH_VCS_DATA)
 
 
 #
-# 3/5: Global Schema for Heat/HVAC systems
+# 3/7: Global Schema for Heat/HVAC systems
 SCH_GLOBAL_SCHEMAS_DICT = {  # System schemas - can be 0-many Heat/HVAC schemas
     # orphans are devices to create that won't be in a (cached) schema...
     vol.Optional(SZ_MAIN_TCS): vol.Any(None, SCH_DEVICE_ID_CTL),
@@ -240,7 +240,7 @@ SCH_GLOBAL_SCHEMAS_DICT = {  # System schemas - can be 0-many Heat/HVAC schemas
 SCH_GLOBAL_SCHEMAS = vol.Schema(SCH_GLOBAL_SCHEMAS_DICT, extra=vol.PREVENT_EXTRA)
 
 #
-# 4/5: Gateway (parser/state) configuration
+# 4/7: Gateway (parser/state) configuration
 SZ_DISABLE_DISCOVERY: Final = "disable_discovery"
 SZ_ENABLE_EAVESDROP: Final = "enable_eavesdrop"
 SZ_MAX_ZONES: Final = "max_zones"  # TODO: move to TCS-attr from GWY-layer
@@ -266,7 +266,7 @@ SCH_GATEWAY_CONFIG = vol.Schema(SCH_GATEWAY_DICT, extra=vol.REMOVE_EXTRA)
 
 
 #
-# 5/5: the Global (gateway) Schema
+# 5/7: the Global (gateway) Schema
 SCH_GLOBAL_CONFIG = (
     vol.Schema(
         {
@@ -282,7 +282,7 @@ SCH_GLOBAL_CONFIG = (
 
 
 #
-# 6/5: External Schemas, to be used by clients of this library
+# 6/7: External Schemas, to be used by clients of this library
 def NormaliseRestoreCache() -> Callable[[bool | dict[str, bool]], dict[str, bool]]:
     """Convert a short-hand restore_cache bool to a dict.
 
@@ -317,9 +317,11 @@ SCH_RESTORE_CACHE_DICT = {
 
 
 #
-# 6/5: Other stuff
+# 7/7: Other stuff
 def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , **traits
-    """Raise an LookupError if a device_id is filtered out by a list.
+    """Get a device from the gateway.
+
+    Raise a LookupError if a device_id is filtered out by a list.
 
     The underlying method is wrapped only to provide a better error message.
     """

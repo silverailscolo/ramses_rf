@@ -168,7 +168,7 @@ def _normalise_mode(
     until: dt | str | None,
     duration: int | None,
 ) -> str:
-    """Validate the zone_mode, and return a it as a normalised 2-byte code.
+    """Validate the mode and return it as a normalised 2-byte code.
 
     Used by set_dhw_mode (target=active) and set_zone_mode (target=setpoint).
     """
@@ -214,11 +214,6 @@ def _normalise_until(
 
     Used by set_dhw_mode and set_zone_mode.
     """
-    # if until and duration:
-    #     raise exc.CommandInvalid(
-    #         "Invalid args: Only one of until or duration can be set"
-    #     )
-
     if mode == ZON_MODE_MAP.TEMPORARY:
         if duration is not None:
             raise exc.CommandInvalid(
@@ -242,7 +237,7 @@ def _normalise_until(
             f"Invalid args: For mode={mode}, until and duration must both be None"
         )
 
-    return until, duration
+    return until, duration  # TODO return updated mode for ZON_MODE_MAP.TEMPORARY ?
 
 
 class Command(Frame):
@@ -894,7 +889,7 @@ class Command(Frame):
         mode: int | str | None = None,
         active: bool | None = None,
         until: dt | str | None = None,
-        duration: int | None = None,
+        duration: int | None = None,  # never supplied by DhwZone.set_mode()
         **kwargs: Any,
     ) -> Command:
         """Constructor to set/reset the mode of the DHW (c.f. parser_1f41)."""
@@ -908,7 +903,7 @@ class Command(Frame):
             active = None
         if active is not None and not isinstance(active, bool | int):
             raise exc.CommandInvalid(
-                f"Invalid args: active={active}, but must be an bool"
+                f"Invalid args: active={active}, but must be a bool"
             )
 
         until, duration = _normalise_until(mode, active, until, duration)
@@ -1043,11 +1038,11 @@ class Command(Frame):
         src_id: DeviceIdT | str | None = None,
         idx: str = "00",  # could be e.g. "63"
     ) -> Command:
-        """Constructor to get the fan speed (and heater?) (c.f. parser_22f1).
+        """Constructor to set the fan speed (and heater?) (c.f. parser_22f1).
 
         There are two types of this packet seen (with seqn, or with src_id):
-         - I 018 --:------ --:------ 39:159057 22F1 003 000204
-         - I --- 21:039407 28:126495 --:------ 22F1 003 000407
+         - I 018 --:------ --:------ 39:159057 22F1 003 000x04
+         - I --- 21:039407 28:126495 --:------ 22F1 003 000x07
         """
         # NOTE: WIP: rate can be int or str
 
@@ -1062,7 +1057,7 @@ class Command(Frame):
 
         # Scheme 2: I --- 21:038634 18:126620 --:------ (less common)
         #  - are cast as a triplet, 0.085s apart, without a seqn (i.e. is ---)
-        #  - only payloads seen: '000.0[47A]', may accept '000.'
+        #  - only payloads seen: '000[0-9A]0[5-7A]', may accept '000.'
         # .I --- 21:038634 18:126620 --:------ 22F1 003 000507
 
         from .ramses import _22F1_MODE_ORCON
@@ -1164,7 +1159,7 @@ class Command(Frame):
         mode: int | str | None = None,
         setpoint: float | None = None,
         until: dt | str | None = None,
-        duration: int | None = None,
+        duration: int | None = None,  # never supplied by Zone.set_mode()
     ) -> Command:
         """Constructor to set/reset the mode of a zone (c.f. parser_2349).
 
