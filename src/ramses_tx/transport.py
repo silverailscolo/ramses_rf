@@ -1158,20 +1158,29 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self,
         client: mqtt.Client,
         userdata: Any,
-        reason_code: Any,
-        properties: Any | None,
+        *args: Any,
     ) -> None:
-        _LOGGER.warning(f"MQTT disconnected: {reason_code.getName()}")
+        # Handle different paho-mqtt callback signatures
+        reason_code = args[0] if len(args) >= 1 else None
+
+        reason_name = (
+            reason_code.getName()
+            if hasattr(reason_code, "getName")
+            else str(reason_code)
+        )
+        _LOGGER.warning(f"MQTT disconnected: {reason_name}")
 
         self._connected = False
 
         # Only attempt reconnection if we didn't deliberately disconnect
-        if not self._closing and not reason_code.is_failure:
-            # This was an unexpected disconnect, schedule reconnection
-            self._schedule_reconnect()
-        elif reason_code.is_failure and not self._closing:
-            # Connection failed, also schedule reconnection
-            self._schedule_reconnect()
+        if not self._closing:
+            is_failure = hasattr(reason_code, "is_failure") and reason_code.is_failure
+            if not is_failure:
+                # This was an unexpected disconnect, schedule reconnection
+                self._schedule_reconnect()
+            elif is_failure:
+                # Connection failed, also schedule reconnection
+                self._schedule_reconnect()
 
     def _create_connection(self, msg: mqtt.MQTTMessage) -> None:
         """Invoke the Protocols's connection_made() callback MQTT is established."""
