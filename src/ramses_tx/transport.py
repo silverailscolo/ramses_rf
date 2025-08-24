@@ -1177,7 +1177,18 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     ) -> None:
         _LOGGER.warning(f"MQTT disconnected: {reason_code.getName()}")
 
+        was_connected = self._connected
         self._connected = False
+
+        # If we were previously connected and had established communication,
+        # notify that the device is now offline
+        if was_connected and hasattr(self, "_topic_sub") and self._topic_sub:
+            device_topic = self._topic_sub[:-3]  # Remove "/rx" suffix
+            _LOGGER.warning(f"{self}: the MQTT device is offline: {device_topic}")
+
+            # Pause writing since device is offline
+            if hasattr(self, "_protocol"):
+                self._protocol.pause_writing()
 
         # Only attempt reconnection if we didn't deliberately disconnect
         if not self._closing and not reason_code.is_failure:
@@ -1235,17 +1246,26 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             _LOGGER.info("Rx: %s", msg.payload)
 
         if msg.topic[-3:] != "/rx":  # then, e.g. 'RAMSES/GATEWAY/18:017804'
-            if msg.payload == b"offline" and (
-                not hasattr(self, "_topic_sub") or self._topic_sub.startswith(msg.topic)
-            ):
-                _LOGGER.warning(f"{self}: the MQTT device is offline: {msg.topic}")
-                self._connected = False
-                self._protocol.pause_writing()
+            if msg.payload == b"offline":
+                # Check if this offline message is for our current device
+                if (
+                    hasattr(self, "_topic_sub")
+                    and self._topic_sub
+                    and msg.topic == self._topic_sub[:-3]
+                ) or not hasattr(self, "_topic_sub"):
+                    _LOGGER.warning(
+                        f"{self}: the ESP device is offline (via LWT): {msg.topic}"
+                    )
+                    # Don't set _connected = False here - that's for MQTT connection, not ESP device
+                    if hasattr(self, "_protocol"):
+                        self._protocol.pause_writing()
 
             # BUG: using create task (self._loop.ct() & asyncio.ct()) causes the
             # BUG: event look to close early
             elif msg.payload == b"online":
-                _LOGGER.info(f"{self}: the MQTT device is online: {msg.topic}")
+                _LOGGER.info(
+                    f"{self}: the ESP device is online (via status): {msg.topic}"
+                )
                 self._create_connection(msg)
 
             return
