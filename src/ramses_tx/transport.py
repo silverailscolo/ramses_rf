@@ -1159,6 +1159,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         client: mqtt.Client,
         userdata: Any,
         *args: Any,
+        **kwargs: Any,
     ) -> None:
         # Handle different paho-mqtt callback signatures
         reason_code = args[0] if len(args) >= 1 else None
