@@ -1175,13 +1175,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         # Only attempt reconnection if we didn't deliberately disconnect
         if not self._closing:
-            is_failure = hasattr(reason_code, "is_failure") and reason_code.is_failure
-            if not is_failure:
-                # This was an unexpected disconnect, schedule reconnection
-                self._schedule_reconnect()
-            elif is_failure:
-                # Connection failed, also schedule reconnection
-                self._schedule_reconnect()
+            # Schedule reconnection for any disconnect (unexpected or failure)
+            self._schedule_reconnect()
 
     def _create_connection(self, msg: mqtt.MQTTMessage) -> None:
         """Invoke the Protocols's connection_made() callback MQTT is established."""
