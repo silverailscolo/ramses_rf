@@ -1166,7 +1166,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         reason_name = (
             reason_code.getName()
-            if hasattr(reason_code, "getName")
+            if reason_code is not None and hasattr(reason_code, "getName")
             else str(reason_code)
         )
         _LOGGER.warning(f"MQTT disconnected: {reason_name}")
