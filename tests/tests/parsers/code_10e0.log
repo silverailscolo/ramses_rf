@@ -8,10 +8,9 @@
 
 
 # The payload changes as the firmware is updated & date_2 is updated
-2019-12-21T18:29:44.104610 057 RP --- 01:145038 18:056026 --:------ 10E0 038 000002FF0163FFFFFFFF140B07E1010807DD45766F20436F6C6F720000000000000000000000  # {'oem_code': 'FF', 'manufacturer_sub_id': 'FF', 'product_id': '01', 'date_1': '2013-08-01', 'date_2': '2017-11-20', 'description': 'Evo Color'}
-2020-05-14T15:41:48.743111 045 RP --- 01:145038 18:013393 --:------ 10E0 038 000002FF0163FFFFFFFF640307E4010807DD45766F20436F6C6F720000000000000000000000  # {'oem_code': 'FF', 'manufacturer_sub_id': 'FF', 'product_id': '01', 'date_1': '2013-08-01', 'date_2': '2020-03-04', 'description': 'Evo Color'}
-2021-01-25T23:23:00.520205 051 RP --- 01:145038 18:140805 --:------ 10E0 038 000002FF0163FFFFFFFF0B0807E4010807DD45766F20436F6C6F720000000000000000000000  # {'oem_code': 'FF', 'manufacturer_sub_id': 'FF', 'product_id': '01', 'date_1': '2013-08-01', 'date_2': '2020-08-11', 'description': 'Evo Color'}
-
+2019-12-21T18:29:44.104610 057 RP --- 01:145038 18:056026 --:------ 10E0 038 000002FF0163FFFFFFFF140B07E1010807DD45766F20436F6C6F720000000000000000000000  # {'description': 'Evo Color', 'oem_code': 'FF', 'manufacturer_sub_id': 'FF', 'product_id': '01', 'date_1': '2013-08-01', 'date_2': '2017-11-20'}
+2020-05-14T15:41:48.743111 045 RP --- 01:145038 18:013393 --:------ 10E0 038 000002FF0163FFFFFFFF640307E4010807DD45766F20436F6C6F720000000000000000000000  # {'description': 'Evo Color', 'oem_code': 'FF', 'manufacturer_sub_id': 'FF', 'product_id': '01', 'date_1': '2013-08-01', 'date_2': '2020-03-04'}
+2021-01-25T23:23:00.520205 051 RP --- 01:145038 18:140805 --:------ 10E0 038 000002FF0163FFFFFFFF0B0807E4010807DD45766F20436F6C6F720000000000000000000000  # {'description': 'Evo Color', 'oem_code': 'FF', 'manufacturer_sub_id': 'FF', 'product_id': '01', 'date_1': '2013-08-01', 'date_2': '2020-08-11'}
 
 #
 # oem_code 'FF' - Honeywell/Resideo CH/DHW
@@ -82,6 +81,8 @@
 
 
 #
+# oem_code '00' / sub-id 'C8' - heat
+2021-12-20T08:24:09.117900 ...  I --- 34:021943 63:262142 --:------ 10E0 038 000001C8380A0100F1FF0C0107E1030B07DE5438375246323032350000000000000000000000  # {'description': 'T87RF2025',           'manufacturer_sub_id': 'C8', 'product_id': '38', 'oem_code': '00', 'date_1': '2014-11-03', 'date_2': '2017-01-12'}
 # oem_code '00' / sub-id 'C9', 30:069468 is a BUVA Boxstream
 2023-11-04T12:34:14.007611 062  I --- 30:068457 63:262142 --:------ 10E0 038 000001C9001B0000FEFEFFFFFFFF0E0507E2425244472D30324A415330310000000000000000  # {'description': 'BRDG-02JAS01',        'manufacturer_sub_id': 'C9', 'product_id': '00', 'date_2': '0000-00-00', 'date_1': '2018-05-14', 'oem_code': '00'}
 2022-01-01T00:00:00.000000 000  I --- 30:069468 63:262142 --:------ 10E0 038 000001C9001B0000FEFEFFFFFFFF0E0507E2425244472D30324A415330310000000000000000  # {'description': 'BRDG-02JAS01',        'manufacturer_sub_id': 'C9', 'product_id': '00', 'date_1': '2018-05-14', 'date_2': '0000-00-00', 'oem_code': '00'}  # BUVA Boxstrea,
