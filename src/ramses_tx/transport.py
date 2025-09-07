@@ -1055,8 +1055,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         # instantiate a paho mqtt client
         self.client = mqtt.Client(
-            protocol=mqtt.MQTTv5,
-            callback_api_version=CallbackAPIVersion.VERSION2,  # type: ignore[call-arg]
+            protocol=mqtt.MQTTv5, callback_api_version=CallbackAPIVersion.VERSION2
         )
         self.client.on_connect = self._on_connect
         self.client.on_connect_fail = self._on_connect_fail
