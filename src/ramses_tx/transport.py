@@ -1073,7 +1073,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._connecting = True
         try:
             self.client.connect_async(
-                self._broker_url.hostname,  # type: ignore[arg-type]
+                str(self._broker_url.hostname or "localhost"),
                 self._broker_url.port or 1883,
                 60,
             )
