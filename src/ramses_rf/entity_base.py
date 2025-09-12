@@ -190,9 +190,7 @@ class _MessageDB(_Entity):
     def __init__(self, gwy: Gateway) -> None:
         super().__init__(gwy)
 
-        self._msgs_: dict[
-            Code, Message
-        ] = {}  # code, should be code/ctx?
+        self._msgs_: dict[Code, Message] = {}  # code, should be code/ctx?
         self._msgz_: dict[
             Code, dict[VerbT, dict[bool | str | None, Message]]
         ] = {}  # code/verb/ctx, should be code/ctx/verb?
@@ -401,9 +399,7 @@ class _MessageDB(_Entity):
 
         :return: nested Dict of messages by Code
         """
-        if (
-            not self._gwy.msg_db
-        ):  # no central SQLite MessageIndex
+        if not self._gwy.msg_db:  # no central SQLite MessageIndex
             return self._msgs_
 
         sql = """
@@ -420,9 +416,7 @@ class _MessageDB(_Entity):
 
         :return: Dict of messages, nested by Code, Verb, Context
         """
-        if (
-            not self._gwy.msg_db
-        ):  # no central SQLite MessageIndex
+        if not self._gwy.msg_db:  # no central SQLite MessageIndex
             return self._msgz_
 
         msgs_1: dict[Code, dict[VerbT, dict[bool | str | None, Message]]] = {}
