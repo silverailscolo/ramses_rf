@@ -854,7 +854,7 @@ class Command(Frame):
     def put_indoor_humidity(
         cls, dev_id: DeviceIdT | str, indoor_humidity: float | None
     ) -> Command:
-        """Constructor to announce the current humidity of a sensor (12A0)."""
+        """Constructor to announce the current humidity of a sensor or fan (12A0)."""
         # .I --- 37:039266 --:------ 37:039266 1298 003 000316
 
         payload = "00" + hex_from_percent(indoor_humidity, high_res=False)
