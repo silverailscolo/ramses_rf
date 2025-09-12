@@ -29,6 +29,22 @@ class Params(TypedDict):
 _LOGGER = logging.getLogger(__name__)
 
 
+def _setup_db_adapters() -> None:
+    """Set up the database adapters and converters."""
+
+    def adapt_datetime_iso(val: dt) -> str:
+        """Adapt datetime.datetime to timezone-naive ISO 8601 datetime."""
+        return val.isoformat(timespec="microseconds")
+
+    sqlite3.register_adapter(dt, adapt_datetime_iso)
+
+    def convert_datetime(val: bytes) -> dt:
+        """Convert ISO 8601 datetime to datetime.datetime object."""
+        return dt.fromisoformat(val.decode())
+
+    sqlite3.register_converter("dtm", convert_datetime)
+
+
 class MessageIndex:
     """A simple in-memory SQLite3 database for indexing messages."""
 
@@ -40,7 +56,7 @@ class MessageIndex:
         self._cx = sqlite3.connect(":memory:")  # Connect to a SQLite DB in memory
         self._cu = self._cx.cursor()  # Create a cursor
 
-        self._setup_db_adapters()  # dtm adapter/converter
+        _setup_db_adapters()  # dtm adapter/converter
         self._setup_db_schema()
 
         self._lock = asyncio.Lock()
@@ -76,23 +92,19 @@ class MessageIndex:
         """Return the messages in the index in a threadsafe way."""
         return self._msgs
 
-    def _setup_db_adapters(self) -> None:
-        """Setup the database adapters and converters."""
-
-        def adapt_datetime_iso(val: dt) -> str:
-            """Adapt datetime.datetime to timezone-naive ISO 8601 datetime."""
-            return val.isoformat(timespec="microseconds")
-
-        sqlite3.register_adapter(dt, adapt_datetime_iso)
-
-        def convert_datetime(val: bytes) -> dt:
-            """Convert ISO 8601 datetime to datetime.datetime object."""
-            return dt.fromisoformat(val.decode())
-
-        sqlite3.register_converter("dtm", convert_datetime)
-
     def _setup_db_schema(self) -> None:
-        """Setup the dayabase schema."""
+        """Set up the message database schema.
+
+        Fields:
+
+        - dtm  message timestamp
+        - verb _I, RQ etc.
+        - src  message origin address
+        - dst  message destination address
+        - code packet code aka command class e.g. _0005, _31DA
+        - ctx  message context, created from payload as index + extra markers (Heat)
+        - hdr  packet header e.g. 000C|RP|01:223036|0208 (see: src/ramses_tx/frame.py)
+        """
 
         self._cu.execute(
             """
@@ -120,14 +132,14 @@ class MessageIndex:
     async def _housekeeping_loop(self) -> None:
         """Periodically remove stale messages from the index."""
 
-        def housekeeping(dt_now: dt, _cutoff: td = td(days=1)) -> None:
+        async def housekeeping(dt_now: dt, _cutoff: td = td(days=1)) -> None:
             dtm = (dt_now - _cutoff).isoformat(timespec="microseconds")
 
             self._cu.execute("SELECT dtm FROM messages WHERE dtm => ?", (dtm,))
             rows = self._cu.fetchall()
 
             try:  # make this operation atomic, i.e. update self._msgs only on success
-                # await self._lock.acquire()
+                await self._lock.acquire()
                 self._cu.execute("DELETE FROM messages WHERE dtm < ?", (dtm,))
                 msgs = OrderedDict({row[0]: self._msgs[row[0]] for row in rows})
                 self._cx.commit()
@@ -137,19 +149,19 @@ class MessageIndex:
             else:
                 self._msgs = msgs
             finally:
-                pass  # self._lock.release()
+                self._lock.release()
 
         while True:
             self._last_housekeeping = dt.now()
             await asyncio.sleep(3600)
-            housekeeping(self._last_housekeeping)
+            await housekeeping(self._last_housekeeping)
 
     def add(self, msg: Message) -> Message | None:
         """Add a single message to the index.
 
         Returns any message that was removed because it had the same header.
 
-        Throws a warning is there is a duplicate dtm.
+        Throws a warning if there is a duplicate dtm.
         """  # TODO: eventually, may be better to use SqlAlchemy
 
         dup: tuple[Message, ...] = tuple()  # avoid UnboundLocalError
@@ -204,7 +216,9 @@ class MessageIndex:
 
         return msgs[0] if msgs else None
 
-    def rem(self, msg: Message | None = None, **kwargs: str) -> tuple[Message, ...]:
+    def rem(
+        self, msg: Message | None = None, **kwargs: str
+    ) -> tuple[Message, ...] | None:
         """Remove a set of message(s) from the index.
 
         Returns any messages that were removed.
@@ -215,6 +229,7 @@ class MessageIndex:
         if msg:
             kwargs["dtm"] = msg.dtm.isoformat(timespec="microseconds")
 
+        msgs = None
         try:  # make this operation atomic, i.e. update self._msgs only on success
             # await self._lock.acquire()
             msgs = self._delete_from(**kwargs)
@@ -277,8 +292,8 @@ class MessageIndex:
     def all(self, include_expired: bool = False) -> tuple[Message, ...]:
         """Return all messages from the index."""
 
-        # self.cursor.execute("SELECT * FROM messages")
-        # return [self._megs[row[0]] for row in self.cursor.fetchall()]
+        # self._cu.execute("SELECT * FROM messages")
+        # return tuple(self._msgs[row[0]] for row in self._cu.fetchall())
 
         return tuple(
             m for m in self._msgs.values() if include_expired or not m._expired

@@ -449,10 +449,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
     def fan_info(self) -> str | None:
         """
         Extract fan info description from _31D9 or _31DA message payload, e.g. "speed 2, medium".
-        By its name, the result is automatically displayed in HA Climate UI.
+        By its name, the result is picked up by a sensor in HA Climate UI.
         Some manufacturers (Orcon, Vasco) include the fan mode (auto, manual), others don't (Itho).
 
-        :return: a string describing mode, speed
+        :return: a string describing fan mode, speed
         """
         if Code._31D9 in self._msgs:
             # Itho, Vasco D60 and ClimaRad (MiniBox fan) send mode/speed in _31D9
@@ -466,9 +466,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A]
     @property
     def indoor_humidity(self) -> float | None:
         """
-        Extract humidity value from _12A0 or _31DA JSON message payload
+        Extract indoor_humidity from MessageIndex _12A0 or _31DA payload
+        Just a demo for SQLite query helper at the moment.
 
-        :return: percentage <= 1.0
+        :return: float RH value from 0.0 to 1.0 = 100%
         """
         if Code._12A0 in self._msgs and isinstance(
             self._msgs[Code._12A0].payload, list
