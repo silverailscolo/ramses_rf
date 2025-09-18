@@ -608,9 +608,7 @@ def _parse_hvac_humidity(
 
     percentage = hex_to_percent(value, False)  # TODO: confirm not /200
 
-    result: dict[str, float | str | None] = {
-        param_name: percentage
-    }
+    result: dict[str, float | str | None] = {param_name: percentage}
     if temp:
         result |= {SZ_TEMPERATURE: hex_to_temp(temp)}
     if dewpoint:
