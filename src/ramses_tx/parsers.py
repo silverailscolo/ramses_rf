@@ -1648,21 +1648,17 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
         _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
 
     new_speed = {  # from now, until timer expiry
-        0x00: "fan_boost",  # #    set fan off, or 'boost' mode?
-        0x01: "per_request",  # #  set fan as per payload[6:10]?
-        0x02: "per_vent_speed",  # set fan as per current fan mode/speed?
+        0x00: "fan_boost",  # set fan off, or 'boost' mode?
+        0x01: "per_request?",  # set fan as per payload[6:10]?
+        0x02: "per_request",  # set fan as per payload[6:10]
     }.get(int(payload[2:4], 0x10) & 0x07)  # 0b0000-0111
 
-    fallback_speed: str | None
-    if msg.len == 7 and payload[9:10] == "06":  # Vasco and ClimaRad REM
-        fallback_speed = "per_vent_speed"  # after timer expiry
-        # set fan as per current fan mode/speed
-    else:
-        fallback_speed = {  # after timer expiry
-            0x08: "fan_off",  # #      set fan off?
-            0x10: "per_request",  # #  set fan as per payload[6:10], or payload[10:]?
-            0x18: "per_vent_speed",  # set fan as per current fan mode/speed?
-        }.get(int(payload[2:4], 0x10) & 0x38)  # 0b0011-1000
+    fallback_speed = {  # after timer expiry
+        0x00: "per_vent_speed",  # set fan as per current fan mode
+        0x08: "fan_off",  # set fan off?
+        0x10: "per_request",  # set fan as per payload[10:14]
+        0x18: "per_vent_speed?",  # set fan as per current fan mode/speed?
+    }.get(int(payload[2:4], 0x10) & 0x38)  # 0b0011-1000
 
     units = {
         0x00: "minutes",
@@ -1677,15 +1673,21 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
         result = {
             "minutes" if units != "index" else "index": duration,
             "flags": hex_to_flag8(payload[2:4]),
-            "_new_speed_mode": new_speed,
-            "_fallback_speed_mode": fallback_speed,
+            "new_speed_mode": new_speed,
+            "fallback_speed_mode": fallback_speed,
         }
 
-    if msg.len >= 5 and payload[6:10] != "0000":  # new speed?
-        result["rate"] = parser_22f1(f"00{payload[6:10]}", msg).get("rate")
+    if msg._addrs[0] == NON_DEV_ADDR and msg.len <= 3:
+        result["_scheme"] = "itho"
 
-    if msg.len >= 7:  # fallback speed?
-        result.update({"_unknown_5": payload[10:]})
+    if msg.len >= 5 and payload[6:10] != "0000":  # new speed
+        mode_info = parser_22f1(f"00{payload[6:10]}", msg)
+        result["_scheme"] = mode_info.get("_scheme")
+        result["fan_mode"] = mode_info.get("fan_mode")
+
+    if msg.len >= 7 and payload[10:14] != "0000":  # fallback speed
+        mode_info = parser_22f1(f"00{payload[10:14]}", msg)
+        result["fallback_fan_mode"] = mode_info.get("fan_mode")
 
     return result
 

@@ -1,17 +1,24 @@
-2024-01-01T01:00:00.000000 ...  I 019 --:------ --:------ 39:159057 22F3 003 00000A          # 10 mins
-2024-01-01T01:00:00.000000 ...  I 022 --:------ --:------ 39:159057 22F3 003 000014          # 20 mins
-2024-01-01T01:00:00.000000 ...  I 026 --:------ --:------ 39:159057 22F3 003 00001E          # 30 mins
-2024-01-01T01:00:00.000000 ...  I --- 29:151550 29:237552 --:------ 22F3 007 00023C03040000  # 60 mins
-2024-01-01T01:00:00.000000 ...  I --- 29:162374 29:237552 --:------ 22F3 007 00020F03040000  # 15 mins
-2024-01-01T01:00:00.000000 ...  I --- 29:162374 29:237552 --:------ 22F3 007 00020F03040000  # 15 mins
+# Itho remote
+2024-01-01T01:00:00.000000 ...  I 019 --:------ --:------ 39:159057 22F3 003 00000A          # {'minutes': 10, 'flags': [0, 0, 0, 0, 0, 0, 0, 0], 'new_speed_mode': 'fan_boost', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'itho', 'seqx_num': '019'}
+2024-01-01T01:00:00.000000 ...  I 022 --:------ --:------ 39:159057 22F3 003 000014          # {'minutes': 20, 'flags': [0, 0, 0, 0, 0, 0, 0, 0], 'new_speed_mode': 'fan_boost', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'itho', 'seqx_num': '022'}
+2024-01-01T01:00:00.000000 ...  I 026 --:------ --:------ 39:159057 22F3 003 00001E          # {'minutes': 30, 'flags': [0, 0, 0, 0, 0, 0, 0, 0], 'new_speed_mode': 'fan_boost', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'itho', 'seqx_num': '026'}
+
+# Orcon remote
+2024-01-01T01:00:00.000000 ...  I --- 29:151550 29:237552 --:------ 22F3 007 00023C03040000  # {'minutes': 60, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'orcon', 'fan_mode': 'high'}
+2024-01-01T01:00:00.000000 ...  I --- 29:162374 29:237552 --:------ 22F3 007 00020F03040000  # {'minutes': 15, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'orcon', 'fan_mode': 'high'}
+2024-01-01T01:00:00.000000 ...  I --- 29:162374 29:237552 --:------ 22F3 007 00020F03040000  # {'minutes': 15, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'orcon', 'fan_mode': 'high'}
+
+# Orcon CO2 sensor / remote
+2025-09-06T13:09:26.049759 ...  I --- 37:123456 32:123456 --:------ 22F3 007 00520C00040404  # {'minutes': 720, 'flags': [0, 1, 0, 1, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_request', '_scheme': 'orcon', 'fan_mode': 'away', 'fallback_fan_mode': 'auto'}
+2025-09-06T22:31:19.792895 ...  I --- 37:123456 32:123456 --:------ 22F3 007 00123C03040404  # {'minutes': 60, 'flags': [0, 0, 0, 1, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_request', '_scheme': 'orcon', 'fan_mode': 'high', 'fallback_fan_mode': 'auto'}
 
 # Vasco remote (VMN-17LMP01) boost
-2024-10-14T20:51:11.263018 049  I --- 29:091138 32:022222 --:------ 22F3 007 00021E04060000  # {'minutes': 30, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], '_new_speed_mode': 'per_vent_speed', '_fallback_speed_mode': None, 'rate': None, '_unknown_5': '0000'}
+2024-10-14T20:51:11.263018 049  I --- 29:091138 32:022222 --:------ 22F3 007 00021E04060000  # {'minutes': 30, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'vasco', 'fan_mode': 'high'}
 # repeated 5 times total
 
 # ClimaRad 4-button remote boost, lasts 20 mins
-2024-10-14T08:50:34.322538 072  I --- 29:123150 29:099029 --:------ 22F3 007 00021E04060000  # {'minutes': 30, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], '_new_speed_mode': 'per_vent_speed', '_fallback_speed_mode': None, 'rate': None, '_unknown_5': '0000'}
+2024-10-14T08:50:34.322538 072  I --- 29:123150 29:099029 --:------ 22F3 007 00021E04060000  # {'minutes': 30, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'vasco', 'fan_mode': 'high'}
 # repeated 2 times total but that could be caused by reception/confirm problem. LED is slow to confirm
 
 # curious 22f3 packet: invalid button combi pressed?
-2024-01-01T01:00:00.000000 123  I --- 29:123150 29:099029 --:------ 22F3 007 00020F00060000  # {'minutes': 15, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], '_new_speed_mode': 'per_vent_speed', '_fallback_speed_mode': None, 'rate': None, '_unknown_5': '0000'}
+2024-01-01T01:00:00.000000 123  I --- 29:123150 29:099029 --:------ 22F3 007 00020F00060000  # {'minutes': 15, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'vasco', 'fan_mode': 'off'}
