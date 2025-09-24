@@ -173,33 +173,6 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
     #         self.doRollover()
     #     return super().emit(record)
 
-    # To fix issue ramses_cc 293, test if this override is still required
-    # async def getFilesToDelete(self) -> list[str]:  # zxdavb: my version
-    #     """Determine the files to delete when rolling over.
-    #
-    #     Overridden as old log files were not being deleted.
-    #     """
-    #     # See bpo-44753 (this code is as was before that commit), bpo45628, bpo-46063
-    #     dirName, baseName = os.path.split(self.baseFilename)
-    #     loop = asyncio.get_running_loop()
-    #     # Must run async in executor to prevent HA blocking call on rollover (ramses_cc issue 293)
-    #     file_names = await loop.run_in_executor(None, os.listdir, dirName) < doesn't work
-    #
-    #     result = []
-    #     prefix = baseName + "."
-    #     plen = len(prefix)
-    #     for fileName in file_names:
-    #         if fileName[:plen] == prefix:
-    #             suffix = fileName[plen:]
-    #             if self.extMatch.match(suffix):
-    #                 result.append(os.path.join(dirName, fileName))
-    #     if len(result) < self.backupCount:
-    #         result = []
-    #     else:
-    #         result.sort()
-    #         result = result[: len(result) - self.backupCount]
-    #     return result
-
 
 def getLogger(  # permits a bespoke Logger class
     name: str | None = None, pkt_log: bool = False
