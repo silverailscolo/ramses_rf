@@ -48,13 +48,22 @@ pip install -r requirements_dev.txt
 Repeat this after a release update and also when dev_requirements change in master.
 
 ### Install pre-commit hook
-Install the repo's pre-commit hook
+First, verify the installed pre-commit version (compare to requirements_dev.txt):
+```
+pre-commit --version
+```
+
+Install the repo's pre-commit hook:
 ```
 pre-commit install
 ```
 
 Running `pre-commit run` will only check staged files before a commit, while
 `pre-commit run -a` will check all files.
+
+Your IDE should automatically activate the pre-commit check when you try to commit.
+The rules for pre-commit are in git in `.pre-commit-config.yaml`.
+Check [issue 170](https://github.com/ramses-rf/ramses_rf/issues/170) when you run into troubles here.
 
 ## More
 For more hints, see the [How to submit a PR wiki page](https://github.com/ramses-rf/ramses_rf/wiki/How-to-submit-a-PR)

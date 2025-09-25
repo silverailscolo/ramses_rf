@@ -11,7 +11,7 @@
 
 # used for development (linting)
   pre-commit >= 4.2.0                            # HA (core) uses 4.2.0
-  ruff >= 0.11.0                                 # HA uses 0.12.1 ! also in: pre-commit-config.yaml
+  ruff >= 0.13.0                                 # HA uses 0.13.0 ! also in: pre-commit-config.yaml
 
 # used for development (typing)
   mypy-dev >= 1.16.0a8                           # HA uses  1.18.0a3 !
