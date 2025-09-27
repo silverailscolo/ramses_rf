@@ -223,7 +223,7 @@ CODES_SCHEMA: dict[Code, dict[str, Any]] = {  # rf_unknown
         SZ_NAME: "device_info",
         I_: r"^(00|FF)([0-9A-F]{30,})?$",  # r"^[0-9A-F]{32,}$" might be OK
         RQ: r"^00$",  # NOTE: 63 seen (no RP), some devices will accept [0-9A-F]{2}
-        # RP: r"^[0-9A-F]{2}([0-9A-F]){30,}$",  # NOTE: indx same as RQ
+        # RP: r"^[0-9A-F]{2}([0-9A-F]){30,}$",  # NOTE: index same as RQ
         SZ_LIFESPAN: False,
     },
     Code._10E1: {  # device_id
