@@ -331,7 +331,7 @@ class TestHvacVentilator:
         assert hvac_ventilator.get_fan_param("0003F") == 75
 
     def test_initialized_callback(self, hvac_ventilator: HvacVentilator) -> None:
-        """Test the initialized callback behavior."""
+        """Test the initialized callback behaviour."""
         # Set up a mock callback
         mock_callback = MagicMock()
         hvac_ventilator.set_initialized_callback(mock_callback)
@@ -356,7 +356,7 @@ class TestHvacVentilator:
     def test_hgi_property(
         self, hvac_ventilator: HvacVentilator, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test the hgi property and its caching behavior."""
+        """Test the hgi property and its caching behaviour."""
         # Get the gateway's hgi
         gateway_hgi = hvac_ventilator._gwy.hgi
 
@@ -368,7 +368,7 @@ class TestHvacVentilator:
         assert hvac_ventilator.hgi is gateway_hgi
         assert hvac_ventilator._hgi is gateway_hgi  # Check the cache directly
 
-        # Test the caching behavior by creating a new mock for the gateway's hgi
+        # Test the caching behaviour by creating a new mock for the gateway's hgi
         new_hgi = MagicMock()
 
         # Use monkeypatch to temporarily replace the hgi property
@@ -407,7 +407,7 @@ class TestHvacVentilator:
         mock_callback.assert_not_called()
 
     def test_missing_callback(self, hvac_ventilator: HvacVentilator) -> None:
-        """Test behavior when callbacks are not set."""
+        """Test behaviour when callbacks are not set."""
         # This should not raise an exception
         hvac_ventilator._handle_param_update("3F", 50)
 

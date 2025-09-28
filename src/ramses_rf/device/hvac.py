@@ -99,7 +99,7 @@ class CarbonDioxide(HvacSensorBase):  # 1298
 
     @property
     def co2_level(self) -> int | None:
-        """Return the CO2 level in ppm.
+        """Get the CO2 level in ppm.
 
         :return: The CO2 level in parts per million (ppm), or None if not available
         :rtype: int | None
@@ -139,7 +139,7 @@ class IndoorHumidity(HvacSensorBase):  # 12A0
 
     @property
     def indoor_humidity(self) -> float | None:
-        """Return the indoor relative humidity.
+        """Get the indoor relative humidity.
 
         :return: The indoor relative humidity as a percentage (0-100), or None if not available
         :rtype: float | None
@@ -183,7 +183,7 @@ class PresenceDetect(HvacSensorBase):  # 2E10
 
     @property
     def presence_detected(self) -> bool | None:
-        """Return the presence detection status.
+        """Get the presence detection status.
 
         :return: True if presence is detected, False if not, None if status is unknown
         :rtype: bool | None
@@ -353,7 +353,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
 
     @property
     def fan_rate(self) -> str | None:
-        """Return the current fan rate setting.
+        """Get the current fan rate setting.
 
         :return: The fan rate as a string, or None if not available
         :rtype: str | None
