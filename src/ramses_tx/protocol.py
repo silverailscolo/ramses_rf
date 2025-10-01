@@ -332,7 +332,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         /,
         *,
         disable_warnings: bool = False,
-        strick_checking: bool = False,
+        strickt_checking: bool = False,
     ) -> DeviceIdT | None:
         """Return the device_id of the gateway specified in the include_list, if any.
 
@@ -384,7 +384,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                 f"The {SZ_KNOWN_LIST} includes exactly one gateway (HGI): {known_hgi}"
             )
 
-        if strick_checking:
+        if strickt_checking:
             return known_hgi if [known_hgi] == explicit_hgis else None
         return known_hgi
 
