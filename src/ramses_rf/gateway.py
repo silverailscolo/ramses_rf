@@ -306,7 +306,7 @@ class Gateway(Engine):
         enforce_include_list = bool(
             self._enforce_known_list
             and extract_known_hgi_id(
-                self._include, disable_warnings=True, strickt_checking=True
+                self._include, disable_warnings=True, strict_checking=True
             )
         )
 
