@@ -8,13 +8,13 @@
  - (Heat) **evohome**, **Sundial**, **Hometronic**, **Chronotherm**
  - (HVAC) **Itho**, **Orcon**, **Nuaire**, **Vasco**, **ClimaRad**
 
-It requires a USB-to-RF device, either a Honeywell HGI80 (somewhat rare, expensive) or something running the [evofw3](https://github.com/ghoti57/evofw3) firmware, such as the one from [here](https://indalo-tech.onlineweb.shop/) or your own ESP32-S3-WROOM-1 N16R8 with a CC1100 transponder.
+It requires a USB-to-RF device, either a Honeywell HGI80 (somewhat rare, expensive) or a USB/MQTT dongle running the [ramses_esp](https://github.com/IndaloTech/ramses_esp) or [evofw3](https://github.com/ghoti57/evofw3) firmware, such as the one from [here](https://indalo-tech.onlineweb.shop/) or your own ESP32-S3-WROOM-1 N16R8 with a CC1100 transponder.
 
 It does four things:
  - decodes RAMSES II-compatible packets and converts them into useful JSON
  - builds a picture (schema, config & state) of evohome-compatible CH/DHW systems - either passively (by eavesdropping), or actively (probing)
- - allows you to send commands to CH/DHW and HVAC systems, or monitor for state changes
- - allows you to emulate some hardware devices
+ - allows you to send commands to CH/DHW and HVAC systems, or monitor them for state changes
+ - allows you to emulate some hardware devices (remotes)
 
 > [!WARNING]
 > This library is not affiliated with Honeywell, Airios nor any final manufacturer. The developers take no responsibility for anything that may happen to your devices because of this library.
@@ -24,9 +24,9 @@ For CH/DHW, the simplest way to know if it will work with your system is to iden
  - **BDR91A**: Wireless Relay (also BDR91T)
  - **HC60NG**: Wireless Relay (older hardware)
 
-Other systems may well work, such as some Itho Daalderop HVAC systems, use this protocol, YMMV.
+Other systems may well work, such as some Itho Daalderop HVAC systems, use this protocol. YMMV.
 
-It includes a CLI and can be used as a standalone tool, but also is used as a client library by:
+This library includes a CLI and can be used as a standalone tool, but also is used as a client library by:
  - [ramses_cc](https://github.com/ramses-rf/ramses_cc), a Home Assistant integration
  - [evohome-Listener](https://github.com/smar000/evohome-Listener), an MQTT gateway
 
