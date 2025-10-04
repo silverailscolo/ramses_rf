@@ -2109,9 +2109,9 @@ class Command(Frame):
             elif (str(data_type) == "00") or (
                 str(data_type) == "10"
             ):  # numeric (minutes, medium(0)/high(1) or days)
-                value_scaled = int(value)
-                min_val_scaled = int(min_val)
-                max_val_scaled = int(max_val)
+                value_scaled = int(float(value))
+                min_val_scaled = int(float(min_val))
+                max_val_scaled = int(float(max_val))
                 precision = 1
                 precision_scaled = int(precision)
                 trailer = (
