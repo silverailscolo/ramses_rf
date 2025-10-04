@@ -1267,7 +1267,7 @@ _22F1_SCHEMES: dict[str, dict[str, str]] = {
 
 # unclear if true for only Orcon/*all* models
 _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
-    "31": {  # slot 09
+    "31": {  # slot 09 (FANs produced after 2021)
         SZ_DESCRIPTION: "Time to change filter (days)",
         SZ_MIN_VALUE: 0,
         SZ_MAX_VALUE: 1800,
@@ -1338,6 +1338,14 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
         SZ_DATA_UNIT: "%",
+    },
+    "4B": {  # slot 09 (FANs produced before 2021) Also check code 22F7
+        SZ_DESCRIPTION: "(Test) Bypass Valve (0=auto, 1=open, 2=closed)",
+        SZ_MIN_VALUE: 0,
+        SZ_MAX_VALUE: 2,
+        SZ_PRECISION: 1,
+        SZ_DATA_TYPE: "00",
+        SZ_DATA_UNIT: "",
     },
     "4E": {  # slot 0A
         SZ_DESCRIPTION: "Moisture scenario position (0=medium, 1=high)",
