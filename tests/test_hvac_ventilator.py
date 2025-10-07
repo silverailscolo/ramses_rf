@@ -115,7 +115,7 @@ class TestHvacVentilator:
         msg.payload = {"parameter": TEST_PARAM_ID, "value": TEST_PARAM_VALUE}
 
         # Set up the message store
-        hvac_ventilator._msgs_ = {}
+        hvac_ventilator._params_2411 = {}
 
         # Set up the param update callback
         mock_callback = MagicMock()
@@ -128,8 +128,8 @@ class TestHvacVentilator:
         assert hvac_ventilator._supports_2411 is True
 
         # Check that the message was stored correctly
-        assert Code._2411 in hvac_ventilator._msgs
-        assert f"{Code._2411}_{TEST_PARAM_ID}" in hvac_ventilator._msgs
+        assert TEST_PARAM_ID in hvac_ventilator._params_2411
+        assert hvac_ventilator._params_2411[TEST_PARAM_ID] == TEST_PARAM_VALUE
 
         # Check that the callback was called with the correct parameters
         mock_callback.assert_called_once_with(TEST_PARAM_ID, TEST_PARAM_VALUE)
@@ -285,14 +285,8 @@ class TestHvacVentilator:
 
     def test_get_fan_param_supported(self, hvac_ventilator: HvacVentilator) -> None:
         """Test getting a supported fan parameter."""
-        # Set up a mock message in the device's message store
-        msg = MagicMock()
-        msg.code = Code._2411
-        msg.payload = {"parameter": TEST_PARAM_ID, "value": TEST_PARAM_VALUE}
-
-        # Use the message store properly
-        hvac_ventilator._msgs[Code._2411] = msg
-        hvac_ventilator._msgs[f"{Code._2411}_{TEST_PARAM_ID}"] = msg  # type: ignore[index]
+        # Set up the parameter in the device's parameter store
+        hvac_ventilator._params_2411[TEST_PARAM_ID] = TEST_PARAM_VALUE
 
         # Mark as supporting 2411
         hvac_ventilator._supports_2411 = True
@@ -315,14 +309,9 @@ class TestHvacVentilator:
 
     def test_get_fan_param_normalization(self, hvac_ventilator: HvacVentilator) -> None:
         """Test parameter ID normalization."""
-        # Set up a mock message with a parameter that has leading zeros
-        msg = MagicMock()
-        msg.code = Code._2411
-        msg.payload = {"parameter": "03F", "value": 75}
-
-        # Use the message store properly
-        hvac_ventilator._msgs[Code._2411] = msg
-        hvac_ventilator._msgs[f"{Code._2411}_3F"] = msg  # type: ignore[index]
+        # Set up the parameter with leading zeros in the parameter store
+        # The get_fan_param method normalizes "03F" to "3F"
+        hvac_ventilator._params_2411["3F"] = 75
         hvac_ventilator._supports_2411 = True
 
         # Test with different formats of the same parameter ID
