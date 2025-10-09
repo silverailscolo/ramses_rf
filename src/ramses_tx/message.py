@@ -54,7 +54,7 @@ class MessageBase:
     def __init__(self, pkt: Packet) -> None:
         """Create a message from a valid packet.
 
-        Will raise InvalidPacketError if it is invalid.
+        :raises InvalidPacketError if message payload is invalid.
         """
 
         self._pkt = pkt
@@ -66,11 +66,15 @@ class MessageBase:
         self.dtm: dt = pkt.dtm
 
         self.verb: VerbT = pkt.verb
-        self.seqn: str = pkt.seqn
+        self.seqn: str = (
+            pkt.seqn
+        )  # the msg is part of a set for 1 Code, received in order
         self.code: Code = pkt.code
         self.len: int = pkt._len
 
-        self._payload = self._validate(self._pkt.payload)  # ? raise InvalidPacketError
+        self._payload = self._validate(
+            self._pkt.payload
+        )  # ? may raise InvalidPacketError
 
         self._str: str = None  # type: ignore[assignment]
 
@@ -92,7 +96,7 @@ class MessageBase:
 
         if self.src.id == self._addrs[0].id:  # type: ignore[unreachable]
             name_0 = self._name(self.src)
-            name_1 = "" if self.dst is self.src else self._name(self.dst)
+            name_1 = "" if self.dst == self.src else self._name(self.dst)
         else:
             name_0 = ""
             name_1 = self._name(self.src)
@@ -139,16 +143,18 @@ class MessageBase:
 
     @property
     def _has_array(self) -> bool:
-        """Return True if the message's raw payload is an array."""
+        """
+        :return: True if the message's raw payload is an array.
+        """
 
         return bool(self._pkt._has_array)
 
     @property
     def _idx(self) -> dict[str, str]:
-        """Return the domain_id/zone_idx/other_idx of a message payload, if any.
+        """Get the domain_id/zone_idx/other_idx of a message payload, if any.
+        Used to identify the zone/domain that a message applies to.
 
-        Used to identify the zone/domain that a message applies to. Returns an empty
-        dict if there is none such, or None if undetermined.
+        :return: an empty dict if there is none such, or None if undetermined.
         """
 
         # .I --- 01:145038 --:------ 01:145038 3B00 002 FCC8
@@ -229,7 +235,7 @@ class MessageBase:
             assert isinstance(self._pkt._idx, str)  # mypy hint
             return {IDX_NAMES[Code._22C9]: self._pkt._idx}
 
-        assert isinstance(self._pkt._idx, str)  # mypy check
+        assert isinstance(self._pkt._idx, str)  # mypy hint
         idx_name = SZ_DOMAIN_ID if self._pkt._idx[:1] == "F" else SZ_ZONE_IDX
         index_name = IDX_NAMES.get(self.code, idx_name)
 
@@ -237,9 +243,10 @@ class MessageBase:
 
     # TODO: needs work...
     def _validate(self, raw_payload: str) -> dict | list[dict]:  # type: ignore[type-arg]
-        """Validate the message, and parse the payload if so.
+        """Validate a message packet payload, and parse it if valid.
 
-        Raise an exception (InvalidPacketError) if it is not valid.
+        :return: a dict containing key: value pairs, or a list of those created from the payload
+        :raises an InvalidPacketError exception if it is not valid.
         """
 
         try:  # parse the payload
@@ -249,10 +256,9 @@ class MessageBase:
             if not self._has_payload and (
                 self.verb == RQ and self.code not in RQ_IDX_COMPLEX
             ):
-                # _LOGGER.error("%s", msg)
                 return {}
 
-            result = parse_payload(self)
+            result = parse_payload(self)  # invoke the code parsers
 
             if isinstance(result, list):
                 return result
@@ -353,7 +359,7 @@ def re_compile_re_match(regex: str, string: str) -> bool:  # Optional[Match[Any]
 def _check_msg_payload(msg: MessageBase, payload: str) -> None:
     """Validate the packet's payload against its verb/code pair.
 
-    Raise an InvalidPayloadError if the payload is seen as invalid. Such payloads may
+    :raises InvalidPayloadError if the payload is seen as invalid. Such payloads may
     actually be valid, in which case the rules (likely the regex) will need updating.
     """
 
