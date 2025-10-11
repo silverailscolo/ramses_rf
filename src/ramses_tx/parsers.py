@@ -1912,41 +1912,56 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
         "92": (4, hex_to_temp),  # 75 (0-30) (C)
     }  # TODO: _2411_TYPES.get(payload[8:10], (8, no_op))
 
-    assert payload[4:6] in _2411_TABLE, (
-        f"param {payload[4:6]} is unknown"
-    )  # _INFORM_DEV_MSG
-    description = _2411_TABLE.get(payload[4:6], "Unknown")
+    # Handle unknown parameters gracefully instead of asserting
+    param_id = payload[4:6]
+    try:
+        description = _2411_TABLE.get(param_id, "Unknown")
+        if param_id not in _2411_TABLE:
+            _LOGGER.warning(
+                f"2411 message received with unknown parameter ID: {param_id}. "
+                f"This parameter is not in the known parameter schema. "
+                f"Message: {msg!r}"
+            )
+    except Exception as err:
+        _LOGGER.warning(f"Error looking up 2411 parameter {param_id}: {err}")
+        description = "Unknown"
 
     result = {
-        "parameter": payload[4:6],
+        "parameter": param_id,
         "description": description,
     }
 
     if msg.verb == RQ:
         return result
 
-    assert payload[8:10] in _2411_DATA_TYPES, (
-        f"param {payload[4:6]} has unknown data_type: {payload[8:10]}"
-    )  # _INFORM_DEV_MSG
-    length, parser = _2411_DATA_TYPES.get(payload[8:10], (8, lambda x: x))
+    try:
+        assert payload[8:10] in _2411_DATA_TYPES, (
+            f"param {param_id} has unknown data_type: {payload[8:10]}"
+        )  # _INFORM_DEV_MSG
+        length, parser = _2411_DATA_TYPES.get(payload[8:10], (8, lambda x: x))
 
-    result |= {
-        "value": parser(payload[10:18][-length:]),  # type: ignore[operator]
-        "_value_06": payload[6:10],
-    }
-
-    if msg.len == 9:
-        return result
-
-    return (
-        result
-        | {
-            "min_value": parser(payload[18:26][-length:]),  # type: ignore[operator]
-            "max_value": parser(payload[26:34][-length:]),  # type: ignore[operator]
-            "precision": parser(payload[34:42][-length:]),  # type: ignore[operator]
-            "_value_42": payload[42:],
+        result |= {
+            "value": parser(payload[10:18][-length:]),  # type: ignore[operator]
+            "_value_06": payload[6:10],
         }
-    )
+
+        if msg.len == 9:
+            return result
+
+        return (
+            result
+            | {
+                "min_value": parser(payload[18:26][-length:]),  # type: ignore[operator]
+                "max_value": parser(payload[26:34][-length:]),  # type: ignore[operator]
+                "precision": parser(payload[34:42][-length:]),  # type: ignore[operator]
+                "_value_42": payload[42:],
+            }
+        )
+    except AssertionError as err:
+        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        # Return partial result for unknown parameters
+        result["value"] = ""
+        return result
 
 
 # unknown_2420, from OTB

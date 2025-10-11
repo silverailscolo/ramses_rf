@@ -446,7 +446,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         """
         super().__init__(*args, **kwargs)
         self._supports_2411 = False  # Flag for 2411 parameter support
-        self._params_2411: dict[str, Any] = {}  # Store 2411 parameters here
+        self._params_2411: dict[str, float] = {}  # Store 2411 parameters here
         self._initialized_callback = None  # Called when device is fully initialized
         self._param_update_callback = None  # Called when 2411 parameters are updated
         self._hgi: Any | None = None  # Will be set when HGI is available
@@ -518,7 +518,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :param param_id: The ID of the parameter that was updated
         :type param_id: str
         :param value: The new value of the parameter
-        :type value: Any
+        :type value: float
         """
         if callable(self._param_update_callback):
             try:
@@ -542,29 +542,29 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         The HGI device provides additional functionality for certain operations.
 
         :return: The HGI device instance, or None if not available
-        :rtype: Any | None
+        :rtype: float | None
         """
         if self._hgi is None and self._gwy and hasattr(self._gwy, "hgi"):
             self._hgi = self._gwy.hgi
         return self._hgi
 
-    def get_2411_param(self, param_id: str) -> Any:
+    def get_2411_param(self, param_id: str) -> float | None:
         """Get a 2411 parameter value.
 
         :param param_id: The parameter ID to retrieve.
         :type param_id: str
         :return: The parameter value if found, None otherwise
-        :rtype: Any | None
+        :rtype: float | None
         """
         return self._params_2411.get(param_id)
 
-    def set_2411_param(self, param_id: str, value: Any) -> bool:
+    def set_2411_param(self, param_id: str, value: float) -> bool:
         """Set a 2411 parameter value.
 
         :param param_id: The parameter ID to retrieve.
         :type param_id: str
         :param value: The parameter value to set.
-        :type value: Any
+        :type value: float
         :return: True if the parameter was set, False otherwise
         :rtype: bool
         """
@@ -584,7 +584,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :param param_id: The parameter ID to retrieve.
         :type param_id: str
         :return: The parameter value if found, None otherwise
-        :rtype: Any | None
+        :rtype: float | None
         """
         # Ensure param_id is uppercase and strip leading zeros for consistency
         param_id = (
