@@ -1960,6 +1960,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
     except AssertionError as err:
         _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
         # Return partial result for unknown parameters
+        result["value"] = ""
         return result
 
 
