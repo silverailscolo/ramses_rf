@@ -44,7 +44,7 @@ import sys
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime as dt, timedelta as td
-from functools import wraps
+from functools import partial, wraps
 from io import TextIOWrapper
 from string import printable
 from time import perf_counter
@@ -142,8 +142,7 @@ else:  # is linux
 
     def list_links(devices: set[str]) -> list[str]:
         """Search for symlinks to ports already listed in devices."""
-
-        links = []
+        links: list[str] = []
         for device in glob.glob("/dev/*") + glob.glob("/dev/serial/by-id/*"):
             if os.path.islink(device) and os.path.realpath(device) in devices:
                 links.append(device)
@@ -174,7 +173,7 @@ else:  # is linux
         return result
 
 
-def is_hgi80(serial_port: SerPortNameT) -> bool | None:
+async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
     """Return True/False if the device attached to the port has the attrs of an HGI80.
 
     Return None if it's not possible to tell (falsy should assume is evofw3).
@@ -209,7 +208,10 @@ def is_hgi80(serial_port: SerPortNameT) -> bool | None:
 
     # otherwise, we can look at device attrs via comports()...
     try:
-        komports = comports(include_links=True)
+        loop = asyncio.get_running_loop()
+        komports = await loop.run_in_executor(
+            None, partial(comports, include_links=True)
+        )
     except ImportError as err:
         raise exc.TransportSerialError(f"Unable to find {serial_port}: {err}") from err
 
@@ -841,8 +843,6 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
             self._leak_sem(), name="PortTransport._leak_sem()"
         )
 
-        self._is_hgi80 = is_hgi80(self.serial.name)
-
         self._loop.create_task(
             self._create_connection(), name="PortTransport._create_connection()"
         )
@@ -854,6 +854,8 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
         # initialisation times, so we must wait until they send OK
 
         # signature also serves to discover the HGI's device_id (& for pkt log, if any)
+
+        self._is_hgi80 = await is_hgi80(self.serial.name)
 
         async def connect_sans_signature() -> None:
             """Call connection_made() without sending/waiting for a signature."""
