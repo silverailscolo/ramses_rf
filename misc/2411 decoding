@@ -2,6 +2,12 @@
 # Move decoded stuff to the EOF
 
 ## ClimaRad Minibox
+ClimaRad seems to have a different structure... I created a test parser: climarad_2411_parser.py that might help decoding.
+run it: python3 misc/climarad_2411_parser.py
+At the top you can find _CLIMARAD_2411_PARAMS that holds params that we decoded (partly)
+I entered 000007 as an example.
+
+
 # exhaust fan: 2411 - 01 Code 32
 RP --- 29:099029 18:130140 --:------ 2411 022 00000100000000003200000000000000FF0000000120
 
@@ -15,7 +21,7 @@ RP --- 37:153226 18:154951 --:------ 2411 023 0000881510000002BC000001900000076C
 
 # base_vent_enabled: set to OFF
 2025-09-30T22:00:01.804915 056 RQ --- 18:154951 37:153226 --:------ 2411 003 000007
-2025-09-30T22:00:02.006368 056  W --- 18:154951 37:153226 --:------ 2411 022 00000700000000000000000000000000000000000000
+2025-09-30T22:00:02.006368 056  W --- 18:154951 37:153226 --:------ 2411 022 00000700000000000000000000000000000000000000 # why shorter ???
 2025-09-30T22:00:02.140166 075  I --- 37:153226 --:------ 37:153226 12A0 021 004007587FFF0001EF7FFF7FFF000245071A04E000 # indoor_humidity  [{'hvac_idx': '00', 'indoor_humidity': 0.64, 'temperature': 18.8, 'dewpoint_temp': None}, {'hvac_idx': '01', 'rel_humidity': Non...
 2025-09-30T22:00:06.633053 055 RQ --- 18:154951 37:153226 --:------ 2411 003 000087
 2025-09-30T22:00:06.658298 075 RP --- 37:153226 18:154951 --:------ 2411 023 0000871400000000000000000000000002000000018A00
@@ -45,10 +51,17 @@ RP --- 37:153226 18:154951 --:------ 2411 023 0000881510000002BC000001900000076C
 
 2025-10-13T13:00:39.449974 051 RQ --- 18:154951 37:153226 --:------ 2411 003 000007
 2025-10-13T13:00:39.468811 060 RP --- 37:153226 18:154951 --:------ 2411 023 0000070000000000000000000000000001000000018A00
-2025-10-13T13:00:39.655646 052  W --- 18:154951 37:153226 --:------ 2411 022 00000700000000000100000000000000000000000000
+2025-10-13T13:00:39.655646 052  W --- 18:154951 37:153226 --:------ 2411 022 00000700000000000100000000000000000000000000 # why shorter ???
 2025-10-13T13:00:39.695645 060  I --- 37:153226 18:154951 --:------ 2411 023 0000070000000000010000000000000001000000018A00
 
-ClimaRad seems to have a different structure...
+Bytes 0-2  (0-5):    Parameter ID (3 bytes / 6 hex chars)
+
+
+
+07:
+#TODO: byte 11(22) of byte 16 ??? 01 of 02 of 00 ??
+offset 34 ??
+
 
 0x000007 - Base Ventilation Enable
 
@@ -58,11 +71,8 @@ This controls whether base ventilation is active
 
 0x000087 - Unknown (value: 20)
 
-Byte 3: Always 0x14 (20 decimal)
-Could be a timer, threshold, or mode setting
 
-
-0x000088 - Timer Configuration (most interesting!)
+0x000088 - Timer Configuration
 
 Timer: 0x1510 = 5392 seconds = 89.87 minutes
 Value 700: 0x02BC (could be flow rate in m³/h or CFM?)
@@ -73,10 +83,6 @@ These could be ventilation rates for different modes
 
 0x0000DA - Unknown (value: 127)
 
-Byte 3: 0x7F (127 decimal - often means "disabled" or "max")
-
-
-
 Questions to help identify the unknowns:
 
 Parameter 0x88 values (700, 400, 1900) - Do these match your ventilation flow rates? Many HRV units have settings like:
@@ -85,9 +91,6 @@ Low speed: 100-200 m³/h
 Medium: 300-400 m³/h
 High: 600-800 m³/h
 
-
-The ~90 minute timer - Does your Minibox have a timer mode or boost duration setting?
-Parameter 0x87 (value 20) - Could this be related to humidity threshold, temperature setpoint, or filter timer?
 
 
 
