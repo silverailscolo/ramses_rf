@@ -4,6 +4,7 @@ At the end of the file you can find test_messages that can be used to test the p
 Known_2411_PARAMS(at the top) holds params that we decoded (partly)
 _parse_hex_value is used to parse unknown params in different formats. 
     Check these if you see any values that make sense to find the right format.
+Just run it from the terminal as python3 2411_parser.py
 """
 import logging
 from typing import Any
@@ -30,16 +31,13 @@ Known_2411_PARAMS = {
 
 def parser_2411(payload: str, msg: Any) -> dict[str, Any]:
     """
-    Parser for ClimaRad Minibox 2411 messages.
+    Parser for 2411 messages.
     Params not listed in Known_2411_PARAMS are parsed by _parse_unknown_parameter
     as 4byte, 6byte or 8byte blocks, in different formats.
 
-    Args:
-        payload: Hex string payload
-        msg: Message object with verb attribute (RQ/RP/W/I)
-
-    Returns:
-        Dictionary with parsed parameter data including all structure components
+    :param payload: Hex string payload
+    :param msg: Message object with verb attribute (RQ/RP/W/I)
+    :return: Dictionary with parsed parameter data including all structure components
     """
     
     # Extract 3-byte parameter ID
@@ -97,12 +95,9 @@ def _parse_unknown_parameter(payload: str, param_id: str) -> dict[str, Any]:
     """
     Try different parsing strategies for unknown 2411 parameters.
 
-    Args:
-        payload: Hex string payload
-        param_id: Parameter ID
-
-    Returns:
-        Dictionary with parsed data from different strategies
+    :param payload: Hex string payload
+    :param param_id: Parameter ID
+    :return: Dictionary with parsed data from different strategies
     """
     result = {}
 
@@ -119,7 +114,12 @@ def _parse_unknown_parameter(payload: str, param_id: str) -> dict[str, Any]:
 
 
 def _parse_hex_value(hex_str: str) -> dict[str, Any]:
-    """Parse a hex string into multiple useful representations."""
+    """
+    Parse a hex string into multiple useful representations.
+
+    :param hex_str: Hex string to parse
+    :return: Dictionary with parsed representations
+    """
     result: dict[str, Any] = {
         "raw": hex_str,
         "hex": f"0x{hex_str.upper()}"
@@ -165,8 +165,9 @@ def _parse_hex_value(hex_str: str) -> dict[str, Any]:
     return result
 
 def _try_4byte_blocks(payload: str) -> dict[str, Any]:
-    """Try parsing as 4-byte (8 hex character) blocks.
-    
+    """
+    Try parsing as 4-byte (8 hex character) blocks.
+
     For each 4-byte block, provides:
     - raw: Original hex string
     - hex: Formatted hex with 0x prefix
@@ -179,6 +180,9 @@ def _try_4byte_blocks(payload: str) -> dict[str, Any]:
     - bin: Binary representation
     - ascii: ASCII interpretation (if possible)
     - offset: Position in the original payload
+
+    :param payload: Hex string payload
+    :return: Dictionary with parsed 4-byte blocks
     """
     blocks = {}
     data_section = payload[6:]  # Skip parameter ID
@@ -194,8 +198,9 @@ def _try_4byte_blocks(payload: str) -> dict[str, Any]:
 
 
 def _try_6byte_blocks(payload: str) -> dict[str, Any]:
-    """Try parsing as 6-byte (12 hex character) blocks.
-    
+    """
+    Try parsing as 6-byte (12 hex character) blocks.
+
     For each 6-byte block, provides:
     - raw: Original hex string
     - hex: Formatted hex with 0x prefix
@@ -208,6 +213,9 @@ def _try_6byte_blocks(payload: str) -> dict[str, Any]:
     - bin: Binary representation
     - ascii: ASCII interpretation (if possible)
     - offset: Position in the original payload
+
+    :param payload: Hex string payload
+    :return: Dictionary with parsed 6-byte blocks
     """
     blocks = {}
     data_section = payload[6:]  # Skip parameter ID
@@ -223,8 +231,9 @@ def _try_6byte_blocks(payload: str) -> dict[str, Any]:
 
 
 def _try_8byte_blocks(payload: str) -> dict[str, Any]:
-    """Try parsing as 8-byte (16 hex character) blocks.
-    
+    """
+    Try parsing as 8-byte (16 hex character) blocks.
+
     For each 8-byte block, provides:
     - raw: Original hex string
     - hex: Formatted hex with 0x prefix
@@ -237,6 +246,9 @@ def _try_8byte_blocks(payload: str) -> dict[str, Any]:
     - bin: Binary representation
     - ascii: ASCII interpretation (if possible)
     - offset: Position in the original payload
+
+    :param payload: Hex string payload
+    :return: Dictionary with parsed 8-byte blocks
     """
     blocks = {}
     data_section = payload[6:]  # Skip parameter ID
@@ -252,15 +264,13 @@ def _try_8byte_blocks(payload: str) -> dict[str, Any]:
 
 
 def format_field(value: Any, width: int, align: str = 'left') -> str:
-    """Format a value to a specific width with alignment.
+    """
+    Format a value to a specific width with alignment.
 
-    Args:
-        value: The value to format (will be converted to string)
-        width: The desired total width
-        align: 'left', 'right', or 'center'
-
-    Returns:
-        Formatted string padded with spaces to the specified width
+    :param value: The value to format (will be converted to string)
+    :param width: The desired total width
+    :param align: 'left', 'right', or 'center'
+    :return: Formatted string padded with spaces to the specified width
     """
     if value is None:
         value = 'N/A'
@@ -281,7 +291,13 @@ def format_field(value: Any, width: int, align: str = 'left') -> str:
 
 
 def format_block_table(blocks: dict[str, Any], title: str) -> str:
-    """Format a dictionary of blocks as a table."""
+    """
+    Format a dictionary of blocks as a table.
+
+    :param blocks: Dictionary of parsed blocks
+    :param title: Title for the table
+    :return: Formatted table string
+    """
     if not blocks:
         return f"{title}: No blocks found\n"
 
@@ -379,7 +395,13 @@ def format_block_table(blocks: dict[str, Any], title: str) -> str:
     return header + "\n".join(rows) + "\n"
 
 def format_result_table(result: dict[str, Any], description: str) -> str:
-    """Format a complete result as tables."""
+    """
+    Format a complete result as tables.
+
+    :param result: Parsed result dictionary
+    :param description: Description for the result
+    :return: Formatted result string with tables
+    """
     output = []
     output.append(f"\n{description}")
     output.append("=" * 60)
@@ -411,6 +433,9 @@ def decode_2411_message(raw_message: str, verb: str = "RP") -> dict[str, Any]:
     """
     Convenience function to decode a raw 2411 message.
 
+    :param raw_message: Raw 2411 message string
+    :param verb: Message verb (default: "RP")
+    :return: Decoded message dictionary
     """
 
     class MockMessage:
