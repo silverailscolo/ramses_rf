@@ -2,10 +2,11 @@
 
 At the end of the file you can find test_messages that can be used to test the parser.
 Known_2411_PARAMS(at the top) holds params that we decoded (partly)
-_parse_hex_value is used to parse unknown params in different formats. 
+_parse_hex_value is used to parse unknown params in different formats.
     Check these if you see any values that make sense to find the right format.
 Just run it from the terminal as python3 2411_parser.py
 """
+
 import logging
 from typing import Any
 
@@ -16,16 +17,16 @@ _LOGGER = logging.getLogger(__name__)
 # Add parameters that we know how to parse (or parts of it)
 
 Known_2411_PARAMS = {
-# TODO: add params that were decoded.
-#     "000007": {
-#         "name": "base_vent_enabled",
-#         "description": "Base Ventilation Enable/Disable",
-#         "parser": lambda payload, offset: {
-#             "unknown1": payload[6:16],
-#             "enabled": payload[16:18] == "01",
-#             "unknown2": payload[18:],
-#         },
-#     },
+    # TODO: add params that were decoded.
+    #     "000007": {
+    #         "name": "base_vent_enabled",
+    #         "description": "Base Ventilation Enable/Disable",
+    #         "parser": lambda payload, offset: {
+    #             "unknown1": payload[6:16],
+    #             "enabled": payload[16:18] == "01",
+    #             "unknown2": payload[18:],
+    #         },
+    #     },
 }
 
 
@@ -39,18 +40,20 @@ def parser_2411(payload: str, msg: Any) -> dict[str, Any]:
     :param msg: Message object with verb attribute (RQ/RP/W/I)
     :return: Dictionary with parsed parameter data including all structure components
     """
-    
+
     # Extract 3-byte parameter ID
     param_id = payload[:6]
-    
+
     result: dict[str, Any] = {
         "parameter_id": param_id,
         "parameter_hex": f"0x{param_id}",
     }
-    
+
     # Get parameter definition
     param_def_raw = Known_2411_PARAMS.get(param_id)
-    param_def: dict[str, Any] | None = param_def_raw if isinstance(param_def_raw, dict) else None
+    param_def: dict[str, Any] | None = (
+        param_def_raw if isinstance(param_def_raw, dict) else None
+    )
 
     if param_def:
         result["parameter_name"] = param_def["name"]
@@ -58,13 +61,10 @@ def parser_2411(payload: str, msg: Any) -> dict[str, Any]:
     else:
         result["parameter_name"] = f"unknown_{param_id}"
         result["description"] = "Unknown"
-        _LOGGER.warning(
-            f"Unknown parameter ID: {param_id}. "
-            f"Payload: {payload}"
-        )
+        _LOGGER.warning(f"Unknown parameter ID: {param_id}. Payload: {payload}")
 
     # For RQ (request) messages, just return parameter info
-    if hasattr(msg, 'verb') and msg.verb == "RQ":
+    if hasattr(msg, "verb") and msg.verb == "RQ":
         return result
 
     try:
@@ -77,13 +77,13 @@ def parser_2411(payload: str, msg: Any) -> dict[str, Any]:
         else:
             # Unknown parameter - try different parsing strategies
             result.update(_parse_unknown_parameter(payload, param_id))
-            
+
         # Extract footer/status bytes (last 6 bytes typically)
         if len(payload) >= 46:
             result["type ? (3:5)"] = payload[3:5]
             result["footer ? (-6)"] = payload[-6:]
             result["status_flag ?(19)"] = payload[38:40]  # Byte 19
-            
+
     except (ValueError, IndexError) as err:
         _LOGGER.error(f"Error parsing 2411 payload for param {param_id}: {err}")
         result["error"] = str(err)
@@ -120,49 +120,51 @@ def _parse_hex_value(hex_str: str) -> dict[str, Any]:
     :param hex_str: Hex string to parse
     :return: Dictionary with parsed representations
     """
-    result: dict[str, Any] = {
-        "raw": hex_str,
-        "hex": f"0x{hex_str.upper()}"
-    }
-    
+    result: dict[str, Any] = {"raw": hex_str, "hex": f"0x{hex_str.upper()}"}
+
     try:
         # Basic decimal value
         dec = int(hex_str, 16)
         result["dec"] = dec
-        
+
         # Byte-swapped version (big-endian to little-endian)
         if len(hex_str) % 2 == 0:  # Only if even number of hex digits
             # Swap byte order (e.g., "A1B2" -> "B2A1")
-            swapped = "".join(reversed([hex_str[i:i+2] for i in range(0, len(hex_str), 2)]))
+            swapped = "".join(
+                reversed([hex_str[i : i + 2] for i in range(0, len(hex_str), 2)])
+            )
             result["swapped_hex"] = f"0x{swapped.upper()}"
             result["swapped_dec"] = int(swapped, 16)
-            
+
             # Little-endian interpretation
             le_bytes = bytes.fromhex(hex_str)
-            le_value = int.from_bytes(le_bytes, byteorder='little', signed=False)
+            le_value = int.from_bytes(le_bytes, byteorder="little", signed=False)
             result["le_dec"] = le_value
             result["le_hex"] = f"0x{le_value:X}"
-            
+
             # Signed integer interpretation
             if len(hex_str) in [4, 8]:  # 16-bit or 32-bit
-                result["signed_dec"] = int.from_bytes(le_bytes, byteorder='big', signed=True)
-        
+                result["signed_dec"] = int.from_bytes(
+                    le_bytes, byteorder="big", signed=True
+                )
+
         # Binary representation
-        result["bin"] = f"0b{dec:0{len(hex_str)*4}b}"
-        
+        result["bin"] = f"0b{dec:0{len(hex_str) * 4}b}"
+
         # ASCII interpretation if possible (for 2 or 4 character hex)
         if len(hex_str) in [2, 4, 6, 8]:
             try:
-                ascii_str = bytes.fromhex(hex_str).decode('ascii', errors='replace')
+                ascii_str = bytes.fromhex(hex_str).decode("ascii", errors="replace")
                 if all(32 <= ord(c) <= 126 for c in ascii_str):
                     result["ascii"] = ascii_str
             except (UnicodeDecodeError, ValueError):
                 pass
-                
+
     except ValueError as e:
         result["error"] = str(e)
-        
+
     return result
+
 
 def _try_4byte_blocks(payload: str) -> dict[str, Any]:
     """
@@ -189,10 +191,10 @@ def _try_4byte_blocks(payload: str) -> dict[str, Any]:
 
     for i in range(0, min(len(data_section), 32), 4):  # Up to 8 blocks
         if i + 4 <= len(data_section):
-            block = data_section[i:i+4]
+            block = data_section[i : i + 4]
             block_info = _parse_hex_value(block)
             block_info["offset"] = 6 + i  # Add offset to the original payload
-            blocks[f"block_{i//4 + 1}"] = block_info
+            blocks[f"block_{i // 4 + 1}"] = block_info
 
     return blocks
 
@@ -222,10 +224,10 @@ def _try_6byte_blocks(payload: str) -> dict[str, Any]:
 
     for i in range(0, min(len(data_section), 30), 6):  # Up to 5 blocks
         if i + 6 <= len(data_section):
-            block = data_section[i:i+6]
+            block = data_section[i : i + 6]
             block_info = _parse_hex_value(block)
             block_info["offset"] = 6 + i
-            blocks[f"block_{i//6 + 1}"] = block_info
+            blocks[f"block_{i // 6 + 1}"] = block_info
 
     return blocks
 
@@ -255,15 +257,15 @@ def _try_8byte_blocks(payload: str) -> dict[str, Any]:
 
     for i in range(0, min(len(data_section), 32), 8):  # Up to 4 blocks
         if i + 8 <= len(data_section):
-            block = data_section[i:i+8]
+            block = data_section[i : i + 8]
             block_info = _parse_hex_value(block)
             block_info["offset"] = 6 + i
-            blocks[f"block_{i//8 + 1}"] = block_info
+            blocks[f"block_{i // 8 + 1}"] = block_info
 
     return blocks
 
 
-def format_field(value: Any, width: int, align: str = 'left') -> str:
+def format_field(value: Any, width: int, align: str = "left") -> str:
     """
     Format a value to a specific width with alignment.
 
@@ -273,18 +275,18 @@ def format_field(value: Any, width: int, align: str = 'left') -> str:
     :return: Formatted string padded with spaces to the specified width
     """
     if value is None:
-        value = 'N/A'
+        value = "N/A"
 
     text = str(value)
 
     # Truncate if too long
     if len(text) > width:
-        text = text[:width-3] + "..." if width > 3 else text[:width]
+        text = text[: width - 3] + "..." if width > 3 else text[:width]
 
     # Apply alignment
-    if align == 'right':
+    if align == "right":
         return f"{text:>{width}}"
-    elif align == 'center':
+    elif align == "center":
         return f"{text:^{width}}"
     else:  # left align
         return f"{text:<{width}}"
@@ -307,7 +309,7 @@ def format_block_table(blocks: dict[str, Any], title: str) -> str:
         all_keys.update(block_info.keys())
 
     # Remove keys that shouldn't be in the table
-    exclude_keys = {'raw', 'offset'}
+    exclude_keys = {"raw", "offset"}
     all_keys_set = set()
     for block_info in blocks.values():
         all_keys_set.update(block_info.keys())
@@ -316,41 +318,45 @@ def format_block_table(blocks: dict[str, Any], title: str) -> str:
     display_keys = []
     for key in sorted(all_keys_set):
         if key not in exclude_keys:
-            if key == 'bin':
+            if key == "bin":
                 continue  # Save for last
             display_keys.append(key)
-    display_keys.append('bin')  # Put bin at the end
+    display_keys.append("bin")  # Put bin at the end
 
     if not display_keys:
         return f"{title}: No displayable data\n"
 
     # Define column specifications: (width, align)
     column_specs = [
-        (12, 'left'),  # Block (+1)
-        (8, 'left'),   # Raw (-2)
+        (12, "left"),  # Block (+1)
+        (8, "left"),  # Raw (-2)
     ]
 
     # Add specs for each display key
     for key in display_keys:
-        if key == 'dec':
-            column_specs.append((9, 'right'))  # Increased for large decimal numbers
-        elif key in ['swapped_dec', 'le_dec', 'signed_dec']:
-            column_specs.append((11, 'right'))  # Increased for swapped_dec
-        elif key == 'hex':
-            column_specs.append((10, 'left'))  # Increased for hex (10 chars for 0x12345678)
-        elif key == 'le_hex':
-            column_specs.append((9, 'left'))  # Increased for le_hex (8 digits + 0x)
-        elif key == 'swapped_hex':
-            column_specs.append((11, 'left'))  # Increased for swapped_hex
-        elif key == 'bin':
-            column_specs.append((50, 'left'))  # Very large width for full binary display
+        if key == "dec":
+            column_specs.append((9, "right"))  # Increased for large decimal numbers
+        elif key in ["swapped_dec", "le_dec", "signed_dec"]:
+            column_specs.append((11, "right"))  # Increased for swapped_dec
+        elif key == "hex":
+            column_specs.append(
+                (10, "left")
+            )  # Increased for hex (10 chars for 0x12345678)
+        elif key == "le_hex":
+            column_specs.append((9, "left"))  # Increased for le_hex (8 digits + 0x)
+        elif key == "swapped_hex":
+            column_specs.append((11, "left"))  # Increased for swapped_hex
+        elif key == "bin":
+            column_specs.append(
+                (50, "left")
+            )  # Very large width for full binary display
         else:
-            column_specs.append((8, 'left'))
+            column_specs.append((8, "left"))
 
     # Create header
     header = f"{title} ({len(blocks)} blocks):\n"
     header_parts = []
-    header_names = ['Block', 'Raw'] + display_keys
+    header_names = ["Block", "Raw"] + display_keys
     for i, (width, align) in enumerate(column_specs):
         header_parts.append(format_field(header_names[i], width, align))
     header += " ".join(header_parts) + "\n"
@@ -361,38 +367,41 @@ def format_block_table(blocks: dict[str, Any], title: str) -> str:
     # Create rows
     rows = []
     for block_name, block_info in blocks.items():
-        offset = block_info.get('offset', 'N/A')
+        offset = block_info.get("offset", "N/A")
         block_display = f"{block_name} ({offset})"
-        raw_value = block_info.get('raw', 'N/A')
+        raw_value = block_info.get("raw", "N/A")
 
         row_parts = []
         # Format Block and Raw columns
-        row_parts.append(format_field(block_display, 12, 'left'))  # Block (+1)
-        row_parts.append(format_field(raw_value, 8, 'left'))       # Raw (-2)
+        row_parts.append(format_field(block_display, 12, "left"))  # Block (+1)
+        row_parts.append(format_field(raw_value, 8, "left"))  # Raw (-2)
 
         # Format each data column
         for key in display_keys:
-            value = block_info.get(key, 'N/A')
-            if key == 'dec':
-                row_parts.append(format_field(value, 9, 'right'))  # Increased for large decimal numbers
-            elif key in ['swapped_dec', 'le_dec', 'signed_dec']:
-                row_parts.append(format_field(value, 11, 'right'))
-            elif key == 'hex':
-                row_parts.append(format_field(value, 10, 'left'))
-            elif key == 'le_hex':
-                row_parts.append(format_field(value, 9, 'left'))
-            elif key == 'swapped_hex':
-                row_parts.append(format_field(value, 11, 'left'))
-            elif key == 'bin':
+            value = block_info.get(key, "N/A")
+            if key == "dec":
+                row_parts.append(
+                    format_field(value, 9, "right")
+                )  # Increased for large decimal numbers
+            elif key in ["swapped_dec", "le_dec", "signed_dec"]:
+                row_parts.append(format_field(value, 11, "right"))
+            elif key == "hex":
+                row_parts.append(format_field(value, 10, "left"))
+            elif key == "le_hex":
+                row_parts.append(format_field(value, 9, "left"))
+            elif key == "swapped_hex":
+                row_parts.append(format_field(value, 11, "left"))
+            elif key == "bin":
                 # No truncation for binary - let it be as long as needed
-                row_parts.append(format_field(value, 50, 'left'))
+                row_parts.append(format_field(value, 50, "left"))
             else:
-                row_parts.append(format_field(value, 8, 'left'))
+                row_parts.append(format_field(value, 8, "left"))
 
         row = " ".join(row_parts)  # Join with spaces between columns
         rows.append(row)
 
     return header + "\n".join(rows) + "\n"
+
 
 def format_result_table(result: dict[str, Any], description: str) -> str:
     """
@@ -412,13 +421,25 @@ def format_result_table(result: dict[str, Any], description: str) -> str:
 
     # Print strategy tables
     for key, value in result.items():
-        if key not in ['parameter_id', 'parameter_name', 'description', 'payload', 'verb'] and isinstance(value, dict):
+        if key not in [
+            "parameter_id",
+            "parameter_name",
+            "description",
+            "payload",
+            "verb",
+        ] and isinstance(value, dict):
             output.append(format_block_table(value, key))
 
     # Print simple values
     simple_values = []
     for key, value in result.items():
-        if key not in ['parameter_id', 'parameter_name', 'description', 'payload', 'verb'] and not isinstance(value, dict):
+        if key not in [
+            "parameter_id",
+            "parameter_name",
+            "description",
+            "payload",
+            "verb",
+        ] and not isinstance(value, dict):
             simple_values.append(f"{key}: {value}")
 
     if simple_values:
@@ -428,6 +449,7 @@ def format_result_table(result: dict[str, Any], description: str) -> str:
 
     output.append("-" * 60)
     return "\n".join(output)
+
 
 def decode_2411_message(raw_message: str, verb: str = "RP") -> dict[str, Any]:
     """
@@ -450,22 +472,21 @@ def decode_2411_message(raw_message: str, verb: str = "RP") -> dict[str, Any]:
 # Example usage and testing
 if __name__ == "__main__":
     # Test messages from your logs
-        # Example:
-        #   ("0000070000000000010000000000000001000000018A00", "RP", "Base vent is ON")
+    # Example:
+    #   ("0000070000000000010000000000000001000000018A00", "RP", "Base vent is ON")
     test_messages = [
         ("00000700000000000000000000000000000000000000", "W", "Base vent set to OFF"),
         ("00000700000000000100000000000000000000000000", "W", "Base vent set to ON"),
         ("0000070000000000010000000000000001000000018A00", " I", "Base vent is ON"),
         ("0000070000000000000000000000000001000000018A00", "RP", "Base vent is OFF"),
         ("0000070000000000010000000000000001000000018A00", "RP", "Base vent is ON"),
-
         # ("0000871400000000000000000000000002000000018A00", "RP", "Parameter 0x87"),
         # ("0000DA7F00000000000000000000000003000000018A00", "RP", "Parameter 0xDA"),
         # ("0000881510000002BC000001900000076C000000018A33", "RP", "Timer configuration"),
     ]
-    
-    print("2411 Message Parser Test\n" + "="*50)
-    
+
+    print("2411 Message Parser Test\n" + "=" * 50)
+
     for payload, verb, description in test_messages:
         result = decode_2411_message(payload, verb)
         print(format_result_table(result, description))
