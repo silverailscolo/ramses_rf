@@ -129,7 +129,7 @@ class Gateway(Engine):
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
-        self.msg_db: MessageIndex | None = None  # MessageIndex()
+        self.msg_db: MessageIndex | None = None
 
     def __repr__(self) -> str:
         if not self.ser_name:
@@ -173,6 +173,7 @@ class Gateway(Engine):
             **self._packet_log,
         )
 
+        # temporarily turn on discovery, remember original state
         self.config.disable_discovery, disable_discovery = (
             True,
             self.config.disable_discovery,
@@ -184,6 +185,7 @@ class Gateway(Engine):
         if cached_packets:
             await self._restore_cached_packets(cached_packets)
 
+        # reset discovery to original state
         self.config.disable_discovery = disable_discovery
 
         if (
@@ -192,6 +194,9 @@ class Gateway(Engine):
             and start_discovery
         ):
             initiate_discovery(self.devices, self.systems)
+
+    def create_sqlite_message_index(self) -> None:
+        self.msg_db = MessageIndex()  # start the index
 
     async def stop(self) -> None:
         """Stop the Gateway and tidy up."""
@@ -248,12 +253,13 @@ class Gateway(Engine):
             #     return True
             return include_expired or not msg._expired
 
-        msgs = [m for device in self.devices for m in device._msg_db]
+        msgs = [m for device in self.devices for m in device._msg_list]
 
         for system in self.systems:
             msgs.extend(list(system._msgs.values()))
             msgs.extend([m for z in system.zones for m in z._msgs.values()])
-            # msgs.extend([m for z in system.dhw for m in z._msgs.values()])  # TODO
+            # msgs.extend([m for z in system.dhw for m in z._msgs.values()])  # TODO: DHW
+            # Related to/Fixes ramses_cc Issue 249 non-existing via-device _HW ?
 
         if self.msg_db:
             pkts = {
@@ -261,8 +267,8 @@ class Gateway(Engine):
                 for msg in self.msg_db.all(include_expired=True)
                 if wanted_msg(msg, include_expired=include_expired)
             }
-
-        else:
+        else:  # deprecated, to be removed in Q1 2026
+            # _LOGGER.warning("Missing MessageIndex")
             pkts = {  # BUG: assumes pkts have unique dtms: may be untrue for contrived logs
                 f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
                 for msg in msgs
@@ -359,7 +365,7 @@ class Gateway(Engine):
         """
 
         def check_filter_lists(dev_id: DeviceIdT) -> None:  # may: LookupError
-            """Raise an LookupError if a device_id is filtered out by a list."""
+            """Raise a LookupError if a device_id is filtered out by a list."""
 
             if dev_id in self._unwanted:  # TODO: shouldn't invalidate a msg
                 raise LookupError(f"Can't create {dev_id}: it is unwanted or invalid")

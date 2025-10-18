@@ -60,7 +60,7 @@ class DeviceBase(Entity):
     def __init__(self, gwy: Gateway, dev_addr: Address, **kwargs: Any) -> None:
         super().__init__(gwy)
 
-        # FIXME: ZZZ entities must know their parent device ID and their own idx
+        # FIXME: gwy.msg_db entities must know their parent device ID and their own idx
         self._z_id = dev_addr.id  # the responsible device is itself
         self._z_idx = None  # depends upon its location in the schema
 
@@ -76,8 +76,9 @@ class DeviceBase(Entity):
         self._scheme: Vendor = None
 
     def __str__(self) -> str:
-        if self._STATE_ATTR:
-            return f"{self.id} ({self._SLUG}): {getattr(self, self._STATE_ATTR)}"
+        if self._STATE_ATTR and hasattr(self, self._STATE_ATTR):
+            state: float | None = getattr(self, self._STATE_ATTR)
+            return f"{self.id} ({self._SLUG}): {state}"
         return f"{self.id} ({self._SLUG})"
 
     def __lt__(self, other: object) -> bool:
@@ -165,7 +166,11 @@ class DeviceBase(Entity):
     @property
     def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered (excludes battery-backup)."""
-
+        if self._gwy.msg_db:
+            code_list = self._msg_dev_qry()
+            return isinstance(self, BatteryState) or (
+                code_list is not None and Code._1060 in code_list
+            )  # TODO(eb): clean up next line Q1 2026
         return isinstance(self, BatteryState) or Code._1060 in self._msgz
 
     @property
@@ -204,7 +209,7 @@ class DeviceBase(Entity):
 
     @property
     def traits(self) -> dict[str, Any]:
-        """Return the traits of the device."""
+        """Get the traits of the device."""
 
         result = super().traits
 

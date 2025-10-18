@@ -8,24 +8,13 @@ import logging
 import sqlite3
 from collections import OrderedDict
 from datetime import datetime as dt, timedelta as td
-from typing import Any, NewType, TypedDict
+from typing import TYPE_CHECKING, Any, NewType
 
-from ramses_tx import Message
+from ramses_tx import CODES_SCHEMA, Code, Message
 
-DtmStrT = NewType("DtmStrT", str)
-MsgDdT = OrderedDict[DtmStrT, Message]
-
-
-class Params(TypedDict):
-    dtm: dt | str | None
-    verb: str | None
-    src: str | None
-    dst: str | None
-    code: str | None
-    ctx: str | None
-    hdr: str | None
-    plk: str | None
-
+if TYPE_CHECKING:
+    DtmStrT = NewType("DtmStrT", str)
+    MsgDdT = OrderedDict[DtmStrT, Message]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +23,7 @@ def _setup_db_adapters() -> None:
     """Set up the database adapters and converters."""
 
     def adapt_datetime_iso(val: dt) -> str:
-        """Adapt datetime.datetime to timezone-naive ISO 8601 datetime to match _msgs_ dtm keys."""
+        """Adapt datetime.datetime to timezone-naive ISO 8601 datetime to match _msgs dtm keys."""
         return val.isoformat(timespec="microseconds")
 
     sqlite3.register_adapter(dt, adapt_datetime_iso)
@@ -77,13 +66,13 @@ class MessageIndex:
     Index holds the latest message to & from all devices by header
     (example of a hdr: 000C|RP|01:223036|0208)."""
 
+    _housekeeping_task: asyncio.Task[None]
+
     def __init__(self, maintain: bool = True) -> None:
         """Instantiate a message database/index."""
 
         self.maintain = maintain
-        self._msgs: MsgDdT = (
-            OrderedDict()
-        )  # stores all messages for retrieval. Filled in housekeeping loop.
+        self._msgs: MsgDdT = OrderedDict()  # stores all messages for retrieval. Filled & cleaned up in housekeeping_loop.
 
         # Connect to a SQLite DB in memory
         self._cx = sqlite3.connect(
@@ -98,7 +87,7 @@ class MessageIndex:
         if self.maintain:
             self._lock = asyncio.Lock()
             self._last_housekeeping: dt = None  # type: ignore[assignment]
-            self._housekeeping_task: asyncio.Task[None] = None  # type: ignore[assignment]
+            self._housekeeping_task = None  # type: ignore[assignment]
 
         self.start()
 
@@ -109,7 +98,7 @@ class MessageIndex:
         """Start the housekeeper loop."""
 
         if self.maintain:
-            if self._housekeeping_task and not self._housekeeping_task.done():
+            if self._housekeeping_task and (not self._housekeeping_task.done()):
                 return
 
             self._housekeeping_task = asyncio.create_task(
@@ -119,7 +108,7 @@ class MessageIndex:
     def stop(self) -> None:
         """Stop the housekeeper loop."""
 
-        if self._housekeeping_task and not self._housekeeping_task.done():
+        if self._housekeeping_task and (not self._housekeeping_task.done()):
             self._housekeeping_task.cancel()  # stop the housekeeper
 
         self._cx.commit()  # just in case
@@ -150,8 +139,8 @@ class MessageIndex:
             CREATE TABLE messages (
                 dtm    DTM      NOT NULL PRIMARY KEY,
                 verb   TEXT(2)  NOT NULL,
-                src    TEXT(9)  NOT NULL,
-                dst    TEXT(9)  NOT NULL,
+                src    TEXT(12) NOT NULL,
+                dst    TEXT(12) NOT NULL,
                 code   TEXT(4)  NOT NULL,
                 ctx    TEXT,
                 hdr    TEXT     NOT NULL UNIQUE,
@@ -175,14 +164,14 @@ class MessageIndex:
 
         async def housekeeping(dt_now: dt, _cutoff: td = td(days=1)) -> None:
             """
-            Delete all messages from the using the MessageIndex older than a given delta.
+            Deletes all messages older than a given delta from the dict using the MessageIndex.
             :param dt_now: current timestamp
             :param _cutoff: the oldest timestamp to retain, default is 24 hours ago
             """
             dtm = dt_now - _cutoff  # .isoformat(timespec="microseconds") < needed?
 
             self._cu.execute("SELECT dtm FROM messages WHERE dtm => ?", (dtm,))
-            rows = self._cu.fetchall()
+            rows = self._cu.fetchall()  # fetch dtm of current messages to retain
 
             try:  # make this operation atomic, i.e. update self._msgs only on success
                 await self._lock.acquire()
@@ -234,7 +223,9 @@ class MessageIndex:
         finally:
             pass  # self._lock.release()
 
-        if dup:
+        if (
+            dup and msg.src is not msg.src
+        ):  # when src==dst, expect to add duplicate, don't check
             _LOGGER.warning(
                 "Overwrote dtm (%s) for %s: %s (contrived log?)",
                 msg.dtm,
@@ -251,7 +242,7 @@ class MessageIndex:
         Add a single record to the MessageIndex with timestamp now() and no Message contents.
         """
         # Used by OtbGateway init, via entity_base.py
-        dtm: DtmStrT = DtmStrT(dt.strftime(dt.now(), "%Y-%m-%dT%H:%M:%S"))
+        dtm: DtmStrT = dt.strftime(dt.now(), "%Y-%m-%dT%H:%M:%S")  # type: ignore[assignment]
         hdr = f"{code}|{verb}|{src}|00"  # dummy record has no contents
 
         dup = self._delete_from(hdr=hdr)
@@ -368,10 +359,36 @@ class MessageIndex:
 
         return msgs
 
+    # MessageIndex msg_db query methods > copy to docs/source/ramses_rf.rst
+    # (ex = entity_base.py query methods
+    #
+    # +----+--------------+-------------+------------+------+--------------------------+
+    # | ix |method name   | args        | returns    | uses | used by                  |
+    # +====+==============+=============+============+======+==========================+
+    # | i1 | get          | Msg/kwargs  | tuple[Msg] | i3   |                          |
+    # +----+--------------+-------------+------------+------+--------------------------+
+    # | i2 | contains     | kwargs      | bool       | i4   |                          |
+    # +----+--------------+-------------+------------+------+--------------------------+
+    # | i3 | _select_from | kwargs      | tuple[Msg] | i4   |                          |
+    # +----+--------------+-------------+------------+------+--------------------------+
+    # | i4 | qry_dtms     | kwargs      | list(dtm)  |      |                          |
+    # +----+--------------+-------------+------------+------+--------------------------+
+    # | i5 | qry          | sql, kwargs | tuple[Msg] |      | _msgs()                  |
+    # +----+--------------+-------------+------------+------+--------------------------+
+    # | i6 | qry_field    | sql, kwargs | tuple[fld] |      | e4, e5                   |
+    # +----+--------------+-------------+------------+------+--------------------------+
+    # | i7 | get_rp_codes | src, dst    | list[Code] |      | Discovery#supported_cmds |
+    # +----+--------------+-------------+------------+------+--------------------------+
+
     def get(
         self, msg: Message | None = None, **kwargs: bool | dt | str
     ) -> tuple[Message, ...]:
-        """Get a set of message(s) from the index."""
+        """
+        Public method to get a set of message(s) from the index.
+        :param msg: Message to return, by dtm (expect a single result as dtm is unique key)
+        :param kwargs: data table field names and criteria, e.g. (hdr=...)
+        :return: tuple of matching Messages
+        """
 
         if not (bool(msg) ^ bool(kwargs)):
             raise ValueError("Either a Message or kwargs should be provided, not both")
@@ -381,7 +398,33 @@ class MessageIndex:
 
         return self._select_from(**kwargs)
 
+    def contains(self, **kwargs: bool | dt | str) -> bool:
+        """
+        Check if the MessageIndex contains at least 1 record that matches the provided fields.
+        :param kwargs: (exact) SQLite table field_name: required_value pairs
+        :return: True if at least one message fitting the given conditions is present, False when qry returned empty
+        """
+
+        return len(self.qry_dtms(**kwargs)) > 0
+
+    def _select_from(self, **kwargs: bool | dt | str) -> tuple[Message, ...]:
+        """
+        Select message(s) using the MessageIndex.
+        :param kwargs: (exact) SQLite table field_name: required_value pairs
+        :returns: a tuple of qualifying messages
+        """
+
+        return tuple(
+            self._msgs[row[0].isoformat(timespec="microseconds")]
+            for row in self.qry_dtms(**kwargs)
+        )
+
     def qry_dtms(self, **kwargs: bool | dt | str) -> list[Any]:
+        """
+        Select from the ImageIndex a list of dtms that match the provided arguments.
+        :param kwargs: data table field names and criteria
+        :return: list of unformatted dtms that match, useful for msg lookup, or an empty list if 0 matches
+        """
         # tweak kwargs as stored in SQLite, inverse from _insert_into():
         kw = {key: value for key, value in kwargs.items() if key != "ctx"}
         if "ctx" in kwargs:
@@ -398,28 +441,13 @@ class MessageIndex:
         self._cu.execute(sql, tuple(kw.values()))
         return self._cu.fetchall()
 
-    def contains(self, **kwargs: bool | dt | str) -> bool:
-        """
-        Check if the MessageIndex contains at least 1 record that matches the provided fields.
-        :param kwargs: (exact) SQLite table field_name: required_value pairs
-        :return: True if at least one message fitting the given conditions is present, False when qry returned empty
-        """
-        # adapted from _select_from()
-
-        return len(self.qry_dtms(**kwargs)) > 0
-
-    def _select_from(self, **kwargs: bool | dt | str) -> tuple[Message, ...]:
-        """Select message(s) using the MessageIndex.
-        :param kwargs: (exact) SQLite table field_name: required_value pairs
-        :returns: a tuple of qualifying messages"""
-
-        return tuple(
-            self._msgs[row[0].isoformat(timespec="microseconds")]
-            for row in self.qry_dtms(**kwargs)
-        )
-
     def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
-        """Get a tuple of messages from the index, given sql and parameters."""
+        """
+        Get a tuple of messages from _msgs using the index, given sql and parameters.
+        :param sql: a bespoke SQL query SELECT string that should return dtm as first field
+        :param parameters: tuple of kwargs with the selection filter
+        :return: a tuple of qualifying messages
+        """
 
         if "SELECT" not in sql:
             raise ValueError(f"{self}: Only SELECT queries are allowed")
@@ -429,7 +457,9 @@ class MessageIndex:
         lst: list[Message] = []
         # stamp = list(self._msgs)[0] if len(self._msgs) > 0 else "N/A"  # for debug
         for row in self._cu.fetchall():
-            ts: DtmStrT = row[0].isoformat(timespec="microseconds")
+            ts: DtmStrT = row[0].isoformat(
+                timespec="microseconds"
+            )  # must reformat from DTM
             # _LOGGER.debug(
             #     f"QRY Msg key raw: {row[0]} Reformatted: {ts} _msgs stamp format: {stamp}"
             # )
@@ -438,21 +468,46 @@ class MessageIndex:
             if ts in self._msgs:
                 lst.append(self._msgs[ts])
             else:  # happens in tests with artificial msg from heat
-                _LOGGER.warning("MessageIndex ts %s not in device messages", ts)
+                _LOGGER.warning("MessageIndex timestamp %s not in device messages", ts)
         return tuple(lst)
+
+    def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
+        """
+        Get a list of Codes from the index, given parameters.
+        :param parameters: tuple of additional kwargs
+        :return: list of Code: value pairs
+        """
+
+        def get_code(code: str) -> Code:
+            for Cd in CODES_SCHEMA:
+                if code == Cd:
+                    return Cd
+            raise LookupError(f"Failed to find matching code for {code}")
+
+        sql = """
+                SELECT code from messages WHERE verb is 'RP' AND (src = ? OR dst = ?)
+            """
+        if "SELECT" not in sql:
+            raise ValueError(f"{self}: Only SELECT queries are allowed")
+
+        self._cu.execute(sql, parameters)
+        res = self._cu.fetchall()
+        return [get_code(res[0]) for res[0] in self._cu.fetchall()]
 
     def qry_field(
         self, sql: str, parameters: tuple[str, ...]
     ) -> list[tuple[dt | str, str]]:
         """
-        Get a list of message field values from the index, given sql and parameters.
+        Get a list of fields from the index, given select sql and parameters.
+        :param sql: a bespoke SQL query SELECT string
+        :param parameters: tuple of additional kwargs
+        :return: list of key: value pairs as defined in sql
         """
 
         if "SELECT" not in sql:
             raise ValueError(f"{self}: Only SELECT queries are allowed")
 
         self._cu.execute(sql, parameters)
-
         return self._cu.fetchall()
 
     def all(self, include_expired: bool = False) -> tuple[Message, ...]:
