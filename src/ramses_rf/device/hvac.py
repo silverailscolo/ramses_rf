@@ -426,7 +426,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     Also handles 2411 parameter messages for configuration.
     Since 2411 is not supported by all vendors, discovery is used to determine if it is supported.
     Since more than 1 different parameters can be sent on 2411 messages,
-    we will process these in the dedicated _handle_2411_message method.
+    we process these in the dedicated _handle_2411_message method.
     """
 
     # Itho Daalderop (NL)
@@ -606,7 +606,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         It handles parameter value normalization and validation.
 
         :param msg: The incoming 2411 message
-        :type msg: Message
+        :type msg: Message to process
         """
         if not hasattr(msg, "payload") or not isinstance(msg.payload, dict):
             _LOGGER.debug("Invalid 2411 message format: %s", msg)
@@ -653,7 +653,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         handling for 2411 parameter messages. It updates the device state and
         triggers any necessary callbacks.
 
-        After handling the messages, it calls the initialized callback if set to notify that
+        After handling the messages, it calls the initialized callback - if set - to notify that
         the device was fully initialized.
 
         :param msg: The incoming message to process
@@ -911,14 +911,38 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     @property
     def fan_info(self) -> str | None:
         """
-        Extract fan info description from _31D9 or _31DA message payload, e.g. "speed 2, medium".
+        Extract fan info description from MessageIndex _31D9 or _31DA payload,
+        e.g. "speed 2, medium".
         By its name, the result is picked up by a sensor in HA Climate UI.
         Some manufacturers (Orcon, Vasco) include the fan mode (auto, manual), others don't (Itho).
 
-        :return: a string describing fan mode, speed
+        :return: string describing fan mode, speed
         """
+        if self._gwy.msg_db:
+            # Use SQLite query on MessageIndex. res_rate/res_mode not exposed yet
+            sql = f"""
+                SELECT code from messages WHERE verb in (' I', 'RP')
+                AND (src = ? OR dst = ?)
+                AND (plk LIKE '%{SZ_FAN_MODE}%')
+            """
+            res_mode: list = self._msg_qry(sql)
+            # SQLite query on MessageIndex
+            _LOGGER.info(f"{res_mode} # FAN_MODE FETCHED from MessageIndex")
+
+            sql = f"""
+                SELECT code from messages WHERE verb in (' I', 'RP')
+                AND (src = ? OR dst = ?)
+                AND (plk LIKE '%{SZ_FAN_RATE}%')
+            """
+            res_rate: list = self._msg_qry(sql)
+            # SQLite query on MessageIndex
+            _LOGGER.info(
+                f"{res_rate} # FAN_RATE FETCHED from MessageIndex"
+            )  # DEBUG always empty?
+
         if Code._31D9 in self._msgs:
-            # Itho, Vasco D60 and ClimaRad (MiniBox fan) send mode/speed in _31D9
+            # was a dict by Code
+            # Itho, Vasco D60 and ClimaRad MiniBox fan send mode/speed in _31D9
             v: str
             for k, v in self._msgs[Code._31D9].payload.items():
                 if k == SZ_FAN_MODE and len(v) > 2:  # prevent non-lookups to pass
