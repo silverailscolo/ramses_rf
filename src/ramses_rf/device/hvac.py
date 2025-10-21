@@ -927,7 +927,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             """
             res_mode: list = self._msg_qry(sql)
             # SQLite query on MessageIndex
-            _LOGGER.info(f"{res_mode} # FAN_MODE FETCHED from MessageIndex")
+            _LOGGER.debug(f"{res_mode} # FAN_MODE FETCHED from MessageIndex")
 
             sql = f"""
                 SELECT code from messages WHERE verb in (' I', 'RP')
@@ -936,7 +936,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             """
             res_rate: list = self._msg_qry(sql)
             # SQLite query on MessageIndex
-            _LOGGER.info(
+            _LOGGER.debug(
                 f"{res_rate} # FAN_RATE FETCHED from MessageIndex"
             )  # DEBUG always empty?
 
