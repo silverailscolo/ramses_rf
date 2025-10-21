@@ -67,7 +67,8 @@ if TYPE_CHECKING:
 
 
 _QOS_TX_LIMIT = 12  # TODO: needs work
-_ID_SLICE = 9  # 9 for base address only
+_ID_SLICE = 9  # base address only, legacy _msgs 9
+_SQL_SLICE = 12  # msg_db dst field query 12
 _SZ_LAST_PKT: Final = "last_msg"
 _SZ_NEXT_DUE: Final = "next_due"
 _SZ_TIMEOUT: Final = "timeout"
@@ -193,18 +194,18 @@ class _MessageDB(_Entity):
         self._msgs_: dict[
             Code, Message
         ] = {}  # TODO(eb): deprecated, used in test, remove Q1 2026
-        if not self._gwy.msg_db:  # TODO(eb): deprecated since 0.52.0, remove Q1 2026
+        if not self._gwy.msg_db:  # TODO(eb): deprecated since 0.52.1, remove Q1 2026
             self._msgz_: dict[
                 Code, dict[VerbT, dict[bool | str | None, Message]]
             ] = {}  # code/verb/ctx,
 
-        # As of 0.52.0 we use SQLite MessageIndex, see ramses_rf/database.py
+        # As of 0.52.1 we use SQLite MessageIndex, see ramses_rf/database.py
         # _msgz_ (nested) was only used in this module. Note:
         # _msgz (now rebuilt from _msgs) also used in: client, base, device.heat
 
     def _handle_msg(self, msg: Message) -> None:
         """Store a msg in the DBs.
-        Uses SQLite MessageIndex since 0.52.0
+        Uses SQLite MessageIndex since 0.52.1
         """
 
         if not (
@@ -236,7 +237,7 @@ class _MessageDB(_Entity):
 
             # ignore any replaced message that might be returned
         else:  # TODO(eb): remove Q1 2026
-            if msg.code not in self._msgz_:  # deprecated since 0.52.0
+            if msg.code not in self._msgz_:  # deprecated since 0.52.1
                 # Store msg verb + ctx by code in nested self._msgz_ Dict
                 self._msgz_[msg.code] = {msg.verb: {msg._pkt._ctx: msg}}
             elif msg.verb not in self._msgz_[msg.code]:
@@ -247,7 +248,7 @@ class _MessageDB(_Entity):
                 self._msgz_[msg.code][msg.verb][msg._pkt._ctx] = msg
 
         # Also store msg by code in flat self._msgs_ dict (stores the latest I/RP msgs by code)
-        # TODO(eb): deprecated since 0.52.0, remove next block _msgs_ Q1 2026
+        # TODO(eb): deprecated since 0.52.1, remove next block _msgs_ Q1 2026
         if msg.verb in (I_, RP):  # drop RQ's
             # if msg.code == Code._3150 and msg.src.id.startswith(
             #     "02:"
@@ -399,7 +400,7 @@ class _MessageDB(_Entity):
 
         assert isinstance(code, Message), (
             f"Invalid format: _msg_value({code})"
-        )  # catch invalidly formatted code, only handle Message
+        )  # catch invalidly formatted code, only handle Message from here
         return self._msg_value_msg(code, *args, **kwargs)
 
     def _msg_value_code(
@@ -410,7 +411,7 @@ class _MessageDB(_Entity):
         **kwargs: Any,
     ) -> dict | list | None:
         """
-        Query the message database using the SQLite index for the most recent
+        Query the message dict or the SQLite index for the most recent
         key: value pairs(s) for a given code.
 
         :param code: filter messages by Code or a tuple of Codes, optional
@@ -442,9 +443,8 @@ class _MessageDB(_Entity):
 
         elif isinstance(code, tuple):
             msgs = [m for m in self._msgs.values() if m.code in code]
-            msg = (
-                max(msgs) if msgs else None
-            )  # return highest = latest? value found in code:value pairs
+            msg = max(msgs) if msgs else None
+            # return highest = latest? value found in code:value pairs
         else:
             msg = self._msgs.get(code)
 
@@ -458,7 +458,7 @@ class _MessageDB(_Entity):
         domain_id: str | None = None,
     ) -> dict | list | None:
         """
-        Get from a Message all or a specific key with its value,
+        Get from a Message all or a specific key with its value(s),
         optionally filtering for a zone or a domain
 
         :param msg: a Message to inspect
@@ -500,17 +500,17 @@ class _MessageDB(_Entity):
             or (idx == SZ_DOMAIN_ID)
         ), (
             f"full dict:{msg_dict}, payload:{msg.payload} < Coding error: key='{idx}', val='{val}'"
-        )  # should not be there (BUG TODO(eb): but it is when using SQLite MessageIndex)
+        )  # should not be there (TODO(eb): BUG but occurs when using SQLite MessageIndex)
 
-        if key == "*":  # from a SQLite wildcard query, return first=only? k,v
-            return msg_dict
-        if key:
-            return msg_dict.get(key)
-        return {
-            k: v
-            for k, v in msg_dict.items()
-            if k not in ("dhw_idx", SZ_DOMAIN_ID, SZ_ZONE_IDX) and k[:1] != "_"
-        }
+        if (
+            key == "*" or not key
+        ):  # from a SQLite wildcard query, return first=only? k,v
+            return {
+                k: v
+                for k, v in msg_dict.items()
+                if k not in ("dhw_idx", SZ_DOMAIN_ID, SZ_ZONE_IDX) and k[:1] != "_"
+            }
+        return msg_dict.get(key)
 
     # SQLite methods, since 0.52.0
 
@@ -518,7 +518,6 @@ class _MessageDB(_Entity):
         """
         Retrieve from the MessageIndex a list of Code keys involving this device.
 
-        :param kwargs: not used as of 0.52.0
         :return: list of Codes or empty list when query returned empty
         """
         if self._gwy.msg_db:
@@ -530,7 +529,7 @@ class _MessageDB(_Entity):
             res: list[Code] = []
 
             for rec in self._gwy.msg_db.qry_field(
-                sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
+                sql, (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
             ):
                 _LOGGER.debug("Fetched from index: %s", rec[0])
                 # Example: "Fetched from index: code 1FD4"
@@ -581,7 +580,7 @@ class _MessageDB(_Entity):
             res = None
 
             for rec in self._gwy.msg_db.qry_field(
-                sql, (vb, self.id[:_ID_SLICE], self.id[:_ID_SLICE], code_qry, key)
+                sql, (vb, self.id[:_SQL_SLICE], self.id[:_SQL_SLICE], code_qry, key)
             ):
                 _LOGGER.debug("Fetched from index: %s", rec)
                 assert isinstance(rec[0], dt)  # mypy hint
@@ -605,7 +604,7 @@ class _MessageDB(_Entity):
 
         :param code: (optional) a single message Code to use, e.g. 31DA
         :param key: (optional) message keyword to fetch the value for, e.g. SZ_HUMIDITY or * (wildcard)
-        :param kwargs: not used as of 0.52.0
+        :param kwargs: not used as of 0.52.1
         :return: a single string or float value or None when qry returned empty
         """
         val_msg: dict | list | None = None
@@ -642,7 +641,7 @@ class _MessageDB(_Entity):
             # """SELECT code from messages WHERE verb in (' I', 'RP') AND (src = ? OR dst = ?)
             # AND (code = '31DA' OR ...) AND (plk LIKE '%{SZ_FAN_INFO}%' OR ...)""" = 2 params
             for rec in self._gwy.msg_db.qry_field(
-                sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
+                sql, (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
             ):
                 _pl = self._msgs[Code(rec[0])].payload
                 # add payload dict to res(ults)
@@ -698,7 +697,7 @@ class _MessageDB(_Entity):
         _msg_dict = {  # ? use ctx (context) instead of just the address?
             m.code: m
             for m in self._gwy.msg_db.qry(
-                sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
+                sql, (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
             )  # e.g. 01:123456_HW
         }
         # if CTL, remove 3150, 3220 heat_demand, both are only stored on children
@@ -774,12 +773,12 @@ class _Discovery(_MessageDB):
                 code: CODES_SCHEMA[code][SZ_NAME]
                 for code in sorted(
                     self._gwy.msg_db.get_rp_codes(
-                        (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
+                        (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
                     )
                 )
                 if self._is_not_deprecated_cmd(code)
             }
-        return {  # TODO(eb): deprecated since 0.52.0, remove Q1 2026
+        return {  # TODO(eb): deprecated since 0.52.1, remove Q1 2026
             code: (CODES_SCHEMA[code][SZ_NAME] if code in CODES_SCHEMA else None)
             for code in sorted(self._msgz)
             if self._msgz[code].get(RP) and self._is_not_deprecated_cmd(code)
@@ -806,7 +805,7 @@ class _Discovery(_MessageDB):
                 AND (src = ? OR dst = ?)
             """
             for rec in self._gwy.msg_db.qry_field(
-                sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
+                sql, (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
             ):
                 _LOGGER.debug("Fetched OT ctx from index: %s", rec[0])
                 res.append(rec[0])
@@ -937,8 +936,8 @@ class _Discovery(_MessageDB):
                             sql,
                             (
                                 task[_SZ_COMMAND].code,
-                                self.tcs.id[:_ID_SLICE],
-                                self.tcs.id[:_ID_SLICE],
+                                self.tcs.id[:_ID_SLICE],  # OK? not _SQL_SLICE?
+                                self.tcs.id[:_ID_SLICE],  # OK? not _SQL_SLICE?
                             ),
                         )[0]  # expect 1 Message in returned tuple
                     else:  # TODO(eb) remove next Q1 2026
