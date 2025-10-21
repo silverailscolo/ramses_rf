@@ -224,8 +224,8 @@ class MessageIndex:
             pass  # self._lock.release()
 
         if (
-            dup and msg.src is not msg.src
-        ):  # when src==dst, expect to add duplicate, don't check
+            dup and msg.src is not msg.dst and not msg.dst.id.startswith("18:")  # HGI
+        ):  # when src==dst, expect to add duplicate, don't warn
             _LOGGER.warning(
                 "Overwrote dtm (%s) for %s: %s (contrived log?)",
                 msg.dtm,

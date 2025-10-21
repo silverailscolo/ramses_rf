@@ -67,7 +67,7 @@ if TYPE_CHECKING:
 
 
 _QOS_TX_LIMIT = 12  # TODO: needs work
-_ID_SLICE = 12  # was 9 for base address only, 12 for _02 sub/params_test?
+_ID_SLICE = 9  # 9 for base address only
 _SZ_LAST_PKT: Final = "last_msg"
 _SZ_NEXT_DUE: Final = "next_due"
 _SZ_TIMEOUT: Final = "timeout"
@@ -232,7 +232,7 @@ class _MessageDB(_Entity):
                 # Result in test log: lookup fails
                 # msg.src = 01:073976 (CTL)
                 # Added msg from 01:073976 (CTL) with code 0005 to _gwy.msg_db
-                # query is for: 01:073976  < no suffix
+                # query is for: 01:073976  < no suffix, extended lookup to [:12] chars
 
             # ignore any replaced message that might be returned
         else:  # TODO(eb): remove Q1 2026
