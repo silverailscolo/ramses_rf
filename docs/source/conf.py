@@ -1,10 +1,14 @@
-# Configuration file for the Sphinx documentation builder.
+#!/usr/bin/env python3
+# Configuration file for the ramses_rf Sphinx documentation builder.
 #
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import os
+import sys
+
 # -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+# see https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "Ramses RF"
 copyright = "2025, David Bonnes, Egbert Broerse"
@@ -14,10 +18,8 @@ release = "0.52.1"
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 # adapted following https://medium.com/@cissyshu/a-step-by-step-guide-to-automatic-documentation-using-sphinx-a697dbbce0e7
-import os
-import sys
 
-sys.path.insert(0, os.path.abspath("../../src/"))  # Adjust to include your package
+sys.path.insert(0, os.path.abspath("../../src/"))
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -41,12 +43,6 @@ language = "en"
 
 html_theme = "furo"
 html_static_path = ["_static"]
-
-# Sidebar configuration -
-# html_sidebars = {
-#     "**": ["search-field.html", "sidebar-nav-bs.html"],
-#     "index": []
-# }
 
 # --- Extension config ----
 
