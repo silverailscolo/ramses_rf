@@ -25,10 +25,10 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
-    "sphinx.ext.viewcode",     # link to local code (button)
+    "sphinx.ext.viewcode",  # link to local code (button)
     "sphinx.ext.githubpages",
     "sphinx_design",
-    "myst_parser",             # to use Markdown inside reST
+    "myst_parser",  # to use Markdown inside reST
 ]
 pygments_style = "sphinx"  # enable syntax highlighting
 
@@ -51,7 +51,7 @@ autodoc_default_options = {
     # Autodoc members
     "members": True,
     # Autodoc private members
-    "private-members": True
+    "private-members": True,
 }
 
 # Autosummary
