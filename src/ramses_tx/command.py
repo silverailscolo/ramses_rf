@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""RAMSES RF - a RAMSES-II protocol decoder & analyser.
+"""
+RAMSES RF - a RAMSES-II protocol decoder & analyser.
 
 This module provides the `Command` class for constructing and managing RAMSES-II protocol
 commands (packets) that are to be sent to HVAC devices. It includes methods for creating
