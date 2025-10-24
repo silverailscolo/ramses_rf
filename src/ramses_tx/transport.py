@@ -258,11 +258,12 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
 
 
 def _normalise(pkt_line: str) -> str:
-    """Perform any (transparent) frame-level hacks, as required at (near-)RF layer.
+    """
+    Perform any (transparent) frame-level hacks, as required at (near-)RF layer.
 
     Goals:
     - ensure an evofw3 provides the same output as a HGI80 (none, presently)
-    - handle 'strange' packets (e.g. I|08:|0008)
+    - handle 'strange' packets (e.g. ``I|08:|0008``)
     """
 
     # TODO: deprecate as only for ramses_esp <0.4.0

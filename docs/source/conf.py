@@ -7,19 +7,24 @@
 import os
 import sys
 
+sys.path.insert(0, os.path.abspath("."))
+sys.path.insert(0, os.path.abspath("../../src"))
+
+from ramses_rf import VERSION  # noqa: E402
+
+version = VERSION
+
 # -- Project information -----------------------------------------------------
 # see https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "Ramses RF"
 copyright = "2025, David Bonnes, Egbert Broerse"
 author = "David Bonnes, Egbert Broerse"
-release = "0.52.1"
+release = version
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 # adapted following https://medium.com/@cissyshu/a-step-by-step-guide-to-automatic-documentation-using-sphinx-a697dbbce0e7
-
-sys.path.insert(0, os.path.abspath("../../src/"))
 
 extensions = [
     "sphinx.ext.autodoc",
