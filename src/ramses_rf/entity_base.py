@@ -244,7 +244,13 @@ class _MessageDB(_Entity):
             return  # don't store the rest
 
         if self._gwy.msg_db:  # central SQLite MessageIndex
-            self._gwy.msg_db.add(msg)
+            _LOGGER.debug(
+                "For %s (z_id %s) add msg %s, src %s, dst %s to msg_db.",
+                self.id,
+                self._z_id,
+                msg.src,
+                msg.dst,
+            )
             debug_code: Code = Code._3150
             if msg.code == debug_code and msg.src.id.startswith("01:"):
                 _LOGGER.debug(
@@ -258,6 +264,7 @@ class _MessageDB(_Entity):
                 # msg.src = 01:073976 (CTL)
                 # Added msg from 01:073976 (CTL) with code 0005 to _gwy.msg_db
                 # query is for: 01:073976  < no suffix, extended lookup to [:12] chars
+            self._gwy.msg_db.add(msg)
 
             # ignore any replaced message that might be returned
         else:  # TODO(eb): remove Q1 2026
@@ -295,7 +302,12 @@ class _MessageDB(_Entity):
                         # safeguard against lookup failures ("sim" packets?)
                         msg_list_qry.append(self._msgs[c])
                     else:
-                        _LOGGER.debug("Could not fetch self._msgs[%s]", c)
+                        _LOGGER.debug(
+                            "_msg_list could not fetch self._msgs[%s] for %s (z_id %s)",
+                            c,
+                            self.id,
+                            self._z_id,
+                        )
             return msg_list_qry
         # else create from legacy nested dict
         return [m for c in self._msgz.values() for v in c.values() for m in v.values()]
@@ -548,7 +560,7 @@ class _MessageDB(_Entity):
         Retrieve from the MessageIndex the most current Code for a code(s) &
         keyword combination involving this device.
 
-        :param code: (optional) a message Code to use, e.g. 31DA or a tuple of Codes
+        :param code: (optional) a message Code to use, e.g. Code._31DA or a tuple of Codes
         :param key: (optional) message keyword to fetch, e.g. SZ_HUMIDITY
         :param kwargs: optional verb='vb' single verb
         :return: Code of most recent query result message or None when query returned empty
@@ -581,7 +593,9 @@ class _MessageDB(_Entity):
             for rec in self._gwy.msg_db.qry_field(
                 sql, (vb, self.id[:_SQL_SLICE], self.id[:_SQL_SLICE], code_qry, key)
             ):
-                _LOGGER.debug("Fetched from index: %s", rec)
+                _LOGGER.debug(
+                    "_msg_qry_by_code_key fetched rec: %s, code: %s", rec, code_qry
+                )
                 assert isinstance(rec[0], dt)  # mypy hint
                 if rec[0] > latest:  # dtm, only use most recent
                     res = Code(rec[1])

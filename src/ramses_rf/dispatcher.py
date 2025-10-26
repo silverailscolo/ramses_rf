@@ -186,6 +186,12 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
     # which requires a valid payload only for 000C.
 
     def logger_xxxx(msg: Message) -> None:
+        """
+        Log msg according to src, code, log.debug setting.
+
+        :param msg: the Message being processed
+        :return: None
+        """
         if _DBG_FORCE_LOG_MESSAGES:
             _LOGGER.warning(msg)
         elif msg.src != gwy.hgi or (msg.code != Code._PUZZ and msg.verb != RQ):
@@ -268,10 +274,9 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
 
     else:
         logger_xxxx(msg)
-        # if gwy.msg_db:
-        #     gwy.msg_db.add(
-        #         msg
-        #     )  # why add it? passes all tests without
+        if gwy.msg_db:
+            gwy.msg_db.add(msg)
+            # why add it? enable for evohome
 
 
 # TODO: this needs cleaning up (e.g. handle intervening packet)
