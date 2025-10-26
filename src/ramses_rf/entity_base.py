@@ -244,7 +244,13 @@ class _MessageDB(_Entity):
             return  # don't store the rest
 
         if self._gwy.msg_db:  # central SQLite MessageIndex
-            self._gwy.msg_db.add(msg)
+            _LOGGER.debug(
+                "For %s (z_id %s) add msg %s, src %s, dst %s to msg_db.",
+                self.id,
+                self._z_id,
+                msg.src,
+                msg.dst,
+            )
             debug_code: Code = Code._3150
             if msg.code == debug_code and msg.src.id.startswith("01:"):
                 _LOGGER.debug(
@@ -258,6 +264,7 @@ class _MessageDB(_Entity):
                 # msg.src = 01:073976 (CTL)
                 # Added msg from 01:073976 (CTL) with code 0005 to _gwy.msg_db
                 # query is for: 01:073976  < no suffix, extended lookup to [:12] chars
+            self._gwy.msg_db.add(msg)
 
             # ignore any replaced message that might be returned
         else:  # TODO(eb): remove Q1 2026
