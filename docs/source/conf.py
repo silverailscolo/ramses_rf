@@ -6,6 +6,7 @@
 
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.insert(0, os.path.abspath("../../src"))
@@ -13,13 +14,14 @@ sys.path.insert(0, os.path.abspath("../../src"))
 from ramses_rf import VERSION  # noqa: E402
 
 version = VERSION
+authors = "D. Bonnes, E. Broerse"
 
 # -- Project information -----------------------------------------------------
 # see https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "Ramses RF"
-copyright = "2025, David Bonnes, Egbert Broerse"
-author = "David Bonnes, Egbert Broerse"
+copyright = f"{datetime.now().year}, {authors}"
+author = authors
 release = version
 
 # -- General configuration ---------------------------------------------------
@@ -48,6 +50,10 @@ language = "en"
 
 html_theme = "furo"
 html_static_path = ["_static"]
+html_logo = "_static/ramses_rf_logo.png"
+html_theme_options = {
+    "announcement": "Build the new <em>ramses_rf</em> documentation locally",
+}
 
 # --- Extension config ----
 
