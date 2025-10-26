@@ -302,7 +302,12 @@ class _MessageDB(_Entity):
                         # safeguard against lookup failures ("sim" packets?)
                         msg_list_qry.append(self._msgs[c])
                     else:
-                        _LOGGER.debug("Could not fetch self._msgs[%s]", c)
+                        _LOGGER.debug(
+                            "_msg_list could not fetch self._msgs[%s] for %s (z_id %s)",
+                            c,
+                            self.id,
+                            self._z_id,
+                        )
             return msg_list_qry
         # else create from legacy nested dict
         return [m for c in self._msgz.values() for v in c.values() for m in v.values()]
