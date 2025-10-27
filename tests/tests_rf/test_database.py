@@ -51,6 +51,13 @@ class TestMessageIndex:
         )
     )
 
+    msg7: Message = Message._from_pkt(
+        Packet(
+            _NOW + td(seconds=60),
+            "...  I --- 04:189078 --:------ 01:145038 12B0 003 040000",
+        )
+    )
+
     async def test_add_msg(self) -> None:
         """Add a message to the MessageIndex."""
         msg_db = MessageIndex()
@@ -177,3 +184,28 @@ class TestMessageIndex:
         assert msg_db.contains(plk="|co2_level|"), "payload keys missing"
 
         assert len(msg_db.all()) == 5
+
+        # simulate entity_base _msgs lookup
+        _SQL_SLICE = 9
+        _id = "01:145038_01"
+        sql = """
+            SELECT dtm from messages WHERE
+            verb in (' I', 'RP')
+            AND (src = ? OR dst = ?)
+            AND ctx = ?
+        """
+        _ctx_qry = "*"
+        if len(_id) > _SQL_SLICE:
+            _ctx_qry = _id[_SQL_SLICE + 1 :]
+        m: tuple[Message] = msg_db.qry(
+            sql, (_id[:_SQL_SLICE], _id[:_SQL_SLICE], _ctx_qry)
+        )  # e.g. 01:123456_01
+        assert len(m) == 1
+        assert m[0].payload == {"heat_demand": 0.0, "zone_idx": "01"}
+
+        msg_db.add(self.msg7)
+        _id = "01:145038_04"
+        m: tuple[Message] = msg_db.qry(
+            sql, (_id[:_SQL_SLICE], _id[:_SQL_SLICE], _ctx_qry)
+        )  # e.g. 01:123456_01
+        assert len(m) == 1

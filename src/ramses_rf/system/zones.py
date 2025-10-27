@@ -233,7 +233,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         # def eavesdrop_dhw_sensor(this: Message, *, prev: Message | None = None) -> None:
         # """Eavesdrop packets, or pairs of packets, to maintain the system state.
 
-        # There are only 2 ways to to find a controller's DHW sensor:
+        # There are only 2 ways to find a controller's DHW sensor:
         # 1. The 10A0 RQ/RP *from/to a 07:* (1x/4h) - reliable
         # 2. Use sensor temp matching - non-deterministic
 
