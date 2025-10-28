@@ -130,7 +130,7 @@ async def test_restore_from_log_file(dir_name: Path) -> None:
             # depends on ramses_rf/entity_base.py def _msgs() from msg_db
             # # prefer to have 2 extra msg instead of missing 1
             assert 0 <= (len(dev._msgs) - len(dev._msgs_)) <= 1, (
-                "more than 1 code extra in _masg"
+                "more than 1 code extra in _msgs"
             )
             # and make sure that every code from _msgs_ is in _msgb
             assert set(dev._msgs_).issubset(set(dev._msgs)), (

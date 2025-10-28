@@ -668,11 +668,8 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         self._child_id = FC  # NOTE: domain_id
 
         # TODO(eb): cleanup
-        # should fix src/ramses_rf/database.py _add_record try/except when activating next line
         if self._gwy.msg_db:
-            self._add_record(
-                address=self.addr, code=Code._3220, verb="RP"
-            )  # << essential?
+            self._add_record(address=self.addr, code=Code._3220, verb="RP")
         # adds a "sim" RP opentherm_msg to the SQLite MessageIndex with code _3220
         # causes exc when fetching ALL, when no "real" msg was added to _msgs_. We skip those.
         else:
@@ -1411,7 +1408,7 @@ class UfhCircuit(Child, Entity):  # FIXME
     def __init__(self, ufc: UfhController, ufh_idx: str) -> None:
         super().__init__(ufc._gwy)
 
-        # FIXME: ZZZ entities must know their parent device ID and their own idx
+        # FIXME: gwy.msg_db entities must know their parent device ID and their own idx
         self._z_id = ufc.id
         self._z_idx = ufh_idx
 

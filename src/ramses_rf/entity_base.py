@@ -67,8 +67,7 @@ if TYPE_CHECKING:
 
 
 _QOS_TX_LIMIT = 12  # TODO: needs work
-_ID_SLICE = 9  # base address only, legacy _msgs 9
-_SQL_SLICE = 12  # msg_db dst field query 12
+_ID_SLICE = 9
 _SZ_LAST_PKT: Final = "last_msg"
 _SZ_NEXT_DUE: Final = "next_due"
 _SZ_TIMEOUT: Final = "timeout"
@@ -248,6 +247,7 @@ class _MessageDB(_Entity):
                 "For %s (z_id %s) add msg %s, src %s, dst %s to msg_db.",
                 self.id,
                 self._z_id,
+                msg,
                 msg.src,
                 msg.dst,
             )
@@ -291,7 +291,7 @@ class _MessageDB(_Entity):
 
     @property
     def _msg_list(self) -> list[Message]:
-        """Return a flattened list of all messages logged on device."""
+        """Return a flattened list of all messages logged on this device."""
         # (only) used in gateway.py#get_state() and in tests/tests/test_eavesdrop_schema.py
         if self._gwy.msg_db:
             msg_list_qry: list[Message] = []
@@ -302,6 +302,8 @@ class _MessageDB(_Entity):
                         # safeguard against lookup failures ("sim" packets?)
                         msg_list_qry.append(self._msgs[c])
                     else:
+                        # evohome has these errors
+                        # _msg_list could not fetch self._msgs[7FFF] for 18:072981 (z_id 18:072981)
                         _LOGGER.debug(
                             "_msg_list could not fetch self._msgs[%s] for %s (z_id %s)",
                             c,
@@ -428,7 +430,7 @@ class _MessageDB(_Entity):
         :param code: filter messages by Code or a tuple of Codes, optional
         :param verb: filter on I, RQ, RP, optional, only with a single Code
         :param key: value keyword to retrieve, not together with verb RQ
-        :param kwargs: not used for now
+        :param kwargs: extra filter, e.g. zone_idx='01'
         :return: a dict containing key: value pairs, or a list of those
         """
         assert not isinstance(code, tuple) or verb is None, (
@@ -444,7 +446,9 @@ class _MessageDB(_Entity):
                 key = None
             try:
                 if self._gwy.msg_db:  # central SQLite MessageIndex, use verb= kwarg
-                    code = Code(self._msg_qry_by_code_key(code, key, verb=verb))
+                    code = Code(
+                        self._msg_qry_by_code_key(code, key, **kwargs, verb=verb)
+                    )
                     msg = self._msgs.get(code)
                 else:  # deprecated lookup in nested _msgz
                     msgs = self._msgz[code][verb]
@@ -456,7 +460,9 @@ class _MessageDB(_Entity):
             msgs = [m for m in self._msgs.values() if m.code in code]
             msg = max(msgs) if msgs else None
             # return highest = latest? value found in code:value pairs
-        else:
+        else:  # single Code
+            # for Zones, this doesn't work, returns first result = often wrong
+            # TODO fix in _msg_qry_by_code_key()
             msg = self._msgs.get(code)
 
         return self._msg_value_msg(msg, key=key, **kwargs)
@@ -531,19 +537,37 @@ class _MessageDB(_Entity):
 
         :return: list of Codes or empty list when query returned empty
         """
+
         if self._gwy.msg_db:
             # SQLite query on MessageIndex
-            sql = """
-                SELECT code from messages WHERE verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-            """
             res: list[Code] = []
+            if self.id[_ID_SLICE:] == "_HW":
+                sql = """
+                    SELECT code from messages WHERE
+                    verb in (' I', 'RP')
+                    AND (src = ? OR dst = ?)
+                    AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
+                """
+                _ctx_qry = "%dhw_idx%"  # syntax error ?
+            else:
+                sql = """
+                    SELECT code from messages WHERE
+                    verb in (' I', 'RP')
+                    AND (src = ? OR dst = ?)
+                    AND ctx LIKE ?
+                """
+                _ctx_qry = f"%{self.id[_ID_SLICE + 1 :]}%"
 
             for rec in self._gwy.msg_db.qry_field(
-                sql, (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
+                sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE], _ctx_qry)
             ):
-                _LOGGER.debug("Fetched from index: %s", rec[0])
-                # Example: "Fetched from index: code 1FD4"
+                _LOGGER.debug(
+                    "Fetched from index: %s for %s (z_id %s)",
+                    rec[0],
+                    self.id,
+                    self._z_id,
+                )
+                # Example: "Fetched from index: code 1FD4 for 01:123456 (z_id 01)"
                 res.append(Code(str(rec[0])))
             return res
         else:
@@ -566,32 +590,48 @@ class _MessageDB(_Entity):
         :return: Code of most recent query result message or None when query returned empty
         """
         if self._gwy.msg_db:
-            code_qry: str = ""
+            code_qry: str = "= "
             if code is None:
-                code_qry = "*"
+                code_qry = "LIKE '%'"  # wildcard
             elif isinstance(code, tuple):
                 for cd in code:
                     code_qry += f"'{str(cd)}' OR code = '"
                 code_qry = code_qry[:-13]  # trim last OR
             else:
-                code_qry = str(code)
-            key = "*" if key is None else f"%{key}%"
+                code_qry += str(code)
             if kwargs["verb"] and kwargs["verb"] in (" I", "RP"):
                 vb = f"('{str(kwargs['verb'])}',)"
             else:
                 vb = "(' I', 'RP',)"
+            ctx_qry = "%"
+            if kwargs["zone_idx"]:
+                ctx_qry = f"%{kwargs['zone_idx']}%"
+            elif kwargs["dhw_idx"]:  # DHW
+                ctx_qry = f"%{kwargs['dhw_idx']}%"
+            key_qry = "%" if key is None else f"%{key}%"
+
             # SQLite query on MessageIndex
             sql = """
-                SELECT dtm, code from messages WHERE verb in ?
+                SELECT dtm, code from messages WHERE
+                verb in ?
                 AND (src = ? OR dst = ?)
-                AND (code = ?)
+                AND (code ?)
+                AND (ctx LIKE ?)
                 AND (plk LIKE ?)
             """
             latest: dt = dt(0, 0, 0)
             res = None
 
             for rec in self._gwy.msg_db.qry_field(
-                sql, (vb, self.id[:_SQL_SLICE], self.id[:_SQL_SLICE], code_qry, key)
+                sql,
+                (
+                    vb,
+                    self.id[:_ID_SLICE],
+                    self.id[:_ID_SLICE],
+                    code_qry,
+                    ctx_qry,
+                    key_qry,
+                ),
             ):
                 _LOGGER.debug(
                     "_msg_qry_by_code_key fetched rec: %s, code: %s", rec, code_qry
@@ -654,7 +694,7 @@ class _MessageDB(_Entity):
             # """SELECT code from messages WHERE verb in (' I', 'RP') AND (src = ? OR dst = ?)
             # AND (code = '31DA' OR ...) AND (plk LIKE '%{SZ_FAN_INFO}%' OR ...)""" = 2 params
             for rec in self._gwy.msg_db.qry_field(
-                sql, (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
+                sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
             ):
                 _pl = self._msgs[Code(rec[0])].payload
                 # add payload dict to res(ults)
@@ -697,21 +737,34 @@ class _MessageDB(_Entity):
         if self.id[:3] == "18:":  # HGI, confirm this is correct, tests suggest so
             return {}
 
-        sql = """
-            SELECT dtm from messages WHERE verb in (' I', 'RP') AND (src = ? OR dst = ?)
-        """
-
-        # handy routine to debug dict creation, see test_systems.py
+        # a routine to debug dict creation, see test_systems.py:
         # print(f"Create _msgs for {self.id}:")
         # results = self._gwy.msg_db._cu.execute("SELECT dtm, src, code from messages WHERE verb in (' I', 'RP') and code is '3150'")
         # for r in results:
         #     print(r)
 
-        _msg_dict = {  # ? use ctx (context) instead of just the address?
+        if self.id[_ID_SLICE:] == "_HW":
+            sql = """
+                SELECT dtm from messages WHERE
+                verb in (' I', 'RP')
+                AND (src = ? OR dst = ?)
+                AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
+            """
+            _ctx_qry = "%dhw_idx%"
+        else:
+            sql = """
+                SELECT dtm from messages WHERE
+                verb in (' I', 'RP')
+                AND (src = ? OR dst = ?)
+                AND ctx LIKE ?
+            """
+            _ctx_qry = f"%{self.id[_ID_SLICE + 1 :]}%"
+
+        _msg_dict = {  # since 0.52.3 use ctx (context) instead of just the address
             m.code: m
             for m in self._gwy.msg_db.qry(
-                sql, (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
-            )  # e.g. 01:123456_HW
+                sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE], _ctx_qry)
+            )  # e.g. 01:123456_HW, 01:123456_02 (Zone)
         }
         # if CTL, remove 3150, 3220 heat_demand, both are only stored on children
         # HACK
@@ -786,7 +839,7 @@ class _Discovery(_MessageDB):
                 code: CODES_SCHEMA[code][SZ_NAME]
                 for code in sorted(
                     self._gwy.msg_db.get_rp_codes(
-                        (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
+                        (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
                     )
                 )
                 if self._is_not_deprecated_cmd(code)
@@ -818,7 +871,7 @@ class _Discovery(_MessageDB):
                 AND (src = ? OR dst = ?)
             """
             for rec in self._gwy.msg_db.qry_field(
-                sql, (self.id[:_SQL_SLICE], self.id[:_SQL_SLICE])
+                sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
             ):
                 _LOGGER.debug("Fetched OT ctx from index: %s", rec[0])
                 res.append(rec[0])
@@ -949,8 +1002,8 @@ class _Discovery(_MessageDB):
                             sql,
                             (
                                 task[_SZ_COMMAND].code,
-                                self.tcs.id[:_ID_SLICE],  # OK? not _SQL_SLICE?
-                                self.tcs.id[:_ID_SLICE],  # OK? not _SQL_SLICE?
+                                self.tcs.id[:_ID_SLICE],
+                                self.tcs.id[:_ID_SLICE],
                             ),
                         )[0]  # expect 1 Message in returned tuple
                     else:  # TODO(eb) remove next Q1 2026

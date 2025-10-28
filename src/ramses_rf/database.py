@@ -334,7 +334,7 @@ class MessageIndex:
                 payload_keys(msg.payload),
             ),
         )
-        _LOGGER.debug(f"Added {msg} to gwy.msg_db")
+        # _LOGGER.debug(f"Added {msg} to gwy.msg_db")
 
         return _old_msgs[0] if _old_msgs else None
 
@@ -435,7 +435,7 @@ class MessageIndex:
 
     def qry_dtms(self, **kwargs: bool | dt | str) -> list[Any]:
         """
-        Select from the ImageIndex a list of dtms that match the provided arguments.
+        Select from the MessageIndex a list of dtms that match the provided arguments.
 
         :param kwargs: data table field names and criteria
         :return: list of unformatted dtms that match, useful for msg lookup, or an empty list if 0 matches
