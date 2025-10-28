@@ -197,7 +197,7 @@ class TestMessageIndex:
         _ctx_qry = "*"
         if len(_id) > _SQL_SLICE:
             _ctx_qry = _id[_SQL_SLICE + 1 :]
-        m: tuple[Message] = msg_db.qry(
+        m: tuple[Message, ...] = msg_db.qry(
             sql, (_id[:_SQL_SLICE], _id[:_SQL_SLICE], _ctx_qry)
         )  # e.g. 01:123456_01
         assert len(m) == 1
@@ -205,7 +205,7 @@ class TestMessageIndex:
 
         msg_db.add(self.msg7)
         _id = "01:145038_04"
-        m: tuple[Message] = msg_db.qry(
+        m = msg_db.qry(
             sql, (_id[:_SQL_SLICE], _id[:_SQL_SLICE], _ctx_qry)
         )  # e.g. 01:123456_01
         assert len(m) == 1

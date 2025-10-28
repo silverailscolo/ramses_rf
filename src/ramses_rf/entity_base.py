@@ -247,6 +247,7 @@ class _MessageDB(_Entity):
                 "For %s (z_id %s) add msg %s, src %s, dst %s to msg_db.",
                 self.id,
                 self._z_id,
+                msg,
                 msg.src,
                 msg.dst,
             )
@@ -459,7 +460,7 @@ class _MessageDB(_Entity):
             msgs = [m for m in self._msgs.values() if m.code in code]
             msg = max(msgs) if msgs else None
             # return highest = latest? value found in code:value pairs
-        else:
+        else:  # single Code
             # for Zones, this doesn't work, returns first result = often wrong
             # TODO fix in _msg_qry_by_code_key()
             msg = self._msgs.get(code)
@@ -536,15 +537,26 @@ class _MessageDB(_Entity):
 
         :return: list of Codes or empty list when query returned empty
         """
+
         if self._gwy.msg_db:
             # SQLite query on MessageIndex
-            sql = """
-                SELECT code from messages WHERE verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND ctx LIKE ?
-            """
             res: list[Code] = []
-            _ctx_qry = f"%{self.id[_ID_SLICE + 1 :]}%"
+            if self.id[_ID_SLICE:] == "_HW":
+                sql = """
+                    SELECT code from messages WHERE
+                    verb in (' I', 'RP')
+                    AND (src = ? OR dst = ?)
+                    AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
+                """
+                _ctx_qry = "%dhw_idx%"  # syntax error ?
+            else:
+                sql = """
+                    SELECT code from messages WHERE
+                    verb in (' I', 'RP')
+                    AND (src = ? OR dst = ?)
+                    AND ctx LIKE ?
+                """
+                _ctx_qry = f"%{self.id[_ID_SLICE + 1 :]}%"
 
             for rec in self._gwy.msg_db.qry_field(
                 sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE], _ctx_qry)
@@ -587,7 +599,6 @@ class _MessageDB(_Entity):
                 code_qry = code_qry[:-13]  # trim last OR
             else:
                 code_qry += str(code)
-            key_qry = "%" if key is None else f"%{key}%"
             if kwargs["verb"] and kwargs["verb"] in (" I", "RP"):
                 vb = f"('{str(kwargs['verb'])}',)"
             else:
@@ -595,6 +606,9 @@ class _MessageDB(_Entity):
             ctx_qry = "%"
             if kwargs["zone_idx"]:
                 ctx_qry = f"%{kwargs['zone_idx']}%"
+            elif kwargs["dhw_idx"]:  # DHW
+                ctx_qry = f"%{kwargs['dhw_idx']}%"
+            key_qry = "%" if key is None else f"%{key}%"
 
             # SQLite query on MessageIndex
             sql = """
@@ -723,25 +737,34 @@ class _MessageDB(_Entity):
         if self.id[:3] == "18:":  # HGI, confirm this is correct, tests suggest so
             return {}
 
-        sql = """
-            SELECT dtm from messages WHERE
-            verb in (' I', 'RP')
-            AND (src = ? OR dst = ?)
-            AND ctx LIKE ?
-        """
-
-        # handy routine to debug dict creation, see test_systems.py
+        # a routine to debug dict creation, see test_systems.py:
         # print(f"Create _msgs for {self.id}:")
         # results = self._gwy.msg_db._cu.execute("SELECT dtm, src, code from messages WHERE verb in (' I', 'RP') and code is '3150'")
         # for r in results:
         #     print(r)
 
-        _ctx_qry = f"%{self.id[_ID_SLICE + 1 :]}%"
+        if self.id[_ID_SLICE:] == "_HW":
+            sql = """
+                SELECT dtm from messages WHERE
+                verb in (' I', 'RP')
+                AND (src = ? OR dst = ?)
+                AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
+            """
+            _ctx_qry = "%dhw_idx%"
+        else:
+            sql = """
+                SELECT dtm from messages WHERE
+                verb in (' I', 'RP')
+                AND (src = ? OR dst = ?)
+                AND ctx LIKE ?
+            """
+            _ctx_qry = f"%{self.id[_ID_SLICE + 1 :]}%"
+
         _msg_dict = {  # since 0.52.3 use ctx (context) instead of just the address
             m.code: m
             for m in self._gwy.msg_db.qry(
                 sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE], _ctx_qry)
-            )  # e.g. 01:123456_HW
+            )  # e.g. 01:123456_HW, 01:123456_02 (Zone)
         }
         # if CTL, remove 3150, 3220 heat_demand, both are only stored on children
         # HACK

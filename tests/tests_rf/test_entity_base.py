@@ -65,7 +65,7 @@ class Test_entity_base:
         )
     )
 
-    async def test_entity_base_dev(self, mock_gateway) -> None:
+    async def test_entity_base_dev(self, mock_gateway: MagicMock) -> None:
         # issues fetching results
         dev = _MessageDB(mock_gateway)
         dev.id = DeviceIdT("04:189078")
@@ -75,6 +75,7 @@ class Test_entity_base:
         dev._handle_msg(self.msg5)
         dev._handle_msg(self.msg6)
         dev._handle_msg(self.msg7)
+        assert dev._gwy.msg_db
         assert len(dev._gwy.msg_db.all()) == 3, "len(msg_db.all) wrong"
 
         # start tests
@@ -92,11 +93,11 @@ class Test_entity_base:
             self.msg5,
             self.msg7,
             self.msg6,
-        ), "qry wrong"
+        ), "base qry wrong"
 
         # create _msgs
         assert dev._msgs == {"12B0": self.msg7, "3150": self.msg5, "3220": self.msg6}, (
-            "_msgs wrong"
+            "base _msgs wrong"
         )
 
         # find our Codes
@@ -104,7 +105,7 @@ class Test_entity_base:
             Code._3150,
             Code._12B0,
             Code._3220,
-        ], "_msg_dev_qry wrong"
+        ], "base _msg_dev_qry wrong"
 
         # list our messages
         assert dev._msg_list == [self.msg5, self.msg7, self.msg6], "_msg_list wrong"
@@ -114,9 +115,9 @@ class Test_entity_base:
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
             "3220": {"RP": {"11": self.msg6}},
-        }, "_msgz wrong"
+        }, "base _msgz wrong"
 
-    async def test_entity_base_zone(self, mock_gateway) -> None:
+    async def test_entity_base_zone(self, mock_gateway: MagicMock) -> None:
         # works as expected
         dev = _MessageDB(mock_gateway)
         dev.id = DeviceIdT("04:189078_01")
@@ -129,6 +130,7 @@ class Test_entity_base:
 
         # start tests
         assert dev.id == "04:189078_01"
+        assert dev._gwy.msg_db
 
         sql = """
             SELECT dtm from messages WHERE
@@ -141,16 +143,16 @@ class Test_entity_base:
         ) == (
             self.msg5,
             self.msg7,
-        ), "qry wrong"
+        ), "zone qry wrong"
 
         # create _msgs
-        assert dev._msgs == {"12B0": self.msg7, "3150": self.msg5}, "_msgs wrong"
+        assert dev._msgs == {"12B0": self.msg7, "3150": self.msg5}, "zone _msgs wrong"
 
         # find our Codes
         assert dev._msg_dev_qry() == [
             Code._3150,
             Code._12B0,
-        ], "_msg_dev_qry wrong"
+        ], "zone _msg_dev_qry wrong"
 
         # list our messages
         assert dev._msg_list == [self.msg5, self.msg7], "_msg_list wrong"
@@ -159,4 +161,68 @@ class Test_entity_base:
         assert dev._msgz == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
-        }, "_msgz wrong"
+        }, "zone _msgz wrong"
+
+    msg8: Message = Message._from_pkt(
+        Packet(
+            _NOW + td(seconds=70),
+            "045  I --- 01:145038 --:------ 01:145038 3150 002 FC90",  # heat_demand
+        )
+    )
+    msg9: Message = Message._from_pkt(
+        Packet(
+            _NOW + td(seconds=80),
+            "045 RP --- 01:145038 18:006402 --:------ 1260 003 00182B",  # setpoint
+        )
+    )
+
+    async def test_entity_base_dhw(self, mock_gateway: MagicMock) -> None:
+        # works as expected
+        dev = _MessageDB(mock_gateway)
+        dev.id = DeviceIdT("01:145038_HW")
+        dev._z_id = dev.id
+
+        # put messages in the msg_db
+        dev._handle_msg(self.msg8)
+        dev._handle_msg(self.msg9)
+
+        # start tests
+        assert dev.id == "01:145038_HW"
+        assert dev._gwy.msg_db
+        assert dev._gwy.msg_db.all() == (self.msg8, self.msg9), "wrong dhw all"
+
+        sql = """
+                SELECT dtm from messages WHERE
+                verb in (' I', 'RP')
+                AND (src = ? OR dst = ?)
+                AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
+            """
+        _ctx_qry = "%dhw_idx%"
+        # SELECT just fields
+        # assert dev._gwy.msg_db.qry_field(
+        #     sql, (dev.id[:9], dev.id[:9], _ctx_qry)
+        # ) == [('FC',), ('00',)]
+
+        # fetch Messages
+        assert dev._gwy.msg_db.qry(sql, (dev.id[:9], dev.id[:9], _ctx_qry)) == (
+            self.msg8,
+            self.msg9,
+        ), "dhw qry wrong"
+
+        # create _msgs
+        assert dev._msgs == {"1260": self.msg9, "3150": self.msg8}, "dhw _msgs wrong"
+
+        # find our Codes
+        assert dev._msg_dev_qry() == [
+            Code._3150,
+            Code._1260,
+        ], "dhw _msg_dev_qry wrong"
+
+        # list our messages
+        assert dev._msg_list == [self.msg8, self.msg9], "dhw _msg_list wrong"
+
+        # create _msgz
+        assert dev._msgz == {
+            "1260": {"RP": {"00": self.msg9}},
+            "3150": {" I": {"FC": self.msg8}},
+        }, "dhw _msgz wrong"
