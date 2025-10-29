@@ -36,6 +36,7 @@ extensions = [
     "sphinx.ext.githubpages",
     "sphinx_design",
     "myst_parser",  # to use Markdown inside reST
+    "sphinxcontrib.mermaid",  # to show mermaid diagrams in docs
 ]
 pygments_style = "sphinx"  # enable syntax highlighting
 
@@ -72,3 +73,4 @@ autosummary_generate_overwrite = True
 # Myst
 myst_enable_extensions = ["colon_fence"]
 myst_heading_anchors = 4
+myst_fence_as_directive = ["mermaid"]
