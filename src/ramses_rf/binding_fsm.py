@@ -200,7 +200,7 @@ class BindContextBase:
             self._state, (RespHasBoundAsRespondent, SuppHasBoundAsSupplicant)
         ):
             _LOGGER.info(
-                f"{self._dev.id}: Binding process completed: {prev_state.__name__} -> {state.__name__} (role: {self.role})"
+                f"{self._dev.id}: Binding process completed: {type(prev_state).__name__} -> {state.__name__} (role: {self.role})"
             )
 
         if _DBG_MAINTAIN_STATE_CHAIN:  # HACK for debugging
