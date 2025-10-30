@@ -178,16 +178,14 @@ class BindContextBase:
         self, state: type[BindStateBase], result: asyncio.Future[Message] | None = None
     ) -> None:
         """Transition the State of the Context, and process the result, if any."""
+        # Ensure prev_state is always available, not only during debugging
+        prev_state = self._state
 
         # if False and result:
         #     try:
         #         self._fut.set_result(result.result())
         #     except exc.BindingError as err:
         #         self._fut.set_result(err)
-
-        if _DBG_MAINTAIN_STATE_CHAIN:  # HACK for debugging
-            # if prev_state in (None, )
-            prev_state = self._state
 
         self._state = state(self)
         if not self.is_binding:
@@ -196,6 +194,14 @@ class BindContextBase:
             self._is_respondent = True
         elif state is SuppSendOfferWaitForAccept:
             self._is_respondent = False
+
+        # Log binding completion transitions
+        if isinstance(
+            self._state, (RespHasBoundAsRespondent, SuppHasBoundAsSupplicant)
+        ):
+            _LOGGER.info(
+                f"{self._dev.id}: Binding process completed: {prev_state.__name__} -> {state.__name__} (role: {self.role})"
+            )
 
         if _DBG_MAINTAIN_STATE_CHAIN:  # HACK for debugging
             setattr(self._state, "_prev_state", prev_state)  # noqa: B010
@@ -663,6 +669,10 @@ class RespHasBoundAsRespondent(BindStateBase):
 
     _attr_role = BindRole.IS_DORMANT
 
+    def __init__(self, context: BindContextBase) -> None:
+        super().__init__(context)
+        _LOGGER.info(f"{context._dev.id}: Binding completed as respondent")
+
 
 class RespIsWaitingForAddenda(_DevIsWaitingForMsg, BindStateBase):
     """Respondent has received a Confirm & is waiting for an Addenda."""
@@ -714,6 +724,10 @@ class SuppHasBoundAsSupplicant(BindStateBase):
     """Supplicant has sent a Confirm (+/- an Addenda) & has nothing more to do."""
 
     _attr_role = BindRole.IS_DORMANT
+
+    def __init__(self, context: BindContextBase) -> None:
+        super().__init__(context)
+        _LOGGER.info(f"{context._dev.id}: Binding completed as supplicant")
 
 
 class SuppIsReadyToSendAddenda(
