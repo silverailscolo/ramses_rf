@@ -11,6 +11,7 @@ ramses_rf
 
    usage
    glossary
+   binding_process_diagram
 
 .. toctree::
    :maxdepth: 2
