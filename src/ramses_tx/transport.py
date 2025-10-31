@@ -1024,6 +1024,7 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
 
 class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     """Send/receive packets to/from ramses_esp via MQTT.
+    For full RX logging, turn on debug logging.
 
     See: https://github.com/IndaloTech/ramses_esp
     """
@@ -1572,7 +1573,6 @@ async def transport_factory(
 
     # MQTT
     if port_name[:4] == "mqtt":  # TODO: handle disable_sending
-        _LOGGER.info("transport_factory starting MQTT, log_all: %s", log_all)
         transport = MqttTransport(
             port_name, protocol, extra=extra, loop=loop, log_all=log_all, **kwargs
         )
