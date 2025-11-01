@@ -1,4 +1,4 @@
-# RAMSES RF Binding Process Diagram
+# RAMSES RF Binding Process
 
 ## Overview
 This diagram shows the binding finite state machine (FSM) for RAMSES RF devices, illustrating the complete process from initial state to binding completion.
@@ -38,8 +38,8 @@ stateDiagram-v2
         RespHasBoundAsRespondent
     end
 
-    classDef supplicant fill:#006400,stroke:#ffffff,stroke-width:2px
-    classDef respondent fill:#00008B,stroke:#ffffff,stroke-width:2px
+    classDef supplicant fill:#ff64dd,stroke:#ffffff,stroke-width:2px
+    classDef respondent fill:#55bb8B,stroke:#ffffff,stroke-width:2px
 
     class SuppSendOfferWaitForAccept,OfferSent,SuppIsReadyToSendConfirm,SuppHasBoundAsSupplicant supplicant
     class RespIsWaitingForOffer,OfferReceived,RespSendAcceptWaitForConfirm,RespHasBoundAsRespondent respondent
