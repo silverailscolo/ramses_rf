@@ -49,7 +49,7 @@ async def gwy() -> AsyncGenerator[Gateway, None]:  # NOTE: async to get running 
     try:
         yield gwy
     finally:
-        await gwy.stop()
+        await gwy.stop()  # close sqlite3 connection
 
 
 def assert_expected(
@@ -71,6 +71,9 @@ def assert_expected_set(gwy: Gateway, expected: dict) -> None:
     assert_expected(gwy.params, expected.get("params"))
     assert_expected(gwy.status, expected.get("status"))
     assert_expected(gwy.known_list, expected.get("known_list"))
+
+    if gwy.msg_db:
+        gwy.msg_db.stop()  # close sqlite3 connection
 
 
 def assert_raises(exception: type[Exception], fnc: Callable, *args: Any) -> None:

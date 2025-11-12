@@ -214,6 +214,9 @@ async def test_virtual_rf_pkt_flow() -> None:
 
     rf: VirtualRf = None  # type: ignore[assignment]
 
+    gwy_0: Gateway = None  # type: ignore[assignment]
+    gwy_1: Gateway = None  # type: ignore[assignment]
+
     try:
         rf, (gwy_0, gwy_1) = await rf_factory(
             [GWY_CONFIG | SCHEMA_0, GWY_CONFIG | SCHEMA_1]
@@ -230,6 +233,8 @@ async def test_virtual_rf_pkt_flow() -> None:
 
     finally:
         if rf:
-            await gwy_0.stop()
-            await gwy_1.stop()
+            if gwy_0:
+                await gwy_0.stop()
+            if gwy_1:
+                await gwy_1.stop()
             await rf.stop()

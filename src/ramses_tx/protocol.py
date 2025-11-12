@@ -583,7 +583,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
             self._context.pause_writing()
 
     def resume_writing(self) -> None:
-        """Inform the FSM that the Protocol has been paused."""
+        """Inform the FSM that the Protocol has been resumed."""
 
         super().resume_writing()
         if self._context:
@@ -597,7 +597,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
             self._context.pkt_received(pkt)
 
     async def _send_impersonation_alert(self, cmd: Command) -> None:
-        """Send an puzzle packet warning that impersonation is occurring."""
+        """Send a puzzle packet warning that impersonation is occurring."""
 
         if _DBG_DISABLE_IMPERSONATION_ALERTS:
             return
