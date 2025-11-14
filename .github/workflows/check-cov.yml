@@ -6,6 +6,8 @@ on:
     branches: [ "master" ]
     paths: [
       ".github/workflows/check-cov.yml",
+      "pyproject.toml",
+      "requirements/**",
       "src/**.py",
       "tests/**",
     ]
@@ -14,9 +16,24 @@ on:
     branches: [ "master" ]
     paths: [
       ".github/workflows/check-cov.yml",
+      "pyproject.toml",
+      "requirements/**",
       "src/**.py",
       "tests/**",
     ]
+
+  pull_request_target:
+    branches: [ "master" ]
+    paths: [
+      ".github/workflows/check-cov.yml",
+      "pyproject.toml",
+      "requirements/**",
+      "src/**.py",
+      "tests/**",
+    ]
+
+  schedule:
+    - cron: "0 7 * * 5"
 
   workflow_dispatch:
 
