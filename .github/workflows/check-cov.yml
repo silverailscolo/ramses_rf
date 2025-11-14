@@ -91,12 +91,15 @@ jobs:
           output: both
           thresholds: '60 80'
 
-#      - name: Add Coverage PR Comment
-#        # from: https://github.com/marketplace/actions/comment-pull-request
-#        uses: thollander/actions-comment-pull-request@v3
-#        with:
-#          file-path: code-coverage-results.md
-#          comment-tag: cov-report  # replaces existing by this name
+      - name: Add Coverage PR Comment
+        # from: https://github.com/marketplace/actions/comment-pull-request
+        if: github.event_name == 'pull_request_target'
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          file-path: code-coverage-results.md
+          comment-tag: code-coverage-results.md  # replaces existing by this name
+          mode: recreate
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # or: https://github.com/marketplace/actions/sticky-pull-request-comment
         #        if: github.event_name == 'pull_request'
         #        with:
