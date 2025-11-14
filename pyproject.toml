@@ -81,17 +81,46 @@
   asyncio_default_fixture_loop_scope = "function"
   asyncio_mode = "auto"
 
+  testpaths = [
+    "tests/"
+  ]
   norecursedirs = "deprecated/*"
 
   # pytest-cov slows down our tests to 10 mins, so leave off.
   # We run coverage in a separate workflow on python 3.13 only (fastest)
   # pytest-cov coverage reporting. open htmlcov/index.html in a browser for details
-  # addopts = "--cov=src --cov-fail-under=50 --cov-report=xml --cov-report=term"
+  # addopts = ["--cov=src", "--cov-fail-under=50", "--cov-report=xml", "--cov-report=term"]
   # to create an interactive local HTML report, add: --cov-report=html
   # to report missed lines during test writing, add: --cov-report=term-missing
   # PyCharm might not hit a breakpoint. For debugging, disable -cov by adding:
   # –no-cov"
   # cov_report_term = "term-missing:skip-covered"
+
+#
+### coverage #########################################################################
+
+[tool.coverage.run]
+  core = "sysmon"  # essential setting for speed on GitHub < 11 secs instead of >12 mins
+  branch = false  # true takes a lot longer and can't be combined with sysmon
+#  patch = ["subprocess"]
+  source = [
+    "src",
+    "tests"
+  ]
+
+[tool.coverage.report]
+  # Regexes for lines to exclude from consideration
+  exclude_also = [
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+  ]
+  format = "text"
+  fail_under = 75
+  ignore_errors = true
+
+[tool.coverage.html]
+  directory = "coverage_html"
 
 #
 ### mypy #############################################################################
