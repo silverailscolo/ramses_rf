@@ -6,7 +6,9 @@ This module wraps logger to provide bespoke functionality, especially for timest
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import re
 import shutil
 import sys
@@ -180,6 +182,34 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
     #     if True or self.shouldRollover(record):
     #         self.doRollover()
     #     return super().emit(record)
+
+    # Fix issue ramses_cc 293, use asyncio
+    async def getFilesToDelete(self) -> list[str]:
+        """Determine the files to delete when rolling over.
+
+        Overrides standard python logging method, as old log files were not being deleted.
+        """
+        dirName, baseName = os.path.split(self.baseFilename)
+        loop = asyncio.get_running_loop()
+        # Must run async in executor to prevent HA blocking call on rollover (ramses_cc issue 293)
+        file_names = await loop.run_in_executor(
+            None, os.listdir, dirName
+        )  # < doesn't work
+
+        result = []
+        prefix = baseName + "."
+        plen = len(prefix)
+        for fileName in file_names:
+            if fileName[:plen] == prefix:
+                suffix = fileName[plen:]
+                if self.extMatch.match(suffix):
+                    result.append(os.path.join(dirName, fileName))
+        if len(result) < self.backupCount:
+            result = []
+        else:
+            result.sort()
+            result = result[: len(result) - self.backupCount]
+        return result
 
 
 def getLogger(  # permits a bespoke Logger class
