@@ -1776,7 +1776,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             _LOGGER.debug(f"Error during MQTT cleanup: {err}")
 
 
-class CallbackTransport(_FullTransport):
+class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
     """A virtual transport that delegates I/O to external callbacks (Inversion of Control).
 
     This transport allows ramses_rf to be used with external connection managers
