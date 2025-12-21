@@ -96,3 +96,34 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         self.assertIs(gwy._transport, self.transport)
 
         await gwy.stop()
+
+    async def test_factory_propagates_disable_sending(self) -> None:
+        """Verify transport_factory passes disable_sending=True to the constructor."""
+        from ramses_rf import Gateway
+
+        # 1. Define a factory that checks if disable_sending was passed
+        async def strict_factory(protocol: Any, **kwargs: Any) -> CallbackTransport:
+            # Check if 'disable_sending' made it through
+            if not kwargs.get("disable_sending"):
+                raise ValueError("disable_sending flag was lost in the factory!")
+
+            # Return a transport that is strictly read-only
+            return CallbackTransport(
+                protocol,
+                io_writer=self.mock_writer,
+                disable_sending=kwargs["disable_sending"],
+            )
+
+        # 2. Initialize Gateway in Read-Only mode (disable_sending=True)
+        # We pass a config that enforces read-only
+        gwy = Gateway(
+            "/dev/null", transport_constructor=strict_factory, disable_sending=True
+        )
+
+        # 3. This should fail if the flag is lost
+        try:
+            await gwy.start()
+        except ValueError as err:
+            self.fail(f"Test failed: {err}")
+        finally:
+            await gwy.stop()

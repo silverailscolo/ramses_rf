@@ -1957,7 +1957,9 @@ async def transport_factory(
     # If a constructor is provided, delegate entirely to it.
     if transport_constructor:
         _LOGGER.debug("transport_factory: Delegating to external transport_constructor")
-        return await transport_constructor(protocol, **kwargs)
+        return await transport_constructor(
+            protocol, disable_sending=disable_sending, extra=extra, **kwargs
+        )
 
     # kwargs are specific to a transport. The above transports have:
     # evofw3_flag, use_regex
