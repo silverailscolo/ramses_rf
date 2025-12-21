@@ -1783,8 +1783,12 @@ class CallbackTransport(_FullTransport):
         :param disable_sending: Whether to disable sending, defaults to False.
         :type disable_sending: bool, optional
         """
-        super().__init__(protocol, disable_sending=disable_sending, **kwargs)
+        # NOTE: Do NOT pass 'protocol' to super().__init__().
+        # Unlike PortTransport, we have no Abstractor Mixin to consume it,
+        # so it would eventually hit object.__init__() and crash.
+        super().__init__(disable_sending=disable_sending, **kwargs)
 
+        self._protocol = protocol
         self._io_writer = io_writer
         # Section 3.1: "Initial State: Default to a PAUSED state"
         self._reading = False
