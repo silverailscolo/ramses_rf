@@ -1478,6 +1478,70 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             _LOGGER.debug(f"Error during MQTT cleanup: {err}")
 
 
+class CallbackTransport(_FullTransport):
+    """A virtual transport that delegates I/O to external callbacks (Inversion of Control).
+
+    This transport allows ramses_rf to be used with external connection managers
+    (like Home Assistant's MQTT integration) without direct dependencies.
+    """
+
+    def __init__(
+        self,
+        protocol: RamsesProtocolT,
+        io_writer: Callable[[str], Awaitable[None]],
+        disable_sending: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(protocol, disable_sending=disable_sending, **kwargs)
+
+        self._io_writer = io_writer
+        # Section 3.1: "Initial State: Default to a PAUSED state"
+        self._reading = False
+
+        # Section 6.1: Object Lifecycle Logging
+        _LOGGER.info(f"CallbackTransport: Created with io_writer={io_writer}")
+
+        # NOTE: connection_made is NOT called here. It must be triggered
+        # externally (e.g. by the Bridge) via the protocol methods once
+        # the external connection is ready.
+
+    async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
+        """Process a frame for transmission by passing it to the external writer."""
+        if self._disable_sending:
+            raise exc.TransportError("Sending has been disabled")
+
+        # Section 6.1: Boundary Logging (Outgoing)
+        _LOGGER.debug(f"CallbackTransport: OUT: {frame}")
+
+        try:
+            await self._io_writer(frame)
+        except Exception as err:
+            _LOGGER.error(f"CallbackTransport: External writer failed: {err}")
+            raise exc.TransportError(f"External writer failed: {err}") from err
+
+    async def _write_frame(self, frame: str) -> None:
+        # Wrapper to satisfy abstract base class, though logic is in write_frame
+        await self.write_frame(frame)
+
+    def receive_frame(self, frame: str, dtm: str | None = None) -> None:
+        """Ingest a frame from the external source (Read Path).
+
+        This is the public method called by the Bridge to inject data.
+        """
+        # Section 4.2: Circuit Breaker implementation (Packet gating)
+        if not self._reading:
+            _LOGGER.debug(f"CallbackTransport: Dropping frame (paused): {frame}")
+            return
+
+        dtm = dtm or dt_now().isoformat()
+
+        # Section 6.1: Boundary Logging (Incoming)
+        _LOGGER.debug(f"CallbackTransport: IN: {frame}")
+
+        # Pass to the standard processing pipeline
+        self._frame_read(dtm, frame)
+
+
 def validate_topic_path(path: str) -> str:
     """Test the topic path."""
 
@@ -1504,7 +1568,9 @@ def validate_topic_path(path: str) -> str:
     return new_path
 
 
-RamsesTransportT: TypeAlias = FileTransport | MqttTransport | PortTransport
+RamsesTransportT: TypeAlias = (
+    FileTransport | MqttTransport | PortTransport | CallbackTransport
+)
 
 
 async def transport_factory(
@@ -1515,6 +1581,7 @@ async def transport_factory(
     port_config: PortConfigT | None = None,
     packet_log: str | None = None,
     packet_dict: dict[str, str] | None = None,
+    transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
     disable_sending: bool | None = False,
     extra: dict[str, Any] | None = None,
     loop: asyncio.AbstractEventLoop | None = None,
@@ -1522,6 +1589,11 @@ async def transport_factory(
     **kwargs: Any,  # HACK: odd/misc params
 ) -> RamsesTransportT:
     """Create and return a Ramses-specific async packet Transport."""
+
+    # If a constructor is provided, delegate entirely to it.
+    if transport_constructor:
+        _LOGGER.debug("transport_factory: Delegating to external transport_constructor")
+        return await transport_constructor(protocol, **kwargs)
 
     # kwargs are specific to a transport. The above transports have:
     # evofw3_flag, use_regex

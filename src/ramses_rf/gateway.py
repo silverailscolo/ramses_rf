@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -94,6 +95,7 @@ class Gateway(Engine):
         block_list: DeviceListT | None = None,
         known_list: DeviceListT | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
+        transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
         **kwargs: Any,
     ) -> None:
         if kwargs.pop("debug_mode", None):
@@ -110,6 +112,7 @@ class Gateway(Engine):
             block_list=block_list,
             known_list=known_list,
             loop=loop,
+            transport_constructor=transport_constructor,
             **SCH_ENGINE_CONFIG(config),
         )
 
