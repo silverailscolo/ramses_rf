@@ -25,7 +25,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
 
     async def test_write_frame_delegates_to_writer(self) -> None:
         """Verify outbound frames are passed to the injected io_writer."""
-        test_frame = " RQ --- 18:000730 18:000730 --:------ 00E0 001 00"
+        test_frame = "RQ --- 18:000730 18:000730 --:------ 00E0 001 00"
 
         await self.transport.write_frame(test_frame)
 
@@ -34,7 +34,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
 
     async def test_receive_frame_respects_circuit_breaker(self) -> None:
         """Verify inbound frames are gated by pause/resume state."""
-        test_frame = " I --- 18:000730 --:------ 18:000730 0008 002 0000"
+        test_frame = "I --- 18:000730 --:------ 18:000730 0008 002 0000"
 
         # 1. Test while PAUSED (Initial State)
         self.transport.pause_reading()
