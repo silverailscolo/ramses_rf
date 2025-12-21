@@ -77,10 +77,15 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
             # We must return the transport instance we are testing
             # but we need to update its protocol reference first
             self.transport._protocol = protocol
-            # Manually signal that the connection is made.
-            # In the real integration, the Bridge calls this when MQTT connects.
-            # Here, we simulate immediate success.
-            protocol.connection_made(self.transport)
+
+            # 1. Simulate Gateway Identification (Critical for protocol state)
+            # Use the string literal "active_hgi" to avoid import issues
+            self.transport._extra["active_hgi"] = "18:000730"
+
+            # 2. Manually signal that the connection is made.
+            # MUST include ramses=True to satisfy the protocol stack
+            protocol.connection_made(self.transport, ramses=True)
+
             return self.transport
 
         # Initialize Gateway with the factory
