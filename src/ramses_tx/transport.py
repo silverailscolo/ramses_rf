@@ -502,6 +502,8 @@ class _CallbackTransportAbstractor:
         :type loop: asyncio.AbstractEventLoop | None, optional
         """
         self._loop = loop or asyncio.get_event_loop()
+        # Consume 'kwargs' here. Do NOT pass them to object.__init__().
+        super().__init__()
 
 
 class _BaseTransport:
