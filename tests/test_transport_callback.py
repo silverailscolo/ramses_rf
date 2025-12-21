@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for the CallbackTransport (Inversion of Control)."""
 
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -25,7 +26,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
 
     async def test_write_frame_delegates_to_writer(self) -> None:
         """Verify outbound frames are passed to the injected io_writer."""
-        test_frame = "RQ --- 18:000730 18:000730 --:------ 00E0 001 00"
+        test_frame = "--- RQ --- 18:000730 01:195932 --:------ 1F41 001 00"
 
         await self.transport.write_frame(test_frame)
 
@@ -34,11 +35,16 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
 
     async def test_receive_frame_respects_circuit_breaker(self) -> None:
         """Verify inbound frames are gated by pause/resume state."""
-        test_frame = "RP --- 18:000730 18:000730 --:------ 00E0 001 00"
+        test_frame = (
+            "059 RP --- 01:195932 04:017982 --:------ 313F 009 00FC2300C4150C07E9"
+        )
 
         # 1. Test while PAUSED (Initial State)
         self.transport.pause_reading()
         self.transport.receive_frame(test_frame)
+
+        # Give the loop a chance to spin (in case it tried to process)
+        await asyncio.sleep(0)
 
         # Protocol should NOT have received data
         self.mock_protocol.pkt_received.assert_not_called()
@@ -46,6 +52,9 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         # 2. Test while RESUMED
         self.transport.resume_reading()
         self.transport.receive_frame(test_frame)
+
+        # We must yield control to the loop so 'call_soon' tasks can execute
+        await asyncio.sleep(0)
 
         # Protocol SHOULD receive data now
         # Note: pkt_received is called with a Packet object, so we verify call count
