@@ -490,6 +490,20 @@ def track_system_syncs(fnc: Callable[..., None]) -> Callable[..., Any]:
 # ### Do the bare minimum to abstract each transport from its underlying class
 
 
+class _CallbackTransportAbstractor:
+    """Do the bare minimum to abstract a transport from its underlying class."""
+
+    def __init__(
+        self, loop: asyncio.AbstractEventLoop | None = None, **kwargs: Any
+    ) -> None:
+        """Initialize the callback transport abstractor.
+
+        :param loop: The asyncio event loop, defaults to None.
+        :type loop: asyncio.AbstractEventLoop | None, optional
+        """
+        self._loop = loop or asyncio.get_event_loop()
+
+
 class _BaseTransport:
     """Base class for all transports."""
 
@@ -1783,13 +1797,13 @@ class CallbackTransport(_FullTransport):
         :param disable_sending: Whether to disable sending, defaults to False.
         :type disable_sending: bool, optional
         """
-        # NOTE: Do NOT pass 'protocol' to super().__init__().
-        # Unlike PortTransport, we have no Abstractor Mixin to consume it,
-        # so it would eventually hit object.__init__() and crash.
+        # Pass kwargs up the chain. _ReadTransport will extract 'loop' if present.
+        # _BaseTransport will pass 'loop' to _CallbackTransportAbstractor, which consumes it.
         super().__init__(disable_sending=disable_sending, **kwargs)
 
         self._protocol = protocol
         self._io_writer = io_writer
+
         # Section 3.1: "Initial State: Default to a PAUSED state"
         self._reading = False
 
