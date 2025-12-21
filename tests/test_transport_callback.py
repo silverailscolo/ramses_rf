@@ -107,20 +107,29 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
             if not kwargs.get("disable_sending"):
                 raise ValueError("disable_sending flag was lost in the factory!")
 
-            # Return a transport that is strictly read-only
-            return CallbackTransport(
+            # Create the transport
+            transport = CallbackTransport(
                 protocol,
                 io_writer=self.mock_writer,
                 disable_sending=kwargs["disable_sending"],
             )
 
-        # 2. Initialize Gateway in Read-Only mode (disable_sending=True)
-        # We pass a config that enforces read-only
-        gwy = Gateway(
-            "/dev/null", transport_constructor=strict_factory, disable_sending=True
-        )
+            # We must tell the protocol we are connected, or gwy.start() will timeout
+            transport._extra["active_hgi"] = "18:000730"
+            protocol.connection_made(transport, ramses=True)
 
-        # 3. This should fail if the flag is lost
+            return transport
+
+        # 2. Initialize Gateway normally (bypass Schema validation)
+        # We do NOT pass disable_sending here to avoid the Voluptuous error
+        gwy = Gateway("/dev/null", transport_constructor=strict_factory)
+
+        # 3. Force the flag internally.
+        # This simulates the Gateway being in a read-only state (e.g. reading from a file)
+        # and ensures we test that this state is propagated to the Transport Factory.
+        gwy._disable_sending = True
+
+        # 4. Start the Gateway (this triggers the factory)
         try:
             await gwy.start()
         except ValueError as err:

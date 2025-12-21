@@ -1919,7 +1919,7 @@ async def transport_factory(
     packet_log: str | None = None,
     packet_dict: dict[str, str] | None = None,
     transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
-    disable_sending: bool | None = False,
+    disable_sending: bool = False,
     extra: dict[str, Any] | None = None,
     loop: asyncio.AbstractEventLoop | None = None,
     log_all: bool = False,
