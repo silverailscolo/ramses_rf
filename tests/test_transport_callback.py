@@ -80,7 +80,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
             return self.transport
 
         # Initialize Gateway with the factory
-        gwy = Gateway(None, transport_constructor=mock_factory)
+        gwy = Gateway("/dev/null", transport_constructor=mock_factory)
         await gwy.start()
 
         # Verify the Gateway is actually using our transport
