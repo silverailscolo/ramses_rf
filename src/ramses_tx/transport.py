@@ -1867,7 +1867,7 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         _LOGGER.debug(f"CallbackTransport: IN: {frame}")
 
         # Pass to the standard processing pipeline
-        self._frame_read(dtm, _normalise(frame))
+        self._frame_read(dtm, frame.rstrip())
 
 
 def validate_topic_path(path: str) -> str:
