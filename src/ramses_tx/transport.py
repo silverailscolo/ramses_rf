@@ -1858,13 +1858,13 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         """
         # Section 4.2: Circuit Breaker implementation (Packet gating)
         if not self._reading:
-            _LOGGER.debug(f"CallbackTransport: Dropping frame (paused): {frame}")
+            _LOGGER.debug(f"CallbackTransport: Dropping frame (paused): '{frame}'")
             return
 
         dtm = dtm or dt_now().isoformat()
 
         # Section 6.1: Boundary Logging (Incoming)
-        _LOGGER.debug(f"CallbackTransport: IN: {frame}")
+        _LOGGER.debug(f"CallbackTransport: IN: '{frame}'")
 
         # Pass to the standard processing pipeline
         self._frame_read(dtm, frame.rstrip())

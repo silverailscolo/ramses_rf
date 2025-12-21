@@ -34,7 +34,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
 
     async def test_receive_frame_respects_circuit_breaker(self) -> None:
         """Verify inbound frames are gated by pause/resume state."""
-        test_frame = " I --- 18:000730 --:------ 18:000730 0008 002 0000"
+        test_frame = " I 01:000730 --:------ 01:000730 0008 002 0000"
 
         # 1. Test while PAUSED (Initial State)
         self.transport.pause_reading()
