@@ -3,6 +3,7 @@
 
 import asyncio
 import unittest
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from ramses_tx import exceptions as exc
@@ -66,3 +67,23 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaises(exc.TransportError):
             await self.transport.write_frame("test_frame")
+
+    async def test_gateway_integration(self) -> None:
+        """Verify the Gateway accepts the transport via IoC."""
+        from ramses_rf import Gateway
+
+        # Define a factory that returns our mocked transport
+        async def mock_factory(protocol: Any, **kwargs: Any) -> CallbackTransport:
+            # We must return the transport instance we are testing
+            # but we need to update its protocol reference first
+            self.transport._protocol = protocol
+            return self.transport
+
+        # Initialize Gateway with the factory
+        gwy = Gateway(None, transport_constructor=mock_factory)
+        await gwy.start()
+
+        # Verify the Gateway is actually using our transport
+        self.assertIs(gwy._transport, self.transport)
+
+        await gwy.stop()
