@@ -389,9 +389,10 @@ class _DeviceIdFilterMixin(_BaseProtocol):
     def hgi_id(self) -> DeviceIdT:
         if not self._transport:
             return self._known_hgi or HGI_DEV_ADDR.id
-        return self._transport.get_extra_info(  # type: ignore[no-any-return]
-            SZ_ACTIVE_HGI, self._known_hgi or HGI_DEV_ADDR.id
-        )
+        # CRITICAL FIX: get_extra_info returns None if key exists but val is None
+        # We must ensure we fallback to the known HGI or default if it returns None
+        hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
+        return hgi or self._known_hgi or HGI_DEV_ADDR.id
 
     @staticmethod
     def _extract_known_hgi_id(
