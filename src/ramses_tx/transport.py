@@ -60,7 +60,12 @@ from typing import TYPE_CHECKING, Any, Final, TypeAlias
 from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
-from paho.mqtt.enums import CallbackAPIVersion
+
+try:
+    from paho.mqtt.enums import CallbackAPIVersion
+except ImportError:
+    # Fallback for Paho MQTT < 2.0.0 (Home Assistant compatibility)
+    CallbackAPIVersion = None  # type: ignore[assignment, misc]
 from serial import (  # type: ignore[import-untyped]
     Serial,
     SerialException,
