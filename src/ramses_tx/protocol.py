@@ -867,7 +867,7 @@ async def create_stack(
     )
 
     transport: RamsesTransportT = await (transport_factory_ or transport_factory)(  # type: ignore[operator]
-        protocol, disable_sending=disable_sending, **kwargs
+        protocol, disable_sending=bool(disable_sending), **kwargs
     )
 
     if not kwargs.get(SZ_PORT_NAME):
