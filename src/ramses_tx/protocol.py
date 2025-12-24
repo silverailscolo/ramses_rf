@@ -251,6 +251,14 @@ class _BaseProtocol(asyncio.Protocol):
 
         # FIX: Patch command with actual HGI ID if it uses the default placeholder
         # NOTE: HGI80s (TI 3410) require the default ID (18:000730), or they will silent-fail
+
+        # DEBUG: Trace why patching might be skipped
+        if cmd._addrs[0].id == HGI_DEV_ADDR.id:
+            _LOGGER.warning(
+                f"[DEBUG] Checking HGI Patching: hgi_id={self.hgi_id} "
+                f"is_evofw3={self._is_evofw3} src={cmd._addrs[0].id}"
+            )
+
         if (
             self.hgi_id
             and self._is_evofw3  # Only patch if using evofw3 (not HGI80)

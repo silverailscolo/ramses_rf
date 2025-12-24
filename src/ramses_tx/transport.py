@@ -1837,12 +1837,12 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
             raise exc.TransportError("Sending has been disabled")
 
         # Section 6.1: Boundary Logging (Outgoing)
-        _LOGGER.debug(f"CallbackTransport: OUT: {frame}")
+        _LOGGER.debug(f"[TRACE_PKT] [Step: TRANS_OUT] [Status: Sending] {frame}")
 
         try:
             await self._io_writer(frame)
         except Exception as err:
-            _LOGGER.error(f"CallbackTransport: External writer failed: {err}")
+            _LOGGER.error(f"[TRACE_PKT] [Step: TRANS_OUT] [Status: failed] {err}")
             raise exc.TransportError(f"External writer failed: {err}") from err
 
     async def _write_frame(self, frame: str) -> None:
@@ -1871,14 +1871,16 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         # Section 4.2: Circuit Breaker implementation (Packet gating)
         if not self._reading:
             _LOGGER.debug(
-                f"CallbackTransport: Dropping frame (paused): '{repr(frame)}'"
+                f"[TRACE_PKT] [Step: TRANS_RX] [Status: Dropping frame (paused)] '{repr(frame)}'"
             )
             return
 
         dtm = dtm or dt_now().isoformat()
 
         # Section 6.1: Boundary Logging (Incoming)
-        _LOGGER.debug(f"CallbackTransport: IN: '{repr(frame)}'")
+        _LOGGER.debug(
+            f"[TRACE_PKT] [Step: TRANS_RX] [Status: Received] | frame='{frame}' timestamp={dtm}"
+        )
 
         # Pass to the standard processing pipeline
         self._frame_read(dtm, frame.rstrip())
