@@ -323,12 +323,15 @@ class _BaseProtocol(asyncio.Protocol):
 
     def pkt_received(self, pkt: Packet) -> None:
         """A wrapper for self._pkt_received(pkt)."""
+        log_msg = (
+            f"[TRACE_PKT] [Step: PROTOCOL_RX] [Status: OK] | rssi={pkt._rssi} pkt={pkt}"
+        )
         if _DBG_FORCE_LOG_PACKETS:
-            _LOGGER.warning(f"Recv'd: {pkt._rssi} {pkt}")
+            _LOGGER.warning(log_msg)
         elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
-            _LOGGER.info(f"Recv'd: {pkt._rssi} {pkt}")
+            _LOGGER.info(log_msg)
         else:
-            _LOGGER.debug(f"Recv'd: {pkt._rssi} {pkt}")
+            _LOGGER.debug(log_msg)
 
         self._pkt_received(pkt)
 
@@ -349,6 +352,7 @@ class _BaseProtocol(asyncio.Protocol):
         """
 
         if self._msg_handler:  # type: ignore[truthy-function]
+            _LOGGER.debug(f"[TRACE_MSG] [Step: DISPATCH] [Status: OK] | msg={msg}")
             self._loop.call_soon_threadsafe(self._msg_handler, msg)
         for callback in self._msg_handlers:
             # TODO: if handler's filter returns True:

@@ -1220,10 +1220,13 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
 
         data = bytes(frame, "ascii") + b"\r\n"
 
+        log_msg = f"[TRACE_PKT] [Step: TRANSPORT_TX] [Status: OK] | frame={frame}"
         if _DBG_FORCE_FRAME_LOGGING:
-            _LOGGER.warning("Tx:     %s", data)
-        elif _LOGGER.getEffectiveLevel() == logging.INFO:  # log for INFO not DEBUG
-            _LOGGER.info("Tx:     %s", data)
+            _LOGGER.warning(log_msg)
+        elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
+            _LOGGER.info(log_msg)
+        else:
+            _LOGGER.debug(log_msg)
 
         try:
             self._write(data)
@@ -1861,6 +1864,10 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         :param dtm: The timestamp of the frame, defaults to current time.
         :type dtm: str | None, optional
         """
+        _LOGGER.debug(
+            f"[TRACE_PKT] [Step: TRANS_RX] [Status: Received] | frame='{frame}' timestamp={dtm}"
+        )
+
         # Section 4.2: Circuit Breaker implementation (Packet gating)
         if not self._reading:
             _LOGGER.debug(
