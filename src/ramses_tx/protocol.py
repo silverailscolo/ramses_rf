@@ -450,7 +450,10 @@ class _DeviceIdFilterMixin(_BaseProtocol):
 
         known_hgi = (explicit_hgis if explicit_hgis else implicit_hgis)[0]
 
-        if include_list[known_hgi].get(SZ_CLASS) != DevType.HGI:
+        if include_list[known_hgi].get(SZ_CLASS) not in (
+            DevType.HGI,
+            DEV_TYPE_MAP[DevType.HGI],
+        ):
             logger(
                 f"The {SZ_KNOWN_LIST} SHOULD include exactly one gateway (HGI): "
                 f"{known_hgi} should specify 'class: HGI', as 18: is also used for HVAC"
