@@ -635,7 +635,7 @@ class _ReadTransport(_BaseTransport):
         self._prev_pkt: Packet | None = None
 
         for key in (SZ_ACTIVE_HGI, SZ_SIGNATURE):
-            self._extra[key] = None
+            self._extra.setdefault(key, None)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self._protocol})"
