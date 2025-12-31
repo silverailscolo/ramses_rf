@@ -1220,7 +1220,7 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
 
         data = bytes(frame, "ascii") + b"\r\n"
 
-        log_msg = f"[TRACE_PKT] [Step: TRANSPORT_TX] [Status: OK] | frame={frame}"
+        log_msg = f"Serial transport transmitting frame: {frame}"
         if _DBG_FORCE_FRAME_LOGGING:
             _LOGGER.warning(log_msg)
         elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
@@ -1818,7 +1818,7 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         self._reading = False
 
         # Section 6.1: Object Lifecycle Logging
-        _LOGGER.info(f"CallbackTransport: Created with io_writer={io_writer}")
+        _LOGGER.info(f"CallbackTransport created with io_writer={io_writer}")
 
         # NOTE: connection_made is NOT called here. It must be triggered
         # externally (e.g. by the Bridge) via the protocol methods once
@@ -1837,12 +1837,12 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
             raise exc.TransportError("Sending has been disabled")
 
         # Section 6.1: Boundary Logging (Outgoing)
-        _LOGGER.debug(f"[TRACE_PKT] [Step: TRANS_OUT] [Status: Sending] {frame}")
+        _LOGGER.debug(f"Sending frame via external writer: {frame}")
 
         try:
             await self._io_writer(frame)
         except Exception as err:
-            _LOGGER.error(f"[TRACE_PKT] [Step: TRANS_OUT] [Status: failed] {err}")
+            _LOGGER.error(f"External writer failed to send frame: {err}")
             raise exc.TransportError(f"External writer failed: {err}") from err
 
     async def _write_frame(self, frame: str) -> None:
@@ -1865,21 +1865,19 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         :type dtm: str | None, optional
         """
         _LOGGER.debug(
-            f"[TRACE_PKT] [Step: TRANS_RX] [Status: Received] | frame='{frame}' timestamp={dtm}"
+            f"Received frame from external source: frame='{frame}', timestamp={dtm}"
         )
 
         # Section 4.2: Circuit Breaker implementation (Packet gating)
         if not self._reading:
-            _LOGGER.debug(
-                f"[TRACE_PKT] [Step: TRANS_RX] [Status: Dropping frame (paused)] '{repr(frame)}'"
-            )
+            _LOGGER.debug(f"Dropping received frame (transport paused): {repr(frame)}")
             return
 
         dtm = dtm or dt_now().isoformat()
 
         # Section 6.1: Boundary Logging (Incoming)
         _LOGGER.debug(
-            f"[TRACE_PKT] [Step: TRANS_RX] [Status: Received] | frame='{frame}' timestamp={dtm}"
+            f"Ingesting frame into transport: frame='{frame}', timestamp={dtm}"
         )
 
         # Pass to the standard processing pipeline
