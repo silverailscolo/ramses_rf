@@ -205,7 +205,7 @@ class Gateway(Engine):
         """
 
         def initiate_discovery(dev_list: list[Device], sys_list: list[Evohome]) -> None:
-            _LOGGER.debug("ENGINE: Initiating/enabling discovery...")
+            _LOGGER.debug("Engine: Initiating/enabling discovery...")
 
             # [d._start_discovery_poller() for d in devs]
             for device in dev_list:
@@ -377,7 +377,7 @@ class Gateway(Engine):
         """
 
         def clear_state() -> None:
-            _LOGGER.info("GATEWAY: Clearing existing schema/state...")
+            _LOGGER.info("Gateway: Clearing existing schema/state...")
 
             # self._schema = {}
 
@@ -390,7 +390,7 @@ class Gateway(Engine):
 
         tmp_transport: RamsesTransportT  # mypy hint
 
-        _LOGGER.debug("GATEWAY: Restoring a cached packet log...")
+        _LOGGER.debug("Gateway: Restoring a cached packet log...")
         self._pause()
 
         if _clear_state:  # only intended for test suite use
@@ -426,7 +426,7 @@ class Gateway(Engine):
 
         await tmp_transport.get_extra_info(SZ_READER_TASK)
 
-        _LOGGER.debug("GATEWAY: Restored, resuming")
+        _LOGGER.debug("Gateway: Restored, resuming")
         self._resume()
 
     def _add_device(self, dev: Device) -> None:  # TODO: also: _add_system()
