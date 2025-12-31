@@ -205,7 +205,7 @@ class ProtocolContext:
 
         if self._fut is None:  # logging only - IsInIdle, Inactive
             _LOGGER.debug(
-                f"[TRACE_FSM] [State: {transition}] [Status: Fut=None] | ctx={self}"
+                f"FSM state changed {transition}: no active future (ctx={self})"
             )
             assert self._cmd is None, f"{self}: Coding error"  # mypy hint
             assert isinstance(self._state, IsInIdle | Inactive | None), (
@@ -216,8 +216,7 @@ class ProtocolContext:
             # cancelled by wait_for(timeout), cancel("buffer overflow"), or other?
             # was for previous send_cmd if currently IsInIdle (+/- Inactive?)
             _LOGGER.debug(
-                f"[TRACE_FSM] [State: {transition}] [Status: Cancelled] | "
-                f"expired={expired} ctx={self}"
+                f"FSM state changed {transition}: future cancelled (expired={expired}, ctx={self})"
             )
             assert self._cmd is not None, f"{self}: Coding error"  # mypy hint
             assert isinstance(self._state, WantEcho | WantRply), (
@@ -226,8 +225,7 @@ class ProtocolContext:
 
         elif exception:
             _LOGGER.debug(
-                f"[TRACE_FSM] [State: {transition}] [Status: Exception] | "
-                f"error={exception} ctx={self}"
+                f"FSM state changed {transition}: exception occurred (error={exception}, ctx={self})"
             )
             assert not self._fut.done(), (
                 f"{self}: Coding error ({self._fut})"
@@ -239,8 +237,7 @@ class ProtocolContext:
 
         elif result:
             _LOGGER.debug(
-                f"[TRACE_FSM] [State: {transition}] [Status: Result] | "
-                f"result={result._hdr} ctx={self}"
+                f"FSM state changed {transition}: result received (result={result._hdr}, ctx={self})"
             )
             assert not self._fut.done(), (
                 f"{self}: Coding error ({self._fut})"
@@ -251,10 +248,7 @@ class ProtocolContext:
             self._fut.set_result(result)
 
         elif expired:  # by expire_state_on_timeout(echo_timeout/reply_timeout)
-            _LOGGER.debug(
-                f"[TRACE_FSM] [State: {transition}] [Status: Expired] | "
-                f"expired={expired} ctx={self}"
-            )
+            _LOGGER.debug(f"FSM state changed {transition}: timer expired (ctx={self})")
             assert not self._fut.done(), (
                 f"{self}: Coding error ({self._fut})"
             )  # mypy hint
@@ -266,9 +260,7 @@ class ProtocolContext:
             )
 
         else:  # logging only - WantEcho, WantRply
-            _LOGGER.debug(
-                f"[TRACE_FSM] [State: {transition}] [Status: OK] | ctx={self}"
-            )
+            _LOGGER.debug(f"FSM state changed {transition}: successful (ctx={self})")
             assert self._fut is None or self._fut.cancelled() or not self._fut.done(), (
                 f"{self}: Coding error ({self._fut})"
             )  # mypy hint
