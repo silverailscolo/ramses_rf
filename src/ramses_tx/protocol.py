@@ -262,9 +262,7 @@ class _BaseProtocol(asyncio.Protocol):
             # Reconstruct the command string with the correct address.
 
             _LOGGER.debug(
-                f"[TRACE_PM] [Step: PATCH] [Status: OK] | "
-                f"swapped_id={self.hgi_id} original_id={HGI_DEV_ADDR.id} "
-                f"cmd={cmd._hdr}"
+                f"Patching command with active HGI ID: swapped {HGI_DEV_ADDR.id} -> {self.hgi_id} for {cmd._hdr}"
             )
 
             # Get current addresses as strings
@@ -334,15 +332,12 @@ class _BaseProtocol(asyncio.Protocol):
 
     def pkt_received(self, pkt: Packet) -> None:
         """A wrapper for self._pkt_received(pkt)."""
-        log_msg = (
-            f"[TRACE_PKT] [Step: PROTOCOL_RX] [Status: OK] | rssi={pkt._rssi} pkt={pkt}"
-        )
         if _DBG_FORCE_LOG_PACKETS:
-            _LOGGER.warning(log_msg)
+            _LOGGER.warning(f"Recv'd: {pkt._rssi} {pkt}")
         elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
-            _LOGGER.info(log_msg)
+            _LOGGER.info(f"Recv'd: {pkt._rssi} {pkt}")
         else:
-            _LOGGER.debug(log_msg)
+            _LOGGER.debug(f"Recv'd: {pkt._rssi} {pkt}")
 
         self._pkt_received(pkt)
 
@@ -363,7 +358,7 @@ class _BaseProtocol(asyncio.Protocol):
         """
 
         if self._msg_handler:  # type: ignore[truthy-function]
-            _LOGGER.debug(f"[TRACE_MSG] [Step: DISPATCH] [Status: OK] | msg={msg}")
+            _LOGGER.debug(f"Dispatching valid message to handler: {msg}")
             self._loop.call_soon_threadsafe(self._msg_handler, msg)
         for callback in self._msg_handlers:
             # TODO: if handler's filter returns True:
