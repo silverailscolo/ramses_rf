@@ -195,11 +195,11 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
         if _DBG_FORCE_LOG_MESSAGES:
             _LOGGER.warning(msg)
         elif msg.src != gwy.hgi or (msg.code != Code._PUZZ and msg.verb != RQ):
-            _LOGGER.info(f"[TRACE_MSG] [Step: DISPATCH] [Status: OK] | msg={msg}")
+            _LOGGER.info(msg)
         elif msg.src != gwy.hgi or msg.verb != RQ:
-            _LOGGER.info(f"[TRACE_MSG] [Step: DISPATCH] [Status: OK] | msg={msg}")
+            _LOGGER.info(msg)
         elif _LOGGER.getEffectiveLevel() == logging.DEBUG:
-            _LOGGER.info(f"[TRACE_MSG] [Step: DISPATCH] [Status: OK] | msg={msg}")
+            _LOGGER.info(msg)
 
     try:  # validate / dispatch the packet
         _check_msg_addrs(msg)  # ?InvalidAddrSetError  TODO: ?useful at all
