@@ -41,6 +41,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # REQUIRED for pull_request_target: explicitly check out the PR code
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
