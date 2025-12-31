@@ -12,16 +12,6 @@ on:
       "tests/**",
     ]
 
-  pull_request:
-    branches: [ "master" ]
-    paths: [
-      ".github/workflows/check-cov.yml",
-      "pyproject.toml",
-      "requirements/**",
-      "src/**.py",
-      "tests/**",
-    ]
-
   pull_request_target:
     branches: [ "master" ]
     paths: [
