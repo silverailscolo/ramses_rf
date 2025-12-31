@@ -146,9 +146,13 @@ class ProtocolContext:
             self._multiplier = min(3, old_val + 1)
 
             if isinstance(self._state, WantEcho):
-                _LOGGER.warning("TOUT.. = %s: echo_timeout=%s", self, delay)
+                _LOGGER.warning(
+                    f"Timeout expired waiting for echo: {self} (delay={delay})"
+                )
             else:  # isinstance(self._state, WantRply):
-                _LOGGER.warning("TOUT.. = %s: rply_timeout=%s", self, delay)
+                _LOGGER.warning(
+                    f"Timeout expired waiting for reply: {self} (delay={delay})"
+                )
 
             assert isinstance(self.is_sending, bool), (
                 f"{self}: Coding error"
