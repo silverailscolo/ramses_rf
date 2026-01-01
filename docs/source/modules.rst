@@ -1,5 +1,5 @@
 ramses_rf/src/
-===
+==============
 
 .. toctree::
    :maxdepth: 4
@@ -8,8 +8,7 @@ ramses_rf/src/
    ramses_rf
    ramses_tx
 
-.. {mermaid}::
-
+.. mermaid::
     ---
     title: ramses-rf packages
     ---
