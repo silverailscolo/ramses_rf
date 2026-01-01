@@ -32,6 +32,21 @@ ramses\_rf.const module
 ramses\_rf.database module
 --------------------------
 
+.. {mermaid}::
+
+    erDiagram
+        msg_db ||--o{ device : query
+
+        msg_db {
+            TEXT(26)* dtm
+            TEXT(2) verb
+            TEXT(9) src
+            TEXT(9) dst
+            TEXT(4) code
+            TEXT() ctx
+            TEXT() hdr
+        }
+
 .. automodule:: ramses_rf.database
    :members:
    :show-inheritance:
