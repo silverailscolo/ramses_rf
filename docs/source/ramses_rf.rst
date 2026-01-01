@@ -32,8 +32,7 @@ ramses\_rf.const module
 ramses\_rf.database module
 --------------------------
 
-.. {mermaid}::
-
+.. mermaid::
     erDiagram
         msg_db ||--o{ device : query
 
