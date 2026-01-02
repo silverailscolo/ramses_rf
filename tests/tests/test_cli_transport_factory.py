@@ -39,21 +39,23 @@ def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     # The result.return_value is the tuple returned by the 'listen' command
     command, lib_kwargs, kwargs = result.return_value
 
-    # 2. Run the main logic that instantiates Gateway
-    # We mock start() so it doesn't actually try to connect to anything
-    mock_gateway.return_value.start = MagicMock(side_effect=lambda: asyncio.sleep(0))
+    # 2. Configure Mocks for async methods
+    # We must make start() and stop() awaitable to prevent "MagicMock can't be used in await" errors
+    mock_gateway.return_value.start.side_effect = lambda: asyncio.sleep(0)
+    mock_gateway.return_value.stop.side_effect = lambda: asyncio.sleep(0)
 
+    # 3. Run the main logic that instantiates Gateway
     # We use asyncio.run to execute the async_main function
     asyncio.run(async_main(command, lib_kwargs, **kwargs))
 
-    # 3. Assert Gateway was initialized with our URL
+    # 4. Assert Gateway was initialized with our URL
     args, kwargs = mock_gateway.call_args
     assert args[0] == mqtt_url
 
-    # 4. Assert transport_constructor was passed
+    # 5. Assert transport_constructor was passed
     assert "transport_constructor" in kwargs
 
-    # 5. Verify it is actually the function we expect
+    # 6. Verify it is actually the function we expect
     assert kwargs["transport_constructor"] is transport_factory
 
 
@@ -75,11 +77,14 @@ def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
 
     command, lib_kwargs, kwargs = result.return_value
 
-    # 2. Run the main logic
-    mock_gateway.return_value.start = MagicMock(side_effect=lambda: asyncio.sleep(0))
+    # 2. Configure Mocks for async methods
+    mock_gateway.return_value.start.side_effect = lambda: asyncio.sleep(0)
+    mock_gateway.return_value.stop.side_effect = lambda: asyncio.sleep(0)
+
+    # 3. Run the main logic
     asyncio.run(async_main(command, lib_kwargs, **kwargs))
 
-    # 3. Assert Gateway was instantiated
+    # 4. Assert Gateway was instantiated
     args, kwargs = mock_gateway.call_args
     assert args[0] == serial_port
     assert "transport_constructor" in kwargs
