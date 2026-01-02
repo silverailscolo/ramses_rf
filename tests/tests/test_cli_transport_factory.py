@@ -6,15 +6,16 @@ and injects the `transport_factory` into the Gateway, preserving legacy behavior
 serial ports.
 """
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
-from ramses_cli.client import cli  # type: ignore[import-untyped]
+# Import async_main so we can run the logic that creates the Gateway
+from ramses_cli.client import async_main, cli  # type: ignore[import-untyped]
 from ramses_tx import transport_factory
 
 
-# Mock the Gateway to prevent actual connections/file creation
 @patch("ramses_cli.client.Gateway")
 def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     """Check that client.py passes the transport_factory to Gateway.
@@ -28,21 +29,31 @@ def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     # We use a valid-looking MQTT URL
     mqtt_url = "mqtt://user:pass@localhost:1883"
 
-    # Run the 'listen' command which requires a port/url
-    runner.invoke(cli, ["listen", mqtt_url])
+    # 1. Run the CLI argument parsing
+    # standalone_mode=False ensures we get the return value (command, lib_kwargs, kwargs)
+    # instead of a system exit code.
+    result = runner.invoke(cli, ["listen", mqtt_url], standalone_mode=False)
 
-    # 1. Assert the CLI ran without crashing (exit code might be non-zero due to our mocks,
-    # but we check the call args)
-    # Note: invoke catches exceptions, so we check mock_gateway usage.
+    assert result.exit_code == 0, f"CLI parsing failed: {result.exception}"
 
-    # 2. Assert Gateway was initialized with our URL
+    # The result.return_value is the tuple returned by the 'listen' command
+    command, lib_kwargs, kwargs = result.return_value
+
+    # 2. Run the main logic that instantiates Gateway
+    # We mock start() so it doesn't actually try to connect to anything
+    mock_gateway.return_value.start = MagicMock(side_effect=lambda: asyncio.sleep(0))
+
+    # We use asyncio.run to execute the async_main function
+    asyncio.run(async_main(command, lib_kwargs, **kwargs))
+
+    # 3. Assert Gateway was initialized with our URL
     args, kwargs = mock_gateway.call_args
     assert args[0] == mqtt_url
 
-    # 3. Assert transport_constructor was passed
+    # 4. Assert transport_constructor was passed
     assert "transport_constructor" in kwargs
 
-    # 4. Verify it is actually the function we expect
+    # 5. Verify it is actually the function we expect
     assert kwargs["transport_constructor"] is transport_factory
 
 
@@ -57,8 +68,18 @@ def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
     runner = CliRunner()
     serial_port = "/dev/ttyUSB0"
 
-    runner.invoke(cli, ["listen", serial_port])
+    # 1. Run the CLI argument parsing
+    result = runner.invoke(cli, ["listen", serial_port], standalone_mode=False)
 
+    assert result.exit_code == 0, f"CLI parsing failed: {result.exception}"
+
+    command, lib_kwargs, kwargs = result.return_value
+
+    # 2. Run the main logic
+    mock_gateway.return_value.start = MagicMock(side_effect=lambda: asyncio.sleep(0))
+    asyncio.run(async_main(command, lib_kwargs, **kwargs))
+
+    # 3. Assert Gateway was instantiated
     args, kwargs = mock_gateway.call_args
     assert args[0] == serial_port
     assert "transport_constructor" in kwargs
