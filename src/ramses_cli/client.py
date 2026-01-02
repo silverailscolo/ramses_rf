@@ -22,7 +22,7 @@ from ramses_rf.schemas import (
     SZ_ENABLE_EAVESDROP,
     SZ_REDUCE_PROCESSING,
 )
-from ramses_tx import is_valid_dev_id
+from ramses_tx import is_valid_dev_id, transport_factory
 from ramses_tx.logger import CONSOLE_COLS, DEFAULT_DATEFMT, DEFAULT_FMT
 from ramses_tx.schemas import (
     SZ_DISABLE_QOS,
@@ -505,7 +505,9 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
     #     from tests.deprecated.mocked_rf import MockGateway  # FIXME: for test/dev
     #     gwy = MockGateway(serial_port, **lib_kwargs)
     # else:
-    gwy = Gateway(serial_port, **lib_kwargs)  # passes action to gateway
+    gwy = Gateway(
+        serial_port, transport_constructor=transport_factory, **lib_kwargs
+    )  # passes action to gateway
 
     if lib_kwargs[SZ_CONFIG][SZ_REDUCE_PROCESSING] < DONT_CREATE_MESSAGES:
         # library will not send MSGs to STDOUT, so we'll send PKTs instead
