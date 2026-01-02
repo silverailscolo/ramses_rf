@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Test the CLI utility's ability to use the transport factory."""
+"""Test the CLI utility's ability to use the transport factory.
+
+This module ensures that the CLI correctly parses connection strings (including MQTT URLs)
+and injects the `transport_factory` into the Gateway, preserving legacy behavior for
+serial ports.
+"""
 
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +17,11 @@ from ramses_tx import transport_factory
 # Mock the Gateway to prevent actual connections/file creation
 @patch("ramses_cli.client.Gateway")
 def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
-    """Check that client.py passes the transport_factory to Gateway."""
+    """Check that client.py passes the transport_factory to Gateway.
+
+    Verifies that when a non-standard port (like an MQTT URL) is passed,
+    the Gateway is initialized with the correct `transport_constructor`.
+    """
 
     runner = CliRunner()
 
@@ -39,7 +48,11 @@ def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
 
 @patch("ramses_cli.client.Gateway")
 def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
-    """Check that legacy serial ports still work."""
+    """Check that legacy serial ports still work.
+
+    Verifies that standard serial port paths are still accepted and handled
+    correctly by the Gateway initialization logic.
+    """
 
     runner = CliRunner()
     serial_port = "/dev/ttyUSB0"
