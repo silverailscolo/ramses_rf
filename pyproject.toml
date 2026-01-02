@@ -209,6 +209,15 @@
 
 
 #
+
+[[tool.mypy.overrides]]
+  module = "colorama.*"
+  ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+  module = "debugpy.*"
+  ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
   module = "ramses_tx.parsers"
 

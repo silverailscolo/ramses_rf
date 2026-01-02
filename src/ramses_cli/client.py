@@ -10,7 +10,7 @@ import sys
 from typing import Any, Final, TextIO
 
 import click
-from colorama import Fore, Style, init as colorama_init  # type: ignore[import-untyped]
+from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
 from ramses_rf.const import DONT_CREATE_MESSAGES, SZ_ZONE_IDX
