@@ -7,7 +7,7 @@ import asyncio
 import json
 import logging
 import sys
-from typing import Any, Final
+from typing import Any, Final, TextIO
 
 import click
 from colorama import Fore, Style, init as colorama_init  # type: ignore[import-untyped]
@@ -92,7 +92,13 @@ LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (SZ_EVOFW_FLAG,)
 
 
 def normalise_config(lib_config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Convert a HA config dict into the client library's own format."""
+    """Convert a HA config dict into the client library's own format.
+
+    :param lib_config: The library configuration dictionary.
+    :type lib_config: dict[str, Any]
+    :returns: A tuple containing the serial port and the normalized configuration.
+    :rtype: tuple[str, dict[str, Any]]
+    """
 
     serial_port = lib_config.pop(SZ_SERIAL_PORT, None)
 
@@ -108,7 +114,15 @@ def normalise_config(lib_config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
 def split_kwargs(
     obj: tuple[dict[str, Any], dict[str, Any]], kwargs: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Split kwargs into cli/library kwargs."""
+    """Split kwargs into cli/library kwargs.
+
+    :param obj: A tuple containing the existing CLI and library configurations.
+    :type obj: tuple[dict[str, Any], dict[str, Any]]
+    :param kwargs: The new keyword arguments to split.
+    :type kwargs: dict[str, Any]
+    :returns: A tuple containing the updated CLI and library configurations.
+    :rtype: tuple[dict[str, Any], dict[str, Any]]
+    """
     cli_kwargs, lib_kwargs = obj
 
     cli_kwargs.update(
@@ -121,6 +135,8 @@ def split_kwargs(
 
 
 class DeviceIdParamType(click.ParamType):
+    """A Click parameter type for Device IDs."""
+
     name = "device_id"
 
     def convert(
@@ -129,6 +145,17 @@ class DeviceIdParamType(click.ParamType):
         param: click.Parameter | None,
         ctx: click.Context | None,
     ) -> Any:
+        """Convert the value to a Device ID.
+
+        :param value: The string value to convert.
+        :type value: str
+        :param param: The Click parameter object.
+        :type param: click.Parameter | None
+        :param ctx: The Click context object.
+        :type ctx: click.Context | None
+        :returns: The validated and upper-cased Device ID.
+        :rtype: Any
+        """
         if is_valid_dev_id(value):
             return value.upper()
         self.fail(f"{value!r} is not a valid device_id", param, ctx)
@@ -186,11 +213,23 @@ class DeviceIdParamType(click.ParamType):
 def cli(
     ctx: click.Context,
     /,
-    config_file: Any = None,
+    config_file: TextIO | None = None,
     eavesdrop: None | bool = None,
     **kwargs: Any,
 ) -> None:
-    """A CLI for the ramses_rf library."""
+    """A CLI for the ramses_rf library.
+
+    :param ctx: The Click context object.
+    :type ctx: click.Context
+    :param config_file: A file object for the configuration (JSON), defaults to None.
+    :type config_file: TextIO | None, optional
+    :param eavesdrop: Whether to enable eavesdropping, defaults to None.
+    :type eavesdrop: bool | None, optional
+    :param kwargs: Additional configuration parameters.
+    :type kwargs: Any
+    :returns: None
+    :rtype: None
+    """
 
     if kwargs[SZ_DBG_MODE] > 0:  # Do first
         start_debugging(kwargs[SZ_DBG_MODE] == 1)
@@ -210,6 +249,8 @@ def cli(
 
 # Args/Params for packet log only
 class FileCommand(click.Command):  # client.py parse <file>
+    """A Click Command class for file-based operations."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.params.insert(  # input_file name/path only
@@ -229,6 +270,8 @@ class FileCommand(click.Command):  # client.py parse <file>
 class PortCommand(
     click.Command
 ):  # client.py <command> <port> --packet-log xxx --evofw3-flag xxx
+    """A Click Command class for serial port operations."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.params.insert(0, click.Argument(("serial-port",)))
@@ -267,7 +310,15 @@ class PortCommand(
 def parse(
     obj: tuple[dict[str, Any], dict[str, Any]], /, **kwargs: Any
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    """Command to parse a log file containing messages/packets."""
+    """Command to parse a log file containing messages/packets.
+
+    :param obj: A tuple containing the CLI and library configuration dictionaries.
+    :type obj: tuple[dict[str, Any], dict[str, Any]]
+    :param kwargs: Additional arguments passed to the command.
+    :type kwargs: Any
+    :returns: A tuple containing the command string, library config, and CLI config.
+    :rtype: tuple[str, dict[str, Any], dict[str, Any]]
+    """
     config, lib_config = split_kwargs(obj, kwargs)
 
     lib_config[SZ_INPUT_FILE] = config.pop(SZ_INPUT_FILE)  # just the file path
@@ -298,7 +349,17 @@ def monitor(
     discover: None | bool = None,
     **kwargs: Any,
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    """Monitor (eavesdrop and/or probe) a serial port for messages/packets."""
+    """Monitor (eavesdrop and/or probe) a serial port for messages/packets.
+
+    :param obj: A tuple containing the CLI and library configuration dictionaries.
+    :type obj: tuple[dict[str, Any], dict[str, Any]]
+    :param discover: Whether to enable discovery, defaults to None (auto).
+    :type discover: bool | None, optional
+    :param kwargs: Additional arguments passed to the command.
+    :type kwargs: Any
+    :returns: A tuple containing the command string, library config, and CLI config.
+    :rtype: tuple[str, dict[str, Any], dict[str, Any]]
+    """
     config, lib_config = split_kwargs(obj, kwargs)
 
     if discover is None:
@@ -341,6 +402,13 @@ def execute(
     """Execute any specified scripts, return the results, then quit.
 
     Disables discovery, and enforces a strict allow_list.
+
+    :param obj: A tuple containing the CLI and library configuration dictionaries.
+    :type obj: tuple[dict[str, Any], dict[str, Any]]
+    :param kwargs: Additional arguments passed to the command.
+    :type kwargs: Any
+    :returns: A tuple containing the command string, library config, and CLI config.
+    :rtype: tuple[str, dict[str, Any], dict[str, Any]]
     """
     config, lib_config = split_kwargs(obj, kwargs)
 
@@ -373,7 +441,15 @@ def execute(
 def listen(
     obj: tuple[dict[str, Any], dict[str, Any]], /, **kwargs: Any
 ) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    """Listen to (eavesdrop only) a serial port for messages/packets."""
+    """Listen to (eavesdrop only) a serial port for messages/packets.
+
+    :param obj: A tuple containing the CLI and library configuration dictionaries.
+    :type obj: tuple[dict[str, Any], dict[str, Any]]
+    :param kwargs: Additional arguments passed to the command.
+    :type kwargs: Any
+    :returns: A tuple containing the command string, library config, and CLI config.
+    :rtype: tuple[str, dict[str, Any], dict[str, Any]]
+    """
     config, lib_config = split_kwargs(obj, kwargs)
 
     print(" - sending is force-disabled")
@@ -383,6 +459,15 @@ def listen(
 
 
 def print_results(gwy: Gateway, **kwargs: Any) -> None:
+    """Print the results of execution commands (faults, schedules).
+
+    :param gwy: The gateway instance.
+    :type gwy: Gateway
+    :param kwargs: The command arguments.
+    :type kwargs: Any
+    :returns: None
+    :rtype: None
+    """
     if kwargs[GET_FAULTS]:
         fault_log = gwy.system_by_id[kwargs[GET_FAULTS]]._faultlog.faultlog
 
@@ -414,6 +499,13 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
 
 
 def _save_state(gwy: Gateway) -> None:
+    """Save the gateway state to files.
+
+    :param gwy: The gateway instance.
+    :type gwy: Gateway
+    :returns: None
+    :rtype: None
+    """
     schema, msgs = gwy.get_state()
 
     with open("state_msgs.log", "w") as f:
@@ -424,6 +516,15 @@ def _save_state(gwy: Gateway) -> None:
 
 
 def _print_engine_state(gwy: Gateway, **kwargs: Any) -> None:
+    """Print the current engine state (schema and packets).
+
+    :param gwy: The gateway instance.
+    :type gwy: Gateway
+    :param kwargs: Command arguments to determine verbosity.
+    :type kwargs: Any
+    :returns: None
+    :rtype: None
+    """
     (schema, packets) = gwy.get_state(include_expired=True)
 
     if kwargs["print_state"] > 0:
@@ -433,6 +534,15 @@ def _print_engine_state(gwy: Gateway, **kwargs: Any) -> None:
 
 
 def print_summary(gwy: Gateway, **kwargs: Any) -> None:
+    """Print a summary of the system state, schema, params, and status.
+
+    :param gwy: The gateway instance.
+    :type gwy: Gateway
+    :param kwargs: Command arguments to determine what to display.
+    :type kwargs: Any
+    :returns: None
+    :rtype: None
+    """
     entity = gwy.tcs or gwy
 
     if kwargs.get("show_schema"):
@@ -492,7 +602,17 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
 
 
 async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) -> None:
-    """Do certain things."""
+    """Run the main asynchronous loop for the CLI.
+
+    :param command: The command to execute (execute, monitor, listen, parse).
+    :type command: str
+    :param lib_kwargs: The library configuration dictionary.
+    :type lib_kwargs: dict[str, Any]
+    :param kwargs: Additional command-specific arguments.
+    :type kwargs: Any
+    :returns: None
+    :rtype: None
+    """
 
     def handle_msg(msg: Message) -> None:
         """Process the message as it arrives (a callback).
@@ -602,6 +722,7 @@ cli.add_command(listen)
 
 
 def main() -> None:
+    """Entry point for the CLI."""
     print("\r\nclient.py: Starting ramses_rf...")
 
     try:
