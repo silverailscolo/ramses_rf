@@ -10,7 +10,7 @@ import sys
 from typing import Any, Final
 
 import click
-from colorama import Fore, Style, init as colorama_init
+from colorama import Fore, Style, init as colorama_init  # type: ignore[import-untyped]
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
 from ramses_rf.const import DONT_CREATE_MESSAGES, SZ_ZONE_IDX
@@ -85,13 +85,13 @@ COLORS = {
     W_: Style.BRIGHT + Fore.MAGENTA,
 }
 
-CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
+CONTEXT_SETTINGS: dict[str, Any] = dict(help_option_names=["-h", "--help"])
 
 LIB_KEYS = tuple(SCH_GLOBAL_CONFIG({}).keys()) + (SZ_SERIAL_PORT,)
 LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (SZ_EVOFW_FLAG,)
 
 
-def normalise_config(lib_config: dict) -> tuple[str, dict]:
+def normalise_config(lib_config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Convert a HA config dict into the client library's own format."""
 
     serial_port = lib_config.pop(SZ_SERIAL_PORT, None)
@@ -105,7 +105,9 @@ def normalise_config(lib_config: dict) -> tuple[str, dict]:
     return serial_port, lib_config
 
 
-def split_kwargs(obj: tuple[dict, dict], kwargs: dict) -> tuple[dict, dict]:
+def split_kwargs(
+    obj: tuple[dict[str, Any], dict[str, Any]], kwargs: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Split kwargs into cli/library kwargs."""
     cli_kwargs, lib_kwargs = obj
 
@@ -121,7 +123,12 @@ def split_kwargs(obj: tuple[dict, dict], kwargs: dict) -> tuple[dict, dict]:
 class DeviceIdParamType(click.ParamType):
     name = "device_id"
 
-    def convert(self, value: str, param, ctx):
+    def convert(
+        self,
+        value: str,
+        param: click.Parameter | None,
+        ctx: click.Context | None,
+    ) -> Any:
         if is_valid_dev_id(value):
             return value.upper()
         self.fail(f"{value!r} is not a valid device_id", param, ctx)
@@ -176,7 +183,13 @@ class DeviceIdParamType(click.ParamType):
     help="display crazy things",
 )
 @click.pass_context
-def cli(ctx, config_file=None, eavesdrop: None | bool = None, **kwargs: Any) -> None:
+def cli(
+    ctx: click.Context,
+    /,
+    config_file: Any = None,
+    eavesdrop: None | bool = None,
+    **kwargs: Any,
+) -> None:
     """A CLI for the ramses_rf library."""
 
     if kwargs[SZ_DBG_MODE] > 0:  # Do first
@@ -251,7 +264,9 @@ class PortCommand(
 # 1/4: PARSE (a file, +/- eavesdrop)
 @click.command(cls=FileCommand)  # parse a packet log file, then stop
 @click.pass_obj
-def parse(obj, **kwargs: Any):
+def parse(
+    obj: tuple[dict[str, Any], dict[str, Any]], /, **kwargs: Any
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Command to parse a log file containing messages/packets."""
     config, lib_config = split_kwargs(obj, kwargs)
 
@@ -277,7 +292,12 @@ def parse(obj, **kwargs: Any):
     "--poll-devices", type=click.STRING, help="e.g. 'device_id, device_id, ...'"
 )
 @click.pass_obj
-def monitor(obj, discover: None | bool = None, **kwargs: Any):
+def monitor(
+    obj: tuple[dict[str, Any], dict[str, Any]],
+    /,
+    discover: None | bool = None,
+    **kwargs: Any,
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Monitor (eavesdrop and/or probe) a serial port for messages/packets."""
     config, lib_config = split_kwargs(obj, kwargs)
 
@@ -315,7 +335,9 @@ def monitor(obj, discover: None | bool = None, **kwargs: Any):
     help="controller_id, filename.json",
 )
 @click.pass_obj
-def execute(obj, **kwargs: Any):
+def execute(
+    obj: tuple[dict[str, Any], dict[str, Any]], /, **kwargs: Any
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Execute any specified scripts, return the results, then quit.
 
     Disables discovery, and enforces a strict allow_list.
@@ -326,6 +348,7 @@ def execute(obj, **kwargs: Any):
     lib_config[SZ_CONFIG][SZ_DISABLE_DISCOVERY] = True
     lib_config[SZ_CONFIG][SZ_DISABLE_QOS] = False
 
+    known_list: dict[str, Any]
     if kwargs[GET_FAULTS]:
         known_list = {kwargs[GET_FAULTS]: {}}
     elif kwargs[GET_SCHED][0]:
@@ -347,7 +370,9 @@ def execute(obj, **kwargs: Any):
 # 4/4: LISTEN (to RF, +/- eavesdrop - NO sending/discovery)
 @click.command(cls=PortCommand)  # (optionally) execute a command, then listen
 @click.pass_obj
-def listen(obj, **kwargs: Any):
+def listen(
+    obj: tuple[dict[str, Any], dict[str, Any]], /, **kwargs: Any
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
     """Listen to (eavesdrop only) a serial port for messages/packets."""
     config, lib_config = split_kwargs(obj, kwargs)
 
@@ -361,7 +386,7 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
     if kwargs[GET_FAULTS]:
         fault_log = gwy.system_by_id[kwargs[GET_FAULTS]]._faultlog.faultlog
 
-        if fault_log is None:
+        if not fault_log:
             print("No fault log, or failed to get the fault log.")
         else:
             [print(f"{k:02X}", v) for k, v in fault_log.items()]
@@ -369,10 +394,12 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
     if kwargs[GET_SCHED][0]:
         system_id, zone_idx = kwargs[GET_SCHED]
         if zone_idx == "HW":
-            zone = gwy.system_by_id[system_id].dhw
+            dhw = gwy.system_by_id[system_id].dhw
+            zone: Any = dhw
         else:
             zone = gwy.system_by_id[system_id].zone_by_idx[zone_idx]
-        schedule = zone.schedule
+
+        schedule = zone.schedule if zone else None
 
         if schedule is None:
             print("Failed to get the schedule.")
@@ -445,8 +472,8 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
                     print(f"{msg._pkt}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
-                for code, verbs in device._msgz.items():
-                    if code in (Code._0005, Code._000C):
+                for msg_code, verbs in device._msgz.items():
+                    if msg_code in (Code._0005, Code._000C):
                         for verb in verbs.values():
                             for pkt in verb.values():
                                 print(f"{pkt}")
@@ -457,14 +484,14 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
                     print(f"{msg._pkt}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
-                for code in device._msgz.values():
-                    for verb in code.values():
+                for msg_code_dict in device._msgz.values():
+                    for verb in msg_code_dict.values():
                         for pkt in verb.values():
                             print(f"{pkt}")
             print()
 
 
-async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
+async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) -> None:
     """Do certain things."""
 
     def handle_msg(msg: Message) -> None:
@@ -534,10 +561,12 @@ async def async_main(command: str, lib_kwargs: dict, **kwargs: Any) -> None:
 
         elif command == MONITOR:
             _ = spawn_scripts(gwy, **kwargs)
-            await gwy._protocol._wait_connection_lost
+            if gwy._protocol and gwy._protocol._wait_connection_lost:
+                await gwy._protocol._wait_connection_lost
 
         elif command in (LISTEN, PARSE):
-            await gwy._protocol._wait_connection_lost
+            if gwy._protocol and gwy._protocol._wait_connection_lost:
+                await gwy._protocol._wait_connection_lost
 
     except asyncio.CancelledError:
         msg = "ended via: CancelledError (e.g. SIGINT)"
