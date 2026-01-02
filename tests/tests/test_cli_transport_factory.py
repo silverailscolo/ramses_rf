@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 from click.testing import CliRunner
 
 # Import async_main so we can run the logic that creates the Gateway
-from ramses_cli.client import async_main, cli  # type: ignore[import-untyped]
+from ramses_cli.client import async_main, cli
 from ramses_tx import transport_factory
 
 
