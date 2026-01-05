@@ -107,7 +107,9 @@ def normalise_config(
     packet_log: str | Mapping[str, str | bool | None] | None = lib_config.get(
         SZ_PACKET_LOG
     )
-    if isinstance(packet_log, str):
+    if packet_log is None:
+        packet_log = {}
+    elif isinstance(packet_log, str):
         packet_log = {SZ_FILE_NAME: packet_log}
     assert isinstance(packet_log, dict)
     lib_config[SZ_PACKET_LOG] = packet_log
