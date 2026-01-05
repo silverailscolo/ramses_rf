@@ -7,7 +7,8 @@ import asyncio
 import json
 import logging
 import sys
-from typing import Any, Final, TextIO
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Final, Literal, TextIO
 
 import click
 from colorama import Fore, Style, init as colorama_init
@@ -46,6 +47,10 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     DEV_TYPE_MAP,
     Code,
 )
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRead
+
 
 _PROFILE_LIBRARY = False  # NOTE: for profiling of library
 
@@ -91,38 +96,29 @@ LIB_KEYS = tuple(SCH_GLOBAL_CONFIG({}).keys()) + (SZ_SERIAL_PORT,)
 LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (SZ_EVOFW_FLAG,)
 
 
-def normalise_config(lib_config: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """Convert a HA config dict into the client library's own format.
-
-    :param lib_config: The library configuration dictionary.
-    :type lib_config: dict[str, Any]
-    :returns: A tuple containing the serial port and the normalized configuration.
-    :rtype: tuple[str, dict[str, Any]]
-    """
+def normalise_config(
+    lib_config: dict[str, dict[str, str | bool | None]],
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Convert a HA config dict into the client library's own format."""
 
     serial_port = lib_config.pop(SZ_SERIAL_PORT, None)
 
     # fix for: https://github.com/ramses-rf/ramses_rf/issues/96
-    packet_log = lib_config.get(SZ_PACKET_LOG)
+    packet_log: str | Mapping[str, str | bool | None] | None = lib_config.get(
+        SZ_PACKET_LOG
+    )
     if isinstance(packet_log, str):
         packet_log = {SZ_FILE_NAME: packet_log}
+    assert isinstance(packet_log, dict)
     lib_config[SZ_PACKET_LOG] = packet_log
 
-    return serial_port, lib_config
+    return serial_port, lib_config  # type: ignore[return-value]
 
 
 def split_kwargs(
     obj: tuple[dict[str, Any], dict[str, Any]], kwargs: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Split kwargs into cli/library kwargs.
-
-    :param obj: A tuple containing the existing CLI and library configurations.
-    :type obj: tuple[dict[str, Any], dict[str, Any]]
-    :param kwargs: The new keyword arguments to split.
-    :type kwargs: dict[str, Any]
-    :returns: A tuple containing the updated CLI and library configurations.
-    :rtype: tuple[dict[str, Any], dict[str, Any]]
-    """
+    """Split kwargs into cli/library kwargs."""
     cli_kwargs, lib_kwargs = obj
 
     cli_kwargs.update(
@@ -139,23 +135,7 @@ class DeviceIdParamType(click.ParamType):
 
     name = "device_id"
 
-    def convert(
-        self,
-        value: str,
-        param: click.Parameter | None,
-        ctx: click.Context | None,
-    ) -> Any:
-        """Convert the value to a Device ID.
-
-        :param value: The string value to convert.
-        :type value: str
-        :param param: The Click parameter object.
-        :type param: click.Parameter | None
-        :param ctx: The Click context object.
-        :type ctx: click.Context | None
-        :returns: The validated and upper-cased Device ID.
-        :rtype: Any
-        """
+    def convert(self, value: str, param: Any, ctx: click.Context | None) -> str:
         if is_valid_dev_id(value):
             return value.upper()
         self.fail(f"{value!r} is not a valid device_id", param, ctx)
@@ -213,23 +193,11 @@ class DeviceIdParamType(click.ParamType):
 def cli(
     ctx: click.Context,
     /,
-    config_file: TextIO | None = None,
+    config_file: SupportsRead[str | bytes] | None = None,
     eavesdrop: None | bool = None,
     **kwargs: Any,
 ) -> None:
-    """A CLI for the ramses_rf library.
-
-    :param ctx: The Click context object.
-    :type ctx: click.Context
-    :param config_file: A file object for the configuration (JSON), defaults to None.
-    :type config_file: TextIO | None, optional
-    :param eavesdrop: Whether to enable eavesdropping, defaults to None.
-    :type eavesdrop: bool | None, optional
-    :param kwargs: Additional configuration parameters.
-    :type kwargs: Any
-    :returns: None
-    :rtype: None
-    """
+    """A CLI for the ramses_rf library."""
 
     if kwargs[SZ_DBG_MODE] > 0:  # Do first
         start_debugging(kwargs[SZ_DBG_MODE] == 1)
@@ -239,7 +207,7 @@ def cli(
     if eavesdrop is not None:
         lib_kwargs[SZ_CONFIG][SZ_ENABLE_EAVESDROP] = eavesdrop
 
-    if config_file:  # TODO: validate with voluptuous, use YAML
+    if config_file:  # TODO: validate file with voluptuous, use YAML
         lib_kwargs = deep_merge(
             lib_kwargs, json.load(config_file)
         )  # CLI takes precedence
@@ -308,17 +276,9 @@ class PortCommand(
 @click.command(cls=FileCommand)  # parse a packet log file, then stop
 @click.pass_obj
 def parse(
-    obj: tuple[dict[str, Any], dict[str, Any]], /, **kwargs: Any
-) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    """Command to parse a log file containing messages/packets.
-
-    :param obj: A tuple containing the CLI and library configuration dictionaries.
-    :type obj: tuple[dict[str, Any], dict[str, Any]]
-    :param kwargs: Additional arguments passed to the command.
-    :type kwargs: Any
-    :returns: A tuple containing the command string, library config, and CLI config.
-    :rtype: tuple[str, dict[str, Any], dict[str, Any]]
-    """
+    obj: Any, /, **kwargs: Any
+) -> tuple[Literal["parse"], dict[str, str], dict[str, str]]:
+    """Command to parse a log file containing messages/packets."""
     config, lib_config = split_kwargs(obj, kwargs)
 
     lib_config[SZ_INPUT_FILE] = config.pop(SZ_INPUT_FILE)  # just the file path
@@ -344,22 +304,9 @@ def parse(
 )
 @click.pass_obj
 def monitor(
-    obj: tuple[dict[str, Any], dict[str, Any]],
-    /,
-    discover: None | bool = None,
-    **kwargs: Any,
-) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    """Monitor (eavesdrop and/or probe) a serial port for messages/packets.
-
-    :param obj: A tuple containing the CLI and library configuration dictionaries.
-    :type obj: tuple[dict[str, Any], dict[str, Any]]
-    :param discover: Whether to enable discovery, defaults to None (auto).
-    :type discover: bool | None, optional
-    :param kwargs: Additional arguments passed to the command.
-    :type kwargs: Any
-    :returns: A tuple containing the command string, library config, and CLI config.
-    :rtype: tuple[str, dict[str, Any], dict[str, Any]]
-    """
+    obj: Any, /, discover: None | bool = None, **kwargs: Any
+) -> tuple[Literal["monitor"], dict[str, str], dict[str, str]]:
+    """Monitor (eavesdrop and/or probe) a serial port for messages/packets."""
     config, lib_config = split_kwargs(obj, kwargs)
 
     if discover is None:
@@ -397,8 +344,8 @@ def monitor(
 )
 @click.pass_obj
 def execute(
-    obj: tuple[dict[str, Any], dict[str, Any]], /, **kwargs: Any
-) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    obj: Any, /, **kwargs: Any
+) -> tuple[Literal["execute"], dict[str | None, str | dict[str, Any]], dict[str, str]]:
     """Execute any specified scripts, return the results, then quit.
 
     Disables discovery, and enforces a strict allow_list.
@@ -416,22 +363,20 @@ def execute(
     lib_config[SZ_CONFIG][SZ_DISABLE_DISCOVERY] = True
     lib_config[SZ_CONFIG][SZ_DISABLE_QOS] = False
 
-    known_list: dict[str, Any]
+    known_list: dict[str | None, dict[str, Any]] = {}
     if kwargs[GET_FAULTS]:
         known_list = {kwargs[GET_FAULTS]: {}}
     elif kwargs[GET_SCHED][0]:
         known_list = {kwargs[GET_SCHED][0]: {}}
     elif kwargs[SET_SCHED][0]:
         known_list = {kwargs[SET_SCHED][0]: {}}
-    else:
-        known_list = {}
 
     if known_list:
         print(" - known list is force-configured/enforced")
         lib_config[SZ_KNOWN_LIST] = known_list
         lib_config[SZ_CONFIG][SZ_ENFORCE_KNOWN_LIST] = True
 
-    return EXECUTE, lib_config, config
+    return EXECUTE, lib_config, config  # type: ignore[return-value]
 
 
 #
@@ -439,17 +384,11 @@ def execute(
 @click.command(cls=PortCommand)  # (optionally) execute a command, then listen
 @click.pass_obj
 def listen(
-    obj: tuple[dict[str, Any], dict[str, Any]], /, **kwargs: Any
-) -> tuple[str, dict[str, Any], dict[str, Any]]:
-    """Listen to (eavesdrop only) a serial port for messages/packets.
-
-    :param obj: A tuple containing the CLI and library configuration dictionaries.
-    :type obj: tuple[dict[str, Any], dict[str, Any]]
-    :param kwargs: Additional arguments passed to the command.
-    :type kwargs: Any
-    :returns: A tuple containing the command string, library config, and CLI config.
-    :rtype: tuple[str, dict[str, Any], dict[str, Any]]
-    """
+    obj: Any, /, **kwargs: Any
+) -> tuple[
+    Literal["listen"], dict[str, str | dict[str, str | None] | None], dict[str, Any]
+]:
+    """Listen to (eavesdrop only) a serial port for messages/packets."""
     config, lib_config = split_kwargs(obj, kwargs)
 
     print(" - sending is force-disabled")
@@ -471,10 +410,10 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
     if kwargs[GET_FAULTS]:
         fault_log = gwy.system_by_id[kwargs[GET_FAULTS]]._faultlog.faultlog
 
-        if not fault_log:
-            print("No fault log, or failed to get the fault log.")
-        else:
+        if fault_log:
             [print(f"{k:02X}", v) for k, v in fault_log.items()]
+        else:
+            print("No fault log, or failed to get the fault log.")
 
     if kwargs[GET_SCHED][0]:
         system_id, zone_idx = kwargs[GET_SCHED]
@@ -482,9 +421,9 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
             dhw = gwy.system_by_id[system_id].dhw
             zone: Any = dhw
         else:
-            zone = gwy.system_by_id[system_id].zone_by_idx[zone_idx]
-
-        schedule = zone.schedule if zone else None
+            zone = gwy.system_by_id[system_id].zone_by_idx[zone_idx]  # type: ignore[assignment]
+        assert zone
+        schedule = zone.schedule
 
         if schedule is None:
             print("Failed to get the schedule.")
@@ -592,29 +531,19 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
             if gwy.msg_db:
                 for msg in gwy.msg_db.get(device=device.id):
                     print(f"{msg._pkt}")
-            else:  # TODO(eb): replace next block by
+            else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
-                for msg_code_dict in device._msgz.values():
-                    for verb in msg_code_dict.values():
+                for cd in device._msgz.values():
+                    for verb in cd.values():
                         for pkt in verb.values():
                             print(f"{pkt}")
             print()
 
 
 async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) -> None:
-    """Run the main asynchronous loop for the CLI.
+    """Do certain things."""
 
-    :param command: The command to execute (execute, monitor, listen, parse).
-    :type command: str
-    :param lib_kwargs: The library configuration dictionary.
-    :type lib_kwargs: dict[str, Any]
-    :param kwargs: Additional command-specific arguments.
-    :type kwargs: Any
-    :returns: None
-    :rtype: None
-    """
-
-    def handle_msg(msg: Message) -> None:
+    def handle_msg(_msg: Message) -> None:
         """Process the message as it arrives (a callback).
 
         In this case, the message is merely printed.
@@ -622,30 +551,32 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
 
         if kwargs["long_format"]:  # HACK for test/dev
             print(
-                f"{msg.dtm.isoformat(timespec='microseconds')} ... {msg!r}"
-                f"  # {msg.payload}"  # or f'  # ("{msg.src!r}", "{msg.dst!r}")'
+                f"{_msg.dtm.isoformat(timespec='microseconds')} ... {_msg!r}"
+                f"  # {_msg.payload}"  # or f'  # ("{msg.src!r}", "{msg.dst!r}")'
             )
             return
 
-        dtm = f"{msg.dtm:%H:%M:%S.%f}"[:-3]
+        dtm = f"{_msg.dtm:%H:%M:%S.%f}"[:-3]
         con_cols = CONSOLE_COLS
 
-        if msg.code == Code._PUZZ:
-            print(f"{Style.BRIGHT}{Fore.YELLOW}{dtm} {msg}"[:con_cols])
-        elif msg.src and msg.src.type == DEV_TYPE_MAP.HGI:
-            print(f"{Style.BRIGHT}{COLORS.get(msg.verb)}{dtm} {msg}"[:con_cols])
-        elif msg.code == Code._1F09 and msg.verb == I_:
-            print(f"{Fore.YELLOW}{dtm} {msg}"[:con_cols])
-        elif msg.code in (Code._000A, Code._2309, Code._30C9) and msg._has_array:
-            print(f"{Fore.YELLOW}{dtm} {msg}"[:con_cols])
+        if _msg.code == Code._PUZZ:
+            print(f"{Style.BRIGHT}{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
+        elif _msg.src and _msg.src.type == DEV_TYPE_MAP.HGI:
+            print(f"{Style.BRIGHT}{COLORS.get(_msg.verb)}{dtm} {_msg}"[:con_cols])
+        elif _msg.code == Code._1F09 and _msg.verb == I_:
+            print(f"{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
+        elif _msg.code in (Code._000A, Code._2309, Code._30C9) and _msg._has_array:
+            print(f"{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
         else:
-            print(f"{COLORS.get(msg.verb)}{dtm} {msg}"[:con_cols])
+            print(f"{COLORS.get(_msg.verb)}{dtm} {_msg}"[:con_cols])
 
-    serial_port, lib_kwargs = normalise_config(lib_kwargs)
+    serial_port, lib_kwargs = normalise_config(lib_kwargs)  # type: ignore[assignment]
 
     if kwargs["restore_schema"]:
         print(" - restoring client schema from a HA cache...")
-        state = json.load(kwargs["restore_schema"])["data"]["client_state"]
+        state: dict[str, Any] = json.load(kwargs["restore_schema"])["data"][
+            "client_state"
+        ]
         lib_kwargs = lib_kwargs | state["schema"]
 
     # if serial_port == "/dev/ttyMOCK":
@@ -656,7 +587,7 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
         serial_port, transport_constructor=transport_factory, **lib_kwargs
     )  # passes action to gateway
 
-    if lib_kwargs[SZ_CONFIG][SZ_REDUCE_PROCESSING] < DONT_CREATE_MESSAGES:
+    if int(lib_kwargs[SZ_CONFIG][SZ_REDUCE_PROCESSING]) < DONT_CREATE_MESSAGES:
         # library will not send MSGs to STDOUT, so we'll send PKTs instead
         colorama_init(autoreset=True)  # WIP: remove strip=True
         gwy.add_msg_handler(handle_msg)
@@ -681,12 +612,10 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
 
         elif command == MONITOR:
             _ = spawn_scripts(gwy, **kwargs)
-            if gwy._protocol and gwy._protocol._wait_connection_lost:
-                await gwy._protocol._wait_connection_lost
+            await asyncio.wait_for(gwy._protocol._wait_connection_lost, 1.0)  # type: ignore[arg-type]
 
         elif command in (LISTEN, PARSE):
-            if gwy._protocol and gwy._protocol._wait_connection_lost:
-                await gwy._protocol._wait_connection_lost
+            await asyncio.wait_for(gwy._protocol._wait_connection_lost, 1.0)  # type: ignore[arg-type]
 
     except asyncio.CancelledError:
         msg = "ended via: CancelledError (e.g. SIGINT)"

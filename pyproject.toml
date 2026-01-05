@@ -132,7 +132,6 @@
     "tests"
   ]
   exclude = [
-    # "src/ramses_cli/client.py",
     "src/ramses_cli/utils",
     "tests/deprecated",
     "tests/wip",
@@ -211,11 +210,11 @@
 #
 
 [[tool.mypy.overrides]]
-  module = "colorama.*"
+  module = "debugpy.*"
   ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-  module = "debugpy.*"
+  module = "colorama.*"
   ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
