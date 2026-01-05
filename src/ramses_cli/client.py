@@ -8,7 +8,7 @@ import json
 import logging
 import sys
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Final, Literal, TextIO
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 import click
 from colorama import Fore, Style, init as colorama_init
@@ -421,7 +421,7 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
             dhw = gwy.system_by_id[system_id].dhw
             zone: Any = dhw
         else:
-            zone = gwy.system_by_id[system_id].zone_by_idx[zone_idx]  # type: ignore[assignment]
+            zone = gwy.system_by_id[system_id].zone_by_idx[zone_idx]
         assert zone
         schedule = zone.schedule
 
