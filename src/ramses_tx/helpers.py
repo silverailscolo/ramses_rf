@@ -131,17 +131,21 @@ file_time = _FILE_TIME()
 def timestamp() -> float:
     """Return the number of seconds since the Unix epoch.
 
-    Return an accurate value, even for Windows-based systems.
+    This function attempts to return a high-precision value, using specific
+    system calls on Windows if available.
+    :return: The current timestamp in seconds.
+    :rtype: float
     """
 
     # see: https://www.python.org/dev/peps/pep-0564/
-    if sys.platform != "win32":  # since 1970-01-01T00:00:00Z, time.gmtime(0)
+    if sys.platform == "win32":
+        # Windows uses a different epoch (1601-01-01)
+        ctypes.windll.kernel32.GetSystemTimePreciseAsFileTime(ctypes.byref(file_time))
+        _time = (file_time.dwLowDateTime + (file_time.dwHighDateTime << 32)) / 1e7
+        return float(_time - 134774 * 24 * 60 * 60)
+    else:
+        # Linux/macOS uses the Unix epoch (1970-01-01)
         return time.time_ns() / 1e9
-
-    # otherwise, is since 1601-01-01T00:00:00Z
-    ctypes.windll.kernel32.GetSystemTimePreciseAsFileTime(ctypes.byref(file_time))  # type: ignore[unreachable]
-    _time = (file_time.dwLowDateTime + (file_time.dwHighDateTime << 32)) / 1e7
-    return _time - 134774 * 24 * 60 * 60
 
 
 def dt_now() -> dt:
@@ -149,10 +153,14 @@ def dt_now() -> dt:
 
     This is slower, but potentially more accurate, than dt.now(), and is used mainly for
     packet timestamps.
+
+    :return: The current local datetime.
+    :rtype: dt
     """
     if sys.platform == "win32":
         return dt.fromtimestamp(timestamp())
-    return dt.now()
+    else:
+        return dt.now()
 
 
 def dt_str() -> str:
@@ -369,7 +377,14 @@ def hex_from_str(value: str) -> str:
 
 
 def hex_to_temp(value: HexStr4) -> bool | float | None:  # TODO: remove bool
-    """Convert a 2's complement 4-byte hex string to a float."""
+    """Convert a 4-byte 2's complement hex string to a float temperature ('C).
+
+    :param value: The 4-character hex string (e.g., '07D0')
+    :type value: HexStr4
+    :return: The temperature in Celsius, or None if N/A
+    :rtype: float | None
+    :raises ValueError: If input is not a 4-char hex string or temperature is invalid.
+    """
     if not isinstance(value, str) or len(value) != 4:
         raise ValueError(f"Invalid value: {value}, is not a 4-char hex string")
     if value == "31FF":  # means: N/A (== 127.99, 2s complement), signed?
@@ -488,13 +503,18 @@ AIR_QUALITY_BASIS: dict[str, str] = {
 
 # 31DA[2:6] and 12C8[2:6]
 def parse_air_quality(value: HexStr4) -> PayDictT.AIR_QUALITY:
-    """Return the air quality (%): poor (0.0) to excellent (1.0).
+    """Return the air quality percentage (0.0 to 1.0) and its basis.
 
     The basis of the air quality level should be one of: VOC, CO2 or relative humidity.
     If air_quality is EF, air_quality_basis should be 00.
 
     The sensor value is None if there is no sensor present (is not an error).
     The dict does not include the key if there is a sensor fault.
+
+    :param value: The 4-character hex string encoding quality and basis
+    :type value: HexStr4
+    :return: A dictionary containing the air quality and its basis (e.g., CO2, VOC)
+    :rtype: PayDictT.AIR_QUALITY
     """  # VOC: Volatile organic compounds
 
     # TODO: remove this as API used only internally...

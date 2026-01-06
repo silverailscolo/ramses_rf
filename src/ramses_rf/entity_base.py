@@ -15,7 +15,7 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, Final
 
 from ramses_rf.helpers import schedule_task
-from ramses_tx import Address, Priority, QosParams
+from ramses_tx import Priority, QosParams
 from ramses_tx.address import ALL_DEVICE_ID
 from ramses_tx.const import MsgId
 from ramses_tx.opentherm import OPENTHERM_MESSAGES
@@ -247,7 +247,7 @@ class _MessageDB(_Entity):
 
         if self._gwy.msg_db:  # central SQLite MessageIndex
             _LOGGER.debug(
-                "For %s (_z_id %s) add msg %s, src %s, dst %s to msg_db.",
+                "For %s (_z_id %s) add to msg_db: %s, src %s, dst %s",
                 self.id,
                 self._z_id,
                 msg,
@@ -324,12 +324,12 @@ class _MessageDB(_Entity):
         ]
 
     def _add_record(
-        self, address: Address, code: Code | None = None, verb: str = " I"
+        self, id: DeviceIdT, code: Code | None = None, verb: str = " I"
     ) -> None:
         """Add a (dummy) record to the central SQLite MessageIndex."""
         # used by heat.py init
         if self._gwy.msg_db:
-            self._gwy.msg_db.add_record(str(address), code=str(code), verb=verb)
+            self._gwy.msg_db.add_record(id, code=str(code), verb=verb)
         # else:
         #     _LOGGER.warning("Missing MessageIndex")
         # raise NotImplementedError
@@ -1029,7 +1029,7 @@ class _Discovery(_MessageDB):
                         sql = """
                             SELECT dtm from messages WHERE
                             code = ?
-                            AND verb = ' I'
+                            AND verb in (' I', 'RP')
                             AND ctx = 'True'
                             AND (src = ? OR dst = ?)
                         """
@@ -1045,10 +1045,12 @@ class _Discovery(_MessageDB):
                             msgs += res[0]  # expect 1 Message in returned tuple
                         else:
                             _LOGGER.debug(
-                                f"No msg found for hdr {hdr}, tesk code {task[_SZ_COMMAND].code}"
+                                f"No msg found for hdr {hdr}, task code {task[_SZ_COMMAND].code}"
                             )
                     else:  # TODO(eb) remove next Q1 2026
-                        msgs += [self.tcs._msgz[task[_SZ_COMMAND].code][I_][True]]
+                        # CRITICAL FIX: self.tcs might be None during early discovery
+                        if self.tcs:
+                            msgs += [self.tcs._msgz[task[_SZ_COMMAND].code][I_][True]]
                         # raise NotImplementedError
             except KeyError:
                 pass

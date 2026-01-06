@@ -30,7 +30,7 @@ from collections import OrderedDict
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, NewType
 
-from ramses_tx import CODES_SCHEMA, Code, Message
+from ramses_tx import CODES_SCHEMA, RQ, Code, Message, Packet
 
 if TYPE_CHECKING:
     DtmStrT = NewType("DtmStrT", str)
@@ -155,7 +155,7 @@ class MessageIndex:
             - verb " I", "RQ" etc.
             - src  message origin address
             - dst  message destination address
-            - code packet code aka command class e.g. _0005, _31DA
+            - code packet code aka command class e.g. 0005, 31DA
             - ctx  message context, created from payload as index + extra markers (Heat)
             - hdr  packet header e.g. 000C|RP|01:223036|0208 (see: src/ramses_tx/frame.py)
             - plk the keys stored in the parsed payload, separated by the | char
@@ -187,7 +187,7 @@ class MessageIndex:
 
     async def _housekeeping_loop(self) -> None:
         """Periodically remove stale messages from the index,
-        unless `self.maintain` is False."""
+        unless `self.maintain` is False - as in (most) tests."""
 
         async def housekeeping(dt_now: dt, _cutoff: td = td(days=1)) -> None:
             """
@@ -195,7 +195,8 @@ class MessageIndex:
             :param dt_now: current timestamp
             :param _cutoff: the oldest timestamp to retain, default is 24 hours ago
             """
-            dtm = dt_now - _cutoff  # .isoformat(timespec="microseconds") < needed?
+            msgs = None
+            dtm = dt_now - _cutoff
 
             self._cu.execute("SELECT dtm FROM messages WHERE dtm >= ?", (dtm,))
             rows = self._cu.fetchall()  # fetch dtm of current messages to retain
@@ -212,6 +213,10 @@ class MessageIndex:
                 self._msgs = msgs
             finally:
                 self._lock.release()
+                if msgs:
+                    _LOGGER.debug(
+                        "MessageIndex size was: %d, now: %d", len(rows), len(msgs)
+                    )
 
         while True:
             self._last_housekeeping = dt.now()
@@ -246,13 +251,17 @@ class MessageIndex:
         else:
             # _msgs dict requires a timestamp reformat
             dtm: DtmStrT = msg.dtm.isoformat(timespec="microseconds")  # type: ignore[assignment]
+            # add msg to self._msgs dict
             self._msgs[dtm] = msg
 
         finally:
             pass  # self._lock.release()
 
         if (
-            dup and msg.src is not msg.dst and not msg.dst.id.startswith("18:")  # HGI
+            dup
+            and (msg.src is not msg.dst)
+            and not msg.dst.id.startswith("18:")  # HGI
+            and msg.verb != RQ  # these may come very quickly
         ):  # when src==dst, expect to add duplicate, don't warn
             _LOGGER.debug(
                 "Overwrote dtm (%s) for %s: %s (contrived log?)",
@@ -260,8 +269,6 @@ class MessageIndex:
                 msg._pkt._hdr,
                 dup[0]._pkt,
             )
-        if old is not None:
-            _LOGGER.debug("Old msg replaced: %s", old)
 
         return old
 
@@ -274,7 +281,8 @@ class MessageIndex:
         :param verb: two letter verb str to use
         """
         # Used by OtbGateway init, via entity_base.py
-        dtm: DtmStrT = dt.strftime(dt.now(), "%Y-%m-%dT%H:%M:%S")  # type: ignore[assignment]
+        _now: dt = dt.now()
+        dtm: DtmStrT = _now.isoformat(timespec="microseconds")  # type: ignore[assignment]
         hdr = f"{code}|{verb}|{src}|00"  # dummy record has no contents
 
         dup = self._delete_from(hdr=hdr)
@@ -287,7 +295,7 @@ class MessageIndex:
             self._cu.execute(
                 sql,
                 (
-                    dtm,
+                    _now,
                     verb,
                     src,
                     src,
@@ -299,6 +307,14 @@ class MessageIndex:
             )
         except sqlite3.Error:
             self._cx.rollback()
+        else:
+            # also add dummy 3220 msg to self._msgs dict to allow maintenance loop
+            msg: Message = Message._from_pkt(
+                Packet(
+                    _now, f"... {verb} --- {src} --:------ {src} {code} 005 0000000000"
+                )
+            )
+            self._msgs[dtm] = msg
 
         if dup:  # expected when more than one heat system in schema
             _LOGGER.debug("Replaced record with same hdr: %s", hdr)
@@ -359,7 +375,7 @@ class MessageIndex:
         if not bool(msg) ^ bool(kwargs):
             raise ValueError("Either a Message or kwargs should be provided, not both")
         if msg:
-            kwargs["dtm"] = msg.dtm  # .isoformat(timespec="microseconds")
+            kwargs["dtm"] = msg.dtm
 
         msgs = None
         try:  # make this operation atomic, i.e. update self._msgs only on success
@@ -410,7 +426,7 @@ class MessageIndex:
             raise ValueError("Either a Message or kwargs should be provided, not both")
 
         if msg:
-            kwargs["dtm"] = msg.dtm  # .isoformat(timespec="microseconds")
+            kwargs["dtm"] = msg.dtm
 
         return self._select_from(**kwargs)
 
@@ -432,10 +448,15 @@ class MessageIndex:
         :returns: a tuple of qualifying messages
         """
 
-        return tuple(
-            self._msgs[row[0].isoformat(timespec="microseconds")]
-            for row in self.qry_dtms(**kwargs)
-        )
+        # CHANGE: Use a list comprehension with a check to avoid KeyError
+        res: list[Message] = []
+        for row in self.qry_dtms(**kwargs):
+            ts: DtmStrT = row[0].isoformat(timespec="microseconds")
+            if ts in self._msgs:
+                res.append(self._msgs[ts])
+            else:
+                _LOGGER.debug("MessageIndex timestamp %s not in device messages", ts)
+        return tuple(res)
 
     def qry_dtms(self, **kwargs: bool | dt | str) -> list[Any]:
         """
@@ -487,6 +508,7 @@ class MessageIndex:
             # _msgs stamp format: 2022-09-08T13:40:52.447364
             if ts in self._msgs:
                 lst.append(self._msgs[ts])
+                # _LOGGER.debug("MessageIndex ts %s added to qry.lst", ts)  # too frequent
             else:  # happens in tests with artificial msg from heat
                 _LOGGER.info("MessageIndex timestamp %s not in device messages", ts)
         return tuple(lst)
@@ -550,8 +572,9 @@ class MessageIndex:
             if ts in self._msgs:
                 # if include_expired or not self._msgs[ts].HAS_EXPIRED:  # not working
                 lst.append(self._msgs[ts])
-            else:  # happens in tests with dummy msg from heat init
-                _LOGGER.info("MessageIndex ts %s not in device messages", ts)
+                _LOGGER.debug("MessageIndex ts %s added to all.lst", ts)
+            else:  # happens in tests and real evohome setups with dummy msg from heat init
+                _LOGGER.debug("MessageIndex ts %s not in device messages", ts)
         return tuple(lst)
 
     def clr(self) -> None:

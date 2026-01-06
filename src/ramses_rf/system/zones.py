@@ -36,7 +36,7 @@ from ramses_rf.device import (
     TrvActuator,
     UfhController,
 )
-from ramses_rf.entity_base import Child, Entity, Parent, class_by_attr
+from ramses_rf.entity_base import _ID_SLICE, Child, Entity, Parent, class_by_attr
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
@@ -728,13 +728,33 @@ class Zone(ZoneSchedule):
         """Set the target temperature, until the next scheduled setpoint."""
 
         if value is None:
-            return self.reset_mode()
+            self.reset_mode()
 
         cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, value)
         self._gwy.send_cmd(cmd, priority=Priority.HIGH)
 
     @property
     def temperature(self) -> float | None:  # 30C9
+        if self._gwy.msg_db:
+            # evohome zones only get initial temp from src + idx, so use zone sensor if newer
+            sql = f"""
+                SELECT dtm from messages WHERE verb in (' I', 'RP')
+                AND code = '30C9'
+                AND (plk LIKE '%{SZ_TEMPERATURE}%')
+                AND ((src = ? AND ctx = ?) OR src = ?)
+            """
+            sensor_id = "aa:aaaaaa"  # should not match any device_id
+            if self._sensor:
+                sensor_id = self._sensor.id
+            # custom SQLite query on MessageIndex
+            msgs = self._gwy.msg_db.qry(
+                sql, (self.id[:_ID_SLICE], self.idx, sensor_id[:_ID_SLICE])
+            )
+            if msgs and len(msgs) > 0:
+                msgs_sorted = sorted(msgs, reverse=True)
+                return msgs_sorted[0].payload.get(SZ_TEMPERATURE)  # type: ignore[no-any-return]
+            return None
+        # else: TODO Q1 2026 remove remainder
         return self._msg_value(Code._30C9, key=SZ_TEMPERATURE)  # type: ignore[no-any-return]
 
     @property
