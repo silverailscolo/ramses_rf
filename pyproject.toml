@@ -214,6 +214,10 @@
   ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+  module = "colorama.*"
+  ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
   module = "ramses_tx.parsers"
 
   disallow_any_generics = false  # 89 - will be lots of work
