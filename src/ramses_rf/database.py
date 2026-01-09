@@ -272,18 +272,21 @@ class MessageIndex:
 
         return old
 
-    def add_record(self, src: str, code: str = "", verb: str = "") -> None:
+    def add_record(
+        self, src: str, code: str = "", verb: str = "", payload: str = "00"
+    ) -> None:
         """
         Add a single record to the MessageIndex with timestamp `now()` and no Message contents.
 
         :param src: device id to use as source address
         :param code: device id to use as destination address (can be identical)
         :param verb: two letter verb str to use
+        :param payload: payload str to use
         """
-        # Used by OtbGateway init, via entity_base.py
+        # Used by OtbGateway init, via entity_base.py (code=_3220)
         _now: dt = dt.now()
         dtm: DtmStrT = _now.isoformat(timespec="microseconds")  # type: ignore[assignment]
-        hdr = f"{code}|{verb}|{src}|00"  # dummy record has no contents
+        hdr = f"{code}|{verb}|{src}|{payload}"
 
         dup = self._delete_from(hdr=hdr)
 
