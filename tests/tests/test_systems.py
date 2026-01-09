@@ -100,7 +100,7 @@ async def test_systemx_from_log_file(dir_name: Path) -> None:
 # """Compare the system built from a get_state log file with the expected results."""
 
 # expected: dict = load_expected_results(dir_name) or {}
-# gwy: Gateway = Gateway(None, input_file=io.StringIO())  # empty file
+# gwy: Gateway = Gateway(None, input_file="")  # empty file, TODO skip reader
 
 # # schema, packets = gwy.get_state(include_expired=True)
 # await gwy._restore_cached_packets(packets)
