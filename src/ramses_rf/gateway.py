@@ -224,9 +224,9 @@ class Gateway(Engine):
         )
 
         # initialize SQLite index, set in _tx/Engine
-        if self._sqlite_index:  # TODO(eb): default to ON in Q4 2025
-            _LOGGER.info("Ramses RF starts SQLite MessageIndex")
-            self.create_sqlite_message_index()  # if activated in ramses_cc > Engine
+        # if self._sqlite_index:  # TODO(eb): default to ON in Q1 2026
+        _LOGGER.info("Ramses RF starts SQLite MessageIndex")
+        self.create_sqlite_message_index()  # if activated in ramses_cc > Engine
 
         # temporarily turn on discovery, remember original state
         self.config.disable_discovery, disable_discovery = (
@@ -695,6 +695,15 @@ class Gateway(Engine):
         :rtype: dict[str, Any]
         """
         return {SZ_DEVICES: {d.id: d.params for d in sorted(self.devices)}}
+        # issue zone name closed dB in test_systems_shuffle_from_log_file
+        # _msg_dict = {'1260':  I --- 07:017494 --:------ 07:017494 1260 003 000837}
+        # {
+        # '01:145038': {},
+        # '04:189078': {},
+        # '07:017494': {'dhw_params': None},
+        # '13:032648': {'tpi_params': {'cycle_rate': 6, 'min_off_time': 0.0, 'min_on_time': 1.0, 'proportional_band_width': None}},
+        # '34:064023': {}
+        # }
 
     @property
     def status(self) -> dict[str, Any]:
