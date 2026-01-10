@@ -1945,7 +1945,7 @@ async def transport_factory(
     :type port_name: SerPortNameT | None, optional
     :param port_config: Configuration dictionary for serial port, defaults to None.
     :type port_config: PortConfigT | None, optional
-    :param packet_log: Path to a file containing packet logs for playback, defaults to None.
+    :param packet_log: Path to a file containing packet logs for playback/parsing, defaults to None.
     :type packet_log: str | None, optional
     :param packet_dict: Dictionary of packets for playback, defaults to None.
     :type packet_dict: dict[str, str] | None, optional
@@ -2024,6 +2024,9 @@ async def transport_factory(
         )
 
     if len([x for x in (packet_dict, packet_log, port_name) if x is not None]) != 1:
+        _LOGGER.warning(
+            f"Input: packet_dict: {packet_dict}, packet_log: {packet_log}, port_name: {port_name}"
+        )  # DEBUG issue #389
         raise exc.TransportSourceInvalid(
             "Packet source must be exactly one of: packet_dict, packet_log, port_name"
         )

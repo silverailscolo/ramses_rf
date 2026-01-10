@@ -114,7 +114,9 @@ class Engine:
             self._include,
             self._exclude,
         )
-        self._sqlite_index = kwargs.pop(SZ_SQLITE_INDEX, False)  # default True?
+        self._sqlite_index = kwargs.pop(
+            SZ_SQLITE_INDEX, False
+        )  # TODO Q1 2026: default True
         self._log_all_mqtt = kwargs.pop(SZ_LOG_ALL_MQTT, False)
         self._kwargs: dict[str, Any] = kwargs  # HACK
 

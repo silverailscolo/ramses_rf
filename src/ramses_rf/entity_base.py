@@ -331,7 +331,7 @@ class _MessageDB(_Entity):
         payload: str = "00",
     ) -> None:
         """Add a (dummy) record to the central SQLite MessageIndex."""
-        # used by heat.py init
+        # used by heat.py.OtbGateway init
         if self._gwy.msg_db:
             self._gwy.msg_db.add_record(id, code=str(code), verb=verb, payload=payload)
         # else:

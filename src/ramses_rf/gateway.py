@@ -107,7 +107,7 @@ class Gateway(Engine):
 
         :param port_name: The serial port name (e.g., '/dev/ttyUSB0') or None if using a file.
         :type port_name: str | None
-        :param input_file: Path to a packet log file for playback, defaults to None.
+        :param input_file: Path to a packet log file for playback/parsing, defaults to None.
         :type input_file: str | None, optional
         :param port_config: Configuration dictionary for the serial port, defaults to None.
         :type port_config: PortConfigT | None, optional
