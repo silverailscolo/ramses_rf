@@ -2026,7 +2026,7 @@ async def transport_factory(
     if len([x for x in (packet_dict, packet_log, port_name) if x is not None]) != 1:
         _LOGGER.warning(
             f"Input: packet_dict: {packet_dict}, packet_log: {packet_log}, port_name: {port_name}"
-        )  # DEBUG issue #389
+        )
         raise exc.TransportSourceInvalid(
             "Packet source must be exactly one of: packet_dict, packet_log, port_name"
         )
