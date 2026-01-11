@@ -703,7 +703,7 @@ class Zone(ZoneSchedule):
             msgs = self._gwy.msg_db.get(
                 code=Code._0004, src=self._z_id, ctx=self._z_idx
             )
-            _LOGGER.debug(f"ZONE.name()[0] from: {msgs})")  # DEBUG issue #317
+            _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")  # DEBUG issue #317
             return msgs[0].payload.get(SZ_NAME) if msgs else None
 
         return self._msg_value(Code._0004, key=SZ_NAME)  # type: ignore[no-any-return]
