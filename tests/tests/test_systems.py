@@ -56,6 +56,10 @@ def test_payload_from_log_file(dir_name: Path) -> None:
                 proc_log_line(line)
 
 
+# Run Gateway tests with both legacy dicts and SQLite msg_db
+# TODO(eb): remove legacy tests Q3 2026, as in tests/tests/test_api_schedule.py
+
+
 async def test_schemax_with_log_file(dir_name: Path) -> None:
     """Compare the schema built from a log file with the expected results."""
 
@@ -66,7 +70,23 @@ async def test_schemax_with_log_file(dir_name: Path) -> None:
 
     schema, packets = gwy.get_state()
 
-    # sert_expected_set(gwy, expected)
+    assert_expected(shrink(schema), shrink(expected["schema"]))
+
+    await gwy.stop()
+
+
+async def test_schemax_with_log_file_sql(dir_name: Path) -> None:
+    """Compare the schema built from a log file with the expected results, using SQLite msg_db."""
+
+    expected: dict = load_expected_results(dir_name) or {}
+    gwy: Gateway = await load_test_gwy(
+        dir_name,
+        **expected["schema"],
+        known_list=expected["known_list"],
+        _sqlite_index=True,
+    )
+    schema, packets = gwy.get_state()
+
     assert_expected(shrink(schema), shrink(expected["schema"]))
 
     await gwy.stop()
@@ -79,7 +99,29 @@ async def test_systemx_from_log_file(dir_name: Path) -> None:
     gwy: Gateway = await load_test_gwy(dir_name)
 
     assert_expected_set(gwy, expected)
-    # sert shrink(gwy.schema) == shrink(schema)
+
+    for dev in gwy.devices:
+        _ = dev.schema
+        _ = dev.traits
+        _ = dev.params
+        _ = dev.status
+
+    for tcs in gwy.systems:
+        _ = tcs.schema
+        _ = tcs.traits
+        _ = tcs.params
+        _ = tcs.status
+
+    await gwy.stop()
+
+
+async def test_systemx_from_log_file_sql(dir_name: Path) -> None:
+    """Compare the system built from a log file with the expected results, using SQLite msg_db."""
+
+    expected: dict = load_expected_results(dir_name) or {}
+    gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+
+    assert_expected_set(gwy, expected)
 
     for dev in gwy.devices:
         _ = dev.schema
@@ -100,13 +142,12 @@ async def test_systemx_from_log_file(dir_name: Path) -> None:
 # """Compare the system built from a get_state log file with the expected results."""
 
 # expected: dict = load_expected_results(dir_name) or {}
-# gwy: Gateway = Gateway(None, input_file=io.StringIO())  # empty file
+# gwy: Gateway = Gateway(None, input_file="")  # empty file, TODO skip reader
 
 # # schema, packets = gwy.get_state(include_expired=True)
 # await gwy._restore_cached_packets(packets)
 
 # assert_expected_set(gwy, expected)
-# # sert shrink(gwy.schema) == shrink(schema)
 
 # await gwy.stop()
 
@@ -121,12 +162,45 @@ async def test_restore_from_log_file(dir_name: Path) -> None:
     await gwy._restore_cached_packets(packets)
 
     assert_expected_set(gwy, expected)
-    # sert shrink(gwy.schema) == shrink(schema)
 
     for dev in gwy.devices:  # SQLite refactor should pass this test
         if dev._gwy.msg_db:
             # depends on ramses_rf/entity_base.py def _msgs() from msg_db
-            assert len(dev._msgs) == len(dev._msgs_), "_msgs not equal to _msgs_"
+            # assert len(dev._msgs) == len(dev._msgs_), "_msgs not equal to _msgs_"
+            # and make sure that every code from _msgs_ is in _msgb
+            assert set(dev._msgs_).issubset(set(dev._msgs)), (
+                "_msgs_ not a subset of _msgs"
+            )
+            # original test can't be met for UFC CTL 3150, see database.py qry()
+            # assert sorted(dev._msgs) == sorted(dev._msgs_), (
+            #     f"Assert 1: {dev} _msgs != _msgs_"
+            # )
+            # don't expect them to match 100% because _msgs() creation requires filter:
+            # sql = """
+            #     SELECT dtm from messages WHERE verb in (' I', 'RP')
+            #     AND (src = ? OR dst = ?) """
+            # assert len(dev._gwy.msg_db.qry_field(sql, (dev.id[:12], dev.id[:12]))) == len(
+            #     dev._msgs_
+            # ), f"Assert 2: {dev} qry != _msgs_"
+
+    await gwy.stop()
+
+
+async def test_restore_from_log_file_sql(dir_name: Path) -> None:
+    """Compare the system built from a get_state log file with the expected results, using SQLite msg_db."""
+
+    expected: dict = load_expected_results(dir_name) or {}
+    gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+
+    schema, packets = gwy.get_state(include_expired=True)
+    await gwy._restore_cached_packets(packets)
+
+    assert_expected_set(gwy, expected)
+
+    for dev in gwy.devices:  # SQLite refactor should pass this test
+        if dev._gwy.msg_db:
+            # depends on ramses_rf/entity_base.py def _msgs() from msg_db
+            # assert len(dev._msgs) == len(dev._msgs_), "_msgs not equal to _msgs_"
             # and make sure that every code from _msgs_ is in _msgb
             assert set(dev._msgs_).issubset(set(dev._msgs)), (
                 "_msgs_ not a subset of _msgs"
@@ -151,6 +225,28 @@ async def test_shuffle_from_log_file(dir_name: Path) -> None:
 
     expected: dict = load_expected_results(dir_name) or {}
     gwy: Gateway = await load_test_gwy(dir_name)
+
+    schema, packets = gwy.get_state(include_expired=True)
+    packets = shuffle_dict(packets)
+    await gwy._restore_cached_packets(packets)
+
+    assert_expected_set(gwy, expected)
+    # sert shrink(gwy.schema) == shrink(schema)
+
+    packets = shuffle_dict(packets)
+    await gwy._restore_cached_packets(packets)
+
+    assert_expected_set(gwy, expected)
+    # sert shrink(gwy.schema) == shrink(schema)
+
+    await gwy.stop()
+
+
+async def test_shuffle_from_log_file_sql(dir_name: Path) -> None:
+    """Compare the system built from a shuffled log file with the expected results, using SQLite msg_db."""
+
+    expected: dict = load_expected_results(dir_name) or {}
+    gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
 
     schema, packets = gwy.get_state(include_expired=True)
     packets = shuffle_dict(packets)

@@ -36,11 +36,30 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 async def test_schedule_get(dir_name: Path) -> None:
     """Compare the schedule built from a log file with the expected results."""
+    # TODO(eb): remove this legacy test Q3 2026, as in tests/tests/test_systems.py
 
     with open(f"{dir_name}/schedule.json") as f:
         schedule = json.load(f)
 
     gwy: Gateway = await load_test_gwy(dir_name)
+    assert isinstance(gwy.tcs, Evohome)  # mypy
+    try:
+        zone: ZoneSchedule = gwy.tcs.dhw if gwy.tcs.dhw else gwy.tcs.zones[0]
+        assert isinstance(zone, ZoneSchedule)
+        assert zone.schedule == schedule[SZ_SCHEDULE]
+        assert zone._schedule._full_schedule == schedule
+
+    finally:
+        await gwy.stop()
+
+
+async def test_schedule_get_sql(dir_name: Path) -> None:
+    """Compare the schedule built from a log file with the expected results, using SQLite msg_db."""
+
+    with open(f"{dir_name}/schedule.json") as f:
+        schedule = json.load(f)
+
+    gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
     assert isinstance(gwy.tcs, Evohome)  # mypy
     try:
         zone: ZoneSchedule = gwy.tcs.dhw if gwy.tcs.dhw else gwy.tcs.zones[0]

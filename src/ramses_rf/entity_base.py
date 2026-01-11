@@ -324,12 +324,16 @@ class _MessageDB(_Entity):
         ]
 
     def _add_record(
-        self, id: DeviceIdT, code: Code | None = None, verb: str = " I"
+        self,
+        id: DeviceIdT,
+        code: Code | None = None,
+        verb: str = " I",
+        payload: str = "00",
     ) -> None:
         """Add a (dummy) record to the central SQLite MessageIndex."""
-        # used by heat.py init
+        # used by heat.py.OtbGateway init
         if self._gwy.msg_db:
-            self._gwy.msg_db.add_record(id, code=str(code), verb=verb)
+            self._gwy.msg_db.add_record(id, code=str(code), verb=verb, payload=payload)
         # else:
         #     _LOGGER.warning("Missing MessageIndex")
         # raise NotImplementedError
