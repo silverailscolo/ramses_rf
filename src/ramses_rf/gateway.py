@@ -224,9 +224,10 @@ class Gateway(Engine):
         )
 
         # initialize SQLite index, set in _tx/Engine
-        if self._sqlite_index:  # TODO(eb): default to ON in Q1 2026
+        if self._sqlite_index:  # TODO(eb): default to True in Q1 2026
             _LOGGER.info("Ramses RF starts SQLite MessageIndex")
-            self.create_sqlite_message_index()  # if activated in ramses_cc > Engine
+            # if activated in ramses_cc > Engine or set in tests
+            self.create_sqlite_message_index()
 
         # temporarily turn on discovery, remember original state
         self.config.disable_discovery, disable_discovery = (
