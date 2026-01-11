@@ -689,7 +689,7 @@ class Zone(ZoneSchedule):
 
     @property
     def heating_type(self) -> str | None:
-        """Return the type of the zone/DHW (e.g. electric_zone, stored_dhw)."""
+        """Get the type of the zone/DHW (e.g. electric_zone, stored_dhw)."""
 
         if self._SLUG is None:  # isinstance(self, ???)
             return None
@@ -697,12 +697,13 @@ class Zone(ZoneSchedule):
 
     @property
     def name(self) -> str | None:  # 0004
-        """Return the name of the zone."""
+        """Get the name of the zone."""
 
         if self._gwy.msg_db:
             msgs = self._gwy.msg_db.get(
                 code=Code._0004, src=self._z_id, ctx=self._z_idx
             )
+            _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")  # DEBUG issue #317
             return msgs[0].payload.get(SZ_NAME) if msgs else None
 
         return self._msg_value(Code._0004, key=SZ_NAME)  # type: ignore[no-any-return]

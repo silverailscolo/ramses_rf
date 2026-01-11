@@ -3291,13 +3291,13 @@ def parser_3220(payload: str, msg: Message) -> dict[str, Any]:
         "FFFF",
     ), f"OpenTherm: Invalid msg-type|data-value: {ot_type}|{payload[6:10]}"
 
-    # HACK: These OT data id can pop in/out of 47AB, which is an invalid value
+    # HACK: These OT data id's can pop in/out of 47AB, which is an invalid value
     if payload[6:] == "47AB" and ot_id in (0x12, 0x13, 0x19, 0x1A, 0x1B, 0x1C):
         ot_value[SZ_VALUE] = None
     # HACK: This OT data id can be 1980, which is an invalid value
     if payload[6:] == "1980" and ot_id:  # CH pressure is 25.5 bar!
         ot_value[SZ_VALUE] = None
-    # HACK: Done above, not in OT.decode_frame() as they isn't in the OT specification
+    # HACK: Done above, not in OT.decode_frame() as values aren't in the OT specification
 
     if ot_type not in _LIST:
         assert ot_type in (

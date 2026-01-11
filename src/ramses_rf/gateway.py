@@ -107,7 +107,7 @@ class Gateway(Engine):
 
         :param port_name: The serial port name (e.g., '/dev/ttyUSB0') or None if using a file.
         :type port_name: str | None
-        :param input_file: Path to a packet log file for playback, defaults to None.
+        :param input_file: Path to a packet log file for playback/parsing, defaults to None.
         :type input_file: str | None, optional
         :param port_config: Configuration dictionary for the serial port, defaults to None.
         :type port_config: PortConfigT | None, optional
@@ -224,9 +224,10 @@ class Gateway(Engine):
         )
 
         # initialize SQLite index, set in _tx/Engine
-        if self._sqlite_index:  # TODO(eb): default to ON in Q4 2025
+        if self._sqlite_index:  # TODO(eb): default to True in Q1 2026
             _LOGGER.info("Ramses RF starts SQLite MessageIndex")
-            self.create_sqlite_message_index()  # if activated in ramses_cc > Engine
+            # if activated in ramses_cc > Engine or set in tests
+            self.create_sqlite_message_index()
 
         # temporarily turn on discovery, remember original state
         self.config.disable_discovery, disable_discovery = (
