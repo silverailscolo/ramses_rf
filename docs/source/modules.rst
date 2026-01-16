@@ -1,26 +1,19 @@
 ramses_rf/src/
 ==============
 
-.. toctree::
-   :maxdepth: 4
-
-   ramses_cli
-   ramses_rf
-   ramses_tx
-
 .. mermaid::
-    ---
-    title: ramses-rf packages
-    ---
+
     classDiagram
-        namespace ramses_rf.dispatcher{
+        direction RL
+
+        namespace ramses_rf-dispatcher{
             class Dispatcher{
                 + create_device()
                 + ..
                 + process_msg()
             }
         }
-        namespace ramses_rf.database{
+        namespace ramses_rf-database{
             class Database {
                 - add(msg)
                 - ..
@@ -29,14 +22,14 @@ ramses_rf/src/
                 - rem(msg)
             }
         }
-        namespace ramses_rf.device{
+        namespace ramses_rf-device{
             class heat
             class hvac
         }
-        namespace ramses_rf.gateway{
+        namespace ramses_rf-gateway{
             class hgi
         }
-        namespace ramses_tx.message{
+        namespace ramses_tx-message{
             class Message {
                 - parse_message()
                 - ..
@@ -45,14 +38,14 @@ ramses_rf/src/
                 - validate_msg()
             }
         }
-        namespace ramses_tx.command{
+        namespace ramses_tx-command{
             class Command{
                 - _from_attrs
                 - ..
                 - set_zone_config
             }
         }
-        namespace ramses_tx.gateway-engine{
+        namespace ramses_tx-gateway-engine{
             class Engine {
                 - add_msg_handler()
                 - ..
@@ -61,7 +54,7 @@ ramses_rf/src/
                 - async_send_cmd()
             }
         }
-        namespace ramses_tx.transport{
+        namespace ramses_tx-transport{
             class Transport {
                 - MqttTransport
                 - ..
@@ -69,8 +62,8 @@ ramses_rf/src/
             }
         }
         namespace ramses_ESP{
-            class RF
-            class Serial
+            class RF:::esp
+            class Serial:::esp
         }
 
         Transport <|--|> Serial
@@ -84,3 +77,21 @@ ramses_rf/src/
         Dispatcher <|--|> hvac
         Dispatcher <|--|> heat
         Dispatcher <|--|> Message
+
+        click Transport href "ramses_tx.html#module-ramses_tx.transport" "docs"
+        click Engine href "ramses_tx.html#module-ramses_tx.gateway" "docs"
+        click hgi href "ramses_rf.html#module-ramses_rf.gateway" "docs"
+        click Database href "ramses_rf.html#module-ramses_rf.database" "docs"
+        click Message href "ramses_tx.html#module-ramses_tx.message" "docs"
+        click heat href "ramses_rf.device.html#module-ramses_rf.device.heat" "docs"
+        click hvac href "ramses_rf.device.html#module-ramses_rf.device.hvac" "docs"
+        click Dispatcher href "ramses_rf.html#module-ramses_rf.dispatcher" "docs"
+        click Command href "ramses_tx.html#module-ramses_tx.command" "docs"
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+   ramses_cli
+   ramses_rf
+   ramses_tx
