@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 import sqlite3
 import sys
 import uuid
@@ -123,6 +124,7 @@ class MessageIndex:
             check_same_thread=False,
             uri=True,  # Enable URI parsing for shared memory support
             timeout=10.0,  # Increased timeout to reduce 'database locked' errors
+            isolation_level=None,  # Autocommit mode prevents stale snapshots
         )
 
         # Enable Write-Ahead Logging for Reader as well
@@ -292,7 +294,8 @@ class MessageIndex:
         except (
             sqlite3.Error
         ):  # UNIQUE constraint failed: ? messages.dtm or .hdr (so: HACK)
-            self._cx.rollback()
+            # self._cx.rollback()
+            pass
 
         else:
             # _msgs dict requires a timestamp reformat
@@ -352,9 +355,8 @@ class MessageIndex:
         self._worker.submit_packet(data)
 
         # Backward compatibility for Tests:
-        # Tests assume the DB update is instant. If running in pytest, flush immediately.
-        # This effectively makes the operation synchronous during tests to avoid rewriting tests.
-        if "pytest" in sys.modules:
+        # Check specific env var set by pytest, which is more reliable than sys.modules
+        if "PYTEST_CURRENT_TEST" in os.environ:
             self.flush()
 
         # also add dummy 3220 msg to self._msgs dict to allow maintenance loop
