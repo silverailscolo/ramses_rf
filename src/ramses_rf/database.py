@@ -28,7 +28,6 @@ import contextlib
 import logging
 import os
 import sqlite3
-import sys
 import uuid
 from collections import OrderedDict
 from datetime import datetime as dt, timedelta as td
@@ -407,7 +406,7 @@ class MessageIndex:
         # Backward compatibility for Tests:
         # Tests assume the DB update is instant. If running in pytest, flush immediately.
         # This effectively makes the operation synchronous during tests to avoid rewriting tests.
-        if "pytest" in sys.modules:
+        if "PYTEST_CURRENT_TEST" in os.environ:
             self.flush()
 
         # _LOGGER.debug(f"Added {msg} to gwy.msg_db")
