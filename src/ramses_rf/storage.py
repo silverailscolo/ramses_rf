@@ -36,10 +36,11 @@ class StorageWorker:
         """Submit a packet tuple for SQL insertion (Non-blocking)."""
         self._queue.put(("SQL", packet_data))
 
-    def flush(self, timeout: float = 5.0) -> None:
+    def flush(self, timeout: float = 10.0) -> None:
         """Block until all currently pending tasks are processed."""
-        if self._queue.empty():
-            return
+        # REMOVED: if self._queue.empty(): return
+        # This check caused a race condition where flush() returned before
+        # the worker finished committing the last item it just popped.
 
         # We inject a special marker into the queue
         sentinel = threading.Event()
