@@ -96,6 +96,9 @@ class StorageWorker:
                 with contextlib.suppress(sqlite3.Error):
                     conn.execute("PRAGMA journal_mode=WAL")
                     conn.execute("PRAGMA synchronous=NORMAL")
+            elif "cache=shared" in self._db_path:
+                with contextlib.suppress(sqlite3.Error):
+                    conn.execute("PRAGMA read_uncommitted = true")
 
             self._init_db(conn)
             self._ready_event.set()  # Signal that tables exist

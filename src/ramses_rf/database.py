@@ -131,6 +131,11 @@ class MessageIndex:
         if db_path != ":memory:" and "mode=memory" not in db_path:
             with contextlib.suppress(sqlite3.Error):
                 self._cx.execute("PRAGMA journal_mode=WAL")
+        elif "cache=shared" in db_path:
+            # Shared cache (used in tests) requires read_uncommitted to prevent
+            # readers from blocking writers (Table Locking).
+            with contextlib.suppress(sqlite3.Error):
+                self._cx.execute("PRAGMA read_uncommitted = true")
 
         # detect_types should retain dt type on store/retrieve
         self._cu = self._cx.cursor()  # Create a cursor
