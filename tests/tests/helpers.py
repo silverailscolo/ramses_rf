@@ -72,9 +72,6 @@ def assert_expected_set(gwy: Gateway, expected: dict) -> None:
     assert_expected(gwy.status, expected.get("status"))
     assert_expected(gwy.known_list, expected.get("known_list"))
 
-    if gwy.msg_db:
-        gwy.msg_db.stop()  # close sqlite3 connection
-
 
 def assert_raises(exception: type[Exception], fnc: Callable, *args: Any) -> None:
     try:
@@ -87,7 +84,8 @@ def assert_raises(exception: type[Exception], fnc: Callable, *args: Any) -> None
 
 async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     """Create a system state from a packet log (using an optional configuration)."""
-
+    # TODO(eb): default sqlite_index to True Q1 2026
+    _sqlite_index = kwargs.pop("_sqlite_index", False)
     kwargs = SCH_GLOBAL_CONFIG({k: v for k, v in kwargs.items() if k[:1] != "_"})
 
     try:
@@ -101,6 +99,7 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
 
     path = f"{dir_name}/packet.log"
     gwy = Gateway(None, input_file=path, **kwargs)
+    gwy._sqlite_index = _sqlite_index  # TODO(eb): remove legacy Q2 2026
     await gwy.start()
 
     await gwy._protocol.wait_for_connection_lost()  # until packet log is EOF

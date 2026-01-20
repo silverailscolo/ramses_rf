@@ -7,7 +7,8 @@ This diagram shows the binding finite state machine (FSM) for RAMSES RF devices,
 
 ```mermaid
 stateDiagram-v2
-    direction LR
+    direction TB
+    
     [*] --> DevIsNotBinding
     DevIsNotBinding --> InitiateBindingProcess : initiate_binding_process()
     InitiateBindingProcess --> SuppSendOfferWaitForAccept

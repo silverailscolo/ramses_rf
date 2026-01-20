@@ -49,6 +49,7 @@ import logging
 import os
 import re
 import sys
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime as dt, timedelta as td
@@ -772,7 +773,7 @@ class _ReadTransport(_BaseTransport):
         if self._closing is True:  # raise, or warn & return?
             raise exc.TransportError("Transport is closing or has closed")
 
-        # TODO: can we switch to call_soon now QoS has been refactored?
+        # TODO: can we switch to call_soon now that QoS has been refactored?
         # NOTE: No need to use call_soon() here, and they may break Qos/Callbacks
         # NOTE: Thus, excepts need checking
         try:  # below could be a call_soon?
@@ -783,7 +784,7 @@ class _ReadTransport(_BaseTransport):
             _LOGGER.error("%s < exception from msg layer: %s", pkt, err)
 
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
-        """ "Transmit a frame via the underlying handler (e.g. serial port, MQTT).
+        """Transmit a frame via the underlying handler (e.g. serial port, MQTT).
 
         :param frame: The frame to write.
         :type frame: str
@@ -811,7 +812,7 @@ class _FullTransport(_ReadTransport):  # asyncio.Transport
         self._transmit_times: deque[dt] = deque(maxlen=_MAX_TRACKED_TRANSMITS)
 
     def _dt_now(self) -> dt:
-        """Return a precise datetime, using the current dtm.
+        """Get a precise datetime, using the current dtm.
 
         :return: Current datetime.
         :rtype: dt
@@ -988,7 +989,8 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         """Start the reader task."""
         self._reading = True
         try:
-            await self._reader()
+            # await self._reader()
+            await self.loop.run_in_executor(None, self._blocking_reader)
         except Exception as err:
             self.loop.call_soon_threadsafe(
                 functools.partial(self._protocol.connection_lost, err)  # type: ignore[arg-type]
@@ -998,49 +1000,47 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                 functools.partial(self._protocol.connection_lost, None)
             )
 
-    # NOTE: self._frame_read() invoked from here
-    async def _reader(self) -> None:  # TODO
+    def _blocking_reader(self) -> None:
         """Loop through the packet source for Frames and process them."""
 
         if isinstance(self._pkt_source, dict):
             for dtm_str, pkt_line in self._pkt_source.items():  # assume dtm_str is OK
-                while not self._reading:
-                    await asyncio.sleep(0.001)
-                self._frame_read(dtm_str, pkt_line)
-                await asyncio.sleep(0)
-                # NOTE: instable without, big performance penalty if delay >0
+                self._process_line(dtm_str, pkt_line)
 
         elif isinstance(self._pkt_source, str):  # file_name, used in client parse
             # open file file_name before reading
             try:
                 with fileinput.input(files=self._pkt_source, encoding="utf-8") as file:
                     for dtm_pkt_line in file:  # self._pkt_source:
-                        # TODO check dtm_str is OK
-                        while not self._reading:
-                            await asyncio.sleep(0.001)
-                        # there may be blank lines in annotated log files
-                        if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[
-                            :1
-                        ] != "#":
-                            self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
-                            # this is where the parsing magic happens!
-                        await asyncio.sleep(0)
-                        # NOTE: instable without, big performance penalty if delay >0
+                        self._process_line_from_raw(dtm_pkt_line)
             except FileNotFoundError as err:
                 _LOGGER.warning(f"Correct the packet file name; {err}")
+
         elif isinstance(self._pkt_source, TextIOWrapper):  # used by client monitor
             for dtm_pkt_line in self._pkt_source:  # should check dtm_str is OK
-                while not self._reading:
-                    await asyncio.sleep(0.001)
-                # can be blank lines in annotated log files
-                if (dtm_pkt_line := dtm_pkt_line.strip()) and dtm_pkt_line[:1] != "#":
-                    self._frame_read(dtm_pkt_line[:26], dtm_pkt_line[27:])
-                await asyncio.sleep(0)
-                # NOTE: instable without, big performance penalty if delay >0
+                self._process_line_from_raw(dtm_pkt_line)
+
         else:
             raise exc.TransportSourceInvalid(
                 f"Packet source is not dict, TextIOWrapper or str: {self._pkt_source:!r}"
             )
+
+    def _process_line_from_raw(self, line: str) -> None:
+        """Helper to process raw lines."""
+        # there may be blank lines in annotated log files
+        if (line := line.strip()) and line[:1] != "#":
+            self._process_line(line[:26], line[27:])
+            # this is where the parsing magic happens!
+
+    def _process_line(self, dtm_str: str, frame: str) -> None:
+        """Push frame to protocol in a thread-safe way."""
+        while not self._reading:
+            time.sleep(0.001)
+
+        self._frame_read(dtm_str, frame)
+
+        # NOTE: instable without, big performance penalty if delay >0
+        time.sleep(0)
 
     def _close(self, exc: exc.RamsesException | None = None) -> None:
         """Close the transport (cancel any outstanding tasks).
@@ -1945,7 +1945,7 @@ async def transport_factory(
     :type port_name: SerPortNameT | None, optional
     :param port_config: Configuration dictionary for serial port, defaults to None.
     :type port_config: PortConfigT | None, optional
-    :param packet_log: Path to a file containing packet logs for playback, defaults to None.
+    :param packet_log: Path to a file containing packet logs for playback/parsing, defaults to None.
     :type packet_log: str | None, optional
     :param packet_dict: Dictionary of packets for playback, defaults to None.
     :type packet_dict: dict[str, str] | None, optional
@@ -2024,6 +2024,9 @@ async def transport_factory(
         )
 
     if len([x for x in (packet_dict, packet_log, port_name) if x is not None]) != 1:
+        _LOGGER.warning(
+            f"Input: packet_dict: {packet_dict}, packet_log: {packet_log}, port_name: {port_name}"
+        )
         raise exc.TransportSourceInvalid(
             "Packet source must be exactly one of: packet_dict, packet_log, port_name"
         )
