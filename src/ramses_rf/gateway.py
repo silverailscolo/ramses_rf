@@ -267,10 +267,12 @@ class Gateway(Engine):
         :returns: None
         :rtype: None
         """
+        # Stop the Engine first to ensure no tasks/callbacks try to write
+        # to the DB while we are closing it.
+        await super().stop()
 
         if self.msg_db:
             self.msg_db.stop()
-        await super().stop()
 
     async def _pause(self, *args: Any) -> None:
         """Pause the (unpaused) gateway (disables sending/discovery).
