@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from functools import partial
+from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
 from .address import (
@@ -156,17 +157,19 @@ if TYPE_CHECKING:
     from logging import Logger
 
 
-async def set_pkt_logging_config(**config: Any) -> Logger:
+async def set_pkt_logging_config(**config: Any) -> tuple[Logger, QueueListener | None]:
     """
     Set up ramses packet logging to a file or port.
-    Must run async in executor to prevent HA blocking call opening packet log file (issue #200)
+    Must run async in executor to prevent HA blocking call opening packet log file.
 
     :param config: if file_name is included, opens packet_log file
-    :return: a logging.Logger
+    :return: a tuple (logging.Logger, QueueListener)
     """
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, partial(set_pkt_logging, PKT_LOGGER, **config))
-    return PKT_LOGGER
+    listener = await loop.run_in_executor(
+        None, partial(set_pkt_logging, PKT_LOGGER, **config)
+    )
+    return PKT_LOGGER, listener
 
 
 def extract_known_hgi_id(
