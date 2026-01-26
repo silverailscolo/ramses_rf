@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from logging.handlers import QueueListener
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -159,6 +160,7 @@ class Gateway(Engine):
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
         self.msg_db: MessageIndex | None = None
+        self._pkt_log_listener: QueueListener | None = None
 
     def __repr__(self) -> str:
         """Return a string representation of the Gateway.
@@ -218,10 +220,12 @@ class Gateway(Engine):
                 if system.dhw:
                     system.dhw._start_discovery_poller()
 
-        await set_pkt_logging_config(  # type: ignore[arg-type]
+        _, self._pkt_log_listener = await set_pkt_logging_config(  # type: ignore[arg-type]
             cc_console=self.config.reduce_processing >= DONT_CREATE_MESSAGES,
             **self._packet_log,
         )
+        if self._pkt_log_listener:
+            self._pkt_log_listener.start()
 
         # initialize SQLite index, set in _tx/Engine
         if self._sqlite_index:  # TODO(eb): default to True in Q1 2026
@@ -270,6 +274,13 @@ class Gateway(Engine):
         # Stop the Engine first to ensure no tasks/callbacks try to write
         # to the DB while we are closing it.
         await super().stop()
+
+        if self._pkt_log_listener:
+            self._pkt_log_listener.stop()
+            # Close handlers to ensure files are flushed/closed
+            for handler in self._pkt_log_listener.handlers:
+                handler.close()
+            self._pkt_log_listener = None
 
         if self.msg_db:
             self.msg_db.stop()
