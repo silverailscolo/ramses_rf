@@ -25,7 +25,7 @@ SCH_GLOBAL_TRAITS = vol.Schema(SCH_GLOBAL_TRAITS_DICT, extra=vol.PREVENT_EXTRA)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-logging.disable(logging.WARNING)  # usu. WARNING
+# logging.disable(logging.WARNING)  # usu. WARNING
 
 
 TEST_DIR = Path(__file__).resolve().parent  # TEST_DIR = f"{os.path.dirname(__file__)}"

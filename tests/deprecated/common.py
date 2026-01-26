@@ -17,7 +17,7 @@ from .mocked_devices import CTL_ID, MOCKED_PORT, MockDeviceCtl, MockGateway
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-logging.disable(logging.WARNING)  # usu. WARNING
+# logging.disable(logging.WARNING)  # usu. WARNING
 
 
 TEST_DIR = Path(__file__).resolve().parent
