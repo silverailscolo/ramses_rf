@@ -2,7 +2,6 @@
 """RAMSES RF - a RAMSES-II protocol decoder & analyser."""
 
 import json
-import logging
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
