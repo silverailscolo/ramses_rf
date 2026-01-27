@@ -17,7 +17,7 @@ from .mocked_devices import CTL_ID, MOCKED_PORT, MockDeviceCtl, MockGateway
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-logging.disable(logging.WARNING)  # usu. WARNING
+# logging.disable(logging.WARNING)  # usu. WARNING  # TODO: Verify original intent. Commented out as it breaks isolated logging logic in PR #413.
 
 
 TEST_DIR = Path(__file__).resolve().parent

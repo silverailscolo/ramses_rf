@@ -2,7 +2,6 @@
 """RAMSES RF - a RAMSES-II protocol decoder & analyser."""
 
 import json
-import logging
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -25,7 +24,7 @@ SCH_GLOBAL_TRAITS = vol.Schema(SCH_GLOBAL_TRAITS_DICT, extra=vol.PREVENT_EXTRA)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-logging.disable(logging.WARNING)  # usu. WARNING
+# logging.disable(logging.WARNING)  # usu. WARNING  # TODO: Verify original intent. Commented out as it breaks isolated logging logic in PR #413.
 
 
 TEST_DIR = Path(__file__).resolve().parent  # TEST_DIR = f"{os.path.dirname(__file__)}"
