@@ -79,6 +79,7 @@ class Engine:
         packet_log: PktLogConfigT | None = None,
         block_list: DeviceListT | None = None,
         known_list: DeviceListT | None = None,
+        hgi_id: str | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
         **kwargs: Any,
     ) -> None:
@@ -119,6 +120,10 @@ class Engine:
         self._log_all_mqtt = kwargs.pop(SZ_LOG_ALL_MQTT, False)
         self._kwargs: dict[str, Any] = kwargs  # HACK
 
+        self._hgi_id = hgi_id
+        if self._hgi_id:
+            self._kwargs[SZ_ACTIVE_HGI] = self._hgi_id
+
         self._engine_lock = asyncio.Lock()
         self._engine_state: (
             tuple[_MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
@@ -135,6 +140,9 @@ class Engine:
         self._set_msg_handler(self._msg_handler)  # sets self._protocol
 
     def __str__(self) -> str:
+        if self._hgi_id:
+            return f"{self._hgi_id} ({self.ser_name})"
+
         if not self._transport:
             return f"{HGI_DEV_ADDR.id} ({self.ser_name})"
 

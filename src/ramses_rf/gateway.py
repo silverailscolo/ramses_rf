@@ -102,6 +102,7 @@ class Gateway(Engine):
         known_list: DeviceListT | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
         transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
+        hgi_id: str | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the Gateway instance.
@@ -122,6 +123,8 @@ class Gateway(Engine):
         :type loop: asyncio.AbstractEventLoop | None, optional
         :param transport_constructor: A factory for creating the transport layer, defaults to None.
         :type transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None, optional
+        :param hgi_id: The Device ID to use for the HGI (gateway), overriding defaults.
+        :type hgi_id: str | None, optional
         :param kwargs: Additional configuration parameters passed to the engine and schema.
         :type kwargs: Any
         """
@@ -139,6 +142,7 @@ class Gateway(Engine):
             block_list=block_list,
             known_list=known_list,
             loop=loop,
+            hgi_id=hgi_id,
             transport_constructor=transport_constructor,
             **SCH_ENGINE_CONFIG(config),
         )
