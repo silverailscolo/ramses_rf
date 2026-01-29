@@ -15,6 +15,7 @@ import serial  # type: ignore[import-untyped]
 
 from ramses_rf import Command, Message, Packet
 from ramses_tx import exceptions as exc
+from ramses_tx.const import DEFAULT_ECHO_TIMEOUT, DEFAULT_RPLY_TIMEOUT
 from ramses_tx.protocol import PortProtocol, ReadProtocol, protocol_factory
 from ramses_tx.protocol_fsm import (
     Inactive,
@@ -80,8 +81,8 @@ async def protocol(rf: VirtualRf) -> AsyncGenerator[PortProtocol, None]:
 
     protocol._disable_qos = False  # HACK: needed for tests to succeed (default: None?)
 
-    assert protocol._context.echo_timeout == 0.5
-    assert protocol._context.reply_timeout == 0.5
+    assert protocol._context.echo_timeout == DEFAULT_ECHO_TIMEOUT
+    assert protocol._context.reply_timeout == DEFAULT_RPLY_TIMEOUT
     assert protocol._context.SEND_TIMEOUT_LIMIT == 20.0
 
     await assert_protocol_state(protocol, Inactive, max_sleep=0)
