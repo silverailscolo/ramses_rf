@@ -20,10 +20,12 @@ DEFAULT_DISABLE_QOS: Final[bool | None] = None
 DEFAULT_WAIT_FOR_REPLY: Final[bool | None] = None
 
 #: Waiting for echo pkt after cmd sent (seconds)
-DEFAULT_ECHO_TIMEOUT: Final[float] = 0.50
+# NOTE: Increased to 3.0s to support high-latency transports (e.g., MQTT)
+DEFAULT_ECHO_TIMEOUT: Final[float] = 3.00
 
 #: Waiting for reply pkt after echo pkt rcvd (seconds)
-DEFAULT_RPLY_TIMEOUT: Final[float] = 0.50
+# NOTE: Increased to 3.0s to support high-latency transports (e.g., MQTT)
+DEFAULT_RPLY_TIMEOUT: Final[float] = 3.00
 DEFAULT_BUFFER_SIZE: Final[int] = 32
 
 #: Total waiting for successful send (seconds)

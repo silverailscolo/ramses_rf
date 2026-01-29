@@ -215,6 +215,41 @@ class _BaseProtocol(asyncio.Protocol):
         """Allow the Protocol to send an impersonation alert (stub)."""
         return
 
+    def _patch_cmd_if_needed(self, cmd: Command) -> Command:
+        """Patch the command with the actual HGI ID if it uses the default placeholder.
+
+        Legacy HGI80s (TI 3410) require the default ID (18:000730), or they will
+        silent-fail. However, evofw3 devices prefer the real ID.
+        """
+        # NOTE: accessing private member cmd._addrs to safely patch the source address
+
+        if (
+            self.hgi_id
+            and self._is_evofw3  # Only patch if using evofw3 (not HGI80)
+            and cmd._addrs[0].id == HGI_DEV_ADDR.id
+            and self.hgi_id != HGI_DEV_ADDR.id
+        ):
+            _LOGGER.debug(
+                f"Patching command with active HGI ID: swapped {HGI_DEV_ADDR.id} "
+                f"-> {self.hgi_id} for {cmd._hdr}"
+            )
+
+            # Get current addresses as strings
+            new_addrs = [a.id for a in cmd._addrs]
+
+            # ONLY patch the Source Address (Index 0).
+            # Leave Dest (Index 1/2) alone to avoid breaking tests that expect 18:000730.
+            new_addrs[0] = self.hgi_id
+
+            # Reconstruct the command string with the correct address
+            new_frame = (
+                f"{cmd.verb} {cmd.seqn} {new_addrs[0]} {new_addrs[1]} {new_addrs[2]} "
+                f"{cmd.code} {int(cmd.len_):03d} {cmd.payload}"
+            )
+            return Command(new_frame)
+
+        return cmd
+
     async def send_cmd(
         self,
         cmd: Command,
@@ -249,35 +284,8 @@ class _BaseProtocol(asyncio.Protocol):
         assert gap_duration == DEFAULT_GAP_DURATION
         assert 0 <= num_repeats <= 3  # if QoS, only Tx x1, with no repeats
 
-        # FIX: Patch command with actual HGI ID if it uses the default placeholder
-        # NOTE: HGI80s (TI 3410) require the default ID (18:000730), or they will silent-fail
-
-        if (
-            self.hgi_id
-            and self._is_evofw3  # Only patch if using evofw3 (not HGI80)
-            and cmd._addrs[0].id == HGI_DEV_ADDR.id
-            and self.hgi_id != HGI_DEV_ADDR.id
-        ):
-            # The command uses the default 18:000730, but we know the real ID.
-            # Reconstruct the command string with the correct address.
-
-            _LOGGER.debug(
-                f"Patching command with active HGI ID: swapped {HGI_DEV_ADDR.id} -> {self.hgi_id} for {cmd._hdr}"
-            )
-
-            # Get current addresses as strings
-            # The command uses the default 18:000730, but we know the real ID.
-            # Reconstruct the command string with the correct address.
-
-            # Get current addresses as strings
-            new_addrs = [a.id for a in cmd._addrs]
-
-            # ONLY patch the Source Address (Index 0).
-            # Leave Dest (Index 1/2) alone to avoid breaking tests that expect 18:000730 there.
-            new_addrs[0] = self.hgi_id
-
-            new_frame = f"{cmd.verb} {cmd.seqn} {new_addrs[0]} {new_addrs[1]} {new_addrs[2]} {cmd.code} {int(cmd.len_):03d} {cmd.payload}"
-            cmd = Command(new_frame)
+        # Patch command with actual HGI ID if it uses the default placeholder
+        cmd = self._patch_cmd_if_needed(cmd)
 
         if qos and not self._context:
             _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
