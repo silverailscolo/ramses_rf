@@ -99,6 +99,14 @@ ramses\_rf.schemas module
    :show-inheritance:
    :undoc-members:
 
+ramses\_rf.storage module
+-------------------------
+
+.. automodule:: ramses_rf.storage
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_rf.version module
 -------------------------
 
