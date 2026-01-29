@@ -12,7 +12,6 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import datetime as dt
-from threading import Lock
 from typing import TYPE_CHECKING, Any, Never
 
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
@@ -80,6 +79,7 @@ class Engine:
         packet_log: PktLogConfigT | None = None,
         block_list: DeviceListT | None = None,
         known_list: DeviceListT | None = None,
+        hgi_id: str | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
         **kwargs: Any,
     ) -> None:
@@ -120,7 +120,11 @@ class Engine:
         self._log_all_mqtt = kwargs.pop(SZ_LOG_ALL_MQTT, False)
         self._kwargs: dict[str, Any] = kwargs  # HACK
 
-        self._engine_lock = Lock()  # FIXME: threading lock, or asyncio lock?
+        self._hgi_id = hgi_id
+        if self._hgi_id:
+            self._kwargs[SZ_ACTIVE_HGI] = self._hgi_id
+
+        self._engine_lock = asyncio.Lock()
         self._engine_state: (
             tuple[_MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
         ) = None
@@ -136,6 +140,9 @@ class Engine:
         self._set_msg_handler(self._msg_handler)  # sets self._protocol
 
     def __str__(self) -> str:
+        if self._hgi_id:
+            return f"{self._hgi_id} ({self.ser_name})"
+
         if not self._transport:
             return f"{HGI_DEV_ADDR.id} ({self.ser_name})"
 
@@ -217,15 +224,13 @@ class Engine:
     async def stop(self) -> None:
         """Close the transport (will stop the protocol)."""
 
-        async def cancel_all_tasks() -> None:  # TODO: needs a lock?
-            _ = [t.cancel() for t in self._tasks if not t.done()]
-            try:  # FIXME: this is broken
-                if tasks := (t for t in self._tasks if not t.done()):
-                    await asyncio.gather(*tasks)
-            except asyncio.CancelledError:
-                pass
+        # Shutdown Safety - wait for tasks to clean up
+        tasks = [t for t in self._tasks if not t.done()]
+        for t in tasks:
+            t.cancel()
 
-        await cancel_all_tasks()
+        if tasks:
+            await asyncio.wait(tasks)
 
         if self._transport:
             self._transport.close()
@@ -233,11 +238,13 @@ class Engine:
 
         return None
 
-    def _pause(self, *args: Any) -> None:
+    async def _pause(self, *args: Any) -> None:
         """Pause the (active) engine or raise a RuntimeError."""
-
-        if not self._engine_lock.acquire(blocking=False):
+        # Async lock handling
+        if self._engine_lock.locked():
             raise RuntimeError("Unable to pause engine, failed to acquire lock")
+
+        await self._engine_lock.acquire()
 
         if self._engine_state is not None:
             self._engine_lock.release()
@@ -255,13 +262,18 @@ class Engine:
 
         self._engine_state = (handler, read_only, *args)
 
-    def _resume(self) -> tuple[Any]:  # FIXME: not atomic
+    async def _resume(self) -> tuple[Any]:  # FIXME: not atomic
         """Resume the (paused) engine or raise a RuntimeError."""
 
         args: tuple[Any]  # mypy
 
-        if not self._engine_lock.acquire(timeout=0.1):
-            raise RuntimeError("Unable to resume engine, failed to acquire lock")
+        # Async lock with timeout
+        try:
+            await asyncio.wait_for(self._engine_lock.acquire(), timeout=0.1)
+        except TimeoutError as err:
+            raise RuntimeError(
+                "Unable to resume engine, failed to acquire lock"
+            ) from err
 
         if self._engine_state is None:
             self._engine_lock.release()

@@ -1898,6 +1898,7 @@ def parser_2210(payload: str, msg: Message) -> dict[str, Any]:
         assert payload[80:82] in (
             "01",
             "08",
+            "0C",  # seen on Orcon HCR-400 EcoMax
         ), f"expected byte 40 (01|08), not {payload[80:82]}"
         assert payload[82:] in (
             "00",

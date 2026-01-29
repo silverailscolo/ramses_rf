@@ -2,7 +2,6 @@
 """RAMSES RF - a RAMSES-II protocol decoder & analyser."""
 
 import json
-import logging
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -25,7 +24,7 @@ SCH_GLOBAL_TRAITS = vol.Schema(SCH_GLOBAL_TRAITS_DICT, extra=vol.PREVENT_EXTRA)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-logging.disable(logging.WARNING)  # usu. WARNING
+# logging.disable(logging.WARNING)  # usu. WARNING  # TODO: Verify original intent. Commented out as it breaks isolated logging logic in PR #413.
 
 
 TEST_DIR = Path(__file__).resolve().parent  # TEST_DIR = f"{os.path.dirname(__file__)}"
@@ -102,7 +101,15 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     gwy._sqlite_index = _sqlite_index  # TODO(eb): remove legacy Q2 2026
     await gwy.start()
 
+    # The Gateway with input_file uses a Transport that processes the file automatically.
+    # We simply need to wait for the transport to finish reading the file.
+    # We pause discovery/sending during replay to avoid side effects.
     await gwy._protocol.wait_for_connection_lost()  # until packet log is EOF
+
+    # Ensure all packets from the log are written to the DB before returning
+    # This is critical for tests using the StorageWorker
+    if gwy.msg_db:
+        gwy.msg_db.flush()
 
     # if hasattr(
     #     gwy.pkt_transport.serial, "mock_devices"

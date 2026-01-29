@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""RAMSES RF - a RAMSES-II protocol decoder & analyser."""
+"""RAMSES RF - a RAMSES-II protocol decoder & analyser.
+
+Contains e.g.:
+:term:`CODES_SCHEMA` the master list of all known Ramses-II Code signatures
+for both HEAT and HVAC.
+:term:`_DEV_KLASSES_HEAT` defining Codes expected for each HEAT device class (SLUG).
+:term:`_DEV_KLASSES_HVAC` defining Codes expected for each HVAC device class (SLUG).
+:term:`_22F1_MODE_XXX` dicts defining valid fan commands.
+:term:`_2411_PARAMS_SCHEMA` defining HVAC fan parameters.
+"""
 
 # TODO: code a lifespan for most packets
 

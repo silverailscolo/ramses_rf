@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from logging.handlers import QueueListener
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
@@ -101,6 +102,7 @@ class Gateway(Engine):
         known_list: DeviceListT | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
         transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
+        hgi_id: str | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the Gateway instance.
@@ -121,6 +123,8 @@ class Gateway(Engine):
         :type loop: asyncio.AbstractEventLoop | None, optional
         :param transport_constructor: A factory for creating the transport layer, defaults to None.
         :type transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None, optional
+        :param hgi_id: The Device ID to use for the HGI (gateway), overriding defaults.
+        :type hgi_id: str | None, optional
         :param kwargs: Additional configuration parameters passed to the engine and schema.
         :type kwargs: Any
         """
@@ -138,6 +142,7 @@ class Gateway(Engine):
             block_list=block_list,
             known_list=known_list,
             loop=loop,
+            hgi_id=hgi_id,
             transport_constructor=transport_constructor,
             **SCH_ENGINE_CONFIG(config),
         )
@@ -159,6 +164,7 @@ class Gateway(Engine):
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
         self.msg_db: MessageIndex | None = None
+        self._pkt_log_listener: QueueListener | None = None
 
     def __repr__(self) -> str:
         """Return a string representation of the Gateway.
@@ -218,10 +224,12 @@ class Gateway(Engine):
                 if system.dhw:
                     system.dhw._start_discovery_poller()
 
-        await set_pkt_logging_config(  # type: ignore[arg-type]
+        _, self._pkt_log_listener = await set_pkt_logging_config(  # type: ignore[arg-type]
             cc_console=self.config.reduce_processing >= DONT_CREATE_MESSAGES,
             **self._packet_log,
         )
+        if self._pkt_log_listener:
+            self._pkt_log_listener.start()
 
         # initialize SQLite index, set in _tx/Engine
         if self._sqlite_index:  # TODO(eb): default to True in Q1 2026
@@ -267,12 +275,21 @@ class Gateway(Engine):
         :returns: None
         :rtype: None
         """
+        # Stop the Engine first to ensure no tasks/callbacks try to write
+        # to the DB while we are closing it.
+        await super().stop()
+
+        if self._pkt_log_listener:
+            self._pkt_log_listener.stop()
+            # Close handlers to ensure files are flushed/closed
+            for handler in self._pkt_log_listener.handlers:
+                handler.close()
+            self._pkt_log_listener = None
 
         if self.msg_db:
             self.msg_db.stop()
-        await super().stop()
 
-    def _pause(self, *args: Any) -> None:
+    async def _pause(self, *args: Any) -> None:
         """Pause the (unpaused) gateway (disables sending/discovery).
 
         There is the option to save other objects, as `args`.
@@ -288,12 +305,12 @@ class Gateway(Engine):
         self.config.disable_discovery, disc_flag = True, self.config.disable_discovery
 
         try:
-            super()._pause(disc_flag, *args)
+            await super()._pause(disc_flag, *args)
         except RuntimeError:
             self.config.disable_discovery = disc_flag
             raise
 
-    def _resume(self) -> tuple[Any]:
+    async def _resume(self) -> tuple[Any]:
         """Resume the (paused) gateway (enables sending/discovery, if applicable).
 
         Will restore other objects, as `args`.
@@ -305,11 +322,13 @@ class Gateway(Engine):
 
         _LOGGER.debug("Gateway: Resuming engine...")
 
-        self.config.disable_discovery, *args = super()._resume()  # type: ignore[assignment]
+        # args_tuple = await super()._resume()
+        # self.config.disable_discovery, *args = args_tuple  # type: ignore[assignment]
+        self.config.disable_discovery, *args = await super()._resume()  # type: ignore[assignment]
 
         return args
 
-    def get_state(
+    async def get_state(
         self, include_expired: bool = False
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """Return the current schema & state (may include expired packets).
@@ -320,7 +339,7 @@ class Gateway(Engine):
         :rtype: tuple[dict[str, Any], dict[str, str]]
         """
 
-        self._pause()
+        await self._pause()
 
         def wanted_msg(msg: Message, include_expired: bool = False) -> bool:
             if msg.code == Code._313F:
@@ -357,7 +376,7 @@ class Gateway(Engine):
             }
             # _LOGGER.warning("Missing MessageIndex")
 
-        self._resume()
+        await self._resume()
 
         return self.schema, dict(sorted(pkts.items()))
 
@@ -392,7 +411,7 @@ class Gateway(Engine):
         tmp_transport: RamsesTransportT  # mypy hint
 
         _LOGGER.debug("Gateway: Restoring a cached packet log...")
-        self._pause()
+        await self._pause()
 
         if _clear_state:  # only intended for test suite use
             clear_state()
@@ -428,7 +447,7 @@ class Gateway(Engine):
         await tmp_transport.get_extra_info(SZ_READER_TASK)
 
         _LOGGER.debug("Gateway: Restored, resuming")
-        self._resume()
+        await self._resume()
 
     def _add_device(self, dev: Device) -> None:  # TODO: also: _add_system()
         """Add a device to the gateway (called by devices during instantiation).
