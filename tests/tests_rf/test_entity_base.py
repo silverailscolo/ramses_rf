@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from ramses_rf.const import RP
 from ramses_rf.database import MessageIndex
-from ramses_rf.entity_base import _MessageDB
+from ramses_rf.entity_base import Entity, _MessageDB
 from ramses_rf.gateway import Gateway
 from ramses_tx import Code, DeviceIdT, Message, Packet
 
@@ -232,3 +233,59 @@ class Test_entity_base:
         }, "dhw _msgz wrong"
 
         mock_gateway.msg_db.stop()  # close sqlite3 connection
+
+
+def test_gh_396_sqlite_ot_context_type() -> None:
+    """Verify that integer context values from SQLite are handled correctly.
+
+    See: https://github.com/ramses-rf/ramses_rf/issues/396
+    """
+    # Setup
+    gwy = MagicMock()
+    gwy.config.disable_discovery = True
+    gwy.msg_db = MagicMock()
+
+    # Mock the database returning an integer (e.g. 0) instead of a string ("00")
+    # This simulates the SQLite behavior reported in issue #396
+    gwy.msg_db.qry_field.return_value = [[0]]
+
+    # Instantiate the entity
+    entity = Entity(gwy)
+    entity.id = "01:123456"  # type: ignore[assignment]
+
+    # Execute
+    try:
+        cmds = entity.supported_cmds_ot
+    except TypeError as exc:
+        assert False, f"raised TypeError: {exc}"
+
+    # Verify
+    # The integer 0 should be converted to hex string "00" internally
+    assert "0x00" in cmds
+
+
+def test_gh_396_legacy_ot_context() -> None:
+    """Verify that the legacy (non-SQLite) path still processes context correctly."""
+    # Setup
+    gwy = MagicMock()
+    gwy.config.disable_discovery = True
+    gwy.msg_db = None  # Force legacy path
+
+    entity = Entity(gwy)
+    entity.id = "01:123456"  # type: ignore[assignment]
+
+    # Manually populate the legacy _msgz_ structure (backing attribute)
+    # Structure: _msgz_[Code][Verb][Ctx] = Message
+    entity._msgz_ = {
+        Code._3220: {
+            RP: {
+                "05": MagicMock(),  # Standard hex string case
+            }
+        }
+    }
+
+    # Execute
+    cmds = entity.supported_cmds_ot
+
+    # Verify
+    assert "0x05" in cmds
