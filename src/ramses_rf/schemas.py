@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
 """RAMSES RF - a RAMSES-II protocol decoder & analyser.
 
 :term:`Schema` processor for upper layer.
