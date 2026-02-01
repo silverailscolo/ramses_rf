@@ -1810,6 +1810,7 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         protocol: RamsesProtocolT,
         io_writer: Callable[[str], Awaitable[None]],
         disable_sending: bool = False,
+        autostart: bool = False,
         **kwargs: Any,
     ) -> None:
         """Initialize the callback transport.
@@ -1820,6 +1821,8 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         :type io_writer: Callable[[str], Awaitable[None]]
         :param disable_sending: Whether to disable sending, defaults to False.
         :type disable_sending: bool, optional
+        :param autostart: Whether to start reading immediately, defaults to False.
+        :type autostart: bool, optional
         """
         # Pass kwargs up the chain. _ReadTransport will extract 'loop' if present.
         # _BaseTransport will pass 'loop' to _CallbackTransportAbstractor, which consumes it.
@@ -1834,9 +1837,11 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         # Section 6.1: Object Lifecycle Logging
         _LOGGER.info(f"CallbackTransport created with io_writer={io_writer}")
 
-        # NOTE: connection_made is NOT called here. It must be triggered
-        # externally (e.g. by the Bridge) via the protocol methods once
-        # the external connection is ready.
+        # Handshake: Notify protocol immediately (Safe: idempotent)
+        self._protocol.connection_made(self, ramses=True)
+
+        if autostart:
+            self.resume_reading()
 
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
         """Process a frame for transmission by passing it to the external writer.
