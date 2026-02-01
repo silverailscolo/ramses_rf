@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """RAMSES RF - a RAMSES-II protocol decoder & analyser.
+`ramses_rf` takes care of the device (upper) layer.
 
 Works with (amongst others):
 - evohome (up to 12 zones)
@@ -16,7 +17,9 @@ from typing import TYPE_CHECKING
 
 from ramses_tx import Address, Command, Message, Packet  # noqa: F401
 
+from . import exceptions  # noqa: F401
 from .device import Device  # noqa: F401
+from .exceptions import CommandInvalid  # noqa: F401
 from .gateway import Gateway  # noqa: F401
 from .version import VERSION  # noqa: F401
 
@@ -38,6 +41,7 @@ __all__ = [
     #
     "Address",
     "Command",
+    "CommandInvalid",
     "Device",
     "Message",
     "Packet",
@@ -50,6 +54,10 @@ __all__ = [
     "Code",
     "IndexT",
     "VerbT",
+    #
+    "exceptions",
+    #
+    "GracefulExit",
 ]
 
 _LOGGER = logging.getLogger(__name__)

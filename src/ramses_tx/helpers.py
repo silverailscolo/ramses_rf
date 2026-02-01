@@ -131,28 +131,36 @@ file_time = _FILE_TIME()
 def timestamp() -> float:
     """Return the number of seconds since the Unix epoch.
 
-    Return an accurate value, even for Windows-based systems.
+    This function attempts to return a high-precision value, using specific
+    system calls on Windows if available.
+    :return: The current timestamp in seconds.
+    :rtype: float
     """
 
     # see: https://www.python.org/dev/peps/pep-0564/
-    if sys.platform != "win32":  # since 1970-01-01T00:00:00Z, time.gmtime(0)
+    if sys.platform == "win32":
+        # Windows uses a different epoch (1601-01-01)
+        ctypes.windll.kernel32.GetSystemTimePreciseAsFileTime(ctypes.byref(file_time))
+        _time = (file_time.dwLowDateTime + (file_time.dwHighDateTime << 32)) / 1e7
+        return float(_time - 134774 * 24 * 60 * 60)
+    else:
+        # Linux/macOS uses the Unix epoch (1970-01-01)
         return time.time_ns() / 1e9
-
-    # otherwise, is since 1601-01-01T00:00:00Z
-    ctypes.windll.kernel32.GetSystemTimePreciseAsFileTime(ctypes.byref(file_time))  # type: ignore[unreachable]
-    _time = (file_time.dwLowDateTime + (file_time.dwHighDateTime << 32)) / 1e7
-    return _time - 134774 * 24 * 60 * 60
 
 
 def dt_now() -> dt:
-    """Return the current datetime as a local/naive datetime object.
+    """Get the current datetime as a local/naive datetime object.
 
     This is slower, but potentially more accurate, than dt.now(), and is used mainly for
     packet timestamps.
+
+    :return: The current local datetime.
+    :rtype: dt
     """
     if sys.platform == "win32":
         return dt.fromtimestamp(timestamp())
-    return dt.now()
+    else:
+        return dt.now()
 
 
 def dt_str() -> str:
@@ -369,7 +377,14 @@ def hex_from_str(value: str) -> str:
 
 
 def hex_to_temp(value: HexStr4) -> bool | float | None:  # TODO: remove bool
-    """Convert a 2's complement 4-byte hex string to a float."""
+    """Convert a 4-byte 2's complement hex string to a float temperature ('C).
+
+    :param value: The 4-character hex string (e.g., '07D0')
+    :type value: HexStr4
+    :return: The temperature in Celsius, or None if N/A
+    :rtype: float | None
+    :raises ValueError: If input is not a 4-char hex string or temperature is invalid.
+    """
     if not isinstance(value, str) or len(value) != 4:
         raise ValueError(f"Invalid value: {value}, is not a 4-char hex string")
     if value == "31FF":  # means: N/A (== 127.99, 2s complement), signed?
@@ -470,7 +485,7 @@ def parse_valve_demand(
     if int(value, 16) & 0xF0 == 0xF0:
         return _faulted_device(SZ_HEAT_DEMAND, value)
 
-    result = int(value, 16) / 200  # c.f. hex_to_percentage
+    result = int(value, 16) / 200  # c.f. hex_to_percent
     if result == 1.01:  # HACK - does it mean maximum?
         result = 1.0
     elif result > 1.0:
@@ -479,15 +494,27 @@ def parse_valve_demand(
     return {SZ_HEAT_DEMAND: result}
 
 
+AIR_QUALITY_BASIS: dict[str, str] = {
+    "10": "voc",  # volatile compounds
+    "20": "co2",  # carbon dioxide
+    "40": "rel_humidity",  # relative humidity
+}
+
+
 # 31DA[2:6] and 12C8[2:6]
 def parse_air_quality(value: HexStr4) -> PayDictT.AIR_QUALITY:
-    """Return the air quality (%): poor (0.0) to excellent (1.0).
+    """Return the air quality percentage (0.0 to 1.0) and its basis.
 
     The basis of the air quality level should be one of: VOC, CO2 or relative humidity.
     If air_quality is EF, air_quality_basis should be 00.
 
     The sensor value is None if there is no sensor present (is not an error).
     The dict does not include the key if there is a sensor fault.
+
+    :param value: The 4-character hex string encoding quality and basis
+    :type value: HexStr4
+    :return: A dictionary containing the air quality and its basis (e.g., CO2, VOC)
+    :rtype: PayDictT.AIR_QUALITY
     """  # VOC: Volatile organic compounds
 
     # TODO: remove this as API used only internally...
@@ -505,13 +532,19 @@ def parse_air_quality(value: HexStr4) -> PayDictT.AIR_QUALITY:
     assert level <= 1.0, value[:2]  # TODO: raise exception
 
     assert value[2:] in ("10", "20", "40"), value[2:]  # TODO: remove assert
-    basis = {
-        "10": "voc",  # volatile compounds
-        "20": "co2",  # carbon dioxide
-        "40": "rel_humidity",  # relative humidity
-    }.get(value[2:], f"unknown_{value[2:]}")  # TODO: remove get/unknown
+
+    basis: str = AIR_QUALITY_BASIS.get(
+        value[2:], f"unknown_{value[2:]}"
+    )  # TODO: remove get/unknown
 
     return {SZ_AIR_QUALITY: level, SZ_AIR_QUALITY_BASIS: basis}
+
+
+def air_quality_code(desc: str) -> str:
+    for k, v in AIR_QUALITY_BASIS.items():
+        if v == desc:
+            return k
+    return "00"
 
 
 # 31DA[6:10] and 1298[2:6]
@@ -593,12 +626,9 @@ def _parse_hvac_humidity(
     if int(value, 16) & 0xF0 == 0xF0:
         return _faulted_sensor(param_name, value)
 
-    percentage = int(value, 16) / 100  # TODO: confirm not 200
-    assert percentage <= 1.0, value  # TODO: raise exception if > 1.0?
+    percentage = hex_to_percent(value, False)  # TODO: confirm not /200
 
-    result: dict[str, float | str | None] = {
-        param_name: percentage
-    }  # was: percent_from_hex(value, high_res=False)
+    result: dict[str, float | str | None] = {param_name: percentage}
     if temp:
         result |= {SZ_TEMPERATURE: hex_to_temp(temp)}
     if dewpoint:
@@ -657,6 +687,26 @@ def _parse_hvac_temp(param_name: str, value: HexStr4) -> Mapping[str, float | No
     return {param_name: temp}
 
 
+ABILITIES = {
+    15: "off",
+    14: "low_med_high",  # 3,2,1 = high,med,low?
+    13: "timer",
+    12: "boost",
+    11: "auto",
+    10: "speed_4",
+    9: "speed_5",
+    8: "speed_6",
+    7: "speed_7",
+    6: "speed_8",
+    5: "speed_9",
+    4: "speed_10",
+    3: "auto_night",
+    2: "reserved",
+    1: "post_heater",
+    0: "pre_heater",
+}
+
+
 # 31DA[30:34]
 def parse_capabilities(value: HexStr4) -> PayDictT.CAPABILITIES:
     """Return the speed capabilities (a bitmask).
@@ -672,25 +722,6 @@ def parse_capabilities(value: HexStr4) -> PayDictT.CAPABILITIES:
     if value == "7FFF":  # TODO: Not implemented???
         return {SZ_SPEED_CAPABILITIES: None}
 
-    ABILITIES = {
-        15: "off",
-        14: "low_med_high",  # 3,2,1 = high,med,low?
-        13: "timer",
-        12: "boost",
-        11: "auto",
-        10: "speed_4",
-        9: "speed_5",
-        8: "speed_6",
-        7: "speed_7",
-        6: "speed_8",
-        5: "speed_9",
-        4: "speed_10",
-        3: "auto_night",
-        2: "reserved",
-        1: "post_heater",
-        0: "pre_heater",
-    }
-
     # assert value in ("0002", "4000", "4808", "F000", "F001", "F800", "F808"), value
 
     return {
@@ -698,6 +729,16 @@ def parse_capabilities(value: HexStr4) -> PayDictT.CAPABILITIES:
             v for k, v in ABILITIES.items() if int(value, 16) & 2**k
         ]
     }
+
+
+def capability_bits(cap_list: list[str]) -> int:
+    # 0xF800 = 0b1111100000000000
+    cap_res: int = 0
+    for cap in cap_list:
+        for k, v in ABILITIES.items():
+            if v == cap:
+                cap_res |= 2**k  # set bit
+    return cap_res
 
 
 # 31DA[34:36]
@@ -724,9 +765,9 @@ def parse_bypass_position(value: HexStr2) -> PayDictT.BYPASS_POSITION:
     return {SZ_BYPASS_POSITION: bypass_pos}
 
 
-# 31DA[36:38]  # TODO: WIP (3 more bits), also 22F3?
+# 31DA[36:38]  # TODO: WIP (3 more bits), also 22F3 and 22F4?
 def parse_fan_info(value: HexStr2) -> PayDictT.FAN_INFO:
-    """Return the fan info (current speed, and...).
+    """Return the fan state (lookup table for current speed and mode).
 
     The sensor value is None if there is no sensor present (is not an error).
     The dict does not include the key if there is a sensor fault.
@@ -750,12 +791,29 @@ def parse_fan_info(value: HexStr2) -> PayDictT.FAN_INFO:
     flags = list((int(value, 16) & (1 << x)) >> x for x in range(7, 4, -1))
 
     return {
-        SZ_FAN_INFO: _31DA_FAN_INFO[int(value, 16) & 0x1F],
+        SZ_FAN_INFO: _31DA_FAN_INFO[
+            int(value, 16) & 0x1F
+        ],  # lookup description from code
         "_unknown_fan_info_flags": flags,
     }
 
 
-# 31DA[38:40]
+def fan_info_to_byte(info: str) -> int:
+    for k, v in _31DA_FAN_INFO.items():
+        if v == info:
+            return int(k) & 0x1F
+    return 0x0000
+
+
+def fan_info_flags(flags_list: list[int]) -> int:
+    flag_res: int = 0
+    for index, shift in enumerate(range(7, 4, -1)):  # index = 7, 6 and 5
+        if flags_list[index] == 1:
+            flag_res |= 1 << shift  # set bits
+    return flag_res
+
+
+# 31DA[38:40], also 2210
 def parse_exhaust_fan_speed(value: HexStr2) -> PayDictT.EXHAUST_FAN_SPEED:
     """Return the exhaust fan speed (% of max speed)."""
     return _parse_fan_speed(SZ_EXHAUST_FAN_SPEED, value)  # type: ignore[return-value]
@@ -840,7 +898,7 @@ def _parse_fan_heater(param_name: str, value: HexStr2) -> Mapping[str, float | N
     if int(value, 16) & 0xF0 == 0xF0:
         return _faulted_sensor(param_name, value)  # type: ignore[return-value]
 
-    percentage = int(value, 16) / 200  # Siber DF EVO 2 is /200, not /100 (?Others)
+    percentage = int(value, 16) / 200  # Siber DF EVO 2 is /200, not /100 (Others?)
     assert percentage <= 1.0, value  # TODO: raise exception if > 1.0?
 
     return {param_name: percentage}  # was: percent_from_hex(value, high_res=False)

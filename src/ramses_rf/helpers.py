@@ -67,7 +67,7 @@ def shrink(
     """Return a minimized dict, after removing all the meaningless items.
 
     Specifically, removes items with:
-    - uwanted keys (starting with '_')
+    - unwanted keys (starting with '_')
     - falsey values
     """
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RAMSES RF - a RAMSES-II protocol decoder & analyser.
 
-Schema processor for protocol (lower) layer.
+:term:`Schema` processor for protocol (lower) layer.
 """
 
 from __future__ import annotations
@@ -73,13 +73,17 @@ class PktLogConfigT(TypedDict):
 def sch_packet_log_dict_factory(
     default_backups: int = 0,
 ) -> dict[vol.Required, vol.Any]:
-    """Return a packet log dict with a configurable default rotation policy.
+    """
+    :return: a packet log dict with a configurable default rotation policy.
 
-    usage:
+    Usage:
 
-    SCH_PACKET_LOG_7 = vol.Schema(
-        packet_log_dict_factory(default_backups=7), extra=vol.PREVENT_EXTRA
-    )
+    .. code-block::
+
+        SCH_PACKET_LOG_7 = vol.Schema(
+            packet_log_dict_factory(default_backups=7), extra=vol.PREVENT_EXTRA
+        )
+
     """
 
     SCH_PACKET_LOG_CONFIG = vol.Schema(
@@ -162,11 +166,13 @@ class PortConfigT(TypedDict):
 def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     """Return a serial port dict.
 
-    usage:
+    Usage:
 
-    SCH_SERIAL_PORT = vol.Schema(
-        sch_serial_port_dict_factory(), extra=vol.PREVENT_EXTRA
-    )
+    .. code-block::
+
+        SCH_SERIAL_PORT = vol.Schema(
+            sch_serial_port_dict_factory(), extra=vol.PREVENT_EXTRA
+        )
     """
 
     SCH_SERIAL_PORT_NAME = str
@@ -215,6 +221,7 @@ def ConvertNullToDict() -> Callable[[_T | None], _T | dict[Never, Never]]:
 
 
 SZ_ALIAS: Final = "alias"
+SZ_BOUND_TO: Final = "bound"
 SZ_CLASS: Final = "class"
 SZ_FAKED: Final = "faked"
 SZ_SCHEME: Final = "scheme"
@@ -251,11 +258,13 @@ def sch_global_traits_dict_factory(
 ) -> tuple[dict[vol.Optional, vol.Any], vol.Any]:
     """Return a global traits dict with a configurable extra traits.
 
-    usage:
+    Usage:
 
-    SCH_GLOBAL_TRAITS = vol.Schema(
-        sch_global_traits_dict(heat=traits), extra=vol.PREVENT_EXTRA
-    )
+    .. code-block::
+
+        SCH_GLOBAL_TRAITS = vol.Schema(
+            sch_global_traits_dict(heat=traits), extra=vol.PREVENT_EXTRA
+        )
     """
 
     heat_traits = heat_traits or {}
@@ -285,7 +294,7 @@ def sch_global_traits_dict_factory(
     )
     SCH_TRAITS_HEAT = SCH_TRAITS_HEAT.extend(
         heat_traits,
-        extra=vol.PREVENT_EXTRA if heat_traits else vol.REMOVE_EXTRA,
+        extra=vol.PREVENT_EXTRA,  # Always prevent extra keys
     )
 
     # NOTE: voluptuous doesn't like StrEnums, hence str(s)
@@ -296,6 +305,8 @@ def sch_global_traits_dict_factory(
             vol.Optional(SZ_CLASS, default="HVC"): vol.Any(
                 None, *hvac_slugs, *(str(DEV_TYPE_MAP[s]) for s in hvac_slugs)
             ),  # TODO: consider removing None
+            # Add 'bound' trait for FAN devices
+            vol.Optional(SZ_BOUND_TO): vol.Any(None, vol.Match(DEVICE_ID_REGEX.ANY)),
         }
     )
     SCH_TRAITS_HVAC = SCH_TRAITS_HVAC.extend(
@@ -303,7 +314,7 @@ def sch_global_traits_dict_factory(
     )
     SCH_TRAITS_HVAC = SCH_TRAITS_HVAC.extend(
         hvac_traits,
-        extra=vol.PREVENT_EXTRA if hvac_traits else vol.REMOVE_EXTRA,
+        extra=vol.PREVENT_EXTRA,  # Always prevent extra keys
     )
 
     SCH_TRAITS = vol.Any(
@@ -335,7 +346,6 @@ SCH_GLOBAL_TRAITS_DICT, SCH_TRAITS = sch_global_traits_dict_factory()
 #
 # Device lists (Engine configuration)
 
-
 DeviceIdT = NewType("DeviceIdT", str)  # TypeVar('DeviceIdT', bound=str)  #
 DevIndexT = NewType("DevIndexT", str)
 DeviceListT: TypeAlias = dict[DeviceIdT, DeviceTraitsT]
@@ -346,7 +356,8 @@ def select_device_filter_mode(
     known_list: DeviceListT,
     block_list: DeviceListT,
 ) -> bool:
-    """Determine which device filter to use, if any.
+    """
+    Determine which device filter to use, if any.
 
     Either:
      - block if device_id in block_list (could be empty), otherwise
@@ -394,21 +405,34 @@ def select_device_filter_mode(
 
 #
 # 5/5: Gateway (engine) configuration
+
 SZ_DISABLE_SENDING: Final = "disable_sending"
+SZ_AUTOSTART: Final = "autostart"
 SZ_DISABLE_QOS: Final = "disable_qos"
 SZ_ENFORCE_KNOWN_LIST: Final[str] = f"enforce_{SZ_KNOWN_LIST}"
 SZ_EVOFW_FLAG: Final = "evofw_flag"
+SZ_SQLITE_INDEX: Final = (
+    "sqlite_index"  # temporary 0.52.x SQLite dev config option in ramses_cc
+)
+SZ_LOG_ALL_MQTT: Final = "log_all_mqtt"
 SZ_USE_REGEX: Final = "use_regex"
 
 SCH_ENGINE_DICT = {
     vol.Optional(SZ_DISABLE_SENDING, default=False): bool,
+    vol.Optional(SZ_AUTOSTART, default=False): bool,
     vol.Optional(SZ_DISABLE_QOS, default=None): vol.Any(
         None,  # None is selective QoS (e.g. QoS only for bindings, schedule, etc.)
         bool,
-    ),  # in long term, this default to be True (and no None)
+    ),  # in the long term, this default to be True (not None)
     vol.Optional(SZ_ENFORCE_KNOWN_LIST, default=False): bool,
     vol.Optional(SZ_EVOFW_FLAG): vol.Any(None, str),
     # vol.Optional(SZ_PORT_CONFIG): SCH_SERIAL_PORT_CONFIG,
+    vol.Optional(
+        SZ_SQLITE_INDEX, default=False
+    ): bool,  # temporary 0.52.x dev config option
+    vol.Optional(
+        SZ_LOG_ALL_MQTT, default=False
+    ): bool,  # log all incoming MQTT traffic config option
     vol.Optional(SZ_USE_REGEX): dict,  # vol.All(ConvertNullToDict(), dict),
     vol.Optional(SZ_COMMS_PARAMS): SCH_COMMS_PARAMS,
 }

@@ -66,7 +66,7 @@ class _BaseProtocol(asyncio.Protocol):
         self._msg_handler = msg_handler
         self._msg_handlers: list[MsgHandlerT] = []
 
-        self._transport: RamsesTransportT = None  # type: ignore[assignment]
+        self._transport: RamsesTransportT | None = None
         self._loop = asyncio.get_running_loop()
 
         self._pause_writing = False  # FIXME: Start in R/O mode as no connection yet?
@@ -79,6 +79,9 @@ class _BaseProtocol(asyncio.Protocol):
         self._prev_msg: Message | None = None
 
         self._is_evofw3: bool | None = None
+
+        self._active_hgi: DeviceIdT | None = None
+        self._context: ProtocolContext | None = None
 
     @property
     def hgi_id(self) -> DeviceIdT:
@@ -140,7 +143,16 @@ class _BaseProtocol(asyncio.Protocol):
         received or the connection was aborted or closed).
         """
 
-        assert self._wait_connection_lost  # mypy
+        # FIX: Check if _wait_connection_lost exists before asserting
+        # This handles cases where connection was never fully established (e.g. timeout)
+        if not self._wait_connection_lost:
+            _LOGGER.debug(
+                "connection_lost called but no connection was established (ignoring)"
+            )
+            # Reset the connection made future for next attempt
+            if self._wait_connection_made.done():
+                self._wait_connection_made = self._loop.create_future()
+            return
 
         if self._wait_connection_lost.done():  # BUG: why is callback invoked twice?
             return
@@ -199,6 +211,45 @@ class _BaseProtocol(asyncio.Protocol):
 
         self._pause_writing = False
 
+    async def _send_impersonation_alert(self, cmd: Command) -> None:
+        """Allow the Protocol to send an impersonation alert (stub)."""
+        return
+
+    def _patch_cmd_if_needed(self, cmd: Command) -> Command:
+        """Patch the command with the actual HGI ID if it uses the default placeholder.
+
+        Legacy HGI80s (TI 3410) require the default ID (18:000730), or they will
+        silent-fail. However, evofw3 devices prefer the real ID.
+        """
+        # NOTE: accessing private member cmd._addrs to safely patch the source address
+
+        if (
+            self.hgi_id
+            and self._is_evofw3  # Only patch if using evofw3 (not HGI80)
+            and cmd._addrs[0].id == HGI_DEV_ADDR.id
+            and self.hgi_id != HGI_DEV_ADDR.id
+        ):
+            _LOGGER.debug(
+                f"Patching command with active HGI ID: swapped {HGI_DEV_ADDR.id} "
+                f"-> {self.hgi_id} for {cmd._hdr}"
+            )
+
+            # Get current addresses as strings
+            new_addrs = [a.id for a in cmd._addrs]
+
+            # ONLY patch the Source Address (Index 0).
+            # Leave Dest (Index 1/2) alone to avoid breaking tests that expect 18:000730.
+            new_addrs[0] = self.hgi_id
+
+            # Reconstruct the command string with the correct address
+            new_frame = (
+                f"{cmd.verb} {cmd.seqn} {new_addrs[0]} {new_addrs[1]} {new_addrs[2]} "
+                f"{cmd.code} {int(cmd.len_):03d} {cmd.payload}"
+            )
+            return Command(new_frame)
+
+        return cmd
+
     async def send_cmd(
         self,
         cmd: Command,
@@ -207,28 +258,57 @@ class _BaseProtocol(asyncio.Protocol):
         gap_duration: float = DEFAULT_GAP_DURATION,
         num_repeats: int = DEFAULT_NUM_REPEATS,
         priority: Priority = Priority.DEFAULT,
-        qos: QosParams = DEFAULT_QOS,
+        qos: QosParams = DEFAULT_QOS,  # max_retries, timeout, wait_for_reply
     ) -> Packet:
-        """This is the wrapper for self._send_cmd(cmd)."""
+        """Send a Command with Qos (with retries, until success or ProtocolError).
 
-        # if not self._transport:
-        #     raise exc.ProtocolSendFailed("There is no connected Transport")
+        Returns the Command's response Packet or the Command echo if a response is not
+        expected (e.g. sending an RP).
 
-        if _DBG_FORCE_LOG_PACKETS:
-            _LOGGER.warning(f"QUEUED:     {cmd}")
-        else:
-            _LOGGER.debug(f"QUEUED:     {cmd}")
+        If wait_for_reply is True, return the RQ's RP (or W's I), or raise an exception
+        if one doesn't arrive. If it is False, return the echo of the Command only. If
+        it is None (the default), act as True for RQs, and False for all other Commands.
 
-        if self._pause_writing:
-            raise exc.ProtocolError("The Protocol is currently read-only/paused")
+        num_repeats is # of times to send the Command, in addition to the fist transmit,
+        with gap_duration seconds between each transmission. If wait_for_reply is True,
+        then num_repeats is ignored.
 
-        return await self._send_cmd(
+        Commands are queued and sent FIFO, except higher-priority Commands are always
+        sent first.
+
+        Will raise:
+            ProtocolSendFailed: tried to Tx Command, but didn't get echo/reply
+            ProtocolError:      didn't attempt to Tx Command for some reason
+        """
+
+        assert gap_duration == DEFAULT_GAP_DURATION
+        assert 0 <= num_repeats <= 3  # if QoS, only Tx x1, with no repeats
+
+        # Patch command with actual HGI ID if it uses the default placeholder
+        cmd = self._patch_cmd_if_needed(cmd)
+
+        if qos and not self._context:
+            _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
+
+        if cmd.src.id != self.hgi_id:  # Was HGI_DEV_ADDR.id
+            await self._send_impersonation_alert(cmd)
+
+        if qos.wait_for_reply and num_repeats:
+            _LOGGER.warning(f"{cmd} < num_repeats set to 0, as wait_for_reply is True")
+            num_repeats = 0  # the lesser crime over wait_for_reply=False
+
+        pkt = await self._send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
             cmd,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
             qos=qos,
         )
+
+        if not pkt:  # HACK: temporary workaround for returning None
+            raise exc.ProtocolSendFailed(f"Failed to send command: {cmd} (REPORT THIS)")
+
+        return pkt
 
     async def _send_cmd(
         self,
@@ -249,6 +329,10 @@ class _BaseProtocol(asyncio.Protocol):
         self, frame: str, num_repeats: int = 0, gap_duration: float = 0.0
     ) -> None:  # _send_frame() -> transport
         """Write to the transport."""
+
+        if self._transport is None:
+            raise exc.ProtocolSendFailed("Transport is not connected")
+
         await self._transport.write_frame(frame)
         for _ in range(num_repeats - 1):
             await asyncio.sleep(gap_duration)
@@ -282,6 +366,7 @@ class _BaseProtocol(asyncio.Protocol):
         """
 
         if self._msg_handler:  # type: ignore[truthy-function]
+            _LOGGER.debug(f"Dispatching valid message to handler: {msg}")
             self._loop.call_soon_threadsafe(self._msg_handler, msg)
         for callback in self._msg_handlers:
             # TODO: if handler's filter returns True:
@@ -322,9 +407,10 @@ class _DeviceIdFilterMixin(_BaseProtocol):
     def hgi_id(self) -> DeviceIdT:
         if not self._transport:
             return self._known_hgi or HGI_DEV_ADDR.id
-        return self._transport.get_extra_info(  # type: ignore[no-any-return]
-            SZ_ACTIVE_HGI, self._known_hgi or HGI_DEV_ADDR.id
-        )
+        # CRITICAL FIX: get_extra_info returns None if key exists but val is None
+        # We must ensure we fallback to the known HGI or default if it returns None
+        hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
+        return hgi or self._known_hgi or HGI_DEV_ADDR.id
 
     @staticmethod
     def _extract_known_hgi_id(
@@ -332,7 +418,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         /,
         *,
         disable_warnings: bool = False,
-        strick_checking: bool = False,
+        strict_checking: bool = False,
     ) -> DeviceIdT | None:
         """Return the device_id of the gateway specified in the include_list, if any.
 
@@ -367,7 +453,10 @@ class _DeviceIdFilterMixin(_BaseProtocol):
 
         known_hgi = (explicit_hgis if explicit_hgis else implicit_hgis)[0]
 
-        if include_list[known_hgi].get(SZ_CLASS) != DevType.HGI:
+        if include_list[known_hgi].get(SZ_CLASS) not in (
+            DevType.HGI,
+            DEV_TYPE_MAP[DevType.HGI],
+        ):
             logger(
                 f"The {SZ_KNOWN_LIST} SHOULD include exactly one gateway (HGI): "
                 f"{known_hgi} should specify 'class: HGI', as 18: is also used for HVAC"
@@ -384,7 +473,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                 f"The {SZ_KNOWN_LIST} includes exactly one gateway (HGI): {known_hgi}"
             )
 
-        if strick_checking:
+        if strict_checking:
             return known_hgi if [known_hgi] == explicit_hgis else None
         return known_hgi
 
@@ -555,8 +644,17 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         super().connection_made(transport)
         # TODO: needed? self.resume_writing()
 
-        self._set_active_hgi(self._transport.get_extra_info(SZ_ACTIVE_HGI))
-        self._is_evofw3 = self._transport.get_extra_info(SZ_IS_EVOFW3)
+        # ROBUSTNESS FIX: Ensure self._transport is set even if the wait future was cancelled
+        if self._transport is None:
+            _LOGGER.warning(
+                f"{self}: Transport bound after wait cancelled (late connection)"
+            )
+            self._transport = transport
+
+        # Safe access with check (optional but recommended)
+        if self._transport:
+            self._set_active_hgi(self._transport.get_extra_info(SZ_ACTIVE_HGI))
+            self._is_evofw3 = self._transport.get_extra_info(SZ_IS_EVOFW3)
 
         if not self._context:
             return
@@ -583,7 +681,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
             self._context.pause_writing()
 
     def resume_writing(self) -> None:
-        """Inform the FSM that the Protocol has been paused."""
+        """Inform the FSM that the Protocol has been resumed."""
 
         super().resume_writing()
         if self._context:
@@ -597,7 +695,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
             self._context.pkt_received(pkt)
 
     async def _send_impersonation_alert(self, cmd: Command) -> None:
-        """Send an puzzle packet warning that impersonation is occurring."""
+        """Send a puzzle packet warning that impersonation is occurring."""
 
         if _DBG_DISABLE_IMPERSONATION_ALERTS:
             return
@@ -656,6 +754,8 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         #         f"{self}: Failed to send {cmd._hdr}: excluded by list"
         #     )
 
+        assert self._context
+
         try:
             return await self._context.send_cmd(send_cmd, cmd, priority, qos)
         # except InvalidStateError as err:  # TODO: handle InvalidStateError separately
@@ -700,9 +800,6 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
 
         if qos and not self._context:
             _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
-
-        if cmd.src.id != HGI_DEV_ADDR.id:  # or actual HGI addr
-            await self._send_impersonation_alert(cmd)
 
         if qos.wait_for_reply and num_repeats:
             _LOGGER.warning(f"{cmd} < num_repeats set to 0, as wait_for_reply is True")
@@ -791,7 +888,7 @@ async def create_stack(
     )
 
     transport: RamsesTransportT = await (transport_factory_ or transport_factory)(  # type: ignore[operator]
-        protocol, disable_sending=disable_sending, **kwargs
+        protocol, disable_sending=bool(disable_sending), **kwargs
     )
 
     if not kwargs.get(SZ_PORT_NAME):

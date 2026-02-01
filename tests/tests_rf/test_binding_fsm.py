@@ -3,7 +3,7 @@
 # TODO: test addenda phase of binding handshake
 # TODO: get test working with (and without) disabled QoS
 
-"""TRAMSES RF - Test the binding protocol with a virtual RF.
+"""RAMSES RF - Test the binding protocol with a virtual RF.
 
 NB: This test will likely fail with pytest-repeat (pytest -n x); maybe because of
 concurrent access to pty.openpty().
@@ -11,6 +11,7 @@ concurrent access to pty.openpty().
 
 import asyncio
 from datetime import datetime as dt
+from unittest.mock import patch
 
 import pytest
 
@@ -303,9 +304,10 @@ async def _test_flow_10x(
 
     # # Step S3: Supplicant sends an Addenda (optional)
     # msg = Message(Packet(dt.now(), "000 " + pkt_flow_expected[_RATIFY]))
+    # old code:
     # supplicant._msgz[msg.code] = {msg.verb: {msg._pkt._ctx: msg}}
-
-    # # TODO: need to finish this
+    # now: only supplicant ?! explains a lot of failures
+    # gwy_r.msg_db.add(msg)  # (for supplicant only?) >> remove from respondent/filter while adding
     # pkt = await supplicant._context._cast_addenda()
     # await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
     # assert pkt is not None
@@ -378,6 +380,7 @@ async def _test_flow_20x(
 
 # TODO: binding working without QoS  # @patch("ramses_tx.protocol._DBG_DISABLE_QOS", True)
 @pytest.mark.xdist_group(name="virt_serial")
+@patch("ramses_tx.transport._DEFAULT_TIMEOUT_PORT", 2.0)  # Increased from 0.5 default
 async def test_flow_100(test_set: dict[str, dict]) -> None:
     """Check packet flow / state change of a binding at context layer."""
 
@@ -407,6 +410,7 @@ async def test_flow_100(test_set: dict[str, dict]) -> None:
 
 # TODO: binding working without QoS  # @patch("ramses_tx.protocol._DBG_DISABLE_QOS", True)
 @pytest.mark.xdist_group(name="virt_serial")
+@patch("ramses_tx.transport._DEFAULT_TIMEOUT_PORT", 2.0)  # Increased from 0.5 default
 async def test_flow_200(test_set: dict[str, dict]) -> None:
     """Check packet flow / state change of a binding at device layer."""
 

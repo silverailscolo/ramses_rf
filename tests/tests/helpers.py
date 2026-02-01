@@ -2,7 +2,6 @@
 """RAMSES RF - a RAMSES-II protocol decoder & analyser."""
 
 import json
-import logging
 import warnings
 from collections.abc import AsyncGenerator, Callable
 from pathlib import Path
@@ -13,6 +12,7 @@ import pytest
 import voluptuous as vol
 
 from ramses_rf import Gateway
+from ramses_rf.database import MessageIndex
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import SCH_GLOBAL_CONFIG, SCH_GLOBAL_SCHEMAS
 from ramses_tx.schemas import SCH_GLOBAL_TRAITS_DICT
@@ -24,7 +24,7 @@ SCH_GLOBAL_TRAITS = vol.Schema(SCH_GLOBAL_TRAITS_DICT, extra=vol.PREVENT_EXTRA)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-logging.disable(logging.WARNING)  # usu. WARNING
+# logging.disable(logging.WARNING)  # usu. WARNING  # TODO: Verify original intent. Commented out as it breaks isolated logging logic in PR #413.
 
 
 TEST_DIR = Path(__file__).resolve().parent  # TEST_DIR = f"{os.path.dirname(__file__)}"
@@ -44,10 +44,11 @@ async def gwy() -> AsyncGenerator[Gateway, None]:  # NOTE: async to get running 
     """Return a vanilla system (with a known, minimal state)."""
     gwy = Gateway("/dev/null", config={})
     gwy._disable_sending = True
+    gwy.msg_db = MessageIndex()  # required to add heat dummy 3220 msg
     try:
         yield gwy
     finally:
-        await gwy.stop()
+        await gwy.stop()  # close sqlite3 connection
 
 
 def assert_expected(
@@ -82,7 +83,8 @@ def assert_raises(exception: type[Exception], fnc: Callable, *args: Any) -> None
 
 async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     """Create a system state from a packet log (using an optional configuration)."""
-
+    # TODO(eb): default sqlite_index to True Q1 2026
+    _sqlite_index = kwargs.pop("_sqlite_index", False)
     kwargs = SCH_GLOBAL_CONFIG({k: v for k, v in kwargs.items() if k[:1] != "_"})
 
     try:
@@ -94,11 +96,20 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     if config:
         kwargs.update(config)
 
-    with open(f"{dir_name}/packet.log") as f:
-        gwy = Gateway(None, input_file=f, **kwargs)
-        await gwy.start()
+    path = f"{dir_name}/packet.log"
+    gwy = Gateway(None, input_file=path, **kwargs)
+    gwy._sqlite_index = _sqlite_index  # TODO(eb): remove legacy Q2 2026
+    await gwy.start()
 
-        await gwy._protocol.wait_for_connection_lost()  # until packet log is EOF
+    # The Gateway with input_file uses a Transport that processes the file automatically.
+    # We simply need to wait for the transport to finish reading the file.
+    # We pause discovery/sending during replay to avoid side effects.
+    await gwy._protocol.wait_for_connection_lost()  # until packet log is EOF
+
+    # Ensure all packets from the log are written to the DB before returning
+    # This is critical for tests using the StorageWorker
+    if gwy.msg_db:
+        gwy.msg_db.flush()
 
     # if hasattr(
     #     gwy.pkt_transport.serial, "mock_devices"

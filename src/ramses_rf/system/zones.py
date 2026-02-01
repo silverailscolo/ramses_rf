@@ -36,7 +36,7 @@ from ramses_rf.device import (
     TrvActuator,
     UfhController,
 )
-from ramses_rf.entity_base import Child, Entity, Parent, class_by_attr
+from ramses_rf.entity_base import _ID_SLICE, Child, Entity, Parent, class_by_attr
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
@@ -233,7 +233,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         # def eavesdrop_dhw_sensor(this: Message, *, prev: Message | None = None) -> None:
         # """Eavesdrop packets, or pairs of packets, to maintain the system state.
 
-        # There are only 2 ways to to find a controller's DHW sensor:
+        # There are only 2 ways to find a controller's DHW sensor:
         # 1. The 10A0 RQ/RP *from/to a 07:* (1x/4h) - reliable
         # 2. Use sensor temp matching - non-deterministic
 
@@ -266,7 +266,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         #     self._get_dhw(sensor=this.dst)
 
         assert (
-            msg.src is self.ctl
+            msg.src == self.ctl
             and msg.code in (Code._0005, Code._000C, Code._10A0, Code._1260, Code._1F41)
             or msg.payload.get(SZ_DOMAIN_ID) in (F9, FA)
             or msg.payload.get(SZ_ZONE_IDX) == "HW"
@@ -633,13 +633,13 @@ class Zone(ZoneSchedule):
                     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.UFH]})
 
             assert (
-                msg.src is self.ctl or msg.src.type == DEV_TYPE_MAP.UFC
+                msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC
             ) and (  # DEX
                 isinstance(msg.payload, dict)
                 or [d for d in msg.payload if d.get(SZ_ZONE_IDX) == self.idx]
             ), f"msg inappropriately routed to {self}"
 
-        assert (msg.src is self.ctl or msg.src.type == DEV_TYPE_MAP.UFC) and (  # DEX
+        assert (msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC) and (  # DEX
             isinstance(msg.payload, list)
             or msg.code == Code._0005
             or msg.payload.get(SZ_ZONE_IDX) == self.idx
@@ -689,7 +689,7 @@ class Zone(ZoneSchedule):
 
     @property
     def heating_type(self) -> str | None:
-        """Return the type of the zone/DHW (e.g. electric_zone, stored_dhw)."""
+        """Get the type of the zone/DHW (e.g. electric_zone, stored_dhw)."""
 
         if self._SLUG is None:  # isinstance(self, ???)
             return None
@@ -697,10 +697,13 @@ class Zone(ZoneSchedule):
 
     @property
     def name(self) -> str | None:  # 0004
-        """Return the name of the zone."""
+        """Get the name of the zone."""
 
-        if self._gwy._zzz:
-            msgs = self._gwy._zzz.get(code=Code._0004, src=self._z_id, ctx=self._z_idx)
+        if self._gwy.msg_db:
+            msgs = self._gwy.msg_db.get(
+                code=Code._0004, src=self._z_id, ctx=self._z_idx
+            )
+            _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")  # DEBUG issue #317
             return msgs[0].payload.get(SZ_NAME) if msgs else None
 
         return self._msg_value(Code._0004, key=SZ_NAME)  # type: ignore[no-any-return]
@@ -726,13 +729,33 @@ class Zone(ZoneSchedule):
         """Set the target temperature, until the next scheduled setpoint."""
 
         if value is None:
-            return self.reset_mode()
+            self.reset_mode()
 
         cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, value)
         self._gwy.send_cmd(cmd, priority=Priority.HIGH)
 
     @property
     def temperature(self) -> float | None:  # 30C9
+        if self._gwy.msg_db:
+            # evohome zones only get initial temp from src + idx, so use zone sensor if newer
+            sql = f"""
+                SELECT dtm from messages WHERE verb in (' I', 'RP')
+                AND code = '30C9'
+                AND (plk LIKE '%{SZ_TEMPERATURE}%')
+                AND ((src = ? AND ctx = ?) OR src = ?)
+            """
+            sensor_id = "aa:aaaaaa"  # should not match any device_id
+            if self._sensor:
+                sensor_id = self._sensor.id
+            # custom SQLite query on MessageIndex
+            msgs = self._gwy.msg_db.qry(
+                sql, (self.id[:_ID_SLICE], self.idx, sensor_id[:_ID_SLICE])
+            )
+            if msgs and len(msgs) > 0:
+                msgs_sorted = sorted(msgs, reverse=True)
+                return msgs_sorted[0].payload.get(SZ_TEMPERATURE)  # type: ignore[no-any-return]
+            return None
+        # else: TODO Q1 2026 remove remainder
         return self._msg_value(Code._30C9, key=SZ_TEMPERATURE)  # type: ignore[no-any-return]
 
     @property

@@ -70,12 +70,12 @@ def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
     # Devices need to know their controller, ?and their location ('parent' domain)
     # NB: only addrs processed here, packet metadata is processed elsewhere
 
-    # Determinging bindings to a controller:
+    # Determining bindings to a controller:
     #  - configury; As per any schema                                                   # codespell:ignore configury
     #  - discovery: If in 000C pkt, or pkt *to* device where src is a controller
     #  - eavesdrop: If pkt *from* device where dst is a controller
 
-    # Determinging location in a schema (domain/DHW/zone):
+    # Determining location in a schema (domain/DHW/zone):
     #  - configury; As per any schema                                                   # codespell:ignore configury
     #  - discovery: If in 000C pkt - unable for 10: & 00: (TRVs)
     #  - discovery: from packet fingerprint, excl. payloads (only for 10:)
@@ -91,7 +91,7 @@ def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
     if not gwy.config.enable_eavesdrop:
         return
 
-    if not isinstance(this.dst, Device) and this.src is not gwy.hgi:  # type: ignore[unreachable]
+    if not isinstance(this.dst, Device) and this.src != gwy.hgi:  # type: ignore[unreachable]
         with contextlib.suppress(LookupError):
             this.dst = gwy.get_device(this.dst.id)  # type: ignore[assignment]
 
@@ -99,7 +99,7 @@ def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
 def _check_msg_addrs(msg: Message) -> None:  # TODO
     """Validate the packet's address set.
 
-    Raise InvalidAddrSetError if the meta data is invalid, otherwise simply return.
+    Raise InvalidAddrSetError if the metadata is invalid, otherwise simply return.
     """
 
     # TODO: needs work: doesn't take into account device's (non-HVAC) class
@@ -186,11 +186,17 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
     # which requires a valid payload only for 000C.
 
     def logger_xxxx(msg: Message) -> None:
+        """
+        Log msg according to src, code, log.debug setting.
+
+        :param msg: the Message being processed
+        :return: None
+        """
         if _DBG_FORCE_LOG_MESSAGES:
             _LOGGER.warning(msg)
-        elif msg.src is not gwy.hgi or (msg.code != Code._PUZZ and msg.verb != RQ):
+        elif msg.src != gwy.hgi or (msg.code != Code._PUZZ and msg.verb != RQ):
             _LOGGER.info(msg)
-        elif msg.src is not gwy.hgi or msg.verb != RQ:
+        elif msg.src != gwy.hgi or msg.verb != RQ:
             _LOGGER.info(msg)
         elif _LOGGER.getEffectiveLevel() == logging.DEBUG:
             _LOGGER.info(msg)
@@ -215,10 +221,10 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
         if (
             msg.src._SLUG != DevType.HGI  # avoid: msg.src.id != gwy.hgi.id
             and msg.verb != I_
-            and msg.dst is not msg.src
+            and msg.dst != msg.src
         ):
             # HGI80 can do what it likes
-            # receiving an I isn't currently in the schema & so can't yet be tested
+            # receiving an I_ isn't currently in the schema & so can't yet be tested
             _check_dst_slug(msg)  # ? raise exc.PacketInvalid
 
         if gwy.config.reduce_processing >= DONT_UPDATE_ENTITIES:
@@ -234,10 +240,10 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
         # TODO: only be for fully-faked (not Fakable) dst (it picks up via RF if not)
 
         if msg.code == Code._1FC9 and msg.payload[SZ_PHASE] == SZ_OFFER:
-            devices = [d for d in gwy.devices if d is not msg.src and d._is_binding]
+            devices = [d for d in gwy.devices if d != msg.src and d._is_binding]
 
         elif msg.dst == ALL_DEV_ADDR:  # some offers use dst=63:, so after 1FC9 offer
-            devices = [d for d in gwy.devices if d is not msg.src and d.is_faked]
+            devices = [d for d in gwy.devices if d != msg.src and d.is_faked]
 
         elif msg.dst is not msg.src and isinstance(msg.dst, Fakeable):  # type: ignore[unreachable]
             # to eavesdrop pkts from other devices, but relevant to this device
@@ -264,12 +270,17 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
         )
 
     except (AttributeError, LookupError, TypeError, ValueError) as err:
-        _LOGGER.exception("%s < %s(%s)", msg._pkt, err.__class__.__name__, err)
+        if getattr(gwy.config, "enforce_strict_handling", False):
+            raise
+        _LOGGER.warning(
+            "%s < %s(%s)", msg._pkt, err.__class__.__name__, err, exc_info=True
+        )
 
     else:
         logger_xxxx(msg)
-        if gwy._zzz:
-            gwy._zzz.add(msg)
+        if gwy.msg_db:
+            gwy.msg_db.add(msg)
+            # why add it? enable for evohome
 
 
 # TODO: this needs cleaning up (e.g. handle intervening packet)

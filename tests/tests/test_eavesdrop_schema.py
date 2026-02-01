@@ -25,7 +25,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 async def assert_schemas_equal(gwy: Gateway, expected_schema: dict) -> None:
     """Check the gwy schema, then shuffle and test again."""
 
-    schema, packets = gwy.get_state(include_expired=True)
+    schema, packets = await gwy.get_state(include_expired=True)
     assert_expected(schema, expected_schema)
 
     packets = shuffle_dict(packets)
@@ -37,9 +37,9 @@ async def assert_schemas_equal(gwy: Gateway, expected_schema: dict) -> None:
 async def test_eavesdrop_off(dir_name: Path) -> None:
     """Check discovery of schema and known_list *without* eavesdropping."""
 
-    with open(f"{dir_name}/packet.log") as f:
-        gwy = Gateway(None, input_file=f, config={"enable_eavesdrop": False})
-        await gwy.start()
+    path = f"{dir_name}/packet.log"
+    gwy = Gateway(None, input_file=path, config={"enable_eavesdrop": False})
+    await gwy.start()
 
     with open(f"{dir_name}/schema_eavesdrop_off.json") as f:
         await assert_schemas_equal(gwy, json.load(f))
@@ -57,9 +57,9 @@ async def test_eavesdrop_off(dir_name: Path) -> None:
 async def test_eavesdrop_on_(dir_name: Path) -> None:
     """Check discovery of schema and known_list *with* eavesdropping."""
 
-    with open(f"{dir_name}/packet.log") as f:
-        gwy = Gateway(None, input_file=f, config={"enable_eavesdrop": True})
-        await gwy.start()
+    path = f"{dir_name}/packet.log"
+    gwy = Gateway(None, input_file=path, config={"enable_eavesdrop": True})
+    await gwy.start()
 
     with open(f"{dir_name}/schema_eavesdrop_on.json") as f:
         await assert_schemas_equal(gwy, json.load(f))

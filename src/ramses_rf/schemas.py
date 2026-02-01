@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RAMSES RF - a RAMSES-II protocol decoder & analyser.
 
-Schema processor for upper layer.
+:term:`Schema` processor for upper layer.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ from ramses_tx.schemas import (  # noqa: F401
     SCH_TRAITS as SCH_TRAITS,
     SZ_ALIAS as SZ_ALIAS,
     SZ_BLOCK_LIST,
+    SZ_BOUND_TO as SZ_BOUND_TO,
     SZ_CLASS as SZ_CLASS,
     SZ_DISABLE_SENDING,
     SZ_ENFORCE_KNOWN_LIST,
@@ -114,7 +115,7 @@ def ErrorRenamedKey(new_key: str) -> Callable[[Any], None]:
 
 
 #
-# 1/5: Schemas for CH/DHW systems, aka Heat/TCS (temp control systems)
+# 1/7: Schemas for CH/DHW systems, aka Heat/TCS (temp control systems)
 SCH_TCS_SYS_CLASS = (SystemType.EVOHOME, SystemType.HOMETRONICS, SystemType.SUNDIAL)
 SCH_TCS_SYS = vol.Schema(
     {
@@ -193,7 +194,7 @@ SCH_TCS = vol.Schema(
 
 
 #
-# 2/5: Schemas for Ventilation control systems, aka HVAC/VCS
+# 2/7: Schemas for Ventilation control systems, aka HVAC/VCS
 SZ_REMOTES: Final = "remotes"
 SZ_SENSORS: Final = "sensors"
 
@@ -227,7 +228,7 @@ SCH_VCS = vol.All(SCH_VCS_KEYS, SCH_VCS_DATA)
 
 
 #
-# 3/5: Global Schema for Heat/HVAC systems
+# 3/7: Global Schema for Heat/HVAC systems
 SCH_GLOBAL_SCHEMAS_DICT = {  # System schemas - can be 0-many Heat/HVAC schemas
     # orphans are devices to create that won't be in a (cached) schema...
     vol.Optional(SZ_MAIN_TCS): vol.Any(None, SCH_DEVICE_ID_CTL),
@@ -236,13 +237,15 @@ SCH_GLOBAL_SCHEMAS_DICT = {  # System schemas - can be 0-many Heat/HVAC schemas
     vol.Optional(SCH_DEVICE_ID_ANY): SCH_VCS,  # must be after SCH_DEVICE_ID_CTL
     vol.Optional(SZ_ORPHANS_HEAT): vol.All([SCH_DEVICE_ID_ANY], vol.Unique()),
     vol.Optional(SZ_ORPHANS_HVAC): vol.All([SCH_DEVICE_ID_ANY], vol.Unique()),
+    vol.Optional("transport_constructor"): vol.Any(callable, None),
 }
 SCH_GLOBAL_SCHEMAS = vol.Schema(SCH_GLOBAL_SCHEMAS_DICT, extra=vol.PREVENT_EXTRA)
 
 #
-# 4/5: Gateway (parser/state) configuration
+# 4/7: Gateway (parser/state) configuration
 SZ_DISABLE_DISCOVERY: Final = "disable_discovery"
 SZ_ENABLE_EAVESDROP: Final = "enable_eavesdrop"
+SZ_ENFORCE_STRICT_HANDLING: Final = "enforce_strict_handling"
 SZ_MAX_ZONES: Final = "max_zones"  # TODO: move to TCS-attr from GWY-layer
 SZ_REDUCE_PROCESSING: Final = "reduce_processing"
 SZ_USE_ALIASES: Final = "use_aliases"  # use friendly device names from known_list
@@ -251,6 +254,7 @@ SZ_USE_NATIVE_OT: Final = "use_native_ot"  # favour OT (3220s) over RAMSES
 SCH_GATEWAY_DICT = {
     vol.Optional(SZ_DISABLE_DISCOVERY, default=False): bool,
     vol.Optional(SZ_ENABLE_EAVESDROP, default=False): bool,
+    vol.Optional(SZ_ENFORCE_STRICT_HANDLING, default=False): bool,
     vol.Optional(SZ_MAX_ZONES, default=DEFAULT_MAX_ZONES): vol.All(
         int, vol.Range(min=1, max=16)
     ),  # NOTE: no default
@@ -266,7 +270,7 @@ SCH_GATEWAY_CONFIG = vol.Schema(SCH_GATEWAY_DICT, extra=vol.REMOVE_EXTRA)
 
 
 #
-# 5/5: the Global (gateway) Schema
+# 5/7: the Global (gateway) Schema
 SCH_GLOBAL_CONFIG = (
     vol.Schema(
         {
@@ -282,9 +286,9 @@ SCH_GLOBAL_CONFIG = (
 
 
 #
-# 6/5: External Schemas, to be used by clients of this library
+# 6/7: External Schemas, to be used by clients of this library
 def NormaliseRestoreCache() -> Callable[[bool | dict[str, bool]], dict[str, bool]]:
-    """Convert a short-hand restore_cache bool to a dict.
+    """Convert a shorthand restore_cache bool to a dict.
 
     restore_cache: bool ->  restore_cache:
                               restore_schema: bool
@@ -317,19 +321,23 @@ SCH_RESTORE_CACHE_DICT = {
 
 
 #
-# 6/5: Other stuff
+# 7/7: Other stuff
 def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , **traits
-    """Raise an LookupError if a device_id is filtered out by a list.
+    """Get a device from the gateway.
+
+    Raise a LookupError if a device_id is filtered out by the known or block list.
 
     The underlying method is wrapped only to provide a better error message.
     """
 
     def check_filter_lists(dev_id: DeviceIdT) -> None:
-        """Raise an LookupError if a device_id is filtered out by a list."""
+        """Raise a LookupError if a device_id is filtered out by a list."""
 
         err_msg = None
         if gwy._enforce_known_list and dev_id not in gwy._include:
             err_msg = f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"
+        # issue ramses_cc #296: if enforce_known_list is turned on, error on any "unknown" dev_id
+        # fix: delete from schema?
         if dev_id in gwy._exclude:
             err_msg = f"it is in the {SZ_SCHEMA}, but also in the {SZ_BLOCK_LIST}"
 

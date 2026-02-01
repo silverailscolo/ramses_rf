@@ -120,7 +120,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
     # .I --- 13:109598 --:------ 13:109598 3EF0 003 00C8FF                # event-driven, 00/C8
-    # RP --- 13:109598 18:002563 --:------ 0008 002 00C8                  # 00/C8, as abobe
+    # RP --- 13:109598 18:002563 --:------ 0008 002 00C8                  # 00/C8, as above
     # RP --- 13:109598 18:002563 --:------ 3EF1 007 0000BF-00BFC8FF       # 00/C8, as above
 
     # RP --- 10:048122 18:140805 --:------ 3EF1 007 007FFF-003C2A10       # 10:s only RP, always 7FFF
@@ -144,7 +144,7 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
         if self._gwy.config.disable_discovery:
             return
 
-        # TODO: why are we doing this here? Should simply use dscovery poller!
+        # TODO: why are we doing this here? Should simply use discovery poller!
         if msg.code == Code._3EF0 and msg.verb == I_ and not self.is_faked:
             # lf._send_cmd(Command.get_relay_demand(self.id), qos=QOS_LOW)
             self._send_cmd(
@@ -429,7 +429,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
-        # Several assumptions ar emade, regarding 000C pkts:
+        # Several assumptions are made, regarding 000C pkts:
         # - UFC bound only to CTL (not, e.g. SEN)
         # - all circuits bound to the same controller
 
@@ -450,7 +450,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
                 #     )
                 #     self._send_cmd(cmd)
 
-        elif msg.code == Code._0008:  # relay_demand, TODO: use msg DB?
+        elif msg.code == Code._0008:  # relay_demand
             if msg.payload.get(SZ_DOMAIN_ID) == FC:
                 self._relay_demand = msg
             else:  # FA
@@ -491,7 +491,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
         # elif msg.code not in (Code._10E0, Code._22D0):
         #     print("xxx")
-
         # "0008|FA/FC", "22C9|array", "22D0|none", "3150|ZZ/array(/FC?)"
 
     # TODO: should be a private method
@@ -635,7 +634,7 @@ def _to_msg_id(data_id: OtDataId) -> MsgId:
     return f"{data_id:02X}"
 
 
-# NOTE: config.use_native_ot should enforces sends, but not reads from _msgz DB
+# NOTE: config.use_native_ot should enforce sends, but not reads from _msgz DB
 class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
     """The OTB class, specifically an OpenTherm Bridge (R8810A Bridge)."""
 
@@ -668,7 +667,15 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
 
         self._child_id = FC  # NOTE: domain_id
 
-        self._msgz[Code._3220] = {RP: {}}  # _msgz[Code._3220][RP][msg_id]
+        # TODO(eb): cleanup
+        if not self._gwy.msg_db:
+            # self._add_record(
+            #     id=self.id, code=Code._3220, verb="RP", payload="00C0060101"
+            # )  # is parsed but pollutes the client.py
+            # adds a "sim" RP opentherm_msg to the SQLite MessageIndex with code _3220
+            # causes exc when fetching ALL, when no "real" msg was added to _msgs_. We skip those.
+            # else:
+            self._msgz[Code._3220] = {RP: {}}  # No ctx! (not None)
 
         # lf._use_ot = self._gwy.config.use_native_ot
         self._msgs_ot: dict[MsgId, Message] = {}
@@ -758,7 +765,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         if msg.payload.get(SZ_VALUE) is None:
             return
 
-        # msg_id is int in msg payload/opentherm.py, but MsgId (str) is in this module
+        # msg_id is int in msg payload/opentherm.py, but MsgId (str) in this module
         msg_id = _to_msg_id(msg.payload[SZ_MSG_ID])
         self._msgs_ot[msg_id] = msg
 
@@ -1255,6 +1262,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
     """The BDR class, such as a BDR91.
 
     BDR91s can be used in six distinct modes, including:
+
     - x2 boiler controller (FC/TPI): either traditional, or newer heat pump-aware
     - x1 electric heat zones (0x/ELE)
     - x1 zone valve zones (0x/VAL)
@@ -1402,7 +1410,7 @@ class UfhCircuit(Child, Entity):  # FIXME
     def __init__(self, ufc: UfhController, ufh_idx: str) -> None:
         super().__init__(ufc._gwy)
 
-        # FIXME: ZZZ entities must know their parent device ID and their own idx
+        # FIXME: gwy.msg_db entities must know their parent device ID and their own idx
         self._z_id = ufc.id
         self._z_idx = ufh_idx
 

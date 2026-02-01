@@ -3,10 +3,11 @@
 
 import io
 import sys
+from collections.abc import Collection
 
 import pytest
 
-sys.path.append(".")  # HACK: to access client.py
+sys.path.append("../tests_cli")  # HACK: to access client.py
 
 try:
     import colorama  # noqa: F401
@@ -88,14 +89,18 @@ LIB_CONFIG_LISTEN_ = {
 }
 LIB_CONFIG_PARSE__ = {
     "config": {"reduce_processing": 0},
-    "input_file": "<_io.TextIOWrapper name='<stdin>' mode='r' encoding='utf-8'>",
+    "input_file": "-",  # will be replaced by sys.stdin by fileinput
 }
 
 BASIC_TESTS = (  # can't use "-z"
     (["client.py", "execute", "/dev/ttyUSB0"], CLI_CONFIG_EXECUTE, LIB_CONFIG_EXECUTE),
     (["client.py", "monitor", "/dev/ttyUSB0"], CLI_CONFIG_MONITOR, LIB_CONFIG_MONITOR),
     (["client.py", "listen", "/dev/ttyUSB0"], CLI_CONFIG_LISTEN_, LIB_CONFIG_LISTEN_),
-    (["client.py", "parse"], CLI_CONFIG_PARSE__, LIB_CONFIG_PARSE__),
+    (
+        ["client.py", "parse", "filename-stand_in"],
+        CLI_CONFIG_PARSE__,
+        LIB_CONFIG_PARSE__,
+    ),
 )
 
 
@@ -105,7 +110,26 @@ def id_fnc(param: int) -> str:
 
 @pytest.mark.parametrize("index", range(len(BASIC_TESTS)), ids=id_fnc)
 def test_client_basic(
-    monkeypatch: pytest.MonkeyPatch, index: int, tests: tuple = BASIC_TESTS
+    monkeypatch: pytest.MonkeyPatch,
+    index: int,
+    tests: tuple[
+        tuple[
+            list[str],
+            dict[str, int | tuple[None, None] | None],
+            dict[str, str | dict[str, int | None] | None],
+        ],
+        tuple[
+            list[str],
+            dict[str, int | None],
+            dict[str, str | dict[str, int | None] | None],
+        ],
+        tuple[
+            list[str],
+            dict[str, int | None],
+            dict[str, str | dict[str, int | None] | None],
+        ],
+        tuple[list[str], dict[str, int | None], dict[str, Collection[str]]],
+    ] = BASIC_TESTS,
 ) -> None:
     monkeypatch.setattr("sys.argv", tests[index][0])
     if tests[index][0][1] == PARSE:

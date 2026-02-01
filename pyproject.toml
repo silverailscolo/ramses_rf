@@ -1,6 +1,6 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2024-09-10
+# last checked/updated: 2026-01-11
 #
 
 [project]
@@ -8,16 +8,15 @@
   dynamic = ["version"]
   description = "A stateful RAMSES-II protocol decoder & analyser."
   readme = "README.md"
-  authors = [{name = "David Bonnes", email = "zxdavb@bonnes.me"}]
-  maintainers = [{name = "David Bonnes", email = "zxdavb@bonnes.me"}]
-  dependencies = [
-    "colorlog>=6.9.0",
-    "paho-mqtt>=2.1.0",
-    "pyserial-asyncio-fast>=0.16",
-    "voluptuous>=0.15.2",
+  authors = [
+    {name = "David Bonnes", email = "zxdavb@bonnes.me"},
+    {name = "Egbert Broerse", email = "dcc2@ebroerse.nl"}
   ]
-  requires-python = ">=3.11"
+  maintainers = [
+    {name = "Egbert Broerse", email = "dcc2@ebroerse.nl"}
+  ]
   license = "MIT"
+  license-files = ["LICENSE*"]
 
   keywords = [
     "evohome",
@@ -25,23 +24,33 @@
     "resideo",
     "round thermostat",
     "ramses",
-    "sundial",
-    "chronotherm",
-    "hometronics",
     "airios",
+    "chronotherm",
+    "climarad",
+    "hometronics",
     "itho",
     "nuaire",
     "orcon",
+    "sundial",
+    "vasco",
   ]
   classifiers = [
     "Topic :: Home Automation",
+    "Programming Language :: Python :: 3.13",
+  ]
+  requires-python = ">=3.11"        # HA core >=3.13.2, TODO set to >=3.12 Feb. 2026 (issue #384)
+  dependencies = [
+    "colorlog>=6.9.0",              # latest
+    "paho-mqtt>=2.1.0",             # latest
+    "pyserial-asyncio-fast>=0.16",  # latest
+    "voluptuous>=0.15.2",           # latest
   ]
 
 #
 [project.urls]
-  "Homepage" = "https://github.com/zxdavb/ramses_rf"
-  "Bug Tracker" = "https://github.com/zxdavb/ramses_rf/issues"
-  "Wiki" = "https://github.com/zxdavb/ramses_rf/wiki"
+  "Homepage" = "https://github.com/ramses-rf/ramses_rf"
+  "Bug Tracker" = "https://github.com/ramses-rf/ramses_rf/issues"
+  "Wiki" = "https://github.com/ramses-rf/ramses_rf/wiki"
 
 #
 [project.scripts]
@@ -72,8 +81,46 @@
   asyncio_default_fixture_loop_scope = "function"
   asyncio_mode = "auto"
 
+  testpaths = [
+    "tests/"
+  ]
   norecursedirs = "deprecated/*"
 
+  # pytest-cov slows down our tests to 10 mins, so leave off.
+  # We run coverage in a separate workflow on python 3.13 only (fastest)
+  # pytest-cov coverage reporting. open htmlcov/index.html in a browser for details
+  # addopts = ["--cov=src", "--cov-fail-under=50", "--cov-report=xml", "--cov-report=term"]
+  # to create an interactive local HTML report, add: --cov-report=html
+  # to report missed lines during test writing, add: --cov-report=term-missing
+  # PyCharm might not hit a breakpoint. For debugging, disable -cov by adding:
+  # –no-cov"
+  # cov_report_term = "term-missing:skip-covered"
+
+#
+### coverage #########################################################################
+
+[tool.coverage.run]
+  core = "sysmon"  # essential setting for speed on GitHub < 11 secs instead of >12 mins
+  branch = false  # true takes a lot longer and can't be combined with sysmon
+#  patch = ["subprocess"]
+  source = [
+    "src",
+    "tests"
+  ]
+
+[tool.coverage.report]
+  # Regexes for lines to exclude from consideration
+  exclude_also = [
+    # Don't complain if tests don't hit defensive assertion code:
+    "raise AssertionError",
+    "raise NotImplementedError",
+  ]
+  format = "text"
+  fail_under = 80  # total cov now 83%
+  ignore_errors = true
+
+[tool.coverage.html]
+  directory = "coverage_html"
 
 #
 ### mypy #############################################################################
@@ -85,7 +132,6 @@
     "tests"
   ]
   exclude = [
-    "src/ramses_cli/client.py",
     "src/ramses_cli/utils",
     "tests/deprecated",
     "tests/wip",
@@ -97,7 +143,7 @@
   # ignore_missing_imports = true  # only used per-module
   # follow_imports = normal  # avoid skip/silent, prefer normal (default) over error
 
-  # ### Strict typing (--strict) if all following are set to true (excl. zxdavb)
+  # ### Strict typing (--strict) if all following are set to true (excl. ramses-rf)
   #  - https://mypy.readthedocs.io/en/stable/existing_code.html#introduce-stricter-options
 
   # # Config file & Configuring warning
@@ -162,6 +208,15 @@
 
 
 #
+
+[[tool.mypy.overrides]]
+  module = "debugpy.*"
+  ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+  module = "colorama.*"
+  ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
   module = "ramses_tx.parsers"
 

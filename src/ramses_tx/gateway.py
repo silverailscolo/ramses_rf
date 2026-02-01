@@ -12,8 +12,6 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import datetime as dt
-from io import TextIOWrapper
-from threading import Lock
 from typing import TYPE_CHECKING, Any, Never
 
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
@@ -35,9 +33,11 @@ from .schemas import (
     SZ_DISABLE_QOS,
     SZ_DISABLE_SENDING,
     SZ_ENFORCE_KNOWN_LIST,
+    SZ_LOG_ALL_MQTT,
     SZ_PACKET_LOG,
     SZ_PORT_CONFIG,
     SZ_PORT_NAME,
+    SZ_SQLITE_INDEX,
     PktLogConfigT,
     PortConfigT,
     select_device_filter_mode,
@@ -74,11 +74,12 @@ class Engine:
     def __init__(
         self,
         port_name: str | None,
-        input_file: TextIOWrapper | None = None,
+        input_file: str | None = None,
         port_config: PortConfigT | None = None,
         packet_log: PktLogConfigT | None = None,
         block_list: DeviceListT | None = None,
         known_list: DeviceListT | None = None,
+        hgi_id: str | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
         **kwargs: Any,
     ) -> None:
@@ -92,7 +93,7 @@ class Engine:
         if input_file:
             self._disable_sending = True
         elif not port_name:
-            raise TypeError("Either a port_name or a input_file must be specified")
+            raise TypeError("Either a port_name or an input_file must be specified")
 
         self.ser_name = port_name
         self._input_file = input_file
@@ -113,9 +114,17 @@ class Engine:
             self._include,
             self._exclude,
         )
+        self._sqlite_index = kwargs.pop(
+            SZ_SQLITE_INDEX, False
+        )  # TODO Q1 2026: default True
+        self._log_all_mqtt = kwargs.pop(SZ_LOG_ALL_MQTT, False)
         self._kwargs: dict[str, Any] = kwargs  # HACK
 
-        self._engine_lock = Lock()  # FIXME: threading lock, or asyncio lock?
+        self._hgi_id = hgi_id
+        if self._hgi_id:
+            self._kwargs[SZ_ACTIVE_HGI] = self._hgi_id
+
+        self._engine_lock = asyncio.Lock()
         self._engine_state: (
             tuple[_MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
         ) = None
@@ -131,6 +140,9 @@ class Engine:
         self._set_msg_handler(self._msg_handler)  # sets self._protocol
 
     def __str__(self) -> str:
+        if self._hgi_id:
+            return f"{self._hgi_id} ({self.ser_name})"
+
         if not self._transport:
             return f"{HGI_DEV_ADDR.id} ({self.ser_name})"
 
@@ -189,13 +201,14 @@ class Engine:
             pkt_source[SZ_PORT_NAME] = self.ser_name
             pkt_source[SZ_PORT_CONFIG] = self._port_config
         else:  # if self._input_file:
-            pkt_source[SZ_PACKET_LOG] = self._input_file  # io.TextIOWrapper
+            pkt_source[SZ_PACKET_LOG] = self._input_file  # filename as string
 
         # incl. await protocol.wait_for_connection_made(timeout=5)
         self._transport = await transport_factory(
             self._protocol,
             disable_sending=self._disable_sending,
             loop=self._loop,
+            log_all=self._log_all_mqtt,
             **pkt_source,
             **self._kwargs,  # HACK: odd/misc params, e.g. comms_params
         )
@@ -211,15 +224,13 @@ class Engine:
     async def stop(self) -> None:
         """Close the transport (will stop the protocol)."""
 
-        async def cancel_all_tasks() -> None:  # TODO: needs a lock?
-            _ = [t.cancel() for t in self._tasks if not t.done()]
-            try:  # FIXME: this is broken
-                if tasks := (t for t in self._tasks if not t.done()):
-                    await asyncio.gather(*tasks)
-            except asyncio.CancelledError:
-                pass
+        # Shutdown Safety - wait for tasks to clean up
+        tasks = [t for t in self._tasks if not t.done()]
+        for t in tasks:
+            t.cancel()
 
-        await cancel_all_tasks()
+        if tasks:
+            await asyncio.wait(tasks)
 
         if self._transport:
             self._transport.close()
@@ -227,11 +238,13 @@ class Engine:
 
         return None
 
-    def _pause(self, *args: Any) -> None:
+    async def _pause(self, *args: Any) -> None:
         """Pause the (active) engine or raise a RuntimeError."""
-
-        if not self._engine_lock.acquire(blocking=False):
+        # Async lock handling
+        if self._engine_lock.locked():
             raise RuntimeError("Unable to pause engine, failed to acquire lock")
+
+        await self._engine_lock.acquire()
 
         if self._engine_state is not None:
             self._engine_lock.release()
@@ -249,13 +262,18 @@ class Engine:
 
         self._engine_state = (handler, read_only, *args)
 
-    def _resume(self) -> tuple[Any]:  # FIXME: not atomic
+    async def _resume(self) -> tuple[Any]:  # FIXME: not atomic
         """Resume the (paused) engine or raise a RuntimeError."""
 
         args: tuple[Any]  # mypy
 
-        if not self._engine_lock.acquire(timeout=0.1):
-            raise RuntimeError("Unable to resume engine, failed to acquire lock")
+        # Async lock with timeout
+        try:
+            await asyncio.wait_for(self._engine_lock.acquire(), timeout=0.1)
+        except TimeoutError as err:
+            raise RuntimeError(
+                "Unable to resume engine, failed to acquire lock"
+            ) from err
 
         if self._engine_state is None:
             self._engine_lock.release()
@@ -332,7 +350,7 @@ class Engine:
         )  # may: raise ProtocolError/ProtocolSendFailed
 
     def _msg_handler(self, msg: Message) -> None:
-        # HACK: This is one consequence of an unpleaseant anachronism
+        # HACK: This is one consequence of an unpleasant anachronism
         msg.__class__ = Message  # HACK (next line too)
         msg._gwy = self  # type: ignore[assignment]
 

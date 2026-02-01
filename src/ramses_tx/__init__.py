@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""RAMSES RF - a RAMSES-II protocol decoder & analyser."""
+"""RAMSES RF - a RAMSES-II protocol decoder & analyser.
+`ramses_tx` takes care of the RF protocol (lower) layer.
+"""
 
 from __future__ import annotations
 
 import asyncio
 from functools import partial
+from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
 from .address import (
@@ -43,8 +46,18 @@ from .logger import set_pkt_logging
 from .message import Message
 from .packet import PKT_LOGGER, Packet
 from .protocol import PortProtocol, ReadProtocol, protocol_factory
-from .ramses import CODES_BY_DEV_SLUG, CODES_SCHEMA
-from .schemas import SZ_SERIAL_PORT, DeviceIdT, DeviceListT
+from .ramses import (
+    _2411_PARAMS_SCHEMA,
+    CODES_BY_DEV_SLUG,
+    CODES_SCHEMA,
+    SZ_DATA_TYPE,
+    SZ_DATA_UNIT,
+    SZ_DESCRIPTION,
+    SZ_MAX_VALUE,
+    SZ_MIN_VALUE,
+    SZ_PRECISION,
+)
+from .schemas import SZ_BOUND_TO, SZ_SERIAL_PORT, DeviceIdT, DeviceListT
 from .transport import (
     FileTransport,
     PortTransport,
@@ -76,6 +89,15 @@ __all__ = [
     "SZ_ZONE_IDX",
     "SZ_ZONE_MASK",
     "SZ_ZONE_TYPE",
+    "SZ_BOUND_TO",
+    # Schema-related constants
+    "SZ_DATA_UNIT",
+    "SZ_DESCRIPTION",
+    "SZ_DATA_TYPE",
+    "SZ_MAX_VALUE",
+    "SZ_MIN_VALUE",
+    "SZ_PRECISION",
+    "_2411_PARAMS_SCHEMA",
     #
     "ALL_DEV_ADDR",
     "ALL_DEVICE_ID",
@@ -135,17 +157,19 @@ if TYPE_CHECKING:
     from logging import Logger
 
 
-async def set_pkt_logging_config(**config: Any) -> Logger:
+async def set_pkt_logging_config(**config: Any) -> tuple[Logger, QueueListener | None]:
     """
     Set up ramses packet logging to a file or port.
-    Must runs async in executor to prevent HA blocking call opening packet log file (issue #200)
+    Must run async in executor to prevent HA blocking call opening packet log file.
 
     :param config: if file_name is included, opens packet_log file
-    :return: a logging.Logger
+    :return: a tuple (logging.Logger, QueueListener)
     """
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, partial(set_pkt_logging, PKT_LOGGER, **config))
-    return PKT_LOGGER
+    listener = await loop.run_in_executor(
+        None, partial(set_pkt_logging, PKT_LOGGER, **config)
+    )
+    return PKT_LOGGER, listener
 
 
 def extract_known_hgi_id(
@@ -153,8 +177,10 @@ def extract_known_hgi_id(
     /,
     *,
     disable_warnings: bool = False,
-    strick_checking: bool = False,
+    strict_checking: bool = False,
 ) -> DeviceIdT | None:
     return PortProtocol._extract_known_hgi_id(
-        include_list, disable_warnings=disable_warnings, strick_checking=strick_checking
+        include_list,
+        disable_warnings=disable_warnings,
+        strict_checking=strict_checking,
     )

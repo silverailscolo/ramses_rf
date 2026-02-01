@@ -7,13 +7,17 @@ This module wraps logger to provide bespoke functionality, especially for timest
 from __future__ import annotations
 
 import logging
-import os
 import re
 import shutil
 import sys
 from collections.abc import Callable, Mapping
 from datetime import datetime as dt
-from logging.handlers import TimedRotatingFileHandler as _TimedRotatingFileHandler
+from logging.handlers import (
+    QueueHandler,
+    QueueListener,
+    TimedRotatingFileHandler as _TimedRotatingFileHandler,
+)
+from queue import Queue
 from typing import Any
 
 from .version import VERSION
@@ -163,6 +167,14 @@ class StdOutFilter(logging.Filter):  # record.levelno < logging.WARNING
         return record.levelno < logging.WARNING
 
 
+class BlockMqttFilter(logging.Filter):
+    """Block mqtt traffic"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Return True if the record is to be processed."""
+        return not record.getMessage().startswith("mq Rx: ")
+
+
 class TimedRotatingFileHandler(_TimedRotatingFileHandler):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -173,29 +185,6 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
     #     if True or self.shouldRollover(record):
     #         self.doRollover()
     #     return super().emit(record)
-
-    def getFilesToDelete(self) -> list[str]:  # zxdavb: my version
-        """Determine the files to delete when rolling over.
-
-        Overridden as old log files not being deleted.
-        """
-        # See bpo-44753 (this code is as was before that commit), bpo45628, bpo-46063
-        dirName, baseName = os.path.split(self.baseFilename)
-        fileNames = os.listdir(dirName)
-        result = []
-        prefix = baseName + "."
-        plen = len(prefix)
-        for fileName in fileNames:
-            if fileName[:plen] == prefix:
-                suffix = fileName[plen:]
-                if self.extMatch.match(suffix):
-                    result.append(os.path.join(dirName, fileName))
-        if len(result) < self.backupCount:
-            result = []
-        else:
-            result.sort()
-            result = result[: len(result) - self.backupCount]
-        return result
 
 
 def getLogger(  # permits a bespoke Logger class
@@ -255,7 +244,7 @@ def set_pkt_logging(
     file_name: str | None = None,
     rotate_backups: int = 0,
     rotate_bytes: int | None = None,
-) -> None:
+) -> QueueListener | None:
     """Create/configure handlers, formatters, etc.
 
     Parameters:
@@ -270,6 +259,8 @@ def set_pkt_logging(
     # as set_pkt_logging() may be called several times: to avoid duplicates in logs...
     for handler in logger.handlers:  # dont use logger.hasHandlers() as not propagating
         logger.removeHandler(handler)
+
+    handlers: list[logging.Handler] = []
 
     if file_name:  # note: this opens the packet_log file IO and may block
         if rotate_bytes:
@@ -289,14 +280,15 @@ def set_pkt_logging(
         handler.setFormatter(logfile_fmt)
         handler.setLevel(logging.INFO)  # .INFO (usually), or .DEBUG
         handler.addFilter(PktLogFilter())  # record.levelno in (.INFO, .WARNING)
-        logger.addHandler(handler)
+        handlers.append(handler)
 
     elif cc_console:
-        logger.addHandler(logging.NullHandler())
+        # logger.addHandler(logging.NullHandler())  # Not needed with QueueHandler
+        pass
 
-    else:
+    elif not cc_console:
         logger.setLevel(logging.CRITICAL)
-        return
+        return None
 
     if cc_console:  # CC: output to stdout/stderr
         console_fmt: ColoredFormatter | Formatter
@@ -313,13 +305,22 @@ def set_pkt_logging(
         handler.setFormatter(console_fmt)
         handler.setLevel(logging.WARNING)  # musr be .WARNING or less
         handler.addFilter(StdErrFilter())  # record.levelno >= .WARNING
-        logger.addHandler(handler)
+        handlers.append(handler)
 
         handler = logging.StreamHandler(stream=sys.stdout)
         handler.setFormatter(console_fmt)
         handler.setLevel(logging.DEBUG)  # must be .INFO or less
         handler.addFilter(StdOutFilter())  # record.levelno < .WARNING
-        logger.addHandler(handler)
+        handlers.append(handler)
+
+    # Use QueueHandler to decouple logging I/O from the main loop (see Issue #397)
+    if handlers:
+        log_queue: Queue[Any] = Queue(-1)
+        listener = QueueListener(log_queue, *handlers, respect_handler_level=True)
+        queue_handler = QueueHandler(log_queue)
+        logger.addHandler(queue_handler)
+    else:
+        return None
 
     extras = {
         "_frame": "",
@@ -327,3 +328,5 @@ def set_pkt_logging(
         "comment": f"ramses_tx {VERSION}",
     }
     logger.warning("", extra=extras)  # initial log line
+
+    return listener

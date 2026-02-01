@@ -3,9 +3,11 @@
 
 NOTES: aspirations on a consistent Schema, going forward:
 
-  :mode/state: | :bool:  | :mutex (infinitive. vs -ing):      | :flags:
-mode (config.) | enabled | disabled, heat, cool, heat_cool... | ch_enabled, dhw_enabled
-state (action) | active  | idle, heating, cooling...          | is_heating, is_cooling
+==============  ========  ===================================  ========================
+  :mode/state:   :bool:    :mutex (infinitive. vs -ing):        :flags:
+mode (config.)   enabled   disabled, heat, cool, heat_cool...   ch_enabled, dhw_enabled
+state (action)   active    idle, heating, cooling...            is_heating, is_cooling
+==============  ========  ===================================  ========================
 
 - prefer: enabled: True over xx_enabled: True (if only ever 1 flag)
 - prefer:  active: True over is_heating: True (if only ever 1 flag)
@@ -32,6 +34,8 @@ from .const import (
     SZ_ACCEPT,
     SZ_ACTIVE,
     SZ_BINDINGS,
+    SZ_BYPASS_MODE,
+    SZ_BYPASS_STATE,
     SZ_CHANGE_COUNTER,
     SZ_CONFIRM,
     SZ_DATETIME,
@@ -70,6 +74,7 @@ from .const import (
     SZ_RELAY_DEMAND,
     SZ_REMAINING_DAYS,
     SZ_REMAINING_PERCENT,
+    SZ_REQ_REASON,
     SZ_SETPOINT,
     SZ_SETPOINT_BOUNDS,
     SZ_SYSTEM_MODE,
@@ -185,6 +190,16 @@ _LOGGER = _PKT_LOGGER = logging.getLogger(__name__)
 
 # rf_unknown
 def parser_0001(payload: str, msg: Message) -> Mapping[str, bool | str | None]:
+    """Parse the 0001 (rf_unknown) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A mapping of parsed slot and parameter data
+    :rtype: Mapping[str, bool | str | None]
+    :raises AssertionError: If the payload format does not match expected constants.
+    """
     # When in test mode, a 12: will send a W ?every 6 seconds:
     # 12:39:56.099 061  W --- 12:010740 --:------ 12:010740 0001 005 0000000501
     # 12:40:02.098 061  W --- 12:010740 --:------ 12:010740 0001 005 0000000501
@@ -260,6 +275,15 @@ def parser_0001(payload: str, msg: Message) -> Mapping[str, bool | str | None]:
 
 # outdoor_sensor (outdoor_weather / outdoor_temperature)
 def parser_0002(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 0002 (outdoor_sensor) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the outdoor temperature
+    :rtype: dict[str, Any]
+    """
     if payload[6:] == "02":  # or: msg.src.type == DEV_TYPE_MAP.OUT:
         return {
             SZ_TEMPERATURE: hex_to_temp(payload[2:6]),
@@ -271,6 +295,15 @@ def parser_0002(payload: str, msg: Message) -> dict[str, Any]:
 
 # zone_name
 def parser_0004(payload: str, msg: Message) -> PayDictT._0004:
+    """Parse the 0004 (zone_name) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the zone name
+    :rtype: PayDictT._0004
+    """
     # RQ payload is zz00; limited to 12 chars in evohome UI? if "7F"*20: not a zone
 
     return {} if payload[4:] == "7F" * 20 else {SZ_NAME: hex_to_str(payload[4:])}
@@ -278,6 +311,16 @@ def parser_0004(payload: str, msg: Message) -> PayDictT._0004:
 
 # system_zones (add/del a zone?)  # TODO: needs a cleanup
 def parser_0005(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only dict
+    """Parse the 0005 (system_zones) packet to identify zone types and masks.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A list or dictionary of zone classes and masks
+    :rtype: dict | list[dict]
+    :raises AssertionError: If the message source is not a recognized device type.
+    """
     # .I --- 01:145038 --:------ 01:145038 0005 004 00000100
     # RP --- 02:017205 18:073736 --:------ 0005 004 0009001F
     # .I --- 34:064023 --:------ 34:064023 0005 012 000A0000-000F0000-00100000
@@ -312,10 +355,15 @@ def parser_0005(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
 
 # schedule_sync (any changes?)
 def parser_0006(payload: str, msg: Message) -> PayDictT._0006:
-    """Return the total number of changes to the schedules, including the DHW schedule.
+    """Return the total number of changes to the system schedules.
 
-    An RQ is sent every ~60s by a RFG100, an increase will prompt it to send a run of
-    RQ|0404s (it seems to assume only the zones may have changed?).
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the schedule change counter
+    :rtype: PayDictT._0006
+    :raises AssertionError: If the payload header is invalid.
     """
     # 16:10:34.288 053 RQ --- 30:071715 01:145038 --:------ 0006 001 00
     # 16:10:34.291 053 RP --- 01:145038 30:071715 --:------ 0006 004 00050008
@@ -332,6 +380,16 @@ def parser_0006(payload: str, msg: Message) -> PayDictT._0006:
 
 # relay_demand (domain/zone/device)
 def parser_0008(payload: str, msg: Message) -> PayDictT._0008:
+    """Parse the 0008 (relay_demand) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the relay demand percentage
+    :rtype: PayDictT._0008
+    :raises AssertionError: If the message length is invalid for specific device types.
+    """
     # https://www.domoticaforum.eu/viewtopic.php?f=7&t=5806&start=105#p73681
     # e.g. Electric Heat Zone
 
@@ -355,14 +413,24 @@ def parser_0008(payload: str, msg: Message) -> PayDictT._0008:
 
 # relay_failsafe
 def parser_0009(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only dict
-    """The relay failsafe mode.
+    """Parse the 0009 (relay_failsafe) packet.
+    The relay failsafe mode.
 
     The failsafe mode defines the relay behaviour if the RF communication is lost (e.g.
     when a room thermostat stops communicating due to discharged batteries):
-        False (disabled) - if RF comms are lost, relay will be held in OFF position
-        True  (enabled)  - if RF comms are lost, relay will cycle at 20% ON, 80% OFF
+
+    - False (disabled) - if RF comms are lost, relay will be held in OFF position
+    - True  (enabled)  - if RF comms are lost, relay will cycle at 20% ON, 80% OFF
 
     This setting may need to be enabled to ensure frost protect mode.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary defining if failsafe mode is enabled
+    :rtype: dict | list[dict]
+    :raises AssertionError: If the domain ID in the payload is invalid.
     """
     # can get: 003 or 006, e.g.: FC01FF-F901FF or FC00FF-F900FF
     # .I --- 23:100224 --:------ 23:100224 0009 003 0100FF  # 2-zone ST9520C
@@ -389,6 +457,17 @@ def parser_0009(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
 def parser_000a(
     payload: str, msg: Message
 ) -> PayDictT._000A | list[PayDictT._000A] | PayDictT.EMPTY:
+    """Parse the 000a (zone_params) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary of zone parameters including min/max temps
+    :rtype: PayDictT._000A | list[PayDictT._000A] | PayDictT.EMPTY
+    :raises AssertionError: If the message length is unexpected.
+    """
+
     def _parser(seqx: str) -> PayDictT._000A:  # null_rp: "007FFF7FFF"
         bitmap = int(seqx[2:4], 16)
         return {
@@ -418,6 +497,17 @@ def parser_000a(
 
 # zone_devices
 def parser_000c(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 000c (zone_devices) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary mapping device IDs to zone indices
+    :rtype: dict[str, Any]
+    :raises PacketPayloadInvalid: If the element length in the payload is malformed.
+    :raises AssertionError: If indices or device IDs are invalid.
+    """
     # .I --- 34:092243 --:------ 34:092243 000C 018 00-0A-7F-FFFFFF 00-0F-7F-FFFFFF 00-10-7F-FFFFFF  # noqa: E501
     # RP --- 01:145038 18:013393 --:------ 000C 006 00-00-00-10DAFD
     # RP --- 01:145038 18:013393 --:------ 000C 012 01-00-00-10DAF5 01-00-00-10DAFB
@@ -509,6 +599,16 @@ def parser_000c(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_000e, from STA
 def parser_000e(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 000e packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the raw payload
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload value is not recognized.
+    """
     assert payload in ("000014", "000028"), _INFORM_DEV_MSG
 
     return {
@@ -518,6 +618,15 @@ def parser_000e(payload: str, msg: Message) -> dict[str, Any]:
 
 # rf_check
 def parser_0016(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 0016 (rf_check) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing rf_strength and rf_value
+    :rtype: dict[str, Any]
+    """
     # TODO: does 0016 include parent_idx?, but RQ|07:|0000?
     # RQ --- 22:060293 01:078710 --:------ 0016 002 0200
     # RP --- 01:078710 22:060293 --:------ 0016 002 021E
@@ -538,6 +647,15 @@ def parser_0016(payload: str, msg: Message) -> dict[str, Any]:
 
 # language (of device/system)
 def parser_0100(payload: str, msg: Message) -> PayDictT._0100 | PayDictT.EMPTY:
+    """Parse the 0100 (language) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the language string
+    :rtype: PayDictT._0100 | PayDictT.EMPTY
+    """
     if msg.verb == RQ and msg.len == 1:  # some RQs have a payload
         return {}
 
@@ -549,6 +667,16 @@ def parser_0100(payload: str, msg: Message) -> PayDictT._0100 | PayDictT.EMPTY:
 
 # unknown_0150, from OTB
 def parser_0150(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 0150 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the raw payload
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload is not the expected '000000'.
+    """
     assert payload == "000000", _INFORM_DEV_MSG
 
     return {
@@ -558,6 +686,16 @@ def parser_0150(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_01d0, from a HR91 (when its buttons are pushed)
 def parser_01d0(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 01d0 packet (HR91 button push).
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the unknown state value
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload value is not recognized.
+    """
     # 23:57:28.869 045  W --- 04:000722 01:158182 --:------ 01D0 002 0003
     # 23:57:28.931 045  I --- 01:158182 04:000722 --:------ 01D0 002 0003
     # 23:57:31.581 048  W --- 04:000722 01:158182 --:------ 01E9 002 0003
@@ -573,6 +711,16 @@ def parser_01d0(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_01e9, from a HR91 (when its buttons are pushed)
 def parser_01e9(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 01e9 packet (HR91 button push).
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the unknown state value
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload value is not recognized.
+    """
     # 23:57:31.581348 048  W --- 04:000722 01:158182 --:------ 01E9 002 0003
     # 23:57:31.643188 045  I --- 01:158182 04:000722 --:------ 01E9 002 0000
 
@@ -584,6 +732,16 @@ def parser_01e9(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_01ff, to/from a Itho Spider/Thermostat
 def parser_01ff(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 01ff (Itho Spider) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of temperature, setpoint bounds, and flags
+    :rtype: dict[str, Any]
+    :raises AssertionError: If internal payload constraints are violated.
+    """
     # see: https://github.com/zxdavb/ramses_rf/issues/73 & 101
 
     # lots of '80's, and I see temps are `int(payload[6:8], 16) / 2`, so I wonder if 0x80 is N/A?
@@ -665,6 +823,17 @@ def parser_01ff(payload: str, msg: Message) -> dict[str, Any]:
 
 # zone_schedule (fragment)
 def parser_0404(payload: str, msg: Message) -> PayDictT._0404:
+    """Parse the 0404 (zone_schedule) fragment.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing schedule fragment data and total fragments
+    :rtype: PayDictT._0404
+    :raises PacketPayloadInvalid: If the fragment length does not match the header.
+    :raises AssertionError: If internal context bytes are invalid.
+    """
     # Retrieval of Zone schedule (NB: 200008)
     # RQ --- 30:185469 01:037519 --:------ 0404 007 00-200008-00-0100
     # RP --- 01:037519 30:185469 --:------ 0404 048 00-200008-29-0103-6E2...
@@ -729,6 +898,15 @@ def parser_0404(payload: str, msg: Message) -> PayDictT._0404:
 
 # system_fault (fault_log_entry) - needs refactoring
 def parser_0418(payload: str, msg: Message) -> PayDictT._0418 | PayDictT._0418_NULL:
+    """Parse the 0418 (system_fault) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing a fault log entry or null entry
+    :rtype: PayDictT._0418 | PayDictT._0418_NULL
+    """
     null_result: PayDictT._0418_NULL
     full_result: PayDictT._0418
 
@@ -807,6 +985,15 @@ def parser_0418(payload: str, msg: Message) -> PayDictT._0418 | PayDictT._0418_N
 
 # unknown_042f, from STA, VMS
 def parser_042f(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 042f packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary of extracted hex counters
+    :rtype: dict[str, Any]
+    """
     return {
         "counter_1": f"0x{payload[2:6]}",
         "counter_3": f"0x{payload[6:10]}",
@@ -817,6 +1004,15 @@ def parser_042f(payload: str, msg: Message) -> dict[str, Any]:
 
 # TODO: unknown_0b04, from THM (only when its a CTL?)
 def parser_0b04(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 0b04 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the unknown data value
+    :rtype: dict[str, Any]
+    """
     # .I --- --:------ --:------ 12:207082 0B04 002 00C8  # batch of 3, every 24h
 
     return {
@@ -826,6 +1022,16 @@ def parser_0b04(payload: str, msg: Message) -> dict[str, Any]:
 
 # mixvalve_config (zone), FAN
 def parser_1030(payload: str, msg: Message) -> PayDictT._1030:
+    """Parse the 1030 (mixvalve_config) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of mixing valve parameters
+    :rtype: PayDictT._1030
+    :raises AssertionError: If the message length is unexpected or parameters are malformed.
+    """
     # .I --- 01:145038 --:------ 01:145038 1030 016 0A-C80137-C9010F-CA0196-CB0100-CC0101
     # .I --- --:------ --:------ 12:144017 1030 016 01-C80137-C9010F-CA0196-CB010F-CC0101
     # RP --- 32:155617 18:005904 --:------ 1030 007 00-200100-21011F
@@ -854,9 +1060,17 @@ def parser_1030(payload: str, msg: Message) -> PayDictT._1030:
 
 # device_battery (battery_state)
 def parser_1060(payload: str, msg: Message) -> PayDictT._1060:
-    """Return the battery state.
+    """Parse the 1060 (device_battery) packet.
+    Return the battery state.
 
     Some devices (04:) will also report battery level.
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing battery low status and level percentage
+    :rtype: PayDictT._1060
+    :raises AssertionError: If the message length is invalid.
     """
 
     assert msg.len == 3, msg.len
@@ -870,11 +1084,30 @@ def parser_1060(payload: str, msg: Message) -> PayDictT._1060:
 
 # max_ch_setpoint (supply high limit)
 def parser_1081(payload: str, msg: Message) -> PayDictT._1081:
+    """Parse the 1081 (max_ch_setpoint) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the temperature setpoint
+    :rtype: PayDictT._1081
+    """
     return {SZ_SETPOINT: hex_to_temp(payload[2:])}
 
 
 # unknown_1090 (non-Evohome, e.g. ST9520C)
 def parser_1090(payload: str, msg: Message) -> PayDictT._1090:
+    """Parse the 1090 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing two temperature values
+    :rtype: PayDictT._1090
+    :raises AssertionError: If the message length or payload index is invalid.
+    """
     # 14:08:05.176 095 RP --- 23:100224 22:219457 --:------ 1090 005 007FFF01F4
     # 18:08:05.809 095 RP --- 23:100224 22:219457 --:------ 1090 005 007FFF01F4
 
@@ -890,6 +1123,16 @@ def parser_1090(payload: str, msg: Message) -> PayDictT._1090:
 
 # unknown_1098, from OTB
 def parser_1098(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 1098 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the raw payload and its interpreted value
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload does not match expected constants.
+    """
     assert payload == "00C8", _INFORM_DEV_MSG
 
     return {
@@ -902,6 +1145,16 @@ def parser_1098(payload: str, msg: Message) -> dict[str, Any]:
 
 # dhw (cylinder) params  # FIXME: a bit messy
 def parser_10a0(payload: str, msg: Message) -> PayDictT._10A0 | PayDictT.EMPTY:
+    """Parse the 10a0 (dhw_params) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of DHW parameters or an empty dictionary
+    :rtype: PayDictT._10A0 | PayDictT.EMPTY
+    :raises AssertionError: If the message length or valve index is invalid.
+    """
     # RQ --- 07:045960 01:145038 --:------ 10A0 006 00-1087-00-03E4  # RQ/RP, every 24h
     # RP --- 01:145038 07:045960 --:------ 10A0 006 00-109A-00-03E8
     # RP --- 10:048122 18:006402 --:------ 10A0 003 00-1B58
@@ -944,6 +1197,16 @@ def parser_10a0(payload: str, msg: Message) -> PayDictT._10A0 | PayDictT.EMPTY:
 
 # unknown_10b0, from OTB
 def parser_10b0(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 10b0 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the raw payload and interpreted value
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload is invalid.
+    """
     assert payload == "0000", _INFORM_DEV_MSG
 
     return {
@@ -956,6 +1219,15 @@ def parser_10b0(payload: str, msg: Message) -> dict[str, Any]:
 
 # filter_change, HVAC
 def parser_10d0(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 10d0 (filter_change) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of remaining days, lifetime, and percentage
+    :rtype: dict[str, Any]
+    """
     # 2022-07-03T22:52:34.571579 045  W --- 37:171871 32:155617 --:------ 10D0 002 00FF
     # 2022-07-03T22:52:34.596526 066  I --- 32:155617 37:171871 --:------ 10D0 006 0047B44F0000
     # then...
@@ -986,6 +1258,16 @@ def parser_10d0(payload: str, msg: Message) -> dict[str, Any]:
 
 # device_info
 def parser_10e0(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 10e0 (device_info) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary of device specifications and manufacturing data
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the message length is invalid for the reported signature.
+    """
     if payload == "00":  # some HVAC devices will RP|10E0|00
         return {}
 
@@ -1025,11 +1307,30 @@ def parser_10e0(payload: str, msg: Message) -> dict[str, Any]:
 
 # device_id
 def parser_10e1(payload: str, msg: Message) -> PayDictT._10E1:
+    """Parse the 10e1 (device_id) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the device ID
+    :rtype: PayDictT._10E1
+    """
     return {SZ_DEVICE_ID: hex_id_to_dev_id(payload[2:])}
 
 
 # unknown_10e2 - HVAC
 def parser_10e2(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 10e2 (HVAC counter) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the extracted counter
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload length is not 6 or prefix is not '00'.
+    """
     # .I --- --:------ --:------ 20:231151 10E2 003 00AD74  # every 2 minutes
 
     assert payload[:2] == "00", _INFORM_DEV_MSG
@@ -1044,6 +1345,17 @@ def parser_10e2(payload: str, msg: Message) -> dict[str, Any]:
 def parser_1100(
     payload: str, msg: Message
 ) -> PayDictT._1100 | PayDictT._1100_IDX | PayDictT._JASPER | PayDictT.EMPTY:
+    """Parse the 1100 (tpi_params) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of TPI parameters or domain index
+    :rtype: PayDictT._1100 | PayDictT._1100_IDX | PayDictT._JASPER | PayDictT.EMPTY
+    :raises AssertionError: If TPI values are outside of recognized ranges.
+    """
+
     def complex_idx(seqx: str) -> PayDictT._1100_IDX | PayDictT.EMPTY:
         return {SZ_DOMAIN_ID: seqx} if seqx[:1] == "F" else {}  # type: ignore[typeddict-item]  # only FC
 
@@ -1095,6 +1407,16 @@ def parser_1100(
 
 # unknown_11f0, from heatpump relay
 def parser_11f0(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 11f0 (heatpump relay) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the raw payload
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload does not match the expected constant string.
+    """
     assert payload == "000009000000000000", _INFORM_DEV_MSG
 
     return {
@@ -1104,22 +1426,58 @@ def parser_11f0(payload: str, msg: Message) -> dict[str, Any]:
 
 # dhw cylinder temperature
 def parser_1260(payload: str, msg: Message) -> PayDictT._1260:
+    """Parse the 1260 (dhw_temp) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the DHW temperature
+    :rtype: PayDictT._1260
+    """
     return {SZ_TEMPERATURE: hex_to_temp(payload[2:])}
 
 
 # HVAC: outdoor humidity
 def parser_1280(payload: str, msg: Message) -> PayDictT._1280:
+    """Parse the 1280 (outdoor_humidity) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the outdoor humidity percentage
+    :rtype: PayDictT._1280
+    """
     return parse_outdoor_humidity(payload[2:])
 
 
 # outdoor temperature
 def parser_1290(payload: str, msg: Message) -> PayDictT._1290:
+    """Parse the 1290 (outdoor_temp) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the outdoor temperature
+    :rtype: PayDictT._1290
+    """
     # evohome responds to an RQ, also from OTB
     return parse_outdoor_temp(payload[2:])
 
 
 # HVAC: co2_level, see: 31DA[6:10]
 def parser_1298(payload: str, msg: Message) -> PayDictT._1298:
+    """Parse the 1298 (co2_level) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the CO2 level in PPM
+    :rtype: PayDictT._1298
+    """
     return parse_co2_level(payload[2:6])
 
 
@@ -1127,6 +1485,15 @@ def parser_1298(payload: str, msg: Message) -> PayDictT._1298:
 def parser_12a0(
     payload: str, msg: Message
 ) -> PayDictT.INDOOR_HUMIDITY | list[PayDictT._12A0]:
+    """Parse the 12a0 (indoor_humidity) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A single humidity dict or a list of sensor element dicts
+    :rtype: PayDictT.INDOOR_HUMIDITY | list[PayDictT._12A0]
+    """
     if len(payload) <= 14:
         return parse_indoor_humidity(payload[2:12])
 
@@ -1141,6 +1508,16 @@ def parser_12a0(
 
 # window_state (of a device/zone)
 def parser_12b0(payload: str, msg: Message) -> PayDictT._12B0:
+    """Parse the 12b0 (window_state) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the window open status
+    :rtype: PayDictT._12B0
+    :raises AssertionError: If the payload state bytes are unrecognized.
+    """
     assert payload[2:] in ("0000", "C800", "FFFF"), payload[2:]  # "FFFF" means N/A
 
     return {
@@ -1150,6 +1527,15 @@ def parser_12b0(payload: str, msg: Message) -> PayDictT._12B0:
 
 # displayed temperature (on a TR87RF bound to a RFG100)
 def parser_12c0(payload: str, msg: Message) -> PayDictT._12C0:
+    """Parse the 12c0 (displayed_temp) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the temperature and its measurement units
+    :rtype: PayDictT._12C0
+    """
     if payload[2:4] == "80":
         temp: float | None = None
     elif payload[4:6] == "00":  # units are 1.0 F
@@ -1168,22 +1554,59 @@ def parser_12c0(payload: str, msg: Message) -> PayDictT._12C0:
 
 # HVAC: air_quality (and air_quality_basis), see: 31DA[2:6]
 def parser_12c8(payload: str, msg: Message) -> PayDictT._12C8:
+    """Parse the 12c8 (air_quality) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the air quality percentage and basis
+    :rtype: PayDictT._12C8
+    """
     return parse_air_quality(payload[2:6])
 
 
 # dhw_flow_rate
 def parser_12f0(payload: str, msg: Message) -> PayDictT._12F0:
+    """Parse the 12f0 (dhw_flow_rate) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the DHW flow rate
+    :rtype: PayDictT._12F0
+    """
     return {SZ_DHW_FLOW_RATE: hex_to_temp(payload[2:])}
 
 
 # ch_pressure
 def parser_1300(payload: str, msg: Message) -> PayDictT._1300:
+    """Parse the 1300 (ch_pressure) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the system pressure in bar
+    :rtype: PayDictT._1300
+    """
     # 0x9F6 (2550 dec = 2.55 bar) appears to be a sentinel value
     return {SZ_PRESSURE: None if payload[2:] == "09F6" else hex_to_temp(payload[2:])}
 
 
 # programme_scheme, HVAC
 def parser_1470(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 1470 (programme_scheme) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of the schedule scheme and daily setpoint count
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload format or constants are unrecognized.
+    """
     # Seen on Orcon: see 1470, 1F70, 22B0
 
     SCHEDULE_SCHEME = {
@@ -1215,6 +1638,16 @@ def parser_1470(payload: str, msg: Message) -> dict[str, Any]:
 
 # system_sync
 def parser_1f09(payload: str, msg: Message) -> PayDictT._1F09:
+    """Parse the 1f09 (system_sync) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary with remaining seconds and the calculated next sync time
+    :rtype: PayDictT._1F09
+    :raises AssertionError: If the packet length is not 3.
+    """
     # 22:51:19.287 067  I --- --:------ --:------ 12:193204 1F09 003 010A69
     # 22:51:19.318 068  I --- --:------ --:------ 12:193204 2309 003 010866
     # 22:51:19.321 067  I --- --:------ --:------ 12:193204 30C9 003 0108C3
@@ -1238,6 +1671,16 @@ def parser_1f09(payload: str, msg: Message) -> PayDictT._1F09:
 
 # dhw_mode
 def parser_1f41(payload: str, msg: Message) -> PayDictT._1F41:
+    """Parse the 1f41 (dhw_mode) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing DHW mode, activity, and duration/until data
+    :rtype: PayDictT._1F41
+    :raises AssertionError: If payload constants or message lengths are invalid.
+    """
     # 053 RP --- 01:145038 18:013393 --:------ 1F41 006 00FF00FFFFFF  # no stored DHW
 
     assert payload[4:6] in ZON_MODE_MAP, f"{payload[4:6]} (0xjj)"
@@ -1264,6 +1707,16 @@ def parser_1f41(payload: str, msg: Message) -> PayDictT._1F41:
 
 # programme_config, HVAC
 def parser_1f70(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 1f70 (programme_config) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing schedule indices and start times
+    :rtype: dict[str, Any]
+    :raises AssertionError: If internal payload constraints are violated.
+    """
     # Seen on Orcon: see 1470, 1F70, 22B0
 
     try:
@@ -1300,6 +1753,18 @@ def parser_1f70(payload: str, msg: Message) -> dict[str, Any]:
 
 # rf_bind
 def parser_1fc9(payload: str, msg: Message) -> PayDictT._1FC9:
+    """Parse the 1fc9 (rf_bind) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary identifying the binding phase (Offer/Accept/Confirm) and bindings
+    :rtype: PayDictT._1FC9
+    :raises PacketPayloadInvalid: If the binding format is unknown.
+    :raises AssertionError: If the payload length or constants are invalid.
+    """
+
     def _parser(seqx: str) -> list[str]:
         if seqx[:2] not in ("90",):
             assert (
@@ -1352,6 +1817,15 @@ def parser_1fc9(payload: str, msg: Message) -> PayDictT._1FC9:
 
 # unknown_1fca, HVAC?
 def parser_1fca(payload: str, msg: Message) -> Mapping[str, str]:
+    """Parse the 1fca packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A mapping of unknown identifiers and associated device IDs
+    :rtype: Mapping[str, str]
+    """
     # .W --- 30:248208 34:021943 --:------ 1FCA 009 00-01FF-7BC990-FFFFFF  # sent x2
 
     return {
@@ -1364,6 +1838,16 @@ def parser_1fca(payload: str, msg: Message) -> Mapping[str, str]:
 
 # unknown_1fd0, from OTB
 def parser_1fd0(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 1fd0 (OpenTherm) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the raw payload
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload does not match the expected null string.
+    """
     assert payload == "0000000000000000", _INFORM_DEV_MSG
 
     return {
@@ -1373,32 +1857,68 @@ def parser_1fd0(payload: str, msg: Message) -> dict[str, Any]:
 
 # opentherm_sync, otb_sync
 def parser_1fd4(payload: str, msg: Message) -> PayDictT._1FD4:
+    """Parse the 1fd4 (opentherm_sync) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the sync ticker value
+    :rtype: PayDictT._1FD4
+    """
     return {"ticker": int(payload[2:], 16)}
 
 
-# WIP: unknown, HVAC
+# WIP: HVAC auto requests (confirmed for Orcon, others?)
 def parser_2210(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 2210 (HVAC auto request) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary of fan speed, request reason, and unknown flags
+    :rtype: dict[str, Any]
+    :raises AssertionError: If payload constants or internal consistency checks fail.
+    """
     try:
         assert msg.verb in (RP, I_) or payload == "00"
-        assert payload[10:12] == payload[38:40] and payload[10:12] in (
-            "58",
-            "96",
-            "FF",
-        ), f"expected (58|96|FF), not {payload[10:12]}"
+        assert payload[10:12] == payload[38:40], (
+            f"expected byte 19 {payload[10:12]}, not {payload[38:40]}"
+        )  # auto requested fan speed %. Identical [38:40] is for supply?
         assert payload[20:22] == payload[48:50] and payload[20:22] in (
+            "00",  # idle
+            "02",  # requested by CO2 level/sensor
+            "03",  # requested by humidity level/sensor
+        ), f"expected req_reason (00|02|03), not {payload[20:22]}"
+        assert payload[78:80] in (
             "00",
-            "03",
-        ), f"expected (00|03), not {payload[10:12]}"
-        assert payload[78:80] in ("00", "02"), f"expected (00|02), not {payload[78:80]}"
-        assert payload[80:82] in ("01", "08"), f"expected (01|08), not {payload[80:82]}"
-        assert payload[82:] in ("00", "40"), f"expected (00|40), not {payload[82:]}"
+            "02",
+        ), f"expected byte 39 (00|02), not {payload[78:80]}"
+        assert payload[80:82] in (
+            "01",
+            "08",
+            "0C",  # seen on Orcon HCR-400 EcoMax
+        ), f"expected byte 40 (01|08), not {payload[80:82]}"
+        assert payload[82:] in (
+            "00",
+            "40",
+        ), f"expected byte 41- (00|40), not {payload[82:]}"
 
     except AssertionError as err:
         _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
 
+    _req = "IDL"
+    if payload[20:22] == "02":
+        _req = "CO2"
+    elif payload[20:22] == "03":
+        _req = "HUM"
+
     return {
-        "unknown_10": payload[10:12],
-        "unknown_20": payload[20:22],
+        **parse_exhaust_fan_speed(
+            payload[10:12]
+        ),  # for Orcon: 29 hex == 41 decimal divided by 2 gives 20.5 (%)
+        SZ_REQ_REASON: _req,
         "unknown_78": payload[78:80],
         "unknown_80": payload[80:82],
         "unknown_82": payload[82:],
@@ -1407,6 +1927,15 @@ def parser_2210(payload: str, msg: Message) -> dict[str, Any]:
 
 # now_next_setpoint - Programmer/Hometronics
 def parser_2249(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only dict
+    """Parse the 2249 (now_next_setpoint) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary or list of current/next setpoints and time remaining
+    :rtype: dict | list[dict]
+    """
     # see: https://github.com/jrosser/honeymon/blob/master/decoder.cpp#L357-L370
     # .I --- 23:100224 --:------ 23:100224 2249 007 00-7EFF-7EFF-FFFF
 
@@ -1435,6 +1964,15 @@ def parser_2249(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
 
 # program_enabled, HVAC
 def parser_22b0(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 22b0 (program_enabled) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the program enabled status
+    :rtype: dict[str, Any]
+    """
     # Seen on Orcon: see 1470, 1F70, 22B0
 
     # .W --- 37:171871 32:155617 --:------ 22B0 002 0005  # enable, calendar on
@@ -1450,6 +1988,16 @@ def parser_22b0(payload: str, msg: Message) -> dict[str, Any]:
 
 # setpoint_bounds, TODO: max length = 24?
 def parser_22c9(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only dict
+    """Parse the 22c9 (setpoint_bounds) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary or list containing mode and temperature bounds
+    :rtype: dict | list[dict]
+    :raises AssertionError: If the payload length or suffix is unrecognized.
+    """
     # .I --- 02:001107 --:------ 02:001107 22C9 024 00-0834-0A28-01-0108340A2801-0208340A2801-0308340A2801  # noqa: E501
     # .I --- 02:001107 --:------ 02:001107 22C9 006 04-0834-0A28-01
 
@@ -1483,6 +2031,17 @@ def parser_22c9(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
 
 # unknown_22d0, UFH system mode (heat/cool)
 def parser_22d0(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 22d0 (UFH system mode) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary of UFH index, flags, and active modes
+    :rtype: dict[str, Any]
+    :raises AssertionError: If payload constants or flags are invalid.
+    """
+
     def _parser(seqx: str) -> dict:
         # assert seqx[2:4] in ("00", "03", "10", "13", "14"), _INFORM_DEV_MSG
         assert seqx[4:6] == "00", _INFORM_DEV_MSG
@@ -1505,11 +2064,32 @@ def parser_22d0(payload: str, msg: Message) -> dict[str, Any]:
 
 # desired boiler setpoint
 def parser_22d9(payload: str, msg: Message) -> PayDictT._22D9:
+    """Parse the 22d9 (desired boiler setpoint) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A dictionary containing the target temperature setpoint
+    :rtype: PayDictT._22D9
+    """
     return {SZ_SETPOINT: hex_to_temp(payload[2:6])}
 
 
 # WIP: unknown, HVAC
 def parser_22e0(payload: str, msg: Message) -> Mapping[str, float | None]:
+    """Parse the 22e0 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A mapping of percentage values extracted from the payload
+    :rtype: Mapping[str, float | None]
+    :raises AssertionError: If a value exceeds the expected 200 threshold.
+    :raises ValueError: If the payload cannot be parsed as percentages.
+    """
+
     # RP --- 32:155617 18:005904 --:------ 22E0 004 00-34-A0-1E
     # RP --- 32:153258 18:005904 --:------ 22E0 004 00-64-A0-1E
     def _parser(seqx: str) -> float:
@@ -1531,6 +2111,15 @@ def parser_22e0(payload: str, msg: Message) -> Mapping[str, float | None]:
 
 # WIP: unknown, HVAC
 def parser_22e5(payload: str, msg: Message) -> Mapping[str, float | None]:
+    """Parse the 22e5 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A mapping of percentage values extracted from the payload
+    :rtype: Mapping[str, float | None]
+    """
     # RP --- 32:153258 18:005904 --:------ 22E5 004 00-96-C8-14
     # RP --- 32:155617 18:005904 --:------ 22E5 004 00-72-C8-14
 
@@ -1539,6 +2128,15 @@ def parser_22e5(payload: str, msg: Message) -> Mapping[str, float | None]:
 
 # WIP: unknown, HVAC
 def parser_22e9(payload: str, msg: Message) -> Mapping[str, float | str | None]:
+    """Parse the 22e9 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object
+    :type msg: Message
+    :return: A mapping of unknown identifiers or percentage values
+    :rtype: Mapping[str, float | str | None]
+    """
     if payload[2:4] == "01":
         return {
             "unknown_4": payload[4:6],
@@ -1549,6 +2147,16 @@ def parser_22e9(payload: str, msg: Message) -> Mapping[str, float | str | None]:
 
 # fan_speed (switch_mode), HVAC
 def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 22f1 (fan_speed) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the fan mode, scheme, and internal indices
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the fan mode or mode set is unrecognized.
+    """
     try:
         assert payload[0:2] in ("00", "63")
         assert not payload[4:] or int(payload[2:4], 16) <= int(payload[4:], 16), (
@@ -1610,6 +2218,15 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
 
 # WIP: unknown, HVAC (flow rate?)
 def parser_22f2(payload: str, msg: Message) -> list:  # TODO: only dict
+    """Parse the 22f2 (HVAC flow rate) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A list of dictionaries containing HVAC indices and measurements
+    :rtype: list
+    """
     # ClimeRad minibox uses 22F2 for speed feedback
 
     def _parser(seqx: str) -> dict:
@@ -1625,6 +2242,16 @@ def parser_22f2(payload: str, msg: Message) -> list:  # TODO: only dict
 
 # fan_boost, HVAC
 def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 22f3 (fan_boost) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of boost settings, duration, and fan modes
+    :rtype: dict[str, Any]
+    :raises AssertionError: If internal payload structure is malformed.
+    """
     # NOTE: for boost timer for high
     try:
         assert msg.len <= 7 or payload[14:] == "0000", f"byte 7: {payload[14:]}"
@@ -1632,21 +2259,17 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
         _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
 
     new_speed = {  # from now, until timer expiry
-        0x00: "fan_boost",  # #    set fan off, or 'boost' mode?
-        0x01: "per_request",  # #  set fan as per payload[6:10]?
-        0x02: "per_vent_speed",  # set fan as per current fan mode/speed?
+        0x00: "fan_boost",  # set fan off, or 'boost' mode?
+        0x01: "per_request?",  # set fan as per payload[6:10]?
+        0x02: "per_request",  # set fan as per payload[6:10]
     }.get(int(payload[2:4], 0x10) & 0x07)  # 0b0000-0111
 
-    fallback_speed: str | None
-    if msg.len == 7 and payload[9:10] == "06":  # Vasco and ClimaRad REM
-        fallback_speed = "per_vent_speed"  # after timer expiry
-        # set fan as per current fan mode/speed
-    else:
-        fallback_speed = {  # after timer expiry
-            0x08: "fan_off",  # #      set fan off?
-            0x10: "per_request",  # #  set fan as per payload[6:10], or payload[10:]?
-            0x18: "per_vent_speed",  # set fan as per current fan mode/speed?
-        }.get(int(payload[2:4], 0x10) & 0x38)  # 0b0011-1000
+    fallback_speed = {  # after timer expiry
+        0x00: "per_vent_speed",  # set fan as per current fan mode
+        0x08: "fan_off",  # set fan off?
+        0x10: "per_request",  # set fan as per payload[10:14]
+        0x18: "per_vent_speed?",  # set fan as per current fan mode/speed?
+    }.get(int(payload[2:4], 0x10) & 0x38)  # 0b0011-1000
 
     units = {
         0x00: "minutes",
@@ -1661,23 +2284,39 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
         result = {
             "minutes" if units != "index" else "index": duration,
             "flags": hex_to_flag8(payload[2:4]),
-            "_new_speed_mode": new_speed,
-            "_fallback_speed_mode": fallback_speed,
+            "new_speed_mode": new_speed,
+            "fallback_speed_mode": fallback_speed,
         }
 
-    if msg.len >= 5 and payload[6:10] != "0000":  # new speed?
-        result["rate"] = parser_22f1(f"00{payload[6:10]}", msg).get("rate")
+    if msg._addrs[0] == NON_DEV_ADDR and msg.len <= 3:
+        result["_scheme"] = "itho"
 
-    if msg.len >= 7:  # fallback speed?
-        result.update({"_unknown_5": payload[10:]})
+    if msg.len >= 5 and payload[6:10] != "0000":  # new speed
+        mode_info = parser_22f1(f"00{payload[6:10]}", msg)
+        result["_scheme"] = mode_info.get("_scheme")
+        result["fan_mode"] = mode_info.get("fan_mode")
+
+    if msg.len >= 7 and payload[10:14] != "0000":  # fallback speed
+        mode_info = parser_22f1(f"00{payload[10:14]}", msg)
+        result["fallback_fan_mode"] = mode_info.get("fan_mode")
 
     return result
 
 
 # WIP: unknown, HVAC
 def parser_22f4(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 22f4 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing interpreted fan mode and rate
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the extracted mode or rate is invalid.
+    """
     if msg.len == 13 and payload[14:] == "000000000000":
-        # ClimaRad Ventura fan/remote
+        # ClimaRad Ventura fan & remote
         _pl = payload[:4] + payload[12:14] if payload[10:12] == "00" else payload[8:14]
     else:
         _pl = payload[:6]
@@ -1710,27 +2349,36 @@ def parser_22f4(payload: str, msg: Message) -> dict[str, Any]:
 
 # bypass_mode, HVAC
 def parser_22f7(payload: str, msg: Message) -> dict[str, Any]:
-    # RQ --- 37:171871 32:155617 --:------ 22F7 001 00
-    # RP --- 32:155617 37:171871 --:------ 22F7 003 00FF00  # also: 000000, 00C8C8
+    """Parse the 22f7 (bypass_mode) packet.
 
-    # .W --- 37:171871 32:155617 --:------ 22F7 003 0000EF  # bypass off
-    # .I --- 32:155617 37:171871 --:------ 22F7 003 000000
-    # .W --- 37:171871 32:155617 --:------ 22F7 003 00C8EF  # bypass on
-    # .I --- 32:155617 37:171871 --:------ 22F7 003 00C800
-    # .W --- 37:171871 32:155617 --:------ 22F7 003 00FFEF  # bypass auto
-    # .I --- 32:155617 37:171871 --:------ 22F7 003 00FFC8
-
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of bypass mode, state, and position
+    :rtype: dict[str, Any]
+    """
     result = {
-        "bypass_mode": {"00": "off", "C8": "on", "FF": "auto"}.get(payload[2:4]),
+        SZ_BYPASS_MODE: {"00": "off", "C8": "on", "FF": "auto"}.get(payload[2:4]),
     }
     if msg.verb != W_ or payload[4:] not in ("", "EF"):
-        result["bypass_state"] = {"00": "off", "C8": "on"}.get(payload[4:])
+        result[SZ_BYPASS_STATE] = {"00": "off", "C8": "on"}.get(payload[4:])
+        result.update(**parse_bypass_position(payload[4:]))  # type: ignore[arg-type]
 
     return result
 
 
 # WIP: unknown_mode, HVAC
 def parser_22f8(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 22f8 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of raw internal values
+    :rtype: dict[str, Any]
+    """
     # from: https://github.com/arjenhiemstra/ithowifi/blob/master/software/NRG_itho_wifi/src/IthoPacket.h
 
     # message command bytes specific for AUTO RFT (536-0150)
@@ -1751,6 +2399,15 @@ def parser_22f8(payload: str, msg: Message) -> dict[str, Any]:
 def parser_2309(
     payload: str, msg: Message
 ) -> PayDictT._2309 | list[PayDictT._2309] | PayDictT.EMPTY:
+    """Parse the 2309 (setpoint) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A setpoint dictionary, list of setpoints, or an empty dictionary
+    :rtype: PayDictT._2309 | list[PayDictT._2309] | PayDictT.EMPTY
+    """
     if msg._has_array:
         return [
             {
@@ -1769,6 +2426,16 @@ def parser_2309(
 
 # zone_mode  # TODO: messy
 def parser_2349(payload: str, msg: Message) -> PayDictT._2349 | PayDictT.EMPTY:
+    """Parse the 2349 (zone_mode) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing zone mode, setpoint, and override details
+    :rtype: PayDictT._2349 | PayDictT.EMPTY
+    :raises AssertionError: If the message length or mode is invalid.
+    """
     # RQ --- 34:225071 30:258557 --:------ 2349 001 00
     # RP --- 30:258557 34:225071 --:------ 2349 013 007FFF00FFFFFFFFFFFFFFFFFF
     # RP --- 30:253184 34:010943 --:------ 2349 013 00064000FFFFFF00110E0507E5
@@ -1808,6 +2475,15 @@ def parser_2349(payload: str, msg: Message) -> PayDictT._2349 | PayDictT.EMPTY:
 
 # unknown_2389, from 03:
 def parser_2389(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 2389 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing an unknown temperature measurement
+    :rtype: dict[str, Any]
+    """
     return {
         "_unknown": hex_to_temp(payload[2:6]),
     }
@@ -1815,6 +2491,15 @@ def parser_2389(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_2400, from OTB, FAN
 def parser_2400(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 2400 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the raw payload
+    :rtype: dict[str, Any]
+    """
     # RP --- 32:155617 18:005904 --:------ 2400 045 00001111-1010929292921110101020110010000080100010100000009191111191910011119191111111111100  # Orcon FAN
     # RP --- 10:048122 18:006402 --:------ 2400 004 0000000F
     # assert payload == "0000000F", _INFORM_DEV_MSG
@@ -1826,6 +2511,16 @@ def parser_2400(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_2401, from OTB
 def parser_2401(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 2401 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of decoded flags and valve demand
+    :rtype: dict[str, Any]
+    :raises AssertionError: If payload constants or bit flags are unrecognized.
+    """
     try:
         assert payload[2:4] == "00", f"byte 1: {payload[2:4]}"
         assert int(payload[4:6], 16) & 0b11110000 == 0, (
@@ -1844,6 +2539,16 @@ def parser_2401(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_2410, from OTB, FAN
 def parser_2410(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 2410 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of current, min, and max values and metadata
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload format does not match expected constants.
+    """
     # RP --- 10:048122 18:006402 --:------ 2410 020 00-00000000-00000000-00000001-00000001-00000C  # OTB
     # RP --- 32:155617 18:005904 --:------ 2410 020 00-00003EE8-00000000-FFFFFFFF-00000000-1002A6  # Orcon Fan
 
@@ -1880,6 +2585,15 @@ def parser_2410(payload: str, msg: Message) -> dict[str, Any]:
 
 # fan_params, HVAC
 def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 2411 (fan_params) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the parameter ID, description, and decoded value
+    :rtype: dict[str, Any]
+    """
     # There is a relationship between 0001 and 2411
     # RQ --- 37:171871 32:155617 --:------ 0001 005 0020000A04
     # RP --- 32:155617 37:171871 --:------ 0001 008 0020000A004E0B00  # 0A -> 2411|4E
@@ -1897,48 +2611,101 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
         "01": (2, centile),  # 52 (0.0-25.0) (%)
         "0F": (2, hex_to_percent),  # xx (0.0-1.0) (%)
         "10": (4, counter),  # 31 (0-1800) (days)
+        # "20": (4, counter),  # unknown data type, uncomment when we have more info
         "92": (4, hex_to_temp),  # 75 (0-30) (C)
     }  # TODO: _2411_TYPES.get(payload[8:10], (8, no_op))
 
-    assert payload[4:6] in _2411_TABLE, (
-        f"param {payload[4:6]} is unknown"
-    )  # _INFORM_DEV_MSG
-    description = _2411_TABLE.get(payload[4:6], "Unknown")
+    # Handle unknown parameters gracefully instead of asserting
+    param_id = payload[4:6]
+    try:
+        description = _2411_TABLE.get(param_id, "Unknown")
+        if param_id not in _2411_TABLE:
+            _LOGGER.warning(
+                f"2411 message received with unknown parameter ID: {param_id}. "
+                f"This parameter is not in the known parameter schema. "
+                f"Message: {msg!r}"
+            )
+    except Exception as err:
+        _LOGGER.warning(f"Error looking up 2411 parameter {param_id}: {err}")
+        description = "Unknown"
 
     result = {
-        "parameter": payload[4:6],
+        "parameter": param_id,
         "description": description,
     }
 
     if msg.verb == RQ:
         return result
 
-    assert payload[8:10] in _2411_DATA_TYPES, (
-        f"param {payload[4:6]} has unknown data_type: {payload[8:10]}"
-    )  # _INFORM_DEV_MSG
-    length, parser = _2411_DATA_TYPES.get(payload[8:10], (8, lambda x: x))
+    try:
+        # Handle unknown data types gracefully instead of asserting
+        if payload[8:10] not in _2411_DATA_TYPES:
+            warningmsg = (
+                f"{msg!r} < {_INFORM_DEV_MSG} (param {param_id} has unknown data_type: {payload[8:10]}). "
+                f"This parameter uses an unrecognized data type. "
+                f"Please report this packet and any context about what changed on your system."
+            )
+            # Return partial result with raw hex values for unknown data types
+            if msg.len == 9:
+                result |= {
+                    "value": f"0x{payload[10:18]}",  # Raw hex value
+                    "_value_06": payload[6:10],
+                    "_unknown_data_type": payload[8:10],
+                }
+            else:
+                result |= {
+                    "value": f"0x{payload[10:18]}",  # Raw hex value
+                    "_value_06": payload[6:10],
+                    "min_value": f"0x{payload[18:26]}",  # Raw hex value
+                    "max_value": f"0x{payload[26:34]}",  # Raw hex value
+                    "precision": f"0x{payload[34:42]}",  # Raw hex value
+                    "_value_42": payload[42:],
+                    # Flexible footer - capture everything after precision
+                }
+            _LOGGER.warning(f"{warningmsg}. Found values: {result}")
+            return result
 
-    result |= {
-        "value": parser(payload[10:18][-length:]),  # type: ignore[operator]
-        "_value_06": payload[6:10],
-    }
-
-    if msg.len == 9:
-        return result
-
-    return (
-        result
-        | {
-            "min_value": parser(payload[18:26][-length:]),  # type: ignore[operator]
-            "max_value": parser(payload[26:34][-length:]),  # type: ignore[operator]
-            "precision": parser(payload[34:42][-length:]),  # type: ignore[operator]
-            "_value_42": payload[42:],
+        # Handle known data types normally
+        length, parser = _2411_DATA_TYPES[payload[8:10]]
+        result |= {
+            "value": parser(payload[10:18][-length:]),  # type: ignore[operator]
+            "_value_06": payload[6:10],
         }
-    )
+
+        if msg.len == 9:
+            return result
+
+        return (
+            result
+            | {
+                "min_value": parser(payload[18:26][-length:]),  # type: ignore[operator]
+                "max_value": parser(payload[26:34][-length:]),  # type: ignore[operator]
+                "precision": parser(payload[34:42][-length:]),  # type: ignore[operator]
+                "_value_42": payload[42:],
+                # Flexible footer - capture everything after precision
+                # eg. older Orcon models may have a footer of 2 bytes
+            }
+        )
+    except Exception as err:
+        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} (Error parsing 2411: {err})")
+        # Return partial result for any parsing errors
+        result["value"] = f"0x{payload[10:18]}"  # Raw hex value
+        result["_parse_error"] = f"Parser error: {err}"
+        return result
 
 
 # unknown_2420, from OTB
 def parser_2420(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 2420 (OpenTherm) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the raw payload
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload does not match the expected constant string.
+    """
     assert payload == "00000010" + "00" * 34, _INFORM_DEV_MSG
 
     return {
@@ -1948,6 +2715,16 @@ def parser_2420(payload: str, msg: Message) -> dict[str, Any]:
 
 # _state (of cooling?), from BDR91T, hometronics CTL
 def parser_2d49(payload: str, msg: Message) -> PayDictT._2D49:
+    """Parse the 2d49 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the boolean state
+    :rtype: PayDictT._2D49
+    :raises AssertionError: If the payload state bytes are unrecognized.
+    """
     assert payload[2:] in ("0000", "00FF", "C800", "C8FF"), _INFORM_DEV_MSG
 
     return {
@@ -1957,6 +2734,16 @@ def parser_2d49(payload: str, msg: Message) -> PayDictT._2D49:
 
 # system_mode
 def parser_2e04(payload: str, msg: Message) -> PayDictT._2E04:
+    """Parse the 2e04 (system_mode) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the system mode and optional duration
+    :rtype: PayDictT._2E04
+    :raises AssertionError: If the system mode or packet length is invalid.
+    """
     # if msg.verb == W_:
 
     # .I --— 01:020766 --:------ 01:020766 2E04 016 FFFFFFFFFFFFFF0007FFFFFFFFFFFF04  # Manual          # noqa: E501
@@ -1991,6 +2778,16 @@ def parser_2e04(payload: str, msg: Message) -> PayDictT._2E04:
 
 # presence_detect, HVAC sensor, or Timed boost for Vasco D60
 def parser_2e10(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 2e10 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary defining if presence is detected
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload is not in a recognized format.
+    """
     assert payload in ("0001", "000000", "000100"), _INFORM_DEV_MSG
     presence: int = int(payload[2:4])
     return {
@@ -2001,6 +2798,15 @@ def parser_2e10(payload: str, msg: Message) -> dict[str, Any]:
 
 # current temperature (of device, zone/s)
 def parser_30c9(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only dict
+    """Parse the 30c9 (temperature) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary or list of temperatures by zone index
+    :rtype: dict | list[dict]
+    """
     if msg._has_array:
         return [
             {
@@ -2015,6 +2821,16 @@ def parser_30c9(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
 
 # ufc_demand, HVAC (Itho autotemp / spider)
 def parser_3110(payload: str, msg: Message) -> PayDictT._3110:
+    """Parse the 3110 (ufc_demand) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the operating mode and demand percentage
+    :rtype: PayDictT._3110
+    :raises AssertionError: If payload constants or demand values are invalid.
+    """
     # .I --- 02:250708 --:------ 02:250708 3110 004 0000C820  # cooling, 100%
     # .I --- 21:042656 --:------ 21:042656 3110 004 00000010  # heating, 0%
 
@@ -2047,6 +2863,16 @@ def parser_3110(payload: str, msg: Message) -> PayDictT._3110:
 
 # unknown_3120, from STA, FAN
 def parser_3120(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 3120 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of raw internal segments
+    :rtype: dict[str, Any]
+    :raises AssertionError: If individual byte segments fail validation.
+    """
     # .I --- 34:136285 --:------ 34:136285 3120 007 0070B0000000FF  # every ~3:45:00!
     # RP --- 20:008749 18:142609 --:------ 3120 007 0070B000009CFF
     # .I --- 37:258565 --:------ 37:258565 3120 007 0080B0010003FF
@@ -2071,6 +2897,16 @@ def parser_3120(payload: str, msg: Message) -> dict[str, Any]:
 
 # WIP: unknown, HVAC
 def parser_313e(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 313e packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing calculated Zulu time and raw internal values
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload prefix or expected constant suffix is invalid.
+    """
     assert payload[:2] == "00"
     assert payload[12:] == "003C800000"
 
@@ -2088,6 +2924,16 @@ def parser_313e(payload: str, msg: Message) -> dict[str, Any]:
 
 # datetime
 def parser_313f(payload: str, msg: Message) -> PayDictT._313F:  # TODO: look for TZ
+    """Parse the 313f (datetime) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the datetime and DST flag
+    :rtype: PayDictT._313F
+    :raises AssertionError: If the payload context is unexpected for the source device type.
+    """
     # 2020-03-28T03:59:21.315178 045 RP --- 01:158182 04:136513 --:------ 313F 009 00FC3500A41C0307E4
     # 2020-03-29T04:58:30.486343 045 RP --- 01:158182 04:136485 --:------ 313F 009 00FC8400C51D0307E4
     # 2022-09-20T20:50:32.800676 065 RP --- 01:182924 18:068640 --:------ 313F 009 00F9203234140907E6
@@ -2120,6 +2966,15 @@ def parser_313f(payload: str, msg: Message) -> PayDictT._313F:  # TODO: look for
 
 # heat_demand (of device, FC domain) - valve status (%open)
 def parser_3150(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only dict
+    """Parse the 3150 (heat_demand) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary or list of dictionaries containing zone indices and valve demand
+    :rtype: dict | list[dict]
+    """
     # event-driven, and periodically; FC domain is maximum of all zones
     # TODO: all have a valid domain will UFC/CTL respond to an RQ, for FC, for a zone?
 
@@ -2144,6 +2999,16 @@ def parser_3150(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
 
 # fan state (ventilation status), HVAC
 def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 31d9 (fan state) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing fan mode, speed, and status flags
+    :rtype: dict[str, Any]
+    :raises AssertionError: If payload constants or byte segments fail validation.
+    """
     # NOTE: Itho and ClimaRad use 0x00-C8 for %, whilst Nuaire uses 0x00-64
     try:
         assert payload[4:6] == "FF" or int(payload[4:6], 16) <= 200, (
@@ -2154,9 +3019,9 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
 
     bitmap = int(payload[2:4], 16)
 
-    # NOTE: 31D9[4:6] is fan_rate (minibox, itho) *or* fan_mode (orcon?)
+    # NOTE: 31D9[4:6] is fan_speed (ClimaRad minibox, Itho) *or* fan_mode (Orcon, Vasco)
     result = {
-        **parse_exhaust_fan_speed(payload[4:6]),  # itho
+        **parse_exhaust_fan_speed(payload[4:6]),  # for itho
         SZ_FAN_MODE: payload[4:6],  # orcon, vasco/climarad
         "passive": bool(bitmap & 0x02),
         "damper_only": bool(bitmap & 0x04),  # i.e. valve only
@@ -2166,16 +3031,17 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
         "_flags": hex_to_flag8(payload[2:4]),
     }
 
+    # Fan Mode Lookup 1 for Vasco codes
     if msg.len == 3:  # usu: I -->20: (no seq#)
         if (
-            payload[:4] == "0000"
+            (payload[:4] == "0000" or payload[:4] == "0080")  # Senza, meaning of 0x80?
             and msg._addrs[0] == msg._addrs[2]
             and msg._addrs[1] == NON_DEV_ADDR
         ):
-            # _31D9_FAN_INFO for Vasco D60 HRU and ClimaRad minibox REM
+            # _31D9_FAN_INFO for Vasco D60 HRU and ClimaRad Minibox, S-Fan, (REM: RQ only, msg.len==1)
             try:
                 assert int(payload[4:6], 16) & 0xFF in _31D9_FAN_INFO_VASCO, (
-                    f"unknown 31D9 fan_mode: {payload[2:4]}"
+                    f"unknown 31D9 fan_mode lookup key: {payload[4:6]}"
                 )
             except AssertionError as err:
                 _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
@@ -2183,6 +3049,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
                 int(payload[4:6], 16) & 0xFF, f"unknown_{payload[4:6]}"
             )
             result[SZ_FAN_MODE] = fan_mode  # replace
+            # if not replaced, 31D9 FAN_MODE is a 2 digit string HEX
         return result
 
     try:
@@ -2210,11 +3077,19 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
 
 # ventilation state (extended), HVAC
 def parser_31da(payload: str, msg: Message) -> PayDictT._31DA:
+    """Parse the 31da (extended ventilation state) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of all decoded ventilation parameters
+    :rtype: PayDictT._31DA
+    """
     # see: https://github.com/python/typing/issues/1445
-    return {  # type: ignore[typeddict-unknown-key]
+    result = {
         **parse_exhaust_fan_speed(payload[38:40]),  # maybe 31D9[4:6] for some?
         **parse_fan_info(payload[36:38]),  # 22F3-ish
-        #
         **parse_air_quality(payload[2:6]),  # 12C8[2:6]
         **parse_co2_level(payload[6:10]),  # 1298[2:6]
         **parse_indoor_humidity(payload[10:12]),  # 12A0?
@@ -2232,6 +3107,13 @@ def parser_31da(payload: str, msg: Message) -> PayDictT._31DA:
         **parse_supply_flow(payload[50:54]),  # NOTE: is supply, not exhaust
         **parse_exhaust_flow(payload[54:58]),  # NOTE: order switched from others
     }
+    if len(payload) == 58:
+        return result  # type: ignore[return-value]
+
+    result.update(
+        {"_extra": payload[58:]}
+    )  # sporadic [58:60] one of {00, 20, 40} version?
+    return result  # type: ignore[return-value]
 
     # From an Orcon 15RF Display
     #  1 Software version
@@ -2252,46 +3134,53 @@ def parser_31da(payload: str, msg: Message) -> PayDictT._31DA:
 
 # vent_demand, HVAC
 def parser_31e0(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only dict
-    """Notes are.
-
-    van means “of”.
+    """Parse the 31e0 (vent_demand) packet.
+    "van" means "of".
     - 0 = min. van min. potm would be:
     - 0 = minimum of minimum potentiometer
 
     See: https://www.industrialcontrolsonline.com/honeywell-t991a
     - modulates air temperatures in ducts
-
-    case 0x31E0:  ' 12768:
-    {
-        string str4;
-        unchecked
-        {
-            result.Fan = Conversions.ToString((double)(int)data[checked(start + 1)] / 2.0);
-            str4 = "";
-        }
-        str4 = (data[start + 2] & 0xF) switch
-        {
-            0 => str4 + "0 = min. potm. ",
-            1 => str4 + "0 = min. van min. potm ",
-            2 => str4 + "0 = min. fan ",
-            _ => "",
-        };
-        switch (data[start + 2] & 0xF0)
-        {
-        case 16:
-            str4 += "100 = max. potm";
-            break;
-        case 32:
-            str4 += "100 = max. van max. potm ";
-            break;
-        case 48:
-            str4 += "100 = max. fan ";
-            break;
-        }
-        result.Data = str4;
-        break;
-    }
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary or list of dictionaries containing flags and demand percentage
+    :rtype: dict | list[dict]
+    :raises AssertionError: If the payload suffix is not a recognized constant.
     """
+
+    # coding note:
+    # case 0x31E0:  ' 12768:
+    # {
+    #     string str4;
+    #     unchecked
+    #     {
+    #         result.Fan = Conversions.ToString((double)(int)data[checked(start + 1)] / 2.0);
+    #         str4 = "";
+    #     }
+    #     str4 = (data[start + 2] & 0xF) switch
+    #     {
+    #         0 => str4 + "0 = min. potm. ",
+    #         1 => str4 + "0 = min. van min. potm ",
+    #         2 => str4 + "0 = min. fan ",
+    #         _ => "",
+    #     };
+    #     switch (data[start + 2] & 0xF0)
+    #     {
+    #     case 16:
+    #         str4 += "100 = max. potm";
+    #         break;
+    #     case 32:
+    #         str4 += "100 = max. van max. potm ";
+    #         break;
+    #     case 48:
+    #         str4 += "100 = max. fan ";
+    #         break;
+    #     }
+    #     result.Data = str4;
+    #     break;
+    # }
 
     # .I --- 37:005302 32:132403 --:------ 31E0 008 00-0000-00 01-0064-00  # RF15 CO2 to Orcon HRC400 series SmartComfort Valve
 
@@ -2321,16 +3210,45 @@ def parser_31e0(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
 
 # supplied boiler water (flow) temp
 def parser_3200(payload: str, msg: Message) -> PayDictT._3200:
+    """Parse the 3200 (supplied_temp) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the water flow temperature
+    :rtype: PayDictT._3200
+    """
     return {SZ_TEMPERATURE: hex_to_temp(payload[2:])}
 
 
 # return (boiler) water temp
 def parser_3210(payload: str, msg: Message) -> PayDictT._3210:
+    """Parse the 3210 (return_temp) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the return water temperature
+    :rtype: PayDictT._3210
+    """
     return {SZ_TEMPERATURE: hex_to_temp(payload[2:])}
 
 
-# opentherm_msg, from OTB (and some RND)
+# opentherm_msg, from OTB (and OT_RND)
 def parser_3220(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse an OpenTherm message packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of decoded OpenTherm data and descriptions
+    :rtype: dict[str, Any]
+    :raises AssertionError: If internal OpenTherm consistency checks fail.
+    :raises PacketPayloadInvalid: If the OpenTherm frame is malformed or uses unknown IDs.
+    """
     try:
         ot_type, ot_id, ot_value, ot_schema = decode_frame(payload[2:10])
     except AssertionError as err:
@@ -2376,13 +3294,13 @@ def parser_3220(payload: str, msg: Message) -> dict[str, Any]:
         "FFFF",
     ), f"OpenTherm: Invalid msg-type|data-value: {ot_type}|{payload[6:10]}"
 
-    # HACK: These OT data id can pop in/out of 47AB, which is an invalid value
+    # HACK: These OT data id's can pop in/out of 47AB, which is an invalid value
     if payload[6:] == "47AB" and ot_id in (0x12, 0x13, 0x19, 0x1A, 0x1B, 0x1C):
         ot_value[SZ_VALUE] = None
     # HACK: This OT data id can be 1980, which is an invalid value
     if payload[6:] == "1980" and ot_id:  # CH pressure is 25.5 bar!
         ot_value[SZ_VALUE] = None
-    # HACK: Done above, not in OT.decode_frame() as they isn't in the OT specification
+    # HACK: Done above, not in OT.decode_frame() as values aren't in the OT specification
 
     if ot_type not in _LIST:
         assert ot_type in (
@@ -2414,6 +3332,16 @@ def parser_3220(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_3221, from OTB, FAN
 def parser_3221(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 3221 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the extracted numeric value
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the extracted value exceeds the valid 0xC8 threshold.
+    """
     # RP --- 10:052644 18:198151 --:------ 3221 002 000F
     # RP --- 10:048122 18:006402 --:------ 3221 002 0000
     # RP --- 32:155617 18:005904 --:------ 3221 002 000A
@@ -2428,6 +3356,16 @@ def parser_3221(payload: str, msg: Message) -> dict[str, Any]:
 
 # WIP: unknown, HVAC
 def parser_3222(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 3222 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing offset, length, and raw data
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload prefix is not '00'.
+    """
     assert payload[:2] == "00"
 
     # e.g. RP|3222|00FE00 (payload = 3 bytes)
@@ -2448,6 +3386,16 @@ def parser_3222(payload: str, msg: Message) -> dict[str, Any]:
 
 # unknown_3223, from OTB
 def parser_3223(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 3223 (OpenTherm) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the extracted value
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the value exceeds the valid 0xC8 threshold.
+    """
     assert int(payload[2:], 16) <= 0xC8, _INFORM_DEV_MSG
 
     return {
@@ -2458,8 +3406,9 @@ def parser_3223(payload: str, msg: Message) -> dict[str, Any]:
 
 # actuator_sync (aka sync_tpi: TPI cycle sync)
 def parser_3b00(payload: str, msg: Message) -> PayDictT._3B00:
-    # system timing master: the device that sends I/FCC8 pkt controls the heater relay
     """Decode a 3B00 packet (actuator_sync).
+
+    This signal marks the start or end of a TPI cycle to synchronize relay behavior.
 
     The heat relay regularly broadcasts a 3B00 at the end(?) of every TPI cycle, the
     frequency of which is determined by the (TPI) cycle rate in 1100.
@@ -2468,7 +3417,16 @@ def parser_3b00(payload: str, msg: Message) -> PayDictT._3B00:
 
     The OTB does not send these packets, but the CTL sends a regular broadcast anyway
     for the benefit of any zone actuators (e.g. zone valve zones).
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the sync state and domain ID
+    :rtype: PayDictT._3B00
+    :raises AssertionError: If the payload length or constants are invalid for the device type.
     """
+    # system timing master: the device that sends I/FCC8 pkt controls the heater relay
 
     # 053  I --- 13:209679 --:------ 13:209679 3B00 002 00C8
     # 045  I --- 01:158182 --:------ 01:158182 3B00 002 FCC8
@@ -2505,6 +3463,16 @@ def parser_3b00(payload: str, msg: Message) -> PayDictT._3B00:
 
 # actuator_state
 def parser_3ef0(payload: str, msg: Message) -> PayDictT._3EF0 | PayDictT._JASPER:
+    """Parse the 3ef0 (actuator_state) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of modulation levels, flags, and setpoints
+    :rtype: PayDictT._3EF0 | PayDictT._JASPER
+    :raises AssertionError: If payload constants, flags, or message lengths are unrecognized.
+    """
     result: dict[str, Any]
 
     if msg.src.type == DEV_TYPE_MAP.JIM:  # Honeywell Jasper
@@ -2607,6 +3575,16 @@ def parser_3ef0(payload: str, msg: Message) -> PayDictT._3EF0 | PayDictT._JASPER
 
 # actuator_cycle
 def parser_3ef1(payload: str, msg: Message) -> PayDictT._3EF1 | PayDictT._JASPER:
+    """Parse the 3ef1 (actuator_cycle) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of modulation levels and cycle/actuator countdowns
+    :rtype: PayDictT._3EF1 | PayDictT._JASPER
+    :raises AssertionError: If the countdown values exceed recognized thresholds.
+    """
     if msg.src.type == DEV_TYPE_MAP.JIM:  # Honeywell Jasper, DEX
         assert msg.len == 18, f"expecting len 18, got: {msg.len}"
         return {
@@ -2659,6 +3637,16 @@ def parser_3ef1(payload: str, msg: Message) -> PayDictT._3EF1 | PayDictT._JASPER
 
 # timestamp, HVAC
 def parser_4401(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 4401 (HVAC timestamp) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of source/destination timestamps and update flags
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload format or constants are invalid.
+    """
     if msg.verb == RP:
         return {}
 
@@ -2721,6 +3709,16 @@ def parser_4401(payload: str, msg: Message) -> dict[str, Any]:
 
 # temperatures (see: 4e02) - Itho spider/autotemp
 def parser_4e01(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 4e01 (Itho temperatures) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing an array of temperature measurements
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the number of temperature groups does not match the packet length.
+    """
     # .I --- 02:248945 02:250708 --:------ 4E01 018 00-7FFF7FFF7FFF09077FFF7FFF7FFF7FFF-00  # 23.11, 8-group
     # .I --- 02:250984 02:250704 --:------ 4E01 018 00-7FFF7FFF7FFF7FFF08387FFF7FFF7FFF-00  # 21.04
 
@@ -2743,6 +3741,16 @@ def parser_4e01(payload: str, msg: Message) -> dict[str, Any]:
 def parser_4e02(
     payload: str, msg: Message
 ) -> dict[str, Any]:  # sent a triplets, 1 min apart
+    """Parse the 4e02 (Itho setpoint bounds) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the mode and associated setpoint bounds
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload constants or mode indicators are invalid.
+    """
     # .I --- 02:248945 02:250708 --:------ 4E02 034 00-7FFF7FFF7FFF07D07FFF7FFF7FFF7FFF-02-7FFF7FFF7FFF08347FFF7FFF7FFF7FFF  # 20.00-21.00
     # .I --- 02:250984 02:250704 --:------ 4E02 034 00-7FFF7FFF7FFF076C7FFF7FFF7FFF7FFF-02-7FFF7FFF7FFF07D07FFF7FFF7FFF7FFF  #
 
@@ -2776,6 +3784,16 @@ def parser_4e02(
 
 # hvac_4e04
 def parser_4e04(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 4e04 (HVAC mode) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the system mode
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the mode byte or data value is unrecognized.
+    """
     MODE = {
         "00": "off",
         "01": "heat",
@@ -2799,6 +3817,15 @@ def parser_4e04(payload: str, msg: Message) -> dict[str, Any]:
 
 # WIP: AT outdoor low - Itho spider/autotemp
 def parser_4e0d(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 4e0d packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the raw payload
+    :rtype: dict[str, Any]
+    """
     # .I --- 02:250704 02:250984 --:------ 4E0D 002 0100  # Itho Autotemp: only(?) master -> slave
     # .I --- 02:250704 02:250984 --:------ 4E0D 002 0101  # why does it have a context?
 
@@ -2809,16 +3836,34 @@ def parser_4e0d(payload: str, msg: Message) -> dict[str, Any]:
 
 # AT fault circulation - Itho spider/autotemp
 def parser_4e14(payload: str, msg: Message) -> dict[str, Any]:
-    """
+    """Parse the 4e14 (circulation fault) packet.
     result = "AT fault circulation";
     result = (((payload[2:] & 0x01) != 0x01) ? " Fault state : no fault "                : " Fault state : fault ")
     result = (((payload[2:] & 0x02) != 0x02) ? (text4 + "Circulation state : no fault ") : (text4 + " Circulation state : fault "))
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary indicating fault and circulation states
+    :rtype: dict[str, Any]
     """
     return {}
 
 
 # wpu_state (hvac state) - Itho spider/autotemp
 def parser_4e15(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 4e15 (WPU state) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of boolean flags for cooling, heating, and DHW activity
+    :rtype: dict[str, Any]
+    :raises TypeError: If the payload indicates simultaneous heating and cooling.
+    :raises AssertionError: If unknown bit flags are present.
+    """
     # .I --- 21:034158 02:250676 --:------ 4E15 002 0000  # WPU "off" (maybe heating, but compressor off)
     # .I --- 21:064743 02:250708 --:------ 4E15 002 0001  # WPU cooling active
     # .I --- 21:057565 02:250677 --:------ 4E15 002 0002  # WPU heating, compressor active
@@ -2852,6 +3897,16 @@ def parser_4e15(payload: str, msg: Message) -> dict[str, Any]:
 
 # TODO: hvac_4e16 - Itho spider/autotemp
 def parser_4e16(payload: str, msg: Message) -> dict[str, Any]:
+    """Parse the 4e16 packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the raw payload
+    :rtype: dict[str, Any]
+    :raises AssertionError: If the payload is not the expected null sequence.
+    """
     # .I --- 02:250984 02:250704 --:------ 4E16 007 00000000000000  # Itho Autotemp: slave -> master
 
     assert payload == "00000000000000", _INFORM_DEV_MSG
@@ -2863,16 +3918,25 @@ def parser_4e16(payload: str, msg: Message) -> dict[str, Any]:
 
 # TODO: Fan characteristics - Itho
 def parser_4e20(payload: str, msg: Message) -> dict[str, Any]:
-    """
+    """Parse the 4e20 (fan characteristics) packet.
+
     result = "Fan characteristics: "
     result += [C[ABC][210] hex_to_sint32[i:i+4] for i in range(2, 34, 4)]
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of decoded fan constants
+    :rtype: dict[str, Any]
     """
     return {}
 
 
 # TODO: Potentiometer control - Itho
 def parser_4e21(payload: str, msg: Message) -> dict[str, Any]:
-    """
+    """Parse the 4e21 (potentiometer control) packet.
+
     result = "Potentiometer control: "
     result += "Rel min: "        + hex_to_sint16(data[2:4])  # 16 bit, 2's complement
     result += "Min of rel min: " + hex_to_sint16(data[4:6])
@@ -2880,12 +3944,27 @@ def parser_4e21(payload: str, msg: Message) -> dict[str, Any]:
     result += "Rel max: "        + hex_to_sint16(data[8:10])
     result += "Max rel: "        + hex_to_sint16(data[10:12])
     result += "Abs max: "        + hex_to_sint16(data[12:14]))
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary of absolute and relative power limits
+    :rtype: dict[str, Any]
     """
     return {}
 
 
 #   # faked puzzle pkt shouldn't be decorated
 def parser_7fff(payload: str, _: Message) -> dict[str, Any]:
+    """Parse the 7fff (puzzle) packet.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param _: The message object (unused)
+    :return: A dictionary containing the message type, timestamp, and metadata
+    :rtype: dict[str, Any]
+    """
     if payload[:2] != "00":
         _LOGGER.debug("Invalid/deprecated Puzzle packet")
         return {
@@ -2927,6 +4006,15 @@ def parser_7fff(payload: str, _: Message) -> dict[str, Any]:
 
 
 def parser_unknown(payload: str, msg: Message) -> dict[str, Any]:
+    """Apply a generic parser for unrecognized packet codes.
+
+    :param payload: The raw hex payload
+    :type payload: str
+    :param msg: The message object containing context
+    :type msg: Message
+    :return: A dictionary containing the raw payload and code information
+    :rtype: dict[str, Any]
+    """
     # TODO: it may be useful to generically search payloads for hex_ids, commands, etc.
 
     # These are generic parsers
@@ -2942,7 +4030,11 @@ def parser_unknown(payload: str, msg: Message) -> dict[str, Any]:
             "_value": hex_to_temp(payload[2:]),
         }
 
-    raise NotImplementedError
+    return {
+        "_payload": payload,
+        "_unknown_code": msg.code,
+        "_parse_error": "No parser available for this packet type",
+    }
 
 
 _PAYLOAD_PARSERS = {
@@ -2953,10 +4045,32 @@ _PAYLOAD_PARSERS = {
 
 
 def parse_payload(msg: Message) -> dict | list[dict]:
-    result: dict | list[dict]
+    """Apply the appropriate parser defined in this module to the message.
 
-    result = _PAYLOAD_PARSERS.get(msg.code, parser_unknown)(msg._pkt.payload, msg)
-    if isinstance(result, dict) and msg.seqn.isnumeric():  # e.g. 22F1/3
-        result["seqx_num"] = msg.seqn
+    :param msg: A Message object containing packet data and extra attributes
+    :type msg: Message
+    :return: A dict of key:value pairs or a list of such dicts
+    :rtype: dict | list[dict]
+    :raises AssertionError: If the packet fails an internal consistency check.
+    """
+    result: dict | list[dict]
+    try:
+        result = _PAYLOAD_PARSERS.get(msg.code, parser_unknown)(msg._pkt.payload, msg)
+        if isinstance(result, dict) and msg.seqn.isnumeric():  # e.g. 22F1/3
+            result["seqx_num"] = msg.seqn
+    except AssertionError as err:
+        _LOGGER.warning(
+            f"{msg!r} < {_INFORM_DEV_MSG} ({err}). "
+            f"This packet could not be parsed completely. "
+            f"Please report this message and any context about what changed on your system when this occurred."
+        )
+        # Return partial result with error info
+        result = {
+            "_payload": msg._pkt.payload,
+            "_parse_error": f"AssertionError: {err}",
+            "_unknown_code": msg.code,
+        }
+        if isinstance(result, dict) and msg.seqn.isnumeric():
+            result["seqx_num"] = msg.seqn
 
     return result

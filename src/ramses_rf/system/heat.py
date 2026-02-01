@@ -137,7 +137,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         self._child_id = FF  # NOTE: domain_id
 
         self._app_cntrl: BdrSwitch | OtbGateway | None = None
-        self._heat_demand = None
+        self._heat_demand: dict[str, Any] | None = None
 
     def __repr__(self) -> str:
         return f"{self.ctl.id} ({self._SLUG})"
@@ -193,19 +193,19 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
                 this.code in (Code._22D9, Code._3220) and this.verb == RQ
             ):  # TODO: RPs too?
                 # dst could be an Address...
-                if this.src is self.ctl and isinstance(this.dst, OtbGateway):  # type: ignore[unreachable]
+                if this.src == self.ctl and isinstance(this.dst, OtbGateway):  # type: ignore[unreachable]
                     app_cntrl = this.dst  # type: ignore[unreachable]
 
             elif this.code == Code._3EF0 and this.verb == RQ:
                 # dst could be an Address...
-                if this.src is self.ctl and isinstance(
+                if this.src == self.ctl and isinstance(
                     this.dst,  # type: ignore[unreachable]
                     BdrSwitch | OtbGateway,
                 ):
                     app_cntrl = this.dst  # type: ignore[unreachable]
 
             elif this.code == Code._3B00 and this.verb == I_ and prev is not None:
-                if this.src is self.ctl and isinstance(prev.src, BdrSwitch):  # type: ignore[unreachable]
+                if this.src == self.ctl and isinstance(prev.src, BdrSwitch):  # type: ignore[unreachable]
                     if prev.code == this.code and prev.verb == this.verb:  # type: ignore[unreachable]
                         app_cntrl = prev.src
 
@@ -217,17 +217,33 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         super()._handle_msg(msg)
 
         if msg.code == Code._000C:
-            if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.APP and msg.payload.get(
-                SZ_DEVICES
-            ):
-                self._gwy.get_device(
-                    msg.payload[SZ_DEVICES][0], parent=self, child_id=FC
-                )  # sets self._app_cntrl
+            if isinstance(msg.payload, dict):
+                if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.APP and msg.payload.get(
+                    SZ_DEVICES
+                ):
+                    self._gwy.get_device(
+                        msg.payload[SZ_DEVICES][0], parent=self, child_id=FC
+                    )  # sets self._app_cntrl
+            else:
+                _LOGGER.warning(
+                    f"{msg!r} < Unexpected payload type for {msg.code}: {type(msg.payload)} (expected dict)"
+                )
             return
 
-        if msg.code == Code._3150:
-            if msg.payload.get(SZ_DOMAIN_ID) == FC and msg.verb in (I_, RP):
-                self._heat_demand = msg.payload
+        if msg.code == Code._3150 and msg.verb in (I_, RP):
+            # 3150 payload can be a dict (old) or list (new, multi-zone)
+            if isinstance(msg.payload, list):
+                if payload := next(
+                    (d for d in msg.payload if d.get(SZ_DOMAIN_ID) == FC), None
+                ):
+                    self._heat_demand = payload
+            elif isinstance(msg.payload, dict):
+                if msg.payload.get(SZ_DOMAIN_ID) == FC:
+                    self._heat_demand = msg.payload
+            else:
+                _LOGGER.warning(
+                    f"{msg!r} < Unexpected payload type for {msg.code}: {type(msg.payload)} (expected list/dict)"
+                )
 
         if self._gwy.config.enable_eavesdrop and not self.appliance_control:
             eavesdrop_appliance_control(msg)
@@ -532,7 +548,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         schema = shrink(SCH_TCS_ZONES_ZON(schema))
 
         zon: Zone = self.zone_by_idx.get(zone_idx)  # type: ignore[assignment]
-        if zon is None:
+        if zon is None:  # not found in tcs, create it
             zon = zone_factory(self, zone_idx, msg=msg, **schema)  # type: ignore[unreachable]
             self.zone_by_idx[zon.idx] = zon
             self.zones.append(zon)
@@ -588,7 +604,12 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         super()._handle_msg(msg)
 
         if msg.code == Code._0006:
-            self._msg_0006 = msg
+            if isinstance(msg.payload, dict):
+                self._msg_0006 = msg
+            else:
+                _LOGGER.warning(
+                    f"{msg!r} < Unexpected payload type for {msg.code}: {type(msg.payload)} (expected dict)"
+                )
 
     async def _schedule_version(self, *, force_io: bool = False) -> tuple[int, bool]:
         """Return the global schedule version number, and an indication if I/O was done.
@@ -706,7 +727,12 @@ class Logbook(SystemBase):  # 0418
         super()._handle_msg(msg)
 
         if msg.code == Code._0418:  # and msg.verb in (I_, RP):
-            self._faultlog.handle_msg(msg)
+            if isinstance(msg.payload, dict):
+                self._faultlog.handle_msg(msg)
+            else:
+                _LOGGER.warning(
+                    f"{msg!r} < Unexpected payload type for {msg.code}: {type(msg.payload)} (expected dict)"
+                )
 
     async def get_faultlog(
         self,
@@ -873,8 +899,13 @@ class SysMode(SystemBase):  # 2E04
     def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
     ) -> asyncio.Task[Packet]:
-        """Set a system mode for a specified duration, or indefinitely."""
+        """
+        Set a system mode for a specified duration, or indefinitely.
 
+        :param system_mode: 2-digit item from SYS_MODE_MAP, positional
+        :param until: optional: end of set period
+        :return:
+        """
         cmd = Command.set_system_mode(self.id, system_mode, until=until)
         return self._gwy.send_cmd(cmd, priority=Priority.HIGH, wait_for_reply=True)
 

@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""RAMSES RF - a RAMSES-II protocol decoder & analyser."""
+"""RAMSES RF - a RAMSES-II protocol decoder & analyser.
+
+Contains e.g.:
+:term:`CODES_SCHEMA` the master list of all known Ramses-II Code signatures
+for both HEAT and HVAC.
+:term:`_DEV_KLASSES_HEAT` defining Codes expected for each HEAT device class (SLUG).
+:term:`_DEV_KLASSES_HVAC` defining Codes expected for each HVAC device class (SLUG).
+:term:`_22F1_MODE_XXX` dicts defining valid fan commands.
+:term:`_2411_PARAMS_SCHEMA` defining HVAC fan parameters.
+"""
 
 # TODO: code a lifespan for most packets
 
@@ -223,7 +232,7 @@ CODES_SCHEMA: dict[Code, dict[str, Any]] = {  # rf_unknown
         SZ_NAME: "device_info",
         I_: r"^(00|FF)([0-9A-F]{30,})?$",  # r"^[0-9A-F]{32,}$" might be OK
         RQ: r"^00$",  # NOTE: 63 seen (no RP), some devices will accept [0-9A-F]{2}
-        # RP: r"^[0-9A-F]{2}([0-9A-F]){30,}$",  # NOTE: indx same as RQ
+        # RP: r"^[0-9A-F]{2}([0-9A-F]){30,}$",  # NOTE: index same as RQ
         SZ_LIFESPAN: False,
     },
     Code._10E1: {  # device_id
@@ -275,7 +284,7 @@ CODES_SCHEMA: dict[Code, dict[str, Any]] = {  # rf_unknown
     },
     Code._1298: {  # co2_level
         SZ_NAME: "co2_level",
-        I_: r"^00[0-9A-F]{4}$",
+        I_: r"^00[0-9A-F]{4}$",  # NOTE: RP is same
         RQ: r"^00$",
     },
     Code._12A0: {  # indoor_humidity
@@ -377,10 +386,10 @@ CODES_SCHEMA: dict[Code, dict[str, Any]] = {  # rf_unknown
         I_: r"^(0[0-9A-F][0-9A-F]{8}0[12]){1,4}(0[12]03)?$",  # (0[12]03)? only if len(array) == 1
         W_: r"^(0[0-9A-F][0-9A-F]{8}0[12])$",  # never an array
     },
-    Code._22D0: {  # unknown_22d0, HVAC system switch?
+    Code._22D0: {  # unknown_22d0, Spider thermostat, HVAC system switch?
         SZ_NAME: "message_22d0",
-        I_: r"^(00|03)",
-        W_: r"^03",
+        I_: r"^(00|03)[0-9]{6}$",
+        W_: r"^03[0-9]{4}1E14030020$",
     },
     Code._22D9: {  # boiler_setpoint
         SZ_NAME: "boiler_setpoint",
@@ -478,9 +487,10 @@ CODES_SCHEMA: dict[Code, dict[str, Any]] = {  # rf_unknown
     },
     Code._2411: {  # fan_params, HVAC
         SZ_NAME: "fan_params",
-        I_: r"^(00|01|15|16|17|21)00[0-9A-F]{6}([0-9A-F]{8}){4}[0-9A-F]{4}$",
+        I_: r"^(00|01|15|16|17|21)00[0-9A-F]{6}([0-9A-F]{8}){4}[0-9A-F]{2,6}$",  # Allow 2-6 byte footer
         RQ: r"^(00|01|15|16|17|21)00[0-9A-F]{2}((00){19})?$",
-        W_: r"^(00|01|15|16|17|21)00[0-9A-F]{6}[0-9A-F]{8}(([0-9A-F]{8}){3}[0-9A-F]{4})?$",
+        RP: r"^(00|01|15|16|17|21)00[0-9A-F]{6}[0-9A-F]{8}([0-9A-F]{8}){3}[0-9A-F]{2,6}$",  # 4 blocks + footer
+        W_: r"^(00|01|15|16|17|21)00[0-9A-F]{6}[0-9A-F]{8}([0-9A-F]{8}){3}[0-9A-F]{2,6}$",  # Same as RP
     },
     Code._2420: {  # unknown_2420, from OTB
         SZ_NAME: "message_2420",
@@ -550,7 +560,7 @@ CODES_SCHEMA: dict[Code, dict[str, Any]] = {  # rf_unknown
     },
     Code._31DA: {  # hvac_state (fan_state_extended)
         SZ_NAME: "hvac_state",
-        I_: r"^(00|01|15|16|17|21)[0-9A-F]{56}(00|20)?$",
+        I_: r"^(00|01|15|16|17|21)[0-9A-F]{56}(00|20|40)?$",
         RQ: r"^(00|01|15|16|17|21)$",
         # RQ --- 32:168090 30:082155 --:------ 31DA 001 21
     },
@@ -842,6 +852,7 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[VerbT, Any]]] = {
         Code._000C: {I_: {}},
         Code._000E: {I_: {}},
         Code._0016: {RQ: {}},
+        Code._01FF: {I_: {}, RQ: {}},
         Code._042F: {I_: {}},
         Code._1030: {I_: {}},
         Code._1060: {I_: {}},
@@ -852,9 +863,11 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[VerbT, Any]]] = {
         Code._1F09: {I_: {}},
         Code._1FC9: {I_: {}},
         Code._22C9: {W_: {}},  # DT4R
+        Code._22D0: {W_: {}},  # Spider master THM
         Code._2309: {I_: {}, RQ: {}, W_: {}},
         Code._2349: {RQ: {}, W_: {}},
         Code._30C9: {I_: {}},
+        Code._3110: {I_: {}},  # Spider THM
         Code._3120: {I_: {}},
         Code._313F: {
             I_: {}
@@ -871,11 +884,15 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[VerbT, Any]]] = {
         Code._000A: {RP: {}},
         Code._000C: {RP: {}},
         Code._1FC9: {I_: {}},
+        Code._1FD4: {I_: {}},  # Spider Autotemp, slave 'ticker'
         Code._10E0: {I_: {}, RP: {}},
         Code._22C9: {I_: {}},  # NOTE: No RP
         Code._22D0: {I_: {}, RP: {}},
         Code._2309: {RP: {}},
+        Code._3110: {I_: {}},  # Spider Autotemp
         Code._3150: {I_: {}},
+        Code._4E01: {I_: {}},  # Spider Autotemp Zone controller
+        Code._4E04: {I_: {}},  # idem
     },
     DevType.TRV: {  # e.g. HR92/HR91: Radiator Controller
         Code._0001: {W_: {r"^0[0-9A-F]"}},
@@ -1059,8 +1076,9 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[VerbT, Any]]] = {
         Code._12C8: {I_: {}},
         Code._1470: {RP: {}},
         Code._1F09: {I_: {}, RP: {}},
-        Code._1FC9: {W_: {}},
+        Code._1FC9: {I_: {}, W_: {}},
         Code._2210: {I_: {}, RP: {}},
+        Code._22E0: {RP: {}},
         Code._22E5: {RP: {}},
         Code._22E9: {RP: {}},
         Code._22F1: {RP: {}},
@@ -1072,6 +1090,7 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[VerbT, Any]]] = {
         Code._2E10: {I_: {}},
         Code._3120: {I_: {}},
         Code._3150: {I_: {}},
+        Code._313E: {RP: {}},
         Code._313F: {I_: {}, RP: {}},
         Code._31D9: {I_: {}, RP: {}},
         Code._31DA: {I_: {}, RP: {}},
@@ -1082,7 +1101,7 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[VerbT, Any]]] = {
     DevType.CO2: {
         Code._042F: {I_: {}},
         Code._10E0: {I_: {}, RP: {}},
-        Code._1298: {I_: {}},
+        Code._1298: {I_: {}, RP: {}},
         Code._1FC9: {I_: {}},
         Code._22F1: {RQ: {}},
         Code._2411: {RQ: {}},
@@ -1104,7 +1123,11 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[VerbT, Any]]] = {
         Code._0001: {RQ: {}},  # from a VMI (only?)
         Code._042F: {I_: {}},  # from a VMI (only?)
         Code._1060: {I_: {}},
-        Code._10D0: {W_: {}},  # reset filter count from REM
+        Code._10D0: {
+            RP: {},
+            RQ: {},
+            W_: {},
+        },  # RQ/RP Orcon HRC, W=reset filter count from REM
         Code._10E0: {I_: {}, RQ: {}},  # RQ from a VMI (only?)
         Code._1470: {RQ: {}},  # from a VMI (only?)
         Code._1FC9: {I_: {}},
@@ -1168,9 +1191,9 @@ _CODE_ONLY_FROM_CTL: tuple[Code, ...] = tuple(
 CODES_ONLY_FROM_CTL: tuple[Code, ...] = (
     Code._1030,
     Code._1F09,
-    Code._22D0,
+    # Code._22D0,  # also _W from the Spider master THM! issue #340
     Code._313F,
-)  # I packets, TODO: 31Dx too?
+)  # I packets, TODO: 31Dx too? not 31D9/31DA!
 
 #
 ########################################################################################
@@ -1211,6 +1234,7 @@ SZ_MIN_VALUE: Final = "min_value"
 SZ_MAX_VALUE: Final = "max_value"
 SZ_PRECISION: Final = "precision"
 SZ_DATA_TYPE: Final = "data_type"
+SZ_DATA_UNIT: Final = "data_unit"
 
 _22F1_MODE_ITHO: dict[str, str] = {
     "00": "off",  # not seen
@@ -1256,12 +1280,21 @@ _22F1_SCHEMES: dict[str, dict[str, str]] = {
 
 # unclear if true for only Orcon/*all* models
 _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
-    "31": {  # slot 09
+    "01": {  # all?
+        SZ_DESCRIPTION: "Support",
+        SZ_MIN_VALUE: 0xFF,  # None?
+        SZ_MAX_VALUE: 0xFF,
+        SZ_PRECISION: 1,
+        SZ_DATA_TYPE: "00",
+        SZ_DATA_UNIT: "",
+    },
+    "31": {  # slot 09 (FANs produced after 2021)
         SZ_DESCRIPTION: "Time to change filter (days)",
         SZ_MIN_VALUE: 0,
         SZ_MAX_VALUE: 1800,
         SZ_PRECISION: 30,
         SZ_DATA_TYPE: "10",
+        SZ_DATA_UNIT: "days",
     },
     "3D": {  # slot 00
         SZ_DESCRIPTION: "Away mode Supply fan rate (%)",
@@ -1269,6 +1302,7 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 0.4,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
     },
     "3E": {  # slot 01
         SZ_DESCRIPTION: "Away mode Exhaust fan rate (%)",
@@ -1276,6 +1310,7 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 0.4,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
     },
     "3F": {  # slot 02
         SZ_DESCRIPTION: "Low mode Supply fan rate (%)",
@@ -1283,6 +1318,7 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 0.8,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
     },
     "40": {  # slot 03
         SZ_DESCRIPTION: "Low mode Exhaust fan rate (%)",
@@ -1290,13 +1326,15 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 0.8,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
     },
     "41": {  # slot 04
         SZ_DESCRIPTION: "Medium mode Supply fan rate (%)",
-        SZ_MIN_VALUE: 0.0,
+        SZ_MIN_VALUE: 0.1,  # Orcon FAN responds with 0.0, but I guess this should be the same as for "42"
         SZ_MAX_VALUE: 1.0,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
     },
     "42": {  # slot 05
         SZ_DESCRIPTION: "Medium mode Exhaust fan rate (%)",
@@ -1304,13 +1342,15 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 1.0,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
     },
     "43": {  # slot 06
         SZ_DESCRIPTION: "High mode Supply fan rate (%)",
-        SZ_MIN_VALUE: 0.0,
+        SZ_MIN_VALUE: 0.1,
         SZ_MAX_VALUE: 1.0,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
     },
     "44": {  # slot 07
         SZ_DESCRIPTION: "High mode Exhaust fan rate (%)",
@@ -1318,6 +1358,15 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 1.0,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
+    },
+    "4B": {  # slot 09 (FANs produced before 2021) Also check code 22F7
+        SZ_DESCRIPTION: "(Test) Bypass Valve (0=auto, 1=open, 2=closed)",
+        SZ_MIN_VALUE: 0,
+        SZ_MAX_VALUE: 2,
+        SZ_PRECISION: 1,
+        SZ_DATA_TYPE: "00",
+        SZ_DATA_UNIT: "",
     },
     "4E": {  # slot 0A
         SZ_DESCRIPTION: "Moisture scenario position (0=medium, 1=high)",
@@ -1325,13 +1374,15 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 1,
         SZ_PRECISION: 1,
         SZ_DATA_TYPE: "00",
+        SZ_DATA_UNIT: "",
     },
     "52": {  # slot 0B
         SZ_DESCRIPTION: "Sensor sensitivity (%)",
         SZ_MIN_VALUE: 0,
         SZ_MAX_VALUE: 25.0,
         SZ_PRECISION: 0.1,
-        SZ_DATA_TYPE: "0F",
+        SZ_DATA_TYPE: "01",
+        SZ_DATA_UNIT: "%",
     },
     "54": {  # slot 0C
         SZ_DESCRIPTION: "Moisture sensor overrun time (mins)",
@@ -1339,13 +1390,15 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 60,
         SZ_PRECISION: 1,
         SZ_DATA_TYPE: "00",
+        SZ_DATA_UNIT: "min",
     },
     "75": {  # slot 0D
         SZ_DESCRIPTION: "Comfort temperature (°C)",
         SZ_MIN_VALUE: 0.0,
         SZ_MAX_VALUE: 30.0,
         SZ_PRECISION: 0.01,
-        SZ_DATA_TYPE: 92,
+        SZ_DATA_TYPE: "92",
+        SZ_DATA_UNIT: "°C",
     },
     "95": {  # slot 08
         SZ_DESCRIPTION: "Boost mode Supply/exhaust fan rate (%)",
@@ -1353,6 +1406,7 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MAX_VALUE: 1.0,
         SZ_PRECISION: 0.005,
         SZ_DATA_TYPE: "0F",
+        SZ_DATA_UNIT: "%",
     },
 }
 
@@ -1402,9 +1456,8 @@ _31DA_FAN_INFO: dict[int, str] = {
     0x1C: "-unknown 0x1C-",
     0x1D: "-unknown 0x1D-",
     0x1E: "-unknown 0x1E-",
-    0x1F: "-unknown 0x1F-",
+    0x1F: "-unknown 0x1F-",  # static field, used as filter in parser_31da so keep same
 }
-
 
 #
 ########################################################################################
@@ -1448,3 +1501,19 @@ _31DA_FAN_INFO: dict[int, str] = {
 # RAMSES_ZONES_ALL = RAMSES_ZONES.pop("ALL")
 # RAMSES_ZONES_DHW = RAMSES_ZONES[ZON_ROLE.DHW]
 # [RAMSES_ZONES[k].update(RAMSES_ZONES_ALL) for k in RAMSES_ZONES if k != ZON_ROLE.DHW]
+
+__all__ = [
+    "CODES_BY_DEV_SLUG",
+    "CODES_SCHEMA",
+    "CODE_NAME_LOOKUP",
+    "CODES_BY_DEV_SLUG",
+    "CODES_SCHEMA",
+    "HVAC_KLASS_BY_VC_PAIR",
+    "_2411_PARAMS_SCHEMA",
+    "SZ_DESCRIPTION",
+    "SZ_MIN_VALUE",
+    "SZ_MAX_VALUE",
+    "SZ_PRECISION",
+    "SZ_DATA_TYPE",
+    "SZ_DATA_UNIT",
+]

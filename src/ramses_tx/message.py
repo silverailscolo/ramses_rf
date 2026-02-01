@@ -54,7 +54,9 @@ class MessageBase:
     def __init__(self, pkt: Packet) -> None:
         """Create a message from a valid packet.
 
-        Will raise InvalidPacketError if it is invalid.
+        :param pkt: The packet to process into a message
+        :type pkt: Packet
+        :raises PacketInvalid: If the packet payload cannot be parsed.
         """
 
         self._pkt = pkt
@@ -66,20 +68,26 @@ class MessageBase:
         self.dtm: dt = pkt.dtm
 
         self.verb: VerbT = pkt.verb
-        self.seqn: str = pkt.seqn
+        self.seqn: str = (
+            pkt.seqn
+        )  # the msg is part of a set for a Code, received in order
         self.code: Code = pkt.code
         self.len: int = pkt._len
 
-        self._payload = self._validate(self._pkt.payload)  # ? raise InvalidPacketError
+        self._payload = self._validate(self._pkt.payload)  # ? may raise PacketInvalid
 
         self._str: str = None  # type: ignore[assignment]
 
     def __repr__(self) -> str:
-        """Return an unambiguous string representation of this object."""
+        """
+        :return: an unambiguous string representation of this object.
+        """
         return str(self._pkt)  # repr or str?
 
     def __str__(self) -> str:
-        """Return a brief readable string representation of this object."""
+        """
+        :return: a brief readable string representation of this object.
+        """
 
         def ctx(pkt: Packet) -> str:
             ctx = {True: "[..]", False: "", None: "??"}.get(pkt._ctx, pkt._ctx)  # type: ignore[arg-type]
@@ -92,7 +100,9 @@ class MessageBase:
 
         if self.src.id == self._addrs[0].id:  # type: ignore[unreachable]
             name_0 = self._name(self.src)
-            name_1 = "" if self.dst is self.src else self._name(self.dst)
+            name_1 = (
+                "" if self.dst is self.src else self._name(self.dst)
+            )  # use 'is', issue_cc 318
         else:
             name_0 = ""
             name_1 = self._name(self.src)
@@ -120,17 +130,22 @@ class MessageBase:
         return self.dtm < other.dtm
 
     def _name(self, addr: Address) -> str:
-        """Return a friendly name for an Address, or a Device."""
+        """
+        :return: a friendly name for an Address, or a Device.
+        """
         return f" {addr.id}"  # can't do 'CTL:123456' instead of ' 01:123456'
 
     @property
     def payload(self):  # type: ignore[no-untyped-def]  # FIXME -> dict | list:
-        """Return the payload."""
+        """
+        :return: the payload.
+        """
         return self._payload
 
     @property
     def _has_payload(self) -> bool:
-        """Return False if there is no payload (may falsely Return True).
+        """
+        :return: False if there is no payload (may falsely return True).
 
         The message (i.e. the raw payload) may still have an idx.
         """
@@ -139,16 +154,18 @@ class MessageBase:
 
     @property
     def _has_array(self) -> bool:
-        """Return True if the message's raw payload is an array."""
+        """
+        :return: True if the message's raw payload is an array.
+        """
 
         return bool(self._pkt._has_array)
 
     @property
     def _idx(self) -> dict[str, str]:
-        """Return the domain_id/zone_idx/other_idx of a message payload, if any.
+        """Get the domain_id/zone_idx/other_idx of a message payload, if any.
+        Used to identify the zone/domain that a message applies to.
 
-        Used to identify the zone/domain that a message applies to. Returns an empty
-        dict if there is none such, or None if undetermined.
+        :return: an empty dict if there is none such, or None if undetermined.
         """
 
         # .I --- 01:145038 --:------ 01:145038 3B00 002 FCC8
@@ -224,12 +241,12 @@ class MessageBase:
             return {}
 
         # TODO: also 000C (but is a complex idx)
-        # TODO: also 3150 (when not domain, and will be array if so)
+        # TODO: also 3150 (when not domain; will be array in that case)
         if self.code in (Code._000A, Code._2309) and self.src.type == DEV_TYPE_MAP.UFC:
             assert isinstance(self._pkt._idx, str)  # mypy hint
             return {IDX_NAMES[Code._22C9]: self._pkt._idx}
 
-        assert isinstance(self._pkt._idx, str)  # mypy check
+        assert isinstance(self._pkt._idx, str)  # mypy hint
         idx_name = SZ_DOMAIN_ID if self._pkt._idx[:1] == "F" else SZ_ZONE_IDX
         index_name = IDX_NAMES.get(self.code, idx_name)
 
@@ -237,9 +254,10 @@ class MessageBase:
 
     # TODO: needs work...
     def _validate(self, raw_payload: str) -> dict | list[dict]:  # type: ignore[type-arg]
-        """Validate the message, and parse the payload if so.
+        """Validate a message packet payload, and parse it if valid.
 
-        Raise an exception (InvalidPacketError) if it is not valid.
+        :return: a dict containing key: value pairs, or a list of those created from the payload
+        :raises PacketInvalid exception if it is not valid.
         """
 
         try:  # parse the payload
@@ -249,10 +267,9 @@ class MessageBase:
             if not self._has_payload and (
                 self.verb == RQ and self.code not in RQ_IDX_COMPLEX
             ):
-                # _LOGGER.error("%s", msg)
                 return {}
 
-            result = parse_payload(self)
+            result = parse_payload(self)  # invoke the code parsers
 
             if isinstance(result, list):
                 return result
@@ -281,8 +298,8 @@ class MessageBase:
             raise exc.PacketInvalid from err
 
 
-class Message(MessageBase):  # add _expired attr
-    """Extend the Message class, so is useful to a stateful Gateway.
+class Message(MessageBase):
+    """Extend the Message class, so it is useful to a stateful Gateway.
 
     Adds _expired attr to the Message class.
     """
@@ -293,7 +310,7 @@ class Message(MessageBase):  # add _expired attr
     # .HAS_DIED = 1.0  # fraction_expired >= 1.0 (is expected lifespan)
     IS_EXPIRING = 0.8  # fraction_expired >= 0.8 (and < HAS_EXPIRED)
 
-    _gwy: Gateway
+    _gwy: Gateway | None = None
     _fraction_expired: float | None = None
 
     @classmethod
@@ -308,13 +325,19 @@ class Message(MessageBase):  # add _expired attr
 
     @property
     def _expired(self) -> bool:
-        """Return True if the message is dated (or False otherwise)."""
+        """
+        :return: True if the message is dated, False otherwise
+        """
         # fraction_expired = (dt_now - self.dtm - _TD_SECONDS_003) / self._pkt._lifespan
         # TODO: keep none >7d, even 10E0, etc.
 
         def fraction_expired(lifespan: td) -> float:
-            """Return the packet's age as fraction of its 'normal' life span."""
-            return (self._gwy._dt_now() - self.dtm - _TD_SECS_003) / lifespan
+            """
+            :return: the packet's age as fraction of its 'normal' life span.
+            """
+            if self._gwy:  # self._gwy is set in ramses_tx.gateway.Engine._msg_handler
+                return (self._gwy._dt_now() - self.dtm - _TD_SECS_003) / lifespan
+            return (dt.now() - self.dtm - _TD_SECS_003) / lifespan
 
         # 1. Look for easy win...
         if self._fraction_expired is not None:
@@ -351,10 +374,14 @@ def re_compile_re_match(regex: str, string: str) -> bool:  # Optional[Match[Any]
 
 
 def _check_msg_payload(msg: MessageBase, payload: str) -> None:
-    """Validate the packet's payload against its verb/code pair.
+    """Validate a packet's payload against its verb/code pair.
 
-    Raise an InvalidPayloadError if the payload is seen as invalid. Such payloads may
-    actually be valid, in which case the rules (likely the regex) will need updating.
+    :param msg: The message object being validated
+    :type msg: MessageBase
+    :param payload: The raw hex payload string
+    :type payload: str
+    :raises PacketInvalid: If the code is unknown or verb/code pair is invalid.
+    :raises PacketPayloadInvalid: If the payload does not match the expected regex.
     """
 
     _ = repr(msg._pkt)  # HACK: ? raise InvalidPayloadError
