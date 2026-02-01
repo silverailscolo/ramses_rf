@@ -145,13 +145,20 @@ class ProtocolContext:
             # nope, was not successful, so multiplier should be incremented...
             self._multiplier = min(3, old_val + 1)
 
+            if self._cmd_tx_count < 3:
+                level = logging.DEBUG
+            elif self._cmd_tx_count == 3:
+                level = logging.INFO
+            else:
+                level = logging.WARNING
+
             if isinstance(self._state, WantEcho):
-                _LOGGER.warning(
-                    f"Timeout expired waiting for echo: {self} (delay={delay})"
+                _LOGGER.log(
+                    level, f"Timeout expired waiting for echo: {self} (delay={delay})"
                 )
             else:  # isinstance(self._state, WantRply):
-                _LOGGER.warning(
-                    f"Timeout expired waiting for reply: {self} (delay={delay})"
+                _LOGGER.log(
+                    level, f"Timeout expired waiting for reply: {self} (delay={delay})"
                 )
 
             assert isinstance(self.is_sending, bool), (
