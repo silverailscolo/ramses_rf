@@ -1884,19 +1884,19 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         :type dtm: str | None, optional
         """
         _LOGGER.debug(
-            f"Received frame from external source: frame='{frame}', timestamp={dtm}"
+            f"Received frame from external source: frame={repr(frame)}, timestamp={dtm}"
         )
 
-        # Section 4.2: Circuit Breaker implementation (Packet gating)
+        # Circuit Breaker implementation (Packet gating)
         if not self._reading:
             _LOGGER.debug(f"Dropping received frame (transport paused): {repr(frame)}")
             return
 
         dtm = dtm or dt_now().isoformat()
 
-        # Section 6.1: Boundary Logging (Incoming)
+        # Boundary Logging (Incoming)
         _LOGGER.debug(
-            f"Ingesting frame into transport: frame='{frame}', timestamp={dtm}"
+            f"Ingesting frame into transport: frame={repr(frame)}, timestamp={dtm}"
         )
 
         # Pass to the standard processing pipeline
