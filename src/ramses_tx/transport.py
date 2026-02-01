@@ -1810,6 +1810,7 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         protocol: RamsesProtocolT,
         io_writer: Callable[[str], Awaitable[None]],
         disable_sending: bool = False,
+        autostart: bool = False,
         **kwargs: Any,
     ) -> None:
         """Initialize the callback transport.
@@ -1820,6 +1821,8 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         :type io_writer: Callable[[str], Awaitable[None]]
         :param disable_sending: Whether to disable sending, defaults to False.
         :type disable_sending: bool, optional
+        :param autostart: Whether to start reading immediately, defaults to False.
+        :type autostart: bool, optional
         """
         # Pass kwargs up the chain. _ReadTransport will extract 'loop' if present.
         # _BaseTransport will pass 'loop' to _CallbackTransportAbstractor, which consumes it.
@@ -1834,9 +1837,11 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         # Section 6.1: Object Lifecycle Logging
         _LOGGER.info(f"CallbackTransport created with io_writer={io_writer}")
 
-        # NOTE: connection_made is NOT called here. It must be triggered
-        # externally (e.g. by the Bridge) via the protocol methods once
-        # the external connection is ready.
+        # Handshake: Notify protocol immediately (Safe: idempotent)
+        self._protocol.connection_made(self, ramses=True)
+
+        if autostart:
+            self.resume_reading()
 
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
         """Process a frame for transmission by passing it to the external writer.
@@ -1879,19 +1884,19 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         :type dtm: str | None, optional
         """
         _LOGGER.debug(
-            f"Received frame from external source: frame='{frame}', timestamp={dtm}"
+            f"Received frame from external source: frame={repr(frame)}, timestamp={dtm}"
         )
 
-        # Section 4.2: Circuit Breaker implementation (Packet gating)
+        # Circuit Breaker implementation (Packet gating)
         if not self._reading:
             _LOGGER.debug(f"Dropping received frame (transport paused): {repr(frame)}")
             return
 
         dtm = dtm or dt_now().isoformat()
 
-        # Section 6.1: Boundary Logging (Incoming)
+        # Boundary Logging (Incoming)
         _LOGGER.debug(
-            f"Ingesting frame into transport: frame='{frame}', timestamp={dtm}"
+            f"Ingesting frame into transport: frame={repr(frame)}, timestamp={dtm}"
         )
 
         # Pass to the standard processing pipeline
@@ -1949,7 +1954,7 @@ async def transport_factory(
     extra: dict[str, Any] | None = None,
     loop: asyncio.AbstractEventLoop | None = None,
     log_all: bool = False,
-    **kwargs: Any,  # HACK: odd/misc params
+    **kwargs: Any,  # HACK: odd/misc params, inc. autostart
 ) -> RamsesTransportT:
     """Create and return a Ramses-specific async packet Transport.
 
@@ -1980,11 +1985,18 @@ async def transport_factory(
     :raises exc.TransportSourceInvalid: If the packet source is invalid or multiple sources are specified.
     """
 
+    # Extract autostart (default to False if missing), used in transport_constructor only
+    autostart = kwargs.pop("autostart", False)
+
     # If a constructor is provided, delegate entirely to it.
     if transport_constructor:
         _LOGGER.debug("transport_factory: Delegating to external transport_constructor")
         return await transport_constructor(
-            protocol, disable_sending=disable_sending, extra=extra, **kwargs
+            protocol,
+            disable_sending=disable_sending,
+            extra=extra,
+            autostart=autostart,  # <--- Pass it explicitly
+            **kwargs,
         )
 
     # kwargs are specific to a transport. The above transports have:
