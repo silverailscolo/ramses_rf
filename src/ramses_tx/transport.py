@@ -566,6 +566,32 @@ class _PortTransportAbstractor(serial_asyncio.SerialTransport):
         super().__init__(loop or asyncio.get_event_loop(), protocol, serial_instance)
 
 
+class _ZigbeeTransportAbstractor:
+    """Do the bare minimum to abstract a transport from its underlying Zigbee class."""
+
+    def __init__(
+        self,
+        zigbee_url: str,
+        protocol: RamsesProtocolT,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
+        """Initialize the Zigbee transport abstractor.
+
+        :param zigbee_url: The Zigbee URL (zigbee://ieee/cluster/attr/endpoint).
+        :type zigbee_url: str
+        :param protocol: The protocol instance.
+        :type protocol: RamsesProtocolT
+        :param loop: The asyncio event loop, defaults to None.
+        :type loop: asyncio.AbstractEventLoop | None, optional
+        """
+        self._zigbee_url = urlparse(zigbee_url)
+        self._protocol = protocol
+        self._loop = loop or asyncio.get_event_loop()
+        self._hass = None
+        self._cluster = None
+        self._write_cluster = None
+
+
 class _MqttTransportAbstractor:
     """Do the bare minimum to abstract a transport from its underlying class."""
 
@@ -1316,6 +1342,156 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
 
         if leaker_task := getattr(self, "_leaker_task", None):
             leaker_task.cancel()
+
+
+class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
+    """Send/receive packets to/from ESP32 Zigbee device.
+
+    Zigbee URL format: zigbee://ieee/cluster/attr/endpoint/write_cluster/write_attr/write_endpoint
+    """
+
+    _MAX_TOKENS: Final[int] = MAX_TRANSMIT_RATE_TOKENS
+    _TIME_WINDOW: Final[int] = DUTY_CYCLE_DURATION
+    _TOKEN_RATE: Final[float] = _MAX_TOKENS / _TIME_WINDOW
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+
+        # Parse Zigbee URL: zigbee://ieee/cluster/attr/endpoint/write_cluster/write_attr/write_endpoint
+        path_parts = self._zigbee_url.path.strip("/").split("/")
+        if len(path_parts) < 7:
+            raise exc.TransportSourceInvalid(f"Invalid Zigbee URL format: {args[0]}")
+
+        self._ieee = path_parts[0]
+        self._cluster_id = int(path_parts[1], 16 if path_parts[1].startswith("0x") else 10)
+        self._attr_id = int(path_parts[2], 16 if path_parts[2].startswith("0x") else 10)
+        self._endpoint_id = int(path_parts[3])
+        self._write_cluster_id = int(path_parts[4], 16 if path_parts[4].startswith("0x") else 10)
+        self._write_attr_id = int(path_parts[5], 16 if path_parts[5].startswith("0x") else 10)
+        self._write_endpoint_id = int(path_parts[6])
+
+        self._extra[SZ_IS_EVOFW3] = True
+        self._timestamp = perf_counter()
+        self._max_tokens: float = self._MAX_TOKENS * 2
+        self._num_tokens: float = self._MAX_TOKENS * 2
+
+        # Get HomeAssistant instance from extra
+        self._hass = self._extra.get("_hass")
+
+        # Schedule async initialization
+        self._loop.create_task(self._async_init())
+
+    async def _async_init(self) -> None:
+        """Asynchronously initialize Zigbee connection."""
+        try:
+            # Import HA components only when needed
+            from zigpy.types import EUI64
+
+            # Check if HA instance is available
+            if not self._hass:
+                _LOGGER.error("HomeAssistant instance not available for Zigbee transport")
+                return
+
+            # Get ZHA gateway
+            zha_data = self._hass.data.get("zha")
+            if not zha_data:
+                _LOGGER.error("ZHA integration not found")
+                return
+
+            gateway_proxy = getattr(zha_data, "gateway_proxy", None)
+            if not gateway_proxy:
+                _LOGGER.error("ZHA gateway proxy not found")
+                return
+
+            gateway = getattr(gateway_proxy, "gateway", None)
+            if not gateway:
+                _LOGGER.error("ZHA gateway not found")
+                return
+
+            # Get device
+            ieee = EUI64.convert(self._ieee)
+            device = gateway.application_controller.devices.get(ieee)
+            if not device:
+                _LOGGER.error(f"Zigbee device {self._ieee} not found")
+                return
+
+            # Get clusters
+            endpoint = device.endpoints.get(self._endpoint_id)
+            if endpoint:
+                self._cluster = endpoint.in_clusters.get(self._cluster_id)
+
+            write_endpoint = device.endpoints.get(self._write_endpoint_id)
+            if write_endpoint:
+                self._write_cluster = write_endpoint.out_clusters.get(self._write_cluster_id)
+
+            if self._cluster:
+                # Set up attribute listener
+                self._cluster.add_listener(self)
+                _LOGGER.info(f"Zigbee transport initialized for {self._ieee}")
+                self._protocol.connection_made(self)
+
+                # Start polling
+                self._loop.create_task(self._poll_loop())
+            else:
+                _LOGGER.error(f"Cluster {self._cluster_id} not found on endpoint {self._endpoint_id}")
+
+        except Exception as err:
+            _LOGGER.exception(f"Failed to initialize Zigbee transport: {err}")
+
+    async def _poll_loop(self) -> None:
+        """Poll for attribute updates."""
+        while not self._closing:
+            try:
+                if self._cluster:
+                    res = await self._cluster.read_attributes([self._attr_id], allow_cache=False)
+                    if self._attr_id in res:
+                        value = res[self._attr_id]
+                        if isinstance(value, str):
+                            self._data_received(value.encode("utf-8") + b"\r\n")
+            except Exception as err:
+                _LOGGER.debug(f"Zigbee poll failed: {err}")
+            await asyncio.sleep(20)
+
+    def attribute_updated(self, attrid: int, value: Any) -> None:
+        """Handle attribute update from Zigbee cluster."""
+        if attrid == self._attr_id and isinstance(value, str):
+            self._data_received(value.encode("utf-8") + b"\r\n")
+
+    def write(self, data: bytes) -> None:
+        """Write data to the Zigbee device."""
+        if self._closing:
+            return
+
+        try:
+            frame = data.decode("utf-8").strip()
+            self._loop.create_task(self._async_write(frame))
+        except Exception as err:
+            _LOGGER.error(f"Failed to write to Zigbee: {err}")
+
+    async def _async_write(self, frame: str) -> None:
+        """Asynchronously write frame to Zigbee device."""
+        if not self._write_cluster:
+            _LOGGER.warning("Write cluster not available")
+            return
+
+        try:
+            cmd_id = 0x01
+            await self._write_cluster.command(cmd_id, frame, expect_reply=False)
+            _LOGGER.debug(f"Sent to Zigbee: {frame}")
+        except Exception as err:
+            _LOGGER.error(f"Zigbee write failed: {err}")
+
+    def close(self) -> None:
+        """Close the Zigbee transport."""
+        if self._closing:
+            return
+        self._closing = True
+        if self._cluster:
+            try:
+                self._cluster.remove_listener(self)
+            except Exception:
+                pass
+        super().close()
 
 
 class MqttTransport(_FullTransport, _MqttTransportAbstractor):
@@ -2110,6 +2286,19 @@ async def transport_factory(
 
     assert port_name is not None  # mypy check
     assert port_config is not None  # mypy check
+
+    # Zigbee
+    if port_name[:6] == "zigbee":
+        transport = ZigbeeTransport(
+            port_name,
+            protocol,
+            disable_sending=bool(disable_sending),
+            extra=extra,
+            loop=loop,
+            **kwargs,
+        )
+        # Zigbee connection is established asynchronously
+        return transport
 
     # MQTT
     if port_name[:4] == "mqtt":
