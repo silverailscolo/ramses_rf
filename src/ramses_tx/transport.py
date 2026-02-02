@@ -1278,8 +1278,9 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
 
         super()._close(exc)
 
-        if self._init_task:
-            self._init_task.cancel()
+        # Use getattr because _init_task may not be set if initialization failed
+        if init_task := getattr(self, "_init_task", None):
+            init_task.cancel()
 
         if self._leaker_task:
             self._leaker_task.cancel()
