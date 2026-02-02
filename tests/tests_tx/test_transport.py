@@ -183,7 +183,6 @@ async def test_port_transport_close_robustness() -> None:
     with patch(
         "ramses_tx.transport.serial_asyncio.SerialTransport.__init__",
         side_effect=mock_init,
-        autospec=True,
     ):
         transport = PortTransport(mock_serial, mock_protocol)
 
