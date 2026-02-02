@@ -41,11 +41,11 @@ To install the `ramses_rf` command line client:
 ```
 git clone https://github.com/ramses-rf/ramses_rf
 cd ramses_rf
-pip install -r requirements.txt
+pip install -r requirements/requirements.txt
 pip install -e .
 ```
 
-The CLI is called ``client.py`` and is included in the code root.
+The CLI is called `client.py` and is included in the code root.
 It has options to monitor and parse Ramses-II traffic to screen or a log file, and to parse a file containing Ramses-II messages to the screen.
 See the [client.py CLI wiki page](https://github.com/ramses-rf/ramses_rf/wiki/2.-The-client.py-command-line) for instructions.
 
