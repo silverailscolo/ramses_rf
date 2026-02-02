@@ -178,11 +178,11 @@ async def test_port_transport_close_robustness() -> None:
         self._protocol = protocol
         self._serial = serial_instance  # Set backing attribute directly
 
-    # Patch SerialTransport.__init__ with the side_effect to mimic basic init
-    # without triggering side effects like loop registration or HGI detection
+    # Patch SerialTransport.__init__ using 'new' to replace it with the function directly.
+    # This ensures 'self' is passed correctly, which doesn't happen with a standard Mock side_effect.
     with patch(
         "ramses_tx.transport.serial_asyncio.SerialTransport.__init__",
-        side_effect=mock_init,
+        new=mock_init,
     ):
         transport = PortTransport(mock_serial, mock_protocol)
 
