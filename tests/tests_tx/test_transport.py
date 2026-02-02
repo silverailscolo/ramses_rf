@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for CallbackTransport initialization logic."""
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -157,3 +158,38 @@ async def test_factory_strips_autostart_for_mqtt_transport() -> None:
         assert MockMqttTransport.call_count == 1
         call_args = MockMqttTransport.call_args
         assert "autostart" not in call_args.kwargs
+
+
+async def test_port_transport_close_robustness() -> None:
+    """Check that PortTransport.close() does not raise AttributeError if init failed.
+
+    This ensures that _close() checks for the existence of _init_task before
+    attempting to cancel it.
+    """
+    from ramses_tx.transport import PortTransport
+
+    mock_protocol = Mock()
+    mock_serial = Mock()
+
+    # Define a side_effect for SerialTransport.__init__ that sets required attributes
+    # PortTransport expects _loop to be set by the parent class
+    def mock_init(self: Any, loop: Any, protocol: Any, serial_instance: Any) -> None:
+        self._loop = loop or asyncio.get_event_loop()
+        self._protocol = protocol
+        self._serial = serial_instance  # Set backing attribute directly
+
+    # Patch SerialTransport.__init__ with the side_effect to mimic basic init
+    # without triggering side effects like loop registration or HGI detection
+    with patch(
+        "ramses_tx.transport.serial_asyncio.SerialTransport.__init__",
+        side_effect=mock_init,
+        autospec=True,
+    ):
+        transport = PortTransport(mock_serial, mock_protocol)
+
+        # Pre-condition: _init_task is created asynchronously, so it shouldn't exist yet
+        # because we haven't yielded to the event loop
+        assert not hasattr(transport, "_init_task")
+
+        # Execute close - should not raise AttributeError
+        transport.close()
