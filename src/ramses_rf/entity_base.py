@@ -913,7 +913,9 @@ class _Discovery(_MessageDB):
                 sql, (self.id[:_ID_SLICE], self.id[:_ID_SLICE])
             ):
                 _LOGGER.debug("Fetched OT ctx from index: %s", rec[0])
-                res.append(rec[0])
+                # SQLite can return int, expected str (hex)
+                val = f"{rec[0]:02X}" if isinstance(rec[0], int) else rec[0]
+                res.append(val)
         else:  # TODO(eb): remove next Q1 2026
             res_dict: dict[bool | str | None, Message] | list[Any] = self._msgz[
                 Code._3220
