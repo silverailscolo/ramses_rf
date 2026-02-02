@@ -1365,10 +1365,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._ieee = path_parts[0]
         self._cluster_id = int(path_parts[1], 16 if path_parts[1].startswith("0x") else 10)
         self._attr_id = int(path_parts[2], 16 if path_parts[2].startswith("0x") else 10)
-        self._endpoint_id = int(path_parts[3])
+        self._endpoint_id = int(float(path_parts[3]))  # Handle float strings like "1.0"
         self._write_cluster_id = int(path_parts[4], 16 if path_parts[4].startswith("0x") else 10)
         self._write_attr_id = int(path_parts[5], 16 if path_parts[5].startswith("0x") else 10)
-        self._write_endpoint_id = int(path_parts[6])
+        self._write_endpoint_id = int(float(path_parts[6]))  # Handle float strings like "1.0"
 
         self._extra[SZ_IS_EVOFW3] = True
         self._timestamp = perf_counter()
@@ -1384,102 +1384,135 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     async def _async_init(self) -> None:
         """Asynchronously initialize Zigbee connection."""
         try:
+            _LOGGER.info(f"Initializing Zigbee transport for {self._ieee}")
             # Import HA components only when needed
             from zigpy.types import EUI64
 
             # Check if HA instance is available
             if not self._hass:
                 _LOGGER.error("HomeAssistant instance not available for Zigbee transport")
-                return
+                raise exc.TransportError("HomeAssistant instance not available")
 
             # Get ZHA gateway
+            _LOGGER.debug("Getting ZHA data from HomeAssistant")
             zha_data = self._hass.data.get("zha")
             if not zha_data:
-                _LOGGER.error("ZHA integration not found")
-                return
+                _LOGGER.error("ZHA integration not found - is ZHA configured and loaded?")
+                raise exc.TransportError("ZHA integration not found")
 
             gateway_proxy = getattr(zha_data, "gateway_proxy", None)
             if not gateway_proxy:
                 _LOGGER.error("ZHA gateway proxy not found")
-                return
+                raise exc.TransportError("ZHA gateway proxy not found")
 
             gateway = getattr(gateway_proxy, "gateway", None)
             if not gateway:
                 _LOGGER.error("ZHA gateway not found")
-                return
+                raise exc.TransportError("ZHA gateway not found")
 
             # Get device
+            _LOGGER.debug(f"Looking for Zigbee device {self._ieee}")
             ieee = EUI64.convert(self._ieee)
             device = gateway.application_controller.devices.get(ieee)
             if not device:
-                _LOGGER.error(f"Zigbee device {self._ieee} not found")
-                return
+                _LOGGER.error(f"Zigbee device {self._ieee} not found in ZHA")
+                raise exc.TransportError(f"Zigbee device {self._ieee} not found")
 
             # Get clusters
+            _LOGGER.debug(f"Getting clusters: read from endpoint {self._endpoint_id} cluster 0x{self._cluster_id:04x}, write to endpoint {self._write_endpoint_id} cluster 0x{self._write_cluster_id:04x}")
             endpoint = device.endpoints.get(self._endpoint_id)
             if endpoint:
                 self._cluster = endpoint.in_clusters.get(self._cluster_id)
+            else:
+                _LOGGER.error(f"Endpoint {self._endpoint_id} not found on device {self._ieee}")
 
             write_endpoint = device.endpoints.get(self._write_endpoint_id)
             if write_endpoint:
                 self._write_cluster = write_endpoint.out_clusters.get(self._write_cluster_id)
+            else:
+                _LOGGER.error(f"Write endpoint {self._write_endpoint_id} not found on device {self._ieee}")
 
             if self._cluster:
                 # Set up attribute listener
                 self._cluster.add_listener(self)
-                _LOGGER.info(f"Zigbee transport initialized for {self._ieee}")
+                _LOGGER.info(f"Zigbee transport initialized for {self._ieee}, cluster 0x{self._cluster_id:04x}, attr 0x{self._attr_id:04x}")
                 self._protocol.connection_made(self)
 
                 # Start polling
                 self._loop.create_task(self._poll_loop())
             else:
-                _LOGGER.error(f"Cluster {self._cluster_id} not found on endpoint {self._endpoint_id}")
+                _LOGGER.error(f"Cluster 0x{self._cluster_id:04x} not found on endpoint {self._endpoint_id}")
+                raise exc.TransportError(f"Cluster not found")
 
         except Exception as err:
             _LOGGER.exception(f"Failed to initialize Zigbee transport: {err}")
+            self._protocol.connection_lost(err)
 
     async def _poll_loop(self) -> None:
         """Poll for attribute updates."""
+        _LOGGER.info("Starting Zigbee poll loop")
+        poll_count = 0
         while not self._closing:
             try:
+                poll_count += 1
+                _LOGGER.debug(f"Zigbee poll #{poll_count}: reading attribute 0x{self._attr_id:04x} from cluster 0x{self._cluster_id:04x}")
                 if self._cluster:
                     res = await self._cluster.read_attributes([self._attr_id], allow_cache=False)
+                    _LOGGER.debug(f"Zigbee poll #{poll_count} result: {res}")
                     if self._attr_id in res:
                         value = res[self._attr_id]
+                        _LOGGER.info(f"Zigbee poll #{poll_count}: received value type={type(value)}, value={value!r}")
                         if isinstance(value, str):
                             self._data_received(value.encode("utf-8") + b"\r\n")
+                            _LOGGER.info(f"Zigbee poll #{poll_count}: passed data to protocol")
+                        else:
+                            _LOGGER.warning(f"Zigbee poll #{poll_count}: value is not a string, type={type(value)}")
+                    else:
+                        _LOGGER.warning(f"Zigbee poll #{poll_count}: attribute 0x{self._attr_id:04x} not in response")
+                else:
+                    _LOGGER.error("Zigbee poll: cluster is None!")
             except Exception as err:
-                _LOGGER.debug(f"Zigbee poll failed: {err}")
+                _LOGGER.error(f"Zigbee poll #{poll_count} failed: {err}", exc_info=True)
             await asyncio.sleep(20)
 
     def attribute_updated(self, attrid: int, value: Any) -> None:
         """Handle attribute update from Zigbee cluster."""
-        if attrid == self._attr_id and isinstance(value, str):
-            self._data_received(value.encode("utf-8") + b"\r\n")
+        _LOGGER.info(f"Zigbee attribute_updated: attrid=0x{attrid:04x}, value={value!r}, expected_attrid=0x{self._attr_id:04x}")
+        if attrid == self._attr_id:
+            if isinstance(value, str):
+                _LOGGER.info(f"Zigbee attribute update: passing '{value}' to protocol")
+                self._data_received(value.encode("utf-8") + b"\r\n")
+            else:
+                _LOGGER.warning(f"Zigbee attribute update: value is not a string, type={type(value)}, value={value!r}")
 
     def write(self, data: bytes) -> None:
         """Write data to the Zigbee device."""
+        _LOGGER.info(f"Zigbee write called: data={data!r}, closing={self._closing}")
         if self._closing:
+            _LOGGER.warning("Zigbee write: transport is closing, ignoring write")
             return
 
         try:
             frame = data.decode("utf-8").strip()
+            _LOGGER.info(f"Zigbee write: decoded frame='{frame}'")
             self._loop.create_task(self._async_write(frame))
         except Exception as err:
-            _LOGGER.error(f"Failed to write to Zigbee: {err}")
+            _LOGGER.error(f"Failed to write to Zigbee: {err}", exc_info=True)
 
     async def _async_write(self, frame: str) -> None:
         """Asynchronously write frame to Zigbee device."""
+        _LOGGER.info(f"Zigbee _async_write: frame='{frame}', write_cluster={self._write_cluster}")
         if not self._write_cluster:
-            _LOGGER.warning("Write cluster not available")
+            _LOGGER.error("Write cluster not available - cannot send frame")
             return
 
         try:
             cmd_id = 0x01
-            await self._write_cluster.command(cmd_id, frame, expect_reply=False)
-            _LOGGER.debug(f"Sent to Zigbee: {frame}")
+            _LOGGER.info(f"Zigbee: sending command 0x{cmd_id:02x} with data '{frame}' to cluster 0x{self._write_cluster_id:04x}")
+            result = await self._write_cluster.command(cmd_id, frame, expect_reply=False)
+            _LOGGER.info(f"Zigbee write success: result={result}")
         except Exception as err:
-            _LOGGER.error(f"Zigbee write failed: {err}")
+            _LOGGER.error(f"Zigbee write failed: {err}", exc_info=True)
 
     def close(self) -> None:
         """Close the Zigbee transport."""
