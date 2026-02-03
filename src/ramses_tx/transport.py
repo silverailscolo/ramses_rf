@@ -2322,6 +2322,7 @@ async def transport_factory(
 
     # Zigbee
     if port_name[:6] == "zigbee":
+        _LOGGER.info(f"transport_factory: Creating ZigbeeTransport for {port_name}")
         transport = ZigbeeTransport(
             port_name,
             protocol,
@@ -2330,7 +2331,15 @@ async def transport_factory(
             loop=loop,
             **kwargs,
         )
-        # Zigbee connection is established asynchronously
+        # Wait for Zigbee connection to be established (similar to MQTT)
+        _LOGGER.info(f"transport_factory: Waiting for Zigbee connection...")
+        try:
+            await protocol.wait_for_connection_made(timeout=30)
+            _LOGGER.info(f"transport_factory: Zigbee connection established")
+        except Exception as err:
+            _LOGGER.error(f"transport_factory: Zigbee connection failed: {err}", exc_info=True)
+            transport.close()
+            raise
         return transport
 
     # MQTT
