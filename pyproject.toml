@@ -38,7 +38,7 @@
     "Topic :: Home Automation",
     "Programming Language :: Python :: 3.13",
   ]
-  requires-python = ">=3.11"        # HA core >=3.13.2, TODO set to >=3.12 Feb. 2026 (issue #384)
+  requires-python = ">=3.12"        # HA core >=3.13.2
   dependencies = [
     "colorlog>=6.9.0",              # latest
     "paho-mqtt>=2.1.0",             # latest
