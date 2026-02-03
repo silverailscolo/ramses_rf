@@ -1,5 +1,7 @@
 name: Typing
 
+permissions:
+  contents: read
 
 on:
   push:

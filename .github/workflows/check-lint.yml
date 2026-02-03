@@ -1,5 +1,7 @@
 name: Linting
 
+permissions:  ## security hint
+  contents: read
 
 on:
   push:
