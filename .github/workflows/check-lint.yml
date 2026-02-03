@@ -1,6 +1,6 @@
 name: Linting
 
-permissions:
+permissions:  ## security hint
   contents: read
 
 on:
