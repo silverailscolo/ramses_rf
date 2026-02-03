@@ -2318,9 +2318,8 @@ async def transport_factory(
         )
 
     assert port_name is not None  # mypy check
-    assert port_config is not None  # mypy check
 
-    # Zigbee
+    # Zigbee - check before port_config assertion
     if port_name[:6] == "zigbee":
         _LOGGER.info(f"transport_factory: Creating ZigbeeTransport for {port_name}")
         transport = ZigbeeTransport(
@@ -2342,7 +2341,7 @@ async def transport_factory(
             raise
         return transport
 
-    # MQTT
+    # MQTT - check before port_config assertion
     if port_name[:4] == "mqtt":
         # Check for custom timeout in config, fallback to constant
         mqtt_timeout = config.timeout or _DEFAULT_TIMEOUT_MQTT
@@ -2366,7 +2365,8 @@ async def transport_factory(
 
         return transport
 
-    # Serial
+    # Serial - port_config required
+    assert port_config is not None  # mypy check
     ser_instance = get_serial_instance(port_name, port_config)
 
     if os.name == "nt" or ser_instance.portstr[:7] in ("rfc2217", "socket:"):
