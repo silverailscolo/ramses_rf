@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
@@ -153,11 +153,11 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
 
     @property
     def actuator_cycle(self) -> dict | None:  # 3EF1
-        return self._msg_value(Code._3EF1)
+        return cast(dict | None, self._msg_value(Code._3EF1))
 
     @property
     def actuator_state(self) -> dict | None:  # 3EF0
-        return self._msg_value(Code._3EF0)
+        return cast(dict | None, self._msg_value(Code._3EF0))
 
     @property
     def status(self) -> dict[str, Any]:
@@ -173,7 +173,7 @@ class HeatDemand(DeviceHeat):  # 3150
 
     @property
     def heat_demand(self) -> float | None:  # 3150
-        return self._msg_value(Code._3150, key=self.HEAT_DEMAND)
+        return cast(float | None, self._msg_value(Code._3150, key=self.HEAT_DEMAND))
 
     @property
     def status(self) -> dict[str, Any]:
@@ -188,7 +188,7 @@ class Setpoint(DeviceHeat):  # 2309
 
     @property
     def setpoint(self) -> float | None:  # 2309
-        return self._msg_value(Code._2309, key=self.SETPOINT)
+        return cast(float | None, self._msg_value(Code._2309, key=self.SETPOINT))
 
     @property
     def status(self) -> dict[str, Any]:
@@ -203,7 +203,7 @@ class Weather(DeviceHeat):  # 0002
 
     @property
     def temperature(self) -> float | None:  # 0002
-        return self._msg_value(Code._0002, key=SZ_TEMPERATURE)
+        return cast(float | None, self._msg_value(Code._0002, key=SZ_TEMPERATURE))
 
     @temperature.setter
     def temperature(self, value: float | None) -> None:
@@ -247,7 +247,7 @@ class RelayDemand(DeviceHeat):  # 0008
 
     @property
     def relay_demand(self) -> float | None:  # 0008
-        return self._msg_value(Code._0008, key=self.RELAY_DEMAND)
+        return cast(float | None, self._msg_value(Code._0008, key=self.RELAY_DEMAND))
 
     @property
     def status(self) -> dict[str, Any]:
@@ -262,7 +262,7 @@ class DhwTemperature(DeviceHeat):  # 1260
 
     @property
     def temperature(self) -> float | None:  # 1260
-        return self._msg_value(Code._1260, key=SZ_TEMPERATURE)
+        return cast(float | None, self._msg_value(Code._1260, key=SZ_TEMPERATURE))
 
     @temperature.setter
     def temperature(self, value: float | None) -> None:
@@ -288,7 +288,7 @@ class Temperature(DeviceHeat):  # 30C9
     # .I --- 34:145039 01:054173 --:------ 1FC9 006 00-30C9-8A368F
     @property
     def temperature(self) -> float | None:  # 30C9
-        return self._msg_value(Code._30C9, key=SZ_TEMPERATURE)
+        return cast(float | None, self._msg_value(Code._30C9, key=SZ_TEMPERATURE))
 
     @temperature.setter
     def temperature(self, value: float | None) -> None:
@@ -526,20 +526,28 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
     @property
     def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
-        return self._msg_value_msg(self._heat_demand, key=self.HEAT_DEMAND)
+        return cast(
+            float | None, self._msg_value_msg(self._heat_demand, key=self.HEAT_DEMAND)
+        )
 
     @property
     def heat_demands(self) -> dict | None:  # 3150|ufh_idx array
         # return self._heat_demands.payload if self._heat_demands else None
-        return self._msg_value_msg(self._heat_demands)
+        return cast(dict | None, self._msg_value_msg(self._heat_demands))
 
     @property
     def relay_demand(self) -> dict | None:  # 0008|FC
-        return self._msg_value_msg(self._relay_demand, key=SZ_RELAY_DEMAND)
+        return cast(
+            dict | None,
+            self._msg_value_msg(self._relay_demand, key=SZ_RELAY_DEMAND),
+        )
 
     @property
     def relay_demand_fa(self) -> dict | None:  # 0008|FA
-        return self._msg_value_msg(self._relay_demand_fa, key=SZ_RELAY_DEMAND)
+        return cast(
+            dict | None,
+            self._msg_value_msg(self._relay_demand_fa, key=SZ_RELAY_DEMAND),
+        )
 
     @property
     def setpoints(self) -> dict | None:  # 22C9|ufh_idx array
@@ -607,7 +615,7 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
 
     @property
     def dhw_params(self) -> PayDictT._10A0 | None:
-        return self._msg_value(Code._10A0)
+        return cast(PayDictT._10A0 | None, self._msg_value(Code._10A0))
 
     @property
     def params(self) -> dict[str, Any]:
@@ -804,7 +812,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             self._deprecate_code_ctx(msg._pkt, reset=True)
 
     def _ot_msg_flag(self, msg_id: MsgId, flag_idx: int) -> bool | None:
-        flags: list = self._ot_msg_value(msg_id)
+        flags = cast(list, self._ot_msg_value(msg_id))
         return bool(flags[flag_idx]) if flags else None
 
     @staticmethod
@@ -906,11 +914,11 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
 
     @property  # TODO
     def percent(self) -> float | None:  # 2401 - WIP (~3150|FC)
-        return self._msg_value(Code._2401, key=SZ_HEAT_DEMAND)
+        return cast(float | None, self._msg_value(Code._2401, key=SZ_HEAT_DEMAND))
 
     @property  # TODO
     def value(self) -> int | None:  # 2401 - WIP
-        return self._msg_value(Code._2401, key="_value_2")
+        return cast(int | None, self._msg_value(Code._2401, key="_value_2"))
 
     @property
     def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
@@ -921,131 +929,182 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         #     self._result_by_lookup(Code._3200, key=SZ_TEMPERATURE),
         # )
 
-        return self._result_by_lookup(Code._3200, key=SZ_TEMPERATURE)
+        return cast(
+            float | None, self._result_by_lookup(Code._3200, key=SZ_TEMPERATURE)
+        )
 
     @property
     def boiler_return_temp(self) -> float | None:  # 3220|1C, or 3210
-        return self._result_by_lookup(Code._3210, key=SZ_TEMPERATURE)
+        return cast(
+            float | None, self._result_by_lookup(Code._3210, key=SZ_TEMPERATURE)
+        )
 
     @property
     def boiler_setpoint(self) -> float | None:  # 3220|01, or 22D9
-        return self._result_by_lookup(Code._22D9, key=SZ_SETPOINT)
+        return cast(float | None, self._result_by_lookup(Code._22D9, key=SZ_SETPOINT))
 
     @property
     def ch_max_setpoint(self) -> float | None:  # 3220|39, or 1081
-        return self._result_by_lookup(Code._1081, key=SZ_SETPOINT)
+        return cast(float | None, self._result_by_lookup(Code._1081, key=SZ_SETPOINT))
 
     @property  # TODO: no OT equivalent
     def ch_setpoint(self) -> float | None:  # 3EF0 (byte 7, only R8820A?)
-        return self._result_by_value(
-            None, self._msg_value(Code._3EF0, key=SZ_CH_SETPOINT)
+        return cast(
+            float | None,
+            self._result_by_value(
+                None, self._msg_value(Code._3EF0, key=SZ_CH_SETPOINT)
+            ),
         )
 
     @property
     def ch_water_pressure(self) -> float | None:  # 3220|12, or 1300
-        return self._result_by_lookup(Code._1300, key=SZ_PRESSURE)
+        return cast(float | None, self._result_by_lookup(Code._1300, key=SZ_PRESSURE))
 
     @property
     def dhw_flow_rate(self) -> float | None:  # 3220|13, or 12F0
-        return self._result_by_lookup(Code._12F0, key=SZ_DHW_FLOW_RATE)
+        return cast(
+            float | None, self._result_by_lookup(Code._12F0, key=SZ_DHW_FLOW_RATE)
+        )
 
     @property
     def dhw_setpoint(self) -> float | None:  # 3220|38, or 10A0
-        return self._result_by_lookup(Code._10A0, key=SZ_SETPOINT)
+        return cast(float | None, self._result_by_lookup(Code._10A0, key=SZ_SETPOINT))
 
     @property
     def dhw_temp(self) -> float | None:  # 3220|1A, or 1260
-        return self._result_by_lookup(Code._1260, key=SZ_TEMPERATURE)
+        return cast(
+            float | None, self._result_by_lookup(Code._1260, key=SZ_TEMPERATURE)
+        )
 
     @property  # TODO: no reliable OT equivalent?
     def max_rel_modulation(self) -> float | None:  # 3220|0E, or 3EF0 (byte 8)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return self._msg_value(Code._3EF0, key=SZ_MAX_REL_MODULATION)
-        return self._result_by_value(
-            self._ot_msg_value(MsgId._0E),  # NOTE: not reliable?
-            self._msg_value(Code._3EF0, key=SZ_MAX_REL_MODULATION),
+            return cast(
+                float | None, self._msg_value(Code._3EF0, key=SZ_MAX_REL_MODULATION)
+            )
+        return cast(
+            float | None,
+            self._result_by_value(
+                self._ot_msg_value(MsgId._0E),  # NOTE: not reliable?
+                self._msg_value(Code._3EF0, key=SZ_MAX_REL_MODULATION),
+            ),
         )
 
     @property
     def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
-        return self._ot_msg_value(MsgId._73)
+        return cast(float | None, self._ot_msg_value(MsgId._73))
 
     @property
     def outside_temp(self) -> float | None:  # 3220|1B, 1290
-        return self._result_by_lookup(Code._1290, key=SZ_TEMPERATURE)
+        return cast(
+            float | None, self._result_by_lookup(Code._1290, key=SZ_TEMPERATURE)
+        )
 
     @property  # TODO: no reliable OT equivalent?
     def rel_modulation_level(self) -> float | None:  # 3220|11, or 3EF0/3EF1
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return self._msg_value((Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL)
-        return self._result_by_value(
-            self._ot_msg_value(MsgId._11),  # NOTE: not reliable?
-            self._msg_value((Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL),
+            return cast(
+                float | None,
+                self._msg_value((Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL),
+            )
+        return cast(
+            float | None,
+            self._result_by_value(
+                self._ot_msg_value(MsgId._11),  # NOTE: not reliable?
+                self._msg_value((Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL),
+            ),
         )
 
     @property  # TODO: no reliable OT equivalent?
     def ch_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE)
-        return self._result_by_value(
-            self._ot_msg_flag(MsgId._00, 8 + 1),  # NOTE: not reliable?
-            self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE),
+            return cast(bool | None, self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE))
+        return cast(
+            bool | None,
+            self._result_by_value(
+                self._ot_msg_flag(MsgId._00, 8 + 1),  # NOTE: not reliable?
+                self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE),
+            ),
         )
 
     @property  # TODO: no reliable OT equivalent?
     def ch_enabled(self) -> bool | None:  # 3220|00, or 3EF0 (byte 6)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return self._msg_value(Code._3EF0, key=SZ_CH_ENABLED)
-        return self._result_by_value(
-            self._ot_msg_flag(MsgId._00, 0),  # NOTE: not reliable?
-            self._msg_value(Code._3EF0, key=SZ_CH_ENABLED),
+            return cast(bool | None, self._msg_value(Code._3EF0, key=SZ_CH_ENABLED))
+        return cast(
+            bool | None,
+            self._result_by_value(
+                self._ot_msg_flag(MsgId._00, 0),  # NOTE: not reliable?
+                self._msg_value(Code._3EF0, key=SZ_CH_ENABLED),
+            ),
         )
 
     @property
     def cooling_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return self._result_by_value(self._ot_msg_flag(MsgId._00, 8 + 4), None)
+        return cast(
+            bool | None,
+            self._result_by_value(self._ot_msg_flag(MsgId._00, 8 + 4), None),
+        )
 
     @property
     def cooling_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return self._result_by_value(self._ot_msg_flag(MsgId._00, 2), None)
+        return cast(
+            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 2), None)
+        )
 
     @property  # TODO: no reliable OT equivalent?
     def dhw_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE)
-        return self._result_by_value(
-            self._ot_msg_flag(MsgId._00, 8 + 2),  # NOTE: not reliable?
-            self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE),
+            return cast(bool | None, self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE))
+        return cast(
+            bool | None,
+            self._result_by_value(
+                self._ot_msg_flag(MsgId._00, 8 + 2),  # NOTE: not reliable?
+                self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE),
+            ),
         )
 
     @property
     def dhw_blocking(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return self._result_by_value(self._ot_msg_flag(MsgId._00, 6), None)
+        return cast(
+            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 6), None)
+        )
 
     @property
     def dhw_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return self._result_by_value(self._ot_msg_flag(MsgId._00, 1), None)
+        return cast(
+            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 1), None)
+        )
 
     @property
     def fault_present(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return self._result_by_value(self._ot_msg_flag(MsgId._00, 8), None)
+        return cast(
+            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 8), None)
+        )
 
     @property  # TODO: no reliable OT equivalent?
     def flame_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return self._msg_value(Code._3EF0, key="flame_on")
-        return self._result_by_value(
-            self._ot_msg_flag(MsgId._00, 8 + 3),  # NOTE: not reliable?
-            self._msg_value(Code._3EF0, key="flame_on"),
+            return cast(bool | None, self._msg_value(Code._3EF0, key="flame_on"))
+        return cast(
+            bool | None,
+            self._result_by_value(
+                self._ot_msg_flag(MsgId._00, 8 + 3),  # NOTE: not reliable?
+                self._msg_value(Code._3EF0, key="flame_on"),
+            ),
         )
 
     @property
     def otc_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return self._result_by_value(self._ot_msg_flag(MsgId._00, 3), None)
+        return cast(
+            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 3), None)
+        )
 
     @property
     def summer_mode(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return self._result_by_value(self._ot_msg_flag(MsgId._00, 5), None)
+        return cast(
+            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 5), None)
+        )
 
     @property
     def opentherm_schema(self) -> dict[str, Any]:
@@ -1335,7 +1394,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
     @property
     def tpi_params(self) -> PayDictT._10A0 | None:
-        return self._msg_value(Code._1100)
+        return cast(PayDictT._10A0 | None, self._msg_value(Code._1100))
 
     @property
     def schema(self) -> dict[str, Any]:
@@ -1376,7 +1435,7 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
 
     @property
     def window_open(self) -> bool | None:  # 12B0
-        return self._msg_value(Code._12B0, key=self.WINDOW_OPEN)
+        return cast(bool | None, self._msg_value(Code._12B0, key=self.WINDOW_OPEN))
 
     @property
     def status(self) -> dict[str, Any]:
