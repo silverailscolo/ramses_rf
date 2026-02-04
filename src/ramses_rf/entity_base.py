@@ -410,9 +410,7 @@ class _MessageDB(_Entity):
             return bool(flags[idx])
         return None
 
-    def _msg_value(
-        self, code: Code | Iterable[Code], *args: Any, **kwargs: Any
-    ) -> dict | list | None:
+    def _msg_value(self, code: Code | Iterable[Code], *args: Any, **kwargs: Any) -> Any:
         """
         Get the value for a Code from the database or from a Message object provided.
 
@@ -435,7 +433,7 @@ class _MessageDB(_Entity):
         verb: VerbT | None = None,
         key: str | None = None,
         **kwargs: Any,
-    ) -> dict | list | None:
+    ) -> Any:
         """
         Query the _msgz message dict or the SQLite MessageIndex for the most recent
         key: value pairs(s) for a given code.
@@ -486,7 +484,7 @@ class _MessageDB(_Entity):
         key: str = "*",
         zone_idx: str | None = None,
         domain_id: str | None = None,
-    ) -> dict | list | None:
+    ) -> Any:
         """
         Get from a Message all or a specific key with its value(s),
         optionally filtering for a zone or a domain
@@ -515,11 +513,28 @@ class _MessageDB(_Entity):
 
         if isinstance(msg.payload, dict):
             msg_dict = msg.payload  # could be a mismatch on idx, accept
+            # Safety check for direct mismatch on zone_idx (common crash source)
+            # in legacy mode where Zones share the controller's message cache.
+            if idx and idx != SZ_DOMAIN_ID and msg_dict.get(idx) != val:
+                return None
+
         elif idx:  # a list of dicts, e.g. SZ_DOMAIN_ID=FC
             msg_dict = {
-                k: v for d in msg.payload for k, v in d.items() if d[idx] == val
+                k: v
+                for d in msg.payload
+                for k, v in d.items()
+                if d.get(idx) == val  # Safely get index
             }
+            if not msg_dict:
+                return None
+
         else:  # a list without idx
+            if not msg.payload:  # Handle empty list case
+                return None
+
+            if isinstance(msg.payload, list) and (key == "*" or not key):
+                return msg.payload
+
             # TODO: this isn't ideal: e.g. a controller is being treated like a 'stat
             # .I 101 --:------ --:------ 12:126457 2309 006 0107D0-0207D0  # is a CTL
             msg_dict = msg.payload[0]  # we pick the first

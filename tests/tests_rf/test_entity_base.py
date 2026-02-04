@@ -234,6 +234,51 @@ class Test_entity_base:
 
         mock_gateway.msg_db.stop()  # close sqlite3 connection
 
+    def test_msg_value_msg_hardening(self, mock_gateway: MagicMock) -> None:
+        """Test hardening fixes in _msg_value_msg (empty lists, full list return)."""
+        dev = _MessageDB(mock_gateway)
+        dev.id = DeviceIdT("01:123456")
+
+        # Case 1: Empty payload list (should not crash with IndexError)
+        msg_empty = MagicMock(spec=Message)
+        msg_empty.payload = []
+        msg_empty._expired = False
+        msg_empty.code = Code._000A
+
+        assert dev._msg_value_msg(msg_empty) is None
+
+        # Case 2: Payload is a list, key='*' (should return full list)
+        payload_list = [
+            {"zone_idx": "00", "val": 10},
+            {"zone_idx": "01", "val": 20},
+        ]
+        msg_list = MagicMock(spec=Message)
+        msg_list.payload = payload_list
+        msg_list._expired = False
+        msg_list.code = Code._000A
+
+        # key='*' -> return full list
+        val = dev._msg_value_msg(msg_list, key="*")
+        assert val == payload_list
+        assert isinstance(val, list)
+
+        # key=None -> return full list (default behavior if key arg is omitted in call)
+        val = dev._msg_value_msg(msg_list)
+        assert val == payload_list
+
+        # Case 3: Legacy Fallback - Payload is list, specific key requested, no zone_idx
+        # Should return value from index 0
+        val = dev._msg_value_msg(msg_list, key="val")
+        assert val == 10  # from index 0 ('00')
+
+        # Case 4: Correct filtering when zone_idx is provided
+        val = dev._msg_value_msg(msg_list, key="val", zone_idx="01")
+        assert val == 20
+
+        # Case 5: Zone not found in list
+        val = dev._msg_value_msg(msg_list, key="val", zone_idx="99")
+        assert val is None
+
 
 def test_gh_396_sqlite_ot_context_type() -> None:
     """Verify that integer context values from SQLite are handled correctly.
