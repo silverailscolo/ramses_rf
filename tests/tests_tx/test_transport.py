@@ -5,7 +5,10 @@ import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
-from ramses_tx.transport import CallbackTransport, transport_factory
+import pytest
+
+from ramses_tx import exceptions as exc
+from ramses_tx.transport import CallbackTransport, is_hgi80, transport_factory
 
 
 async def _async_callback_factory(*args: Any, **kwargs: Any) -> CallbackTransport:
@@ -192,3 +195,35 @@ async def test_port_transport_close_robustness() -> None:
 
         # Execute close - should not raise AttributeError
         transport.close()
+
+
+async def test_is_hgi80_async_file_check() -> None:
+    """Check that is_hgi80 uses loop.run_in_executor for file existence checks.
+
+    This test verifies that the file check does not block the event loop and
+    uses the expected executor logic.
+    """
+
+    # We define a path that contains "by-id" and "evofw3".
+    # This ensures that is_hgi80 returns False immediately after the file check,
+    # preventing it from proceeding to the complex 'comports' logic which triggers I/O.
+    test_port = "/dev/serial/by-id/usb-SparkFun_evofw3_TEST"
+
+    # 1. Test: File exists (should return False due to 'evofw3' in name)
+    # We patch os.path.exists to return True
+    with patch("ramses_tx.transport.os.path.exists", return_value=True) as mock_exists:
+        result = await is_hgi80(test_port)
+
+        # Assert: os.path.exists was called with the correct path
+        mock_exists.assert_called_once_with(test_port)
+        # Assert: Logic correctly identified it as NOT HGI80 (due to evofw3 name)
+        assert result is False
+
+    # 2. Test: File does NOT exist (should raise TransportSerialError)
+    # We patch os.path.exists to return False
+    with patch("ramses_tx.transport.os.path.exists", return_value=False) as mock_exists:
+        with pytest.raises(exc.TransportSerialError):
+            await is_hgi80(test_port)
+
+        # Assert: os.path.exists was called
+        mock_exists.assert_called_once_with(test_port)

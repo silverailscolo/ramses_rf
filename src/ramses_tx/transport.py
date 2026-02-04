@@ -229,7 +229,8 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
             ) from err
         return None
 
-    if not os.path.exists(serial_port):
+    loop = asyncio.get_running_loop()
+    if not await loop.run_in_executor(None, os.path.exists, serial_port):
         raise exc.TransportSerialError(f"Unable to find {serial_port}")
 
     # first, try the easy win...
