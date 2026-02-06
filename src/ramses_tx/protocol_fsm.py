@@ -597,8 +597,17 @@ class WantEcho(ProtocolStateBase):
                 )
             )
         ):
-            _LOGGER.warning(
-                "%s: Invalid state to receive a reply (expecting echo)", self._context
+            if self._context._cmd_tx_count < 3:
+                level = logging.DEBUG
+            elif self._context._cmd_tx_count == 3:
+                level = logging.INFO
+            else:
+                level = logging.WARNING
+
+            _LOGGER.log(
+                level,
+                "%s: Invalid state to receive a reply (expecting echo)",
+                self._context,
             )
 
             self._rply_pkt = pkt
@@ -663,8 +672,17 @@ class WantRply(ProtocolStateBase):
         # 2024-04-16 08:28:33.910 052 RQ --- 01:145038 10:048122 --:------ 3220 005 0000110000  # 3220|RQ|10:048122|11
 
         if pkt._hdr == self._sent_cmd.tx_header and pkt.src == self._echo_pkt.src:
-            _LOGGER.warning(
-                "%s: Invalid state to receive an echo (expecting reply)", self._context
+            if self._context._cmd_tx_count < 3:
+                level = logging.DEBUG
+            elif self._context._cmd_tx_count == 3:
+                level = logging.INFO
+            else:
+                level = logging.WARNING
+
+            _LOGGER.log(
+                level,
+                "%s: Invalid state to receive an echo (expecting reply)",
+                self._context,
             )
             return  # do not transition, wait until existing timer expires
 

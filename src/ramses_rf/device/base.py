@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.binding_fsm import BindContext, Vendor
 from ramses_rf.const import DEV_TYPE_MAP, SZ_OEM_CODE, DevType
@@ -235,13 +235,13 @@ class BatteryState(DeviceBase):  # 1060
     def battery_low(self) -> None | bool:  # 1060
         if self.is_faked:
             return False
-        return self._msg_value(Code._1060, key=self.BATTERY_LOW)
+        return cast(bool | None, self._msg_value(Code._1060, key=self.BATTERY_LOW))
 
     @property
     def battery_state(self) -> dict[str, Any] | None:  # 1060
         if self.is_faked:
             return None
-        return self._msg_value(Code._1060)
+        return cast(dict[str, Any] | None, self._msg_value(Code._1060))
 
     @property
     def status(self) -> dict[str, Any]:
@@ -264,7 +264,7 @@ class DeviceInfo(DeviceBase):  # 10E0
 
     @property
     def device_info(self) -> dict | None:  # 10E0
-        return self._msg_value(Code._10E0)
+        return cast(dict | None, self._msg_value(Code._10E0))
 
     @property
     def traits(self) -> dict[str, Any]:
@@ -406,7 +406,7 @@ class Fakeable(DeviceBase):
         # raise NotImplementedError  # self.traits is a @property
         if not self.traits.get(SZ_OEM_CODE):
             self.traits[SZ_OEM_CODE] = self._msg_value(Code._10E0, key=SZ_OEM_CODE)
-        return self.traits.get(SZ_OEM_CODE)
+        return cast(str | None, self.traits.get(SZ_OEM_CODE))
 
 
 class Device(Child, DeviceBase):
