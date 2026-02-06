@@ -173,6 +173,7 @@ class Gateway(Engine, GatewayInterface):
         if debug_mode:
             _LOGGER.setLevel(logging.DEBUG)
 
+        hidden_kwargs = {k: v for k, v in kwargs.items() if k.startswith("_")}
         self._gwy_config = config or GatewayConfig()
 
         super().__init__(
@@ -191,6 +192,9 @@ class Gateway(Engine, GatewayInterface):
             evofw_flag=evofw_flag,
             use_regex=self._gwy_config.use_regex,
         )
+
+        if hidden_kwargs:
+            self._extra.update(hidden_kwargs)  # injected into transport_factory() via Engine.start()
 
         if self._disable_sending:
             self._gwy_config.disable_discovery = True

@@ -137,6 +137,8 @@ class Engine:
 
         self._tasks: list[asyncio.Task] = []  # type: ignore[type-arg]
 
+        self._extra: dict[str, Any] = {}  # extra info injected into transport factory
+
         self._set_msg_handler(self._msg_handler)  # sets self._protocol
 
     def __str__(self) -> str:
@@ -204,9 +206,11 @@ class Engine:
             use_regex=self._use_regex,
         )
 
-        extra_info = {}
+        extra_info: dict[str, Any] = {}
         if self._hgi_id:
             extra_info[SZ_ACTIVE_HGI] = self._hgi_id
+        if self._extra:
+            extra_info.update(self._extra)
 
         # incl. await protocol.wait_for_connection_made(timeout=5)
         self._transport = await transport_factory(
