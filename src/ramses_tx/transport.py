@@ -1358,17 +1358,20 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         super().__init__(*args, **kwargs)
 
         # Parse Zigbee URL: zigbee://ieee/cluster/attr/endpoint/write_cluster/write_attr/write_endpoint
-        path_parts = self._zigbee_url.path.strip("/").split("/")
-        if len(path_parts) < 7:
-            raise exc.TransportSourceInvalid(f"Invalid Zigbee URL format: {args[0]}")
+        self._ieee = self._zigbee_url.netloc
+        path_parts = [p for p in self._zigbee_url.path.strip("/").split("/") if p]
 
-        self._ieee = path_parts[0]
-        self._cluster_id = int(path_parts[1], 16 if path_parts[1].startswith("0x") else 10)
-        self._attr_id = int(path_parts[2], 16 if path_parts[2].startswith("0x") else 10)
-        self._endpoint_id = int(float(path_parts[3]))  # Handle float strings like "1.0"
-        self._write_cluster_id = int(path_parts[4], 16 if path_parts[4].startswith("0x") else 10)
-        self._write_attr_id = int(path_parts[5], 16 if path_parts[5].startswith("0x") else 10)
-        self._write_endpoint_id = int(float(path_parts[6]))  # Handle float strings like "1.0"
+        if not self._ieee or len(path_parts) < 6:
+            raise exc.TransportSourceInvalid(
+                f"Invalid Zigbee URL format: {args[0]}"
+            )
+
+        self._cluster_id = int(path_parts[0], 16 if path_parts[0].startswith("0x") else 10)
+        self._attr_id = int(path_parts[1], 16 if path_parts[1].startswith("0x") else 10)
+        self._endpoint_id = int(float(path_parts[2]))  # Handle float strings like "1.0"
+        self._write_cluster_id = int(path_parts[3], 16 if path_parts[3].startswith("0x") else 10)
+        self._write_attr_id = int(path_parts[4], 16 if path_parts[4].startswith("0x") else 10)
+        self._write_endpoint_id = int(float(path_parts[5]))  # Handle float strings like "1.0"
 
         self._extra[SZ_IS_EVOFW3] = True
         self._timestamp = perf_counter()
