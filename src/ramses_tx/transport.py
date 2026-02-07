@@ -1442,6 +1442,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not cluster:
             raise exc.TransportError("Zigbee write cluster not ready")
 
+        _LOGGER.debug("Zigbee write requested frame: %s", frame)
+
         payload = frame.strip()
         if not payload:
             return
