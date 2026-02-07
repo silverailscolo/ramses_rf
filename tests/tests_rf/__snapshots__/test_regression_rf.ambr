@@ -765,7 +765,10 @@
         'battery_low': None,
         'id': '02:242981',
         'is_alive': None,
-        'setpoints': "<TypeError: string indices must be integers, not 'str'>",
+        'setpoints': dict({
+          '05': dict({
+          }),
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
@@ -854,7 +857,10 @@
         'battery_low': None,
         'id': '02:250704',
         'is_alive': None,
-        'setpoints': "<TypeError: string indices must be integers, not 'str'>",
+        'setpoints': dict({
+          '03': dict({
+          }),
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
@@ -863,7 +869,10 @@
         'battery_low': None,
         'id': '02:250708',
         'is_alive': None,
-        'setpoints': "<TypeError: string indices must be integers, not 'str'>",
+        'setpoints': dict({
+          '03': dict({
+          }),
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
@@ -872,7 +881,10 @@
         'battery_low': None,
         'id': '02:250984',
         'is_alive': None,
-        'setpoints': "<TypeError: string indices must be integers, not 'str'>",
+        'setpoints': dict({
+          '07': dict({
+          }),
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
