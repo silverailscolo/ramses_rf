@@ -550,15 +550,19 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         )
 
     @property
-    def setpoints(self) -> dict | None:  # 22C9|ufh_idx array
+    def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_idx array
         if self._setpoints is None:
             return None
+
+        payload = self._setpoints.payload
+        # 22C9 payload can be a list or a dict (if indexed by schema)
+        items = payload.values() if isinstance(payload, dict) else payload
 
         return {
             c[SZ_UFH_IDX]: {
                 k: v for k, v in c.items() if k in ("temp_low", "temp_high")
             }
-            for c in self._setpoints.payload
+            for c in items
         }
 
     @property  # id, type
