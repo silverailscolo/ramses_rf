@@ -1453,6 +1453,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 return
             except Exception as err:  # pragma: no cover - defensive
                 last_err = err
+                _LOGGER.warning(
+                    "Zigbee write attempt %s failed (endpoint=%s cluster=0x%04x): %s",
+                    attempt,
+                    self._write_endpoint_id,
+                    self._write_cluster_id,
+                    err,
+                )
                 if attempt == 1:
                     refreshed = self._get_active_write_cluster(force_refresh=True)
                     if refreshed and refreshed is not cluster:
