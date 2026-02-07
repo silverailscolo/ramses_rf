@@ -3,13 +3,16 @@
   dict({
     'devices': list([
       dict({
+        'battery_low': None,
         'id': '00:000558',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 18.85,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:024170',
         'is_alive': None,
         'tcs_id': '01:024170',
@@ -17,6 +20,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:026398',
         'is_alive': None,
         'tcs_id': '01:026398',
@@ -24,6 +28,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:037291',
         'is_alive': None,
         'tcs_id': '01:037291',
@@ -31,6 +36,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:037519',
         'is_alive': None,
         'tcs_id': '01:037519',
@@ -38,6 +44,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:040078',
         'is_alive': None,
         'tcs_id': '01:040078',
@@ -45,6 +52,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:050858',
         'is_alive': None,
         'tcs_id': '01:050858',
@@ -52,6 +60,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:051477',
         'is_alive': None,
         'tcs_id': '01:051477',
@@ -59,6 +68,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:054173',
         'is_alive': None,
         'tcs_id': '01:054173',
@@ -66,6 +76,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:059885',
         'is_alive': None,
         'tcs_id': '01:059885',
@@ -73,6 +84,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:062035',
         'is_alive': None,
         'tcs_id': '01:062035',
@@ -80,6 +92,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:063844',
         'is_alive': None,
         'tcs_id': '01:063844',
@@ -87,6 +100,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:069616',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -94,6 +108,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:072888',
         'is_alive': None,
         'tcs_id': '01:072888',
@@ -101,6 +116,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:073322',
         'is_alive': None,
         'tcs_id': '01:073322',
@@ -108,6 +124,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:073765',
         'is_alive': None,
         'tcs_id': '01:073765',
@@ -115,6 +132,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:073976',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -122,6 +140,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:076010',
         'is_alive': None,
         'tcs_id': '01:076010',
@@ -129,6 +148,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:078710',
         'is_alive': None,
         'tcs_id': '01:078710',
@@ -136,6 +156,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:081046',
         'is_alive': None,
         'tcs_id': '01:081046',
@@ -143,6 +164,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:085545',
         'is_alive': None,
         'tcs_id': '01:085545',
@@ -150,6 +172,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:085674',
         'is_alive': None,
         'tcs_id': '01:085674',
@@ -157,6 +180,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:087939',
         'is_alive': None,
         'tcs_id': '01:087939',
@@ -164,6 +188,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:095966',
         'is_alive': None,
         'tcs_id': '01:095966',
@@ -171,6 +196,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:096339',
         'is_alive': None,
         'tcs_id': '01:096339',
@@ -178,6 +204,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:102458',
         'is_alive': None,
         'tcs_id': '01:102458',
@@ -185,6 +212,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:111111',
         'is_alive': None,
         'tcs_id': '01:111111',
@@ -192,6 +220,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:123456',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -199,6 +228,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:130735',
         'is_alive': None,
         'tcs_id': '01:130735',
@@ -206,6 +236,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:133689',
         'is_alive': None,
         'tcs_id': '01:133689',
@@ -213,6 +244,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:138490',
         'is_alive': None,
         'tcs_id': '01:138490',
@@ -220,6 +252,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:139901',
         'is_alive': None,
         'tcs_id': '01:139901',
@@ -227,6 +260,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:140959',
         'is_alive': None,
         'tcs_id': '01:140959',
@@ -234,6 +268,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:145038',
         'is_alive': None,
         'tcs_id': '01:145038',
@@ -241,6 +276,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:155341',
         'is_alive': None,
         'tcs_id': '01:155341',
@@ -248,6 +284,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:158182',
         'is_alive': None,
         'tcs_id': '01:158182',
@@ -255,6 +292,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:164379',
         'is_alive': None,
         'tcs_id': '01:164379',
@@ -262,6 +300,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:169176',
         'is_alive': None,
         'tcs_id': '01:169176',
@@ -269,6 +308,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:182472',
         'is_alive': None,
         'tcs_id': '01:182472',
@@ -276,6 +316,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:185426',
         'is_alive': None,
         'tcs_id': '01:185426',
@@ -283,6 +324,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:187666',
         'is_alive': None,
         'tcs_id': '01:187666',
@@ -290,6 +332,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:191718',
         'is_alive': None,
         'tcs_id': '01:191718',
@@ -297,6 +340,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:195932',
         'is_alive': None,
         'tcs_id': '01:195932',
@@ -304,6 +348,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:196185',
         'is_alive': None,
         'tcs_id': '01:196185',
@@ -311,6 +356,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:198098',
         'is_alive': None,
         'tcs_id': '01:198098',
@@ -318,6 +364,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:201047',
         'is_alive': None,
         'tcs_id': '01:201047',
@@ -325,6 +372,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:205114',
         'is_alive': None,
         'tcs_id': '01:205114',
@@ -332,6 +380,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:205453',
         'is_alive': None,
         'tcs_id': '01:205453',
@@ -339,6 +388,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:210309',
         'is_alive': None,
         'tcs_id': '01:210309',
@@ -346,6 +396,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:220768',
         'is_alive': None,
         'tcs_id': '01:220768',
@@ -353,6 +404,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:223036',
         'is_alive': None,
         'tcs_id': '01:223036',
@@ -360,6 +412,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:225826',
         'is_alive': None,
         'tcs_id': '01:225826',
@@ -367,6 +420,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:239474',
         'is_alive': None,
         'tcs_id': '01:239474',
@@ -374,6 +428,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '01:239700',
         'is_alive': None,
         'tcs_id': '01:239700',
@@ -381,6 +436,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:000921',
         'is_alive': None,
         'tcs_id': None,
@@ -388,6 +444,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:001075',
         'is_alive': None,
         'tcs_id': None,
@@ -395,27 +452,81 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:001107',
         'is_alive': None,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+          '02': dict({
+          }),
+          '03': dict({
+          }),
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demands': list([
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '00',
+          }),
+          dict({
+            'heat_demand': 0.31,
+            'ufx_idx': '01',
+          }),
+        ]),
         'id': '02:001786',
         'is_alive': None,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
+        'heat_demands': list([
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '00',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '01',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '02',
+          }),
+        ]),
         'id': '02:007533',
         'is_alive': None,
+        'relay_demand': 0.0,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+          '02': dict({
+          }),
+        }),
         'tcs_id': '01:195932',
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:010136',
         'is_alive': None,
         'tcs_id': None,
@@ -423,20 +534,47 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.62,
         'id': '02:017205',
         'is_alive': None,
+        'relay_demand': 1.0,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+          '02': dict({
+          }),
+          '03': dict({
+          }),
+          '04': dict({
+          }),
+        }),
         'tcs_id': '01:087939',
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:019383',
         'is_alive': None,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+          '02': dict({
+          }),
+          '03': dict({
+          }),
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:020364',
         'is_alive': None,
         'tcs_id': None,
@@ -444,13 +582,17 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '02:033545',
         'is_alive': None,
+        'relay_demand': 0.0,
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:043392',
         'is_alive': None,
         'tcs_id': None,
@@ -458,27 +600,113 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.74,
+        'heat_demands': list([
+          dict({
+            'heat_demand': 0.57,
+            'ufx_idx': '00',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '01',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '02',
+          }),
+        ]),
         'id': '02:044328',
         'is_alive': None,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+          '02': dict({
+          }),
+        }),
         'tcs_id': '01:073976',
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.22,
+        'heat_demands': list([
+          dict({
+            'heat_demand': 0.95,
+            'ufx_idx': '00',
+          }),
+          dict({
+            'heat_demand': 0.85,
+            'ufx_idx': '01',
+          }),
+          dict({
+            'heat_demand': 0.64,
+            'ufx_idx': '02',
+          }),
+        ]),
         'id': '02:044435',
         'is_alive': None,
+        'relay_demand': 1.0,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+          '02': dict({
+          }),
+        }),
         'tcs_id': '01:073976',
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 1.0,
+        'heat_demands': list([
+          dict({
+            'heat_demand': 0.82,
+            'ufx_idx': '00',
+          }),
+          dict({
+            'heat_demand': 0.78,
+            'ufx_idx': '01',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '02',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '03',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '04',
+          }),
+        ]),
         'id': '02:044446',
         'is_alive': None,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+          '02': dict({
+          }),
+          '03': dict({
+          }),
+          '04': dict({
+          }),
+        }),
         'tcs_id': '01:073976',
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:066404',
         'is_alive': None,
         'tcs_id': None,
@@ -486,6 +714,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:111111',
         'is_alive': None,
         'tcs_id': None,
@@ -493,13 +722,31 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demands': list([
+          dict({
+            'heat_demand': 0.81,
+            'ufx_idx': '00',
+          }),
+        ]),
         'id': '02:123456',
         'is_alive': None,
+        'setpoints': dict({
+          '00': dict({
+          }),
+          '01': dict({
+          }),
+          '02': dict({
+          }),
+          '03': dict({
+          }),
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:153425',
         'is_alive': None,
         'tcs_id': None,
@@ -507,6 +754,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:241111',
         'is_alive': None,
         'tcs_id': None,
@@ -514,13 +762,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:242981',
         'is_alive': None,
+        'setpoints': "<TypeError: string indices must be integers, not 'str'>",
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:243333',
         'is_alive': None,
         'tcs_id': None,
@@ -528,6 +779,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:245555',
         'is_alive': None,
         'tcs_id': None,
@@ -535,6 +787,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:246666',
         'is_alive': None,
         'tcs_id': None,
@@ -542,6 +795,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:246873',
         'is_alive': None,
         'tcs_id': None,
@@ -549,6 +803,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:246902',
         'is_alive': None,
         'tcs_id': None,
@@ -556,6 +811,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:246947',
         'is_alive': None,
         'tcs_id': None,
@@ -563,6 +819,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:248945',
         'is_alive': None,
         'tcs_id': None,
@@ -570,6 +827,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:248955',
         'is_alive': None,
         'tcs_id': None,
@@ -577,6 +835,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:250676',
         'is_alive': None,
         'tcs_id': None,
@@ -584,6 +843,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:250677',
         'is_alive': None,
         'tcs_id': None,
@@ -591,41 +851,53 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:250704',
         'is_alive': None,
+        'setpoints': "<TypeError: string indices must be integers, not 'str'>",
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:250708',
         'is_alive': None,
+        'setpoints': "<TypeError: string indices must be integers, not 'str'>",
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '02:250984',
         'is_alive': None,
+        'setpoints': "<TypeError: string indices must be integers, not 'str'>",
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '03:123001',
         'is_alive': None,
         'tcs_id': '01:087939',
+        'temperature': 19.52,
         'type': 'Thermostat',
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': False,
         'id': '03:183434',
         'is_alive': None,
+        'setpoint': 22.0,
         'tcs_id': None,
+        'temperature': 19.2,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '03:196221',
         'is_alive': None,
         'tcs_id': None,
@@ -633,6 +905,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '03:201565',
         'is_alive': None,
         'tcs_id': None,
@@ -640,6 +913,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '03:256004',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -647,6 +921,7 @@
         'zone_idx': '08',
       }),
       dict({
+        'battery_low': None,
         'id': '03:256021',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -654,6 +929,7 @@
         'zone_idx': '07',
       }),
       dict({
+        'battery_low': None,
         'id': '04:000722',
         'is_alive': None,
         'tcs_id': None,
@@ -661,6 +937,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:000730',
         'is_alive': None,
         'tcs_id': None,
@@ -668,6 +945,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:003276',
         'is_alive': None,
         'tcs_id': None,
@@ -675,6 +953,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:003288',
         'is_alive': None,
         'tcs_id': None,
@@ -682,6 +961,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:003400',
         'is_alive': None,
         'tcs_id': None,
@@ -689,90 +969,148 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:017804',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 16.79,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:017806',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 17.19,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '02',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:017808',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 15.92,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '08',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:017810',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': None,
+        'temperature': 18.6,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '04:017980',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 17.05,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '04',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:017982',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 15.92,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '07',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:017984',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 18.25,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '03',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:017986',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 16.74,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:018744',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 18.3,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '0A',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.0,
         'id': '04:018756',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': '01:195932',
+        'temperature': 16.48,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '09',
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '04:023992',
         'is_alive': None,
+        'setpoint': 5.0,
         'tcs_id': '01:087939',
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '04:024000',
         'is_alive': None,
+        'setpoint': 5.0,
         'tcs_id': '01:087939',
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:024680',
         'is_alive': None,
         'tcs_id': None,
@@ -780,6 +1118,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:026369',
         'is_alive': None,
         'tcs_id': None,
@@ -787,6 +1126,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:039169',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -794,6 +1134,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039170',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -801,6 +1142,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039171',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -808,6 +1150,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039172',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -815,6 +1158,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039173',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -822,6 +1166,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039174',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -829,6 +1174,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039175',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -836,6 +1182,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039176',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -843,6 +1190,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039177',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -850,6 +1198,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039354',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -857,6 +1206,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039355',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -864,6 +1214,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039356',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -871,6 +1222,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039357',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -878,6 +1230,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039358',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -885,6 +1238,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039359',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -892,6 +1246,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039363',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -899,6 +1254,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:039365',
         'is_alive': None,
         'tcs_id': '01:123456',
@@ -906,6 +1262,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:044937',
         'is_alive': None,
         'tcs_id': None,
@@ -913,6 +1270,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:045072',
         'is_alive': None,
         'tcs_id': None,
@@ -920,6 +1278,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:053707',
         'is_alive': None,
         'tcs_id': None,
@@ -927,13 +1286,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:055480',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 18.07,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:055482',
         'is_alive': None,
         'tcs_id': None,
@@ -941,6 +1303,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:055486',
         'is_alive': None,
         'tcs_id': None,
@@ -948,6 +1311,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:055506',
         'is_alive': None,
         'tcs_id': None,
@@ -955,6 +1319,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:055510',
         'is_alive': None,
         'tcs_id': None,
@@ -962,6 +1327,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:055514',
         'is_alive': None,
         'tcs_id': '01:050858',
@@ -969,6 +1335,7 @@
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '04:055594',
         'is_alive': None,
         'tcs_id': '01:050858',
@@ -976,6 +1343,7 @@
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '04:055596',
         'is_alive': None,
         'tcs_id': None,
@@ -983,6 +1351,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:055600',
         'is_alive': None,
         'tcs_id': None,
@@ -990,27 +1359,37 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.34,
         'id': '04:056053',
         'is_alive': None,
         'tcs_id': '01:145038',
+        'temperature': 21.96,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '04',
       }),
       dict({
+        'battery_low': True,
         'id': '04:056057',
         'is_alive': None,
         'tcs_id': '01:145038',
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '02',
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0,
         'id': '04:056059',
         'is_alive': None,
+        'setpoint': False,
         'tcs_id': '01:145038',
         'type': 'TrvActuator',
         'zone_idx': '03',
       }),
       dict({
+        'battery_low': None,
         'id': '04:056061',
         'is_alive': None,
         'tcs_id': '01:145038',
@@ -1018,48 +1397,73 @@
         'zone_idx': '07',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.34,
         'id': '04:057586',
         'is_alive': None,
+        'setpoint': 19.5,
         'tcs_id': None,
+        'temperature': 18.3,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.52,
         'id': '04:057587',
         'is_alive': None,
+        'setpoint': 20.0,
         'tcs_id': None,
+        'temperature': 18.23,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '04:059569',
         'is_alive': None,
+        'setpoint': 5.0,
         'tcs_id': '01:087939',
+        'temperature': 13.89,
         'type': 'TrvActuator',
         'zone_idx': '03',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.48,
         'id': '04:061402',
         'is_alive': None,
+        'setpoint': 20.0,
         'tcs_id': '01:078710',
+        'temperature': 20.11,
         'type': 'TrvActuator',
         'zone_idx': '04',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.44,
         'id': '04:061731',
         'is_alive': None,
+        'setpoint': 18.5,
         'tcs_id': None,
+        'temperature': 17.13,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.56,
         'id': '04:061760',
         'is_alive': None,
+        'setpoint': 16.0,
         'tcs_id': None,
+        'temperature': 19.1,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:067179',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1067,6 +1471,7 @@
         'zone_idx': '07',
       }),
       dict({
+        'battery_low': None,
         'id': '04:073121',
         'is_alive': None,
         'tcs_id': None,
@@ -1074,6 +1479,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:081849',
         'is_alive': None,
         'tcs_id': None,
@@ -1081,6 +1487,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:086793',
         'is_alive': None,
         'tcs_id': None,
@@ -1088,6 +1495,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:086797',
         'is_alive': None,
         'tcs_id': None,
@@ -1095,6 +1503,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:088159',
         'is_alive': None,
         'tcs_id': None,
@@ -1102,41 +1511,62 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.64,
         'id': '04:098306',
         'is_alive': None,
+        'setpoint': 20.0,
         'tcs_id': '01:078710',
+        'temperature': 19.72,
         'type': 'TrvActuator',
         'zone_idx': '09',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.72,
         'id': '04:098449',
         'is_alive': None,
+        'setpoint': 20.0,
         'tcs_id': '01:078710',
+        'temperature': 19.85,
         'type': 'TrvActuator',
         'zone_idx': '0B',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.76,
         'id': '04:098455',
         'is_alive': None,
+        'setpoint': 20.0,
         'tcs_id': None,
+        'temperature': 22.12,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.6,
         'id': '04:098464',
         'is_alive': None,
+        'setpoint': 20.5,
         'tcs_id': '01:078710',
+        'temperature': 21.21,
         'type': 'TrvActuator',
         'zone_idx': '08',
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.68,
         'id': '04:098474',
         'is_alive': None,
+        'setpoint': 20.5,
         'tcs_id': '01:078710',
+        'temperature': 20.82,
         'type': 'TrvActuator',
         'zone_idx': '0A',
       }),
       dict({
+        'battery_low': None,
         'id': '04:105113',
         'is_alive': None,
         'tcs_id': '01:239474',
@@ -1144,6 +1574,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:105119',
         'is_alive': None,
         'tcs_id': '01:059885',
@@ -1151,6 +1582,7 @@
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '04:105167',
         'is_alive': None,
         'tcs_id': '01:059885',
@@ -1158,6 +1590,7 @@
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '04:105249',
         'is_alive': None,
         'tcs_id': '01:239474',
@@ -1165,6 +1598,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:105255',
         'is_alive': None,
         'tcs_id': '01:059885',
@@ -1172,6 +1606,7 @@
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '04:113257',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -1179,6 +1614,7 @@
         'zone_idx': '02',
       }),
       dict({
+        'battery_low': None,
         'id': '04:126354',
         'is_alive': None,
         'tcs_id': '01:059885',
@@ -1186,6 +1622,7 @@
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '04:126368',
         'is_alive': None,
         'tcs_id': '01:059885',
@@ -1193,6 +1630,7 @@
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '04:126378',
         'is_alive': None,
         'tcs_id': '01:059885',
@@ -1200,13 +1638,17 @@
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.15,
         'id': '04:130039',
         'is_alive': None,
+        'setpoint': 17.0,
         'tcs_id': None,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:133195',
         'is_alive': None,
         'tcs_id': None,
@@ -1214,6 +1656,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:133211',
         'is_alive': None,
         'tcs_id': None,
@@ -1221,13 +1664,18 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
+        'heat_demand': 0.36,
         'id': '04:133277',
         'is_alive': None,
+        'setpoint': 20.0,
         'tcs_id': '01:078710',
+        'temperature': 19.98,
         'type': 'TrvActuator',
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '04:133361',
         'is_alive': None,
         'tcs_id': None,
@@ -1235,6 +1683,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:133363',
         'is_alive': None,
         'tcs_id': None,
@@ -1242,6 +1691,8 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.86,
         'id': '04:133367',
         'is_alive': None,
         'tcs_id': None,
@@ -1249,6 +1700,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:136481',
         'is_alive': None,
         'tcs_id': None,
@@ -1256,6 +1708,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:136483',
         'is_alive': None,
         'tcs_id': None,
@@ -1263,6 +1716,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:136489',
         'is_alive': None,
         'tcs_id': None,
@@ -1270,6 +1724,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:136491',
         'is_alive': None,
         'tcs_id': None,
@@ -1277,6 +1732,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:136497',
         'is_alive': None,
         'tcs_id': None,
@@ -1284,6 +1740,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:136503',
         'is_alive': None,
         'tcs_id': None,
@@ -1291,6 +1748,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:136513',
         'is_alive': None,
         'tcs_id': None,
@@ -1298,6 +1756,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:138054',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1305,6 +1764,7 @@
         'zone_idx': '03',
       }),
       dict({
+        'battery_low': None,
         'id': '04:138060',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1312,6 +1772,7 @@
         'zone_idx': '04',
       }),
       dict({
+        'battery_low': None,
         'id': '04:138066',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1319,6 +1780,7 @@
         'zone_idx': '01',
       }),
       dict({
+        'battery_low': None,
         'id': '04:138068',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1326,6 +1788,7 @@
         'zone_idx': '01',
       }),
       dict({
+        'battery_low': None,
         'id': '04:155407',
         'is_alive': None,
         'tcs_id': None,
@@ -1333,6 +1796,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:155445',
         'is_alive': None,
         'tcs_id': None,
@@ -1340,6 +1804,8 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '04:155533',
         'is_alive': None,
         'tcs_id': None,
@@ -1347,6 +1813,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:155537',
         'is_alive': None,
         'tcs_id': None,
@@ -1354,6 +1821,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:155551',
         'is_alive': None,
         'tcs_id': None,
@@ -1361,6 +1829,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:157929',
         'is_alive': None,
         'tcs_id': None,
@@ -1368,6 +1837,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:161198',
         'is_alive': None,
         'tcs_id': None,
@@ -1375,20 +1845,26 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:166512',
         'is_alive': None,
+        'setpoint': 22.0,
         'tcs_id': None,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.19,
         'id': '04:166526',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 16.52,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:167734',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1396,6 +1872,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:167740',
         'is_alive': None,
         'tcs_id': '01:145038',
@@ -1403,6 +1880,7 @@
         'zone_idx': '01',
       }),
       dict({
+        'battery_low': None,
         'id': '04:173599',
         'is_alive': None,
         'tcs_id': None,
@@ -1410,6 +1888,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:173601',
         'is_alive': None,
         'tcs_id': None,
@@ -1417,20 +1896,27 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:175713',
         'is_alive': None,
+        'setpoint': 16.0,
         'tcs_id': None,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '04:189076',
         'is_alive': None,
         'tcs_id': '01:145038',
+        'temperature': 19.87,
         'type': 'TrvActuator',
+        'window_open': False,
         'zone_idx': '04',
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '04:189078',
         'is_alive': None,
         'tcs_id': '01:145038',
@@ -1438,20 +1924,27 @@
         'zone_idx': '01',
       }),
       dict({
+        'battery_low': None,
         'id': '04:189080',
         'is_alive': None,
+        'setpoint': 16.0,
         'tcs_id': '01:145038',
         'type': 'TrvActuator',
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': True,
+        'heat_demand': 1.0,
         'id': '04:189082',
         'is_alive': None,
         'tcs_id': '01:145038',
+        'temperature': 20.52,
         'type': 'TrvActuator',
+        'window_open': True,
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '04:190691',
         'is_alive': None,
         'tcs_id': None,
@@ -1459,6 +1952,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:197688',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1466,6 +1960,7 @@
         'zone_idx': '02',
       }),
       dict({
+        'battery_low': None,
         'id': '04:197696',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1473,6 +1968,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '04:198483',
         'is_alive': None,
         'tcs_id': None,
@@ -1480,6 +1976,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:198487',
         'is_alive': None,
         'tcs_id': None,
@@ -1487,13 +1984,17 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:205059',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': None,
+        'temperature': 14.78,
         'type': 'TrvActuator',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:206655',
         'is_alive': None,
         'tcs_id': None,
@@ -1501,6 +2002,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:211058',
         'is_alive': None,
         'tcs_id': None,
@@ -1508,6 +2010,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:217635',
         'is_alive': None,
         'tcs_id': None,
@@ -1515,27 +2018,37 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.43,
         'id': '04:225657',
         'is_alive': None,
         'tcs_id': '01:087939',
+        'temperature': 15.67,
         'type': 'TrvActuator',
         'zone_idx': '01',
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '04:225661',
         'is_alive': None,
+        'setpoint': 5.0,
         'tcs_id': '01:087939',
         'type': 'TrvActuator',
         'zone_idx': '02',
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '04:225663',
         'is_alive': None,
+        'setpoint': 5.0,
         'tcs_id': '01:087939',
         'type': 'TrvActuator',
         'zone_idx': '04',
       }),
       dict({
+        'battery_low': None,
         'id': '04:231770',
         'is_alive': None,
         'tcs_id': None,
@@ -1543,6 +2056,8 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '04:231774',
         'is_alive': None,
         'tcs_id': None,
@@ -1550,6 +2065,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '04:240790',
         'is_alive': None,
         'tcs_id': None,
@@ -1557,6 +2073,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:245376',
         'is_alive': None,
         'tcs_id': None,
@@ -1564,6 +2081,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:253797',
         'is_alive': None,
         'tcs_id': None,
@@ -1571,6 +2089,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '04:259832',
         'is_alive': None,
         'tcs_id': None,
@@ -1578,11 +2097,13 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '06:031569',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '07:016460',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1590,34 +2111,43 @@
         'zone_idx': 'HW',
       }),
       dict({
+        'battery_low': False,
         'id': '07:017494',
         'is_alive': None,
         'tcs_id': '01:078710',
+        'temperature': 21.03,
         'type': 'DhwSensor',
         'zone_idx': 'HW',
       }),
       dict({
+        'battery_low': None,
         'id': '07:045960',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 21.03,
         'type': 'DhwSensor',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '07:046947',
         'is_alive': None,
         'tcs_id': '01:145038',
+        'temperature': 63.1,
         'type': 'DhwSensor',
         'zone_idx': 'HW',
       }),
       dict({
+        'battery_low': False,
         'id': '07:048080',
         'is_alive': None,
         'tcs_id': '01:195932',
+        'temperature': 30.96,
         'type': 'DhwSensor',
         'zone_idx': 'HW',
       }),
       dict({
+        'battery_low': None,
         'id': '08:002337',
         'is_alive': None,
         'tcs_id': None,
@@ -1625,6 +2155,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '08:006244',
         'is_alive': None,
         'tcs_id': None,
@@ -1632,6 +2163,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '08:027240',
         'is_alive': None,
         'tcs_id': None,
@@ -1639,6 +2171,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '08:060775',
         'is_alive': None,
         'tcs_id': None,
@@ -1646,6 +2179,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '08:133345',
         'is_alive': None,
         'tcs_id': None,
@@ -1653,6 +2187,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '08:245855',
         'is_alive': None,
         'tcs_id': None,
@@ -1660,20 +2195,49 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'ch_setpoint': 10,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.5,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:004598',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': True,
+          'ch_enabled': True,
+          'ch_setpoint': 26,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.5,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:022270',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:023327',
         'is_alive': None,
         'tcs_id': None,
@@ -1681,6 +2245,8 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'heat_demand': 0.0,
         'id': '10:025262',
         'is_alive': None,
         'tcs_id': None,
@@ -1688,13 +2254,28 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'ch_setpoint': 10,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.5,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:030051',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:030670',
         'is_alive': None,
         'tcs_id': None,
@@ -1702,6 +2283,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:032432',
         'is_alive': None,
         'tcs_id': None,
@@ -1709,20 +2291,45 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:033995',
         'is_alive': None,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': True,
+          'ch_enabled': True,
+          'ch_setpoint': 32,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.0,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:037879',
         'is_alive': None,
+        'max_rel_modulation': 0.0,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:039243',
         'is_alive': None,
         'tcs_id': None,
@@ -1730,20 +2337,50 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'ch_setpoint': 10,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.5,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
+        'heat_demand': 0.0,
         'id': '10:040239',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'ch_setpoint': 10,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.5,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:040485',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:044987',
         'is_alive': None,
         'tcs_id': None,
@@ -1751,13 +2388,34 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': True,
+          'ch_setpoint': 27,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.0,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'boiler_output_temp': 41.0,
+        'boiler_return_temp': 42.0,
+        'boiler_setpoint': 27.0,
+        'ch_max_setpoint': 90.0,
+        'dhw_setpoint': 40.0,
+        'flame_active': False,
+        'heat_demand': 0.99,
         'id': '10:047707',
         'is_alive': None,
+        'max_rel_modulation': 0.0,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:047712',
         'is_alive': None,
         'tcs_id': None,
@@ -1765,20 +2423,62 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'actuator_countdown': 60,
+          'cycle_countdown': None,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'ch_setpoint': 10,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.5,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'boiler_output_temp': 47.4,
+        'boiler_return_temp': 44.7,
+        'boiler_setpoint': 10.0,
+        'ch_max_setpoint': 63.0,
+        'dhw_setpoint': 70.0,
+        'dhw_temp': 36.8,
+        'flame_active': False,
+        'heat_demand': 0.0,
         'id': '10:048122',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': True,
+          'ch_setpoint': 47,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'max_rel_modulation': 0.5,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:048456',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
+        'boiler_setpoint': 90.0,
         'id': '10:050360',
         'is_alive': None,
         'tcs_id': None,
@@ -1786,6 +2486,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:051349',
         'is_alive': None,
         'tcs_id': None,
@@ -1793,6 +2494,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:052644',
         'is_alive': None,
         'tcs_id': None,
@@ -1800,27 +2502,64 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'actuator_countdown': 60,
+          'cycle_countdown': None,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'boiler_setpoint': 90.0,
+        'flame_active': False,
         'id': '10:062498',
         'is_alive': None,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': True,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': True,
+          'modulation_level': 0.3,
+        }),
+        'battery_low': None,
+        'flame_active': True,
         'id': '10:067219',
         'is_alive': None,
+        'rel_modulation_level': 0.3,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:070473',
         'is_alive': None,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:073263',
         'is_alive': None,
         'tcs_id': None,
@@ -1828,6 +2567,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:073268',
         'is_alive': None,
         'tcs_id': None,
@@ -1835,13 +2575,30 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': True,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': True,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'boiler_output_temp': 53.69,
+        'boiler_return_temp': 43.0,
+        'boiler_setpoint': 49.0,
+        'ch_max_setpoint': 60.0,
+        'dhw_setpoint': 60.0,
+        'flame_active': True,
+        'heat_demand': 0.0,
         'id': '10:078099',
         'is_alive': None,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:102998',
         'is_alive': None,
         'tcs_id': None,
@@ -1849,6 +2606,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:105624',
         'is_alive': None,
         'tcs_id': None,
@@ -1856,6 +2614,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:123456',
         'is_alive': None,
         'tcs_id': None,
@@ -1863,20 +2622,46 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': True,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': True,
+          'modulation_level': 0.135,
+        }),
+        'battery_low': None,
+        'boiler_output_temp': 62.59,
+        'boiler_setpoint': 65.0,
+        'ch_water_pressure': 1.0,
+        'dhw_flow_rate': 5.55,
+        'dhw_temp': 37.0,
+        'flame_active': True,
         'id': '10:124973',
         'is_alive': None,
+        'rel_modulation_level': 0.135,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'cool_active': False,
+          'dhw_active': True,
+          'flame_on': True,
+          'modulation_level': 0.49,
+        }),
+        'battery_low': None,
+        'flame_active': True,
         'id': '10:130890',
         'is_alive': None,
+        'rel_modulation_level': 0.49,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:133866',
         'is_alive': None,
         'tcs_id': None,
@@ -1884,6 +2669,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:138822',
         'is_alive': None,
         'tcs_id': None,
@@ -1891,6 +2677,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:142568',
         'is_alive': None,
         'tcs_id': None,
@@ -1898,13 +2685,24 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_state': dict({
+          'ch_active': False,
+          'cool_active': False,
+          'dhw_active': False,
+          'flame_on': False,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
+        'flame_active': False,
         'id': '10:162769',
         'is_alive': None,
+        'rel_modulation_level': 0.0,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '10:262143',
         'is_alive': None,
         'tcs_id': None,
@@ -1912,20 +2710,25 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': True,
         'id': '12:010740',
         'is_alive': None,
         'tcs_id': '01:145038',
+        'temperature': 19.25,
         'type': 'Thermostat',
         'zone_idx': '03',
       }),
       dict({
+        'battery_low': None,
         'id': '12:027384',
         'is_alive': None,
+        'setpoint': 18.0,
         'tcs_id': None,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '12:106131',
         'is_alive': None,
         'tcs_id': None,
@@ -1933,27 +2736,35 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '12:193204',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 21.54,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '12:207082',
         'is_alive': None,
+        'setpoint': False,
         'tcs_id': None,
+        'temperature': 19.37,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '12:227486',
         'is_alive': None,
+        'setpoint': 10.0,
         'tcs_id': None,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '12:259810',
         'is_alive': None,
         'tcs_id': None,
@@ -1961,6 +2772,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:002512',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1968,6 +2780,7 @@
         'zone_idx': 'HW',
       }),
       dict({
+        'battery_low': None,
         'id': '13:024041',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -1975,13 +2788,31 @@
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_cycle': dict({
+          'actuator_countdown': 297,
+          'cycle_countdown': 297,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:027756',
         'is_alive': None,
+        'relay_demand': 0.0,
         'tcs_id': None,
         'type': 'BdrSwitch',
         'zone_idx': None,
       }),
       dict({
+        'active': True,
+        'actuator_cycle': dict({
+          'actuator_countdown': 493,
+          'cycle_countdown': 493,
+          'modulation_level': 1.0,
+        }),
+        'battery_low': None,
         'id': '13:031208',
         'is_alive': None,
         'tcs_id': None,
@@ -1989,6 +2820,11 @@
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_state': dict({
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:032522',
         'is_alive': None,
         'tcs_id': None,
@@ -1996,6 +2832,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:032648',
         'is_alive': None,
         'tcs_id': '01:145038',
@@ -2003,13 +2840,25 @@
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_cycle': dict({
+          'actuator_countdown': 529,
+          'cycle_countdown': 529,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:035462',
         'is_alive': None,
+        'relay_demand': 0.0,
         'tcs_id': None,
         'type': 'BdrSwitch',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:042805',
         'is_alive': None,
         'tcs_id': None,
@@ -2017,13 +2866,25 @@
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_cycle': dict({
+          'actuator_countdown': 584,
+          'cycle_countdown': 584,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:049798',
         'is_alive': None,
+        'relay_demand': 0.0,
         'tcs_id': None,
         'type': 'BdrSwitch',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:064044',
         'is_alive': None,
         'tcs_id': None,
@@ -2031,6 +2892,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:081775',
         'is_alive': None,
         'tcs_id': None,
@@ -2038,6 +2900,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:081807',
         'is_alive': None,
         'tcs_id': None,
@@ -2045,13 +2908,25 @@
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_cycle': dict({
+          'actuator_countdown': 581,
+          'cycle_countdown': 581,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:106039',
         'is_alive': None,
+        'relay_demand': 0.0,
         'tcs_id': None,
         'type': 'BdrSwitch',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:109545',
         'is_alive': None,
         'tcs_id': None,
@@ -2059,13 +2934,25 @@
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_cycle': dict({
+          'actuator_countdown': 513,
+          'cycle_countdown': 513,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:109598',
         'is_alive': None,
+        'relay_demand': 0.0,
         'tcs_id': '01:078710',
         'type': 'BdrSwitch',
         'zone_idx': 'HW',
       }),
       dict({
+        'battery_low': None,
         'id': '13:120241',
         'is_alive': None,
         'tcs_id': None,
@@ -2073,13 +2960,20 @@
         'zone_idx': None,
       }),
       dict({
+        'active': True,
+        'actuator_state': dict({
+          'modulation_level': 1.0,
+        }),
+        'battery_low': None,
         'id': '13:120242',
         'is_alive': None,
+        'relay_demand': 1.0,
         'tcs_id': '01:145038',
         'type': 'BdrSwitch',
         'zone_idx': 'HW',
       }),
       dict({
+        'battery_low': None,
         'id': '13:171587',
         'is_alive': None,
         'tcs_id': None,
@@ -2087,6 +2981,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:172643',
         'is_alive': None,
         'tcs_id': '01:069616',
@@ -2094,6 +2989,13 @@
         'zone_idx': 'HW',
       }),
       dict({
+        'active': True,
+        'actuator_cycle': dict({
+          'actuator_countdown': 988,
+          'cycle_countdown': 988,
+          'modulation_level': 1.0,
+        }),
+        'battery_low': None,
         'id': '13:202850',
         'is_alive': None,
         'tcs_id': None,
@@ -2101,13 +3003,25 @@
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_cycle': dict({
+          'actuator_countdown': 462,
+          'cycle_countdown': 462,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:203402',
         'is_alive': None,
+        'relay_demand': 0.0,
         'tcs_id': '01:195932',
         'type': 'BdrSwitch',
         'zone_idx': 'HW',
       }),
       dict({
+        'battery_low': None,
         'id': '13:208181',
         'is_alive': None,
         'tcs_id': None,
@@ -2115,6 +3029,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:209679',
         'is_alive': None,
         'tcs_id': None,
@@ -2122,6 +3037,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '13:235624',
         'is_alive': None,
         'tcs_id': None,
@@ -2129,13 +3045,28 @@
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_cycle': dict({
+          'actuator_countdown': 255,
+          'cycle_countdown': 255,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:237335',
         'is_alive': None,
+        'relay_demand': 0.0,
         'tcs_id': None,
         'type': 'BdrSwitch',
         'zone_idx': None,
       }),
       dict({
+        'active': False,
+        'actuator_cycle': dict({
+          'actuator_countdown': 26,
+          'cycle_countdown': 26,
+          'modulation_level': 0.0,
+        }),
+        'battery_low': None,
         'id': '13:246213',
         'is_alive': None,
         'tcs_id': None,
@@ -2143,6 +3074,16 @@
         'zone_idx': None,
       }),
       dict({
+        'active': True,
+        'actuator_cycle': dict({
+          'actuator_countdown': 300,
+          'cycle_countdown': 300,
+          'modulation_level': 1.0,
+        }),
+        'actuator_state': dict({
+          'modulation_level': 1.0,
+        }),
+        'battery_low': None,
         'id': '13:259021',
         'is_alive': None,
         'tcs_id': None,
@@ -2150,251 +3091,301 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '18:002563',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:005567',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:005960',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:006307',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:006402',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:008942',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:010629',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:011649',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:012667',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:013393',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:015697',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:017022',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:056026',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:070162',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:073736',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:111111',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:114076',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:122112',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:123456',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:124535',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:125558',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:126620',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:130140',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:132629',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:139815',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:140805',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:141846',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:154951',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:198151',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:199952',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:200202',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:200214',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '18:201492',
         'is_alive': None,
         'type': 'HgiGateway',
       }),
       dict({
+        'battery_low': None,
         'id': '20:001397',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:002544',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:007902',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:008749',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:010779',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:016443',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:018860',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:020521',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:024743',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:025286',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:026866',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:032436',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:036714',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:043678',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:059025',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '20:226497',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '21:032798',
         'is_alive': None,
         'tcs_id': None,
@@ -2402,6 +3393,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:033160',
         'is_alive': None,
         'tcs_id': None,
@@ -2409,6 +3401,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:033170',
         'is_alive': None,
         'tcs_id': None,
@@ -2416,6 +3409,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:033244',
         'is_alive': None,
         'tcs_id': None,
@@ -2423,6 +3417,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:033389',
         'is_alive': None,
         'tcs_id': None,
@@ -2430,6 +3425,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:033394',
         'is_alive': None,
         'tcs_id': None,
@@ -2437,6 +3433,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:033618',
         'is_alive': None,
         'tcs_id': None,
@@ -2444,6 +3441,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:033620',
         'is_alive': None,
         'tcs_id': None,
@@ -2451,6 +3449,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:034158',
         'is_alive': None,
         'tcs_id': None,
@@ -2458,6 +3457,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:034423',
         'is_alive': None,
         'tcs_id': None,
@@ -2465,6 +3465,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:034832',
         'is_alive': None,
         'tcs_id': None,
@@ -2472,6 +3473,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:038634',
         'is_alive': None,
         'tcs_id': None,
@@ -2479,6 +3481,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:038682',
         'is_alive': None,
         'tcs_id': None,
@@ -2486,6 +3489,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:038840',
         'is_alive': None,
         'tcs_id': None,
@@ -2493,6 +3497,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:038940',
         'is_alive': None,
         'tcs_id': None,
@@ -2500,6 +3505,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:039407',
         'is_alive': None,
         'tcs_id': None,
@@ -2507,6 +3513,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:041873',
         'is_alive': None,
         'tcs_id': None,
@@ -2514,6 +3521,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:041918',
         'is_alive': None,
         'tcs_id': None,
@@ -2521,6 +3529,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:042656',
         'is_alive': None,
         'tcs_id': None,
@@ -2528,6 +3537,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043151',
         'is_alive': None,
         'tcs_id': None,
@@ -2535,6 +3545,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043273',
         'is_alive': None,
         'tcs_id': None,
@@ -2542,6 +3553,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043275',
         'is_alive': None,
         'tcs_id': None,
@@ -2549,6 +3561,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043333',
         'is_alive': None,
         'tcs_id': None,
@@ -2556,6 +3569,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043337',
         'is_alive': None,
         'tcs_id': None,
@@ -2563,6 +3577,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043352',
         'is_alive': None,
         'tcs_id': None,
@@ -2570,6 +3585,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043436',
         'is_alive': None,
         'tcs_id': None,
@@ -2577,6 +3593,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043468',
         'is_alive': None,
         'tcs_id': None,
@@ -2584,6 +3601,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043526',
         'is_alive': None,
         'tcs_id': None,
@@ -2591,6 +3609,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043531',
         'is_alive': None,
         'tcs_id': None,
@@ -2598,6 +3617,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:043534',
         'is_alive': None,
         'tcs_id': None,
@@ -2605,6 +3625,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:044797',
         'is_alive': None,
         'tcs_id': None,
@@ -2612,6 +3633,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:052764',
         'is_alive': None,
         'tcs_id': None,
@@ -2619,6 +3641,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:055721',
         'is_alive': None,
         'tcs_id': None,
@@ -2626,6 +3649,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:056200',
         'is_alive': None,
         'tcs_id': None,
@@ -2633,6 +3657,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:057565',
         'is_alive': None,
         'tcs_id': None,
@@ -2640,6 +3665,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:059180',
         'is_alive': None,
         'tcs_id': None,
@@ -2647,6 +3673,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:060034',
         'is_alive': None,
         'tcs_id': None,
@@ -2654,6 +3681,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:061022',
         'is_alive': None,
         'tcs_id': None,
@@ -2661,6 +3689,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '21:064743',
         'is_alive': None,
         'tcs_id': None,
@@ -2668,6 +3697,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '22:006100',
         'is_alive': None,
         'tcs_id': None,
@@ -2675,13 +3705,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '22:012299',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 8.9,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '22:014503',
         'is_alive': None,
         'tcs_id': None,
@@ -2689,6 +3722,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '22:014583',
         'is_alive': None,
         'tcs_id': None,
@@ -2696,13 +3730,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '22:032844',
         'is_alive': None,
         'tcs_id': '01:078710',
+        'temperature': 20.33,
         'type': 'Thermostat',
         'zone_idx': '01',
       }),
       dict({
+        'battery_low': None,
         'id': '22:054901',
         'is_alive': None,
         'tcs_id': None,
@@ -2710,6 +3747,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '22:057520',
         'is_alive': None,
         'tcs_id': None,
@@ -2717,13 +3755,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '22:060293',
         'is_alive': None,
         'tcs_id': '01:078710',
+        'temperature': 22.31,
         'type': 'Thermostat',
         'zone_idx': '02',
       }),
       dict({
+        'battery_low': None,
         'id': '22:070483',
         'is_alive': None,
         'tcs_id': None,
@@ -2731,20 +3772,25 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '22:131874',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 15.9,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '22:140285',
         'is_alive': None,
         'tcs_id': '01:145038',
+        'temperature': 18.37,
         'type': 'Thermostat',
         'zone_idx': '0A',
       }),
       dict({
+        'battery_low': None,
         'id': '22:170592',
         'is_alive': None,
         'tcs_id': None,
@@ -2752,6 +3798,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '22:210057',
         'is_alive': None,
         'tcs_id': None,
@@ -2759,136 +3806,163 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '29:052148',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:079817',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:091138',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:098458',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:098549',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:099029',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:123150',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:123160',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:123456',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:136571',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:146052',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:150155',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:151550',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:156898',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:158183',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:162374',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:181813',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:183967',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:186340',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:186341',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:186497',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:206851',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:207706',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:215374',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:226075',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '29:237552',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '30:006056',
         'is_alive': None,
         'tcs_id': None,
@@ -2896,6 +3970,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:027402',
         'is_alive': None,
         'tcs_id': None,
@@ -2903,6 +3978,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:042165',
         'is_alive': None,
         'tcs_id': None,
@@ -2910,6 +3986,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:051821',
         'is_alive': None,
         'tcs_id': None,
@@ -2917,6 +3994,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:068457',
         'is_alive': None,
         'tcs_id': None,
@@ -2924,6 +4002,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:069468',
         'is_alive': None,
         'tcs_id': None,
@@ -2931,6 +4010,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:071715',
         'is_alive': None,
         'tcs_id': None,
@@ -2938,6 +4018,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:077132',
         'is_alive': None,
         'tcs_id': None,
@@ -2945,6 +4026,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:079129',
         'is_alive': None,
         'tcs_id': None,
@@ -2952,6 +4034,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:082155',
         'is_alive': None,
         'tcs_id': None,
@@ -2959,6 +4042,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:084670',
         'is_alive': None,
         'tcs_id': None,
@@ -2966,6 +4050,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:085433',
         'is_alive': None,
         'tcs_id': None,
@@ -2973,6 +4058,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:098165',
         'is_alive': None,
         'tcs_id': None,
@@ -2980,6 +4066,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:123643',
         'is_alive': None,
         'tcs_id': None,
@@ -2987,6 +4074,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:123820',
         'is_alive': None,
         'tcs_id': None,
@@ -2994,6 +4082,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:173916',
         'is_alive': None,
         'tcs_id': None,
@@ -3001,6 +4090,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:185469',
         'is_alive': None,
         'tcs_id': None,
@@ -3008,6 +4098,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:185637',
         'is_alive': None,
         'tcs_id': None,
@@ -3015,6 +4106,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:248208',
         'is_alive': None,
         'tcs_id': None,
@@ -3022,6 +4114,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:257306',
         'is_alive': None,
         'tcs_id': None,
@@ -3029,6 +4122,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:258557',
         'is_alive': None,
         'tcs_id': None,
@@ -3036,6 +4130,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '30:258720',
         'is_alive': None,
         'tcs_id': None,
@@ -3043,6 +4138,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '31:012315',
         'is_alive': None,
         'tcs_id': None,
@@ -3050,6 +4146,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '31:012319',
         'is_alive': None,
         'tcs_id': None,
@@ -3057,6 +4154,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '31:030193',
         'is_alive': None,
         'tcs_id': None,
@@ -3064,6 +4162,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '31:035676',
         'is_alive': None,
         'tcs_id': None,
@@ -3071,6 +4170,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '31:050330',
         'is_alive': None,
         'tcs_id': None,
@@ -3078,6 +4178,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '31:136826',
         'is_alive': None,
         'tcs_id': None,
@@ -3085,6 +4186,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '31:199125',
         'is_alive': None,
         'tcs_id': None,
@@ -3092,200 +4194,241 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '32:022222',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:023459',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:097277',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:097710',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:102225',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:102841',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:123456',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:131186',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:131922',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:132125',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:132403',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:132412',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:133288',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:134044',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:134446',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:137102',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:137185',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:139370',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:139773',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:143293',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:143479',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:153073',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:153258',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:155021',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:155617',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:160269',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:161205',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:161442',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:166025',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:168090',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:168240',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:172522',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:172534',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:206250',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:208628',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '32:236773',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': False,
         'id': '34:002877',
         'is_alive': None,
         'tcs_id': '01:195932',
+        'temperature': 20.2,
         'type': 'Thermostat',
         'zone_idx': '03',
       }),
       dict({
+        'battery_low': False,
         'id': '34:006985',
         'is_alive': None,
         'tcs_id': '01:195932',
+        'temperature': 19.31,
         'type': 'Thermostat',
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '34:011469',
         'is_alive': None,
         'tcs_id': None,
@@ -3293,6 +4436,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:018143',
         'is_alive': None,
         'tcs_id': None,
@@ -3300,20 +4444,25 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:021943',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 21.45,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:030020',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 25.19,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:041323',
         'is_alive': None,
         'tcs_id': None,
@@ -3321,6 +4470,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:044201',
         'is_alive': None,
         'tcs_id': None,
@@ -3328,6 +4478,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:044203',
         'is_alive': None,
         'tcs_id': None,
@@ -3335,6 +4486,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:044213',
         'is_alive': None,
         'tcs_id': None,
@@ -3342,13 +4494,17 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:064023',
         'is_alive': None,
+        'setpoint': 13.0,
         'tcs_id': '01:145038',
+        'temperature': 20.64,
         'type': 'Thermostat',
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '34:074181',
         'is_alive': None,
         'tcs_id': None,
@@ -3356,6 +4512,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:074660',
         'is_alive': None,
         'tcs_id': None,
@@ -3363,6 +4520,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:074756',
         'is_alive': None,
         'tcs_id': None,
@@ -3370,6 +4528,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:074774',
         'is_alive': None,
         'tcs_id': None,
@@ -3377,6 +4536,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:077613',
         'is_alive': None,
         'tcs_id': None,
@@ -3384,6 +4544,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:077615',
         'is_alive': None,
         'tcs_id': None,
@@ -3391,6 +4552,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:089280',
         'is_alive': None,
         'tcs_id': None,
@@ -3398,13 +4560,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '34:092243',
         'is_alive': None,
         'tcs_id': '01:145038',
+        'temperature': 18.16,
         'type': 'Thermostat',
         'zone_idx': '02',
       }),
       dict({
+        'battery_low': None,
         'id': '34:098092',
         'is_alive': None,
         'tcs_id': None,
@@ -3412,6 +4577,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:098094',
         'is_alive': None,
         'tcs_id': None,
@@ -3419,20 +4585,25 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '34:103601',
         'is_alive': None,
         'tcs_id': '01:078710',
+        'temperature': 19.73,
         'type': 'Thermostat',
         'zone_idx': '03',
       }),
       dict({
+        'battery_low': False,
         'id': '34:103839',
         'is_alive': None,
         'tcs_id': '01:078710',
+        'temperature': 19.64,
         'type': 'Thermostat',
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '34:118197',
         'is_alive': None,
         'tcs_id': None,
@@ -3440,6 +4611,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:122891',
         'is_alive': None,
         'tcs_id': None,
@@ -3447,6 +4619,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:123457',
         'is_alive': None,
         'tcs_id': None,
@@ -3454,13 +4627,17 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '34:124201',
         'is_alive': None,
+        'setpoint': 14.0,
         'tcs_id': '01:195932',
+        'temperature': 20.51,
         'type': 'Thermostat',
         'zone_idx': '0B',
       }),
       dict({
+        'battery_low': None,
         'id': '34:125635',
         'is_alive': None,
         'tcs_id': None,
@@ -3468,6 +4645,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:128145',
         'is_alive': None,
         'tcs_id': None,
@@ -3475,13 +4653,17 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '34:136285',
         'is_alive': None,
+        'setpoint': 15.5,
         'tcs_id': '01:145038',
+        'temperature': 20.49,
         'type': 'Thermostat',
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '34:144335',
         'is_alive': None,
         'tcs_id': None,
@@ -3489,6 +4671,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:146623',
         'is_alive': None,
         'tcs_id': None,
@@ -3496,13 +4679,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '34:147397',
         'is_alive': None,
         'tcs_id': '01:078710',
+        'temperature': 20.37,
         'type': 'Thermostat',
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '34:148939',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -3510,6 +4696,7 @@
         'zone_idx': '04',
       }),
       dict({
+        'battery_low': None,
         'id': '34:155573',
         'is_alive': None,
         'tcs_id': None,
@@ -3517,6 +4704,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:157457',
         'is_alive': None,
         'tcs_id': None,
@@ -3524,6 +4712,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:159297',
         'is_alive': None,
         'tcs_id': None,
@@ -3531,6 +4720,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:162993',
         'is_alive': None,
         'tcs_id': None,
@@ -3538,6 +4728,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:172927',
         'is_alive': None,
         'tcs_id': None,
@@ -3545,6 +4736,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:175809',
         'is_alive': None,
         'tcs_id': None,
@@ -3552,6 +4744,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:176169',
         'is_alive': None,
         'tcs_id': None,
@@ -3559,6 +4752,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:176627',
         'is_alive': None,
         'tcs_id': None,
@@ -3566,6 +4760,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:177047',
         'is_alive': None,
         'tcs_id': None,
@@ -3573,13 +4768,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '34:182991',
         'is_alive': None,
         'tcs_id': '01:195932',
+        'temperature': 19.28,
         'type': 'Thermostat',
         'zone_idx': '01',
       }),
       dict({
+        'battery_low': None,
         'id': '34:190267',
         'is_alive': None,
         'tcs_id': None,
@@ -3587,13 +4785,17 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': False,
         'id': '34:194645',
         'is_alive': None,
+        'setpoint': 15.5,
         'tcs_id': '01:195932',
+        'temperature': 18.44,
         'type': 'Thermostat',
         'zone_idx': '00',
       }),
       dict({
+        'battery_low': None,
         'id': '34:195026',
         'is_alive': None,
         'tcs_id': None,
@@ -3601,6 +4803,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:204867',
         'is_alive': None,
         'tcs_id': None,
@@ -3608,13 +4811,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:205645',
         'is_alive': None,
         'tcs_id': '01:145038',
+        'temperature': 20.69,
         'type': 'Thermostat',
         'zone_idx': '07',
       }),
       dict({
+        'battery_low': None,
         'id': '34:208159',
         'is_alive': None,
         'tcs_id': None,
@@ -3622,6 +4828,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:208165',
         'is_alive': None,
         'tcs_id': None,
@@ -3629,6 +4836,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:209032',
         'is_alive': None,
         'tcs_id': None,
@@ -3636,6 +4844,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:213191',
         'is_alive': None,
         'tcs_id': None,
@@ -3643,6 +4852,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:219793',
         'is_alive': None,
         'tcs_id': None,
@@ -3650,6 +4860,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:219801',
         'is_alive': None,
         'tcs_id': None,
@@ -3657,6 +4868,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:219917',
         'is_alive': None,
         'tcs_id': None,
@@ -3664,6 +4876,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:225071',
         'is_alive': None,
         'tcs_id': None,
@@ -3671,6 +4884,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:225954',
         'is_alive': None,
         'tcs_id': None,
@@ -3678,6 +4892,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:226553',
         'is_alive': None,
         'tcs_id': None,
@@ -3685,6 +4900,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:235195',
         'is_alive': None,
         'tcs_id': None,
@@ -3692,6 +4908,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:235203',
         'is_alive': None,
         'tcs_id': None,
@@ -3699,6 +4916,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:235213',
         'is_alive': None,
         'tcs_id': None,
@@ -3706,6 +4924,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:235221',
         'is_alive': None,
         'tcs_id': None,
@@ -3713,6 +4932,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:237681',
         'is_alive': None,
         'tcs_id': None,
@@ -3720,13 +4940,16 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:242504',
         'is_alive': None,
         'tcs_id': None,
+        'temperature': 21.04,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:244333',
         'is_alive': None,
         'tcs_id': None,
@@ -3734,6 +4957,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:247739',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -3741,6 +4965,7 @@
         'zone_idx': '01',
       }),
       dict({
+        'battery_low': None,
         'id': '34:247741',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -3748,6 +4973,7 @@
         'zone_idx': '03',
       }),
       dict({
+        'battery_low': None,
         'id': '34:247743',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -3755,6 +4981,7 @@
         'zone_idx': '06',
       }),
       dict({
+        'battery_low': None,
         'id': '34:247919',
         'is_alive': None,
         'tcs_id': '01:073976',
@@ -3762,6 +4989,7 @@
         'zone_idx': '05',
       }),
       dict({
+        'battery_low': None,
         'id': '34:254211',
         'is_alive': None,
         'tcs_id': None,
@@ -3769,6 +4997,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:254213',
         'is_alive': None,
         'tcs_id': None,
@@ -3776,6 +5005,7 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '34:260920',
         'is_alive': None,
         'tcs_id': None,
@@ -3783,441 +5013,529 @@
         'zone_idx': None,
       }),
       dict({
+        'battery_low': None,
         'id': '37:000001',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:004841',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:005302',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:005608',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:005624',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:005633',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:006393',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:006421',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:006470',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:006488',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:011523',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:014196',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:017639',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:034528',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:039266',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:039271',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:043931',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:053261',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:053679',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:054614',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:062388',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:064328',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:070351',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:078437',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:081967',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:087793',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:108640',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:117647',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:123456',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:125482',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:137928',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:141993',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:151757',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:151780',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:153226',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:154011',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:155617',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:171685',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:171871',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:195851',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:197660',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:197661',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:201960',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:205750',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:205755',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:205756',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:207882',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:211856',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:215972',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:226252',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:227673',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:228323',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:231676',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:231842',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:231859',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:237286',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:237292',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:237600',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:237608',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:237614',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:237616',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:238109',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:238124',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:238167',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:238176',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:239356',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:239374',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:240038',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:242903',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:245348',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:245360',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:245398',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:249697',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:250192',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:250299',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:255297',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:258565',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '37:261128',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '39:159057',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '41:111111',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '42:222222',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '43:333333',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '44:444444',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '45:555555',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '46:666666',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '47:777777',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '48:888888',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
       dict({
+        'battery_low': None,
         'id': '49:999999',
         'is_alive': None,
         'type': 'DeviceHvac',
