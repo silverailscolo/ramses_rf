@@ -11,7 +11,6 @@ concurrent access to pty.openpty().
 
 import asyncio
 from datetime import datetime as dt
-from unittest.mock import patch
 
 import pytest
 
