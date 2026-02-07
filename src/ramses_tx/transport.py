@@ -1374,7 +1374,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         self._extra[SZ_IS_EVOFW3] = True
         self._hass = self._extra.get("_hass")
-        self._zha_device: Any | None = None
+        self._device: Any | None = None
+        self._zha_gateway: Any | None = None
         self._cluster: Any | None = None
         self._write_cluster: Any | None = None
         self._device_ready_unsub: Callable[[], None] | None = None
@@ -1392,9 +1393,19 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
             gateway = await self._wait_for_gateway()
             ieee = EUI64.convert(self._ieee)
-            device = gateway.application_controller.devices.get(ieee)
+
+            device = None
+            zha_devices = getattr(gateway, "devices", None)
+            if zha_devices and ieee in zha_devices:
+                device = zha_devices[ieee]
+            elif getattr(gateway, "application_controller", None):
+                device = gateway.application_controller.devices.get(ieee)
+
             if not device:
                 raise exc.TransportError(f"Zigbee device {self._ieee} not found")
+
+            self._zha_gateway = gateway
+            self._device = device
 
             await self._wait_for_device_ready(device, ieee)
             self._attach_clusters(device)
@@ -1413,6 +1424,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._close(exc.TransportError(str(err)))
 
     def attribute_updated(self, attrid: int, value: Any) -> None:
+        self._ensure_read_cluster_bound()
         if attrid != self._attr_id or not isinstance(value, str):
             return
 
@@ -1425,17 +1437,33 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     async def _write_frame(self, frame: str) -> None:
         if self._closing:
             raise exc.TransportError("Zigbee transport is closing")
-        if not self._write_cluster:
+
+        cluster = self._get_active_write_cluster()
+        if not cluster:
             raise exc.TransportError("Zigbee write cluster not ready")
 
         payload = frame.strip()
         if not payload:
             return
 
-        try:
-            await self._write_cluster.command(0x01, payload, expect_reply=False)
-        except Exception as err:
-            raise exc.TransportError("Failed to send Zigbee command") from err
+        last_err: Exception | None = None
+        for attempt in (1, 2):
+            try:
+                await cluster.command(0x01, payload, expect_reply=False)
+                return
+            except Exception as err:  # pragma: no cover - defensive
+                last_err = err
+                if attempt == 1:
+                    refreshed = self._get_active_write_cluster(force_refresh=True)
+                    if refreshed and refreshed is not cluster:
+                        cluster = refreshed
+                        continue
+                break
+
+        if last_err is None:
+            raise exc.TransportError("Failed to send Zigbee command")
+
+        raise exc.TransportError("Failed to send Zigbee command") from last_err
 
     def close(self) -> None:
         if self._closing:
@@ -1486,7 +1514,18 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 self._device_ready_unsub()
                 self._device_ready_unsub = None
 
-    def _get_cluster(self, device: Any, endpoint_id: int, cluster_id: int) -> Any:
+    def _get_cluster(
+        self, device: Any, endpoint_id: int, cluster_id: int, direction: str = "in"
+    ) -> Any:
+        getter = getattr(device, "async_get_cluster", None)
+        if callable(getter):
+            cluster = getter(endpoint_id, cluster_id, direction)
+            if cluster is None:
+                raise exc.TransportError(
+                    f"Cluster 0x{cluster_id:04x} not found on endpoint {endpoint_id}"
+                )
+            return cluster
+
         if not hasattr(device, "endpoints"):
             raise exc.TransportError("Zigbee device has no endpoints map")
 
@@ -1496,7 +1535,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 f"Endpoint {endpoint_id} not found on Zigbee device {self._ieee}"
             )
 
-        cluster = endpoint.in_clusters.get(cluster_id)
+        clusters_attr = "in_clusters" if direction == "in" else "out_clusters"
+        clusters = getattr(endpoint, clusters_attr, None)
+        if clusters is None:
+            raise exc.TransportError(
+                f"Endpoint {endpoint_id} has no {direction} clusters map"
+            )
+        cluster = clusters.get(cluster_id)
         if cluster is None:
             raise exc.TransportError(
                 f"Cluster 0x{cluster_id:04x} not found on endpoint {endpoint_id}"
@@ -1516,10 +1561,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 device, self._write_endpoint_id, self._write_cluster_id
             )
 
-        self._zha_device = device
+        if self._cluster and hasattr(self._cluster, "remove_listener"):
+            with contextlib.suppress(Exception):
+                self._cluster.remove_listener(self)
+
         self._cluster = read_cluster
         self._write_cluster = write_cluster
-        self._cluster.add_listener(self)
+
+        if hasattr(self._cluster, "add_listener"):
+            self._cluster.add_listener(self)
 
     async def _bind_and_configure(self) -> None:
         if not self._cluster:
@@ -1534,6 +1584,45 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         with contextlib.suppress(Exception):
             await configure(self._attr_id, 0, 0xFFFE, None)
+
+    def _refresh_write_cluster(self) -> Any | None:
+        if not self._device:
+            return self._write_cluster
+
+        try:
+            cluster = self._get_cluster(
+                self._device, self._write_endpoint_id, self._write_cluster_id
+            )
+        except exc.TransportError:
+            return None
+
+        self._write_cluster = cluster
+        return cluster
+
+    def _get_active_write_cluster(self, force_refresh: bool = False) -> Any | None:
+        if force_refresh or self._write_cluster is None:
+            return self._refresh_write_cluster()
+        return self._write_cluster
+
+    def _ensure_read_cluster_bound(self) -> None:
+        if not self._device:
+            return
+
+        try:
+            cluster = self._get_cluster(self._device, self._endpoint_id, self._cluster_id)
+        except exc.TransportError:
+            return
+
+        if cluster is self._cluster:
+            return
+
+        if self._cluster and hasattr(self._cluster, "remove_listener"):
+            with contextlib.suppress(Exception):
+                self._cluster.remove_listener(self)
+
+        self._cluster = cluster
+        if hasattr(self._cluster, "add_listener"):
+            self._cluster.add_listener(self)
 
 
 
