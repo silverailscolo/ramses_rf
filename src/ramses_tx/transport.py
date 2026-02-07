@@ -44,8 +44,11 @@ import contextlib
 import fileinput
 import functools
 import glob
-import json
+import asyncio
+import contextlib
+import glob
 import logging
+import math
 import os
 import re
 import sys
@@ -58,8 +61,6 @@ from io import TextIOWrapper
 from string import printable
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
-from urllib.parse import parse_qs, unquote, urlparse
-
 from paho.mqtt import MQTTException, client as mqtt
 
 try:
@@ -1353,6 +1354,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     _GATEWAY_POLL_INTERVAL: Final[float] = 1.0
     _GATEWAY_POLL_ATTEMPTS: Final[int] = 30
     _DEVICE_READY_TIMEOUT: Final[float] = 60.0
+    _MAX_CHAR_STRING_LEN: Final[int] = 63
+    _CHUNK_BODY_LEN: Final[int] = 54  # leaves room for seq header within 63-char limit
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -1438,55 +1441,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if self._closing:
             raise exc.TransportError("Zigbee transport is closing")
 
-        cluster = self._get_active_write_cluster()
-        if not cluster:
-            raise exc.TransportError("Zigbee write cluster not ready")
-
         _LOGGER.debug("Zigbee write requested frame: %s", frame)
 
         payload = frame.strip()
         if not payload:
             return
 
-        if len(payload) > 63:
-            _LOGGER.debug(
-                "Zigbee payload truncated from %s to 63 characters to fit char-string",
-                len(payload),
-            )
-            payload = payload[:63]
-        _LOGGER.debug(
-            "Zigbee write payload (len=%s endpoint=%s cluster=0x%04x): %s",
-            len(payload),
-            self._write_endpoint_id,
-            self._write_cluster_id,
-            payload,
-        )
-
-        last_err: Exception | None = None
-        for attempt in (1, 2):
-            try:
-                await cluster.command(0x01, payload, expect_reply=False)
-                return
-            except Exception as err:  # pragma: no cover - defensive
-                last_err = err
-                _LOGGER.warning(
-                    "Zigbee write attempt %s failed (endpoint=%s cluster=0x%04x): %s",
-                    attempt,
-                    self._write_endpoint_id,
-                    self._write_cluster_id,
-                    err,
-                )
-                if attempt == 1:
-                    refreshed = self._get_active_write_cluster(force_refresh=True)
-                    if refreshed and refreshed is not cluster:
-                        cluster = refreshed
-                        continue
-                break
-
-        if last_err is None:
-            raise exc.TransportError("Failed to send Zigbee command")
-
-        raise exc.TransportError("Failed to send Zigbee command") from last_err
+        chunks = list(self._chunk_payload(payload))
+        for seq, total, chunk in chunks:
+            await self._send_chunk(chunk, seq, total)
 
     def close(self) -> None:
         if self._closing:
@@ -1646,6 +1609,68 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._cluster = cluster
         if hasattr(self._cluster, "add_listener"):
             self._cluster.add_listener(self)
+
+    def _chunk_payload(self, payload: str) -> list[tuple[int, int, str]]:
+        if len(payload) <= self._MAX_CHAR_STRING_LEN:
+            return [(1, 1, payload)]
+
+        total = math.ceil(len(payload) / self._CHUNK_BODY_LEN)
+        chunks: list[tuple[int, int, str]] = []
+        for idx in range(total):
+            start = idx * self._CHUNK_BODY_LEN
+            body = payload[start : start + self._CHUNK_BODY_LEN]
+            header = f"{idx + 1}/{total}|"
+            allowed = self._MAX_CHAR_STRING_LEN - len(header)
+            if allowed <= 0:
+                raise exc.TransportError("Chunk header exceeds Zigbee char-string limit")
+            body = body[:allowed]
+            chunk = header + body
+            chunks.append((idx + 1, total, chunk))
+
+        return chunks
+
+    async def _send_chunk(self, chunk: str, seq: int, total: int) -> None:
+        cluster = self._get_active_write_cluster()
+        if not cluster:
+            raise exc.TransportError("Zigbee write cluster not ready")
+
+        _LOGGER.debug(
+            "Zigbee write chunk %s/%s (len=%s endpoint=%s cluster=0x%04x): %s",
+            seq,
+            total,
+            len(chunk),
+            self._write_endpoint_id,
+            self._write_cluster_id,
+            chunk,
+        )
+
+        last_err: Exception | None = None
+        for attempt in (1, 2):
+            try:
+                await cluster.command(0x01, chunk, expect_reply=False)
+                return
+            except Exception as err:  # pragma: no cover - defensive
+                last_err = err
+                _LOGGER.warning(
+                    "Zigbee write chunk %s/%s attempt %s failed (endpoint=%s cluster=0x%04x): %s",
+                    seq,
+                    total,
+                    attempt,
+                    self._write_endpoint_id,
+                    self._write_cluster_id,
+                    err,
+                )
+                if attempt == 1:
+                    refreshed = self._get_active_write_cluster(force_refresh=True)
+                    if refreshed and refreshed is not cluster:
+                        cluster = refreshed
+                        continue
+                break
+
+        if last_err is None:
+            raise exc.TransportError("Failed to send Zigbee chunk")
+
+        raise exc.TransportError("Failed to send Zigbee chunk") from last_err
 
 
 
