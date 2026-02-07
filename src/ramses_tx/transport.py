@@ -1446,6 +1446,20 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not payload:
             return
 
+        if len(payload) > 63:
+            _LOGGER.debug(
+                "Zigbee payload truncated from %s to 63 characters to fit char-string",
+                len(payload),
+            )
+            payload = payload[:63]
+        _LOGGER.debug(
+            "Zigbee write payload (len=%s endpoint=%s cluster=0x%04x): %s",
+            len(payload),
+            self._write_endpoint_id,
+            self._write_cluster_id,
+            payload,
+        )
+
         last_err: Exception | None = None
         for attempt in (1, 2):
             try:
