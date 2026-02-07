@@ -3559,7 +3559,7 @@ def parser_3ef0(payload: str, msg: Message) -> PayDictT._3EF0 | PayDictT._JASPER
         # only 10:040239 does 04
 
         assert "_unknown_5" not in result or (
-            payload[10:12] in ("00", "13", "1C", "FF")
+            payload[10:12] in ("00", "13", "1C", "2F", "FF")
         ), f"byte 5: {payload[10:12]}"
 
         assert "_flags_6" not in result or (
