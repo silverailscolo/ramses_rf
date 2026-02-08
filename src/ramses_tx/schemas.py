@@ -365,11 +365,17 @@ def select_device_filter_mode(
     """
 
     # warn if not has_exactly_one_valid_hgi(known_list)
+    known_warn_line2: Final = (
+        "In Ramses RF Config, turn On 'Accept packets from known device IDs only'. "
+    )
+    known_warn_line3: str = (
+        f"For CLI, add `configure: enforce_{SZ_KNOWN_LIST} = True` to a config file."
+    )
 
     if enforce_known_list and not known_list:
         _LOGGER.warning(
             f"Best practice is to enforce a {SZ_KNOWN_LIST} (an allow list), "
-            f"but it is empty, so it can't be used "
+            f"but it is empty, so it can't be used. "
         )
         enforce_known_list = False
 
@@ -390,14 +396,16 @@ def select_device_filter_mode(
     elif known_list:
         _LOGGER.warning(
             f"Best practice is to enforce the {SZ_KNOWN_LIST} as an allow list, "
-            f"configure: {SZ_ENFORCE_KNOWN_LIST} = True"
+            + known_warn_line2
+            + known_warn_line3
         )
         _LOGGER.debug(f"known_list = {known_list}")
 
     else:
         _LOGGER.warning(
             f"Best practice is to provide a {SZ_KNOWN_LIST} and enforce it, "
-            f"configure: {SZ_ENFORCE_KNOWN_LIST} = True"
+            + known_warn_line2
+            + known_warn_line3
         )
 
     return enforce_known_list
