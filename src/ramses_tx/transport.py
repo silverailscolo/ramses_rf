@@ -1383,10 +1383,65 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._cluster: Any | None = None
         self._write_cluster: Any | None = None
         self._device_ready_unsub: Callable[[], None] | None = None
+        self._rx_chunk_active = False
+        self._rx_chunk_total = 0
+        self._rx_chunk_next_seq = 1
+        self._rx_chunk_parts: list[str] = []
 
         self._loop.create_task(
             self._async_init(), name="ZigbeeTransport._async_init()"
         )
+
+    def _reset_rx_chunks(self) -> None:
+        self._rx_chunk_active = False
+        self._rx_chunk_total = 0
+        self._rx_chunk_next_seq = 1
+        self._rx_chunk_parts = []
+
+    def _handle_rx_chunk(self, payload: str) -> str | None:
+        match = re.match(r"^(\d+)/(\d+)\|(.*)$", payload)
+        if not match:
+            return payload
+
+        seq = int(match.group(1))
+        total = int(match.group(2))
+        body = match.group(3)
+
+        if total <= 1:
+            return payload
+        if seq <= 0 or seq > total:
+            _LOGGER.warning("Zigbee chunk invalid seq=%s total=%s", seq, total)
+            self._reset_rx_chunks()
+            return None
+
+        if not self._rx_chunk_active or seq == 1:
+            self._reset_rx_chunks()
+            self._rx_chunk_active = True
+            self._rx_chunk_total = total
+            self._rx_chunk_next_seq = 1
+
+        if self._rx_chunk_next_seq != seq:
+            _LOGGER.warning(
+                "Zigbee chunk out of order (expected=%s got=%s)",
+                self._rx_chunk_next_seq,
+                seq,
+            )
+            self._reset_rx_chunks()
+            return None
+
+        if not body:
+            _LOGGER.warning("Zigbee chunk %s/%s has empty body", seq, total)
+            return None
+
+        self._rx_chunk_parts.append(body)
+        self._rx_chunk_next_seq += 1
+
+        if seq == total:
+            assembled = "".join(self._rx_chunk_parts)
+            self._reset_rx_chunks()
+            return assembled
+
+        return None
 
     async def _async_init(self) -> None:
         try:
@@ -1436,7 +1491,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not payload:
             return
 
-        self._frame_read(dt_now().isoformat(), _normalise(payload))
+        assembled = self._handle_rx_chunk(payload)
+        if assembled is None:
+            return
+
+        self._frame_read(dt_now().isoformat(), _normalise(assembled))
 
     async def _write_frame(self, frame: str) -> None:
         if self._closing:
