@@ -1729,7 +1729,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         last_err: Exception | None = None
         for attempt in (1, 2):
             try:
-                await cluster.command(0x01, chunk, expect_reply=False)
+                from zigpy import types as t
+
+                value = t.CharacterString(chunk)
+                await cluster.write_attributes({self._write_attr_id: value}, manufacturer=None)
                 return
             except Exception as err:  # pragma: no cover - defensive
                 last_err = err
