@@ -1398,6 +1398,28 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._rx_chunk_next_seq = 1
         self._rx_chunk_parts = []
 
+    def _decode_char_string(self, value: Any) -> str | None:
+        if isinstance(value, str):
+            return value
+
+        if isinstance(value, (bytes, bytearray)):
+            raw = bytes(value)
+        elif isinstance(value, list) and value and all(isinstance(x, int) for x in value):
+            raw = bytes(value)
+        else:
+            return None
+
+        if not raw:
+            return None
+
+        # Try ZCL char string format (length byte + payload)
+        if raw[0] <= len(raw) - 1:
+            text = raw[1 : 1 + raw[0]].decode("ascii", errors="ignore")
+        else:
+            text = raw.decode("ascii", errors="ignore")
+
+        return text.strip() if text else None
+
     def _handle_rx_chunk(self, payload: str) -> str | None:
         match = re.match(r"^(\d+)/(\d+)\|(.*)$", payload)
         if not match:
@@ -1484,10 +1506,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
     def attribute_updated(self, attrid: int, value: Any) -> None:
         self._ensure_read_cluster_bound()
-        if attrid != self._attr_id or not isinstance(value, str):
+        if attrid != self._attr_id:
             return
 
-        payload = value.strip()
+        payload = self._decode_char_string(value)
         if not payload:
             return
 
