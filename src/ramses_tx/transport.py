@@ -60,7 +60,7 @@ from functools import partial, wraps
 from io import TextIOWrapper
 from string import printable
 from time import perf_counter
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
 from paho.mqtt import MQTTException, client as mqtt
 
@@ -1357,6 +1357,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     _DEVICE_READY_TIMEOUT: Final[float] = 60.0
     _MAX_CHAR_STRING_LEN: Final[int] = 63
     _CHUNK_BODY_LEN: Final[int] = 54  # leaves room for seq header within 63-char limit
+    _MAX_CHAR_STRING_LEN_CMD: Final[int] = 255
+    _CHUNK_BODY_LEN_CMD: Final[int] = 240  # leaves room for seq header within 255-char limit
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -1376,6 +1378,24 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._write_attr_id = int(path_parts[4], 16 if path_parts[4].startswith("0x") else 10)
         self._write_endpoint_id = int(float(path_parts[5]))
 
+        query = parse_qs(self._zigbee_url.query)
+        mode = (query.get("mode", [""])[0] or "").lower()
+        cmd = (query.get("cmd", ["0x00"])[0] or "0x00")
+        self._use_command_mode = mode in {"cmd", "command", "custom"} or (
+            self._cluster_id == 0xFC00 and self._write_cluster_id == 0xFC01
+        )
+        self._cmd_id = int(cmd, 16 if cmd.startswith("0x") else 10)
+        self._read_direction = "out" if self._use_command_mode else "in"
+        self._write_direction = "in"
+        self._max_char_len = (
+            self._MAX_CHAR_STRING_LEN_CMD
+            if self._use_command_mode
+            else self._MAX_CHAR_STRING_LEN
+        )
+        self._chunk_body_len = (
+            self._CHUNK_BODY_LEN_CMD if self._use_command_mode else self._CHUNK_BODY_LEN
+        )
+
         self._extra[SZ_IS_EVOFW3] = True
         self._hass = self._extra.get("_hass")
         self._device: Any | None = None
@@ -1383,87 +1403,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._cluster: Any | None = None
         self._write_cluster: Any | None = None
         self._device_ready_unsub: Callable[[], None] | None = None
-        self._rx_chunk_active = False
-        self._rx_chunk_total = 0
-        self._rx_chunk_next_seq = 1
-        self._rx_chunk_parts: list[str] = []
 
         self._loop.create_task(
             self._async_init(), name="ZigbeeTransport._async_init()"
         )
-
-    def _reset_rx_chunks(self) -> None:
-        self._rx_chunk_active = False
-        self._rx_chunk_total = 0
-        self._rx_chunk_next_seq = 1
-        self._rx_chunk_parts = []
-
-    def _decode_char_string(self, value: Any) -> str | None:
-        if isinstance(value, str):
-            return value
-
-        if isinstance(value, (bytes, bytearray)):
-            raw = bytes(value)
-        elif isinstance(value, list) and value and all(isinstance(x, int) for x in value):
-            raw = bytes(value)
-        else:
-            return None
-
-        if not raw:
-            return None
-
-        # Try ZCL char string format (length byte + payload)
-        if raw[0] <= len(raw) - 1:
-            text = raw[1 : 1 + raw[0]].decode("ascii", errors="ignore")
-        else:
-            text = raw.decode("ascii", errors="ignore")
-
-        return text.strip() if text else None
-
-    def _handle_rx_chunk(self, payload: str) -> str | None:
-        match = re.match(r"^(\d+)/(\d+)\|(.*)$", payload)
-        if not match:
-            return payload
-
-        seq = int(match.group(1))
-        total = int(match.group(2))
-        body = match.group(3)
-
-        if total <= 1:
-            return payload
-        if seq <= 0 or seq > total:
-            _LOGGER.warning("Zigbee chunk invalid seq=%s total=%s", seq, total)
-            self._reset_rx_chunks()
-            return None
-
-        if not self._rx_chunk_active or seq == 1:
-            self._reset_rx_chunks()
-            self._rx_chunk_active = True
-            self._rx_chunk_total = total
-            self._rx_chunk_next_seq = 1
-
-        if self._rx_chunk_next_seq != seq:
-            _LOGGER.warning(
-                "Zigbee chunk out of order (expected=%s got=%s)",
-                self._rx_chunk_next_seq,
-                seq,
-            )
-            self._reset_rx_chunks()
-            return None
-
-        if not body:
-            _LOGGER.warning("Zigbee chunk %s/%s has empty body", seq, total)
-            return None
-
-        self._rx_chunk_parts.append(body)
-        self._rx_chunk_next_seq += 1
-
-        if seq == total:
-            assembled = "".join(self._rx_chunk_parts)
-            self._reset_rx_chunks()
-            return assembled
-
-        return None
 
     async def _async_init(self) -> None:
         try:
@@ -1506,18 +1449,26 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
     def attribute_updated(self, attrid: int, value: Any) -> None:
         self._ensure_read_cluster_bound()
-        if attrid != self._attr_id:
+        if attrid != self._attr_id or not isinstance(value, str):
             return
 
-        payload = self._decode_char_string(value)
+        payload = value.strip()
         if not payload:
             return
 
-        assembled = self._handle_rx_chunk(payload)
-        if assembled is None:
+        self._frame_read(dt_now().isoformat(), _normalise(payload))
+
+    def cluster_command(
+        self, tsn: int, command_id: int, args: Any, *_args: Any, **_kwargs: Any
+    ) -> None:
+        if not self._use_command_mode:
             return
 
-        self._frame_read(dt_now().isoformat(), _normalise(assembled))
+        payload = self._decode_command_payload(args)
+        if not payload:
+            return
+
+        self._frame_read(dt_now().isoformat(), _normalise(payload))
 
     async def _write_frame(self, frame: str) -> None:
         if self._closing:
@@ -1527,6 +1478,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         payload = frame.strip()
         if not payload:
+            return
+
+        if self._use_command_mode:
+            chunks = list(self._chunk_payload(payload))
+            for seq, total, chunk in chunks:
+                await self._send_command(chunk, seq, total)
             return
 
         chunks = list(self._chunk_payload(payload))
@@ -1617,7 +1574,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         return cluster
 
     def _attach_clusters(self, device: Any) -> None:
-        read_cluster = self._get_cluster(device, self._endpoint_id, self._cluster_id)
+        read_cluster = self._get_cluster(
+            device, self._endpoint_id, self._cluster_id, self._read_direction
+        )
 
         if (self._write_cluster_id, self._write_endpoint_id) == (
             self._cluster_id,
@@ -1626,7 +1585,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             write_cluster = read_cluster
         else:
             write_cluster = self._get_cluster(
-                device, self._write_endpoint_id, self._write_cluster_id
+                device,
+                self._write_endpoint_id,
+                self._write_cluster_id,
+                self._write_direction,
             )
 
         if self._cluster and hasattr(self._cluster, "remove_listener"):
@@ -1642,6 +1604,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     async def _bind_and_configure(self) -> None:
         if not self._cluster:
             raise exc.TransportError("Read cluster handle not available")
+
+        if self._use_command_mode:
+            return
 
         with contextlib.suppress(Exception):
             await self._cluster.bind()
@@ -1659,7 +1624,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         try:
             cluster = self._get_cluster(
-                self._device, self._write_endpoint_id, self._write_cluster_id
+                self._device,
+                self._write_endpoint_id,
+                self._write_cluster_id,
+                self._write_direction,
             )
         except exc.TransportError:
             return None
@@ -1677,7 +1645,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             return
 
         try:
-            cluster = self._get_cluster(self._device, self._endpoint_id, self._cluster_id)
+            cluster = self._get_cluster(
+                self._device, self._endpoint_id, self._cluster_id, self._read_direction
+            )
         except exc.TransportError:
             return
 
@@ -1693,16 +1663,16 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._cluster.add_listener(self)
 
     def _chunk_payload(self, payload: str) -> list[tuple[int, int, str]]:
-        if len(payload) <= self._MAX_CHAR_STRING_LEN:
+        if len(payload) <= self._max_char_len:
             return [(1, 1, payload)]
 
-        total = math.ceil(len(payload) / self._CHUNK_BODY_LEN)
+        total = math.ceil(len(payload) / self._chunk_body_len)
         chunks: list[tuple[int, int, str]] = []
         for idx in range(total):
-            start = idx * self._CHUNK_BODY_LEN
-            body = payload[start : start + self._CHUNK_BODY_LEN]
+            start = idx * self._chunk_body_len
+            body = payload[start : start + self._chunk_body_len]
             header = f"{idx + 1}/{total}|"
-            allowed = self._MAX_CHAR_STRING_LEN - len(header)
+            allowed = self._max_char_len - len(header)
             if allowed <= 0:
                 raise exc.TransportError("Chunk header exceeds Zigbee char-string limit")
             body = body[:allowed]
@@ -1710,6 +1680,69 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             chunks.append((idx + 1, total, chunk))
 
         return chunks
+
+    def _decode_command_payload(self, args: Any) -> str | None:
+        if isinstance(args, str):
+            return args
+
+        if isinstance(args, (bytes, bytearray)):
+            raw = bytes(args)
+        elif isinstance(args, list) and args and all(isinstance(x, int) for x in args):
+            raw = bytes(args)
+        elif isinstance(args, (list, tuple)) and args:
+            return self._decode_command_payload(args[0])
+        else:
+            return None
+
+        if not raw:
+            return None
+
+        return raw.decode("ascii", errors="ignore")
+
+    async def _send_command(self, chunk: str, seq: int, total: int) -> None:
+        cluster = self._get_active_write_cluster()
+        if not cluster:
+            raise exc.TransportError("Zigbee write cluster not ready")
+
+        _LOGGER.debug(
+            "Zigbee write cmd %s/%s (len=%s endpoint=%s cluster=0x%04x cmd=0x%02x): %s",
+            seq,
+            total,
+            len(chunk),
+            self._write_endpoint_id,
+            self._write_cluster_id,
+            self._cmd_id,
+            chunk,
+        )
+
+        last_err: Exception | None = None
+        for attempt in (1, 2):
+            try:
+                await cluster.command(self._cmd_id, chunk, expect_reply=False)
+                return
+            except Exception as err:  # pragma: no cover - defensive
+                last_err = err
+                _LOGGER.warning(
+                    "Zigbee write cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s",
+                    seq,
+                    total,
+                    attempt,
+                    self._write_endpoint_id,
+                    self._write_cluster_id,
+                    self._cmd_id,
+                    err,
+                )
+                if attempt == 1:
+                    refreshed = self._get_active_write_cluster(force_refresh=True)
+                    if refreshed and refreshed is not cluster:
+                        cluster = refreshed
+                        continue
+                break
+
+        if last_err is None:
+            raise exc.TransportError("Failed to send Zigbee command")
+
+        raise exc.TransportError("Failed to send Zigbee command") from last_err
 
     async def _send_chunk(self, chunk: str, seq: int, total: int) -> None:
         cluster = self._get_active_write_cluster()
