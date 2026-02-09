@@ -1697,6 +1697,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not raw:
             return None
 
+        if raw[0] <= len(raw) - 1:
+            return raw[1 : 1 + raw[0]].decode("ascii", errors="ignore")
+
         return raw.decode("ascii", errors="ignore")
 
     async def _send_command(self, chunk: str, seq: int, total: int) -> None:
@@ -1718,7 +1721,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         last_err: Exception | None = None
         for attempt in (1, 2):
             try:
-                await cluster.command(self._cmd_id, chunk, expect_reply=False)
+                from zigpy import types as t
+
+                value = t.CharacterString(chunk)
+                await cluster.command(self._cmd_id, value, expect_reply=False)
                 return
             except Exception as err:  # pragma: no cover - defensive
                 last_err = err
