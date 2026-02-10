@@ -1484,6 +1484,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             chunks = list(self._chunk_payload(payload))
             for seq, total, chunk in chunks:
                 await self._send_command(chunk, seq, total)
+            # Zigbee transport does not provide a physical echo, so synthesize one.
+            self._frame_read(dt_now().isoformat(), _normalise(payload))
             return
 
         chunks = list(self._chunk_payload(payload))
