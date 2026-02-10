@@ -1721,7 +1721,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         last_err: Exception | None = None
         for attempt in (1, 2):
             try:
-                await cluster.command(self._cmd_id, chunk, expect_reply=False)
+                if hasattr(cluster, "client_command"):
+                    await cluster.client_command(self._cmd_id, chunk, expect_reply=False)
+                else:
+                    await cluster.command(self._cmd_id, chunk, expect_reply=False)
                 return
             except Exception as err:  # pragma: no cover - defensive
                 last_err = err
