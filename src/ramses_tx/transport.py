@@ -1721,15 +1721,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         last_err: Exception | None = None
         for attempt in (1, 2):
             try:
-                from zigpy import types as t
-
-                value = t.CharacterString(chunk)
-                await cluster.command(self._cmd_id, value, expect_reply=False)
+                await cluster.command(self._cmd_id, chunk, expect_reply=False)
                 return
             except Exception as err:  # pragma: no cover - defensive
                 last_err = err
                 _LOGGER.warning(
-                    "Zigbee write cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s",
+                    "Zigbee write cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
                     seq,
                     total,
                     attempt,
@@ -1737,6 +1734,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     self._write_cluster_id,
                     self._cmd_id,
                     err,
+                    type(err).__name__,
                 )
                 if attempt == 1:
                     refreshed = self._get_active_write_cluster(force_refresh=True)
