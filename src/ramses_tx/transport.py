@@ -60,7 +60,7 @@ from functools import partial, wraps
 from io import TextIOWrapper
 from string import printable
 from time import perf_counter
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
 from paho.mqtt import MQTTException, client as mqtt
 
