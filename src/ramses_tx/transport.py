@@ -1464,10 +1464,21 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not self._use_command_mode:
             return
 
+        _LOGGER.debug(
+            "Zigbee cluster_command received: tsn=%s cmd_id=0x%02x args_type=%s args_len=%s args_repr=%r",
+            tsn,
+            command_id,
+            type(args).__name__,
+            len(args) if hasattr(args, '__len__') else 'N/A',
+            args[:100] if hasattr(args, '__getitem__') else args,
+        )
+
         payload = self._decode_command_payload(args)
         if not payload:
+            _LOGGER.warning("Zigbee cluster_command: empty payload after decode")
             return
 
+        _LOGGER.debug("Zigbee cluster_command decoded payload (len=%s): %r", len(payload), payload)
         self._frame_read(dt_now().isoformat(), _normalise(payload))
 
     async def _write_frame(self, frame: str) -> None:
@@ -1699,11 +1710,24 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not raw:
             return None
 
+        _LOGGER.debug(
+            "Zigbee _decode_command_payload: raw_len=%s raw[0]=%s raw[:20]=%r",
+            len(raw),
+            raw[0] if len(raw) > 0 else 'empty',
+            raw[:20],
+        )
+
         # Check if this is a valid ZCL char-string (length prefix + data)
         # where the first byte indicates the string length
         if len(raw) >= 2 and raw[0] > 0 and raw[0] <= len(raw) - 1:
             # Extract the actual string data (skip length prefix)
             string_data = raw[1 : 1 + raw[0]]
+            
+            _LOGGER.debug(
+                "Zigbee _decode_command_payload: detected ZCL char-string, string_data_len=%s string_data[:20]=%r",
+                len(string_data),
+                string_data[:20],
+            )
             
             # Check if the string data looks like a chunk header (e.g., "1/2|..." or "2/2|...")
             # This happens when Python sends chunks to ESP
@@ -1714,15 +1738,20 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     if 0 < slash_pos < 3:
                         pipe_pos = data_str.find('|', slash_pos)
                         if slash_pos < pipe_pos < 6:
+                            _LOGGER.debug("Zigbee _decode_command_payload: detected chunk header, returning: %r", data_str)
                             return data_str  # Return chunk as-is
             except (UnicodeDecodeError, AttributeError):
                 pass
             
             # Normal ZCL char-string, decode and return
-            return string_data.decode("ascii", errors="ignore")
+            decoded = string_data.decode("ascii", errors="ignore")
+            _LOGGER.debug("Zigbee _decode_command_payload: ZCL string decoded (len=%s): %r", len(decoded), decoded[:50] if len(decoded) > 50 else decoded)
+            return decoded
 
         # Fallback: decode entire raw data as-is
-        return raw.decode("ascii", errors="ignore")
+        decoded = raw.decode("ascii", errors="ignore")
+        _LOGGER.debug("Zigbee _decode_command_payload: fallback decode (len=%s): %r", len(decoded), decoded[:50] if len(decoded) > 50 else decoded)
+        return decoded
 
     async def _send_command(self, chunk: str, seq: int, total: int) -> None:
         cluster = self._get_active_write_cluster()
