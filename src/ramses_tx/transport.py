@@ -1385,8 +1385,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._cluster_id == 0xFC00 and self._write_cluster_id == 0xFC01
         )
         self._cmd_id = int(cmd, 16 if cmd.startswith("0x") else 10)
-        # For command mode, we listen on server-side ("in") to receive echoes from ESP
-        self._read_direction = "in" if self._use_command_mode else "in"
+        # For custom commands, we listen on client-side cluster where Zigbee stack
+        # delivers incoming commands from the ESP's client cluster
+        self._read_direction = "out" if self._use_command_mode else "in"
         self._write_direction = "in"
         self._max_char_len = (
             self._MAX_CHAR_STRING_LEN_CMD
