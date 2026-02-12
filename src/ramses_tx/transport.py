@@ -1699,6 +1699,21 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not raw:
             return None
 
+        # Check if this looks like a chunk header (e.g., "1/2|..." or "2/2|...")
+        # to avoid misinterpreting the first digit as a ZCL string length prefix
+        try:
+            raw_str = raw.decode("ascii", errors="strict")
+            # Pattern: digit(s) + "/" + digit(s) + "|" indicates a chunk header
+            if len(raw_str) >= 4 and raw_str[0].isdigit():
+                slash_pos = raw_str.find('/')
+                if 0 < slash_pos < 3:  # Allow "1/2" or "10/20" style headers
+                    pipe_pos = raw_str.find('|', slash_pos)
+                    if slash_pos < pipe_pos < 6:  # Pipe should be close after slash
+                        return raw_str  # Return as-is, it's a chunk
+        except (UnicodeDecodeError, AttributeError):
+            pass
+
+        # Otherwise, treat as ZCL char-string with length prefix
         if raw[0] <= len(raw) - 1:
             return raw[1 : 1 + raw[0]].decode("ascii", errors="ignore")
 
