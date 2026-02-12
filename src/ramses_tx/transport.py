@@ -1385,7 +1385,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._cluster_id == 0xFC00 and self._write_cluster_id == 0xFC01
         )
         self._cmd_id = int(cmd, 16 if cmd.startswith("0x") else 10)
-        self._read_direction = "out" if self._use_command_mode else "in"
+        # For command mode, we listen on server-side ("in") to receive echoes from ESP
+        self._read_direction = "in" if self._use_command_mode else "in"
         self._write_direction = "in"
         self._max_char_len = (
             self._MAX_CHAR_STRING_LEN_CMD
@@ -1448,6 +1449,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._close(exc.TransportError(str(err)))
 
     def attribute_updated(self, attrid: int, value: Any) -> None:
+        _LOGGER.debug(
+            "Zigbee attribute_updated: attrid=0x%04x expected=0x%04x value_type=%s",
+            attrid,
+            self._attr_id,
+            type(value).__name__,
+        )
         self._ensure_read_cluster_bound()
         if attrid != self._attr_id or not isinstance(value, str):
             return
@@ -1456,22 +1463,25 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not payload:
             return
 
+        _LOGGER.debug("Zigbee attribute_updated payload: %r", payload)
         self._frame_read(dt_now().isoformat(), _normalise(payload))
 
     def cluster_command(
         self, tsn: int, command_id: int, args: Any, *_args: Any, **_kwargs: Any
     ) -> None:
-        if not self._use_command_mode:
-            return
-
         _LOGGER.debug(
-            "Zigbee cluster_command received: tsn=%s cmd_id=0x%02x args_type=%s args_len=%s args_repr=%r",
+            "Zigbee cluster_command received: tsn=%s cmd_id=0x%02x use_command_mode=%s args_type=%s args_len=%s args_repr=%r",
             tsn,
             command_id,
+            self._use_command_mode,
             type(args).__name__,
             len(args) if hasattr(args, '__len__') else 'N/A',
             args[:100] if hasattr(args, '__getitem__') else args,
         )
+        
+        if not self._use_command_mode:
+            _LOGGER.debug("Zigbee cluster_command: ignoring (not in command mode)")
+            return
 
         payload = self._decode_command_payload(args)
         if not payload:
