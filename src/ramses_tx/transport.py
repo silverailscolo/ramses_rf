@@ -1511,7 +1511,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     await self._send_command(chunk, seq, total)
                     # Delay between chunks to prevent ZBOSS buffer pool exhaustion
                     if seq < total:
-                        await asyncio.sleep(0.01)
+                        await asyncio.sleep(0.025)
                 except Exception as err:
                     _LOGGER.warning(
                         "Zigbee chunk %s/%s failed: %s - continuing", seq, total, err
@@ -1525,7 +1525,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 await self._send_chunk(chunk, seq, total)
                 # Delay between chunks to prevent ZBOSS buffer pool exhaustion
                 if seq < total:
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(0.025)
             except Exception as err:
                 _LOGGER.warning(
                     "Zigbee chunk %s/%s failed: %s - continuing", seq, total, err
