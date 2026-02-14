@@ -1507,13 +1507,29 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if self._use_command_mode:
             chunks = list(self._chunk_payload(payload))
             for seq, total, chunk in chunks:
-                await self._send_command(chunk, seq, total)
+                try:
+                    await self._send_command(chunk, seq, total)
+                    # Delay between chunks to prevent ZBOSS buffer pool exhaustion
+                    if seq < total:
+                        await asyncio.sleep(0.15)
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Zigbee chunk %s/%s failed: %s - continuing", seq, total, err
+                    )
             # Real echo will come from ESP via cluster_command callback
             return
 
         chunks = list(self._chunk_payload(payload))
         for seq, total, chunk in chunks:
-            await self._send_chunk(chunk, seq, total)
+            try:
+                await self._send_chunk(chunk, seq, total)
+                # Delay between chunks to prevent ZBOSS buffer pool exhaustion
+                if seq < total:
+                    await asyncio.sleep(0.15)
+            except Exception as err:
+                _LOGGER.warning(
+                    "Zigbee chunk %s/%s failed: %s - continuing", seq, total, err
+                )
 
     def close(self) -> None:
         if self._closing:
