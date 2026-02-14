@@ -1502,16 +1502,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not payload:
             return
 
+        # Send full payload - ZHA/zigpy handles APS fragmentation automatically
         if self._use_command_mode:
-            chunks = list(self._chunk_payload(payload))
-            for seq, total, chunk in chunks:
-                await self._send_command(chunk, seq, total)
+            await self._send_command(payload, 1, 1)
             # Real echo will come from ESP via cluster_command callback
             return
 
-        chunks = list(self._chunk_payload(payload))
-        for seq, total, chunk in chunks:
-            await self._send_chunk(chunk, seq, total)
+        await self._send_chunk(payload, 1, 1)
 
     def close(self) -> None:
         if self._closing:
@@ -1739,21 +1736,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 string_data[:20],
             )
             
-            # Check if the string data looks like a chunk header (e.g., "1/2|..." or "2/2|...")
-            # This happens when Python sends chunks to ESP
-            try:
-                data_str = string_data.decode("ascii", errors="strict")
-                if len(data_str) >= 4 and data_str[0].isdigit():
-                    slash_pos = data_str.find('/')
-                    if 0 < slash_pos < 3:
-                        pipe_pos = data_str.find('|', slash_pos)
-                        if slash_pos < pipe_pos < 6:
-                            _LOGGER.debug("Zigbee _decode_command_payload: detected chunk header, returning: %r", data_str)
-                            return data_str  # Return chunk as-is
-            except (UnicodeDecodeError, AttributeError):
-                pass
-            
-            # Normal ZCL char-string, decode and return
+            # Decode ZCL char-string (APS fragmentation is handled by Zigbee stack)
             decoded = string_data.decode("ascii", errors="ignore")
             _LOGGER.debug("Zigbee _decode_command_payload: ZCL string decoded (len=%s): %r", len(decoded), decoded[:50] if len(decoded) > 50 else decoded)
             return decoded
