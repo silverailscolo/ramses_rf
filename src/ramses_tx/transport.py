@@ -1356,9 +1356,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     _GATEWAY_POLL_ATTEMPTS: Final[int] = 30
     _DEVICE_READY_TIMEOUT: Final[float] = 60.0
     _MAX_CHAR_STRING_LEN: Final[int] = 63
-    _CHUNK_BODY_LEN: Final[int] = 54  # leaves room for seq header within 63-char limit
+    _CHUNK_BODY_LEN: Final[int] = 32  # Reduced to prevent APS fragmentation & buffer exhaustion
     _MAX_CHAR_STRING_LEN_CMD: Final[int] = 63
-    _CHUNK_BODY_LEN_CMD: Final[int] = 54  # leaves room for seq header within 63-char limit
+    _CHUNK_BODY_LEN_CMD: Final[int] = 32  # Reduced to prevent APS fragmentation & buffer exhaustion
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
