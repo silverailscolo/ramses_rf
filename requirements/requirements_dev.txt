@@ -10,7 +10,7 @@
 # - pip list | grep -E 'pre-commit|ruff|mypy|types-|voluptuous|pytest|hatch'
 
 # used for development (linting)
-  prek == 0.3.2                                 # same as ramses_cc and HA core 2026.1.2
+  prek == 0.3.3                                 # same as ramses_cc and HA core 2026.1.2
   # pre-commit >= 4.3.0                          # replaced by prek since 2026.1
   ruff >= 0.13.0                                 # HA uses 0.13.0 ! also in: pre-commit-config.yaml
 
