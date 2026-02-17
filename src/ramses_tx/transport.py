@@ -1466,6 +1466,17 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         _LOGGER.debug("Zigbee attribute_updated payload: %r", payload)
         self._frame_read(dt_now().isoformat(), _normalise(payload))
+        # If this payload looks like a chunk header, schedule an application ACK
+        try:
+            m = re.match(r"^(\d{1,3})/(\d{1,3})\|", payload)
+            if m:
+                seq = int(m.group(1))
+                total = int(m.group(2))
+                ack = f"ACK {seq}/{total}"
+                # fire-and-forget ACK send
+                self._loop.create_task(self._send_unacked(ack))
+        except Exception:
+            pass
 
     def cluster_command(
         self, tsn: int, command_id: int, args: Any, *_args: Any, **_kwargs: Any
@@ -1491,6 +1502,16 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         _LOGGER.debug("Zigbee cluster_command decoded payload (len=%s): %r", len(payload), payload)
         self._frame_read(dt_now().isoformat(), _normalise(payload))
+        # If payload looks like a chunk header, schedule an ACK
+        try:
+            m = re.match(r"^(\d{1,3})/(\d{1,3})\|", payload)
+            if m:
+                seq = int(m.group(1))
+                total = int(m.group(2))
+                ack = f"ACK {seq}/{total}"
+                self._loop.create_task(self._send_unacked(ack))
+        except Exception:
+            pass
 
     async def _write_frame(self, frame: str) -> None:
         if self._closing:
@@ -1875,6 +1896,19 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             raise exc.TransportError("Failed to send Zigbee chunk")
 
         raise exc.TransportError("Failed to send Zigbee chunk") from last_err
+
+    async def _send_unacked(self, text: str) -> None:
+        """Send a small ZCL payload back to the device without expecting an app-level ACK."""
+        try:
+            chunks = list(self._chunk_payload(text))
+            for seq, total, chunk in chunks:
+                if self._use_command_mode:
+                    await self._send_command(chunk, seq, total)
+                else:
+                    await self._send_chunk(chunk, seq, total)
+                await asyncio.sleep(0.01)
+        except Exception as err:  # pragma: no cover - defensive
+            _LOGGER.warning("Zigbee unacked send failed: %s", err)
 
 
 
