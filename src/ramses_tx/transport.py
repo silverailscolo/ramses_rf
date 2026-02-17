@@ -1600,6 +1600,20 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         def _mark_ready(*_: Any) -> None:
             if not ready_event.is_set():
                 ready_event.set()
+        signal = f"zha_device_initialized_{ieee}"
+        self._device_ready_unsub = async_dispatcher_connect(self._hass, signal, _mark_ready)
+
+        try:
+            await asyncio.wait_for(ready_event.wait(), timeout=self._DEVICE_READY_TIMEOUT)
+        except asyncio.TimeoutError as err:  # pragma: no cover - defensive
+            raise exc.TransportError(
+                f"Zigbee device {ieee} did not finish initializing"
+            ) from err
+        finally:
+            if getattr(self, "_device_ready_unsub", None):
+                self._device_ready_unsub()
+                self._device_ready_unsub = None
+        
 
     def _parse_chunk(self, payload: str) -> tuple[int, int, str] | None:
         """Parse a chunk header of the form 'seq/total|body'. Returns (seq,total,body) or None."""
@@ -1654,19 +1668,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             pass
         return True
 
-        signal = f"zha_device_initialized_{ieee}"
-        self._device_ready_unsub = async_dispatcher_connect(self._hass, signal, _mark_ready)
-
-        try:
-            await asyncio.wait_for(ready_event.wait(), timeout=self._DEVICE_READY_TIMEOUT)
-        except asyncio.TimeoutError as err:
-            raise exc.TransportError(
-                f"Zigbee device {self._ieee} did not finish initializing"
-            ) from err
-        finally:
-            if self._device_ready_unsub:
-                self._device_ready_unsub()
-                self._device_ready_unsub = None
+        
 
     def _get_cluster(
         self, device: Any, endpoint_id: int, cluster_id: int, direction: str = "in"
