@@ -1409,6 +1409,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._loop.create_task(
             self._async_init(), name="ZigbeeTransport._async_init()"
         )
+        # buffers for assembling incoming chunked messages per device
+        self._chunk_buffers: dict[str, dict] = {}
 
     async def _async_init(self) -> None:
         try:
@@ -1465,6 +1467,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             return
 
         _LOGGER.debug("Zigbee attribute_updated payload: %r", payload)
+        # If this is a chunk header, assemble; otherwise pass through
+        try:
+            if self._maybe_handle_incoming_chunk(payload):
+                return
+        except Exception:
+            _LOGGER.exception("Error handling incoming chunk")
         self._frame_read(dt_now().isoformat(), _normalise(payload))
         # If this payload looks like a chunk header, schedule an application ACK
         try:
@@ -1501,6 +1509,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             return
 
         _LOGGER.debug("Zigbee cluster_command decoded payload (len=%s): %r", len(payload), payload)
+        # If chunked, assemble and only call frame_read when complete
+        try:
+            if self._maybe_handle_incoming_chunk(payload):
+                return
+        except Exception:
+            _LOGGER.exception("Error handling incoming chunk")
         self._frame_read(dt_now().isoformat(), _normalise(payload))
         # If payload looks like a chunk header, schedule an ACK
         try:
@@ -1586,6 +1600,59 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         def _mark_ready(*_: Any) -> None:
             if not ready_event.is_set():
                 ready_event.set()
+
+    def _parse_chunk(self, payload: str) -> tuple[int, int, str] | None:
+        """Parse a chunk header of the form 'seq/total|body'. Returns (seq,total,body) or None."""
+        try:
+            m = re.match(r"^(\d{1,3})/(\d{1,3})\|(.*)$", payload, re.DOTALL)
+            if not m:
+                return None
+            seq = int(m.group(1))
+            total = int(m.group(2))
+            body = m.group(3)
+            if seq < 1 or total < 1 or seq > total:
+                return None
+            return (seq, total, body)
+        except Exception:
+            return None
+
+    def _maybe_handle_incoming_chunk(self, payload: str) -> bool:
+        """Handle incoming chunked payloads. If payload is chunked, buffer and
+        assemble; call _frame_read when complete. Returns True if chunk handled
+        (and original should NOT be passed to _frame_read)."""
+        parsed = self._parse_chunk(payload)
+        if not parsed:
+            return False
+        seq, total, body = parsed
+        key = str(self._ieee)
+        buf = self._chunk_buffers.get(key)
+        if not buf or buf.get("total") != total:
+            # start new assembly
+            buf = {"total": total, "parts": [None] * total, "received": 0}
+            self._chunk_buffers[key] = buf
+
+        parts = buf["parts"]
+        if parts[seq - 1] is None:
+            parts[seq - 1] = body
+            buf["received"] += 1
+
+        if buf["received"] < total:
+            # Not complete yet; we still send ACK from elsewhere
+            return True
+
+        # All parts received; assemble and clear buffer
+        assembled = "".join(p if p is not None else "" for p in parts)
+        try:
+            # deliver assembled payload to frame reader
+            self._frame_read(dt_now().isoformat(), _normalise(assembled))
+        except Exception as err:
+            _LOGGER.exception("Error delivering assembled chunk: %s", err)
+        # cleanup
+        try:
+            del self._chunk_buffers[key]
+        except Exception:
+            pass
+        return True
 
         signal = f"zha_device_initialized_{ieee}"
         self._device_ready_unsub = async_dispatcher_connect(self._hass, signal, _mark_ready)
