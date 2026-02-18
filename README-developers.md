@@ -65,6 +65,31 @@ Your IDE should automatically activate the pre-commit check when you try to comm
 The rules for pre-commit are in git in `.pre-commit-config.yaml`.
 Check [issue 170](https://github.com/ramses-rf/ramses_rf/issues/170) when you run into troubles here.
 
+## Regression Snapshot Suite
+
+To guarantee packet processing stability, this repository includes a comprehensive regression suite located in:
+* `tests/tests_tx/test_regression_tx.py` (Transport Layer / Parsing)
+* `tests/tests_rf/test_regression_rf.py` (Application Layer / Device State)
+
+These tests utilize a large dataset of historical raw packets:
+* `tests/fixtures/regression_packets_sorted.txt`
+
+### What these tests do
+These tests are **Replay Tests**, not functional logic tests. They feed the static packet log through the system and assert that the output exactly matches the stored "Gold Standard" snapshots (`.ambr` files) located in:
+* `tests/tests_tx/__snapshots__/test_regression_tx.ambr`
+* `tests/tests_rf/__snapshots__/test_regression_rf.ambr`
+
+They ensure that refactoring parsers or device logic does not inadvertently alter how historical devices are detected or how their state is decoded.
+
+### Snapshot Update Policy
+**Strict Rule:** The snapshot files (`.ambr`) are treated as source code. They should **not** be altered (through a snapshot update) unless there is a specific, understood reason.
+
+If your PR causes a regression test failure:
+1.  **Do not** simply run `--snapshot-update` to make the test pass.
+2.  **Inspect the failure:** Determine if the change in output is a **Regression** (you broke support for an old device) or an **Improvement** (you added support for a new device/attribute).
+3.  **If it is a Regression:** Fix your code.
+4.  **If it is an Improvement:** You may update the snapshot. However, you **must** provide a detailed explanation in your Pull Request description justifying the specific changes seen in the snapshot diff (e.g., *"The snapshot diff shows `device_class` changing from `None` to `CO2Sensor` because this PR adds support for that sensor type"*).
+
 ## More
 Build and view the code documentation locally for easier access and to confirm that
 your own code contribution include proper documentation. See [Usage](docs/source/usage.md) for details.
