@@ -55,9 +55,7 @@ if TYPE_CHECKING:
     from .const import VerbT
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
-    from .typing import DeviceIdT, DeviceListT, PayloadT
-
-_MsgHandlerT = Callable[[Message], None]
+    from .typing import DeviceIdT, DeviceListT, MsgHandlerT, PayloadT
 
 
 DEV_MODE = False
@@ -123,7 +121,7 @@ class Engine:
 
         self._engine_lock = asyncio.Lock()
         self._engine_state: (
-            tuple[_MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
+            tuple[MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
         ) = None
 
         self._protocol: RamsesProtocolT = None  # type: ignore[assignment]
@@ -151,7 +149,7 @@ class Engine:
     def _dt_now(self) -> dt:
         return self._transport._dt_now() if self._transport else dt.now()
 
-    def _set_msg_handler(self, msg_handler: _MsgHandlerT) -> None:
+    def _set_msg_handler(self, msg_handler: MsgHandlerT) -> None:
         """Create an appropriate protocol for the packet source (transport).
 
         The corresponding transport will be created later.

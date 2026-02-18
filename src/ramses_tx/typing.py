@@ -2,7 +2,7 @@
 """RAMSES RF - Typing for RamsesProtocol & RamsesTransport."""
 
 from collections.abc import Callable
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta as td
 from enum import EnumCheck, StrEnum, verify
 from typing import (
     TYPE_CHECKING,
@@ -41,14 +41,6 @@ HeaderT = NewType("HeaderT", str)
 PayloadT = NewType("PayloadT", str)
 
 
-if TYPE_CHECKING:
-    MsgFilterT = Callable[[Message], bool]
-    MsgHandlerT = Callable[[Message], None]
-else:
-    MsgFilterT = Callable[[Any], bool]
-    MsgHandlerT = Callable[[Any], None]
-
-
 # Device Traits
 class DeviceTraitsT(TypedDict):
     alias: str | None
@@ -57,6 +49,13 @@ class DeviceTraitsT(TypedDict):
 
 
 DeviceListT: TypeAlias = dict[DeviceIdT, DeviceTraitsT]
+
+if TYPE_CHECKING:
+    MsgFilterT = Callable[[Message], bool]
+    MsgHandlerT = Callable[[Message], None]
+else:
+    MsgFilterT = Callable[[Any], bool]
+    MsgHandlerT = Callable[[Any], None]
 
 
 # QoS & Send Parameters
@@ -612,7 +611,30 @@ class PortConfigT(TypedDict):
     xonxoff: bool
 
 
-class PktLogConfigT(DeviceTraitsT):  # Re-using TypedDict mixin strategy if needed
+class PktLogConfigT(TypedDict):
     file_name: str
     rotate_backups: int
     rotate_bytes: int | None
+
+
+# CODES_SCHEMA entries
+CodeSchemaEntry = TypedDict(
+    "CodeSchemaEntry",
+    {
+        "name": str,
+        " I": str,  # Regex
+        "RQ": str,  # Regex
+        "RP": str,  # Regex
+        " W": str,  # Regex
+        "lifespan": bool | td | None,
+    },
+    total=False,
+)
+
+
+# For fingerprints.py
+class DeviceFingerprint(TypedDict):
+    slug: str
+    dev_type: str
+    date: str
+    desc: str

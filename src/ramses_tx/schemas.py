@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Final, Never, TypedDict, TypeVar
+from typing import Any, Final, Never, TypeVar
 
 import voluptuous as vol
 
@@ -20,7 +20,7 @@ from .const import (
     MAX_DUTY_CYCLE_RATE,
     MIN_INTER_WRITE_GAP,
 )
-from .typing import DeviceListT, PortConfigT
+from .typing import DeviceListT, PktLogConfigT, PortConfigT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,12 +63,6 @@ SZ_FILE_NAME: Final = "file_name"
 SZ_PACKET_LOG: Final = "packet_log"
 SZ_ROTATE_BACKUPS: Final = "rotate_backups"
 SZ_ROTATE_BYTES: Final = "rotate_bytes"
-
-
-class PktLogConfigT(TypedDict):
-    file_name: str
-    rotate_backups: int
-    rotate_bytes: int | None
 
 
 def sch_packet_log_dict_factory(
