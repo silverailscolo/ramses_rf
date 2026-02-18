@@ -66,6 +66,7 @@ from .ramses import (
     SZ_MIN_VALUE,
     SZ_PRECISION,
 )
+from .typing import DeviceIdT, HeaderT, PayloadT
 from .version import VERSION
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -85,8 +86,6 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 
 if TYPE_CHECKING:
     from .const import VerbT
-    from .frame import HeaderT, PayloadT
-    from .schemas import DeviceIdT
 
 
 COMMAND_FORMAT = "{:<2} {} {} {} {} {} {:03d} {}"
@@ -337,7 +336,7 @@ class Command(Frame):
         except exc.PacketInvalid as err:
             _LOGGER.warning(f"{self} < Command is potentially invalid: {err}")
 
-        self._rx_header: str | None = None
+        self._rx_header: HeaderT | None = None
         # self._source_entity: Entity | None = None  # TODO: is needed?
 
     @classmethod  # convenience constructor
@@ -435,7 +434,7 @@ class Command(Frame):
 
         verb = parts.pop(0)
         seqn = "---" if DEVICE_ID_REGEX.ANY.match(parts[0]) else parts.pop(0)
-        payload = parts.pop()[:48]
+        payload = PayloadT(parts.pop()[:48])
         code = parts.pop()
 
         addrs: tuple[DeviceIdT | str, DeviceIdT | str, DeviceIdT | str]
@@ -501,7 +500,9 @@ class Command(Frame):
             )
 
         payload = f"00{hex_from_temp(temperature)}01"
-        return cls._from_attrs(I_, Code._0002, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._0002, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for RQ|0004
     def get_zone_name(cls, ctl_id: DeviceIdT | str, zone_idx: _ZoneIdxT) -> Command:
@@ -521,7 +522,8 @@ class Command(Frame):
             The zone name is typically a user-assigned identifier for the zone,
             such as "Living Room" or "Bedroom 1".
         """
-        return cls.from_attrs(RQ, ctl_id, Code._0004, f"{_check_idx(zone_idx)}00")
+        payload = f"{_check_idx(zone_idx)}00"
+        return cls.from_attrs(RQ, ctl_id, Code._0004, PayloadT(payload))
 
     @classmethod  # constructor for W|0004
     def set_zone_name(
@@ -546,7 +548,7 @@ class Command(Frame):
             will be replaced with '?'. The name is limited to 20 characters.
         """
         payload = f"{_check_idx(zone_idx)}00{hex_from_str(name)[:40]:0<40}"
-        return cls.from_attrs(W_, ctl_id, Code._0004, payload)
+        return cls.from_attrs(W_, ctl_id, Code._0004, PayloadT(payload))
 
     @classmethod  # constructor for RQ|0006
     def get_schedule_version(cls, ctl_id: DeviceIdT | str) -> Command:
@@ -567,7 +569,7 @@ class Command(Frame):
             occurred. The actual value should be compared with a previously stored
             version to detect changes.
         """
-        return cls.from_attrs(RQ, ctl_id, Code._0006, "00")
+        return cls.from_attrs(RQ, ctl_id, Code._0006, PayloadT("00"))
 
     @classmethod  # constructor for RQ|0008
     def get_relay_demand(
@@ -592,7 +594,7 @@ class Command(Frame):
             - The response will contain the current demand value as a percentage (0-100%).
         """
         payload = "00" if zone_idx is None else _check_idx(zone_idx)
-        return cls.from_attrs(RQ, dev_id, Code._0008, payload)
+        return cls.from_attrs(RQ, dev_id, Code._0008, PayloadT(payload))
 
     @classmethod  # constructor for RQ|000A
     def get_zone_config(cls, ctl_id: DeviceIdT | str, zone_idx: _ZoneIdxT) -> Command:
@@ -619,7 +621,7 @@ class Command(Frame):
             - Other zone-specific settings
         """
         zon_idx = _check_idx(zone_idx)
-        return cls.from_attrs(RQ, ctl_id, Code._000A, zon_idx)
+        return cls.from_attrs(RQ, ctl_id, Code._000A, PayloadT(zon_idx))
 
     @classmethod  # constructor for W|000A
     def set_zone_config(
@@ -685,7 +687,7 @@ class Command(Frame):
             (zon_idx, f"{bitmap:02X}", hex_from_temp(min_temp), hex_from_temp(max_temp))
         )
 
-        return cls.from_attrs(W_, ctl_id, Code._000A, payload)
+        return cls.from_attrs(W_, ctl_id, Code._000A, PayloadT(payload))
 
     @classmethod  # constructor for RQ|0100
     def get_system_language(cls, ctl_id: DeviceIdT | str, **kwargs: Any) -> Command:
@@ -705,7 +707,7 @@ class Command(Frame):
             system's configured language setting.
         """
         assert not kwargs, kwargs
-        return cls.from_attrs(RQ, ctl_id, Code._0100, "00", **kwargs)
+        return cls.from_attrs(RQ, ctl_id, Code._0100, PayloadT("00"), **kwargs)
 
     @classmethod  # constructor for RQ|0404
     def get_schedule_fragment(
@@ -765,7 +767,7 @@ class Command(Frame):
         header = "00230008" if zon_idx == FA else f"{zon_idx}200008"
 
         payload = f"{header}{frag_length}{frag_number:02X}{total_frags:02X}"
-        return cls.from_attrs(RQ, ctl_id, Code._0404, payload, **kwargs)
+        return cls.from_attrs(RQ, ctl_id, Code._0404, PayloadT(payload), **kwargs)
 
     @classmethod  # constructor for W|0404
     def set_schedule_fragment(
@@ -817,7 +819,7 @@ class Command(Frame):
         frag_length = int(len(fragment) / 2)
 
         payload = f"{header}{frag_length:02X}{frag_num:02X}{frag_cnt:02X}{fragment}"
-        return cls.from_attrs(W_, ctl_id, Code._0404, payload)
+        return cls.from_attrs(W_, ctl_id, Code._0404, PayloadT(payload))
 
     @classmethod  # constructor for RQ|0418
     def get_system_log_entry(
@@ -841,7 +843,7 @@ class Command(Frame):
             - The response will include details about the log entry
         """
         log_idx = log_idx if isinstance(log_idx, int) else int(log_idx, 16)
-        return cls.from_attrs(RQ, ctl_id, Code._0418, f"{log_idx:06X}")
+        return cls.from_attrs(RQ, ctl_id, Code._0418, PayloadT(f"{log_idx:06X}"))
 
     @classmethod  # constructor for I|0418 (used for testing only)
     def _put_system_log_entry(
@@ -930,7 +932,7 @@ class Command(Frame):
             )
         )
 
-        return cls.from_attrs(I_, ctl_id, Code._0418, payload)
+        return cls.from_attrs(I_, ctl_id, Code._0418, PayloadT(payload))
 
     @classmethod  # constructor for RQ|1030
     def get_mix_valve_params(
@@ -957,7 +959,7 @@ class Command(Frame):
         """
         zon_idx = _check_idx(zone_idx)
 
-        return cls.from_attrs(RQ, ctl_id, Code._1030, zon_idx)
+        return cls.from_attrs(RQ, ctl_id, Code._1030, PayloadT(zon_idx))
 
     @classmethod  # constructor for W|1030 - TODO: sort out kwargs for HVAC
     def set_mix_valve_params(
@@ -1031,7 +1033,7 @@ class Command(Frame):
             )
         )
 
-        return cls.from_attrs(W_, ctl_id, Code._1030, payload, **kwargs)
+        return cls.from_attrs(W_, ctl_id, Code._1030, PayloadT(payload), **kwargs)
 
     @classmethod  # constructor for RQ|10A0
     def get_dhw_params(cls, ctl_id: DeviceIdT | str, **kwargs: Any) -> Command:
@@ -1057,7 +1059,7 @@ class Command(Frame):
         dhw_idx = _check_idx(kwargs.pop(SZ_DHW_IDX, 0))  # 00 or 01 (rare)
         assert not kwargs, f"Unexpected arguments: {kwargs}"
 
-        return cls.from_attrs(RQ, ctl_id, Code._10A0, dhw_idx)
+        return cls.from_attrs(RQ, ctl_id, Code._10A0, PayloadT(dhw_idx))
 
     @classmethod  # constructor for W|10A0
     def set_dhw_params(
@@ -1120,7 +1122,7 @@ class Command(Frame):
 
         payload = f"{dhw_idx}{hex_from_temp(setpoint)}{overrun:02X}{hex_from_temp(differential)}"
 
-        return cls.from_attrs(W_, ctl_id, Code._10A0, payload)
+        return cls.from_attrs(W_, ctl_id, Code._10A0, PayloadT(payload))
 
     @classmethod  # constructor for RQ|1100
     def get_tpi_params(
@@ -1147,7 +1149,7 @@ class Command(Frame):
         if domain_id is None:
             domain_id = "00" if dev_id[:2] == DEV_TYPE_MAP.BDR else FC
 
-        return cls.from_attrs(RQ, dev_id, Code._1100, _check_idx(domain_id))
+        return cls.from_attrs(RQ, dev_id, Code._1100, PayloadT(_check_idx(domain_id)))
 
     @classmethod  # constructor for W|1100
     def set_tpi_params(
@@ -1210,7 +1212,7 @@ class Command(Frame):
             )
         )
 
-        return cls.from_attrs(W_, ctl_id, Code._1100, payload)
+        return cls.from_attrs(W_, ctl_id, Code._1100, PayloadT(payload))
 
     @classmethod  # constructor for RQ|1260
     def get_dhw_temp(cls, ctl_id: DeviceIdT | str, **kwargs: Any) -> Command:
@@ -1236,7 +1238,7 @@ class Command(Frame):
         dhw_idx = _check_idx(kwargs.pop(SZ_DHW_IDX, 0))  # 00 or 01 (rare)
         assert not kwargs, f"Unexpected arguments: {kwargs}"
 
-        return cls.from_attrs(RQ, ctl_id, Code._1260, dhw_idx)
+        return cls.from_attrs(RQ, ctl_id, Code._1260, PayloadT(dhw_idx))
 
     @classmethod  # constructor for I|1260  # TODO: trap corrupt temps?
     def put_dhw_temp(
@@ -1277,7 +1279,9 @@ class Command(Frame):
             )
 
         payload = f"{dhw_idx}{hex_from_temp(temperature)}"
-        return cls._from_attrs(I_, Code._1260, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._1260, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for I|1290  # TODO: trap corrupt temps?
     def put_outdoor_temp(
@@ -1303,7 +1307,9 @@ class Command(Frame):
             - The device ID should match the expected format for an outdoor temperature sensor
         """
         payload = f"00{hex_from_temp(temperature)}"
-        return cls._from_attrs(I_, Code._1290, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._1290, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for I|1298
     def put_co2_level(cls, dev_id: DeviceIdT | str, co2_level: float | None) -> Command:
@@ -1330,7 +1336,9 @@ class Command(Frame):
             - Example message format: ``.I --- 37:039266 --:------ 37:039266 1298 003 000316``
         """
         payload = f"00{hex_from_double(co2_level)}"
-        return cls._from_attrs(I_, Code._1298, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._1298, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for I|12A0
     def put_indoor_humidity(
@@ -1360,7 +1368,9 @@ class Command(Frame):
             - Example message format: ``.I --- 37:039266 --:------ 37:039266 12A0 003 0032`` (for 50%)
         """
         payload = "00" + hex_from_percent(indoor_humidity, high_res=False)
-        return cls._from_attrs(I_, Code._12A0, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._12A0, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for RQ|12B0
     def get_zone_window_state(
@@ -1384,7 +1394,7 @@ class Command(Frame):
             - This is typically used by thermostats to enable/disable heating when windows are open
             - The actual window state detection is usually done by a separate sensor
         """
-        return cls.from_attrs(RQ, ctl_id, Code._12B0, _check_idx(zone_idx))
+        return cls.from_attrs(RQ, ctl_id, Code._12B0, PayloadT(_check_idx(zone_idx)))
 
     @classmethod  # constructor for RQ|1F41
     def get_dhw_mode(cls, ctl_id: DeviceIdT | str, **kwargs: Any) -> Command:
@@ -1411,7 +1421,7 @@ class Command(Frame):
         dhw_idx = _check_idx(kwargs.pop(SZ_DHW_IDX, 0))  # 00 or 01 (rare)
         assert not kwargs, f"Unexpected arguments: {kwargs}"
 
-        return cls.from_attrs(RQ, ctl_id, Code._1F41, dhw_idx)
+        return cls.from_attrs(RQ, ctl_id, Code._1F41, PayloadT(dhw_idx))
 
     @classmethod  # constructor for W|1F41
     def set_dhw_mode(
@@ -1478,7 +1488,7 @@ class Command(Frame):
             )
         )
 
-        return cls.from_attrs(W_, ctl_id, Code._1F41, payload)
+        return cls.from_attrs(W_, ctl_id, Code._1F41, PayloadT(payload))
 
     @classmethod  # constructor for 1FC9 (rf_bind) 3-way handshake
     def put_bind(
@@ -1595,7 +1605,7 @@ class Command(Frame):
         payload += f"00{Code._1FC9}{hex_id}"
 
         return cls.from_attrs(  # NOTE: .from_attrs, not ._from_attrs
-            I_, dst_id or src_id, Code._1FC9, payload, from_id=src_id
+            I_, dst_id or src_id, Code._1FC9, PayloadT(payload), from_id=src_id
         )  # as dst_id could be NUL_DEV_ID
 
     @classmethod  # constructor for 1FC9 (rf_bind) accept - mainly used for test suite
@@ -1637,7 +1647,7 @@ class Command(Frame):
         hex_id = Address.convert_to_hex(src_id)  # type: ignore[arg-type]
         payload = "".join(f"{idx or '00'}{c}{hex_id}" for c in codes)
 
-        return cls.from_attrs(W_, dst_id, Code._1FC9, payload, from_id=src_id)
+        return cls.from_attrs(W_, dst_id, Code._1FC9, PayloadT(payload), from_id=src_id)
 
     @classmethod  # constructor for 1FC9 (rf_bind) confirm
     def _put_bind_confirm(
@@ -1679,7 +1689,7 @@ class Command(Frame):
             hex_id = Address.convert_to_hex(src_id)  # type: ignore[arg-type]
             payload = f"{idx or '00'}{codes[0]}{hex_id}"
 
-        return cls.from_attrs(I_, dst_id, Code._1FC9, payload, from_id=src_id)
+        return cls.from_attrs(I_, dst_id, Code._1FC9, PayloadT(payload), from_id=src_id)
 
     @classmethod  # constructor for I|22F1
     def set_fan_mode(
@@ -1773,8 +1783,12 @@ class Command(Frame):
             )
 
         if seqn:
-            return cls._from_attrs(I_, Code._22F1, payload, addr2=fan_id, seqn=seqn)
-        return cls._from_attrs(I_, Code._22F1, payload, addr0=src_id, addr1=fan_id)
+            return cls._from_attrs(
+                I_, Code._22F1, PayloadT(payload), addr2=fan_id, seqn=seqn
+            )
+        return cls._from_attrs(
+            I_, Code._22F1, PayloadT(payload), addr0=src_id, addr1=fan_id
+        )
 
     @classmethod  # constructor for I|22F7
     def set_bypass_position(
@@ -1838,7 +1852,7 @@ class Command(Frame):
             pos = "FF"  # auto
 
         return cls._from_attrs(
-            W_, Code._22F7, f"00{pos}", addr0=src_id, addr1=fan_id
+            W_, Code._22F7, PayloadT(f"00{pos}"), addr0=src_id, addr1=fan_id
         )  # trailing EF not required
 
     @classmethod  # constructor for RQ|2309
@@ -1866,7 +1880,7 @@ class Command(Frame):
             The actual number of available zones depends on the controller configuration.
             Requesting a non-existent zone will typically result in no response.
         """
-        return cls.from_attrs(RQ, ctl_id, Code._2309, _check_idx(zone_idx))
+        return cls.from_attrs(RQ, ctl_id, Code._2309, PayloadT(_check_idx(zone_idx)))
 
     @classmethod  # constructor for W|2309
     def set_zone_setpoint(
@@ -1903,7 +1917,7 @@ class Command(Frame):
         """
         # Example: .W --- 34:092243 01:145038 --:------ 2309 003 0107D0
         payload = f"{_check_idx(zone_idx)}{hex_from_temp(setpoint)}"
-        return cls.from_attrs(W_, ctl_id, Code._2309, payload)
+        return cls.from_attrs(W_, ctl_id, Code._2309, PayloadT(payload))
 
     @classmethod  # constructor for RQ|2349
     def get_zone_mode(cls, ctl_id: DeviceIdT | str, zone_idx: _ZoneIdxT) -> Command:
@@ -1924,7 +1938,7 @@ class Command(Frame):
             >>> cmd = Command.get_zone_mode('01:123456', '00')
         """
 
-        return cls.from_attrs(RQ, ctl_id, Code._2349, _check_idx(zone_idx))
+        return cls.from_attrs(RQ, ctl_id, Code._2349, PayloadT(_check_idx(zone_idx)))
 
     @classmethod  # constructor for W|2349
     def set_zone_mode(
@@ -1991,7 +2005,7 @@ class Command(Frame):
             )
         )
 
-        return cls.from_attrs(W_, ctl_id, Code._2349, payload)
+        return cls.from_attrs(W_, ctl_id, Code._2349, PayloadT(payload))
 
     @classmethod  # constructor for W|2411
     def set_fan_param(
@@ -2168,7 +2182,7 @@ class Command(Frame):
             return cls._from_attrs(
                 W_,
                 Code._2411,
-                payload,
+                PayloadT(payload),
                 addr0=src_id,
                 addr1=fan_id,
                 addr2=NON_DEV_ADDR.id,
@@ -2250,7 +2264,9 @@ class Command(Frame):
             fan_id,
         )
 
-        return cls._from_attrs(RQ, Code._2411, payload, addr0=src_id, addr1=fan_id)
+        return cls._from_attrs(
+            RQ, Code._2411, PayloadT(payload), addr0=src_id, addr1=fan_id
+        )
 
     @classmethod  # constructor for RQ|2E04
     def get_system_mode(cls, ctl_id: DeviceIdT | str) -> Command:
@@ -2262,7 +2278,7 @@ class Command(Frame):
         :rtype: Command
         """
 
-        return cls.from_attrs(RQ, ctl_id, Code._2E04, FF)
+        return cls.from_attrs(RQ, ctl_id, Code._2E04, PayloadT(FF))
 
     @classmethod  # constructor for W|2E04
     def set_system_mode(
@@ -2335,7 +2351,7 @@ class Command(Frame):
             )
         )
 
-        return cls.from_attrs(W_, ctl_id, Code._2E04, payload)
+        return cls.from_attrs(W_, ctl_id, Code._2E04, PayloadT(payload))
 
     @classmethod  # constructor for I|2E10
     def put_presence_detected(
@@ -2366,7 +2382,9 @@ class Command(Frame):
             for presence/occupancy reporting in the RAMSES-II protocol.
         """
         payload = f"00{hex_from_bool(presence_detected)}"
-        return cls._from_attrs(I_, Code._2E10, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._2E10, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for RQ|30C9
     def get_zone_temp(cls, ctl_id: DeviceIdT | str, zone_idx: _ZoneIdxT) -> Command:
@@ -2396,7 +2414,7 @@ class Command(Frame):
             The actual number of available zones depends on the controller configuration.
             Requesting a non-existent zone will typically result in no response.
         """
-        return cls.from_attrs(RQ, ctl_id, Code._30C9, _check_idx(zone_idx))
+        return cls.from_attrs(RQ, ctl_id, Code._30C9, PayloadT(_check_idx(zone_idx)))
 
     @classmethod  # constructor for I|30C9  # TODO: trap corrupt temps?
     def put_sensor_temp(
@@ -2444,13 +2462,15 @@ class Command(Frame):
             )
 
         payload = f"00{hex_from_temp(temperature)}"
-        return cls._from_attrs(I_, Code._30C9, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._30C9, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for RQ|313F
     def get_system_time(cls, ctl_id: DeviceIdT | str) -> Command:
         """Constructor to get the datetime of a system (c.f. parser_313f)."""
 
-        return cls.from_attrs(RQ, ctl_id, Code._313F, "00")
+        return cls.from_attrs(RQ, ctl_id, Code._313F, PayloadT("00"))
 
     @classmethod  # constructor for W|313F
     def set_system_time(
@@ -2473,7 +2493,7 @@ class Command(Frame):
         # .W --- 30:185469 01:037519 --:------ 313F 009 0060003A0C1B0107E5
 
         dt_str = hex_from_dtm(datetime, is_dst=is_dst, incl_seconds=True)
-        return cls.from_attrs(W_, ctl_id, Code._313F, f"0060{dt_str}")
+        return cls.from_attrs(W_, ctl_id, Code._313F, PayloadT(f"0060{dt_str}"))
 
     @classmethod  # constructor for I|31DA
     def get_hvac_fan_31da(
@@ -2631,7 +2651,9 @@ class Command(Frame):
         )
         payload += extra
 
-        return cls._from_attrs(I_, Code._31DA, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._31DA, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for RQ|3220
     def get_opentherm_data(cls, otb_id: DeviceIdT | str, msg_id: int | str) -> Command:
@@ -2670,7 +2692,7 @@ class Command(Frame):
         """
         msg_id = msg_id if isinstance(msg_id, int) else int(msg_id, 16)
         payload = f"0080{msg_id:02X}0000" if parity(msg_id) else f"0000{msg_id:02X}0000"
-        return cls.from_attrs(RQ, otb_id, Code._3220, payload)
+        return cls.from_attrs(RQ, otb_id, Code._3220, PayloadT(payload))
 
     @classmethod  # constructor for I|3EF0  # TODO: trap corrupt states?
     def put_actuator_state(
@@ -2717,7 +2739,9 @@ class Command(Frame):
             if modulation_level is None
             else f"00{int(modulation_level * 200):02X}FF"
         )
-        return cls._from_attrs(I_, Code._3EF0, payload, addr0=dev_id, addr2=dev_id)
+        return cls._from_attrs(
+            I_, Code._3EF0, PayloadT(payload), addr0=dev_id, addr2=dev_id
+        )
 
     @classmethod  # constructor for RP|3EF1 (I|3EF1?)  # TODO: trap corrupt values?
     def put_actuator_cycle(
@@ -2777,7 +2801,9 @@ class Command(Frame):
         payload += f"{actuator_countdown:04X}"
         payload += hex_from_percent(modulation_level)
         payload += "FF"
-        return cls._from_attrs(RP, Code._3EF1, payload, addr0=src_id, addr1=dst_id)
+        return cls._from_attrs(
+            RP, Code._3EF1, PayloadT(payload), addr0=src_id, addr1=dst_id
+        )
 
     @classmethod  # constructor for internal use only
     def _puzzle(cls, msg_type: str | None = None, message: str = "") -> Command:
@@ -2837,7 +2863,7 @@ class Command(Frame):
         else:
             payload += hex_from_str(message)
 
-        return cls.from_attrs(I_, ALL_DEV_ADDR.id, Code._PUZZ, payload[:48])
+        return cls.from_attrs(I_, ALL_DEV_ADDR.id, Code._PUZZ, PayloadT(payload[:48]))
 
 
 # A convenience dict

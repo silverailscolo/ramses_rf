@@ -38,12 +38,10 @@ from .schemas import (
     SZ_PORT_CONFIG,
     SZ_PORT_NAME,
     SZ_SQLITE_INDEX,
-    PktLogConfigT,
-    PortConfigT,
     select_device_filter_mode,
 )
 from .transport import transport_factory
-from .typing import QosParams
+from .typing import PktLogConfigT, PortConfigT, QosParams
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -55,10 +53,9 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 
 if TYPE_CHECKING:
     from .const import VerbT
-    from .frame import PayloadT
     from .protocol import RamsesProtocolT
-    from .schemas import DeviceIdT, DeviceListT
     from .transport import RamsesTransportT
+    from .typing import DeviceIdT, DeviceListT, PayloadT
 
 _MsgHandlerT = Callable[[Message], None]
 

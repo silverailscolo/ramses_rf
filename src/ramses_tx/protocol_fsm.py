@@ -24,7 +24,7 @@ from .const import (
     Priority,
 )
 from .packet import Packet
-from .typing import QosParams
+from .typing import HeaderT, QosParams
 
 if TYPE_CHECKING:
     from .protocol import RamsesProtocolT
@@ -551,7 +551,10 @@ class IsInIdle(ProtocolStateBase):
         #  I --- --:------ --:------ 18:000730 0008 002 00BB    # 0008| I|18:000730|00, *and* will be unchanged
 
         if HGI_DEVICE_ID in cmd.tx_header:  # HACK: what do I do about this
-            cmd._hdr_ = cmd._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+            assert cmd._hdr_ is not None  # mypy hint: tx_header ensures it's populated
+            cmd._hdr_ = HeaderT(
+                cmd._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+            )
         self._context.set_state(WantEcho)
 
 
@@ -618,7 +621,10 @@ class WantEcho(ProtocolStateBase):
         #  I --- --:------ --:------ 18:000730 0008 002 00BB
 
         if HGI_DEVICE_ID in pkt._hdr:  # HACK: what do I do about this?
-            pkt__hdr = pkt._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+            assert pkt._hdr_ is not None  # mypy hint
+            pkt__hdr = HeaderT(
+                pkt._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+            )
         else:
             pkt__hdr = pkt._hdr
 

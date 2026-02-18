@@ -9,6 +9,7 @@ import pytest
 
 from ramses_tx import exceptions as exc
 from ramses_tx.transport import CallbackTransport, is_hgi80, transport_factory
+from ramses_tx.typing import SerPortNameT
 
 
 async def _async_callback_factory(*args: Any, **kwargs: Any) -> CallbackTransport:
@@ -126,7 +127,7 @@ async def test_factory_strips_autostart_for_standard_transport() -> None:
 
         await transport_factory(
             mock_protocol,
-            port_name="/dev/ttyUSB0",
+            port_name=SerPortNameT("/dev/ttyUSB0"),
             port_config=port_config,
             autostart=True,  # This argument must be filtered out!
         )
@@ -153,7 +154,7 @@ async def test_factory_strips_autostart_for_mqtt_transport() -> None:
 
         await transport_factory(
             mock_protocol,
-            port_name="mqtt://broker:1883",
+            port_name=SerPortNameT("mqtt://broker:1883"),
             port_config=port_config,
             autostart=True,  # This must be filtered out
         )
@@ -207,7 +208,7 @@ async def test_is_hgi80_async_file_check() -> None:
     # We define a path that contains "by-id" and "evofw3".
     # This ensures that is_hgi80 returns False immediately after the file check,
     # preventing it from proceeding to the complex 'comports' logic which triggers I/O.
-    test_port = "/dev/serial/by-id/usb-SparkFun_evofw3_TEST"
+    test_port = SerPortNameT("/dev/serial/by-id/usb-SparkFun_evofw3_TEST")
 
     # 1. Test: File exists (should return False due to 'evofw3' in name)
     # We patch os.path.exists to return True

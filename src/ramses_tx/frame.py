@@ -22,6 +22,7 @@ from .ramses import (
     CODES_WITH_ARRAYS,
     RQ_NO_PAYLOAD,
 )
+from .typing import HeaderT, PayloadT
 
 # TODO: add _has_idx (as func return only one type, or raise)
 
@@ -47,8 +48,6 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-HeaderT = str
-PayloadT = str
 _PktIdxT = str
 
 
@@ -78,7 +77,7 @@ class Frame:
         self.seqn: str = fields[1]  # . frame[3:6]
         self.code: Code = fields[5]  # type: ignore[assignment]
         self.len_: str = fields[6]  # . frame[42:45]  FIXME: len_, _len & len(payload)/2
-        self.payload: PayloadT = fields[7]  # frame[46:].split(" ")[0]
+        self.payload: PayloadT = PayloadT(fields[7])  # frame[46:].split(" ")[0]
         self._len: int = int(len(self.payload) / 2)
 
         try:
@@ -95,7 +94,7 @@ class Frame:
             )
 
         self._ctx_: bool | str = None  # type: ignore[assignment]
-        self._hdr_: str = None  # type: ignore[assignment]
+        self._hdr_: HeaderT | None = None
         self._idx_: bool | str = None  # type: ignore[assignment]
 
         self._has_array_: bool = None  # type: ignore[assignment]
@@ -349,7 +348,7 @@ class Frame:
     def _force_has_array(self) -> None:
         self._has_array_ = True
         self._ctx_ = None  # type: ignore[assignment]
-        self._hdr_ = None  # type: ignore[assignment]
+        self._hdr_ = None
         self._idx_ = None  # type: ignore[assignment]
 
     @property
@@ -396,9 +395,9 @@ class Frame:
             return self._hdr_
 
         # FIXME: HACK: sometimes RecursionError
-        self._hdr_ = "|".join((self.code, self.verb))  # type: ignore[unreachable]
+        self._hdr_ = HeaderT("|".join((self.code, self.verb)))
         self._hdr_ = pkt_header(self)
-        return self._hdr_
+        return self._hdr_  # type: ignore[return-value]
 
     @property
     def _idx(self) -> bool | str:  # FIXME: a mess
@@ -532,11 +531,13 @@ def pkt_header(pkt: Frame, /, rx_header: bool = False) -> None | HeaderT:
         # .I --- 34:021943 01:145038 --:------ 1FC9 006 00-2309-8855B7
         if not rx_header:
             device_id = ALL_DEV_ADDR.id if pkt.src == pkt.dst else pkt.dst.id
-            return "|".join((pkt.code, pkt.verb, device_id))
+            return HeaderT("|".join((pkt.code, pkt.verb, device_id)))
         if pkt.src == pkt.dst:  # and pkt.verb == I_:
-            return "|".join((pkt.code, W_, pkt.src.id))
+            return HeaderT("|".join((pkt.code, W_, pkt.src.id)))
         if pkt.verb == W_:  # and pkt.src != pkt.dst:
-            return "|".join((pkt.code, I_, pkt.src.id))  # TODO: why not pkt.dst?
+            return HeaderT(
+                "|".join((pkt.code, I_, pkt.src.id))
+            )  # TODO: why not pkt.dst?
         # if pkt.verb == RQ:  # and pkt.src != pkt.dst:  # TODO: this breaks things
         #     return "|".join((pkt.code, RP, pkt.dst.id))
         return None
@@ -557,6 +558,6 @@ def pkt_header(pkt: Frame, /, rx_header: bool = False) -> None | HeaderT:
         header = "|".join((pkt.code, pkt.verb, pkt.dst.id))
 
     try:
-        return f"{header}|{pkt._ctx}" if isinstance(pkt._ctx, str) else header
+        return HeaderT(f"{header}|{pkt._ctx}" if isinstance(pkt._ctx, str) else header)
     except AssertionError:
-        return header
+        return HeaderT(header)

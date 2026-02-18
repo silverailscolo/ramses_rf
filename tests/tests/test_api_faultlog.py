@@ -9,8 +9,7 @@ from ramses_rf import Address, Command, Message, Packet
 from ramses_rf.system.faultlog import FaultLog, FaultLogEntry
 from ramses_tx.address import HGI_DEVICE_ID
 from ramses_tx.const import SZ_LOG_ENTRY, FaultDeviceClass, FaultState, FaultType
-from ramses_tx.schemas import DeviceIdT
-from ramses_tx.typed_dicts import LogIdxT
+from ramses_tx.typing import DeviceIdT, LogIdxT
 
 from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,

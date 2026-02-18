@@ -44,7 +44,7 @@ from ramses_tx.opentherm import (
     OtMsgType,
 )
 from ramses_tx.ramses import CODES_OF_HEAT_DOMAIN_ONLY, CODES_ONLY_FROM_CTL
-from ramses_tx.typed_dicts import PayDictT
+from ramses_tx.typing import PayDictT, PayloadT
 
 from .base import BatteryState, DeviceHeat, Fakeable
 
@@ -148,7 +148,7 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
         if msg.code == Code._3EF0 and msg.verb == I_ and not self.is_faked:
             # lf._send_cmd(Command.get_relay_demand(self.id), qos=QOS_LOW)
             self._send_cmd(
-                Command.from_attrs(RQ, self.id, Code._3EF1, "00"), **QOS_LOW
+                Command.from_attrs(RQ, self.id, Code._3EF1, PayloadT("00")), **QOS_LOW
             )  # actuator cycle
 
     @property
@@ -409,7 +409,9 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
         # Only RPs are: 0001, 0005/000C, 10E0, 000A/2309 & 22D0
 
-        cmd = Command.from_attrs(RQ, self.id, Code._0005, f"00{DEV_ROLE_MAP.UFH}")
+        cmd = Command.from_attrs(
+            RQ, self.id, Code._0005, PayloadT(f"00{DEV_ROLE_MAP.UFH}")
+        )
         self._add_discovery_cmd(cmd, 60 * 60 * 24)
 
         # TODO: this needs work
@@ -422,7 +424,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
             self._add_discovery_cmd(cmd, 60 * 60 * 6)
 
         for ufc_idx in range(8):
-            payload = f"{ufc_idx:02X}{DEV_ROLE_MAP.UFH}"
+            payload = PayloadT(f"{ufc_idx:02X}{DEV_ROLE_MAP.UFH}")
             cmd = Command.from_attrs(RQ, self.id, Code._000C, payload)
             self._add_discovery_cmd(cmd, 60 * 60 * 24)
 
@@ -709,7 +711,9 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             if use_native_ot in ("always", "prefer"):
                 return Command.get_opentherm_data(self.id, msg_id)
             if msg_id in self.OT_TO_RAMSES:  # is: in ("avoid", "never")
-                return Command.from_attrs(RQ, self.id, self.OT_TO_RAMSES[msg_id], "00")
+                return Command.from_attrs(
+                    RQ, self.id, self.OT_TO_RAMSES[msg_id], PayloadT("00")
+                )
             if use_native_ot == "avoid":
                 return Command.get_opentherm_data(self.id, msg_id)
             return None  # use_native_ot == "never"
@@ -722,10 +726,10 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
 
         if self._gwy.config.use_native_ot != "always":
             self._add_discovery_cmd(
-                Command.from_attrs(RQ, self.id, Code._3EF0, "00"), 60
+                Command.from_attrs(RQ, self.id, Code._3EF0, PayloadT("00")), 60
             )
             self._add_discovery_cmd(  # NOTE: this code is a WIP
-                Command.from_attrs(RQ, self.id, Code._2401, "00"), 60
+                Command.from_attrs(RQ, self.id, Code._2401, PayloadT("00")), 60
             )
 
         for data_id in SCHEMA_DATA_IDS:  # From OT v2.2: version numbers
@@ -748,7 +752,9 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
                 Code._3221,  # R8810A/20A
                 Code._3223,  # R8810A/20A
             ):
-                self._add_discovery_cmd(Command.from_attrs(RQ, self.id, code, "00"), 60)
+                self._add_discovery_cmd(
+                    Command.from_attrs(RQ, self.id, code, PayloadT("00")), 60
+                )
 
         if _DBG_EXTRA_OTB_DISCOVERY:  # TODO: these are WIP, appear FIXED in payload
             for code in (
@@ -761,7 +767,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
                 Code._2420,  # payload always "0000001000000...
             ):  # TODO: to test against BDR91T
                 self._add_discovery_cmd(
-                    Command.from_attrs(RQ, self.id, code, "00"), 300
+                    Command.from_attrs(RQ, self.id, code, PayloadT("00")), 300
                 )
 
     def _handle_msg(self, msg: Message) -> None:
@@ -1376,7 +1382,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
         self._add_discovery_cmd(Command.get_tpi_params(self.id), 6 * 3600)  # params
         self._add_discovery_cmd(
-            Command.from_attrs(RQ, self.id, Code._3EF1, "00"),
+            Command.from_attrs(RQ, self.id, Code._3EF1, PayloadT("00")),
             60 if self._child_id in (F9, FA, FC) else 300,
         )  # status
 

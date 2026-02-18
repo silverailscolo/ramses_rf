@@ -10,8 +10,8 @@ import pytest
 import serial  # type: ignore[import-untyped]
 
 from ramses_rf import Address, Code, Command, Gateway
-from ramses_tx.schemas import DeviceIdT
 from ramses_tx.transport import PortTransport
+from ramses_tx.typing import DeviceIdT
 from tests_rf.virtual_rf import VirtualRf, rf_factory
 
 # other constants

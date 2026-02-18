@@ -39,8 +39,8 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 )
 
 if TYPE_CHECKING:
-    from .schemas import DeviceIdT, DeviceListT
     from .transport import RamsesTransportT
+    from .typing import DeviceIdT, DeviceListT
 
 
 TIP = f", configure the {SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"

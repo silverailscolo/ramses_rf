@@ -85,15 +85,8 @@ from .const import (
 )
 from .helpers import dt_now
 from .packet import Packet
-from .schemas import (
-    SCH_SERIAL_PORT_CONFIG,
-    SZ_EVOFW_FLAG,
-    SZ_INBOUND,
-    SZ_OUTBOUND,
-    DeviceIdT,
-    PortConfigT,
-)
-from .typing import ExceptionT, SerPortNameT
+from .schemas import SCH_SERIAL_PORT_CONFIG, SZ_EVOFW_FLAG, SZ_INBOUND, SZ_OUTBOUND
+from .typing import DeviceIdT, ExceptionT, PortConfigT, SerPortNameT
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,

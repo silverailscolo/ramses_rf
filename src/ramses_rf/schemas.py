@@ -47,10 +47,10 @@ from ramses_tx.schemas import (  # noqa: F401
     SZ_KNOWN_LIST as SZ_KNOWN_LIST,
     SZ_PACKET_LOG,
     SZ_SCHEME as SZ_SCHEME,
-    DeviceIdT,
     sch_packet_log_dict_factory,
     select_device_filter_mode,
 )
+from ramses_tx.typing import DeviceIdT
 
 from . import exceptions as exc
 
