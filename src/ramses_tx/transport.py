@@ -84,6 +84,7 @@ from .const import (
     SZ_SIGNATURE,
 )
 from .helpers import dt_now
+from .interfaces import TransportInterface
 from .packet import Packet
 from .schemas import SCH_SERIAL_PORT_CONFIG, SZ_EVOFW_FLAG, SZ_INBOUND, SZ_OUTBOUND
 from .typing import DeviceIdT, ExceptionT, PortConfigT, SerPortNameT
@@ -597,7 +598,7 @@ class _MqttTransportAbstractor:
 # ### Code shared by all R/O, R/W transport types (File/dict, Serial, MQTT)
 
 
-class _ReadTransport(_BaseTransport):
+class _ReadTransport(_BaseTransport, TransportInterface):
     """Interface for read-only transports."""
 
     _protocol: RamsesProtocolT = None  # type: ignore[assignment]
@@ -689,7 +690,7 @@ class _ReadTransport(_BaseTransport):
         self._closing = True
 
         self.loop.call_soon_threadsafe(
-            functools.partial(self._protocol.connection_lost, exc)  # type: ignore[arg-type]
+            functools.partial(self._protocol.connection_lost, exc)
         )
 
     def close(self) -> None:
@@ -721,7 +722,7 @@ class _ReadTransport(_BaseTransport):
         self._extra[SZ_ACTIVE_HGI] = gwy_id  # or HGI_DEV_ADDR.id
 
         self.loop.call_soon_threadsafe(  # shouldn't call this until we have HGI-ID
-            functools.partial(self._protocol.connection_made, self, ramses=True)  # type: ignore[arg-type]
+            functools.partial(self._protocol.connection_made, self, ramses=True)
         )
 
     # NOTE: all transport should call this method when they receive data
@@ -775,6 +776,10 @@ class _ReadTransport(_BaseTransport):
             _LOGGER.exception("%s < exception from msg layer: %s", pkt, err)
         except exc.ProtocolError as err:  # protect from upper layers
             _LOGGER.error("%s < exception from msg layer: %s", pkt, err)
+
+    async def send_frame(self, frame: str) -> None:
+        """Send a frame (alias for write_frame)."""
+        await self.write_frame(frame)
 
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
         """Transmit a frame via the underlying handler (e.g. serial port, MQTT).
@@ -989,7 +994,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
             await self._producer_loop()
         except Exception as err:
             self.loop.call_soon_threadsafe(
-                functools.partial(self._protocol.connection_lost, err)  # type: ignore[arg-type]
+                functools.partial(self._protocol.connection_lost, err)
             )
         else:
             self.loop.call_soon_threadsafe(
@@ -1760,7 +1765,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             _LOGGER.warning("MQTT publish returned no info")
         elif info.rc != mqtt.MQTT_ERR_SUCCESS:
             _LOGGER.warning(f"MQTT publish failed with code: {info.rc}")
-            # Check if this indicates a connection issue
+            # Check for connection issues
             if info.rc in (mqtt.MQTT_ERR_NO_CONN, mqtt.MQTT_ERR_CONN_LOST):
                 self._connected = False
                 if not self._closing:

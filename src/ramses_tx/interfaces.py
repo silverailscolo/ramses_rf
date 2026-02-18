@@ -77,7 +77,7 @@ class StateMachineInterface(ABC):
         """Called when the connection is lost."""
 
     @abstractmethod
-    def pkt_rcvd(self, pkt: "Packet") -> None:
+    def pkt_received(self, pkt: "Packet") -> None:
         """Called when a packet is received."""
 
     @abstractmethod
