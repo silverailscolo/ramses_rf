@@ -58,15 +58,18 @@ class Packet(Frame):
         :raises PacketInvalid: If the frame content is malformed.
         """
 
-        super().__init__(frame[4:])  # remove RSSI
-
         self._dtm: dt = dtm
-
         self._rssi: str = frame[0:3]
 
         self.comment: str = kwargs.get("comment", "")
         self.error_text: str = kwargs.get("err_msg", "")
         self.raw_frame: str = kwargs.get("raw_frame", "")
+
+        # Intercept null packets before the strict Frame regex validation explodes
+        if not frame[4:].strip() and self.comment:
+            raise exc.PacketInvalid("Null packet")
+
+        super().__init__(frame[4:])  # remove RSSI
 
         self._lifespan: bool | td = pkt_lifespan(self) or False
 
@@ -81,9 +84,6 @@ class Packet(Frame):
         try:
             if self.error_text:
                 raise exc.PacketInvalid(self.error_text)
-
-            if not self._frame and self.comment:  # log null pkts only if has a comment
-                raise exc.PacketInvalid("Null packet")
 
             super()._validate(strict_checking=strict_checking)  # no RSSI
 
@@ -115,7 +115,13 @@ class Packet(Frame):
 
     @property
     def dtm(self) -> dt:
+        """Return the datetime when the packet was received."""
         return self._dtm
+
+    @property
+    def rssi(self) -> str:
+        """Return the received signal strength indicator (RSSI)."""
+        return self._rssi
 
     @staticmethod
     def _partition(pkt_line: str) -> tuple[str, str, str]:  # map[str]
