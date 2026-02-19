@@ -49,13 +49,13 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
 )
 from ramses_tx import Address, Command, Message, Priority
-from ramses_tx.typed_dicts import PayDictT
+from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 
 from .schedule import InnerScheduleT, OuterScheduleT, Schedule
 
 if TYPE_CHECKING:
     from ramses_tx import Packet
-    from ramses_tx.schemas import DeviceIdT, DevIndexT
+    from ramses_tx.typing import DeviceIdT, DevIndexT
 
     from .heat import Evohome, _MultiZoneT, _StoredHwT
 
@@ -221,7 +221,8 @@ class DhwZone(ZoneSchedule):  # CS92A
             f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
         ):
             self._add_discovery_cmd(
-                Command.from_attrs(RQ, self.ctl.id, Code._000C, payload), 60 * 60 * 24
+                Command.from_attrs(RQ, self.ctl.id, Code._000C, PayloadT(payload)),
+                60 * 60 * 24,
             )
 
         self._add_discovery_cmd(Command.get_dhw_params(self.ctl.id), 60 * 60 * 6)
@@ -545,7 +546,7 @@ class Zone(ZoneSchedule):
 
         for dev_role in (self._ROLE_ACTUATORS, DEV_ROLE_MAP.SEN):
             cmd = Command.from_attrs(
-                RQ, self.ctl.id, Code._000C, f"{self.idx}{dev_role}"
+                RQ, self.ctl.id, Code._000C, PayloadT(f"{self.idx}{dev_role}")
             )
             self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=0.5)
 
@@ -584,13 +585,13 @@ class Zone(ZoneSchedule):
             return
 
         if [t for t in self._discovery_cmds if t[-2:] in ZON_ROLE_MAP.HEAT_ZONES] and (
-            self._discovery_cmds.pop(f"{self.idx}{ZON_ROLE_MAP.ACT}", [])
+            self._discovery_cmds.pop(HeaderT(f"{self.idx}{ZON_ROLE_MAP.ACT}"), [])
         ):
             _LOGGER.warning(f"cmd({cmd}): inferior header removed from discovery")
 
         if (
-            self._discovery_cmds.get(f"{self.idx}{ZON_ROLE_MAP.VAL}")
-            and (self._discovery_cmds[f"{self.idx}{ZON_ROLE_MAP.ELE}"])
+            self._discovery_cmds.get(HeaderT(f"{self.idx}{ZON_ROLE_MAP.VAL}"))
+            and (self._discovery_cmds[HeaderT(f"{self.idx}{ZON_ROLE_MAP.ELE}")])
         ):
             _LOGGER.warning(f"cmd({cmd}): inferior header removed from discovery")
 

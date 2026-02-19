@@ -52,7 +52,7 @@ def test_device_hvac_slugs() -> None:
     ]
 
 
-def assert_codes_idx_mutex(mutex_list: set, other_list: set) -> None:
+def assert_codes_idx_mutex(mutex_list: set[Code], other_list: set[Code]) -> None:
     """Assert the two lists are mutually exclusive."""
 
     codes = sorted(c for c in mutex_list if c in other_list)
@@ -91,15 +91,19 @@ def test_codes_idx_simple_mutex() -> None:
 
 
 def test_codes_mutex() -> None:
-    assert_codes_idx_mutex(RQ_IDX_ONLY, CODE_IDX_ARE_NONE)
+    # RQ_IDX_ONLY is a list, convert to set for the helper
+    assert_codes_idx_mutex(set(RQ_IDX_ONLY), CODE_IDX_ARE_NONE)
 
 
-RQ_IDX_NONE = [k for k, v in CODES_SCHEMA.items() if v.get(RQ, "")[:3] == "^00"]
+# Cast .get() result to str() to ensure it is indexable/sliceable
+RQ_IDX_NONE = [k for k, v in CODES_SCHEMA.items() if str(v.get(RQ, ""))[:3] == "^00"]
+
 RQ_IDX_ONLY = [
     k
     for k, v in CODES_SCHEMA.items()
     if k not in RQ_NO_PAYLOAD and (v.get(RQ) in (r"^0[0-9A-F]00$", r"^0[0-9A-F](00)?$"))
 ]
+
 RQ_IDX_UNKNOWN = [
     k
     for k, v in CODES_SCHEMA.items()

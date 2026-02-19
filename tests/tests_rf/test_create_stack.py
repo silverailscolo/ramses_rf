@@ -15,8 +15,8 @@ import serial  # type: ignore[import-untyped]
 from ramses_rf import Message
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.protocol import RamsesProtocolT, create_stack, protocol_factory
-from ramses_tx.schemas import DeviceIdT
 from ramses_tx.transport import RamsesTransportT, transport_factory
+from ramses_tx.typing import DeviceIdT
 
 from .virtual_rf import HgiFwTypes, VirtualRf
 

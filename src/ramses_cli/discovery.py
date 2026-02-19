@@ -16,6 +16,7 @@ from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
 from ramses_rf.device import Fakeable
 from ramses_tx import CODES_SCHEMA, Command, DeviceIdT, Priority
 from ramses_tx.opentherm import OTB_DATA_IDS
+from ramses_tx.typing import PayloadT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -176,7 +177,7 @@ def script_poll_device(gwy: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task[Non
     tasks = []
 
     for code in (Code._0016, Code._1FC9):
-        cmd = Command.from_attrs(RQ, dev_id, code, "00")
+        cmd = Command.from_attrs(RQ, dev_id, code, PayloadT("00"))
         tasks.append(asyncio.create_task(periodic_send(gwy, cmd, count=0)))
 
     gwy._tasks.extend(tasks)
@@ -194,24 +195,34 @@ async def script_scan_disc(gwy: Gateway, dev_id: DeviceIdT) -> None:
 async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
     _LOGGER.warning("scan_full() invoked - expect a lot of Warnings")
 
-    gwy.send_cmd(Command.from_attrs(RQ, dev_id, Code._0016, "0000"), num_repeats=3)
+    gwy.send_cmd(
+        Command.from_attrs(RQ, dev_id, Code._0016, PayloadT("0000")), num_repeats=3
+    )
 
     for code in sorted(CODES_SCHEMA):
         if code == Code._0005:
             for zone_type in range(20):  # known up to 18
-                gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, f"00{zone_type:02X}"))
+                gwy.send_cmd(
+                    Command.from_attrs(RQ, dev_id, code, PayloadT(f"00{zone_type:02X}"))
+                )
 
         elif code == Code._000C:
             for zone_idx in range(16):  # also: FA-FF?
-                gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, f"{zone_idx:02X}00"))
+                gwy.send_cmd(
+                    Command.from_attrs(RQ, dev_id, code, PayloadT(f"{zone_idx:02X}00"))
+                )
 
         elif code == Code._0016:
             continue
 
         elif code in (Code._01D0, Code._01E9):
             for zone_idx in ("00", "01", "FC"):  # type: ignore[assignment]
-                gwy.send_cmd(Command.from_attrs(W_, dev_id, code, f"{zone_idx}00"))
-                gwy.send_cmd(Command.from_attrs(W_, dev_id, code, f"{zone_idx}03"))
+                gwy.send_cmd(
+                    Command.from_attrs(W_, dev_id, code, PayloadT(f"{zone_idx}00"))
+                )
+                gwy.send_cmd(
+                    Command.from_attrs(W_, dev_id, code, PayloadT(f"{zone_idx}03"))
+                )
 
         elif code == Code._0404:  # FIXME
             gwy.send_cmd(Command.get_schedule_fragment(dev_id, "HW", 1, 0))
@@ -239,14 +250,14 @@ async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
             and RQ in CODES_SCHEMA[code]
             and re.match(CODES_SCHEMA[code][RQ], "00")
         ):
-            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, "00"))
+            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("00")))
 
         else:
-            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, "0000"))
+            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("0000")))
 
     # these are possible/difficult codes
     for code in (Code._0150, Code._2389):
-        gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, "0000"))
+        gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("0000")))
 
 
 @script_decorator
@@ -279,7 +290,7 @@ async def script_scan_fan(gwy: Gateway, dev_id: DeviceIdT) -> None:
         c for k in _DEV_KLASSES_HVAC.values() for c in k if c not in OUT_CODES
     )
     for code in OLD_CODES:
-        gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, "00"))
+        gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("00")))
 
     NEW_CODES = (
         Code._0150,
@@ -308,7 +319,7 @@ async def script_scan_fan(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
     for code in NEW_CODES:
         if code not in OLD_CODES and code not in OUT_CODES:
-            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, "00"))
+            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("00")))
 
 
 @script_decorator
@@ -345,7 +356,9 @@ async def script_scan_otb_map(gwy: Gateway, dev_id: DeviceIdT) -> None:
     }
 
     for code, msg_id in RAMSES_TO_OPENTHERM.items():
-        gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, "00"), priority=Priority.LOW)
+        gwy.send_cmd(
+            Command.from_attrs(RQ, dev_id, code, PayloadT("00")), priority=Priority.LOW
+        )
         gwy.send_cmd(Command.get_opentherm_data(dev_id, msg_id), priority=Priority.LOW)
 
 
@@ -381,7 +394,9 @@ async def script_scan_otb_ramses(gwy: Gateway, dev_id: DeviceIdT) -> None:
     )
 
     for c in _CODES:
-        gwy.send_cmd(Command.from_attrs(RQ, dev_id, c, "00"), priority=Priority.LOW)
+        gwy.send_cmd(
+            Command.from_attrs(RQ, dev_id, c, PayloadT("00")), priority=Priority.LOW
+        )
 
 
 SCRIPTS = {

@@ -17,7 +17,7 @@ from ramses_tx.const import (
     FaultType,
 )
 from ramses_tx.helpers import parse_fault_log_entry
-from ramses_tx.schemas import DeviceIdT
+from ramses_tx.typing import DeviceIdT, PayloadT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -249,7 +249,7 @@ class FaultLog:  # 0418  # TODO: use a NamedTuple
             return Message(pkt)
 
         idx = cmd.rx_header[-2:]  # cmd._idx could be bool/None?
-        pkt.payload = f"0000{idx}B0000000000000000000007FFFFF7000000000"
+        pkt.payload = PayloadT(f"0000{idx}B0000000000000000000007FFFFF7000000000")
 
         # NOTE: must now reset pkt payload, and its header
         pkt._repr = pkt._hdr_ = pkt._ctx_ = pkt._idx_ = None  # type: ignore[assignment]

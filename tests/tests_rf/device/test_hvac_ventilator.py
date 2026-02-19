@@ -12,7 +12,7 @@ from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.gateway import Gateway
 from ramses_tx import Address
 from ramses_tx.const import Code
-from ramses_tx.schemas import DeviceIdT
+from ramses_tx.typing import DeviceIdT
 
 # Test data
 TEST_DEVICE_ID = "32:123456"

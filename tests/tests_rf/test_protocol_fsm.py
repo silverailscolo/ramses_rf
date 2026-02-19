@@ -179,7 +179,7 @@ async def _test_flow_30x(protocol: PortProtocol) -> None:
         protocol._transport is not None
     )  # mypy: fixture ensures transport is connected
     # STEP 0: Setup...
-    rf: VirtualRf = protocol._transport._extra["virtual_rf"]
+    rf: VirtualRf = protocol._transport.get_extra_info("virtual_rf")
     ser = serial.Serial(rf.ports[1])
 
     qos = QosParams(wait_for_reply=True)

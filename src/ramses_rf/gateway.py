@@ -42,10 +42,9 @@ from ramses_tx.schemas import (
     SZ_BLOCK_LIST,
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST,
-    PktLogConfigT,
-    PortConfigT,
 )
 from ramses_tx.transport import SZ_READER_TASK
+from ramses_tx.typing import PktLogConfigT, PortConfigT
 
 from .const import DONT_CREATE_MESSAGES, SZ_DEVICES
 from .database import MessageIndex

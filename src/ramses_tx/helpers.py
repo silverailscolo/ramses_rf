@@ -52,7 +52,7 @@ from .const import (
 from .ramses import _31DA_FAN_INFO
 
 if TYPE_CHECKING:
-    from .typed_dicts import PayDictT
+    from .typing import PayDictT
 
 # Sensor faults
 SZ_UNRELIABLE: Final = "unreliable"

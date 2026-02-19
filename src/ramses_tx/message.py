@@ -389,12 +389,19 @@ def _check_msg_payload(msg: MessageBase, payload: str) -> None:
     if msg.code not in CODES_SCHEMA:
         raise exc.PacketInvalid(f"Unknown code: {msg.code}")
 
-    try:
-        regex = CODES_SCHEMA[msg.code][msg.verb]
-    except KeyError:
-        raise exc.PacketInvalid(
-            f"Unknown verb/code pair: {msg.verb}/{msg.code}"
-        ) from None
+    # Guard the TypedDict access by verifying the key against literals
+    # We use a tuple of strings that match the CodeSchemaEntry keys
+    if msg.verb not in ("RQ", "RP", " I", " W"):
+        raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
 
-    if not re_compile_re_match(regex, payload):
-        raise exc.PacketPayloadInvalid(f"Payload doesn't match '{regex}': {payload}")
+    # Now that we've checked the literal membership, Mypy allows the access
+    # We use .get() to return the regex (str) and safely handle missing verbs
+    regex = CODES_SCHEMA[msg.code].get(msg.verb)
+
+    if not regex:
+        raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
+
+    if not re_compile_re_match(str(regex), payload):
+        raise exc.PacketPayloadInvalid(
+            f"Payload doesn't match {msg.verb}/{msg.code}: {payload} != {regex}"
+        )

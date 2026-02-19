@@ -57,7 +57,7 @@ from .ramses import (
     SZ_MIN_VALUE,
     SZ_PRECISION,
 )
-from .schemas import SZ_BOUND_TO, SZ_SERIAL_PORT, DeviceIdT, DeviceListT
+from .schemas import SZ_BOUND_TO, SZ_SERIAL_PORT
 from .transport import (
     FileTransport,
     PortTransport,
@@ -65,7 +65,7 @@ from .transport import (
     is_hgi80,
     transport_factory,
 )
-from .typing import QosParams
+from .typing import DeviceIdT, DeviceListT, QosParams
 from .version import VERSION
 
 from .const import (  # isort: skip

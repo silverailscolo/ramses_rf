@@ -14,9 +14,8 @@ from ramses_rf import Command, Gateway
 from ramses_tx import exceptions as exc
 from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.protocol import PortProtocol
-from ramses_tx.schemas import DeviceIdT
 from ramses_tx.transport import MqttTransport
-from ramses_tx.typing import QosParams
+from ramses_tx.typing import DeviceIdT, QosParams
 
 from .conftest import _GwyConfigDictT
 

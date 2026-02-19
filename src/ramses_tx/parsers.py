@@ -136,7 +136,7 @@ from .opentherm import (
     decode_frame,
 )
 from .ramses import _31D9_FAN_INFO_VASCO, _2411_PARAMS_SCHEMA
-from .typed_dicts import PayDictT
+from .typing import PayDictT
 from .version import VERSION
 
 # Kudos & many thanks to:

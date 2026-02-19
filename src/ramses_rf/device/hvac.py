@@ -44,6 +44,7 @@ from ramses_rf.const import (
 from ramses_rf.entity_base import class_by_attr
 from ramses_tx import Address, Command, Message, Packet, Priority
 from ramses_tx.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR
+from ramses_tx.typing import PayloadT
 
 from .base import BatteryState, DeviceHvac, Fakeable
 
@@ -226,7 +227,9 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         super()._setup_discovery_cmds()
 
         self._add_discovery_cmd(
-            Command.from_attrs(RQ, self.id, Code._10D0, "00"), 60 * 60 * 24, delay=30
+            Command.from_attrs(RQ, self.id, Code._10D0, PayloadT("00")),
+            60 * 60 * 24,
+            delay=30,
         )
 
     @property
@@ -685,7 +688,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
         # RP --- 32:155617 18:005904 --:------ 22F1 003 000207
         self._add_discovery_cmd(
-            Command.from_attrs(RQ, self.id, Code._22F1, "00"), 60 * 60 * 24, delay=15
+            Command.from_attrs(RQ, self.id, Code._22F1, PayloadT("00")),
+            60 * 60 * 24,
+            delay=15,
         )  # to learn scheme: orcon/itho/other (04/07/0?)
 
         # Add a single discovery command for all parameters (3F likely to be supported if any)
@@ -693,7 +698,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         # also set the supports_2411 flag
         _LOGGER.debug("Adding single discovery command for all 2411 parameters")
         self._add_discovery_cmd(
-            Command.from_attrs(RQ, self.id, Code._2411, "00003F"),
+            Command.from_attrs(RQ, self.id, Code._2411, PayloadT("00003F")),
             interval=60 * 60 * 24,  # Check daily
             delay=40,  # Initial delay before first discovery
         )
@@ -709,12 +714,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             Code._22F8,  # Air quality base
         ):
             self._add_discovery_cmd(
-                Command.from_attrs(RQ, self.id, code, "00"), 60 * 30, delay=15
+                Command.from_attrs(RQ, self.id, code, PayloadT("00")), 60 * 30, delay=15
             )
 
         for code in (Code._313E, Code._3222):
             self._add_discovery_cmd(
-                Command.from_attrs(RQ, self.id, code, "00"), 60 * 30, delay=30
+                Command.from_attrs(RQ, self.id, code, PayloadT("00")), 60 * 30, delay=30
             )
 
     def add_bound_device(self, device_id: str, device_type: str) -> None:
