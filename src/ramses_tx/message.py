@@ -66,6 +66,7 @@ class MessageBase:
         self._addrs: tuple[Address, Address, Address] = pkt._addrs
 
         self.dtm: dt = pkt.dtm
+        self.rssi: str = pkt.rssi
 
         self.verb: VerbT = pkt.verb
         self.seqn: str = (
