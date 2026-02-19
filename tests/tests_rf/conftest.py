@@ -16,7 +16,7 @@ from ramses_rf import Gateway
 from ramses_rf.device import HgiGateway
 from ramses_tx import exceptions as exc
 from ramses_tx.address import HGI_DEVICE_ID
-from ramses_tx.schemas import DeviceIdT
+from ramses_tx.typing import DeviceIdT
 from tests_rf.virtual_rf import HgiFwTypes, VirtualRf
 
 #

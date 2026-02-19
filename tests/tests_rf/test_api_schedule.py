@@ -11,7 +11,7 @@ from ramses_rf.system import Evohome, Zone
 from ramses_rf.system.schedule import InnerScheduleT
 from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.protocol import PortProtocol
-from ramses_tx.schemas import DeviceIdT
+from ramses_tx.typing import DeviceIdT
 
 from .conftest import _GwyConfigDictT
 from .virtual_rf import VirtualRf

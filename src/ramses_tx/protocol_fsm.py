@@ -23,13 +23,12 @@ from .const import (
     Code,
     Priority,
 )
+from .interfaces import StateMachineInterface, TransportInterface
 from .packet import Packet
-from .typing import QosParams
+from .typing import HeaderT, QosParams
 
 if TYPE_CHECKING:
     from .protocol import RamsesProtocolT
-    from .transport import RamsesTransportT
-    from .typing import ExceptionT
 
 #
 # NOTE: All debug flags should be False for deployment to end-users
@@ -45,7 +44,7 @@ _FutureT: TypeAlias = asyncio.Future[Packet]
 _QueueEntryT: TypeAlias = tuple[Priority, dt, Command, QosParams, _FutureT]
 
 
-class ProtocolContext:
+class ProtocolContext(StateMachineInterface):
     SEND_TIMEOUT_LIMIT = MAX_SEND_TIMEOUT
 
     def __init__(
@@ -312,15 +311,16 @@ class ProtocolContext:
         assert self._qos is not None, f"{self}: Coding error"  # mypy hint
         # _LOGGER.debug("AFTER. = %s: wait_for_reply=%s", self, self._qos.wait_for_reply)
 
-    def connection_made(self, transport: RamsesTransportT) -> None:
+    def connection_made(self, transport: TransportInterface) -> None:
         # may want to set some instance variables, according to type of transport
         self._state.connection_made()
 
     # TODO: Should we clear the buffer if connection is lost (and apologise to senders?
-    def connection_lost(self, err: ExceptionT | None) -> None:
+    def connection_lost(self, err: Exception | None) -> None:
         self._state.connection_lost()
 
-    def pkt_received(self, pkt: Packet) -> Any:
+    def pkt_received(self, pkt: Packet) -> None:
+        """Process a received packet (echo or reply)."""
         self._state.pkt_rcvd(pkt)
 
     def pause_writing(self) -> None:
@@ -551,7 +551,10 @@ class IsInIdle(ProtocolStateBase):
         #  I --- --:------ --:------ 18:000730 0008 002 00BB    # 0008| I|18:000730|00, *and* will be unchanged
 
         if HGI_DEVICE_ID in cmd.tx_header:  # HACK: what do I do about this
-            cmd._hdr_ = cmd._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+            assert cmd._hdr_ is not None  # mypy hint: tx_header ensures it's populated
+            cmd._hdr_ = HeaderT(
+                cmd._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+            )
         self._context.set_state(WantEcho)
 
 
@@ -618,7 +621,10 @@ class WantEcho(ProtocolStateBase):
         #  I --- --:------ --:------ 18:000730 0008 002 00BB
 
         if HGI_DEVICE_ID in pkt._hdr:  # HACK: what do I do about this?
-            pkt__hdr = pkt._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+            assert pkt._hdr_ is not None  # mypy hint
+            pkt__hdr = HeaderT(
+                pkt._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+            )
         else:
             pkt__hdr = pkt._hdr
 

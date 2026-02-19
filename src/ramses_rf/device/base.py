@@ -24,6 +24,7 @@ from ramses_rf.schemas import (
 )
 from ramses_tx import Command, Packet, Priority, QosParams
 from ramses_tx.ramses import CODES_BY_DEV_SLUG, CODES_ONLY_FROM_CTL
+from ramses_tx.typing import PayloadT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -259,7 +260,7 @@ class DeviceInfo(DeviceBase):  # 10E0
         if self._SLUG not in CODES_BY_DEV_SLUG or RP in CODES_BY_DEV_SLUG[
             self._SLUG
         ].get(Code._10E0, {}):
-            cmd = Command.from_attrs(RQ, self.id, Code._10E0, "00")
+            cmd = Command.from_attrs(RQ, self.id, Code._10E0, PayloadT("00"))
             self._add_discovery_cmd(cmd, 60 * 60 * 24)
 
     @property

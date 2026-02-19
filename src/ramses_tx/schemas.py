@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Final, Never, NewType, TypeAlias, TypedDict, TypeVar
+from typing import Any, Final, Never, TypeVar
 
 import voluptuous as vol
 
@@ -20,6 +20,7 @@ from .const import (
     MAX_DUTY_CYCLE_RATE,
     MIN_INTER_WRITE_GAP,
 )
+from .typing import DeviceListT, PktLogConfigT, PortConfigT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,26 +65,11 @@ SZ_ROTATE_BACKUPS: Final = "rotate_backups"
 SZ_ROTATE_BYTES: Final = "rotate_bytes"
 
 
-class PktLogConfigT(TypedDict):
-    file_name: str
-    rotate_backups: int
-    rotate_bytes: int | None
-
-
 def sch_packet_log_dict_factory(
     default_backups: int = 0,
 ) -> dict[vol.Required, vol.Any]:
     """
     :return: a packet log dict with a configurable default rotation policy.
-
-    Usage:
-
-    .. code-block::
-
-        SCH_PACKET_LOG_7 = vol.Schema(
-            packet_log_dict_factory(default_backups=7), extra=vol.PREVENT_EXTRA
-        )
-
     """
 
     SCH_PACKET_LOG_CONFIG = vol.Schema(
@@ -145,35 +131,18 @@ SCH_SERIAL_PORT_CONFIG = vol.Schema(
     {
         vol.Optional(SZ_BAUDRATE, default=115200): vol.All(
             vol.Coerce(int), vol.Any(57600, 115200)
-        ),  # NB: HGI80 does not work, except at 115200 - so must be default
+        ),
         vol.Optional(SZ_DSRDTR, default=False): bool,
         vol.Optional(SZ_RTSCTS, default=False): bool,
-        vol.Optional(SZ_TIMEOUT, default=0): vol.Any(None, int),  # default None?
-        vol.Optional(SZ_XONXOFF, default=True): bool,  # set True to remove \x11
+        vol.Optional(SZ_TIMEOUT, default=0): vol.Any(None, int),
+        vol.Optional(SZ_XONXOFF, default=True): bool,
     },
     extra=vol.PREVENT_EXTRA,
 )
 
 
-class PortConfigT(TypedDict):
-    baudrate: int  # 57600, 115200
-    dsrdtr: bool
-    rtscts: bool
-    timeout: int
-    xonxoff: bool
-
-
 def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
-    """Return a serial port dict.
-
-    Usage:
-
-    .. code-block::
-
-        SCH_SERIAL_PORT = vol.Schema(
-            sch_serial_port_dict_factory(), extra=vol.PREVENT_EXTRA
-        )
-    """
+    """Return a serial port dict."""
 
     SCH_SERIAL_PORT_NAME = str
 
@@ -242,30 +211,11 @@ _SCH_TRAITS_DOMAINS = ("heat", "hvac")
 _SCH_TRAITS_HVAC_SCHEMES = ("itho", "nuaire", "orcon", "vasco", "climarad")
 
 
-DeviceTraitsT = TypedDict(
-    "DeviceTraitsT",
-    {
-        "alias": str | None,
-        "faked": bool | None,
-        "class": str | None,
-    },
-)
-
-
 def sch_global_traits_dict_factory(
     heat_traits: dict[vol.Optional, vol.Any] | None = None,
     hvac_traits: dict[vol.Optional, vol.Any] | None = None,
 ) -> tuple[dict[vol.Optional, vol.Any], vol.Any]:
-    """Return a global traits dict with a configurable extra traits.
-
-    Usage:
-
-    .. code-block::
-
-        SCH_GLOBAL_TRAITS = vol.Schema(
-            sch_global_traits_dict(heat=traits), extra=vol.PREVENT_EXTRA
-        )
-    """
+    """Return a global traits dict with a configurable extra traits."""
 
     heat_traits = heat_traits or {}
     hvac_traits = hvac_traits or {}
@@ -274,13 +224,11 @@ def sch_global_traits_dict_factory(
         {
             vol.Optional(SZ_ALIAS, default=None): vol.Any(None, str),
             vol.Optional(SZ_FAKED, default=None): vol.Any(None, bool),
-            vol.Optional(vol.Remove("_note")): str,  # only for convenience, not used
+            vol.Optional(vol.Remove("_note")): str,
         },
         extra=vol.PREVENT_EXTRA,
     )
 
-    # NOTE: voluptuous doesn't like StrEnums, hence str(s)
-    # TIP: the _domain key can be used to force which traits schema to use
     heat_slugs = list(
         str(s) for s in DEV_TYPE_MAP.slugs() if s not in DEV_TYPE_MAP.HVAC_SLUGS
     )
@@ -294,18 +242,16 @@ def sch_global_traits_dict_factory(
     )
     SCH_TRAITS_HEAT = SCH_TRAITS_HEAT.extend(
         heat_traits,
-        extra=vol.PREVENT_EXTRA,  # Always prevent extra keys
+        extra=vol.PREVENT_EXTRA,
     )
 
-    # NOTE: voluptuous doesn't like StrEnums, hence str(s)
     hvac_slugs = list(str(s) for s in DEV_TYPE_MAP.HVAC_SLUGS)
     SCH_TRAITS_HVAC = SCH_TRAITS_BASE.extend(
         {
             vol.Optional("_domain", default="hvac"): "hvac",
             vol.Optional(SZ_CLASS, default="HVC"): vol.Any(
                 None, *hvac_slugs, *(str(DEV_TYPE_MAP[s]) for s in hvac_slugs)
-            ),  # TODO: consider removing None
-            # Add 'bound' trait for FAN devices
+            ),
             vol.Optional(SZ_BOUND_TO): vol.Any(None, vol.Match(DEVICE_ID_REGEX.ANY)),
         }
     )
@@ -314,7 +260,7 @@ def sch_global_traits_dict_factory(
     )
     SCH_TRAITS_HVAC = SCH_TRAITS_HVAC.extend(
         hvac_traits,
-        extra=vol.PREVENT_EXTRA,  # Always prevent extra keys
+        extra=vol.PREVENT_EXTRA,
     )
 
     SCH_TRAITS = vol.Any(
@@ -327,7 +273,7 @@ def sch_global_traits_dict_factory(
         extra=vol.PREVENT_EXTRA,
     )
 
-    global_traits_dict = {  # Filter lists with Device traits...
+    global_traits_dict = {
         vol.Optional(SZ_KNOWN_LIST, default={}): vol.Any(
             vol.All(None, ConvertNullToDict()),
             vol.All(SCH_DEVICE, vol.Length(min=0)),
@@ -343,28 +289,14 @@ def sch_global_traits_dict_factory(
 
 SCH_GLOBAL_TRAITS_DICT, SCH_TRAITS = sch_global_traits_dict_factory()
 
-#
-# Device lists (Engine configuration)
-
-DeviceIdT = NewType("DeviceIdT", str)  # TypeVar('DeviceIdT', bound=str)  #
-DevIndexT = NewType("DevIndexT", str)
-DeviceListT: TypeAlias = dict[DeviceIdT, DeviceTraitsT]
-
 
 def select_device_filter_mode(
     enforce_known_list: bool,
     known_list: DeviceListT,
     block_list: DeviceListT,
 ) -> bool:
-    """
-    Determine which device filter to use, if any.
+    """Determine which device filter to use, if any."""
 
-    Either:
-     - block if device_id in block_list (could be empty), otherwise
-     - allow if device_id in known_list, or
-    """
-
-    # warn if not has_exactly_one_valid_hgi(known_list)
     known_warn_line2: Final = (
         "In Ramses RF Config, turn On 'Accept packets from known device IDs only'. "
     )
@@ -419,32 +351,22 @@ SZ_AUTOSTART: Final = "autostart"
 SZ_DISABLE_QOS: Final = "disable_qos"
 SZ_ENFORCE_KNOWN_LIST: Final[str] = f"enforce_{SZ_KNOWN_LIST}"
 SZ_EVOFW_FLAG: Final = "evofw_flag"
-SZ_SQLITE_INDEX: Final = (
-    "sqlite_index"  # temporary 0.52.x SQLite dev config option in ramses_cc
-)
+SZ_SQLITE_INDEX: Final = "sqlite_index"
 SZ_LOG_ALL_MQTT: Final = "log_all_mqtt"
 SZ_USE_REGEX: Final = "use_regex"
 
 SCH_ENGINE_DICT = {
     vol.Optional(SZ_DISABLE_SENDING, default=False): bool,
     vol.Optional(SZ_AUTOSTART, default=False): bool,
-    vol.Optional(SZ_DISABLE_QOS, default=None): vol.Any(
-        None,  # None is selective QoS (e.g. QoS only for bindings, schedule, etc.)
-        bool,
-    ),  # in the long term, this default to be True (not None)
+    vol.Optional(SZ_DISABLE_QOS, default=None): vol.Any(None, bool),
     vol.Optional(SZ_ENFORCE_KNOWN_LIST, default=False): bool,
     vol.Optional(SZ_EVOFW_FLAG): vol.Any(None, str),
-    # vol.Optional(SZ_PORT_CONFIG): SCH_SERIAL_PORT_CONFIG,
-    vol.Optional(
-        SZ_SQLITE_INDEX, default=False
-    ): bool,  # temporary 0.52.x dev config option
-    vol.Optional(
-        SZ_LOG_ALL_MQTT, default=False
-    ): bool,  # log all incoming MQTT traffic config option
-    vol.Optional(SZ_USE_REGEX): dict,  # vol.All(ConvertNullToDict(), dict),
+    vol.Optional(SZ_SQLITE_INDEX, default=False): bool,
+    vol.Optional(SZ_LOG_ALL_MQTT, default=False): bool,
+    vol.Optional(SZ_USE_REGEX): dict,
     vol.Optional(SZ_COMMS_PARAMS): SCH_COMMS_PARAMS,
 }
 SCH_ENGINE_CONFIG = vol.Schema(SCH_ENGINE_DICT, extra=vol.REMOVE_EXTRA)
 
-SZ_INBOUND: Final = "inbound"  # for use_regex (intentionally obscured)
+SZ_INBOUND: Final = "inbound"
 SZ_OUTBOUND: Final = "outbound"

@@ -50,9 +50,8 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 
 if TYPE_CHECKING:
     from ramses_tx import Command, Message, Packet, VerbT
-    from ramses_tx.frame import HeaderT
     from ramses_tx.opentherm import OtDataId
-    from ramses_tx.schemas import DeviceIdT, DevIndexT
+    from ramses_tx.typing import DeviceIdT, DevIndexT, HeaderT
 
     from .device import (
         BdrSwitch,

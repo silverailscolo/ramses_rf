@@ -11,7 +11,7 @@ from ramses_rf.device import Controller
 from ramses_rf.system import Evohome
 from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.protocol import PortProtocol
-from ramses_tx.schemas import DeviceIdT
+from ramses_tx.typing import DeviceIdT
 from tests_rf.virtual_rf import VirtualRf
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import

@@ -60,7 +60,7 @@ from ramses_tx import (
     Message,
     Priority,
 )
-from ramses_tx.typed_dicts import PayDictT
+from ramses_tx.typing import PayDictT, PayloadT
 
 from .faultlog import FaultLog
 from .zones import zone_factory
@@ -150,7 +150,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             f"00{DEV_ROLE_MAP.HTG}",  # hotwater_valve
             f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
         ):
-            cmd = Command.from_attrs(RQ, self.ctl.id, Code._000C, payload)
+            cmd = Command.from_attrs(RQ, self.ctl.id, Code._000C, PayloadT(payload))
             self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=0)
 
         cmd = Command.get_tpi_params(self.id)
@@ -371,7 +371,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         super()._setup_discovery_cmds()
 
         for zone_type in list(ZON_ROLE_MAP.HEAT_ZONES) + [ZON_ROLE_MAP.SEN]:
-            cmd = Command.from_attrs(RQ, self.id, Code._0005, f"00{zone_type}")
+            cmd = Command.from_attrs(
+                RQ, self.id, Code._0005, PayloadT(f"00{zone_type}")
+            )
             self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=0)
 
     def _handle_msg(self, msg: Message) -> None:
@@ -802,7 +804,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
             # f"00{DEV_ROLE_MAP.HTG}",  # hotwater_valve
             # f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
         ):
-            cmd = Command.from_attrs(RQ, self.id, Code._000C, payload)
+            cmd = Command.from_attrs(RQ, self.id, Code._000C, PayloadT(payload))
             self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=0)
 
     def _handle_msg(self, msg: Message) -> None:

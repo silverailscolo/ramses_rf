@@ -17,11 +17,14 @@ from .const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_NUM_REPEATS,
     DEV_TYPE_MAP,
+    MAX_GAP_DURATION,
+    MAX_NUM_REPEATS,
     SZ_ACTIVE_HGI,
     SZ_IS_EVOFW3,
     DevType,
     Priority,
 )
+from .interfaces import ProtocolInterface, TransportInterface
 from .logger import set_logger_timesource
 from .message import Message
 from .packet import Packet
@@ -39,8 +42,8 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 )
 
 if TYPE_CHECKING:
-    from .schemas import DeviceIdT, DeviceListT
     from .transport import RamsesTransportT
+    from .typing import DeviceIdT, DeviceListT
 
 
 TIP = f", configure the {SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
@@ -57,7 +60,7 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_QOS = QosParams()
 
 
-class _BaseProtocol(asyncio.Protocol):
+class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
     """Base class for RAMSES II protocols."""
 
     WRITER_TASK = "writer_task"
@@ -66,12 +69,12 @@ class _BaseProtocol(asyncio.Protocol):
         self._msg_handler = msg_handler
         self._msg_handlers: list[MsgHandlerT] = []
 
-        self._transport: RamsesTransportT | None = None
+        self._transport: TransportInterface | None = None
         self._loop = asyncio.get_running_loop()
 
         self._pause_writing = False  # FIXME: Start in R/O mode as no connection yet?
         self._wait_connection_lost: asyncio.Future[None] | None = None
-        self._wait_connection_made: asyncio.Future[RamsesTransportT] = (
+        self._wait_connection_made: asyncio.Future[TransportInterface] = (
             self._loop.create_future()
         )
 
@@ -108,7 +111,7 @@ class _BaseProtocol(asyncio.Protocol):
 
         return del_handler
 
-    def connection_made(self, transport: RamsesTransportT) -> None:  # type: ignore[override]
+    def connection_made(self, transport: TransportInterface) -> None:  # type: ignore[override]
         """Called when the connection to the Transport is established.
 
         The argument is the transport representing the pipe connection. To receive data,
@@ -123,7 +126,7 @@ class _BaseProtocol(asyncio.Protocol):
         self._wait_connection_made.set_result(transport)
         self._transport = transport
 
-    async def wait_for_connection_made(self, timeout: float = 1) -> RamsesTransportT:
+    async def wait_for_connection_made(self, timeout: float = 1) -> TransportInterface:
         """A courtesy function to wait until connection_made() has been invoked.
 
         Will raise TransportError if isn't connected within timeout seconds.
@@ -136,7 +139,7 @@ class _BaseProtocol(asyncio.Protocol):
                 f"Transport did not bind to Protocol within {timeout} secs"
             ) from err
 
-    def connection_lost(self, err: ExceptionT | None) -> None:  # type: ignore[override]
+    def connection_lost(self, err: Exception | None) -> None:
         """Called when the connection to the Transport is lost or closed.
 
         The argument is an exception object or None (the latter meaning a regular EOF is
@@ -258,7 +261,7 @@ class _BaseProtocol(asyncio.Protocol):
         gap_duration: float = DEFAULT_GAP_DURATION,
         num_repeats: int = DEFAULT_NUM_REPEATS,
         priority: Priority = Priority.DEFAULT,
-        qos: QosParams = DEFAULT_QOS,  # max_retries, timeout, wait_for_reply
+        qos: QosParams | None = None,
     ) -> Packet:
         """Send a Command with Qos (with retries, until success or ProtocolError).
 
@@ -281,8 +284,10 @@ class _BaseProtocol(asyncio.Protocol):
             ProtocolError:      didn't attempt to Tx Command for some reason
         """
 
-        assert gap_duration == DEFAULT_GAP_DURATION
-        assert 0 <= num_repeats <= 3  # if QoS, only Tx x1, with no repeats
+        assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
+        assert 0 <= num_repeats <= MAX_NUM_REPEATS, (
+            "Out of range: num_repeats"
+        )  # if QoS, only Tx x1, with no repeats
 
         # Patch command with actual HGI ID if it uses the default placeholder
         cmd = self._patch_cmd_if_needed(cmd)
@@ -293,7 +298,7 @@ class _BaseProtocol(asyncio.Protocol):
         if cmd.src.id != self.hgi_id:  # Was HGI_DEV_ADDR.id
             await self._send_impersonation_alert(cmd)
 
-        if qos.wait_for_reply and num_repeats:
+        if qos and qos.wait_for_reply and num_repeats:
             _LOGGER.warning(f"{cmd} < num_repeats set to 0, as wait_for_reply is True")
             num_repeats = 0  # the lesser crime over wait_for_reply=False
 
@@ -302,7 +307,7 @@ class _BaseProtocol(asyncio.Protocol):
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
-            qos=qos,
+            qos=qos or DEFAULT_QOS,
         )
 
         if not pkt:  # HACK: temporary workaround for returning None
@@ -564,7 +569,12 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             return
         super().pkt_received(pkt)
 
-    async def send_cmd(self, cmd: Command, *args: Any, **kwargs: Any) -> Packet:
+    async def send_cmd(
+        self,
+        cmd: Command,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Packet:
         if not self._is_wanted_addrs(cmd.src.id, cmd.dst.id, sending=True):
             raise exc.ProtocolError(f"Command excluded by device_id filter: {cmd}")
         return await super().send_cmd(cmd, *args, **kwargs)
@@ -579,7 +589,7 @@ class ReadProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         self._pause_writing = True
 
     def connection_made(  # type: ignore[override]
-        self, transport: RamsesTransportT, /, *, ramses: bool = False
+        self, transport: TransportInterface, /, *, ramses: bool = False
     ) -> None:
         """Consume the callback if invoked by SerialTransport rather than PortTransport.
 
@@ -627,7 +637,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         return f"QosProtocol({cls}, len(queue)={self._context._que.qsize()})"
 
     def connection_made(  # type: ignore[override]
-        self, transport: RamsesTransportT, /, *, ramses: bool = False
+        self, transport: TransportInterface, /, *, ramses: bool = False
     ) -> None:
         """Consume the callback if invoked by SerialTransport rather than PortTransport.
 
@@ -666,7 +676,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         else:
             self._context.resume_writing()
 
-    def connection_lost(self, err: ExceptionT | None) -> None:  # type: ignore[override]
+    def connection_lost(self, err: Exception | None) -> None:
         """Inform the FSM that the connection with the Transport has been lost."""
 
         super().connection_lost(err)
@@ -772,7 +782,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         gap_duration: float = DEFAULT_GAP_DURATION,
         num_repeats: int = DEFAULT_NUM_REPEATS,
         priority: Priority = Priority.DEFAULT,
-        qos: QosParams = DEFAULT_QOS,  # max_retries, timeout, wait_for_reply
+        qos: QosParams | None = None,
     ) -> Packet:
         """Send a Command with Qos (with retries, until success or ProtocolError).
 
@@ -795,22 +805,28 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
             ProtocolError:      didn't attempt to Tx Command for some reason
         """
 
-        assert gap_duration == DEFAULT_GAP_DURATION
-        assert 0 <= num_repeats <= 3  # if QoS, only Tx x1, with no repeats
+        assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
+        assert 0 <= num_repeats <= MAX_NUM_REPEATS, (
+            "Out of range: num_repeats"
+        )  # if QoS, only Tx x1, with no repeats
 
         if qos and not self._context:
             _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
 
-        if qos.wait_for_reply and num_repeats:
+        if qos and qos.wait_for_reply and num_repeats:
             _LOGGER.warning(f"{cmd} < num_repeats set to 0, as wait_for_reply is True")
             num_repeats = 0  # the lesser crime over wait_for_reply=False
 
-        pkt = await super().send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
+        # Manual filter check to avoid calling super().send_cmd(), which fails
+        if not self._is_wanted_addrs(cmd.src.id, cmd.dst.id, sending=True):
+            raise exc.ProtocolError(f"Command excluded by device_id filter: {cmd}")
+
+        pkt = await self._send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
             cmd,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
-            qos=qos,
+            qos=qos or DEFAULT_QOS,
         )
 
         if not pkt:  # HACK: temporary workaround for returning None
