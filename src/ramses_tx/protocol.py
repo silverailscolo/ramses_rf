@@ -17,6 +17,8 @@ from .const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_NUM_REPEATS,
     DEV_TYPE_MAP,
+    MAX_GAP_DURATION,
+    MAX_NUM_REPEATS,
     SZ_ACTIVE_HGI,
     SZ_IS_EVOFW3,
     DevType,
@@ -282,8 +284,10 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             ProtocolError:      didn't attempt to Tx Command for some reason
         """
 
-        assert gap_duration == DEFAULT_GAP_DURATION
-        assert 0 <= num_repeats <= 3  # if QoS, only Tx x1, with no repeats
+        assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
+        assert 0 <= num_repeats <= MAX_NUM_REPEATS, (
+            "Out of range: num_repeats"
+        )  # if QoS, only Tx x1, with no repeats
 
         # Patch command with actual HGI ID if it uses the default placeholder
         cmd = self._patch_cmd_if_needed(cmd)
@@ -801,8 +805,10 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
             ProtocolError:      didn't attempt to Tx Command for some reason
         """
 
-        assert gap_duration == DEFAULT_GAP_DURATION
-        assert 0 <= num_repeats <= 3  # if QoS, only Tx x1, with no repeats
+        assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
+        assert 0 <= num_repeats <= MAX_NUM_REPEATS, (
+            "Out of range: num_repeats"
+        )  # if QoS, only Tx x1, with no repeats
 
         if qos and not self._context:
             _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
