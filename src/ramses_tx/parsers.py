@@ -1501,9 +1501,6 @@ def parser_12a0(
         {
             "hvac_idx": payload[i : i + 2],  # used as index
             **parse_humidity_element(payload[i + 2 : i + 12], payload[i : i + 2]),
-            "_unknown_12": payload[
-                i + 12 : i + 14
-            ],  # sporadic [12:14] one of {00, 02} 02=cold?
         }
         for i in range(0, len(payload), 14)
     ]

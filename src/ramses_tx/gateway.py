@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, Never
 
@@ -30,17 +30,12 @@ from .message import Message
 from .packet import Packet
 from .protocol import protocol_factory
 from .schemas import (
-    SZ_DISABLE_QOS,
-    SZ_DISABLE_SENDING,
-    SZ_ENFORCE_KNOWN_LIST,
-    SZ_LOG_ALL_MQTT,
     SZ_PACKET_LOG,
     SZ_PORT_CONFIG,
     SZ_PORT_NAME,
-    SZ_SQLITE_INDEX,
     select_device_filter_mode,
 )
-from .transport import transport_factory
+from .transport import TransportConfig, transport_factory
 from .typing import PktLogConfigT, PortConfigT, QosParams
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -76,7 +71,15 @@ class Engine:
         known_list: DeviceListT | None = None,
         hgi_id: str | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
-        **kwargs: Any,
+        *,
+        disable_sending: bool = False,
+        disable_qos: bool | None = None,
+        enforce_known_list: bool = False,
+        sqlite_index: bool = False,
+        log_all_mqtt: bool = False,
+        evofw_flag: str | None = None,
+        use_regex: dict[str, dict[str, str]] | None = None,
+        transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
     ) -> None:
         if port_name and input_file:
             _LOGGER.warning(
@@ -84,7 +87,7 @@ class Engine:
             )
             input_file = None
 
-        self._disable_sending = kwargs.pop(SZ_DISABLE_SENDING, None)
+        self._disable_sending = disable_sending
         if input_file:
             self._disable_sending = True
         elif not port_name:
@@ -105,19 +108,21 @@ class Engine:
             "01:000001",  # type: ignore[list-item]  # why this one?
         ]
         self._enforce_known_list = select_device_filter_mode(
-            kwargs.pop(SZ_ENFORCE_KNOWN_LIST, None),
+            enforce_known_list,
             self._include,
             self._exclude,
         )
-        self._sqlite_index = kwargs.pop(
-            SZ_SQLITE_INDEX, False
-        )  # TODO Q1 2026: default True
-        self._log_all_mqtt = kwargs.pop(SZ_LOG_ALL_MQTT, False)
-        self._kwargs: dict[str, Any] = kwargs  # HACK
+        self._sqlite_index = sqlite_index  # TODO Q1 2026: default True
+        self._log_all_mqtt = log_all_mqtt
+        self._evofw_flag = evofw_flag
+        self._use_regex = use_regex or {}
+        self._disable_qos = (
+            disable_qos if disable_qos is not None else DEFAULT_DISABLE_QOS
+        )
+
+        self._transport_constructor = transport_constructor
 
         self._hgi_id = hgi_id
-        if self._hgi_id:
-            self._kwargs[SZ_ACTIVE_HGI] = self._hgi_id
 
         self._engine_lock = asyncio.Lock()
         self._engine_state: (
@@ -158,7 +163,7 @@ class Engine:
         self._protocol = protocol_factory(
             msg_handler,
             disable_sending=self._disable_sending,
-            disable_qos=self._kwargs.pop(SZ_DISABLE_QOS, DEFAULT_DISABLE_QOS),
+            disable_qos=self._disable_qos,
             enforce_include_list=self._enforce_known_list,
             exclude_list=self._exclude,
             include_list=self._include,
@@ -198,17 +203,26 @@ class Engine:
         else:  # if self._input_file:
             pkt_source[SZ_PACKET_LOG] = self._input_file  # filename as string
 
+        transport_config = TransportConfig(
+            disable_sending=bool(self._disable_sending),
+            log_all=bool(self._log_all_mqtt),
+            evofw_flag=self._evofw_flag,
+            use_regex=self._use_regex,
+        )
+
+        extra_info = {}
+        if self._hgi_id:
+            extra_info[SZ_ACTIVE_HGI] = self._hgi_id
+
         # incl. await protocol.wait_for_connection_made(timeout=5)
         self._transport = await transport_factory(
             self._protocol,
-            disable_sending=self._disable_sending,
+            config=transport_config,
             loop=self._loop,
-            log_all=self._log_all_mqtt,
+            transport_constructor=self._transport_constructor,
+            extra=extra_info if extra_info else None,
             **pkt_source,
-            **self._kwargs,  # HACK: odd/misc params, e.g. comms_params
         )
-
-        self._kwargs = {}  # HACK
 
         await self._protocol.wait_for_connection_made()
 

@@ -9,7 +9,6 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
 
-from . import exceptions as exc
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
 from .command import Command
 from .const import (
@@ -21,34 +20,40 @@ from .const import (
     MAX_NUM_REPEATS,
     SZ_ACTIVE_HGI,
     SZ_IS_EVOFW3,
+    Code,
     DevType,
     Priority,
+)
+from .exceptions import (
+    MessageInvalid,
+    ProtocolError,
+    ProtocolSendFailed,
+    TransportError,
 )
 from .interfaces import ProtocolInterface, TransportInterface
 from .logger import set_logger_timesource
 from .message import Message
 from .packet import Packet
 from .protocol_fsm import ProtocolContext
-from .schemas import SZ_BLOCK_LIST, SZ_CLASS, SZ_KNOWN_LIST, SZ_PORT_NAME
-from .transport import transport_factory
-from .typing import ExceptionT, MsgFilterT, MsgHandlerT, QosParams
-
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    Code,
+from .schemas import SZ_BLOCK_LIST, SZ_CLASS, SZ_KNOWN_LIST
+from .transport import TransportConfig, transport_factory
+from .typing import (
+    DeviceIdT,
+    DeviceListT,
+    ExceptionT,
+    MsgFilterT,
+    MsgHandlerT,
+    PortConfigT,
+    QosParams,
+    SerPortNameT,
 )
 
 if TYPE_CHECKING:
     from .transport import RamsesTransportT
-    from .typing import DeviceIdT, DeviceListT
 
 
-TIP = f", configure the {SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
+TIP: Final[str] = f", configure the {SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
 
-#
 # NOTE: All debug flags should be False for deployment to end-users
 _DBG_DISABLE_IMPERSONATION_ALERTS: Final[bool] = False
 _DBG_DISABLE_QOS: Final[bool] = False
@@ -56,23 +61,29 @@ _DBG_FORCE_LOG_PACKETS: Final[bool] = False
 
 _LOGGER = logging.getLogger(__name__)
 
-
 DEFAULT_QOS = QosParams()
 
 
 class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
     """Base class for RAMSES II protocols."""
 
-    WRITER_TASK = "writer_task"
+    WRITER_TASK: Final[str] = "writer_task"
 
-    def __init__(self, msg_handler: MsgHandlerT) -> None:
+    def __init__(self, msg_handler: MsgHandlerT, /) -> None:
+        """Initialize the base protocol.
+
+        :param msg_handler: The callback invoked when a valid message is processed.
+        :type msg_handler: MsgHandlerT
+        """
         self._msg_handler = msg_handler
         self._msg_handlers: list[MsgHandlerT] = []
 
         self._transport: TransportInterface | None = None
         self._loop = asyncio.get_running_loop()
 
-        self._pause_writing = False  # FIXME: Start in R/O mode as no connection yet?
+        self._pause_writing: bool = (
+            False  # FIXME: Start in R/O mode as no connection yet?
+        )
         self._wait_connection_lost: asyncio.Future[None] | None = None
         self._wait_connection_made: asyncio.Future[TransportInterface] = (
             self._loop.create_future()
@@ -88,6 +99,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
     @property
     def hgi_id(self) -> DeviceIdT:
+        """Get the Hardware Gateway Interface ID."""
         return HGI_DEV_ADDR.id
 
     def add_handler(
@@ -100,6 +112,13 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         """Add a Message handler to the list of such callbacks.
 
         Returns a callback that can be used to subsequently remove the Message handler.
+
+        :param msg_handler: The handler function to add.
+        :type msg_handler: MsgHandlerT
+        :param msg_filter: An optional filter to apply before calling the handler.
+        :type msg_filter: MsgFilterT | None
+        :return: A callable to remove the handler.
+        :rtype: Callable[[], None]
         """
 
         def del_handler() -> None:
@@ -118,7 +137,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         wait for pkt_received() calls. When the connection is closed, connection_lost()
         is called.
         """
-
         if self._wait_connection_made.done():
             return
 
@@ -126,16 +144,17 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._wait_connection_made.set_result(transport)
         self._transport = transport
 
-    async def wait_for_connection_made(self, timeout: float = 1) -> TransportInterface:
+    async def wait_for_connection_made(
+        self, timeout: float = 1.0
+    ) -> TransportInterface:
         """A courtesy function to wait until connection_made() has been invoked.
 
         Will raise TransportError if isn't connected within timeout seconds.
         """
-
         try:
             return await asyncio.wait_for(self._wait_connection_made, timeout)
         except TimeoutError as err:
-            raise exc.TransportError(
+            raise TransportError(
                 f"Transport did not bind to Protocol within {timeout} secs"
             ) from err
 
@@ -145,7 +164,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         The argument is an exception object or None (the latter meaning a regular EOF is
         received or the connection was aborted or closed).
         """
-
         # FIX: Check if _wait_connection_lost exists before asserting
         # This handles cases where connection was never fully established (e.g. timeout)
         if not self._wait_connection_lost:
@@ -166,7 +184,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         else:
             self._wait_connection_lost.set_result(None)
 
-    async def wait_for_connection_lost(self, timeout: float = 1) -> ExceptionT | None:
+    async def wait_for_connection_lost(self, timeout: float = 1.0) -> ExceptionT | None:
         """A courtesy function to wait until connection_lost() has been invoked.
 
         Includes scenarios where neither connection_made() nor connection_lost() were
@@ -174,14 +192,13 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         Will raise TransportError if isn't disconnect within timeout seconds.
         """
-
         if not self._wait_connection_lost:
             return None
 
         try:
             return await asyncio.wait_for(self._wait_connection_lost, timeout)
         except TimeoutError as err:
-            raise exc.TransportError(
+            raise TransportError(
                 f"Transport did not unbind from Protocol within {timeout} secs"
             ) from err
 
@@ -203,7 +220,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         needed (when the app keeps writing without yielding until pause_writing() is
         called).
         """
-
         self._pause_writing = True
 
     def resume_writing(self) -> None:
@@ -211,7 +227,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         See pause_writing() for details.
         """
-
         self._pause_writing = False
 
     async def _send_impersonation_alert(self, cmd: Command) -> None:
@@ -225,7 +240,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         silent-fail. However, evofw3 devices prefer the real ID.
         """
         # NOTE: accessing private member cmd._addrs to safely patch the source address
-
         if (
             self.hgi_id
             and self._is_evofw3  # Only patch if using evofw3 (not HGI80)
@@ -311,7 +325,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         )
 
         if not pkt:  # HACK: temporary workaround for returning None
-            raise exc.ProtocolSendFailed(f"Failed to send command: {cmd} (REPORT THIS)")
+            raise ProtocolSendFailed(f"Failed to send command: {cmd} (REPORT THIS)")
 
         return pkt
 
@@ -325,18 +339,14 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         priority: Priority = Priority.DEFAULT,
         qos: QosParams = DEFAULT_QOS,
     ) -> Packet:  # only cmd, no args, kwargs
-        # await self._send_frame(
-        #     str(cmd), num_repeats=num_repeats, gap_duration=gap_duration
-        # )
         raise NotImplementedError(f"{self}: Unexpected error")
 
     async def _send_frame(
         self, frame: str, num_repeats: int = 0, gap_duration: float = 0.0
     ) -> None:  # _send_frame() -> transport
         """Write to the transport."""
-
         if self._transport is None:
-            raise exc.ProtocolSendFailed("Transport is not connected")
+            raise ProtocolSendFailed("Transport is not connected")
 
         await self._transport.write_frame(frame)
         for _ in range(num_repeats - 1):
@@ -358,7 +368,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         """Called by the Transport when a Packet is received."""
         try:
             msg = Message(pkt)  # should log all invalid msgs appropriately
-        except exc.PacketInvalid:  # TODO: InvalidMessageError (packet is valid)
+        except MessageInvalid:
             return
 
         self._this_msg, self._prev_msg = msg, self._this_msg
@@ -369,7 +379,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         Also maintain _prev_msg, _this_msg attrs.
         """
-
         if self._msg_handler:  # type: ignore[truthy-function]
             _LOGGER.debug(f"Dispatching valid message to handler: {msg}")
             self._loop.call_soon_threadsafe(self._msg_handler, msg)
@@ -384,11 +393,13 @@ class _DeviceIdFilterMixin(_BaseProtocol):
     def __init__(
         self,
         msg_handler: MsgHandlerT,
+        /,
+        *,
         enforce_include_list: bool = False,
         exclude_list: DeviceListT | None = None,
         include_list: DeviceListT | None = None,
     ) -> None:
-        super().__init__(msg_handler)
+        _BaseProtocol.__init__(self, msg_handler)
 
         exclude_list = exclude_list or {}
         include_list = include_list or {}
@@ -410,6 +421,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
 
     @property
     def hgi_id(self) -> DeviceIdT:
+        """Get the ID of the HGI handling the comms."""
         if not self._transport:
             return self._known_hgi or HGI_DEV_ADDR.id
         # CRITICAL FIX: get_extra_info returns None if key exists but val is None
@@ -435,7 +447,6 @@ class _DeviceIdFilterMixin(_BaseProtocol):
 
         Will send a warning if the include_list is configured incorrectly.
         """
-
         logger = _LOGGER.warning if not disable_warnings else _LOGGER.debug
 
         explicit_hgis = [
@@ -487,7 +498,6 @@ class _DeviceIdFilterMixin(_BaseProtocol):
 
         Send a warning if the include list is configured incorrectly.
         """
-
         assert self._active_hgi is None  # should only be called once
 
         msg = f"The active gateway '{dev_id}: {{ class: HGI }}' "
@@ -572,20 +582,43 @@ class _DeviceIdFilterMixin(_BaseProtocol):
     async def send_cmd(
         self,
         cmd: Command,
-        *args: Any,
-        **kwargs: Any,
+        /,
+        *,
+        gap_duration: float = DEFAULT_GAP_DURATION,
+        num_repeats: int = DEFAULT_NUM_REPEATS,
+        priority: Priority = Priority.DEFAULT,
+        qos: QosParams | None = None,
     ) -> Packet:
         if not self._is_wanted_addrs(cmd.src.id, cmd.dst.id, sending=True):
-            raise exc.ProtocolError(f"Command excluded by device_id filter: {cmd}")
-        return await super().send_cmd(cmd, *args, **kwargs)
+            raise ProtocolError(f"Command excluded by device_id filter: {cmd}")
+        return await super().send_cmd(
+            cmd,
+            gap_duration=gap_duration,
+            num_repeats=num_repeats,
+            priority=priority,
+            qos=qos,
+        )
 
 
-class ReadProtocol(_DeviceIdFilterMixin, _BaseProtocol):
+class ReadProtocol(_DeviceIdFilterMixin):
     """A protocol that can only receive Packets."""
 
-    def __init__(self, msg_handler: MsgHandlerT, **kwargs: Any) -> None:
-        super().__init__(msg_handler, **kwargs)
-
+    def __init__(
+        self,
+        msg_handler: MsgHandlerT,
+        /,
+        *,
+        enforce_include_list: bool = False,
+        exclude_list: DeviceListT | None = None,
+        include_list: DeviceListT | None = None,
+    ) -> None:
+        _DeviceIdFilterMixin.__init__(
+            self,
+            msg_handler,
+            enforce_include_list=enforce_include_list,
+            exclude_list=exclude_list,
+            include_list=include_list,
+        )
         self._pause_writing = True
 
     def connection_made(  # type: ignore[override]
@@ -615,18 +648,27 @@ class ReadProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         raise NotImplementedError(f"{cmd._hdr}: < this Protocol is Read-Only")
 
 
-class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
+class PortProtocol(_DeviceIdFilterMixin):
     """A protocol that can receive Packets and send Commands +/- QoS (using a FSM)."""
 
     def __init__(
         self,
         msg_handler: MsgHandlerT,
+        /,
+        *,
         disable_qos: bool | None = DEFAULT_DISABLE_QOS,
-        **kwargs: Any,
+        enforce_include_list: bool = False,
+        exclude_list: DeviceListT | None = None,
+        include_list: DeviceListT | None = None,
     ) -> None:
         """Add a FSM to the Protocol, to provide QoS."""
-        super().__init__(msg_handler, **kwargs)
-
+        _DeviceIdFilterMixin.__init__(
+            self,
+            msg_handler,
+            enforce_include_list=enforce_include_list,
+            exclude_list=exclude_list,
+            include_list=include_list,
+        )
         self._context = ProtocolContext(self)
         self._disable_qos = disable_qos  # no wait_for_reply
 
@@ -644,7 +686,6 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         Our PortTransport wraps SerialTransport and will wait for the signature echo
         to be received (c.f. FileTransport) before calling connection_made(ramses=True).
         """
-
         if not ramses:
             return None
 
@@ -678,35 +719,30 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
 
     def connection_lost(self, err: Exception | None) -> None:
         """Inform the FSM that the connection with the Transport has been lost."""
-
         super().connection_lost(err)
         if self._context:
             self._context.connection_lost(err)  # is this safe, when KeyboardInterrupt?
 
     def pause_writing(self) -> None:
         """Inform the FSM that the Protocol has been paused."""
-
         super().pause_writing()
         if self._context:
             self._context.pause_writing()
 
     def resume_writing(self) -> None:
         """Inform the FSM that the Protocol has been resumed."""
-
         super().resume_writing()
         if self._context:
             self._context.resume_writing()
 
     def pkt_received(self, pkt: Packet) -> None:
         """Pass any valid/wanted packets to the callback."""
-
         super().pkt_received(pkt)
         if self._context:
             self._context.pkt_received(pkt)
 
     async def _send_impersonation_alert(self, cmd: Command) -> None:
         """Send a puzzle packet warning that impersonation is occurring."""
-
         if _DBG_DISABLE_IMPERSONATION_ALERTS:
             return
 
@@ -733,7 +769,6 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         # TODO: use a sync function, so we don't have a stack of awaits before the write
         async def send_cmd(kmd: Command) -> None:
             """Wrapper to for self._send_frame(cmd)."""
-
             await self._send_frame(
                 str(kmd), gap_duration=gap_duration, num_repeats=num_repeats
             )
@@ -770,7 +805,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
             return await self._context.send_cmd(send_cmd, cmd, priority, qos)
         # except InvalidStateError as err:  # TODO: handle InvalidStateError separately
         #     # reset protocol stack
-        except exc.ProtocolError as err:
+        except ProtocolError as err:
             _LOGGER.info(f"{self}: Failed to send {cmd._hdr}: {err}")
             raise
 
@@ -819,7 +854,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
 
         # Manual filter check to avoid calling super().send_cmd(), which fails
         if not self._is_wanted_addrs(cmd.src.id, cmd.dst.id, sending=True):
-            raise exc.ProtocolError(f"Command excluded by device_id filter: {cmd}")
+            raise ProtocolError(f"Command excluded by device_id filter: {cmd}")
 
         pkt = await self._send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
             cmd,
@@ -830,7 +865,7 @@ class PortProtocol(_DeviceIdFilterMixin, _BaseProtocol):
         )
 
         if not pkt:  # HACK: temporary workaround for returning None
-            raise exc.ProtocolSendFailed(f"Failed to send command: {cmd} (REPORT THIS)")
+            raise ProtocolSendFailed(f"Failed to send command: {cmd} (REPORT THIS)")
 
         return pkt
 
@@ -849,7 +884,6 @@ def protocol_factory(
     include_list: DeviceListT | None = None,
 ) -> RamsesProtocolT:
     """Create and return a Ramses-specific async packet Protocol."""
-
     if disable_sending:
         _LOGGER.debug("ReadProtocol: Sending has been disabled")
         return ReadProtocol(
@@ -875,14 +909,19 @@ async def create_stack(
     msg_handler: MsgHandlerT,
     /,
     *,
+    transport_config: TransportConfig,
     protocol_factory_: Callable[..., RamsesProtocolT] | None = None,
-    transport_factory_: Awaitable[RamsesTransportT] | None = None,
-    disable_qos: bool | None = DEFAULT_DISABLE_QOS,  # True, None, False
-    disable_sending: bool | None = False,
+    transport_factory_: Callable[..., Awaitable[RamsesTransportT]] | None = None,
+    port_name: SerPortNameT | None = None,
+    port_config: PortConfigT | None = None,
+    packet_log: str | None = None,
+    packet_dict: dict[str, str] | None = None,
+    extra: dict[str, Any] | None = None,
+    loop: asyncio.AbstractEventLoop | None = None,
+    disable_qos: bool | None = DEFAULT_DISABLE_QOS,
     enforce_include_list: bool = False,
     exclude_list: DeviceListT | None = None,
     include_list: DeviceListT | None = None,
-    **kwargs: Any,  # TODO: these are for the transport_factory
 ) -> tuple[RamsesProtocolT, RamsesTransportT]:
     """Utility function to provide a Protocol / Transport pair.
 
@@ -890,24 +929,31 @@ async def create_stack(
     - send Commands via awaitable Protocol.send_cmd(cmd)
     - receive Messages via Gateway._handle_msg(msg) callback
     """
-
-    read_only = kwargs.get("packet_dict") or kwargs.get("packet_log")
-    disable_sending = disable_sending or read_only
+    read_only = bool(packet_dict or packet_log)
+    if read_only:
+        transport_config.disable_sending = True
 
     protocol: RamsesProtocolT = (protocol_factory_ or protocol_factory)(
         msg_handler,
         disable_qos=disable_qos,
-        disable_sending=disable_sending,
+        disable_sending=transport_config.disable_sending,
         enforce_include_list=enforce_include_list,
         exclude_list=exclude_list,
         include_list=include_list,
     )
 
-    transport: RamsesTransportT = await (transport_factory_ or transport_factory)(  # type: ignore[operator]
-        protocol, disable_sending=bool(disable_sending), **kwargs
+    transport: RamsesTransportT = await (transport_factory_ or transport_factory)(
+        protocol,
+        config=transport_config,
+        port_name=port_name,
+        port_config=port_config,
+        packet_log=packet_log,
+        packet_dict=packet_dict,
+        extra=extra,
+        loop=loop,
     )
 
-    if not kwargs.get(SZ_PORT_NAME):
+    if not port_name:
         set_logger_timesource(transport._dt_now)
         _LOGGER.warning("Logger datetimes maintained as most recent packet timestamp")
 

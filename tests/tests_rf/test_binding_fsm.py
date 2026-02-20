@@ -22,6 +22,7 @@ from ramses_rf.binding_fsm import (
     _BindStates,
 )
 from ramses_rf.device import Fakeable
+from ramses_rf.gateway import GatewayConfig
 from ramses_tx.protocol import PortProtocol
 
 from .virtual_rf import rf_factory
@@ -41,15 +42,6 @@ _TENDER = 0
 _ACCEPT = 1
 _AFFIRM = 2
 _RATIFY = 3
-
-
-GWY_CONFIG = {
-    "config": {
-        "disable_discovery": True,
-        "disable_qos": False,  # this is required for this test
-        "enforce_known_list": True,
-    }
-}
 
 ITHO__ = "itho"
 NUAIRE = "nuaire"
@@ -385,9 +377,14 @@ async def test_flow_100(test_set: dict[str, dict]) -> None:
     config = {}
     for role in (SZ_RESPONDENT, SZ_SUPPLICANT):
         devices = [d for d in test_set.values() if isinstance(d, dict)]
-        config[role] = GWY_CONFIG | {
+        config[role] = {
+            "config": GatewayConfig(disable_discovery=True),
+            "disable_qos": False,
+            "enforce_known_list": True,
             "known_list": {k: v for d in devices for k, v in d.items()},
-            "orphans_hvac": list(test_set[role]),  # TODO: used by Heat domain too!
+            "schema": {
+                "orphans_hvac": list(test_set[role])  # TODO: used by Heat domain too!
+            },  # Nested inside schema correctly
         }
 
     pkt_flow = [
@@ -414,9 +411,14 @@ async def test_flow_200(test_set: dict[str, dict]) -> None:
     config = {}
     for role in (SZ_RESPONDENT, SZ_SUPPLICANT):
         devices = [d for d in test_set.values() if isinstance(d, dict)]
-        config[role] = GWY_CONFIG | {
+        config[role] = {
+            "config": GatewayConfig(disable_discovery=True),
+            "disable_qos": False,
+            "enforce_known_list": True,
             "known_list": {k: v for d in devices for k, v in d.items()},
-            "orphans_hvac": list(test_set[role]),  # TODO: used by Heat domain too!
+            "schema": {
+                "orphans_hvac": list(test_set[role])  # TODO: used by Heat domain too!
+            },  # Nested inside schema correctly
         }
 
     pkt_flow = [

@@ -2,18 +2,19 @@
 """RAMSES RF - Check get/set of zone/DHW schedules."""
 
 import asyncio
+from typing import Any
 
 import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.device import Controller
+from ramses_rf.gateway import GatewayConfig
 from ramses_rf.system import Evohome, Zone
 from ramses_rf.system.schedule import InnerScheduleT
 from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.protocol import PortProtocol
 from ramses_tx.typing import DeviceIdT
 
-from .conftest import _GwyConfigDictT
 from .virtual_rf import VirtualRf
 
 TST_ID_ = Address("18:123456").id  # the id of the test HGI80-compatible device
@@ -25,13 +26,13 @@ pytestmark = pytest.mark.asyncio()
 
 
 @pytest.fixture()
-def gwy_config() -> _GwyConfigDictT:
+def gwy_config() -> dict[str, Any]:
     return {
-        "config": {
-            "disable_discovery": True,
-            "disable_qos": False,  # QoS is required for this test
-            "enforce_known_list": False,
-        },
+        "config": GatewayConfig(
+            disable_discovery=True,
+        ),
+        "disable_qos": False,  # QoS is required for this test
+        "enforce_known_list": False,
         "known_list": {HGI_DEVICE_ID: {}},  # req'd to thwart foreign HGI blacklisting
     }
 

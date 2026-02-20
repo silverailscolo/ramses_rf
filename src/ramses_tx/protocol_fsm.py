@@ -11,7 +11,6 @@ from queue import Empty, Full, PriorityQueue
 from threading import Lock
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
 
-from . import exceptions as exc
 from .address import HGI_DEVICE_ID
 from .command import Command
 from .const import (
@@ -22,6 +21,12 @@ from .const import (
     MAX_SEND_TIMEOUT,
     Code,
     Priority,
+)
+from .exceptions import (
+    ProtocolError,
+    ProtocolFsmError,
+    ProtocolSendFailed,
+    TransportError,
 )
 from .interfaces import StateMachineInterface, TransportInterface
 from .packet import Packet
@@ -45,6 +50,8 @@ _QueueEntryT: TypeAlias = tuple[Priority, dt, Command, QosParams, _FutureT]
 
 
 class ProtocolContext(StateMachineInterface):
+    """The context for the protocol finite state machine."""
+
     SEND_TIMEOUT_LIMIT = MAX_SEND_TIMEOUT
 
     def __init__(
@@ -57,6 +64,19 @@ class ProtocolContext(StateMachineInterface):
         max_retry_limit: int = MAX_RETRY_LIMIT,
         max_buffer_size: int = DEFAULT_BUFFER_SIZE,
     ) -> None:
+        """Initialize the protocol state machine context.
+
+        :param protocol: The protocol instance using this context.
+        :type protocol: RamsesProtocolT
+        :param echo_timeout: Timeout for an echo response.
+        :type echo_timeout: float
+        :param reply_timeout: Timeout for a full reply response.
+        :type reply_timeout: float
+        :param max_retry_limit: Maximum number of times to retry a send.
+        :type max_retry_limit: int
+        :param max_buffer_size: Maximum size of the command queue.
+        :type max_buffer_size: int
+        """
         self._protocol = protocol
         self.echo_timeout = echo_timeout
         self.reply_timeout = reply_timeout
@@ -85,6 +105,7 @@ class ProtocolContext(StateMachineInterface):
         self.set_state(Inactive)
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation of this object."""
         msg = f"<ProtocolContext state={repr(self._state)[21:-1]}"
         if self._cmd is None:
             return msg + ">"
@@ -94,10 +115,12 @@ class ProtocolContext(StateMachineInterface):
 
     @property
     def state(self) -> _ProtocolStateT:
+        """Return the current state of the FSM."""
         return self._state
 
     @property
     def is_sending(self) -> bool:  # TODO: remove asserts
+        """Return True if the context is currently sending a command."""
         if isinstance(self._state, WantEcho | WantRply):
             assert self._cmd is not None, f"{self}: Coding error"  # mypy hint
             assert self._qos is not None, f"{self}: Coding error"  # mypy hint
@@ -119,6 +142,20 @@ class ProtocolContext(StateMachineInterface):
         exception: Exception | None = None,
         result: Packet | None = None,
     ) -> None:
+        """Transition the state machine to a new state.
+
+        :param state_class: The new state class to transition to.
+        :type state_class: _ProtocolStateClassT
+        :param expired: Whether the state transition is due to a full expiry.
+        :type expired: bool
+        :param timed_out: Whether the state transition is due to a timeout.
+        :type timed_out: bool
+        :param exception: Any exception that caused the state transition.
+        :type exception: Exception | None
+        :param result: Any resulting packet associated with the transition.
+        :type result: Packet | None
+        """
+
         async def expire_state_on_timeout() -> None:
             # a separate coro, so can be spawned off with create_task()
 
@@ -266,7 +303,7 @@ class ProtocolContext(StateMachineInterface):
                 f"{self}: Coding error"
             )  # mypy hint
             self._fut.set_exception(
-                exc.ProtocolSendFailed(f"{self}: Exceeded maximum retries")
+                ProtocolSendFailed(f"{self}: Exceeded maximum retries")
             )
 
         else:  # logging only - WantEcho, WantRply
@@ -312,11 +349,13 @@ class ProtocolContext(StateMachineInterface):
         # _LOGGER.debug("AFTER. = %s: wait_for_reply=%s", self, self._qos.wait_for_reply)
 
     def connection_made(self, transport: TransportInterface) -> None:
+        """Handle the transport connection being made."""
         # may want to set some instance variables, according to type of transport
         self._state.connection_made()
 
     # TODO: Should we clear the buffer if connection is lost (and apologise to senders?
     def connection_lost(self, err: Exception | None) -> None:
+        """Handle the transport connection being lost."""
         self._state.connection_lost()
 
     def pkt_received(self, pkt: Packet) -> None:
@@ -324,9 +363,11 @@ class ProtocolContext(StateMachineInterface):
         self._state.pkt_rcvd(pkt)
 
     def pause_writing(self) -> None:
+        """Handle the transport pausing writing."""
         self._state.writing_paused()
 
     def resume_writing(self) -> None:
+        """Handle the transport resuming writing."""
         self._state.writing_resumed()
 
     async def send_cmd(
@@ -336,10 +377,24 @@ class ProtocolContext(StateMachineInterface):
         priority: Priority,
         qos: QosParams,
     ) -> Packet:
+        """Send a Command with QoS (retries, until success or Exception).
+
+        :param send_fnc: The function used to actually transmit the command.
+        :type send_fnc: Callable[[Command], Coroutine[Any, Any, None]]
+        :param cmd: The command to send.
+        :type cmd: Command
+        :param priority: The transmission priority.
+        :type priority: Priority
+        :param qos: Quality of Service parameters.
+        :type qos: QosParams
+        :return: The received response packet, or the echo if no response is expected.
+        :rtype: Packet
+        :raises ProtocolSendFailed: If the send times out or retries are exhausted.
+        """
         self._send_fnc = send_fnc  # TODO: REMOVE: make per Context, not per Command
 
         if isinstance(self._state, Inactive):
-            raise exc.ProtocolSendFailed(f"{self}: Send failed (no active transport?)")
+            raise ProtocolSendFailed(f"{self}: Send failed (no active transport?)")
 
         assert self._loop is asyncio.get_running_loop()  # BUG is here
 
@@ -348,7 +403,7 @@ class ProtocolContext(StateMachineInterface):
             self._que.put_nowait((priority, dt.now(), cmd, qos, fut))
         except Full as err:
             fut.cancel("Send buffer overflow")
-            raise exc.ProtocolSendFailed(f"{self}: Send buffer overflow") from err
+            raise ProtocolSendFailed(f"{self}: Send buffer overflow") from err
 
         if isinstance(self._state, IsInIdle):
             self._loop.call_soon_threadsafe(self._check_buffer_for_cmd)
@@ -367,16 +422,17 @@ class ProtocolContext(StateMachineInterface):
                 self.set_state(
                     IsInIdle, expired=True
                 )  # set_exception() will cause InvalidStateError
-            raise exc.ProtocolSendFailed(msg) from err  # make msg *before* state reset
+            raise ProtocolSendFailed(msg) from err  # make msg *before* state reset
 
         try:
             return fut.result()
-        except exc.ProtocolSendFailed:
+        except ProtocolSendFailed:
             raise
-        except (exc.ProtocolError, exc.TransportError) as err:  # incl. ProtocolFsmError
-            raise exc.ProtocolSendFailed(f"{self}: Send failed: {err}") from err
+        except (ProtocolError, TransportError) as err:  # incl. ProtocolFsmError
+            raise ProtocolSendFailed(f"{self}: Send failed: {err}") from err
 
     def _check_buffer_for_cmd(self) -> None:
+        """Check the queue buffer and send the next command if available."""
         self._lock.acquire()
         assert isinstance(self.is_sending, bool), f"{self}: Coding error"  # mypy hint
 
@@ -411,12 +467,18 @@ class ProtocolContext(StateMachineInterface):
             self._que.task_done()
 
     def _send_cmd(self, cmd: Command, is_retry: bool = False) -> None:
-        """Wrapper to send a command with retries, until success or exception."""
+        """Wrapper to send a command with retries, until success or exception.
+
+        :param cmd: The command to transmit.
+        :type cmd: Command
+        :param is_retry: Flag indicating if this is a retry attempt.
+        :type is_retry: bool
+        """
 
         async def send_fnc_wrapper(cmd: Command) -> None:
             try:  # the wrapped function (actual Tx.write)
                 await self._send_fnc(cmd)
-            except exc.TransportError as err:
+            except TransportError as err:
                 self.set_state(IsInIdle, exception=err)
 
         # TODO: check what happens when exception here - why does it hang?
@@ -424,7 +486,7 @@ class ProtocolContext(StateMachineInterface):
 
         try:  # the wrapped function (actual Tx.write)
             self._state.cmd_sent(cmd, is_retry=is_retry)
-        except exc.ProtocolFsmError as err:
+        except ProtocolFsmError as err:
             self.set_state(IsInIdle, exception=err)
         else:
             self._loop.create_task(send_fnc_wrapper(cmd))
@@ -458,7 +520,14 @@ class ProtocolContext(StateMachineInterface):
 
 
 class ProtocolStateBase:
+    """The base class for the protocol finite state machine states."""
+
     def __init__(self, context: ProtocolContext) -> None:
+        """Initialize the state with the protocol context.
+
+        :param context: The context orchestrating this state.
+        :type context: ProtocolContext
+        """
         self._context = context
 
         self._sent_cmd: Command | None = None
@@ -466,6 +535,7 @@ class ProtocolStateBase:
         self._rply_pkt: Packet | None = None
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation of this state."""
         msg = f"<ProtocolState state={self.__class__.__name__}"
         if self._rply_pkt:
             return msg + f" rply={self._rply_pkt._hdr}>"
@@ -489,9 +559,7 @@ class ProtocolStateBase:
             self._context.set_state(Inactive)
             return
 
-        self._context.set_state(
-            Inactive, exception=exc.TransportError("Connection lost")
-        )
+        self._context.set_state(Inactive, exception=TransportError("Connection lost"))
 
     def pkt_rcvd(self, pkt: Packet) -> None:  # Different for each state
         """Raise a NotImplementedError."""
@@ -508,7 +576,8 @@ class ProtocolStateBase:
     def cmd_sent(  # For all except IsInIdle, WantEcho
         self, cmd: Command, is_retry: bool | None = None
     ) -> None:
-        raise exc.ProtocolFsmError(f"Invalid state to send a command: {self._context}")
+        """Raise an error as default states cannot send commands."""
+        raise ProtocolFsmError(f"Invalid state to send a command: {self._context}")
 
 
 class Inactive(ProtocolStateBase):
@@ -566,6 +635,7 @@ class WantEcho(ProtocolStateBase):
     # RQ --- 18:198151 10:052644 --:------ 3220 005 0000050000  # RQ|10:048122|3220|05
 
     def __init__(self, context: ProtocolContext) -> None:
+        """Initialize the state from the previous context state."""
         super().__init__(context)
 
         self._sent_cmd = context._state._sent_cmd
@@ -662,6 +732,7 @@ class WantRply(ProtocolStateBase):
     # RP --- 10:048122 18:198151 --:------ 3220 005 00C0050000  # 3220|RP|10:048122|05
 
     def __init__(self, context: ProtocolContext) -> None:
+        """Initialize the state with the echo that triggered it."""
         super().__init__(context)
 
         self._sent_cmd = context._state._sent_cmd

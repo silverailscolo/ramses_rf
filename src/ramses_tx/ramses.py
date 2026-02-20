@@ -289,7 +289,7 @@ CODES_SCHEMA: dict[Code, CodeSchemaEntry] = {  # rf_unknown
     },
     Code._12A0: {  # indoor_humidity
         "name": "indoor_humidity",
-        " I": r"^(0[0-9A-F]{3}([0-9A-F]{8}(00|02)?)?)+$",
+        " I": r"^(0[0-9A-F]{3}([0-9A-F]{8}(00)?)?)+$",
         "RP": r"^0[0-9A-F]{3}([0-9A-F]{8}(00)?)?$",
         "lifespan": td(hours=1),
     },
