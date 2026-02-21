@@ -622,6 +622,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             _LOGGER.debug("Missing parameter ID or value in 2411 message: %s", msg)
             return
 
+        # Normalize param_id: uppercase and strip leading zeros for consistency with get_fan_param
+        param_id = str(param_id).upper().lstrip("0") or "0"
+
         # Mark that we support 2411 parameters
         if not self._supports_2411:
             self._supports_2411 = True

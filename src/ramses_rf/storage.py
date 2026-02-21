@@ -125,8 +125,8 @@ class StorageWorker:
 
             self._init_db(conn)
             self._ready_event.set()  # Signal that tables exist
-        except sqlite3.Error as exc:
-            _LOGGER.error("Failed to initialize storage database: %s", exc)
+        except sqlite3.Error as err:
+            _LOGGER.error("Failed to initialize storage database: %s", err)
             self._ready_event.set()  # Avoid blocking waiters forever
             return
 
