@@ -1381,8 +1381,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         query = parse_qs(self._zigbee_url.query)
         mode = (query.get("mode", [""])[0] or "").lower()
         cmd = (query.get("cmd", ["0x00"])[0] or "0x00")
+        # Command mode is opt-in via query `mode=cmd` or when both read/write
+        # clusters are the same custom command cluster. Do NOT assume command
+        # mode for the common 0xFC00 (read) / 0xFC01 (write attribute) pairing
+        # used by the Ramses ESP device — that pairing expects attribute writes
+        # (write_cluster 0xFC01), not commands.
         self._use_command_mode = mode in {"cmd", "command", "custom"} or (
-            self._cluster_id == 0xFC00 and self._write_cluster_id == 0xFC01
+            self._cluster_id == self._write_cluster_id
         )
         self._cmd_id = int(cmd, 16 if cmd.startswith("0x") else 10)
         # For custom commands, we listen on client-side cluster where Zigbee stack
@@ -1482,6 +1487,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
                 # fire-and-forget ACK send
+                _LOGGER.debug("Scheduling application ACK: %s", ack)
                 self._loop.create_task(self._send_unacked(ack))
         except Exception:
             pass
@@ -1523,6 +1529,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 seq = int(m.group(1))
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
+                _LOGGER.debug("Scheduling application ACK (cmd): %s", ack)
                 self._loop.create_task(self._send_unacked(ack))
         except Exception:
             pass
@@ -1968,13 +1975,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
     async def _send_unacked(self, text: str) -> None:
         """Send a small ZCL payload back to the device without expecting an app-level ACK."""
+        _LOGGER.debug("_send_unacked called: %r", text)
         try:
             chunks = list(self._chunk_payload(text))
             for seq, total, chunk in chunks:
-                if self._use_command_mode:
-                    await self._send_command(chunk, seq, total)
-                else:
-                    await self._send_chunk(chunk, seq, total)
+                _LOGGER.debug("_send_unacked sending chunk %s/%s: %r", seq, total, chunk)
+                # Always send ACKs as attribute writes to the configured write cluster.
+                # This ensures ACKs reach the Ramses ESP which expects attribute writes
+                # on the write cluster (e.g. 0xFC01).
+                await self._send_chunk(chunk, seq, total)
                 await asyncio.sleep(0.01)
         except Exception as err:  # pragma: no cover - defensive
             _LOGGER.warning("Zigbee unacked send failed: %s", err)
