@@ -1381,14 +1381,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         query = parse_qs(self._zigbee_url.query)
         mode = (query.get("mode", [""])[0] or "").lower()
         cmd = (query.get("cmd", ["0x00"])[0] or "0x00")
-        # Command mode is opt-in via query `mode=cmd` or when both read/write
-        # clusters are the same custom command cluster. Do NOT assume command
-        # mode for the common 0xFC00 (read) / 0xFC01 (write attribute) pairing
-        # used by the Ramses ESP device — that pairing expects attribute writes
-        # (write_cluster 0xFC01), not commands.
-        self._use_command_mode = mode in {"cmd", "command", "custom"} or (
-            self._cluster_id == self._write_cluster_id
-        )
+        # For this deployment we use custom ZCL commands for all payloads
+        # (ESP <-> HA uses commands only). Force command mode regardless of
+        # URL query; this removes the attribute-path fallback and keeps
+        # handling simple and consistent.
+        self._use_command_mode = True
         self._cmd_id = int(cmd, 16 if cmd.startswith("0x") else 10)
         # For custom commands, we listen on client-side cluster where Zigbee stack
         # delivers incoming commands from the ESP's client cluster
@@ -1399,9 +1396,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             if self._use_command_mode
             else self._MAX_CHAR_STRING_LEN
         )
-        self._chunk_body_len = (
-            self._CHUNK_BODY_LEN_CMD if self._use_command_mode else self._CHUNK_BODY_LEN
-        )
+        self._chunk_body_len = self._CHUNK_BODY_LEN_CMD
 
         self._extra[SZ_IS_EVOFW3] = True
         self._hass = self._extra.get("_hass")
@@ -2083,10 +2078,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             chunks = list(self._chunk_payload(text))
             for seq, total, chunk in chunks:
                 _LOGGER.debug("_send_unacked sending chunk %s/%s: %r", seq, total, chunk)
-                # Always send ACKs as attribute writes to the configured write cluster.
-                # This ensures ACKs reach the Ramses ESP which expects attribute writes
-                # on the write cluster (e.g. 0xFC01).
-                await self._send_chunk(chunk, seq, total)
+                # Send ACKs as ZCL custom commands (commands-only mode).
+                # Use the command send path so Home Assistant and ESP speak
+                # the same transport (commands), avoiding attribute writes.
+                await self._send_command(chunk, seq, total)
                 await asyncio.sleep(0.01)
         except Exception as err:  # pragma: no cover - defensive
             _LOGGER.warning("Zigbee unacked send failed: %s", err)
