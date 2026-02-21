@@ -62,6 +62,10 @@ SZ_TIMEOUT: Final = "timeout"
 SZ_ACTIVE_HGI: Final = "active_gwy"
 SZ_SIGNATURE: Final = "signature"
 SZ_IS_EVOFW3: Final = "is_evofw3"
+SZ_READER_TASK: Final[str] = "reader_task"
+
+# MQTT topic
+SZ_RAMSES_GATEWAY: Final[str] = "RAMSES/GATEWAY"
 
 # default values for transmit rate governers...
 DUTY_CYCLE_DURATION = 60  #      time window (seconds) where rate limiting occurs

@@ -152,7 +152,8 @@ class Engine:
         return f"{device_id} ({self.ser_name})"
 
     def _dt_now(self) -> dt:
-        return self._transport._dt_now() if self._transport else dt.now()
+        timesource: Callable[[], dt] = getattr(self._transport, "_dt_now", dt.now)
+        return timesource()
 
     def _set_msg_handler(self, msg_handler: MsgHandlerT) -> None:
         """Create an appropriate protocol for the packet source (transport).
@@ -264,7 +265,9 @@ class Engine:
 
         self._protocol.pause_writing()  # TODO: call_soon()?
         if self._transport:
-            self._transport.pause_reading()  # TODO: call_soon()?
+            pause_reading = getattr(self._transport, "pause_reading", None)
+            if pause_reading:
+                pause_reading()  # TODO: call_soon()?
 
         self._protocol._msg_handler, handler = None, self._protocol._msg_handler  # type: ignore[assignment]
         self._disable_sending, read_only = True, self._disable_sending
@@ -292,7 +295,9 @@ class Engine:
         self._engine_lock.release()
 
         if self._transport:
-            self._transport.resume_reading()
+            resume_reading = getattr(self._transport, "resume_reading", None)
+            if resume_reading:
+                resume_reading()
         if not self._disable_sending:
             self._protocol.resume_writing()
 
