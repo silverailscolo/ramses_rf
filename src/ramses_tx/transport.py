@@ -1482,7 +1482,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
                 # fire-and-forget ACK send
-                _LOGGER.debug("Scheduling application ACK: %s", ack)
+                _LOGGER.info("Scheduling application ACK: %s", ack)
                 self._loop.create_task(self._send_unacked(ack))
         except Exception:
             pass
@@ -1525,7 +1525,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 seq = int(m.group(1))
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
-                _LOGGER.debug("Scheduling application ACK (cmd): %s", ack)
+                _LOGGER.info("Scheduling application ACK (cmd): %s", ack)
                 self._loop.create_task(self._send_unacked(ack))
         except Exception:
             pass
@@ -2073,7 +2073,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
     async def _send_unacked(self, text: str) -> None:
         """Send a small ZCL payload back to the device without expecting an app-level ACK."""
-        _LOGGER.debug("_send_unacked called: %r", text)
+        _LOGGER.info("_send_unacked called: %r", text)
         try:
             chunks = list(self._chunk_payload(text))
             for seq, total, chunk in chunks:
