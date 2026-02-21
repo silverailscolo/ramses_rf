@@ -1682,7 +1682,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     ) -> Any:
         getter = getattr(device, "async_get_cluster", None)
         if callable(getter):
-            cluster = getter(endpoint_id, cluster_id, direction)
+            try:
+                cluster = getter(endpoint_id, cluster_id, direction)
+            except Exception as err:
+                # Some ZHA implementations raise KeyError (or other exceptions)
+                # when the cluster is not present; normalize to TransportError
+                raise exc.TransportError(
+                    f"Cluster lookup failed for 0x{cluster_id:04x} on endpoint {endpoint_id}: {err}"
+                ) from err
             if cluster is None:
                 raise exc.TransportError(
                     f"Cluster 0x{cluster_id:04x} not found on endpoint {endpoint_id}"
@@ -1712,9 +1719,32 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         return cluster
 
     def _attach_clusters(self, device: Any) -> None:
-        read_cluster = self._get_cluster(
-            device, self._endpoint_id, self._cluster_id, self._read_direction
-        )
+        try:
+            read_cluster = self._get_cluster(
+                device, self._endpoint_id, self._cluster_id, self._read_direction
+            )
+        except exc.TransportError:
+            # Fallback: search all endpoints for the requested cluster id and
+            # bind to the first matching endpoint. This helps when the user
+            # supplied an endpoint that doesn't expose the custom cluster.
+            _LOGGER.debug(
+                "Read cluster 0x%04x not found on endpoint %s; searching other endpoints",
+                self._cluster_id,
+                self._endpoint_id,
+            )
+            found = False
+            for ep_id, ep in getattr(device, "endpoints", {}).items():
+                try:
+                    candidate = self._get_cluster(device, int(ep_id), self._cluster_id, self._read_direction)
+                    _LOGGER.info("Auto-selected endpoint %s for read cluster 0x%04x", ep_id, self._cluster_id)
+                    self._endpoint_id = int(ep_id)
+                    read_cluster = candidate
+                    found = True
+                    break
+                except Exception:
+                    continue
+            if not found:
+                raise
 
         if (self._write_cluster_id, self._write_endpoint_id) == (
             self._cluster_id,
@@ -1722,12 +1752,32 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         ):
             write_cluster = read_cluster
         else:
-            write_cluster = self._get_cluster(
-                device,
-                self._write_endpoint_id,
-                self._write_cluster_id,
-                self._write_direction,
-            )
+            try:
+                write_cluster = self._get_cluster(
+                    device,
+                    self._write_endpoint_id,
+                    self._write_cluster_id,
+                    self._write_direction,
+                )
+            except exc.TransportError:
+                _LOGGER.debug(
+                    "Write cluster 0x%04x not found on endpoint %s; searching other endpoints",
+                    self._write_cluster_id,
+                    self._write_endpoint_id,
+                )
+                found = False
+                for ep_id, ep in getattr(device, "endpoints", {}).items():
+                    try:
+                        candidate = self._get_cluster(device, int(ep_id), self._write_cluster_id, self._write_direction)
+                        _LOGGER.info("Auto-selected endpoint %s for write cluster 0x%04x", ep_id, self._write_cluster_id)
+                        self._write_endpoint_id = int(ep_id)
+                        write_cluster = candidate
+                        found = True
+                        break
+                    except Exception:
+                        continue
+                if not found:
+                    raise
 
         if self._cluster and hasattr(self._cluster, "remove_listener"):
             with contextlib.suppress(Exception):
