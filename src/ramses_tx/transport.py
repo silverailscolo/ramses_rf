@@ -1505,13 +1505,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             args[:100] if hasattr(args, '__getitem__') else args,
         )
         
-        if not self._use_command_mode:
-            _LOGGER.debug("Zigbee cluster_command: ignoring (not in command mode)")
-            return
-
+        # Attempt to decode command payload as a ZCL char-string. Previously
+        # we ignored incoming commands unless in explicit command mode; this
+        # prevented handling ESP custom-command chunked payloads when the
+        # read/write clusters differed (common with Ramses ESP). Decode the
+        # payload and only return when decoding yields nothing relevant.
         payload = self._decode_command_payload(args)
         if not payload:
-            _LOGGER.warning("Zigbee cluster_command: empty payload after decode")
+            _LOGGER.debug("Zigbee cluster_command: empty or non-text payload after decode")
             return
 
         _LOGGER.debug("Zigbee cluster_command decoded payload (len=%s): %r", len(payload), payload)
