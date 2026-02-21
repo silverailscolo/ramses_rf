@@ -1724,25 +1724,52 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 device, self._endpoint_id, self._cluster_id, self._read_direction
             )
         except exc.TransportError:
-            # Fallback: search all endpoints for the requested cluster id and
-            # bind to the first matching endpoint. This helps when the user
-            # supplied an endpoint that doesn't expose the custom cluster.
+            # Fallback: search all endpoints and both cluster directions
+            # for the requested cluster id, and bind to the first matching
+            # endpoint/direction. This helps when the user supplied an
+            # endpoint that doesn't expose the custom cluster in the
+            # expected direction (in vs out).
             _LOGGER.debug(
-                "Read cluster 0x%04x not found on endpoint %s; searching other endpoints",
+                "Read cluster 0x%04x not found on endpoint %s; searching other endpoints/directions",
                 self._cluster_id,
                 self._endpoint_id,
             )
+            # Dump device endpoints and their clusters to help diagnose role/direction mismatches
+            try:
+                ep_map = {}
+                for ep_id, ep_obj in getattr(device, "endpoints", {}).items():
+                    try:
+                        in_clusters = list(getattr(ep_obj, "in_clusters", {}).keys())
+                    except Exception:
+                        in_clusters = list(getattr(ep_obj, "in_clusters", {}).keys()) if hasattr(ep_obj, "in_clusters") else []
+                    try:
+                        out_clusters = list(getattr(ep_obj, "out_clusters", {}).keys())
+                    except Exception:
+                        out_clusters = list(getattr(ep_obj, "out_clusters", {}).keys()) if hasattr(ep_obj, "out_clusters") else []
+                    ep_map[int(ep_id)] = {"in": in_clusters, "out": out_clusters}
+                _LOGGER.debug("ZHA device endpoints map: %s", ep_map)
+            except Exception:
+                _LOGGER.exception("Failed to dump device endpoints for debugging")
             found = False
             for ep_id, ep in getattr(device, "endpoints", {}).items():
-                try:
-                    candidate = self._get_cluster(device, int(ep_id), self._cluster_id, self._read_direction)
-                    _LOGGER.info("Auto-selected endpoint %s for read cluster 0x%04x", ep_id, self._cluster_id)
-                    self._endpoint_id = int(ep_id)
-                    read_cluster = candidate
-                    found = True
+                for dir_try in ("in", "out"):
+                    try:
+                        candidate = self._get_cluster(device, int(ep_id), self._cluster_id, dir_try)
+                        _LOGGER.info(
+                            "Auto-selected endpoint %s (direction=%s) for read cluster 0x%04x",
+                            ep_id,
+                            dir_try,
+                            self._cluster_id,
+                        )
+                        self._endpoint_id = int(ep_id)
+                        self._read_direction = dir_try
+                        read_cluster = candidate
+                        found = True
+                        break
+                    except Exception:
+                        continue
+                if found:
                     break
-                except Exception:
-                    continue
             if not found:
                 raise
 
@@ -1761,21 +1788,46 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 )
             except exc.TransportError:
                 _LOGGER.debug(
-                    "Write cluster 0x%04x not found on endpoint %s; searching other endpoints",
+                    "Write cluster 0x%04x not found on endpoint %s; searching other endpoints/directions",
                     self._write_cluster_id,
                     self._write_endpoint_id,
                 )
+                # Dump device endpoints and clusters for debugging
+                try:
+                    ep_map = {}
+                    for ep_id, ep_obj in getattr(device, "endpoints", {}).items():
+                        try:
+                            in_clusters = list(getattr(ep_obj, "in_clusters", {}).keys())
+                        except Exception:
+                            in_clusters = list(getattr(ep_obj, "in_clusters", {}).keys()) if hasattr(ep_obj, "in_clusters") else []
+                        try:
+                            out_clusters = list(getattr(ep_obj, "out_clusters", {}).keys())
+                        except Exception:
+                            out_clusters = list(getattr(ep_obj, "out_clusters", {}).keys()) if hasattr(ep_obj, "out_clusters") else []
+                        ep_map[int(ep_id)] = {"in": in_clusters, "out": out_clusters}
+                    _LOGGER.debug("ZHA device endpoints map: %s", ep_map)
+                except Exception:
+                    _LOGGER.exception("Failed to dump device endpoints for debugging")
                 found = False
                 for ep_id, ep in getattr(device, "endpoints", {}).items():
-                    try:
-                        candidate = self._get_cluster(device, int(ep_id), self._write_cluster_id, self._write_direction)
-                        _LOGGER.info("Auto-selected endpoint %s for write cluster 0x%04x", ep_id, self._write_cluster_id)
-                        self._write_endpoint_id = int(ep_id)
-                        write_cluster = candidate
-                        found = True
+                    for dir_try in ("in", "out"):
+                        try:
+                            candidate = self._get_cluster(device, int(ep_id), self._write_cluster_id, dir_try)
+                            _LOGGER.info(
+                                "Auto-selected endpoint %s (direction=%s) for write cluster 0x%04x",
+                                ep_id,
+                                dir_try,
+                                self._write_cluster_id,
+                            )
+                            self._write_endpoint_id = int(ep_id)
+                            self._write_direction = dir_try
+                            write_cluster = candidate
+                            found = True
+                            break
+                        except Exception:
+                            continue
+                    if found:
                         break
-                    except Exception:
-                        continue
                 if not found:
                     raise
 
