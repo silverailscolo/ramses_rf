@@ -100,34 +100,37 @@ def limit_duty_cycle(
     def decorator(
         fnc: Callable[..., Awaitable[None]],
     ) -> Callable[..., Awaitable[None]]:
-        bits_in_bucket: float = BUCKET_CAPACITY
-        last_time_bit_added = perf_counter()
 
         @wraps(fnc)
         async def wrapper(
             self: PortTransport, frame: str, *args: Any, **kwargs: Any
         ) -> None:
-            nonlocal bits_in_bucket
-            nonlocal last_time_bit_added
+            # Lazy initialize the instance-bound duty cycle variables
+            if self._tx_bits_in_bucket is None or self._tx_last_time_bit_added is None:
+                self._tx_bits_in_bucket = BUCKET_CAPACITY
+                self._tx_last_time_bit_added = perf_counter()
 
             rf_frame_size = 330 + len(frame[46:]) * 10
 
-            elapsed_time = perf_counter() - last_time_bit_added
-            bits_in_bucket = min(
-                bits_in_bucket + elapsed_time * FILL_RATE, BUCKET_CAPACITY
+            elapsed_time = perf_counter() - self._tx_last_time_bit_added
+            self._tx_bits_in_bucket = min(
+                self._tx_bits_in_bucket + elapsed_time * FILL_RATE, BUCKET_CAPACITY
             )
-            last_time_bit_added = perf_counter()
+            self._tx_last_time_bit_added = perf_counter()
 
             if _DBG_DISABLE_DUTY_CYCLE_LIMIT:
-                bits_in_bucket = BUCKET_CAPACITY
+                self._tx_bits_in_bucket = BUCKET_CAPACITY
 
-            if bits_in_bucket < rf_frame_size:
-                await asyncio.sleep((rf_frame_size - bits_in_bucket) / FILL_RATE)
+            if self._tx_bits_in_bucket < rf_frame_size:
+                await asyncio.sleep(
+                    (rf_frame_size - self._tx_bits_in_bucket) / FILL_RATE
+                )
 
             try:
                 await fnc(self, frame, *args, **kwargs)
             finally:
-                bits_in_bucket -= rf_frame_size
+                if self._tx_bits_in_bucket is not None:
+                    self._tx_bits_in_bucket -= rf_frame_size
 
         @wraps(fnc)
         async def null_wrapper(
@@ -171,6 +174,9 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
 
     _recv_buffer: bytes = b""
 
+    _tx_bits_in_bucket: float | None = None
+    _tx_last_time_bit_added: float | None = None
+
     def __init__(  # type: ignore[no-any-unimported]
         self,
         serial_instance: Serial,
@@ -184,6 +190,9 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         """Initialize the port transport."""
         _PortTransportAbstractor.__init__(self, serial_instance, protocol, loop=loop)
         _FullTransport.__init__(self, config=config, extra=extra, loop=loop)
+
+        self._tx_bits_in_bucket = None
+        self._tx_last_time_bit_added = None
 
         self._leaker_sem = asyncio.BoundedSemaphore()
         self._leaker_task = self._loop.create_task(

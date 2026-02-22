@@ -59,9 +59,9 @@ class ReadProtocol(_DeviceIdFilterMixin):
         :param include_list: Dictionary of device IDs to allow.
         :type include_list: DeviceListT | None
         """
-        _DeviceIdFilterMixin.__init__(
-            self,
+        super().__init__(
             msg_handler,
+            disable_warnings=True,
             enforce_include_list=enforce_include_list,
             exclude_list=exclude_list,
             include_list=include_list,
@@ -122,9 +122,9 @@ class PortProtocol(_DeviceIdFilterMixin):
         :param include_list: Dictionary of device IDs to allow.
         :type include_list: DeviceListT | None
         """
-        _DeviceIdFilterMixin.__init__(
-            self,
+        super().__init__(
             msg_handler,
+            disable_warnings=False,
             enforce_include_list=enforce_include_list,
             exclude_list=exclude_list,
             include_list=include_list,

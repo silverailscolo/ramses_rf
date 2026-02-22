@@ -70,6 +70,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         :param msg_handler: The callback invoked when a valid message is processed.
         :type msg_handler: MsgHandlerT
         """
+        super().__init__()
         self._msg_handler = msg_handler
         self._msg_handlers: list[tuple[MsgHandlerT, MsgFilterT | None]] = []
 
@@ -430,11 +431,12 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         msg_handler: MsgHandlerT,
         /,
         *,
+        disable_warnings: bool = False,
         enforce_include_list: bool = False,
         exclude_list: DeviceListT | None = None,
         include_list: DeviceListT | None = None,
     ) -> None:
-        _BaseProtocol.__init__(self, msg_handler)
+        super().__init__(msg_handler)
 
         exclude_list = exclude_list or {}
         include_list = include_list or {}
@@ -448,7 +450,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         # HACK: to disable_warnings if pkt source is static (e.g. a file/dict)
         # HACK: but a dynamic source (e.g. a port/MQTT) should warn if needed
         self._known_hgi = self._extract_known_hgi_id(
-            include_list, disable_warnings=self.__class__.__name__ == "ReadProtocol"
+            include_list, disable_warnings=disable_warnings
         )
 
         self._foreign_gwys_lst: list[DeviceIdT] = []
