@@ -15,9 +15,9 @@ class RamsesException(_RamsesBaseException):
 
     HINT: None | str = None
 
-    def __init__(self, *args: object):
+    def __init__(self, *args: object) -> None:
         super().__init__(*args)
-        self.message: str | None = args[0] if args else None  # type: ignore[assignment]
+        self.message: str | None = str(args[0]) if args else None
 
     def __str__(self) -> str:
         if self.message and self.HINT:
@@ -81,7 +81,8 @@ class PacketPayloadInvalid(PacketInvalid):
     """The packet's payload is inconsistent."""
 
 
-# Errors at/below the protocol/transport layer, incl. packet processing
+class MessageInvalid(ParserBaseError):
+    """The message is structurally sound as a packet, but semantically invalid."""
 
 
 class ParserError(ParserBaseError):
@@ -89,4 +90,4 @@ class ParserError(ParserBaseError):
 
 
 class CommandInvalid(ParserError):
-    """The command is corrupt/not internally consistent."""
+    """The command is corrupt or invalid."""

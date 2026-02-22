@@ -44,11 +44,13 @@ async def test_hgi_id_injection() -> None:
         ):
             await gwy.start()
 
-        # 5. Verify transport_factory was called with the correct kwarg
+        # 5. Verify transport_factory was called with the correct extra dict
         _, kwargs = mock_transport_factory.call_args
 
-        assert SZ_ACTIVE_HGI in kwargs
-        assert kwargs[SZ_ACTIVE_HGI] == TEST_HGI_ID
+        assert "extra" in kwargs
+        assert kwargs["extra"] is not None
+        assert SZ_ACTIVE_HGI in kwargs["extra"]
+        assert kwargs["extra"][SZ_ACTIVE_HGI] == TEST_HGI_ID
 
         # Cleanup
         await gwy.stop()
@@ -86,7 +88,10 @@ async def test_hgi_id_default_behavior() -> None:
         _, kwargs = mock_transport_factory.call_args
 
         # The key should NOT be present if we didn't inject it
-        assert SZ_ACTIVE_HGI not in kwargs
+        # Under the new DTO refactor, extra might be None or an empty dict
+        extra = kwargs.get("extra")
+        if extra is not None:
+            assert SZ_ACTIVE_HGI not in extra
 
         # Cleanup
         await gwy.stop()

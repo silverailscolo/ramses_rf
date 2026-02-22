@@ -6,18 +6,18 @@
 """RAMSES RF - Check GWY address/type detection and its treatment of addr0."""
 
 import asyncio
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 from ramses_rf import Command, Gateway
+from ramses_rf.gateway import GatewayConfig
 from ramses_tx import exceptions as exc
 from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.protocol import PortProtocol
 from ramses_tx.transport import MqttTransport
 from ramses_tx.typing import DeviceIdT, QosParams
-
-from .conftest import _GwyConfigDictT
 
 # patched constants
 _DBG_DISABLE_STRICT_CHECKING = True  # #    ramses_tx.address
@@ -54,13 +54,13 @@ pytestmark = pytest.mark.asyncio()  # scope="module")
 
 
 @pytest.fixture()
-def gwy_config() -> _GwyConfigDictT:
+def gwy_config() -> dict[str, Any]:
     return {
-        "config": {
-            "disable_discovery": True,
-            "disable_qos": False,  # this is required for this test
-            "enforce_known_list": False,
-        },
+        "config": GatewayConfig(
+            disable_discovery=True,
+        ),
+        "disable_qos": False,  # this is required for this test
+        "enforce_known_list": False,
         "known_list": {HGI_DEVICE_ID: {}},  # req'd to thwart foreign HGI blacklisting
     }
 

@@ -23,23 +23,20 @@ from .const import (
     DEV_TYPE_MAP,
     DONT_CREATE_ENTITIES,
     DONT_UPDATE_ENTITIES,
+    I_,
+    RP,
+    RQ,
     SZ_DEVICES,
     SZ_OFFER,
     SZ_PHASE,
+    W_,
+    Code,
     DevType,
 )
 from .device import Device, Fakeable
 
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    Code,
-)
-
 if TYPE_CHECKING:
-    from . import Gateway
+    from .gateway import Gateway
 
 #
 # NOTE: All debug flags should be False for deployment to end-users
@@ -60,7 +57,13 @@ _TD_SECONDS_003 = td(seconds=3)
 
 
 def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
-    """Discover and create any new devices using the packet addresses (not payload)."""
+    """Discover and create any new devices using the packet addresses (not payload).
+
+    :param gwy: The gateway instance processing the message.
+    :type gwy: Gateway
+    :param this: The message containing the source and destination addresses.
+    :type this: Message
+    """
 
     # FIXME: changing Address to Devices is messy: ? Protocol for same method signatures
     # prefer Devices but can continue with Addresses if required...
@@ -100,6 +103,10 @@ def _check_msg_addrs(msg: Message) -> None:  # TODO
     """Validate the packet's address set.
 
     Raise InvalidAddrSetError if the metadata is invalid, otherwise simply return.
+
+    :param msg: The message to validate.
+    :type msg: Message
+    :raises exc.PacketAddrSetInvalid: If the address pair is invalid for the domain.
     """
 
     # TODO: needs work: doesn't take into account device's (non-HVAC) class
@@ -127,7 +134,14 @@ def _check_msg_addrs(msg: Message) -> None:  # TODO
 
 
 def _check_src_slug(msg: Message, *, slug: str | None = None) -> None:
-    """Validate the packet's source device class against its verb/code pair."""
+    """Validate the packet's source device class against its verb/code pair.
+
+    :param msg: The message to validate.
+    :type msg: Message
+    :param slug: The device slug to use for validation, defaults to None.
+    :type slug: str | None
+    :raises exc.PacketInvalid: If the source slug is unknown or cannot Tx the verb/code.
+    """
 
     if slug is None:  # slug = best_dev_role(msg.src, msg=msg)._SLUG
         slug = getattr(msg.src, "_SLUG", None)
@@ -152,7 +166,14 @@ def _check_src_slug(msg: Message, *, slug: str | None = None) -> None:
 
 
 def _check_dst_slug(msg: Message, *, slug: str | None = None) -> None:
-    """Validate the packet's destination device class against its verb/code pair."""
+    """Validate the packet's destination device class against its verb/code pair.
+
+    :param msg: The message to validate.
+    :type msg: Message
+    :param slug: The device slug to use for validation, defaults to None.
+    :type slug: str | None
+    :raises exc.PacketInvalid: If the destination slug is unknown or cannot Rx the verb/code.
+    """
 
     if slug is None:
         slug = getattr(msg.dst, "_SLUG", None)
@@ -180,17 +201,22 @@ def _check_dst_slug(msg: Message, *, slug: str | None = None) -> None:
 
 
 def process_msg(gwy: Gateway, msg: Message) -> None:
-    """Decoding the packet payload and route it appropriately."""
+    """Decode the packet payload and route it appropriately.
+
+    :param gwy: The gateway instance handling the routing.
+    :type gwy: Gateway
+    :param msg: The processed message to route.
+    :type msg: Message
+    """
 
     # All methods require msg with a valid payload, except _create_devices_from_addrs(),
     # which requires a valid payload only for 000C.
 
     def logger_xxxx(msg: Message) -> None:
-        """
-        Log msg according to src, code, log.debug setting.
+        """Log msg according to src, code, log.debug setting.
 
         :param msg: the Message being processed
-        :return: None
+        :type msg: Message
         """
         if _DBG_FORCE_LOG_MESSAGES:
             _LOGGER.warning(msg)
@@ -289,7 +315,15 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
 
 # TODO: this needs cleaning up (e.g. handle intervening packet)
 def detect_array_fragment(this: Message, prev: Message) -> bool:  # _PayloadT
-    """Return a merged array if this pkt is the latter half of an array."""
+    """Return True if this pkt is the latter half of an array.
+
+    :param this: The current message being evaluated.
+    :type this: Message
+    :param prev: The previously received message.
+    :type prev: Message
+    :return: True if the packet is part of a merged array, False otherwise.
+    :rtype: bool
+    """
     # This will work, even if the 2nd pkt._is_array == False as 1st == True
     # .I --- 01:158182 --:------ 01:158182 000A 048 001201F409C4011101F409C40...
     # .I --- 01:158182 --:------ 01:158182 000A 006 081001F409C4

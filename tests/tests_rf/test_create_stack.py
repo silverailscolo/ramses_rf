@@ -15,7 +15,7 @@ import serial  # type: ignore[import-untyped]
 from ramses_rf import Message
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.protocol import RamsesProtocolT, create_stack, protocol_factory
-from ramses_tx.transport import RamsesTransportT, transport_factory
+from ramses_tx.transport import RamsesTransportT, TransportConfig, transport_factory
 from ramses_tx.typing import DeviceIdT
 
 from .virtual_rf import HgiFwTypes, VirtualRf
@@ -62,8 +62,8 @@ async def _test_create_stack(
 
     protocol, transport = await create_stack(
         _msg_handler,
+        transport_config=TransportConfig(disable_sending=bool(disable_sending)),
         disable_qos=disable_qos,
-        disable_sending=disable_sending,
         enforce_include_list=enforce_include_list,
         exclude_list=exclude_list,
         include_list=include_list,
@@ -105,7 +105,7 @@ async def _test_factories(
     )
     transport: RamsesTransportT = await transport_factory(
         protocol,
-        disable_sending=disable_sending,
+        config=TransportConfig(disable_sending=bool(disable_sending)),
         **kwargs,
     )
 
