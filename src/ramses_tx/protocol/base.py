@@ -13,7 +13,6 @@ import logging
 import re
 from collections import deque
 from collections.abc import Callable
-from contextlib import suppress
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Final
 
@@ -31,7 +30,12 @@ from ..const import (
     DevType,
     Priority,
 )
-from ..exceptions import ProtocolError, ProtocolSendFailed, TransportError
+from ..exceptions import (
+    PacketInvalid,
+    ProtocolError,
+    ProtocolSendFailed,
+    TransportError,
+)
 from ..helpers import dt_now
 from ..interfaces import ProtocolInterface, TransportInterface
 from ..message import Message
@@ -364,11 +368,12 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         hacked_frame = self._apply_regex(raw_frame, self._inbound_regex)
 
         if hacked_frame != raw_frame:
-            with suppress(Exception):
+            try:
                 # Packet.from_port strictly expects the 3-character RSSI + space prefix
-                pkt = Packet.from_port(
-                    pkt.dtm, f"{pkt.rssi} {hacked_frame}"
-                )  # Fallback to original packet if regex broke it
+                pkt = Packet.from_port(pkt.dtm, f"{pkt.rssi} {hacked_frame}")
+            except (ValueError, PacketInvalid) as err:
+                _LOGGER.debug(f"Regex modified frame is invalid, reverting: {err}")
+                # Fallback to original packet if regex broke it (pkt remains unchanged)
 
         # Track Sync Cycles
         if pkt.code == Code._1F09 and pkt.verb == I_ and pkt._len == 3:
@@ -401,9 +406,9 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         """Called by the Transport when a Packet is received."""
         try:
             msg = Message(pkt)  # should log all invalid msgs appropriately
-        except Exception as exc:
-            # We catch generic Exception here because validation failures
-            # like PacketPayloadInvalid should never crash the reader loop.
+        except PacketInvalid as exc:
+            # We explicitly catch specific validation failures. Unhandled internal errors
+            # like TypeError or AttributeError will correctly bubble up and fail loudly.
             _LOGGER.debug(f"Dropped invalid packet during parsing: {exc}")
             return
 
@@ -447,8 +452,6 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         self._include += [ALL_DEV_ADDR.id, NON_DEV_ADDR.id]
 
         self._active_hgi: DeviceIdT | None = None
-        # HACK: to disable_warnings if pkt source is static (e.g. a file/dict)
-        # HACK: but a dynamic source (e.g. a port/MQTT) should warn if needed
         self._known_hgi = self._extract_known_hgi_id(
             include_list, disable_warnings=disable_warnings
         )
