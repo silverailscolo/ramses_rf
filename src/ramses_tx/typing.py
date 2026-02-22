@@ -382,6 +382,7 @@ class _12a0(TypedDict):
     relative_humidity: NotRequired[_HexToTempT | None]
     temperature: NotRequired[float | None]
     dewpoint_temp: NotRequired[float | None]
+    _unknown_12: NotRequired[str]
 
 
 class _12b0(TypedDict):
