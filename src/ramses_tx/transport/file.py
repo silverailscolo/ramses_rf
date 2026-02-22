@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import asyncio
-import fileinput
 import functools
 import logging
 from io import TextIOWrapper
 from typing import TYPE_CHECKING, Any
+
+import aiofiles  # type: ignore[import-untyped]
 
 from ..const import SZ_READER_TASK
 from ..exceptions import RamsesException, TransportSourceInvalid
@@ -105,14 +106,17 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
         elif isinstance(self._pkt_source, str):
             try:
-                with fileinput.input(files=self._pkt_source, encoding="utf-8") as file:
-                    for dtm_pkt_line in file:
+                # Removed redundant mode="r" to satisfy Ruff UP015
+                async with aiofiles.open(self._pkt_source, encoding="utf-8") as file:
+                    async for dtm_pkt_line in file:
                         await self._process_line_from_raw(dtm_pkt_line)
             except FileNotFoundError as err:
                 _LOGGER.warning(f"Correct the packet file name; {err}")
 
         elif isinstance(self._pkt_source, TextIOWrapper):
-            for dtm_pkt_line in self._pkt_source:
+            # Wrap the synchronous TextIOWrapper for asynchronous iteration
+            async_file = aiofiles.wrap(self._pkt_source)
+            async for dtm_pkt_line in async_file:
                 await self._process_line_from_raw(dtm_pkt_line)
 
         else:
