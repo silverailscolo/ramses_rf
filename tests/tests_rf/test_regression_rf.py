@@ -1,18 +1,23 @@
 """Regression tests for the application layer (Gateway state)."""
 
+from __future__ import annotations
+
 import asyncio
 import contextlib
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from syrupy.assertion import SnapshotAssertion
 
 from ramses_rf import Gateway
 from ramses_rf.device import DeviceHeat, DeviceHvac
+from ramses_rf.gateway import GatewayConfig
 from ramses_tx.exceptions import TransportError
 from ramses_tx.transport import SZ_READER_TASK
+
+if TYPE_CHECKING:
+    from syrupy.assertion import SnapshotAssertion
 
 # Navigate up from tests/tests_rf/test_regression_rf.py to tests/fixtures/
 FIXTURE_FILE = Path(__file__).parents[1] / "fixtures" / "regression_packets_sorted.txt"
@@ -163,11 +168,11 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
     gwy = Gateway(
         None,  # port_name is required (positional arg)
         input_file=str(FIXTURE_FILE),
-        config={
-            "disable_discovery": True,
-            "disable_sending": True,
-            "reduce_processing": 0,
-        },
+        config=GatewayConfig(
+            disable_discovery=True,
+            reduce_processing=0,
+        ),
+        disable_sending=True,
     )
 
     # 2. Patch sending methods to prevent "Read-Only" errors & background noise.

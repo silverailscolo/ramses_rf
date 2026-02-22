@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
@@ -705,7 +705,10 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         # lf._msgs_ot_ctl_polled = {}
 
     def _setup_discovery_cmds(self) -> None:
-        def which_cmd(use_native_ot: str, msg_id: MsgId) -> Command | None:
+        def which_cmd(
+            use_native_ot: Literal["always", "prefer", "avoid", "never"] | None,
+            msg_id: MsgId,
+        ) -> Command | None:
             """Create a OT cmd, or its RAMSES equivalent, depending."""
             # we know RQ|3220 is an option, question is: use that, or RAMSES or nothing?
             if use_native_ot in ("always", "prefer"):

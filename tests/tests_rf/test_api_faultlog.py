@@ -3,11 +3,13 @@
 
 import asyncio
 import re
+from typing import Any
 
 import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.device import Controller
+from ramses_rf.gateway import GatewayConfig
 from ramses_rf.system import Evohome
 from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.protocol import PortProtocol
@@ -22,7 +24,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     Code,
 )
 
-from .conftest import TEST_DIR, _GwyConfigDictT
+from .conftest import TEST_DIR
 
 LOGS_DIR = f"{TEST_DIR}/logs"
 
@@ -37,13 +39,13 @@ pytestmark = pytest.mark.asyncio()
 
 
 @pytest.fixture()
-def gwy_config() -> _GwyConfigDictT:
+def gwy_config() -> dict[str, Any]:
     return {
-        "config": {
-            "disable_discovery": True,
-            "disable_qos": False,  # QoS is required for this test
-            "enforce_known_list": False,
-        },
+        "config": GatewayConfig(
+            disable_discovery=True,
+        ),
+        "disable_qos": False,  # QoS is required for this test
+        "enforce_known_list": False,
         "known_list": {HGI_DEVICE_ID: {}},  # req'd to thwart foreign HGI blacklisting
     }
 

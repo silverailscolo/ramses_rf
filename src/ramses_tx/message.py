@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""RAMSES RF - Decode/process a message (payload into JSON)."""
+"""RAMSES RF - Decode/process a message (payload into JSON/DTO)."""
 
 from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from datetime import datetime as dt, timedelta as td
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from . import exceptions as exc
 from .address import Address
@@ -30,7 +31,7 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 )
 
 if TYPE_CHECKING:
-    from ramses_rf import Gateway
+    from ramses_rf.gateway import Gateway
 
     from .const import IndexT, VerbT  # noqa: F401, pylint: disable=unused-import
 
@@ -38,14 +39,28 @@ if TYPE_CHECKING:
 __all__ = ["Message"]
 
 
-CODE_NAMES = {k: v["name"] for k, v in CODES_SCHEMA.items()}
+CODE_NAMES: dict[Code | str, str] = {k: v["name"] for k, v in CODES_SCHEMA.items()}
 
-MSG_FORMAT_10 = "|| {:10s} | {:10s} | {:2s} | {:16s} | {:^4s} || {}"
+MSG_FORMAT_10: str = "|| {:10s} | {:10s} | {:2s} | {:16s} | {:^4s} || {}"
 
-_TD_SECS_003 = td(seconds=3)
+_TD_SECS_003: td = td(seconds=3)
 
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class PayloadBase:
+    """Base Data Transfer Object for parsed payloads.
+
+    Acts as the foundation for the strict DTO migration, replacing raw dicts.
+    """
+
+    pass
+
+
+# Transition alias for typing until full payload migration is complete
+PayloadT: TypeAlias = Any  # PayloadBase | list[PayloadBase] | dict | list[dict]
 
 
 class MessageBase:
@@ -59,7 +74,7 @@ class MessageBase:
         :raises PacketInvalid: If the packet payload cannot be parsed.
         """
 
-        self._pkt = pkt
+        self._pkt: Packet = pkt
 
         self.src: Address = pkt.src
         self.dst: Address = pkt.dst
@@ -75,31 +90,44 @@ class MessageBase:
         self.code: Code = pkt.code
         self.len: int = pkt._len
 
+        # Initialize attributes before parsing to prevent AttributeError
+        # if an exception is raised and __repr__ is called during handling.
+        self._str: str | None = None
+        self._payload: PayloadT = {}
+
         self._payload = self._validate(self._pkt.payload)  # ? may raise PacketInvalid
 
-        self._str: str = None  # type: ignore[assignment]
-
-    def __repr__(self) -> str:
-        """
-        :return: an unambiguous string representation of this object.
-        """
-        return str(self._pkt)  # repr or str?
-
     def __str__(self) -> str:
-        """
-        :return: a brief readable string representation of this object.
+        """Return a human-readable string representation of this object.
+
+        :return: A human-readable string representation of this object.
+        :rtype: str
         """
 
         def ctx(pkt: Packet) -> str:
-            ctx = {True: "[..]", False: "", None: "??"}.get(pkt._ctx, pkt._ctx)  # type: ignore[arg-type]
-            if not ctx and pkt.payload[:2] not in ("00", "FF"):
+            """Extract the context string from the packet safely."""
+            val: str
+            if pkt._ctx is True:
+                val = "[..]"
+            elif pkt._ctx is False:
+                val = ""
+            elif pkt._ctx is None:
+                val = "??"  # type: ignore[unreachable]
+            else:
+                val = str(pkt._ctx)
+
+            if (
+                not val
+                and isinstance(pkt.payload, str)
+                and pkt.payload[:2] not in ("00", "FF")
+            ):
                 return f"({pkt.payload[:2]})"
-            return ctx
+            return val
 
         if self._str is not None:
             return self._str
 
-        if self.src.id == self._addrs[0].id:  # type: ignore[unreachable]
+        if self.src.id == self._addrs[0].id:
             name_0 = self._name(self.src)
             name_1 = (
                 "" if self.dst is self.src else self._name(self.dst)
@@ -114,8 +142,17 @@ class MessageBase:
         )
         return self._str
 
+    def __repr__(self) -> str:
+        """Return an unambiguous string representation of this object.
+
+        :return: An unambiguous string representation of this object.
+        :rtype: str
+        """
+        return str(self._pkt)
+
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Message):
+        """Check equality against another Message."""
+        if not isinstance(other, MessageBase):
             return NotImplemented
         return (self.src, self.dst, self.verb, self.code, self._pkt.payload) == (
             other.src,
@@ -126,39 +163,48 @@ class MessageBase:
         )
 
     def __lt__(self, other: object) -> bool:
-        if not isinstance(other, Message):
+        """Compare timestamps for ordering."""
+        if not isinstance(other, MessageBase):
             return NotImplemented
         return self.dtm < other.dtm
 
     def _name(self, addr: Address) -> str:
-        """
-        :return: a friendly name for an Address, or a Device.
+        """Return a friendly name for an Address, or a Device.
+
+        :param addr: The address to identify.
+        :type addr: Address
+        :return: A friendly name for an Address, or a Device.
+        :rtype: str
         """
         return f" {addr.id}"  # can't do 'CTL:123456' instead of ' 01:123456'
 
     @property
-    def payload(self):  # type: ignore[no-untyped-def]  # FIXME -> dict | list:
-        """
-        :return: the payload.
+    def payload(self) -> PayloadT:
+        """Return the parsed payload, preferably as a strongly-typed DTO.
+
+        :return: The payload.
+        :rtype: PayloadT
         """
         return self._payload
 
     @property
     def _has_payload(self) -> bool:
-        """
-        :return: False if there is no payload (may falsely return True).
+        """Return False if there is no payload (may falsely return True).
 
         The message (i.e. the raw payload) may still have an idx.
-        """
 
+        :return: False if there is no payload (may falsely return True).
+        :rtype: bool
+        """
         return self._pkt._has_payload
 
     @property
     def _has_array(self) -> bool:
-        """
-        :return: True if the message's raw payload is an array.
-        """
+        """Return True if the message's raw payload is an array.
 
+        :return: True if the message's raw payload is an array.
+        :rtype: bool
+        """
         return bool(self._pkt._has_array)
 
     @property
@@ -167,6 +213,7 @@ class MessageBase:
         Used to identify the zone/domain that a message applies to.
 
         :return: an empty dict if there is none such, or None if undetermined.
+        :rtype: dict[str, str]
         """
 
         # .I --- 01:145038 --:------ 01:145038 3B00 002 FCC8
@@ -254,11 +301,14 @@ class MessageBase:
         return {index_name: self._pkt._idx}
 
     # TODO: needs work...
-    def _validate(self, raw_payload: str) -> dict | list[dict]:  # type: ignore[type-arg]
+    def _validate(self, raw_payload: str) -> PayloadT:
         """Validate a message packet payload, and parse it if valid.
 
-        :return: a dict containing key: value pairs, or a list of those created from the payload
-        :raises PacketInvalid exception if it is not valid.
+        :param raw_payload: The raw payload string.
+        :type raw_payload: str
+        :return: A dict containing key: value pairs, or a list/DTO created from the payload
+        :rtype: PayloadT
+        :raises PacketInvalid: If it is not valid or parsable.
         """
 
         try:  # parse the payload
@@ -277,7 +327,8 @@ class MessageBase:
             if isinstance(result, dict):
                 return {**self._idx, **result}
 
-            raise TypeError(f"Invalid payload type: {type(result)}")
+            # Return the strongly-typed PayloadBase DTO object
+            return result  # type: ignore[unreachable]
 
         except exc.PacketInvalid as err:
             _LOGGER.warning("%s < %s", self._pkt, err)
@@ -305,29 +356,45 @@ class Message(MessageBase):
     Adds _expired attr to the Message class.
     """
 
-    CANT_EXPIRE = -1  # sentinel value for fraction_expired
+    CANT_EXPIRE: float = -1.0  # sentinel value for fraction_expired
 
-    HAS_EXPIRED = 2.0  # fraction_expired >= HAS_EXPIRED
+    HAS_EXPIRED: float = 2.0  # fraction_expired >= HAS_EXPIRED
     # .HAS_DIED = 1.0  # fraction_expired >= 1.0 (is expected lifespan)
-    IS_EXPIRING = 0.8  # fraction_expired >= 0.8 (and < HAS_EXPIRED)
+    IS_EXPIRING: float = 0.8  # fraction_expired >= 0.8 (and < HAS_EXPIRED)
 
     _gwy: Gateway | None = None
     _fraction_expired: float | None = None
 
     @classmethod
     def _from_cmd(cls, cmd: Command, dtm: dt | None = None) -> Message:
-        """Create a Message from a Command."""
+        """Create a Message from a Command.
+
+        :param cmd: The command.
+        :type cmd: Command
+        :param dtm: Datetime overrides.
+        :type dtm: dt | None
+        :return: The generated message.
+        :rtype: Message
+        """
         return cls(Packet._from_cmd(cmd, dtm=dtm))
 
     @classmethod
     def _from_pkt(cls, pkt: Packet) -> Message:
-        """Create a Message from a Packet."""
+        """Create a Message from a Packet.
+
+        :param pkt: The packet.
+        :type pkt: Packet
+        :return: The generated message.
+        :rtype: Message
+        """
         return cls(pkt)
 
     @property
     def _expired(self) -> bool:
-        """
+        """Return True if the message is dated, False otherwise.
+
         :return: True if the message is dated, False otherwise
+        :rtype: bool
         """
         # fraction_expired = (dt_now - self.dtm - _TD_SECONDS_003) / self._pkt._lifespan
         # TODO: keep none >7d, even 10E0, etc.
@@ -350,17 +417,22 @@ class Message(MessageBase):
         # 2. Need to update the fraction_expired...
         if self.code == Code._1F09 and self.verb != RQ:  # sync_cycle is a special case
             # RQs won't have remaining_seconds, RP/Ws have only partial cycle times
+            rem_secs = getattr(self.payload, "remaining_seconds", None)
+            if rem_secs is None and isinstance(self.payload, dict):
+                rem_secs = self.payload.get("remaining_seconds", 0)
+
             self._fraction_expired = fraction_expired(
-                td(seconds=self.payload["remaining_seconds"]),
+                td(seconds=float(rem_secs or 0)),
             )
 
         elif self._pkt._lifespan is False:  # Can't expire
             self._fraction_expired = self.CANT_EXPIRE
 
         elif self._pkt._lifespan is True:  # Can't expire
-            raise NotImplementedError
+            raise NotImplementedError("Lifespan True not implemented")
 
         else:
+            assert isinstance(self._pkt._lifespan, td)
             self._fraction_expired = fraction_expired(self._pkt._lifespan)
 
         return self._fraction_expired >= self.HAS_EXPIRED
@@ -368,10 +440,19 @@ class Message(MessageBase):
 
 @lru_cache(maxsize=256)
 def re_compile_re_match(regex: str, string: str) -> bool:  # Optional[Match[Any]]
+    """Check if the provided string matches the regex pattern.
+
+    :param regex: The regex pattern string
+    :type regex: str
+    :param string: The text payload to test
+    :type string: str
+    :return: True if matched, False otherwise
+    :rtype: bool
+    """
     # TODO: confirm this does speed things up
     # Python has its own caching of re.compile, _MAXCACHE = 512
     # https://github.com/python/cpython/blob/3.10/Lib/re.py
-    return re.compile(regex).match(string)  # type: ignore[return-value]
+    return bool(re.compile(regex).match(string))
 
 
 def _check_msg_payload(msg: MessageBase, payload: str) -> None:

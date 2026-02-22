@@ -51,6 +51,7 @@ import re
 import sys
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
+from dataclasses import dataclass, field
 from datetime import datetime as dt, timedelta as td
 from functools import partial, wraps
 from io import TextIOWrapper
@@ -76,40 +77,37 @@ from . import exceptions as exc
 from .command import Command
 from .const import (
     DUTY_CYCLE_DURATION,
+    I_,
     MAX_DUTY_CYCLE_RATE,
     MAX_TRANSMIT_RATE_TOKENS,
     MIN_INTER_WRITE_GAP,
+    RP,
+    RQ,
     SZ_ACTIVE_HGI,
     SZ_IS_EVOFW3,
     SZ_SIGNATURE,
+    W_,
+    Code,
 )
 from .helpers import dt_now
 from .interfaces import TransportInterface
 from .packet import Packet
-from .schemas import SCH_SERIAL_PORT_CONFIG, SZ_EVOFW_FLAG, SZ_INBOUND, SZ_OUTBOUND
+from .schemas import SCH_SERIAL_PORT_CONFIG, SZ_INBOUND, SZ_OUTBOUND
 from .typing import DeviceIdT, ExceptionT, PortConfigT, SerPortNameT
-
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    Code,
-)
 
 if TYPE_CHECKING:
     from .protocol import RamsesProtocolT
 
 
-_DEFAULT_TIMEOUT_PORT: Final[float] = 3
-_DEFAULT_TIMEOUT_MQTT: Final[float] = 60  # Updated from 9s to 60s for robustness
+_DEFAULT_TIMEOUT_PORT: Final[float] = 3.0
+_DEFAULT_TIMEOUT_MQTT: Final[float] = 60.0  # Updated from 9s to 60s for robustness
 
-_SIGNATURE_GAP_SECS = 0.05
-_SIGNATURE_MAX_TRYS = 40  # was: 24
-_SIGNATURE_MAX_SECS = 3
+_SIGNATURE_GAP_SECS: Final[float] = 0.05
+_SIGNATURE_MAX_TRYS: Final[int] = 40  # was: 24
+_SIGNATURE_MAX_SECS: Final[int] = 3
 
-SZ_RAMSES_GATEWAY: Final = "RAMSES/GATEWAY"
-SZ_READER_TASK: Final = "reader_task"
+SZ_RAMSES_GATEWAY: Final[str] = "RAMSES/GATEWAY"
+SZ_READER_TASK: Final[str] = "reader_task"
 
 
 #
@@ -155,7 +153,6 @@ else:  # is linux
         :return: A list of symlinks pointing to the devices.
         :rtype: list[str]
         """
-
         links: list[str] = []
         for device in glob.glob("/dev/*") + glob.glob("/dev/serial/by-id/*"):
             if os.path.islink(device) and os.path.realpath(device) in devices:
@@ -174,7 +171,6 @@ else:  # is linux
         :return: A list of SysFS objects representing the ports.
         :rtype: list[SysFS]
         """
-
         if _hide_subsystems is None:
             _hide_subsystems = ["platform"]
 
@@ -207,7 +203,6 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
     :rtype: bool | None
     :raises exc.TransportSerialError: If the serial port cannot be found.
     """
-
     if serial_port[:7] == "mqtt://":
         return False  # ramses_esp
 
@@ -290,7 +285,6 @@ def _normalise(pkt_line: str) -> str:
     :return: The normalized packet string.
     :rtype: str
     """
-
     # TODO: deprecate as only for ramses_esp <0.4.0
     # ramses_esp-specific bugs, see: https://github.com/IndaloTech/ramses_esp/issues/1
     pkt_line = re.sub("\r\r", "\r", pkt_line)
@@ -315,7 +309,6 @@ def _str(value: bytes) -> str:
     :return: The decoded string.
     :rtype: str
     """
-
     try:
         result = "".join(
             c for c in value.decode("ascii", errors="strict") if c in printable
@@ -338,7 +331,6 @@ def limit_duty_cycle(
     :return: A decorator that enforces the duty cycle limit.
     :rtype: Callable[..., Any]
     """
-
     TX_RATE_AVAIL: int = 38400  # bits per second (deemed)
     FILL_RATE: float = TX_RATE_AVAIL * max_duty_cycle  # bits per second
     BUCKET_CAPACITY: float = FILL_RATE * time_window
@@ -412,7 +404,6 @@ def avoid_system_syncs(fnc: Callable[..., Awaitable[None]]) -> Callable[..., Any
     :return: The decorated function.
     :rtype: Callable[..., Any]
     """
-
     DURATION_PKT_GAP = 0.020  # 0.0200 for evohome, or 0.0127 for DTS92
     DURATION_LONG_PKT = 0.022  # time to tx I|2309|048 (or 30C9, or 000A)
     DURATION_SYNC_PKT = 0.010  # time to tx I|1F09|003
@@ -486,6 +477,21 @@ def track_system_syncs(fnc: Callable[..., None]) -> Callable[..., Any]:
     return wrapper
 
 
+@dataclass
+class TransportConfig:
+    """Configuration parameters for Ramses transports.
+
+    Replaces kwargs payload previously passed to transport and factories.
+    """
+
+    disable_sending: bool = False
+    autostart: bool = False
+    log_all: bool = False
+    evofw_flag: str | None = None
+    use_regex: dict[str, dict[str, str]] = field(default_factory=dict)
+    timeout: float | None = None
+
+
 # ### Abstractors #####################################################################
 # ### Do the bare minimum to abstract each transport from its underlying class
 
@@ -493,24 +499,21 @@ def track_system_syncs(fnc: Callable[..., None]) -> Callable[..., Any]:
 class _CallbackTransportAbstractor:
     """Do the bare minimum to abstract a transport from its underlying class."""
 
-    def __init__(
-        self, loop: asyncio.AbstractEventLoop | None = None, **kwargs: Any
-    ) -> None:
+    def __init__(self, /, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
         """Initialize the callback transport abstractor.
 
         :param loop: The asyncio event loop, defaults to None.
         :type loop: asyncio.AbstractEventLoop | None, optional
         """
         self._loop = loop or asyncio.get_event_loop()
-        # Consume 'kwargs' here. Do NOT pass them to object.__init__().
         super().__init__()
 
 
 class _BaseTransport:
     """Base class for all transports."""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self) -> None:
+        pass
 
 
 class _FileTransportAbstractor:
@@ -520,6 +523,8 @@ class _FileTransportAbstractor:
         self,
         pkt_source: dict[str, str] | str | TextIOWrapper,
         protocol: RamsesProtocolT,
+        /,
+        *,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the file transport abstractor.
@@ -531,10 +536,7 @@ class _FileTransportAbstractor:
         :param loop: The asyncio event loop, defaults to None.
         :type loop: asyncio.AbstractEventLoop | None, optional
         """
-        # per().__init__(extra=extra)  # done in _BaseTransport
-
         self._pkt_source = pkt_source
-
         self._protocol = protocol
         self._loop = loop or asyncio.get_event_loop()
 
@@ -548,6 +550,8 @@ class _PortTransportAbstractor(serial_asyncio.SerialTransport):
         self,
         serial_instance: Serial,
         protocol: RamsesProtocolT,
+        /,
+        *,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the port transport abstractor.
@@ -559,13 +563,7 @@ class _PortTransportAbstractor(serial_asyncio.SerialTransport):
         :param loop: The asyncio event loop, defaults to None.
         :type loop: asyncio.AbstractEventLoop | None, optional
         """
-
         super().__init__(loop or asyncio.get_event_loop(), protocol, serial_instance)
-
-        # lf._serial = serial_instance  # ._serial, not .serial
-
-        # lf._protocol = protocol
-        # lf._loop = loop or asyncio.get_event_loop()
 
 
 class _MqttTransportAbstractor:
@@ -575,6 +573,8 @@ class _MqttTransportAbstractor:
         self,
         broker_url: str,
         protocol: RamsesProtocolT,
+        /,
+        *,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the MQTT transport abstractor.
@@ -586,10 +586,7 @@ class _MqttTransportAbstractor:
         :param loop: The asyncio event loop, defaults to None.
         :type loop: asyncio.AbstractEventLoop | None, optional
         """
-        # per().__init__(extra=extra)  # done in _BaseTransport
-
         self._broker_url = urlparse(broker_url)
-
         self._protocol = protocol
         self._loop = loop or asyncio.get_event_loop()
 
@@ -606,22 +603,29 @@ class _ReadTransport(_BaseTransport, TransportInterface):
 
     _is_hgi80: bool | None = None  # NOTE: None (unknown) is as False (is_evofw3)
 
-    #  __slots__ = ('_extra',)
-
     def __init__(
-        self, *args: Any, extra: dict[str, Any] | None = None, **kwargs: Any
+        self,
+        /,
+        *,
+        config: TransportConfig,
+        extra: dict[str, Any] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the read-only transport.
 
+        :param config: Extracted setup configuration for transports.
+        :type config: TransportConfig
         :param extra: Extra info dict, defaults to None.
         :type extra: dict[str, Any] | None, optional
+        :param loop: The asyncio event loop, defaults to None.
+        :type loop: asyncio.AbstractEventLoop | None, optional
         """
-        super().__init__(*args, loop=kwargs.pop("loop", None))
+        _BaseTransport.__init__(self)
 
+        self._loop = loop or asyncio.get_event_loop()
         self._extra: dict[str, Any] = {} if extra is None else extra
 
-        self._evofw_flag = kwargs.pop(SZ_EVOFW_FLAG, None)  # gwy.config.evofw_flag
-        # kwargs.pop("comms_params", None)  # FiXME: remove this
+        self._evofw_flag = config.evofw_flag
 
         self._closing: bool = False
         self._reading: bool = False
@@ -641,7 +645,6 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         :return: The timestamp of the current packet or a default.
         :rtype: dt
         """
-
         try:
             return self._this_pkt.dtm  # type: ignore[union-attr]
         except AttributeError:
@@ -684,7 +687,6 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         :param exc: The exception that caused the closure, if any.
         :type exc: exc.RamsesException | None, optional
         """
-
         if self._closing:
             return
         self._closing = True
@@ -734,7 +736,6 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         :param frame: The raw frame string.
         :type frame: str
         """
-
         if not frame.strip():
             return
 
@@ -759,11 +760,8 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         :type pkt: Packet
         :raises exc.TransportError: If called while closing.
         """
-
         self._this_pkt, self._prev_pkt = pkt, self._this_pkt
 
-        # if self._reading is False:  # raise, or warn & return?
-        #     raise exc.TransportError("Reading has been paused")
         if self._closing is True:  # raise, or warn & return?
             raise exc.TransportError("Transport is closing or has closed")
 
@@ -797,16 +795,25 @@ class _FullTransport(_ReadTransport):  # asyncio.Transport
     """Interface representing a bidirectional transport."""
 
     def __init__(
-        self, *args: Any, disable_sending: bool = False, **kwargs: Any
+        self,
+        /,
+        *,
+        config: TransportConfig,
+        extra: dict[str, Any] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the full transport.
 
-        :param disable_sending: Whether to disable sending capabilities, defaults to False.
-        :type disable_sending: bool, optional
+        :param config: Extracted setup configuration for transports.
+        :type config: TransportConfig
+        :param extra: Extra info dict, defaults to None.
+        :type extra: dict[str, Any] | None, optional
+        :param loop: The asyncio event loop, defaults to None.
+        :type loop: asyncio.AbstractEventLoop | None, optional
         """
-        super().__init__(*args, **kwargs)
+        _ReadTransport.__init__(self, config=config, extra=extra, loop=loop)
 
-        self._disable_sending = disable_sending
+        self._disable_sending = config.disable_sending
         self._transmit_times: deque[dt] = deque(maxlen=_MAX_TRACKED_TRANSMITS)
 
     def _dt_now(self) -> dt:
@@ -839,20 +846,18 @@ class _FullTransport(_ReadTransport):  # asyncio.Transport
         :return: Transmits per minute.
         :rtype: float
         """
-
         dt_now = dt.now()
         dtm = dt_now - td(seconds=_MAX_TRACKED_DURATION)
         transmit_times = tuple(t for t in self._transmit_times if t > dtm)
 
         if len(transmit_times) <= 1:
-            return len(transmit_times)
+            return float(len(transmit_times))
 
         duration: float = (transmit_times[-1] - transmit_times[0]) / td(seconds=1)
         return int(len(transmit_times) / duration * 6000) / 100
 
     def _track_transmit_rate(self) -> None:
         """Track the Tx rate as period of seconds per x transmits."""
-
         # period: float = (transmit_times[-1] - transmit_times[0]) / td(seconds=1)
         # num_tx: int   = len(transmit_times)
 
@@ -883,7 +888,6 @@ class _FullTransport(_ReadTransport):  # asyncio.Transport
         :type disable_tx_limits: bool, optional
         :raises exc.TransportError: If sending is disabled or transport is closed.
         """
-
         if self._disable_sending is True:
             raise exc.TransportError("Sending has been disabled")
         if self._closing is True:
@@ -911,20 +915,14 @@ _RegexRuleT: TypeAlias = dict[str, str]
 class _RegHackMixin:
     """Mixin to apply regex rules to inbound and outbound frames."""
 
-    def __init__(
-        self, *args: Any, use_regex: dict[str, _RegexRuleT] | None = None, **kwargs: Any
-    ) -> None:
+    def __init__(self, /, *, config: TransportConfig) -> None:
         """Initialize the regex mixin.
 
-        :param use_regex: Dictionary containing inbound/outbound regex rules.
-        :type use_regex: dict[str, _RegexRuleT] | None, optional
+        :param config: Extracted setup configuration containing regex rules.
+        :type config: TransportConfig
         """
-        super().__init__(*args, **kwargs)
-
-        use_regex = use_regex or {}
-
-        self._inbound_rule: _RegexRuleT = use_regex.get(SZ_INBOUND, {})
-        self._outbound_rule: _RegexRuleT = use_regex.get(SZ_OUTBOUND, {})
+        self._inbound_rule: _RegexRuleT = config.use_regex.get(SZ_INBOUND, {})
+        self._outbound_rule: _RegexRuleT = config.use_regex.get(SZ_OUTBOUND, {})
 
     @staticmethod
     def _regex_hack(pkt_line: str, regex_rules: _RegexRuleT) -> str:
@@ -965,17 +963,35 @@ class _RegHackMixin:
 class FileTransport(_ReadTransport, _FileTransportAbstractor):
     """Receive packets from a read-only source such as packet log or a dict."""
 
-    def __init__(self, *args: Any, disable_sending: bool = True, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        pkt_source: dict[str, str] | str | TextIOWrapper,
+        protocol: RamsesProtocolT,
+        /,
+        *,
+        config: TransportConfig,
+        extra: dict[str, Any] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
         """Initialize the file transport.
 
-        :param disable_sending: Must be True for FileTransport.
-        :type disable_sending: bool
+        :param pkt_source: The source of packets (file path, file object, or dict).
+        :type pkt_source: dict[str, str] | str | TextIOWrapper
+        :param protocol: The protocol instance.
+        :type protocol: RamsesProtocolT
+        :param config: Extracted setup configuration for transports.
+        :type config: TransportConfig
+        :param extra: Extra configuration options, defaults to None.
+        :type extra: dict[str, Any] | None, optional
+        :param loop: Asyncio event loop, defaults to None.
+        :type loop: asyncio.AbstractEventLoop | None, optional
         :raises exc.TransportSourceInvalid: If disable_sending is False.
         """
-        super().__init__(*args, **kwargs)
-
-        if bool(disable_sending) is False:
+        if not config.disable_sending:
             raise exc.TransportSourceInvalid("This Transport cannot send packets")
+
+        _FileTransportAbstractor.__init__(self, pkt_source, protocol, loop=loop)
+        _ReadTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._evt_reading = asyncio.Event()
 
@@ -1061,10 +1077,9 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         :param exc: The exception causing closure.
         :type exc: exc.RamsesException | None, optional
         """
-
         super()._close(exc)
 
-        if self._reader_task:
+        if hasattr(self, "_reader_task") and self._reader_task:
             self._reader_task.cancel()
 
 
@@ -1079,9 +1094,32 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
 
     _recv_buffer: bytes = b""
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize the port transport."""
-        super().__init__(*args, **kwargs)
+    def __init__(  # type: ignore[no-any-unimported]
+        self,
+        serial_instance: Serial,
+        protocol: RamsesProtocolT,
+        /,
+        *,
+        config: TransportConfig,
+        extra: dict[str, Any] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
+        """Initialize the port transport.
+
+        :param serial_instance: The serial object instance.
+        :type serial_instance: Serial
+        :param protocol: The protocol instance.
+        :type protocol: RamsesProtocolT
+        :param config: Extracted setup configuration for transports.
+        :type config: TransportConfig
+        :param extra: Extra configuration options, defaults to None.
+        :type extra: dict[str, Any] | None, optional
+        :param loop: Asyncio event loop, defaults to None.
+        :type loop: asyncio.AbstractEventLoop | None, optional
+        """
+        _PortTransportAbstractor.__init__(self, serial_instance, protocol, loop=loop)
+        _RegHackMixin.__init__(self, config=config)
+        _FullTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._leaker_sem = asyncio.BoundedSemaphore()
         self._leaker_task = self._loop.create_task(
@@ -1104,13 +1142,11 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
 
         async def connect_sans_signature() -> None:
             """Call connection_made() without sending/waiting for a signature."""
-
             self._init_fut.set_result(None)
             self._make_connection(gwy_id=None)
 
         async def connect_with_signature() -> None:
             """Poll port with signatures, call connection_made() after first echo."""
-
             # TODO: send a 2nd signature, but with addr0 set to learned GWY address
             # TODO: a HGI80 will silently drop this cmd, so an echo would tell us
             # TODO: that the GWY is evofw3-compatible
@@ -1217,7 +1253,6 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
         :param disable_tx_limits: Whether to disable duty cycle limits, defaults to False.
         :type disable_tx_limits: bool, optional
         """
-
         await self._leaker_sem.acquire()  # MIN_INTER_WRITE_GAP
         await super().write_frame(frame)
 
@@ -1230,7 +1265,6 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
         :param frame: The frame to write.
         :type frame: str
         """
-
         data = bytes(frame, "ascii") + b"\r\n"
 
         log_msg = f"Serial transport transmitting frame: {frame}"
@@ -1263,9 +1297,9 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
         """
         super()._abort(exc)  # type: ignore[arg-type]
 
-        if self._init_task:
+        if hasattr(self, "_init_task") and self._init_task:
             self._init_task.cancel()
-        if self._leaker_task:
+        if hasattr(self, "_leaker_task") and self._leaker_task:
             self._leaker_task.cancel()
 
     def _close(self, exc: exc.RamsesException | None = None) -> None:  # type: ignore[override]
@@ -1274,15 +1308,14 @@ class PortTransport(_RegHackMixin, _FullTransport, _PortTransportAbstractor):  #
         :param exc: The exception causing closure.
         :type exc: exc.RamsesException | None, optional
         """
-
         super()._close(exc)
 
         # Use getattr because _init_task may not be set if initialization failed
         if init_task := getattr(self, "_init_task", None):
             init_task.cancel()
 
-        if self._leaker_task:
-            self._leaker_task.cancel()
+        if leaker_task := getattr(self, "_leaker_task", None):
+            leaker_task.cancel()
 
 
 class MqttTransport(_FullTransport, _MqttTransportAbstractor):
@@ -1297,10 +1330,32 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     _TIME_WINDOW: Final[int] = DUTY_CYCLE_DURATION
     _TOKEN_RATE: Final[float] = _MAX_TOKENS / _TIME_WINDOW
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        # _LOGGER.error("__init__(%s, %s)", args, kwargs)
+    def __init__(
+        self,
+        broker_url: str,
+        protocol: RamsesProtocolT,
+        /,
+        *,
+        config: TransportConfig,
+        extra: dict[str, Any] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
+        """Initialize the MQTT transport.
 
-        super().__init__(*args, **kwargs)
+        :param broker_url: The URL of the MQTT broker.
+        :type broker_url: str
+        :param protocol: The protocol instance.
+        :type protocol: RamsesProtocolT
+        :param config: Extracted setup configuration for transports.
+        :type config: TransportConfig
+        :param extra: Extra configuration options, defaults to None.
+        :type extra: dict[str, Any] | None, optional
+        :param loop: Asyncio event loop, defaults to None.
+        :type loop: asyncio.AbstractEventLoop | None, optional
+        """
+        # _LOGGER.error("__init__(%s, %s)", args, kwargs)
+        _MqttTransportAbstractor.__init__(self, broker_url, protocol, loop=loop)
+        _FullTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._username = unquote(self._broker_url.username or "")
         self._password = unquote(self._broker_url.password or "")
@@ -1331,7 +1386,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._num_tokens: float = self._MAX_TOKENS * 2
 
         # set log MQTT flag
-        self._log_all = kwargs.pop("log_all", False)
+        self._log_all = config.log_all
 
         # instantiate a paho mqtt client
         self.client = mqtt.Client(
@@ -1595,12 +1650,10 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if msg.topic[-3:] != "/rx":  # then, e.g. 'RAMSES/GATEWAY/18:017804'
             if msg.payload == b"offline":
-                # Check if this offline message is for our current device
+                # Check if this offline message is for our current device safely
                 if (
-                    hasattr(self, "_topic_sub")
-                    and self._topic_sub
-                    and msg.topic == self._topic_sub[:-3]
-                ) or not hasattr(self, "_topic_sub"):
+                    self._topic_sub and msg.topic == self._topic_sub[:-3]
+                ) or not self._topic_sub:
                     _LOGGER.warning(
                         f"{self}: the ESP device is offline (via LWT): {msg.topic}"
                     )
@@ -1809,9 +1862,11 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         self,
         protocol: RamsesProtocolT,
         io_writer: Callable[[str], Awaitable[None]],
-        disable_sending: bool = False,
-        autostart: bool = False,
-        **kwargs: Any,
+        /,
+        *,
+        config: TransportConfig,
+        extra: dict[str, Any] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the callback transport.
 
@@ -1819,14 +1874,17 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         :type protocol: RamsesProtocolT
         :param io_writer: Async callable to handle outbound frames.
         :type io_writer: Callable[[str], Awaitable[None]]
-        :param disable_sending: Whether to disable sending, defaults to False.
-        :type disable_sending: bool, optional
-        :param autostart: Whether to start reading immediately, defaults to False.
-        :type autostart: bool, optional
+        :param config: Extracted setup configuration for transports.
+        :type config: TransportConfig
+        :param extra: Extra configuration options, defaults to None.
+        :type extra: dict[str, Any] | None, optional
+        :param loop: Asyncio event loop, defaults to None.
+        :type loop: asyncio.AbstractEventLoop | None, optional
         """
         # Pass kwargs up the chain. _ReadTransport will extract 'loop' if present.
         # _BaseTransport will pass 'loop' to _CallbackTransportAbstractor, which consumes it.
-        super().__init__(disable_sending=disable_sending, **kwargs)
+        _CallbackTransportAbstractor.__init__(self, loop=loop)
+        _FullTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._protocol = protocol
         self._io_writer = io_writer
@@ -1840,7 +1898,7 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         # Handshake: Notify protocol immediately (Safe: idempotent)
         self._protocol.connection_made(self, ramses=True)
 
-        if autostart:
+        if config.autostart:
             self.resume_reading()
 
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
@@ -1945,21 +2003,21 @@ async def transport_factory(
     protocol: RamsesProtocolT,
     /,
     *,
+    config: TransportConfig,
     port_name: SerPortNameT | None = None,
     port_config: PortConfigT | None = None,
     packet_log: str | None = None,
     packet_dict: dict[str, str] | None = None,
     transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
-    disable_sending: bool = False,
     extra: dict[str, Any] | None = None,
     loop: asyncio.AbstractEventLoop | None = None,
-    log_all: bool = False,
-    **kwargs: Any,  # HACK: odd/misc params, inc. autostart
 ) -> RamsesTransportT:
     """Create and return a Ramses-specific async packet Transport.
 
     :param protocol: The protocol instance that will use this transport.
     :type protocol: RamsesProtocolT
+    :param config: Extracted setup configuration for transports.
+    :type config: TransportConfig
     :param port_name: Serial port name or MQTT URL, defaults to None.
     :type port_name: SerPortNameT | None, optional
     :param port_config: Configuration dictionary for serial port, defaults to None.
@@ -1970,37 +2028,24 @@ async def transport_factory(
     :type packet_dict: dict[str, str] | None, optional
     :param transport_constructor: Custom async callable to create a transport, defaults to None.
     :type transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None, optional
-    :param disable_sending: If True, the transport will not transmit packets, defaults to False.
-    :type disable_sending: bool | None, optional
     :param extra: Extra configuration options, defaults to None.
     :type extra: dict[str, Any] | None, optional
     :param loop: Asyncio event loop, defaults to None.
     :type loop: asyncio.AbstractEventLoop | None, optional
-    :param log_all: If True, log all MQTT messages including non-protocol ones, defaults to False.
-    :type log_all: bool, optional
-    :param kwargs: Additional keyword arguments for specific transports.
-    :type kwargs: Any
     :return: An instantiated RamsesTransportT object.
     :rtype: RamsesTransportT
     :raises exc.TransportSourceInvalid: If the packet source is invalid or multiple sources are specified.
     """
-
-    # Extract autostart (default to False if missing), used in transport_constructor only
-    autostart = kwargs.pop("autostart", False)
 
     # If a constructor is provided, delegate entirely to it.
     if transport_constructor:
         _LOGGER.debug("transport_factory: Delegating to external transport_constructor")
         return await transport_constructor(
             protocol,
-            disable_sending=disable_sending,
+            config=config,
             extra=extra,
-            autostart=autostart,  # <--- Pass it explicitly
-            **kwargs,
+            loop=loop,
         )
-
-    # kwargs are specific to a transport. The above transports have:
-    # evofw3_flag, use_regex
 
     def get_serial_instance(  # type: ignore[no-any-unimported]
         ser_name: SerPortNameT, ser_config: PortConfigT | None
@@ -2059,26 +2104,24 @@ async def transport_factory(
 
     # File
     if (pkt_source := packet_log or packet_dict) is not None:
-        return FileTransport(pkt_source, protocol, extra=extra, loop=loop, **kwargs)
+        return FileTransport(
+            pkt_source, protocol, config=config, extra=extra, loop=loop
+        )
 
     assert port_name is not None  # mypy check
     assert port_config is not None  # mypy check
 
     # MQTT
     if port_name[:4] == "mqtt":
-        # Check for custom timeout in kwargs, fallback to constant
-        mqtt_timeout = kwargs.get("timeout", _DEFAULT_TIMEOUT_MQTT)
+        # Check for custom timeout in config, fallback to constant
+        mqtt_timeout = config.timeout or _DEFAULT_TIMEOUT_MQTT
 
         transport = MqttTransport(
             port_name,
             protocol,
-            disable_sending=bool(
-                disable_sending
-            ),  # Feature Added: handled disable_sending
+            config=config,
             extra=extra,
             loop=loop,
-            log_all=log_all,
-            **kwargs,
         )
 
         try:
@@ -2098,16 +2141,17 @@ async def transport_factory(
     if os.name == "nt" or ser_instance.portstr[:7] in ("rfc2217", "socket:"):
         issue_warning()  # TODO: add tests for these...
 
-    transport = PortTransport(  # type: ignore[assignment]
+    transport_port = PortTransport(
         ser_instance,
         protocol,
-        disable_sending=bool(disable_sending),
+        config=config,
         extra=extra,
         loop=loop,
-        **kwargs,
     )
 
     # TODO: remove this? better to invoke timeout after factory returns?
-    await protocol.wait_for_connection_made(timeout=_DEFAULT_TIMEOUT_PORT)
+    await protocol.wait_for_connection_made(
+        timeout=config.timeout or _DEFAULT_TIMEOUT_PORT
+    )
     # pytest-cov times out in virtual_rf.py when set below 30.0 on GitHub Actions
-    return transport
+    return transport_port

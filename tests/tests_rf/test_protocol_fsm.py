@@ -25,7 +25,7 @@ from ramses_tx.protocol_fsm import (
     WantRply,
     _ProtocolStateT,
 )
-from ramses_tx.transport import transport_factory
+from ramses_tx.transport import TransportConfig, transport_factory
 from ramses_tx.typing import QosParams
 
 from .virtual_rf import VirtualRf
@@ -87,7 +87,12 @@ async def protocol(rf: VirtualRf) -> AsyncGenerator[PortProtocol, None]:
 
     await assert_protocol_state(protocol, Inactive, max_sleep=0)
 
-    transport = await transport_factory(protocol, port_name=rf.ports[0], port_config={})
+    transport = await transport_factory(
+        protocol,
+        config=TransportConfig(),
+        port_name=rf.ports[0],
+        port_config={},
+    )
     transport._extra["virtual_rf"] = rf  # injected to aid any debugging
 
     await assert_protocol_state(protocol, IsInIdle, max_sleep=0)

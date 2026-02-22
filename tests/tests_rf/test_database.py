@@ -74,8 +74,8 @@ class TestMessageIndex:
         assert msg_db.contains(code="1298")
         assert len(msg_db.all()) == 1
         assert (
-            str(msg_db.all())
-            == "( I --- 32:166025 --:------ 32:166025 1298 003 007FFF,)"
+            str(msg_db.all()[0])
+            == "||  32:166025 |            |  I | co2_level        |      || {'co2_level': None}"
         )
 
         # add another message with same code

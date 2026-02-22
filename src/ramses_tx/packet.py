@@ -7,23 +7,14 @@ Decode/process a packet (packet that was received).
 from __future__ import annotations
 
 from datetime import datetime as dt, timedelta as td
-from typing import Any
 
-from . import exceptions as exc
 from .command import Command
+from .const import I_, RP, RQ, W_, Code
+from .exceptions import PacketInvalid
 from .frame import Frame
 from .logger import getLogger  # overridden logger.getLogger
 from .opentherm import PARAMS_DATA_IDS, SCHEMA_DATA_IDS, STATUS_DATA_IDS
 from .ramses import CODES_SCHEMA, SZ_LIFESPAN
-
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    Code,
-)
-
 
 # these trade memory for speed
 _TD_SECS_000 = td(seconds=0)
@@ -47,27 +38,40 @@ class Packet(Frame):
     _dtm: dt
     _rssi: str
 
-    def __init__(self, dtm: dt, frame: str, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        dtm: dt,
+        frame: str,
+        /,
+        *,
+        comment: str = "",
+        err_msg: str = "",
+        raw_frame: bytes | str = "",
+    ) -> None:
         """Create a packet from a raw frame string.
 
         :param dtm: The timestamp when the packet was received
         :type dtm: dt
         :param frame: The raw frame string, typically including RSSI
         :type frame: str
-        :param kwargs: Metadata including 'comment', 'err_msg', or 'raw_frame'
+        :param comment: Optional comment extracted from the log line
+        :type comment: str
+        :param err_msg: Optional error message from the packet parser
+        :type err_msg: str
+        :param raw_frame: Original raw byte/string frame before parsing
+        :type raw_frame: bytes | str
         :raises PacketInvalid: If the frame content is malformed.
         """
+        self._dtm = dtm
+        self._rssi = frame[0:3]
 
-        self._dtm: dt = dtm
-        self._rssi: str = frame[0:3]
-
-        self.comment: str = kwargs.get("comment", "")
-        self.error_text: str = kwargs.get("err_msg", "")
-        self.raw_frame: str = kwargs.get("raw_frame", "")
+        self.comment: str = comment
+        self.error_text: str = err_msg
+        self.raw_frame: bytes | str = raw_frame
 
         # Intercept null packets before the strict Frame regex validation explodes
         if not frame[4:].strip() and self.comment:
-            raise exc.PacketInvalid("Null packet")
+            raise PacketInvalid("Null packet")
 
         super().__init__(frame[4:])  # remove RSSI
 
@@ -80,17 +84,15 @@ class Packet(Frame):
 
         Raise an exception InvalidPacketError (InvalidAddrSetError) if it is not valid.
         """
-
         try:
             if self.error_text:
-                raise exc.PacketInvalid(self.error_text)
+                raise PacketInvalid(self.error_text)
 
             super()._validate(strict_checking=strict_checking)  # no RSSI
 
-            # FIXME: this is messy
             PKT_LOGGER.info("", extra=self.__dict__)  # the packet.log line
 
-        except exc.PacketInvalid as err:  # incl. InvalidAddrSetError
+        except PacketInvalid as err:  # incl. InvalidAddrSetError
             if self._frame or self.error_text:
                 PKT_LOGGER.warning("%s", err, extra=self.__dict__)
             raise err
@@ -100,13 +102,13 @@ class Packet(Frame):
         # e.g.: RQ --- 18:000730 01:145038 --:------ 000A 002 0800  # 000A|RQ|01:145038|08
         try:
             hdr = f" # {self._hdr}{f' ({self._ctx})' if self._ctx else ''}"
-        except (exc.PacketInvalid, NotImplementedError):
+        except (PacketInvalid, NotImplementedError):
             hdr = ""
         try:
-            dtm = self.dtm.isoformat(timespec="microseconds")
+            dtm_str = self.dtm.isoformat(timespec="microseconds")
         except AttributeError:
-            dtm = dt.min.isoformat(timespec="microseconds")
-        return f"{dtm} ... {self}{hdr}"
+            dtm_str = dt.min.isoformat(timespec="microseconds")
+        return f"{dtm_str} ... {self}{hdr}"
 
     def __str__(self) -> str:
         """Return a brief readable string representation of this object aka 'header'."""
@@ -129,11 +131,13 @@ class Packet(Frame):
 
         Format: packet[ < parser-hint: ...][ * evofw3-err_msg][ # evofw3-comment]
         """
-
         fragment, _, comment = pkt_line.partition("#")
         fragment, _, err_msg = fragment.partition("*")
         pkt_str, _, _ = fragment.partition("<")  # discard any parser hints
-        return map(str.strip, (pkt_str, err_msg, comment))  # type: ignore[return-value]
+
+        # We explicitly cast back to a strictly typed tuple
+        parts = tuple(map(str.strip, (pkt_str, err_msg, comment)))
+        return parts[0], parts[1], parts[2]
 
     @classmethod
     def _from_cmd(cls, cmd: Command, dtm: dt | None = None) -> Packet:
@@ -157,7 +161,7 @@ class Packet(Frame):
         return cls(dt.fromisoformat(dtm), frame, err_msg=err_msg, comment=comment)
 
     @classmethod
-    def from_port(cls, dtm: dt, pkt_line: str, raw_line: bytes | None = None) -> Packet:
+    def from_port(cls, dtm: dt, pkt_line: str, raw_line: bytes | str = "") -> Packet:
         """Create a packet from a USB port (HGI80, evofw3)."""
         frame, err_msg, comment = cls._partition(pkt_line)
         if not frame:
@@ -174,7 +178,6 @@ def pkt_lifespan(pkt: Packet) -> td:  # import OtbGateway??
     :return: The duration the packet's data remains valid
     :rtype: td
     """
-
     if pkt.verb in (RQ, W_):
         return _TD_SECS_000
 
