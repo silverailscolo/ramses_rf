@@ -1482,13 +1482,17 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # If this payload looks like a chunk header, schedule an application ACK
         try:
             m = re.match(r"^(\d{1,3})/(\d{1,3})\|", payload)
-            if m:
+                if m:
                 seq = int(m.group(1))
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
-                # fire-and-forget ACK send
+                # fire-and-forget ACK send on the cluster that delivered this payload
                 _LOGGER.info("Scheduling application ACK: %s", ack)
-                self._loop.create_task(self._send_unacked(ack))
+                try:
+                    target_cluster = self._cluster
+                except Exception:
+                    target_cluster = None
+                self._loop.create_task(self._send_unacked(ack, target_cluster=target_cluster))
         except Exception:
             pass
 
@@ -1532,12 +1536,16 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # If payload looks like a chunk header, schedule an ACK
         try:
             m = re.match(r"^(\d{1,3})/(\d{1,3})\|", payload)
-            if m:
+                if m:
                 seq = int(m.group(1))
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
                 _LOGGER.info("Scheduling application ACK (cmd): %s", ack)
-                self._loop.create_task(self._send_unacked(ack))
+                try:
+                    target_cluster = self._cluster
+                except Exception:
+                    target_cluster = None
+                self._loop.create_task(self._send_unacked(ack, target_cluster=target_cluster))
         except Exception:
             pass
 
@@ -1663,12 +1671,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if parts[seq - 1] is None:
             parts[seq - 1] = body
             buf["received"] += 1
-            # Schedule an immediate application-level ACK for this part
             try:
                 ack = f"ACK {seq}/{total}"
                 _LOGGER.info("Scheduling application ACK (part): %s", ack)
-                # fire-and-forget ACK send
-                self._loop.create_task(self._send_unacked(ack))
+                try:
+                    target_cluster = self._cluster
+                except Exception:
+                    target_cluster = None
+                # fire-and-forget ACK send on the cluster that delivered this payload
+                self._loop.create_task(self._send_unacked(ack, target_cluster=target_cluster))
             except Exception:
                 _LOGGER.exception("Failed to schedule application ACK")
 
@@ -2174,27 +2185,42 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         raise exc.TransportError("Failed to send Zigbee chunk") from last_err
 
-    async def _send_unacked(self, text: str) -> None:
-        """Send a small ZCL payload back to the device without expecting an app-level ACK."""
-        _LOGGER.info("_send_unacked called: %r", text)
+    async def _send_unacked(self, text: str, target_cluster: Any | None = None) -> None:
+        """Send a small ZCL payload back to the device without expecting an app-level ACK.
+
+        When `target_cluster` is provided, the send will use that cluster object and
+        the command path implied by that cluster (server_command for server->client
+        sends, client_command for client->server sends). This avoids probing multiple
+        clusters dynamically and enforces deterministic behavior according to the
+        quirk definitions.
+        """
+        _LOGGER.info("_send_unacked called: %r target_cluster=%r", text, getattr(target_cluster, "cluster_id", None))
         try:
             chunks = list(self._chunk_payload(text))
             for seq, total, chunk in chunks:
                 _LOGGER.debug("_send_unacked sending chunk %s/%s: %r", seq, total, chunk)
-                # If this is an application ACK, send it as command id 0x01 so
-                # it matches the quirk's ServerCommandDefs `ack_chunk`.
-                if isinstance(chunk, str) and chunk.startswith("ACK "):
-                    # prefer to use the read cluster for ACKs (server response
-                    # path), but fall back to the configured write cluster.
-                    try:
-                        target_cluster = self._cluster or self._get_active_write_cluster()
-                    except Exception:
-                        target_cluster = self._get_active_write_cluster()
-
-                    # send using cmd id 0x01 (ack)
-                    await self._send_command(chunk, seq, total, cmd_override=0x01)
+                # If a target_cluster was provided, send on that cluster deterministically
+                if target_cluster is not None:
+                    use_cmd = 0x01 if isinstance(chunk, str) and chunk.startswith("ACK ") else self._cmd_id
+                    # Determine which API to call based on the cluster's capabilities
+                    if isinstance(chunk, str) and chunk.startswith("ACK "):
+                        # ACKs are server->client commands on the cluster that delivered the chunk
+                        if hasattr(target_cluster, "server_command"):
+                            await target_cluster.server_command(use_cmd, chunk, expect_reply=False)
+                        else:
+                            raise exc.TransportError(
+                                f"Target cluster does not expose server_command for ack (cluster=0x{getattr(target_cluster, 'cluster_id', 0):04x})"
+                            )
+                    else:
+                        # Non-ACK unacked payloads use client_command on the write cluster
+                        if hasattr(target_cluster, "client_command"):
+                            await target_cluster.client_command(use_cmd, chunk, expect_reply=False)
+                        else:
+                            raise exc.TransportError(
+                                f"Target cluster does not expose client_command for unacked send (cluster=0x{getattr(target_cluster, 'cluster_id', 0):04x})"
+                            )
                 else:
-                    # Send other unacked payloads as default command
+                    # No explicit cluster provided: fall back to the configured write cluster
                     await self._send_command(chunk, seq, total)
                 await asyncio.sleep(0.01)
         except Exception as err:  # pragma: no cover - defensive
