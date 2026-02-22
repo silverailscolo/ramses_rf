@@ -1663,15 +1663,6 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if parts[seq - 1] is None:
             parts[seq - 1] = body
             buf["received"] += 1
-            try:
-                # Send an application-level ACK for the received part so
-                # the remote sender can progress. Use fire-and-forget
-                # `_send_unacked` which sends via command path.
-                ack = f"ACK {seq}/{total}"
-                _LOGGER.info("Scheduling application ACK (part): %s", ack)
-                self._loop.create_task(self._send_unacked(ack))
-            except Exception:
-                _LOGGER.exception("Failed to schedule per-part ACK")
 
         if buf["received"] < total:
             # Not complete yet; we still send ACK from elsewhere
