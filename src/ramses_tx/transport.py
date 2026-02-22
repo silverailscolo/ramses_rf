@@ -2022,21 +2022,94 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 tried_clusters.append(candidate)
                 try:
                     use_cmd = cmd_override if cmd_override is not None else self._cmd_id
+                    # Prefer explicit client_command API when available (client->server)
                     if hasattr(candidate, "client_command"):
-                        await candidate.client_command(use_cmd, chunk, expect_reply=False)
-                    else:
-                        await candidate.command(use_cmd, chunk, expect_reply=False)
-                    return
+                        try:
+                            await candidate.client_command(use_cmd, chunk, expect_reply=False)
+                            return
+                        except KeyError as ke:
+                            # Missing client command mapping for this id — try server-side command
+                            _LOGGER.debug(
+                                "client_command KeyError (cmd=0x%02x) on cluster 0x%04x, will try server_command: %s",
+                                use_cmd,
+                                getattr(candidate, "cluster_id", 0),
+                                ke,
+                            )
+                        except Exception as err:  # pragma: no cover - defensive
+                            last_err = err
+                            _LOGGER.warning(
+                                "Zigbee write cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
+                                seq,
+                                total,
+                                attempt,
+                                self._write_endpoint_id,
+                                self._write_cluster_id,
+                                use_cmd,
+                                err,
+                                type(err).__name__,
+                            )
+
+                    # If client_command not available or failed with KeyError, try server_command (server->client)
+                    if hasattr(candidate, "server_command"):
+                        try:
+                            await candidate.server_command(use_cmd, chunk, expect_reply=False)
+                            return
+                        except Exception as err:  # pragma: no cover - defensive
+                            last_err = err
+                            _LOGGER.warning(
+                                "Zigbee write server cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
+                                seq,
+                                total,
+                                attempt,
+                                self._write_endpoint_id,
+                                self._write_cluster_id,
+                                use_cmd,
+                                err,
+                                type(err).__name__,
+                            )
+
+                    # Fallback to generic command API if present
+                    if hasattr(candidate, "command"):
+                        try:
+                            await candidate.command(use_cmd, chunk, expect_reply=False)
+                            return
+                        except Exception as err:  # pragma: no cover - defensive
+                            last_err = err
+                            _LOGGER.warning(
+                                "Zigbee write generic cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
+                                seq,
+                                total,
+                                attempt,
+                                self._write_endpoint_id,
+                                self._write_cluster_id,
+                                use_cmd,
+                                err,
+                                type(err).__name__,
+                            )
+
+                    # If we reach here, nothing succeeded — dump available mappings for debugging
+                    try:
+                        client_map = getattr(candidate, "client_commands", None) or getattr(candidate, "client_command_names", None)
+                        server_map = getattr(candidate, "server_commands", None) or getattr(candidate, "server_command_names", None)
+                        _LOGGER.debug(
+                            "Cluster 0x%04x available commands: client=%r server=%r",
+                            getattr(candidate, "cluster_id", 0),
+                            client_map,
+                            server_map,
+                        )
+                    except Exception:
+                        pass
+                    # fall through to outer retry/refresh logic
                 except Exception as err:  # pragma: no cover - defensive
                     last_err = err
                     _LOGGER.warning(
-                        "Zigbee write cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
+                        "Zigbee write cmd %s/%s attempt %s unexpected failure (endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
                         seq,
                         total,
                         attempt,
                         self._write_endpoint_id,
                         self._write_cluster_id,
-                        use_cmd,
+                        cmd_override if cmd_override is not None else self._cmd_id,
                         err,
                         type(err).__name__,
                     )
