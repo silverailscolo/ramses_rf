@@ -476,3 +476,61 @@ class TestHvacVentilator:
 
         if hvac_ventilator._gwy.msg_db:
             hvac_ventilator._gwy.msg_db.stop()  # close sqlite3 connection
+
+    def test_2411_param_01_data_type_20(self, hvac_ventilator: HvacVentilator) -> None:
+        """Test parsing of 2411 parameter 01 with data type 20 (GitHub issue #342)."""
+        msg = MagicMock()
+        msg.code = Code._2411
+        msg.verb = "RP"
+        msg.src = MagicMock()
+        msg.src.id = TEST_DEVICE_ID
+        msg.dst = MagicMock()
+        msg.dst.id = TEST_DEVICE_ID
+        msg.payload = {
+            "parameter": "01",
+            "description": "Support",
+            "value": 3307,
+            "_value_06": "0020",
+            "min_value": 0,
+            "max_value": 65535,
+            "precision": 1,
+            "_value_42": "B500",
+        }
+
+        hvac_ventilator._handle_2411_message(msg)
+
+        assert hvac_ventilator.supports_2411
+        stored_value = hvac_ventilator.get_fan_param("1")
+        assert stored_value == 3307
+
+        if hvac_ventilator._gwy.msg_db:
+            hvac_ventilator._gwy.msg_db.stop()
+
+    def test_2411_param_3e_data_type_90(self, hvac_ventilator: HvacVentilator) -> None:
+        """Test parsing of 2411 parameter 3E with data type 90 (GitHub issue #317)."""
+        msg = MagicMock()
+        msg.code = Code._2411
+        msg.verb = "RP"
+        msg.src = MagicMock()
+        msg.src.id = TEST_DEVICE_ID
+        msg.dst = MagicMock()
+        msg.dst.id = TEST_DEVICE_ID
+        msg.payload = {
+            "parameter": "3E",
+            "description": "Away mode Exhaust fan rate (%)",
+            "value": 800,
+            "_value_06": "7690",
+            "min_value": 0,
+            "max_value": 2000,
+            "precision": 1,
+            "_value_42": "8A33",
+        }
+
+        hvac_ventilator._handle_2411_message(msg)
+
+        assert hvac_ventilator.supports_2411
+        stored_value = hvac_ventilator.get_fan_param("3E")
+        assert stored_value == 800
+
+        if hvac_ventilator._gwy.msg_db:
+            hvac_ventilator._gwy.msg_db.stop()

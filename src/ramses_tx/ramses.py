@@ -1289,7 +1289,7 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MIN_VALUE: 0xFF,  # None?
         SZ_MAX_VALUE: 0xFF,
         SZ_PRECISION: 1,
-        SZ_DATA_TYPE: "00",
+        SZ_DATA_TYPE: "20",
         SZ_DATA_UNIT: "",
     },
     "31": {  # slot 09 (FANs produced after 2021)
@@ -1313,7 +1313,7 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_MIN_VALUE: 0.0,
         SZ_MAX_VALUE: 0.4,
         SZ_PRECISION: 0.005,
-        SZ_DATA_TYPE: "0F",
+        SZ_DATA_TYPE: "90",
         SZ_DATA_UNIT: "%",
     },
     "3F": {  # slot 02
