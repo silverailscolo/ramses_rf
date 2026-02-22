@@ -29,12 +29,7 @@ from .const import (
     DevType,
     Priority,
 )
-from .exceptions import (
-    MessageInvalid,
-    ProtocolError,
-    ProtocolSendFailed,
-    TransportError,
-)
+from .exceptions import ProtocolError, ProtocolSendFailed, TransportError
 from .helpers import dt_now
 from .interfaces import ProtocolInterface, TransportInterface
 from .logger import set_logger_timesource
@@ -82,7 +77,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         :type msg_handler: MsgHandlerT
         """
         self._msg_handler = msg_handler
-        self._msg_handlers: list[MsgHandlerT] = []
+        self._msg_handlers: list[tuple[MsgHandlerT, MsgFilterT | None]] = []
 
         self._transport: TransportInterface | None = None
         self._loop = asyncio.get_running_loop()
@@ -148,13 +143,14 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         :return: A callable to remove the handler.
         :rtype: Callable[[], None]
         """
+        entry = (msg_handler, msg_filter)
 
         def del_handler() -> None:
-            if msg_handler in self._msg_handlers:
-                self._msg_handlers.remove(msg_handler)
+            if entry in self._msg_handlers:
+                self._msg_handlers.remove(entry)
 
-        if msg_handler not in self._msg_handlers:
-            self._msg_handlers.append(msg_handler)
+        if entry not in self._msg_handlers:
+            self._msg_handlers.append(entry)
 
         return del_handler
 
@@ -435,23 +431,26 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         """Called by the Transport when a Packet is received."""
         try:
             msg = Message(pkt)  # should log all invalid msgs appropriately
-        except MessageInvalid:
+        except Exception as exc:
+            # We catch generic Exception here because validation failures
+            # like PacketPayloadInvalid should never crash the reader loop.
+            _LOGGER.debug(f"Dropped invalid packet during parsing: {exc}")
             return
 
         self._this_msg, self._prev_msg = msg, self._this_msg
         self._msg_received(msg)
 
     def _msg_received(self, msg: Message) -> None:
-        """Pass any valid/wanted Messages to the client's callback.
+        """Pass any valid/wanted Messages to the client's callbacks.
 
         Also maintain _prev_msg, _this_msg attrs.
         """
-        if self._msg_handler:  # type: ignore[truthy-function]
+        if self._msg_handler is not None:
             _LOGGER.debug(f"Dispatching valid message to handler: {msg}")
-            self._loop.call_soon_threadsafe(self._msg_handler, msg)
-        for callback in self._msg_handlers:
-            # TODO: if handler's filter returns True:
-            self._loop.call_soon_threadsafe(callback, msg)
+            self._msg_handler(msg)
+        for callback, msg_filter in self._msg_handlers:
+            if msg_filter is None or msg_filter(msg):
+                callback(msg)
 
 
 class _DeviceIdFilterMixin(_BaseProtocol):
@@ -1011,7 +1010,7 @@ async def create_stack(
 
     Architecture: gwy (client) -> msg (Protocol) -> pkt (Transport) -> HGI/log (or dict)
     - send Commands via awaitable Protocol.send_cmd(cmd)
-    - receive Messages via Gateway._handle_msg(msg) callback
+    - receive Messages via msg_handler callback
     """
     read_only = bool(packet_dict or packet_log)
     if read_only:
