@@ -10,7 +10,9 @@ concurrent access to pty.openpty().
 """
 
 import asyncio
+from collections.abc import Generator
 from datetime import datetime as dt
+from unittest.mock import patch
 
 import pytest
 
@@ -148,6 +150,16 @@ TEST_SUITE_300 = [
 # TEST_SUITE_300 = [TEST_SUITE_300[-2]]
 
 # ### FIXTURES #########################################################################
+
+
+@pytest.fixture(autouse=True)
+def patch_port_transport_delays() -> Generator[None, None, None]:
+    """Bypass the real-world signature timeouts and duty cycle limits for tests."""
+    patch_1 = patch("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
+    patch_2 = patch("ramses_tx.transport.port._SIGNATURE_MAX_TRYS", 0)
+
+    with patch_1, patch_2:
+        yield
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -381,7 +393,8 @@ async def test_flow_100(test_set: dict[str, dict]) -> None:
             "config": GatewayConfig(disable_discovery=True),
             "disable_qos": False,
             "enforce_known_list": True,
-            "known_list": {k: v for d in devices for k, v in d.items()},
+            "known_list": {"18:000000": {"class": "HGI"}}
+            | {k: v for d in devices for k, v in d.items()},
             "schema": {
                 "orphans_hvac": list(test_set[role])  # TODO: used by Heat domain too!
             },  # Nested inside schema correctly
@@ -415,7 +428,8 @@ async def test_flow_200(test_set: dict[str, dict]) -> None:
             "config": GatewayConfig(disable_discovery=True),
             "disable_qos": False,
             "enforce_known_list": True,
-            "known_list": {k: v for d in devices for k, v in d.items()},
+            "known_list": {"18:000000": {"class": "HGI"}}
+            | {k: v for d in devices for k, v in d.items()},
             "schema": {
                 "orphans_hvac": list(test_set[role])  # TODO: used by Heat domain too!
             },  # Nested inside schema correctly

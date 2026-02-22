@@ -39,11 +39,11 @@ from .transport import TransportConfig, transport_factory
 from .typing import PktLogConfigT, PortConfigT, QosParams
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+    Code,
     I_,
     RP,
     RQ,
     W_,
-    Code,
 )
 
 if TYPE_CHECKING:
@@ -152,7 +152,8 @@ class Engine:
         return f"{device_id} ({self.ser_name})"
 
     def _dt_now(self) -> dt:
-        return self._transport._dt_now() if self._transport else dt.now()
+        timesource: Callable[[], dt] = getattr(self._transport, "_dt_now", dt.now)
+        return timesource()
 
     def _set_msg_handler(self, msg_handler: MsgHandlerT) -> None:
         """Create an appropriate protocol for the packet source (transport).
@@ -173,22 +174,15 @@ class Engine:
         self,
         msg_handler: Callable[[Message], None],
         /,
+        *,
         msg_filter: Callable[[Message], bool] | None = None,
-    ) -> None:
-        """Create a client protocol for the RAMSES-II message transport.
+    ) -> Callable[[], None]:
+        """Add a Message handler to the underlying Protocol.
 
         The optional filter will return True if the message is to be handled.
+        Returns a callable that can be used to subsequently remove the handler.
         """
-
-        # if msg_filter is not None and not is_callback(msg_filter):
-        #     raise TypeError(f"Msg filter {msg_filter} is not a callback")
-
-        if not msg_filter:
-            msg_filter = lambda _: True  # noqa: E731
-        else:
-            raise NotImplementedError
-
-        self._protocol.add_handler(msg_handler, msg_filter=msg_filter)
+        return self._protocol.add_handler(msg_handler, msg_filter=msg_filter)
 
     async def start(self) -> None:
         """Create a suitable transport for the specified packet source.
@@ -264,7 +258,9 @@ class Engine:
 
         self._protocol.pause_writing()  # TODO: call_soon()?
         if self._transport:
-            self._transport.pause_reading()  # TODO: call_soon()?
+            pause_reading = getattr(self._transport, "pause_reading", None)
+            if pause_reading:
+                pause_reading()  # TODO: call_soon()?
 
         self._protocol._msg_handler, handler = None, self._protocol._msg_handler  # type: ignore[assignment]
         self._disable_sending, read_only = True, self._disable_sending
@@ -292,7 +288,9 @@ class Engine:
         self._engine_lock.release()
 
         if self._transport:
-            self._transport.resume_reading()
+            resume_reading = getattr(self._transport, "resume_reading", None)
+            if resume_reading:
+                resume_reading()
         if not self._disable_sending:
             self._protocol.resume_writing()
 
@@ -359,8 +357,17 @@ class Engine:
         )  # may: raise ProtocolError/ProtocolSendFailed
 
     def _msg_handler(self, msg: Message) -> None:
+        """Process incoming messages from the protocol."""
         # HACK: This is one consequence of an unpleasant anachronism
-        msg.__class__ = Message  # HACK (next line too)
-        msg._gwy = self  # type: ignore[assignment]
+        msg.__class__ = Message
+
+        # MUST be set so ramses_rf properties (e.g. msg.src) can instantiate orphans
+        # Using setattr bypasses Mypy type assignment checks, keeping decoupling clean
+        setattr(msg, "_gwy", self)  # noqa: B010
 
         self._this_msg, self._prev_msg = msg, self._this_msg
+
+        # Safely pass execution to Gateway's extended handling logic if defined
+        handler = getattr(self, "_handle_msg", None)
+        if handler:
+            handler(msg)
