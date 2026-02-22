@@ -1482,7 +1482,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # If this payload looks like a chunk header, schedule an application ACK
         try:
             m = re.match(r"^(\d{1,3})/(\d{1,3})\|", payload)
-                if m:
+            if m:
                 seq = int(m.group(1))
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
@@ -1536,7 +1536,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # If payload looks like a chunk header, schedule an ACK
         try:
             m = re.match(r"^(\d{1,3})/(\d{1,3})\|", payload)
-                if m:
+            if m:
                 seq = int(m.group(1))
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
