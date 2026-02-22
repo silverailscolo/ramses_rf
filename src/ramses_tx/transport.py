@@ -1465,6 +1465,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         payload = value.strip()
         if not payload:
             return
+        # Fast-path: ignore application ACKs here so they are not treated
+        # as normal RAMSES frames by the parser.
+        if payload.startswith("ACK "):
+            _LOGGER.info("Zigbee incoming application ACK (ignored): %r", payload)
+            return
 
         _LOGGER.debug("Zigbee attribute_updated payload: %r", payload)
         # If this is a chunk header, assemble; otherwise pass through
@@ -1508,6 +1513,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         payload = self._decode_command_payload(args)
         if not payload:
             _LOGGER.debug("Zigbee cluster_command: empty or non-text payload after decode")
+            return
+
+        # Fast-path: ignore incoming application ACKs to avoid feeding them
+        # into the RAMSES frame parser (they are control-plane only).
+        if isinstance(payload, str) and payload.startswith("ACK "):
+            _LOGGER.info("Zigbee incoming application ACK (cmd) ignored: %r", payload)
             return
 
         _LOGGER.debug("Zigbee cluster_command decoded payload (len=%s): %r", len(payload), payload)
