@@ -10,8 +10,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime as dt
-from queue import Empty, Full, PriorityQueue
-from threading import Lock
 from typing import TypeAlias
 
 from ..command import Command
@@ -66,8 +64,7 @@ class QosManager:
         self.max_retry_limit = min(max_retry_limit, MAX_RETRY_LIMIT)
         self.max_buffer_size = min(max_buffer_size, DEFAULT_BUFFER_SIZE)
 
-        self._lock = Lock()
-        self._que: PriorityQueue[_QueueEntryT] = PriorityQueue(
+        self._que: asyncio.PriorityQueue[_QueueEntryT] = asyncio.PriorityQueue(
             maxsize=self.max_buffer_size
         )
 
@@ -104,7 +101,7 @@ class QosManager:
         fut: _FutureT = self._loop.create_future()
         try:
             self._que.put_nowait((priority, dt.now(), cmd, qos, fut))
-        except Full as err:
+        except asyncio.QueueFull as err:
             fut.cancel("Send buffer overflow")
             raise ProtocolSendFailed("Send buffer overflow") from err
         return fut
@@ -115,18 +112,14 @@ class QosManager:
         :return: True if a new command was successfully loaded.
         :rtype: bool
         """
-        self._lock.acquire()
-
         if self.fut is not None and not self.fut.done():
-            self._lock.release()
             return False
 
         while True:
             try:
                 *_, self.cmd, self.qos, self.fut = self._que.get_nowait()
-            except Empty:
+            except asyncio.QueueEmpty:
                 self.reset_active()
-                self._lock.release()
                 return False
 
             assert self.qos is not None
@@ -138,7 +131,6 @@ class QosManager:
                 continue
             break
 
-        self._lock.release()
         return True
 
     def task_done(self) -> None:
