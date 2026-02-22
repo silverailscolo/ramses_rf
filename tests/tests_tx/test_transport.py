@@ -9,12 +9,9 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from ramses_tx import exceptions as exc
-from ramses_tx.transport import (
-    CallbackTransport,
-    TransportConfig,
-    is_hgi80,
-    transport_factory,
-)
+from ramses_tx.discovery import is_hgi80
+from ramses_tx.transport import TransportConfig, transport_factory
+from ramses_tx.transport.callback import CallbackTransport
 from ramses_tx.typing import SerPortNameT
 
 
@@ -121,11 +118,10 @@ async def test_factory_passes_config_to_standard_transport() -> None:
     mock_protocol = Mock()
     mock_protocol.wait_for_connection_made = AsyncMock()
 
-    # We must patch serial_for_url because transport_factory calls it via
-    # get_serial_instance BEFORE creating PortTransport.
+    # We patch where they are USED (factory.py), not where they are DEFINED
     with (
-        patch("ramses_tx.transport.PortTransport") as MockPortTransport,
-        patch("ramses_tx.transport.serial_for_url") as mock_serial_for_url,
+        patch("ramses_tx.transport.factory.PortTransport") as MockPortTransport,
+        patch("ramses_tx.transport.factory.serial_for_url") as mock_serial_for_url,
     ):
         # Setup the mock serial object to pass validity checks
         mock_serial = Mock()
@@ -157,7 +153,8 @@ async def test_factory_passes_config_to_mqtt_transport() -> None:
     mock_protocol = Mock()
     mock_protocol.wait_for_connection_made = AsyncMock()
 
-    with patch("ramses_tx.transport.MqttTransport") as MockMqttTransport:
+    # We patch where it is USED (factory.py)
+    with patch("ramses_tx.transport.factory.MqttTransport") as MockMqttTransport:
         # valid-looking config so factory enters the MQTT branch
         # We must provide port_config because transport_factory validates it
         # is not None even for MQTT
@@ -183,7 +180,7 @@ async def test_port_transport_close_robustness() -> None:
     This ensures that _close() checks for the existence of _init_task before
     attempting to cancel it.
     """
-    from ramses_tx.transport import PortTransport
+    from ramses_tx.transport.port import PortTransport
 
     mock_protocol = Mock()
     mock_serial = Mock()
@@ -198,7 +195,7 @@ async def test_port_transport_close_robustness() -> None:
     # Patch SerialTransport.__init__ using 'new' to replace it with the function directly.
     # This ensures 'self' is passed correctly, which doesn't happen with a standard Mock side_effect.
     with patch(
-        "ramses_tx.transport.serial_asyncio.SerialTransport.__init__",
+        "ramses_tx.transport.port.serial_asyncio.SerialTransport.__init__",
         new=mock_init,
     ):
         transport = PortTransport(mock_serial, mock_protocol, config=TransportConfig())
@@ -220,8 +217,8 @@ async def test_is_hgi80_async_file_check() -> None:
     test_port = SerPortNameT("/dev/serial/by-id/usb-SparkFun_evofw3_TEST")
 
     # 1. Test: File exists (should return False due to 'evofw3' in name)
-    # We patch os.path.exists to return True
-    with patch("ramses_tx.transport.os.path.exists", return_value=True) as mock_exists:
+    # We patch os.path.exists where it is used (port.py)
+    with patch("ramses_tx.discovery.os.path.exists", return_value=True) as mock_exists:
         result = await is_hgi80(test_port)
 
         # Assert: os.path.exists was called with the correct path
@@ -231,7 +228,7 @@ async def test_is_hgi80_async_file_check() -> None:
 
     # 2. Test: File does NOT exist (should raise TransportSerialError)
     # We patch os.path.exists to return False
-    with patch("ramses_tx.transport.os.path.exists", return_value=False) as mock_exists:
+    with patch("ramses_tx.discovery.os.path.exists", return_value=False) as mock_exists:
         with pytest.raises(exc.TransportSerialError):
             await is_hgi80(test_port)
 

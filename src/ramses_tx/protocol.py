@@ -5,8 +5,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+from collections import deque
 from collections.abc import Awaitable, Callable
-from datetime import datetime as dt
+from contextlib import suppress
+from datetime import datetime as dt, timedelta as td
+from time import perf_counter
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
 
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
@@ -16,6 +20,7 @@ from .const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_NUM_REPEATS,
     DEV_TYPE_MAP,
+    I_,
     MAX_GAP_DURATION,
     MAX_NUM_REPEATS,
     SZ_ACTIVE_HGI,
@@ -30,12 +35,13 @@ from .exceptions import (
     ProtocolSendFailed,
     TransportError,
 )
+from .helpers import dt_now
 from .interfaces import ProtocolInterface, TransportInterface
 from .logger import set_logger_timesource
 from .message import Message
 from .packet import Packet
 from .protocol_fsm import ProtocolContext
-from .schemas import SZ_BLOCK_LIST, SZ_CLASS, SZ_KNOWN_LIST
+from .schemas import SZ_BLOCK_LIST, SZ_CLASS, SZ_INBOUND, SZ_KNOWN_LIST, SZ_OUTBOUND
 from .transport import TransportConfig, transport_factory
 from .typing import (
     DeviceIdT,
@@ -97,10 +103,32 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._active_hgi: DeviceIdT | None = None
         self._context: ProtocolContext | None = None
 
+        # regex rules and sync trackers
+        self._inbound_regex: dict[str, str] = {}
+        self._outbound_regex: dict[str, str] = {}
+        self._tracked_sync_cycles: deque[Packet] = deque(maxlen=3)
+
     @property
     def hgi_id(self) -> DeviceIdT:
         """Get the Hardware Gateway Interface ID."""
         return HGI_DEV_ADDR.id
+
+    def set_regex_rules(self, rules: dict[str, dict[str, str]]) -> None:
+        """Set regex rules for inbound/outbound payload manipulation."""
+        self._inbound_regex = rules.get(SZ_INBOUND, {})
+        self._outbound_regex = rules.get(SZ_OUTBOUND, {})
+
+    def _apply_regex(self, frame: str, rules: dict[str, str]) -> str:
+        """Apply regex hacks to a frame string."""
+        if not rules:
+            return frame
+        result = frame
+        for k, v in rules.items():
+            try:
+                result = re.sub(k, v, result)
+            except re.error as err:
+                _LOGGER.warning(f"{frame} < issue with regex ({k}, {v}): {err}")
+        return result
 
     def add_handler(
         self,
@@ -348,13 +376,52 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         if self._transport is None:
             raise ProtocolSendFailed("Transport is not connected")
 
+        # apply outbound regex
+        frame = self._apply_regex(frame, self._outbound_regex)
+
         await self._transport.write_frame(frame)
         for _ in range(num_repeats - 1):
             await asyncio.sleep(gap_duration)
             await self._transport.write_frame(frame)
 
     def pkt_received(self, pkt: Packet) -> None:
-        """A wrapper for self._pkt_received(pkt)."""
+        """A wrapper for self._pkt_received(pkt).
+
+        Applies inbound regex modifications and tracks synchronization cycles
+        before passing the packet to the internal receiver.
+
+        :param pkt: The received Packet object to process.
+        """
+
+        # Use pkt._frame and prepend RSSI so from_port can correctly parse it
+        raw_frame = pkt._frame
+        hacked_frame = self._apply_regex(raw_frame, self._inbound_regex)
+
+        if hacked_frame != raw_frame:
+            with suppress(Exception):
+                # Packet.from_port strictly expects the 3-character RSSI + space prefix
+                pkt = Packet.from_port(
+                    pkt.dtm, f"{pkt.rssi} {hacked_frame}"
+                )  # Fallback to original packet if regex broke it
+
+        # Track Sync Cycles
+        if pkt.code == Code._1F09 and pkt.verb == I_ and pkt._len == 3:
+
+            def is_pending(p: Packet) -> bool:
+                """Check if a packet's sync cycle is still pending.
+
+                :param p: The packet to evaluate.
+                :return: True if the packet is within the pending window.
+                """
+                return bool(p.dtm + td(seconds=int(p.payload[2:6], 16) / 10) > dt_now())
+
+            self._tracked_sync_cycles = deque(
+                p
+                for p in self._tracked_sync_cycles
+                if p.src != pkt.src and is_pending(p)
+            )
+            self._tracked_sync_cycles.append(pkt)
+
         if _DBG_FORCE_LOG_PACKETS:
             _LOGGER.warning(f"Recv'd: {pkt._rssi} {pkt}")
         elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
@@ -573,11 +640,11 @@ class _DeviceIdFilterMixin(_BaseProtocol):
 
         return True
 
-    def pkt_received(self, pkt: Packet) -> None:
+    def _pkt_received(self, pkt: Packet) -> None:
         if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
             _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
             return
-        super().pkt_received(pkt)
+        super()._pkt_received(pkt)
 
     async def send_cmd(
         self,
@@ -735,9 +802,9 @@ class PortProtocol(_DeviceIdFilterMixin):
         if self._context:
             self._context.resume_writing()
 
-    def pkt_received(self, pkt: Packet) -> None:
+    def _pkt_received(self, pkt: Packet) -> None:
         """Pass any valid/wanted packets to the callback."""
-        super().pkt_received(pkt)
+        super()._pkt_received(pkt)
         if self._context:
             self._context.pkt_received(pkt)
 
@@ -769,6 +836,23 @@ class PortProtocol(_DeviceIdFilterMixin):
         # TODO: use a sync function, so we don't have a stack of awaits before the write
         async def send_cmd(kmd: Command) -> None:
             """Wrapper to for self._send_frame(cmd)."""
+
+            # collision avoidance wait here before calling _send_frame
+            def is_imminent(p: Packet) -> bool:
+                LOWER = td(seconds=0.010 * 0.8)
+                UPPER = LOWER + td(seconds=0.084)
+                return bool(
+                    LOWER
+                    < (p.dtm + td(seconds=int(p.payload[2:6], 16) / 10) - dt_now())
+                    < UPPER
+                )
+
+            start = perf_counter()
+            while any(is_imminent(p) for p in self._tracked_sync_cycles):
+                await asyncio.sleep(0.010)
+            if perf_counter() - start > 0.010:
+                await asyncio.sleep(0.084)  # SYNC_WAIT_LONG
+
             await self._send_frame(
                 str(kmd), gap_duration=gap_duration, num_repeats=num_repeats
             )
@@ -954,7 +1038,9 @@ async def create_stack(
     )
 
     if not port_name:
-        set_logger_timesource(transport._dt_now)
+        # Safely extract the transport's mocked clock (e.g., FileTransport) without breaking the interface
+        timesource: Callable[[], dt] = getattr(transport, "_dt_now", dt_now)
+        set_logger_timesource(timesource)
         _LOGGER.warning("Logger datetimes maintained as most recent packet timestamp")
 
     return protocol, transport

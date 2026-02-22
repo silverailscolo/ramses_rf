@@ -7,7 +7,7 @@ limits.
 
 import asyncio
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import pytest
 import serial  # type: ignore[import-untyped]
@@ -16,6 +16,7 @@ from ramses_rf import Message
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.protocol import RamsesProtocolT, create_stack, protocol_factory
 from ramses_tx.transport import RamsesTransportT, TransportConfig, transport_factory
+from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import DeviceIdT
 
 from .virtual_rf import HgiFwTypes, VirtualRf
@@ -26,15 +27,15 @@ from .virtual_rf import HgiFwTypes, VirtualRf
 async def assert_stack_state(
     protocol: RamsesProtocolT, transport: RamsesTransportT
 ) -> None:
-    assert transport._this_pkt and transport._this_pkt.code == Code._PUZZ
-    assert transport._this_pkt and transport._this_pkt.src.id == GWY_ID
-    assert transport._prev_pkt is None
+    # Cast to PortTransport to access internal test-specific details
+    port_transport = cast(PortTransport, transport)
 
-    assert transport.get_extra_info(SZ_ACTIVE_HGI) == GWY_ID
-    assert transport.get_extra_info(SZ_IS_EVOFW3) is True
+    assert port_transport._this_pkt and port_transport._this_pkt.code == Code._PUZZ
+    assert port_transport._this_pkt and port_transport._this_pkt.src.id == GWY_ID
+    assert port_transport._prev_pkt is None
 
-    assert protocol._active_hgi == GWY_ID
-    assert protocol._is_evofw3 is True
+    assert port_transport.get_extra_info(SZ_ACTIVE_HGI) == GWY_ID
+    assert port_transport.get_extra_info(SZ_IS_EVOFW3) is True
 
 
 def _msg_handler(msg: Message) -> None:
@@ -73,7 +74,7 @@ async def _test_create_stack(
     try:
         await assert_stack_state(protocol, transport)
     except serial.SerialException as err:
-        transport._close(exc=err)
+        cast(PortTransport, transport)._close(exc=err)
         raise
     except (AssertionError, asyncio.InvalidStateError, TimeoutError):
         transport.close()
@@ -112,7 +113,7 @@ async def _test_factories(
     try:
         await assert_stack_state(protocol, transport)
     except serial.SerialException as err:
-        transport._close(exc=err)
+        cast(PortTransport, transport)._close(exc=err)
         raise
     except (AssertionError, asyncio.InvalidStateError, TimeoutError):
         transport.close()

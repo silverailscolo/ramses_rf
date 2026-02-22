@@ -23,9 +23,9 @@ from ramses_tx.const import (
     DEFAULT_SEND_TIMEOUT,
     DEFAULT_WAIT_FOR_REPLY,
     SZ_ACTIVE_HGI,
+    SZ_READER_TASK,
 )
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
-from ramses_tx.transport import SZ_READER_TASK
 
 from .const import DONT_CREATE_MESSAGES, SZ_DEVICES
 from .schemas import (

@@ -11,7 +11,7 @@ from ramses_rf import Command, Gateway, Packet
 from ramses_rf.gateway import GatewayConfig
 from ramses_tx.protocol import PortProtocol
 from ramses_tx.schemas import SZ_INBOUND, SZ_OUTBOUND
-from ramses_tx.transport import _str
+from ramses_tx.transport.helpers import _str
 from tests_rf.virtual_rf import VirtualRf
 
 # other constants
@@ -59,7 +59,7 @@ TESTS_INBOUND = {  # sent by other, received
 @pytest.fixture(autouse=True)
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("ramses_tx.protocol._DBG_DISABLE_IMPERSONATION_ALERTS", True)
-    monkeypatch.setattr("ramses_tx.transport.MIN_INTER_WRITE_GAP", 0)
+    monkeypatch.setattr("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0)
 
 
 async def assert_this_pkt(

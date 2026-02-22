@@ -5,7 +5,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Final, NoReturn, TypeAlias, TypedDict
+from typing import Final, NoReturn, TypeAlias, TypedDict, cast
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +16,7 @@ from ramses_rf import Gateway
 from ramses_rf.device import HgiGateway
 from ramses_tx import exceptions as exc
 from ramses_tx.address import HGI_DEVICE_ID
+from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import DeviceIdT
 from tests_rf.virtual_rf import HgiFwTypes, VirtualRf
 
@@ -57,8 +58,8 @@ _global_failed_ports: list[str] = []
 @pytest.fixture(autouse=True)
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("ramses_tx.protocol._DBG_DISABLE_IMPERSONATION_ALERTS", True)
-    monkeypatch.setattr("ramses_tx.transport._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
-    monkeypatch.setattr("ramses_tx.transport.MIN_INTER_WRITE_GAP", 0)
+    monkeypatch.setattr("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
+    monkeypatch.setattr("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0)
 
 
 # TODO: add teardown to cleanup orphan MessageIndex thread
@@ -192,11 +193,14 @@ async def _fake_gateway(
 ) -> Gateway:
     """Wrapper to instantiate a virtual gateway."""
 
-    with patch("ramses_tx.transport.comports", rf.comports):
+    with patch("ramses_tx.discovery.comports", rf.comports):
         gwy = await _gateway(gwy_port, gwy_config)
 
     assert gwy._transport  # mypy
-    gwy._transport._extra["virtual_rf"] = rf
+    # Cast to PortTransport to access concrete implementation details
+    transport = cast(PortTransport, gwy._transport)
+    transport._extra["virtual_rf"] = rf
+
     return gwy
 
 

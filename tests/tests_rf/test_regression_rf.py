@@ -13,8 +13,8 @@ import pytest
 from ramses_rf import Gateway
 from ramses_rf.device import DeviceHeat, DeviceHvac
 from ramses_rf.gateway import GatewayConfig
+from ramses_tx.const import SZ_READER_TASK
 from ramses_tx.exceptions import TransportError
-from ramses_tx.transport import SZ_READER_TASK
 
 if TYPE_CHECKING:
     from syrupy.assertion import SnapshotAssertion
