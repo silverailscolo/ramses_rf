@@ -1663,6 +1663,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if parts[seq - 1] is None:
             parts[seq - 1] = body
             buf["received"] += 1
+            try:
+                # Send an application-level ACK for the received part so
+                # the remote sender can progress. Use fire-and-forget
+                # `_send_unacked` which sends via command path.
+                ack = f"ACK {seq}/{total}"
+                _LOGGER.info("Scheduling application ACK (part): %s", ack)
+                self._loop.create_task(self._send_unacked(ack))
+            except Exception:
+                _LOGGER.exception("Failed to schedule per-part ACK")
 
         if buf["received"] < total:
             # Not complete yet; we still send ACK from elsewhere
@@ -1783,17 +1792,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if (self._write_cluster_id, self._write_endpoint_id) == (
             self._cluster_id,
             self._endpoint_id,
-        ):
-            write_cluster = read_cluster
-        else:
-            try:
-                write_cluster = self._get_cluster(
-                    device,
-                    self._write_endpoint_id,
-                    self._write_cluster_id,
-                    self._write_direction,
-                )
-            except exc.TransportError:
+        # ACKs for chunk parts are scheduled from inside
+        # `_maybe_handle_incoming_chunk()` when a part is accepted.
                 _LOGGER.debug(
                     "Write cluster 0x%04x not found on endpoint %s; searching other endpoints/directions",
                     self._write_cluster_id,
