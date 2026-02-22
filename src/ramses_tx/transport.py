@@ -2202,23 +2202,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 # If a target_cluster was provided, send on that cluster deterministically
                 if target_cluster is not None:
                     use_cmd = 0x01 if isinstance(chunk, str) and chunk.startswith("ACK ") else self._cmd_id
-                    # Determine which API to call based on the cluster's capabilities
-                    if isinstance(chunk, str) and chunk.startswith("ACK "):
-                        # ACKs are server->client commands on the cluster that delivered the chunk
-                        if hasattr(target_cluster, "server_command"):
-                            await target_cluster.server_command(use_cmd, chunk, expect_reply=False)
-                        else:
-                            raise exc.TransportError(
-                                f"Target cluster does not expose server_command for ack (cluster=0x{getattr(target_cluster, 'cluster_id', 0):04x})"
-                            )
-                    else:
-                        # Non-ACK unacked payloads use client_command on the write cluster
-                        if hasattr(target_cluster, "client_command"):
-                            await target_cluster.client_command(use_cmd, chunk, expect_reply=False)
-                        else:
-                            raise exc.TransportError(
-                                f"Target cluster does not expose client_command for unacked send (cluster=0x{getattr(target_cluster, 'cluster_id', 0):04x})"
-                            )
+                    # Use the generic cluster.command API which ZHA cluster objects provide
+                    # This respects the cluster role (server/client) under the hood and
+                    # avoids relying on presence of `server_command`/`client_command`
+                    try:
+                        await target_cluster.command(use_cmd, chunk, expect_reply=False)
+                    except Exception as err:  # pragma: no cover - defensive
+                        raise exc.TransportError(
+                            f"Target cluster command failed (cluster=0x{getattr(target_cluster, 'cluster_id', 0):04x} cmd=0x{use_cmd:02x}): {err}"
+                        ) from err
                 else:
                     # No explicit cluster provided: fall back to the configured write cluster
                     await self._send_command(chunk, seq, total)
