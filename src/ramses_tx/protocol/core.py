@@ -137,7 +137,7 @@ class PortProtocol(_DeviceIdFilterMixin):
         if not self._context:
             return super().__repr__()
         cls = self._context.state.__class__.__name__
-        return f"QosProtocol({cls}, len(queue)={self._context._que.qsize()})"
+        return f"QosProtocol({cls}, len(queue)={self._context.qsize})"
 
     def connection_made(  # type: ignore[override]
         self, transport: TransportInterface, /, *, ramses: bool = False

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """RAMSES RF - RAMSES-II compatible packet protocol finite state machine.
 
-This module manages the state transitions, command queuing, and QoS
-retry mechanisms for the RAMSES-II protocol.
+This module manages the state transitions and orchestrates commands using
+the dedicated QoS manager.
 """
 
 from __future__ import annotations
@@ -10,9 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable, Coroutine
-from datetime import datetime as dt, timedelta as td
-from queue import Empty, Full, PriorityQueue
-from threading import Lock
+from datetime import timedelta as td
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
 
@@ -37,6 +35,7 @@ from ..helpers import dt_now
 from ..interfaces import StateMachineInterface, TransportInterface
 from ..packet import Packet
 from ..typing import HeaderT, QosParams
+from .qos import QosManager
 
 if TYPE_CHECKING:
     from .core import RamsesProtocolT
@@ -46,9 +45,6 @@ _DBG_MAINTAIN_STATE_CHAIN: Final[bool] = False
 _DBG_USE_STRICT_TRANSITIONS: Final[bool] = False
 
 _LOGGER = logging.getLogger(__name__)
-
-_FutureT: TypeAlias = asyncio.Future[Packet]
-_QueueEntryT: TypeAlias = tuple[Priority, dt, Command, QosParams, _FutureT]
 
 
 class ProtocolContext(StateMachineInterface):
@@ -80,39 +76,61 @@ class ProtocolContext(StateMachineInterface):
         :type max_buffer_size: int
         """
         self._protocol = protocol
-        self.echo_timeout = echo_timeout
-        self.reply_timeout = reply_timeout
-        self.max_retry_limit = min(max_retry_limit, MAX_RETRY_LIMIT)
-        self.max_buffer_size = min(max_buffer_size, DEFAULT_BUFFER_SIZE)
-
         self._loop = protocol._loop
-        self._lock = Lock()
-        self._fut: _FutureT | None = None
-        self._que: PriorityQueue[_QueueEntryT] = PriorityQueue(
-            maxsize=self.max_buffer_size
+
+        # Delegate QoS state management to the isolated QosManager
+        self._qos_mgr = QosManager(
+            self._loop,
+            echo_timeout=echo_timeout,
+            reply_timeout=reply_timeout,
+            max_retry_limit=max_retry_limit,
+            max_buffer_size=max_buffer_size,
         )
 
         self._expiry_timer: asyncio.Task[None] | None = None
-        self._multiplier = 0
         self._state: _ProtocolStateT = None  # type: ignore[assignment]
 
         self._send_fnc: Callable[[Command], Coroutine[Any, Any, None]] = None  # type: ignore[assignment]
-
-        self._cmd: Command | None = None
-        self._qos: QosParams | None = None
-        self._cmd_tx_count: int = 0
-        self._cmd_tx_limit: int = 0
 
         self.set_state(Inactive)
 
     def __repr__(self) -> str:
         """Return an unambiguous string representation of this object."""
         msg = f"<ProtocolContext state={repr(self._state)[21:-1]}"
-        if self._cmd is None:
+        if not self._qos_mgr.is_active:
             return msg + ">"
-        if self._cmd_tx_count == 0:
+        if self._qos_mgr.tx_count == 0:
             return msg + ", tx_count=0/0>"
-        return msg + f", tx_count={self._cmd_tx_count}/{self._cmd_tx_limit}>"
+        return msg + f", tx_count={self._qos_mgr.tx_count}/{self._qos_mgr.tx_limit}>"
+
+    # Properties to maintain backward compatibility with the test suite
+    @property
+    def max_retry_limit(self) -> int:
+        return self._qos_mgr.max_retry_limit
+
+    @max_retry_limit.setter
+    def max_retry_limit(self, value: int) -> None:
+        self._qos_mgr.max_retry_limit = value
+
+    @property
+    def echo_timeout(self) -> float:
+        return self._qos_mgr.echo_timeout
+
+    @property
+    def reply_timeout(self) -> float:
+        return self._qos_mgr.reply_timeout
+
+    @property
+    def qsize(self) -> int:
+        return self._qos_mgr.qsize
+
+    @property
+    def _cmd_tx_count(self) -> int:
+        return self._qos_mgr.tx_count
+
+    @property
+    def _cmd_tx_limit(self) -> int:
+        return self._qos_mgr.tx_limit
 
     @property
     def is_sending(self) -> bool:
@@ -147,20 +165,17 @@ class ProtocolContext(StateMachineInterface):
         """
 
         async def expire_state_on_timeout() -> None:
-            if isinstance(self._state, WantEcho):
-                delay = self.echo_timeout * (2**self._multiplier)
-            else:
-                delay = self.reply_timeout * (2**self._multiplier)
-
-            self._multiplier, old_val = max(0, self._multiplier - 1), self._multiplier
+            delay, old_val = self._qos_mgr.get_and_update_delay(
+                isinstance(self._state, WantEcho)
+            )
             await asyncio.sleep(delay)
-            self._multiplier = min(3, old_val + 1)
+            self._qos_mgr.restore_multiplier(old_val)
 
             level = (
                 logging.DEBUG
-                if self._cmd_tx_count < 3
+                if self._qos_mgr.tx_count < 3
                 else logging.INFO
-                if self._cmd_tx_count == 3
+                if self._qos_mgr.tx_count == 3
                 else logging.WARNING
             )
             state_str = "echo" if isinstance(self._state, WantEcho) else "reply"
@@ -169,18 +184,22 @@ class ProtocolContext(StateMachineInterface):
                 f"Timeout expired waiting for {state_str}: {self} (delay={delay})",
             )
 
-            if self._cmd_tx_count < self._cmd_tx_limit:
+            if self._qos_mgr.tx_count < self._qos_mgr.tx_limit:
                 self.set_state(WantEcho, timed_out=True)
             else:
                 self.set_state(IsInIdle, expired=True)
 
         def effect_state(timed_out: bool) -> None:
-            if timed_out and self._cmd is not None:
-                self._send_cmd(self._cmd, is_retry=True)
+            if timed_out and self._qos_mgr.cmd is not None:
+                self._send_cmd(self._qos_mgr.cmd, is_retry=True)
 
             if isinstance(self._state, IsInIdle):
                 self._loop.call_soon_threadsafe(self._check_buffer_for_cmd)
-            elif isinstance(self._state, WantRply) and not self._qos.wait_for_reply:  # type: ignore[union-attr]
+            elif (
+                isinstance(self._state, WantRply)
+                and self._qos_mgr.qos
+                and not self._qos_mgr.qos.wait_for_reply
+            ):
                 self.set_state(IsInIdle, result=self._state._echo_pkt)
             elif isinstance(self._state, WantEcho | WantRply):
                 self._expiry_timer = self._loop.create_task(expire_state_on_timeout())
@@ -193,11 +212,11 @@ class ProtocolContext(StateMachineInterface):
         new_state_name = state_class.__name__
         transition = f"{current_state_name}->{new_state_name}"
 
-        if self._fut is None:
+        if self._qos_mgr.fut is None:
             _LOGGER.debug(
                 f"FSM state changed {transition}: no active future (ctx={self})"
             )
-        elif self._fut.cancelled() and not isinstance(self._state, IsInIdle):
+        elif self._qos_mgr.fut.cancelled() and not isinstance(self._state, IsInIdle):
             _LOGGER.debug(
                 f"FSM state changed {transition}: future cancelled (expired={expired}, ctx={self})"
             )
@@ -205,18 +224,18 @@ class ProtocolContext(StateMachineInterface):
             _LOGGER.debug(
                 f"FSM state changed {transition}: exception occurred (error={exception}, ctx={self})"
             )
-            if not self._fut.done():
-                self._fut.set_exception(exception)
+            if not self._qos_mgr.fut.done():
+                self._qos_mgr.fut.set_exception(exception)
         elif result:
             _LOGGER.debug(
                 f"FSM state changed {transition}: result received (result={result._hdr}, ctx={self})"
             )
-            if not self._fut.done():
-                self._fut.set_result(result)
+            if not self._qos_mgr.fut.done():
+                self._qos_mgr.fut.set_result(result)
         elif expired:
             _LOGGER.debug(f"FSM state changed {transition}: timer expired (ctx={self})")
-            if not self._fut.done():
-                self._fut.set_exception(
+            if not self._qos_mgr.fut.done():
+                self._qos_mgr.fut.set_exception(
                     ProtocolSendFailed(f"{self}: Exceeded maximum retries")
                 )
         else:
@@ -229,12 +248,11 @@ class ProtocolContext(StateMachineInterface):
             setattr(self._state, "_prev_state", prev_state)  # noqa: B010
 
         if timed_out:
-            self._cmd_tx_count += 1
+            self._qos_mgr.tx_count += 1
         elif isinstance(self._state, WantEcho):
-            self._cmd_tx_count = 1
+            self._qos_mgr.tx_count = 1
         elif not isinstance(self._state, WantRply):
-            self._cmd = self._qos = None
-            self._cmd_tx_count = 0
+            self._qos_mgr.reset_active()
 
         self._loop.call_soon_threadsafe(effect_state, timed_out)
 
@@ -284,12 +302,7 @@ class ProtocolContext(StateMachineInterface):
         if isinstance(self._state, Inactive):
             raise ProtocolSendFailed(f"{self}: Send failed (no active transport?)")
 
-        fut: _FutureT = self._loop.create_future()
-        try:
-            self._que.put_nowait((priority, dt.now(), cmd, qos, fut))
-        except Full as err:
-            fut.cancel("Send buffer overflow")
-            raise ProtocolSendFailed(f"{self}: Send buffer overflow") from err
+        fut = self._qos_mgr.enqueue(priority, cmd, qos)
 
         if isinstance(self._state, IsInIdle):
             self._loop.call_soon_threadsafe(self._check_buffer_for_cmd)
@@ -300,9 +313,12 @@ class ProtocolContext(StateMachineInterface):
         except TimeoutError as err:
             msg = f"{self}: Expired global timer after {timeout} sec"
             _LOGGER.warning(
-                "TOUT.. = %s: send_timeout=%s (%s)", self, timeout, self._cmd is cmd
+                "TOUT.. = %s: send_timeout=%s (%s)",
+                self,
+                timeout,
+                self._qos_mgr.cmd is cmd,
             )
-            if self._cmd is cmd:
+            if self._qos_mgr.cmd is cmd:
                 self.set_state(IsInIdle, expired=True)
             raise ProtocolSendFailed(msg) from err
 
@@ -315,36 +331,14 @@ class ProtocolContext(StateMachineInterface):
 
     def _check_buffer_for_cmd(self) -> None:
         """Check the queue buffer and send the next command if available."""
-        self._lock.acquire()
-
-        if self._fut is not None and not self._fut.done():
-            self._lock.release()
+        if not self._qos_mgr.get_next():
             return
 
-        while True:
-            try:
-                *_, self._cmd, self._qos, self._fut = self._que.get_nowait()
-            except Empty:
-                self._cmd = self._qos = self._fut = None
-                self._lock.release()
-                return
-
-            self._cmd_tx_count = 0
-            self._cmd_tx_limit = min(self._qos.max_retries, self.max_retry_limit) + 1
-
-            assert isinstance(self._fut, asyncio.Future)
-            if self._fut.done():
-                self._que.task_done()
-                continue
-            break
-
-        self._lock.release()
-
         try:
-            assert self._cmd is not None
-            self._send_cmd(self._cmd)
+            assert self._qos_mgr.cmd is not None
+            self._send_cmd(self._qos_mgr.cmd)
         finally:
-            self._que.task_done()
+            self._qos_mgr.task_done()
 
     def _send_cmd(self, cmd: Command, is_retry: bool = False) -> None:
         """Wrapper to send a command with retries, until success or exception.
