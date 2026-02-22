@@ -19,7 +19,7 @@ from ramses_rf import Command, Message, Packet
 from ramses_tx import exceptions as exc
 from ramses_tx.const import DEFAULT_ECHO_TIMEOUT, DEFAULT_RPLY_TIMEOUT
 from ramses_tx.protocol import PortProtocol, ReadProtocol, protocol_factory
-from ramses_tx.protocol_fsm import (
+from ramses_tx.protocol.fsm import (
     Inactive,
     IsInIdle,
     ProtocolContext,

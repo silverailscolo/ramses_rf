@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""RAMSES RF - RAMSES-II compatible packet protocol."""
+"""RAMSES RF - RAMSES-II compatible packet protocol base classes.
+
+This module provides the foundational protocol layers, handling transport
+binding, basic message dispatching, regex-based payload manipulation,
+and device ID filtering mechanisms.
+"""
 
 from __future__ import annotations
 
@@ -7,16 +12,14 @@ import asyncio
 import logging
 import re
 from collections import deque
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime as dt, timedelta as td
-from time import perf_counter
-from typing import TYPE_CHECKING, Any, Final, TypeAlias
+from typing import TYPE_CHECKING, Final
 
-from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
-from .command import Command
-from .const import (
-    DEFAULT_DISABLE_QOS,
+from ..address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
+from ..command import Command
+from ..const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_NUM_REPEATS,
     DEV_TYPE_MAP,
@@ -24,40 +27,31 @@ from .const import (
     MAX_GAP_DURATION,
     MAX_NUM_REPEATS,
     SZ_ACTIVE_HGI,
-    SZ_IS_EVOFW3,
     Code,
     DevType,
     Priority,
 )
-from .exceptions import ProtocolError, ProtocolSendFailed, TransportError
-from .helpers import dt_now
-from .interfaces import ProtocolInterface, TransportInterface
-from .logger import set_logger_timesource
-from .message import Message
-from .packet import Packet
-from .protocol_fsm import ProtocolContext
-from .schemas import SZ_BLOCK_LIST, SZ_CLASS, SZ_INBOUND, SZ_KNOWN_LIST, SZ_OUTBOUND
-from .transport import TransportConfig, transport_factory
-from .typing import (
+from ..exceptions import ProtocolError, ProtocolSendFailed, TransportError
+from ..helpers import dt_now
+from ..interfaces import ProtocolInterface, TransportInterface
+from ..message import Message
+from ..packet import Packet
+from ..schemas import SZ_BLOCK_LIST, SZ_CLASS, SZ_INBOUND, SZ_KNOWN_LIST, SZ_OUTBOUND
+from ..typing import (
     DeviceIdT,
     DeviceListT,
     ExceptionT,
     MsgFilterT,
     MsgHandlerT,
-    PortConfigT,
     QosParams,
-    SerPortNameT,
 )
 
 if TYPE_CHECKING:
-    from .transport import RamsesTransportT
+    from .fsm import ProtocolContext
 
 
 TIP: Final[str] = f", configure the {SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
 
-# NOTE: All debug flags should be False for deployment to end-users
-_DBG_DISABLE_IMPERSONATION_ALERTS: Final[bool] = False
-_DBG_DISABLE_QOS: Final[bool] = False
 _DBG_FORCE_LOG_PACKETS: Final[bool] = False
 
 _LOGGER = logging.getLogger(__name__)
@@ -188,8 +182,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         The argument is an exception object or None (the latter meaning a regular EOF is
         received or the connection was aborted or closed).
         """
-        # FIX: Check if _wait_connection_lost exists before asserting
-        # This handles cases where connection was never fully established (e.g. timeout)
         if not self._wait_connection_lost:
             _LOGGER.debug(
                 "connection_lost called but no connection was established (ignoring)"
@@ -199,7 +191,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
                 self._wait_connection_made = self._loop.create_future()
             return
 
-        if self._wait_connection_lost.done():  # BUG: why is callback invoked twice?
+        if self._wait_connection_lost.done():
             return
 
         self._wait_connection_made = self._loop.create_future()
@@ -227,30 +219,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             ) from err
 
     def pause_writing(self) -> None:
-        """Called when the transport's buffer goes over the high-water mark.
-
-        Pause and resume calls are paired -- pause_writing() is called once when the
-        buffer goes strictly over the high-water mark (even if subsequent writes
-        increases the buffer size even more), and eventually resume_writing() is called
-        once when the buffer size reaches the low-water mark.
-
-        Note that if the buffer size equals the high-water mark, pause_writing() is not
-        called -- it must go strictly over. Conversely, resume_writing() is called when
-        the buffer size is equal or lower than the low-water mark.  These end conditions
-        are important to ensure that things go as expected when either mark is zero.
-
-        NOTE: This is the only Protocol callback that is not called through
-        EventLoop.call_soon() -- if it were, it would have no effect when it's most
-        needed (when the app keeps writing without yielding until pause_writing() is
-        called).
-        """
+        """Called when the transport's buffer goes over the high-water mark."""
         self._pause_writing = True
 
     def resume_writing(self) -> None:
-        """Called when the transport's buffer drains below the low-water mark.
-
-        See pause_writing() for details.
-        """
+        """Called when the transport's buffer drains below the low-water mark."""
         self._pause_writing = False
 
     async def _send_impersonation_alert(self, cmd: Command) -> None:
@@ -321,11 +294,8 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             ProtocolSendFailed: tried to Tx Command, but didn't get echo/reply
             ProtocolError:      didn't attempt to Tx Command for some reason
         """
-
         assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
-        assert 0 <= num_repeats <= MAX_NUM_REPEATS, (
-            "Out of range: num_repeats"
-        )  # if QoS, only Tx x1, with no repeats
+        assert 0 <= num_repeats <= MAX_NUM_REPEATS, "Out of range: num_repeats"
 
         # Patch command with actual HGI ID if it uses the default placeholder
         cmd = self._patch_cmd_if_needed(cmd)
@@ -367,7 +337,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
     async def _send_frame(
         self, frame: str, num_repeats: int = 0, gap_duration: float = 0.0
-    ) -> None:  # _send_frame() -> transport
+    ) -> None:
         """Write to the transport."""
         if self._transport is None:
             raise ProtocolSendFailed("Transport is not connected")
@@ -388,7 +358,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         :param pkt: The received Packet object to process.
         """
-
         # Use pkt._frame and prepend RSSI so from_port can correctly parse it
         raw_frame = pkt._frame
         hacked_frame = self._apply_regex(raw_frame, self._inbound_regex)
@@ -479,7 +448,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         # HACK: to disable_warnings if pkt source is static (e.g. a file/dict)
         # HACK: but a dynamic source (e.g. a port/MQTT) should warn if needed
         self._known_hgi = self._extract_known_hgi_id(
-            include_list, disable_warnings=isinstance(self, ReadProtocol)
+            include_list, disable_warnings=self.__class__.__name__ == "ReadProtocol"
         )
 
         self._foreign_gwys_lst: list[DeviceIdT] = []
@@ -490,8 +459,6 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         """Get the ID of the HGI handling the comms."""
         if not self._transport:
             return self._known_hgi or HGI_DEV_ADDR.id
-        # CRITICAL FIX: get_extra_info returns None if key exists but val is None
-        # We must ensure we fallback to the known HGI or default if it returns None
         hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
         return hgi or self._known_hgi or HGI_DEV_ADDR.id
 
@@ -571,14 +538,12 @@ class _DeviceIdFilterMixin(_BaseProtocol):
 
         if dev_id not in self._exclude:
             self._active_hgi = dev_id
-            # else: setting self._active_hgi will not help
 
         if dev_id in self._exclude:
             _LOGGER.error(f"{msg} MUST NOT be in the {SZ_BLOCK_LIST}{TIP}")
 
         elif dev_id not in self._include:
             _LOGGER.warning(f"{msg} SHOULD be in the (enforced) {SZ_KNOWN_LIST}")
-            # self._include.append(dev_id)  # a good idea?
 
         elif not self.enforce_include:
             _LOGGER.info(f"{msg} is in the {SZ_KNOWN_LIST}, which SHOULD be enforced")
@@ -592,10 +557,6 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         """Return True if the packet is not to be filtered out.
 
         In any one packet, an excluded device_id 'trumps' an included device_id.
-
-        There are two ways to set the Active Gateway (HGI80/evofw3):
-        - by signature (evofw3 only), when frame -> packet
-        - by known_list (HGI80/evofw3), when filtering packets
         """
 
         def warn_foreign_hgi(dev_id: DeviceIdT) -> None:
@@ -616,13 +577,13 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             self._foreign_gwys_lst.append(dev_id)
 
         for dev_id in dict.fromkeys((src_id, dst_id)):  # removes duplicates
-            if dev_id in self._exclude:  # problems if incl. active gateway
+            if dev_id in self._exclude:
                 return False
 
-            if dev_id == self._active_hgi:  # is active gwy
-                continue  # consider: return True (but what if corrupted dst.id?)
+            if dev_id == self._active_hgi:
+                continue
 
-            if dev_id in self._include:  # incl. 63:262142 & --:------
+            if dev_id in self._include:
                 continue
 
             if sending and dev_id == HGI_DEV_ADDR.id:
@@ -634,7 +595,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             if dev_id[:2] != DEV_TYPE_MAP.HGI:
                 continue
 
-            if self._active_hgi:  # this 18: is not in known_list
+            if self._active_hgi:
                 warn_foreign_hgi(dev_id)
 
         return True
@@ -664,382 +625,3 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             priority=priority,
             qos=qos,
         )
-
-
-class ReadProtocol(_DeviceIdFilterMixin):
-    """A protocol that can only receive Packets."""
-
-    def __init__(
-        self,
-        msg_handler: MsgHandlerT,
-        /,
-        *,
-        enforce_include_list: bool = False,
-        exclude_list: DeviceListT | None = None,
-        include_list: DeviceListT | None = None,
-    ) -> None:
-        _DeviceIdFilterMixin.__init__(
-            self,
-            msg_handler,
-            enforce_include_list=enforce_include_list,
-            exclude_list=exclude_list,
-            include_list=include_list,
-        )
-        self._pause_writing = True
-
-    def connection_made(  # type: ignore[override]
-        self, transport: TransportInterface, /, *, ramses: bool = False
-    ) -> None:
-        """Consume the callback if invoked by SerialTransport rather than PortTransport.
-
-        Our PortTransport wraps SerialTransport and will wait for the signature echo
-        to be received (c.f. FileTransport) before calling connection_made(ramses=True).
-        """
-        super().connection_made(transport)
-
-    def resume_writing(self) -> None:
-        raise NotImplementedError(f"{self}: The chosen Protocol is Read-Only")
-
-    async def send_cmd(
-        self,
-        cmd: Command,
-        /,
-        *,
-        gap_duration: float = DEFAULT_GAP_DURATION,
-        num_repeats: int = DEFAULT_NUM_REPEATS,
-        priority: Priority = Priority.DEFAULT,
-        qos: QosParams | None = None,
-    ) -> Packet:
-        """Raise an exception as the Protocol cannot send Commands."""
-        raise NotImplementedError(f"{cmd._hdr}: < this Protocol is Read-Only")
-
-
-class PortProtocol(_DeviceIdFilterMixin):
-    """A protocol that can receive Packets and send Commands +/- QoS (using a FSM)."""
-
-    def __init__(
-        self,
-        msg_handler: MsgHandlerT,
-        /,
-        *,
-        disable_qos: bool | None = DEFAULT_DISABLE_QOS,
-        enforce_include_list: bool = False,
-        exclude_list: DeviceListT | None = None,
-        include_list: DeviceListT | None = None,
-    ) -> None:
-        """Add a FSM to the Protocol, to provide QoS."""
-        _DeviceIdFilterMixin.__init__(
-            self,
-            msg_handler,
-            enforce_include_list=enforce_include_list,
-            exclude_list=exclude_list,
-            include_list=include_list,
-        )
-        self._context = ProtocolContext(self)
-        self._disable_qos = disable_qos  # no wait_for_reply
-
-    def __repr__(self) -> str:
-        if not self._context:
-            return super().__repr__()
-        cls = self._context.state.__class__.__name__
-        return f"QosProtocol({cls}, len(queue)={self._context._que.qsize()})"
-
-    def connection_made(  # type: ignore[override]
-        self, transport: TransportInterface, /, *, ramses: bool = False
-    ) -> None:
-        """Consume the callback if invoked by SerialTransport rather than PortTransport.
-
-        Our PortTransport wraps SerialTransport and will wait for the signature echo
-        to be received (c.f. FileTransport) before calling connection_made(ramses=True).
-        """
-        if not ramses:
-            return None
-
-        # if isinstance(transport, MqttTransport):  # HACK
-        #     self._context.echo_timeout = 0.5  # HACK: need to move FSM to transport?
-
-        super().connection_made(transport)
-        # TODO: needed? self.resume_writing()
-
-        # ROBUSTNESS FIX: Ensure self._transport is set even if the wait future was cancelled
-        if self._transport is None:
-            _LOGGER.warning(
-                f"{self}: Transport bound after wait cancelled (late connection)"
-            )
-            self._transport = transport
-
-        # Safe access with check (optional but recommended)
-        if self._transport:
-            self._set_active_hgi(self._transport.get_extra_info(SZ_ACTIVE_HGI))
-            self._is_evofw3 = self._transport.get_extra_info(SZ_IS_EVOFW3)
-
-        if not self._context:
-            return
-
-        self._context.connection_made(transport)
-
-        if self._pause_writing:
-            self._context.pause_writing()
-        else:
-            self._context.resume_writing()
-
-    def connection_lost(self, err: Exception | None) -> None:
-        """Inform the FSM that the connection with the Transport has been lost."""
-        super().connection_lost(err)
-        if self._context:
-            self._context.connection_lost(err)  # is this safe, when KeyboardInterrupt?
-
-    def pause_writing(self) -> None:
-        """Inform the FSM that the Protocol has been paused."""
-        super().pause_writing()
-        if self._context:
-            self._context.pause_writing()
-
-    def resume_writing(self) -> None:
-        """Inform the FSM that the Protocol has been resumed."""
-        super().resume_writing()
-        if self._context:
-            self._context.resume_writing()
-
-    def _pkt_received(self, pkt: Packet) -> None:
-        """Pass any valid/wanted packets to the callback."""
-        super()._pkt_received(pkt)
-        if self._context:
-            self._context.pkt_received(pkt)
-
-    async def _send_impersonation_alert(self, cmd: Command) -> None:
-        """Send a puzzle packet warning that impersonation is occurring."""
-        if _DBG_DISABLE_IMPERSONATION_ALERTS:
-            return
-
-        msg = f"{self}: Impersonating device: {cmd.src}, for pkt: {cmd.tx_header}"
-        if self._is_evofw3 is False:
-            _LOGGER.error(f"{msg}, NB: non-evofw3 gateways can't impersonate!")
-        else:
-            _LOGGER.info(msg)
-
-        await self._send_cmd(Command._puzzle(msg_type="11", message=cmd.tx_header))
-
-    async def _send_cmd(  # NOTE: QoS wrapped here...
-        self,
-        cmd: Command,
-        /,
-        *,
-        gap_duration: float = DEFAULT_GAP_DURATION,
-        num_repeats: int = DEFAULT_NUM_REPEATS,
-        priority: Priority = Priority.DEFAULT,
-        qos: QosParams = DEFAULT_QOS,
-    ) -> Packet:
-        """Wrapper to send a Command with QoS (retries, until success or exception)."""
-
-        # TODO: use a sync function, so we don't have a stack of awaits before the write
-        async def send_cmd(kmd: Command) -> None:
-            """Wrapper to for self._send_frame(cmd)."""
-
-            # collision avoidance wait here before calling _send_frame
-            def is_imminent(p: Packet) -> bool:
-                LOWER = td(seconds=0.010 * 0.8)
-                UPPER = LOWER + td(seconds=0.084)
-                return bool(
-                    LOWER
-                    < (p.dtm + td(seconds=int(p.payload[2:6], 16) / 10) - dt_now())
-                    < UPPER
-                )
-
-            start = perf_counter()
-            while any(is_imminent(p) for p in self._tracked_sync_cycles):
-                await asyncio.sleep(0.010)
-            if perf_counter() - start > 0.010:
-                await asyncio.sleep(0.084)  # SYNC_WAIT_LONG
-
-            await self._send_frame(
-                str(kmd), gap_duration=gap_duration, num_repeats=num_repeats
-            )
-
-        qos = qos or DEFAULT_QOS
-
-        if _DBG_DISABLE_QOS:  # TODO: should allow echo Packet?
-            await send_cmd(cmd)
-            return None  # type: ignore[return-value]  # used for test/dev
-
-        # if cmd.code == Code._PUZZ:  # NOTE: not as simple as this
-        #     priority = Priority.HIGHEST  # FIXME: hack for _7FFF
-
-        _CODES = (Code._0006, Code._0404, Code._0418, Code._1FC9)  # must have QoS
-        # 0006|RQ must have wait_for_reply: (TODO: explain why)
-        # 0404|RQ must have wait_for_reply: (TODO: explain why)
-        # 0418|RQ must have wait_for_reply: if null log entry, reply has no idx
-        # 1FC9|xx must have wait_for_reply and priority (timing critical)
-
-        if self._disable_qos is True or _DBG_DISABLE_QOS:
-            qos._wait_for_reply = False
-        elif self._disable_qos is None and cmd.code not in _CODES:
-            qos._wait_for_reply = False
-
-        # Should do this check before, or after previous block (of non-QoS sends)?
-        # if not self._transport._is_wanted_addrs(cmd.src.id, cmd.dst.id, sending=True):
-        #     raise exc.ProtocolError(
-        #         f"{self}: Failed to send {cmd._hdr}: excluded by list"
-        #     )
-
-        assert self._context
-
-        try:
-            return await self._context.send_cmd(send_cmd, cmd, priority, qos)
-        # except InvalidStateError as err:  # TODO: handle InvalidStateError separately
-        #     # reset protocol stack
-        except ProtocolError as err:
-            _LOGGER.info(f"{self}: Failed to send {cmd._hdr}: {err}")
-            raise
-
-    async def send_cmd(
-        self,
-        cmd: Command,
-        /,
-        *,
-        gap_duration: float = DEFAULT_GAP_DURATION,
-        num_repeats: int = DEFAULT_NUM_REPEATS,
-        priority: Priority = Priority.DEFAULT,
-        qos: QosParams | None = None,
-    ) -> Packet:
-        """Send a Command with Qos (with retries, until success or ProtocolError).
-
-        Returns the Command's response Packet or the Command echo if a response is not
-        expected (e.g. sending an RP).
-
-        If wait_for_reply is True, return the RQ's RP (or W's I), or raise an exception
-        if one doesn't arrive. If it is False, return the echo of the Command only. If
-        it is None (the default), act as True for RQs, and False for all other Commands.
-
-        num_repeats is # of times to send the Command, in addition to the fist transmit,
-        with gap_duration seconds between each transmission. If wait_for_reply is True,
-        then num_repeats is ignored.
-
-        Commands are queued and sent FIFO, except higher-priority Commands are always
-        sent first.
-
-        Will raise:
-            ProtocolSendFailed: tried to Tx Command, but didn't get echo/reply
-            ProtocolError:      didn't attempt to Tx Command for some reason
-        """
-
-        assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
-        assert 0 <= num_repeats <= MAX_NUM_REPEATS, (
-            "Out of range: num_repeats"
-        )  # if QoS, only Tx x1, with no repeats
-
-        if qos and not self._context:
-            _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
-
-        if qos and qos.wait_for_reply and num_repeats:
-            _LOGGER.warning(f"{cmd} < num_repeats set to 0, as wait_for_reply is True")
-            num_repeats = 0  # the lesser crime over wait_for_reply=False
-
-        # Manual filter check to avoid calling super().send_cmd(), which fails
-        if not self._is_wanted_addrs(cmd.src.id, cmd.dst.id, sending=True):
-            raise ProtocolError(f"Command excluded by device_id filter: {cmd}")
-
-        pkt = await self._send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
-            cmd,
-            gap_duration=gap_duration,
-            num_repeats=num_repeats,
-            priority=priority,
-            qos=qos or DEFAULT_QOS,
-        )
-
-        if not pkt:  # HACK: temporary workaround for returning None
-            raise ProtocolSendFailed(f"Failed to send command: {cmd} (REPORT THIS)")
-
-        return pkt
-
-
-RamsesProtocolT: TypeAlias = PortProtocol | ReadProtocol
-
-
-def protocol_factory(
-    msg_handler: MsgHandlerT,
-    /,
-    *,
-    disable_qos: bool | None = DEFAULT_DISABLE_QOS,
-    disable_sending: bool | None = False,
-    enforce_include_list: bool = False,  # True, None, False
-    exclude_list: DeviceListT | None = None,
-    include_list: DeviceListT | None = None,
-) -> RamsesProtocolT:
-    """Create and return a Ramses-specific async packet Protocol."""
-    if disable_sending:
-        _LOGGER.debug("ReadProtocol: Sending has been disabled")
-        return ReadProtocol(
-            msg_handler,
-            enforce_include_list=enforce_include_list,
-            exclude_list=exclude_list,
-            include_list=include_list,
-        )
-
-    if disable_qos:
-        _LOGGER.debug("PortProtocol: QoS has been disabled (will wait_for echos)")
-
-    return PortProtocol(
-        msg_handler,
-        disable_qos=disable_qos,
-        enforce_include_list=enforce_include_list,
-        exclude_list=exclude_list,
-        include_list=include_list,
-    )
-
-
-async def create_stack(
-    msg_handler: MsgHandlerT,
-    /,
-    *,
-    transport_config: TransportConfig,
-    protocol_factory_: Callable[..., RamsesProtocolT] | None = None,
-    transport_factory_: Callable[..., Awaitable[RamsesTransportT]] | None = None,
-    port_name: SerPortNameT | None = None,
-    port_config: PortConfigT | None = None,
-    packet_log: str | None = None,
-    packet_dict: dict[str, str] | None = None,
-    extra: dict[str, Any] | None = None,
-    loop: asyncio.AbstractEventLoop | None = None,
-    disable_qos: bool | None = DEFAULT_DISABLE_QOS,
-    enforce_include_list: bool = False,
-    exclude_list: DeviceListT | None = None,
-    include_list: DeviceListT | None = None,
-) -> tuple[RamsesProtocolT, RamsesTransportT]:
-    """Utility function to provide a Protocol / Transport pair.
-
-    Architecture: gwy (client) -> msg (Protocol) -> pkt (Transport) -> HGI/log (or dict)
-    - send Commands via awaitable Protocol.send_cmd(cmd)
-    - receive Messages via msg_handler callback
-    """
-    read_only = bool(packet_dict or packet_log)
-    if read_only:
-        transport_config.disable_sending = True
-
-    protocol: RamsesProtocolT = (protocol_factory_ or protocol_factory)(
-        msg_handler,
-        disable_qos=disable_qos,
-        disable_sending=transport_config.disable_sending,
-        enforce_include_list=enforce_include_list,
-        exclude_list=exclude_list,
-        include_list=include_list,
-    )
-
-    transport: RamsesTransportT = await (transport_factory_ or transport_factory)(
-        protocol,
-        config=transport_config,
-        port_name=port_name,
-        port_config=port_config,
-        packet_log=packet_log,
-        packet_dict=packet_dict,
-        extra=extra,
-        loop=loop,
-    )
-
-    if not port_name:
-        # Safely extract the transport's mocked clock (e.g., FileTransport) without breaking the interface
-        timesource: Callable[[], dt] = getattr(transport, "_dt_now", dt_now)
-        set_logger_timesource(timesource)
-        _LOGGER.warning("Logger datetimes maintained as most recent packet timestamp")
-
-    return protocol, transport
