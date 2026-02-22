@@ -57,7 +57,9 @@ _global_failed_ports: list[str] = []
 
 @pytest.fixture(autouse=True)
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("ramses_tx.protocol._DBG_DISABLE_IMPERSONATION_ALERTS", True)
+    monkeypatch.setattr(
+        "ramses_tx.protocol.core._DBG_DISABLE_IMPERSONATION_ALERTS", True
+    )
     monkeypatch.setattr("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
     monkeypatch.setattr("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0)
 
