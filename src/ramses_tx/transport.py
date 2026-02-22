@@ -1980,7 +1980,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         _LOGGER.debug("Zigbee _decode_command_payload: fallback decode (len=%s): %r", len(decoded), decoded[:50] if len(decoded) > 50 else decoded)
         return decoded
 
-    async def _send_command(self, chunk: str, seq: int, total: int) -> None:
+    async def _send_command(self, chunk: str, seq: int, total: int, cmd_override: int | None = None) -> None:
         cluster = self._get_active_write_cluster()
         if not cluster:
             raise exc.TransportError("Zigbee write cluster not ready")
@@ -1997,32 +1997,50 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         )
 
         last_err: Exception | None = None
+        # If a command override is requested (e.g., ACK=0x01) and we have
+        # an active read cluster (self._cluster), try sending the command on
+        # that cluster first. This helps hit the server/client direction
+        # mapping that the device expects for ACK responses.
+        tried_clusters = []
+        candidate_clusters = []
+        if cmd_override is not None and getattr(self, "_cluster", None) is not None:
+            candidate_clusters.append(self._cluster)
+        candidate_clusters.append(cluster)
+
         for attempt in (1, 2):
-            try:
-                if hasattr(cluster, "client_command"):
-                    await cluster.client_command(self._cmd_id, chunk, expect_reply=False)
-                else:
-                    await cluster.command(self._cmd_id, chunk, expect_reply=False)
-                return
-            except Exception as err:  # pragma: no cover - defensive
-                last_err = err
-                _LOGGER.warning(
-                    "Zigbee write cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
-                    seq,
-                    total,
-                    attempt,
-                    self._write_endpoint_id,
-                    self._write_cluster_id,
-                    self._cmd_id,
-                    err,
-                    type(err).__name__,
-                )
-                if attempt == 1:
-                    refreshed = self._get_active_write_cluster(force_refresh=True)
-                    if refreshed and refreshed is not cluster:
-                        cluster = refreshed
-                        continue
-                break
+            for candidate in candidate_clusters:
+                if candidate in tried_clusters:
+                    continue
+                tried_clusters.append(candidate)
+                try:
+                    use_cmd = cmd_override if cmd_override is not None else self._cmd_id
+                    if hasattr(candidate, "client_command"):
+                        await candidate.client_command(use_cmd, chunk, expect_reply=False)
+                    else:
+                        await candidate.command(use_cmd, chunk, expect_reply=False)
+                    return
+                except Exception as err:  # pragma: no cover - defensive
+                    last_err = err
+                    _LOGGER.warning(
+                        "Zigbee write cmd %s/%s attempt %s failed (endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
+                        seq,
+                        total,
+                        attempt,
+                        self._write_endpoint_id,
+                        self._write_cluster_id,
+                        use_cmd,
+                        err,
+                        type(err).__name__,
+                    )
+            # refresh and retry once
+            if attempt == 1:
+                refreshed = self._get_active_write_cluster(force_refresh=True)
+                if refreshed and refreshed is not cluster:
+                    cluster = refreshed
+                    candidate_clusters = [c for c in candidate_clusters if c is not cluster]
+                    candidate_clusters.append(cluster)
+                    continue
+            break
 
         if last_err is None:
             raise exc.TransportError("Failed to send Zigbee command")
@@ -2082,10 +2100,21 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             chunks = list(self._chunk_payload(text))
             for seq, total, chunk in chunks:
                 _LOGGER.debug("_send_unacked sending chunk %s/%s: %r", seq, total, chunk)
-                # Send ACKs as ZCL custom commands (commands-only mode).
-                # Use the command send path so Home Assistant and ESP speak
-                # the same transport (commands), avoiding attribute writes.
-                await self._send_command(chunk, seq, total)
+                # If this is an application ACK, send it as command id 0x01 so
+                # it matches the quirk's ServerCommandDefs `ack_chunk`.
+                if isinstance(chunk, str) and chunk.startswith("ACK "):
+                    # prefer to use the read cluster for ACKs (server response
+                    # path), but fall back to the configured write cluster.
+                    try:
+                        target_cluster = self._cluster or self._get_active_write_cluster()
+                    except Exception:
+                        target_cluster = self._get_active_write_cluster()
+
+                    # send using cmd id 0x01 (ack)
+                    await self._send_command(chunk, seq, total, cmd_override=0x01)
+                else:
+                    # Send other unacked payloads as default command
+                    await self._send_command(chunk, seq, total)
                 await asyncio.sleep(0.01)
         except Exception as err:  # pragma: no cover - defensive
             _LOGGER.warning("Zigbee unacked send failed: %s", err)
