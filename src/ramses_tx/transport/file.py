@@ -10,8 +10,8 @@ import logging
 from io import TextIOWrapper
 from typing import TYPE_CHECKING, Any
 
-from .. import exceptions as exc
 from ..const import SZ_READER_TASK
+from ..exceptions import RamsesException, TransportSourceInvalid
 from .base import TransportConfig, _ReadTransport
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
     ) -> None:
         """Initialize the file transport."""
         if not config.disable_sending:
-            raise exc.TransportSourceInvalid("This Transport cannot send packets")
+            raise TransportSourceInvalid("This Transport cannot send packets")
 
         _FileTransportAbstractor.__init__(self, pkt_source, protocol, loop=loop)
         _ReadTransport.__init__(self, config=config, extra=extra, loop=loop)
@@ -72,12 +72,18 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
         try:
             await self._producer_loop()
-        except Exception as err:
-            self.loop.call_soon_threadsafe(
+        except asyncio.CancelledError:
+            # CancelledError is a BaseException, so we pass None to indicate a clean close
+            self._loop.call_soon_threadsafe(
+                functools.partial(self._protocol.connection_lost, None)
+            )
+            raise
+        except (RamsesException, OSError) as err:
+            self._loop.call_soon_threadsafe(
                 functools.partial(self._protocol.connection_lost, err)
             )
         else:
-            self.loop.call_soon_threadsafe(
+            self._loop.call_soon_threadsafe(
                 functools.partial(self._protocol.connection_lost, None)
             )
 
@@ -110,7 +116,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                 await self._process_line_from_raw(dtm_pkt_line)
 
         else:
-            raise exc.TransportSourceInvalid(
+            raise TransportSourceInvalid(
                 f"Packet source is not dict, TextIOWrapper or str: {self._pkt_source:!r}"
             )
 
@@ -125,7 +131,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         self._frame_read(dtm_str, frame)
         await asyncio.sleep(0)
 
-    def _close(self, exc: exc.RamsesException | None = None) -> None:
+    def _close(self, exc: RamsesException | None = None) -> None:
         """Close the transport (cancel any outstanding tasks)."""
         super()._close(exc)
 
