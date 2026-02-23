@@ -9,7 +9,7 @@
 
 
 # also required if using the library via the CLI, client.py
-# - pip list | grep -E 'click|colorama|debugpy'
+# - pip list | grep -E 'aiofiles|click|colorama|debugpy'
 
   aiofiles >= 23.2.1
   click >= 8.2.1                                 # NOTE: non-async version
