@@ -2121,9 +2121,12 @@ class Command(Frame):
                     raise exc.CommandInvalid(
                         f"Parameter {param_id}: Temperature {value_scaled / 100:.1f}°C is out of allowed range ({min_val_scaled / 100:.1f}°C to {max_val_scaled / 100:.1f}°C)"
                     )
-            elif (str(data_type) == "00") or (
-                str(data_type) == "10"
-            ):  # numeric (minutes, medium(0)/high(1) or days)
+            elif (
+                (str(data_type) == "00")
+                or (str(data_type) == "10")
+                or (str(data_type) == "20")
+                or (str(data_type) == "90")
+            ):  # numeric (minutes, medium(0)/high(1), days, support, fan rate %)
                 value_scaled = int(float(value))
                 min_val_scaled = int(float(min_val))
                 max_val_scaled = int(float(max_val))
@@ -2141,8 +2144,7 @@ class Command(Frame):
             else:
                 # Validate value against min/max
                 raise exc.CommandInvalid(
-                    f"Parameter {param_id}: Invalid data type '{data_type}'. Must be one of '00', '01', '0F', '10', or '92'"
-                    f"Invalid Data_type {data_type} for parameter {param_id}"
+                    f"Parameter {param_id}: Invalid data type '{data_type}'. Must be one of '00', '01', '0F', '10', '20', '90', or '92'"
                 )
 
             # Assemble payload fields

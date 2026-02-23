@@ -7,6 +7,7 @@ from pathlib import Path, PurePath
 import pytest
 
 from ramses_rf import Gateway
+from ramses_rf.gateway import GatewayConfig
 
 from .helpers import TEST_DIR, assert_expected, shuffle_dict
 
@@ -38,7 +39,7 @@ async def test_eavesdrop_off(dir_name: Path) -> None:
     """Check discovery of schema and known_list *without* eavesdropping."""
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, input_file=path, config={"enable_eavesdrop": False})
+    gwy = Gateway(None, input_file=path, config=GatewayConfig(enable_eavesdrop=False))
     await gwy.start()
 
     with open(f"{dir_name}/schema_eavesdrop_off.json") as f:
@@ -58,7 +59,7 @@ async def test_eavesdrop_on_(dir_name: Path) -> None:
     """Check discovery of schema and known_list *with* eavesdropping."""
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, input_file=path, config={"enable_eavesdrop": True})
+    gwy = Gateway(None, input_file=path, config=GatewayConfig(enable_eavesdrop=True))
     await gwy.start()
 
     with open(f"{dir_name}/schema_eavesdrop_on.json") as f:

@@ -8,9 +8,10 @@ import pytest
 import serial  # type: ignore[import-untyped]
 
 from ramses_rf import Command, Gateway, Packet
+from ramses_rf.gateway import GatewayConfig
 from ramses_tx.protocol import PortProtocol
-from ramses_tx.schemas import SZ_INBOUND, SZ_OUTBOUND, SZ_USE_REGEX
-from ramses_tx.transport import _str
+from ramses_tx.schemas import SZ_INBOUND, SZ_OUTBOUND
+from ramses_tx.transport.helpers import _str
 from tests_rf.virtual_rf import VirtualRf
 
 # other constants
@@ -51,22 +52,16 @@ TESTS_INBOUND = {  # sent by other, received
     "RP --- 01:182924 30:068640 --:------ 000C 006 020800FFFFFF": "RP --- 01:182924 30:068640 --:------ 000C 006 02080013FFFF",
 }
 
-GWY_CONFIG = {
-    "config": {
-        "disable_discovery": True,
-        "disable_qos": False,  # QoS is required for this test
-        "enforce_known_list": False,
-    }
-}
-
 
 # ### FIXTURES #########################################################################
 
 
 @pytest.fixture(autouse=True)
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("ramses_tx.protocol._DBG_DISABLE_IMPERSONATION_ALERTS", True)
-    monkeypatch.setattr("ramses_tx.transport.MIN_INTER_WRITE_GAP", 0)
+    monkeypatch.setattr(
+        "ramses_tx.protocol.core._DBG_DISABLE_IMPERSONATION_ALERTS", True
+    )
+    monkeypatch.setattr("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0)
 
 
 async def assert_this_pkt(
@@ -90,10 +85,15 @@ async def test_regex_inbound_() -> None:
     rf = VirtualRf(2)
 
     # NOTE: the absence of reciprocal outbound tests is intentional
-    config = GWY_CONFIG
-    config["config"].update({SZ_USE_REGEX: {SZ_INBOUND: RULES_INBOUND}})  # type: ignore[dict-item]
-
-    gwy_0 = Gateway(rf.ports[0], **config)
+    gwy_0 = Gateway(
+        rf.ports[0],
+        config=GatewayConfig(
+            disable_discovery=True,
+            use_regex={SZ_INBOUND: RULES_INBOUND},
+        ),
+        disable_qos=False,
+        enforce_known_list=False,
+    )
     ser_1 = serial.Serial(rf.ports[1])
 
     try:
@@ -116,10 +116,15 @@ async def test_regex_with_qos() -> None:
 
     rf = VirtualRf(2)
 
-    config = GWY_CONFIG
-    config["config"].update({SZ_USE_REGEX: RULES_COMBINED})  # type: ignore[dict-item]
-
-    gwy_0 = Gateway(rf.ports[0], **config)
+    gwy_0 = Gateway(
+        rf.ports[0],
+        config=GatewayConfig(
+            disable_discovery=True,
+            use_regex=RULES_COMBINED,
+        ),
+        disable_qos=False,
+        enforce_known_list=False,
+    )
     ser_1 = serial.Serial(rf.ports[1])
 
     if not isinstance(gwy_0._protocol, PortProtocol) or not gwy_0._protocol._context:

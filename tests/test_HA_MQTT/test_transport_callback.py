@@ -7,7 +7,8 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 from ramses_tx import exceptions as exc
-from ramses_tx.transport import CallbackTransport
+from ramses_tx.transport import TransportConfig
+from ramses_tx.transport.callback import CallbackTransport
 
 
 class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
@@ -15,9 +16,11 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         self.mock_protocol = MagicMock()
         self.mock_writer = AsyncMock()
 
-        # Initialize transport with our mocks
+        # Initialize transport with our mocks and a default strict config
         self.transport = CallbackTransport(
-            self.mock_protocol, io_writer=self.mock_writer
+            self.mock_protocol,
+            self.mock_writer,
+            config=TransportConfig(),
         )
 
     async def test_initial_state_is_paused(self) -> None:
@@ -73,7 +76,9 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         from ramses_rf import Gateway
 
         # Define a factory that returns our mocked transport
-        async def mock_factory(protocol: Any, **kwargs: Any) -> CallbackTransport:
+        async def mock_factory(
+            protocol: Any, *, config: TransportConfig, **kwargs: Any
+        ) -> CallbackTransport:
             # We must return the transport instance we are testing
             # but we need to update its protocol reference first
             self.transport._protocol = protocol
@@ -98,20 +103,22 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         await gwy.stop()
 
     async def test_factory_propagates_disable_sending(self) -> None:
-        """Verify transport_factory passes disable_sending=True to the constructor."""
+        """Verify transport_factory passes disable_sending=True via TransportConfig."""
         from ramses_rf import Gateway
 
-        # 1. Define a factory that checks if disable_sending was passed
-        async def strict_factory(protocol: Any, **kwargs: Any) -> CallbackTransport:
-            # Check if 'disable_sending' made it through
-            if not kwargs.get("disable_sending"):
+        # 1. Define a factory that checks if disable_sending was passed via the DTO
+        async def strict_factory(
+            protocol: Any, *, config: TransportConfig, **kwargs: Any
+        ) -> CallbackTransport:
+            # Check if 'disable_sending' made it through the DTO
+            if not config.disable_sending:
                 raise ValueError("disable_sending flag was lost in the factory!")
 
             # Create the transport
             transport = CallbackTransport(
                 protocol,
-                io_writer=self.mock_writer,
-                disable_sending=kwargs["disable_sending"],
+                self.mock_writer,
+                config=config,
             )
 
             # We must tell the protocol we are connected, or gwy.start() will timeout

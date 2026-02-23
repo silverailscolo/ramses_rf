@@ -12,9 +12,41 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from logging.handlers import QueueListener
-from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
+
+from ramses_tx.const import (
+    DEFAULT_GAP_DURATION,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_NUM_REPEATS,
+    DEFAULT_SEND_TIMEOUT,
+    DEFAULT_WAIT_FOR_REPLY,
+    SZ_ACTIVE_HGI,
+    SZ_READER_TASK,
+)
+from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
+
+from .const import DONT_CREATE_MESSAGES, SZ_DEVICES
+from .schemas import (
+    SCH_GLOBAL_SCHEMAS,
+    SCH_TRAITS,
+    SZ_ALIAS,
+    SZ_CLASS,
+    SZ_CONFIG,
+    SZ_ENABLE_EAVESDROP,
+    SZ_FAKED,
+    SZ_MAIN_TCS,
+    SZ_ORPHANS,
+)
+
+from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+    I_,
+    RP,
+    RQ,
+    W_,
+    Code,
+)
 
 from ramses_tx import (
     Address,
@@ -29,61 +61,41 @@ from ramses_tx import (
     set_pkt_logging_config,
     transport_factory,
 )
-from ramses_tx.const import (
-    DEFAULT_GAP_DURATION,
-    DEFAULT_MAX_RETRIES,
-    DEFAULT_NUM_REPEATS,
-    DEFAULT_SEND_TIMEOUT,
-    DEFAULT_WAIT_FOR_REPLY,
-    SZ_ACTIVE_HGI,
-)
-from ramses_tx.schemas import (
-    SCH_ENGINE_CONFIG,
-    SZ_BLOCK_LIST,
-    SZ_ENFORCE_KNOWN_LIST,
-    SZ_KNOWN_LIST,
-)
-from ramses_tx.transport import SZ_READER_TASK
+from ramses_tx.transport import TransportConfig
 from ramses_tx.typing import PktLogConfigT, PortConfigT
 
-from .const import DONT_CREATE_MESSAGES, SZ_DEVICES
 from .database import MessageIndex
 from .device import DeviceHeat, DeviceHvac, Fakeable, HgiGateway, device_factory
 from .dispatcher import detect_array_fragment, process_msg
-from .schemas import (
-    SCH_GATEWAY_CONFIG,
-    SCH_GLOBAL_SCHEMAS,
-    SCH_TRAITS,
-    SZ_ALIAS,
-    SZ_CLASS,
-    SZ_CONFIG,
-    SZ_DISABLE_DISCOVERY,
-    SZ_ENABLE_EAVESDROP,
-    SZ_FAKED,
-    SZ_MAIN_TCS,
-    SZ_ORPHANS,
-    load_schema,
-)
+from .interfaces import GatewayInterface, MessageIndexInterface
+from .schemas import load_schema
 from .system import Evohome
 
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    Code,
-)
-
 if TYPE_CHECKING:
-    from ramses_tx import DeviceIdT, DeviceListT, RamsesTransportT
+    from ramses_tx import RamsesTransportT
 
     from .device import Device
     from .entity_base import Parent
+    from .typing import DeviceIdT, DeviceListT
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class Gateway(Engine):
+@dataclass
+class GatewayConfig:
+    """Configuration parameters for the Ramses Gateway."""
+
+    disable_discovery: bool = False
+    enable_eavesdrop: bool = False
+    reduce_processing: int = 0
+    max_zones: int = 12
+    use_regex: dict[str, dict[str, str]] = field(default_factory=dict)
+    use_aliases: dict[str, str] = field(default_factory=dict)
+    enforce_strict_handling: bool = False
+    use_native_ot: Literal["always", "prefer", "avoid", "never"] | None = None
+
+
+class Gateway(Engine, GatewayInterface):
     """The gateway class.
 
     This class serves as the primary interface for the RAMSES RF network. It manages
@@ -94,6 +106,10 @@ class Gateway(Engine):
     def __init__(
         self,
         port_name: str | None,
+        /,
+        *,
+        config: GatewayConfig | None = None,
+        schema: dict[str, Any] | None = None,
         input_file: str | None = None,
         port_config: PortConfigT | None = None,
         packet_log: PktLogConfigT | None = None,
@@ -102,12 +118,20 @@ class Gateway(Engine):
         loop: asyncio.AbstractEventLoop | None = None,
         transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
         hgi_id: str | None = None,
-        **kwargs: Any,
+        debug_mode: bool = False,
+        disable_sending: bool = False,
+        disable_qos: bool | None = None,
+        enforce_known_list: bool = False,
+        evofw_flag: str | None = None,
     ) -> None:
         """Initialize the Gateway instance.
 
         :param port_name: The serial port name (e.g., '/dev/ttyUSB0') or None if using a file.
         :type port_name: str | None
+        :param config: The typed configuration parameters for the Gateway.
+        :type config: GatewayConfig | None, optional
+        :param schema: Dictionary representing the schema.
+        :type schema: dict[str, Any] | None, optional
         :param input_file: Path to a packet log file for playback/parsing, defaults to None.
         :type input_file: str | None, optional
         :param port_config: Configuration dictionary for the serial port, defaults to None.
@@ -124,45 +148,56 @@ class Gateway(Engine):
         :type transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None, optional
         :param hgi_id: The Device ID to use for the HGI (gateway), overriding defaults.
         :type hgi_id: str | None, optional
-        :param kwargs: Additional configuration parameters passed to the engine and schema.
-        :type kwargs: Any
+        :param debug_mode: If True, set the logger to debug mode.
+        :type debug_mode: bool, optional
+        :param disable_sending: Prevent sending any packets from the protocol.
+        :type disable_sending: bool, optional
+        :param disable_qos: Disable the Quality of Service mechanism.
+        :type disable_qos: bool | None, optional
+        :param enforce_known_list: Enforce that only known devices can be created.
+        :type enforce_known_list: bool, optional
+        :param evofw_flag: Specific flag for evofw3 usage.
+        :type evofw_flag: str | None, optional
         """
-        if kwargs.pop("debug_mode", None):
+        if debug_mode:
             _LOGGER.setLevel(logging.DEBUG)
 
-        kwargs = {k: v for k, v in kwargs.items() if k[:1] != "_"}  # anachronism
-        config: dict[str, Any] = kwargs.pop(SZ_CONFIG, {})
+        self._gwy_config = config or GatewayConfig()
 
         super().__init__(
             port_name,
             input_file=input_file,
             port_config=port_config,
             packet_log=packet_log,
-            block_list=block_list,
-            known_list=known_list,
+            block_list=cast("Any", block_list),
+            known_list=cast("Any", known_list),
             loop=loop,
             hgi_id=hgi_id,
             transport_constructor=transport_constructor,
-            **SCH_ENGINE_CONFIG(config),
+            disable_sending=disable_sending,
+            disable_qos=disable_qos,
+            enforce_known_list=enforce_known_list,
+            evofw_flag=evofw_flag,
+            use_regex=self._gwy_config.use_regex,
         )
 
         if self._disable_sending:
-            config[SZ_DISABLE_DISCOVERY] = True
-        if config.get(SZ_ENABLE_EAVESDROP):
+            self._gwy_config.disable_discovery = True
+
+        if self._gwy_config.enable_eavesdrop:
             _LOGGER.warning(
                 f"{SZ_ENABLE_EAVESDROP}=True: this is strongly discouraged"
                 " for routine use (there be dragons here)"
             )
 
-        self.config = SimpleNamespace(**SCH_GATEWAY_CONFIG(config))
-        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(kwargs)
+        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(schema or {})
 
         self._tcs: Evohome | None = None
 
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
-        self.msg_db: MessageIndex | None = None
+        self._msg_db: MessageIndexInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
 
     def __repr__(self) -> str:
@@ -174,6 +209,21 @@ class Gateway(Engine):
         if not self.ser_name:
             return f"Gateway(input_file={self._input_file})"
         return f"Gateway(port_name={self.ser_name}, port_config={self._port_config})"
+
+    @property
+    def config(self) -> GatewayConfig:
+        """Return the gateway configuration."""
+        return self._gwy_config
+
+    @property
+    def msg_db(self) -> MessageIndexInterface | None:
+        """Return the message database if configured."""
+        return self._msg_db
+
+    @msg_db.setter
+    def msg_db(self, value: MessageIndexInterface | None) -> None:
+        """Set the message database."""
+        self._msg_db = value
 
     @property
     def hgi(self) -> HgiGateway | None:
@@ -264,7 +314,7 @@ class Gateway(Engine):
         :returns: None
         :rtype: None
         """
-        self.msg_db = MessageIndex()  # start the index
+        self._msg_db = MessageIndex()  # start the index
 
     async def stop(self) -> None:
         """Stop the Gateway and tidy up.
@@ -285,8 +335,8 @@ class Gateway(Engine):
                 handler.close()
             self._pkt_log_listener = None
 
-        if self.msg_db:
-            self.msg_db.stop()
+        if self._msg_db:
+            self._msg_db.stop()
 
     async def _pause(self, *args: Any) -> None:
         """Pause the (unpaused) gateway (disables sending/discovery).
@@ -309,15 +359,15 @@ class Gateway(Engine):
             self.config.disable_discovery = disc_flag
             raise
 
-    async def _resume(self) -> tuple[Any]:
+    async def _resume(self) -> tuple[Any, ...]:
         """Resume the (paused) gateway (enables sending/discovery, if applicable).
 
         Will restore other objects, as `args`.
 
         :returns: A tuple of arguments saved during the pause.
-        :rtype: tuple[Any]
+        :rtype: tuple[Any, ...]
         """
-        args: tuple[Any]
+        args: tuple[Any, ...]
 
         _LOGGER.debug("Gateway: Resuming engine...")
 
@@ -440,6 +490,7 @@ class Gateway(Engine):
 
         tmp_transport = await transport_factory(
             tmp_protocol,
+            config=TransportConfig(disable_sending=True),
             packet_dict=packets,
         )
 
@@ -613,7 +664,7 @@ class Gateway(Engine):
         :rtype: DeviceListT
         """
 
-        result = self._include  # could be devices here, not (yet) in gwy.devices
+        result = dict(self._include)  # ensure we do not mutate the engine's list
         result.update(
             {
                 d.id: {k: d.traits[k] for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)}  # type: ignore[misc]
@@ -621,7 +672,7 @@ class Gateway(Engine):
                 if not self._enforce_known_list or d.id in self._include
             }
         )
-        return result
+        return cast("DeviceListT", result)
 
     @property
     def system_by_id(self) -> dict[DeviceIdT, Evohome]:
@@ -762,8 +813,12 @@ class Gateway(Engine):
         priority: Priority = Priority.DEFAULT,
         timeout: float = DEFAULT_SEND_TIMEOUT,
         wait_for_reply: bool | None = DEFAULT_WAIT_FOR_REPLY,
+        max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> asyncio.Task[Packet]:
         """Wrapper to schedule an async_send_cmd() and return the Task.
+
+        Commands are queued and sent FIFO, except higher-priority Commands are
+        always sent first.
 
         :param cmd: The command object to send.
         :type cmd: Command
@@ -777,6 +832,8 @@ class Gateway(Engine):
         :type timeout: float, optional
         :param wait_for_reply: Whether to wait for a reply packet, defaults to DEFAULT_WAIT_FOR_REPLY.
         :type wait_for_reply: bool | None, optional
+        :param max_retries: Maximum number of retries if sending fails, defaults to DEFAULT_MAX_RETRIES.
+        :type max_retries: int, optional
         :returns: The asyncio Task wrapping the send operation.
         :rtype: asyncio.Task[Packet]
         """
@@ -788,10 +845,11 @@ class Gateway(Engine):
             priority=priority,
             timeout=timeout,
             wait_for_reply=wait_for_reply,
+            max_retries=max_retries,
         )
 
         task = self._loop.create_task(coro)
-        self.add_task(task)
+        self.add_task(task)  # wait for these during stop()
         return task
 
     async def async_send_cmd(
@@ -802,9 +860,9 @@ class Gateway(Engine):
         gap_duration: float = DEFAULT_GAP_DURATION,
         num_repeats: int = DEFAULT_NUM_REPEATS,
         priority: Priority = Priority.DEFAULT,
-        max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_SEND_TIMEOUT,
         wait_for_reply: bool | None = DEFAULT_WAIT_FOR_REPLY,
+        max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> Packet:
         """Send a Command and return the corresponding (echo or reply) Packet.
 

@@ -7,8 +7,10 @@ limits.
 
 import asyncio
 import random
-from collections.abc import AsyncGenerator, Awaitable
+from collections.abc import AsyncGenerator, Awaitable, Generator
 from datetime import datetime as dt
+from typing import cast
+from unittest.mock import patch
 
 import pytest
 import serial  # type: ignore[import-untyped]
@@ -17,7 +19,7 @@ from ramses_rf import Command, Message, Packet
 from ramses_tx import exceptions as exc
 from ramses_tx.const import DEFAULT_ECHO_TIMEOUT, DEFAULT_RPLY_TIMEOUT
 from ramses_tx.protocol import PortProtocol, ReadProtocol, protocol_factory
-from ramses_tx.protocol_fsm import (
+from ramses_tx.protocol.fsm import (
     Inactive,
     IsInIdle,
     ProtocolContext,
@@ -25,7 +27,8 @@ from ramses_tx.protocol_fsm import (
     WantRply,
     _ProtocolStateT,
 )
-from ramses_tx.transport import transport_factory
+from ramses_tx.transport import TransportConfig, transport_factory
+from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import QosParams
 
 from .virtual_rf import VirtualRf
@@ -68,6 +71,17 @@ RP_PKT_1 = Packet(dt.now(), f"... {RP_CMD_STR_1}")
 # ### FIXTURES #########################################################################
 
 
+@pytest.fixture(autouse=True)
+def patch_port_transport_delays() -> Generator[None, None, None]:
+    """Bypass the real-world signature timeouts and duty cycle limits for tests."""
+    patch_1 = patch("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
+    patch_2 = patch("ramses_tx.transport.port._SIGNATURE_MAX_TRYS", 0)
+    patch_3 = patch("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0)
+
+    with patch_1, patch_2, patch_3:
+        yield
+
+
 @pytest.fixture()
 async def protocol(rf: VirtualRf) -> AsyncGenerator[PortProtocol, None]:
     def _msg_handler(msg: Message) -> None:
@@ -87,7 +101,14 @@ async def protocol(rf: VirtualRf) -> AsyncGenerator[PortProtocol, None]:
 
     await assert_protocol_state(protocol, Inactive, max_sleep=0)
 
-    transport = await transport_factory(protocol, port_name=rf.ports[0], port_config={})
+    _transport = await transport_factory(
+        protocol,
+        config=TransportConfig(),
+        port_name=rf.ports[0],
+        port_config={},
+    )
+    # Cast to PortTransport to access internal test-specific details
+    transport = cast(PortTransport, _transport)
     transport._extra["virtual_rf"] = rf  # injected to aid any debugging
 
     await assert_protocol_state(protocol, IsInIdle, max_sleep=0)

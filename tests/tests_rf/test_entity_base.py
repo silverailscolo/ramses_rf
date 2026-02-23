@@ -301,8 +301,8 @@ def test_gh_396_sqlite_ot_context_type() -> None:
     # Execute
     try:
         cmds = entity.supported_cmds_ot
-    except TypeError as exc:
-        assert False, f"raised TypeError: {exc}"
+    except TypeError as err:
+        assert False, f"raised TypeError: {err}"
 
     # Verify
     # The integer 0 should be converted to hex string "00" internally

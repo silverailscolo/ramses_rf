@@ -27,8 +27,10 @@ Referenced Files:
 
 Usage:
     Run manually from the project root:
-    $ python3 tests/utils/analyze_diff.py
+    $ python3 tests/utils/analyze_diff_rf.py
 """
+
+from __future__ import annotations
 
 import asyncio
 import contextlib
@@ -39,13 +41,17 @@ import sys
 from collections import defaultdict
 from importlib import metadata
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 from unittest.mock import AsyncMock, patch
 
 from ramses_rf import Gateway
 from ramses_rf.device import DeviceHeat, DeviceHvac
+from ramses_rf.gateway import GatewayConfig
+from ramses_tx.const import SZ_READER_TASK
 from ramses_tx.exceptions import TransportError
-from ramses_tx.transport import SZ_READER_TASK
+
+if TYPE_CHECKING:
+    pass
 
 # --- Configuration ---
 PACKET_LOG: Final[Path] = Path("tests/fixtures/regression_packets_sorted.txt")
@@ -56,10 +62,15 @@ TARGET_SNAPSHOT_KEY: Final[str] = "test_gateway_replay_regression"
 
 
 def serialize_device(dev: Any) -> dict[str, Any]:
-    """Helper to serialize a device's state for comparison.
+    """Helper to serialize a device's state for snapshotting.
+
+    Identifies attributes based on device type (Heat vs HVAC) and existence
+    of properties to create a deterministic state snapshot.
 
     :param dev: The device object to serialize.
+    :type dev: Any
     :return: A dictionary representing the device state.
+    :rtype: dict[str, Any]
     """
     # Base attributes for all devices
     data: dict[str, Any] = {
@@ -74,6 +85,7 @@ def serialize_device(dev: Any) -> dict[str, Any]:
         # Topology
         zone = getattr(dev, "zone", None)
         tcs = getattr(dev, "tcs", None)
+
         data.update(
             {
                 "tcs_id": tcs.id if tcs else None,
@@ -81,18 +93,20 @@ def serialize_device(dev: Any) -> dict[str, Any]:
             }
         )
 
+        # General Heating Attributes
+        # We iterate and try to access each attribute.
         for attr in (
-            "active",
-            "actuator_cycle",
+            "active",  # BDR Switch
+            "actuator_cycle",  # Actuators
             "actuator_state",
-            "heat_demand",
-            "heat_demands",
-            "modulation_level",
-            "relay_demand",
-            "setpoint",
-            "setpoints",
-            "temperature",
-            "window_open",
+            "heat_demand",  # Many heat devices
+            "heat_demands",  # UFC
+            "modulation_level",  # OTB/Actuators
+            "relay_demand",  # BDR/UFC
+            "setpoint",  # Thermostats/TRVs
+            "setpoints",  # UFC
+            "temperature",  # Sensors
+            "window_open",  # TRV
         ):
             try:
                 # getattr triggers the @property logic
@@ -100,8 +114,9 @@ def serialize_device(dev: Any) -> dict[str, Any]:
                 if val is not None:
                     data[attr] = val
             except AttributeError:
-                continue
+                continue  # Attribute strictly does not exist on this object
             except Exception as err:
+                # Capture functional regressions (bugs) in the library code as string data
                 data[attr] = f"<{type(err).__name__}: {err}>"
 
         # OpenTherm Bridge (OTB) Specifics
@@ -172,6 +187,7 @@ def serialize_device(dev: Any) -> dict[str, Any]:
             except Exception as err:
                 data[attr] = f"<{type(err).__name__}: {err}>"
 
+    # Return sorted dictionary for deterministic snapshots
     return {k: v for k, v in sorted(data.items())}
 
 
@@ -179,30 +195,33 @@ async def generate_actual_state() -> dict[str, Any]:
     """Replay packet log in memory and generate the current system state.
 
     :return: The generated system state dictionary.
+    :rtype: dict[str, Any]
     """
     gwy = Gateway(
         None,
         input_file=str(PACKET_LOG),
-        config={
-            "disable_discovery": True,
-            "disable_sending": True,
-            "reduce_processing": 0,
-        },
+        config=GatewayConfig(
+            disable_discovery=True,
+            reduce_processing=0,
+        ),
+        disable_sending=True,
     )
 
+    # Replicate the test environment: Patch sending methods to prevent Read-Only errors.
     mock_send = AsyncMock(return_value=None)
 
-    with (
-        patch.object(gwy, "async_send_cmd", mock_send),
-        contextlib.suppress(TransportError),
-    ):
-        await gwy.start()
+    with patch.object(gwy, "async_send_cmd", mock_send):
+        # 1. Start the Gateway processing
+        with contextlib.suppress(TransportError):
+            await gwy.start()
 
+        # 2. Wait for the Transport to finish reading the file
         if gwy._transport:
             reader_task = gwy._transport.get_extra_info(SZ_READER_TASK)
             if reader_task:
                 await reader_task
 
+        # 3. Extract State for Snapshot (Matches test_regression_rf.py flow)
         system_state: dict[str, Any] = {
             "schema": gwy.schema,
             "devices": [
@@ -210,6 +229,7 @@ async def generate_actual_state() -> dict[str, Any]:
             ],
         }
 
+        # Add specific System (TCS) details if a TCS was discovered
         if gwy.tcs:
             system_state["tcs"] = {
                 "id": gwy.tcs.id,
@@ -224,6 +244,7 @@ async def generate_actual_state() -> dict[str, Any]:
                 },
             }
 
+        # 4. Stop Gateway
         with contextlib.suppress(asyncio.CancelledError, TransportError):
             await gwy.stop()
 
@@ -234,6 +255,7 @@ def load_expected_state() -> dict[str, Any]:
     """Parse the syrupy AMBR file to extract the expected snapshot.
 
     :return: The parsed dictionary from the snapshot file.
+    :rtype: dict[str, Any]
     """
     if not SNAPSHOT_FILE.exists():
         print(f"Error: Snapshot file not found: {SNAPSHOT_FILE}")
@@ -257,6 +279,7 @@ def load_expected_state() -> dict[str, Any]:
         print(f"Error: Could not find snapshot for '{TARGET_SNAPSHOT_KEY}'.")
         sys.exit(1)
 
+    # Convert syrupy's dictionary/list representation back to Python literal format
     py_literal = raw_value.replace("dict({", "{").replace("list([", "[")
     py_literal = py_literal.replace("})", "}").replace("])", "]")
 
@@ -267,8 +290,11 @@ def find_diffs(old: dict[str, Any], new: dict[str, Any]) -> dict[str, list[str]]
     """Compare two states and identify differences.
 
     :param old: The reference state.
+    :type old: dict[str, Any]
     :param new: The current state.
+    :type new: dict[str, Any]
     :return: A dictionary of differences keyed by entity ID.
+    :rtype: dict[str, list[str]]
     """
     diffs: dict[str, list[str]] = defaultdict(list)
 
@@ -304,7 +330,9 @@ def extract_packets(target_ids: set[str]) -> dict[str, list[str]]:
     """Scan log file for packets related to affected IDs.
 
     :param target_ids: Set of IDs to filter for.
+    :type target_ids: set[str]
     :return: Mapping of ID to list of relevant log lines.
+    :rtype: dict[str, list[str]]
     """
     if not PACKET_LOG.exists():
         return {}
@@ -323,11 +351,15 @@ def print_report(diffs: dict[str, list[str]], packets: dict[str, list[str]]) -> 
     """Print the final analysis report in a Gemini-friendly format.
 
     :param diffs: Found differences.
+    :type diffs: dict[str, list[str]]
     :param packets: Relevant packets for those differences.
+    :type packets: dict[str, list[str]]
+    :return: None
+    :rtype: None
     """
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Safely get library version to avoid AttributeError/Mypy errors
+    # Safely get library version
     try:
         ver = metadata.version("ramses_rf")
     except metadata.PackageNotFoundError:
@@ -339,7 +371,7 @@ def print_report(diffs: dict[str, list[str]], packets: dict[str, list[str]]) -> 
 
     # --- LLM Context Section ---
     print("\n## LLM PROMPT CONTEXT")
-    print("This is a diagnostic output from `tests/utils/analyze_diff.py`.")
+    print("This is a diagnostic output from `tests/utils/analyze_diff_rf.py`.")
     print("It represents a fresh regression analysis run comparing the current")
     print("in-memory Gateway state (after replaying the packet log) against the")
     print("official 'Golden Snapshot' (expected state).")
@@ -393,7 +425,11 @@ def print_report(diffs: dict[str, list[str]], packets: dict[str, list[str]]) -> 
 
 
 async def main() -> None:
-    """Main execution flow."""
+    """Main execution flow.
+
+    :return: None
+    :rtype: None
+    """
     logging.getLogger("ramses_rf").setLevel(logging.CRITICAL)
     logging.getLogger("ramses_tx").setLevel(logging.CRITICAL)
     logging.getLogger("asyncio").setLevel(logging.CRITICAL)

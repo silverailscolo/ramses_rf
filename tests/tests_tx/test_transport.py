@@ -2,19 +2,24 @@
 """Tests for CallbackTransport initialization logic."""
 
 import asyncio
+from functools import partial
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from ramses_tx import exceptions as exc
-from ramses_tx.transport import CallbackTransport, is_hgi80, transport_factory
+from ramses_tx.discovery import is_hgi80
+from ramses_tx.transport import TransportConfig, transport_factory
+from ramses_tx.transport.callback import CallbackTransport
 from ramses_tx.typing import SerPortNameT
 
 
-async def _async_callback_factory(*args: Any, **kwargs: Any) -> CallbackTransport:
+async def _async_callback_factory(
+    protocol: Any, io_writer: Any = None, *, config: TransportConfig, **kwargs: Any
+) -> CallbackTransport:
     """Async wrapper for CallbackTransport to satisfy transport_factory signature."""
-    return CallbackTransport(*args, **kwargs)
+    return CallbackTransport(protocol, io_writer, config=config, **kwargs)
 
 
 async def test_callback_transport_handshake() -> None:
@@ -22,7 +27,7 @@ async def test_callback_transport_handshake() -> None:
     mock_protocol = Mock()
     mock_writer = AsyncMock()
 
-    transport = CallbackTransport(mock_protocol, mock_writer)
+    transport = CallbackTransport(mock_protocol, mock_writer, config=TransportConfig())
 
     # Assert handshake called immediately
     mock_protocol.connection_made.assert_called_once_with(transport, ramses=True)
@@ -33,7 +38,7 @@ async def test_callback_transport_handshake_idempotency() -> None:
     mock_protocol = Mock()
     mock_writer = AsyncMock()
 
-    transport = CallbackTransport(mock_protocol, mock_writer)
+    transport = CallbackTransport(mock_protocol, mock_writer, config=TransportConfig())
 
     # Verify initial call
     mock_protocol.connection_made.assert_called_once()
@@ -50,7 +55,9 @@ async def test_callback_transport_autostart_false() -> None:
     mock_protocol = Mock()
     mock_writer = AsyncMock()
 
-    transport = CallbackTransport(mock_protocol, mock_writer, autostart=False)
+    transport = CallbackTransport(
+        mock_protocol, mock_writer, config=TransportConfig(autostart=False)
+    )
 
     assert transport.is_reading() is False
 
@@ -60,7 +67,7 @@ async def test_callback_transport_autostart_default() -> None:
     mock_protocol = Mock()
     mock_writer = AsyncMock()
 
-    transport = CallbackTransport(mock_protocol, mock_writer)
+    transport = CallbackTransport(mock_protocol, mock_writer, config=TransportConfig())
 
     assert transport.is_reading() is False
 
@@ -70,7 +77,9 @@ async def test_callback_transport_autostart_true() -> None:
     mock_protocol = Mock()
     mock_writer = AsyncMock()
 
-    transport = CallbackTransport(mock_protocol, mock_writer, autostart=True)
+    transport = CallbackTransport(
+        mock_protocol, mock_writer, config=TransportConfig(autostart=True)
+    )
 
     assert transport.is_reading() is True
 
@@ -81,12 +90,11 @@ async def test_factory_routes_autostart_to_custom_constructor() -> None:
     mock_writer = AsyncMock()
 
     # 1. Test with autostart=True
-    # NOTE: transport_factory awaits the constructor, so we must pass an async callable
+    # NOTE: transport_factory awaits the constructor, so we pass an async callable via partial
     transport = await transport_factory(
         mock_protocol,
-        transport_constructor=_async_callback_factory,
-        io_writer=mock_writer,
-        autostart=True,
+        transport_constructor=partial(_async_callback_factory, io_writer=mock_writer),
+        config=TransportConfig(autostart=True),
     )
     assert isinstance(transport, CallbackTransport)
     assert transport.is_reading() is True
@@ -94,28 +102,26 @@ async def test_factory_routes_autostart_to_custom_constructor() -> None:
     # 2. Test with autostart=False (default)
     transport_paused = await transport_factory(
         mock_protocol,
-        transport_constructor=_async_callback_factory,
-        io_writer=mock_writer,
-        autostart=False,
+        transport_constructor=partial(_async_callback_factory, io_writer=mock_writer),
+        config=TransportConfig(autostart=False),
     )
     assert isinstance(transport_paused, CallbackTransport)
     assert transport_paused.is_reading() is False
 
 
-async def test_factory_strips_autostart_for_standard_transport() -> None:
-    """Check that autostart is REMOVED before calling standard transports.
+async def test_factory_passes_config_to_standard_transport() -> None:
+    """Check that config is strictly passed to standard transports.
 
-    If it isn't removed, the standard transports (PortTransport/MqttTransport)
-    would raise TypeError because they don't accept 'autostart' in __init__.
+    If it isn't passed, the standard transports (PortTransport/MqttTransport)
+    would raise TypeError missing 'config' in __init__.
     """
     mock_protocol = Mock()
     mock_protocol.wait_for_connection_made = AsyncMock()
 
-    # We must patch serial_for_url because transport_factory calls it via
-    # get_serial_instance BEFORE creating PortTransport.
+    # We patch where they are USED (factory.py), not where they are DEFINED
     with (
-        patch("ramses_tx.transport.PortTransport") as MockPortTransport,
-        patch("ramses_tx.transport.serial_for_url") as mock_serial_for_url,
+        patch("ramses_tx.transport.factory.PortTransport") as MockPortTransport,
+        patch("ramses_tx.transport.factory.serial_for_url") as mock_serial_for_url,
     ):
         # Setup the mock serial object to pass validity checks
         mock_serial = Mock()
@@ -124,12 +130,13 @@ async def test_factory_strips_autostart_for_standard_transport() -> None:
 
         # valid-looking config so factory enters the Serial branch
         port_config: Any = {}
+        transport_config = TransportConfig(autostart=True)
 
         await transport_factory(
             mock_protocol,
             port_name=SerPortNameT("/dev/ttyUSB0"),
             port_config=port_config,
-            autostart=True,  # This argument must be filtered out!
+            config=transport_config,
         )
 
         # Assert PortTransport was called
@@ -137,31 +144,34 @@ async def test_factory_strips_autostart_for_standard_transport() -> None:
 
         # Verify 'autostart' was NOT in the call args
         call_args = MockPortTransport.call_args
-        assert "autostart" not in call_args.kwargs
-        assert "autostart" not in call_args.args  # just in case
+        assert "config" in call_args.kwargs
+        assert call_args.kwargs["config"] is transport_config
 
 
-async def test_factory_strips_autostart_for_mqtt_transport() -> None:
-    """Check that autostart is REMOVED before calling MqttTransport."""
+async def test_factory_passes_config_to_mqtt_transport() -> None:
+    """Check that config is strictly passed to MqttTransport."""
     mock_protocol = Mock()
     mock_protocol.wait_for_connection_made = AsyncMock()
 
-    with patch("ramses_tx.transport.MqttTransport") as MockMqttTransport:
+    # We patch where it is USED (factory.py)
+    with patch("ramses_tx.transport.factory.MqttTransport") as MockMqttTransport:
         # valid-looking config so factory enters the MQTT branch
         # We must provide port_config because transport_factory validates it
         # is not None even for MQTT
         port_config: Any = {}
+        transport_config = TransportConfig(autostart=True)
 
         await transport_factory(
             mock_protocol,
             port_name=SerPortNameT("mqtt://broker:1883"),
             port_config=port_config,
-            autostart=True,  # This must be filtered out
+            config=transport_config,
         )
 
         assert MockMqttTransport.call_count == 1
         call_args = MockMqttTransport.call_args
-        assert "autostart" not in call_args.kwargs
+        assert "config" in call_args.kwargs
+        assert call_args.kwargs["config"] is transport_config
 
 
 async def test_port_transport_close_robustness() -> None:
@@ -170,7 +180,7 @@ async def test_port_transport_close_robustness() -> None:
     This ensures that _close() checks for the existence of _init_task before
     attempting to cancel it.
     """
-    from ramses_tx.transport import PortTransport
+    from ramses_tx.transport.port import PortTransport
 
     mock_protocol = Mock()
     mock_serial = Mock()
@@ -185,10 +195,10 @@ async def test_port_transport_close_robustness() -> None:
     # Patch SerialTransport.__init__ using 'new' to replace it with the function directly.
     # This ensures 'self' is passed correctly, which doesn't happen with a standard Mock side_effect.
     with patch(
-        "ramses_tx.transport.serial_asyncio.SerialTransport.__init__",
+        "ramses_tx.transport.port.serial_asyncio.SerialTransport.__init__",
         new=mock_init,
     ):
-        transport = PortTransport(mock_serial, mock_protocol)
+        transport = PortTransport(mock_serial, mock_protocol, config=TransportConfig())
 
         # Pre-condition: _init_task is created asynchronously, so it shouldn't exist yet
         # because we haven't yielded to the event loop
@@ -199,11 +209,7 @@ async def test_port_transport_close_robustness() -> None:
 
 
 async def test_is_hgi80_async_file_check() -> None:
-    """Check that is_hgi80 uses loop.run_in_executor for file existence checks.
-
-    This test verifies that the file check does not block the event loop and
-    uses the expected executor logic.
-    """
+    """Check that is_hgi80 uses loop.run_in_executor for file existence checks."""
 
     # We define a path that contains "by-id" and "evofw3".
     # This ensures that is_hgi80 returns False immediately after the file check,
@@ -211,8 +217,8 @@ async def test_is_hgi80_async_file_check() -> None:
     test_port = SerPortNameT("/dev/serial/by-id/usb-SparkFun_evofw3_TEST")
 
     # 1. Test: File exists (should return False due to 'evofw3' in name)
-    # We patch os.path.exists to return True
-    with patch("ramses_tx.transport.os.path.exists", return_value=True) as mock_exists:
+    # We patch os.path.exists where it is used (port.py)
+    with patch("ramses_tx.discovery.os.path.exists", return_value=True) as mock_exists:
         result = await is_hgi80(test_port)
 
         # Assert: os.path.exists was called with the correct path
@@ -222,7 +228,7 @@ async def test_is_hgi80_async_file_check() -> None:
 
     # 2. Test: File does NOT exist (should raise TransportSerialError)
     # We patch os.path.exists to return False
-    with patch("ramses_tx.transport.os.path.exists", return_value=False) as mock_exists:
+    with patch("ramses_tx.discovery.os.path.exists", return_value=False) as mock_exists:
         with pytest.raises(exc.TransportSerialError):
             await is_hgi80(test_port)
 

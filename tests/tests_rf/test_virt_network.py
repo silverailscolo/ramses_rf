@@ -5,12 +5,14 @@
 """Test the Virtual RF library - VirtualRF is used for testing."""
 
 import asyncio
+from typing import Any
 
 import pytest
 import serial  # type: ignore[import-untyped]
 
 from ramses_rf import Address, Code, Command, Gateway
-from ramses_tx.transport import PortTransport
+from ramses_rf.gateway import GatewayConfig
+from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import DeviceIdT
 from tests_rf.virtual_rf import VirtualRf, rf_factory
 
@@ -19,21 +21,21 @@ ASSERT_CYCLE_TIME = 0.001  # max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TI
 DEFAULT_MAX_SLEEP = 1
 
 
-GWY_CONFIG = {
-    "config": {
-        "disable_discovery": True,  # we're testing discovery here
-        "enforce_known_list": False,
-    },
+GWY_CONFIG: dict[str, Any] = {
+    "config": GatewayConfig(
+        disable_discovery=True,  # we're testing discovery here
+    ),
+    "enforce_known_list": False,
 }
 
 
-SCHEMA_0 = {
-    "orphans_hvac": ["40:000000"],
+SCHEMA_0: dict[str, Any] = {
+    "schema": {"orphans_hvac": ["40:000000"]},
     "known_list": {"40:000000": {"class": "REM"}},
 }
 
-SCHEMA_1 = {
-    "orphans_hvac": ["41:111111"],
+SCHEMA_1: dict[str, Any] = {
+    "schema": {"orphans_hvac": ["41:111111"]},
     "known_list": {"41:111111": {"class": "FAN"}},
 }
 

@@ -88,7 +88,7 @@ def _get_hgi_id_for_schema(
     return f"18:{port_idx:06d}", HgiFwTypes.EVOFW3
 
 
-@patch("ramses_tx.transport.MIN_INTER_WRITE_GAP", MIN_INTER_WRITE_GAP)
+@patch("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", MIN_INTER_WRITE_GAP)
 async def rf_factory(
     schemas: list[dict[str, Any] | None], start_gwys: bool = True
 ) -> tuple[VirtualRf, list[Gateway]]:
@@ -116,7 +116,7 @@ async def rf_factory(
         # rf._create_port(idx)  # REMOVED: Redundant and causes race condition
         rf.set_gateway(rf.ports[idx], hgi_id, fw_type=fw_type)
 
-        with patch("ramses_tx.transport.comports", rf.comports):
+        with patch("ramses_tx.discovery.comports", rf.comports):
             gwy = Gateway(rf.ports[idx], **schema)
             # gwy._engine.ptcl.qos.disable_qos = False  # Hack for testing
 
