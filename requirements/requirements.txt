@@ -1,5 +1,5 @@
 # Requirements to use the library via its CLI client.py
-# - last checked/updated: 2026-01-11 (c.f. HA 2026.1.0)
+# - last checked/updated: 2026-02-23 (c.f. HA 2026.1.0)
 #
 
 # library requirements (dependencies) are in pyproject.toml
@@ -11,6 +11,7 @@
 # also required if using the library via the CLI, client.py
 # - pip list | grep -E 'click|colorama|debugpy'
 
+  aiofiles >= 23.2.1
   click >= 8.2.1                                 # NOTE: non-async version
   colorama >= 0.4.6                              # on Windows, colorlog uses the latest colorama
   debugpy >= 1.8.13                              # can invoke via CLI
