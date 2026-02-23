@@ -22,8 +22,8 @@
 # It appears the subsequent/spontaneous REM|I|10E0 *is required* for a successful bind (otherwise the FAN will RQ|10E0, see below):
 2023-04-27T16:21:21.263244 ...  I --- 32:208628 63:262142 --:------ 10E0 030 000001C85A01016CFFFFFFFFFFFF010607E0564D4E2D32334C4D48323300                  # {'description': 'VMN-23LMH23', 'date_2': '0000-00-00', 'date_1': '2016-06-01', 'manufacturer_sub_id': 'C8', 'product_id': '5A', 'oem_code': '6C'}
 
-# Nuaire CO2 binding PIV
-2026-02-22T10:56:42.832075 065  I --- 32:166025 --:------ 32:166025 1FC9 018 0031E08288896C10E0828889001FC9828889  # {'phase': 'offer', 'bindings': [['00', '31E0', '32:166025'], ['6C', '10E0', '32:166025']]}
+# Nuaire DRI-ECO-RM Remote Monitoring PIV + CO2 (VMS-23C33) binding 2026-02 by stevieb12345
+2026-02-22T10:56:42.832075 065  I --- 32:166025 --:------ 32:166025 1FC9 018 0031E08288896C10E0828889001FC9828889  # {'phase': 'offer', 'bindings': [['00', '31E0', '32:166025'], ['6C', '10E0', '32:166025'], ['00', '1FC9', '32:166025']]}
 2026-02-22T10:56:42.900195 054  W --- 30:072506 32:166025 --:------ 1FC9 006 2131DA791B3A                          # {'phase': 'accept', 'bindings': [['21', '31DA', '30:072506']]}
 2026-02-22T10:56:42.919220 066  I --- 32:166025 30:072506 --:------ 1FC9 001 21                                    # {'phase': 'confirm', 'bindings': [['21']]}
 
