@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import warnings
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from logging.handlers import QueueListener
@@ -105,8 +106,7 @@ class Gateway(Engine, GatewayInterface):
 
     def __init__(
         self,
-        port_name: str | None,
-        /,
+        port_name: str | None = None,
         *,
         config: GatewayConfig | None = None,
         schema: dict[str, Any] | None = None,
@@ -123,6 +123,7 @@ class Gateway(Engine, GatewayInterface):
         disable_qos: bool | None = None,
         enforce_known_list: bool = False,
         evofw_flag: str | None = None,
+        **kwargs: Any,
     ) -> None:
         """Initialize the Gateway instance.
 
@@ -158,7 +159,17 @@ class Gateway(Engine, GatewayInterface):
         :type enforce_known_list: bool, optional
         :param evofw_flag: Specific flag for evofw3 usage.
         :type evofw_flag: str | None, optional
+        :param kwargs: Catch-all for legacy keyword arguments.
+        :type kwargs: Any
         """
+        if kwargs:
+            warnings.warn(
+                "Initializing Gateway with undocumented **kwargs is deprecated. "
+                "Please transition to using GatewayConfig.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         if debug_mode:
             _LOGGER.setLevel(logging.DEBUG)
 
