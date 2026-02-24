@@ -1,0 +1,26 @@
+####################################################################################################
+# Nuaire CO2 Sensor binding to a PIV
+# (VMS-23C33) binding 2026-02 by stevieb12345
+#  - Supplicant, CO2: Nuaire Drimaster-ECO CO2 (DRI-ECO-CO2)
+#  - Respondent, FAN: Nuaire Drimaster-ECO PIV (DRI-ECO-RM)
+
+####################################################################################################
+# 1. For reference, 10E0s (if any), oem_code='6C' (Note: REM/FAN won't RP|10E0):
+2023-04-13T10:43:39.077524 ...  I --- 30:098165 63:262142 --:------ 10E0 038 000001C9001D006CFEFEFFFFFFFF120707E3425244472D30324A415330310000000000000000  # {'oem_code': '6C', 'description': 'BRDG-02JAS01', 'date_2': '0000-00-00', 'date_1': '2019-07-18', 'manufacturer_sub_id': 'C9', 'product_id': '00'}
+2026-02-22T10:56:43.770144 065  I --- 32:166025 63:262142 --:------ 10E0 038 000001C85701016CFFFFFFFFFFFF110607E0564D532D32334333330000000000000000000000  # {'oem_code': '6C', 'description': 'VMS-23C33',    'date_2': '0000-00-00', 'date_1': '2016-06-17', 'manufacturer_sub_id': 'C8', 'product_id': '57'}
+
+
+####################################################################################################
+# 2. The handshake (NB: FAN|W|1FC9|21):
+2026-02-22T10:56:42.832075 065  I --- 32:166025 --:------ 32:166025 1FC9 018 0031E08288896C10E0828889001FC9828889  # {'phase': 'offer', 'bindings': [['00', '31E0', '32:166025'], ['6C', '10E0', '32:166025'], ['00', '1FC9', '32:166025']]}
+2026-02-22T10:56:42.900195 054  W --- 30:072506 32:166025 --:------ 1FC9 006 2131DA791B3A                          # {'phase': 'accept', 'bindings': [['21', '31DA', '30:072506']]}
+2026-02-22T10:56:42.919220 066  I --- 32:166025 30:072506 --:------ 1FC9 001 21                                    # {'phase': 'confirm', 'bindings': [['21']]}
+
+# It appears the subsequent/spontaneous REM|I|10E0 *is required* for a successful bind (otherwise the FAN will RQ|10E0, see below):
+2026-02-22T10:56:43.770144 065  I --- 32:166025 63:262142 --:------ 10E0 038 000001C85701016CFFFFFFFFFFFF110607E0564D532D32334333330000000000000000000000  # {'oem_code': '6C', 'description': 'VMS-23C33',    'date_2': '0000-00-00', 'date_1': '2016-06-17', 'manufacturer_sub_id': 'C8', 'product_id': '57'}
+
+
+####################################################################################################
+# 3. Other notes:
+#  - domain IS appears to be 21:
+2026-02-22T02:13:07.726180 055  I --- 30:072506 --:------ 30:072506 31DA 030 21EF007FFF39EF7FFF7FFF7FFF7FFF0002EF18FFFF000000EF7FFF7FFF00   # {'hvac_id': '21', 'exhaust_fan_speed': None, 'fan_info': 'auto', '_unknown_fan_info_flags': [0, 0, 0], 'air_quality': None, 'co2_level': None, 'indoor_humidity': 0.57, 'outdoor_humidity': None, 'exhaust_temp': None, 'supply_temp': None, 'indoor_temp': None, 'outdoor_temp': None, 'speed_capabilities': ['post_heater'], 'bypass_position': None, 'supply_fan_speed': None, 'remaining_mins': 0, 'post_heat': 0.0, 'pre_heat': None, 'supply_flow': None, 'exhaust_flow': None, '_extra': '00'}

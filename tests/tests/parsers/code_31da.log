@@ -376,7 +376,7 @@
 # 2025-04-28T16:22:00.000000 000  I --- 37:153226 --:------ 37:153226 31DA 030 00EF000251D3EF085C7FFF09D208DCBE09001F0000000000008500850000 # {}
 # RH > 1.0! 0xD3 = d211/200 <<< AssertionError(D3)
 
-# Nuaire PIV ECO-RM by stevieb12345
+# Nuaire CO2 to PIV ECO-RM by stevieb12345
 2026-02-22T02:18:44.604884 073 RQ --- 32:166025 30:079129 --:------ 31DA 001 21                                                             # {}
 2026-02-22T02:13:07.726180 055  I --- 30:072506 --:------ 30:072506 31DA 030 21EF007FFF39EF7FFF7FFF7FFF7FFF0002EF18FFFF000000EF7FFF7FFF00   # {'hvac_id': '21', 'exhaust_fan_speed': None, 'fan_info': 'auto', '_unknown_fan_info_flags': [0, 0, 0], 'air_quality': None, 'co2_level': None, 'indoor_humidity': 0.57, 'outdoor_humidity': None, 'exhaust_temp': None, 'supply_temp': None, 'indoor_temp': None, 'outdoor_temp': None, 'speed_capabilities': ['post_heater'], 'bypass_position': None, 'supply_fan_speed': None, 'remaining_mins': 0, 'post_heat': 0.0, 'pre_heat': None, 'supply_flow': None, 'exhaust_flow': None, '_extra': '00'}
 2026-02-22T02:52:30.764085 055  I --- 30:072506 --:------ 30:072506 31DA 030 21EF007FFF39EF7FFF7FFF7FFF7FFF0002EF18FFFF000000EF7FFF7FFF00   # {'hvac_id': '21', 'exhaust_fan_speed': None, 'fan_info': 'auto', '_unknown_fan_info_flags': [0, 0, 0], 'air_quality': None, 'co2_level': None, 'indoor_humidity': 0.57, 'outdoor_humidity': None, 'exhaust_temp': None, 'supply_temp': None, 'indoor_temp': None, 'outdoor_temp': None, 'speed_capabilities': ['post_heater'], 'bypass_position': None, 'supply_fan_speed': None, 'remaining_mins': 0, 'post_heat': 0.0, 'pre_heat': None, 'supply_flow': None, 'exhaust_flow': None, '_extra': '00'}
