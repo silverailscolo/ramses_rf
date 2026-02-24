@@ -11,7 +11,7 @@ assignees: ''
 A clear and concise description of the bug.
 
 **To Reproduce**
-Steps to reproduce the behaviour (for example):
+Steps to reproduce the bug:
 1. Go to '...'
 2. Click on '....'
 3. Scroll down to '....'
