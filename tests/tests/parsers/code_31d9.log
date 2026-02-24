@@ -3,6 +3,8 @@
 2023-11-05T10:00:43.645038 061  I --- 30:068457 20:020521 --:------ 22F1 003 000205  #
 2023-11-05T10:01:38.150893 076  I --- --:------ --:------ 20:020521 31D9 003 000001  # {'hvac_id': '00', 'exhaust_fan_speed': 0.005, 'fan_mode': '01', 'passive': False, 'damper_only': False, 'filter_dirty': False, 'frost_cycle': False, 'has_fault': False, '_flags': [0, 0, 0, 0, 0, 0, 0, 0]}
 
+# Nuaire PIV ECO-RM
+2026-02-22T09:31:31.127541 054  I 200 30:072506 --:------ 30:072506 31D9 017 2100FF0000000000000000000000000000                          # {'hvac_id': '21', 'exhaust_fan_speed': None, 'fan_mode': 'FF', 'passive': False, 'damper_only': False, 'filter_dirty': False, 'frost_cycle': False, 'has_fault': False, '_flags': [0, 0, 0, 0, 0, 0, 0, 0], '_unknown_3': '00', '_unknown_4': '000000000000000000000000', 'unknown_16': '00', 'seqx_num': '200'}  # always same
 
 # Itho, ignore fan_mode
 2023-10-26T18:11:16.681976 ...  I 076 37:211856 --:------ 37:211856 31D9 017 0006C80020202020202020202020202000                          # {'hvac_id': '00', 'exhaust_fan_speed': 1.000, 'fan_mode': 'C8', 'passive': True, 'damper_only': True, 'filter_dirty': False, 'frost_cycle': False, 'has_fault': False, '_flags': [0, 0, 0, 0, 0, 1, 1, 0], '_unknown_3': '00', '_unknown_4': '202020202020202020202020', 'unknown_16': '00', 'seqx_num': '076'}
