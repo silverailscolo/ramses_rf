@@ -32,7 +32,7 @@ from ramses_cli.client import (
 from ramses_rf import GracefulExit
 from ramses_rf.const import DEV_TYPE_MAP, I_, Code
 from ramses_rf.database import MessageIndex
-from ramses_rf.gateway import Gateway
+from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.schemas import SZ_CONFIG, SZ_DISABLE_DISCOVERY
 from ramses_tx import exceptions as exc
 from ramses_tx.message import Message
@@ -60,6 +60,9 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
 
     # Fix: Explicitly mock the private protocol attribute
     gateway._protocol = MagicMock()
+
+    # Fix: Explicitly mock wait_for_connection_lost as an async method
+    gateway._protocol.wait_for_connection_lost = AsyncMock()
 
     # Fix: Create a future attached to the running loop.
     loop = asyncio.get_running_loop()
@@ -234,7 +237,7 @@ async def test_print_summary(
     # Mock msg_db to be None to trigger the alternative branch in show_crazys
     mock_gateway.msg_db = None
 
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "show_schema": True,
         "show_params": True,
         "show_status": True,
@@ -298,7 +301,7 @@ async def test_print_engine_state(
     mock_gateway: MagicMock, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Test _print_engine_state."""
-    kwargs = {"print_state": 2}  # 2 implies print packets as well
+    kwargs: dict[str, Any] = {"print_state": 2}  # 2 implies print packets as well
     await _print_engine_state(mock_gateway, **kwargs)
 
     out = capsys.readouterr().out
@@ -308,9 +311,12 @@ async def test_print_engine_state(
 
 @pytest.mark.asyncio
 async def test_async_main_parse(mock_gateway: MagicMock) -> None:
-    """Test async_main logic for the PARSE command."""
-    lib_kwargs = {SZ_CONFIG: {"reduce_processing": 0}, SZ_PACKET_LOG: {}}
-    kwargs = {
+    """Test async_main logic for the PARSE command and config validation."""
+    lib_kwargs: dict[str, Any] = {
+        SZ_CONFIG: {"reduce_processing": 0},
+        SZ_PACKET_LOG: {},
+    }
+    kwargs: dict[str, Any] = {
         "long_format": False,
         "restore_schema": None,
         "restore_state": None,
@@ -319,7 +325,7 @@ async def test_async_main_parse(mock_gateway: MagicMock) -> None:
     }
 
     with (
-        patch("ramses_cli.client.Gateway", return_value=mock_gateway),
+        patch("ramses_cli.client.Gateway", return_value=mock_gateway) as mock_gwy_class,
         patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
     ):
         await async_main(PARSE, lib_kwargs, **kwargs)
@@ -327,18 +333,59 @@ async def test_async_main_parse(mock_gateway: MagicMock) -> None:
         mock_gateway.start.assert_awaited_once()
         mock_gateway.stop.assert_awaited_once()
 
+        # Verify GatewayConfig was explicitly used and built correctly
+        call_kwargs = mock_gwy_class.call_args.kwargs
+        assert "config" in call_kwargs
+        assert isinstance(call_kwargs["config"], GatewayConfig)
+        assert call_kwargs["config"].reduce_processing == 0
+
+
+@pytest.mark.asyncio
+async def test_async_main_real_gateway_init() -> None:
+    """Verify real Gateway initialization using GatewayConfig.
+
+    This test intentionally does NOT mock the Gateway class itself,
+    ensuring the real Gateway.__init__ runs and successfully parses
+    the GatewayConfig object (fixes Issue #479).
+    """
+    lib_kwargs: dict[str, Any] = {
+        SZ_CONFIG: {
+            "reduce_processing": 0,
+            "disable_discovery": True,
+        },
+        SZ_PACKET_LOG: {},
+        SZ_INPUT_FILE: "dummy.log",
+    }
+    kwargs: dict[str, Any] = {
+        "long_format": False,
+        "restore_schema": None,
+        "restore_state": None,
+        "print_state": 0,
+    }
+
+    with (
+        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch("ramses_rf.gateway.Gateway.start", new_callable=AsyncMock) as mock_start,
+        patch("ramses_rf.gateway.Gateway.stop", new_callable=AsyncMock) as mock_stop,
+        patch("ramses_cli.client.asyncio.wait_for", new_callable=AsyncMock),
+    ):
+        await async_main(PARSE, lib_kwargs, **kwargs)
+
+        mock_start.assert_awaited_once()
+        mock_stop.assert_awaited_once()
+
 
 @pytest.mark.asyncio
 async def test_async_main_execute(mock_gateway: MagicMock) -> None:
     """Test async_main logic for the EXECUTE command."""
-    lib_kwargs = {
+    lib_kwargs: dict[str, Any] = {
         SZ_CONFIG: {
             "reduce_processing": 0,
             SZ_DISABLE_DISCOVERY: True,
         },
         SZ_PACKET_LOG: {},
     }
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "long_format": False,
         "restore_schema": None,
         "restore_state": None,
@@ -348,10 +395,8 @@ async def test_async_main_execute(mock_gateway: MagicMock) -> None:
         "get_faults": None,
         "get_schedule": [None, None],
         "set_schedule": [None, None],
-        # CLI functions like print_results expect these
     }
 
-    # Fix: Define a real awaitable to return, not an AsyncMock object
     async def mock_task() -> None:
         pass
 
@@ -369,8 +414,11 @@ async def test_async_main_execute(mock_gateway: MagicMock) -> None:
 @pytest.mark.asyncio
 async def test_async_main_monitor(mock_gateway: MagicMock) -> None:
     """Test async_main logic for the MONITOR command."""
-    lib_kwargs = {SZ_CONFIG: {"reduce_processing": 0}, SZ_PACKET_LOG: {}}
-    kwargs = {
+    lib_kwargs: dict[str, Any] = {
+        SZ_CONFIG: {"reduce_processing": 0},
+        SZ_PACKET_LOG: {},
+    }
+    kwargs: dict[str, Any] = {
         "long_format": False,
         "restore_schema": None,
         "restore_state": None,
@@ -380,7 +428,6 @@ async def test_async_main_monitor(mock_gateway: MagicMock) -> None:
 
     with (
         patch("ramses_cli.client.Gateway", return_value=mock_gateway),
-        # Fix: Return empty list for monitor since it doesn't await the tasks, preventing warnings
         patch("ramses_cli.client.spawn_scripts", return_value=[]),
         patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
     ):
@@ -393,7 +440,7 @@ async def test_async_main_monitor(mock_gateway: MagicMock) -> None:
 @pytest.mark.asyncio
 async def test_async_main_restore_schema(mock_gateway: MagicMock) -> None:
     """Test async_main with restore_schema functionality."""
-    lib_kwargs = {SZ_CONFIG: {"reduce_processing": 0}}
+    lib_kwargs: dict[str, Any] = {SZ_CONFIG: {"reduce_processing": 0}}
 
     # Mock a file object for restore_schema
     mock_file = MagicMock()
@@ -403,7 +450,7 @@ async def test_async_main_restore_schema(mock_gateway: MagicMock) -> None:
     # Make json.load work on the mock
     mock_file.__enter__.return_value = mock_file
 
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "long_format": False,
         "restore_schema": mock_file,
         "restore_state": None,
@@ -428,8 +475,11 @@ async def test_async_main_msg_handler(
     mock_gateway: MagicMock, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Test the internal handle_msg callback logic inside async_main."""
-    lib_kwargs = {SZ_CONFIG: {"reduce_processing": 0}, SZ_PACKET_LOG: {}}
-    kwargs = {
+    lib_kwargs: dict[str, Any] = {
+        SZ_CONFIG: {"reduce_processing": 0},
+        SZ_PACKET_LOG: {},
+    }
+    kwargs: dict[str, Any] = {
         "long_format": False,
         "restore_schema": None,
         "restore_state": None,
@@ -486,8 +536,11 @@ async def test_async_main_long_format(
     mock_gateway: MagicMock, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Test the long_format output branch in handle_msg."""
-    lib_kwargs = {SZ_CONFIG: {"reduce_processing": 0}, SZ_PACKET_LOG: {}}
-    kwargs = {
+    lib_kwargs: dict[str, Any] = {
+        SZ_CONFIG: {"reduce_processing": 0},
+        SZ_PACKET_LOG: {},
+    }
+    kwargs: dict[str, Any] = {
         "long_format": True,  # ENABLE LONG FORMAT
         "restore_schema": None,
         "restore_state": None,
@@ -530,8 +583,11 @@ async def test_async_main_exceptions(
     mock_gateway: MagicMock, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Test exception handling in async_main."""
-    lib_kwargs = {SZ_CONFIG: {"reduce_processing": 0}, SZ_PACKET_LOG: {}}
-    kwargs = {
+    lib_kwargs: dict[str, Any] = {
+        SZ_CONFIG: {"reduce_processing": 0},
+        SZ_PACKET_LOG: {},
+    }
+    kwargs: dict[str, Any] = {
         "long_format": False,
         "restore_schema": None,
         "restore_state": None,
@@ -615,7 +671,6 @@ def test_execute_flags(mock_gateway: MagicMock) -> None:
 @pytest.mark.asyncio
 async def test__save_state(mock_gateway: MagicMock) -> None:
     """Test _save_state writes schema and packets to files."""
-    # NOTE: Converted to async to ensure event_loop exists for mock_gateway fixture
     # Setup mock gateway state
     mock_gateway.get_state.return_value = (
         {"schema_key": "schema_data"},

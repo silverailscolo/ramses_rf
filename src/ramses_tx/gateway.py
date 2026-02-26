@@ -220,9 +220,9 @@ class Engine:
 
         await self._protocol.wait_for_connection_made()
 
-        # TODO: should this be removed (if so, pytest all before committing)
         if self._input_file:
-            await self._protocol.wait_for_connection_lost()
+            await self._protocol.wait_for_connection_lost(timeout=86400)
+            # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
     async def stop(self) -> None:
         """Close the transport (will stop the protocol)."""
@@ -234,6 +234,12 @@ class Engine:
 
         if tasks:
             await asyncio.wait(tasks)
+
+        # Clear any unretrieved exceptions from background tasks
+        for task in self._tasks:
+            if task.done() and not task.cancelled():
+                if exc := task.exception():
+                    _LOGGER.debug("Background task %s failed: %s", task.get_name(), exc)
 
         if self._transport:
             self._transport.close()
