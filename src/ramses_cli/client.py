@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import sys
@@ -15,6 +16,7 @@ from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
 from ramses_rf.const import DONT_CREATE_MESSAGES, SZ_ZONE_IDX
+from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import deep_merge
 from ramses_rf.schemas import (
     SCH_GLOBAL_CONFIG,
@@ -614,22 +616,41 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     # Explicitly extract input_file if present to ensure it's passed as a named arg
     input_file = lib_kwargs.pop(SZ_INPUT_FILE, None)
 
-    # if serial_port == "/dev/ttyMOCK":
-    #     from tests.deprecated.mocked_rf import MockGateway  # FIXME: for test/dev
-    #     gwy = MockGateway(serial_port, **lib_kwargs)
-    # else:
+    # Extract the configuration variables targeting the GatewayConfig Dataclass
+    config_dict = lib_kwargs.pop(SZ_CONFIG, {})
+    valid_config_keys = {
+        "disable_discovery",
+        "enable_eavesdrop",
+        "enforce_strict_handling",
+        "max_zones",
+        "reduce_processing",
+        "use_aliases",
+        "use_native_ot",
+        "use_regex",
+    }
+
+    gwy_config_kwargs: dict[str, Any] = {}
+    for key, val in config_dict.items():
+        if key in valid_config_keys:
+            if key == SZ_REDUCE_PROCESSING and val is not None:
+                gwy_config_kwargs[key] = int(val)
+            else:
+                gwy_config_kwargs[key] = val
+        else:
+            # Leave unmatched keys in lib_kwargs as they may map to Gateway.__init__
+            lib_kwargs[key] = val
+
+    gwy_config = GatewayConfig(**gwy_config_kwargs)
 
     # Instantiate Gateway, note: transport_factory is the default, so we don't need to pass it
     gwy = Gateway(
         serial_port,
+        config=gwy_config,
         input_file=input_file,
         **lib_kwargs,
     )  # passes action to gateway
 
-    if (
-        int(lib_kwargs.get(SZ_CONFIG, {}).get(SZ_REDUCE_PROCESSING, 0))
-        < DONT_CREATE_MESSAGES
-    ):
+    if gwy_config.reduce_processing < DONT_CREATE_MESSAGES:
         # library will not send MSGs to STDOUT, so we'll send PKTs instead
         colorama_init(autoreset=True)  # WIP: remove strip=True
         gwy.add_msg_handler(handle_msg)
@@ -656,7 +677,13 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
             _ = spawn_scripts(gwy, **kwargs)
             await asyncio.wait_for(gwy._protocol._wait_connection_lost, 1.0)  # type: ignore[arg-type]
 
-        elif command in (LISTEN, PARSE):
+        elif command == PARSE:
+            # Wait indefinitely until EOF closes the transport
+            await gwy._protocol.wait_for_connection_lost(
+                timeout=86400
+            )  # timeout set to timeout=86400, to stop type checker complaint if sent to None
+
+        elif command in (LISTEN):
             await asyncio.wait_for(gwy._protocol._wait_connection_lost, 1.0)  # type: ignore[arg-type]
 
     except asyncio.CancelledError:
@@ -670,7 +697,10 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     else:  # if no Exceptions raised, e.g. EOF when parsing, or Ctrl-C?
         msg = "ended without error (e.g. EOF)"
     finally:
-        await gwy.stop()  # what happens if we have an exception here?
+        with contextlib.suppress(asyncio.CancelledError):
+            await (
+                gwy.stop()
+            )  # Task cancellation is expected during shutdown, especially after EOF
 
     print(f"\r\nclient.py: Engine stopped: {msg}")
 
