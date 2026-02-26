@@ -19,8 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install hatch
-        run: pipx install hatch
+      - name: Install hatch and Update Dependencies
+        run: |
+          pipx install hatch
+          pipx inject hatch virtualenv --upgrade
+
+      - name: Verify Hatch Environment Compatibility
+        run: hatch env show
 
       - name: Build dist
         run: hatch build
