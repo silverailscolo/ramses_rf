@@ -675,16 +675,17 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
 
         elif command == MONITOR:
             _ = spawn_scripts(gwy, **kwargs)
-            await asyncio.wait_for(gwy._protocol._wait_connection_lost, 1.0)  # type: ignore[arg-type]
+            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
         elif command == PARSE:
             # Wait indefinitely until EOF closes the transport
-            await gwy._protocol.wait_for_connection_lost(
-                timeout=86400
-            )  # timeout set to timeout=86400, to stop type checker complaint if sent to None
+            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
-        elif command in (LISTEN):
-            await asyncio.wait_for(gwy._protocol._wait_connection_lost, 1.0)  # type: ignore[arg-type]
+        elif command == LISTEN:
+            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
     except asyncio.CancelledError:
         msg = "ended via: CancelledError (e.g. SIGINT)"

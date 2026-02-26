@@ -6,7 +6,7 @@ and passes them to the Gateway.
 """
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from click.testing import CliRunner
 
@@ -42,8 +42,8 @@ def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     mock_gateway.return_value.start.side_effect = lambda: asyncio.sleep(0)
     mock_gateway.return_value.stop.side_effect = lambda: asyncio.sleep(0)
 
-    # We must set this to a valid awaitable (not None) so asyncio.wait_for doesn't fail
-    mock_gateway.return_value._protocol._wait_connection_lost = asyncio.sleep(0)
+    # Explicitly mock wait_for_connection_lost as an async method
+    mock_gateway.return_value._protocol.wait_for_connection_lost = AsyncMock()
 
     # 3. Run the main logic that instantiates Gateway
     # We use asyncio.run to execute the async_main function
@@ -80,8 +80,8 @@ def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
     mock_gateway.return_value.start.side_effect = lambda: asyncio.sleep(0)
     mock_gateway.return_value.stop.side_effect = lambda: asyncio.sleep(0)
 
-    # We must set this to a valid awaitable (not None) so asyncio.wait_for doesn't fail
-    mock_gateway.return_value._protocol._wait_connection_lost = asyncio.sleep(0)
+    # Explicitly mock wait_for_connection_lost as an async method
+    mock_gateway.return_value._protocol.wait_for_connection_lost = AsyncMock()
 
     # 3. Run the main logic
     asyncio.run(async_main(command, lib_kwargs, **kwargs))
