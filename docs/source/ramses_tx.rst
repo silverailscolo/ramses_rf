@@ -1,6 +1,15 @@
 ramses\_tx package
 ==================
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   ramses_tx.protocol
+   ramses_tx.transport
+
 Submodules
 ----------
 
@@ -24,6 +33,14 @@ ramses\_tx.const module
 -----------------------
 
 .. automodule:: ramses_tx.const
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_tx.discovery module
+---------------------------
+
+.. automodule:: ramses_tx.discovery
    :members:
    :show-inheritance:
    :undoc-members:
@@ -68,6 +85,14 @@ ramses\_tx.helpers module
    :show-inheritance:
    :undoc-members:
 
+ramses\_tx.interfaces module
+----------------------------
+
+.. automodule:: ramses_tx.interfaces
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_tx.logger module
 ------------------------
 
@@ -108,22 +133,6 @@ ramses\_tx.parsers module
    :show-inheritance:
    :undoc-members:
 
-ramses\_tx.protocol module
---------------------------
-
-.. automodule:: ramses_tx.protocol
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-ramses\_tx.protocol\_fsm module
--------------------------------
-
-.. automodule:: ramses_tx.protocol_fsm
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 ramses\_tx.ramses module
 ------------------------
 
@@ -144,14 +153,6 @@ ramses\_tx.transport module
 ---------------------------
 
 .. automodule:: ramses_tx.transport
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-ramses\_tx.typed\_dicts module
-------------------------------
-
-.. automodule:: ramses_tx.typed_dicts
    :members:
    :show-inheritance:
    :undoc-members:
