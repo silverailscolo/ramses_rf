@@ -91,6 +91,14 @@ ramses\_rf.helpers module
    :show-inheritance:
    :undoc-members:
 
+ramses\_rf.interfaces module
+----------------------------
+
+.. automodule:: ramses_rf.interfaces
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_rf.schemas module
 -------------------------
 
@@ -103,6 +111,14 @@ ramses\_rf.storage module
 -------------------------
 
 .. automodule:: ramses_rf.storage
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_rf.typing module
+------------------------
+
+.. automodule:: ramses_rf.typing
    :members:
    :show-inheritance:
    :undoc-members:

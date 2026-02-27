@@ -56,9 +56,12 @@ ramses_rf/src/
         }
         namespace ramses_tx-transport{
             class Transport {
-                - MqttTransport
-                - ..
-                - PortTransport
+                - factory
+                - base
+                - file
+                - mqtt
+                - port
+                - ...
             }
         }
         namespace ramses_ESP{
@@ -78,7 +81,7 @@ ramses_rf/src/
         Dispatcher <|--|> heat
         Dispatcher <|--|> Message
 
-        click Transport href "ramses_tx.html#module-ramses_tx.transport" "docs"
+        click Transport href "ramses_tx.transport.html" "docs"
         click Engine href "ramses_tx.html#module-ramses_tx.gateway" "docs"
         click hgi href "ramses_rf.html#module-ramses_rf.gateway" "docs"
         click Database href "ramses_rf.html#module-ramses_rf.database" "docs"
