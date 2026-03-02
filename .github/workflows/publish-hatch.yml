@@ -21,7 +21,7 @@ jobs:
 
       - name: Install hatch and Update Dependencies
         run: |
-          pipx install --upgrade hatch "virtualenv<21"
+          pipx install hatch
 
       - name: Verify Hatch Environment Compatibility
         run: hatch env show
