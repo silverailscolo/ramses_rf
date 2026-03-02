@@ -22,7 +22,6 @@ jobs:
       - name: Install hatch and Update Dependencies
         run: |
           pipx install hatch
-          pipx inject hatch virtualenv --upgrade
 
       - name: Verify Hatch Environment Compatibility
         run: hatch env show
