@@ -1399,7 +1399,7 @@ class Child(Entity):  # A Zone, Device or a UfhCircuit
             in (
                 "Zone",
                 "DhwZone",
-                "ElecZone",
+                "EleZone",
                 "MixZone",
                 "RadZone",
                 "UfhZone",
