@@ -13,10 +13,18 @@ from .factory import (
     RamsesTransportT as RamsesTransportT,
     transport_factory as transport_factory,
 )
+from .file import FileTransport as FileTransport
+from .port import PortTransport as PortTransport
+from .zigbee import ZigbeeTransport as ZigbeeTransport
+from ..discovery import is_hgi80 as is_hgi80
 
 __all__ = [
     "CallbackTransport",
+    "FileTransport",
+    "is_hgi80",
+    "PortTransport",
     "RamsesTransportT",
     "TransportConfig",
     "transport_factory",
+    "ZigbeeTransport",
 ]
