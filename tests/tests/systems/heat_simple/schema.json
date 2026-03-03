@@ -6,7 +6,8 @@
         "stored_hotwater": {"sensor": "07:017494"},
         "underfloor_heating": {},
         "zones": {
-            "01": {"class": "radiator_valve", "sensor": "34:064023", "actuators": ["04:189078"], "_name": "Lounge" }
+            "01": {"class": "radiator_valve", "sensor": "34:064023", "actuators": ["04:189078"], "_name": "Lounge" },
+            "02": {"class": "electric_heat", "sensor": "34:094165", "actuators": [], "_name": "Kelder"}
         }
     },
     "orphans_heat": [],
