@@ -1404,7 +1404,7 @@ class Child(Entity):  # A Zone, Device or a UfhCircuit
                 "RadZone",
                 "UfhZone",
                 "ValZone",
-            )
+            )  # note: is a subset of self.PARENT_RULES
             and not child_id
         ):
             child_id = child_id or getattr(parent, "idx", None)
@@ -1436,7 +1436,7 @@ class Child(Entity):  # A Zone, Device or a UfhCircuit
                 SZ_ACTUATORS: ("BdrSwitch", "TrvActuator", "UfhCircuit"),
                 SZ_SENSOR: ("Controller", "Thermostat", "TrvActuator"),
             },
-            "ElecZone": {
+            "EleZone": {
                 SZ_ACTUATORS: ("BdrSwitch", "TrvActuator", "UfhCircuit"),
                 SZ_SENSOR: ("Controller", "Thermostat", "TrvActuator"),
             },

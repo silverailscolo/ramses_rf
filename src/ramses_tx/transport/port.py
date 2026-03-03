@@ -100,7 +100,6 @@ def limit_duty_cycle(
     def decorator(
         fnc: Callable[..., Awaitable[None]],
     ) -> Callable[..., Awaitable[None]]:
-
         @wraps(fnc)
         async def wrapper(
             self: PortTransport, frame: str, *args: Any, **kwargs: Any
