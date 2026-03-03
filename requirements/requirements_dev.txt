@@ -1,5 +1,5 @@
 # Requirements to dev/test the source code
-# - last checked/updated: 2026-01-22 (c.f. 0.53.4 / HA 2026.1.2)
+# - last checked/updated: 2026-03-03 (c.f. 0.55.2 / HA 2026.2.3)
 # - HA core reqs: https://github.com/home-assistant/core/blob/dev/requirements.txt
 
 # for using the ramses_rf library with CLI
@@ -10,8 +10,7 @@
 # - pip list | grep -E 'pre-commit|ruff|mypy|types-|voluptuous|pytest|hatch'
 
 # used for development (linting)
-  prek == 0.3.4                                 # same as ramses_cc and HA core 2026.1.2
-  # pre-commit >= 4.3.0                          # replaced by prek since 2026.1
+  prek == 0.3.4                                  # latest, same as ramses_cc
   ruff >= 0.13.0                                 # HA uses 0.13.0 ! also in: pre-commit-config.yaml
 
 # used for development (typing)
@@ -30,5 +29,5 @@
   syrupy >= 5.0.0                                # HA uses 5.0.0 - 07/02/2026 - 2026.2.1
 
 # used for build/deploy
-  hatch >= 1.14.1
-  hatchling >= 1.27.0
+  hatch >= 1.16.5
+  hatchling >= 1.29.0
