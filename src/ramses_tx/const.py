@@ -562,7 +562,7 @@ class ZoneRole(StrEnum):
     MIX = "MIX"  # heating zone with HM8s
     RAD = "RAD"  # heating zone with TRVs
     UFH = "UFH"  # heating zone with UFC circuits
-    VAL = "VAL"  # zheating one with BDRs
+    VAL = "VAL"  # heating zone with BDRs
     # Standard device/zone classes *not a heating zone)
     DHW = "DHW"  # DHW zone with BDRs
 
