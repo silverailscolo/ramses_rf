@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 from .. import exceptions as exc
 from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3
 from ..helpers import dt_now
-from .base import _FullTransport
+from .base import _FullTransport, TransportConfig
 from .helpers import _normalise
 
 if TYPE_CHECKING:
@@ -68,8 +68,20 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         32  # Reduced to prevent APS fragmentation & buffer exhaustion
     )
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        zigbee_url: str,
+        protocol: RamsesProtocolT,
+        *,
+        config: TransportConfig,
+        extra: dict[str, Any] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
+        # _FullTransport and _ReadTransport break the cooperative MRO chain by
+        # calling their parent classes directly rather than via super().  We
+        # therefore initialise both halves of the diamond explicitly.
+        _ZigbeeTransportAbstractor.__init__(self, zigbee_url, protocol, loop=loop)
+        _FullTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._ieee = self._zigbee_url.netloc
         path_parts = [p for p in self._zigbee_url.path.strip("/").split("/") if p]
