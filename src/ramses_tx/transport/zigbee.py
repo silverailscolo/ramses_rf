@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 from .. import exceptions as exc
 from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3
 from ..helpers import dt_now
-from .base import _FullTransport, TransportConfig
+from .base import TransportConfig, _FullTransport
 from .helpers import _normalise
 
 if TYPE_CHECKING:
@@ -175,12 +175,6 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._close(exc.TransportError(str(err)))
 
     def attribute_updated(self, attrid: int, value: Any) -> None:
-        _LOGGER.debug(
-            "Zigbee attribute_updated: attrid=0x%04x expected=0x%04x value_type=%s",
-            attrid,
-            self._attr_id,
-            type(value).__name__,
-        )
         self._ensure_read_cluster_bound()
         if attrid != self._attr_id or not isinstance(value, str):
             return
@@ -191,10 +185,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # Fast-path: ignore application ACKs here so they are not treated
         # as normal RAMSES frames by the parser.
         if payload.startswith("ACK "):
-            _LOGGER.info("Zigbee incoming application ACK (ignored): %r", payload)
             return
 
-        _LOGGER.debug("Zigbee attribute_updated payload: %r", payload)
         # If this is a chunk header, assemble; otherwise pass through
         try:
             if self._maybe_handle_incoming_chunk(payload):
@@ -210,7 +202,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
                 # fire-and-forget ACK send on the cluster that delivered this payload
-                _LOGGER.info("Scheduling application ACK: %s", ack)
+                _LOGGER.debug("Scheduling application ACK: %s", ack)
                 try:
                     target_cluster = self._cluster
                 except Exception:
@@ -224,15 +216,6 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     def cluster_command(
         self, tsn: int, command_id: int, args: Any, *_args: Any, **_kwargs: Any
     ) -> None:
-        _LOGGER.debug(
-            "Zigbee cluster_command received: tsn=%s cmd_id=0x%02x use_command_mode=%s args_type=%s args_len=%s args_repr=%r",
-            tsn,
-            command_id,
-            self._use_command_mode,
-            type(args).__name__,
-            len(args) if hasattr(args, "__len__") else "N/A",
-            args[:100] if hasattr(args, "__getitem__") else args,
-        )
 
         # Attempt to decode command payload as a ZCL char-string. Previously
         # we ignored incoming commands unless in explicit command mode; this
@@ -241,20 +224,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # payload and only return when decoding yields nothing relevant.
         payload = self._decode_command_payload(args)
         if not payload:
-            _LOGGER.debug(
-                "Zigbee cluster_command: empty or non-text payload after decode"
-            )
             return
 
         # Fast-path: ignore incoming application ACKs to avoid feeding them
         # into the RAMSES frame parser (they are control-plane only).
         if isinstance(payload, str) and payload.startswith("ACK "):
-            _LOGGER.info("Zigbee incoming application ACK (cmd) ignored: %r", payload)
             return
-
-        _LOGGER.debug(
-            "Zigbee cluster_command decoded payload (len=%s): %r", len(payload), payload
-        )
         # If chunked, assemble and only call frame_read when complete
         try:
             if self._maybe_handle_incoming_chunk(payload):
@@ -269,7 +244,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 seq = int(m.group(1))
                 total = int(m.group(2))
                 ack = f"ACK {seq}/{total}"
-                _LOGGER.info("Scheduling application ACK (cmd): %s", ack)
+                _LOGGER.debug("Scheduling application ACK (cmd): %s", ack)
                 try:
                     target_cluster = self._cluster
                 except Exception:
@@ -333,7 +308,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         super().close()
 
     async def _wait_for_gateway(self) -> Any:
-        for attempt in range(self._GATEWAY_POLL_ATTEMPTS):
+        for _attempt in range(self._GATEWAY_POLL_ATTEMPTS):
             zha_data = self._hass.data.get("zha") if self._hass else None
             gateway_proxy = (
                 getattr(zha_data, "gateway_proxy", None) if zha_data else None
@@ -713,27 +688,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not raw:
             return None
 
-        _LOGGER.debug(
-            "Zigbee _decode_command_payload: raw_len=%s raw[0]=%s raw[:20]=%r",
-            len(raw),
-            raw[0] if len(raw) > 0 else "empty",
-            raw[:20],
-        )
-
         # Check if this is a valid ZCL char-string (length prefix + data)
         # where the first byte indicates the string length
         if len(raw) >= 2 and raw[0] > 0 and raw[0] <= len(raw) - 1:
-            # Extract the actual string data (skip length prefix)
             string_data = raw[1 : 1 + raw[0]]
 
-            _LOGGER.debug(
-                "Zigbee _decode_command_payload: detected ZCL char-string, string_data_len=%s string_data[:20]=%r",
-                len(string_data),
-                string_data[:20],
-            )
-
             # Check if the string data looks like a chunk header (e.g., "1/2|..." or "2/2|...")
-            # This happens when Python sends chunks to ESP
             try:
                 data_str = string_data.decode("ascii", errors="strict")
                 if len(data_str) >= 4 and data_str[0].isdigit():
@@ -741,31 +701,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     if 0 < slash_pos < 3:
                         pipe_pos = data_str.find("|", slash_pos)
                         if slash_pos < pipe_pos < 6:
-                            _LOGGER.debug(
-                                "Zigbee _decode_command_payload: detected chunk header, returning: %r",
-                                data_str,
-                            )
                             return data_str  # Return chunk as-is
             except (UnicodeDecodeError, AttributeError):
                 pass
 
-            # Normal ZCL char-string, decode and return
-            decoded = string_data.decode("ascii", errors="ignore")
-            _LOGGER.debug(
-                "Zigbee _decode_command_payload: ZCL string decoded (len=%s): %r",
-                len(decoded),
-                decoded[:50] if len(decoded) > 50 else decoded,
-            )
-            return decoded
+            return string_data.decode("ascii", errors="ignore")
 
-        # Fallback: decode entire raw data as-is
-        decoded = raw.decode("ascii", errors="ignore")
-        _LOGGER.debug(
-            "Zigbee _decode_command_payload: fallback decode (len=%s): %r",
-            len(decoded),
-            decoded[:50] if len(decoded) > 50 else decoded,
-        )
-        return decoded
+        return raw.decode("ascii", errors="ignore")
 
     async def _send_command(
         self, chunk: str, seq: int, total: int, cmd_override: int | None = None
@@ -774,16 +716,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not cluster:
             raise exc.TransportError("Zigbee write cluster not ready")
 
-        _LOGGER.debug(
-            "Zigbee write cmd %s/%s (len=%s endpoint=%s cluster=0x%04x cmd=0x%02x): %s",
-            seq,
-            total,
-            len(chunk),
-            self._write_endpoint_id,
-            self._write_cluster_id,
-            self._cmd_id,
-            chunk,
-        )
+        _LOGGER.debug("Zigbee TX %s/%s: %s", seq, total, chunk)
 
         last_err: Exception | None = None
         # If a command override is requested (e.g., ACK=0x01) and we have
@@ -976,17 +909,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         clusters dynamically and enforces deterministic behavior according to the
         quirk definitions.
         """
-        _LOGGER.info(
-            "_send_unacked called: %r target_cluster=%r",
-            text,
-            getattr(target_cluster, "cluster_id", None),
-        )
         try:
             chunks = list(self._chunk_payload(text))
             for seq, total, chunk in chunks:
-                _LOGGER.debug(
-                    "_send_unacked sending chunk %s/%s: %r", seq, total, chunk
-                )
                 # If a target_cluster was provided, send on that cluster deterministically
                 if target_cluster is not None:
                     use_cmd = (

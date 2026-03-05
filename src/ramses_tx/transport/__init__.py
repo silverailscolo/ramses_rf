@@ -7,6 +7,7 @@ Operates at the pkt layer of: app - msg - pkt - h/w
 
 from __future__ import annotations
 
+from ..discovery import is_hgi80 as is_hgi80
 from .base import TransportConfig as TransportConfig
 from .callback import CallbackTransport as CallbackTransport
 from .factory import (
@@ -16,7 +17,6 @@ from .factory import (
 from .file import FileTransport as FileTransport
 from .port import PortTransport as PortTransport
 from .zigbee import ZigbeeTransport as ZigbeeTransport
-from ..discovery import is_hgi80 as is_hgi80
 
 __all__ = [
     "CallbackTransport",
