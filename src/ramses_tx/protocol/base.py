@@ -406,10 +406,10 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         """Called by the Transport when a Packet is received."""
         try:
             msg = Message(pkt)  # should log all invalid msgs appropriately
-        except PacketInvalid as exc:
+        except PacketInvalid as err:
             # We explicitly catch specific validation failures. Unhandled internal errors
             # like TypeError or AttributeError will correctly bubble up and fail loudly.
-            _LOGGER.debug(f"Dropped invalid packet during parsing: {exc}")
+            _LOGGER.debug(f"Dropped invalid packet during parsing: {err}")
             return
 
         self._this_msg, self._prev_msg = msg, self._this_msg
