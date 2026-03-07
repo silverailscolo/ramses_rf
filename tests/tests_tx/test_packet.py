@@ -93,7 +93,7 @@ def test_packet_constructors() -> None:
 
     # Test _from_cmd
     cmd = MockCommand()
-    pkt_cmd = Packet._from_cmd(cmd, DTM)  # type: ignore[arg-type]
+    pkt_cmd = Packet._from_cmd(cmd, DTM)
 
     # _from_cmd prepends "... " to the frame, simulating a blank RSSI from a command
     assert pkt_cmd.rssi == "..."
