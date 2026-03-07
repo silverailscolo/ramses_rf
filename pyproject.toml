@@ -219,6 +219,26 @@
   ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+  module = "zigpy.*"
+  ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+  module = "homeassistant.*"
+  ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+  module = "ramses_tx.transport.zigbee"
+  disable_error_code = [
+    "unreachable",  # conditional imports inside try blocks
+  ]
+
+[[tool.mypy.overrides]]
+  module = "ramses_tx.transport.factory"
+  disable_error_code = [
+    "assignment",  # transport var reassigned between ZigbeeTransport and MqttTransport branches
+  ]
+
+[[tool.mypy.overrides]]
   module = "ramses_tx.parsers"
 
   disallow_any_generics = false  # 89 - will be lots of work
@@ -266,6 +286,19 @@
   disable_error_code = [
     "arg-type",  #     54
     "type-arg",  #     11
+  ]
+
+[[tool.mypy.overrides]]
+  module = "tests_tx.*"
+
+  disable_error_code = [
+    "attr-defined",   #  MagicMock assertions on typed callables
+    "method-assign",  #  assigning MagicMock to methods in tests
+    "assignment",     #  assigning MagicMock to None-typed fields
+    "index",          #  Optional tuple indexing in test helpers
+    "misc",           #  assigning to Final class attributes
+    "arg-type",
+    "type-arg",
   ]
 
 [[tool.mypy.overrides]]

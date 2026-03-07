@@ -227,7 +227,11 @@ class TestChunkPayload(unittest.TestCase):
     def test_reassembly_recovers_original_payload(self) -> None:
         payload = "D" * 150
         chunks = self.t._chunk_payload(payload)
-        assembled = "".join(c[chunk_str.index("|") + 1 :] for _, _, chunk_str in chunks for c in [chunk_str])
+        assembled = "".join(
+            c[chunk_str.index("|") + 1 :]
+            for _, _, chunk_str in chunks
+            for c in [chunk_str]
+        )
         self.assertEqual(assembled, payload)
 
     def test_empty_payload_single_chunk(self) -> None:
@@ -549,7 +553,9 @@ class TestGetCluster(unittest.TestCase):
 class TestAttachClusters(unittest.TestCase):
     """Tests for ``_attach_clusters``."""
 
-    def _mock_device(self, read_cluster: Any, write_cluster: Any | None = None) -> MagicMock:
+    def _mock_device(
+        self, read_cluster: Any, write_cluster: Any | None = None
+    ) -> MagicMock:
         """Create a mock device that hands back clusters via endpoints map."""
         read_ep = MagicMock()
         read_ep.out_clusters = {0xFC00: read_cluster}  # command-mode reads "out"
@@ -998,7 +1004,9 @@ class TestAsyncInit(unittest.IsolatedAsyncioTestCase):
         t = _make_transport(extra={})  # no _hass key
         t._close = MagicMock()
 
-        with patch.dict("sys.modules", {"zigpy": MagicMock(), "zigpy.types": MagicMock()}):
+        with patch.dict(
+            "sys.modules", {"zigpy": MagicMock(), "zigpy.types": MagicMock()}
+        ):
             await t._async_init()
 
         t._close.assert_called_once()
@@ -1010,7 +1018,9 @@ class TestAsyncInit(unittest.IsolatedAsyncioTestCase):
         t._wait_for_gateway = AsyncMock(side_effect=RuntimeError("unexpected"))
         t._close = MagicMock()
 
-        with patch.dict("sys.modules", {"zigpy": MagicMock(), "zigpy.types": MagicMock()}):
+        with patch.dict(
+            "sys.modules", {"zigpy": MagicMock(), "zigpy.types": MagicMock()}
+        ):
             await t._async_init()
 
         t._close.assert_called_once()
@@ -1064,9 +1074,7 @@ class TestWaitForDeviceReady(unittest.IsolatedAsyncioTestCase):
 # ---------------------------------------------------------------------------
 
 
-_DIFF_WRITE_URL = (
-    f"zigbee://{_IEEE}/0xFC00/0x0000/1/0xFC01/0x0001/2"
-)
+_DIFF_WRITE_URL = f"zigbee://{_IEEE}/0xFC00/0x0000/1/0xFC01/0x0001/2"
 
 
 class TestAttachClustersFallback(unittest.TestCase):
@@ -1200,7 +1208,10 @@ class TestSendChunk(unittest.IsolatedAsyncioTestCase):
         t._write_cluster = None
         t._device = None
 
-        with patch.dict("sys.modules", {"zigpy": MagicMock()}), self.assertRaises(exc.TransportError):
+        with (
+            patch.dict("sys.modules", {"zigpy": MagicMock()}),
+            self.assertRaises(exc.TransportError),
+        ):
             await t._send_chunk("payload", 1, 1)
 
     async def test_write_attributes_fails_raises_transport_error(self) -> None:
@@ -1215,7 +1226,10 @@ class TestSendChunk(unittest.IsolatedAsyncioTestCase):
         mock_zigpy = MagicMock()
         mock_zigpy.types.CharacterString.return_value = MagicMock()
 
-        with patch.dict("sys.modules", {"zigpy": mock_zigpy}), self.assertRaises(exc.TransportError):
+        with (
+            patch.dict("sys.modules", {"zigpy": mock_zigpy}),
+            self.assertRaises(exc.TransportError),
+        ):
             await t._send_chunk("payload", 1, 1)
 
 
@@ -1233,7 +1247,9 @@ class TestAttributeUpdatedEdgeCases(unittest.TestCase):
         self.t._loop.create_task = _mock_create_task()
         self.t._ensure_read_cluster_bound = MagicMock()
 
-    def test_invalid_chunk_header_seq_gt_total_delivered_and_ack_scheduled(self) -> None:
+    def test_invalid_chunk_header_seq_gt_total_delivered_and_ack_scheduled(
+        self,
+    ) -> None:
         """Payload '5/3|body': _parse_chunk returns None → _maybe_handle returns False
         → _frame_read is called → ACK scheduling regex still matches → ACK scheduled."""
         self.t.attribute_updated(self.t._attr_id, "5/3|body")
@@ -1243,7 +1259,9 @@ class TestAttributeUpdatedEdgeCases(unittest.TestCase):
     def test_maybe_handle_raises_exception_fallthrough(self) -> None:
         """If _maybe_handle_incoming_chunk raises, the exception is caught and
         the payload is forwarded to _frame_read."""
-        self.t._maybe_handle_incoming_chunk = MagicMock(side_effect=RuntimeError("boom"))
+        self.t._maybe_handle_incoming_chunk = MagicMock(
+            side_effect=RuntimeError("boom")
+        )
         self.t.attribute_updated(self.t._attr_id, "plain frame")
         self.t._frame_read.assert_called_once()
 
@@ -1262,7 +1280,9 @@ class TestClusterCommandEdgeCases(unittest.TestCase):
         self.t._loop.create_task.assert_called()
 
     def test_maybe_handle_raises_exception_fallthrough(self) -> None:
-        self.t._maybe_handle_incoming_chunk = MagicMock(side_effect=RuntimeError("boom"))
+        self.t._maybe_handle_incoming_chunk = MagicMock(
+            side_effect=RuntimeError("boom")
+        )
         self.t.cluster_command(0, 0, "plain text")
         self.t._frame_read.assert_called_once()
 
@@ -1288,4 +1308,3 @@ class TestMaybeHandleChunkErrorDelivery(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

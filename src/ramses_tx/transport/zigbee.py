@@ -133,7 +133,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         self._loop.create_task(self._async_init(), name="ZigbeeTransport._async_init()")
         # buffers for assembling incoming chunked messages per device
-        self._chunk_buffers: dict[str, dict] = {}
+        self._chunk_buffers: dict[str, dict[str, Any]] = {}
 
     async def _async_init(self) -> None:
         try:
@@ -724,8 +724,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # an active read cluster (self._cluster), try sending the command on
         # that cluster first. This helps hit the server/client direction
         # mapping that the device expects for ACK responses.
-        tried_clusters = []
-        candidate_clusters = []
+        tried_clusters: list[Any] = []
+        candidate_clusters: list[Any] = []
         if cmd_override is not None and getattr(self, "_cluster", None) is not None:
             candidate_clusters.append(self._cluster)
         candidate_clusters.append(cluster)
