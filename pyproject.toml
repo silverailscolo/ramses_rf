@@ -297,6 +297,7 @@
     "assignment",     #  assigning MagicMock to None-typed fields
     "index",          #  Optional tuple indexing in test helpers
     "misc",           #  assigning to Final class attributes
+    "union-attr",     #  accessing attrs on Any | None cluster mocks
     "arg-type",
     "type-arg",
   ]
