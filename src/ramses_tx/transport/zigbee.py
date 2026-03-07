@@ -216,7 +216,6 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     def cluster_command(
         self, tsn: int, command_id: int, args: Any, *_args: Any, **_kwargs: Any
     ) -> None:
-
         # Attempt to decode command payload as a ZCL char-string. Previously
         # we ignored incoming commands unless in explicit command mode; this
         # prevented handling ESP custom-command chunked payloads when the
@@ -578,7 +577,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 if found:
                     break
             if not found:
-                raise
+                raise exc.TransportError(
+                    f"Write cluster 0x{self._write_cluster_id:04x} not found on device {self._ieee}"
+                )
 
         if self._cluster and hasattr(self._cluster, "remove_listener"):
             with contextlib.suppress(Exception):

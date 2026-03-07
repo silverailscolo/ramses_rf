@@ -194,7 +194,9 @@ class Gateway(Engine, GatewayInterface):
         )
 
         if hidden_kwargs:
-            self._extra.update(hidden_kwargs)  # injected into transport_factory() via Engine.start()
+            self._extra.update(
+                hidden_kwargs
+            )  # injected into transport_factory() via Engine.start()
 
         if self._disable_sending:
             self._gwy_config.disable_discovery = True
