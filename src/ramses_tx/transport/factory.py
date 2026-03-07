@@ -32,6 +32,7 @@ _LOGGER = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT_PORT: Final[float] = 3.0
 _DEFAULT_TIMEOUT_MQTT: Final[float] = 60.0
+_DEFAULT_TIMEOUT_ZIGBEE: Final[float] = 60.0
 
 RamsesTransportT: TypeAlias = TransportInterface
 
@@ -150,6 +151,25 @@ async def transport_factory(
         )
 
     assert port_name is not None  # mypy check
+
+    # Zigbee
+    if port_name[:6] == "zigbee":
+        from .zigbee import ZigbeeTransport
+
+        transport = ZigbeeTransport(
+            port_name,
+            protocol,
+            config=config,
+            extra=extra,
+            loop=loop,
+        )
+        try:
+            await protocol.wait_for_connection_made(timeout=_DEFAULT_TIMEOUT_ZIGBEE)
+        except Exception:
+            transport.close()
+            raise
+        return transport
+
     assert port_config is not None  # mypy check
 
     # MQTT
