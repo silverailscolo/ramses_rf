@@ -1322,11 +1322,13 @@ class Thermostat(BatteryState, Setpoint, Temperature, Fakeable):  # THM (..):
             if self._iz_controller is None:
                 # _LOGGER.info(f"{msg!r} # IS_CONTROLLER (10): is FALSE")
                 self._iz_controller = False
-            elif self._iz_controller:  # TODO: raise CorruptStateError
-                _LOGGER.error(f"{msg!r} # IS_CONTROLLER (11): was TRUE, now False")
+            elif self._iz_controller:
+                raise exc.SystemInconsistent(
+                    f"{msg!r} # IS_CONTROLLER (11): was TRUE, now False"
+                )
 
-            if msg.code in CODES_ONLY_FROM_CTL:  # TODO: raise CorruptPktError
-                _LOGGER.error(f"{msg!r} # IS_CONTROLLER (12); is CORRUPT PKT")
+            if msg.code in CODES_ONLY_FROM_CTL:
+                raise exc.PacketInvalid(f"{msg!r} # IS_CONTROLLER (12); is CORRUPT PKT")
 
         elif all(
             (
@@ -1339,8 +1341,10 @@ class Thermostat(BatteryState, Setpoint, Temperature, Fakeable):  # THM (..):
                 # _LOGGER.info(f"{msg!r} # IS_CONTROLLER (20): is TRUE")
                 self._iz_controller = msg
                 self._make_tcs_controller(msg=msg)
-            elif self._iz_controller is False:  # TODO: raise CorruptStateError
-                _LOGGER.error(f"{msg!r} # IS_CONTROLLER (21): was FALSE, now True")
+            elif self._iz_controller is False:
+                raise exc.SystemInconsistent(
+                    f"{msg!r} # IS_CONTROLLER (21): was FALSE, now True"
+                )
 
     async def initiate_binding_process(self) -> Packet:
         return await super()._initiate_binding_process(
@@ -1590,9 +1594,13 @@ def class_dev_heat(
         return HEAT_CLASS_BY_SLUG[slug]
 
     if not eavesdrop:
-        raise TypeError(f"No CH/DHW class for: {dev_addr} (no eavesdropping)")
+        raise exc.DeviceNotRecognised(
+            f"No CH/DHW class for: {dev_addr} (no eavesdropping)"
+        )
 
     if msg and msg.code in CODES_OF_HEAT_DOMAIN_ONLY:
         return DeviceHeat
 
-    raise TypeError(f"No CH/DHW class for: {dev_addr} (unknown type: {dev_addr.type})")
+    raise exc.DeviceNotRecognised(
+        f"No CH/DHW class for: {dev_addr} (unknown type: {dev_addr.type})"
+    )

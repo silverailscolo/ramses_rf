@@ -8,6 +8,7 @@ import logging
 from collections import OrderedDict
 from typing import TYPE_CHECKING, NewType, TypeAlias
 
+from ramses_rf import exceptions as exc
 from ramses_tx import Command, Message, Packet
 from ramses_tx.const import (
     SZ_LOG_ENTRY,
@@ -71,8 +72,8 @@ class FaultLogEntry:
     def _is_matching_pair(self, other: object) -> bool:
         """Return True if the other entry could be a matching pair (fault/restore)."""
 
-        if not isinstance(other, FaultLogEntry):  # TODO: make a parochial exception
-            raise TypeError(f"{other} is not not a FaultLogEntry")
+        if not isinstance(other, FaultLogEntry):
+            raise exc.SystemInconsistent(f"{other} is not a FaultLogEntry")
 
         if self.fault_state == FaultState.FAULT:
             return (
@@ -110,8 +111,8 @@ class FaultLogEntry:
         """Create a fault log entry from a packet's payload."""
 
         log_entry = parse_fault_log_entry(pkt.payload)
-        if log_entry is None:  # TODO: make a parochial exception
-            raise TypeError("Null fault log entry")
+        if log_entry is None:
+            raise exc.SystemInconsistent("Null fault log entry")
 
         return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
 

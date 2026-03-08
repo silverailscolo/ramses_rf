@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Final, NotRequired, TypeAlias, TypedDict
 
 import voluptuous as vol  # type: ignore[import, unused-ignore]
 
+from ramses_rf import exceptions as exc
 from ramses_rf.const import (
     SZ_FRAG_NUMBER,
     SZ_FRAGMENT,
@@ -255,10 +256,10 @@ class Schedule:  # 0404
                 self._get_schedule(force_io=force_io), timeout=timeout
             )
         except TimeoutError as err:
-            raise TimeoutError(
+            raise exc.ScheduleFlowError(
                 f"Failed to obtain schedule within {timeout} secs"
             ) from err
-        # TODO: raise a more parochial exception
+
         return self.schedule
 
     async def _get_schedule(self, *, force_io: bool = False) -> None:
@@ -319,8 +320,8 @@ class Schedule:  # 0404
             schedule = fragz_to_full_sched(
                 payload[SZ_FRAGMENT] for payload in payload_set if payload
             )  # TODO: messy - what is set not full
-        except zlib.error:
-            return None  # TODO: raise a more parochial exception
+        except zlib.error as err:
+            raise exc.ScheduleError("Failed to decompress schedule fragments") from err
 
         if self.idx == "HW":
             schedule[SZ_ZONE_IDX] = "HW"
@@ -387,7 +388,7 @@ class Schedule:  # 0404
             try:
                 full_schedule = schedule_schema(full_schedule)
             except vol.MultipleInvalid as err:
-                raise TypeError(f"failed to set schedule: {err}") from err
+                raise exc.ScheduleError(f"failed to set schedule: {err}") from err
 
             if self.idx == "HW":  # HACK: to avoid confusing dhw with zone '00'
                 full_schedule[SZ_ZONE_IDX] = "00"
@@ -403,7 +404,7 @@ class Schedule:  # 0404
             for num, frag in enumerate(self._fragments, 1):
                 await put_fragment(num, len(self._fragments), frag)
         except TimeoutError as err:
-            raise TimeoutError(f"failed to set schedule: {err}") from err
+            raise exc.ScheduleFlowError(f"failed to set schedule: {err}") from err
         else:
             if not force_refresh:
                 self._global_ver, _ = await self.tcs._schedule_version(force_io=True)

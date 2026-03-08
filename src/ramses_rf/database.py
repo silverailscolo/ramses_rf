@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, NewType
 
 from ramses_tx import CODES_SCHEMA, RQ, Code, Message, Packet
 
+from .exceptions import DatabaseQueryError
 from .storage import PacketLogEntry, StorageWorker
 
 if TYPE_CHECKING:
@@ -430,7 +431,9 @@ class MessageIndex:
         # bool(kwargs)
 
         if not bool(msg) ^ bool(kwargs):
-            raise ValueError("Either a Message or kwargs should be provided, not both")
+            raise DatabaseQueryError(
+                "Either a Message or kwargs should be provided, not both"
+            )
         if msg:
             kwargs["dtm"] = msg.dtm
 
@@ -439,8 +442,9 @@ class MessageIndex:
             # await self._lock.acquire()
             msgs = self._delete_from(**kwargs)
 
-        except sqlite3.Error:  # need to tighten?
+        except sqlite3.Error as err:  # need to tighten?
             self._cx.rollback()
+            raise DatabaseQueryError(f"Delete failed: {err}") from err
 
         else:
             for msg in msgs:
@@ -480,7 +484,9 @@ class MessageIndex:
         """
 
         if not (bool(msg) ^ bool(kwargs)):
-            raise ValueError("Either a Message or kwargs should be provided, not both")
+            raise DatabaseQueryError(
+                "Either a Message or kwargs should be provided, not both"
+            )
 
         if msg:
             kwargs["dtm"] = msg.dtm
@@ -535,7 +541,10 @@ class MessageIndex:
         sql = "SELECT dtm FROM messages WHERE "
         sql += " AND ".join(f"{k} = ?" for k in kw)
 
-        self._cu.execute(sql, tuple(kw.values()))
+        try:
+            self._cu.execute(sql, tuple(kw.values()))
+        except sqlite3.Error as err:
+            raise DatabaseQueryError(f"Query failed: {err}") from err
         return self._cu.fetchall()
 
     def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
@@ -548,9 +557,12 @@ class MessageIndex:
         """
 
         if "SELECT" not in sql:
-            raise ValueError(f"{self}: Only SELECT queries are allowed")
+            raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
-        self._cu.execute(sql, parameters)
+        try:
+            self._cu.execute(sql, parameters)
+        except sqlite3.Error as err:
+            raise DatabaseQueryError(f"Database error during qry: {err}") from err
 
         lst: list[Message] = []
         # stamp = list(self._msgs)[0] if len(self._msgs) > 0 else "N/A"  # for debug
@@ -582,15 +594,21 @@ class MessageIndex:
             for Cd in CODES_SCHEMA:
                 if code == Cd:
                     return Cd
-            raise LookupError(f"Failed to find matching code for {code}")
+            raise DatabaseQueryError(f"Failed to find matching code for {code}")
 
         sql = """
                 SELECT code from messages WHERE verb is 'RP' AND (src = ? OR dst = ?)
             """
         if "SELECT" not in sql:
-            raise ValueError(f"{self}: Only SELECT queries are allowed")
+            raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
-        self._cu.execute(sql, parameters)
+        try:
+            self._cu.execute(sql, parameters)
+        except sqlite3.Error as err:
+            raise DatabaseQueryError(
+                f"Database error during get_rp_codes: {err}"
+            ) from err
+
         res = self._cu.fetchall()
         return [get_code(res[0]) for res[0] in self._cu.fetchall()]
 
@@ -606,9 +624,13 @@ class MessageIndex:
         """
 
         if "SELECT" not in sql:
-            raise ValueError(f"{self}: Only SELECT queries are allowed")
+            raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
-        self._cu.execute(sql, parameters)
+        try:
+            self._cu.execute(sql, parameters)
+        except sqlite3.Error as err:
+            raise DatabaseQueryError(f"Database error during qry_field: {err}") from err
+
         return self._cu.fetchall()
 
     def all(self, include_expired: bool = False) -> tuple[Message, ...]:

@@ -29,6 +29,7 @@ from ..exceptions import (
     ProtocolError,
     ProtocolFsmError,
     ProtocolSendFailed,
+    ProtocolTimeoutError,
     TransportError,
 )
 from ..helpers import dt_now
@@ -295,7 +296,8 @@ class ProtocolContext(StateMachineInterface):
         :type qos: QosParams
         :return: The received response packet, or the echo if no response is expected.
         :rtype: Packet
-        :raises ProtocolSendFailed: If the send times out or retries are exhausted.
+        :raises ProtocolTimeoutError: If the global send timer expires.
+        :raises ProtocolSendFailed: If retries are exhausted.
         """
         self._send_fnc = send_fnc
 
@@ -320,7 +322,7 @@ class ProtocolContext(StateMachineInterface):
             )
             if self._qos_mgr.cmd is cmd:
                 self.set_state(IsInIdle, expired=True)
-            raise ProtocolSendFailed(msg) from err
+            raise ProtocolTimeoutError(msg) from err
 
         try:
             return fut.result()

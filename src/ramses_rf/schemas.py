@@ -325,13 +325,13 @@ SCH_RESTORE_CACHE_DICT = {
 def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , **traits
     """Get a device from the gateway.
 
-    Raise a LookupError if a device_id is filtered out by the known or block list.
+    Raise a DeviceNotFoundError if a device_id is filtered out by the known or block list.
 
     The underlying method is wrapped only to provide a better error message.
     """
 
     def check_filter_lists(dev_id: DeviceIdT) -> None:
-        """Raise a LookupError if a device_id is filtered out by a list."""
+        """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
 
         err_msg = None
         if gwy._enforce_known_list and dev_id not in gwy._include:
@@ -342,7 +342,7 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
             err_msg = f"it is in the {SZ_SCHEMA}, but also in the {SZ_BLOCK_LIST}"
 
         if err_msg:
-            raise LookupError(
+            raise exc.DeviceNotFoundError(
                 f"Can't create {dev_id}: {err_msg} (check the lists and the {SZ_SCHEMA})"
             )
 
@@ -385,7 +385,7 @@ def load_schema(
         if traits.get(SZ_FAKED):
             dev = _get_device(gwy, device_id)  # , **traits)
             if not isinstance(dev, Fakeable):
-                raise exc.SystemSchemaInconsistent(f"Device is not fakeable: {dev}")
+                raise exc.DeviceNotFaked(f"Device is not fakeable: {dev}")
             if not dev.is_faked:
                 dev._make_fake()
 

@@ -5,6 +5,7 @@ import contextlib
 from datetime import datetime as dt, timedelta as td
 
 from ramses_rf.database import MessageIndex
+from ramses_rf.exceptions import DatabaseQueryError
 from ramses_tx import Message, Packet
 
 
@@ -131,7 +132,7 @@ class TestMessageIndex:
             "payload keys skipped if value is None"
         )
 
-        with contextlib.suppress(ValueError):
+        with contextlib.suppress(DatabaseQueryError):
             msg_db.qry_field("RANDOM from messages", (self._SRC1, self._SRC1))
         # Only SELECT queries are allowed
 
