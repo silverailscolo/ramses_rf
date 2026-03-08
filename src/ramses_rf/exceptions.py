@@ -32,6 +32,10 @@ class BindingFlowFailed(BindingError):
     """The binding failed due to a timeout or retry limit being exceeded."""
 
 
+class BindingTimeoutError(BindingError):
+    """Raised when a binding operation exceeds the allotted time."""
+
+
 ########################################################################################
 # Errors above the protocol/transport layer, incl. message processing, state & schema
 
@@ -52,6 +56,14 @@ class ScheduleFlowError(ScheduleError):
 # Errors above the protocol/transport layer, incl. message processing, state & schema
 
 
+class DatabaseQueryError(_RamsesUpperError):
+    """Raised when a query to the message database fails or is invalid."""
+
+
+class DeviceNotFoundError(_RamsesUpperError):
+    """Raised when a specific device cannot be found in the gateway or system."""
+
+
 class ExpiredCallbackError(_RamsesUpperError):
     """Raised when the callback has expired."""
 
@@ -64,6 +76,12 @@ class SystemSchemaInconsistent(SystemInconsistent):
     """Raised when the system state (usu. schema) is inconsistent."""
 
     HINT = "try restarting the client library"
+
+
+class SchemaInconsistentError(SystemSchemaInconsistent):
+    """Raised when the loaded schema contradicts the known state or rules."""
+
+    HINT = "check the configuration schema for conflicting definitions"
 
 
 class DeviceNotFaked(SystemInconsistent):

@@ -487,7 +487,7 @@ class BindStateBase:
         )
 
         _LOGGER.warning(msg)
-        self._fut.set_exception(exc.BindingFlowFailed(msg))
+        self._fut.set_exception(exc.BindingTimeoutError(msg))
         self._set_context_state(DevHasFailedBinding)
 
     def _set_context_state(self, next_state: type[BindStateBase]) -> None:

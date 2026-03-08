@@ -37,6 +37,7 @@ from ramses_rf.device import (
     UfhController,
 )
 from ramses_rf.entity_base import Entity, Parent, class_by_attr
+from ramses_rf.exceptions import ScheduleFlowError, SchemaInconsistentError
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
     DEFAULT_MAX_ZONES,
@@ -120,9 +121,9 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         _LOGGER.debug("Creating a TCS for CTL: %s (%s)", ctl.id, self.__class__)
 
         if ctl.id in ctl._gwy.system_by_id:
-            raise LookupError(f"Duplicate TCS for CTL: {ctl.id}")
+            raise SchemaInconsistentError(f"Duplicate TCS for CTL: {ctl.id}")
         if not isinstance(ctl, Controller):  # TODO
-            raise ValueError(f"Invalid CTL: {ctl} (is not a controller)")
+            raise SchemaInconsistentError(f"Invalid CTL: {ctl} (is not a controller)")
 
         super().__init__(ctl._gwy)
 
@@ -673,7 +674,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
             await asyncio.sleep(0.005)  # gives the other zone enough time
 
         else:
-            raise TimeoutError(
+            raise ScheduleFlowError(
                 f"Unable to obtain lock for {zone_idx} (used by {self.zone_lock_idx})"
             )
 

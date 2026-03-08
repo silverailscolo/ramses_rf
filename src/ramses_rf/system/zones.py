@@ -201,9 +201,11 @@ class DhwZone(ZoneSchedule):  # CS92A
         _LOGGER.debug("Creating a DHW for TCS: %s_HW (%s)", tcs.id, self.__class__)
 
         if tcs.dhw:
-            raise LookupError(f"Duplicate DHW for TCS: {tcs.id}")
+            raise exc.SchemaInconsistentError(f"Duplicate DHW for TCS: {tcs.id}")
         if zone_idx not in (None, "HW"):
-            raise ValueError(f"Invalid zone idx for DHW: {zone_idx} (not 'HW'/null)")
+            raise exc.SchemaInconsistentError(
+                f"Invalid zone idx for DHW: {zone_idx} (not 'HW'/null)"
+            )
 
         super().__init__(tcs, "HW")
 
@@ -473,9 +475,13 @@ class Zone(ZoneSchedule):
         _LOGGER.debug("Creating a Zone: %s_%s (%s)", tcs.id, zone_idx, self.__class__)
 
         if zone_idx in tcs.zone_by_idx:
-            raise LookupError(f"Duplicate ZON for TCS: {tcs.id}_{zone_idx}")
+            raise exc.SchemaInconsistentError(
+                f"Duplicate ZON for TCS: {tcs.id}_{zone_idx}"
+            )
         if int(zone_idx, 16) >= tcs._max_zones:
-            raise ValueError(f"Invalid zone_idx: {zone_idx} (exceeds max_zones)")
+            raise exc.SchemaInconsistentError(
+                f"Invalid zone_idx: {zone_idx} (exceeds max_zones)"
+            )
 
         super().__init__(tcs, zone_idx)
 
@@ -500,7 +506,7 @@ class Zone(ZoneSchedule):
             if zone_type in (ZON_ROLE_MAP.ACT, ZON_ROLE_MAP.SEN):
                 return  # generic zone classes
             if zone_type not in ZON_ROLE_MAP.HEAT_ZONES:
-                raise TypeError
+                raise exc.SchemaInconsistentError(f"Invalid zone type: {zone_type}")
 
             klass = ZON_ROLE_MAP.slug(zone_type)  # not incl. DHW?
 
@@ -511,10 +517,14 @@ class Zone(ZoneSchedule):
                 None,
                 ZoneRole.ELE,
             ):
-                raise ValueError(f"Not a compatible zone class for {self}: {zone_type}")
+                raise exc.SchemaInconsistentError(
+                    f"Not a compatible zone class for {self}: {zone_type}"
+                )
 
             elif klass not in ZONE_CLASS_BY_SLUG:
-                raise ValueError(f"Not a known zone class (for {self}): {zone_type}")
+                raise exc.SchemaInconsistentError(
+                    f"Not a known zone class (for {self}): {zone_type}"
+                )
 
             if self._SLUG is not None:
                 raise exc.SystemSchemaInconsistent(
@@ -831,7 +841,7 @@ class Zone(ZoneSchedule):
         elif setpoint is not None:  # unsure if Hometronics supports setpoint of None
             cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, setpoint)
         else:
-            raise ValueError("Invalid mode/setpoint")
+            raise exc.CommandInvalid("Invalid mode/setpoint")
 
         return self._gwy.send_cmd(cmd, priority=Priority.HIGH)
 
@@ -879,9 +889,9 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
         # if msg.code == Code._0008:  # ZON zones are ELE zones that also call for heat
         #     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZON_ROLE.VAL]})
         if msg.code == Code._3150:
-            raise TypeError("WHAT 1")
+            raise exc.SystemInconsistent("EleZone cannot process 3150 (heat demand)")
         elif msg.code == Code._3EF0:
-            raise TypeError("WHAT 2")
+            raise exc.SystemInconsistent("EleZone cannot process 3EF0")
 
     @property
     def heat_demand(self) -> float | None:

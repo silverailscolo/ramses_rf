@@ -101,6 +101,7 @@ from ramses_tx.const import (
 )
 
 if TYPE_CHECKING:
+    from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Evohome, Zone
     from ramses_tx import Address, Message, Packet
     from ramses_tx.opentherm import OtDataId
@@ -323,8 +324,10 @@ class Controller(DeviceHeat):  # CTL (01):
     _SLUG = DevType.CTL
     _STATE_ATTR = HEAT_DEMAND
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
 
         # self.ctl = None
         self.tcs = None  # TODO: = self?
@@ -393,8 +396,10 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     # 12:27:24.824 059  I --- 01:191718 --:------ 01:191718 3150 002 FC5C
     # 12:27:24.857 067  I --- 02:000921 --:------ 02:000921 3150 006 0060-015A-025C
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
 
         self.circuit_by_id = {f"{i:02X}": {} for i in range(8)}
 
@@ -608,8 +613,10 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
     _SLUG: str = DevType.DHW
     _STATE_ATTR = DhwTemperature.TEMPERATURE
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
 
         self._child_id = FA  # NOTE: domain_id
 
@@ -685,8 +692,10 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         v: k for k, v in OT_TO_RAMSES.items() if v != Code._3EF0
     }  # also 10A0?
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
 
         self._child_id = FC  # NOTE: domain_id
 
@@ -1313,11 +1322,13 @@ class Thermostat(BatteryState, Setpoint, Temperature, Fakeable):  # THM (..):
             if self._iz_controller is None:
                 # _LOGGER.info(f"{msg!r} # IS_CONTROLLER (10): is FALSE")
                 self._iz_controller = False
-            elif self._iz_controller:  # TODO: raise CorruptStateError
-                _LOGGER.error(f"{msg!r} # IS_CONTROLLER (11): was TRUE, now False")
+            elif self._iz_controller:
+                raise exc.SystemInconsistent(
+                    f"{msg!r} # IS_CONTROLLER (11): was TRUE, now False"
+                )
 
-            if msg.code in CODES_ONLY_FROM_CTL:  # TODO: raise CorruptPktError
-                _LOGGER.error(f"{msg!r} # IS_CONTROLLER (12); is CORRUPT PKT")
+            if msg.code in CODES_ONLY_FROM_CTL:
+                raise exc.PacketInvalid(f"{msg!r} # IS_CONTROLLER (12); is CORRUPT PKT")
 
         elif all(
             (
@@ -1330,8 +1341,10 @@ class Thermostat(BatteryState, Setpoint, Temperature, Fakeable):  # THM (..):
                 # _LOGGER.info(f"{msg!r} # IS_CONTROLLER (20): is TRUE")
                 self._iz_controller = msg
                 self._make_tcs_controller(msg=msg)
-            elif self._iz_controller is False:  # TODO: raise CorruptStateError
-                _LOGGER.error(f"{msg!r} # IS_CONTROLLER (21): was FALSE, now True")
+            elif self._iz_controller is False:
+                raise exc.SystemInconsistent(
+                    f"{msg!r} # IS_CONTROLLER (21): was FALSE, now True"
+                )
 
     async def initiate_binding_process(self) -> Packet:
         return await super()._initiate_binding_process(
@@ -1356,8 +1369,8 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
     _SLUG = DevType.BDR
     _STATE_ATTR = "active"
 
-    # def __init__(self, *args: Any, **kwargs: Any) -> None:
-    #     super().__init__(*args, **kwargs)
+    # def __init__(self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any) -> None:
+    #     super().__init__(*args, traits=traits, **kwargs)
 
     #     if kwargs.get(SZ_DOMAIN_ID) == FC:  # TODO: F9/FA/FC, zone_idx
     #         self.ctl._set_app_cntrl(self)
@@ -1581,9 +1594,13 @@ def class_dev_heat(
         return HEAT_CLASS_BY_SLUG[slug]
 
     if not eavesdrop:
-        raise TypeError(f"No CH/DHW class for: {dev_addr} (no eavesdropping)")
+        raise exc.DeviceNotRecognised(
+            f"No CH/DHW class for: {dev_addr} (no eavesdropping)"
+        )
 
     if msg and msg.code in CODES_OF_HEAT_DOMAIN_ONLY:
         return DeviceHeat
 
-    raise TypeError(f"No CH/DHW class for: {dev_addr} (unknown type: {dev_addr.type})")
+    raise exc.DeviceNotRecognised(
+        f"No CH/DHW class for: {dev_addr} (unknown type: {dev_addr.type})"
+    )

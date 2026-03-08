@@ -23,7 +23,7 @@ from ..const import (
     Code,
     Priority,
 )
-from ..exceptions import ProtocolError, ProtocolSendFailed
+from ..exceptions import ProtocolError, ProtocolSendFailed, ProtocolTimeoutError
 from ..interfaces import TransportInterface
 from ..packet import Packet
 from ..typing import DeviceListT, MsgHandlerT, QosParams
@@ -246,6 +246,9 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         try:
             return await self._context.send_cmd(send_cmd, cmd, priority, qos)
+        except ProtocolTimeoutError as err:
+            _LOGGER.warning(f"{self}: Send timed out for {cmd._hdr}: {err}")
+            raise
         except ProtocolError as err:
             _LOGGER.info(f"{self}: Failed to send {cmd._hdr}: {err}")
             raise
@@ -277,8 +280,9 @@ class PortProtocol(_DeviceIdFilterMixin):
         sent first.
 
         Will raise:
-            ProtocolSendFailed: tried to Tx Command, but didn't get echo/reply
-            ProtocolError:      didn't attempt to Tx Command for some reason
+            ProtocolTimeoutError: global send timer expired before getting echo/reply.
+            ProtocolSendFailed:   tried to Tx Command, but didn't get echo/reply.
+            ProtocolError:        didn't attempt to Tx Command for some reason.
         """
         assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
         assert 0 <= num_repeats <= MAX_NUM_REPEATS, "Out of range: num_repeats"
