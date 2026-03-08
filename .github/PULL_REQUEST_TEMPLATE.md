@@ -1,6 +1,6 @@
 ---
 name: Pull Request
-about: Create a useful PR description to help improve ramses_cc
+about: Create a useful PR description to help improve ramses_rf
 title: ''
 labels: ''
 assignees: ''
