@@ -1,6 +1,6 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2026-03-07
+# last checked/updated: 2026-03-08
 #
 
 [project]
@@ -38,7 +38,7 @@
     "Topic :: Home Automation",
     "Programming Language :: Python :: 3.13",
   ]
-  requires-python = ">=3.12"        # HA core >=3.13.2
+  requires-python = ">=3.12"        # HA core >=3.14.2
   dependencies = [
     "aiofiles>=23.2.1",             # latest
     "colorlog>=6.9.0",              # latest
@@ -117,7 +117,7 @@
     "raise NotImplementedError",
   ]
   format = "text"
-  fail_under = 80  # total cov now 83%
+  fail_under = 80  # total cov now 82%
   ignore_errors = true
 
 [tool.coverage.html]
