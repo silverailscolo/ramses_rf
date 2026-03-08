@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from datetime import timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -489,13 +490,13 @@ class TestGetCluster(unittest.TestCase):
     def test_async_get_cluster_returns_none_raises(self) -> None:
         device = MagicMock()
         device.async_get_cluster.return_value = None
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             self.t._get_cluster(device, 1, 0xFC00, "out")
 
     def test_async_get_cluster_key_error_raises_transport_error(self) -> None:
         device = MagicMock()
         device.async_get_cluster.side_effect = KeyError("not found")
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             self.t._get_cluster(device, 1, 0xFC00, "out")
 
     # --- via endpoints map ---
@@ -529,7 +530,7 @@ class TestGetCluster(unittest.TestCase):
     def test_missing_endpoint_raises(self) -> None:
         device = MagicMock(spec=["endpoints"])
         device.endpoints = {}
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             self.t._get_cluster(device, 1, 0xFC00, "in")
 
     def test_missing_cluster_raises(self) -> None:
@@ -537,12 +538,12 @@ class TestGetCluster(unittest.TestCase):
         endpoint.in_clusters = {}
         device = MagicMock(spec=["endpoints"])
         device.endpoints = {1: endpoint}
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             self.t._get_cluster(device, 1, 0xFC00, "in")
 
     def test_device_without_endpoints_attr_raises(self) -> None:
         device = MagicMock(spec=[])  # no endpoints, no async_get_cluster
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             self.t._get_cluster(device, 1, 0xFC00, "in")
 
 
@@ -666,7 +667,7 @@ class TestWriteFrame(unittest.IsolatedAsyncioTestCase):
     async def test_closing_transport_raises(self) -> None:
         t = await self._make()
         t._closing = True
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             await t._write_frame("some frame")
 
     async def test_short_frame_sends_exactly_one_command(self) -> None:
@@ -721,7 +722,7 @@ class TestWaitForGateway(unittest.IsolatedAsyncioTestCase):
         t._GATEWAY_POLL_ATTEMPTS = 1
         t._GATEWAY_POLL_INTERVAL = 0.001
 
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             await t._wait_for_gateway()
 
     async def test_no_hass_raises_transport_error(self) -> None:
@@ -730,7 +731,7 @@ class TestWaitForGateway(unittest.IsolatedAsyncioTestCase):
         t._GATEWAY_POLL_ATTEMPTS = 1
         t._GATEWAY_POLL_INTERVAL = 0.001
 
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             await t._wait_for_gateway()
 
 
@@ -758,7 +759,7 @@ class TestSendCommand(unittest.IsolatedAsyncioTestCase):
         t = _make_transport()
         t._write_cluster = None
         t._device = None
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             await t._send_command("test", 1, 1)
 
     async def test_key_error_falls_back_to_server_command(self) -> None:
@@ -776,7 +777,7 @@ class TestSendCommand(unittest.IsolatedAsyncioTestCase):
         if hasattr(cluster, "command"):
             cluster.command = AsyncMock(side_effect=RuntimeError("fail"))
         # Should raise TransportError after retries exhausted
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             await t._send_command("test", 1, 1)
 
 
@@ -863,7 +864,7 @@ class TestClusterBinding(unittest.TestCase):
 
     def test_refresh_write_cluster_get_cluster_failure_returns_none(self) -> None:
         self.t._device = MagicMock()
-        self.t._get_cluster = MagicMock(side_effect=exc.TransportError("missing"))
+        self.t._get_cluster = MagicMock(side_effect=exc.TransportZigbeeError("missing"))
         result = self.t._refresh_write_cluster()
         self.assertIsNone(result)
 
@@ -892,7 +893,7 @@ class TestBindAndConfigure(unittest.IsolatedAsyncioTestCase):
     async def test_no_cluster_raises(self) -> None:
         t = _make_transport()
         t._cluster = None
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             await t._bind_and_configure()
 
     async def test_command_mode_skips_bind_and_configure(self) -> None:
@@ -1107,7 +1108,7 @@ class TestAttachClustersFallback(unittest.TestCase):
         ep.out_clusters = {}
         device = MagicMock(spec=["endpoints"])
         device.endpoints = {1: ep}
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             t._attach_clusters(device)
 
     def test_write_cluster_fallback_finds_on_different_endpoint(self) -> None:
@@ -1144,7 +1145,7 @@ class TestAttachClustersFallback(unittest.TestCase):
         device = MagicMock(spec=["endpoints"])
         device.endpoints = {1: ep1}  # no ep2 → write cluster 0xFC01 not found
 
-        with self.assertRaises(exc.TransportError):
+        with self.assertRaises(exc.TransportZigbeeError):
             t._attach_clusters(device)
 
 
@@ -1211,7 +1212,7 @@ class TestSendChunk(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.dict("sys.modules", {"zigpy": MagicMock()}),
-            self.assertRaises(exc.TransportError),
+            self.assertRaises(exc.TransportZigbeeError),
         ):
             await t._send_chunk("payload", 1, 1)
 
@@ -1229,7 +1230,7 @@ class TestSendChunk(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.dict("sys.modules", {"zigpy": mock_zigpy}),
-            self.assertRaises(exc.TransportError),
+            self.assertRaises(exc.TransportZigbeeError),
         ):
             await t._send_chunk("payload", 1, 1)
 
@@ -1305,6 +1306,86 @@ class TestMaybeHandleChunkErrorDelivery(unittest.TestCase):
         # 1/1 triggers immediate delivery
         result = self.t._maybe_handle_incoming_chunk("1/1|hello")
         self.assertTrue(result)  # must still return True (chunk was handled)
+
+
+# ---------------------------------------------------------------------------
+# 24. Task Tracking & Cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestTaskTracking(unittest.TestCase):
+    """Tests for task registry and cleanup."""
+
+    def setUp(self) -> None:
+        self.t = _make_transport()
+        self.t._tasks.clear()
+
+    def test_track_task_adds_and_clears(self) -> None:
+        mock_task = MagicMock()
+        self.t._track_task(mock_task)
+
+        self.assertIn(mock_task, self.t._tasks)
+        mock_task.add_done_callback.assert_called_once()
+
+        # Simulate the callback firing
+        callback = mock_task.add_done_callback.call_args[0][0]
+        callback(mock_task)
+        self.assertNotIn(mock_task, self.t._tasks)
+
+    def test_close_cancels_pending_tasks(self) -> None:
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        self.t._tasks.add(mock_task)
+        self.t.close()
+        mock_task.cancel.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# 25. Chunk Buffer TTL Cleanup
+# ---------------------------------------------------------------------------
+
+
+class TestChunkBufferTTL(unittest.TestCase):
+    """Tests for stale chunk buffer garbage collection."""
+
+    def setUp(self) -> None:
+        self.t = _make_transport()
+
+    def test_cleanup_removes_stale_buffers(self) -> None:
+        from ramses_tx.helpers import dt_now
+
+        old_time = dt_now() - timedelta(seconds=self.t._CHUNK_TIMEOUT + 1)
+        fresh_time = dt_now()
+
+        self.t._chunk_buffers["stale_device"] = {
+            "timestamp": old_time,
+            "total": 2,
+            "parts": [None, None],
+        }
+        self.t._chunk_buffers["fresh_device"] = {
+            "timestamp": fresh_time,
+            "total": 2,
+            "parts": [None, None],
+        }
+
+        self.t._cleanup_chunk_buffers()
+
+        self.assertNotIn("stale_device", self.t._chunk_buffers)
+        self.assertIn("fresh_device", self.t._chunk_buffers)
+
+    def test_maybe_handle_triggers_cleanup(self) -> None:
+        from ramses_tx.helpers import dt_now
+
+        old_time = dt_now() - timedelta(seconds=self.t._CHUNK_TIMEOUT + 1)
+        self.t._chunk_buffers["stale_device"] = {
+            "timestamp": old_time,
+            "total": 2,
+            "parts": [None, None],
+        }
+
+        # Calling handle on a normal chunk should trigger the cleanup pass
+        self.t._maybe_handle_incoming_chunk("1/1|data")
+        self.assertNotIn("stale_device", self.t._chunk_buffers)
 
 
 if __name__ == "__main__":

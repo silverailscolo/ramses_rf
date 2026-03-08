@@ -61,6 +61,10 @@ class TransportSourceInvalid(TransportError):
     """The source of packets (frames) is not valid type/configuration."""
 
 
+class TransportZigbeeError(TransportError):
+    """A failure occurred specifically within the Zigbee ZHA transport layer."""
+
+
 ########################################################################################
 # Errors at/below the protocol/transport layer, incl. packet processing
 
