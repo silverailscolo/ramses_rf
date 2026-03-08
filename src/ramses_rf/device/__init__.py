@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from ramses_rf import exceptions as exc
 from ramses_rf.const import DEV_TYPE_MAP
 from ramses_rf.models import DeviceTraits
 from ramses_tx.const import DevType
@@ -139,7 +140,7 @@ def best_dev_role(
                 f"Using the default Heat class for: {dev_addr!r} ({cls._SLUG})"
             )
             return cls
-    except TypeError:
+    except exc.DeviceNotRecognised:
         pass
 
     try:  # or, a HVAC class, eavesdropped from the message code/payload...
@@ -148,7 +149,7 @@ def best_dev_role(
                 f"Using eavesdropped HVAC class for: {dev_addr!r} ({cls._SLUG})"
             )
             return cls  # includes DeviceHvac
-    except TypeError:
+    except exc.DeviceNotRecognised:
         pass
 
     # otherwise, use the default device class...
@@ -184,7 +185,7 @@ def device_factory(
         and traits.device_class in (DevType.HVC, None)
         and traits.faked
     ):
-        raise TypeError(
+        raise exc.SchemaInconsistentError(
             f"Faked devices from the HVAC domain must have an explicit class: {dev_addr}"
         )
 

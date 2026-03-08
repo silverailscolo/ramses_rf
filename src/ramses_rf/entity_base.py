@@ -370,7 +370,9 @@ class _MessageDB(_Entity):
             # only 1 result expected since hdr is a unique key in _gwy.msg_db
             if msgs:
                 if msgs[0]._pkt._hdr != hdr:
-                    raise LookupError
+                    raise exc.DatabaseQueryError(
+                        f"Header mismatch: {msgs[0]._pkt._hdr} != {hdr}"
+                    )
                 return msgs[0]
         else:
             msg: Message
@@ -393,7 +395,9 @@ class _MessageDB(_Entity):
                 return None
 
             if msg._pkt._hdr != hdr:
-                raise LookupError
+                raise exc.DatabaseQueryError(
+                    f"Header mismatch: {msg._pkt._hdr} != {hdr}"
+                )
             return msg
         return None
 
@@ -968,9 +972,10 @@ class _Discovery(_MessageDB):
         Both `timeout` and `delay` are in seconds.
         """
 
-        if cmd.rx_header is None:  # TODO: raise TypeError
-            _LOGGER.warning(f"cmd({cmd}): invalid (null) header not added to discovery")
-            return
+        if cmd.rx_header is None:
+            raise exc.CommandInvalid(
+                f"cmd({cmd}): invalid (null) header not added to discovery"
+            )
 
         if cmd.rx_header in self.discovery_cmds:
             _LOGGER.info(f"cmd({cmd}): duplicate header not added to discovery")
@@ -1268,7 +1273,7 @@ class Parent(Entity):  # A System, Zone, DhwZone or a UfhController
             self._sensor = child
 
         elif is_sensor:
-            raise TypeError(
+            raise exc.SchemaInconsistentError(
                 f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
             )
 
@@ -1306,7 +1311,7 @@ class Parent(Entity):  # A System, Zone, DhwZone or a UfhController
             pass
 
         else:
-            raise TypeError(
+            raise exc.SchemaInconsistentError(
                 f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
             )
 
@@ -1377,7 +1382,7 @@ class Child(Entity):  # A Zone, Device or a UfhCircuit
     ) -> tuple[Parent, str | None]:
         """Get the device's parent, after validating it."""
         if parent is None:
-            raise TypeError(f"{self}: parent cannot be None")
+            raise exc.SchemaInconsistentError(f"{self}: parent cannot be None")
 
         parent_class = parent.__class__.__name__
         self_class = self.__class__.__name__
@@ -1416,7 +1421,7 @@ class Child(Entity):  # A Zone, Device or a UfhCircuit
             child_id = child_id or getattr(parent, "idx", None)
 
         elif parent_class == "UfhController" and not child_id:
-            raise TypeError(
+            raise exc.SchemaInconsistentError(
                 f"{self}: can't set child_id to: {child_id} "
                 f"(for Circuits, it must be a circuit_idx)"
             )
@@ -1466,44 +1471,44 @@ class Child(Entity):  # A Zone, Device or a UfhCircuit
 
         rules = PARENT_RULES.get(parent_class)
         if not rules:
-            raise TypeError(
+            raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: not a valid parent "
                 f"(it must be {tuple(PARENT_RULES.keys())})"
             )
 
         if is_sensor and self_class not in rules[SZ_SENSOR]:
-            raise TypeError(
+            raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: Sensor {self} must be {rules[SZ_SENSOR]}"
             )
         if not is_sensor and self_class not in rules[SZ_ACTUATORS]:
-            raise TypeError(
+            raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: Actuator {self} must be {rules[SZ_ACTUATORS]}"
             )
 
         if "Zone" in parent_class and parent_class != "DhwZone":
             parent_idx = getattr(parent, "idx", None)  # noqa: B009
             if child_id != parent_idx:
-                raise TypeError(
+                raise exc.SchemaInconsistentError(
                     f"{self}: can't set child_id to: {child_id} "
                     f"(it must match its parent's zone idx, {parent_idx})"
                 )
 
         elif parent_class == "DhwZone":  # usu. FA (HW), could be F9
             if child_id not in (F9, FA):  # may not be known if eavesdrop'd
-                raise TypeError(
+                raise exc.SchemaInconsistentError(
                     f"{self}: can't set child_id to: {child_id} "
                     f"(for DHW, it must be F9 or FA)"
                 )
 
         elif parent_class in ("System", "Evohome"):  # usu. FC
             if child_id not in (FC, FF):  # was: not in (F9, FA, FC, "HW"):
-                raise TypeError(
+                raise exc.SchemaInconsistentError(
                     f"{self}: can't set child_id to: {child_id} "
                     f"(for TCS, it must be FC)"
                 )
 
         elif parent_class != "UfhController":  # is like CTL/TCS combined
-            raise TypeError(
+            raise exc.SchemaInconsistentError(
                 f"{self}: can't set Parent to: {parent} "
                 f"(it must be System, DHW, Zone, or UfhController)"
             )

@@ -68,6 +68,7 @@ from ramses_tx.typing import PktLogConfigT, PortConfigT
 from .database import MessageIndex
 from .device import DeviceHeat, DeviceHvac, Fakeable, HgiGateway, device_factory
 from .dispatcher import detect_array_fragment, process_msg
+from .exceptions import DeviceNotFaked, DeviceNotFoundError, SchemaInconsistentError
 from .interfaces import GatewayInterface, MessageIndexInterface
 from .models import DeviceTraits
 from .schemas import load_schema
@@ -520,11 +521,11 @@ class Gateway(Engine, GatewayInterface):
         :type dev: Device
         :returns: None
         :rtype: None
-        :raises LookupError: If the device already exists in the gateway.
+        :raises SchemaInconsistentError: If the device already exists in the gateway.
         """
 
         if dev.id in self.device_by_id:
-            raise LookupError(f"Device already exists: {dev.id}")
+            raise SchemaInconsistentError(f"Device already exists: {dev.id}")
 
         self.devices.append(dev)
         self.device_by_id[dev.id] = dev
@@ -556,34 +557,36 @@ class Gateway(Engine, GatewayInterface):
         :type is_sensor: bool | None, optional
         :returns: The existing or newly created device instance.
         :rtype: Device
-        :raises LookupError: If the device ID is blocked or not in the allowed known_list.
+        :raises DeviceNotFoundError: If the device ID is blocked or not in the allowed known_list.
         """
 
-        def check_filter_lists(dev_id: DeviceIdT) -> None:  # may: LookupError
-            """Raise a LookupError if a device_id is filtered out by a list."""
+        def check_filter_lists(dev_id: DeviceIdT) -> None:  # may: DeviceNotFoundError
+            """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
 
             if dev_id in self._unwanted:  # TODO: shouldn't invalidate a msg
-                raise LookupError(f"Can't create {dev_id}: it is unwanted or invalid")
+                raise DeviceNotFoundError(
+                    f"Can't create {dev_id}: it is unwanted or invalid"
+                )
 
             if self._enforce_known_list and (
                 dev_id not in self._include and dev_id != getattr(self.hgi, "id", None)
             ):
                 self._unwanted.append(dev_id)
-                raise LookupError(
+                raise DeviceNotFoundError(
                     f"Can't create {dev_id}: it is not an allowed device_id"
                     f" (if required, add it to the {SZ_KNOWN_LIST})"
                 )
 
             if dev_id in self._exclude:
                 self._unwanted.append(dev_id)
-                raise LookupError(
+                raise DeviceNotFoundError(
                     f"Can't create {dev_id}: it is a blocked device_id"
                     f" (if required, remove it from the {SZ_BLOCK_LIST})"
                 )
 
         try:
             check_filter_lists(device_id)
-        except LookupError:
+        except DeviceNotFoundError:
             # have to allow for GWY not being in known_list...
             if device_id != self._protocol.hgi_id:
                 raise  # TODO: make parochial
@@ -636,24 +639,27 @@ class Gateway(Engine, GatewayInterface):
         :type create_device: bool, optional
         :returns: The faked device instance.
         :rtype: Device | Fakeable
-        :raises TypeError: If the device ID is invalid or the device is not fakeable.
-        :raises LookupError: If the device does not exist and create_device is False,
+        :raises SchemaInconsistentError: If the device ID is invalid.
+        :raises DeviceNotFoundError: If the device does not exist and create_device is False,
                              or if create_device is True but the ID is not in known_list.
+        :raises DeviceNotFaked: If the device is not fakeable.
         """
 
         if not is_valid_dev_id(device_id):
-            raise TypeError(f"The device id is not valid: {device_id}")
+            raise SchemaInconsistentError(f"The device id is not valid: {device_id}")
 
         if not create_device and device_id not in self.device_by_id:
-            raise LookupError(f"The device id does not exist: {device_id}")
+            raise DeviceNotFoundError(f"The device id does not exist: {device_id}")
         elif create_device and device_id not in self.known_list:
-            raise LookupError(f"The device id is not in the known_list: {device_id}")
+            raise DeviceNotFoundError(
+                f"The device id is not in the known_list: {device_id}"
+            )
 
         if (dev := self.get_device(device_id)) and isinstance(dev, Fakeable):
             dev._make_fake()
             return dev
 
-        raise TypeError(f"The device is not fakeable: {device_id}")
+        raise DeviceNotFaked(f"The device is not fakeable: {device_id}")
 
     @property
     def tcs(self) -> Evohome | None:

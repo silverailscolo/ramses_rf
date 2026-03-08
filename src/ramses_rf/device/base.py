@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 from ramses_rf.binding_fsm import BindContext, Vendor
 from ramses_rf.const import DEV_TYPE_MAP, SZ_OEM_CODE, DevType
 from ramses_rf.entity_base import Child, Entity, class_by_attr
+from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
 from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED, SZ_KNOWN_LIST
 from ramses_tx import Command, Packet, Priority, QosParams
 from ramses_tx.ramses import CODES_BY_DEV_SLUG, CODES_ONLY_FROM_CTL
@@ -91,12 +92,14 @@ class DeviceBase(Entity):
         """Update a device with new schema attributes.
 
         :param traits: The traits to apply (e.g., alias, class, faked)
-        :raises TypeError: If the device is not fakeable but 'faked' is set.
+        :raises DeviceNotFaked: If the device is not fakeable but 'faked' is set.
         """
 
         if traits.faked:  # class & alias are done elsewhere
             if not isinstance(self, Fakeable):
-                raise TypeError(f"Device is not fakeable: {self} (traits={traits})")
+                raise DeviceNotFaked(
+                    f"Device is not fakeable: {self} (traits={traits})"
+                )
             self._make_fake()
 
         self._scheme = traits.scheme
@@ -362,7 +365,7 @@ class Fakeable(DeviceBase):
         """
 
         if not self._bind_context:
-            raise TypeError(f"{self}: Faking not enabled")
+            raise DeviceNotFaked(f"{self}: Faking not enabled")
 
         msgs = await self._bind_context.wait_for_binding_request(
             accept_codes, idx=idx, require_ratify=require_ratify
@@ -391,7 +394,7 @@ class Fakeable(DeviceBase):
         # confirm_code can be FFFF.
 
         if not self._bind_context:
-            raise TypeError(f"{self}: Faking not enabled")
+            raise DeviceNotFaked(f"{self}: Faking not enabled")
 
         if isinstance(offer_codes, Iterable):
             codes: tuple[Code] = offer_codes
@@ -494,7 +497,9 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         """Attach a TCS (create/update as required) after passing it any msg."""
 
         if self.type not in DEV_TYPE_MAP.CONTROLLERS:  # potentially can be controllers
-            raise TypeError(f"Invalid device type to be a controller: {self}")
+            raise SchemaInconsistentError(
+                f"Invalid device type to be a controller: {self}"
+            )
 
         self._iz_controller = self._iz_controller or msg or True
 

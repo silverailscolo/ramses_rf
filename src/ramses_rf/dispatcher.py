@@ -85,7 +85,7 @@ def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
     #  - eavesdrop: from packet fingerprint, incl. payloads
 
     if not isinstance(this.src, Device):  # type: ignore[unreachable]
-        # may: LookupError, but don't suppress
+        # may: DeviceNotFoundError, but don't suppress
         this.src = gwy.get_device(this.src.id)  # type: ignore[assignment]
         if this.dst.id == this.src.id:
             this.dst = this.src
@@ -95,7 +95,7 @@ def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
         return
 
     if not isinstance(this.dst, Device) and this.src != gwy.hgi:  # type: ignore[unreachable]
-        with contextlib.suppress(LookupError):
+        with contextlib.suppress(exc.DeviceNotFoundError):
             this.dst = gwy.get_device(this.dst.id)  # type: ignore[assignment]
 
 
@@ -237,7 +237,7 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
 
         try:
             _create_devices_from_addrs(gwy, msg)
-        except LookupError as err:
+        except exc.DeviceNotFoundError as err:
             (_LOGGER.error if _DBG_INCREASE_LOG_LEVELS else _LOGGER.warning)(
                 "%s < %s(%s)", msg._pkt, err.__class__.__name__, err
             )

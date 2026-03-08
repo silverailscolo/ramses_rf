@@ -1175,10 +1175,12 @@ def class_dev_hvac(
     """
 
     if not eavesdrop:
-        raise TypeError(f"No HVAC class for: {dev_addr} (no eavesdropping)")
+        raise exc.DeviceNotRecognised(
+            f"No HVAC class for: {dev_addr} (no eavesdropping)"
+        )
 
     if msg is None:
-        raise TypeError(f"No HVAC class for: {dev_addr} (no msg)")
+        raise exc.DeviceNotRecognised(f"No HVAC class for: {dev_addr} (no msg)")
 
     if klass := HVAC_KLASS_BY_VC_PAIR.get((msg.verb, msg.code)):
         return HVAC_CLASS_BY_SLUG[klass]
@@ -1186,7 +1188,9 @@ def class_dev_hvac(
     if msg.code in CODES_OF_HVAC_DOMAIN_ONLY:
         return DeviceHvac
 
-    raise TypeError(f"No HVAC class for: {dev_addr} (insufficient meta-data)")
+    raise exc.DeviceNotRecognised(
+        f"No HVAC class for: {dev_addr} (insufficient meta-data)"
+    )
 
 
 _REMOTES = {
