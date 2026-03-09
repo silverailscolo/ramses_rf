@@ -67,13 +67,13 @@ prek --version
 ```
 Finally, install the pre-commit hooks, and confirm all tests pass:
 ```bash
-prek commandline
+prek install
 ```
 ```
 prek installed at .git/hooks/pre-commit
 ```
 
-Since we have moved from `pre-commit` to `prek`, a much faster drop-in replacement, you should update existing pre-commit hooks to use prek. Run:
+Since we have moved from `pre-commit` to `prek`, a much faster drop-in replacement, you should update existing pre-commit hooks to use `prek` by running:
 ```commandline
 prek install -f
 ```
