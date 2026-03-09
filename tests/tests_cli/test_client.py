@@ -85,21 +85,26 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     mock_dev = MagicMock()
     mock_dev.id = "01:123456"
     mock_dev.type = DEV_TYPE_MAP.CTL  # Controller
-    mock_dev.schema = {"mock": "schema"}
-    mock_dev.params = {"mock": "params"}
-    mock_dev.status = {"mock": "status"}
-    mock_dev.traits = {"mock": "traits"}
+
+    # These are now async methods
+    mock_dev.schema = AsyncMock(return_value={"mock": "schema"})
+    mock_dev.params = AsyncMock(return_value={"mock": "params"})
+    mock_dev.status = AsyncMock(return_value={"mock": "status"})
+    mock_dev.traits = AsyncMock(return_value={"mock": "traits"})
+
     # Mock message database interaction for show_crazys
-    mock_dev._msgz = {
-        Code._0005: {"verb": {"pkt": "msg_0005"}},
-        Code._000C: {"verb": {"pkt": "msg_000C"}},
-    }
+    mock_dev._msgz = AsyncMock(
+        return_value={
+            Code._0005: {"verb": {"pkt": "msg_0005"}},
+            Code._000C: {"verb": {"pkt": "msg_000C"}},
+        }
+    )
 
     gateway.devices = [mock_dev]
     gateway.tcs = None  # mimic no TCS
-    gateway.schema = {"global": "schema"}
-    gateway.params = {"global": "params"}
-    gateway.status = {"global": "status"}
+    gateway.schema = AsyncMock(return_value={"global": "schema"})
+    gateway.params = AsyncMock(return_value={"global": "params"})
+    gateway.status = AsyncMock(return_value={"global": "status"})
 
     # Add msg_db attribute
     gateway.msg_db = MessageIndex(maintain=False)
@@ -246,7 +251,7 @@ async def test_print_summary(
         "show_crazys": True,
     }
 
-    print_summary(mock_gateway, **kwargs)
+    await print_summary(mock_gateway, **kwargs)
 
     captured = capsys.readouterr()
     output = captured.out

@@ -85,10 +85,10 @@ _LOGGER = logging.getLogger(__name__)
 class ZoneBase(Child, Parent, Entity):
     """The Zone/DHW base class."""
 
-    _SLUG: str = None
+    _SLUG: str | None = None
 
-    _ROLE_ACTUATORS: str = None
-    _ROLE_SENSORS: str = None
+    _ROLE_ACTUATORS: str | None = None
+    _ROLE_SENSORS: str | None = None
 
     def __init__(self, tcs: _MultiZoneT | _StoredHwT, zone_idx: str) -> None:
         super().__init__(tcs._gwy)
@@ -135,18 +135,15 @@ class ZoneBase(Child, Parent, Entity):
     def idx(self) -> str:
         return self._child_id
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
         """Return the schema (can't change without destroying/re-creating entity)."""
         return {}
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
         """Return configuration (can be changed by user)."""
         return {}
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the current state."""
         return {}
 
@@ -180,14 +177,13 @@ class ZoneSchedule(ZoneBase):  # 0404
         return self._schedule.schedule
 
     @property
-    def schedule_version(self) -> int | None:  # TODO: make int
+    def schedule_version(self) -> int | None:
         """Return the version number associated with the latest retrieved schedule."""
         return self._schedule.version
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         return {
-            **super().status,
+            **(await super().status()),
             "schedule_version": self.schedule_version,
         }
 
@@ -215,8 +211,6 @@ class DhwZone(ZoneSchedule):  # CS92A
         self._htg_valve: BdrSwitch | None = None
 
     def _setup_discovery_cmds(self) -> None:
-        # super()._setup_discovery_cmds()
-
         for payload in (
             f"00{DEV_ROLE_MAP.DHW}",  # sensor
             f"00{DEV_ROLE_MAP.HTG}",  # hotwater_valve
@@ -228,7 +222,6 @@ class DhwZone(ZoneSchedule):  # CS92A
             )
 
         self._add_discovery_cmd(Command.get_dhw_params(self.ctl.id), 60 * 60 * 6)
-
         self._add_discovery_cmd(Command.get_dhw_mode(self.ctl.id), 60 * 5)
         self._add_discovery_cmd(Command.get_dhw_temp(self.ctl.id), 60 * 15)
 
@@ -337,52 +330,48 @@ class DhwZone(ZoneSchedule):  # CS92A
             self._htg_valve = htg_valve
 
     @property
-    def sensor(self) -> DhwSensor | None:  # self._dhw_sensor
+    def sensor(self) -> DhwSensor | None:
         return self._dhw_sensor
 
     @property
-    def hotwater_valve(self) -> BdrSwitch | None:  # self._dhw_valve
+    def hotwater_valve(self) -> BdrSwitch | None:
         return self._dhw_valve
 
     @property
-    def heating_valve(self) -> BdrSwitch | None:  # self._htg_valve
+    def heating_valve(self) -> BdrSwitch | None:
         return self._htg_valve
 
-    @property
-    def name(self) -> str:
+    async def name(self) -> str:
         return "Stored HW"
 
-    @property
-    def config(self) -> dict[str, Any] | None:  # 10A0
-        return cast(dict[str, Any] | None, self._msg_value(Code._10A0))
+    async def config(self) -> dict[str, Any] | None:  # 10A0
+        return cast(dict[str, Any] | None, await self._msg_value(Code._10A0))
 
-    @property
-    def mode(self) -> dict[str, Any] | None:  # 1F41
-        return cast(dict[str, Any] | None, self._msg_value(Code._1F41))
+    async def mode(self) -> dict[str, Any] | None:  # 1F41
+        return cast(dict[str, Any] | None, await self._msg_value(Code._1F41))
 
-    @property
-    def setpoint(self) -> float | None:  # 10A0
-        return cast(float | None, self._msg_value(Code._10A0, key=SZ_SETPOINT))
+    async def setpoint(self) -> float | None:  # 10A0
+        return cast(float | None, await self._msg_value(Code._10A0, key=SZ_SETPOINT))
 
-    @setpoint.setter  # TODO: can value be None?
-    def setpoint(self, value: float) -> None:  # 10A0
-        self.set_config(setpoint=value)
+    def set_setpoint(self, value: float) -> asyncio.Task[Packet]:  # 10A0
+        """Set the target temperature for the DHW zone."""
+        return self.set_config(setpoint=value)
 
-    @property
-    def temperature(self) -> float | None:  # 1260
-        return cast(float | None, self._msg_value(Code._1260, key=SZ_TEMPERATURE))
+    async def temperature(self) -> float | None:  # 1260
+        return cast(float | None, await self._msg_value(Code._1260, key=SZ_TEMPERATURE))
 
-    @property
-    def heat_demand(self) -> float | None:  # 3150
-        return cast(float | None, self._msg_value(Code._3150, key=SZ_HEAT_DEMAND))
+    async def heat_demand(self) -> float | None:  # 3150
+        return cast(float | None, await self._msg_value(Code._3150, key=SZ_HEAT_DEMAND))
 
-    @property
-    def relay_demand(self) -> float | None:  # 0008
-        return cast(float | None, self._msg_value(Code._0008, key=SZ_RELAY_DEMAND))
+    async def relay_demand(self) -> float | None:  # 0008
+        return cast(
+            float | None, await self._msg_value(Code._0008, key=SZ_RELAY_DEMAND)
+        )
 
-    @property  # only seen with FC, but seems should pair with 0008?
-    def relay_failsafe(self) -> float | None:  # 0009
-        return cast(float | None, self._msg_value(Code._0009, key=SZ_RELAY_FAILSAFE))
+    async def relay_failsafe(self) -> float | None:  # 0009
+        return cast(
+            float | None, await self._msg_value(Code._0009, key=SZ_RELAY_FAILSAFE)
+        )
 
     def set_mode(
         self,
@@ -437,8 +426,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         """Reset the DHW parameters to their default values."""
         return self.set_config(setpoint=50, overrun=5, differential=1)
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
         """Return the schema of the DHW's."""
         return {
             SZ_SENSOR: self.sensor.id if self.sensor else None,
@@ -446,21 +434,25 @@ class DhwZone(ZoneSchedule):  # CS92A
             SZ_HTG_VALVE: self.heating_valve.id if self.heating_valve else None,
         }
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
         """Return the DHW's configuration (excl. schedule)."""
-        return {a: getattr(self, a) for a in ("config", "mode")}
+        return {
+            "config": await self.config(),
+            "mode": await self.mode(),
+        }
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the DHW's current state."""
-        return {a: getattr(self, a) for a in (SZ_TEMPERATURE, SZ_HEAT_DEMAND)}
+        return {
+            SZ_TEMPERATURE: await self.temperature(),
+            SZ_HEAT_DEMAND: await self.heat_demand(),
+        }
 
 
 class Zone(ZoneSchedule):
     """The Zone class for all zone types (but not DHW)."""
 
-    _SLUG: str = None
+    _SLUG: str | None = None
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.ACT
 
     def __init__(self, tcs: _MultiZoneT, zone_idx: str) -> None:
@@ -607,8 +599,7 @@ class Zone(ZoneSchedule):
 
     def _handle_msg(self, msg: Message) -> None:
         def eavesdrop_zone_type(this: Message, *, prev: Message | None = None) -> None:
-            """TODO.
-
+            """Determine the type of a zone by eavesdropping.
             There are three ways to determine the type of a zone:
             1. Use a 0005 packet (deterministic)
             2. Eavesdrop (non-deterministic, slow to converge)
@@ -691,8 +682,8 @@ class Zone(ZoneSchedule):
         ):
             eavesdrop_zone_type(msg)
 
-    def _msg_value(self, *args: Any, **kwargs: Any) -> Any:
-        return super()._msg_value(*args, **kwargs, zone_idx=self.idx)
+    async def _msg_value(self, *args: Any, **kwargs: Any) -> Any:
+        return await super()._msg_value(*args, **kwargs, zone_idx=self.idx)
 
     @property
     def sensor(self) -> Device | None:
@@ -701,55 +692,45 @@ class Zone(ZoneSchedule):
     @property
     def heating_type(self) -> str | None:
         """Get the type of the zone/DHW (e.g. electric_zone, stored_dhw)."""
-
-        if self._SLUG is None:  # isinstance(self, ???)
+        if self._SLUG is None:
             return None
-        return ZON_ROLE_MAP[self._SLUG]  # type: ignore[no-any-return]
+        return cast(str, ZON_ROLE_MAP[self._SLUG])
 
-    @property
-    def name(self) -> str | None:  # 0004
+    async def name(self) -> str | None:  # 0004
         """Get the name of the zone."""
 
         if self._gwy.msg_db:
-            msgs = self._gwy.msg_db.get(
+            msgs = await self._gwy.msg_db.get(
                 code=Code._0004, src=self._z_id, ctx=self._z_idx
             )
             _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")  # DEBUG issue #317
-            return msgs[0].payload.get(SZ_NAME) if msgs else None
+            return cast(str, msgs[0].payload.get(SZ_NAME)) if msgs else None
 
-        return cast(str | None, self._msg_value(Code._0004, key=SZ_NAME))
+        return cast(str | None, await self._msg_value(Code._0004, key=SZ_NAME))
 
-    @name.setter
-    def name(self, value: str) -> None:
-        raise NotImplementedError("The setter has been deprecated, use: .set_name()")
+    async def config(self) -> dict[str, Any] | None:  # 000A
+        return cast(dict[str, Any] | None, await self._msg_value(Code._000A))
 
-    @property
-    def config(self) -> dict[str, Any] | None:  # 000A
-        return cast(dict[str, Any] | None, self._msg_value(Code._000A))
+    async def mode(self) -> dict[str, Any] | None:  # 2349
+        return cast(dict[str, Any] | None, await self._msg_value(Code._2349))
 
-    @property
-    def mode(self) -> dict[str, Any] | None:  # 2349
-        return cast(dict[str, Any] | None, self._msg_value(Code._2349))
-
-    @property
-    def setpoint(self) -> float | None:  # 2309 (2349 is a superset of 2309)
+    async def setpoint(self) -> float | None:  # 2309 (2349 is a superset of 2309)
         return cast(
             float | None,
-            self._msg_value((Code._2309, Code._2349), key=SZ_SETPOINT),
+            await self._msg_value((Code._2309, Code._2349), key=SZ_SETPOINT),
         )
 
-    @setpoint.setter  # TODO: can value be None?
-    def setpoint(self, value: float) -> None:  # 000A/2309
+    def set_setpoint(
+        self, value: float | None
+    ) -> asyncio.Task[Packet] | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""
-
         if value is None:
-            self.reset_mode()
+            return self.reset_mode()
 
         cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, value)
-        self._gwy.send_cmd(cmd, priority=Priority.HIGH)
+        return self._gwy.send_cmd(cmd, priority=Priority.HIGH)
 
-    @property
-    def temperature(self) -> float | None:  # 30C9
+    async def temperature(self) -> float | None:  # 30C9
         if self._gwy.msg_db:
             # evohome zones only get initial temp from src + idx, so use zone sensor if newer
             sql = f"""
@@ -762,30 +743,30 @@ class Zone(ZoneSchedule):
             if self._sensor:
                 sensor_id = self._sensor.id
             # custom SQLite query on MessageIndex
-            msgs = self._gwy.msg_db.qry(
+            msgs = await self._gwy.msg_db.qry(
                 sql, (self.id[:_ID_SLICE], self.idx, sensor_id[:_ID_SLICE])
             )
             if msgs and len(msgs) > 0:
                 msgs_sorted = sorted(msgs, reverse=True)
                 return msgs_sorted[0].payload.get(SZ_TEMPERATURE)  # type: ignore[no-any-return]
             return None
-        # else: TODO Q1 2026 remove remainder
-        return cast(float | None, self._msg_value(Code._30C9, key=SZ_TEMPERATURE))
 
-    @property
-    def heat_demand(self) -> float | None:  # 3150
+        return cast(float | None, await self._msg_value(Code._30C9, key=SZ_TEMPERATURE))
+
+    async def heat_demand(self) -> float | None:  # 3150
         """Return the zone's heat demand, estimated from its devices' heat demand."""
-        demands = [
-            d.heat_demand
-            for d in self.actuators  # TODO: actuators
-            if hasattr(d, SZ_HEAT_DEMAND) and d.heat_demand is not None
-        ]
+        demands = []
+        for d in self.actuators:
+            if hasattr(d, "heat_demand"):
+                demand = await d.heat_demand()
+                if demand is not None:
+                    demands.append(demand)
+
         return _transform(max(demands + [0])) if demands else None
 
-    @property
-    def window_open(self) -> bool | None:  # 12B0
+    async def window_open(self) -> bool | None:  # 12B0
         """Return an estimate of the zone's current window_open state."""
-        return cast(bool | None, self._msg_value(Code._12B0, key=SZ_WINDOW_OPEN))
+        return cast(bool | None, await self._msg_value(Code._12B0, key=SZ_WINDOW_OPEN))
 
     def _get_temp(self) -> asyncio.Task[Packet] | None:
         """Get the zone's latest temp from the Controller."""
@@ -851,27 +832,30 @@ class Zone(ZoneSchedule):
         cmd = Command.set_zone_name(self.ctl.id, self.idx, name)
         return self._gwy.send_cmd(cmd, priority=Priority.HIGH)
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
         """Return the schema of the zone (type, devices)."""
 
         return {
-            f"_{SZ_NAME}": self.name,
+            f"_{SZ_NAME}": await self.name(),
             SZ_CLASS: self.heating_type,
             SZ_SENSOR: self._sensor.id if self._sensor else None,
             SZ_ACTUATORS: sorted([d.id for d in self.actuators]),
         }
 
-    @property  # TODO: setpoint
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
         """Return the zone's configuration (excl. schedule)."""
-        return {a: getattr(self, a) for a in ("config", "mode", "name")}
+        return {
+            "config": await self.config(),
+            "mode": await self.mode(),
+            "name": await self.name(),
+        }
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the zone's current state."""
         return {
-            a: getattr(self, a) for a in (SZ_SETPOINT, SZ_TEMPERATURE, SZ_HEAT_DEMAND)
+            SZ_SETPOINT: await self.setpoint(),
+            SZ_TEMPERATURE: await self.temperature(),
+            SZ_HEAT_DEMAND: await self.heat_demand(),
         }
 
 
@@ -893,20 +877,19 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
         elif msg.code == Code._3EF0:
             raise exc.SystemInconsistent("EleZone cannot process 3EF0")
 
-    @property
-    def heat_demand(self) -> float | None:
+    async def heat_demand(self) -> float | None:
         """Return 0 as the zone's heat demand, as electric zones don't call for heat."""
         return 0
 
-    @property
-    def relay_demand(self) -> float | None:  # 0008 (NOTE: CTLs won't RP|0008)
-        return cast(float | None, self._msg_value(Code._0008, key=SZ_RELAY_DEMAND))
+    async def relay_demand(self) -> float | None:  # 0008 (NOTE: CTLs won't RP|0008)
+        return cast(
+            float | None, await self._msg_value(Code._0008, key=SZ_RELAY_DEMAND)
+        )
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         return {
-            **super().status,
-            SZ_RELAY_DEMAND: self.relay_demand,
+            **(await super().status()),
+            SZ_RELAY_DEMAND: await self.relay_demand(),
         }
 
 
@@ -928,15 +911,13 @@ class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
             Command.get_mix_valve_params(self.ctl.id, self.idx), 60 * 60 * 6
         )
 
-    @property
-    def mix_config(self) -> PayDictT._1030:
-        return cast(PayDictT._1030, self._msg_value(Code._1030))
+    async def mix_config(self) -> PayDictT._1030:
+        return cast(PayDictT._1030, await self._msg_value(Code._1030))
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
         return {
-            **super().status,
-            "mix_config": self.mix_config,
+            **(await super().params()),
+            "mix_config": await self.mix_config(),
         }
 
 
@@ -957,10 +938,11 @@ class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
     _SLUG: str = ZoneRole.UFH
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.UFH
 
-    @property
-    def heat_demand(self) -> float | None:  # 3150
+    async def heat_demand(self) -> float | None:  # 3150
         """Return the zone's heat demand, estimated from its devices' heat demand."""
-        if (demand := self._msg_value(Code._3150, key=SZ_HEAT_DEMAND)) is not None:
+        if (
+            demand := await self._msg_value(Code._3150, key=SZ_HEAT_DEMAND)
+        ) is not None:
             return _transform(demand)
         return None
 
@@ -973,10 +955,9 @@ class ValZone(EleZone):  # BDR91A/T
     _SLUG: str = ZoneRole.VAL
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.VAL
 
-    @property
-    def heat_demand(self) -> float | None:  # 0008 (NOTE: not 3150)
+    async def heat_demand(self) -> float | None:  # 0008 (NOTE: not 3150)
         """Return the zone's heat demand, using relay demand as a proxy."""
-        return self.relay_demand
+        return await self.relay_demand()
 
 
 def _transform(valve_pos: float) -> float:

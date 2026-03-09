@@ -29,14 +29,14 @@ async def test_schema_discover_from_log(f_name: Path) -> None:
     with open(f"{WORK_DIR}/log_files/{f_name}.json") as f:
         schema = json.load(f)
 
-        assert shrink(gwy.schema) == shrink(schema)
+        assert shrink(await gwy.schema()) == shrink(schema)
 
         gwy.ser_name = "/dev/null"  # HACK: needed to pause engine
         schema, packets = await gwy.get_state(include_expired=True)
         packets = shuffle_dict(packets)
         await gwy._restore_cached_packets(packets)
 
-        assert shrink(gwy.schema) == shrink(schema)
+        assert shrink(await gwy.schema()) == shrink(schema)
 
     await gwy.stop()
 

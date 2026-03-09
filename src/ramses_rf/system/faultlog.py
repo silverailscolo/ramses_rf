@@ -145,7 +145,7 @@ class FaultLog:  # 0418  # TODO: use a NamedTuple
         self.id = tcs.id
         self._gwy = tcs._gwy
 
-        self._log: FaultLogT = dict()
+        self._log: FaultLogT = {}
         self._map: FaultMapT = OrderedDict()
         self._log_done: bool | None = None
 

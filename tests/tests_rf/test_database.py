@@ -72,10 +72,10 @@ class TestMessageIndex:
         ret = msg_db.add(self.msg1)  # replaced message
 
         assert ret is None
-        assert msg_db.contains(code="1298")
-        assert len(msg_db.all()) == 1
+        assert await msg_db.contains(code="1298")
+        assert len(await msg_db.all()) == 1
         assert (
-            str(msg_db.all()[0])
+            str((await msg_db.all())[0])
             == "||  32:166025 |            |  I | co2_level        |      || {'co2_level': None}"
         )
 
@@ -87,23 +87,23 @@ class TestMessageIndex:
         #     str(ret)
         #     == "||  32:166025 |            |  I | co2_level        |      || {'co2_level': None}"
         # )
-        assert len(msg_db.all()) == 1
+        assert len(await msg_db.all()) == 1
 
         # add another message with different code
         ret = msg_db.add(self.msg3)  # new code
 
         assert ret is None
-        assert len(msg_db.all()) == 2
+        assert len(await msg_db.all()) == 2
 
         ret = msg_db.add(self.msg5)  # new code
         assert ret is None
         ret = msg_db.add(self.msg5)  # add copy code
         assert ret is None
-        assert len(msg_db.all()) == 3
+        assert len(await msg_db.all()) == 3
 
         # test clear index
-        msg_db.clr()
-        assert len(msg_db.all()) == 0
+        await msg_db.clr()
+        assert len(await msg_db.all()) == 0
 
         msg_db.stop()  # close sqlite3 connection
 
@@ -118,29 +118,31 @@ class TestMessageIndex:
         msg_db.add(self.msg6)
 
         # qry by code
-        assert msg_db.contains(code="2309"), "code 2309 missing"
-        assert msg_db.contains(code="3150"), "code 3150 missing"
-        assert msg_db.contains(src="01:087939", dst="01:087939", code="2309"), (
+        assert await msg_db.contains(code="2309"), "code 2309 missing"
+        assert await msg_db.contains(code="3150"), "code 3150 missing"
+        assert await msg_db.contains(src="01:087939", dst="01:087939", code="2309"), (
             "src, dst missing"
         )
-        assert not msg_db.contains(src="01:12345", code="2309"), (
+        assert not await msg_db.contains(src="01:12345", code="2309"), (
             "random src should return False"
         )
-        assert not msg_db.contains(code="1234"), "a random code should return False"
-        assert msg_db.contains(dst="01:087939"), "dst missing"
-        assert not msg_db.contains(plk="co2_level"), (
+        assert not await msg_db.contains(code="1234"), (
+            "a random code should return False"
+        )
+        assert await msg_db.contains(dst="01:087939"), "dst missing"
+        assert not await msg_db.contains(plk="co2_level"), (
             "payload keys skipped if value is None"
         )
 
         with contextlib.suppress(DatabaseQueryError):
-            msg_db.qry_field("RANDOM from messages", (self._SRC1, self._SRC1))
+            await msg_db.qry_field("RANDOM from messages", (self._SRC1, self._SRC1))
         # Only SELECT queries are allowed
 
         # Use simplest SQLite query on MessageIndex
         sql = """
                 SELECT code, plk from messages WHERE (src = ? OR dst = ?)
             """
-        res: list[tuple[dt | str, str]] = msg_db.qry_field(
+        res: list[tuple[dt | str, str]] = await msg_db.qry_field(
             sql, (self._SRC2, self._SRC2)
         )
         assert res == [
@@ -158,7 +160,7 @@ class TestMessageIndex:
                 AND code in ('1298', '31DA')
                 AND (plk LIKE '%co2_level%')
             """
-        res = msg_db.qry_field(sql, (self._SRC1, self._SRC1))
+        res = await msg_db.qry_field(sql, (self._SRC1, self._SRC1))
         assert res == [  # key 'co2_level' included since value is not None
             ("1298", "|co2_level|"),
             (
@@ -166,14 +168,14 @@ class TestMessageIndex:
                 "|hvac_id|exhaust_fan_speed|fan_info|_unknown_fan_info_flags|co2_level|indoor_humidity|exhaust_temp|indoor_temp|outdoor_temp|speed_capabilities|bypass_position|supply_fan_speed|remaining_mins|post_heat|pre_heat|supply_flow_fault|exhaust_flow_fault|_extra|",
             ),
         ]
-        assert msg_db.contains(plk="|co2_level|"), "payload keys missing"
+        assert await msg_db.contains(plk="|co2_level|"), "payload keys missing"
 
         # src only query on MessageIndex
         sql = """
                 SELECT code, dst from messages WHERE verb in (' I', 'RP')
                 AND (src = ?)
             """
-        res = msg_db.qry_field(sql, ("04:189078",))
+        res = await msg_db.qry_field(sql, ("04:189078",))
         assert res == [("3150", "01:145038")]  # so dst is addrs[2], not --:------
 
         # Use payload key SQLite query on MessageIndex
@@ -182,12 +184,12 @@ class TestMessageIndex:
                 AND (src = ? OR dst = ?)
                 AND (plk LIKE '%co2_level%')
             """
-        res = msg_db.qry_field(sql, (self._SRC1, self._SRC1))
+        res = await msg_db.qry_field(sql, (self._SRC1, self._SRC1))
         assert res == [("1298", "False"), ("31DA", "00")]
 
-        assert msg_db.contains(plk="|co2_level|"), "payload keys missing"
+        assert await msg_db.contains(plk="|co2_level|"), "payload keys missing"
 
-        assert len(msg_db.all()) == 5
+        assert len(await msg_db.all()) == 5
 
         # simulate entity_base _msgs lookup
         _SQL_SLICE = 9
@@ -201,7 +203,7 @@ class TestMessageIndex:
         _ctx_qry = "*"
         if len(_id) > _SQL_SLICE:
             _ctx_qry = _id[_SQL_SLICE + 1 :]
-        m: tuple[Message, ...] = msg_db.qry(
+        m: tuple[Message, ...] = await msg_db.qry(
             sql, (_id[:_SQL_SLICE], _id[:_SQL_SLICE], _ctx_qry)
         )  # e.g. 01:123456_01
         assert len(m) == 1
@@ -209,14 +211,14 @@ class TestMessageIndex:
 
         msg_db.add(self.msg7)
         _id = "01:145038_04"
-        m = msg_db.qry(
+        m = await msg_db.qry(
             sql, (_id[:_SQL_SLICE], _id[:_SQL_SLICE], _ctx_qry)
         )  # e.g. 01:123456_01
         assert len(m) == 1
 
         # run maintenance loop
-        # assert len(msg_db.all()) == 5
+        # assert len(await msg_db.all()) == 5
         # await msg_db._housekeeping_loop.housekeeping(self._NOW, _cutoff=dt(second=10))
-        # assert len(msg_db.all()) == 5
+        # assert len(await msg_db.all()) == 5
 
         msg_db.stop()  # close sqlite3 connection

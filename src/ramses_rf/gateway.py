@@ -73,13 +73,13 @@ from .interfaces import GatewayInterface, MessageIndexInterface
 from .models import DeviceTraits
 from .schemas import load_schema
 from .system import Evohome
+from .typing import DeviceIdT, DeviceListT, DeviceTraitsT
 
 if TYPE_CHECKING:
     from ramses_tx import RamsesTransportT
 
     from .device import Device
     from .entity_base import Parent
-    from .typing import DeviceIdT, DeviceListT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -242,12 +242,7 @@ class Gateway(Engine, GatewayInterface):
 
     @property
     def hgi(self) -> HgiGateway | None:
-        """Return the active HGI80-compatible gateway device, if known.
-
-        :returns: The gateway device instance or None if the transport is not set up
-                  or the HGI ID is not found.
-        :rtype: HgiGateway | None
-        """
+        """Return the active HGI80-compatible gateway device, if known."""
         if not self._transport:
             return None
         if device_id := self._transport.get_extra_info(SZ_ACTIVE_HGI):
@@ -421,17 +416,17 @@ class Gateway(Engine, GatewayInterface):
         if self.msg_db:
             pkts = {
                 f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
-                for msg in self.msg_db.all(include_expired=True)
+                for msg in await self.msg_db.all(include_expired=True)
                 if wanted_msg(msg, include_expired=include_expired)
             }
         else:  # deprecated, to be removed in Q1 2026
-            msgs = [m for device in self.devices for m in device._msg_list]
-            # add systems._msgs and zones._msgs
+            msgs = []
+            for device in self.devices:
+                msgs.extend(await device._msg_list())
             for system in self.systems:
-                msgs.extend(list(system._msgs.values()))
-                msgs.extend([m for z in system.zones for m in z._msgs.values()])
-                # msgs.extend([m for z in system.dhw for m in z._msgs.values()])  # TODO: DHW
-                # Related to/Fixes ramses_cc Issue 249 non-existing via-device _HW ?
+                msgs.extend(list((await system._msgs()).values()))
+                for z in system.zones:
+                    msgs.extend(list((await z._msgs()).values()))
 
             pkts = {  # BUG: assumes pkts have unique dtms: may be untrue for contrived logs
                 f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
@@ -442,7 +437,7 @@ class Gateway(Engine, GatewayInterface):
 
         await self._resume()
 
-        return self.schema, dict(sorted(pkts.items()))
+        return await self.schema(), dict(sorted(pkts.items()))
 
     async def _restore_cached_packets(
         self, packets: dict[str, str], _clear_state: bool = False
@@ -468,7 +463,6 @@ class Gateway(Engine, GatewayInterface):
             self._tcs = None
             self.devices = []
             self.device_by_id = {}
-
             self._prev_msg = None
             self._this_msg = None
 
@@ -623,34 +617,21 @@ class Gateway(Engine, GatewayInterface):
 
         return dev
 
-    def fake_device(
+    async def fake_device(
         self,
         device_id: DeviceIdT,
         create_device: bool = False,
     ) -> Device | Fakeable:
-        """Create a faked device.
-
-        Converts an existing device to a fake device, or creates a new fake device
-        if it satisfies strict criteria (valid ID, presence in known_list).
-
-        :param device_id: The ID of the device to fake.
-        :type device_id: DeviceIdT
-        :param create_device: If True, allow creation of a new device if it doesn't exist, defaults to False.
-        :type create_device: bool, optional
-        :returns: The faked device instance.
-        :rtype: Device | Fakeable
-        :raises SchemaInconsistentError: If the device ID is invalid.
-        :raises DeviceNotFoundError: If the device does not exist and create_device is False,
-                             or if create_device is True but the ID is not in known_list.
-        :raises DeviceNotFaked: If the device is not fakeable.
-        """
+        """Create a faked device."""
 
         if not is_valid_dev_id(device_id):
             raise SchemaInconsistentError(f"The device id is not valid: {device_id}")
 
+        known_list = await self.known_list()
+
         if not create_device and device_id not in self.device_by_id:
             raise DeviceNotFoundError(f"The device id does not exist: {device_id}")
-        elif create_device and device_id not in self.known_list:
+        elif create_device and device_id not in known_list:
             raise DeviceNotFoundError(
                 f"The device id is not in the known_list: {device_id}"
             )
@@ -673,143 +654,84 @@ class Gateway(Engine, GatewayInterface):
             self._tcs = self.systems[0]
         return self._tcs
 
-    @property
-    def known_list(self) -> DeviceListT:
-        """Return the working known_list (a superset of the provided known_list).
+    async def known_list(self) -> DeviceListT:
+        """Return the working known_list (a superset of the provided known_list)."""
 
-        Unlike orphans, which are always instantiated when a schema is loaded, these
-        devices may/may not exist. However, if they are ever instantiated, they should
-        be given these traits.
-
-        :returns: A dictionary where keys are device IDs and values are their traits.
-        :rtype: DeviceListT
-        """
-
-        result = dict(self._include)  # ensure we do not mutate the engine's list
-        result.update(
-            {
-                d.id: {k: d.traits[k] for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)}  # type: ignore[misc]
-                for d in self.devices
-                if not self._enforce_known_list or d.id in self._include
-            }
-        )
-        return cast("DeviceListT", result)
+        result: dict[str, Any] = {k: v for k, v in self._include.items()}
+        for d in self.devices:
+            if not self._enforce_known_list or d.id in self._include:
+                traits = await d.traits()
+                result[d.id] = cast(
+                    DeviceTraitsT,
+                    {k: traits.get(k) for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)},
+                )
+        return cast(DeviceListT, result)
 
     @property
     def system_by_id(self) -> dict[DeviceIdT, Evohome]:
-        """Return a mapping of device IDs to their associated Evohome systems.
-
-        :returns: A dictionary mapping DeviceId to Evohome instances.
-        :rtype: dict[DeviceIdT, Evohome]
-        """
+        """Return a mapping of device IDs to their associated Evohome systems."""
         return {
             d.id: d.tcs
             for d in self.devices
             if hasattr(d, "tcs") and getattr(d.tcs, "id", None) == d.id
-        }  # why something so simple look so messy
+        }
 
     @property
     def systems(self) -> list[Evohome]:
-        """Return a list of all identified Evohome systems.
-
-        :returns: A list of Evohome system instances.
-        :rtype: list[Evohome]
-        """
+        """Return a list of all identified Evohome systems."""
         return list(self.system_by_id.values())
 
-    @property
-    def _config(self) -> dict[str, Any]:
-        """Return the working configuration.
-
-        Includes:
-         - config
-         - schema (everything else)
-         - known_list
-         - block_list
-
-        :returns: A dictionary representing the current internal configuration state.
-        :rtype: dict[str, Any]
-        """
-
+    async def _config(self) -> dict[str, Any]:
+        """Return the working configuration."""
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
             SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self._enforce_known_list},
-            SZ_KNOWN_LIST: self.known_list,
+            SZ_KNOWN_LIST: await self.known_list(),
             SZ_BLOCK_LIST: [{k: v} for k, v in self._exclude.items()],
             "_unwanted": sorted(self._unwanted),
         }
 
-    @property
-    def schema(self) -> dict[str, Any]:
-        """Return the global schema.
-
-        This 'active' schema may exclude non-present devices from the configured schema
-        that was loaded during initialisation.
-
-        Orphans are devices that 'exist' but don't yet have a place in the schema
-        hierarchy (if ever): therefore, they are instantiated when the schema is loaded,
-        just like the other devices in the schema.
-
-        :returns: A dictionary representing the entire system schema structure.
-        :rtype: dict[str, Any]
-        """
+    async def schema(self) -> dict[str, Any]:
+        """Return the global schema."""
 
         schema: dict[str, Any] = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}
 
         for tcs in self.systems:
-            schema[tcs.ctl.id] = tcs.schema
+            schema[tcs.ctl.id] = await tcs.schema()
 
-        dev_list: list[DeviceIdT] = sorted(
-            [
-                d.id
-                for d in self.devices
-                if not getattr(d, "tcs", None)
+        heat_orphans = []
+        for d in self.devices:
+            if (
+                not getattr(d, "tcs", None)
                 and isinstance(d, DeviceHeat)
-                and d._is_present
-            ]
-        )
-        schema[f"{SZ_ORPHANS}_heat"] = dev_list
+                and await d._is_present()
+            ):
+                heat_orphans.append(d.id)
+        schema[f"{SZ_ORPHANS}_heat"] = sorted(heat_orphans)
 
-        dev_list = sorted(
-            [d.id for d in self.devices if isinstance(d, DeviceHvac) and d._is_present]
-        )
-        schema[f"{SZ_ORPHANS}_hvac"] = dev_list
+        hvac_orphans = []
+        for d in self.devices:
+            if isinstance(d, DeviceHvac) and await d._is_present():
+                hvac_orphans.append(d.id)
+        schema[f"{SZ_ORPHANS}_hvac"] = sorted(hvac_orphans)
 
         return schema
 
-    @property
-    def params(self) -> dict[str, Any]:
-        """Return the parameters for all devices.
+    async def params(self) -> dict[str, Any]:
+        """Return the parameters for all devices."""
+        return {SZ_DEVICES: {d.id: await d.params() for d in sorted(self.devices)}}
 
-        :returns: A dictionary containing parameters for every device in the gateway.
-        :rtype: dict[str, Any]
-        """
-        return {SZ_DEVICES: {d.id: d.params for d in sorted(self.devices)}}
-
-    @property
-    def status(self) -> dict[str, Any]:
-        """Return the status for all devices and the transport rate.
-
-        :returns: A dictionary containing device statuses and transmission rate.
-        :rtype: dict[str, Any]
-        """
+    async def status(self) -> dict[str, Any]:
+        """Return the status for all devices and the transport rate."""
         tx_rate = self._transport.get_extra_info("tx_rate") if self._transport else None
         return {
-            SZ_DEVICES: {d.id: d.status for d in sorted(self.devices)},
+            SZ_DEVICES: {d.id: await d.status() for d in sorted(self.devices)},
             "_tx_rate": tx_rate,
         }
 
     def _msg_handler(self, msg: Message) -> None:
-        """A callback to handle messages from the protocol stack.
-
-        Handles message reassembly (fragmentation) and dispatches the message for processing.
-
-        :param msg: The incoming message to handle.
-        :type msg: Message
-        :returns: None
-        :rtype: None
-        """
+        """A callback to handle messages from the protocol stack."""
 
         super()._msg_handler(msg)
 
@@ -817,7 +739,7 @@ class Gateway(Engine, GatewayInterface):
         assert self._this_msg  # mypy check
 
         if self._prev_msg and detect_array_fragment(self._this_msg, self._prev_msg):
-            msg._pkt._force_has_array()  # may be an array of length 1
+            msg._pkt._force_has_array()
             msg._payload = self._prev_msg.payload + (
                 msg.payload if isinstance(msg.payload, list) else [msg.payload]
             )

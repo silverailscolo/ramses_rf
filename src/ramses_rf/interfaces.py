@@ -23,33 +23,37 @@ class MessageIndexInterface(Protocol):
         """Add a single record to the index."""
         ...
 
-    def rem(
+    async def rem(
         self, msg: Message | None = None, **kwargs: Any
     ) -> tuple[Message, ...] | None:
         """Remove a set of message(s) from the index."""
         ...
 
-    def get(self, msg: Message | None = None, **kwargs: Any) -> tuple[Message, ...]:
+    async def get(
+        self, msg: Message | None = None, **kwargs: Any
+    ) -> tuple[Message, ...]:
         """Get a set of message(s) from the index."""
         ...
 
-    def contains(self, **kwargs: Any) -> bool:
+    async def contains(self, **kwargs: Any) -> bool:
         """Check if the index contains at least 1 record matching the fields."""
         ...
 
-    def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
+    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
         """Execute a custom SQL query returning messages."""
         ...
 
-    def qry_field(self, sql: str, parameters: tuple[str, ...]) -> list[tuple[Any, ...]]:
+    async def qry_field(
+        self, sql: str, parameters: tuple[str, ...]
+    ) -> list[tuple[Any, ...]]:
         """Execute a custom SQL query returning raw fields."""
         ...
 
-    def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
+    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
         """Get a list of Codes from the index."""
         ...
 
-    def all(self, include_expired: bool = False) -> tuple[Message, ...]:
+    async def all(self, include_expired: bool = False) -> tuple[Message, ...]:
         """Get all messages from the index."""
         ...
 
@@ -73,8 +77,7 @@ class DeviceInterface(Protocol):
         """
         ...
 
-    @property
-    def traits(self) -> dict[str, Any]:
+    async def traits(self) -> dict[str, Any]:
         """Return the device traits.
 
         :return: A dictionary of device traits.
