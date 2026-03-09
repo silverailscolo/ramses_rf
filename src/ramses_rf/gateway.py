@@ -78,7 +78,7 @@ if TYPE_CHECKING:
     from ramses_tx import RamsesTransportT
 
     from .device import Device
-    from .entity_base import Parent
+    from .topology import Parent
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -350,16 +350,16 @@ class Gateway(Engine, GatewayInterface):
             """
             _LOGGER.debug("Engine: Initiating/enabling discovery...")
 
-            # [d._start_discovery_poller() for d in devs]
+            # Routing to components
             for device in dev_list:
-                device._start_discovery_poller()
+                device.discovery.start_poller()
 
             for system in sys_list:
-                system._start_discovery_poller()
+                system.discovery.start_poller()
                 for zone in system.zones:
-                    zone._start_discovery_poller()
+                    zone.discovery.start_poller()
                 if system.dhw:
-                    system.dhw._start_discovery_poller()
+                    system.dhw.discovery.start_poller()
 
         _, self._pkt_log_listener = await set_pkt_logging_config(  # type: ignore[arg-type]
             cc_console=self.config.reduce_processing >= DONT_CREATE_MESSAGES,
@@ -509,11 +509,11 @@ class Gateway(Engine, GatewayInterface):
         else:  # deprecated, to be removed in Q1 2026
             msgs = []
             for device in self.devices:
-                msgs.extend(await device._msg_list())
+                msgs.extend(await device.state_store._msg_list())
             for system in self.systems:
-                msgs.extend(list((await system._msgs()).values()))
+                msgs.extend(list((await system.state_store._msgs()).values()))
                 for z in system.zones:
-                    msgs.extend(list((await z._msgs()).values()))
+                    msgs.extend(list((await z.state_store._msgs()).values()))
 
             pkts = {  # BUG: assumes pkts have unique dtms: may be untrue for contrived logs
                 f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"

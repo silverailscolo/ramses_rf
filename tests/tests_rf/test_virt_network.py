@@ -64,8 +64,8 @@ async def assert_code_in_device_msgindex(
             ) or await gwy.msg_db.contains(dst=dev_id, code=str(code))
 
         # Fallback to device's internal tracking dictionaries
-        msgs = await dev._msgs()
-        msgz = await dev._msgz()
+        msgs = await dev.state_store._msgs()
+        msgz = await dev.state_store._msgz()
         return code in msgs or code in msgz
 
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):

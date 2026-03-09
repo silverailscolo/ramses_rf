@@ -18,9 +18,9 @@ if TYPE_CHECKING:
     from ramses_tx import Message
 
     from .device import Device
-    from .entity_base import Parent
     from .gateway import Gateway
     from .system import Evohome
+    from .topology import Parent
 
 _LOGGER = logging.getLogger(__name__)
 

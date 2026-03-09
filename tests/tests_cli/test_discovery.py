@@ -57,8 +57,9 @@ def mock_gateway() -> MagicMock:
     mock_dev.tcs.get_htg_zone.return_value.get_schedule = AsyncMock()
     mock_dev.tcs.get_htg_zone.return_value.set_schedule = AsyncMock()
 
-    # Mock discover
-    mock_dev.discover = AsyncMock()
+    # Mock the discovery component and its discover method
+    mock_dev.discovery = MagicMock()
+    mock_dev.discovery.discover = AsyncMock()
 
     # Mock fakeable for binding tests
     mock_dev._make_fake = MagicMock()
@@ -196,7 +197,8 @@ async def test_script_scan_disc(mock_gateway: MagicMock) -> None:
     """Test script_scan_disc."""
     await script_scan_disc(mock_gateway, DEV_ID)
     mock_dev = mock_gateway.get_device(DEV_ID)
-    mock_dev.discover.assert_awaited_once()
+    # Phase 4 update: Verify the discovery component method was called
+    mock_dev.discovery.discover.assert_awaited_once()
 
 
 @pytest.mark.asyncio

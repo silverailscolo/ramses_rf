@@ -92,8 +92,9 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     mock_dev.status = AsyncMock(return_value={"mock": "status"})
     mock_dev.traits = AsyncMock(return_value={"mock": "traits"})
 
-    # Mock message database interaction for show_crazys
-    mock_dev._msgz = AsyncMock(
+    # Mock message database interaction via the state_store component
+    mock_dev.state_store = MagicMock()
+    mock_dev.state_store._msgz = AsyncMock(
         return_value={
             Code._0005: {"verb": {"pkt": "msg_0005"}},
             Code._000C: {"verb": {"pkt": "msg_000C"}},

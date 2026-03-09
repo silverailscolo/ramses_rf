@@ -7,7 +7,7 @@ from ramses_tx import Code, Command, Message, Packet, Priority
 from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
-    from .entity_base import Parent
+    from .topology import Parent
 
 
 class MessageIndexInterface(Protocol):

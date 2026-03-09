@@ -262,7 +262,7 @@ async def script_scan_disc(gwy: Gateway, dev_id: DeviceIdT) -> None:
     """
     _LOGGER.warning("scan_disc() invoked...")
 
-    await gwy.get_device(dev_id).discover()
+    await gwy.get_device(dev_id).discovery.discover()
 
 
 @script_decorator
