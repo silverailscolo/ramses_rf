@@ -9,7 +9,7 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
@@ -27,7 +27,9 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 )
 
 if TYPE_CHECKING:
-    from ramses_rf import Gateway, IndexT
+    from ramses_rf import Gateway
+    from ramses_rf.device import Controller
+    from ramses_tx import IndexT
 
 
 EXEC_CMD: Final = "exec_cmd"
@@ -45,6 +47,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorate a script to broadcast 'Script begins:' and 'Script done.' messages.
+
+    :param fnc: The asynchronous script function to decorate.
+    :return: The wrapped asynchronous function.
+    """
+
     @functools.wraps(fnc)
     async def wrapper(gwy: Gateway, *args: Any, **kwargs: Any) -> None:
         gwy.send_cmd(
@@ -65,19 +73,25 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def spawn_scripts(gwy: Gateway, **kwargs: Any) -> list[asyncio.Task[None]]:
-    tasks = []
+    """Spawn discovery or execution tasks based on provided CLI keyword arguments.
+
+    :param gwy: The main gateway instance handling transport and device indexing.
+    :param kwargs: CLI configuration dictionary containing execution flags.
+    :return: A list of the generated asyncio tasks running the specified scripts.
+    """
+    tasks: list[asyncio.Task[None]] = []
 
     if kwargs.get(EXEC_CMD):
-        tasks += [asyncio.create_task(exec_cmd(gwy, **kwargs))]
+        tasks.append(asyncio.create_task(exec_cmd(gwy, **kwargs)))
 
     if kwargs.get(GET_FAULTS):
-        tasks += [asyncio.create_task(get_faults(gwy, kwargs[GET_FAULTS]))]
+        tasks.append(asyncio.create_task(get_faults(gwy, kwargs[GET_FAULTS])))
 
     elif kwargs.get(GET_SCHED) and kwargs[GET_SCHED][0]:
-        tasks += [asyncio.create_task(get_schedule(gwy, *kwargs[GET_SCHED]))]
+        tasks.append(asyncio.create_task(get_schedule(gwy, *kwargs[GET_SCHED])))
 
     elif kwargs.get(SET_SCHED) and kwargs[SET_SCHED][0]:
-        tasks += [asyncio.create_task(set_schedule(gwy, *kwargs[SET_SCHED]))]
+        tasks.append(asyncio.create_task(set_schedule(gwy, *kwargs[SET_SCHED])))
 
     elif kwargs.get(EXEC_SCR):
         script = SCRIPTS.get(f"{kwargs[EXEC_SCR][0]}")
@@ -97,6 +111,11 @@ def spawn_scripts(gwy: Gateway, **kwargs: Any) -> list[asyncio.Task[None]]:
 
 
 async def exec_cmd(gwy: Gateway, **kwargs: Any) -> None:
+    """Execute a single raw command string from the CLI arguments.
+
+    :param gwy: The gateway instance.
+    :param kwargs: CLI parameters containing the 'EXEC_CMD' string.
+    """
     cmd = Command.from_cli(kwargs[EXEC_CMD])
     await gwy.async_send_cmd(cmd, priority=Priority.HIGH, wait_for_reply=True)
 
@@ -104,16 +123,35 @@ async def exec_cmd(gwy: Gateway, **kwargs: Any) -> None:
 async def get_faults(
     gwy: Gateway, ctl_id: DeviceIdT, start: int = 0, limit: int = 0x3F
 ) -> None:
-    ctl = gwy.get_device(ctl_id)
+    """Retrieve the fault log from a target controller.
+
+    :param gwy: The gateway instance.
+    :param ctl_id: The device ID of the controller to query.
+    :param start: The index to start querying from.
+    :param limit: The maximum number of fault entries to return.
+    """
+    ctl = cast("Controller", gwy.get_device(ctl_id))
 
     try:
-        await ctl.tcs.get_faultlog(start=start, limit=limit)  # 0418
+        if ctl.tcs:
+            await ctl.tcs.get_faultlog(start=start, limit=limit)  # 0418
     except exc.ExpiredCallbackError as err:
         _LOGGER.error("get_faults(): Function timed out: %s", err)
 
 
 async def get_schedule(gwy: Gateway, ctl_id: DeviceIdT, zone_idx: str) -> None:
-    zone = gwy.get_device(ctl_id).tcs.get_htg_zone(zone_idx)
+    """Retrieve the zone schedule for a specific zone under a controller.
+
+    :param gwy: The gateway instance.
+    :param ctl_id: The device ID of the controller.
+    :param zone_idx: The zone index string (e.g. "00" or "HW").
+    """
+    ctl = cast("Controller", gwy.get_device(ctl_id))
+    if not ctl.tcs:
+        _LOGGER.error("get_schedule(): Controller has no TCS active.")
+        return
+
+    zone = ctl.tcs.get_htg_zone(zone_idx)
 
     try:
         await zone.get_schedule()
@@ -122,10 +160,21 @@ async def get_schedule(gwy: Gateway, ctl_id: DeviceIdT, zone_idx: str) -> None:
 
 
 async def set_schedule(gwy: Gateway, ctl_id: DeviceIdT, schedule: str) -> None:
+    """Set the zone schedule for a specific zone under a controller via JSON payload.
+
+    :param gwy: The gateway instance.
+    :param ctl_id: The device ID of the controller.
+    :param schedule: A JSON string describing the full schedule dictionary.
+    """
     schedule_ = json.loads(schedule)
     zone_idx = schedule_[SZ_ZONE_IDX]
 
-    zone = gwy.get_device(ctl_id).tcs.get_htg_zone(zone_idx)
+    ctl = cast("Controller", gwy.get_device(ctl_id))
+    if not ctl.tcs:
+        _LOGGER.error("set_schedule(): Controller has no TCS active.")
+        return
+
+    zone = ctl.tcs.get_htg_zone(zone_idx)
 
     try:
         await zone.set_schedule(schedule_[SZ_SCHEDULE])  # 0404
@@ -136,6 +185,12 @@ async def set_schedule(gwy: Gateway, ctl_id: DeviceIdT, schedule: str) -> None:
 async def script_bind_req(
     gwy: Gateway, dev_id: DeviceIdT, code: Code = Code._2309
 ) -> None:
+    """Make the targeted device artificially enter a supplicant bind phase.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to transition to binding state.
+    :param code: The code to offer during the bind request.
+    """
     dev = gwy.get_device(dev_id)
     assert isinstance(dev, Fakeable)  # mypy
     dev._make_fake()
@@ -145,6 +200,13 @@ async def script_bind_req(
 async def script_bind_wait(
     gwy: Gateway, dev_id: DeviceIdT, code: Code = Code._2309, idx: IndexT = "00"
 ) -> None:
+    """Make the targeted device artificially enter a respondent bind phase.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to transition to binding state.
+    :param code: The expected bind code to accept.
+    :param idx: The internal domain or zone index to map to.
+    """
     dev = gwy.get_device(dev_id)
     assert isinstance(dev, Fakeable)  # mypy
     dev._make_fake()
@@ -152,6 +214,13 @@ async def script_bind_wait(
 
 
 def script_poll_device(gwy: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task[None]]:
+    """Generate tasks to periodically poll a device for vital status metrics.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The targeted device ID.
+    :return: A list containing tasks executing the periodic polling.
+    """
+
     async def periodic_send(
         gwy: Gateway,
         cmd: Command,
@@ -186,6 +255,11 @@ def script_poll_device(gwy: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task[Non
 
 @script_decorator
 async def script_scan_disc(gwy: Gateway, dev_id: DeviceIdT) -> None:
+    """Trigger the target device's internal discovery poller routine.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to scan.
+    """
     _LOGGER.warning("scan_disc() invoked...")
 
     await gwy.get_device(dev_id).discover()
@@ -193,6 +267,11 @@ async def script_scan_disc(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
 @script_decorator
 async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
+    """Execute a comprehensive probe of a target device across all recognized schema codes.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to scan.
+    """
     _LOGGER.warning("scan_full() invoked - expect a lot of Warnings")
 
     gwy.send_cmd(
@@ -216,12 +295,12 @@ async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
             continue
 
         elif code in (Code._01D0, Code._01E9):
-            for zone_idx in ("00", "01", "FC"):  # type: ignore[assignment]
+            for str_zone_idx in ("00", "01", "FC"):
                 gwy.send_cmd(
-                    Command.from_attrs(W_, dev_id, code, PayloadT(f"{zone_idx}00"))
+                    Command.from_attrs(W_, dev_id, code, PayloadT(f"{str_zone_idx}00"))
                 )
                 gwy.send_cmd(
-                    Command.from_attrs(W_, dev_id, code, PayloadT(f"{zone_idx}03"))
+                    Command.from_attrs(W_, dev_id, code, PayloadT(f"{str_zone_idx}03"))
                 )
 
         elif code == Code._0404:  # FIXME
@@ -264,6 +343,12 @@ async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
 async def script_scan_hard(
     gwy: Gateway, dev_id: DeviceIdT, *, start_code: None | int = None
 ) -> None:
+    """Execute a sequential numeric ping across the theoretical code space.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to probe.
+    :param start_code: Hex starting point for the iteration.
+    """
     _LOGGER.warning("scan_hard() invoked - expect some Warnings")
 
     start_code = start_code or 0
@@ -277,6 +362,11 @@ async def script_scan_hard(
 
 @script_decorator
 async def script_scan_fan(gwy: Gateway, dev_id: DeviceIdT) -> None:
+    """Probe an HVAC/Ventilator targeted device with standard parameters.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to probe.
+    """
     _LOGGER.warning("scan_fan() invoked - expect a lot of nonsense")
 
     from ramses_tx.ramses import _DEV_KLASSES_HVAC
@@ -324,6 +414,11 @@ async def script_scan_fan(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
 @script_decorator
 async def script_scan_otb(gwy: Gateway, dev_id: DeviceIdT) -> None:
+    """Probe an OpenTherm Bridge targeted device across known data ID tables.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to probe.
+    """
     _LOGGER.warning("script_scan_otb_full invoked - expect a lot of nonsense")
 
     for msg_id in OTB_DATA_IDS:
@@ -332,6 +427,11 @@ async def script_scan_otb(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
 @script_decorator
 async def script_scan_otb_hard(gwy: Gateway, dev_id: DeviceIdT) -> None:
+    """Probe an OpenTherm Bridge target iteratively across numeric data ID space.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to probe.
+    """
     _LOGGER.warning("script_scan_otb_hard invoked - expect a lot of nonsense")
 
     for msg_id in range(0x80):
@@ -340,6 +440,11 @@ async def script_scan_otb_hard(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
 @script_decorator
 async def script_scan_otb_map(gwy: Gateway, dev_id: DeviceIdT) -> None:
+    """Execute mapping verifications between native RAMSES codes and OpenTherm properties.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to probe.
+    """
     _LOGGER.warning("script_scan_otb_map invoked - expect a lot of nonsense")
 
     RAMSES_TO_OPENTHERM = {
@@ -364,6 +469,11 @@ async def script_scan_otb_map(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
 @script_decorator
 async def script_scan_otb_ramses(gwy: Gateway, dev_id: DeviceIdT) -> None:
+    """Probe an OpenTherm bridge exclusively for native RAMSES codes.
+
+    :param gwy: The gateway instance.
+    :param dev_id: The device ID to probe.
+    """
     _LOGGER.warning("script_scan_otb_ramses invoked - expect a lot of nonsense")
 
     _CODES = (

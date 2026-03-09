@@ -137,9 +137,6 @@ class MessageIndex:
             with contextlib.suppress(sqlite3.Error):
                 self._cx.execute("PRAGMA read_uncommitted = true")
 
-        # detect_types should retain dt type on store/retrieve
-        self._cu = self._cx.cursor()  # Create a cursor
-
         _setup_db_adapters()  # DTM adapter/converter
 
         # Schema creation is now handled safely by the StorageWorker to avoid races.
@@ -159,7 +156,9 @@ class MessageIndex:
         """Start the housekeeper loop."""
 
         if self.maintain:
-            if self._housekeeping_task and (not self._housekeeping_task.done()):
+            if getattr(self, "_housekeeping_task", None) and (
+                not self._housekeeping_task.done()
+            ):
                 return
 
             self._housekeeping_task = asyncio.create_task(
@@ -167,18 +166,22 @@ class MessageIndex:
             )
 
     def stop(self) -> None:
-        """Stop the housekeeper loop."""
+        """Stop the housekeeper loop and resources."""
 
         if (
             self.maintain
-            and self._housekeeping_task
-            and (not self._housekeeping_task.done())
+            and getattr(self, "_housekeeping_task", None)
+            and not self._housekeeping_task.done()
         ):
             self._housekeeping_task.cancel()  # stop the housekeeper
 
         self._worker.stop()  # Stop the background thread
-        self._cx.commit()  # just in case
-        self._cx.close()  # may still need to do queries after engine has stopped?
+
+        try:
+            self._cx.commit()  # just in case
+            self._cx.close()  # safely close reader connection
+        except sqlite3.ProgrammingError:
+            pass  # Connection might already be closed
 
     @property
     def msgs(self) -> MsgDdT:
@@ -191,46 +194,6 @@ class MessageIndex:
         This is primarily for testing to ensure data persistence before querying.
         """
         self._worker.flush()
-
-    def _setup_db_schema(self) -> None:
-        """Set up the message database schema.
-
-        .. note::
-            messages TABLE Fields:
-
-            - dtm  message timestamp
-            - verb " I", "RQ" etc.
-            - src  message origin address
-            - dst  message destination address
-            - code packet code aka command class e.g. 0005, 31DA
-            - ctx  message context, created from payload as index + extra markers (Heat)
-            - hdr  packet header e.g. 000C|RP|01:223036|0208 (see: src/ramses_tx/frame.py)
-            - plk the keys stored in the parsed payload, separated by the | char
-        """
-
-        self._cu.execute(
-            """
-            CREATE TABLE messages (
-                dtm    DTM      NOT NULL PRIMARY KEY,
-                verb   TEXT(2)  NOT NULL,
-                src    TEXT(12) NOT NULL,
-                dst    TEXT(12) NOT NULL,
-                code   TEXT(4)  NOT NULL,
-                ctx    TEXT,
-                hdr    TEXT     NOT NULL UNIQUE,
-                plk    TEXT     NOT NULL
-            )
-            """
-        )
-
-        self._cu.execute("CREATE INDEX idx_verb ON messages (verb)")
-        self._cu.execute("CREATE INDEX idx_src ON messages (src)")
-        self._cu.execute("CREATE INDEX idx_dst ON messages (dst)")
-        self._cu.execute("CREATE INDEX idx_code ON messages (code)")
-        self._cu.execute("CREATE INDEX idx_ctx ON messages (ctx)")
-        self._cu.execute("CREATE INDEX idx_hdr ON messages (hdr)")
-
-        self._cx.commit()
 
     async def _housekeeping_loop(self) -> None:
         """Periodically remove stale messages from the index,
@@ -291,22 +254,16 @@ class MessageIndex:
             dup = (self._msgs[dtm_str],)
 
         try:  # TODO: remove this, or apply only when source is a real packet log?
-            # await self._lock.acquire()
-            # dup = self._delete_from(  # HACK: because of contrived pkt logs
-            #     dtm=msg.dtm  # stored as such with DTM formatter
-            # )
             # We defer the write to the worker; return value (old) is not available synchronously
             self._insert_into(msg)  # will delete old msg by hdr (not dtm!)
 
         except (
             sqlite3.Error
         ):  # UNIQUE constraint failed: ? messages.dtm or .hdr (so: HACK)
-            # self._cx.rollback()
             pass
 
         else:
             # _msgs dict requires a timestamp reformat
-            # dtm: DtmStrT = msg.dtm.isoformat(timespec="microseconds")
             # add msg to self._msgs dict
             self._msgs[dtm_str] = msg
 
@@ -344,9 +301,6 @@ class MessageIndex:
         dtm: DtmStrT = _now.isoformat(timespec="microseconds")  # type: ignore[assignment]
         hdr = f"{code}|{verb}|{src}|{payload}"
 
-        # dup = self._delete_from(hdr=hdr)
-        # Avoid blocking read; worker handles REPLACE on unique constraint collision
-
         # Prepare data tuple for worker
         data = PacketLogEntry(
             dtm=_now,
@@ -372,9 +326,6 @@ class MessageIndex:
         )
         self._msgs[dtm] = msg
 
-        # if dup:  # expected when more than one heat system in schema
-        #     _LOGGER.debug("Replaced record with same hdr: %s", hdr)
-
     def _insert_into(self, msg: Message) -> Message | None:
         """
         Insert a message into the index.
@@ -390,9 +341,7 @@ class MessageIndex:
         else:
             msg_pkt_ctx = msg._pkt._ctx  # can be None
 
-        # _old_msgs = self._delete_from(hdr=msg._pkt._hdr)
         # Refactor: Worker uses INSERT OR REPLACE to handle collision
-
         data = PacketLogEntry(
             dtm=msg.dtm,
             verb=str(msg.verb),
@@ -412,23 +361,15 @@ class MessageIndex:
         if "PYTEST_CURRENT_TEST" in os.environ:
             self.flush()
 
-        # _LOGGER.debug(f"Added {msg} to gwy.msg_db")
-
         return None
 
-    def rem(
+    async def rem(
         self, msg: Message | None = None, **kwargs: str | dt
     ) -> tuple[Message, ...] | None:
         """Remove a set of message(s) from the index.
 
         :returns: any messages that were removed.
         """
-        # _LOGGER.debug(f"SQL REM msg={msg} bool{bool(msg)} kwargs={kwargs} bool(kwargs)")
-        # SQL REM
-        # msg=||  02:044328 | | I | heat_demand | FC || {'domain_id': 'FC', 'heat_demand': 0.74}
-        # boolTrue
-        # kwargs={}
-        # bool(kwargs)
 
         if not bool(msg) ^ bool(kwargs):
             raise DatabaseQueryError(
@@ -437,42 +378,45 @@ class MessageIndex:
         if msg:
             kwargs["dtm"] = msg.dtm
 
-        msgs = None
+        msgs: tuple[Message, ...] | None = None
         try:  # make this operation atomic, i.e. update self._msgs only on success
-            # await self._lock.acquire()
-            msgs = self._delete_from(**kwargs)
+            msgs = await self._delete_from(**kwargs)
 
         except sqlite3.Error as err:  # need to tighten?
-            self._cx.rollback()
+            await asyncio.to_thread(self._cx.rollback)
             raise DatabaseQueryError(f"Delete failed: {err}") from err
 
         else:
-            for msg in msgs:
-                dtm: DtmStrT = msg.dtm.isoformat(timespec="microseconds")  # type: ignore[assignment]
-                self._msgs.pop(dtm)
+            if msgs is not None:
+                for m in msgs:
+                    dtm: DtmStrT = m.dtm.isoformat(timespec="microseconds")  # type: ignore[assignment]
+                    self._msgs.pop(dtm)
 
         finally:
             pass  # self._lock.release()
 
         return msgs
 
-    def _delete_from(self, **kwargs: bool | dt | str) -> tuple[Message, ...]:
+    async def _delete_from(self, **kwargs: bool | dt | str) -> tuple[Message, ...]:
         """Remove message(s) from the index.
 
         :returns: any messages that were removed"""
 
-        msgs = self._select_from(**kwargs)
+        msgs = await self._select_from(**kwargs)
 
         sql = "DELETE FROM messages WHERE "
         sql += " AND ".join(f"{k} = ?" for k in kwargs)
 
-        self._cu.execute(sql, tuple(kwargs.values()))
+        def _execute_delete() -> None:
+            self._cx.execute(sql, tuple(kwargs.values()))
+
+        await asyncio.to_thread(_execute_delete)
 
         return msgs
 
     # MessageIndex msg_db query methods
 
-    def get(
+    async def get(
         self, msg: Message | None = None, **kwargs: bool | dt | str
     ) -> tuple[Message, ...]:
         """
@@ -491,9 +435,9 @@ class MessageIndex:
         if msg:
             kwargs["dtm"] = msg.dtm
 
-        return self._select_from(**kwargs)
+        return await self._select_from(**kwargs)
 
-    def contains(self, **kwargs: bool | dt | str) -> bool:
+    async def contains(self, **kwargs: bool | dt | str) -> bool:
         """
         Check if the MessageIndex contains at least 1 record that matches the provided fields.
 
@@ -501,9 +445,9 @@ class MessageIndex:
         :return: True if at least one message fitting the given conditions is present, False when qry returned empty
         """
 
-        return len(self.qry_dtms(**kwargs)) > 0
+        return len(await self.qry_dtms(**kwargs)) > 0
 
-    def _select_from(self, **kwargs: bool | dt | str) -> tuple[Message, ...]:
+    async def _select_from(self, **kwargs: bool | dt | str) -> tuple[Message, ...]:
         """
         Select message(s) using the MessageIndex.
 
@@ -513,7 +457,8 @@ class MessageIndex:
 
         # CHANGE: Use a list comprehension with a check to avoid KeyError
         res: list[Message] = []
-        for row in self.qry_dtms(**kwargs):
+        dtms = await self.qry_dtms(**kwargs)
+        for row in dtms:
             ts: DtmStrT = row[0].isoformat(timespec="microseconds")
             if ts in self._msgs:
                 res.append(self._msgs[ts])
@@ -521,7 +466,7 @@ class MessageIndex:
                 _LOGGER.debug("MessageIndex timestamp %s not in device messages", ts)
         return tuple(res)
 
-    def qry_dtms(self, **kwargs: bool | dt | str) -> list[Any]:
+    async def qry_dtms(self, **kwargs: bool | dt | str) -> list[Any]:
         """
         Select from the MessageIndex a list of dtms that match the provided arguments.
 
@@ -541,13 +486,15 @@ class MessageIndex:
         sql = "SELECT dtm FROM messages WHERE "
         sql += " AND ".join(f"{k} = ?" for k in kw)
 
+        def _fetch_dtms() -> list[Any]:
+            return self._cx.execute(sql, tuple(kw.values())).fetchall()
+
         try:
-            self._cu.execute(sql, tuple(kw.values()))
+            return await asyncio.to_thread(_fetch_dtms)
         except sqlite3.Error as err:
             raise DatabaseQueryError(f"Query failed: {err}") from err
-        return self._cu.fetchall()
 
-    def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
+    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
         """
         Get a tuple of messages from _msgs using the index, given sql and parameters.
 
@@ -559,30 +506,26 @@ class MessageIndex:
         if "SELECT" not in sql:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
+        def _fetch_qry() -> list[Any]:
+            return self._cx.execute(sql, parameters).fetchall()
+
         try:
-            self._cu.execute(sql, parameters)
+            rows = await asyncio.to_thread(_fetch_qry)
         except sqlite3.Error as err:
             raise DatabaseQueryError(f"Database error during qry: {err}") from err
 
         lst: list[Message] = []
-        # stamp = list(self._msgs)[0] if len(self._msgs) > 0 else "N/A"  # for debug
-        for row in self._cu.fetchall():
+        for row in rows:
             ts: DtmStrT = row[0].isoformat(
                 timespec="microseconds"
             )  # must reformat from DTM
-            # _LOGGER.debug(
-            #     f"QRY Msg key raw: {row[0]} Reformatted: {ts} _msgs stamp format: {stamp}"
-            # )
-            # QRY Msg key raw: 2022-09-08 13:43:31.536862 Reformatted: 2022-09-08T13:43:31.536862
-            # _msgs stamp format: 2022-09-08T13:40:52.447364
             if ts in self._msgs:
                 lst.append(self._msgs[ts])
-                # _LOGGER.debug("MessageIndex ts %s added to qry.lst", ts)  # too frequent
             else:  # happens in tests with artificial msg from heat
                 _LOGGER.info("MessageIndex timestamp %s not in device messages", ts)
         return tuple(lst)
 
-    def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
+    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
         """
         Get a list of Codes from the index, given parameters.
 
@@ -602,17 +545,19 @@ class MessageIndex:
         if "SELECT" not in sql:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
+        def _fetch_rp() -> list[Any]:
+            return self._cx.execute(sql, parameters).fetchall()
+
         try:
-            self._cu.execute(sql, parameters)
+            rows = await asyncio.to_thread(_fetch_rp)
         except sqlite3.Error as err:
             raise DatabaseQueryError(
                 f"Database error during get_rp_codes: {err}"
             ) from err
 
-        res = self._cu.fetchall()
-        return [get_code(res[0]) for res[0] in self._cu.fetchall()]
+        return [get_code(row[0]) for row in rows]
 
-    def qry_field(
+    async def qry_field(
         self, sql: str, parameters: tuple[str, ...]
     ) -> list[tuple[dt | str, str]]:
         """
@@ -626,44 +571,37 @@ class MessageIndex:
         if "SELECT" not in sql:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
+        def _fetch_field() -> list[Any]:
+            return self._cx.execute(sql, parameters).fetchall()
+
         try:
-            self._cu.execute(sql, parameters)
+            return await asyncio.to_thread(_fetch_field)
         except sqlite3.Error as err:
             raise DatabaseQueryError(f"Database error during qry_field: {err}") from err
 
-        return self._cu.fetchall()
-
-    def all(self, include_expired: bool = False) -> tuple[Message, ...]:
+    async def all(self, include_expired: bool = False) -> tuple[Message, ...]:
         """Get all messages from the index."""
 
-        self._cu.execute("SELECT * FROM messages")
+        def _fetch_all() -> list[Any]:
+            return self._cx.execute("SELECT * FROM messages").fetchall()
 
+        rows = await asyncio.to_thread(_fetch_all)
         lst: list[Message] = []
-        # stamp = list(self._msgs)[0] if len(self._msgs) > 0 else "N/A"
-        for row in self._cu.fetchall():
+        for row in rows:
             ts: DtmStrT = row[0].isoformat(timespec="microseconds")
-            # _LOGGER.debug(
-            #     f"ALL Msg key raw: {row[0]} Reformatted: {ts} _msgs stamp format: {stamp}"
-            # )
-            # ALL Msg key raw: 2022-05-02 10:02:02.744905
-            # Reformatted: 2022-05-02T10:02:02.744905
-            # _msgs stamp format: 2022-05-02T10:02:02.744905
             if ts in self._msgs:
-                # if include_expired or not self._msgs[ts].HAS_EXPIRED:  # not working
                 lst.append(self._msgs[ts])
                 _LOGGER.debug("MessageIndex ts %s added to all.lst", ts)
             else:  # happens in tests and real evohome setups with dummy msg from heat init
                 _LOGGER.debug("MessageIndex ts %s not in device messages", ts)
         return tuple(lst)
 
-    def clr(self) -> None:
+    async def clr(self) -> None:
         """Clear the message index (remove indexes of all messages)."""
 
-        self._cu.execute("DELETE FROM messages")
-        self._cx.commit()
+        def _clear_db() -> None:
+            self._cx.execute("DELETE FROM messages")
+            self._cx.commit()
 
+        await asyncio.to_thread(_clear_db)
         self._msgs.clear()
-
-    # def _msgs(self, device_id: DeviceIdT) -> tuple[Message, ...]:
-    #     msgs = [msg for msg in self._msgs.values() if msg.src.id == device_id]
-    #     return msgs

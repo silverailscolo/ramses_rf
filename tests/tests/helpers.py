@@ -82,7 +82,7 @@ def assert_expected(
         assert_expected(shrink(actual), shrink(expected))
 
 
-def assert_expected_set(gwy: Gateway, expected: dict) -> None:
+async def assert_expected_set(gwy: Gateway, expected: dict) -> None:
     """Compare the actual system state against the expected system state.
 
     :param gwy: The gateway instance to check.
@@ -93,10 +93,10 @@ def assert_expected_set(gwy: Gateway, expected: dict) -> None:
     :rtype: None
     """
 
-    assert_expected(gwy.schema, expected.get("schema"))
-    assert_expected(gwy.params, expected.get("params"))
-    assert_expected(gwy.status, expected.get("status"))
-    assert_expected(gwy.known_list, expected.get("known_list"))
+    assert_expected(await gwy.schema(), expected.get("schema"))
+    assert_expected(await gwy.params(), expected.get("params"))
+    assert_expected(await gwy.status(), expected.get("status"))
+    assert_expected(await gwy.known_list(), expected.get("known_list"))
 
 
 def assert_raises(

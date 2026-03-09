@@ -89,6 +89,8 @@ BINDING_QOS = QosParams(
 
 
 class Vendor(StrEnum):
+    """Enumeration of recognized hardware vendors."""
+
     CLIMARAD = "climarad"
     ITHO = "itho"
     NUAIRE = "nuaire"
@@ -127,6 +129,8 @@ VOL_SUPPLICANT = vol.Schema(
 
 
 class BindPhase(StrEnum):
+    """Enumeration representing the phase of the binding process."""
+
     TENDER = "offer"
     ACCEPT = "accept"
     AFFIRM = "confirm"
@@ -134,6 +138,8 @@ class BindPhase(StrEnum):
 
 
 class BindRole(StrEnum):
+    """Enumeration representing the binding role of a device."""
+
     RESPONDENT = "respondent"
     SUPPLICANT = "supplicant"
     IS_DORMANT = "is_dormant"
@@ -162,6 +168,10 @@ class BindContextBase:
     _state: BindStateBase = None  # type: ignore[assignment]
 
     def __init__(self, dev: Fakeable) -> None:
+        """Initialize the binding context.
+
+        :param dev: The fakeable device managing this binding context.
+        """
         self._dev = dev
         self._loop = asyncio.get_running_loop()
         self._fut: asyncio.Future[Message] | None = None
@@ -177,7 +187,11 @@ class BindContextBase:
     def set_state(
         self, state: type[BindStateBase], result: asyncio.Future[Message] | None = None
     ) -> None:
-        """Transition the State of the Context, and process the result, if any."""
+        """Transition the State of the Context, and process the result, if any.
+
+        :param state: The new state class to transition into.
+        :param result: The future result carrying the preceding message state, optional.
+        """
         # Ensure prev_state is always available, not only during debugging
         prev_state = self._state
 
@@ -213,6 +227,7 @@ class BindContextBase:
 
     @property
     def role(self) -> BindRole:
+        """Return the current binding role."""
         if self._is_respondent is True:
             return BindRole.RESPONDENT
         if self._is_respondent is False:
@@ -226,12 +241,18 @@ class BindContextBase:
         return not isinstance(self.state, _IS_NOT_BINDING_STATES)
 
     def rcvd_msg(self, msg: Message) -> None:
-        """Pass relevant Messages through to the state processor."""
+        """Pass relevant Messages through to the state processor.
+
+        :param msg: The incoming message to process.
+        """
         if msg.code in (Code._1FC9, Code._10E0):
             self.state.rcvd_msg(msg)
 
     def sent_cmd(self, cmd: Command) -> None:
-        """Pass relevant Commands through to the state processor."""
+        """Pass relevant Commands through to the state processor.
+
+        :param cmd: The outgoing command to process.
+        """
         if cmd.code in (Code._1FC9, Code._10E0):
             self.state.send_cmd(cmd)
 
@@ -251,8 +272,14 @@ class BindContextRespondent(BindContextBase):
     ) -> tuple[Packet, Packet, Packet, Packet | None]:
         """Device starts binding as a Respondent, by listening for an Offer.
 
-        Returns the Supplicant's Offer or raise an exception if the binding is
+        Returns the Supplicant's Offer or raises an exception if the binding is
         unsuccessful (BindError).
+
+        :param accept_codes: An iterable of codes this device accepts.
+        :param idx: The index to bind to, defaults to '00'.
+        :param require_ratify: If True, require an addenda stage.
+        :return: A tuple containing the (tender, accept, affirm, ratify) packets.
+        :raises exc.BindingFsmError: If already binding.
         """
 
         if self.is_binding:
@@ -279,13 +306,23 @@ class BindContextRespondent(BindContextBase):
         return tender._pkt, accept, affirm._pkt, (ratify._pkt if ratify else None)
 
     async def _wait_for_offer(self, timeout: float = _TENDER_WAIT_TIME) -> Message:
-        """Resp waits timeout seconds for an Offer to arrive & returns it."""
+        """Resp waits timeout seconds for an Offer to arrive & returns it.
+
+        :param timeout: Time to wait in seconds.
+        :return: The offer message.
+        """
         return await self.state.wait_for_offer(timeout)
 
     async def _accept_offer(
         self, tender: Message, codes: Iterable[Code], idx: IndexT = "00"
     ) -> Packet:
-        """Resp sends an Accept on the basis of a rcvd Offer & returns the Confirm."""
+        """Resp sends an Accept on the basis of a rcvd Offer & returns the Confirm.
+
+        :param tender: The received offer message.
+        :param codes: Iterable of codes accepted.
+        :param idx: The bound index.
+        :return: The sent accept packet.
+        """
 
         cmd = Command.put_bind(W_, self._dev.id, codes, dst_id=tender.src.id, idx=idx)
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
@@ -303,7 +340,12 @@ class BindContextRespondent(BindContextBase):
         accept: Packet,
         timeout: float = _AFFIRM_WAIT_TIME,
     ) -> Message:
-        """Resp waits timeout seconds for a Confirm to arrive & returns it."""
+        """Resp waits timeout seconds for a Confirm to arrive & returns it.
+
+        :param accept: The accept packet previously sent.
+        :param timeout: Time to wait in seconds.
+        :return: The confirm message.
+        """
         return await self.state.wait_for_confirm(timeout)
 
     async def _wait_for_addenda(
@@ -311,7 +353,12 @@ class BindContextRespondent(BindContextBase):
         accept: Packet,
         timeout: float = _RATIFY_WAIT_TIME,
     ) -> Message:
-        """Resp waits timeout seconds for an Addenda to arrive & returns it."""
+        """Resp waits timeout seconds for an Addenda to arrive & returns it.
+
+        :param accept: The accept packet previously sent.
+        :param timeout: Time to wait in seconds.
+        :return: The addenda message.
+        """
         return await self.state.wait_for_addenda(timeout)
 
 
@@ -330,8 +377,14 @@ class BindContextSupplicant(BindContextBase):
     ) -> tuple[Packet, Packet, Packet, Packet | None]:
         """Device starts binding as a Supplicant, by sending an Offer.
 
-        Returns the Respondent's Accept, or raise an exception if the binding is
+        Returns the Respondent's Accept, or raises an exception if the binding is
         unsuccessful (BindError).
+
+        :param offer_codes: An iterable of codes to offer.
+        :param confirm_code: An optional confirm code override.
+        :param ratify_cmd: An optional ratification command to finalize binding.
+        :return: A tuple containing the (tender, accept, affirm, ratify) packets.
+        :raises exc.BindingFsmError: If already binding.
         """
 
         if self.is_binding:
@@ -364,7 +417,12 @@ class BindContextSupplicant(BindContextBase):
         codes: Iterable[Code],
         oem_code: str | None = None,
     ) -> Packet:
-        """Supp sends an Offer & returns the corresponding Packet."""
+        """Supp sends an Offer & returns the corresponding Packet.
+
+        :param codes: Codes to offer.
+        :param oem_code: Optional OEM specific code block.
+        :return: The sent offer packet.
+        """
         # if oem_code, send an 10E0
 
         # state = self.state
@@ -387,13 +445,23 @@ class BindContextSupplicant(BindContextBase):
         tender: Packet,
         timeout: float = _ACCEPT_WAIT_TIME,
     ) -> Message:
-        """Supp waits timeout seconds for an Accept to arrive & returns it."""
+        """Supp waits timeout seconds for an Accept to arrive & returns it.
+
+        :param tender: The previously sent offer packet.
+        :param timeout: Time to wait in seconds.
+        :return: The accept message.
+        """
         return await self.state.wait_for_accept(timeout)
 
     async def _confirm_accept(
         self, accept: Message, confirm_code: Code | None = None
     ) -> Packet:
-        """Supp casts a Confirm on the basis of a rcvd Accept & returns the Confirm."""
+        """Supp casts a Confirm on the basis of a rcvd Accept & returns the Confirm.
+
+        :param accept: The received accept message.
+        :param confirm_code: The code to confirm with.
+        :return: The sent confirm packet.
+        """
 
         idx = accept._pkt.payload[:2]  # HACK assumes all idx same
 
@@ -411,7 +479,12 @@ class BindContextSupplicant(BindContextBase):
         return pkt
 
     async def _cast_addenda(self, accept: Message, cmd: Command) -> Packet:
-        """Supp casts an Addenda (the final 10E0 command)."""
+        """Supp casts an Addenda (the final 10E0 command).
+
+        :param accept: The previously received accept message.
+        :param cmd: The ratify command to cast.
+        :return: The sent addenda packet.
+        """
 
         pkt: Packet = await self._dev._async_send_cmd(  # type: ignore[assignment]
             cmd, priority=Priority.HIGH, qos=BINDING_QOS
@@ -422,6 +495,8 @@ class BindContextSupplicant(BindContextBase):
 
 
 class BindContext(BindContextRespondent, BindContextSupplicant):
+    """Aggregate context handling both Respondent and Supplicant flows."""
+
     _attr_role = BindRole.IS_UNKNOWN
 
 
@@ -429,6 +504,8 @@ class BindContext(BindContextRespondent, BindContextSupplicant):
 
 
 class BindStateBase:
+    """Base class for all phases within the Binding Finite State Machine."""
+
     _attr_role = BindRole.IS_UNKNOWN
 
     _cmds_sent: int = 0  # num of bind cmds sent
@@ -441,6 +518,10 @@ class BindStateBase:
     _next_ctx_state: type[BindStateBase]  # next state, if successful transition
 
     def __init__(self, context: BindContextBase) -> None:
+        """Initialize the binding state.
+
+        :param context: The binding context operating this state.
+        """
         self._context = context
         self._loop = context._loop
 
@@ -462,12 +543,16 @@ class BindStateBase:
 
     @property
     def context(self) -> BindContextBase:
+        """Return the associated context for this state."""
         return self._context
 
     async def _wait_for_fut_result(self, timeout: float) -> Message:
         """Wait timeout seconds for an expected event to occur.
 
         The expected event is defined by the State's sent_cmd, rcvd_msg methods.
+
+        :param timeout: The maximum time to wait in seconds.
+        :return: The message containing the expected result.
         """
         try:
             await asyncio.wait_for(self._fut, timeout)
@@ -479,8 +564,10 @@ class BindStateBase:
         return result
 
     def _handle_wait_timer_expired(self, timeout: float) -> None:
-        """Process an overrun of the wait timer when waiting for a Message."""
+        """Process an overrun of the wait timer when waiting for a Message.
 
+        :param timeout: The timeout limit that was exceeded.
+        """
         msg = (
             f"{self._context}: Failed to transition to {self._next_ctx_state}: "
             f"expected message not received after {timeout} secs"
@@ -491,18 +578,37 @@ class BindStateBase:
         self._set_context_state(DevHasFailedBinding)
 
     def _set_context_state(self, next_state: type[BindStateBase]) -> None:
+        """Transition the parent context to a new state.
+
+        :param next_state: The class representing the next state.
+        :raises exc.BindingFsmError: If the future was not yet completed.
+        """
         if not self._fut.done():  # if not BindRetryError, BindTimeoutError, msg
             raise exc.BindingFsmError  # or: self._fut.set_exception()
         self._context.set_state(next_state, result=self._fut)
 
     def send_cmd(self, cmd: Command) -> None:
+        """Abstract method to handle an outgoing command.
+
+        :param cmd: The command that is being sent.
+        """
         raise NotImplementedError
 
     def rcvd_msg(self, msg: Message) -> None:
+        """Abstract method to handle an incoming message.
+
+        :param msg: The message that was received.
+        """
         raise NotImplementedError
 
     @staticmethod
     def is_phase(cmd: Command | Packet, phase: BindPhase) -> bool:
+        """Evaluate if the given command or packet corresponds to the specified binding phase.
+
+        :param cmd: The command or packet object.
+        :param phase: The binding phase to test against.
+        :return: True if the command is aligned with the phase, False otherwise.
+        """
         if phase == BindPhase.RATIFY:
             return cmd.verb == I_ and cmd.code == Code._10E0
         if cmd.code != Code._1FC9:

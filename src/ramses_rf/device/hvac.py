@@ -101,17 +101,15 @@ class HvacSensorBase(DeviceHvac):
 class CarbonDioxide(HvacSensorBase):  # 1298
     """The CO2 sensor (cardinal code is 1298)."""
 
-    @property
-    def co2_level(self) -> int | None:
+    async def co2_level(self) -> int | None:
         """Get the CO2 level in ppm.
 
         :return: The CO2 level in parts per million (ppm), or None if not available
         :rtype: int | None
         """
-        return cast(int | None, self._msg_value(Code._1298, key=SZ_CO2_LEVEL))
+        return cast(int | None, await self._msg_value(Code._1298, key=SZ_CO2_LEVEL))
 
-    @co2_level.setter
-    def co2_level(self, value: int | None) -> None:
+    def set_co2_level(self, value: int | None) -> None:
         """Set a fake CO2 level for the sensor.
 
         :param value: The CO2 level in ppm to set, or None to clear the fake value
@@ -125,33 +123,33 @@ class CarbonDioxide(HvacSensorBase):  # 1298
         cmd = Command.put_co2_level(self.id, value)
         self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the status of the CO2 sensor.
 
         :return: A dictionary containing the sensor's status including CO2 level
         :rtype: dict[str, Any]
         """
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_CO2_LEVEL: self.co2_level,
+            **base_status,
+            SZ_CO2_LEVEL: await self.co2_level(),
         }
 
 
 class IndoorHumidity(HvacSensorBase):  # 12A0
     """The relative humidity sensor (12A0)."""
 
-    @property
-    def indoor_humidity(self) -> float | None:
+    async def indoor_humidity(self) -> float | None:
         """Get the indoor relative humidity.
 
         :return: The indoor relative humidity as a percentage (0-100), or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._12A0, key=SZ_INDOOR_HUMIDITY))
+        return cast(
+            float | None, await self._msg_value(Code._12A0, key=SZ_INDOOR_HUMIDITY)
+        )
 
-    @indoor_humidity.setter
-    def indoor_humidity(self, value: float | None) -> None:
+    def set_indoor_humidity(self, value: float | None) -> None:
         """Set a fake indoor humidity value for the sensor.
 
         :param value: The humidity percentage to set (0-100), or None to clear the fake value
@@ -165,16 +163,16 @@ class IndoorHumidity(HvacSensorBase):  # 12A0
         cmd = Command.put_indoor_humidity(self.id, value)
         self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the status of the indoor humidity sensor.
 
         :return: A dictionary containing the sensor's status including humidity level
         :rtype: dict[str, Any]
         """
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_INDOOR_HUMIDITY: self.indoor_humidity,
+            **base_status,
+            SZ_INDOOR_HUMIDITY: await self.indoor_humidity(),
         }
 
 
@@ -185,17 +183,17 @@ class PresenceDetect(HvacSensorBase):  # 2E10
     # .W --- 28:126620 37:154011 --:------ 1FC9 012 00-31D9-49EE9C 00-31DA-49EE9C                                                 # FAN, BRDG-02A55
     # .I --- 37:154011 28:126620 --:------ 1FC9 001 00                                                                            # CO2, incl. integrated control, PIR
 
-    @property
-    def presence_detected(self) -> bool | None:
+    async def presence_detected(self) -> bool | None:
         """Get the presence detection status.
 
         :return: True if presence is detected, False if not, None if status is unknown
         :rtype: bool | None
         """
-        return cast(bool | None, self._msg_value(Code._2E10, key=SZ_PRESENCE_DETECTED))
+        return cast(
+            bool | None, await self._msg_value(Code._2E10, key=SZ_PRESENCE_DETECTED)
+        )
 
-    @presence_detected.setter
-    def presence_detected(self, value: bool | None) -> None:
+    def set_presence_detected(self, value: bool | None) -> None:
         """Set a fake presence detection state for the sensor.
 
         :param value: The presence state to set (True/False), or None to clear the fake value
@@ -209,16 +207,16 @@ class PresenceDetect(HvacSensorBase):  # 2E10
         cmd = Command.put_presence_detected(self.id, value)
         self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the status of the presence sensor.
 
         :return: A dictionary containing the sensor's status including presence detection state
         :rtype: dict[str, Any]
         """
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_PRESENCE_DETECTED: self.presence_detected,
+            **base_status,
+            SZ_PRESENCE_DETECTED: await self.presence_detected(),
         }
 
 
@@ -235,25 +233,23 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             delay=30,
         )
 
-    @property
-    def filter_remaining(self) -> int | None:
+    async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.
 
         :return: Number of days remaining until filter change, or None if not available
         :rtype: int | None
         """
-        _val = self._msg_value(Code._10D0, key=SZ_REMAINING_DAYS)
+        _val = await self._msg_value(Code._10D0, key=SZ_REMAINING_DAYS)
         assert isinstance(_val, (int | type(None)))
         return _val
 
-    @property
-    def filter_remaining_percent(self) -> float | None:
+    async def filter_remaining_percent(self) -> float | None:
         """Return the remaining filter life as a percentage.
 
         :return: Percentage of filter life remaining (0-100), or None if not available
         :rtype: float | None
         """
-        _val = self._msg_value(Code._10D0, key=SZ_REMAINING_PERCENT)
+        _val = await self._msg_value(Code._10D0, key=SZ_REMAINING_PERCENT)
         assert isinstance(_val, (float | type(None)))
         return _val
 
@@ -287,35 +283,35 @@ class HvacHumiditySensor(BatteryState, IndoorHumidity, Fakeable):  # HUM: I/12A0
 
     _SLUG: str = DevType.HUM
 
-    @property
-    def temperature(self) -> float | None:
+    async def temperature(self) -> float | None:
         """Return the current temperature in Celsius.
 
         :return: The temperature in degrees Celsius, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._12A0, key=SZ_TEMPERATURE))
+        return cast(float | None, await self._msg_value(Code._12A0, key=SZ_TEMPERATURE))
 
-    @property
-    def dewpoint_temp(self) -> float | None:
+    async def dewpoint_temp(self) -> float | None:
         """Return the dewpoint temperature in Celsius.
 
         :return: The dewpoint temperature in degrees Celsius, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._12A0, key="dewpoint_temp"))
+        return cast(
+            float | None, await self._msg_value(Code._12A0, key="dewpoint_temp")
+        )
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the status of the humidity sensor.
 
         :return: A dictionary containing the sensor's status including temperature and humidity
         :rtype: dict[str, Any]
         """
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_TEMPERATURE: self.temperature,
-            "dewpoint_temp": self.dewpoint_temp,
+            **base_status,
+            SZ_TEMPERATURE: await self.temperature(),
+            "dewpoint_temp": await self.dewpoint_temp(),
         }
 
 
@@ -360,18 +356,16 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
             Code._22F1 if self._scheme == "nuaire" else (Code._22F1, Code._22F3)
         )
 
-    @property
-    def fan_rate(self) -> str | None:
+    async def fan_rate(self) -> str | None:
         """Get the current fan rate setting.
 
         :return: The fan rate as a string, or None if not available
         :rtype: str | None
         :note: This is a work in progress - rate can be either int or str
         """
-        return cast(str | None, self._msg_value(Code._22F1, key="rate"))
+        return cast(str | None, await self._msg_value(Code._22F1, key="rate"))
 
-    @fan_rate.setter
-    def fan_rate(self, value: int) -> None:
+    def set_fan_rate(self, value: int) -> None:
         """Set a fake fan rate for the remote control.
 
         :param value: The fan rate to set (can be int or str, but not None)
@@ -389,30 +383,28 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         cmd = Command.set_fan_mode(self.id, int(4 * value), src_id=self.id)
         self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
 
-    @property
-    def fan_mode(self) -> str | None:
+    async def fan_mode(self) -> str | None:
         """Return the current fan mode.
 
         :return: The fan mode as a string, or None if not available
         :rtype: str | None
         """
-        return cast(str | None, self._msg_value(Code._22F1, key=SZ_FAN_MODE))
+        return cast(str | None, await self._msg_value(Code._22F1, key=SZ_FAN_MODE))
 
-    @property
-    def boost_timer(self) -> int | None:
+    async def boost_timer(self) -> int | None:
         """Return the remaining boost timer in minutes.
 
         :return: The remaining boost time in minutes, or None if boost is not active
         :rtype: int | None
         """
-        return cast(int | None, self._msg_value(Code._22F3, key=SZ_BOOST_TIMER))
+        return cast(int | None, await self._msg_value(Code._22F3, key=SZ_BOOST_TIMER))
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_FAN_MODE: self.fan_mode,
-            SZ_BOOST_TIMER: self.boost_timer,
+            **base_status,
+            SZ_FAN_MODE: await self.fan_mode(),
+            SZ_BOOST_TIMER: await self.boost_timer(),
         }
 
 
@@ -817,17 +809,15 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         _LOGGER.debug("No bound REM or DIS devices found for FAN %s", self.id)
         return None
 
-    @property
-    def air_quality(self) -> float | None:
+    async def air_quality(self) -> float | None:
         """Return the current air quality measurement.
 
         :return: The air quality measurement as a float, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_AIR_QUALITY))
+        return cast(float | None, await self._msg_value(Code._31DA, key=SZ_AIR_QUALITY))
 
-    @property
-    def air_quality_base(self) -> float | None:
+    async def air_quality_base(self) -> float | None:
         """Return the base air quality measurement.
 
         This represents the baseline or raw air quality measurement before any
@@ -836,17 +826,17 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The base air quality measurement, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_AIR_QUALITY_BASIS))
+        return cast(
+            float | None, await self._msg_value(Code._31DA, key=SZ_AIR_QUALITY_BASIS)
+        )
 
-    @property
-    def bypass_mode(self) -> str | None:
+    async def bypass_mode(self) -> str | None:
         """
         :return: bypass mode as on|off|auto
         """
-        return cast(str | None, self._msg_value(Code._22F7, key=SZ_BYPASS_MODE))
+        return cast(str | None, await self._msg_value(Code._22F7, key=SZ_BYPASS_MODE))
 
-    @property
-    def bypass_position(self) -> float | str | None:
+    async def bypass_position(self) -> float | str | None:
         """
         Position info is found in 22F7 and in 31DA. The most recent packet is returned.
         :return: bypass position as percentage: 0.0 (closed) or 1.0 (open), on error: "x_faulted"
@@ -854,28 +844,25 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         # if both packets exist and both have the key, returns the most recent
         return cast(
             float | str | None,
-            self._msg_value((Code._22F7, Code._31DA), key=SZ_BYPASS_POSITION),
+            await self._msg_value((Code._22F7, Code._31DA), key=SZ_BYPASS_POSITION),
         )
 
-    @property
-    def bypass_state(self) -> str | None:
+    async def bypass_state(self) -> str | None:
         """
         Orcon, others?
         :return: bypass position as on/off
         """
-        return cast(str | None, self._msg_value(Code._22F7, key=SZ_BYPASS_STATE))
+        return cast(str | None, await self._msg_value(Code._22F7, key=SZ_BYPASS_STATE))
 
-    @property
-    def co2_level(self) -> int | None:
+    async def co2_level(self) -> int | None:
         """Return the CO2 level in parts per million (ppm).
 
         :return: The CO2 level in ppm, or None if not available
         :rtype: int | None
         """
-        return cast(int | None, self._msg_value(Code._31DA, key=SZ_CO2_LEVEL))
+        return cast(int | None, await self._msg_value(Code._31DA, key=SZ_CO2_LEVEL))
 
-    @property
-    def exhaust_fan_speed(
+    async def exhaust_fan_speed(
         self,
     ) -> float | None:
         """
@@ -884,8 +871,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: speed as percentage
         """
         speed: float = -1
-        for code in [c for c in (Code._31D9, Code._31DA) if c in self._msgs]:
-            if v := self._msgs[code].payload.get(SZ_EXHAUST_FAN_SPEED):
+        msgs = await self._msgs()
+        for code in [c for c in (Code._31D9, Code._31DA) if c in msgs]:
+            if v := msgs[code].payload.get(SZ_EXHAUST_FAN_SPEED):
                 # if both packets exist and both have the key, use the highest value
                 if v is not None:
                     speed = max(v, speed)
@@ -893,46 +881,45 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             return speed
         return None
 
-    @property
-    def exhaust_flow(self) -> float | None:
+    async def exhaust_flow(self) -> float | None:
         """Return the current exhaust air flow rate.
 
         :return: The exhaust air flow rate in m³/h, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_EXHAUST_FLOW))
+        return cast(
+            float | None, await self._msg_value(Code._31DA, key=SZ_EXHAUST_FLOW)
+        )
 
-    @property
-    def exhaust_temp(self) -> float | None:
+    async def exhaust_temp(self) -> float | None:
         """Return the current exhaust air temperature.
 
         :return: The exhaust air temperature in degrees Celsius, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_EXHAUST_TEMP))
+        return cast(
+            float | None, await self._msg_value(Code._31DA, key=SZ_EXHAUST_TEMP)
+        )
 
-    @property
-    def fan_rate(self) -> str | None:
+    async def fan_rate(self) -> str | None:
         """
         Lookup fan mode description from _22F4  message payload, e.g. "low", "medium", "boost".
         For manufacturers Orcon, Vasco, ClimaRad.
 
         :return: int or str describing rate of fan
         """
-        return cast(str | None, self._msg_value(Code._22F4, key=SZ_FAN_RATE))
+        return cast(str | None, await self._msg_value(Code._22F4, key=SZ_FAN_RATE))
 
-    @property
-    def fan_mode(self) -> str | None:
+    async def fan_mode(self) -> str | None:
         """
         Lookup fan mode description from _22F4  message payload, e.g. "auto", "manual", "off".
         For manufacturers Orcon, Vasco, ClimaRad.
 
         :return: a string describing mode
         """
-        return cast(str | None, self._msg_value(Code._22F4, key=SZ_FAN_MODE))
+        return cast(str | None, await self._msg_value(Code._22F4, key=SZ_FAN_MODE))
 
-    @property
-    def fan_info(self) -> str | None:
+    async def fan_info(self) -> str | None:
         """
         Extract fan info description from MessageIndex _31D9 or _31DA payload,
         e.g. "speed 2, medium".
@@ -966,46 +953,45 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         #     f"# Fetched FAN_RATE for {self.id} from MessageIndex: {res_rate}"
         # )
 
-        if Code._31D9 in self._msgs:
+        msgs = await self._msgs()
+        if Code._31D9 in msgs:
             # was a dict by Code
             # Itho, Vasco D60 and ClimaRad MiniBox fan send mode/speed in _31D9
             v: str
-            for k, v in self._msgs[Code._31D9].payload.items():
+            for k, v in msgs[Code._31D9].payload.items():
                 if k == SZ_FAN_MODE and len(v) > 2:  # prevent non-lookups to pass
                     return v
             # continue to 31DA
-        return str(self._msg_value(Code._31DA, key=SZ_FAN_INFO))  # Itho lookup
+        return str(await self._msg_value(Code._31DA, key=SZ_FAN_INFO))  # Itho lookup
 
-    @property
-    def indoor_humidity(self) -> float | None:
+    async def indoor_humidity(self) -> float | None:
         """
         Extract indoor_humidity from MessageIndex _12A0 or _31DA payload
         Just a demo for SQLite query helper at the moment.
 
         :return: float RH value from 0.0 to 1.0 = 100%
         """
-        if Code._12A0 in self._msgs and isinstance(
-            self._msgs[Code._12A0].payload, list
+        msgs = await self._msgs()
+        if Code._12A0 in msgs and isinstance(
+            msgs[Code._12A0].payload, list
         ):  # FAN Ventura sends RH/temps as a list; element [0] contains indoor_hum
-            if v := self._msgs[Code._12A0].payload[0].get(SZ_INDOOR_HUMIDITY):
+            if v := msgs[Code._12A0].payload[0].get(SZ_INDOOR_HUMIDITY):
                 assert isinstance(v, (float | type(None)))
                 return v
         return cast(
             float | None,
-            self._msg_value((Code._12A0, Code._31DA), key=SZ_INDOOR_HUMIDITY),
+            await self._msg_value((Code._12A0, Code._31DA), key=SZ_INDOOR_HUMIDITY),
         )
 
-    @property
-    def indoor_temp(self) -> float | None:
+    async def indoor_temp(self) -> float | None:
         """Return the current indoor temperature.
 
         :return: The indoor temperature in degrees Celsius, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_INDOOR_TEMP))
+        return cast(float | None, await self._msg_value(Code._31DA, key=SZ_INDOOR_TEMP))
 
-    @property
-    def outdoor_humidity(self) -> float | None:
+    async def outdoor_humidity(self) -> float | None:
         """Return the outdoor relative humidity.
 
         Handles special case for Ventura devices that send humidity data in 12A0 messages.
@@ -1013,96 +999,97 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The outdoor relative humidity as a percentage (0-100), or None if not available
         :rtype: float | None
         """
-        if Code._12A0 in self._msgs and isinstance(
-            self._msgs[Code._12A0].payload, list
+        msgs = await self._msgs()
+        if Code._12A0 in msgs and isinstance(
+            msgs[Code._12A0].payload, list
         ):  # FAN Ventura sends RH/temps as a list; element [1] contains outdoor_hum
-            if v := self._msgs[Code._12A0].payload[1].get(SZ_OUTDOOR_HUMIDITY):
+            if v := msgs[Code._12A0].payload[1].get(SZ_OUTDOOR_HUMIDITY):
                 assert isinstance(v, (float | type(None)))
                 return v
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_OUTDOOR_HUMIDITY))
+        return cast(
+            float | None, await self._msg_value(Code._31DA, key=SZ_OUTDOOR_HUMIDITY)
+        )
 
-    @property
-    def outdoor_temp(self) -> float | None:
+    async def outdoor_temp(self) -> float | None:
         """Return the outdoor temperature in Celsius.
 
         :return: The outdoor temperature in degrees Celsius, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_OUTDOOR_TEMP))
+        return cast(
+            float | None, await self._msg_value(Code._31DA, key=SZ_OUTDOOR_TEMP)
+        )
 
-    @property
-    def post_heat(self) -> int | None:
+    async def post_heat(self) -> int | None:
         """Return the post-heat status.
 
         :return: The post-heat status as an integer, or None if not available
         :rtype: int | None
         """
-        return cast(int | None, self._msg_value(Code._31DA, key=SZ_POST_HEAT))
+        return cast(int | None, await self._msg_value(Code._31DA, key=SZ_POST_HEAT))
 
-    @property
-    def pre_heat(self) -> int | None:
+    async def pre_heat(self) -> int | None:
         """Return the pre-heat status.
 
         :return: The pre-heat status as an integer, or None if not available
         :rtype: int | None
         """
-        return cast(int | None, self._msg_value(Code._31DA, key=SZ_PRE_HEAT))
+        return cast(int | None, await self._msg_value(Code._31DA, key=SZ_PRE_HEAT))
 
-    @property
-    def remaining_mins(self) -> int | None:
+    async def remaining_mins(self) -> int | None:
         """Return the remaining minutes for the current operation.
 
         :return: The remaining minutes as an integer, or None if not available
         :rtype: int | None
         """
-        return cast(int | None, self._msg_value(Code._31DA, key=SZ_REMAINING_MINS))
+        return cast(
+            int | None, await self._msg_value(Code._31DA, key=SZ_REMAINING_MINS)
+        )
 
-    @property
-    def request_fan_speed(self) -> float | None:
+    async def request_fan_speed(self) -> float | None:
         """Return the requested fan speed.
 
         :return: The requested fan speed as a percentage, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._2210, key=SZ_REQ_SPEED))
+        return cast(float | None, await self._msg_value(Code._2210, key=SZ_REQ_SPEED))
 
-    @property
-    def request_src(self) -> str | None:
+    async def request_src(self) -> str | None:
         """
         Orcon, others?
         :return: source sensor of auto speed request: IDL, CO2 or HUM
         """
-        return cast(str | None, self._msg_value(Code._2210, key=SZ_REQ_REASON))
+        return cast(str | None, await self._msg_value(Code._2210, key=SZ_REQ_REASON))
 
-    @property
-    def speed_cap(self) -> int | None:
+    async def speed_cap(self) -> int | None:
         """Return the speed capabilities of the fan.
 
         :return: The speed capabilities as an integer, or None if not available
         :rtype: int | None
         """
-        return cast(int | None, self._msg_value(Code._31DA, key=SZ_SPEED_CAPABILITIES))
+        return cast(
+            int | None, await self._msg_value(Code._31DA, key=SZ_SPEED_CAPABILITIES)
+        )
 
-    @property
-    def supply_fan_speed(self) -> float | None:
+    async def supply_fan_speed(self) -> float | None:
         """Return the supply fan speed.
 
         :return: The supply fan speed as a percentage, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_SUPPLY_FAN_SPEED))
+        return cast(
+            float | None, await self._msg_value(Code._31DA, key=SZ_SUPPLY_FAN_SPEED)
+        )
 
-    @property
-    def supply_flow(self) -> float | None:
+    async def supply_flow(self) -> float | None:
         """Return the supply air flow rate.
 
         :return: The supply air flow rate in m³/h, or None if not available
         :rtype: float | None
         """
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_SUPPLY_FLOW))
+        return cast(float | None, await self._msg_value(Code._31DA, key=SZ_SUPPLY_FLOW))
 
-    @property
-    def supply_temp(self) -> float | None:
+    async def supply_temp(self) -> float | None:
         """Return the supply air temperature.
 
         Handles special case for Ventura devices that send temperature data in 12A0 messages.
@@ -1110,30 +1097,31 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The supply air temperature in Celsius, or None if not available
         :rtype: float | None
         """
-        if Code._12A0 in self._msgs and isinstance(
-            self._msgs[Code._12A0].payload, list
+        msgs = await self._msgs()
+        if Code._12A0 in msgs and isinstance(
+            msgs[Code._12A0].payload, list
         ):  # FAN Ventura sends RH/temps as a list;
             # pass element [0] in place of supply_temp, which is always None in VenturaV1x 31DA
-            if v := self._msgs[Code._12A0].payload[1].get(SZ_TEMPERATURE):
+            if v := msgs[Code._12A0].payload[1].get(SZ_TEMPERATURE):
                 assert isinstance(v, (float | type(None)))
                 return v
-        return cast(float | None, self._msg_value(Code._31DA, key=SZ_SUPPLY_TEMP))
+        return cast(float | None, await self._msg_value(Code._31DA, key=SZ_SUPPLY_TEMP))
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        msgs = await self._msgs()
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_EXHAUST_FAN_SPEED: self.exhaust_fan_speed,
+            **base_status,
+            SZ_EXHAUST_FAN_SPEED: await self.exhaust_fan_speed(),
             **{
                 k: v
-                for code in [c for c in (Code._31D9, Code._31DA) if c in self._msgs]
-                for k, v in self._msgs[code].payload.items()
+                for code in [c for c in (Code._31D9, Code._31DA) if c in msgs]
+                for k, v in msgs[code].payload.items()
                 if k != SZ_EXHAUST_FAN_SPEED
             },
         }
 
-    @property
-    def temperature(self) -> float | None:  # Celsius
+    async def temperature(self) -> float | None:  # Celsius
         """Return the current temperature in Celsius.
 
         Handles special cases.
@@ -1141,14 +1129,15 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The temperature in degrees Celsius, or None if not available
         :rtype: float | None
         """
-        if Code._12A0 in self._msgs and isinstance(
-            self._msgs[Code._12A0].payload, list
+        msgs = await self._msgs()
+        if Code._12A0 in msgs and isinstance(
+            msgs[Code._12A0].payload, list
         ):  # FAN Ventura sends RH/temps as a list; use element [1]
-            if v := self._msgs[Code._12A0].payload[0].get(SZ_TEMPERATURE):
+            if v := msgs[Code._12A0].payload[0].get(SZ_TEMPERATURE):
                 assert isinstance(v, (float | type(None)))
                 return v
         # ClimaRad minibox FAN sends (indoor) temp in 12A0
-        return cast(float | None, self._msg_value(Code._12A0, key=SZ_TEMPERATURE))
+        return cast(float | None, await self._msg_value(Code._12A0, key=SZ_TEMPERATURE))
 
 
 # class HvacFanHru(HvacVentilator):
