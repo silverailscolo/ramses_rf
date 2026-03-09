@@ -528,7 +528,7 @@ def parse_air_quality(value: HexStr4) -> PayDictT.AIR_QUALITY:
     if int(value[:2], 16) & 0xF0 == 0xF0:
         return _faulted_sensor(SZ_AIR_QUALITY, value)  # type: ignore[return-value]
 
-    level = int(value[:2], 16) / 200  # was: hex_to_percent(value[:2])
+    level = int(value[:2], 16) / 200  # was: hex_to_percent(value[:2], True)
     assert level <= 1.0, value[:2]  # TODO: raise exception
 
     assert value[2:] in ("10", "20", "40"), value[2:]  # TODO: remove assert
@@ -626,7 +626,9 @@ def _parse_hvac_humidity(
     if int(value, 16) & 0xF0 == 0xF0:
         return _faulted_sensor(param_name, value)
 
-    percentage = hex_to_percent(value, False)  # TODO: confirm not /200
+    percentage = int(value[:2], 16) / 100
+    if percentage > 1.0:  # seen regularly, unknown meaning
+        return _faulted_common(param_name, value)
 
     result: dict[str, float | str | None] = {param_name: percentage}
     if temp:
@@ -839,7 +841,7 @@ def _parse_fan_speed(param_name: str, value: HexStr2) -> Mapping[str, float | No
     if value == "FF":  # Not implemented (is definitely FF, not EF!)
         return {param_name: None}
 
-    percentage = int(value, 16) / 200  # was: hex_to_percent(value)
+    percentage = int(value, 16) / 200  # was: hex_to_percent(value, True)
     if percentage > 1.0:
         return _faulted_common(param_name, value)  # type: ignore[return-value]
 
