@@ -260,25 +260,21 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             app_cntrl[0] if len(app_cntrl) == 1 else None,
         )
 
-    @property
-    def tpi_params(self) -> PayDictT._1100 | None:  # 1100
-        return cast(PayDictT._1100 | None, self._msg_value(Code._1100))
+    async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
+        return cast(PayDictT._1100 | None, await self._msg_value(Code._1100))
 
-    @property
-    def heat_demand(self) -> float | None:  # 3150/FC
+    async def heat_demand(self) -> float | None:  # 3150/FC
         return cast(
             float | None,
-            self._msg_value(Code._3150, domain_id=FC, key=SZ_HEAT_DEMAND),
+            await self._msg_value(Code._3150, domain_id=FC, key=SZ_HEAT_DEMAND),
         )
 
-    @property
-    def is_calling_for_heat(self) -> NoReturn:
+    async def is_calling_for_heat(self) -> NoReturn:
         raise NotImplementedError(
-            f"{self}: is_calling_for_heat attr is deprecated, use bool(heat_demand)"
+            f"{self}: is_calling_for_heat attr is deprecated, use bool(await heat_demand())"
         )
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
         """Return the system's schema."""
 
         schema: dict[str, Any] = {SZ_SYSTEM: {}}
@@ -291,17 +287,17 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             [
                 d.id
                 for d in self.childs  # HACK: UFC
-                if not d._child_id and d._is_present  # TODO: and d is not self.ctl
+                if not d._child_id
+                and await d._is_present()  # TODO: and d is not self.ctl
             ]  # and not isinstance(d, UfhController)
         )  # devices without a parent zone, NB: CTL can be a sensor for a zone
 
         return schema
 
-    @property
-    def _schema_min(self) -> dict[str, Any]:
+    async def _schema_min(self) -> dict[str, Any]:
         """Return the system's minimal-alised schema."""
 
-        schema: dict[str, Any] = self.schema
+        schema: dict[str, Any] = await self.schema()
         result: dict[str, Any] = {}
 
         try:
@@ -334,23 +330,21 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
         return result  # TODO: check against vol schema
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
         """Return the system's configuration."""
 
         params: dict[str, Any] = {SZ_SYSTEM: {}}
-        params[SZ_SYSTEM]["tpi_params"] = self._msg_value(Code._1100)
+        params[SZ_SYSTEM]["tpi_params"] = await self._msg_value(Code._1100)
         return params
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the system's current state."""
 
         status: dict[str, Any] = {SZ_SYSTEM: {}}
-        status[SZ_SYSTEM]["heat_demand"] = self.heat_demand
+        status[SZ_SYSTEM]["heat_demand"] = await self.heat_demand()
 
         status[SZ_DEVICES] = {
-            d.id: d.status for d in sorted(self.childs, key=lambda x: x.id)
+            d.id: await d.status() for d in sorted(self.childs, key=lambda x: x.id)
         }
 
         return status
@@ -391,9 +385,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 if k == SZ_ZONE_IDX
             ]
 
-        def eavesdrop_zone_sensors(
-            this: Message, *, prev: Message | None = None
-        ) -> None:
+        async def eavesdrop_zone_sensors(this: Message, prev: Message) -> None:
             """Determine each zone's sensor by matching zone/sensor temperatures."""
 
             def _testable_zones(changed_zones: dict[str, float]) -> dict[float, str]:
@@ -404,13 +396,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                     and t1 not in [t2 for i2, t2 in changed_zones.items() if i2 != i1]
                 }
 
-            self._prev_30c9, prev = this, self._prev_30c9
-            if prev is None:
-                return  # type: ignore[unreachable]
-
             # TODO: use msgz/I, not RP
             secs = cast(
-                int | None, self._msg_value(Code._1F09, key="remaining_seconds")
+                int | None, await self._msg_value(Code._1F09, key="remaining_seconds")
             )
             if secs is None or this.dtm > prev.dtm + td(seconds=secs + 5):
                 return  # can only compare against 30C9 pkt from the last cycle
@@ -429,14 +417,18 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             if not testable_zones:
                 return  # no testable zones
 
-            testable_sensors = {
-                d.temperature: d
-                for d in self._gwy.devices  # NOTE: *not* self.childs
-                if isinstance(d, Temperature)  # d.addr.type in DEVICE_HAS_ZONE_SENSOR
-                and d.ctl in (self.ctl, None)
-                and d.temperature is not None
-                and d._msgs[Code._30C9].dtm > prev.dtm  # changed during last cycle
-            }
+            testable_sensors = {}
+            for d in self._gwy.devices:
+                if isinstance(d, Temperature) and d.ctl in (self.ctl, None):
+                    d_temp = await d.temperature()
+                    d_msgs = await d._msgs()
+                    if (
+                        d_temp is not None
+                        and Code._30C9 in d_msgs
+                        and d_msgs[Code._30C9].dtm > prev.dtm
+                    ):
+                        testable_sensors[d_temp] = d
+
             if not testable_sensors:
                 return  # no testable sensors
 
@@ -542,7 +534,10 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             and (msg._has_array or len(self.zones) == 1)
             and any(z for z in self.zones if not z.sensor)
         ):
-            eavesdrop_zone_sensors(msg)
+            prev = self._prev_30c9
+            self._prev_30c9 = msg
+            if prev is not None:
+                self._gwy._loop.create_task(eavesdrop_zone_sensors(msg, prev))
 
     # TODO: should be a private method
     def get_htg_zone(
@@ -571,25 +566,25 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             zon._handle_msg(msg)
         return zon
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
+        base_schema = await super().schema()
         return {
-            **super().schema,
-            SZ_ZONES: {z.idx: z.schema for z in sorted(self.zones)},
+            **base_schema,
+            SZ_ZONES: {z.idx: await z.schema() for z in sorted(self.zones)},
         }
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
+        base_params = await super().params()
         return {
-            **super().params,
-            SZ_ZONES: {z.idx: z.params for z in sorted(self.zones)},
+            **base_params,
+            SZ_ZONES: {z.idx: await z.params() for z in sorted(self.zones)},
         }
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_ZONES: {z.idx: z.status for z in sorted(self.zones)},
+            **base_status,
+            SZ_ZONES: {z.idx: await z.status() for z in sorted(self.zones)},
         }
 
 
@@ -683,15 +678,16 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         self.zone_lock_idx = None
         self.zone_lock.release()
 
-    @property
-    def schedule_version(self) -> int | None:
-        return cast(int | None, self._msg_value(Code._0006, key=SZ_CHANGE_COUNTER))
+    async def schedule_version(self) -> int | None:
+        return cast(
+            int | None, await self._msg_value(Code._0006, key=SZ_CHANGE_COUNTER)
+        )
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            "schedule_version": self.schedule_version,
+            **base_status,
+            "schedule_version": await self.schedule_version(),
         }
 
 
@@ -702,14 +698,12 @@ class Language(SystemBase):  # 0100
         cmd = Command.get_system_language(self.id)
         self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=60 * 15)
 
-    @property
-    def language(self) -> str | None:
-        return cast(str | None, self._msg_value(Code._0100, key=SZ_LANGUAGE))
+    async def language(self) -> str | None:
+        return cast(str | None, await self._msg_value(Code._0100, key=SZ_LANGUAGE))
 
-    @property
-    def params(self) -> dict[str, Any]:
-        params = super().params
-        params[SZ_SYSTEM][SZ_LANGUAGE] = self.language
+    async def params(self) -> dict[str, Any]:
+        params = await super().params()
+        params[SZ_SYSTEM][SZ_LANGUAGE] = await self.language()
         return params
 
 
@@ -778,10 +772,10 @@ class Logbook(SystemBase):  # 0418
             return None
         return str(self._faultlog.latest_fault)
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
+            **base_status,
             "active_faults": self.active_faults,
             "latest_event": self.latest_event,
             "latest_fault": self.latest_fault,
@@ -874,25 +868,25 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
     def heating_valve(self) -> Device | None:
         return self._dhw.heating_valve if self._dhw else None
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
+        base_schema = await super().schema()
         return {
-            **super().schema,
-            SZ_DHW_SYSTEM: self._dhw.schema if self._dhw else {},
+            **base_schema,
+            SZ_DHW_SYSTEM: await self._dhw.schema() if self._dhw else {},
         }
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
+        base_params = await super().params()
         return {
-            **super().params,
-            SZ_DHW_SYSTEM: self._dhw.params if self._dhw else {},
+            **base_params,
+            SZ_DHW_SYSTEM: await self._dhw.params() if self._dhw else {},
         }
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_DHW_SYSTEM: self._dhw.status if self._dhw else {},
+            **base_status,
+            SZ_DHW_SYSTEM: await self._dhw.status() if self._dhw else {},
         }
 
 
@@ -903,9 +897,8 @@ class SysMode(SystemBase):  # 2E04
         cmd = Command.get_system_mode(self.id)
         self._add_discovery_cmd(cmd, 60 * 5, delay=5)
 
-    @property
-    def system_mode(self) -> dict[str, Any] | None:  # 2E04
-        return cast(dict[str, Any] | None, self._msg_value(Code._2E04))
+    async def system_mode(self) -> dict[str, Any] | None:  # 2E04
+        return cast(dict[str, Any] | None, await self._msg_value(Code._2E04))
 
     def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
@@ -928,10 +921,9 @@ class SysMode(SystemBase):  # 2E04
         """Revert system to Auto, force *all* zones to FollowSchedule."""
         return self.set_mode(SYS_MODE_MAP.AUTO_WITH_RESET)
 
-    @property
-    def params(self) -> dict[str, Any]:
-        params = super().params
-        params[SZ_SYSTEM][SZ_SYSTEM_MODE] = self.system_mode
+    async def params(self) -> dict[str, Any]:
+        params = await super().params()
+        params[SZ_SYSTEM][SZ_SYSTEM_MODE] = await self.system_mode()
         return params
 
 
@@ -968,25 +960,25 @@ class UfHeating(SystemBase):
     def _ufh_ctls(self) -> list[UfhController]:
         return sorted([d for d in self.childs if isinstance(d, UfhController)])
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
+        base_schema = await super().schema()
         return {
-            **super().schema,
-            SZ_UFH_SYSTEM: {d.id: d.schema for d in self._ufh_ctls()},
+            **base_schema,
+            SZ_UFH_SYSTEM: {d.id: await d.schema() for d in self._ufh_ctls()},
         }
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
+        base_params = await super().params()
         return {
-            **super().params,
-            SZ_UFH_SYSTEM: {d.id: d.params for d in self._ufh_ctls()},
+            **base_params,
+            SZ_UFH_SYSTEM: {d.id: await d.params() for d in self._ufh_ctls()},
         }
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_UFH_SYSTEM: {d.id: d.status for d in self._ufh_ctls()},
+            **base_status,
+            SZ_UFH_SYSTEM: {d.id: await d.status() for d in self._ufh_ctls()},
         }
 
 
@@ -1081,11 +1073,10 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
             return None
         return {}  # FIXME: failsafe_enabled
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
         """Return the system's current state."""
 
-        status = super().status
+        status = await super().status()
         # assert SZ_SYSTEM in status  # TODO: removeme
 
         status[SZ_SYSTEM]["heat_demands"] = self.heat_demands

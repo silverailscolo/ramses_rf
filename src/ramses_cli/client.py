@@ -505,7 +505,7 @@ async def _print_engine_state(gwy: Gateway, **kwargs: Any) -> None:
         print(f"packets: {json.dumps(packets, indent=4)}\r\n")
 
 
-def print_summary(gwy: Gateway, **kwargs: Any) -> None:
+async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
     """Print a summary of the system state, schema, params, and status.
 
     :param gwy: The gateway instance.
@@ -514,21 +514,21 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
     entity = gwy.tcs or gwy
 
     if kwargs.get("show_schema"):
-        print(f"Schema[{entity}] = {json.dumps(entity.schema, indent=4)}\r\n")
+        print(f"Schema[{entity}] = {json.dumps(await entity.schema(), indent=4)}\r\n")
 
-        # schema = {d.id: d.schema for d in sorted(gwy.devices)}
+        # schema = {d.id: await d.schema() for d in sorted(gwy.devices)}
         # print(f"Schema[devices] = {json.dumps({'schema': schema}, indent=4)}\r\n")
 
     if kwargs.get("show_params"):
-        print(f"Params[{entity}] = {json.dumps(entity.params, indent=4)}\r\n")
+        print(f"Params[{entity}] = {json.dumps(await entity.params(), indent=4)}\r\n")
 
-        params = {d.id: d.params for d in sorted(gwy.devices)}
+        params = {d.id: await d.params() for d in sorted(gwy.devices)}
         print(f"Params[devices] = {json.dumps({'params': params}, indent=4)}\r\n")
 
     if kwargs.get("show_status"):
-        print(f"Status[{entity}] = {json.dumps(entity.status, indent=4)}\r\n")
+        print(f"Status[{entity}] = {json.dumps(await entity.status(), indent=4)}\r\n")
 
-        status = {d.id: d.status for d in sorted(gwy.devices)}
+        status = {d.id: await d.status() for d in sorted(gwy.devices)}
         print(f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n")
 
     if kwargs.get("show_knowns"):  # show device hints (show-knowns)
@@ -536,7 +536,7 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
 
     if kwargs.get("show_traits"):  # show device traits
         result = {
-            d.id: d.traits  # {k: v for k, v in d.traits.items() if k[:1] == "_"}
+            d.id: await d.traits()  # {k: v for k, v in (await d.traits()).items() if k[:1] == "_"}
             for d in sorted(gwy.devices)
         }
         print(json.dumps(result, indent=4), "\r\n")
@@ -544,13 +544,13 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
     if kwargs.get("show_crazys"):
         for device in [d for d in gwy.devices if d.type == DEV_TYPE_MAP.CTL]:
             if gwy.msg_db:
-                for msg in gwy.msg_db.get(device=device.id, code=Code._0005):
+                for msg in await gwy.msg_db.get(device=device.id, code=Code._0005):
                     print(f"{msg._pkt}")
-                for msg in gwy.msg_db.get(device=device.id, code=Code._000C):
+                for msg in await gwy.msg_db.get(device=device.id, code=Code._000C):
                     print(f"{msg._pkt}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
-                for msg_code, verbs in device._msgz.items():
+                for msg_code, verbs in (await device._msgz()).items():
                     if msg_code in (Code._0005, Code._000C):
                         for verb in verbs.values():
                             for pkt in verb.values():
@@ -558,11 +558,11 @@ def print_summary(gwy: Gateway, **kwargs: Any) -> None:
             print()
         for device in [d for d in gwy.devices if d.type == DEV_TYPE_MAP.UFC]:
             if gwy.msg_db:
-                for msg in gwy.msg_db.get(device=device.id):
+                for msg in await gwy.msg_db.get(device=device.id):
                     print(f"{msg._pkt}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
-                for cd in device._msgz.values():
+                for cd in (await device._msgz()).values():
                     for verb in cd.values():
                         for pkt in verb.values():
                             print(f"{pkt}")
@@ -714,7 +714,7 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     elif command == EXECUTE:
         print_results(gwy, **kwargs)
 
-    print_summary(gwy, **kwargs)
+    await print_summary(gwy, **kwargs)
 
 
 cli.add_command(parse)

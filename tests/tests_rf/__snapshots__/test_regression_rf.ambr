@@ -1880,8 +1880,10 @@
       }),
       dict({
         'battery_low': False,
+        'heat_demand': 0.11,
         'id': '04:189076',
         'is_alive': None,
+        'setpoint': 5.0,
         'tcs_id': '01:145038',
         'temperature': 19.87,
         'type': 'TrvActuator',

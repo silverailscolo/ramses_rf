@@ -52,25 +52,28 @@ async def assert_code_in_device_msgindex(
 ) -> None:
     """Fail if the device doesn't exist, or if it doesn't have the code in its msg_db."""
 
+    async def _has_code() -> bool:
+        dev = gwy.device_by_id.get(dev_id)
+        if not dev:
+            return False
+
+        # Check central SQLite MessageIndex if enabled
+        if gwy.msg_db:
+            return await gwy.msg_db.contains(
+                src=dev_id, code=str(code)
+            ) or await gwy.msg_db.contains(dst=dev_id, code=str(code))
+
+        # Fallback to device's internal tracking dictionaries
+        msgs = await dev._msgs()
+        msgz = await dev._msgz()
+        return code in msgs or code in msgz
+
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)
-        if (
-            (_ := gwy.device_by_id.get(dev_id))
-            and gwy.msg_db
-            and (
-                gwy.msg_db.contains(src=dev_id, code=str(code))
-                or gwy.msg_db.contains(dst=dev_id, code=str(code))
-            )
-        ) != test_not:
+        if await _has_code() != test_not:
             break
-    assert (
-        (_ := gwy.device_by_id.get(dev_id))
-        and gwy.msg_db
-        and (
-            gwy.msg_db.contains(src=dev_id, code=str(code))
-            or gwy.msg_db.contains(dst=dev_id, code=str(code))
-        )
-    ) != test_not  # TODO: fix me
+
+    assert await _has_code() != test_not
 
 
 async def assert_devices(
@@ -78,13 +81,15 @@ async def assert_devices(
 ) -> None:
     """Fail if the two sets of devices are not equal."""
 
-    devices = [Address(d).id for d in devices]
+    expected = sorted(Address(d).id for d in devices)
 
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)
-        if len(gwy.devices) == len(devices):
+        # Fix: ensure contents actually match before breaking early
+        if sorted(d.id for d in gwy.devices) == expected:
             break
-    assert sorted(d.id for d in gwy.devices) == sorted(devices)
+
+    assert sorted(d.id for d in gwy.devices) == expected
 
 
 async def assert_this_pkt(
@@ -140,6 +145,7 @@ async def _test_virtual_rf_dev_disc(
     cmd = Command(" I --- 01:022222 --:------ 01:022222 1F09 003 0004B5")
     list(rf._port_to_object.values())[1].write(bytes(f"000 {cmd}\r\n".encode("ascii")))
 
+    # Fix: Reverted gwy_0 expected list to have 18:000000 since it is not receiving the injected packet
     await assert_devices(gwy_0, ["01:010000", "01:011111", "18:000000", "18:111111"])
     await assert_devices(gwy_1, ["01:010000", "01:011111", "01:022222", "18:111111"])
 
