@@ -8,14 +8,16 @@ and passes them to the Gateway.
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from click.testing import CliRunner
+import pytest
+from asyncclick.testing import CliRunner
 
 # Import async_main so we can run the logic that creates the Gateway
 from ramses_cli.client import async_main, cli
 
 
+@pytest.mark.asyncio
 @patch("ramses_cli.client.Gateway")
-def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
+async def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     """Check that client.py passes the connection string to Gateway.
 
     Verifies that when a non-standard port (like an MQTT URL) is passed,
@@ -30,7 +32,7 @@ def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     # 1. Run the CLI argument parsing
     # standalone_mode=False ensures we get the return value (command, lib_kwargs, kwargs)
     # instead of a system exit code.
-    result = runner.invoke(cli, ["listen", mqtt_url], standalone_mode=False)
+    result = await runner.invoke(cli, ["listen", mqtt_url], standalone_mode=False)
 
     assert result.exit_code == 0, f"CLI parsing failed: {result.exception}"
 
@@ -46,8 +48,8 @@ def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     mock_gateway.return_value._protocol.wait_for_connection_lost = AsyncMock()
 
     # 3. Run the main logic that instantiates Gateway
-    # We use asyncio.run to execute the async_main function
-    asyncio.run(async_main(command, lib_kwargs, **kwargs))
+    # We await the async_main function directly since we are already in an async test
+    await async_main(command, lib_kwargs, **kwargs)
 
     # 4. Assert Gateway was initialized with our URL
     args, kwargs = mock_gateway.call_args
@@ -58,8 +60,9 @@ def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     # assert "transport_constructor" in kwargs
 
 
+@pytest.mark.asyncio
 @patch("ramses_cli.client.Gateway")
-def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
+async def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
     """Check that legacy serial ports still work.
 
     Verifies that standard serial port paths are still accepted and handled
@@ -70,7 +73,7 @@ def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
     serial_port = "/dev/ttyUSB0"
 
     # 1. Run the CLI argument parsing
-    result = runner.invoke(cli, ["listen", serial_port], standalone_mode=False)
+    result = await runner.invoke(cli, ["listen", serial_port], standalone_mode=False)
 
     assert result.exit_code == 0, f"CLI parsing failed: {result.exception}"
 
@@ -84,7 +87,7 @@ def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
     mock_gateway.return_value._protocol.wait_for_connection_lost = AsyncMock()
 
     # 3. Run the main logic
-    asyncio.run(async_main(command, lib_kwargs, **kwargs))
+    await async_main(command, lib_kwargs, **kwargs)
 
     # 4. Assert Gateway was instantiated
     args, kwargs = mock_gateway.call_args

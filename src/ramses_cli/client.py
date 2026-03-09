@@ -11,7 +11,7 @@ import sys
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, Literal
 
-import click
+import asyncclick as click
 from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
@@ -160,6 +160,7 @@ class DeviceIdParamType(click.ParamType):
         if is_valid_dev_id(value):
             return value.upper()
         self.fail(f"{value!r} is not a valid device_id", param, ctx)
+        assert False  # satisfy mypy, as self.fail raises BadParameter and never returns
 
 
 # Args/Params for both RF and file
@@ -211,7 +212,7 @@ class DeviceIdParamType(click.ParamType):
     help="display crazy things",
 )
 @click.pass_context
-def cli(
+async def cli(
     ctx: click.Context,
     /,
     config_file: SupportsRead[str | bytes] | None = None,
@@ -302,7 +303,7 @@ class PortCommand(
 # 1/4: PARSE (a file, +/- eavesdrop)
 @click.command(cls=FileCommand)  # parse a packet log file, then stop
 @click.pass_obj
-def parse(
+async def parse(
     obj: Any, /, **kwargs: Any
 ) -> tuple[Literal["parse"], dict[str, str], dict[str, str]]:
     """Command to parse a log file containing messages/packets.
@@ -335,7 +336,7 @@ def parse(
     "--poll-devices", type=click.STRING, help="e.g. 'device_id, device_id, ...'"
 )
 @click.pass_obj
-def monitor(
+async def monitor(
     obj: Any, /, discover: None | bool = None, **kwargs: Any
 ) -> tuple[Literal["monitor"], dict[str, str], dict[str, str]]:
     """Monitor (eavesdrop and/or probe) a serial port for messages/packets.
@@ -381,7 +382,7 @@ def monitor(
     help="controller_id, filename.json",
 )
 @click.pass_obj
-def execute(
+async def execute(
     obj: Any, /, **kwargs: Any
 ) -> tuple[Literal["execute"], dict[str | None, str | dict[str, Any]], dict[str, str]]:
     """Execute any specified scripts, return the results, then quit.
@@ -418,7 +419,7 @@ def execute(
 # 4/4: LISTEN (to RF, +/- eavesdrop - NO sending/discovery)
 @click.command(cls=PortCommand)  # (optionally) execute a command, then listen
 @click.pass_obj
-def listen(
+async def listen(
     obj: Any, /, **kwargs: Any
 ) -> tuple[
     Literal["listen"], dict[str, str | dict[str, str | None] | None], dict[str, Any]
@@ -731,28 +732,31 @@ def main() -> None:  # pragma: no cover
     """
     print("\r\nclient.py: Starting ramses_rf...")
 
-    try:
-        result = cli(standalone_mode=False)
-    except click.NoSuchOption as err:
-        print(f"Error: {err}")
-        sys.exit(-1)
-
-    if isinstance(result, int):
-        sys.exit(result)
-
-    (command, lib_kwargs, kwargs) = result
-
     if sys.platform == "win32":
         print(" - event_loop_policy set for win32")  # do before asyncio.run()
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    async def _run_cli() -> None:
+        """Run the CLI via asyncclick and execute the core application engine."""
+        try:
+            result = await cli(standalone_mode=False)
+        except click.NoSuchOption as err:
+            print(f"Error: {err}")
+            sys.exit(-1)
+
+        if isinstance(result, int):
+            sys.exit(result)
+
+        (command, lib_kwargs, kwargs) = result
+        await async_main(command, lib_kwargs, **kwargs)
 
     profile = None
     try:
         if _PROFILE_LIBRARY:
             profile = cProfile.Profile()
-            profile.run("asyncio.run(main(command, lib_kwargs, **kwargs))")
+            profile.run("asyncio.run(_run_cli())")
         else:
-            asyncio.run(async_main(command, lib_kwargs, **kwargs))
+            asyncio.run(_run_cli())
     except KeyboardInterrupt:  # , SystemExit):
         print("\r\nclient.py: Engine stopped: ended via: KeyboardInterrupt")
 

@@ -6,6 +6,7 @@ import sys
 from collections.abc import Collection
 
 import pytest
+from asyncclick.testing import CliRunner
 
 sys.path.append("../tests_cli")  # HACK: to access client.py
 
@@ -108,8 +109,9 @@ def id_fnc(param: int) -> str:
     return f"{BASIC_TESTS[param][0][1]:7}"
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("index", range(len(BASIC_TESTS)), ids=id_fnc)
-def test_client_basic(
+async def test_client_basic(
     monkeypatch: pytest.MonkeyPatch,
     index: int,
     tests: tuple[
@@ -131,11 +133,21 @@ def test_client_basic(
         tuple[list[str], dict[str, int | None], dict[str, Collection[str]]],
     ] = BASIC_TESTS,
 ) -> None:
-    monkeypatch.setattr("sys.argv", tests[index][0])
-    if tests[index][0][1] == PARSE:
-        monkeypatch.setattr("sys.stdin", STDIN)
+    runner = CliRunner()
 
-    cmd_string, lib_config, cli_config = cli(standalone_mode=False)
+    # Strip the script name ('client.py') from the arguments array before passing it to the runner
+    args = tests[index][0][1:]
+
+    # Safely inject the mock string content natively into the runner if parsing
+    input_data = None
+    if tests[index][0][1] == PARSE:
+        input_data = STDIN.getvalue()
+
+    result = await runner.invoke(cli, args, input=input_data, standalone_mode=False)
+
+    assert result.exit_code == 0, f"Command failed: {result.exception}"
+
+    cmd_string, lib_config, cli_config = result.return_value
 
     if lib_config.get("input_file"):
         lib_config["input_file"] = LIB_CONFIG_PARSE__["input_file"]
