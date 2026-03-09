@@ -86,7 +86,27 @@ _LOGGER = logging.getLogger(__name__)
 
 @dataclass
 class GatewayConfig:
-    """Configuration parameters for the Ramses Gateway."""
+    """Configuration parameters for the Ramses Gateway.
+
+    :param disable_discovery: Disable device discovery, defaults to False.
+    :type disable_discovery: bool
+    :param enable_eavesdrop: Enable eavesdropping mode, defaults to False.
+    :type enable_eavesdrop: bool
+    :param reduce_processing: Level of reduced processing, defaults to 0.
+    :type reduce_processing: int
+    :param max_zones: Maximum number of zones allowed, defaults to 12.
+    :type max_zones: int
+    :param use_regex: Regex patterns for matching devices, defaults to empty dict.
+    :type use_regex: dict[str, dict[str, str]]
+    :param use_aliases: Mapping of aliases for device IDs, defaults to empty dict.
+    :type use_aliases: dict[str, str]
+    :param enforce_strict_handling: Enforce strict handling of packets, defaults to False.
+    :type enforce_strict_handling: bool
+    :param use_native_ot: Preference for using native OpenTherm.
+    :type use_native_ot: Literal["always", "prefer", "avoid", "never"] | None
+    :param app_context: Optional application context object.
+    :type app_context: Any | None
+    """
 
     disable_discovery: bool = False
     enable_eavesdrop: bool = False
@@ -227,22 +247,38 @@ class Gateway(Engine, GatewayInterface):
 
     @property
     def config(self) -> GatewayConfig:
-        """Return the gateway configuration."""
+        """Return the gateway configuration.
+
+        :returns: The configuration object for this gateway.
+        :rtype: GatewayConfig
+        """
         return self._gwy_config
 
     @property
     def msg_db(self) -> MessageIndexInterface | None:
-        """Return the message database if configured."""
+        """Return the message database if configured.
+
+        :returns: The configured MessageIndexInterface or None.
+        :rtype: MessageIndexInterface | None
+        """
         return self._msg_db
 
     @msg_db.setter
     def msg_db(self, value: MessageIndexInterface | None) -> None:
-        """Set the message database."""
+        """Set the message database.
+
+        :param value: The MessageIndexInterface instance to set, or None.
+        :type value: MessageIndexInterface | None
+        """
         self._msg_db = value
 
     @property
     def hgi(self) -> HgiGateway | None:
-        """Return the active HGI80-compatible gateway device, if known."""
+        """Return the active HGI80-compatible gateway device, if known.
+
+        :returns: The active HGI gateway device if found, else None.
+        :rtype: HgiGateway | None
+        """
         if not self._transport:
             return None
         if device_id := self._transport.get_extra_info(SZ_ACTIVE_HGI):
@@ -270,6 +306,15 @@ class Gateway(Engine, GatewayInterface):
         """
 
         def initiate_discovery(dev_list: list[Device], sys_list: list[Evohome]) -> None:
+            """Initiate polling discovery on devices and systems.
+
+            :param dev_list: List of devices to discover.
+            :type dev_list: list[Device]
+            :param sys_list: List of systems to discover.
+            :type sys_list: list[Evohome]
+            :returns: None
+            :rtype: None
+            """
             _LOGGER.debug("Engine: Initiating/enabling discovery...")
 
             # [d._start_discovery_poller() for d in devs]
@@ -401,6 +446,15 @@ class Gateway(Engine, GatewayInterface):
         await self._pause()
 
         def wanted_msg(msg: Message, include_expired: bool = False) -> bool:
+            """Determine if a message is wanted for state reconstruction.
+
+            :param msg: The message to evaluate.
+            :type msg: Message
+            :param include_expired: Whether to include expired messages, defaults to False.
+            :type include_expired: bool, optional
+            :returns: True if the message should be kept, otherwise False.
+            :rtype: bool
+            """
             if msg.code == Code._313F:
                 return msg.verb in (I_, RP)  # usu. expired, useful 4 back-back restarts
             if msg._expired and not include_expired:
@@ -456,6 +510,11 @@ class Gateway(Engine, GatewayInterface):
         """
 
         def clear_state() -> None:
+            """Clear existing internal schema and state records.
+
+            :returns: None
+            :rtype: None
+            """
             _LOGGER.info("Gateway: Clearing existing schema/state...")
 
             # self._schema = {}
@@ -555,7 +614,14 @@ class Gateway(Engine, GatewayInterface):
         """
 
         def check_filter_lists(dev_id: DeviceIdT) -> None:  # may: DeviceNotFoundError
-            """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
+            """Raise a DeviceNotFoundError if a device_id is filtered out by a list.
+
+            :param dev_id: The device identifier to evaluate.
+            :type dev_id: DeviceIdT
+            :returns: None
+            :rtype: None
+            :raises DeviceNotFoundError: If the device is unwanted, strictly not known, or excluded.
+            """
 
             if dev_id in self._unwanted:  # TODO: shouldn't invalidate a msg
                 raise DeviceNotFoundError(
@@ -622,7 +688,18 @@ class Gateway(Engine, GatewayInterface):
         device_id: DeviceIdT,
         create_device: bool = False,
     ) -> Device | Fakeable:
-        """Create a faked device."""
+        """Create a faked device.
+
+        :param device_id: The unique identifier for the device to fake.
+        :type device_id: DeviceIdT
+        :param create_device: Allow creation if the device does not exist, defaults to False.
+        :type create_device: bool, optional
+        :returns: The instantiated faked device.
+        :rtype: Device | Fakeable
+        :raises SchemaInconsistentError: If the provided device ID is invalid.
+        :raises DeviceNotFoundError: If the device doesn't exist and `create_device` is False, or if it isn't in the known_list when creation is allowed.
+        :raises DeviceNotFaked: If the device exists but cannot be faked.
+        """
 
         if not is_valid_dev_id(device_id):
             raise SchemaInconsistentError(f"The device id is not valid: {device_id}")
@@ -655,7 +732,11 @@ class Gateway(Engine, GatewayInterface):
         return self._tcs
 
     async def known_list(self) -> DeviceListT:
-        """Return the working known_list (a superset of the provided known_list)."""
+        """Return the working known_list (a superset of the provided known_list).
+
+        :returns: A dictionary mapping device IDs to their traits.
+        :rtype: DeviceListT
+        """
 
         result: dict[str, Any] = {k: v for k, v in self._include.items()}
         for d in self.devices:
@@ -669,7 +750,11 @@ class Gateway(Engine, GatewayInterface):
 
     @property
     def system_by_id(self) -> dict[DeviceIdT, Evohome]:
-        """Return a mapping of device IDs to their associated Evohome systems."""
+        """Return a mapping of device IDs to their associated Evohome systems.
+
+        :returns: Dictionary mapping device ID to Evohome system.
+        :rtype: dict[DeviceIdT, Evohome]
+        """
         return {
             d.id: d.tcs
             for d in self.devices
@@ -678,11 +763,19 @@ class Gateway(Engine, GatewayInterface):
 
     @property
     def systems(self) -> list[Evohome]:
-        """Return a list of all identified Evohome systems."""
+        """Return a list of all identified Evohome systems.
+
+        :returns: A list of Evohome instances.
+        :rtype: list[Evohome]
+        """
         return list(self.system_by_id.values())
 
     async def _config(self) -> dict[str, Any]:
-        """Return the working configuration."""
+        """Return the working configuration.
+
+        :returns: A dictionary containing the current configuration state.
+        :rtype: dict[str, Any]
+        """
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
@@ -693,7 +786,11 @@ class Gateway(Engine, GatewayInterface):
         }
 
     async def schema(self) -> dict[str, Any]:
-        """Return the global schema."""
+        """Return the global schema.
+
+        :returns: A dictionary representing the global system schema.
+        :rtype: dict[str, Any]
+        """
 
         schema: dict[str, Any] = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}
 
@@ -719,11 +816,19 @@ class Gateway(Engine, GatewayInterface):
         return schema
 
     async def params(self) -> dict[str, Any]:
-        """Return the parameters for all devices."""
+        """Return the parameters for all devices.
+
+        :returns: A dictionary containing parameters for all devices.
+        :rtype: dict[str, Any]
+        """
         return {SZ_DEVICES: {d.id: await d.params() for d in sorted(self.devices)}}
 
     async def status(self) -> dict[str, Any]:
-        """Return the status for all devices and the transport rate."""
+        """Return the status for all devices and the transport rate.
+
+        :returns: A dictionary containing device statuses and the transport transmission rate.
+        :rtype: dict[str, Any]
+        """
         tx_rate = self._transport.get_extra_info("tx_rate") if self._transport else None
         return {
             SZ_DEVICES: {d.id: await d.status() for d in sorted(self.devices)},
@@ -731,7 +836,13 @@ class Gateway(Engine, GatewayInterface):
         }
 
     def _msg_handler(self, msg: Message) -> None:
-        """A callback to handle messages from the protocol stack."""
+        """A callback to handle messages from the protocol stack.
+
+        :param msg: The message to be handled and processed.
+        :type msg: Message
+        :returns: None
+        :rtype: None
+        """
 
         super()._msg_handler(msg)
 
