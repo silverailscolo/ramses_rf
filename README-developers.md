@@ -10,6 +10,7 @@ Confirm you have Python 3.13.x installed by running:
 ```
 python3 --version
 ```
+Note that the HA integration runs Python 3.14.x.
 
 ### Virtual environment
 
@@ -41,29 +42,41 @@ and confirm your Terminal prompt looks like:
 ### Install dependencies:
 ```
 cd /your-path-to/ramses_rf
-pip install -r requirements.txt
-pip install -r requirements_dev.txt
+pip install -r requirements/requirements.txt
+pip install -r requirements/requirements_dev.txt
 ```
 
-Repeat this after a release update and also when dev_requirements change in master.
+Repeat this after a new release and also when dev_requirements change in master.
 
 ### Install pre-commit hook
-First, verify the installed pre-commit version (compare to requirements_dev.txt):
+First, verify the installed prek version (compare to requirements/requirements_dev.txt):
 ```
-pre-commit --version
+prek --version
+```
+Finally, install the pre-commit hooks, and confirm all tests pass:
+```bash
+> prek install
+prek installed at .git/hooks/pre-commit
 ```
 
-Install the repo's pre-commit hook:
-```
-pre-commit install
+Since we have moved from `pre-commit` to `prek`, a much faster drop-in replacement, you should update existing pre-commit hooks to use prek. Run:
+```bash
+> prek install -f
+Overwriting existing hook at `.git/hooks/pre-commit`
+prek installed at `.git/hooks/pre-commit`
 ```
 
-Running `pre-commit run` will only check staged files before a commit, while
-`pre-commit run -a` will check all files.
+The command to run the hooks from the terminal:
+```bash
+> prek run -a
+```
 
-Your IDE should automatically activate the pre-commit check when you try to commit.
-The rules for pre-commit are in git in `.pre-commit-config.yaml`.
-Check [issue 170](https://github.com/ramses-rf/ramses_rf/issues/170) when you run into troubles here.
+Running `prek run` will only check staged files before a commit, while
+`prek run -a` will check all files.
+
+Your IDE should automatically activate the prek pre-commit hook checks when you try to commit.
+The rules for prek are in git in `.pre-commit-config.yaml`.
+Check [issue 407](https://github.com/ramses-rf/ramses_rf/issues/407) when you run into troubles here.
 
 ## Regression Snapshot Suite
 
