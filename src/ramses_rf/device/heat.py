@@ -152,62 +152,58 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
                 Command.from_attrs(RQ, self.id, Code._3EF1, PayloadT("00")), **QOS_LOW
             )  # actuator cycle
 
-    @property
-    def actuator_cycle(self) -> dict | None:  # 3EF1
-        return cast(dict | None, self._msg_value(Code._3EF1))
+    async def actuator_cycle(self) -> dict | None:  # 3EF1
+        return cast(dict | None, await self._msg_value(Code._3EF1))
 
-    @property
-    def actuator_state(self) -> dict | None:  # 3EF0
-        return cast(dict | None, self._msg_value(Code._3EF0))
+    async def actuator_state(self) -> dict | None:  # 3EF0
+        return cast(dict | None, await self._msg_value(Code._3EF0))
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            self.ACTUATOR_CYCLE: self.actuator_cycle,
-            self.ACTUATOR_STATE: self.actuator_state,
+            **base_status,
+            self.ACTUATOR_CYCLE: await self.actuator_cycle(),
+            self.ACTUATOR_STATE: await self.actuator_state(),
         }
 
 
 class HeatDemand(DeviceHeat):  # 3150
     HEAT_DEMAND: Final = SZ_HEAT_DEMAND  # percentage valve open (0.0-1.0)
 
-    @property
-    def heat_demand(self) -> float | None:  # 3150
-        return cast(float | None, self._msg_value(Code._3150, key=self.HEAT_DEMAND))
+    async def heat_demand(self) -> float | None:  # 3150
+        return cast(
+            float | None, await self._msg_value(Code._3150, key=self.HEAT_DEMAND)
+        )
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            self.HEAT_DEMAND: self.heat_demand,
+            **base_status,
+            self.HEAT_DEMAND: await self.heat_demand(),
         }
 
 
 class Setpoint(DeviceHeat):  # 2309
     SETPOINT: Final = SZ_SETPOINT  # degrees Celsius
 
-    @property
-    def setpoint(self) -> float | None:  # 2309
-        return cast(float | None, self._msg_value(Code._2309, key=self.SETPOINT))
+    async def setpoint(self) -> float | None:  # 2309
+        return cast(float | None, await self._msg_value(Code._2309, key=self.SETPOINT))
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            self.SETPOINT: self.setpoint,
+            **base_status,
+            self.SETPOINT: await self.setpoint(),
         }
 
 
 class Weather(DeviceHeat):  # 0002
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
-    @property
-    def temperature(self) -> float | None:  # 0002
-        return cast(float | None, self._msg_value(Code._0002, key=SZ_TEMPERATURE))
+    async def temperature(self) -> float | None:  # 0002
+        return cast(float | None, await self._msg_value(Code._0002, key=SZ_TEMPERATURE))
 
-    @temperature.setter
-    def temperature(self, value: float | None) -> None:
+    def set_temperature(self, value: float | None) -> None:
         """Fake the outdoor temperature of the sensor."""
 
         if not self.is_faked:
@@ -216,11 +212,11 @@ class Weather(DeviceHeat):  # 0002
         cmd = Command.put_outdoor_temp(self.id, value)
         self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            self.TEMPERATURE: self.temperature,
+            **base_status,
+            self.TEMPERATURE: await self.temperature(),
         }
 
 
@@ -246,27 +242,26 @@ class RelayDemand(DeviceHeat):  # 0008
         if not self.is_faked:  # discover_flag & Discover.STATUS and
             self._add_discovery_cmd(Command.get_relay_demand(self.id), 60 * 15)
 
-    @property
-    def relay_demand(self) -> float | None:  # 0008
-        return cast(float | None, self._msg_value(Code._0008, key=self.RELAY_DEMAND))
+    async def relay_demand(self) -> float | None:  # 0008
+        return cast(
+            float | None, await self._msg_value(Code._0008, key=self.RELAY_DEMAND)
+        )
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            self.RELAY_DEMAND: self.relay_demand,
+            **base_status,
+            self.RELAY_DEMAND: await self.relay_demand(),
         }
 
 
 class DhwTemperature(DeviceHeat):  # 1260
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
-    @property
-    def temperature(self) -> float | None:  # 1260
-        return cast(float | None, self._msg_value(Code._1260, key=SZ_TEMPERATURE))
+    async def temperature(self) -> float | None:  # 1260
+        return cast(float | None, await self._msg_value(Code._1260, key=SZ_TEMPERATURE))
 
-    @temperature.setter
-    def temperature(self, value: float | None) -> None:
+    def set_temperature(self, value: float | None) -> None:
         """Fake the DHW temperature of the sensor."""
 
         if not self.is_faked:
@@ -275,11 +270,11 @@ class DhwTemperature(DeviceHeat):  # 1260
         cmd = Command.put_dhw_temp(self.id, value)
         self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            self.TEMPERATURE: self.temperature,
+            **base_status,
+            self.TEMPERATURE: await self.temperature(),
         }
 
 
@@ -287,12 +282,10 @@ class Temperature(DeviceHeat):  # 30C9
     # .I --- 34:145039 --:------ 34:145039 1FC9 012 00-30C9-8A368F 00-1FC9-8A368F
     # .W --- 01:054173 34:145039 --:------ 1FC9 006 03-2309-04D39D  # real CTL
     # .I --- 34:145039 01:054173 --:------ 1FC9 006 00-30C9-8A368F
-    @property
-    def temperature(self) -> float | None:  # 30C9
-        return cast(float | None, self._msg_value(Code._30C9, key=SZ_TEMPERATURE))
+    async def temperature(self) -> float | None:  # 30C9
+        return cast(float | None, await self._msg_value(Code._30C9, key=SZ_TEMPERATURE))
 
-    @temperature.setter
-    def temperature(self, value: float | None) -> None:
+    def set_temperature(self, value: float | None) -> None:
         """Fake the indoor temperature of the sensor."""
 
         if not self.is_faked:
@@ -301,11 +294,11 @@ class Temperature(DeviceHeat):  # 30C9
         cmd = Command.put_sensor_temp(self.id, value)
         self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_TEMPERATURE: self.temperature,
+            **base_status,
+            SZ_TEMPERATURE: await self.temperature(),
         }
 
 
@@ -531,33 +524,28 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     # def circuits(self) -> dict:  # 000C
     #     return self.circuit_by_id
 
-    @property
-    def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
+    async def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
         return cast(
             float | None, self._msg_value_msg(self._heat_demand, key=self.HEAT_DEMAND)
         )
 
-    @property
-    def heat_demands(self) -> dict | None:  # 3150|ufh_idx array
+    async def heat_demands(self) -> dict | None:  # 3150|ufh_idx array
         # return self._heat_demands.payload if self._heat_demands else None
         return cast(dict | None, self._msg_value_msg(self._heat_demands))
 
-    @property
-    def relay_demand(self) -> dict | None:  # 0008|FC
+    async def relay_demand(self) -> dict | None:  # 0008|FC
         return cast(
             dict | None,
             self._msg_value_msg(self._relay_demand, key=SZ_RELAY_DEMAND),
         )
 
-    @property
-    def relay_demand_fa(self) -> dict | None:  # 0008|FA
+    async def relay_demand_fa(self) -> dict | None:  # 0008|FA
         return cast(
             dict | None,
             self._msg_value_msg(self._relay_demand_fa, key=SZ_RELAY_DEMAND),
         )
 
-    @property
-    def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_idx array
+    async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_idx array
         if self._setpoints is None:
             return None
 
@@ -581,27 +569,27 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
             if isinstance(c, dict) and SZ_UFH_IDX in c
         }
 
-    @property  # id, type
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
+        base_schema = await super().schema()
         return {
-            **super().schema,
+            **base_schema,
             SZ_CIRCUITS: self.circuit_by_id,
         }
 
-    @property  # setpoint, config, mode (not schedule)
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
+        base_params = await super().params()
         return {
-            **super().params,
-            SZ_CIRCUITS: self.setpoints,
+            **base_params,
+            SZ_CIRCUITS: await self.setpoints(),
         }
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            SZ_HEAT_DEMAND: self.heat_demand,
-            SZ_RELAY_DEMAND: self.relay_demand,
-            f"{SZ_RELAY_DEMAND}_fa": self.relay_demand_fa,
+            **base_status,
+            SZ_HEAT_DEMAND: await self.heat_demand(),
+            SZ_RELAY_DEMAND: await self.relay_demand(),
+            f"{SZ_RELAY_DEMAND}_fa": await self.relay_demand_fa(),
         }
 
 
@@ -635,15 +623,14 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
     async def initiate_binding_process(self) -> Packet:
         return await super()._initiate_binding_process(Code._1260)
 
-    @property
-    def dhw_params(self) -> PayDictT._10A0 | None:
-        return cast(PayDictT._10A0 | None, self._msg_value(Code._10A0))
+    async def dhw_params(self) -> PayDictT._10A0 | None:
+        return cast(PayDictT._10A0 | None, await self._msg_value(Code._10A0))
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
+        base_params = await super().params()
         return {
-            **super().params,
-            self.DHW_PARAMS: self.dhw_params,
+            **base_params,
+            self.DHW_PARAMS: await self.dhw_params(),
         }
 
 
@@ -707,7 +694,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             # adds a "sim" RP opentherm_msg to the SQLite MessageIndex with code _3220
             # causes exc when fetching ALL, when no "real" msg was added to _msgs_. We skip those.
             # else:
-            self._msgz[Code._3220] = {RP: {}}  # No ctx! (not None)
+            self._msgz_[Code._3220] = {RP: {}}  # No ctx! (not None)
 
         # lf._use_ot = self._gwy.config.use_native_ot
         self._msgs_ot: dict[MsgId, Message] = {}
@@ -877,7 +864,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             return cbk_ot() if cbk_ot else None
         return result_ramses  # incl. use_native_ot == "never"
 
-    def _result_by_lookup(
+    async def _result_by_lookup(
         self,
         code: Code,
         /,
@@ -894,7 +881,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             if (result_ot := self._ot_msg_value(self.RAMSES_TO_OT[code])) is not None:
                 return result_ot
 
-        result_ramses = self._msg_value(code, key=key)
+        result_ramses = await self._msg_value(code, key=key)
         if self._gwy.config.use_native_ot == "avoid" and result_ramses is None:
             return self._ot_msg_value(self.RAMSES_TO_OT[code])
 
@@ -919,226 +906,205 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
 
         return result_ramses  # incl. use_native_ot == "never"
 
-    @property  # TODO
-    def bit_2_4(self) -> bool | None:  # 2401 - WIP
-        return self._msg_flag(Code._2401, "_flags_2", 4)
+    async def bit_2_4(self) -> bool | None:  # 2401 - WIP
+        return await self._msg_flag(Code._2401, "_flags_2", 4)
 
-    @property  # TODO
-    def bit_2_5(self) -> bool | None:  # 2401 - WIP
-        return self._msg_flag(Code._2401, "_flags_2", 5)
+    async def bit_2_5(self) -> bool | None:  # 2401 - WIP
+        return await self._msg_flag(Code._2401, "_flags_2", 5)
 
-    @property  # TODO
-    def bit_2_6(self) -> bool | None:  # 2401 - WIP
-        return self._msg_flag(Code._2401, "_flags_2", 6)
+    async def bit_2_6(self) -> bool | None:  # 2401 - WIP
+        return await self._msg_flag(Code._2401, "_flags_2", 6)
 
-    @property  # TODO
-    def bit_2_7(self) -> bool | None:  # 2401 - WIP
-        return self._msg_flag(Code._2401, "_flags_2", 7)
+    async def bit_2_7(self) -> bool | None:  # 2401 - WIP
+        return await self._msg_flag(Code._2401, "_flags_2", 7)
 
-    @property  # TODO
-    def bit_3_7(self) -> bool | None:  # 3EF0 (byte 3, only OTB)
-        return self._msg_flag(Code._3EF0, "_flags_3", 7)
+    async def bit_3_7(self) -> bool | None:  # 3EF0 (byte 3, only OTB)
+        return await self._msg_flag(Code._3EF0, "_flags_3", 7)
 
-    @property  # TODO
-    def bit_6_6(self) -> bool | None:  # 3EF0 ?dhw_enabled (byte 3, only R8820A?)
-        return self._msg_flag(Code._3EF0, "_flags_6", 6)
+    async def bit_6_6(self) -> bool | None:  # 3EF0 ?dhw_enabled (byte 3, only R8820A?)
+        return await self._msg_flag(Code._3EF0, "_flags_6", 6)
 
-    @property  # TODO
-    def percent(self) -> float | None:  # 2401 - WIP (~3150|FC)
-        return cast(float | None, self._msg_value(Code._2401, key=SZ_HEAT_DEMAND))
+    async def percent(self) -> float | None:  # 2401 - WIP (~3150|FC)
+        return cast(float | None, await self._msg_value(Code._2401, key=SZ_HEAT_DEMAND))
 
-    @property  # TODO
-    def value(self) -> int | None:  # 2401 - WIP
-        return cast(int | None, self._msg_value(Code._2401, key="_value_2"))
+    async def value(self) -> int | None:  # 2401 - WIP
+        return cast(int | None, await self._msg_value(Code._2401, key="_value_2"))
 
-    @property
-    def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
-        # _LOGGER.warning(
-        #     "code=%s, 3220=%s, both=%s",
-        #     self._msg_value(Code._3200, key=SZ_TEMPERATURE),
-        #     self._ot_msg_value(str(self.RAMSES_TO_OT[Code._3200])),
-        #     self._result_by_lookup(Code._3200, key=SZ_TEMPERATURE),
-        # )
-
+    async def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
         return cast(
-            float | None, self._result_by_lookup(Code._3200, key=SZ_TEMPERATURE)
+            float | None, await self._result_by_lookup(Code._3200, key=SZ_TEMPERATURE)
         )
 
-    @property
-    def boiler_return_temp(self) -> float | None:  # 3220|1C, or 3210
+    async def boiler_return_temp(self) -> float | None:  # 3220|1C, or 3210
         return cast(
-            float | None, self._result_by_lookup(Code._3210, key=SZ_TEMPERATURE)
+            float | None, await self._result_by_lookup(Code._3210, key=SZ_TEMPERATURE)
         )
 
-    @property
-    def boiler_setpoint(self) -> float | None:  # 3220|01, or 22D9
-        return cast(float | None, self._result_by_lookup(Code._22D9, key=SZ_SETPOINT))
+    async def boiler_setpoint(self) -> float | None:  # 3220|01, or 22D9
+        return cast(
+            float | None, await self._result_by_lookup(Code._22D9, key=SZ_SETPOINT)
+        )
 
-    @property
-    def ch_max_setpoint(self) -> float | None:  # 3220|39, or 1081
-        return cast(float | None, self._result_by_lookup(Code._1081, key=SZ_SETPOINT))
+    async def ch_max_setpoint(self) -> float | None:  # 3220|39, or 1081
+        return cast(
+            float | None, await self._result_by_lookup(Code._1081, key=SZ_SETPOINT)
+        )
 
-    @property  # TODO: no OT equivalent
-    def ch_setpoint(self) -> float | None:  # 3EF0 (byte 7, only R8820A?)
+    async def ch_setpoint(self) -> float | None:  # 3EF0 (byte 7, only R8820A?)
         return cast(
             float | None,
             self._result_by_value(
-                None, self._msg_value(Code._3EF0, key=SZ_CH_SETPOINT)
+                None, await self._msg_value(Code._3EF0, key=SZ_CH_SETPOINT)
             ),
         )
 
-    @property
-    def ch_water_pressure(self) -> float | None:  # 3220|12, or 1300
-        return cast(float | None, self._result_by_lookup(Code._1300, key=SZ_PRESSURE))
-
-    @property
-    def dhw_flow_rate(self) -> float | None:  # 3220|13, or 12F0
+    async def ch_water_pressure(self) -> float | None:  # 3220|12, or 1300
         return cast(
-            float | None, self._result_by_lookup(Code._12F0, key=SZ_DHW_FLOW_RATE)
+            float | None, await self._result_by_lookup(Code._1300, key=SZ_PRESSURE)
         )
 
-    @property
-    def dhw_setpoint(self) -> float | None:  # 3220|38, or 10A0
-        return cast(float | None, self._result_by_lookup(Code._10A0, key=SZ_SETPOINT))
-
-    @property
-    def dhw_temp(self) -> float | None:  # 3220|1A, or 1260
+    async def dhw_flow_rate(self) -> float | None:  # 3220|13, or 12F0
         return cast(
-            float | None, self._result_by_lookup(Code._1260, key=SZ_TEMPERATURE)
+            float | None, await self._result_by_lookup(Code._12F0, key=SZ_DHW_FLOW_RATE)
         )
 
-    @property  # TODO: no reliable OT equivalent?
-    def max_rel_modulation(self) -> float | None:  # 3220|0E, or 3EF0 (byte 8)
+    async def dhw_setpoint(self) -> float | None:  # 3220|38, or 10A0
+        return cast(
+            float | None, await self._result_by_lookup(Code._10A0, key=SZ_SETPOINT)
+        )
+
+    async def dhw_temp(self) -> float | None:  # 3220|1A, or 1260
+        return cast(
+            float | None, await self._result_by_lookup(Code._1260, key=SZ_TEMPERATURE)
+        )
+
+    async def max_rel_modulation(self) -> float | None:  # 3220|0E, or 3EF0 (byte 8)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
             return cast(
-                float | None, self._msg_value(Code._3EF0, key=SZ_MAX_REL_MODULATION)
+                float | None,
+                await self._msg_value(Code._3EF0, key=SZ_MAX_REL_MODULATION),
             )
         return cast(
             float | None,
             self._result_by_value(
                 self._ot_msg_value(MsgId._0E),  # NOTE: not reliable?
-                self._msg_value(Code._3EF0, key=SZ_MAX_REL_MODULATION),
+                await self._msg_value(Code._3EF0, key=SZ_MAX_REL_MODULATION),
             ),
         )
 
-    @property
-    def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
+    async def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
         return cast(float | None, self._ot_msg_value(MsgId._73))
 
-    @property
-    def outside_temp(self) -> float | None:  # 3220|1B, 1290
+    async def outside_temp(self) -> float | None:  # 3220|1B, 1290
         return cast(
-            float | None, self._result_by_lookup(Code._1290, key=SZ_TEMPERATURE)
+            float | None, await self._result_by_lookup(Code._1290, key=SZ_TEMPERATURE)
         )
 
-    @property  # TODO: no reliable OT equivalent?
-    def rel_modulation_level(self) -> float | None:  # 3220|11, or 3EF0/3EF1
+    async def rel_modulation_level(self) -> float | None:  # 3220|11, or 3EF0/3EF1
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
             return cast(
                 float | None,
-                self._msg_value((Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL),
+                await self._msg_value(
+                    (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
+                ),
             )
         return cast(
             float | None,
             self._result_by_value(
                 self._ot_msg_value(MsgId._11),  # NOTE: not reliable?
-                self._msg_value((Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL),
+                await self._msg_value(
+                    (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
+                ),
             ),
         )
 
-    @property  # TODO: no reliable OT equivalent?
-    def ch_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
+    async def ch_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(bool | None, self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE))
+            return cast(
+                bool | None, await self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE)
+            )
         return cast(
             bool | None,
             self._result_by_value(
                 self._ot_msg_flag(MsgId._00, 8 + 1),  # NOTE: not reliable?
-                self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE),
+                await self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE),
             ),
         )
 
-    @property  # TODO: no reliable OT equivalent?
-    def ch_enabled(self) -> bool | None:  # 3220|00, or 3EF0 (byte 6)
+    async def ch_enabled(self) -> bool | None:  # 3220|00, or 3EF0 (byte 6)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(bool | None, self._msg_value(Code._3EF0, key=SZ_CH_ENABLED))
+            return cast(
+                bool | None, await self._msg_value(Code._3EF0, key=SZ_CH_ENABLED)
+            )
         return cast(
             bool | None,
             self._result_by_value(
                 self._ot_msg_flag(MsgId._00, 0),  # NOTE: not reliable?
-                self._msg_value(Code._3EF0, key=SZ_CH_ENABLED),
+                await self._msg_value(Code._3EF0, key=SZ_CH_ENABLED),
             ),
         )
 
-    @property
-    def cooling_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def cooling_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
         return cast(
             bool | None,
             self._result_by_value(self._ot_msg_flag(MsgId._00, 8 + 4), None),
         )
 
-    @property
-    def cooling_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def cooling_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
         return cast(
             bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 2), None)
         )
 
-    @property  # TODO: no reliable OT equivalent?
-    def dhw_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
+    async def dhw_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(bool | None, self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE))
+            return cast(
+                bool | None, await self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE)
+            )
         return cast(
             bool | None,
             self._result_by_value(
                 self._ot_msg_flag(MsgId._00, 8 + 2),  # NOTE: not reliable?
-                self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE),
+                await self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE),
             ),
         )
 
-    @property
-    def dhw_blocking(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def dhw_blocking(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
         return cast(
             bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 6), None)
         )
 
-    @property
-    def dhw_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def dhw_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
         return cast(
             bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 1), None)
         )
 
-    @property
-    def fault_present(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def fault_present(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
         return cast(
             bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 8), None)
         )
 
-    @property  # TODO: no reliable OT equivalent?
-    def flame_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
+    async def flame_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(bool | None, self._msg_value(Code._3EF0, key="flame_on"))
+            return cast(bool | None, await self._msg_value(Code._3EF0, key="flame_on"))
         return cast(
             bool | None,
             self._result_by_value(
                 self._ot_msg_flag(MsgId._00, 8 + 3),  # NOTE: not reliable?
-                self._msg_value(Code._3EF0, key="flame_on"),
+                await self._msg_value(Code._3EF0, key="flame_on"),
             ),
         )
 
-    @property
-    def otc_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def otc_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
         return cast(
             bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 3), None)
         )
 
-    @property
-    def summer_mode(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def summer_mode(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
         return cast(
             bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 5), None)
         )
 
-    @property
-    def opentherm_schema(self) -> dict[str, Any]:
+    async def opentherm_schema(self) -> dict[str, Any]:
         result: dict[str, Any] = {
             self._ot_msg_name(v): v.payload
             for k, v in self._msgs_ot.items()
@@ -1149,8 +1115,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             for m, p in result.items()
         }
 
-    @property
-    def opentherm_counters(self) -> dict[str, Any]:  # all are U16
+    async def opentherm_counters(self) -> dict[str, Any]:  # all are U16
         return {
             SZ_BURNER_HOURS: self._ot_msg_value(MsgId._78),
             SZ_BURNER_STARTS: self._ot_msg_value(MsgId._74),
@@ -1164,8 +1129,9 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_FLAME_SIGNAL_LOW: self._ot_msg_value(MsgId._72),
         }  # 0x73 is not a counter: is OEM diagnostic code...
 
-    @property
-    def opentherm_params(self) -> dict[str, Any]:  # F8_8, U8, {"hb": S8, "lb": S8}
+    async def opentherm_params(
+        self,
+    ) -> dict[str, Any]:  # F8_8, U8, {"hb": S8, "lb": S8}
         result = {
             self._ot_msg_name(v): v.payload
             for k, v in self._msgs_ot.items()
@@ -1176,8 +1142,9 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             for m, p in result.items()
         }
 
-    @property
-    def opentherm_status(self) -> dict[str, Any]:  # F8_8, U16 (only OEM_CODE) or bool
+    async def opentherm_status(
+        self,
+    ) -> dict[str, Any]:  # F8_8, U16 (only OEM_CODE) or bool
         return {  # most these are in: STATUS_DATA_IDS
             SZ_BOILER_OUTPUT_TEMP: self._ot_msg_value(MsgId._19),
             SZ_BOILER_RETURN_TEMP: self._ot_msg_value(MsgId._1C),
@@ -1207,95 +1174,96 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_OTC_ACTIVE: self._ot_msg_flag(MsgId._00, 3),
         }
 
-    @property
-    def ramses_schema(self) -> PayDictT.EMPTY:
+    async def ramses_schema(self) -> PayDictT.EMPTY:
         return {}
 
-    @property
-    def ramses_params(self) -> dict[str, float | None]:
+    async def ramses_params(self) -> dict[str, float | None]:
         return {
-            SZ_MAX_REL_MODULATION: self.max_rel_modulation,
+            SZ_MAX_REL_MODULATION: await self.max_rel_modulation(),
         }
 
-    @property
-    def ramses_status(self) -> dict[str, Any]:
+    async def ramses_status(self) -> dict[str, Any]:
         return {
-            SZ_BOILER_OUTPUT_TEMP: self._msg_value(Code._3200, key=SZ_TEMPERATURE),
-            SZ_BOILER_RETURN_TEMP: self._msg_value(Code._3210, key=SZ_TEMPERATURE),
-            SZ_BOILER_SETPOINT: self._msg_value(Code._22D9, key=SZ_SETPOINT),
-            SZ_CH_MAX_SETPOINT: self._msg_value(Code._1081, key=SZ_SETPOINT),
-            SZ_CH_SETPOINT: self._msg_value(Code._3EF0, key=SZ_CH_SETPOINT),
-            SZ_CH_WATER_PRESSURE: self._msg_value(Code._1300, key=SZ_PRESSURE),
-            SZ_DHW_FLOW_RATE: self._msg_value(Code._12F0, key=SZ_DHW_FLOW_RATE),
-            SZ_DHW_SETPOINT: self._msg_value(Code._1300, key=SZ_SETPOINT),
-            SZ_DHW_TEMP: self._msg_value(Code._1260, key=SZ_TEMPERATURE),
-            SZ_OUTSIDE_TEMP: self._msg_value(Code._1290, key=SZ_TEMPERATURE),
-            SZ_REL_MODULATION_LEVEL: self._msg_value(
+            SZ_BOILER_OUTPUT_TEMP: await self._msg_value(
+                Code._3200, key=SZ_TEMPERATURE
+            ),
+            SZ_BOILER_RETURN_TEMP: await self._msg_value(
+                Code._3210, key=SZ_TEMPERATURE
+            ),
+            SZ_BOILER_SETPOINT: await self._msg_value(Code._22D9, key=SZ_SETPOINT),
+            SZ_CH_MAX_SETPOINT: await self._msg_value(Code._1081, key=SZ_SETPOINT),
+            SZ_CH_SETPOINT: await self._msg_value(Code._3EF0, key=SZ_CH_SETPOINT),
+            SZ_CH_WATER_PRESSURE: await self._msg_value(Code._1300, key=SZ_PRESSURE),
+            SZ_DHW_FLOW_RATE: await self._msg_value(Code._12F0, key=SZ_DHW_FLOW_RATE),
+            SZ_DHW_SETPOINT: await self._msg_value(Code._1300, key=SZ_SETPOINT),
+            SZ_DHW_TEMP: await self._msg_value(Code._1260, key=SZ_TEMPERATURE),
+            SZ_OUTSIDE_TEMP: await self._msg_value(Code._1290, key=SZ_TEMPERATURE),
+            SZ_REL_MODULATION_LEVEL: await self._msg_value(
                 (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
             ),
             #
-            SZ_CH_ACTIVE: self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE),
-            SZ_CH_ENABLED: self._msg_value(Code._3EF0, key=SZ_CH_ENABLED),
-            SZ_DHW_ACTIVE: self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE),
-            SZ_FLAME_ACTIVE: self._msg_value(Code._3EF0, key=SZ_FLAME_ACTIVE),
+            SZ_CH_ACTIVE: await self._msg_value(Code._3EF0, key=SZ_CH_ACTIVE),
+            SZ_CH_ENABLED: await self._msg_value(Code._3EF0, key=SZ_CH_ENABLED),
+            SZ_DHW_ACTIVE: await self._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE),
+            SZ_FLAME_ACTIVE: await self._msg_value(Code._3EF0, key=SZ_FLAME_ACTIVE),
         }
 
-    @property
-    def traits(self) -> dict[str, Any]:
+    async def traits(self) -> dict[str, Any]:
+        base_traits = await super().traits()
         return {
-            **super().traits,
-            "opentherm_traits": self.supported_cmds_ot,
-            "ramses_ii_traits": self.supported_cmds,
+            **base_traits,
+            "opentherm_traits": await self.supported_cmds_ot(),
+            "ramses_ii_traits": await self.supported_cmds(),
         }
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
+        base_schema = await super().schema()
         return {
-            **super().schema,
-            "opentherm_schema": self.opentherm_schema,
-            "ramses_ii_schema": self.ramses_schema,
+            **base_schema,
+            "opentherm_schema": await self.opentherm_schema(),
+            "ramses_ii_schema": await self.ramses_schema(),
         }
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
+        base_params = await super().params()
         return {
-            **super().params,
-            "opentherm_params": self.opentherm_params,
-            "ramses_ii_params": self.ramses_params,
+            **base_params,
+            "opentherm_params": await self.opentherm_params(),
+            "ramses_ii_params": await self.ramses_params(),
         }
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,  # incl. actuator_cycle, actuator_state
+            **base_status,  # incl. actuator_cycle, actuator_state
             #
-            SZ_BOILER_OUTPUT_TEMP: self.boiler_output_temp,
-            SZ_BOILER_RETURN_TEMP: self.boiler_return_temp,
-            SZ_BOILER_SETPOINT: self.boiler_setpoint,
-            SZ_CH_SETPOINT: self.ch_setpoint,
-            SZ_CH_MAX_SETPOINT: self.ch_max_setpoint,
-            SZ_CH_WATER_PRESSURE: self.ch_water_pressure,
-            SZ_DHW_FLOW_RATE: self.dhw_flow_rate,
-            SZ_DHW_SETPOINT: self.dhw_setpoint,
-            SZ_DHW_TEMP: self.dhw_temp,
-            SZ_OEM_CODE: self.oem_code,
-            SZ_OUTSIDE_TEMP: self.outside_temp,
-            SZ_REL_MODULATION_LEVEL: self.rel_modulation_level,
+            SZ_BOILER_OUTPUT_TEMP: await self.boiler_output_temp(),
+            SZ_BOILER_RETURN_TEMP: await self.boiler_return_temp(),
+            SZ_BOILER_SETPOINT: await self.boiler_setpoint(),
+            SZ_CH_SETPOINT: await self.ch_setpoint(),
+            SZ_CH_MAX_SETPOINT: await self.ch_max_setpoint(),
+            SZ_CH_WATER_PRESSURE: await self.ch_water_pressure(),
+            SZ_DHW_FLOW_RATE: await self.dhw_flow_rate(),
+            SZ_DHW_SETPOINT: await self.dhw_setpoint(),
+            SZ_DHW_TEMP: await self.dhw_temp(),
+            SZ_OEM_CODE: await self.oem_code(),
+            SZ_OUTSIDE_TEMP: await self.outside_temp(),
+            SZ_REL_MODULATION_LEVEL: await self.rel_modulation_level(),
             #
-            SZ_CH_ACTIVE: self.ch_active,
-            SZ_CH_ENABLED: self.ch_enabled,
-            SZ_COOLING_ACTIVE: self.cooling_active,
-            SZ_COOLING_ENABLED: self.cooling_enabled,
-            SZ_DHW_ACTIVE: self.dhw_active,
-            SZ_DHW_BLOCKING: self.dhw_blocking,
-            SZ_DHW_ENABLED: self.dhw_enabled,
-            SZ_FAULT_PRESENT: self.fault_present,
-            SZ_FLAME_ACTIVE: self.flame_active,
-            SZ_SUMMER_MODE: self.summer_mode,
-            SZ_OTC_ACTIVE: self.otc_active,
+            SZ_CH_ACTIVE: await self.ch_active(),
+            SZ_CH_ENABLED: await self.ch_enabled(),
+            SZ_COOLING_ACTIVE: await self.cooling_active(),
+            SZ_COOLING_ENABLED: await self.cooling_enabled(),
+            SZ_DHW_ACTIVE: await self.dhw_active(),
+            SZ_DHW_BLOCKING: await self.dhw_blocking(),
+            SZ_DHW_ENABLED: await self.dhw_enabled(),
+            SZ_FAULT_PRESENT: await self.fault_present(),
+            SZ_FLAME_ACTIVE: await self.flame_active(),
+            SZ_SUMMER_MODE: await self.summer_mode(),
+            SZ_OTC_ACTIVE: await self.otc_active(),
             #
-            # "status_opentherm": self.opentherm_status,
-            # "status_ramses_ii": self.ramses_status,
+            # "status_opentherm": await self.opentherm_status(),
+            # "status_ramses_ii": await self.ramses_status(),
         }
 
 
@@ -1402,14 +1370,14 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
             60 if self._child_id in (F9, FA, FC) else 300,
         )  # status
 
-    @property
-    def active(self) -> bool | None:  # 3EF0, 3EF1
+    async def active(self) -> bool | None:  # 3EF0, 3EF1
         """Return the actuator's current state."""
-        result = self._msg_value((Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL)
+        result = await self._msg_value(
+            (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
+        )
         return None if result is None else bool(result)
 
-    @property
-    def role(self) -> str | None:
+    async def role(self) -> str | None:
         """Return the role of the BDR91A (there are six possibilities)."""
 
         # TODO: use self._parent?
@@ -1427,29 +1395,28 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
         return None
 
-    @property
-    def tpi_params(self) -> PayDictT._10A0 | None:
-        return cast(PayDictT._10A0 | None, self._msg_value(Code._1100))
+    async def tpi_params(self) -> PayDictT._10A0 | None:
+        return cast(PayDictT._10A0 | None, await self._msg_value(Code._1100))
 
-    @property
-    def schema(self) -> dict[str, Any]:
+    async def schema(self) -> dict[str, Any]:
+        base_schema = await super().schema()
         return {
-            **super().schema,
-            "role": self.role,
+            **base_schema,
+            "role": await self.role(),
         }
 
-    @property
-    def params(self) -> dict[str, Any]:
+    async def params(self) -> dict[str, Any]:
+        base_params = await super().params()
         return {
-            **super().params,
-            self.TPI_PARAMS: self.tpi_params,
+            **base_params,
+            self.TPI_PARAMS: await self.tpi_params(),
         }
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            self.ACTIVE: self.active,
+            **base_status,
+            self.ACTIVE: await self.active(),
         }
 
 
@@ -1461,22 +1428,25 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
     _SLUG = DevType.TRV
     _STATE_ATTR = SZ_HEAT_DEMAND
 
-    @property
-    def heat_demand(self) -> float | None:  # 3150
-        if (heat_demand := super().heat_demand) is None:
-            if self._msg_value(Code._3150) is None and self.setpoint is False:
+    async def heat_demand(self) -> float | None:  # 3150
+        if (heat_demand := await super().heat_demand()) is None:
+            if (
+                await self._msg_value(Code._3150) is None
+                and await self.setpoint() is False
+            ):
                 return 0  # instead of None (no 3150s sent when setpoint is False)
         return heat_demand
 
-    @property
-    def window_open(self) -> bool | None:  # 12B0
-        return cast(bool | None, self._msg_value(Code._12B0, key=self.WINDOW_OPEN))
+    async def window_open(self) -> bool | None:  # 12B0
+        return cast(
+            bool | None, await self._msg_value(Code._12B0, key=self.WINDOW_OPEN)
+        )
 
-    @property
-    def status(self) -> dict[str, Any]:
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
         return {
-            **super().status,
-            self.WINDOW_OPEN: self.window_open,
+            **base_status,
+            self.WINDOW_OPEN: await self.window_open(),
         }
 
 

@@ -23,7 +23,21 @@ if TYPE_CHECKING:
 FIXTURE_FILE = Path(__file__).parents[1] / "fixtures" / "regression_packets_sorted.txt"
 
 
-def serialize_device(dev: Any) -> dict[str, Any]:
+async def _get_attr_value(obj: Any, attr: str) -> Any:
+    """Safely get and evaluate an attribute.
+
+    Handles standard attributes, @properties, synchronous methods,
+    and asynchronous coroutine methods seamlessly.
+    """
+    val = getattr(obj, attr, None)
+    if callable(val):
+        val = val()
+    if asyncio.iscoroutine(val):
+        val = await val
+    return val
+
+
+async def serialize_device(dev: Any) -> dict[str, Any]:
     """Helper to serialize a device's state for snapshotting.
 
     Identifies attributes based on device type (Heat vs HVAC) and existence
@@ -33,8 +47,8 @@ def serialize_device(dev: Any) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": dev.id,
         "type": type(dev).__name__,
-        "is_alive": getattr(dev, "_is_alive", None),
-        "battery_low": getattr(dev, "battery_low", None),
+        "is_alive": await _get_attr_value(dev, "_is_alive"),
+        "battery_low": await _get_attr_value(dev, "battery_low"),
     }
 
     # Capture specific state for Heating devices
@@ -70,7 +84,7 @@ def serialize_device(dev: Any) -> dict[str, Any]:
         ):
             try:
                 # getattr triggers the @property logic
-                val = getattr(dev, attr, None)
+                val = await _get_attr_value(dev, attr)
                 if val is not None:
                     data[attr] = val
             except AttributeError:
@@ -100,7 +114,7 @@ def serialize_device(dev: Any) -> dict[str, Any]:
                 "rel_modulation_level",
             ):
                 try:
-                    val = getattr(dev, attr, None)
+                    val = await _get_attr_value(dev, attr)
                     if val is not None:
                         data[attr] = val
                 except AttributeError:
@@ -140,7 +154,7 @@ def serialize_device(dev: Any) -> dict[str, Any]:
             "supply_temp",
         ):
             try:
-                val = getattr(dev, attr, None)
+                val = await _get_attr_value(dev, attr)
                 if val is not None:
                     data[attr] = val
             except AttributeError:
@@ -196,28 +210,35 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
             if reader_task:
                 await reader_task
 
+        # Ensure database is flushed if it exists
+        if gwy.msg_db:
+            gwy.msg_db.flush()
+
         # 5. Extract State for Snapshot
         # We create a deterministic dictionary of the system state
+        devices_data = []
+        for d in sorted(gwy.devices, key=lambda x: x.id):
+            devices_data.append(await serialize_device(d))
+
         system_state: dict[str, Any] = {
-            "schema": gwy.schema,
-            "devices": [
-                serialize_device(d) for d in sorted(gwy.devices, key=lambda x: x.id)
-            ],
+            "schema": await gwy.schema(),
+            "devices": devices_data,
         }
 
         # Add specific System (TCS) details if a TCS was discovered
         if gwy.tcs:
+            zones_data = {}
+            for z in sorted(gwy.tcs.zones, key=lambda x: x.idx):
+                zones_data[z.idx] = {
+                    "name": await z.name(),
+                    "type": type(z).__name__,
+                    "sensor": z.sensor.id if z.sensor else None,
+                    "actuators": sorted([a.id for a in z.actuators]),
+                }
+
             system_state["tcs"] = {
                 "id": gwy.tcs.id,
-                "zones": {
-                    z.idx: {
-                        "name": z.name,
-                        "type": type(z).__name__,
-                        "sensor": z.sensor.id if z.sensor else None,
-                        "actuators": sorted([a.id for a in z.actuators]),
-                    }
-                    for z in sorted(gwy.tcs.zones, key=lambda x: x.idx)
-                },
+                "zones": zones_data,
             }
 
         # 6. Stop Gateway

@@ -9,9 +9,9 @@ from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
-import click
+import asyncclick as click
 import pytest
-from click.testing import CliRunner
+from asyncclick.testing import CliRunner
 
 from ramses_cli.client import (
     EXECUTE,
@@ -85,21 +85,26 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     mock_dev = MagicMock()
     mock_dev.id = "01:123456"
     mock_dev.type = DEV_TYPE_MAP.CTL  # Controller
-    mock_dev.schema = {"mock": "schema"}
-    mock_dev.params = {"mock": "params"}
-    mock_dev.status = {"mock": "status"}
-    mock_dev.traits = {"mock": "traits"}
+
+    # These are now async methods
+    mock_dev.schema = AsyncMock(return_value={"mock": "schema"})
+    mock_dev.params = AsyncMock(return_value={"mock": "params"})
+    mock_dev.status = AsyncMock(return_value={"mock": "status"})
+    mock_dev.traits = AsyncMock(return_value={"mock": "traits"})
+
     # Mock message database interaction for show_crazys
-    mock_dev._msgz = {
-        Code._0005: {"verb": {"pkt": "msg_0005"}},
-        Code._000C: {"verb": {"pkt": "msg_000C"}},
-    }
+    mock_dev._msgz = AsyncMock(
+        return_value={
+            Code._0005: {"verb": {"pkt": "msg_0005"}},
+            Code._000C: {"verb": {"pkt": "msg_000C"}},
+        }
+    )
 
     gateway.devices = [mock_dev]
     gateway.tcs = None  # mimic no TCS
-    gateway.schema = {"global": "schema"}
-    gateway.params = {"global": "params"}
-    gateway.status = {"global": "status"}
+    gateway.schema = AsyncMock(return_value={"global": "schema"})
+    gateway.params = AsyncMock(return_value={"global": "params"})
+    gateway.status = AsyncMock(return_value={"global": "status"})
 
     # Add msg_db attribute
     gateway.msg_db = MessageIndex(maintain=False)
@@ -118,67 +123,76 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
 # --- CLI Argument Parsing Tests ---
 
 
-def test_parse_no_input() -> None:
+@pytest.mark.asyncio
+async def test_parse_no_input() -> None:
     runner = CliRunner()
-    result = runner.invoke(cli, ["parse"])
+    result = await runner.invoke(cli, ["parse"])
     assert result.exit_code == 2  # missing input file
     assert result.output.startswith("Usage: cli parse [OPTIONS] INPUT_FILE")
 
 
-def test_parse(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_parse(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.stdin", STDIN)
     runner = CliRunner()
-    result = runner.invoke(cli, ["parse", "-"])
+    result = await runner.invoke(cli, ["parse", "-"])
     assert result.exit_code == 0  # OK input file supplied
     assert result.output == ""
 
 
-def test_monitor_no_port() -> None:
+@pytest.mark.asyncio
+async def test_monitor_no_port() -> None:
     runner = CliRunner()
-    result = runner.invoke(cli, ["monitor"])
+    result = await runner.invoke(cli, ["monitor"])
     assert result.exit_code == 2  # missing port name
     assert result.output.startswith("Usage: cli monitor [OPTIONS] SERIAL_PORT")
 
 
-def test_monitor(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_monitor(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
-    result = runner.invoke(cli, ["monitor", "nullmodem"])
+    result = await runner.invoke(cli, ["monitor", "nullmodem"])
     assert result.exit_code == 0  # OK port name supplied
     assert "discovery is enabled" in result.output
 
 
-def test_monitor_no_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_monitor_no_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test monitor with explicit no-discovery flag."""
     runner = CliRunner()
-    result = runner.invoke(cli, ["monitor", "nullmodem", "--no-discover"])
+    result = await runner.invoke(cli, ["monitor", "nullmodem", "--no-discover"])
     assert result.exit_code == 0
     assert "discovery is enabled" not in result.output
 
 
-def test_execute_no_arg() -> None:
+@pytest.mark.asyncio
+async def test_execute_no_arg() -> None:
     runner = CliRunner()
-    result = runner.invoke(cli, ["execute"])
+    result = await runner.invoke(cli, ["execute"])
     assert result.exit_code == 2  # missing command, port
     assert result.output.startswith("Usage: cli execute [OPTIONS] SERIAL_PORT")
 
 
-def test_execute(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_execute(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
-    result = runner.invoke(cli, ["execute", CMD])
+    result = await runner.invoke(cli, ["execute", CMD])
     assert result.exit_code == 0  # OK command supplied
     assert result.output == " - discovery is force-disabled\n"
 
 
-def test_listen_no_arg() -> None:
+@pytest.mark.asyncio
+async def test_listen_no_arg() -> None:
     runner = CliRunner()
-    result = runner.invoke(cli, ["listen"])
+    result = await runner.invoke(cli, ["listen"])
     assert result.exit_code == 2  # missing port
     assert result.output.startswith("Usage: cli listen [OPTIONS] SERIAL_PORT")
 
 
-def test_listen(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_listen(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
-    result = runner.invoke(cli, ["listen", "nullmodem"])
+    result = await runner.invoke(cli, ["listen", "nullmodem"])
     assert result.exit_code == 0  # OK port supplied
     assert result.output == " - sending is force-disabled\n"
 
@@ -246,7 +260,7 @@ async def test_print_summary(
         "show_crazys": True,
     }
 
-    print_summary(mock_gateway, **kwargs)
+    await print_summary(mock_gateway, **kwargs)
 
     captured = capsys.readouterr()
     output = captured.out
@@ -630,16 +644,18 @@ def test_convert() -> None:
         param_type.convert("invalid", None, None)
 
 
-def test_cli_debug_mode(mock_gateway: MagicMock) -> None:
+@pytest.mark.asyncio
+async def test_cli_debug_mode(mock_gateway: MagicMock) -> None:
     """Test that the debug flag triggers the debugger."""
     with patch("ramses_cli.client.start_debugging") as mock_debug:
         runner = CliRunner()
         # invoke cli with -z (debug) count 1
-        runner.invoke(cli, ["-z", "parse", "/dev/null"])
+        await runner.invoke(cli, ["-z", "parse", "/dev/null"])
         mock_debug.assert_called_once_with(True)
 
 
-def test_cli_config_file(mock_gateway: MagicMock) -> None:
+@pytest.mark.asyncio
+async def test_cli_config_file(mock_gateway: MagicMock) -> None:
     """Test loading a configuration file via the CLI."""
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -648,7 +664,9 @@ def test_cli_config_file(mock_gateway: MagicMock) -> None:
             json.dump({"config": {"disable_discovery": True}}, f)
 
         # Run CLI with -c pointing to the file
-        result = runner.invoke(cli, ["-c", "test_config.json", "parse", "/dev/null"])
+        result = await runner.invoke(
+            cli, ["-c", "test_config.json", "parse", "/dev/null"]
+        )
 
         assert result.exit_code == 0
         # Verify the config was actually merged (by checking the internal call)
@@ -656,12 +674,15 @@ def test_cli_config_file(mock_gateway: MagicMock) -> None:
         # but here we just want to ensure it runs without error.
 
 
-def test_execute_flags(mock_gateway: MagicMock) -> None:
+@pytest.mark.asyncio
+async def test_execute_flags(mock_gateway: MagicMock) -> None:
     """Test that execute flags (like --get-faults) enforce the known_list."""
     runner = CliRunner()
 
     # Running execute with a specific device target should force-enable the known_list
-    result = runner.invoke(cli, ["execute", "/dev/null", "--get-faults", "01:123456"])
+    result = await runner.invoke(
+        cli, ["execute", "/dev/null", "--get-faults", "01:123456"]
+    )
 
     assert result.exit_code == 0
     # This specific string is printed when execute logic enforces the list
@@ -690,14 +711,15 @@ async def test__save_state(mock_gateway: MagicMock) -> None:
         assert "state_schema.json" in filenames
 
 
-def test_parse_command_passes_input_file() -> None:
+@pytest.mark.asyncio
+async def test_parse_command_passes_input_file() -> None:
     """Verify that 'client.py parse' correctly puts input_file into lib_kwargs."""
 
     runner = CliRunner()
     fake_log_file = "test_capture.log"
 
     # standalone_mode=False allows us to see the return value of the command
-    result = runner.invoke(cli, ["parse", fake_log_file], standalone_mode=False)
+    result = await runner.invoke(cli, ["parse", fake_log_file], standalone_mode=False)
 
     assert result.exit_code == 0, f"Command failed: {result.exception}"
 

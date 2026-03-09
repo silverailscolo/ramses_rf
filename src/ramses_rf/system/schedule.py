@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final, NotRequired, TypeAlias, TypedDict
 
-import voluptuous as vol  # type: ignore[import, unused-ignore]
+import voluptuous as vol
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
@@ -40,53 +40,10 @@ if TYPE_CHECKING:
     from ramses_rf.system.zones import DhwZone, Zone
 
 
-class EmptyDictT(TypedDict):
-    pass
-
-
-class SwitchPointDhw(TypedDict):
-    time_of_day: str
-    enabled: bool
-
-
-class SwitchPointZon(TypedDict):
-    time_of_day: str
-    heat_setpoint: float
-
-
-SwitchPointT: TypeAlias = SwitchPointDhw | SwitchPointZon
-SwitchPointsT: TypeAlias = list[SwitchPointDhw] | list[SwitchPointZon]
-
-
-class DayOfWeek(TypedDict):
-    day_of_week: int
-    switchpoints: SwitchPointsT
-
-
-DayOfWeekT: TypeAlias = DayOfWeek
-InnerScheduleT: TypeAlias = list[DayOfWeek]
-
-
-class _OuterSchedule(TypedDict):
-    zone_idx: str
-    schedule: InnerScheduleT
-
-
-class _EmptySchedule(TypedDict):
-    zone_idx: str
-    schedule: NotRequired[EmptyDictT | None]
-
-
-OuterScheduleT: TypeAlias = _OuterSchedule | _EmptySchedule
-
-
-_LOGGER = logging.getLogger(__name__)
-
-
-FIVE_MINS = td(minutes=5)
+# Constants
+FIVE_MINS: Final = td(minutes=5)
 
 SZ_MSG: Final = "msg"
-
 SZ_DAY_OF_WEEK: Final = "day_of_week"
 SZ_HEAT_SETPOINT: Final = "heat_setpoint"
 SZ_SWITCHPOINTS: Final = "switchpoints"
@@ -96,7 +53,76 @@ SZ_ENABLED: Final = "enabled"
 REGEX_TIME_OF_DAY: Final = r"^([0-1][0-9]|2[0-3]):[0-5][05]$"
 
 
+# Types
+class EmptyDictT(TypedDict):
+    """An empty typed dictionary used as a sentinel."""
+
+    pass
+
+
+class SwitchPointDhw(TypedDict):
+    """A dictionary representing a DHW switchpoint."""
+
+    time_of_day: str
+    enabled: bool
+
+
+class SwitchPointZon(TypedDict):
+    """A dictionary representing a Zone heating switchpoint."""
+
+    time_of_day: str
+    heat_setpoint: float
+
+
+SwitchPointT: TypeAlias = SwitchPointDhw | SwitchPointZon
+SwitchPointsT: TypeAlias = list[SwitchPointDhw] | list[SwitchPointZon]
+
+
+class DayOfWeek(TypedDict):
+    """A dictionary representing a schedule for a single day."""
+
+    day_of_week: int
+    switchpoints: SwitchPointsT
+
+
+DayOfWeekT: TypeAlias = DayOfWeek
+InnerScheduleT: TypeAlias = list[DayOfWeek]
+
+
+class _OuterSchedule(TypedDict):
+    """A dictionary representing a full schedule payload."""
+
+    zone_idx: str
+    schedule: InnerScheduleT
+
+
+class _EmptySchedule(TypedDict):
+    """A dictionary representing an empty schedule payload."""
+
+    zone_idx: str
+    schedule: NotRequired[EmptyDictT | None]
+
+
+OuterScheduleT: TypeAlias = _OuterSchedule | _EmptySchedule
+
+_PayloadT: TypeAlias = dict[str, Any]  # Message payload
+_PayloadSetT: TypeAlias = list[_PayloadT | None]
+
+_FragmentT: TypeAlias = str
+_FragmentSetT: TypeAlias = list[_FragmentT]
+
+EMPTY_PAYLOAD_SET: _PayloadSetT = [None]
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
 def schema_sched(schema_switchpoint: vol.Schema) -> vol.Schema:
+    """Generate a voluptuous schema for a weekly schedule.
+
+    :param schema_switchpoint: The schema describing an individual switchpoint.
+    :return: A voluptuous Schema object for the 7-day schedule array.
+    """
     schema_sched_day = vol.Schema(
         {
             vol.Required(SZ_DAY_OF_WEEK): int,
@@ -154,20 +180,15 @@ SCH_FULL_SCHEDULE = vol.Schema(
 )
 
 
-_PayloadT: TypeAlias = dict[str, Any]  # Message payload
-_PayloadSetT: TypeAlias = list[_PayloadT | None]
-
-_FragmentT: TypeAlias = str
-_FragmentSetT: TypeAlias = list[_FragmentT]
-
-EMPTY_PAYLOAD_SET: _PayloadSetT = [None]
-
-
 # TODO: make stateful (a la binding)
 class Schedule:  # 0404
     """The schedule of a zone."""
 
     def __init__(self, zone: DhwZone | Zone) -> None:
+        """Initialize the Schedule for a specific zone.
+
+        :param zone: The heating or DHW zone this schedule applies to.
+        """
         _LOGGER.debug("Schedule(zon=%s).__init__()", zone)
 
         self.id = zone.id
@@ -180,18 +201,21 @@ class Schedule:  # 0404
 
         self._full_schedule: OuterScheduleT | EmptyDictT = {}
 
-        self._payload_set: _PayloadSetT = EMPTY_PAYLOAD_SET  # Rx'd
+        self._payload_set: _PayloadSetT = list(EMPTY_PAYLOAD_SET)  # Rx'd
         self._fragments: _FragmentSetT = []  # to Tx
 
         self._global_ver = 0  # None is a sentinel for 'dont know'
         self._sched_ver = 0  # the global_ver when this schedule was retrieved
 
     def __str__(self) -> str:
+        """Return a string representation of the schedule object."""
         return f"{self._zone} (schedule)"
 
     def _handle_msg(self, msg: Message) -> None:
-        """Process a schedule packet: if possible, create the corresponding schedule."""
+        """Process a schedule packet: if possible, create the corresponding schedule.
 
+        :param msg: The incoming message to parse.
+        """
         if msg.code == Code._0006:  # keep up, in cause is useful to know in future
             self._global_ver = msg.payload[SZ_CHANGE_COUNTER]
             return
@@ -217,8 +241,10 @@ class Schedule:  # 0404
 
         If `force_io`, then a true negative is guaranteed (it forces an RQ|0006 unless
         self._global_ver > self._sched_ver).
-        """
 
+        :param force_io: True to force an IO request to check versions.
+        :return: A tuple of (is_dated, did_io).
+        """
         # this will not cause an I/O...
         if (
             not force_io
@@ -249,8 +275,12 @@ class Schedule:  # 0404
         Otherwise, RQ the latest schedule from the controller and return that.
 
         If `force_io`, then the latest schedule is guaranteed (it forces an RQ|0006).
-        """
 
+        :param force_io: Set to True to force fetching a new schedule from the controller.
+        :param timeout: Maximum time in seconds to wait for the schedule.
+        :return: The schedule details or None if not found.
+        :raises exc.ScheduleFlowError: If unable to obtain the schedule before timeout.
+        """
         try:
             await asyncio.wait_for(
                 self._get_schedule(force_io=force_io), timeout=timeout
@@ -263,11 +293,17 @@ class Schedule:  # 0404
         return self.schedule
 
     async def _get_schedule(self, *, force_io: bool = False) -> None:
-        """Retrieve/return the schedule of a zone (sets self._full_schedule)."""
+        """Retrieve/return the schedule of a zone and sets `self._full_schedule`.
 
-        async def get_fragment(frag_num: int) -> _PayloadT:  # may: TimeoutError?
-            """Retrieve a schedule fragment from the controller."""
+        :param force_io: Set to True to force IO fetching.
+        """
 
+        async def get_fragment(frag_num: int) -> _PayloadT:
+            """Retrieve a schedule fragment from the controller.
+
+            :param frag_num: The fragment index number to fetch.
+            :return: The dictionary payload of the fragment.
+            """
             frag_set_size = 0 if frag_num == 1 else _len(self._payload_set)
             cmd = Command.get_schedule_fragment(
                 self.ctl.id, self.idx, frag_num, frag_set_size
@@ -292,8 +328,10 @@ class Schedule:  # 0404
 
         self._payload_set[0] = None  # if 1st frag valid: schedule very likely unchanged
         while frag_num := next(
-            i for i, f in enumerate(self._payload_set, 1) if f is None
+            (i for i, f in enumerate(self._payload_set, 1) if f is None), 0
         ):
+            if frag_num == 0:
+                break
             fragment = await get_fragment(frag_num)
             # next line also in self._handle_msg(), so protected there with a lock
             self._payload_set = self._update_payload_set(self._payload_set, fragment)
@@ -308,8 +346,11 @@ class Schedule:  # 0404
 
         If the schedule is for DHW, set the `zone_idx` key to 'HW' (to avoid confusing
         with zone '00').
-        """
 
+        :param payload_set: The completed array of fragment payloads.
+        :return: The full schedule block.
+        :raises exc.ScheduleError: On failure to decompress fragment string blob.
+        """
         # TODO: relying upon caller to ensure set is only empty or full
 
         if payload_set == EMPTY_PAYLOAD_SET:
@@ -335,17 +376,20 @@ class Schedule:  # 0404
         """Add a fragment to a frag set and process/return the new set.
 
         If the frag set is complete, check for a schedule (sets `self._schedule`).
-
         If required, start a new frag set with the fragment.
+
+        :param payload_set: The existing fragment collection.
+        :param payload: The new payload dict to integrate.
+        :return: The updated set of payloads.
         """
 
         def init_payload_set(payload: _PayloadT) -> _PayloadSetT:
-            payload_set: _PayloadSetT = [None] * payload[SZ_TOTAL_FRAGS]
-            payload_set[payload[SZ_FRAG_NUMBER] - 1] = payload
-            return payload_set
+            _payload_set: _PayloadSetT = [None] * payload[SZ_TOTAL_FRAGS]
+            _payload_set[payload[SZ_FRAG_NUMBER] - 1] = payload
+            return _payload_set
 
         if payload[SZ_TOTAL_FRAGS] is None:  # zone has no schedule
-            payload_set = EMPTY_PAYLOAD_SET
+            payload_set = list(EMPTY_PAYLOAD_SET)
             self._proc_payload_set(payload_set)
             return payload_set
 
@@ -363,11 +407,17 @@ class Schedule:  # 0404
     async def set_schedule(
         self, schedule: InnerScheduleT, force_refresh: bool = False
     ) -> InnerScheduleT | None:
-        """Set the schedule of a zone."""
+        """Set the schedule of a zone.
+
+        :param schedule: The array representing the days of the week schedule.
+        :param force_refresh: True to query and retrieve the new schedule directly after setting.
+        :return: The updated InnerSchedule array.
+        :raises exc.ScheduleError: On validation or serialization failure.
+        :raises exc.ScheduleFlowError: On transmission timeout.
+        """
 
         async def put_fragment(frag_num: int, frag_cnt: int, fragment: str) -> None:
             """Send a schedule fragment to the controller."""
-
             cmd = Command.set_schedule_fragment(
                 self.ctl.id, self.idx, frag_num, frag_cnt, fragment
             )
@@ -408,7 +458,6 @@ class Schedule:  # 0404
         else:
             if not force_refresh:
                 self._global_ver, _ = await self.tcs._schedule_version(force_io=True)
-                # assert self._global_ver > self._sched_ver
                 self._sched_ver = self._global_ver
         finally:
             self.tcs._release_lock()
@@ -434,29 +483,24 @@ class Schedule:  # 0404
         return self._sched_ver if self._full_schedule else None
 
 
-# TODO: deprecate in favour of len(payload_set)
 def _len(payload_set: _PayloadSetT) -> int:
     """Return the total number of fragments in the complete frag set.
 
     Return 0 if the expected set size is unknown (sentinel value as per RAMSES II).
+    Uses len(payload_set) directly.
 
-    Uses frag_set[i][SZ_TOTAL_FRAGS] instead of `len(frag_set)` (is necessary?).
+    :param payload_set: The current list of payloads.
+    :return: The total expected fragments based on the set size.
     """
-    # for frag in (f for f in payload_set if f is not None):  # they will all match
-    #     assert len(payload_set) == frag[SZ_TOTAL_FRAGS]  # TODO: remove
-    #     assert isinstance(frag[SZ_TOTAL_FRAGS], int)  # mypy check
-    #     result: int = frag[SZ_TOTAL_FRAGS]
-    #     return result
-
-    # assert payload_set == EMPTY_PAYLOAD_SET  # TODO: remove
-    # return 0  # sentinel value as per RAMSES protocol
     return len(payload_set)
 
 
 def fragz_to_full_sched(fragments: Iterable[_FragmentT]) -> _OuterSchedule:
     """Convert a tuple of fragments strs (a blob) into a schedule.
 
-    May raise a `zlib.error` exception.
+    :param fragments: An iterable of hexadecimal string fragments.
+    :return: A parsed `_OuterSchedule` TypedDict representation.
+    :raises zlib.error: On invalid payload compression stream.
     """
 
     def setpoint(value: int) -> dict[str, bool | float]:
@@ -468,7 +512,7 @@ def fragz_to_full_sched(fragments: Iterable[_FragmentT]) -> _OuterSchedule:
 
     old_day = 0
     schedule: InnerScheduleT = []
-    switchpoints: SwitchPointsT = []  # type: ignore[assignment, unused-ignore]
+    switchpoints: SwitchPointsT = []
 
     idx: int
     dow: int
@@ -480,7 +524,7 @@ def fragz_to_full_sched(fragments: Iterable[_FragmentT]) -> _OuterSchedule:
 
         if dow > old_day:
             schedule.append({SZ_DAY_OF_WEEK: old_day, SZ_SWITCHPOINTS: switchpoints})
-            old_day, switchpoints = dow, []  # type: ignore[assignment, unused-ignore]
+            old_day, switchpoints = dow, []
 
         switchpoint: SwitchPointDhw | SwitchPointZon = {
             SZ_TIME_OF_DAY: "{:02d}:{:02d}".format(*divmod(tod, 60))
@@ -495,9 +539,10 @@ def fragz_to_full_sched(fragments: Iterable[_FragmentT]) -> _OuterSchedule:
 def full_sched_to_fragz(full_schedule: _OuterSchedule) -> list[_FragmentT]:
     """Convert a schedule into a set of fragments (a blob).
 
-    May raise `KeyError`, `zlib.error` exceptions.
+    :param full_schedule: The `_OuterSchedule` dictionary representation.
+    :return: A list of string fragments representing the zlib compressed binary.
+    :raises KeyError: If expected keys are missing from the structure.
     """
-
     cobj = zlib.compressobj(level=9, wbits=14)
     frags: list[bytes] = []
 
@@ -517,6 +562,13 @@ def _struct_pack(
     week_day: DayOfWeekT,
     switchpoint: SwitchPointDhw | SwitchPointZon,
 ) -> bytes:
+    """Pack schedule information into bytes layout for transport.
+
+    :param full_schedule: The outer schedule context.
+    :param week_day: The specific day dict object.
+    :param switchpoint: The specific time array dict object.
+    :return: A bytes struct representing this switchpoint rule.
+    """
     idx_: str = full_schedule[SZ_ZONE_IDX]
     dow_: int = week_day[SZ_DAY_OF_WEEK]
     tod_: str = switchpoint[SZ_TIME_OF_DAY]
@@ -534,6 +586,11 @@ def _struct_pack(
 
 
 def _struct_unpack(raw_schedule: bytes) -> tuple[int, int, int, int]:
+    """Unpack a compressed RAMSES binary schedule format.
+
+    :param raw_schedule: Uncompressed 20-byte block.
+    :return: A tuple mapping (idx, day_of_week, time_of_day, value).
+    """
     idx, dow, tod, val, _ = struct.unpack("<xxxxBxxxBxxxHxxHH", raw_schedule)
     return idx, dow, tod, val
 

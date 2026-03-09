@@ -77,7 +77,7 @@ class Test_entity_base:
         dev._handle_msg(self.msg6)
         dev._handle_msg(self.msg7)
         assert dev._gwy.msg_db
-        assert len(dev._gwy.msg_db.all()) == 3, "len(msg_db.all) wrong"
+        assert len(await dev._gwy.msg_db.all()) == 3, "len(msg_db.all) wrong"
 
         # start tests
         assert dev.id == "04:189078"
@@ -88,7 +88,7 @@ class Test_entity_base:
             AND (src = ? OR dst = ?)
             AND ctx LIKE ?
         """
-        assert dev._gwy.msg_db.qry(
+        assert await dev._gwy.msg_db.qry(
             sql, (dev.id[:9], dev.id[:9], f"%{dev.id[10:]}%")
         ) == (
             self.msg5,
@@ -97,22 +97,26 @@ class Test_entity_base:
         ), "base qry wrong"
 
         # create _msgs
-        assert dev._msgs == {"12B0": self.msg7, "3150": self.msg5, "3220": self.msg6}, (
-            "base _msgs wrong"
-        )
+        assert await dev._msgs() == {
+            "12B0": self.msg7,
+            "3150": self.msg5,
+            "3220": self.msg6,
+        }, "base _msgs wrong"
 
         # find our Codes
-        assert dev._msg_dev_qry() == [
+        assert await dev._msg_dev_qry() == [
             Code._3150,
             Code._12B0,
             Code._3220,
         ], "base _msg_dev_qry wrong"
 
         # list our messages
-        assert dev._msg_list == [self.msg5, self.msg7, self.msg6], "_msg_list wrong"
+        assert await dev._msg_list() == [self.msg5, self.msg7, self.msg6], (
+            "_msg_list wrong"
+        )
 
         # create _msgz
-        assert dev._msgz == {
+        assert await dev._msgz() == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
             "3220": {"RP": {"11": self.msg6}},
@@ -141,7 +145,7 @@ class Test_entity_base:
             AND (src = ? OR dst = ?)
             AND ctx LIKE ?
         """
-        assert dev._gwy.msg_db.qry(
+        assert await dev._gwy.msg_db.qry(
             sql, (dev.id[:9], dev.id[:9], f"%{dev.id[10:]}%")
         ) == (
             self.msg5,
@@ -149,19 +153,21 @@ class Test_entity_base:
         ), "zone qry wrong"
 
         # create _msgs
-        assert dev._msgs == {"12B0": self.msg7, "3150": self.msg5}, "zone _msgs wrong"
+        assert await dev._msgs() == {"12B0": self.msg7, "3150": self.msg5}, (
+            "zone _msgs wrong"
+        )
 
         # find our Codes
-        assert dev._msg_dev_qry() == [
+        assert await dev._msg_dev_qry() == [
             Code._3150,
             Code._12B0,
         ], "zone _msg_dev_qry wrong"
 
         # list our messages
-        assert dev._msg_list == [self.msg5, self.msg7], "_msg_list wrong"
+        assert await dev._msg_list() == [self.msg5, self.msg7], "_msg_list wrong"
 
         # create _msgz
-        assert dev._msgz == {
+        assert await dev._msgz() == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
         }, "zone _msgz wrong"
@@ -194,7 +200,7 @@ class Test_entity_base:
         # start tests
         assert dev.id == "01:145038_HW"
         assert dev._gwy.msg_db
-        assert dev._gwy.msg_db.all() == (self.msg8, self.msg9), "wrong dhw all"
+        assert await dev._gwy.msg_db.all() == (self.msg8, self.msg9), "wrong dhw all"
 
         sql = """
                 SELECT dtm from messages WHERE
@@ -204,30 +210,32 @@ class Test_entity_base:
             """
         _ctx_qry = "%dhw_idx%"
         # SELECT just fields
-        # assert dev._gwy.msg_db.qry_field(
+        # assert await dev._gwy.msg_db.qry_field(
         #     sql, (dev.id[:9], dev.id[:9], _ctx_qry)
         # ) == [('FC',), ('00',)]
 
         # fetch Messages
-        assert dev._gwy.msg_db.qry(sql, (dev.id[:9], dev.id[:9], _ctx_qry)) == (
+        assert await dev._gwy.msg_db.qry(sql, (dev.id[:9], dev.id[:9], _ctx_qry)) == (
             self.msg8,
             self.msg9,
         ), "dhw qry wrong"
 
         # create _msgs
-        assert dev._msgs == {"1260": self.msg9, "3150": self.msg8}, "dhw _msgs wrong"
+        assert await dev._msgs() == {"1260": self.msg9, "3150": self.msg8}, (
+            "dhw _msgs wrong"
+        )
 
         # find our Codes
-        assert dev._msg_dev_qry() == [
+        assert await dev._msg_dev_qry() == [
             Code._3150,
             Code._1260,
         ], "dhw _msg_dev_qry wrong"
 
         # list our messages
-        assert dev._msg_list == [self.msg8, self.msg9], "dhw _msg_list wrong"
+        assert await dev._msg_list() == [self.msg8, self.msg9], "dhw _msg_list wrong"
 
         # create _msgz
-        assert dev._msgz == {
+        assert await dev._msgz() == {
             "1260": {"RP": {"00": self.msg9}},
             "3150": {" I": {"FC": self.msg8}},
         }, "dhw _msgz wrong"
@@ -280,7 +288,7 @@ class Test_entity_base:
         assert val is None
 
 
-def test_gh_396_sqlite_ot_context_type() -> None:
+async def test_gh_396_sqlite_ot_context_type() -> None:
     """Verify that integer context values from SQLite are handled correctly.
 
     See: https://github.com/ramses-rf/ramses_rf/issues/396
@@ -292,7 +300,7 @@ def test_gh_396_sqlite_ot_context_type() -> None:
 
     # Mock the database returning an integer (e.g. 0) instead of a string ("00")
     # This simulates the SQLite behavior reported in issue #396
-    gwy.msg_db.qry_field.return_value = [[0]]
+    gwy.msg_db.qry_field = AsyncMock(return_value=[[0]])
 
     # Instantiate the entity
     entity = Entity(gwy)
@@ -300,7 +308,7 @@ def test_gh_396_sqlite_ot_context_type() -> None:
 
     # Execute
     try:
-        cmds = entity.supported_cmds_ot
+        cmds = await entity.supported_cmds_ot()
     except TypeError as err:
         assert False, f"raised TypeError: {err}"
 
@@ -309,7 +317,7 @@ def test_gh_396_sqlite_ot_context_type() -> None:
     assert "0x00" in cmds
 
 
-def test_gh_396_legacy_ot_context() -> None:
+async def test_gh_396_legacy_ot_context() -> None:
     """Verify that the legacy (non-SQLite) path still processes context correctly."""
     # Setup
     gwy = MagicMock()
@@ -330,7 +338,7 @@ def test_gh_396_legacy_ot_context() -> None:
     }
 
     # Execute
-    cmds = entity.supported_cmds_ot
+    cmds = await entity.supported_cmds_ot()
 
     # Verify
     assert "0x05" in cmds

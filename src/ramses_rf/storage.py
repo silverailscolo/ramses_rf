@@ -73,9 +73,11 @@ class StorageWorker:
             _LOGGER.warning("StorageWorker flush timed out")
 
     def stop(self) -> None:
-        """Signal the worker to stop processing and close resources."""
+        """Signal the worker to stop processing and close resources safely."""
         self._queue.put(None)  # Poison pill
-        self._thread.join()
+        self._thread.join(timeout=3.0)  # Give the worker a chance to wrap up gracefully
+        if self._thread.is_alive():
+            _LOGGER.warning("StorageWorker thread did not cleanly exit.")
 
     def _init_db(self, conn: sqlite3.Connection) -> None:
         """Initialize the database schema."""
@@ -190,5 +192,6 @@ class StorageWorker:
                 _LOGGER.exception("StorageWorker encountered an error: %s", err)
 
         # Cleanup
-        conn.close()
+        with contextlib.suppress(sqlite3.ProgrammingError):
+            conn.close()
         _LOGGER.debug("StorageWorker thread stopped.")
