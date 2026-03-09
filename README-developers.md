@@ -7,8 +7,19 @@
 ## Installation
 
 Confirm you have Python 3.13.x installed by running:
-```
+```commandline
 python3 --version
+```
+Note: the ramses_cc HA integration venv runs Python 3.14.x to match current Home Assistant.
+
+Upgrade `pip` (or uv if you prefer):
+```commandline
+python -m pip install --upgrade pip
+```
+
+Run the following command to ensure you have the latest version of virtualenv:
+```commandline
+pip install --upgrade virtualenv
 ```
 
 ### Virtual environment
@@ -22,16 +33,18 @@ Python3.13 -m venv ~/your-path-to/virtual-envs/ramses_rf
 ```
 where `Python3.13` is the python version to set for the `venv`.
 
+You might also create or link to this venv inside your preferred IDE.
+
 ### Clone this repo
 
 Clone this repo and install the requirements.
 Using `pip`, in a location where your IDE has access:
-```
+```commandline
 git clone https://github.com/ramses-rf/ramses_rf
 ```
 
 Activate the venv (repeat every new session):
-```
+```commandline
 cd /your-path-to/ramses_rf
 source /your-path-to/virtual-envs/ramses_rf/bin/activate
 ```
@@ -39,31 +52,47 @@ and confirm your Terminal prompt looks like:
 `(ramses_rf) user:ramses_rf`
 
 ### Install dependencies:
-```
+```commandline
 cd /your-path-to/ramses_rf
-pip install -r requirements.txt
-pip install -r requirements_dev.txt
+pip install -r requirements/requirements.txt
+pip install -r requirements/requirements_dev.txt
 ```
 
-Repeat this after a release update and also when dev_requirements change in master.
+Repeat this after a new release and also when dev_requirements change in master.
 
 ### Install pre-commit hook
-First, verify the installed pre-commit version (compare to requirements_dev.txt):
+First, verify the installed prek version (compare to requirements/requirements_dev.txt):
+```commandline
+prek --version
 ```
-pre-commit --version
+Finally, install the pre-commit hooks, and confirm all tests pass:
+```bash
+prek install
+```
+```
+prek installed at .git/hooks/pre-commit
 ```
 
-Install the repo's pre-commit hook:
+Since we have moved from `pre-commit` to `prek`, a much faster drop-in replacement, you should update existing pre-commit hooks to use `prek` by running:
+```commandline
+prek install -f
 ```
-pre-commit install
+```
+Overwriting existing hook at `.git/hooks/pre-commit`
+prek installed at `.git/hooks/pre-commit`
 ```
 
-Running `pre-commit run` will only check staged files before a commit, while
-`pre-commit run -a` will check all files.
+The command to run the hooks from the terminal:
+```commandline
+prek run -a
+```
 
-Your IDE should automatically activate the pre-commit check when you try to commit.
-The rules for pre-commit are in git in `.pre-commit-config.yaml`.
-Check [issue 170](https://github.com/ramses-rf/ramses_rf/issues/170) when you run into troubles here.
+Running `prek run` will only check staged files before a commit, while
+`prek run -a` will check all files.
+
+Your IDE should automatically activate the prek pre-commit hook checks when you try to commit.
+The rules for prek are in git in `.pre-commit-config.yaml`.
+Check [issue 407](https://github.com/ramses-rf/ramses_rf/issues/407) when you run into troubles here.
 
 ## Regression Snapshot Suite
 
