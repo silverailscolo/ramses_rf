@@ -628,7 +628,7 @@ def _parse_hvac_humidity(
 
     percentage = int(value[:2], 16) / 100
     if percentage > 1.0:  # seen regularly, unknown meaning
-        return _faulted_common(param_name, value)  # type: ignore[return-value]
+        return _faulted_common(param_name, value)
 
     result: dict[str, float | str | None] = {param_name: percentage}
     if temp:
