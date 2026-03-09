@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from ramses_tx import Code, Command, Message, Packet, Priority
 
-from .typing import DeviceIdT
+from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
     from .entity_base import Parent
@@ -92,8 +92,92 @@ class DeviceInterface(Protocol):
         ...
 
 
+class DeviceFilterInterface(Protocol):
+    """Interface for the Device Filter service."""
+
+    def check_filter_lists(self, dev_id: DeviceIdT) -> None:
+        """Raise a DeviceNotFoundError if a device_id is filtered out.
+
+        :param dev_id: The device identifier to evaluate.
+        """
+        ...
+
+
+class DeviceRegistryInterface(Protocol):
+    """Interface for the Device Registry service."""
+
+    @property
+    def devices(self) -> list[Any]:
+        """Return the list of devices."""
+        ...
+
+    @property
+    def device_by_id(self) -> dict[DeviceIdT, Any]:
+        """Return the mapping of device IDs to devices."""
+        ...
+
+    @property
+    def system_by_id(self) -> dict[DeviceIdT, Any]:
+        """Return a mapping of device IDs to their associated systems."""
+        ...
+
+    @property
+    def systems(self) -> list[Any]:
+        """Return a list of all identified systems."""
+        ...
+
+    def _add_device(self, dev: Any) -> None:
+        """Add a device to the registry."""
+        ...
+
+    def get_device(
+        self,
+        device_id: DeviceIdT,
+        *,
+        msg: Message | None = None,
+        parent: "Parent | None" = None,
+        child_id: str | None = None,
+        is_sensor: bool | None = None,
+    ) -> Any:
+        """Return a device, creating it if it does not already exist."""
+        ...
+
+    async def fake_device(
+        self,
+        device_id: DeviceIdT,
+        create_device: bool = False,
+    ) -> Any:
+        """Create a faked device."""
+        ...
+
+    async def known_list(self) -> DeviceListT:
+        """Return the working known_list."""
+        ...
+
+    async def get_heat_orphans(self) -> list[DeviceIdT]:
+        """Return a list of IDs for orphaned heat devices."""
+        ...
+
+    async def get_hvac_orphans(self) -> list[DeviceIdT]:
+        """Return a list of IDs for orphaned HVAC devices."""
+        ...
+
+    async def params(self) -> dict[str, Any]:
+        """Return the parameters for all devices."""
+        ...
+
+    async def status(self) -> dict[str, Any]:
+        """Return the status for all devices."""
+        ...
+
+
 class GatewayInterface(Protocol):
     """Interface for the core Gateway orchestrator."""
+
+    @property
+    def device_registry(self) -> DeviceRegistryInterface:
+        """Return the Device Registry."""
+        ...
 
     @property
     def msg_db(self) -> MessageIndexInterface | None:
