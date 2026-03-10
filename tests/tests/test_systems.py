@@ -128,7 +128,7 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
     expected: dict = load_expected_results(dir_name) or {}
     gwy: Gateway = await load_test_gwy(dir_name)
 
-    # for dev in gwy.devices:
+    # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
     #         assert dev._msgs == gwy.msg_db.get(
     #             src=dev.id, dtms=list(dev._msgs.keys())
@@ -144,7 +144,7 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
         await gwy._restore_cached_packets(packets)
         await assert_expected_set(gwy, expected)
 
-    # for dev in gwy.devices:
+    # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
     #         assert dev._msgs == gwy.msg_db.get(
     #             src=dev.id, dtms=list(dev._msgs.keys())
@@ -159,7 +159,7 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
     expected: dict = load_expected_results(dir_name) or {}
     gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
 
-    # for dev in gwy.devices:
+    # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
     #         assert dev._msgs == gwy.msg_db.get(
     #             src=dev.id, dtms=list(dev._msgs.keys())
@@ -179,7 +179,7 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
 
         await assert_expected_set(gwy, expected)
 
-    # for dev in gwy.devices:
+    # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
     #         assert dev._msgs == gwy.msg_db.get(
     #             src=dev.id, dtms=list(dev._msgs.keys())

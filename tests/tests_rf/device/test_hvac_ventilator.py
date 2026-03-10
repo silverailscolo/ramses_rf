@@ -40,7 +40,7 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
     gateway._loop.call_later = MagicMock()
     gateway._loop.time = MagicMock(return_value=0.0)
     gateway._include = {}
-    # Add msg_db attribute accessed by the message store, activates the SQLite MessageIndex
+    # Add msg_db attribute accessed by the message store
     gateway.msg_db = MessageIndex(maintain=False)
 
     yield gateway
@@ -156,11 +156,12 @@ class TestHvacVentilator:
         # Mock the command creation
         mock_cmd.return_value = "MOCK_CMD"
 
-        # Use patch.object to properly mock the method
-        with patch.object(hvac_ventilator, "_add_discovery_cmd") as mock_add_cmd:
+        # Use patch.object to properly mock the discovery service component directly
+        # Phase 4 Update: we now call self.discovery.add_cmd instead of the bridge method
+        with patch.object(hvac_ventilator.discovery, "add_cmd") as mock_add_cmd:
             hvac_ventilator._setup_discovery_cmds()
 
-            # Check that _add_discovery_cmd was called at least once
+            # Check that add_cmd was called at least once
             assert mock_add_cmd.called
 
         if hvac_ventilator._gwy.msg_db:
@@ -187,7 +188,7 @@ class TestHvacVentilator:
 
         # Set up the message store  # deprecated, TODO(eb): remove Q1 2026
         if not hvac_ventilator._gwy.msg_db:
-            hvac_ventilator._msgs_ = {}
+            hvac_ventilator.state_store._msgs_ = {}
 
         # Patch the _handle_2411_message method
         with patch.object(hvac_ventilator, "_handle_2411_message") as mock_handle:
@@ -217,7 +218,7 @@ class TestHvacVentilator:
 
         # Set up the message store  # deprecated, TODO(eb): remove Q1 2026
         if not hvac_ventilator._gwy.msg_db:
-            hvac_ventilator._msgs_ = {}
+            hvac_ventilator.state_store._msgs_ = {}
 
         # Patch the parent class's _handle_msg method
         with patch(

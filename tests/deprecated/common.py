@@ -54,9 +54,9 @@ def abort_if_rf_test_fails(fnc):
 
 def find_test_tcs(gwy: Gateway) -> System:
     if isinstance(gwy, MockGateway):
-        return gwy.system_by_id[CTL_ID]
-    systems = [s for s in gwy.systems if s.id != CTL_ID]
-    return systems[0] if systems else gwy.system_by_id[CTL_ID]
+        return gwy.device_registry.system_by_id[CTL_ID]
+    systems = [s for s in gwy.device_registry.systems if s.id != CTL_ID]
+    return systems[0] if systems else gwy.device_registry.system_by_id[CTL_ID]
 
 
 async def load_test_gwy(

@@ -18,9 +18,9 @@ if TYPE_CHECKING:
     from ramses_tx import Message
 
     from .device import Device
-    from .entity_base import Parent
     from .gateway import Gateway
     from .system import Evohome
+    from .topology import Parent
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class DeviceRegistry:
 
         if (dev := self.get_device(device_id)) and isinstance(dev, Fakeable):
             dev._make_fake()
-            return dev
+            return cast("Device | Fakeable", dev)
 
         raise DeviceNotFaked(f"The device is not fakeable: {device_id}")
 

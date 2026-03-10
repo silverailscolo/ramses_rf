@@ -92,15 +92,16 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     mock_dev.status = AsyncMock(return_value={"mock": "status"})
     mock_dev.traits = AsyncMock(return_value={"mock": "traits"})
 
-    # Mock message database interaction for show_crazys
-    mock_dev._msgz = AsyncMock(
+    # Mock message database interaction via the state_store component
+    mock_dev.state_store = MagicMock()
+    mock_dev.state_store._msgz = AsyncMock(
         return_value={
             Code._0005: {"verb": {"pkt": "msg_0005"}},
             Code._000C: {"verb": {"pkt": "msg_000C"}},
         }
     )
 
-    gateway.devices = [mock_dev]
+    gateway.device_registry.devices = [mock_dev]
     gateway.tcs = None  # mimic no TCS
     gateway.schema = AsyncMock(return_value={"global": "schema"})
     gateway.params = AsyncMock(return_value={"global": "params"})
@@ -115,7 +116,7 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     mock_sys.zone_by_idx = {"01": MagicMock(schedule=[{"day": "Tuesday"}])}
     # Fix: Use integer key for faultlog to match expectations of print_results
     mock_sys._faultlog.faultlog = {0: "fault_data"}
-    gateway.system_by_id = {"01:123456": mock_sys}
+    gateway.device_registry.system_by_id = {"01:123456": mock_sys}
 
     yield gateway
 

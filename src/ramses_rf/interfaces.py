@@ -7,7 +7,7 @@ from ramses_tx import Code, Command, Message, Packet, Priority
 from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
-    from .entity_base import Parent
+    from .topology import Parent
 
 
 class MessageIndexInterface(Protocol):
@@ -192,18 +192,6 @@ class GatewayInterface(Protocol):
     @property
     def config(self) -> Any:
         """Return the gateway configuration."""
-        ...
-
-    def get_device(
-        self,
-        device_id: DeviceIdT,
-        *,
-        msg: Message | None = None,
-        parent: "Parent | None" = None,
-        child_id: str | None = None,
-        is_sensor: bool | None = None,
-    ) -> DeviceInterface:
-        """Retrieve or create a device."""
         ...
 
     async def async_send_cmd(

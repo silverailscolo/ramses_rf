@@ -57,15 +57,16 @@ def mock_gateway() -> MagicMock:
     mock_dev.tcs.get_htg_zone.return_value.get_schedule = AsyncMock()
     mock_dev.tcs.get_htg_zone.return_value.set_schedule = AsyncMock()
 
-    # Mock discover
-    mock_dev.discover = AsyncMock()
+    # Mock the discovery component and its discover method
+    mock_dev.discovery = MagicMock()
+    mock_dev.discovery.discover = AsyncMock()
 
     # Mock fakeable for binding tests
     mock_dev._make_fake = MagicMock()
     mock_dev._initiate_binding_process = AsyncMock()
     mock_dev._wait_for_binding_request = AsyncMock()
 
-    gateway.get_device.return_value = mock_dev
+    gateway.device_registry.get_device.return_value = mock_dev
 
     # IMPORTANT: Configure config so scripts don't return early
     gateway.config = MagicMock()
@@ -147,7 +148,7 @@ async def test_execution_of_exec_cmd(mock_gateway: MagicMock) -> None:
 async def test_execution_of_get_faults(mock_gateway: MagicMock) -> None:
     """Test execution of get_faults logic."""
     await get_faults(mock_gateway, DEV_ID)  # type: ignore[arg-type]
-    mock_dev = mock_gateway.get_device(DEV_ID)
+    mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
     mock_dev.tcs.get_faultlog.assert_awaited_once()
 
 
@@ -155,7 +156,7 @@ async def test_execution_of_get_faults(mock_gateway: MagicMock) -> None:
 async def test_execution_of_get_schedule(mock_gateway: MagicMock) -> None:
     """Test execution of get_schedule logic."""
     await get_schedule(mock_gateway, DEV_ID, "01")  # type: ignore[arg-type]
-    mock_dev = mock_gateway.get_device(DEV_ID)
+    mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
     mock_zone = mock_dev.tcs.get_htg_zone("01")
     mock_zone.get_schedule.assert_awaited_once()
 
@@ -165,7 +166,7 @@ async def test_execution_of_set_schedule(mock_gateway: MagicMock) -> None:
     """Test execution of set_schedule logic."""
     sched_json = f'{{"{SZ_ZONE_IDX}": "01", "{SZ_SCHEDULE}": []}}'
     await set_schedule(mock_gateway, DEV_ID, sched_json)  # type: ignore[arg-type]
-    mock_dev = mock_gateway.get_device(DEV_ID)
+    mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
     mock_zone = mock_dev.tcs.get_htg_zone("01")
     mock_zone.set_schedule.assert_awaited_once()
 
@@ -195,8 +196,9 @@ async def test_script_decorator_behavior(mock_gateway: MagicMock) -> None:
 async def test_script_scan_disc(mock_gateway: MagicMock) -> None:
     """Test script_scan_disc."""
     await script_scan_disc(mock_gateway, DEV_ID)
-    mock_dev = mock_gateway.get_device(DEV_ID)
-    mock_dev.discover.assert_awaited_once()
+    mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
+    # Phase 4 update: Verify the discovery component method was called
+    mock_dev.discovery.discover.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -246,11 +248,11 @@ async def test_script_binding(mock_gateway: MagicMock) -> None:
     class MockFakeable:
         pass
 
-    mock_gateway.get_device.return_value.__class__ = MockFakeable
+    mock_gateway.device_registry.get_device.return_value.__class__ = MockFakeable
 
     with patch("ramses_cli.discovery.Fakeable", MockFakeable):
         await script_bind_req(mock_gateway, DEV_ID)  # type: ignore[arg-type]
-        mock_dev = mock_gateway.get_device(DEV_ID)
+        mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
         mock_dev._initiate_binding_process.assert_awaited()
 
         await script_bind_wait(mock_gateway, DEV_ID)  # type: ignore[arg-type]

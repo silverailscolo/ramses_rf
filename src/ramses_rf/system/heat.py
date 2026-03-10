@@ -36,7 +36,7 @@ from ramses_rf.device import (
     Temperature,
     UfhController,
 )
-from ramses_rf.entity_base import Entity, Parent, class_by_attr
+from ramses_rf.entity_base import Entity, class_by_attr
 from ramses_rf.exceptions import ScheduleFlowError, SchemaInconsistentError
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
@@ -52,6 +52,7 @@ from ramses_rf.schemas import (
     SZ_SYSTEM,
     SZ_UFH_SYSTEM,
 )
+from ramses_rf.topology import Parent
 from ramses_tx import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
@@ -120,7 +121,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
     def __init__(self, ctl: Controller) -> None:
         _LOGGER.debug("Creating a TCS for CTL: %s (%s)", ctl.id, self.__class__)
 
-        if ctl.id in ctl._gwy.system_by_id:
+        if ctl.id in ctl._gwy.device_registry.system_by_id:
             raise SchemaInconsistentError(f"Duplicate TCS for CTL: {ctl.id}")
         if not isinstance(ctl, Controller):  # TODO
             raise SchemaInconsistentError(f"Invalid CTL: {ctl} (is not a controller)")
@@ -152,10 +153,10 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
         ):
             cmd = Command.from_attrs(RQ, self.ctl.id, Code._000C, PayloadT(payload))
-            self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=0)
+            self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0)
 
         cmd = Command.get_tpi_params(self.id)
-        self._add_discovery_cmd(cmd, 60 * 60 * 6, delay=5)
+        self.discovery.add_cmd(cmd, 60 * 60 * 6, delay=5)
 
     def _handle_msg(self, msg: Message) -> None:
         def eavesdrop_appliance_control(
@@ -222,7 +223,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
                 if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.APP and msg.payload.get(
                     SZ_DEVICES
                 ):
-                    self._gwy.get_device(
+                    self._gwy.device_registry.get_device(
                         msg.payload[SZ_DEVICES][0], parent=self, child_id=FC
                     )  # sets self._app_cntrl
             else:
@@ -261,12 +262,16 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         )
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
-        return cast(PayDictT._1100 | None, await self._msg_value(Code._1100))
+        return cast(
+            PayDictT._1100 | None, await self.state_store._msg_value(Code._1100)
+        )
 
     async def heat_demand(self) -> float | None:  # 3150/FC
         return cast(
             float | None,
-            await self._msg_value(Code._3150, domain_id=FC, key=SZ_HEAT_DEMAND),
+            await self.state_store._msg_value(
+                Code._3150, domain_id=FC, key=SZ_HEAT_DEMAND
+            ),
         )
 
     async def is_calling_for_heat(self) -> NoReturn:
@@ -334,7 +339,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         """Return the system's configuration."""
 
         params: dict[str, Any] = {SZ_SYSTEM: {}}
-        params[SZ_SYSTEM]["tpi_params"] = await self._msg_value(Code._1100)
+        params[SZ_SYSTEM]["tpi_params"] = await self.state_store._msg_value(Code._1100)
         return params
 
     async def status(self) -> dict[str, Any]:
@@ -369,7 +374,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             cmd = Command.from_attrs(
                 RQ, self.id, Code._0005, PayloadT(f"00{zone_type}")
             )
-            self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=0)
+            self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0)
 
     def _handle_msg(self, msg: Message) -> None:
         """Process any relevant message.
@@ -398,7 +403,8 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
             # TODO: use msgz/I, not RP
             secs = cast(
-                int | None, await self._msg_value(Code._1F09, key="remaining_seconds")
+                int | None,
+                await self.state_store._msg_value(Code._1F09, key="remaining_seconds"),
             )
             if secs is None or this.dtm > prev.dtm + td(seconds=secs + 5):
                 return  # can only compare against 30C9 pkt from the last cycle
@@ -418,10 +424,10 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 return  # no testable zones
 
             testable_sensors = {}
-            for d in self._gwy.devices:
+            for d in self._gwy.device_registry.devices:
                 if isinstance(d, Temperature) and d.ctl in (self.ctl, None):
                     d_temp = await d.temperature()
-                    d_msgs = await d._msgs()
+                    d_msgs = await d.state_store._msgs()
                     if (
                         d_temp is not None
                         and Code._30C9 in d_msgs
@@ -441,7 +447,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
             for sensor, zone_idx in matched_pairs.items():
                 zone = self.zone_by_idx[zone_idx]
-                self._gwy.get_device(sensor.id, parent=zone, is_sensor=True)
+                self._gwy.device_registry.get_device(
+                    sensor.id, parent=zone, is_sensor=True
+                )
 
             # _LOGGER.warning("System state (after): %s", self.schema)
 
@@ -458,7 +466,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             # can safely(?) assume this zone is using the CTL as a sensor...
             if not [s for s in testable_sensors if s == temp]:
                 zone = self.zone_by_idx[zone_idx]
-                self._gwy.get_device(self.ctl.id, parent=zone, is_sensor=True)
+                self._gwy.device_registry.get_device(
+                    self.ctl.id, parent=zone, is_sensor=True
+                )
 
             # _LOGGER.warning("System state (finally): %s", self.schema)
 
@@ -602,7 +612,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         super()._setup_discovery_cmds()
 
         cmd = Command.get_schedule_version(self.id)
-        self._add_discovery_cmd(cmd, 60 * 5, delay=5)
+        self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
         """Periodically retrieve the latest global change counter."""
@@ -680,7 +690,8 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
 
     async def schedule_version(self) -> int | None:
         return cast(
-            int | None, await self._msg_value(Code._0006, key=SZ_CHANGE_COUNTER)
+            int | None,
+            await self.state_store._msg_value(Code._0006, key=SZ_CHANGE_COUNTER),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -696,10 +707,12 @@ class Language(SystemBase):  # 0100
         super()._setup_discovery_cmds()
 
         cmd = Command.get_system_language(self.id)
-        self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=60 * 15)
+        self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=60 * 15)
 
     async def language(self) -> str | None:
-        return cast(str | None, await self._msg_value(Code._0100, key=SZ_LANGUAGE))
+        return cast(
+            str | None, await self.state_store._msg_value(Code._0100, key=SZ_LANGUAGE)
+        )
 
     async def params(self) -> dict[str, Any]:
         params = await super().params()
@@ -723,7 +736,7 @@ class Logbook(SystemBase):  # 0418
         super()._setup_discovery_cmds()
 
         cmd = Command.get_system_log_entry(self.id, 0)
-        self._add_discovery_cmd(cmd, 60 * 5, delay=5)
+        self.discovery.add_cmd(cmd, 60 * 5, delay=5)
         # self._gwy.add_task(
         #     self._gwy._loop.create_task(self.get_faultlog())
         # )
@@ -800,7 +813,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
             # f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
         ):
             cmd = Command.from_attrs(RQ, self.id, Code._000C, PayloadT(payload))
-            self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=0)
+            self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0)
 
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
@@ -895,10 +908,12 @@ class SysMode(SystemBase):  # 2E04
         super()._setup_discovery_cmds()
 
         cmd = Command.get_system_mode(self.id)
-        self._add_discovery_cmd(cmd, 60 * 5, delay=5)
+        self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
     async def system_mode(self) -> dict[str, Any] | None:  # 2E04
-        return cast(dict[str, Any] | None, await self._msg_value(Code._2E04))
+        return cast(
+            dict[str, Any] | None, await self.state_store._msg_value(Code._2E04)
+        )
 
     def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
@@ -932,7 +947,7 @@ class Datetime(SystemBase):  # 313F
         super()._setup_discovery_cmds()
 
         cmd = Command.get_system_time(self.id)
-        self._add_discovery_cmd(cmd, 60 * 60, delay=0)
+        self.discovery.add_cmd(cmd, 60 * 60, delay=0)
 
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
@@ -1006,7 +1021,9 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         if schema.get(SZ_SYSTEM) and (
             dev_id := schema[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL)
         ):
-            self._app_cntrl = self._gwy.get_device(dev_id, parent=self, child_id=FC)  # type: ignore[assignment]
+            self._app_cntrl = self._gwy.device_registry.get_device(
+                dev_id, parent=self, child_id=FC
+            )
 
         if _schema := (schema.get(SZ_DHW_SYSTEM)):  # type: ignore[assignment]
             self.get_dhw_zone(**_schema)  # self._dhw = ...

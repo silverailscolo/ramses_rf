@@ -36,7 +36,7 @@ from ramses_rf.device import (
     TrvActuator,
     UfhController,
 )
-from ramses_rf.entity_base import _ID_SLICE, Child, Entity, Parent, class_by_attr
+from ramses_rf.entity_base import _ID_SLICE, Entity, class_by_attr
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
@@ -48,6 +48,7 @@ from ramses_rf.schemas import (
     SZ_HTG_VALVE,
     SZ_SENSOR,
 )
+from ramses_rf.topology import Child, Parent
 from ramses_tx import Address, Command, Message, Priority
 from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 
@@ -216,14 +217,14 @@ class DhwZone(ZoneSchedule):  # CS92A
             f"00{DEV_ROLE_MAP.HTG}",  # hotwater_valve
             f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
         ):
-            self._add_discovery_cmd(
+            self.discovery.add_cmd(
                 Command.from_attrs(RQ, self.ctl.id, Code._000C, PayloadT(payload)),
                 60 * 60 * 24,
             )
 
-        self._add_discovery_cmd(Command.get_dhw_params(self.ctl.id), 60 * 60 * 6)
-        self._add_discovery_cmd(Command.get_dhw_mode(self.ctl.id), 60 * 5)
-        self._add_discovery_cmd(Command.get_dhw_temp(self.ctl.id), 60 * 15)
+        self.discovery.add_cmd(Command.get_dhw_params(self.ctl.id), 60 * 60 * 6)
+        self.discovery.add_cmd(Command.get_dhw_mode(self.ctl.id), 60 * 5)
+        self.discovery.add_cmd(Command.get_dhw_temp(self.ctl.id), 60 * 15)
 
     def _handle_msg(self, msg: Message) -> None:
         # def eavesdrop_dhw_sensor(this: Message, *, prev: Message | None = None) -> None:
@@ -279,7 +280,7 @@ class DhwZone(ZoneSchedule):  # CS92A
 
         assert len(msg.payload[SZ_DEVICES]) == 1
 
-        self._gwy.get_device(
+        self._gwy.device_registry.get_device(
             msg.payload[SZ_DEVICES][0],
             parent=self,
             child_id=msg.payload[SZ_DOMAIN_ID],
@@ -313,19 +314,23 @@ class DhwZone(ZoneSchedule):  # CS92A
         schema = shrink(SCH_TCS_DHW(schema))
 
         if dev_id := schema.get(SZ_SENSOR):
-            dhw_sensor = self._gwy.get_device(
+            dhw_sensor = self._gwy.device_registry.get_device(
                 dev_id, parent=self, child_id=FA, is_sensor=True
             )
             assert isinstance(dhw_sensor, DhwSensor)  # mypy
             self._dhw_sensor = dhw_sensor
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
-            dhw_valve = self._gwy.get_device(dev_id, parent=self, child_id=FA)
+            dhw_valve = self._gwy.device_registry.get_device(
+                dev_id, parent=self, child_id=FA
+            )
             assert isinstance(dhw_valve, BdrSwitch)  # mypy
             self._dhw_valve = dhw_valve
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HT1]):
-            htg_valve = self._gwy.get_device(dev_id, parent=self, child_id=F9)
+            htg_valve = self._gwy.device_registry.get_device(
+                dev_id, parent=self, child_id=F9
+            )
             assert isinstance(htg_valve, BdrSwitch)  # mypy
             self._htg_valve = htg_valve
 
@@ -345,32 +350,46 @@ class DhwZone(ZoneSchedule):  # CS92A
         return "Stored HW"
 
     async def config(self) -> dict[str, Any] | None:  # 10A0
-        return cast(dict[str, Any] | None, await self._msg_value(Code._10A0))
+        return cast(
+            dict[str, Any] | None, await self.state_store._msg_value(Code._10A0)
+        )
 
     async def mode(self) -> dict[str, Any] | None:  # 1F41
-        return cast(dict[str, Any] | None, await self._msg_value(Code._1F41))
+        return cast(
+            dict[str, Any] | None, await self.state_store._msg_value(Code._1F41)
+        )
 
     async def setpoint(self) -> float | None:  # 10A0
-        return cast(float | None, await self._msg_value(Code._10A0, key=SZ_SETPOINT))
+        return cast(
+            float | None, await self.state_store._msg_value(Code._10A0, key=SZ_SETPOINT)
+        )
 
     def set_setpoint(self, value: float) -> asyncio.Task[Packet]:  # 10A0
         """Set the target temperature for the DHW zone."""
         return self.set_config(setpoint=value)
 
     async def temperature(self) -> float | None:  # 1260
-        return cast(float | None, await self._msg_value(Code._1260, key=SZ_TEMPERATURE))
+        return cast(
+            float | None,
+            await self.state_store._msg_value(Code._1260, key=SZ_TEMPERATURE),
+        )
 
     async def heat_demand(self) -> float | None:  # 3150
-        return cast(float | None, await self._msg_value(Code._3150, key=SZ_HEAT_DEMAND))
+        return cast(
+            float | None,
+            await self.state_store._msg_value(Code._3150, key=SZ_HEAT_DEMAND),
+        )
 
     async def relay_demand(self) -> float | None:  # 0008
         return cast(
-            float | None, await self._msg_value(Code._0008, key=SZ_RELAY_DEMAND)
+            float | None,
+            await self.state_store._msg_value(Code._0008, key=SZ_RELAY_DEMAND),
         )
 
     async def relay_failsafe(self) -> float | None:  # 0009
         return cast(
-            float | None, await self._msg_value(Code._0009, key=SZ_RELAY_FAILSAFE)
+            float | None,
+            await self.state_store._msg_value(Code._0009, key=SZ_RELAY_FAILSAFE),
         )
 
     def set_mode(
@@ -406,7 +425,7 @@ class DhwZone(ZoneSchedule):  # CS92A
     ) -> asyncio.Task[Packet]:
         """Set the DHW parameters (setpoint, overrun, differential)."""
 
-        # dhw_params = self._msg_value(Code._10A0)
+        # dhw_params = self.state_store._msg_value(Code._10A0)
         # if setpoint is None:
         #     setpoint = dhw_params[SZ_SETPOINT]
         # if overrun is None:
@@ -538,10 +557,12 @@ class Zone(ZoneSchedule):
             set_zone_type(ZON_ROLE_MAP[klass])
 
         if dev_id := schema.get(SZ_SENSOR):
-            self._sensor = self._gwy.get_device(dev_id, parent=self, is_sensor=True)
+            self._sensor = self._gwy.device_registry.get_device(
+                dev_id, parent=self, is_sensor=True
+            )
 
         for dev_id in schema.get(SZ_ACTUATORS, []):
-            self._gwy.get_device(dev_id, parent=self)
+            self._gwy.device_registry.get_device(dev_id, parent=self)
 
     def _setup_discovery_cmds(self) -> None:
         # super()._setup_discovery_cmds()
@@ -550,52 +571,36 @@ class Zone(ZoneSchedule):
             cmd = Command.from_attrs(
                 RQ, self.ctl.id, Code._000C, PayloadT(f"{self.idx}{dev_role}")
             )
-            self._add_discovery_cmd(cmd, 60 * 60 * 24, delay=0.5)
+            self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0.5)
 
-        self._add_discovery_cmd(
+        self.discovery.add_cmd(
             Command.get_zone_config(self.ctl.id, self.idx), 60 * 60 * 6, delay=30
         )  # td should be > long sync_cycle duration (> 1hr)
-        self._add_discovery_cmd(
+        self.discovery.add_cmd(
             Command.get_zone_name(self.ctl.id, self.idx), 60 * 60 * 6, delay=30
         )
 
-        self._add_discovery_cmd(  # 2349 instead of 2309
+        self.discovery.add_cmd(  # 2349 instead of 2309
             Command.get_zone_mode(self.ctl.id, self.idx), 60 * 5, delay=30
         )
-        self._add_discovery_cmd(  # 30C9
+        self.discovery.add_cmd(  # 30C9
             Command.get_zone_temp(self.ctl.id, self.idx), 60 * 5, delay=0
         )  # td should be > sync_cycle duration,?delay in hope of picking up cycle
-        self._add_discovery_cmd(
+        self.discovery.add_cmd(
             Command.get_zone_window_state(self.ctl.id, self.idx), 60 * 15, delay=60 * 5
         )  # longer dt as low yield (factory duration is 30 min): prefer eavesdropping
 
-    def _add_discovery_cmd(
-        self,
-        cmd: Command,
-        interval: float,
-        *,
-        delay: float = 0,
-        timeout: float | None = None,
-    ) -> None:
-        """Schedule a command to run periodically.
-
-        Both `timeout` and `delay` are in seconds.
-        """
-        super()._add_discovery_cmd(cmd, interval, delay=delay, timeout=timeout)
-
-        if cmd.code != Code._000C:  # or cmd._ctx == f"{self.idx}{ZON_ROLE_MAP.SEN}":
-            return
-
-        if [t for t in self._discovery_cmds if t[-2:] in ZON_ROLE_MAP.HEAT_ZONES] and (
-            self._discovery_cmds.pop(HeaderT(f"{self.idx}{ZON_ROLE_MAP.ACT}"), [])
+        # Cleanup inferior headers after registering all of them
+        if [t for t in self.discovery.cmds if t[-2:] in ZON_ROLE_MAP.HEAT_ZONES] and (
+            self.discovery.cmds.pop(HeaderT(f"{self.idx}{ZON_ROLE_MAP.ACT}"), [])
         ):
-            _LOGGER.warning(f"cmd({cmd}): inferior header removed from discovery")
+            _LOGGER.warning("inferior header removed from discovery")
 
-        if (
-            self._discovery_cmds.get(HeaderT(f"{self.idx}{ZON_ROLE_MAP.VAL}"))
-            and (self._discovery_cmds[HeaderT(f"{self.idx}{ZON_ROLE_MAP.ELE}")])
+        if self.discovery.cmds.get(HeaderT(f"{self.idx}{ZON_ROLE_MAP.VAL}")) and (
+            self.discovery.cmds.get(HeaderT(f"{self.idx}{ZON_ROLE_MAP.ELE}"))
         ):
-            _LOGGER.warning(f"cmd({cmd}): inferior header removed from discovery")
+            self.discovery.cmds.pop(HeaderT(f"{self.idx}{ZON_ROLE_MAP.ELE}"), [])
+            _LOGGER.warning("inferior header removed from discovery")
 
     def _handle_msg(self, msg: Message) -> None:
         def eavesdrop_zone_type(this: Message, *, prev: Message | None = None) -> None:
@@ -655,15 +660,17 @@ class Zone(ZoneSchedule):
 
             if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.SEN:
                 dev_id = msg.payload[SZ_DEVICES][0]
-                self._sensor = self._gwy.get_device(dev_id, parent=self, is_sensor=True)
+                self._sensor = self._gwy.device_registry.get_device(
+                    dev_id, parent=self, is_sensor=True
+                )
 
             elif msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.ACT:
                 for dev_id in msg.payload[SZ_DEVICES]:
-                    self._gwy.get_device(dev_id, parent=self)
+                    self._gwy.device_registry.get_device(dev_id, parent=self)
 
             elif msg.payload[SZ_ZONE_TYPE] in ZON_ROLE_MAP.HEAT_ZONES:
                 for dev_id in msg.payload[SZ_DEVICES]:
-                    self._gwy.get_device(dev_id, parent=self)
+                    self._gwy.device_registry.get_device(dev_id, parent=self)
                 self._update_schema(
                     **{SZ_CLASS: ZON_ROLE_MAP[msg.payload[SZ_ZONE_TYPE]]}
                 )
@@ -681,9 +688,6 @@ class Zone(ZoneSchedule):
             ZoneRole.ELE,
         ):
             eavesdrop_zone_type(msg)
-
-    async def _msg_value(self, *args: Any, **kwargs: Any) -> Any:
-        return await super()._msg_value(*args, **kwargs, zone_idx=self.idx)
 
     @property
     def sensor(self) -> Device | None:
@@ -706,18 +710,31 @@ class Zone(ZoneSchedule):
             _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")  # DEBUG issue #317
             return cast(str, msgs[0].payload.get(SZ_NAME)) if msgs else None
 
-        return cast(str | None, await self._msg_value(Code._0004, key=SZ_NAME))
+        return cast(
+            str | None,
+            await self.state_store._msg_value(
+                Code._0004, key=SZ_NAME, zone_idx=self.idx
+            ),
+        )
 
     async def config(self) -> dict[str, Any] | None:  # 000A
-        return cast(dict[str, Any] | None, await self._msg_value(Code._000A))
+        return cast(
+            dict[str, Any] | None,
+            await self.state_store._msg_value(Code._000A, zone_idx=self.idx),
+        )
 
     async def mode(self) -> dict[str, Any] | None:  # 2349
-        return cast(dict[str, Any] | None, await self._msg_value(Code._2349))
+        return cast(
+            dict[str, Any] | None,
+            await self.state_store._msg_value(Code._2349, zone_idx=self.idx),
+        )
 
     async def setpoint(self) -> float | None:  # 2309 (2349 is a superset of 2309)
         return cast(
             float | None,
-            await self._msg_value((Code._2309, Code._2349), key=SZ_SETPOINT),
+            await self.state_store._msg_value(
+                (Code._2309, Code._2349), key=SZ_SETPOINT, zone_idx=self.idx
+            ),
         )
 
     def set_setpoint(
@@ -751,7 +768,12 @@ class Zone(ZoneSchedule):
                 return msgs_sorted[0].payload.get(SZ_TEMPERATURE)  # type: ignore[no-any-return]
             return None
 
-        return cast(float | None, await self._msg_value(Code._30C9, key=SZ_TEMPERATURE))
+        return cast(
+            float | None,
+            await self.state_store._msg_value(
+                Code._30C9, key=SZ_TEMPERATURE, zone_idx=self.idx
+            ),
+        )
 
     async def heat_demand(self) -> float | None:  # 3150
         """Return the zone's heat demand, estimated from its devices' heat demand."""
@@ -766,7 +788,12 @@ class Zone(ZoneSchedule):
 
     async def window_open(self) -> bool | None:  # 12B0
         """Return an estimate of the zone's current window_open state."""
-        return cast(bool | None, await self._msg_value(Code._12B0, key=SZ_WINDOW_OPEN))
+        return cast(
+            bool | None,
+            await self.state_store._msg_value(
+                Code._12B0, key=SZ_WINDOW_OPEN, zone_idx=self.idx
+            ),
+        )
 
     def _get_temp(self) -> asyncio.Task[Packet] | None:
         """Get the zone's latest temp from the Controller."""
@@ -883,7 +910,8 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
 
     async def relay_demand(self) -> float | None:  # 0008 (NOTE: CTLs won't RP|0008)
         return cast(
-            float | None, await self._msg_value(Code._0008, key=SZ_RELAY_DEMAND)
+            float | None,
+            await self.state_store._msg_value(Code._0008, key=SZ_RELAY_DEMAND),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -907,12 +935,12 @@ class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
     def _setup_discovery_cmds(self) -> None:
         super()._setup_discovery_cmds()
 
-        self._add_discovery_cmd(
+        self.discovery.add_cmd(
             Command.get_mix_valve_params(self.ctl.id, self.idx), 60 * 60 * 6
         )
 
     async def mix_config(self) -> PayDictT._1030:
-        return cast(PayDictT._1030, await self._msg_value(Code._1030))
+        return cast(PayDictT._1030, await self.state_store._msg_value(Code._1030))
 
     async def params(self) -> dict[str, Any]:
         return {
@@ -941,7 +969,7 @@ class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
     async def heat_demand(self) -> float | None:  # 3150
         """Return the zone's heat demand, estimated from its devices' heat demand."""
         if (
-            demand := await self._msg_value(Code._3150, key=SZ_HEAT_DEMAND)
+            demand := await self.state_store._msg_value(Code._3150, key=SZ_HEAT_DEMAND)
         ) is not None:
             return _transform(demand)
         return None
