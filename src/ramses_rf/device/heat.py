@@ -482,7 +482,9 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
             self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: msg.payload[SZ_ZONE_IDX]}
             if msg.payload[SZ_ZONE_IDX] is not None:  # [SZ_DEVICES][0] will be the CTL
                 self.set_parent(
-                    self._gwy.get_device(msg.payload[SZ_DEVICES][0]).tcs,
+                    self._gwy.device_registry.get_device(
+                        msg.payload[SZ_DEVICES][0]
+                    ).tcs,
                     # child_id=msg.payload[SZ_ZONE_IDX],
                 )
 
@@ -1567,8 +1569,8 @@ class UfhCircuit(Child, Entity):  # FIXME
         if len(dev_ids) != 1:
             raise exc.PacketPayloadInvalid("No devices")
 
-        # ctl = self._gwy.device_by_id.get(dev_ids[0])
-        ctl: Controller = self._gwy.get_device(dev_ids[0])
+        # ctl = self._gwy.device_registry.device_by_id.get(dev_ids[0])
+        ctl: Controller = self._gwy.device_registry.get_device(dev_ids[0])
         if not ctl or (self._ctl and self._ctl is not ctl):
             raise exc.PacketPayloadInvalid("No CTL")
         self._ctl = ctl

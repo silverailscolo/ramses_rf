@@ -53,7 +53,7 @@ async def assert_code_in_device_msgindex(
     """Fail if the device doesn't exist, or if it doesn't have the code in its msg_db."""
 
     async def _has_code() -> bool:
-        dev = gwy.device_by_id.get(dev_id)
+        dev = gwy.device_registry.device_by_id.get(dev_id)
         if not dev:
             return False
 
@@ -86,10 +86,10 @@ async def assert_devices(
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)
         # Fix: ensure contents actually match before breaking early
-        if sorted(d.id for d in gwy.devices) == expected:
+        if sorted(d.id for d in gwy.device_registry.devices) == expected:
             break
 
-    assert sorted(d.id for d in gwy.devices) == expected
+    assert sorted(d.id for d in gwy.device_registry.devices) == expected
 
 
 async def assert_this_pkt(

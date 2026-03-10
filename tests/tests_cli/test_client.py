@@ -101,7 +101,7 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
         }
     )
 
-    gateway.devices = [mock_dev]
+    gateway.device_registry.devices = [mock_dev]
     gateway.tcs = None  # mimic no TCS
     gateway.schema = AsyncMock(return_value={"global": "schema"})
     gateway.params = AsyncMock(return_value={"global": "params"})
@@ -116,7 +116,7 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     mock_sys.zone_by_idx = {"01": MagicMock(schedule=[{"day": "Tuesday"}])}
     # Fix: Use integer key for faultlog to match expectations of print_results
     mock_sys._faultlog.faultlog = {0: "fault_data"}
-    gateway.system_by_id = {"01:123456": mock_sys}
+    gateway.device_registry.system_by_id = {"01:123456": mock_sys}
 
     yield gateway
 

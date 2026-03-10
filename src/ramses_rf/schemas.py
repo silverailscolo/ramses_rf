@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import voluptuous as vol
 
@@ -348,7 +348,7 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
 
     check_filter_lists(dev_id)
 
-    return gwy.get_device(dev_id, **kwargs)
+    return cast("Device", gwy.device_registry.get_device(dev_id, **kwargs))
 
 
 def load_schema(
@@ -368,7 +368,7 @@ def load_schema(
         if re.match(DEVICE_ID_REGEX.ANY, ctl_id) and SZ_REMOTES not in schema
     ]
     if schema.get(SZ_MAIN_TCS):
-        gwy._tcs = gwy.system_by_id.get(schema[SZ_MAIN_TCS])
+        gwy._tcs = gwy.device_registry.system_by_id.get(schema[SZ_MAIN_TCS])
     [
         load_fan(gwy, fan_id, schema)  # type: ignore[arg-type]
         for fan_id, schema in schema.items()
@@ -417,7 +417,7 @@ def load_tcs(gwy: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evohome
     #     import json
 
     #     src = json.dumps(shrink(schema), sort_keys=True)
-    #     dst = json.dumps(shrink(gwy.system_by_id[ctl.id].schema), sort_keys=True)
+    #     dst = json.dumps(shrink(gwy.device_registry.system_by_id[ctl.id].schema), sort_keys=True)
     #     # assert dst == src, "They don't match!"
     #     print(src)
     #     print(dst)

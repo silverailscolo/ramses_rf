@@ -49,6 +49,11 @@ class GatewayStub:
     _include: dict[str] = {}
     msg_db = MessageIndex(maintain=False)
 
+    @property
+    def device_registry(self) -> "GatewayStub":
+        """Act as our own DeviceRegistry for testing purposes."""
+        return self
+
     def _add_device(self, dev: Fakeable) -> None:
         self.device_by_id[dev.id] = dev
         self.devices.append(dev)

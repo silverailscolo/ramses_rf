@@ -184,7 +184,7 @@ async def _gateway(gwy_port: PortStrT, gwy_config: _GwyConfigDictT) -> Gateway:
 
     gwy = Gateway(gwy_port, **gwy_config)
 
-    assert gwy.hgi is None and gwy.devices == []
+    assert gwy.hgi is None and gwy.device_registry.devices == []
 
     await gwy.start()
     return gwy
@@ -280,7 +280,9 @@ async def mqtt_evofw3(
     gwy_config: _GwyConfigDictT = request.getfixturevalue(SZ_GWY_CONFIG)
     gwy = await _gateway(mqtt_evofw3_port, gwy_config)
 
-    gwy.get_device(gwy._protocol.hgi_id)  # HACK: not instantiated: no puzzle pkts sent
+    gwy.device_registry.get_device(
+        gwy._protocol.hgi_id
+    )  # HACK: not instantiated: no puzzle pkts sent
 
     assert isinstance(gwy.hgi, HgiGateway) and gwy.hgi.id not in (None, HGI_DEVICE_ID)
     assert gwy._protocol._is_evofw3 is True

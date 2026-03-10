@@ -96,7 +96,7 @@ async def assert_expected_set(gwy: Gateway, expected: dict) -> None:
     assert_expected(await gwy.schema(), expected.get("schema"))
     assert_expected(await gwy.params(), expected.get("params"))
     assert_expected(await gwy.status(), expected.get("status"))
-    assert_expected(await gwy.known_list(), expected.get("known_list"))
+    assert_expected(await gwy.device_registry.known_list(), expected.get("known_list"))
 
 
 def assert_raises(

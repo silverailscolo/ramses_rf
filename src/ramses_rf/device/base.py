@@ -437,7 +437,7 @@ class Device(Child, DeviceBase):
         _LOGGER.debug("Creating a Device: %s (%s)", dev_addr.id, self.__class__)
         super().__init__(gwy, dev_addr, traits=traits, **kwargs)
 
-        gwy._add_device(self)
+        gwy.device_registry._add_device(self)
 
 
 class HgiGateway(Device):  # HGI (18:)
