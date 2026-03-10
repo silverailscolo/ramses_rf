@@ -194,18 +194,6 @@ class GatewayInterface(Protocol):
         """Return the gateway configuration."""
         ...
 
-    def get_device(
-        self,
-        device_id: DeviceIdT,
-        *,
-        msg: Message | None = None,
-        parent: "Parent | None" = None,
-        child_id: str | None = None,
-        is_sensor: bool | None = None,
-    ) -> DeviceInterface:
-        """Retrieve or create a device."""
-        ...
-
     async def async_send_cmd(
         self,
         cmd: Command,

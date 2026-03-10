@@ -60,7 +60,7 @@ from ramses_tx.transport import TransportConfig
 from ramses_tx.typing import PktLogConfigT, PortConfigT
 
 from .database import MessageIndex
-from .device import Fakeable, HgiGateway
+from .device import HgiGateway
 from .device_filter import DeviceFilter
 from .device_registry import DeviceRegistry
 from .dispatcher import detect_array_fragment, process_msg
@@ -72,13 +72,12 @@ from .interfaces import (
 )
 from .schemas import load_schema
 from .system import Evohome
-from .typing import DeviceIdT, DeviceListT
+from .typing import DeviceListT
 
 if TYPE_CHECKING:
     from ramses_tx import RamsesTransportT
 
     from .device import Device
-    from .topology import Parent
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -261,24 +260,6 @@ class Gateway(Engine, GatewayInterface):
         return self._device_registry
 
     @property
-    def devices(self) -> list[Device]:
-        """Return the list of devices (delegated to DeviceRegistry).
-
-        :returns: A list of all known Device instances.
-        :rtype: list[Device]
-        """
-        return self.device_registry.devices
-
-    @property
-    def device_by_id(self) -> dict[DeviceIdT, Device]:
-        """Return the mapping of device IDs to devices (delegated to DeviceRegistry).
-
-        :returns: A dictionary mapping Device IDs to Device instances.
-        :rtype: dict[DeviceIdT, Device]
-        """
-        return self.device_registry.device_by_id
-
-    @property
     def config(self) -> GatewayConfig:
         """Return the gateway configuration.
 
@@ -315,7 +296,7 @@ class Gateway(Engine, GatewayInterface):
         if not self._transport:
             return None
         if device_id := self._transport.get_extra_info(SZ_ACTIVE_HGI):
-            return self.device_by_id.get(device_id)  # type: ignore[return-value]
+            return self.device_registry.device_by_id.get(device_id)
         return None
 
     async def start(
@@ -394,7 +375,9 @@ class Gateway(Engine, GatewayInterface):
             and not self.config.disable_discovery
             and start_discovery
         ):
-            initiate_discovery(self.devices, self.systems)
+            initiate_discovery(
+                self.device_registry.devices, self.device_registry.systems
+            )
 
     def create_sqlite_message_index(self) -> None:
         """Initialize the SQLite MessageIndex.
@@ -508,9 +491,9 @@ class Gateway(Engine, GatewayInterface):
             }
         else:  # deprecated, to be removed in Q1 2026
             msgs = []
-            for device in self.devices:
+            for device in self.device_registry.devices:
                 msgs.extend(await device.state_store._msg_list())
-            for system in self.systems:
+            for system in self.device_registry.systems:
                 msgs.extend(list((await system.state_store._msgs()).values()))
                 for z in system.zones:
                     msgs.extend(list((await z.state_store._msgs()).values()))
@@ -600,66 +583,6 @@ class Gateway(Engine, GatewayInterface):
         _LOGGER.debug("Gateway: Restored, resuming")
         await self._resume()
 
-    def _add_device(self, dev: Device) -> None:  # TODO: also: _add_system()
-        """Add a device to the gateway (called by devices during instantiation).
-
-        :param dev: The device instance to add.
-        :type dev: Device
-        :returns: None
-        :rtype: None
-        """
-        self.device_registry._add_device(dev)
-
-    def get_device(
-        self,
-        device_id: DeviceIdT,
-        *,
-        msg: Message | None = None,
-        parent: Parent | None = None,
-        child_id: str | None = None,
-        is_sensor: bool | None = None,
-    ) -> Device:
-        """Return a device, creating it if it does not already exist.
-
-        :param device_id: The unique identifier for the device (e.g., '01:123456').
-        :type device_id: DeviceIdT
-        :param msg: An optional initial message for the device to process, defaults to None.
-        :type msg: Message | None, optional
-        :param parent: The parent entity of this device, if any, defaults to None.
-        :type parent: Parent | None, optional
-        :param child_id: The specific ID of the child component if applicable, defaults to None.
-        :type child_id: str | None, optional
-        :param is_sensor: Indicates if this device should be treated as a sensor, defaults to None.
-        :type is_sensor: bool | None, optional
-        :returns: The existing or newly created device instance.
-        :rtype: Device
-        """
-        return self.device_registry.get_device(  # type: ignore[no-any-return]
-            device_id,
-            msg=msg,
-            parent=parent,
-            child_id=child_id,
-            is_sensor=is_sensor,
-        )
-
-    async def fake_device(
-        self,
-        device_id: DeviceIdT,
-        create_device: bool = False,
-    ) -> Device | Fakeable:
-        """Create a faked device.
-
-        :param device_id: The unique identifier for the device to fake.
-        :type device_id: DeviceIdT
-        :param create_device: Allow creation if the device does not exist, defaults to False.
-        :type create_device: bool, optional
-        :returns: The instantiated faked device.
-        :rtype: Device | Fakeable
-        """
-        return await self.device_registry.fake_device(  # type: ignore[no-any-return]
-            device_id, create_device=create_device
-        )
-
     @property
     def tcs(self) -> Evohome | None:
         """Return the primary Temperature Control System (TCS), if any.
@@ -668,35 +591,9 @@ class Gateway(Engine, GatewayInterface):
         :rtype: Evohome | None
         """
 
-        if self._tcs is None and self.systems:
-            self._tcs = self.systems[0]
+        if self._tcs is None and self.device_registry.systems:
+            self._tcs = self.device_registry.systems[0]
         return self._tcs
-
-    async def known_list(self) -> DeviceListT:
-        """Return the working known_list (a superset of the provided known_list).
-
-        :returns: A dictionary mapping device IDs to their traits.
-        :rtype: DeviceListT
-        """
-        return await self.device_registry.known_list()
-
-    @property
-    def system_by_id(self) -> dict[DeviceIdT, Evohome]:
-        """Return a mapping of device IDs to their associated Evohome systems.
-
-        :returns: Dictionary mapping device ID to Evohome system.
-        :rtype: dict[DeviceIdT, Evohome]
-        """
-        return self.device_registry.system_by_id
-
-    @property
-    def systems(self) -> list[Evohome]:
-        """Return a list of all identified Evohome systems.
-
-        :returns: A list of Evohome instances.
-        :rtype: list[Evohome]
-        """
-        return self.device_registry.systems
 
     async def _config(self) -> dict[str, Any]:
         """Return the working configuration.
@@ -708,7 +605,7 @@ class Gateway(Engine, GatewayInterface):
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
             SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self._enforce_known_list},
-            SZ_KNOWN_LIST: await self.known_list(),
+            SZ_KNOWN_LIST: await self.device_registry.known_list(),
             SZ_BLOCK_LIST: [{k: v} for k, v in self._exclude.items()],
             "_unwanted": sorted(self._unwanted),
         }
@@ -722,7 +619,7 @@ class Gateway(Engine, GatewayInterface):
 
         schema: dict[str, Any] = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}
 
-        for tcs in self.systems:
+        for tcs in self.device_registry.systems:
             schema[tcs.ctl.id] = await tcs.schema()
 
         schema[f"{SZ_ORPHANS}_heat"] = await self.device_registry.get_heat_orphans()

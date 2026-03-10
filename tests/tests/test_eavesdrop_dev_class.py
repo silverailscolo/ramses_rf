@@ -50,7 +50,9 @@ async def test_dev_eavesdrop_on_(dir_name: Path) -> None:
     await gwy.start()
 
     with open(f"{dir_name}/known_list_eavesdrop_on.json") as f:
-        assert_expected(await gwy.known_list(), json.load(f).get("known_list"))
+        assert_expected(
+            await gwy.device_registry.known_list(), json.load(f).get("known_list")
+        )
 
     try:
         with open(f"{dir_name}/schema_eavesdrop_on.json") as f:
@@ -71,7 +73,9 @@ async def test_dev_eavesdrop_off(dir_name: Path) -> None:
 
     try:
         with open(f"{dir_name}/known_list_eavesdrop_off.json") as f:
-            assert_expected(await gwy.known_list(), json.load(f).get("known_list"))
+            assert_expected(
+                await gwy.device_registry.known_list(), json.load(f).get("known_list")
+            )
     except FileNotFoundError:
         pass
 

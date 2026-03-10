@@ -217,7 +217,7 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
         # 5. Extract State for Snapshot
         # We create a deterministic dictionary of the system state
         devices_data = []
-        for d in sorted(gwy.devices, key=lambda x: x.id):
+        for d in sorted(gwy.device_registry.devices, key=lambda x: x.id):
             devices_data.append(await serialize_device(d))
 
         system_state: dict[str, Any] = {

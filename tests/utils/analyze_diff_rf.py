@@ -225,7 +225,8 @@ async def generate_actual_state() -> dict[str, Any]:
         system_state: dict[str, Any] = {
             "schema": gwy.schema,
             "devices": [
-                serialize_device(d) for d in sorted(gwy.devices, key=lambda x: x.id)
+                serialize_device(d)
+                for d in sorted(gwy.device_registry.devices, key=lambda x: x.id)
             ],
         }
 

@@ -130,7 +130,7 @@ async def get_faults(
     :param start: The index to start querying from.
     :param limit: The maximum number of fault entries to return.
     """
-    ctl = cast("Controller", gwy.get_device(ctl_id))
+    ctl = cast("Controller", gwy.device_registry.get_device(ctl_id))
 
     try:
         if ctl.tcs:
@@ -146,7 +146,7 @@ async def get_schedule(gwy: Gateway, ctl_id: DeviceIdT, zone_idx: str) -> None:
     :param ctl_id: The device ID of the controller.
     :param zone_idx: The zone index string (e.g. "00" or "HW").
     """
-    ctl = cast("Controller", gwy.get_device(ctl_id))
+    ctl = cast("Controller", gwy.device_registry.get_device(ctl_id))
     if not ctl.tcs:
         _LOGGER.error("get_schedule(): Controller has no TCS active.")
         return
@@ -169,7 +169,7 @@ async def set_schedule(gwy: Gateway, ctl_id: DeviceIdT, schedule: str) -> None:
     schedule_ = json.loads(schedule)
     zone_idx = schedule_[SZ_ZONE_IDX]
 
-    ctl = cast("Controller", gwy.get_device(ctl_id))
+    ctl = cast("Controller", gwy.device_registry.get_device(ctl_id))
     if not ctl.tcs:
         _LOGGER.error("set_schedule(): Controller has no TCS active.")
         return
@@ -191,7 +191,7 @@ async def script_bind_req(
     :param dev_id: The device ID to transition to binding state.
     :param code: The code to offer during the bind request.
     """
-    dev = gwy.get_device(dev_id)
+    dev = gwy.device_registry.get_device(dev_id)
     assert isinstance(dev, Fakeable)  # mypy
     dev._make_fake()
     await dev._initiate_binding_process([code])
@@ -207,7 +207,7 @@ async def script_bind_wait(
     :param code: The expected bind code to accept.
     :param idx: The internal domain or zone index to map to.
     """
-    dev = gwy.get_device(dev_id)
+    dev = gwy.device_registry.get_device(dev_id)
     assert isinstance(dev, Fakeable)  # mypy
     dev._make_fake()
     await dev._wait_for_binding_request([code], idx=idx)
@@ -262,7 +262,7 @@ async def script_scan_disc(gwy: Gateway, dev_id: DeviceIdT) -> None:
     """
     _LOGGER.warning("scan_disc() invoked...")
 
-    await gwy.get_device(dev_id).discovery.discover()
+    await gwy.device_registry.get_device(dev_id).discovery.discover()
 
 
 @script_decorator

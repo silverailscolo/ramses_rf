@@ -443,7 +443,7 @@ class MockDeviceCtl(MockDeviceBase):
     ) -> None:
         super().__init__(gwy, device_id)
 
-        self._ref = gwy.get_device(device_id)  # device_factory(gwy, self._addr)
+        self._ref = gwy.device_registry.get_device(device_id)  # device_factory(gwy, self._addr)
         self._tcs = self._ref.tcs
 
         self._change_counter: int = 8

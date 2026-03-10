@@ -121,7 +121,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
     def __init__(self, ctl: Controller) -> None:
         _LOGGER.debug("Creating a TCS for CTL: %s (%s)", ctl.id, self.__class__)
 
-        if ctl.id in ctl._gwy.system_by_id:
+        if ctl.id in ctl._gwy.device_registry.system_by_id:
             raise SchemaInconsistentError(f"Duplicate TCS for CTL: {ctl.id}")
         if not isinstance(ctl, Controller):  # TODO
             raise SchemaInconsistentError(f"Invalid CTL: {ctl} (is not a controller)")
@@ -223,7 +223,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
                 if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.APP and msg.payload.get(
                     SZ_DEVICES
                 ):
-                    self._gwy.get_device(
+                    self._gwy.device_registry.get_device(
                         msg.payload[SZ_DEVICES][0], parent=self, child_id=FC
                     )  # sets self._app_cntrl
             else:
@@ -424,7 +424,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 return  # no testable zones
 
             testable_sensors = {}
-            for d in self._gwy.devices:
+            for d in self._gwy.device_registry.devices:
                 if isinstance(d, Temperature) and d.ctl in (self.ctl, None):
                     d_temp = await d.temperature()
                     d_msgs = await d.state_store._msgs()
@@ -447,7 +447,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
             for sensor, zone_idx in matched_pairs.items():
                 zone = self.zone_by_idx[zone_idx]
-                self._gwy.get_device(sensor.id, parent=zone, is_sensor=True)
+                self._gwy.device_registry.get_device(
+                    sensor.id, parent=zone, is_sensor=True
+                )
 
             # _LOGGER.warning("System state (after): %s", self.schema)
 
@@ -464,7 +466,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             # can safely(?) assume this zone is using the CTL as a sensor...
             if not [s for s in testable_sensors if s == temp]:
                 zone = self.zone_by_idx[zone_idx]
-                self._gwy.get_device(self.ctl.id, parent=zone, is_sensor=True)
+                self._gwy.device_registry.get_device(
+                    self.ctl.id, parent=zone, is_sensor=True
+                )
 
             # _LOGGER.warning("System state (finally): %s", self.schema)
 
@@ -1017,7 +1021,9 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         if schema.get(SZ_SYSTEM) and (
             dev_id := schema[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL)
         ):
-            self._app_cntrl = self._gwy.get_device(dev_id, parent=self, child_id=FC)  # type: ignore[assignment]
+            self._app_cntrl = self._gwy.device_registry.get_device(
+                dev_id, parent=self, child_id=FC
+            )
 
         if _schema := (schema.get(SZ_DHW_SYSTEM)):  # type: ignore[assignment]
             self.get_dhw_zone(**_schema)  # self._dhw = ...

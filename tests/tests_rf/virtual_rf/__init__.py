@@ -122,7 +122,7 @@ async def rf_factory(
 
             if start_gwys:
                 await gwy.start()
-            gwy.get_device(hgi_id)
+            gwy.device_registry.get_device(hgi_id)
 
         gwys.append(gwy)
 

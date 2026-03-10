@@ -198,8 +198,8 @@ async def _test_flow_10x(
     # asyncio.create_task() should be OK (no need to pass in an event loop)
 
     # STEP 0: Setup...
-    respondent = gwy_r.devices[0]
-    supplicant = gwy_s.devices[0]
+    respondent = gwy_r.device_registry.devices[0]
+    supplicant = gwy_s.device_registry.devices[0]
     ensure_fakeable(respondent)
 
     assert isinstance(respondent, Fakeable)  # mypy
@@ -329,8 +329,8 @@ async def _test_flow_20x(
     """Check the change of state during a binding at device layer."""
 
     # STEP 0: Setup...
-    respondent = gwy_r.devices[0]
-    supplicant = gwy_s.devices[0]
+    respondent = gwy_r.device_registry.devices[0]
+    supplicant = gwy_s.device_registry.devices[0]
     ensure_fakeable(respondent)
 
     assert isinstance(respondent, Fakeable)  # mypy

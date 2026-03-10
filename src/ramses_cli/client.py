@@ -445,7 +445,9 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
     :param kwargs: The command arguments.
     """
     if kwargs[GET_FAULTS]:
-        fault_log = gwy.system_by_id[kwargs[GET_FAULTS]]._faultlog.faultlog
+        fault_log = gwy.device_registry.system_by_id[
+            kwargs[GET_FAULTS]
+        ]._faultlog.faultlog
 
         if fault_log:
             [print(f"{k:02X}", v) for k, v in fault_log.items()]
@@ -455,10 +457,10 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
     if kwargs[GET_SCHED][0]:
         system_id, zone_idx = kwargs[GET_SCHED]
         if zone_idx == "HW":
-            dhw = gwy.system_by_id[system_id].dhw
+            dhw = gwy.device_registry.system_by_id[system_id].dhw
             zone: Any = dhw
         else:
-            zone = gwy.system_by_id[system_id].zone_by_idx[zone_idx]
+            zone = gwy.device_registry.system_by_id[system_id].zone_by_idx[zone_idx]
         assert zone
         schedule = zone.schedule
 
@@ -517,19 +519,19 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
     if kwargs.get("show_schema"):
         print(f"Schema[{entity}] = {json.dumps(await entity.schema(), indent=4)}\r\n")
 
-        # schema = {d.id: await d.schema() for d in sorted(gwy.devices)}
+        # schema = {d.id: await d.schema() for d in sorted(gwy.device_registry.devices)}
         # print(f"Schema[devices] = {json.dumps({'schema': schema}, indent=4)}\r\n")
 
     if kwargs.get("show_params"):
         print(f"Params[{entity}] = {json.dumps(await entity.params(), indent=4)}\r\n")
 
-        params = {d.id: await d.params() for d in sorted(gwy.devices)}
+        params = {d.id: await d.params() for d in sorted(gwy.device_registry.devices)}
         print(f"Params[devices] = {json.dumps({'params': params}, indent=4)}\r\n")
 
     if kwargs.get("show_status"):
         print(f"Status[{entity}] = {json.dumps(await entity.status(), indent=4)}\r\n")
 
-        status = {d.id: await d.status() for d in sorted(gwy.devices)}
+        status = {d.id: await d.status() for d in sorted(gwy.device_registry.devices)}
         print(f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n")
 
     if kwargs.get("show_knowns"):  # show device hints (show-knowns)
@@ -538,12 +540,14 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
     if kwargs.get("show_traits"):  # show device traits
         result = {
             d.id: await d.traits()  # {k: v for k, v in (await d.traits()).items() if k[:1] == "_"}
-            for d in sorted(gwy.devices)
+            for d in sorted(gwy.device_registry.devices)
         }
         print(json.dumps(result, indent=4), "\r\n")
 
     if kwargs.get("show_crazys"):
-        for device in [d for d in gwy.devices if d.type == DEV_TYPE_MAP.CTL]:
+        for device in [
+            d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.CTL
+        ]:
             if gwy.msg_db:
                 for msg in await gwy.msg_db.get(device=device.id, code=Code._0005):
                     print(f"{msg._pkt}")
@@ -557,7 +561,9 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
                             for pkt in verb.values():
                                 print(f"{pkt}")
             print()
-        for device in [d for d in gwy.devices if d.type == DEV_TYPE_MAP.UFC]:
+        for device in [
+            d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
+        ]:
             if gwy.msg_db:
                 for msg in await gwy.msg_db.get(device=device.id):
                     print(f"{msg._pkt}")

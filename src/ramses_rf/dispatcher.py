@@ -67,8 +67,8 @@ def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
 
     # FIXME: changing Address to Devices is messy: ? Protocol for same method signatures
     # prefer Devices but can continue with Addresses if required...
-    this.src = gwy.device_by_id.get(this.src.id, this.src)  # type: ignore[assignment]
-    this.dst = gwy.device_by_id.get(this.dst.id, this.dst)  # type: ignore[assignment]
+    this.src = gwy.device_registry.device_by_id.get(this.src.id, this.src)
+    this.dst = gwy.device_registry.device_by_id.get(this.dst.id, this.dst)
 
     # Devices need to know their controller, ?and their location ('parent' domain)
     # NB: only addrs processed here, packet metadata is processed elsewhere
@@ -86,7 +86,7 @@ def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
 
     if not isinstance(this.src, Device):  # type: ignore[unreachable]
         # may: DeviceNotFoundError, but don't suppress
-        this.src = gwy.get_device(this.src.id)  # type: ignore[assignment]
+        this.src = gwy.device_registry.get_device(this.src.id)
         if this.dst.id == this.src.id:
             this.dst = this.src
             return
@@ -96,7 +96,7 @@ def _create_devices_from_addrs(gwy: Gateway, this: Message) -> None:
 
     if not isinstance(this.dst, Device) and this.src != gwy.hgi:  # type: ignore[unreachable]
         with contextlib.suppress(exc.DeviceNotFoundError):
-            this.dst = gwy.get_device(this.dst.id)  # type: ignore[assignment]
+            this.dst = gwy.device_registry.get_device(this.dst.id)
 
 
 def _check_msg_addrs(msg: Message) -> None:  # TODO
@@ -270,10 +270,14 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
             and isinstance(msg.payload, dict)  # 1. Ensure it's a dict (not bytes)
             and msg.payload.get(SZ_PHASE) == SZ_OFFER  # 2. Safely check for key
         ):
-            devices = [d for d in gwy.devices if d != msg.src and d._is_binding]
+            devices = [
+                d for d in gwy.device_registry.devices if d != msg.src and d._is_binding
+            ]
 
         elif msg.dst == ALL_DEV_ADDR:  # some offers use dst=63:, so after 1FC9 offer
-            devices = [d for d in gwy.devices if d != msg.src and d.is_faked]
+            devices = [
+                d for d in gwy.device_registry.devices if d != msg.src and d.is_faked
+            ]
 
         elif msg.dst is not msg.src and isinstance(msg.dst, Fakeable):  # type: ignore[unreachable]
             # to eavesdrop pkts from other devices, but relevant to this device

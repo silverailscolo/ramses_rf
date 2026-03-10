@@ -280,7 +280,7 @@ class DhwZone(ZoneSchedule):  # CS92A
 
         assert len(msg.payload[SZ_DEVICES]) == 1
 
-        self._gwy.get_device(
+        self._gwy.device_registry.get_device(
             msg.payload[SZ_DEVICES][0],
             parent=self,
             child_id=msg.payload[SZ_DOMAIN_ID],
@@ -314,19 +314,23 @@ class DhwZone(ZoneSchedule):  # CS92A
         schema = shrink(SCH_TCS_DHW(schema))
 
         if dev_id := schema.get(SZ_SENSOR):
-            dhw_sensor = self._gwy.get_device(
+            dhw_sensor = self._gwy.device_registry.get_device(
                 dev_id, parent=self, child_id=FA, is_sensor=True
             )
             assert isinstance(dhw_sensor, DhwSensor)  # mypy
             self._dhw_sensor = dhw_sensor
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
-            dhw_valve = self._gwy.get_device(dev_id, parent=self, child_id=FA)
+            dhw_valve = self._gwy.device_registry.get_device(
+                dev_id, parent=self, child_id=FA
+            )
             assert isinstance(dhw_valve, BdrSwitch)  # mypy
             self._dhw_valve = dhw_valve
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HT1]):
-            htg_valve = self._gwy.get_device(dev_id, parent=self, child_id=F9)
+            htg_valve = self._gwy.device_registry.get_device(
+                dev_id, parent=self, child_id=F9
+            )
             assert isinstance(htg_valve, BdrSwitch)  # mypy
             self._htg_valve = htg_valve
 
@@ -553,10 +557,12 @@ class Zone(ZoneSchedule):
             set_zone_type(ZON_ROLE_MAP[klass])
 
         if dev_id := schema.get(SZ_SENSOR):
-            self._sensor = self._gwy.get_device(dev_id, parent=self, is_sensor=True)
+            self._sensor = self._gwy.device_registry.get_device(
+                dev_id, parent=self, is_sensor=True
+            )
 
         for dev_id in schema.get(SZ_ACTUATORS, []):
-            self._gwy.get_device(dev_id, parent=self)
+            self._gwy.device_registry.get_device(dev_id, parent=self)
 
     def _setup_discovery_cmds(self) -> None:
         # super()._setup_discovery_cmds()
@@ -654,15 +660,17 @@ class Zone(ZoneSchedule):
 
             if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.SEN:
                 dev_id = msg.payload[SZ_DEVICES][0]
-                self._sensor = self._gwy.get_device(dev_id, parent=self, is_sensor=True)
+                self._sensor = self._gwy.device_registry.get_device(
+                    dev_id, parent=self, is_sensor=True
+                )
 
             elif msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.ACT:
                 for dev_id in msg.payload[SZ_DEVICES]:
-                    self._gwy.get_device(dev_id, parent=self)
+                    self._gwy.device_registry.get_device(dev_id, parent=self)
 
             elif msg.payload[SZ_ZONE_TYPE] in ZON_ROLE_MAP.HEAT_ZONES:
                 for dev_id in msg.payload[SZ_DEVICES]:
-                    self._gwy.get_device(dev_id, parent=self)
+                    self._gwy.device_registry.get_device(dev_id, parent=self)
                 self._update_schema(
                     **{SZ_CLASS: ZON_ROLE_MAP[msg.payload[SZ_ZONE_TYPE]]}
                 )
