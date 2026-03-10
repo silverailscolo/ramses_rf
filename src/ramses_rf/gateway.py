@@ -28,15 +28,11 @@ from ramses_tx.const import (
 )
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 
-from .const import DONT_CREATE_MESSAGES, SZ_DEVICES
+from .const import DONT_CREATE_MESSAGES
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
-    SCH_TRAITS,
-    SZ_ALIAS,
-    SZ_CLASS,
     SZ_CONFIG,
     SZ_ENABLE_EAVESDROP,
-    SZ_FAKED,
     SZ_MAIN_TCS,
     SZ_ORPHANS,
 )
@@ -50,14 +46,12 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 )
 
 from ramses_tx import (
-    Address,
     Command,
     Engine,
     Message,
     Packet,
     Priority,
     extract_known_hgi_id,
-    is_valid_dev_id,
     protocol_factory,
     set_pkt_logging_config,
     transport_factory,
@@ -66,14 +60,19 @@ from ramses_tx.transport import TransportConfig
 from ramses_tx.typing import PktLogConfigT, PortConfigT
 
 from .database import MessageIndex
-from .device import DeviceHeat, DeviceHvac, Fakeable, HgiGateway, device_factory
+from .device import Fakeable, HgiGateway
+from .device_filter import DeviceFilter
+from .device_registry import DeviceRegistry
 from .dispatcher import detect_array_fragment, process_msg
-from .exceptions import DeviceNotFaked, DeviceNotFoundError, SchemaInconsistentError
-from .interfaces import GatewayInterface, MessageIndexInterface
-from .models import DeviceTraits
+from .interfaces import (
+    DeviceFilterInterface,
+    DeviceRegistryInterface,
+    GatewayInterface,
+    MessageIndexInterface,
+)
 from .schemas import load_schema
 from .system import Evohome
-from .typing import DeviceIdT, DeviceListT, DeviceTraitsT
+from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
     from ramses_tx import RamsesTransportT
@@ -229,8 +228,15 @@ class Gateway(Engine, GatewayInterface):
 
         self._tcs: Evohome | None = None
 
-        self.devices: list[Device] = []
-        self.device_by_id: dict[DeviceIdT, Device] = {}
+        self._device_registry: DeviceRegistryInterface = DeviceRegistry(self)
+
+        self._device_filter: DeviceFilterInterface = DeviceFilter(
+            include=cast(DeviceListT, self._include),
+            exclude=cast(DeviceListT, self._exclude),
+            unwanted=self._unwanted,
+            enforce_known_list=self._enforce_known_list,
+            hgi_id_provider=lambda: getattr(self.hgi, "id", None),
+        )
 
         self._msg_db: MessageIndexInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
@@ -244,6 +250,33 @@ class Gateway(Engine, GatewayInterface):
         if not self.ser_name:
             return f"Gateway(input_file={self._input_file})"
         return f"Gateway(port_name={self.ser_name}, port_config={self._port_config})"
+
+    @property
+    def device_registry(self) -> DeviceRegistryInterface:
+        """Return the Device Registry service.
+
+        :returns: The instantiated DeviceRegistryInterface.
+        :rtype: DeviceRegistryInterface
+        """
+        return self._device_registry
+
+    @property
+    def devices(self) -> list[Device]:
+        """Return the list of devices (delegated to DeviceRegistry).
+
+        :returns: A list of all known Device instances.
+        :rtype: list[Device]
+        """
+        return self.device_registry.devices
+
+    @property
+    def device_by_id(self) -> dict[DeviceIdT, Device]:
+        """Return the mapping of device IDs to devices (delegated to DeviceRegistry).
+
+        :returns: A dictionary mapping Device IDs to Device instances.
+        :rtype: dict[DeviceIdT, Device]
+        """
+        return self.device_registry.device_by_id
 
     @property
     def config(self) -> GatewayConfig:
@@ -520,8 +553,8 @@ class Gateway(Engine, GatewayInterface):
             # self._schema = {}
 
             self._tcs = None
-            self.devices = []
-            self.device_by_id = {}
+            self.device_registry.devices.clear()
+            self.device_registry.device_by_id.clear()
             self._prev_msg = None
             self._this_msg = None
 
@@ -574,14 +607,8 @@ class Gateway(Engine, GatewayInterface):
         :type dev: Device
         :returns: None
         :rtype: None
-        :raises SchemaInconsistentError: If the device already exists in the gateway.
         """
-
-        if dev.id in self.device_by_id:
-            raise SchemaInconsistentError(f"Device already exists: {dev.id}")
-
-        self.devices.append(dev)
-        self.device_by_id[dev.id] = dev
+        self.device_registry._add_device(dev)
 
     def get_device(
         self,
@@ -593,10 +620,6 @@ class Gateway(Engine, GatewayInterface):
         is_sensor: bool | None = None,
     ) -> Device:
         """Return a device, creating it if it does not already exist.
-
-        This method uses provided traits to create or update a device and optionally
-        passes a message for it to handle. All devices have traits, but only
-        controllers (CTL, UFC) have a schema.
 
         :param device_id: The unique identifier for the device (e.g., '01:123456').
         :type device_id: DeviceIdT
@@ -610,78 +633,14 @@ class Gateway(Engine, GatewayInterface):
         :type is_sensor: bool | None, optional
         :returns: The existing or newly created device instance.
         :rtype: Device
-        :raises DeviceNotFoundError: If the device ID is blocked or not in the allowed known_list.
         """
-
-        def check_filter_lists(dev_id: DeviceIdT) -> None:  # may: DeviceNotFoundError
-            """Raise a DeviceNotFoundError if a device_id is filtered out by a list.
-
-            :param dev_id: The device identifier to evaluate.
-            :type dev_id: DeviceIdT
-            :returns: None
-            :rtype: None
-            :raises DeviceNotFoundError: If the device is unwanted, strictly not known, or excluded.
-            """
-
-            if dev_id in self._unwanted:  # TODO: shouldn't invalidate a msg
-                raise DeviceNotFoundError(
-                    f"Can't create {dev_id}: it is unwanted or invalid"
-                )
-
-            if self._enforce_known_list and (
-                dev_id not in self._include and dev_id != getattr(self.hgi, "id", None)
-            ):
-                self._unwanted.append(dev_id)
-                raise DeviceNotFoundError(
-                    f"Can't create {dev_id}: it is not an allowed device_id"
-                    f" (if required, add it to the {SZ_KNOWN_LIST})"
-                )
-
-            if dev_id in self._exclude:
-                self._unwanted.append(dev_id)
-                raise DeviceNotFoundError(
-                    f"Can't create {dev_id}: it is a blocked device_id"
-                    f" (if required, remove it from the {SZ_BLOCK_LIST})"
-                )
-
-        try:
-            check_filter_lists(device_id)
-        except DeviceNotFoundError:
-            # have to allow for GWY not being in known_list...
-            if device_id != self._protocol.hgi_id:
-                raise  # TODO: make parochial
-
-        dev = self.device_by_id.get(device_id)
-
-        if not dev:
-            # voluptuous bug workaround: https://github.com/alecthomas/voluptuous/pull/524
-            _traits_raw: dict[str, Any] = self._include.get(device_id, {})  # type: ignore[assignment]
-            _traits_raw.pop("commands", None)
-
-            traits_dict: dict[str, Any] = SCH_TRAITS(self._include.get(device_id, {}))
-            traits = DeviceTraits.from_dict(traits_dict)
-
-            dev = device_factory(self, Address(device_id), msg=msg, traits=traits)
-
-            if traits.faked:
-                if isinstance(dev, Fakeable):
-                    dev._make_fake()
-                else:
-                    _LOGGER.warning(f"The device is not fakeable: {dev}")
-
-        # TODO: the exact order of the following may need refining...
-        # TODO: some will be done by devices themselves?
-
-        # if schema:  # Step 2: Only controllers have a schema...
-        #     dev._update_schema(**schema)  # TODO: schema/traits
-
-        if parent or child_id:
-            dev.set_parent(parent, child_id=child_id, is_sensor=is_sensor)
-
-        # if msg:
-        #     dev._handle_msg(msg)
-
-        return dev
+        return self.device_registry.get_device(  # type: ignore[no-any-return]
+            device_id,
+            msg=msg,
+            parent=parent,
+            child_id=child_id,
+            is_sensor=is_sensor,
+        )
 
     async def fake_device(
         self,
@@ -696,28 +655,10 @@ class Gateway(Engine, GatewayInterface):
         :type create_device: bool, optional
         :returns: The instantiated faked device.
         :rtype: Device | Fakeable
-        :raises SchemaInconsistentError: If the provided device ID is invalid.
-        :raises DeviceNotFoundError: If the device doesn't exist and `create_device` is False, or if it isn't in the known_list when creation is allowed.
-        :raises DeviceNotFaked: If the device exists but cannot be faked.
         """
-
-        if not is_valid_dev_id(device_id):
-            raise SchemaInconsistentError(f"The device id is not valid: {device_id}")
-
-        known_list = await self.known_list()
-
-        if not create_device and device_id not in self.device_by_id:
-            raise DeviceNotFoundError(f"The device id does not exist: {device_id}")
-        elif create_device and device_id not in known_list:
-            raise DeviceNotFoundError(
-                f"The device id is not in the known_list: {device_id}"
-            )
-
-        if (dev := self.get_device(device_id)) and isinstance(dev, Fakeable):
-            dev._make_fake()
-            return dev
-
-        raise DeviceNotFaked(f"The device is not fakeable: {device_id}")
+        return await self.device_registry.fake_device(  # type: ignore[no-any-return]
+            device_id, create_device=create_device
+        )
 
     @property
     def tcs(self) -> Evohome | None:
@@ -737,16 +678,7 @@ class Gateway(Engine, GatewayInterface):
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
         """
-
-        result: dict[str, Any] = {k: v for k, v in self._include.items()}
-        for d in self.devices:
-            if not self._enforce_known_list or d.id in self._include:
-                traits = await d.traits()
-                result[d.id] = cast(
-                    DeviceTraitsT,
-                    {k: traits.get(k) for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)},
-                )
-        return cast(DeviceListT, result)
+        return await self.device_registry.known_list()
 
     @property
     def system_by_id(self) -> dict[DeviceIdT, Evohome]:
@@ -755,11 +687,7 @@ class Gateway(Engine, GatewayInterface):
         :returns: Dictionary mapping device ID to Evohome system.
         :rtype: dict[DeviceIdT, Evohome]
         """
-        return {
-            d.id: d.tcs
-            for d in self.devices
-            if hasattr(d, "tcs") and getattr(d.tcs, "id", None) == d.id
-        }
+        return self.device_registry.system_by_id
 
     @property
     def systems(self) -> list[Evohome]:
@@ -768,7 +696,7 @@ class Gateway(Engine, GatewayInterface):
         :returns: A list of Evohome instances.
         :rtype: list[Evohome]
         """
-        return list(self.system_by_id.values())
+        return self.device_registry.systems
 
     async def _config(self) -> dict[str, Any]:
         """Return the working configuration.
@@ -797,21 +725,8 @@ class Gateway(Engine, GatewayInterface):
         for tcs in self.systems:
             schema[tcs.ctl.id] = await tcs.schema()
 
-        heat_orphans = []
-        for d in self.devices:
-            if (
-                not getattr(d, "tcs", None)
-                and isinstance(d, DeviceHeat)
-                and await d._is_present()
-            ):
-                heat_orphans.append(d.id)
-        schema[f"{SZ_ORPHANS}_heat"] = sorted(heat_orphans)
-
-        hvac_orphans = []
-        for d in self.devices:
-            if isinstance(d, DeviceHvac) and await d._is_present():
-                hvac_orphans.append(d.id)
-        schema[f"{SZ_ORPHANS}_hvac"] = sorted(hvac_orphans)
+        schema[f"{SZ_ORPHANS}_heat"] = await self.device_registry.get_heat_orphans()
+        schema[f"{SZ_ORPHANS}_hvac"] = await self.device_registry.get_hvac_orphans()
 
         return schema
 
@@ -821,7 +736,7 @@ class Gateway(Engine, GatewayInterface):
         :returns: A dictionary containing parameters for all devices.
         :rtype: dict[str, Any]
         """
-        return {SZ_DEVICES: {d.id: await d.params() for d in sorted(self.devices)}}
+        return await self.device_registry.params()
 
     async def status(self) -> dict[str, Any]:
         """Return the status for all devices and the transport rate.
@@ -829,11 +744,10 @@ class Gateway(Engine, GatewayInterface):
         :returns: A dictionary containing device statuses and the transport transmission rate.
         :rtype: dict[str, Any]
         """
+        status_dict = await self.device_registry.status()
         tx_rate = self._transport.get_extra_info("tx_rate") if self._transport else None
-        return {
-            SZ_DEVICES: {d.id: await d.status() for d in sorted(self.devices)},
-            "_tx_rate": tx_rate,
-        }
+        status_dict["_tx_rate"] = tx_rate
+        return status_dict
 
     def _msg_handler(self, msg: Message) -> None:
         """A callback to handle messages from the protocol stack.

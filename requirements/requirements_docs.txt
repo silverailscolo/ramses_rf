@@ -10,6 +10,6 @@
     markdown-it-py==4.0.0
     myst-parser==5.0.0
     Sphinx==9.1.0
-    sphinxcontrib-mermaid==2.0.0
+    sphinxcontrib-mermaid==2.0.1
     sphinx-basic-ng==1.0.0b2
     sphinx_design==0.7.0
