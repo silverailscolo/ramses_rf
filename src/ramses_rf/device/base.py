@@ -13,9 +13,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.binding_fsm import BindContext, Vendor
 from ramses_rf.const import DEV_TYPE_MAP, SZ_OEM_CODE, DevType
-from ramses_rf.entity_base import Child, Entity, class_by_attr
+from ramses_rf.entity_base import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
 from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED, SZ_KNOWN_LIST
+from ramses_rf.topology import Child
 from ramses_tx import Command, Packet, Priority, QosParams
 from ramses_tx.ramses import CODES_BY_DEV_SLUG, CODES_ONLY_FROM_CTL
 from ramses_tx.typing import PayloadT
@@ -29,8 +30,6 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 )
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Zone
@@ -127,8 +126,8 @@ class DeviceBase(Entity):
         # sometimes, battery-powered devices will respond to an RQ (e.g. bind mode)
 
         # if discover_flag & Discover.TRAITS:
-        # self._add_discovery_cmd(cmd(RQ, Code._1FC9, "00", self.id), 60 * 60 * 24)
-        # self._add_discovery_cmd(cmd(RQ, Code._0016, "00", self.id), 60 * 60)
+        # self.discovery.add_cmd(cmd(RQ, Code._1FC9, "00", self.id), 60 * 60 * 24)
+        # self.discovery.add_cmd(cmd(RQ, Code._0016, "00", self.id), 60 * 60)
 
         pass
 
@@ -175,11 +174,11 @@ class DeviceBase(Entity):
     async def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered (excludes battery-backup)."""
         if self._gwy.msg_db:
-            code_list = await self._msg_dev_qry()
+            code_list = await self.state_store._msg_dev_qry()
             return isinstance(self, BatteryState) or (
                 code_list is not None and Code._1060 in code_list
             )  # TODO(eb): clean up next line Q1 2026
-        msgz = await self._msgz()
+        msgz = await self.state_store._msgz()
         return isinstance(self, BatteryState) or Code._1060 in msgz
 
     @property
@@ -192,11 +191,11 @@ class DeviceBase(Entity):
     def _is_binding(self) -> bool:
         """Return True if the (faked) device is actively binding."""
 
-        return self._bind_context and self._bind_context.is_binding
+        return self._bind_context and self._bind_context.is_binding is True
 
     async def _is_present(self) -> bool:
         """Try to exclude ghost devices (as caused by corrupt packet addresses)."""
-        msgs = await self._msgs()
+        msgs = await self.state_store._msgs()
         return any(
             m.src == self for m in msgs.values() if not m._expired
         )  # TODO: needs addressing
@@ -216,7 +215,7 @@ class DeviceBase(Entity):
     async def traits(self) -> dict[str, Any]:
         """Get the traits of the device."""
 
-        result = await super().traits()
+        result = await self.state_store.traits()
 
         known_dev = self._gwy._include.get(self.id)
 
@@ -228,7 +227,8 @@ class DeviceBase(Entity):
             }
         )
 
-        return result | {"_bind": await self._msg_value(Code._1FC9)}
+        result["_bind"] = await self.state_store._msg_value(Code._1FC9)
+        return result
 
 
 class BatteryState(DeviceBase):  # 1060
@@ -239,13 +239,16 @@ class BatteryState(DeviceBase):  # 1060
         if self.is_faked:
             return False
         return cast(
-            bool | None, await self._msg_value(Code._1060, key=self.BATTERY_LOW)
+            bool | None,
+            await self.state_store._msg_value(Code._1060, key=self.BATTERY_LOW),
         )
 
     async def battery_state(self) -> dict[str, Any] | None:  # 1060
         if self.is_faked:
             return None
-        return cast(dict[str, Any] | None, await self._msg_value(Code._1060))
+        return cast(
+            dict[str, Any] | None, await self.state_store._msg_value(Code._1060)
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -264,16 +267,18 @@ class DeviceInfo(DeviceBase):  # 10E0
             self._SLUG
         ].get(Code._10E0, {}):
             cmd = Command.from_attrs(RQ, self.id, Code._10E0, PayloadT("00"))
-            self._add_discovery_cmd(cmd, 60 * 60 * 24)
+            self.discovery.add_cmd(cmd, 60 * 60 * 24)
 
-    async def device_info(self) -> dict | None:  # 10E0
-        return cast(dict | None, await self._msg_value(Code._10E0))
+    async def device_info(self) -> dict[str, Any] | None:  # 10E0
+        return cast(
+            dict[str, Any] | None, await self.state_store._msg_value(Code._10E0)
+        )
 
     async def traits(self) -> dict[str, Any]:
         """Return the traits of the device."""
 
         result = await super().traits()
-        msgs = await self._msgs()
+        msgs = await self.state_store._msgs()
 
         if Code._10E0 in msgs or Code._10E0 in CODES_BY_DEV_SLUG.get(self._SLUG, []):
             result.update({"_info": await self.device_info()})
@@ -394,10 +399,10 @@ class Fakeable(DeviceBase):
         if not self._bind_context:
             raise DeviceNotFaked(f"{self}: Faking not enabled")
 
-        if isinstance(offer_codes, Iterable):
-            codes: tuple[Code] = offer_codes
+        if isinstance(offer_codes, str):
+            codes: tuple[Code, ...] = (offer_codes,)
         else:
-            codes = tuple([offer_codes])
+            codes = tuple(offer_codes)
 
         msgs = await self._bind_context.initiate_binding_process(
             codes, confirm_code=confirm_code, ratify_cmd=ratify_cmd
@@ -411,7 +416,10 @@ class Fakeable(DeviceBase):
         """Return the OEM code (a 2-char ascii str) for this device, if there is one."""
         traits = await self.traits()
         if not traits.get(SZ_OEM_CODE):
-            return cast(str | None, await self._msg_value(Code._10E0, key=SZ_OEM_CODE))
+            return cast(
+                str | None,
+                await self.state_store._msg_value(Code._10E0, key=SZ_OEM_CODE),
+            )
         return cast(str | None, traits.get(SZ_OEM_CODE))
 
 

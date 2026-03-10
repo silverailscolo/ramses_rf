@@ -9,7 +9,7 @@ import pytest
 
 from ramses_rf.const import RP
 from ramses_rf.database import MessageIndex
-from ramses_rf.entity_base import Entity, _MessageDB
+from ramses_rf.entity_base import Entity, _Entity
 from ramses_rf.gateway import Gateway
 from ramses_tx import Code, DeviceIdT, Message, Packet
 
@@ -38,7 +38,7 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
 
 
 class Test_entity_base:
-    """Test _MessageDB class."""
+    """Test _Entity class (formerly _MessageDB)."""
 
     _SRC1 = "32:166025"
     _SRC2 = "01:087939"  # (CTR)
@@ -68,7 +68,7 @@ class Test_entity_base:
 
     async def test_entity_base_dev(self, mock_gateway: MagicMock) -> None:
         # issues fetching results
-        dev = _MessageDB(mock_gateway)
+        dev = _Entity(mock_gateway)
         dev.id = DeviceIdT("04:189078")
         dev._z_id = dev.id
 
@@ -97,26 +97,26 @@ class Test_entity_base:
         ), "base qry wrong"
 
         # create _msgs
-        assert await dev._msgs() == {
+        assert await dev.state_store._msgs() == {
             "12B0": self.msg7,
             "3150": self.msg5,
             "3220": self.msg6,
         }, "base _msgs wrong"
 
         # find our Codes
-        assert await dev._msg_dev_qry() == [
+        assert await dev.state_store._msg_dev_qry() == [
             Code._3150,
             Code._12B0,
             Code._3220,
         ], "base _msg_dev_qry wrong"
 
         # list our messages
-        assert await dev._msg_list() == [self.msg5, self.msg7, self.msg6], (
+        assert await dev.state_store._msg_list() == [self.msg5, self.msg7, self.msg6], (
             "_msg_list wrong"
         )
 
         # create _msgz
-        assert await dev._msgz() == {
+        assert await dev.state_store._msgz() == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
             "3220": {"RP": {"11": self.msg6}},
@@ -126,7 +126,7 @@ class Test_entity_base:
 
     async def test_entity_base_zone(self, mock_gateway: MagicMock) -> None:
         # works as expected
-        dev = _MessageDB(mock_gateway)
+        dev = _Entity(mock_gateway)
         dev.id = DeviceIdT("04:189078_01")
         dev._z_id = dev.id
 
@@ -153,21 +153,24 @@ class Test_entity_base:
         ), "zone qry wrong"
 
         # create _msgs
-        assert await dev._msgs() == {"12B0": self.msg7, "3150": self.msg5}, (
-            "zone _msgs wrong"
-        )
+        assert await dev.state_store._msgs() == {
+            "12B0": self.msg7,
+            "3150": self.msg5,
+        }, "zone _msgs wrong"
 
         # find our Codes
-        assert await dev._msg_dev_qry() == [
+        assert await dev.state_store._msg_dev_qry() == [
             Code._3150,
             Code._12B0,
         ], "zone _msg_dev_qry wrong"
 
         # list our messages
-        assert await dev._msg_list() == [self.msg5, self.msg7], "_msg_list wrong"
+        assert await dev.state_store._msg_list() == [self.msg5, self.msg7], (
+            "_msg_list wrong"
+        )
 
         # create _msgz
-        assert await dev._msgz() == {
+        assert await dev.state_store._msgz() == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
         }, "zone _msgz wrong"
@@ -189,7 +192,7 @@ class Test_entity_base:
 
     async def test_entity_base_dhw(self, mock_gateway: MagicMock) -> None:
         # works as expected
-        dev = _MessageDB(mock_gateway)
+        dev = _Entity(mock_gateway)
         dev.id = DeviceIdT("01:145038_HW")
         dev._z_id = dev.id
 
@@ -209,10 +212,6 @@ class Test_entity_base:
                 AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
             """
         _ctx_qry = "%dhw_idx%"
-        # SELECT just fields
-        # assert await dev._gwy.msg_db.qry_field(
-        #     sql, (dev.id[:9], dev.id[:9], _ctx_qry)
-        # ) == [('FC',), ('00',)]
 
         # fetch Messages
         assert await dev._gwy.msg_db.qry(sql, (dev.id[:9], dev.id[:9], _ctx_qry)) == (
@@ -221,21 +220,24 @@ class Test_entity_base:
         ), "dhw qry wrong"
 
         # create _msgs
-        assert await dev._msgs() == {"1260": self.msg9, "3150": self.msg8}, (
-            "dhw _msgs wrong"
-        )
+        assert await dev.state_store._msgs() == {
+            "1260": self.msg9,
+            "3150": self.msg8,
+        }, "dhw _msgs wrong"
 
         # find our Codes
-        assert await dev._msg_dev_qry() == [
+        assert await dev.state_store._msg_dev_qry() == [
             Code._3150,
             Code._1260,
         ], "dhw _msg_dev_qry wrong"
 
         # list our messages
-        assert await dev._msg_list() == [self.msg8, self.msg9], "dhw _msg_list wrong"
+        assert await dev.state_store._msg_list() == [self.msg8, self.msg9], (
+            "dhw _msg_list wrong"
+        )
 
         # create _msgz
-        assert await dev._msgz() == {
+        assert await dev.state_store._msgz() == {
             "1260": {"RP": {"00": self.msg9}},
             "3150": {" I": {"FC": self.msg8}},
         }, "dhw _msgz wrong"
@@ -244,7 +246,7 @@ class Test_entity_base:
 
     def test_msg_value_msg_hardening(self, mock_gateway: MagicMock) -> None:
         """Test hardening fixes in _msg_value_msg (empty lists, full list return)."""
-        dev = _MessageDB(mock_gateway)
+        dev = _Entity(mock_gateway)
         dev.id = DeviceIdT("01:123456")
 
         # Case 1: Empty payload list (should not crash with IndexError)
@@ -253,7 +255,7 @@ class Test_entity_base:
         msg_empty._expired = False
         msg_empty.code = Code._000A
 
-        assert dev._msg_value_msg(msg_empty) is None
+        assert dev.state_store._msg_value_msg(msg_empty) is None
 
         # Case 2: Payload is a list, key='*' (should return full list)
         payload_list = [
@@ -266,25 +268,25 @@ class Test_entity_base:
         msg_list.code = Code._000A
 
         # key='*' -> return full list
-        val = dev._msg_value_msg(msg_list, key="*")
+        val = dev.state_store._msg_value_msg(msg_list, key="*")
         assert val == payload_list
         assert isinstance(val, list)
 
         # key=None -> return full list (default behavior if key arg is omitted in call)
-        val = dev._msg_value_msg(msg_list)
+        val = dev.state_store._msg_value_msg(msg_list)
         assert val == payload_list
 
         # Case 3: Legacy Fallback - Payload is list, specific key requested, no zone_idx
         # Should return value from index 0
-        val = dev._msg_value_msg(msg_list, key="val")
+        val = dev.state_store._msg_value_msg(msg_list, key="val")
         assert val == 10  # from index 0 ('00')
 
         # Case 4: Correct filtering when zone_idx is provided
-        val = dev._msg_value_msg(msg_list, key="val", zone_idx="01")
+        val = dev.state_store._msg_value_msg(msg_list, key="val", zone_idx="01")
         assert val == 20
 
         # Case 5: Zone not found in list
-        val = dev._msg_value_msg(msg_list, key="val", zone_idx="99")
+        val = dev.state_store._msg_value_msg(msg_list, key="val", zone_idx="99")
         assert val is None
 
 
@@ -304,11 +306,11 @@ async def test_gh_396_sqlite_ot_context_type() -> None:
 
     # Instantiate the entity
     entity = Entity(gwy)
-    entity.id = "01:123456"  # type: ignore[assignment]
+    entity.id = DeviceIdT("01:123456")
 
     # Execute
     try:
-        cmds = await entity.supported_cmds_ot()
+        cmds = await entity.discovery.supported_cmds_ot()
     except TypeError as err:
         assert False, f"raised TypeError: {err}"
 
@@ -325,11 +327,11 @@ async def test_gh_396_legacy_ot_context() -> None:
     gwy.msg_db = None  # Force legacy path
 
     entity = Entity(gwy)
-    entity.id = "01:123456"  # type: ignore[assignment]
+    entity.id = DeviceIdT("01:123456")
 
     # Manually populate the legacy _msgz_ structure (backing attribute)
     # Structure: _msgz_[Code][Verb][Ctx] = Message
-    entity._msgz_ = {
+    entity.state_store._msgz_ = {
         Code._3220: {
             RP: {
                 "05": MagicMock(),  # Standard hex string case
@@ -338,7 +340,7 @@ async def test_gh_396_legacy_ot_context() -> None:
     }
 
     # Execute
-    cmds = await entity.supported_cmds_ot()
+    cmds = await entity.discovery.supported_cmds_ot()
 
     # Verify
     assert "0x05" in cmds
