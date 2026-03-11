@@ -21,6 +21,7 @@ from ramses_cli.client import (
     SZ_INPUT_FILE,
     DeviceIdParamType,
     _print_engine_state,
+    _run_cli,
     _save_state,
     async_main,
     cli,
@@ -660,11 +661,11 @@ async def test_cli_config_file(mock_gateway: MagicMock) -> None:
     """Test loading a configuration file via the CLI."""
     runner = CliRunner()
     with runner.isolated_filesystem():
-        # Create a dummy config file
+        # Write config file synchronously before invoking CLI
         with open("test_config.json", "w") as f:
             json.dump({"config": {"disable_discovery": True}}, f)
 
-        # Run CLI with -c pointing to the file
+        # Run CLI with -c pointing to the locally closed file
         result = await runner.invoke(
             cli, ["-c", "test_config.json", "parse", "/dev/null"]
         )
@@ -733,3 +734,52 @@ async def test_parse_command_passes_input_file() -> None:
     )
 
     print("\nSuccess: CLI parsed the input file argument correctly.")
+
+
+# --- Core App Lifecycle Execution Tests ---
+
+
+def test_run_cli_missing_command(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that _run_cli catches ClickException on missing commands."""
+    with (
+        patch("sys.argv", ["client.py"]),
+        patch("sys.exit", side_effect=SystemExit) as mock_exit,
+        pytest.raises(SystemExit),
+    ):
+        _run_cli()
+
+    mock_exit.assert_called_once()
+    captured = capsys.readouterr()
+    assert "Usage:" in captured.out or "Usage:" in captured.err
+
+
+def test_run_cli_help(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that _run_cli catches click.exceptions.Exit when --help is passed."""
+    with (
+        patch("sys.argv", ["client.py", "--help"]),
+        patch("sys.exit", side_effect=SystemExit) as mock_exit,
+        pytest.raises(SystemExit),
+    ):
+        _run_cli()
+
+    mock_exit.assert_called_once_with(0)
+    captured = capsys.readouterr()
+    assert "Usage:" in captured.out or "Usage:" in captured.err
+
+
+def test_run_cli_valid() -> None:
+    """Test that _run_cli correctly bridges into asyncio.run(async_main(...))."""
+
+    async def dummy_main(*args: Any, **kwargs: Any) -> None:
+        """A safe, awaitable mock for async_main to avoid nested loop conflicts."""
+        pass
+
+    with (
+        patch("sys.argv", ["client.py", "parse", "dummy.log"]),
+        patch("ramses_cli.client.async_main", side_effect=dummy_main) as mock_main,
+        patch("sys.exit", side_effect=SystemExit) as mock_exit,
+    ):
+        _run_cli()
+
+        mock_exit.assert_not_called()
+        mock_main.assert_called_once()
