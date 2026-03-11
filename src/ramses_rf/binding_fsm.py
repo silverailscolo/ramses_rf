@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
     from ramses_tx import IndexT, Packet
 
-    from .device.base import Fakeable
+    from .interfaces import CommandDispatcher, DeviceInterface
 
 #
 # NOTE: All debug flags should be False for deployment to end-users
@@ -159,20 +159,22 @@ SCHEME_LOOKUP = {
 #
 
 
-class BindContextBase:
-    """The context is the Device class. It should be initiated with a default state."""
+class BindingManagerBase:
+    """The manager is the core service. It should be initiated with a default state."""
 
     _attr_role = BindRole.IS_UNKNOWN
 
     _is_respondent: bool | None  # if binding, is either: respondent or supplicant
     _state: BindStateBase = None  # type: ignore[assignment]
 
-    def __init__(self, dev: Fakeable) -> None:
-        """Initialize the binding context.
+    def __init__(self, dev: DeviceInterface, dispatcher: CommandDispatcher) -> None:
+        """Initialize the binding manager.
 
-        :param dev: The fakeable device managing this binding context.
+        :param dev: The device interface context for this binding service.
+        :param dispatcher: The command dispatcher callback.
         """
         self._dev = dev
+        self._dispatcher = dispatcher
         self._loop = asyncio.get_running_loop()
         self._fut: asyncio.Future[Message] | None = None
 
@@ -187,7 +189,7 @@ class BindContextBase:
     def set_state(
         self, state: type[BindStateBase], result: asyncio.Future[Message] | None = None
     ) -> None:
-        """Transition the State of the Context, and process the result, if any.
+        """Transition the State of the Manager, and process the result, if any.
 
         :param state: The new state class to transition into.
         :param result: The future result carrying the preceding message state, optional.
@@ -222,7 +224,7 @@ class BindContextBase:
 
     @property
     def state(self) -> BindStateBase:
-        """Return the State (phase) of the Context."""
+        """Return the State (phase) of the Manager."""
         return self._state
 
     @property
@@ -257,8 +259,8 @@ class BindContextBase:
             self.state.send_cmd(cmd)
 
 
-class BindContextRespondent(BindContextBase):
-    """The binding Context for a Respondent."""
+class BindingManagerRespondent(BindingManagerBase):
+    """The binding Manager for a Respondent."""
 
     _attr_role = BindRole.RESPONDENT
 
@@ -328,7 +330,7 @@ class BindContextRespondent(BindContextBase):
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
             assert Message._from_cmd(cmd).payload["phase"] == BindPhase.ACCEPT
 
-        pkt: Packet = await self._dev._async_send_cmd(  # type: ignore[assignment]
+        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
             cmd, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
@@ -362,8 +364,8 @@ class BindContextRespondent(BindContextBase):
         return await self.state.wait_for_addenda(timeout)
 
 
-class BindContextSupplicant(BindContextBase):
-    """The binding Context for a Supplicant."""
+class BindingManagerSupplicant(BindingManagerBase):
+    """The binding Manager for a Supplicant."""
 
     _attr_role = BindRole.SUPPLICANT
 
@@ -432,7 +434,7 @@ class BindContextSupplicant(BindContextBase):
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
             assert Message._from_cmd(cmd).payload["phase"] == BindPhase.TENDER
 
-        pkt: Packet = await self._dev._async_send_cmd(  # type: ignore[assignment]
+        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
             cmd, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
@@ -471,7 +473,7 @@ class BindContextSupplicant(BindContextBase):
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
             assert Message._from_cmd(cmd).payload["phase"] == BindPhase.AFFIRM
 
-        pkt: Packet = await self._dev._async_send_cmd(  # type: ignore[assignment]
+        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
             cmd, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
@@ -486,7 +488,7 @@ class BindContextSupplicant(BindContextBase):
         :return: The sent addenda packet.
         """
 
-        pkt: Packet = await self._dev._async_send_cmd(  # type: ignore[assignment]
+        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
             cmd, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
@@ -494,8 +496,8 @@ class BindContextSupplicant(BindContextBase):
         return pkt
 
 
-class BindContext(BindContextRespondent, BindContextSupplicant):
-    """Aggregate context handling both Respondent and Supplicant flows."""
+class BindingManager(BindingManagerRespondent, BindingManagerSupplicant):
+    """Aggregate manager handling both Respondent and Supplicant flows."""
 
     _attr_role = BindRole.IS_UNKNOWN
 
@@ -517,15 +519,16 @@ class BindStateBase:
 
     _next_ctx_state: type[BindStateBase]  # next state, if successful transition
 
-    def __init__(self, context: BindContextBase) -> None:
+    def __init__(self, context: BindingManagerBase) -> None:
         """Initialize the binding state.
 
-        :param context: The binding context operating this state.
+        :param context: The binding manager operating this state.
         """
         self._context = context
         self._loop = context._loop
 
-        self._fut = self._loop.create_future()
+        # Strong typing on Future ensures .result() correctly returns a Message
+        self._fut: asyncio.Future[Message] = self._loop.create_future()
         _LOGGER.debug(f"{self}: Changing state from: {self._context.state} to: {self}")
 
         if self._has_wait_timer:
@@ -542,8 +545,8 @@ class BindStateBase:
         return self.__class__.__name__
 
     @property
-    def context(self) -> BindContextBase:
-        """Return the associated context for this state."""
+    def context(self) -> BindingManagerBase:
+        """Return the associated manager for this state."""
         return self._context
 
     async def _wait_for_fut_result(self, timeout: float) -> Message:
@@ -555,13 +558,14 @@ class BindStateBase:
         :return: The message containing the expected result.
         """
         try:
-            await asyncio.wait_for(self._fut, timeout)
+            # Wrap in shield to prevent asyncio.wait_for from cancelling the future.
+            await asyncio.wait_for(asyncio.shield(self._fut), timeout)
         except TimeoutError:
             self._handle_wait_timer_expired(timeout)
         else:
             self._set_context_state(self._next_ctx_state)
-        result: Message = self._fut.result()  # may raise exception
-        return result
+
+        return self._fut.result()  # may raise exception
 
     def _handle_wait_timer_expired(self, timeout: float) -> None:
         """Process an overrun of the wait timer when waiting for a Message.
@@ -574,11 +578,12 @@ class BindStateBase:
         )
 
         _LOGGER.warning(msg)
-        self._fut.set_exception(exc.BindingTimeoutError(msg))
+        if not self._fut.done():
+            self._fut.set_exception(exc.BindingTimeoutError(msg))
         self._set_context_state(DevHasFailedBinding)
 
     def _set_context_state(self, next_state: type[BindStateBase]) -> None:
-        """Transition the parent context to a new state.
+        """Transition the parent manager to a new state.
 
         :param next_state: The class representing the next state.
         :raises exc.BindingFsmError: If the future was not yet completed.
@@ -673,7 +678,7 @@ class _DevIsWaitingForMsg(BindStateBase):
 
     _wait_timer_limit: float = 5.1  # WAITING_TIMEOUT_SECS
 
-    def __init__(self, context: BindContextBase) -> None:
+    def __init__(self, context: BindingManagerBase) -> None:
         super().__init__(context)
 
         self._timer_handle = self._loop.call_later(
@@ -689,7 +694,7 @@ class _DevIsWaitingForMsg(BindStateBase):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the waited-for pkt, transition to the next state."""
-        if self.is_phase(msg._pkt, self._expected_pkt_phase):
+        if not self._fut.done() and self.is_phase(msg._pkt, self._expected_pkt_phase):
             self._fut.set_result(msg)
 
 
@@ -704,7 +709,7 @@ class _DevIsReadyToSendCmd(BindStateBase):
     _send_retry_limit: int = 0  # retries dont include the first send
     _send_retry_timer: float = 0.8  # retry if no echo received before timeout
 
-    def __init__(self, context: BindContextBase) -> None:
+    def __init__(self, context: BindingManagerBase) -> None:
         super().__init__(context)
 
         self._cmd: Command | None = None
@@ -720,7 +725,8 @@ class _DevIsReadyToSendCmd(BindStateBase):
         )
 
         _LOGGER.warning(msg)
-        self._fut.set_exception(exc.BindingFlowFailed(msg))
+        if not self._fut.done():
+            self._fut.set_exception(exc.BindingFlowFailed(msg))
         self._set_context_state(DevHasFailedBinding)
 
     def send_cmd(self, cmd: Command) -> None:
@@ -736,7 +742,12 @@ class _DevIsReadyToSendCmd(BindStateBase):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the echo of the sent cmd, transition to the next state."""
-        if self._cmd and msg._pkt == self._cmd:
+        if self._fut.done():
+            return
+        if (self._cmd and msg._pkt == self._cmd) or (
+            self.is_phase(msg._pkt, self._expected_cmd_phase)
+            and msg.src.id == self._context._dev.id
+        ):
             self._fut.set_result(msg)
 
 
@@ -749,9 +760,7 @@ class _DevSendCmdUntilReply(_DevIsWaitingForMsg, _DevIsReadyToSendCmd):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the expected reply, transition to the next state."""
-        # if self._cmd and msg._pkt == self._cmd:  # the echo
-        #     self._set_context_state(self._next_ctx_state)
-        if self.is_phase(msg._pkt, self._expected_pkt_phase):
+        if not self._fut.done() and self.is_phase(msg._pkt, self._expected_pkt_phase):
             self._fut.set_result(msg)
 
 
@@ -775,7 +784,7 @@ class RespHasBoundAsRespondent(BindStateBase):
 
     _attr_role = BindRole.IS_DORMANT
 
-    def __init__(self, context: BindContextBase) -> None:
+    def __init__(self, context: BindingManagerBase) -> None:
         super().__init__(context)
         _LOGGER.info(f"{context._dev.id}: Binding completed as respondent")
 
@@ -831,7 +840,7 @@ class SuppHasBoundAsSupplicant(BindStateBase):
 
     _attr_role = BindRole.IS_DORMANT
 
-    def __init__(self, context: BindContextBase) -> None:
+    def __init__(self, context: BindingManagerBase) -> None:
         super().__init__(context)
         _LOGGER.info(f"{context._dev.id}: Binding completed as supplicant")
 

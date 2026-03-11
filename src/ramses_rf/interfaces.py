@@ -2,12 +2,26 @@
 
 from typing import TYPE_CHECKING, Any, Protocol
 
-from ramses_tx import Code, Command, Message, Packet, Priority
+from ramses_tx import Code, Command, Message, Packet, Priority, QosParams
 
 from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
     from .topology import Parent
+
+
+class CommandDispatcher(Protocol):
+    """Protocol for a service/callback that dispatches commands."""
+
+    async def __call__(
+        self,
+        cmd: Command,
+        *,
+        priority: Priority | None = None,
+        qos: QosParams | None = None,
+    ) -> Packet | None:
+        """Dispatch a command asynchronously."""
+        ...
 
 
 class MessageIndexInterface(Protocol):
