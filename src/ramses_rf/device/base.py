@@ -11,7 +11,7 @@ import logging
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
-from ramses_rf.binding_fsm import BindContext, Vendor
+from ramses_rf.binding_fsm import BindingManager, Vendor
 from ramses_rf.const import DEV_TYPE_MAP, SZ_OEM_CODE, DevType
 from ramses_rf.entity_base import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
@@ -50,7 +50,7 @@ class DeviceBase(Entity):
     _SLUG: str = DevType.DEV
     _STATE_ATTR: str = None
 
-    _bind_context: BindContext | None = None
+    _binding_manager: BindingManager | None = None
 
     def __init__(
         self,
@@ -185,13 +185,13 @@ class DeviceBase(Entity):
     def is_faked(self) -> bool:
         """Return True if the device is faked."""
 
-        return bool(self._bind_context)  # isinstance(self, Fakeable) and...
+        return bool(self._binding_manager)  # isinstance(self, Fakeable) and...
 
     @property
     def _is_binding(self) -> bool:
         """Return True if the (faked) device is actively binding."""
 
-        return self._bind_context and self._bind_context.is_binding is True
+        return self._binding_manager and self._binding_manager.is_binding is True
 
     async def _is_present(self) -> bool:
         """Try to exclude ghost devices (as caused by corrupt packet addresses)."""
@@ -307,7 +307,7 @@ class Fakeable(DeviceBase):
     ) -> None:
         super().__init__(gwy, *args, traits=traits, **kwargs)
 
-        self._bind_context: BindContext | None = None
+        self._binding_manager: BindingManager | None = None
 
         # TOD: this is messy - device schema vs device traits
         if self.id in gwy._include and gwy._include[self.id].get(SZ_FAKED):
@@ -317,10 +317,10 @@ class Fakeable(DeviceBase):
             self._make_fake()
 
     def _make_fake(self) -> None:
-        if self._bind_context:
+        if self._binding_manager:
             return
 
-        self._bind_context = BindContext(self)
+        self._binding_manager = BindingManager(self, self._async_send_cmd)
         self._gwy._include[self.id][SZ_FAKED] = True  # TODO: remove this
         _LOGGER.info(f"Faking now enabled for: {self}")
 
@@ -332,9 +332,9 @@ class Fakeable(DeviceBase):
     ) -> Packet | None:
         """Wrapper to CC: any relevant Commands to the binding Context."""
 
-        if self._bind_context and self._bind_context.is_binding:
+        if self._binding_manager and self._binding_manager.is_binding:
             # cmd.code in (Code._1FC9, Code._10E0)
-            self._bind_context.sent_cmd(cmd)  # other codes needed for edge cases
+            self._binding_manager.sent_cmd(cmd)  # other codes needed for edge cases
 
         return await super()._async_send_cmd(cmd, priority=priority, qos=qos)
 
@@ -343,9 +343,11 @@ class Fakeable(DeviceBase):
 
         super()._handle_msg(msg)
 
-        if self._bind_context and self._bind_context.is_binding:
+        if self._binding_manager and self._binding_manager.is_binding:
             # msg.code in (Code._1FC9, Code._10E0)
-            self._bind_context.rcvd_msg(msg)  # maybe other codes needed for edge cases
+            self._binding_manager.rcvd_msg(
+                msg
+            )  # maybe other codes needed for edge cases
 
     async def _wait_for_binding_request(
         self,
@@ -367,10 +369,10 @@ class Fakeable(DeviceBase):
         :rtype: tuple[Packet, Packet, Packet, Packet | None]
         """
 
-        if not self._bind_context:
+        if not self._binding_manager:
             raise DeviceNotFaked(f"{self}: Faking not enabled")
 
-        msgs = await self._bind_context.wait_for_binding_request(
+        msgs = await self._binding_manager.wait_for_binding_request(
             accept_codes, idx=idx, require_ratify=require_ratify
         )
         return msgs
@@ -396,7 +398,7 @@ class Fakeable(DeviceBase):
         """Start a binding and return the Accept, or raise an exception."""
         # confirm_code can be FFFF.
 
-        if not self._bind_context:
+        if not self._binding_manager:
             raise DeviceNotFaked(f"{self}: Faking not enabled")
 
         if isinstance(offer_codes, str):
@@ -404,7 +406,7 @@ class Fakeable(DeviceBase):
         else:
             codes = tuple(offer_codes)
 
-        msgs = await self._bind_context.initiate_binding_process(
+        msgs = await self._binding_manager.initiate_binding_process(
             codes, confirm_code=confirm_code, ratify_cmd=ratify_cmd
         )  # TODO: if successful, re-discover schema?
         return msgs

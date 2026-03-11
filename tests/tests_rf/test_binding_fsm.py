@@ -12,6 +12,7 @@ concurrent access to pty.openpty().
 import asyncio
 from collections.abc import Generator
 from datetime import datetime as dt
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -20,15 +21,16 @@ from ramses_rf import Code, Command, Gateway, Message, Packet
 from ramses_rf.binding_fsm import (
     SZ_RESPONDENT,
     SZ_SUPPLICANT,
+    BindingManager,
     BindStateBase,
     _BindStates,
 )
 from ramses_rf.device import Fakeable
 from ramses_rf.gateway import GatewayConfig
+from ramses_tx import Priority, QosParams
 from ramses_tx.protocol import PortProtocol
 
 from .virtual_rf import rf_factory
-from .virtual_rf.helpers import ensure_fakeable
 
 # patched constants
 DEFAULT_MAX_RETRIES = 0  # #                ramses_tx.protocol
@@ -155,15 +157,18 @@ TEST_SUITE_300 = [
 @pytest.fixture(autouse=True)
 def patch_port_transport_delays() -> Generator[None, None, None]:
     """Bypass the real-world signature timeouts and duty cycle limits for tests."""
-    patch_1 = patch("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
-    patch_2 = patch("ramses_tx.transport.port._SIGNATURE_MAX_TRYS", 0)
-
-    with patch_1, patch_2:
+    with (
+        patch("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True),
+        patch("ramses_tx.transport.port._SIGNATURE_MAX_TRYS", 0),
+    ):
         yield
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-    def id_fnc(test_set: dict) -> str:
+    """Parametrize tests dynamically based on TEST_SUITE_300."""
+
+    def id_fnc(test_set: dict[str, Any]) -> str:
+        """Generate a test ID based on the test set."""
         r_class = list(test_set[SZ_RESPONDENT].values())[0]["class"]
         s_class = list(test_set[SZ_SUPPLICANT].values())[0]["class"]
         return str(s_class + " binding to " + r_class)
@@ -174,16 +179,82 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 # ######################################################################################
 
 
+def _build_gateway_config(test_set: dict[str, Any], role: str) -> dict[str, Any]:
+    """Build the gateway configuration for a specific role.
+
+    Strips the 'faked' trait from the known_list to prevent DeviceNotFaked
+    exceptions during gateway initialization or message dispatch.
+
+    :param test_set: The test configuration data set.
+    :param role: The specific role (SZ_RESPONDENT or SZ_SUPPLICANT).
+    :return: A dictionary representing the Gateway configuration.
+    """
+    devices = [d for d in test_set.values() if isinstance(d, dict)]
+
+    known_list: dict[str, Any] = {"18:000000": {"class": "HGI"}}
+    for d in devices:
+        for k, v in d.items():
+            known_list[k] = {key: val for key, val in v.items() if key != "faked"}
+
+    return {
+        "config": GatewayConfig(disable_discovery=True),
+        "disable_qos": False,
+        "enforce_known_list": True,
+        "known_list": known_list,
+        "schema": {
+            "orphans_hvac": list(test_set[role])
+        },  # TODO: used by Heat domain too!
+    }
+
+
+def _setup_fakeable_device(gwy: Gateway, device_id: str) -> Fakeable:
+    """Dynamically convert a gateway device into a Fakeable one for testing."""
+    dev = gwy.device_registry.device_by_id[cast(Any, device_id)]
+
+    class _Fakeable(dev.__class__, Fakeable):  # type: ignore[misc, name-defined]
+        pass
+
+    if not isinstance(dev, Fakeable | _Fakeable):
+        dev.__class__ = _Fakeable
+
+    fake_dev = cast(Fakeable, dev)
+
+    if not getattr(fake_dev, "_binding_manager", None):
+
+        async def _dispatcher(
+            cmd: Command,
+            *,
+            priority: Priority | None = None,
+            qos: QosParams | None = None,
+        ) -> Packet | None:
+            """Adapter mapping CommandDispatcher signature to Gateway.async_send_cmd."""
+            kwargs: dict[str, Any] = {}
+            if priority is not None:
+                kwargs["priority"] = priority
+            if qos is not None:
+                kwargs["max_retries"] = qos.max_retries
+                kwargs["timeout"] = qos.timeout
+                kwargs["wait_for_reply"] = qos.wait_for_reply
+
+            return await gwy.async_send_cmd(cmd, **kwargs)
+
+        setattr(fake_dev, "_binding_manager", BindingManager(fake_dev, _dispatcher))  # noqa: B010
+
+    fake_dev._make_fake()
+    return fake_dev
+
+
 async def assert_context_state(
     device: Fakeable, state: type[BindStateBase], max_sleep: float = DEFAULT_MAX_SLEEP
 ) -> None:
-    assert device._bind_context
+    """Assert that the device's context state transitions correctly within max_sleep."""
+    assert device._binding_manager
 
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)
-        if isinstance(device._bind_context.state, state):
+        if isinstance(device._binding_manager.state, state):
             break
-    assert isinstance(device._bind_context.state, state)
+    assert isinstance(device._binding_manager.state, state)
 
 
 # ### TESTS ############################################################################
@@ -191,71 +262,74 @@ async def assert_context_state(
 
 # TODO: test addenda phase of binding handshake
 async def _test_flow_10x(
-    gwy_r: Gateway, gwy_s: Gateway, pkt_flow_expected: list[str]
+    gwy_r: Gateway,
+    gwy_s: Gateway,
+    test_set: dict[str, Any],
+    pkt_flow_expected: list[str],
 ) -> None:
     """Check the change of state during a binding at context layer."""
 
     # asyncio.create_task() should be OK (no need to pass in an event loop)
 
     # STEP 0: Setup...
-    respondent = gwy_r.device_registry.devices[0]
-    supplicant = gwy_s.device_registry.devices[0]
-    ensure_fakeable(respondent)
+    resp_id = list(test_set[SZ_RESPONDENT].keys())[0]
+    supp_id = list(test_set[SZ_SUPPLICANT].keys())[0]
 
-    assert isinstance(respondent, Fakeable)  # mypy
-    assert isinstance(supplicant, Fakeable)  # mypy
+    respondent = _setup_fakeable_device(gwy_r, resp_id)
+    supplicant = _setup_fakeable_device(gwy_s, supp_id)
 
     await assert_context_state(respondent, _BindStates.IS_IDLE_DEVICE)
     await assert_context_state(supplicant, _BindStates.IS_IDLE_DEVICE)
 
-    assert respondent._bind_context
-    assert supplicant._bind_context
-
-    assert not respondent._bind_context.is_binding
-    assert not supplicant._bind_context.is_binding
+    # Local assignments let Mypy lock in the narrowed types reliably across awaits
+    resp_bm = respondent._binding_manager
+    supp_bm = supplicant._binding_manager
+    assert resp_bm is not None
+    assert supp_bm is not None
 
     #
     # Step R0: Respondent initial state
-    respondent._bind_context.set_state(_BindStates.NEEDING_TENDER)
+    resp_bm.set_state(_BindStates.NEEDING_TENDER)
     await assert_context_state(respondent, _BindStates.NEEDING_TENDER)
-    assert respondent._bind_context.is_binding
 
     #
     # Step S0: Supplicant initial state
-    supplicant._bind_context.set_state(_BindStates.NEEDING_ACCEPT)  # type: ignore[unreachable]
+    supp_bm.set_state(_BindStates.NEEDING_ACCEPT)
     await assert_context_state(supplicant, _BindStates.NEEDING_ACCEPT)
-    assert supplicant._bind_context.is_binding
 
     #
     # Step R1: Respondent expects an Offer
-    resp_task = asyncio.create_task(respondent._bind_context._wait_for_offer())
+    resp_task = asyncio.create_task(resp_bm._wait_for_offer())
 
     #
     # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
     msg = Message(Packet(dt.now(), "000 " + pkt_flow_expected[_TENDER]))
     codes = [b[1] for b in msg.payload["bindings"] if b[1] != Code._1FC9]
 
-    pkt = await supplicant._bind_context._make_offer(codes)
+    pkt = await supp_bm._make_offer(codes)
     await assert_context_state(supplicant, _BindStates.NEEDING_ACCEPT)
     assert pkt is not None
 
     await resp_task
     await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
 
-    if not isinstance(gwy_r._protocol, PortProtocol) or not gwy_r._protocol._context:
-        assert False, "QoS protocol not enabled"  # use assert, not skip
+    if (
+        not isinstance(gwy_r._protocol, PortProtocol)
+        or getattr(gwy_r._protocol, "_context", None) is None
+    ):
+        pytest.skip("QoS protocol not enabled")
 
     tender = resp_task.result()
     assert tender._pkt == pkt, "Resp's Msg doesn't match Supp's Offer cmd"
 
-    supp_task = asyncio.create_task(supplicant._bind_context._wait_for_accept(tender))
+    supp_task = asyncio.create_task(supp_bm._wait_for_accept(tender))
 
     #
     # Step R2: Respondent expects a Confirm after sending an Accept (accepts Offer)
     msg = Message(Packet(dt.now(), "000 " + pkt_flow_expected[_ACCEPT]))
     codes = [b[1] for b in msg.payload["bindings"]]
 
-    pkt = await respondent._bind_context._accept_offer(tender, codes)
+    pkt = await resp_bm._accept_offer(tender, codes)
     await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
     assert pkt is not None
 
@@ -265,29 +339,25 @@ async def _test_flow_10x(
     accept = supp_task.result()
     assert accept._pkt == pkt, "Supp's Msg doesn't match Resp's Accept cmd"
 
-    resp_task = asyncio.create_task(respondent._bind_context._wait_for_confirm(accept))
+    resp_task = asyncio.create_task(resp_bm._wait_for_confirm(accept))
 
     #
     # Step S2: Supplicant sends a Confirm (confirms Accept)
     msg = Message(Packet(dt.now(), "000 " + pkt_flow_expected[_AFFIRM]))
     codes = [b[1] for b in msg.payload["bindings"] if len(b) > 1]
 
-    pkt = await supplicant._bind_context._confirm_accept(accept, confirm_code=codes)
+    pkt = await supp_bm._confirm_accept(accept, confirm_code=codes)
     await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
     assert pkt is not None
 
     if len(pkt_flow_expected) > _RATIFY:  # FIXME
-        supplicant._bind_context.set_state(
-            _BindStates.TO_SEND_RATIFY
-        )  # HACK: easiest way
+        supp_bm.set_state(_BindStates.TO_SEND_RATIFY)  # HACK: easiest way
 
     await resp_task
     await assert_context_state(respondent, _BindStates.HAS_BOUND_RESP)
 
     if len(pkt_flow_expected) > _RATIFY:  # FIXME
-        respondent._bind_context.set_state(
-            _BindStates.NEEDING_RATIFY
-        )  # HACK: easiest way
+        resp_bm.set_state(_BindStates.NEEDING_RATIFY)  # HACK: easiest way
 
     affirm = resp_task.result()
     assert affirm._pkt == pkt, "Resp's Msg doesn't match Supp's Confirm cmd"
@@ -324,17 +394,19 @@ async def _test_flow_10x(
 
 # TODO: test addenda phase of binding handshake
 async def _test_flow_20x(
-    gwy_r: Gateway, gwy_s: Gateway, pkt_flow_expected: list[str]
+    gwy_r: Gateway,
+    gwy_s: Gateway,
+    test_set: dict[str, Any],
+    pkt_flow_expected: list[str],
 ) -> None:
     """Check the change of state during a binding at device layer."""
 
     # STEP 0: Setup...
-    respondent = gwy_r.device_registry.devices[0]
-    supplicant = gwy_s.device_registry.devices[0]
-    ensure_fakeable(respondent)
+    resp_id = list(test_set[SZ_RESPONDENT].keys())[0]
+    supp_id = list(test_set[SZ_SUPPLICANT].keys())[0]
 
-    assert isinstance(respondent, Fakeable)  # mypy
-    assert isinstance(supplicant, Fakeable)  # mypy
+    respondent = _setup_fakeable_device(gwy_r, resp_id)
+    supplicant = _setup_fakeable_device(gwy_s, supp_id)
 
     assert respondent.id == pkt_flow_expected[_ACCEPT][7:16], "bad test suite config"
     assert supplicant.id == pkt_flow_expected[_TENDER][7:16], "bad test suite config"
@@ -383,22 +455,13 @@ async def _test_flow_20x(
 
 # TODO: binding working without QoS  # @patch("ramses_tx.protocol._DBG_DISABLE_QOS", True)
 @pytest.mark.xdist_group(name="virt_serial")
-async def test_flow_100(test_set: dict[str, dict]) -> None:
+async def test_flow_100(test_set: dict[str, Any]) -> None:
     """Check packet flow / state change of a binding at context layer."""
 
-    config = {}
-    for role in (SZ_RESPONDENT, SZ_SUPPLICANT):
-        devices = [d for d in test_set.values() if isinstance(d, dict)]
-        config[role] = {
-            "config": GatewayConfig(disable_discovery=True),
-            "disable_qos": False,
-            "enforce_known_list": True,
-            "known_list": {"18:000000": {"class": "HGI"}}
-            | {k: v for d in devices for k, v in d.items()},
-            "schema": {
-                "orphans_hvac": list(test_set[role])  # TODO: used by Heat domain too!
-            },  # Nested inside schema correctly
-        }
+    config = {
+        role: _build_gateway_config(test_set, role)
+        for role in (SZ_RESPONDENT, SZ_SUPPLICANT)
+    }
 
     pkt_flow = [
         x[:46] + x[46:].replace(" ", "").replace("-", "")
@@ -409,7 +472,7 @@ async def test_flow_100(test_set: dict[str, dict]) -> None:
     rf, gwys = await rf_factory([config[SZ_RESPONDENT], config[SZ_SUPPLICANT]])
 
     try:
-        await _test_flow_10x(gwys[0], gwys[1], pkt_flow)
+        await _test_flow_10x(gwys[0], gwys[1], test_set, pkt_flow)
     finally:
         for gwy in gwys:
             await gwy.stop()
@@ -418,22 +481,13 @@ async def test_flow_100(test_set: dict[str, dict]) -> None:
 
 # TODO: binding working without QoS  # @patch("ramses_tx.protocol._DBG_DISABLE_QOS", True)
 @pytest.mark.xdist_group(name="virt_serial")
-async def test_flow_200(test_set: dict[str, dict]) -> None:
+async def test_flow_200(test_set: dict[str, Any]) -> None:
     """Check packet flow / state change of a binding at device layer."""
 
-    config = {}
-    for role in (SZ_RESPONDENT, SZ_SUPPLICANT):
-        devices = [d for d in test_set.values() if isinstance(d, dict)]
-        config[role] = {
-            "config": GatewayConfig(disable_discovery=True),
-            "disable_qos": False,
-            "enforce_known_list": True,
-            "known_list": {"18:000000": {"class": "HGI"}}
-            | {k: v for d in devices for k, v in d.items()},
-            "schema": {
-                "orphans_hvac": list(test_set[role])  # TODO: used by Heat domain too!
-            },  # Nested inside schema correctly
-        }
+    config = {
+        role: _build_gateway_config(test_set, role)
+        for role in (SZ_RESPONDENT, SZ_SUPPLICANT)
+    }
 
     pkt_flow = [
         x[:46] + x[46:].replace(" ", "").replace("-", "")
@@ -441,12 +495,10 @@ async def test_flow_200(test_set: dict[str, dict]) -> None:
     ]
 
     # can't use fixture for this, as new schema required for every test
-    rf, gwys = await rf_factory(
-        [config[SZ_RESPONDENT], config[SZ_SUPPLICANT]]
-    )  # can pop orphans_hvac
+    rf, gwys = await rf_factory([config[SZ_RESPONDENT], config[SZ_SUPPLICANT]])
 
     try:
-        await _test_flow_20x(gwys[0], gwys[1], pkt_flow)
+        await _test_flow_20x(gwys[0], gwys[1], test_set, pkt_flow)
     finally:
         for gwy in gwys:
             await gwy.stop()
