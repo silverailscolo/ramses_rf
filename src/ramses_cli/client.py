@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Final, Literal
 
 import asyncclick as click
+from asyncclick.exceptions import ClickException, Exit
 from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
@@ -730,6 +731,23 @@ cli.add_command(execute)
 cli.add_command(listen)
 
 
+def _run_cli() -> None:
+    """Run the CLI via asyncclick and execute the core application engine."""
+    try:
+        result = cli(standalone_mode=False)
+    except ClickException as err:
+        err.show()
+        sys.exit(err.exit_code)
+    except Exit as err:
+        sys.exit(err.exit_code)
+
+    if isinstance(result, int):
+        sys.exit(result)
+
+    (command, lib_kwargs, kwargs) = result
+    asyncio.run(async_main(command, lib_kwargs, **kwargs))
+
+
 def main() -> None:  # pragma: no cover
     """Entry point for the CLI.
 
@@ -742,27 +760,13 @@ def main() -> None:  # pragma: no cover
         print(" - event_loop_policy set for win32")  # do before asyncio.run()
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-    async def _run_cli() -> None:
-        """Run the CLI via asyncclick and execute the core application engine."""
-        try:
-            result = await cli(standalone_mode=False)
-        except click.NoSuchOption as err:
-            print(f"Error: {err}")
-            sys.exit(-1)
-
-        if isinstance(result, int):
-            sys.exit(result)
-
-        (command, lib_kwargs, kwargs) = result
-        await async_main(command, lib_kwargs, **kwargs)
-
     profile = None
     try:
         if _PROFILE_LIBRARY:
             profile = cProfile.Profile()
-            profile.run("asyncio.run(_run_cli())")
+            profile.run("_run_cli()")
         else:
-            asyncio.run(_run_cli())
+            _run_cli()
     except KeyboardInterrupt:  # , SystemExit):
         print("\r\nclient.py: Engine stopped: ended via: KeyboardInterrupt")
 
