@@ -15,6 +15,8 @@ WORK_DIR = f"{TEST_DIR}/eavesdrop_dev_class"
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    """Generate tests for each folder in the work directory."""
+
     def id_fnc(param: Path) -> str:
         return PurePath(param).name
 
@@ -30,7 +32,7 @@ async def test_packets_from_log_file(dir_name: Path) -> None:
 
     path = f"{dir_name}/packet.log"
 
-    gwy = Gateway(None, input_file=path, config=GatewayConfig(enable_eavesdrop=False))
+    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=False))
     gwy.config.enable_eavesdrop = True  # Test setting this config attr
 
     gwy.add_msg_handler(proc_log_line)
@@ -46,7 +48,7 @@ async def test_dev_eavesdrop_on_(dir_name: Path) -> None:
     """Check discovery of schema and known_list *with* eavesdropping."""
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, input_file=path, config=GatewayConfig(enable_eavesdrop=True))
+    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=True))
     await gwy.start()
 
     with open(f"{dir_name}/known_list_eavesdrop_on.json") as f:
@@ -68,7 +70,7 @@ async def test_dev_eavesdrop_off(dir_name: Path) -> None:
     """Check discovery of schema and known_list *without* eavesdropping."""
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, input_file=path, config=GatewayConfig(enable_eavesdrop=False))
+    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=False))
     await gwy.start()
 
     try:

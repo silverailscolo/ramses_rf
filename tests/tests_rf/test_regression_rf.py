@@ -181,12 +181,12 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
     # config options set to prevent networking attempts
     gwy = Gateway(
         None,  # port_name is required (positional arg)
-        input_file=str(FIXTURE_FILE),
         config=GatewayConfig(
             disable_discovery=True,
+            disable_sending=True,
+            input_file=str(FIXTURE_FILE),
             reduce_processing=0,
         ),
-        disable_sending=True,
     )
 
     # 2. Patch sending methods to prevent "Read-Only" errors & background noise.

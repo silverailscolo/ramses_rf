@@ -58,6 +58,7 @@ TESTS_INBOUND = {  # sent by other, received
 
 @pytest.fixture(autouse=True)
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Apply patches required for virtual RF testing."""
     monkeypatch.setattr(
         "ramses_tx.protocol.core._DBG_DISABLE_IMPERSONATION_ALERTS", True
     )
@@ -89,10 +90,10 @@ async def test_regex_inbound_() -> None:
         rf.ports[0],
         config=GatewayConfig(
             disable_discovery=True,
+            disable_qos=False,
+            enforce_known_list=False,
             use_regex={SZ_INBOUND: RULES_INBOUND},
         ),
-        disable_qos=False,
-        enforce_known_list=False,
     )
     ser_1 = serial.Serial(rf.ports[1])
 
@@ -120,10 +121,10 @@ async def test_regex_with_qos() -> None:
         rf.ports[0],
         config=GatewayConfig(
             disable_discovery=True,
+            disable_qos=False,
+            enforce_known_list=False,
             use_regex=RULES_COMBINED,
         ),
-        disable_qos=False,
-        enforce_known_list=False,
     )
     ser_1 = serial.Serial(rf.ports[1])
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """RAMSES RF - a RAMSES-II protocol decoder & analyser."""
 
-import inspect
 import json
 import re
 import warnings
@@ -34,7 +33,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 TEST_DIR = Path(__file__).resolve().parent  # TEST_DIR = f"{os.path.dirname(__file__)}"
 
 
-def shuffle_dict(old_dict: dict) -> dict:
+def shuffle_dict(old_dict: dict[str, Any]) -> dict[str, Any]:
     """Return a dictionary with its keys shuffled.
 
     :param old_dict: The dictionary to shuffle.
@@ -44,7 +43,7 @@ def shuffle_dict(old_dict: dict) -> dict:
     """
     keys = list(old_dict.keys())
     shuffle(keys)
-    new_dict = dict()
+    new_dict: dict[str, Any] = dict()
     for key in keys:
         new_dict.update({key: old_dict[key]})
     return new_dict
@@ -75,14 +74,14 @@ def assert_expected(
     :rtype: None
     """
 
-    def assert_expected(actual_: dict[str, Any], expect_: dict[str, Any]) -> None:
+    def _assert_expected(actual_: dict[str, Any], expect_: dict[str, Any]) -> None:
         assert actual_ == expect_
 
     if expected:
-        assert_expected(shrink(actual), shrink(expected))
+        _assert_expected(shrink(actual), shrink(expected))
 
 
-async def assert_expected_set(gwy: Gateway, expected: dict) -> None:
+async def assert_expected_set(gwy: Gateway, expected: dict[str, Any]) -> None:
     """Compare the actual system state against the expected system state.
 
     :param gwy: The gateway instance to check.
@@ -121,6 +120,60 @@ def assert_raises(
         assert False
 
 
+def shrink_dict(old_dict: Any, keys: tuple[str, ...]) -> Any:
+    """Return a dictionary recursively containing only certain keys.
+
+    :param old_dict: The dictionary to filter.
+    :type old_dict: Any
+    :param keys: The keys to keep.
+    :type keys: tuple[str, ...]
+    :return: The filtered dictionary.
+    :rtype: Any
+    """
+
+    if not isinstance(old_dict, dict):
+        return old_dict
+
+    new_dict: dict[str, Any] = {}
+    for k, v in old_dict.items():
+        if k in keys:
+            if isinstance(v, dict):
+                new_dict[k] = shrink_dict(v, keys)
+            elif isinstance(v, list):
+                new_dict[k] = [shrink_dict(i, keys) for i in v]
+            else:
+                new_dict[k] = v
+    return new_dict
+
+
+async def test_ports() -> dict[str, Any]:
+    """Test the comports."""
+    import serial.tools.list_ports  # type: ignore[import-untyped]
+
+    return {
+        p.device: p.description
+        for p in serial.tools.list_ports.comports()
+        if p.description != "n/a"
+    }
+
+
+def find_test_tcs(gwy: Gateway | tuple[Gateway, ...]) -> Any:
+    """Return the controller of the main TCS.
+
+    :param gwy: The gateway instance.
+    :type gwy: Gateway | tuple[Gateway, ...]
+    :return: The system object.
+    :rtype: Any
+    """
+    if isinstance(gwy, tuple):
+        gwy = gwy[0]
+
+    try:
+        return gwy.tcs
+    except IndexError:
+        return None
+
+
 async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     """Create a system state from a packet log (using an optional configuration).
 
@@ -145,29 +198,18 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
         kwargs.update(config)
 
     config_dict = kwargs.pop("config", {})
-    gwy_config_args = {}
+    config_kwargs = {**config_dict, **kwargs}
+    config_kwargs["input_file"] = f"{dir_name}/packet.log"
 
-    # Extract known GatewayConfig fields
-    for field_ in fields(GatewayConfig):
-        if field_.name in config_dict:
-            gwy_config_args[field_.name] = config_dict.pop(field_.name)
+    valid_keys = {f.name for f in fields(GatewayConfig)}
+    safe_kwargs: dict[str, Any] = {}
+    schema_kwargs = config_kwargs.pop("schema", {})
 
-    # Move any leftover legacy config items (e.g. enforce_known_list)
-    # to kwargs for Gateway.__init__
-    for k, v in config_dict.items():
-        kwargs[k] = v
-
-    # Filter kwargs to only those explicitly accepted by Gateway.__init__
-    valid_kwargs = inspect.signature(Gateway.__init__).parameters
-    gateway_kwargs = {}
-    schema_kwargs = kwargs.pop("schema", {})
-
-    # Route valid parameters directly, and selectively lump allowed schema properties
-    for k, v in kwargs.items():
+    for k, v in config_kwargs.items():
         if k.startswith("_"):
             continue
-        if k in valid_kwargs:
-            gateway_kwargs[k] = v
+        if k in valid_keys:
+            safe_kwargs[k] = v
         elif k in (
             "main_tcs",
             "orphans",
@@ -178,12 +220,9 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
             schema_kwargs[k] = v
 
     if schema_kwargs:
-        gateway_kwargs["schema"] = schema_kwargs
+        safe_kwargs["schema"] = schema_kwargs
 
-    path = f"{dir_name}/packet.log"
-    gwy = Gateway(
-        None, input_file=path, config=GatewayConfig(**gwy_config_args), **gateway_kwargs
-    )
+    gwy = Gateway(None, config=GatewayConfig(**safe_kwargs))
     gwy._sqlite_index = _sqlite_index  # TODO(eb): remove legacy Q2 2026
     await gwy.start()
 
@@ -196,11 +235,6 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     # This is critical for tests using the StorageWorker
     if gwy.msg_db:
         gwy.msg_db.flush()
-
-    # if hasattr(
-    #     gwy.pkt_transport.serial, "mock_devices"
-    # ):  # needs ser instance, so after gwy.start()
-    #     gwy.pkt_transport.serial.mock_devices = [MockDeviceCtl(gwy, CTL_ID)]
 
     return gwy
 
@@ -240,7 +274,6 @@ def load_expected_results(dir_name: Path) -> dict[str, Any]:
     except FileNotFoundError:
         status = {}
 
-    # TODO: do known_list, status
     return {
         "schema": schema,
         "known_list": known_list,

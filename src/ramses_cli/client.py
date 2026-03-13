@@ -626,36 +626,46 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
 
     # Extract the configuration variables targeting the GatewayConfig Dataclass
     config_dict = lib_kwargs.pop(SZ_CONFIG, {})
-    valid_config_keys = {
-        "disable_discovery",
-        "enable_eavesdrop",
-        "enforce_strict_handling",
-        "max_zones",
-        "reduce_processing",
-        "use_aliases",
-        "use_native_ot",
-        "use_regex",
-    }
 
     gwy_config_kwargs: dict[str, Any] = {}
+
+    # 1. Map inner SZ_CONFIG keys
     for key, val in config_dict.items():
-        if key in valid_config_keys:
-            if key == SZ_REDUCE_PROCESSING and val is not None:
-                gwy_config_kwargs[key] = int(val)
-            else:
-                gwy_config_kwargs[key] = val
+        if key == SZ_REDUCE_PROCESSING and val is not None:
+            gwy_config_kwargs[key] = int(val)
         else:
-            # Leave unmatched keys in lib_kwargs as they may map to Gateway.__init__
-            lib_kwargs[key] = val
+            gwy_config_kwargs[key] = val
+
+    # 2. Extract known GatewayConfig keys from lib_kwargs
+    known_config_keys = {
+        "packet_log",
+        "port_config",
+        "block_list",
+        "known_list",
+        "hgi_id",
+        "debug_mode",
+        "disable_sending",
+        "disable_qos",
+        "enforce_known_list",
+        "evofw_flag",
+    }
+    for key in list(lib_kwargs.keys()):
+        if key in known_config_keys:
+            gwy_config_kwargs[key] = lib_kwargs.pop(key)
+
+    if input_file is not None:
+        gwy_config_kwargs["input_file"] = input_file
+
+    # 3. Whatever remains in lib_kwargs represents schema parameters
+    if lib_kwargs:
+        gwy_config_kwargs["schema"] = lib_kwargs
 
     gwy_config = GatewayConfig(**gwy_config_kwargs)
 
-    # Instantiate Gateway, note: transport_factory is the default, so we don't need to pass it
+    # Instantiate Gateway
     gwy = Gateway(
         serial_port,
         config=gwy_config,
-        input_file=input_file,
-        **lib_kwargs,
     )  # passes action to gateway
 
     if gwy_config.reduce_processing < DONT_CREATE_MESSAGES:
