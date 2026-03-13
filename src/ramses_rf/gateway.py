@@ -117,7 +117,7 @@ class GatewayConfig:
     app_context: Any | None = None
 
 
-class Gateway(Engine, GatewayInterface):
+class Gateway(GatewayInterface):
     """The gateway class.
 
     This class serves as the primary interface for the RAMSES RF network. It manages
@@ -196,7 +196,7 @@ class Gateway(Engine, GatewayInterface):
 
         self._gwy_config = config or GatewayConfig()
 
-        super().__init__(
+        self._engine = Engine(
             port_name,
             input_file=input_file,
             port_config=port_config,
@@ -214,7 +214,10 @@ class Gateway(Engine, GatewayInterface):
             app_context=self._gwy_config.app_context,
         )
 
-        if self._disable_sending:
+        # Force the engine's protocol to use Gateway's message handler
+        self._engine._set_msg_handler(self._msg_handler)
+
+        if self._engine._disable_sending:
             self._gwy_config.disable_discovery = True
 
         if self._gwy_config.enable_eavesdrop:
@@ -230,10 +233,10 @@ class Gateway(Engine, GatewayInterface):
         self._device_registry: DeviceRegistryInterface = DeviceRegistry(self)
 
         self._device_filter: DeviceFilterInterface = DeviceFilter(
-            include=cast(DeviceListT, self._include),
-            exclude=cast(DeviceListT, self._exclude),
-            unwanted=self._unwanted,
-            enforce_known_list=self._enforce_known_list,
+            include=cast(DeviceListT, self._engine._include),
+            exclude=cast(DeviceListT, self._engine._exclude),
+            unwanted=self._engine._unwanted,
+            enforce_known_list=self._engine._enforce_known_list,
             hgi_id_provider=lambda: getattr(self.hgi, "id", None),
         )
 
@@ -246,9 +249,108 @@ class Gateway(Engine, GatewayInterface):
         :returns: A string describing the gateway's input source (port or file).
         :rtype: str
         """
-        if not self.ser_name:
-            return f"Gateway(input_file={self._input_file})"
-        return f"Gateway(port_name={self.ser_name}, port_config={self._port_config})"
+        if not self._engine.ser_name:
+            return f"Gateway(input_file={self._engine._input_file})"
+        return f"Gateway(port_name={self._engine.ser_name}, port_config={self._engine._port_config})"
+
+    # ------------------------------------------------------------------------
+    # TODO: TEMPORARY PROXIES FOR TEST SUITE BACKWARDS COMPATIBILITY
+    # These properties intercept legacy test accesses to Engine internals
+    # and route them to the composed Engine. They can be removed in a later
+    # PR once the test suite is updated to respect the new API boundaries.
+    # ------------------------------------------------------------------------
+
+    @property
+    def _transport(self) -> Any:
+        return self._engine._transport
+
+    @_transport.setter
+    def _transport(self, value: Any) -> None:
+        self._engine._transport = value
+
+    @property
+    def _protocol(self) -> Any:
+        return self._engine._protocol
+
+    @_protocol.setter
+    def _protocol(self, value: Any) -> None:
+        self._engine._protocol = value
+
+    @property
+    def _loop(self) -> asyncio.AbstractEventLoop:
+        return self._engine._loop
+
+    @_loop.setter
+    def _loop(self, value: asyncio.AbstractEventLoop) -> None:
+        self._engine._loop = value
+
+    @property
+    def _disable_sending(self) -> bool:
+        return self._engine._disable_sending
+
+    @_disable_sending.setter
+    def _disable_sending(self, value: bool) -> None:
+        self._engine._disable_sending = value
+
+    @property
+    def _include(self) -> Any:
+        return self._engine._include
+
+    @_include.setter
+    def _include(self, value: Any) -> None:
+        self._engine._include = value
+
+    @property
+    def _exclude(self) -> Any:
+        return self._engine._exclude
+
+    @_exclude.setter
+    def _exclude(self, value: Any) -> None:
+        self._engine._exclude = value
+
+    @property
+    def _enforce_known_list(self) -> bool:
+        return self._engine._enforce_known_list
+
+    @_enforce_known_list.setter
+    def _enforce_known_list(self, value: bool) -> None:
+        self._engine._enforce_known_list = value
+
+    @property
+    def _hgi_id(self) -> str | None:
+        return self._engine._hgi_id
+
+    @_hgi_id.setter
+    def _hgi_id(self, value: str | None) -> None:
+        self._engine._hgi_id = value
+
+    @property
+    def ser_name(self) -> str | None:
+        return self._engine.ser_name
+
+    @ser_name.setter
+    def ser_name(self, value: str | None) -> None:
+        self._engine.ser_name = value
+
+    @property
+    def _this_msg(self) -> Message | None:
+        return self._engine._this_msg
+
+    @_this_msg.setter
+    def _this_msg(self, value: Message | None) -> None:
+        self._engine._this_msg = value
+
+    @property
+    def pkt_received(self) -> int:
+        return getattr(self._engine, "pkt_received", 0)
+
+    @property
+    def wait_for_connection_lost(self) -> Any:
+        return getattr(self._engine, "wait_for_connection_lost", None)
+
+    @property
+    def _is_evofw3(self) -> bool | None:
+        return getattr(self._engine, "_is_evofw3", None)
 
     @property
     def device_registry(self) -> DeviceRegistryInterface:
@@ -293,11 +395,29 @@ class Gateway(Engine, GatewayInterface):
         :returns: The active HGI gateway device if found, else None.
         :rtype: HgiGateway | None
         """
-        if not self._transport:
+        if not self._engine._transport:
             return None
-        if device_id := self._transport.get_extra_info(SZ_ACTIVE_HGI):
+        if device_id := self._engine._transport.get_extra_info(SZ_ACTIVE_HGI):
             return self.device_registry.device_by_id.get(device_id)
         return None
+
+    @property
+    def _dt_now(self) -> Any:
+        return getattr(self._engine, "_dt_now", None)
+
+    @property
+    def _tasks(self) -> list[asyncio.Task[Any]]:
+        return getattr(self._engine, "_tasks", [])
+
+    @property
+    def _sqlite_index(self) -> bool:
+        return getattr(self._engine, "_sqlite_index", False)
+
+    @_sqlite_index.setter
+    def _sqlite_index(self, value: bool) -> None:
+        self._engine._sqlite_index = value
+
+    # ------------------------------------------------------------------------
 
     async def start(
         self,
@@ -344,13 +464,13 @@ class Gateway(Engine, GatewayInterface):
 
         _, self._pkt_log_listener = await set_pkt_logging_config(  # type: ignore[arg-type]
             cc_console=self.config.reduce_processing >= DONT_CREATE_MESSAGES,
-            **self._packet_log,
+            **self._engine._packet_log,
         )
         if self._pkt_log_listener:
             self._pkt_log_listener.start()
 
         # initialize SQLite index, set in _tx/Engine
-        if self._sqlite_index:  # TODO(eb): default to True in Q1 2026
+        if self._engine._sqlite_index:  # TODO(eb): default to True in Q1 2026
             _LOGGER.info("Ramses RF starts SQLite MessageIndex")
             # if activated in ramses_cc > Engine or set in tests
             self.create_sqlite_message_index()
@@ -361,9 +481,11 @@ class Gateway(Engine, GatewayInterface):
             self.config.disable_discovery,
         )
 
-        load_schema(self, known_list=self._include, **self._schema)  # create faked too
+        load_schema(
+            self, known_list=self._engine._include, **self._schema
+        )  # create faked too
 
-        await super().start()  # TODO: do this *after* restore cache
+        await self._engine.start()  # TODO: do this *after* restore cache
         if cached_packets:
             await self._restore_cached_packets(cached_packets)
 
@@ -371,7 +493,7 @@ class Gateway(Engine, GatewayInterface):
         self.config.disable_discovery = disable_discovery
 
         if (
-            not self._disable_sending
+            not self._engine._disable_sending
             and not self.config.disable_discovery
             and start_discovery
         ):
@@ -397,7 +519,7 @@ class Gateway(Engine, GatewayInterface):
         """
         # Stop the Engine first to ensure no tasks/callbacks try to write
         # to the DB while we are closing it.
-        await super().stop()
+        await self._engine.stop()
 
         if self._pkt_log_listener:
             self._pkt_log_listener.stop()
@@ -425,7 +547,7 @@ class Gateway(Engine, GatewayInterface):
         self.config.disable_discovery, disc_flag = True, self.config.disable_discovery
 
         try:
-            await super()._pause(disc_flag, *args)
+            await self._engine._pause(disc_flag, *args)
         except RuntimeError:
             self.config.disable_discovery = disc_flag
             raise
@@ -444,7 +566,7 @@ class Gateway(Engine, GatewayInterface):
 
         # args_tuple = await super()._resume()
         # self.config.disable_discovery, *args = args_tuple  # type: ignore[assignment]
-        self.config.disable_discovery, *args = await super()._resume()  # type: ignore[assignment]
+        self.config.disable_discovery, *args = await self._engine._resume()  # type: ignore[assignment]
 
         return args
 
@@ -538,8 +660,8 @@ class Gateway(Engine, GatewayInterface):
             self._tcs = None
             self.device_registry.devices.clear()
             self.device_registry.device_by_id.clear()
-            self._prev_msg = None
-            self._this_msg = None
+            self._engine._prev_msg = None
+            self._engine._this_msg = None
 
         tmp_transport: RamsesTransportT  # mypy hint
 
@@ -555,9 +677,9 @@ class Gateway(Engine, GatewayInterface):
         # can be dropped unnecessarily.
 
         enforce_include_list = bool(
-            self._enforce_known_list
+            self._engine._enforce_known_list
             and extract_known_hgi_id(
-                self._include, disable_warnings=True, strict_checking=True
+                self._engine._include, disable_warnings=True, strict_checking=True
             )
         )
 
@@ -568,8 +690,8 @@ class Gateway(Engine, GatewayInterface):
             self._msg_handler,
             disable_sending=True,
             enforce_include_list=enforce_include_list,
-            exclude_list=self._exclude,
-            include_list=self._include,
+            exclude_list=self._engine._exclude,
+            include_list=self._engine._include,
         )
 
         tmp_transport = await transport_factory(
@@ -604,10 +726,10 @@ class Gateway(Engine, GatewayInterface):
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
-            SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self._enforce_known_list},
+            SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self._engine._enforce_known_list},
             SZ_KNOWN_LIST: await self.device_registry.known_list(),
-            SZ_BLOCK_LIST: [{k: v} for k, v in self._exclude.items()],
-            "_unwanted": sorted(self._unwanted),
+            SZ_BLOCK_LIST: [{k: v} for k, v in self._engine._exclude.items()],
+            "_unwanted": sorted(self._engine._unwanted),
         }
 
     async def schema(self) -> dict[str, Any]:
@@ -642,7 +764,11 @@ class Gateway(Engine, GatewayInterface):
         :rtype: dict[str, Any]
         """
         status_dict = await self.device_registry.status()
-        tx_rate = self._transport.get_extra_info("tx_rate") if self._transport else None
+        tx_rate = (
+            self._engine._transport.get_extra_info("tx_rate")
+            if self._engine._transport
+            else None
+        )
         status_dict["_tx_rate"] = tx_rate
         return status_dict
 
@@ -654,19 +780,73 @@ class Gateway(Engine, GatewayInterface):
         :returns: None
         :rtype: None
         """
+        # Engine's logic replicated to map directly to the Gateway
+        msg.__class__ = Message
+        setattr(msg, "_gwy", self)  # noqa: B010
 
-        super()._msg_handler(msg)
+        self._engine._this_msg, self._engine._prev_msg = msg, self._engine._this_msg
 
         # TODO: ideally remove this feature...
-        assert self._this_msg  # mypy check
+        assert self._engine._this_msg  # mypy check
 
-        if self._prev_msg and detect_array_fragment(self._this_msg, self._prev_msg):
+        if self._engine._prev_msg and detect_array_fragment(
+            self._engine._this_msg, self._engine._prev_msg
+        ):
             msg._pkt._force_has_array()
-            msg._payload = self._prev_msg.payload + (
+            msg._payload = self._engine._prev_msg.payload + (
                 msg.payload if isinstance(msg.payload, list) else [msg.payload]
             )
 
         process_msg(self, msg)
+
+    def add_msg_handler(
+        self,
+        msg_handler: Callable[[Message], None],
+        /,
+        *,
+        msg_filter: Callable[[Message], bool] | None = None,
+    ) -> Callable[[], None]:
+        """Add a Message handler to the underlying Protocol.
+
+        :param msg_handler: The message handler callback.
+        :type msg_handler: Callable[[Message], None]
+        :param msg_filter: An optional filter to only handle specific messages.
+        :type msg_filter: Callable[[Message], bool] | None, optional
+        :returns: A callable to remove the handler.
+        :rtype: Callable[[], None]
+        """
+        return self._engine.add_msg_handler(msg_handler, msg_filter=msg_filter)
+
+    def add_task(self, task: asyncio.Task[Any]) -> None:
+        """Add a task to the engine's task list.
+
+        :param task: The asyncio Task to track.
+        :type task: asyncio.Task[Any]
+        :returns: None
+        :rtype: None
+        """
+        self._engine.add_task(task)
+
+    @staticmethod
+    def create_cmd(
+        verb: str, device_id: str, code: Code | str, payload: str, **kwargs: Any
+    ) -> Command:
+        """Make a command addressed to device_id.
+
+        :param verb: The command verb (e.g. RQ, W).
+        :type verb: str
+        :param device_id: The target device identifier.
+        :type device_id: str
+        :param code: The code representing the command.
+        :type code: Code | str
+        :param payload: The payload of the command.
+        :type payload: str
+        :param kwargs: Additional arguments for the command generation.
+        :type kwargs: Any
+        :returns: The created Command instance.
+        :rtype: Command
+        """
+        return Engine.create_cmd(verb, device_id, code, payload, **kwargs)  # type: ignore[arg-type]
 
     def send_cmd(
         self,
@@ -713,7 +893,7 @@ class Gateway(Engine, GatewayInterface):
             max_retries=max_retries,
         )
 
-        task = self._loop.create_task(coro)
+        task = self._engine._loop.create_task(coro)
         self.add_task(task)  # wait for these during stop()
         return task
 
@@ -754,7 +934,7 @@ class Gateway(Engine, GatewayInterface):
         :raises ProtocolError: If the system failed to attempt the transmission.
         """
 
-        return await super().async_send_cmd(
+        return await self._engine.async_send_cmd(
             cmd,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
