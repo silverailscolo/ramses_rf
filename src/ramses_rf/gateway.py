@@ -104,6 +104,30 @@ class GatewayConfig:
     :type use_native_ot: Literal["always", "prefer", "avoid", "never"] | None
     :param app_context: Optional application context object.
     :type app_context: Any | None
+    :param schema: Dictionary representing the schema.
+    :type schema: dict[str, Any]
+    :param input_file: Path to a packet log file for playback/parsing.
+    :type input_file: str | None
+    :param port_config: Configuration dictionary for the serial port.
+    :type port_config: PortConfigT | None
+    :param packet_log: Configuration for packet logging.
+    :type packet_log: PktLogConfigT | None
+    :param block_list: A list of device IDs to block/ignore.
+    :type block_list: DeviceListT | None
+    :param known_list: A list of known device IDs and their traits.
+    :type known_list: DeviceListT | None
+    :param hgi_id: The Device ID to use for the HGI (gateway), overriding defaults.
+    :type hgi_id: str | None
+    :param debug_mode: If True, set the logger to debug mode.
+    :type debug_mode: bool
+    :param disable_sending: Prevent sending any packets from the protocol.
+    :type disable_sending: bool
+    :param disable_qos: Disable the Quality of Service mechanism.
+    :type disable_qos: bool | None
+    :param enforce_known_list: Enforce that only known devices can be created.
+    :type enforce_known_list: bool
+    :param evofw_flag: Specific flag for evofw3 usage.
+    :type evofw_flag: str | None
     """
 
     disable_discovery: bool = False
@@ -115,6 +139,20 @@ class GatewayConfig:
     enforce_strict_handling: bool = False
     use_native_ot: Literal["always", "prefer", "avoid", "never"] | None = None
     app_context: Any | None = None
+
+    # Legacy configuration parameters absorbed into the config DTO
+    schema: dict[str, Any] = field(default_factory=dict)
+    input_file: str | None = None
+    port_config: PortConfigT | None = None
+    packet_log: PktLogConfigT | None = None
+    block_list: DeviceListT | None = None
+    known_list: DeviceListT | None = None
+    hgi_id: str | None = None
+    debug_mode: bool = False
+    disable_sending: bool = False
+    disable_qos: bool | None = None
+    enforce_known_list: bool = False
+    evofw_flag: str | None = None
 
 
 class Gateway(GatewayInterface):
@@ -130,20 +168,8 @@ class Gateway(GatewayInterface):
         port_name: str | None = None,
         *,
         config: GatewayConfig | None = None,
-        schema: dict[str, Any] | None = None,
-        input_file: str | None = None,
-        port_config: PortConfigT | None = None,
-        packet_log: PktLogConfigT | None = None,
-        block_list: DeviceListT | None = None,
-        known_list: DeviceListT | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
         transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
-        hgi_id: str | None = None,
-        debug_mode: bool = False,
-        disable_sending: bool = False,
-        disable_qos: bool | None = None,
-        enforce_known_list: bool = False,
-        evofw_flag: str | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the Gateway instance.
@@ -152,64 +178,46 @@ class Gateway(GatewayInterface):
         :type port_name: str | None
         :param config: The typed configuration parameters for the Gateway.
         :type config: GatewayConfig | None, optional
-        :param schema: Dictionary representing the schema.
-        :type schema: dict[str, Any] | None, optional
-        :param input_file: Path to a packet log file for playback/parsing, defaults to None.
-        :type input_file: str | None, optional
-        :param port_config: Configuration dictionary for the serial port, defaults to None.
-        :type port_config: PortConfigT | None, optional
-        :param packet_log: Configuration for packet logging, defaults to None.
-        :type packet_log: PktLogConfigT | None, optional
-        :param block_list: A list of device IDs to block/ignore, defaults to None.
-        :type block_list: DeviceListT | None, optional
-        :param known_list: A list of known device IDs and their traits, defaults to None.
-        :type known_list: DeviceListT | None, optional
         :param loop: The asyncio event loop to use, defaults to None.
         :type loop: asyncio.AbstractEventLoop | None, optional
         :param transport_constructor: A factory for creating the transport layer, defaults to None.
         :type transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None, optional
-        :param hgi_id: The Device ID to use for the HGI (gateway), overriding defaults.
-        :type hgi_id: str | None, optional
-        :param debug_mode: If True, set the logger to debug mode.
-        :type debug_mode: bool, optional
-        :param disable_sending: Prevent sending any packets from the protocol.
-        :type disable_sending: bool, optional
-        :param disable_qos: Disable the Quality of Service mechanism.
-        :type disable_qos: bool | None, optional
-        :param enforce_known_list: Enforce that only known devices can be created.
-        :type enforce_known_list: bool, optional
-        :param evofw_flag: Specific flag for evofw3 usage.
-        :type evofw_flag: str | None, optional
-        :param kwargs: Catch-all for legacy keyword arguments.
+        :param kwargs: Catch-all for legacy keyword arguments, managed gracefully.
         :type kwargs: Any
         """
         if kwargs:
+            keys = list(kwargs.keys())
+            _LOGGER.error(
+                "Gateway received unsupported kwargs: %s. These arguments are ignored. "
+                "Please migrate them to the GatewayConfig object.",
+                keys,
+            )
             warnings.warn(
-                "Initializing Gateway with undocumented **kwargs is deprecated. "
-                "Please transition to using GatewayConfig.",
+                f"Initializing Gateway with **kwargs {keys} is deprecated and "
+                "will be removed in a future release. Please use GatewayConfig.",
                 DeprecationWarning,
                 stacklevel=2,
             )
 
-        if debug_mode:
-            _LOGGER.setLevel(logging.DEBUG)
-
         self._gwy_config = config or GatewayConfig()
+
+        if self._gwy_config.debug_mode:
+            _LOGGER.setLevel(logging.DEBUG)
 
         self._engine = Engine(
             port_name,
-            input_file=input_file,
-            port_config=port_config,
-            packet_log=packet_log,
-            block_list=cast("Any", block_list),
-            known_list=cast("Any", known_list),
+            input_file=self._gwy_config.input_file,
+            port_config=self._gwy_config.port_config,
+            packet_log=self._gwy_config.packet_log,
+            block_list=cast("Any", self._gwy_config.block_list),
+            known_list=cast("Any", self._gwy_config.known_list),
             loop=loop,
-            hgi_id=hgi_id,
+            hgi_id=self._gwy_config.hgi_id,
             transport_constructor=transport_constructor,
-            disable_sending=disable_sending,
-            disable_qos=disable_qos,
-            enforce_known_list=enforce_known_list,
-            evofw_flag=evofw_flag,
+            disable_sending=self._gwy_config.disable_sending,
+            disable_qos=self._gwy_config.disable_qos,
+            enforce_known_list=self._gwy_config.enforce_known_list,
+            evofw_flag=self._gwy_config.evofw_flag,
             use_regex=self._gwy_config.use_regex,
             app_context=self._gwy_config.app_context,
         )
@@ -226,7 +234,7 @@ class Gateway(GatewayInterface):
                 " for routine use (there be dragons here)"
             )
 
-        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(schema or {})
+        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(self._gwy_config.schema or {})
 
         self._tcs: Evohome | None = None
 

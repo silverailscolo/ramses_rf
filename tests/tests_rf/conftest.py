@@ -5,7 +5,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Final, NoReturn, TypeAlias, TypedDict, cast
+from typing import Any, Final, NoReturn, TypeAlias, TypedDict, cast
 from unittest.mock import patch
 
 import pytest
@@ -14,6 +14,7 @@ from serial.tools.list_ports import comports  # type: ignore[import-untyped]
 
 from ramses_rf import Gateway
 from ramses_rf.device import HgiGateway
+from ramses_rf.gateway import GatewayConfig
 from ramses_tx import exceptions as exc
 from ramses_tx.address import HGI_DEVICE_ID
 from ramses_tx.transport.port import PortTransport
@@ -182,7 +183,18 @@ async def real_ti3410_port() -> PortStrT | NoReturn:
 async def _gateway(gwy_port: PortStrT, gwy_config: _GwyConfigDictT) -> Gateway:
     """Instantiate a gateway."""
 
-    gwy = Gateway(gwy_port, **gwy_config)
+    kwargs = cast(dict[str, Any], dict(gwy_config))
+
+    # Flatten gwy_config to handle nested 'config' dicts or GatewayConfig objects
+    if "config" in kwargs:
+        cfg = kwargs.pop("config")
+        cfg_dict = cast(dict[str, Any], cfg if isinstance(cfg, dict) else vars(cfg))
+        # Outer kwargs take precedence over nested config values
+        kwargs = {**cfg_dict, **kwargs}
+
+    config = GatewayConfig(**kwargs)
+
+    gwy = Gateway(gwy_port, config=config)
 
     assert gwy.hgi is None and gwy.device_registry.devices == []
 

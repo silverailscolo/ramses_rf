@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """RAMSES RF - a RAMSES-II protocol decoder & analyser.
+
 `ramses_rf` takes care of the device (upper) layer.
 
 Works with (amongst others):
@@ -20,7 +21,7 @@ from ramses_tx import Address, Command, Message, Packet  # noqa: F401
 from . import exceptions  # noqa: F401
 from .device import Device  # noqa: F401
 from .exceptions import CommandInvalid  # noqa: F401
-from .gateway import Gateway  # noqa: F401
+from .gateway import Gateway, GatewayConfig  # noqa: F401
 from .version import VERSION  # noqa: F401
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
 __all__ = [
     "VERSION",
     "Gateway",
+    "GatewayConfig",
     #
     "Address",
     "Command",
@@ -64,4 +66,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class GracefulExit(SystemExit):
+    """Exit the program gracefully."""
+
     code = 1

@@ -22,9 +22,7 @@ DEFAULT_MAX_SLEEP = 1
 
 
 GWY_CONFIG: dict[str, Any] = {
-    "config": GatewayConfig(
-        disable_discovery=True,  # we're testing discovery here
-    ),
+    "disable_discovery": True,  # we're testing discovery here
     "enforce_known_list": False,
 }
 
@@ -198,11 +196,11 @@ async def test_virtual_rf_dev_disc() -> None:
 
     try:
         rf.set_gateway(rf.ports[0], "18:000000")
-        gwy_0 = Gateway(rf.ports[0], **GWY_CONFIG)
+        gwy_0 = Gateway(rf.ports[0], config=GatewayConfig(**GWY_CONFIG))
         await assert_devices(gwy_0, [])
 
         rf.set_gateway(rf.ports[1], "18:111111")
-        gwy_1 = Gateway(rf.ports[1], **GWY_CONFIG)
+        gwy_1 = Gateway(rf.ports[1], config=GatewayConfig(**GWY_CONFIG))
         await assert_devices(gwy_1, [])
 
         await _test_virtual_rf_dev_disc(rf, gwy_0, gwy_1)

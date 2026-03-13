@@ -15,7 +15,17 @@ WORK_DIR = f"{TEST_DIR}/eavesdrop_schema"
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    """Generate the test cases for each folder in the work directory.
+
+    :param metafunc: The pytest metafunc object.
+    """
+
     def id_fnc(param: Path) -> str:
+        """Return the name of the folder.
+
+        :param param: The path to the folder.
+        :return: The folder name as a string.
+        """
         return PurePath(param).name
 
     folders = [f for f in Path(WORK_DIR).iterdir() if f.is_dir() and f.name[:1] != "_"]
@@ -24,7 +34,11 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 async def assert_schemas_equal(gwy: Gateway, expected_schema: dict) -> None:
-    """Check the gwy schema, then shuffle and test again."""
+    """Check the gwy schema, then shuffle and test again.
+
+    :param gwy: The gateway instance to check.
+    :param expected_schema: The schema dictionary expected to match.
+    """
 
     schema, packets = await gwy.get_state(include_expired=True)
     assert_expected(schema, expected_schema)
@@ -36,10 +50,13 @@ async def assert_schemas_equal(gwy: Gateway, expected_schema: dict) -> None:
 
 # duplicate in test_eavesdrop_dev_class
 async def test_eavesdrop_off(dir_name: Path) -> None:
-    """Check discovery of schema and known_list *without* eavesdropping."""
+    """Check discovery of schema and known_list *without* eavesdropping.
+
+    :param dir_name: The directory containing the test packet log and schemas.
+    """
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, input_file=path, config=GatewayConfig(enable_eavesdrop=False))
+    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=False))
     await gwy.start()
 
     with open(f"{dir_name}/schema_eavesdrop_off.json") as f:
@@ -48,7 +65,8 @@ async def test_eavesdrop_off(dir_name: Path) -> None:
     try:
         with open(f"{dir_name}/known_list_eavesdrop_off.json") as f:
             assert_expected(
-                await gwy.device_registry.known_list(), json.load(f).get("known_list")
+                await gwy.device_registry.known_list(),
+                json.load(f).get("known_list"),
             )
     except FileNotFoundError:
         pass
@@ -58,10 +76,13 @@ async def test_eavesdrop_off(dir_name: Path) -> None:
 
 # duplicate in test_eavesdrop_dev_class
 async def test_eavesdrop_on_(dir_name: Path) -> None:
-    """Check discovery of schema and known_list *with* eavesdropping."""
+    """Check discovery of schema and known_list *with* eavesdropping.
+
+    :param dir_name: The directory containing the test packet log and schemas.
+    """
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, input_file=path, config=GatewayConfig(enable_eavesdrop=True))
+    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=True))
     await gwy.start()
 
     with open(f"{dir_name}/schema_eavesdrop_on.json") as f:
@@ -70,7 +91,8 @@ async def test_eavesdrop_on_(dir_name: Path) -> None:
     try:
         with open(f"{dir_name}/known_list_eavesdrop_on.json") as f:
             assert_expected(
-                await gwy.device_registry.known_list(), json.load(f).get("known_list")
+                await gwy.device_registry.known_list(),
+                json.load(f).get("known_list"),
             )
     except FileNotFoundError:
         pass
