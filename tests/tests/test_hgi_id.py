@@ -30,12 +30,12 @@ async def test_hgi_id_injection() -> None:
         # We must provide a dummy port_name to satisfy Engine.__init__ validation
         gwy = Gateway("/dev/ttyMOCK", input_file=None, hgi_id=TEST_HGI_ID)
 
-        # 2. Check that the Engine (Gateway base class) has stored the ID
-        assert gwy._hgi_id == TEST_HGI_ID
+        # 2. Check that the Engine (via composition) has stored the ID
+        assert gwy._engine._hgi_id == TEST_HGI_ID
 
-        # 3. Check the string representation reflects the custom ID
+        # 3. Check the string representation of the engine reflects the custom ID
         # Note: Before start(), it uses the stored _hgi_id
-        assert str(gwy).startswith(TEST_HGI_ID)
+        assert str(gwy._engine).startswith(TEST_HGI_ID)
 
         # 4. Start the gateway to trigger the transport factory call
         # We patch the protocol's wait method to bypass the handshake timeout
@@ -72,10 +72,10 @@ async def test_hgi_id_default_behavior() -> None:
         gwy = Gateway("/dev/ttyMOCK", input_file=None)
 
         # 2. Check that the Engine has NO stored custom ID
-        assert gwy._hgi_id is None
+        assert gwy._engine._hgi_id is None
 
-        # 3. Check the string representation falls back to the default constant
-        assert str(gwy).startswith(HGI_DEV_ADDR.id)
+        # 3. Check the string representation of the engine falls back to the default constant
+        assert str(gwy._engine).startswith(HGI_DEV_ADDR.id)
 
         # 4. Start the gateway
         # We patch the protocol's wait method to bypass the handshake timeout

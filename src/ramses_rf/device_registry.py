@@ -87,7 +87,7 @@ class DeviceRegistry:
 
         if not dev:
             # voluptuous bug workaround: https://github.com/alecthomas/voluptuous/pull/524
-            _traits_raw: dict[str, Any] = self._gwy._include.get(device_id, {})  # type: ignore[assignment]
+            _traits_raw: dict[str, Any] = self._gwy._include.get(device_id, {})
             _traits_raw.pop("commands", None)
 
             traits_dict: dict[str, Any] = SCH_TRAITS(
