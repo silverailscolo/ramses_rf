@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """RAMSES RF - A pseudo-mocked serial port used for testing."""
 
+from dataclasses import fields
 from typing import Any, Final
 from unittest.mock import patch
 
 from ramses_rf import Gateway
-from ramses_rf.const import DEV_TYPE_MAP, DevType
+from ramses_rf.gateway import GatewayConfig
 from ramses_rf.schemas import SZ_CLASS, SZ_KNOWN_LIST
 
 from .const import MAX_NUM_PORTS, HgiFwTypes
@@ -31,66 +32,47 @@ _DEFAULT_GWY_CONFIG = {
 
 
 def _get_hgi_id_for_schema(
-    schema: dict[str, Any], port_idx: int
+    schema: dict[str, Any] | GatewayConfig, port_idx: int
 ) -> tuple[str, HgiFwTypes]:
     """Return the Gateway's device_id for a schema (if required, construct an id).
 
     Does not modify the schema.
 
     Checks that only one Gateway is defined and ensures all 18: type devices
-    have an explicit HGI class defined.
-
-    If a Gateway (18:) device is present in the schema, it must have a defined class
-    of "HGI". If it does, its device_id is returned, along with its FW type (if
-    specified, or EVOFW3 is assumed).
-
-    If no Gateway device is present, one is created (18:000000), and its
-    details returned.
-
-    :param schema: The configuration schema.
-    :param port_idx: Index used to construct a default ID if none found.
-    :raises TypeError: If multiple gateways exist or an HGI device lacks a class.
-    :return: A tuple of (device_id, firmware_type).
+    have an explicit HGI class trait.
     """
 
-    known_list: dict[str, Any] = schema.get(SZ_KNOWN_LIST, {})
+    if isinstance(schema, GatewayConfig):
+        known_list_dict = getattr(schema, "known_list", {}) or {}
+    else:
+        known_list_dict = schema.get(SZ_KNOWN_LIST, {}) or {}
 
-    # 1. Collect HGI IDs for validation
-    hgi_ids = [
-        device_id
-        for device_id, v in known_list.items()
-        if v.get(SZ_CLASS) == DevType.HGI
+    gwy_ids = [
+        k
+        for k, v in known_list_dict.items()
+        if k[:2] == "18" and v.get(SZ_CLASS) == "HGI"
     ]
 
-    # 2. Validation: Multiple Gateways
-    if len(hgi_ids) > 1:
-        raise TypeError("Multiple Gateways per schema are not supported")
+    if not gwy_ids:  # check for an 18: without a class: HGI
+        gwy_ids = [k for k in known_list_dict if k[:2] == "18"]
 
-    # 3. Validation: Orphaned 18: devices (Gateways without a class)
-    if any(
-        k
-        for k, v in known_list.items()
-        if k.startswith(DEV_TYPE_MAP[DevType.HGI]) and not v.get(SZ_CLASS)
-    ):
-        raise TypeError("Any Gateway (18:) must have its class defined explicitly")
+    if gwy_ids:
+        if len(gwy_ids) > 1:
+            raise ValueError(f"Schema contains more than one HGI: {gwy_ids}")
+        return gwy_ids[0], HgiFwTypes.EVOFW3
 
-    # 4. Logic: Return existing
-    if len(hgi_ids) == 1:
-        hgi_id = hgi_ids[0]
-        fw_type_name = known_list[hgi_id].get("fw_version", HgiFwTypes.EVOFW3.name)
-        return hgi_id, HgiFwTypes[fw_type_name]
-
-    # 5. Logic: Create default if none present (18:000000 for idx 0, 18:111111 for idx 1)
+    # Fallback assignment mirroring the original behavior
     if port_idx == 0:
         return GWY_ID_0, HgiFwTypes.EVOFW3
-    if port_idx == 1:
+    elif port_idx == 1:
         return GWY_ID_1, HgiFwTypes.EVOFW3
+
     return f"18:{port_idx:06d}", HgiFwTypes.EVOFW3
 
 
 @patch("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", MIN_INTER_WRITE_GAP)
 async def rf_factory(
-    schemas: list[dict[str, Any] | None], start_gwys: bool = True
+    schemas: list[dict[str, Any] | GatewayConfig | None], start_gwys: bool = True
 ) -> tuple[VirtualRf, list[Gateway]]:
     """Return the virtual network corresponding to a list of gateway schema/configs.
 
@@ -108,22 +90,49 @@ async def rf_factory(
 
     for idx, schema in enumerate(schemas):
         if schema is None:  # assume no gateway device
-            # rf._create_port(idx)  # REMOVED: Redundant and causes race condition
             continue
 
         hgi_id, fw_type = _get_hgi_id_for_schema(schema, idx)
 
-        # rf._create_port(idx)  # REMOVED: Redundant and causes race condition
         rf.set_gateway(rf.ports[idx], hgi_id, fw_type=fw_type)
 
         with patch("ramses_tx.discovery.comports", rf.comports):
-            gwy = Gateway(rf.ports[idx], **schema)
-            # gwy._engine.ptcl.qos.disable_qos = False  # Hack for testing
+            if isinstance(schema, GatewayConfig):
+                schema.hgi_id = hgi_id
+                gwy_config = schema
+            else:
+                config_kwargs: dict[str, Any] = {}
+                schema_copy = dict(schema)
+                config_dict = schema_copy.pop("config", {})
+
+                if isinstance(config_dict, GatewayConfig):
+                    config_kwargs.update(
+                        {
+                            f.name: getattr(config_dict, f.name)
+                            for f in fields(GatewayConfig)
+                        }
+                    )
+                else:
+                    config_kwargs.update(config_dict)
+
+                config_kwargs.update(schema_copy)
+
+                valid_keys = {f.name for f in fields(GatewayConfig)}
+                safe_kwargs = {
+                    k: v for k, v in config_kwargs.items() if k in valid_keys
+                }
+                safe_kwargs["hgi_id"] = hgi_id
+
+                gwy_config = GatewayConfig(**safe_kwargs)
+
+            gwy = Gateway(rf.ports[idx], config=gwy_config)
 
             if start_gwys:
                 await gwy.start()
-            gwy.device_registry.get_device(hgi_id)
+                gwy._engine._disable_sending = (
+                    False  # allows Virtual RF to capture/reply
+                )
 
-        gwys.append(gwy)
+            gwys.append(gwy)
 
     return rf, gwys

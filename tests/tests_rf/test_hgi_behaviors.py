@@ -84,9 +84,12 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 async def _test_gwy_device(gwy: Gateway, test_idx: int) -> None:
     """Check GWY address/type detection, and behaviour of its treatment of addr0."""
 
-    assert gwy._loop is asyncio.get_running_loop()  # scope BUG is here
+    assert gwy._engine._loop is asyncio.get_running_loop()  # scope BUG is here
 
-    if not isinstance(gwy._protocol, PortProtocol) or not gwy._protocol._context:
+    if (
+        not isinstance(gwy._engine._protocol, PortProtocol)
+        or not gwy._engine._protocol._context
+    ):
         assert False, "QoS protocol not enabled"  # use assert, not skip
 
     assert gwy.hgi  # mypy
@@ -99,22 +102,22 @@ async def _test_gwy_device(gwy: Gateway, test_idx: int) -> None:
     assert str(cmd) == cmd_str  # sanity check
 
     # a HGI80 (ti4310) will silently discard all frames that have addr0 != 18:000730
-    is_hgi80 = not gwy._protocol._is_evofw3  # TODO: is_hgi80?
+    is_hgi80 = not gwy._engine._protocol._is_evofw3  # TODO: is_hgi80?
 
-    assert gwy._transport  # mypy
+    assert gwy._engine._transport  # mypy
 
     # NOTE: timeout values are empirical, and may need to be adjusted
-    if isinstance(gwy._transport, MqttTransport):  # MQTT
+    if isinstance(gwy._engine._transport, MqttTransport):  # MQTT
         timeout = 0.375 * 2  # intesting, fail: 0.370 work: 0.375: 0.75 margin of safety
-    elif gwy._transport.get_extra_info("virtual_rf"):  #   # fake
+    elif gwy._engine._transport.get_extra_info("virtual_rf"):  #   # fake
         timeout = 0.010 * 2  # was 0.003 * 2: increased to 20ms for CI stability
     else:  #                                        # real
         timeout = 0.355 * 2  # intesting, fail: 0.350 work: 0.355: 0.71 margin of safety
 
     try:
-        # using gwy._protocol.send_cmd() instead of gwy.async_send_cmd() as the
+        # using gwy._engine._protocol.send_cmd() instead of gwy.async_send_cmd() as the
         # latter may swallow the exception we wish to capture (ProtocolSendFailed)
-        pkt = await gwy._protocol.send_cmd(
+        pkt = await gwy._engine._protocol.send_cmd(
             cmd, qos=QosParams(wait_for_reply=False, timeout=timeout)
         )  # for this test, we only need the cmd echo
     except exc.ProtocolSendFailed:

@@ -536,7 +536,7 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         print(f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n")
 
     if kwargs.get("show_knowns"):  # show device hints (show-knowns)
-        print(f"allow_list (hints) = {json.dumps(gwy._include, indent=4)}\r\n")
+        print(f"allow_list (hints) = {json.dumps(gwy._engine._include, indent=4)}\r\n")
 
     if kwargs.get("show_traits"):  # show device traits
         result = {
@@ -585,7 +585,7 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     :param kwargs: Additional CLI arguments.
     """
 
-    def handle_msg(_msg: Message) -> None:
+    async def handle_msg(_msg: Message) -> None:
         """Process the message as it arrives (a callback).
 
         In this case, the message is merely printed.
@@ -626,36 +626,46 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
 
     # Extract the configuration variables targeting the GatewayConfig Dataclass
     config_dict = lib_kwargs.pop(SZ_CONFIG, {})
-    valid_config_keys = {
-        "disable_discovery",
-        "enable_eavesdrop",
-        "enforce_strict_handling",
-        "max_zones",
-        "reduce_processing",
-        "use_aliases",
-        "use_native_ot",
-        "use_regex",
-    }
 
     gwy_config_kwargs: dict[str, Any] = {}
+
+    # 1. Map inner SZ_CONFIG keys
     for key, val in config_dict.items():
-        if key in valid_config_keys:
-            if key == SZ_REDUCE_PROCESSING and val is not None:
-                gwy_config_kwargs[key] = int(val)
-            else:
-                gwy_config_kwargs[key] = val
+        if key == SZ_REDUCE_PROCESSING and val is not None:
+            gwy_config_kwargs[key] = int(val)
         else:
-            # Leave unmatched keys in lib_kwargs as they may map to Gateway.__init__
-            lib_kwargs[key] = val
+            gwy_config_kwargs[key] = val
+
+    # 2. Extract known GatewayConfig keys from lib_kwargs
+    known_config_keys = {
+        "packet_log",
+        "port_config",
+        "block_list",
+        "known_list",
+        "hgi_id",
+        "debug_mode",
+        "disable_sending",
+        "disable_qos",
+        "enforce_known_list",
+        "evofw_flag",
+    }
+    for key in list(lib_kwargs.keys()):
+        if key in known_config_keys:
+            gwy_config_kwargs[key] = lib_kwargs.pop(key)
+
+    if input_file is not None:
+        gwy_config_kwargs["input_file"] = input_file
+
+    # 3. Whatever remains in lib_kwargs represents schema parameters
+    if lib_kwargs:
+        gwy_config_kwargs["schema"] = lib_kwargs
 
     gwy_config = GatewayConfig(**gwy_config_kwargs)
 
-    # Instantiate Gateway, note: transport_factory is the default, so we don't need to pass it
+    # Instantiate Gateway
     gwy = Gateway(
         serial_port,
         config=gwy_config,
-        input_file=input_file,
-        **lib_kwargs,
     )  # passes action to gateway
 
     if gwy_config.reduce_processing < DONT_CREATE_MESSAGES:
@@ -683,16 +693,16 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
 
         elif command == MONITOR:
             _ = spawn_scripts(gwy, **kwargs)
-            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
         elif command == PARSE:
             # Wait indefinitely until EOF closes the transport
-            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
         elif command == LISTEN:
-            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
     except asyncio.CancelledError:

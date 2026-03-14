@@ -200,7 +200,7 @@ def _check_dst_slug(msg: Message, *, slug: str | None = None) -> None:
         )
 
 
-def process_msg(gwy: Gateway, msg: Message) -> None:
+async def process_msg(gwy: Gateway, msg: Message) -> None:
     """Decode the packet payload and route it appropriately.
 
     :param gwy: The gateway instance handling the routing.
@@ -261,7 +261,7 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
         # systems, zones, circuits) is done by those devices (e.g. UFC to UfhCircuit)
 
         if isinstance(msg.src, Device):  # type: ignore[unreachable]
-            gwy._loop.call_soon(msg.src._handle_msg, msg)  # type: ignore[unreachable]
+            gwy._engine._loop.call_soon(msg.src._handle_msg, msg)  # type: ignore[unreachable]
 
         # TODO: only be for fully-faked (not Fakable) dst (it picks up via RF if not)
 
@@ -296,7 +296,7 @@ def process_msg(gwy: Gateway, msg: Message) -> None:
             devices = []
 
         for d in devices:  # FIXME: some may be Addresses?
-            gwy._loop.call_soon(d._handle_msg, msg)
+            gwy._engine._loop.call_soon(d._handle_msg, msg)
 
     except (AssertionError, exc.RamsesException, NotImplementedError) as err:
         (_LOGGER.error if _DBG_INCREASE_LOG_LEVELS else _LOGGER.warning)(

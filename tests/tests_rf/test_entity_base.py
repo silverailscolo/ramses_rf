@@ -26,11 +26,16 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
     gateway.config = MagicMock()
     gateway.config.disable_discovery = False
     gateway.config.enable_eavesdrop = False
+
+    # Explicitly attach the nested engine mock to bypass the spec restriction
+    gateway._engine = MagicMock()
+    gateway._engine._include = {}
+
     gateway._loop = MagicMock()
     gateway._loop.call_soon = MagicMock()
     gateway._loop.call_later = MagicMock()
     gateway._loop.time = MagicMock(return_value=0.0)
-    gateway._include = {}
+
     # activate the SQLite MessageIndex
     gateway.msg_db = MessageIndex(maintain=False)
 

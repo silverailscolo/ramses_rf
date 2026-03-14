@@ -48,7 +48,22 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
     idx = MessageIndex(db_path=str(db_path))
 
     # Allow a tiny moment for the worker thread to initialize tables
-    await asyncio.sleep(0.1)
+    # using a deterministic polling loop instead of a flaky hardcoded sleep
+    for _ in range(50):  # max 0.5s wait
+        if db_path.exists():
+            try:
+                conn = sqlite3.connect(str(db_path))
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='messages'"
+                )
+                result = cursor.fetchone()
+                conn.close()
+                if result:
+                    break
+            except sqlite3.OperationalError:
+                pass
+        await asyncio.sleep(0.01)
 
     # CRITICAL FIX for Test:
     # database.py now auto-flushes (blocks) if it detects it is running in Pytest.
@@ -86,10 +101,6 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
 
     # Poll the DB file until data matches or timeout (max 3 seconds)
     while wait_time < 3.0:
-        await asyncio.sleep(0.5)
-        wait_time += 0.5
-
-        # Open a fresh connection to read from disk (verifying the file, not memory)
         try:
             conn = sqlite3.connect(str(db_path))
             cursor = conn.cursor()
@@ -104,6 +115,9 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         except sqlite3.OperationalError:
             # DB might be locked or not ready yet
             pass
+
+        await asyncio.sleep(0.05)
+        wait_time += 0.05
 
     # 5. Final Assertions
     assert row_count == MSG_COUNT, (

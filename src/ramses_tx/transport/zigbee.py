@@ -888,7 +888,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         :param args: The arbitrary payload argument block.
         :type args: Any
-        :return: The decoded string or None if unparseable.
+        :return: The decoded string or None if unparsable.
         :rtype: str | None
         """
         if isinstance(args, str):

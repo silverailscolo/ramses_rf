@@ -98,7 +98,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         await gwy.start()
 
         # Verify the Gateway is actually using our transport
-        self.assertIs(gwy._transport, self.transport)
+        self.assertIs(gwy._engine._transport, self.transport)
 
         await gwy.stop()
 
@@ -134,7 +134,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         # 3. Force the flag internally.
         # This simulates the Gateway being in a read-only state (e.g. reading from a file)
         # and ensures we test that this state is propagated to the Transport Factory.
-        gwy._disable_sending = True
+        gwy._engine._disable_sending = True
 
         # 4. Start the Gateway (this triggers the factory)
         try:

@@ -80,18 +80,21 @@ class DeviceRegistry:
             self._gwy._device_filter.check_filter_lists(device_id)
         except DeviceNotFoundError:
             # have to allow for GWY not being in known_list...
-            if device_id != self._gwy._protocol.hgi_id:
+            # Proper composition fix: get the configured HGI ID directly from the Engine
+            if device_id != self._gwy._engine._hgi_id:
                 raise
 
         dev = self.device_by_id.get(device_id)
 
         if not dev:
             # voluptuous bug workaround: https://github.com/alecthomas/voluptuous/pull/524
-            _traits_raw: dict[str, Any] = self._gwy._include.get(device_id, {})  # type: ignore[assignment]
+            _traits_raw: dict[str, Any] = dict(
+                self._gwy._engine._include.get(device_id, {})
+            )
             _traits_raw.pop("commands", None)
 
             traits_dict: dict[str, Any] = SCH_TRAITS(
-                self._gwy._include.get(device_id, {})
+                self._gwy._engine._include.get(device_id, {})
             )
             traits = DeviceTraits.from_dict(traits_dict)
 
@@ -149,9 +152,12 @@ class DeviceRegistry:
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
         """
-        result: dict[str, Any] = {k: v for k, v in self._gwy._include.items()}
+        result: dict[str, Any] = {k: v for k, v in self._gwy._engine._include.items()}
         for d in self.devices:
-            if not self._gwy._enforce_known_list or d.id in self._gwy._include:
+            if (
+                not self._gwy._engine._enforce_known_list
+                or d.id in self._gwy._engine._include
+            ):
                 traits = await d.traits()
                 result[d.id] = cast(
                     DeviceTraitsT,

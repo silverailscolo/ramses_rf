@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RAMSES RF - Typing for RamsesProtocol & RamsesTransport."""
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime as dt, timedelta as td
 from enum import EnumCheck, StrEnum, verify
 from typing import (
@@ -52,10 +52,10 @@ DeviceListT: TypeAlias = dict[DeviceIdT, DeviceTraitsT]
 
 if TYPE_CHECKING:
     MsgFilterT = Callable[[Message], bool]
-    MsgHandlerT = Callable[[Message], None]
+    MsgHandlerT = Callable[[Message], Awaitable[None]]
 else:
     MsgFilterT = Callable[[Any], bool]
-    MsgHandlerT = Callable[[Any], None]
+    MsgHandlerT = Callable[[Any], Awaitable[None]]
 
 
 # QoS & Send Parameters

@@ -58,6 +58,7 @@ TESTS_INBOUND = {  # sent by other, received
 
 @pytest.fixture(autouse=True)
 def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Apply patches required for virtual RF testing."""
     monkeypatch.setattr(
         "ramses_tx.protocol.core._DBG_DISABLE_IMPERSONATION_ALERTS", True
     )
@@ -70,9 +71,14 @@ async def assert_this_pkt(
     """Check, at the gateway layer, that the current packet is as expected."""
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)
-        if gwy._this_msg and gwy._this_msg._pkt._frame == expected._frame:
+        if (
+            gwy._engine._this_msg
+            and gwy._engine._this_msg._pkt._frame == expected._frame
+        ):
             break
-    assert gwy._this_msg and gwy._this_msg._pkt._frame == expected._frame
+    assert (
+        gwy._engine._this_msg and gwy._engine._this_msg._pkt._frame == expected._frame
+    )
 
 
 # ### TESTS ############################################################################
@@ -89,16 +95,16 @@ async def test_regex_inbound_() -> None:
         rf.ports[0],
         config=GatewayConfig(
             disable_discovery=True,
+            disable_qos=False,
+            enforce_known_list=False,
             use_regex={SZ_INBOUND: RULES_INBOUND},
         ),
-        disable_qos=False,
-        enforce_known_list=False,
     )
     ser_1 = serial.Serial(rf.ports[1])
 
     try:
         await gwy_0.start()
-        assert gwy_0._protocol._transport
+        assert gwy_0._engine._protocol._transport
 
         for cmd, pkt in TESTS_INBOUND.items():
             ser_1.write(bytes(cmd.encode("ascii")) + b"\r\n")
@@ -120,22 +126,27 @@ async def test_regex_with_qos() -> None:
         rf.ports[0],
         config=GatewayConfig(
             disable_discovery=True,
+            disable_qos=False,
+            enforce_known_list=False,
             use_regex=RULES_COMBINED,
         ),
-        disable_qos=False,
-        enforce_known_list=False,
     )
     ser_1 = serial.Serial(rf.ports[1])
 
-    if not isinstance(gwy_0._protocol, PortProtocol) or not gwy_0._protocol._context:
+    if (
+        not isinstance(gwy_0._engine._protocol, PortProtocol)
+        or not gwy_0._engine._protocol._context
+    ):
         await rf.stop()
         pytest.skip("QoS protocol not enabled")
     else:
-        assert gwy_0._protocol._disable_qos is False  # needed for successful tests
+        assert (
+            gwy_0._engine._protocol._disable_qos is False
+        )  # needed for successful tests
 
     try:
         await gwy_0.start()
-        assert gwy_0._protocol._transport
+        assert gwy_0._engine._protocol._transport
 
         _ = ser_1.read(ser_1.in_waiting)  # ser_1.flush() doesn't work?
 

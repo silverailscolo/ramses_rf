@@ -45,8 +45,11 @@ def mock_gateway() -> MagicMock:
 
     gateway.send_cmd = MagicMock()
     gateway.async_send_cmd = AsyncMock()
-    gateway._tasks = []
-    gateway.ser_name = "/dev/ttyUSB0"
+
+    # Fix: explicitly attach the _engine mock to bypass the spec
+    gateway._engine = MagicMock()
+    gateway._engine._tasks = []
+    gateway._engine.ser_name = "/dev/ttyUSB0"
 
     # Mock device retrieval
     mock_dev = MagicMock()
@@ -82,7 +85,7 @@ async def test_spawn_scripts_exec_cmd(mock_gateway: MagicMock) -> None:
     kwargs = {EXEC_CMD: "RQ 01:123456 1F09 00"}
     tasks = spawn_scripts(mock_gateway, **kwargs)
     assert len(tasks) == 1
-    assert len(mock_gateway._tasks) == 1
+    assert len(mock_gateway._engine._tasks) == 1
 
 
 @pytest.mark.asyncio
@@ -281,4 +284,4 @@ async def test_script_poll_device(mock_gateway: MagicMock) -> None:
     tasks = script_poll_device(mock_gateway, DEV_ID)  # type: ignore[arg-type]
 
     assert len(tasks) == 2  # One for each code (0016, 1FC9)
-    assert len(mock_gateway._tasks) == 2
+    assert len(mock_gateway._engine._tasks) == 2

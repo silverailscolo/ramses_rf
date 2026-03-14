@@ -181,12 +181,12 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
     # config options set to prevent networking attempts
     gwy = Gateway(
         None,  # port_name is required (positional arg)
-        input_file=str(FIXTURE_FILE),
         config=GatewayConfig(
             disable_discovery=True,
+            disable_sending=True,
+            input_file=str(FIXTURE_FILE),
             reduce_processing=0,
         ),
-        disable_sending=True,
     )
 
     # 2. Patch sending methods to prevent "Read-Only" errors & background noise.
@@ -205,8 +205,8 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
         # 4. Wait for the Transport to finish reading the file
         # Instead of relying on the possibly-cancelled protocol future,
         # we await the specific reader task responsible for file processing.
-        if gwy._transport:
-            reader_task = gwy._transport.get_extra_info(SZ_READER_TASK)
+        if gwy._engine._transport:
+            reader_task = gwy._engine._transport.get_extra_info(SZ_READER_TASK)
             if reader_task:
                 await reader_task
 

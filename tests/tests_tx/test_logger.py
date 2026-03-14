@@ -8,13 +8,16 @@ from pathlib import Path
 
 import pytest
 
-from ramses_rf import Gateway
+from ramses_rf import Gateway, GatewayConfig
 from ramses_tx.packet import PKT_LOGGER
 
 
 @pytest.mark.asyncio
 async def test_logging_lifecycle(tmp_path: Path) -> None:
-    """Verify that packet logging uses a QueueHandler and listener starts/stops."""
+    """Verify that packet logging uses a QueueHandler and listener starts/stops.
+
+    :param tmp_path: The temporary directory path provided by pytest.
+    """
 
     log_file = tmp_path / "packet.log"
     input_file = tmp_path / "empty_input.log"
@@ -36,8 +39,10 @@ async def test_logging_lifecycle(tmp_path: Path) -> None:
     # 2. Start Gateway
     gwy = Gateway(
         None,
-        input_file=str(input_file),
-        packet_log={"file_name": str(log_file)},
+        config=GatewayConfig(
+            input_file=str(input_file),
+            packet_log={"file_name": str(log_file)},
+        ),
     )
     await gwy.start()
 
@@ -63,8 +68,11 @@ async def test_logging_lifecycle(tmp_path: Path) -> None:
             },
         )
 
-        # Allow brief time for thread to process queue
-        await asyncio.sleep(0.1)
+        # Poll for the log to be written (up to 1 second)
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if log_file.exists() and "TEST_LOG_ENTRY" in log_file.read_text():
+                break
 
     finally:
         # 5. Stop

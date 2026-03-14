@@ -547,7 +547,8 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             prev = self._prev_30c9
             self._prev_30c9 = msg
             if prev is not None:
-                self._gwy._loop.create_task(eavesdrop_zone_sensors(msg, prev))
+                task = asyncio.create_task(eavesdrop_zone_sensors(msg, prev))
+                self._gwy.add_task(task)
 
     # TODO: should be a private method
     def get_htg_zone(
@@ -662,9 +663,11 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         zone: Zone
 
         for zone in getattr(self, SZ_ZONES, []):
-            self._gwy._loop.create_task(zone.get_schedule(force_io=True))
+            task = asyncio.create_task(zone.get_schedule(force_io=True))
+            self._gwy.add_task(task)
         if isinstance(self, StoredHw) and self.dhw:
-            self._gwy._loop.create_task(self.dhw.get_schedule(force_io=True))
+            task = asyncio.create_task(self.dhw.get_schedule(force_io=True))
+            self._gwy.add_task(task)
 
     async def _obtain_lock(self, zone_idx: str) -> None:
         timeout_dtm = dt.now() + td(minutes=3)
@@ -737,9 +740,8 @@ class Logbook(SystemBase):  # 0418
 
         cmd = Command.get_system_log_entry(self.id, 0)
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
-        # self._gwy.add_task(
-        #     self._gwy._loop.create_task(self.get_faultlog())
-        # )
+        # task = asyncio.create_task(self.get_faultlog())
+        # self._gwy.add_task(task)
 
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
         super()._handle_msg(msg)
@@ -953,8 +955,14 @@ class Datetime(SystemBase):  # 313F
         super()._handle_msg(msg)
 
         # FIXME: refactoring protocol stack
-        if msg.code == Code._313F and msg.verb in (I_, RP) and self._gwy._transport:
-            diff = abs(dt.fromisoformat(msg.payload[SZ_DATETIME]) - self._gwy._dt_now())
+        if (
+            msg.code == Code._313F
+            and msg.verb in (I_, RP)
+            and self._gwy._engine._transport
+        ):
+            diff = abs(
+                dt.fromisoformat(msg.payload[SZ_DATETIME]) - self._gwy._engine._dt_now()
+            )
             if diff > td(minutes=5):
                 _LOGGER.warning(f"{msg!r} < excessive datetime difference: {diff}")
 

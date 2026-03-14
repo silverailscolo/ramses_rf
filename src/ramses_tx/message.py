@@ -404,7 +404,9 @@ class Message(MessageBase):
             :return: the packet's age as fraction of its 'normal' life span.
             """
             if self._gwy:  # self._gwy is set in ramses_tx.gateway.Engine._msg_handler
-                return (self._gwy._dt_now() - self.dtm - _TD_SECS_003) / lifespan
+                return float(
+                    (self._gwy._engine._dt_now() - self.dtm - _TD_SECS_003) / lifespan
+                )
             return (dt.now() - self.dtm - _TD_SECS_003) / lifespan
 
         # 1. Look for easy win...

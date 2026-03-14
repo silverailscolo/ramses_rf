@@ -314,8 +314,8 @@ async def _test_flow_10x(
     await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
 
     if (
-        not isinstance(gwy_r._protocol, PortProtocol)
-        or getattr(gwy_r._protocol, "_context", None) is None
+        not isinstance(gwy_r._engine._protocol, PortProtocol)
+        or getattr(gwy_r._engine._protocol, "_context", None) is None
     ):
         pytest.skip("QoS protocol not enabled")
 
