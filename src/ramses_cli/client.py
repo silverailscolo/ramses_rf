@@ -585,7 +585,7 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     :param kwargs: Additional CLI arguments.
     """
 
-    def handle_msg(_msg: Message) -> None:
+    async def handle_msg(_msg: Message) -> None:
         """Process the message as it arrives (a callback).
 
         In this case, the message is merely printed.

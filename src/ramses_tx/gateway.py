@@ -174,7 +174,7 @@ class Engine:
 
     def add_msg_handler(
         self,
-        msg_handler: Callable[[Message], None],
+        msg_handler: MsgHandlerT,
         /,
         *,
         msg_filter: Callable[[Message], bool] | None = None,
@@ -365,7 +365,7 @@ class Engine:
             qos=qos,
         )  # may: raise ProtocolError/ProtocolSendFailed
 
-    def _msg_handler(self, msg: Message) -> None:
+    async def _msg_handler(self, msg: Message) -> None:
         """Process incoming messages from the protocol."""
         # HACK: This is one consequence of an unpleasant anachronism
         msg.__class__ = Message
@@ -379,4 +379,6 @@ class Engine:
         # Safely pass execution to Gateway's extended handling logic if defined
         handler = getattr(self, "_handle_msg", None)
         if handler:
-            handler(msg)
+            res = handler(msg)
+            if asyncio.iscoroutine(res):
+                await res
