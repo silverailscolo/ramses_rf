@@ -106,7 +106,7 @@ class Test_dispatcher_gateway:
 class TestDispatcherErrorHandling:
     """Test Dispatcher exception handling logic."""
 
-    def test_process_msg_strict_mode(self, mock_gateway: MagicMock) -> None:
+    async def test_process_msg_strict_mode(self, mock_gateway: MagicMock) -> None:
         """Test process_msg raises exception in strict mode."""
         # Enable strict mode
         mock_gateway.config.enforce_strict_handling = True
@@ -127,9 +127,9 @@ class TestDispatcherErrorHandling:
             ),
             pytest.raises(ValueError, match="Test Error"),
         ):
-            dispatcher.process_msg(mock_gateway, msg)
+            await dispatcher.process_msg(mock_gateway, msg)
 
-    def test_process_msg_safe_mode(
+    async def test_process_msg_safe_mode(
         self, mock_gateway: MagicMock, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test process_msg logs warning with trace in safe mode."""
@@ -151,7 +151,7 @@ class TestDispatcherErrorHandling:
             ),
             caplog.at_level(logging.WARNING),
         ):
-            dispatcher.process_msg(mock_gateway, msg)
+            await dispatcher.process_msg(mock_gateway, msg)
 
         # Assert exception was caught and logged
         assert "Test Error" in caplog.text

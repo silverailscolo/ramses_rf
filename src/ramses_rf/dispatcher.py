@@ -200,7 +200,7 @@ def _check_dst_slug(msg: Message, *, slug: str | None = None) -> None:
         )
 
 
-def process_msg(gwy: Gateway, msg: Message) -> None:
+async def process_msg(gwy: Gateway, msg: Message) -> None:
     """Decode the packet payload and route it appropriately.
 
     :param gwy: The gateway instance handling the routing.

@@ -422,10 +422,16 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         """
         if self._msg_handler is not None:
             _LOGGER.debug(f"Dispatching valid message to handler: {msg}")
-            self._msg_handler(msg)
+            # Ensure safe dispatch to either coroutine or standard handler
+            res = self._msg_handler(msg)
+            if asyncio.iscoroutine(res):
+                self._loop.create_task(res)
+
         for callback, msg_filter in self._msg_handlers:
             if msg_filter is None or msg_filter(msg):
-                callback(msg)
+                res = callback(msg)
+                if asyncio.iscoroutine(res):
+                    self._loop.create_task(res)
 
 
 class _DeviceIdFilterMixin(_BaseProtocol):

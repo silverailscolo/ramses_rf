@@ -780,7 +780,7 @@ class Gateway(GatewayInterface):
         status_dict["_tx_rate"] = tx_rate
         return status_dict
 
-    def _msg_handler(self, msg: Message) -> None:
+    async def _msg_handler(self, msg: Message) -> None:
         """A callback to handle messages from the protocol stack.
 
         :param msg: The message to be handled and processed.
@@ -805,11 +805,11 @@ class Gateway(GatewayInterface):
                 msg.payload if isinstance(msg.payload, list) else [msg.payload]
             )
 
-        process_msg(self, msg)
+        await process_msg(self, msg)
 
     def add_msg_handler(
         self,
-        msg_handler: Callable[[Message], None],
+        msg_handler: Callable[[Message], Awaitable[None]],
         /,
         *,
         msg_filter: Callable[[Message], bool] | None = None,
@@ -817,7 +817,7 @@ class Gateway(GatewayInterface):
         """Add a Message handler to the underlying Protocol.
 
         :param msg_handler: The message handler callback.
-        :type msg_handler: Callable[[Message], None]
+        :type msg_handler: Callable[[Message], Awaitable[None]]
         :param msg_filter: An optional filter to only handle specific messages.
         :type msg_filter: Callable[[Message], bool] | None, optional
         :returns: A callable to remove the handler.

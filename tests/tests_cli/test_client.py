@@ -4,7 +4,7 @@
 import asyncio
 import io
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
@@ -503,7 +503,7 @@ async def test_async_main_msg_handler(
     }
 
     # We need to capture the callback passed to add_msg_handler
-    captured_callback = None
+    captured_callback: Callable[[Message], Awaitable[None]] | None = None
 
     def capture_cb(cb: Any) -> None:
         nonlocal captured_callback
@@ -527,7 +527,7 @@ async def test_async_main_msg_handler(
         msg1.code = Code._PUZZ
         # Mypy dislikes assigning to method slots on mocks without ignore
         msg1.__repr__ = MagicMock(return_value="PUZZLE_MSG")  # type: ignore[method-assign]
-        captured_callback(msg1)
+        await captured_callback(msg1)
         out = capsys.readouterr().out
         assert "PUZZLE_MSG" in out
 
@@ -542,7 +542,7 @@ async def test_async_main_msg_handler(
         msg2.src.type = "01"  # Controller type, definitely not HGI
         msg2.__repr__ = MagicMock(return_value="1F09_MSG")  # type: ignore[method-assign]
 
-        captured_callback(msg2)
+        await captured_callback(msg2)
         out = capsys.readouterr().out
         assert "1F09_MSG" in out
 
@@ -564,7 +564,7 @@ async def test_async_main_long_format(
     }
 
     # Capture the callback
-    captured_callback: Any = None
+    captured_callback: Callable[[Message], Awaitable[None]] | None = None
 
     def capture_cb(cb: Any) -> None:
         nonlocal captured_callback
@@ -585,7 +585,7 @@ async def test_async_main_long_format(
         msg.payload = "PAYLOAD"
 
         assert captured_callback is not None
-        captured_callback(msg)
+        await captured_callback(msg)
 
         out = capsys.readouterr().out
         # Verify long format output (timestamp ... repr # payload)
