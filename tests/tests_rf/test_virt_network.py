@@ -113,13 +113,13 @@ async def _test_virtual_rf_dev_disc(
 
     # TEST 0: Tx of fingerprint packet with one on/one off
     await gwy_0.start()
-    assert gwy_0._protocol._transport
+    assert gwy_0._engine._protocol._transport
 
     await assert_devices(gwy_0, ["18:000000"])
     await assert_devices(gwy_1, [])
 
     await gwy_1.start()
-    assert gwy_1._protocol._transport
+    assert gwy_1._engine._protocol._transport
 
     # NOTE: will pick up gwy 18:111111, since Foreign gwy detect has been removed
     await assert_devices(gwy_0, ["18:000000", "18:111111"])
@@ -164,8 +164,8 @@ async def _test_virtual_rf_pkt_flow(
     await assert_devices(gwy_0, ["01:022222", "18:000000", "18:111111", "40:000000"])
     await assert_code_in_device_msgindex(gwy_0, "01:022222", Code._1F09)
 
-    await assert_this_pkt(gwy_0._transport, cmd)
-    await assert_this_pkt(gwy_1._transport, cmd)
+    await assert_this_pkt(gwy_0._engine._transport, cmd)
+    await assert_this_pkt(gwy_1._engine._transport, cmd)
 
     # TEST 2:
     # await assert_code_in_device_msgindex(
@@ -177,8 +177,8 @@ async def _test_virtual_rf_pkt_flow(
 
     # await assert_code_in_device_msgindex(gwy_0, "40:000000", Code._22F1)  # ?needs QoS
 
-    await assert_this_pkt(gwy_0._transport, cmd)
-    await assert_this_pkt(gwy_1._transport, cmd)
+    await assert_this_pkt(gwy_0._engine._transport, cmd)
+    await assert_this_pkt(gwy_1._engine._transport, cmd)
 
     await assert_devices(gwy_0, ["01:022222", "18:000000", "18:111111", "40:000000"])
     await assert_devices(gwy_1, ["01:022222", "18:111111", "40:000000", "41:111111"])
@@ -228,11 +228,11 @@ async def test_virtual_rf_pkt_flow() -> None:
             [GWY_CONFIG | SCHEMA_0, GWY_CONFIG | SCHEMA_1]
         )
 
-        assert gwy_0._protocol._transport
+        assert gwy_0._engine._protocol._transport
         # NOTE: will pick up gwy 18:111111, since Foreign gwy detect has been removed
         await assert_devices(gwy_0, ["18:000000", "18:111111", "40:000000"])
 
-        assert gwy_1._protocol._transport
+        assert gwy_1._engine._protocol._transport
         await assert_devices(gwy_1, ["18:111111", "41:111111"])
 
         await _test_virtual_rf_pkt_flow(rf, gwy_0, gwy_1)

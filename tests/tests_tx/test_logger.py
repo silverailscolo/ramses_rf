@@ -68,8 +68,11 @@ async def test_logging_lifecycle(tmp_path: Path) -> None:
             },
         )
 
-        # Allow brief time for thread to process queue
-        await asyncio.sleep(0.1)
+        # Poll for the log to be written (up to 1 second)
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if log_file.exists() and "TEST_LOG_ENTRY" in log_file.read_text():
+                break
 
     finally:
         # 5. Stop

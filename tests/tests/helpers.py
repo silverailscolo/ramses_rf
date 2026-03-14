@@ -53,7 +53,7 @@ def shuffle_dict(old_dict: dict[str, Any]) -> dict[str, Any]:
 async def gwy() -> AsyncGenerator[Gateway, None]:  # NOTE: async to get running loop
     """Return a vanilla system (with a known, minimal state)."""
     gwy = Gateway("/dev/null", config=GatewayConfig())
-    gwy._disable_sending = True
+    gwy._engine._disable_sending = True
     gwy.msg_db = MessageIndex()  # required to add heat dummy 3220 msg
     try:
         yield gwy
@@ -223,13 +223,13 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
         safe_kwargs["schema"] = schema_kwargs
 
     gwy = Gateway(None, config=GatewayConfig(**safe_kwargs))
-    gwy._sqlite_index = _sqlite_index  # TODO(eb): remove legacy Q2 2026
+    gwy._engine._sqlite_index = _sqlite_index  # TODO(eb): remove legacy Q2 2026
     await gwy.start()
 
     # The Gateway with input_file uses a Transport that processes the file automatically.
     # We simply need to wait for the transport to finish reading the file.
     # We pause discovery/sending during replay to avoid side effects.
-    await gwy._protocol.wait_for_connection_lost()  # until packet log is EOF
+    await gwy._engine._protocol.wait_for_connection_lost()  # until packet log is EOF
 
     # Ensure all packets from the log are written to the DB before returning
     # This is critical for tests using the StorageWorker

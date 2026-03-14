@@ -205,8 +205,8 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
         # 4. Wait for the Transport to finish reading the file
         # Instead of relying on the possibly-cancelled protocol future,
         # we await the specific reader task responsible for file processing.
-        if gwy._transport:
-            reader_task = gwy._transport.get_extra_info(SZ_READER_TASK)
+        if gwy._engine._transport:
+            reader_task = gwy._engine._transport.get_extra_info(SZ_READER_TASK)
             if reader_task:
                 await reader_task
 

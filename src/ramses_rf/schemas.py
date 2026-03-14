@@ -334,11 +334,11 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
         """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
 
         err_msg = None
-        if gwy._enforce_known_list and dev_id not in gwy._include:
+        if gwy._engine._enforce_known_list and dev_id not in gwy._engine._include:
             err_msg = f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"
         # issue ramses_cc #296: if enforce_known_list is turned on, error on any "unknown" dev_id
         # fix: delete from schema?
-        if dev_id in gwy._exclude:
+        if dev_id in gwy._engine._exclude:
             err_msg = f"it is in the {SZ_SCHEMA}, but also in the {SZ_BLOCK_LIST}"
 
         if err_msg:

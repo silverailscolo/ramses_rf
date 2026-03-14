@@ -129,7 +129,9 @@ async def rf_factory(
 
             if start_gwys:
                 await gwy.start()
-                gwy._disable_sending = False  # allows Virtual RF to capture/reply
+                gwy._engine._disable_sending = (
+                    False  # allows Virtual RF to capture/reply
+                )
 
             gwys.append(gwy)
 

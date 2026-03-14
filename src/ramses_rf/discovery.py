@@ -70,7 +70,13 @@ class DiscoveryService:
         self._supported_cmds_ctx: dict[str, bool | None] = {}
 
         if not gwy.config.disable_discovery:
-            gwy._loop.call_soon(self.start_poller)
+            try:
+                asyncio.get_running_loop().call_soon(self.start_poller)
+            except RuntimeError:
+                # Fallback if instantiated outside of a running event loop context
+                _LOGGER.debug(
+                    "No running event loop; discovery poller must be started manually."
+                )
 
     async def supported_cmds(self) -> dict[Code, Any]:
         """Return the current list of pollable command codes.
