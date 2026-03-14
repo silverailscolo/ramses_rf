@@ -536,7 +536,7 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         print(f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n")
 
     if kwargs.get("show_knowns"):  # show device hints (show-knowns)
-        print(f"allow_list (hints) = {json.dumps(gwy._include, indent=4)}\r\n")
+        print(f"allow_list (hints) = {json.dumps(gwy._engine._include, indent=4)}\r\n")
 
     if kwargs.get("show_traits"):  # show device traits
         result = {
@@ -693,16 +693,16 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
 
         elif command == MONITOR:
             _ = spawn_scripts(gwy, **kwargs)
-            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
         elif command == PARSE:
             # Wait indefinitely until EOF closes the transport
-            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
         elif command == LISTEN:
-            await gwy._protocol.wait_for_connection_lost(timeout=86400)
+            await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
     except asyncio.CancelledError:

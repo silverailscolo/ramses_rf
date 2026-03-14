@@ -115,7 +115,7 @@ async def test_shuffle_from_log_file_sql(dir_name: Path) -> None:
     await gwy._restore_cached_packets(packets)
     if gwy.msg_db:
         gwy.msg_db.flush()
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0)  # Yield to allow flush callbacks to fire
 
     await assert_expected_set(gwy, expected)
 
@@ -175,7 +175,7 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
         await gwy._restore_cached_packets(packets)
         if gwy.msg_db:
             gwy.msg_db.flush()
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0)  # Yield to allow flush callbacks to fire
 
         await assert_expected_set(gwy, expected)
 

@@ -61,9 +61,9 @@ def gwy_dev_id() -> DeviceIdT:
 async def _test_get_faultlog(gwy: Gateway, ctl_id: DeviceIdT) -> None:
     """Test obtaining the fault log."""
 
-    assert gwy._loop is asyncio.get_running_loop()  # scope BUG is here
-    assert isinstance(gwy._protocol, PortProtocol)  # mypy
-    assert gwy._protocol._disable_qos is False  # QoS is required for this test
+    assert gwy._engine._loop is asyncio.get_running_loop()  # scope BUG is here
+    assert isinstance(gwy._engine._protocol, PortProtocol)  # mypy
+    assert gwy._engine._protocol._disable_qos is False  # QoS is required for this test
 
     _: Controller = gwy.device_registry.get_device(ctl_id)
 
@@ -111,10 +111,10 @@ TEST_SUITE = _create_test_suite(f"{LOGS_DIR}/test_api_faultlog.log")
 async def test_get_faultlog_fake(fake_evofw3: Gateway) -> None:
     """Test obtaining the schedule from a faked controller via Virtual RF."""
 
-    assert fake_evofw3._transport  # mypy
+    assert fake_evofw3._engine._transport  # mypy
 
     # Prime the virtual RF with the expected replies...
-    rf: VirtualRf = fake_evofw3._transport.get_extra_info("virtual_rf")
+    rf: VirtualRf = fake_evofw3._engine._transport.get_extra_info("virtual_rf")
     for k, v in TEST_SUITE.items():
         rf.add_reply_for_cmd(k, v)
 

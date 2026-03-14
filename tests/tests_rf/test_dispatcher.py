@@ -10,7 +10,7 @@ import pytest
 
 from ramses_rf import Device, dispatcher
 from ramses_rf.database import MessageIndex
-from ramses_rf.gateway import Gateway
+from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_tx import Address, DeviceIdT, Message, Packet
 
 
@@ -19,19 +19,30 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
     """Create a mock Gateway instance for testing."""
     gateway = MagicMock(spec=Gateway)
     gateway.send_cmd = AsyncMock()
-    gateway.dispatcher = MagicMock()
-    gateway.dispatcher.send = MagicMock()
 
-    # Add required attributes
-    gateway.config = MagicMock()
-    gateway.config.disable_discovery = False
-    gateway.config.enable_eavesdrop = False
-    gateway.config.reduce_processing = 0  # Ensure processing continues by default
-    gateway._loop = MagicMock()
-    gateway._loop.call_soon = MagicMock()
-    gateway._loop.call_later = MagicMock()
-    gateway._loop.time = MagicMock(return_value=0.0)
-    gateway._include = {}
+    # Use the strictly typed GatewayConfig DTO instead of loose mock attributes
+    gateway.config = GatewayConfig(
+        disable_discovery=False,
+        enable_eavesdrop=False,
+        reduce_processing=0,
+    )
+
+    # Mock the internal engine and its loop to reflect the new architecture
+    gateway._engine = MagicMock()
+    gateway._engine._loop = MagicMock()
+    gateway._engine._loop.call_soon = MagicMock()
+    gateway._engine._loop.call_later = MagicMock()
+    gateway._engine._loop.time = MagicMock(return_value=0.0)
+
+    # Support legacy proxy access (dispatcher.py currently still uses `gwy._loop`)
+    gateway._loop = gateway._engine._loop
+
+    # Correctly mock the device registry structure
+    gateway.device_registry = MagicMock()
+    gateway.device_registry.device_by_id = {}
+
+    gateway._engine._include = {}
+
     # activate the SQLite MessageIndex
     gateway.msg_db = MessageIndex(maintain=False)
 
@@ -39,7 +50,7 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
 
 
 class Test_dispatcher_gateway:
-    """Test  Dispatcher class."""
+    """Test Dispatcher class."""
 
     _SRC1 = "32:166025"
     _SRC2 = "01:087939"  # (CTR)
@@ -61,25 +72,27 @@ class Test_dispatcher_gateway:
     )
 
     @pytest.mark.skip(reason="requires gwy")
-    async def test_create_devices_from_addrs(self, mock_gateway: MagicMock) -> None:
-        # device_by_id = {
+    def test_create_devices_from_addrs(self, mock_gateway: MagicMock) -> None:
+        """Test device creation from addresses."""
         dev1 = Device(mock_gateway, Address(DeviceIdT("04:189078")))
-        # dev2 = Device(mock_gateway, Address(DeviceIdT("01:145038")))
-        # }
-        mock_gateway.device_by_id = MagicMock(return_value=dev1)
+        mock_gateway.device_registry.device_by_id.get = MagicMock(return_value=dev1)
         mock_gateway._check_dst_slug = MagicMock(return_value="CTL")
+
         dispatcher._create_devices_from_addrs(mock_gateway, self.msg5)
 
         mock_gateway.msg_db.stop()  # close sqlite3 connection
 
-    async def test_check_msg_addrs(self) -> None:
+    def test_check_msg_addrs(self) -> None:
+        """Test address validation."""
         dispatcher._check_msg_addrs(self.msg5)
         dispatcher._check_msg_addrs(self.msg6)
 
-    async def test_check_dst_slug(self) -> None:
+    def test_check_dst_slug(self) -> None:
+        """Test destination slug validation."""
         dispatcher._check_dst_slug(self.msg5)
 
-    async def test_detect_array_fragment(self) -> None:
+    def test_detect_array_fragment(self) -> None:
+        """Test detection of array fragments."""
         msg1: Message = Message._from_pkt(
             Packet(
                 self._NOW,

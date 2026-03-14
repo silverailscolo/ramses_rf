@@ -36,7 +36,7 @@ async def test_schema_discover_from_log(f_name: str) -> None:
 
         assert shrink(await gwy.schema()) == shrink(schema)
 
-        gwy.ser_name = "/dev/null"  # HACK: needed to pause engine
+        gwy._engine.ser_name = "/dev/null"  # HACK: needed to pause engine
         schema, packets = await gwy.get_state(include_expired=True)
         packets = shuffle_dict(packets)
         await gwy._restore_cached_packets(packets)

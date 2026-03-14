@@ -108,7 +108,6 @@ def fake_evofw3_port(request: pytest.FixtureRequest, rf: VirtualRf) -> PortStrT 
 
     rf.set_gateway(rf.ports[0], gwy_dev_id, fw_type=HgiFwTypes.EVOFW3)
 
-    # with patch("ramses_tx.transport.comports", rf.comports):
     return rf.ports[0]
 
 
@@ -123,7 +122,6 @@ def fake_ti3410_port(request: pytest.FixtureRequest, rf: VirtualRf) -> PortStrT 
 
     rf.set_gateway(rf.ports[0], gwy_dev_id, fw_type=HgiFwTypes.HGI_80)
 
-    # with patch("ramses_tx.transport.comports", rf.comports):
     return rf.ports[0]
 
 
@@ -131,7 +129,6 @@ def fake_ti3410_port(request: pytest.FixtureRequest, rf: VirtualRf) -> PortStrT 
 async def mqtt_evofw3_port() -> PortStrT:
     """Utilize an actual evofw3-compatible gateway."""
 
-    # We could mock the MQTT client at: patch("ramses_tx.transport.MqttTransport"
     pytest.skip("This test fixture requires an MQTT broker")
 
     return "mqtt://mqtt_username:mqtt_passw0rd@127.0.0.1"  # type: ignore[unreachable]
@@ -210,9 +207,9 @@ async def _fake_gateway(
     with patch("ramses_tx.discovery.comports", rf.comports):
         gwy = await _gateway(gwy_port, gwy_config)
 
-    assert gwy._transport  # mypy
+    assert gwy._engine._transport  # mypy
     # Cast to PortTransport to access concrete implementation details
-    transport = cast(PortTransport, gwy._transport)
+    transport = cast(PortTransport, gwy._engine._transport)
     transport._extra["virtual_rf"] = rf
 
     return gwy
@@ -248,7 +245,7 @@ async def fake_evofw3(
     gwy = await _fake_gateway(fake_evofw3_port, gwy_config, rf)
 
     assert isinstance(gwy.hgi, HgiGateway) and gwy.hgi.id == gwy_dev_id
-    assert gwy._protocol._is_evofw3 is True
+    assert gwy._engine._protocol._is_evofw3 is True
 
     try:
         yield gwy
@@ -271,7 +268,7 @@ async def fake_ti3410(
     gwy = await _fake_gateway(fake_ti3410_port, gwy_config, rf)
 
     assert isinstance(gwy.hgi, HgiGateway) and gwy.hgi.id == gwy_dev_id
-    assert gwy._protocol._is_evofw3 is False
+    assert gwy._engine._protocol._is_evofw3 is False
 
     try:
         yield gwy
@@ -293,11 +290,11 @@ async def mqtt_evofw3(
     gwy = await _gateway(mqtt_evofw3_port, gwy_config)
 
     gwy.device_registry.get_device(
-        gwy._protocol.hgi_id
+        gwy._engine._protocol.hgi_id
     )  # HACK: not instantiated: no puzzle pkts sent
 
     assert isinstance(gwy.hgi, HgiGateway) and gwy.hgi.id not in (None, HGI_DEVICE_ID)
-    assert gwy._protocol._is_evofw3 is True
+    assert gwy._engine._protocol._is_evofw3 is True
 
     try:
         yield gwy
@@ -319,7 +316,7 @@ async def real_evofw3(
     gwy = await _real_gateway(real_evofw3_port, gwy_config)
 
     assert isinstance(gwy.hgi, HgiGateway) and gwy.hgi.id not in (None, HGI_DEVICE_ID)
-    assert gwy._protocol._is_evofw3 is True
+    assert gwy._engine._protocol._is_evofw3 is True
 
     try:
         yield gwy
@@ -341,7 +338,7 @@ async def real_ti3410(
     gwy = await _real_gateway(real_ti3410_port, gwy_config)
 
     assert isinstance(gwy.hgi, HgiGateway) and gwy.hgi.id not in (None, HGI_DEVICE_ID)
-    assert gwy._protocol._is_evofw3 is False
+    assert gwy._engine._protocol._is_evofw3 is False
 
     try:
         yield gwy

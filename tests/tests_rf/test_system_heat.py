@@ -71,8 +71,8 @@ async def test_system_handle_msg_3150_real_packet(fake_evofw3: Gateway) -> None:
     """
     gwy = fake_evofw3
     pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._protocol.pkt_received(pkt)
-    await asyncio.sleep(0.001)
+    gwy._engine._protocol.pkt_received(pkt)
+    await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
 
     tcs = gwy.tcs
     assert tcs is not None
@@ -90,8 +90,8 @@ async def test_system_handle_msg_3150_force_list(fake_evofw3: Gateway) -> None:
 
     # Bootstrap TCS
     pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._protocol.pkt_received(pkt)
-    await asyncio.sleep(0.001)
+    gwy._engine._protocol.pkt_received(pkt)
+    await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
     tcs = gwy.tcs
     assert tcs is not None  # Ensure TCS exists for Mypy
 
@@ -122,8 +122,8 @@ async def test_system_handle_msg_3150_force_dict(fake_evofw3: Gateway) -> None:
 
     # Bootstrap TCS
     pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._protocol.pkt_received(pkt)
-    await asyncio.sleep(0.001)
+    gwy._engine._protocol.pkt_received(pkt)
+    await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
     tcs = gwy.tcs
     assert tcs is not None  # Ensure TCS exists for Mypy
 

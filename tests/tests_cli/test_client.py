@@ -59,28 +59,33 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     gateway._restore_cached_packets = AsyncMock()
     gateway.add_msg_handler = MagicMock()
 
-    # Fix: Explicitly mock the private protocol attribute
-    gateway._protocol = MagicMock()
+    # Fix: Create the nested engine structure
+    gateway._engine = MagicMock()
+
+    # Fix: Explicitly mock the private protocol attribute inside the engine
+    gateway._engine._protocol = MagicMock()
 
     # Fix: Explicitly mock wait_for_connection_lost as an async method
-    gateway._protocol.wait_for_connection_lost = AsyncMock()
+    gateway._engine._protocol.wait_for_connection_lost = AsyncMock()
 
     # Fix: Create a future attached to the running loop.
     loop = asyncio.get_running_loop()
 
     future: asyncio.Future[None] = loop.create_future()
     future.set_result(None)
-    gateway._protocol._wait_connection_lost = future
+    gateway._engine._protocol._wait_connection_lost = future
 
     # Add required attributes
     gateway.config = MagicMock()
     gateway.config.disable_discovery = False
     gateway.config.enable_eavesdrop = False
-    gateway._loop = MagicMock()
-    gateway._loop.call_soon = MagicMock()
-    gateway._loop.call_later = MagicMock()
-    gateway._loop.time = MagicMock(return_value=0.0)
-    gateway._include = {}
+
+    # Fix: Mock the loop inside the engine
+    gateway._engine._loop = MagicMock()
+    gateway._engine._loop.call_soon = MagicMock()
+    gateway._engine._loop.call_later = MagicMock()
+    gateway._engine._loop.time = MagicMock(return_value=0.0)
+    gateway._engine._include = {}
 
     # Mock devices for print_summary
     mock_dev = MagicMock()

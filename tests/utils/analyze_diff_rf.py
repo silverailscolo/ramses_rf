@@ -216,8 +216,8 @@ async def generate_actual_state() -> dict[str, Any]:
             await gwy.start()
 
         # 2. Wait for the Transport to finish reading the file
-        if gwy._transport:
-            reader_task = gwy._transport.get_extra_info(SZ_READER_TASK)
+        if gwy._engine._transport:
+            reader_task = gwy._engine._transport.get_extra_info(SZ_READER_TASK)
             if reader_task:
                 await reader_task
 

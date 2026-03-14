@@ -261,105 +261,6 @@ class Gateway(GatewayInterface):
             return f"Gateway(input_file={self._engine._input_file})"
         return f"Gateway(port_name={self._engine.ser_name}, port_config={self._engine._port_config})"
 
-    # ------------------------------------------------------------------------
-    # TODO: TEMPORARY PROXIES FOR TEST SUITE BACKWARDS COMPATIBILITY
-    # These properties intercept legacy test accesses to Engine internals
-    # and route them to the composed Engine. They can be removed in a later
-    # PR once the test suite is updated to respect the new API boundaries.
-    # ------------------------------------------------------------------------
-
-    @property
-    def _transport(self) -> Any:
-        return self._engine._transport
-
-    @_transport.setter
-    def _transport(self, value: Any) -> None:
-        self._engine._transport = value
-
-    @property
-    def _protocol(self) -> Any:
-        return self._engine._protocol
-
-    @_protocol.setter
-    def _protocol(self, value: Any) -> None:
-        self._engine._protocol = value
-
-    @property
-    def _loop(self) -> asyncio.AbstractEventLoop:
-        return self._engine._loop
-
-    @_loop.setter
-    def _loop(self, value: asyncio.AbstractEventLoop) -> None:
-        self._engine._loop = value
-
-    @property
-    def _disable_sending(self) -> bool:
-        return self._engine._disable_sending
-
-    @_disable_sending.setter
-    def _disable_sending(self, value: bool) -> None:
-        self._engine._disable_sending = value
-
-    @property
-    def _include(self) -> Any:
-        return self._engine._include
-
-    @_include.setter
-    def _include(self, value: Any) -> None:
-        self._engine._include = value
-
-    @property
-    def _exclude(self) -> Any:
-        return self._engine._exclude
-
-    @_exclude.setter
-    def _exclude(self, value: Any) -> None:
-        self._engine._exclude = value
-
-    @property
-    def _enforce_known_list(self) -> bool:
-        return self._engine._enforce_known_list
-
-    @_enforce_known_list.setter
-    def _enforce_known_list(self, value: bool) -> None:
-        self._engine._enforce_known_list = value
-
-    @property
-    def _hgi_id(self) -> str | None:
-        return self._engine._hgi_id
-
-    @_hgi_id.setter
-    def _hgi_id(self, value: str | None) -> None:
-        self._engine._hgi_id = value
-
-    @property
-    def ser_name(self) -> str | None:
-        return self._engine.ser_name
-
-    @ser_name.setter
-    def ser_name(self, value: str | None) -> None:
-        self._engine.ser_name = value
-
-    @property
-    def _this_msg(self) -> Message | None:
-        return self._engine._this_msg
-
-    @_this_msg.setter
-    def _this_msg(self, value: Message | None) -> None:
-        self._engine._this_msg = value
-
-    @property
-    def pkt_received(self) -> int:
-        return getattr(self._engine, "pkt_received", 0)
-
-    @property
-    def wait_for_connection_lost(self) -> Any:
-        return getattr(self._engine, "wait_for_connection_lost", None)
-
-    @property
-    def _is_evofw3(self) -> bool | None:
-        return getattr(self._engine, "_is_evofw3", None)
-
     @property
     def device_registry(self) -> DeviceRegistryInterface:
         """Return the Device Registry service.
@@ -408,24 +309,6 @@ class Gateway(GatewayInterface):
         if device_id := self._engine._transport.get_extra_info(SZ_ACTIVE_HGI):
             return self.device_registry.device_by_id.get(device_id)
         return None
-
-    @property
-    def _dt_now(self) -> Any:
-        return getattr(self._engine, "_dt_now", None)
-
-    @property
-    def _tasks(self) -> list[asyncio.Task[Any]]:
-        return getattr(self._engine, "_tasks", [])
-
-    @property
-    def _sqlite_index(self) -> bool:
-        return getattr(self._engine, "_sqlite_index", False)
-
-    @_sqlite_index.setter
-    def _sqlite_index(self, value: bool) -> None:
-        self._engine._sqlite_index = value
-
-    # ------------------------------------------------------------------------
 
     async def start(
         self,

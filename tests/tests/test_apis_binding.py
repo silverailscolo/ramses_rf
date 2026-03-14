@@ -3,7 +3,7 @@
 
 import unittest.mock
 from types import SimpleNamespace
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import pytest
 
@@ -41,13 +41,21 @@ CLASS_CODES_MAP: dict[type[Fakeable], Code | tuple[Code, ...]] = {
 
 
 class GatewayStub:
-    config = SimpleNamespace(**{"disable_discovery": True})
+    """A stub for the Gateway to provide isolated state for testing bindings."""
 
-    device_by_id: dict[str, Fakeable] = {}
-    devices: list[Fakeable] = []
+    def __init__(self) -> None:
+        """Initialize the GatewayStub."""
+        self.config = SimpleNamespace(disable_discovery=True)
 
-    _include: dict[str] = {}
-    msg_db = MessageIndex(maintain=False)
+        self.device_by_id: dict[str, Fakeable] = {}
+        self.devices: list[Fakeable] = []
+
+        # Explicitly type as Any to prevent strict mode from complaining about missing mock attributes
+        self._engine: Any = unittest.mock.MagicMock()
+        self._engine._include = {}
+        self._engine._enforce_known_list = False
+
+        self.msg_db = MessageIndex(maintain=False)
 
     @property
     def device_registry(self) -> "GatewayStub":
@@ -81,7 +89,7 @@ async def test_initiate_binding_process(dev_class: type[Fakeable]) -> None:
     with unittest.mock.patch.object(
         Fakeable, "_initiate_binding_process", return_value=None
     ) as mocked_method:
-        gwy._include[dev_addr.id] = {}  # this shouldn't be needed? a BUG?
+        gwy._engine._include[dev_addr.id] = {}  # this shouldn't be needed? a BUG?
 
         dev = dev_class(gwy, dev_addr)
         dev._make_fake()

@@ -44,8 +44,8 @@ async def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     mock_gateway.return_value.start.side_effect = lambda: asyncio.sleep(0)
     mock_gateway.return_value.stop.side_effect = lambda: asyncio.sleep(0)
 
-    # Explicitly mock wait_for_connection_lost as an async method
-    mock_gateway.return_value._protocol.wait_for_connection_lost = AsyncMock()
+    # Explicitly mock wait_for_connection_lost as an async method on the nested engine
+    mock_gateway.return_value._engine._protocol.wait_for_connection_lost = AsyncMock()
 
     # 3. Run the main logic that instantiates Gateway
     # We await the async_main function directly since we are already in an async test
@@ -83,8 +83,8 @@ async def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> Non
     mock_gateway.return_value.start.side_effect = lambda: asyncio.sleep(0)
     mock_gateway.return_value.stop.side_effect = lambda: asyncio.sleep(0)
 
-    # Explicitly mock wait_for_connection_lost as an async method
-    mock_gateway.return_value._protocol.wait_for_connection_lost = AsyncMock()
+    # Explicitly mock wait_for_connection_lost as an async method on the nested engine
+    mock_gateway.return_value._engine._protocol.wait_for_connection_lost = AsyncMock()
 
     # 3. Run the main logic
     await async_main(command, lib_kwargs, **kwargs)

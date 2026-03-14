@@ -27,7 +27,9 @@ async def test_hgi_id_injection() -> None:
     # We want to inspect the kwargs passed to it.
     with (
         patch("ramses_tx.gateway.transport_factory") as mock_transport_factory,
-        patch.object(gwy._protocol, "wait_for_connection_made", new_callable=AsyncMock),
+        patch.object(
+            gwy._engine._protocol, "wait_for_connection_made", new_callable=AsyncMock
+        ),
     ):
         # Setup the mock transport to be returned by the factory
         mock_transport = MagicMock()
@@ -67,7 +69,9 @@ async def test_hgi_id_default_behavior() -> None:
 
     with (
         patch("ramses_tx.gateway.transport_factory") as mock_transport_factory,
-        patch.object(gwy._protocol, "wait_for_connection_made", new_callable=AsyncMock),
+        patch.object(
+            gwy._engine._protocol, "wait_for_connection_made", new_callable=AsyncMock
+        ),
     ):
         # Setup the mock transport
         mock_transport = MagicMock()

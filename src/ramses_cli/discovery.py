@@ -106,7 +106,7 @@ def spawn_scripts(gwy: Gateway, **kwargs: Any) -> list[asyncio.Task[None]]:
             else:
                 tasks.append(asyncio.create_task(result))
 
-    gwy._tasks.extend(tasks)
+    gwy._engine._tasks.extend(tasks)
     return tasks
 
 
@@ -249,7 +249,7 @@ def script_poll_device(gwy: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task[Non
         cmd = Command.from_attrs(RQ, dev_id, code, PayloadT("00"))
         tasks.append(asyncio.create_task(periodic_send(gwy, cmd, count=0)))
 
-    gwy._tasks.extend(tasks)
+    gwy._engine._tasks.extend(tasks)
     return tasks
 
 
