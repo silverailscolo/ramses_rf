@@ -26,6 +26,7 @@ from ramses_tx.const import (
     SZ_ACTIVE_HGI,
     SZ_READER_TASK,
 )
+from ramses_tx.logger import flush_packet_log
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 
 from .const import DONT_CREATE_MESSAGES
@@ -359,6 +360,20 @@ class Gateway(GatewayInterface):
         )
         if self._pkt_log_listener:
             self._pkt_log_listener.start()
+
+            pkt_log_config = cast("dict[str, Any]", self._engine._packet_log)
+            if flush_interval := pkt_log_config.get("flush_interval", 0):
+
+                async def _periodic_flush() -> None:
+                    """Periodically flush the packet log."""
+                    try:
+                        while True:
+                            await asyncio.sleep(flush_interval)
+                            flush_packet_log(self._pkt_log_listener)
+                    except asyncio.CancelledError:
+                        pass
+
+                self.add_task(self._engine._loop.create_task(_periodic_flush()))
 
         # initialize SQLite index, set in _tx/Engine
         if self._engine._sqlite_index:  # TODO(eb): default to True in Q1 2026

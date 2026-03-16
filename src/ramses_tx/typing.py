@@ -616,6 +616,9 @@ class PktLogConfigT(TypedDict):
     file_name: str
     rotate_backups: int
     rotate_bytes: int | None
+    buffer_capacity: NotRequired[int]
+    flush_level: NotRequired[int]
+    flush_interval: NotRequired[float]
 
 
 # CODES_SCHEMA entries
