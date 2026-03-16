@@ -13,6 +13,7 @@ import sys
 from collections.abc import Callable, Mapping
 from datetime import datetime as dt
 from logging.handlers import (
+    MemoryHandler,
     QueueHandler,
     QueueListener,
     TimedRotatingFileHandler as _TimedRotatingFileHandler,
@@ -181,11 +182,6 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
         assert self.when == "MIDNIGHT"
         self.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$", re.ASCII)
 
-    # def emit(self, record):  # used only for debugging
-    #     if True or self.shouldRollover(record):
-    #         self.doRollover()
-    #     return super().emit(record)
-
 
 def getLogger(  # permits a bespoke Logger class
     name: str | None = None, pkt_log: bool = False
@@ -244,13 +240,21 @@ def set_pkt_logging(
     file_name: str | None = None,
     rotate_backups: int = 0,
     rotate_bytes: int | None = None,
+    buffer_capacity: int = 0,
+    flush_level: int = logging.ERROR,
+    flush_interval: float = 0,
 ) -> QueueListener | None:
     """Create/configure handlers, formatters, etc.
 
     Parameters:
+    - logger:         The logger to configure.
+    - cc_console:     If True, output to stdout/stderr.
     - file_name:      base of file to store packet logs in, from root
     - rotate_backups: keep this many copies, and rotate at midnight unless:
     - rotate_bytes:   rotate log files when log > rotate_size
+    - buffer_capacity: If > 0, buffer logs in memory up to this capacity.
+    - flush_level:    The logging level that triggers the buffer to flush.
+    - flush_interval: Accepted here to satisfy kwargs unpacked from config (unused locally).
     """
 
     logger.propagate = False  # log file is distinct from any app/debug logging
@@ -263,27 +267,38 @@ def set_pkt_logging(
     handlers: list[logging.Handler] = []
 
     if file_name:  # note: this opens the packet_log file IO and may block
+        file_handler: logging.Handler
+
         if rotate_bytes:
             rotate_backups = rotate_backups or 2
-            handler = logging.handlers.RotatingFileHandler(
+            file_handler = logging.handlers.RotatingFileHandler(
                 file_name, maxBytes=rotate_bytes, backupCount=rotate_backups
             )
         elif rotate_backups:
-            handler = TimedRotatingFileHandler(
+            file_handler = TimedRotatingFileHandler(
                 file_name, when="MIDNIGHT", backupCount=rotate_backups
             )
         else:
-            handler = logging.FileHandler(file_name)
+            file_handler = logging.FileHandler(file_name)
 
         logfile_fmt = Formatter(fmt=PKT_LOG_FMT + BANDW_SUFFIX)
 
-        handler.setFormatter(logfile_fmt)
-        handler.setLevel(logging.INFO)  # .INFO (usually), or .DEBUG
-        handler.addFilter(PktLogFilter())  # record.levelno in (.INFO, .WARNING)
-        handlers.append(handler)
+        file_handler.setFormatter(logfile_fmt)
+        file_handler.setLevel(logging.INFO)  # .INFO (usually), or .DEBUG
+        file_handler.addFilter(PktLogFilter())  # record.levelno in (.INFO, .WARNING)
+
+        if buffer_capacity > 0:
+            mem_handler = MemoryHandler(
+                capacity=buffer_capacity,
+                flushLevel=flush_level,
+                target=file_handler,
+            )
+            mem_handler.addFilter(PktLogFilter())
+            handlers.append(mem_handler)
+        else:
+            handlers.append(file_handler)
 
     elif cc_console:
-        # logger.addHandler(logging.NullHandler())  # Not needed with QueueHandler
         pass
 
     elif not cc_console:
@@ -330,3 +345,15 @@ def set_pkt_logging(
     logger.warning("", extra=extras)  # initial log line
 
     return listener
+
+
+def flush_packet_log(listener: QueueListener | None) -> None:
+    """Manually flush any MemoryHandler associated with the packet log listener.
+
+    :param listener: The QueueListener managing the log handlers.
+    """
+    if listener is None:
+        return
+    for handler in listener.handlers:
+        if isinstance(handler, MemoryHandler):
+            handler.flush()
