@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from enum import IntEnum
 from typing import TYPE_CHECKING, Final
 
@@ -155,3 +156,10 @@ WB_STATUS_CODES: Final[dict[str, str]] = {
     "357": "Appliance in air purge mode. Primary heat exchanger air venting program active - approximately 100 seconds.",
     "358": "Three way valve kick. If the 3-way valve hasn't moved in within 48 hours, the valve will operate once to prevent seizure",
 }
+
+# Device Availability Timeouts
+HEARTBEAT_TIMEOUT_DEFAULT = timedelta(hours=1)
+HEARTBEAT_TIMEOUT_OTB = timedelta(hours=24)
+HEARTBEAT_TIMEOUT_TRV = timedelta(hours=12)
+HEARTBEAT_TIMEOUT_REMOTE = timedelta(hours=24)
+HEARTBEAT_TIMEOUT_SENSOR = timedelta(hours=12)
