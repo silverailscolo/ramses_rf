@@ -1,5 +1,5 @@
 # Requirements to build the code documentation from the source code
-# - last checked/updated: 2026-01-19 (c.f. HA 2026.1.2)
+# - last checked/updated: 2026-03-21 (c.f. HA 2026.3.3)
 
 # libraries required to build with sphinx
 # - pip list | grep -E 'sphinx'

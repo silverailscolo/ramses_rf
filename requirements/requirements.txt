@@ -1,5 +1,5 @@
 # Requirements to use the library via its CLI client.py
-# - last checked/updated: 2026-03-11 (c.f. HA 2026.2.1), on 2026-03-09 click changed to asyncclick
+# - last checked/updated: 2026-03-21 (c.f. HA 2026.3.3)
 #
 
 # library requirements (dependencies) are in pyproject.toml
