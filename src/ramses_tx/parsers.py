@@ -1284,7 +1284,15 @@ def parser_10e0(payload: str, msg: Message) -> dict[str, Any]:
             f"{msg!r} < {_INFORM_DEV_MSG}, with the make/model of device: {msg.src} ({err})"
         )
 
-    description, _, unknown = payload[36:].partition("00")
+    description, _, unknown = payload[36:].partition(
+        "00"
+    )  # intended: split description (product name) part before '00'
+    # some payloads contain a '000' substring, so we add an odd/even check:
+    if len(description) % 2 != 0:
+        description = description + "0"
+        if not unknown.startswith("0"):  # expected for '000'
+            _LOGGER.debug("Unexpected 2E10 payload: %s", payload)
+        unknown = unknown[1:]  # trim first char
 
     result = {
         SZ_OEM_CODE: payload[14:16],  # 00/FF is CH/DHW, 01/6x is HVAC
