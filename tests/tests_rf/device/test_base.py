@@ -7,13 +7,19 @@ which all reside in ramses_rf/device/base.py.
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
+from collections.abc import Generator
+from datetime import datetime as dt
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ramses_rf.const import GATEWAY_MESSAGE_TIMEOUT
 from ramses_rf.device.base import BatteryState, DeviceBase, HgiGateway
+from ramses_rf.database import MessageIndex
+from ramses_rf.device import HgiGateway
 from ramses_rf.gateway import Gateway
 from ramses_tx import Address
+from ramses_tx.typing import DeviceIdT
 
 
 @pytest.fixture
@@ -184,3 +190,38 @@ class TestHgiGateway:
 
         hgi_gateway._gwy._engine._this_msg = mock_msg
         assert await hgi_gateway.is_active()
+
+    @pytest.mark.asyncio
+    async def test_status_with_latest_dtm(self, hgi_gateway: HgiGateway) -> None:
+        # Mock the parent class's status method
+        latest_dt = dt(2023, 1, 1, 12, 0, 0)
+        mock_parent_status = {"gateway_dtm": latest_dt}
+        with patch.object(HgiGateway, "status", new_callable=AsyncMock) as mock_status:
+            mock_status.return_value = mock_parent_status
+
+            hgi_gateway.latest_dtm = latest_dt
+
+            # Call the status method
+            result = await hgi_gateway.status()
+
+            # Assert the result
+            assert result == {
+                **mock_parent_status,
+                "gateway_dtm": hgi_gateway.latest_dtm,
+            }
+
+
+    @pytest.mark.asyncio
+    async def test_status_without_latest_dtm(self, hgi_gateway: HgiGateway):
+        # Mock the parent class's status method
+        mock_parent_status = {"gateway_dtm": None}
+        with patch.object(HgiGateway, "status", new_callable=AsyncMock) as mock_status:
+            mock_status.return_value = mock_parent_status
+
+            hgi_gateway.latest_dtm = None
+
+            # Call the status method
+            result = await hgi_gateway.status()
+
+            # Assert the result
+            assert result == {**mock_parent_status, "gateway_dtm": None}
