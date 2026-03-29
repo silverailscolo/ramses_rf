@@ -483,7 +483,7 @@ class HgiGateway(Device):  # HGI (18:)
     """The HGI80 base class."""
 
     _SLUG: str = DevType.HGI
-    GATEWAY_DTM = "gateway_dtm"  # boolean
+    GATEWAY_DTM = "gateway_dtm"
 
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
