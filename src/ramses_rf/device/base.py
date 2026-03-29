@@ -509,12 +509,9 @@ class HgiGateway(Device):  # HGI (18:)
             return False
 
         # Extract dtm and assert its type
-        dtm: datetime = msg.dtm
+        dtm: dt = msg.dtm
 
-        if dtm.tzinfo is not None:
-            now = datetime.now(UTC).astimezone(dtm.tzinfo)
-        else:
-            now = datetime.now()
+        now = dt.now(UTC).astimezone(dtm.tzinfo) if dtm.tzinfo is not None else dt.now()
 
         # Cleaner math because the constant is already a timedelta
         return bool((now - dtm) < GATEWAY_MESSAGE_TIMEOUT)
