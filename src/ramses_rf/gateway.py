@@ -369,7 +369,9 @@ class Gateway(GatewayInterface):
                     try:
                         while True:
                             await asyncio.sleep(flush_interval)
-                            flush_packet_log(self._pkt_log_listener)
+                            await self._engine._loop.run_in_executor(
+                                None, flush_packet_log, self._pkt_log_listener
+                            )
                     except asyncio.CancelledError:
                         pass
 
@@ -428,10 +430,17 @@ class Gateway(GatewayInterface):
         await self._engine.stop()
 
         if self._pkt_log_listener:
-            self._pkt_log_listener.stop()
-            # Close handlers to ensure files are flushed/closed
-            for handler in self._pkt_log_listener.handlers:
-                handler.close()
+
+            def _stop_listener(listener: QueueListener) -> None:
+                """Stop the listener and close its handlers synchronously."""
+                listener.stop()
+                # Close handlers to ensure files are flushed/closed
+                for handler in listener.handlers:
+                    handler.close()
+
+            await self._engine._loop.run_in_executor(
+                None, _stop_listener, self._pkt_log_listener
+            )
             self._pkt_log_listener = None
 
         if self._msg_db:
