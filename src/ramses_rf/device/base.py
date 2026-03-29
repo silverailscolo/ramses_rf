@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.binding_fsm import BindingManager, Vendor
@@ -82,7 +82,7 @@ class DeviceBase(Entity):
         self.type = dev_addr.type  # DEX  # TODO: remove this attr? use SLUG?
 
         self._scheme: Vendor | None = traits.scheme if traits else None
-        self._last_msg_dtm: datetime | None = None
+        self._last_msg_dtm: dt | None = None
 
     def __str__(self) -> str:
         if self._STATE_ATTR and hasattr(self, self._STATE_ATTR):
@@ -96,7 +96,7 @@ class DeviceBase(Entity):
         return self.id < other.id  # type: ignore[no-any-return]
 
     @property
-    def heartbeat_timeout(self) -> timedelta:
+    def heartbeat_timeout(self) -> td:
         """Return the timeout before the device is considered unavailable.
 
         :return: The timeout duration before going unavailable.
@@ -115,9 +115,9 @@ class DeviceBase(Entity):
             return True  # Assume available until we receive baseline telemetry
 
         if self._last_msg_dtm.tzinfo is not None:
-            now = datetime.now(UTC).astimezone(self._last_msg_dtm.tzinfo)
+            now = dt.now(UTC).astimezone(self._last_msg_dtm.tzinfo)
         else:
-            now = datetime.now()
+            now = dt.now()
 
         return (now - self._last_msg_dtm) <= self.heartbeat_timeout
 
