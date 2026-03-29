@@ -128,19 +128,23 @@ class CarbonDioxide(HvacSensorBase):  # 1298
             int | None, await self.state_store._msg_value(Code._1298, key=SZ_CO2_LEVEL)
         )
 
-    def set_co2_level(self, value: int | None) -> None:
+    async def set_co2_level(self, value: int | None) -> Packet:
         """Set a fake CO2 level for the sensor.
 
         :param value: The CO2 level in ppm to set, or None to clear the fake value
         :type value: int | None
         :raises TypeError: If the sensor is not in faked mode
+        :return: The sent packet
+        :rtype: Packet
         """
 
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
         cmd = Command.put_co2_level(self.id, value)
-        self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(
+            cmd, num_repeats=2, priority=Priority.HIGH
+        )
 
     async def status(self) -> dict[str, Any]:
         """Return the status of the CO2 sensor.
@@ -169,19 +173,23 @@ class IndoorHumidity(HvacSensorBase):  # 12A0
             await self.state_store._msg_value(Code._12A0, key=SZ_INDOOR_HUMIDITY),
         )
 
-    def set_indoor_humidity(self, value: float | None) -> None:
+    async def set_indoor_humidity(self, value: float | None) -> Packet:
         """Set a fake indoor humidity value for the sensor.
 
         :param value: The humidity percentage to set (0-100), or None to clear the fake value
         :type value: float | None
         :raises TypeError: If the sensor is not in faked mode
+        :return: The sent packet
+        :rtype: Packet
         """
 
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
         cmd = Command.put_indoor_humidity(self.id, value)
-        self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(
+            cmd, num_repeats=2, priority=Priority.HIGH
+        )
 
     async def status(self) -> dict[str, Any]:
         """Return the status of the indoor humidity sensor.
@@ -214,19 +222,23 @@ class PresenceDetect(HvacSensorBase):  # 2E10
             await self.state_store._msg_value(Code._2E10, key=SZ_PRESENCE_DETECTED),
         )
 
-    def set_presence_detected(self, value: bool | None) -> None:
+    async def set_presence_detected(self, value: bool | None) -> Packet:
         """Set a fake presence detection state for the sensor.
 
         :param value: The presence state to set (True/False), or None to clear the fake value
         :type value: bool | None
         :raises TypeError: If the sensor is not in faked mode
+        :return: The sent packet
+        :rtype: Packet
         """
 
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
         cmd = Command.put_presence_detected(self.id, value)
-        self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(
+            cmd, num_repeats=2, priority=Priority.HIGH
+        )
 
     async def status(self) -> dict[str, Any]:
         """Return the status of the presence sensor.
@@ -392,12 +404,14 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
             str | None, await self.state_store._msg_value(Code._22F1, key="rate")
         )
 
-    def set_fan_rate(self, value: int) -> None:
+    async def set_fan_rate(self, value: int) -> Packet:
         """Set a fake fan rate for the remote control.
 
         :param value: The fan rate to set (can be int or str, but not None)
         :type value: int
         :raises TypeError: If the remote is not in faked mode
+        :return: The sent packet
+        :rtype: Packet
         :note: This is a work in progress
         """
 
@@ -408,7 +422,9 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
 
         # NOTE: this is not completely understood (i.e. diffs between vendor schemes)
         cmd = Command.set_fan_mode(self.id, int(4 * value), src_id=self.id)
-        self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(
+            cmd, num_repeats=2, priority=Priority.HIGH
+        )
 
     async def fan_mode(self) -> str | None:
         """Return the current fan mode.

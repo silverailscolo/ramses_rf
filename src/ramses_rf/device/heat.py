@@ -214,14 +214,16 @@ class Weather(DeviceHeat):  # 0002
             await self.state_store._msg_value(Code._0002, key=SZ_TEMPERATURE),
         )
 
-    def set_temperature(self, value: float | None) -> None:
+    async def set_temperature(self, value: float | None) -> Packet:
         """Fake the outdoor temperature of the sensor."""
 
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
         cmd = Command.put_outdoor_temp(self.id, value)
-        self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(
+            cmd, num_repeats=2, priority=Priority.HIGH
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -276,14 +278,16 @@ class DhwTemperature(DeviceHeat):  # 1260
             await self.state_store._msg_value(Code._1260, key=SZ_TEMPERATURE),
         )
 
-    def set_temperature(self, value: float | None) -> None:
+    async def set_temperature(self, value: float | None) -> Packet:
         """Fake the DHW temperature of the sensor."""
 
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
         cmd = Command.put_dhw_temp(self.id, value)
-        self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(
+            cmd, num_repeats=2, priority=Priority.HIGH
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -303,14 +307,16 @@ class Temperature(DeviceHeat):  # 30C9
             await self.state_store._msg_value(Code._30C9, key=SZ_TEMPERATURE),
         )
 
-    def set_temperature(self, value: float | None) -> None:
+    async def set_temperature(self, value: float | None) -> Packet:
         """Fake the indoor temperature of the sensor."""
 
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
         cmd = Command.put_sensor_temp(self.id, value)
-        self._gwy.send_cmd(cmd, num_repeats=2, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(
+            cmd, num_repeats=2, priority=Priority.HIGH
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()

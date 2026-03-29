@@ -517,7 +517,8 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         if msg.code == Code._30C9 and msg._has_array:
             for z in self.zones:
                 if z.idx not in (x[SZ_ZONE_IDX] for x in msg.payload):
-                    z._get_temp()
+                    task = asyncio.create_task(z._get_temp())
+                    self._gwy.add_task(task)
 
         # If some zones still don't have a sensor, maybe eavesdrop?
         if self._gwy.config.enable_eavesdrop and (
@@ -917,9 +918,9 @@ class SysMode(SystemBase):  # 2E04
             dict[str, Any] | None, await self.state_store._msg_value(Code._2E04)
         )
 
-    def set_mode(
+    async def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
-    ) -> asyncio.Task[Packet]:
+    ) -> Packet:
         """
         Set a system mode for a specified duration, or indefinitely.
 
@@ -928,15 +929,17 @@ class SysMode(SystemBase):  # 2E04
         :return:
         """
         cmd = Command.set_system_mode(self.id, system_mode, until=until)
-        return self._gwy.send_cmd(cmd, priority=Priority.HIGH, wait_for_reply=True)
+        return await self._gwy.async_send_cmd(
+            cmd, priority=Priority.HIGH, wait_for_reply=True
+        )
 
-    def set_auto(self) -> asyncio.Task[Packet]:
+    async def set_auto(self) -> Packet:
         """Revert system to Auto, set non-PermanentOverride zones to FollowSchedule."""
-        return self.set_mode(SYS_MODE_MAP.AUTO)
+        return await self.set_mode(SYS_MODE_MAP.AUTO)
 
-    def reset_mode(self) -> asyncio.Task[Packet]:
+    async def reset_mode(self) -> Packet:
         """Revert system to Auto, force *all* zones to FollowSchedule."""
-        return self.set_mode(SYS_MODE_MAP.AUTO_WITH_RESET)
+        return await self.set_mode(SYS_MODE_MAP.AUTO_WITH_RESET)
 
     async def params(self) -> dict[str, Any]:
         params = await super().params()
