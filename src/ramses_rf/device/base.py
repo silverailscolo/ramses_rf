@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, cast
 from ramses_rf.binding_fsm import BindingManager, Vendor
 from ramses_rf.const import (
     DEV_TYPE_MAP,
+    GATEWAY_MESSAGE_TIMEOUT,
     HEARTBEAT_TIMEOUT_DEFAULT,
     SZ_OEM_CODE,
     DevType,
@@ -493,7 +494,30 @@ class HgiGateway(Device):  # HGI (18:)
         self.tcs = None
 
     async def schema(self) -> dict[str, Any]:
+        """Return the schema dictionary for the HGI Gateway."""
         return {}
+
+    async def is_active(self) -> bool:
+        """Return True if the gateway has received messages recently.
+
+        Evaluates the timestamp of the latest received message overall.
+        """
+        # Explicitly type the extracted object to pacify Mypy
+        msg: Message | None = getattr(self._gwy._engine, "_this_msg", None)
+
+        if not msg or not hasattr(msg, "dtm"):
+            return False
+
+        # Extract dtm and assert its type
+        dtm: datetime = msg.dtm
+
+        if dtm.tzinfo is not None:
+            now = datetime.now(UTC).astimezone(dtm.tzinfo)
+        else:
+            now = datetime.now()
+
+        # Cleaner math because the constant is already a timedelta
+        return bool((now - dtm) < GATEWAY_MESSAGE_TIMEOUT)
 
 
 class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible

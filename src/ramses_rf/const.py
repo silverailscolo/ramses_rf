@@ -163,3 +163,5 @@ HEARTBEAT_TIMEOUT_OTB = timedelta(hours=24)
 HEARTBEAT_TIMEOUT_TRV = timedelta(hours=12)
 HEARTBEAT_TIMEOUT_REMOTE = timedelta(hours=24)
 HEARTBEAT_TIMEOUT_SENSOR = timedelta(hours=12)
+
+GATEWAY_MESSAGE_TIMEOUT: timedelta = timedelta(minutes=5)
