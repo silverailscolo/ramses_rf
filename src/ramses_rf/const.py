@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import timedelta as td
 from enum import IntEnum
 from typing import TYPE_CHECKING, Final
 
@@ -158,8 +158,8 @@ WB_STATUS_CODES: Final[dict[str, str]] = {
 }
 
 # Device Availability Timeouts
-HEARTBEAT_TIMEOUT_DEFAULT = timedelta(hours=1)
-HEARTBEAT_TIMEOUT_OTB = timedelta(hours=24)
-HEARTBEAT_TIMEOUT_TRV = timedelta(hours=12)
-HEARTBEAT_TIMEOUT_REMOTE = timedelta(hours=24)
-HEARTBEAT_TIMEOUT_SENSOR = timedelta(hours=12)
+HEARTBEAT_TIMEOUT_DEFAULT = td(hours=1)
+HEARTBEAT_TIMEOUT_OTB = td(hours=24)
+HEARTBEAT_TIMEOUT_TRV = td(hours=12)
+HEARTBEAT_TIMEOUT_REMOTE = td(hours=24)
+HEARTBEAT_TIMEOUT_SENSOR = td(hours=12)
