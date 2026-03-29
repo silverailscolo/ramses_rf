@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
 from datetime import datetime as dt, timedelta as td
@@ -177,15 +176,14 @@ class ZoneSchedule(ZoneBase):  # 0404
 
         return self._schedule.schedule
 
-    @property
-    def schedule_version(self) -> int | None:
+    async def schedule_version(self) -> int | None:
         """Return the version number associated with the latest retrieved schedule."""
         return self._schedule.version
 
     async def status(self) -> dict[str, Any]:
         return {
             **(await super().status()),
-            "schedule_version": self.schedule_version,
+            "schedule_version": await self.schedule_version(),
         }
 
 
@@ -364,9 +362,9 @@ class DhwZone(ZoneSchedule):  # CS92A
             float | None, await self.state_store._msg_value(Code._10A0, key=SZ_SETPOINT)
         )
 
-    def set_setpoint(self, value: float) -> asyncio.Task[Packet]:  # 10A0
+    async def set_setpoint(self, value: float) -> Packet:  # 10A0
         """Set the target temperature for the DHW zone."""
-        return self.set_config(setpoint=value)
+        return await self.set_config(setpoint=value)
 
     async def temperature(self) -> float | None:  # 1260
         return cast(
@@ -392,37 +390,39 @@ class DhwZone(ZoneSchedule):  # CS92A
             await self.state_store._msg_value(Code._0009, key=SZ_RELAY_FAILSAFE),
         )
 
-    def set_mode(
+    async def set_mode(
         self,
         *,
         mode: int | str | None = None,
         active: bool | None = None,
         until: dt | str | None = None,
-    ) -> asyncio.Task[Packet]:
+    ) -> Packet:
         """Set the DHW mode (mode, active, until)."""
 
         cmd = Command.set_dhw_mode(self.ctl.id, mode=mode, active=active, until=until)
-        return self._gwy.send_cmd(cmd, priority=Priority.HIGH, wait_for_reply=True)
+        return await self._gwy.async_send_cmd(
+            cmd, priority=Priority.HIGH, wait_for_reply=True
+        )
 
-    def set_boost_mode(self) -> asyncio.Task[Packet]:
+    async def set_boost_mode(self) -> Packet:
         """Enable DHW for an hour, despite any schedule."""
-        return self.set_mode(
+        return await self.set_mode(
             mode=ZON_MODE_MAP.TEMPORARY,
             active=True,
             until=dt.now() + td(hours=1),
         )
 
-    def reset_mode(self) -> asyncio.Task[Packet]:  # 1F41
+    async def reset_mode(self) -> Packet:  # 1F41
         """Revert the DHW to following its schedule."""
-        return self.set_mode(mode=ZON_MODE_MAP.FOLLOW)
+        return await self.set_mode(mode=ZON_MODE_MAP.FOLLOW)
 
-    def set_config(
+    async def set_config(
         self,
         *,
         setpoint: float | None = None,
         overrun: int | None = None,
         differential: float | None = None,
-    ) -> asyncio.Task[Packet]:
+    ) -> Packet:
         """Set the DHW parameters (setpoint, overrun, differential)."""
 
         # dhw_params = self.state_store._msg_value(Code._10A0)
@@ -439,11 +439,11 @@ class DhwZone(ZoneSchedule):  # CS92A
             overrun=overrun,
             differential=differential,
         )
-        return self._gwy.send_cmd(cmd, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
-    def reset_config(self) -> asyncio.Task[Packet]:  # 10A0
+    async def reset_config(self) -> Packet:  # 10A0
         """Reset the DHW parameters to their default values."""
-        return self.set_config(setpoint=50, overrun=5, differential=1)
+        return await self.set_config(setpoint=50, overrun=5, differential=1)
 
     async def schema(self) -> dict[str, Any]:
         """Return the schema of the DHW's."""
@@ -737,15 +737,13 @@ class Zone(ZoneSchedule):
             ),
         )
 
-    def set_setpoint(
-        self, value: float | None
-    ) -> asyncio.Task[Packet] | None:  # 000A/2309
+    async def set_setpoint(self, value: float | None) -> Packet | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""
         if value is None:
-            return self.reset_mode()
+            return await self.reset_mode()
 
         cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, value)
-        return self._gwy.send_cmd(cmd, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
     async def temperature(self) -> float | None:  # 30C9
         if self._gwy.msg_db:
@@ -795,15 +793,17 @@ class Zone(ZoneSchedule):
             ),
         )
 
-    def _get_temp(self) -> asyncio.Task[Packet] | None:
+    async def _get_temp(self) -> Packet | None:
         """Get the zone's latest temp from the Controller."""
-        return self._send_cmd(Command.get_zone_temp(self.ctl.id, self.idx))
+        return await self._gwy.async_send_cmd(
+            Command.get_zone_temp(self.ctl.id, self.idx)
+        )
 
-    def reset_config(self) -> asyncio.Task[Packet]:  # 000A
+    async def reset_config(self) -> Packet:  # 000A
         """Reset the zone's parameters to their default values."""
-        return self.set_config()
+        return await self.set_config()
 
-    def set_config(
+    async def set_config(
         self,
         *,
         min_temp: float = 5,
@@ -811,7 +811,7 @@ class Zone(ZoneSchedule):
         local_override: bool = False,
         openwindow_function: bool = False,
         multiroom_mode: bool = False,
-    ) -> asyncio.Task[Packet]:
+    ) -> Packet:
         """Set the zone's parameters (min_temp, max_temp, etc.)."""
 
         cmd = Command.set_zone_config(
@@ -823,23 +823,23 @@ class Zone(ZoneSchedule):
             openwindow_function=openwindow_function,
             multiroom_mode=multiroom_mode,
         )
-        return self._gwy.send_cmd(cmd, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
-    def reset_mode(self) -> asyncio.Task[Packet]:  # 2349
+    async def reset_mode(self) -> Packet:  # 2349
         """Revert the zone to following its schedule."""
-        return self.set_mode(mode=ZON_MODE_MAP.FOLLOW)
+        return await self.set_mode(mode=ZON_MODE_MAP.FOLLOW)
 
-    def set_frost_mode(self) -> asyncio.Task[Packet]:  # 2349
+    async def set_frost_mode(self) -> Packet:  # 2349
         """Set the zone to the lowest possible setpoint, indefinitely."""
-        return self.set_mode(mode=ZON_MODE_MAP.PERMANENT, setpoint=5)  # TODO
+        return await self.set_mode(mode=ZON_MODE_MAP.PERMANENT, setpoint=5)  # TODO
 
-    def set_mode(
+    async def set_mode(
         self,
         *,
         mode: str | None = None,
         setpoint: float | None = None,
         until: dt | str | None = None,
-    ) -> asyncio.Task[Packet]:  # 2309/2349
+    ) -> Packet:  # 2309/2349
         """Override the zone's setpoint for a specified duration, or indefinitely."""
 
         if mode is not None or until is not None:  # Hometronics doesn't support 2349
@@ -851,13 +851,13 @@ class Zone(ZoneSchedule):
         else:
             raise exc.CommandInvalid("Invalid mode/setpoint")
 
-        return self._gwy.send_cmd(cmd, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
-    def set_name(self, name: str) -> asyncio.Task[Packet]:
+    async def set_name(self, name: str) -> Packet:
         """Set the zone's name."""
 
         cmd = Command.set_zone_name(self.ctl.id, self.idx, name)
-        return self._gwy.send_cmd(cmd, priority=Priority.HIGH)
+        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
     async def schema(self) -> dict[str, Any]:
         """Return the schema of the zone (type, devices)."""

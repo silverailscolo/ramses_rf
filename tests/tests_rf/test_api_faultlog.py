@@ -71,7 +71,7 @@ async def _test_get_faultlog(gwy: Gateway, ctl_id: DeviceIdT) -> None:
     assert isinstance(tcs, Evohome)  # mypy
 
     faultlog = await tcs.get_faultlog(limit=TST_FAULTLOG_LIMIT)
-    assert faultlog
+    assert isinstance(faultlog, dict)  # Can be empty {} if no faults exist
 
 
 #######################################################################################
@@ -98,18 +98,11 @@ def _create_test_suite(log_file_name: str) -> dict[str, str]:
     return result
 
 
-# TEST_SUITE = {
-#     r"RQ.* 18:.* 01:.* 0418 003 000000": "RP --- 01:145038 18:006402 --:------ 0418 022 004000B00400000000004A18659A7FFFFF7000000001",
-#     r"RQ.* 18:.* 01:.* 0418 003 000001": "RP --- 01:145038 18:006402 --:------ 0418 022 000001B00400000000004A184B58FFFFFF7000000001",
-#     r"RQ.* 18:.* 01:.* 0418 003 000002": "RP --- 01:145038 18:006402 --:------ 0418 022 004002B0060401000000431888F87FFFFF70005A23FD",
-#     r"RQ.* 18:.* 01:.* 0418 003 000003": "RP --- 01:145038 18:006402 --:------ 0418 022 000003B006040100000043187D63FFFFFF70005A23FD",
-#     r"RQ.* 18:.* 01:.* 0418 003 000004": "RP --- 01:145038 18:006402 --:------ 0418 022 000000B0000000000000000000007FFFFF7000000000",
-# }
 TEST_SUITE = _create_test_suite(f"{LOGS_DIR}/test_api_faultlog.log")
 
 
 async def test_get_faultlog_fake(fake_evofw3: Gateway) -> None:
-    """Test obtaining the schedule from a faked controller via Virtual RF."""
+    """Test obtaining a populated schedule from a faked controller via Virtual RF."""
 
     assert fake_evofw3._engine._transport  # mypy
 
@@ -130,29 +123,51 @@ async def test_get_faultlog_fake(fake_evofw3: Gateway) -> None:
     tcs = fake_evofw3.tcs
     assert tcs  # mypy
 
-    _ = await tcs.get_faultlog(limit=64)  # TODO: multiple TEST_SUITEs
+    _ = await tcs.get_faultlog(limit=64, force_refresh=True)
 
     assert len(tcs._faultlog._log) == 49
+
+    # Test the newly standardized public properties in heat.py
     assert (
-        str(tcs._faultlog.latest_event)
+        tcs.latest_event
         == "24-04-20T12:44:52, restore, battery_low, 00:000001, 00, controller"
     )
     assert (
-        str(tcs._faultlog.latest_fault)
+        tcs.latest_fault
         == "24-04-20T09:26:49, fault,   battery_low, 00:000001, 00, controller"
     )
-    assert (
-        tcs._faultlog.active_faults is not None
-        and len(tcs._faultlog.active_faults) == 1
-        and (
-            str(tcs._faultlog.active_faults[0])
-            == "24-03-20T20:11:13, fault,   comms_fault, 07:123456, FA, dhw_sensor"
-        )
+    assert tcs.active_faults == (
+        "24-03-20T20:11:13, fault,   comms_fault, 07:123456, FA, dhw_sensor",
     )
 
-    # assert tcs.latest_event
-    # assert tcs.latest_fault
-    # assert tcs.active_fault
+
+async def test_get_faultlog_empty(fake_evofw3: Gateway) -> None:
+    """Test obtaining an empty fault log from a faked controller via Virtual RF."""
+
+    assert fake_evofw3._engine._transport  # mypy
+
+    # Prime the virtual RF with entirely empty (null) replies...
+    rf: VirtualRf = fake_evofw3._engine._transport.get_extra_info("virtual_rf")
+    for idx in range(0, 64):
+        rq = f"RQ --- {TST_ID_} 01:145038 --:------ 0418 003 0000{idx:02X}"
+        # A real controller always replies with idx 00 for empty slots:
+        rp = f"RP --- 01:145038 {TST_ID_} --:------ 0418 022 000000B0000000000000000000007FFFFF7000000000"
+        rf.add_reply_for_cmd(rq, rp)
+
+    await _test_get_faultlog(fake_evofw3, "01:145038")
+
+    tcs = fake_evofw3.tcs
+    assert tcs  # mypy
+
+    faultlog = await tcs.get_faultlog(limit=64, force_refresh=True)
+
+    assert len(faultlog) == 0
+    assert tcs._faultlog.is_current is True
+
+    # The public properties should gracefully handle the empty state
+    assert tcs.latest_event is None
+    assert tcs.latest_fault is None
+    assert tcs.active_faults is None
 
 
 @pytest.mark.xdist_group(name="real_serial")
