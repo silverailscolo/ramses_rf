@@ -5,10 +5,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
+    HEARTBEAT_TIMEOUT_REMOTE,
+    HEARTBEAT_TIMEOUT_SENSOR,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BOOST_TIMER,
@@ -85,7 +88,14 @@ class HvacRemoteBase(DeviceHvac):
     It provides common functionality and interfaces for remote control operations.
     """
 
-    pass
+    @property
+    def heartbeat_timeout(self) -> timedelta:
+        """Return the timeout before the device is considered unavailable.
+
+        :return: The timeout duration.
+        :rtype: timedelta
+        """
+        return HEARTBEAT_TIMEOUT_REMOTE
 
 
 class HvacSensorBase(DeviceHvac):
@@ -95,7 +105,14 @@ class HvacSensorBase(DeviceHvac):
     It provides common functionality for sensor data collection and processing.
     """
 
-    pass
+    @property
+    def heartbeat_timeout(self) -> timedelta:
+        """Return the timeout before the device is considered unavailable.
+
+        :return: The timeout duration.
+        :rtype: timedelta
+        """
+        return HEARTBEAT_TIMEOUT_SENSOR
 
 
 class CarbonDioxide(HvacSensorBase):  # 1298

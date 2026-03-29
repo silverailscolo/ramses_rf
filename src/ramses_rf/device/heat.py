@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from ramses_rf import exceptions as exc
@@ -12,6 +13,8 @@ from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
     DOMAIN_TYPE_MAP,
+    HEARTBEAT_TIMEOUT_OTB,
+    HEARTBEAT_TIMEOUT_TRV,
     SZ_DEVICES,
     SZ_DOMAIN_ID,
     SZ_HEAT_DEMAND,
@@ -719,6 +722,15 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         # lf._use_ot = self._gwy.config.use_native_ot
         self._msgs_ot: dict[MsgId, Message] = {}
         # lf._msgs_ot_ctl_polled = {}
+
+    @property
+    def heartbeat_timeout(self) -> timedelta:
+        """Return the timeout before the device is considered unavailable.
+
+        :return: The timeout duration.
+        :rtype: timedelta
+        """
+        return HEARTBEAT_TIMEOUT_OTB
 
     def _setup_discovery_cmds(self) -> None:
         def which_cmd(
@@ -1490,6 +1502,15 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
 
     _SLUG = DevType.TRV
     _STATE_ATTR = SZ_HEAT_DEMAND
+
+    @property
+    def heartbeat_timeout(self) -> timedelta:
+        """Return the timeout before the device is considered unavailable.
+
+        :return: The timeout duration.
+        :rtype: timedelta
+        """
+        return HEARTBEAT_TIMEOUT_TRV
 
     async def heat_demand(self) -> float | None:  # 3150
         if (heat_demand := await super().heat_demand()) is None:

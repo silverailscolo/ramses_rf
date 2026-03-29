@@ -9,10 +9,16 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Iterable
+from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.binding_fsm import BindingManager, Vendor
-from ramses_rf.const import DEV_TYPE_MAP, SZ_OEM_CODE, DevType
+from ramses_rf.const import (
+    DEV_TYPE_MAP,
+    HEARTBEAT_TIMEOUT_DEFAULT,
+    SZ_OEM_CODE,
+    DevType,
+)
 from ramses_rf.entity_base import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
 from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED, SZ_KNOWN_LIST
@@ -76,6 +82,7 @@ class DeviceBase(Entity):
         self.type = dev_addr.type  # DEX  # TODO: remove this attr? use SLUG?
 
         self._scheme: Vendor | None = traits.scheme if traits else None
+        self._last_msg_dtm: dt | None = None
 
     def __str__(self) -> str:
         if self._STATE_ATTR and hasattr(self, self._STATE_ATTR):
@@ -87,6 +94,32 @@ class DeviceBase(Entity):
         if not hasattr(other, "id"):
             return NotImplemented
         return self.id < other.id  # type: ignore[no-any-return]
+
+    @property
+    def heartbeat_timeout(self) -> td:
+        """Return the timeout before the device is considered unavailable.
+
+        :return: The timeout duration before going unavailable.
+        :rtype: timedelta
+        """
+        return HEARTBEAT_TIMEOUT_DEFAULT
+
+    @property
+    def is_available(self) -> bool:
+        """Return True if the device is available based on its heartbeat.
+
+        :return: Availability status based on the latest message timestamp.
+        :rtype: bool
+        """
+        if self._last_msg_dtm is None:
+            return True  # Assume available until we receive baseline telemetry
+
+        if self._last_msg_dtm.tzinfo is not None:
+            now = dt.now(UTC).astimezone(self._last_msg_dtm.tzinfo)
+        else:
+            now = dt.now()
+
+        return (now - self._last_msg_dtm) <= self.heartbeat_timeout
 
     def _update_traits(self, traits: DeviceTraits) -> None:
         """Update a device with new schema attributes.
@@ -147,6 +180,7 @@ class DeviceBase(Entity):
         # # ), f"msg from {msg.src} inappropriately routed to {self}"
 
         super()._handle_msg(msg)
+        self._last_msg_dtm = getattr(msg, "dtm", None)
 
         if self._SLUG in DEV_TYPE_MAP.PROMOTABLE_SLUGS:  # HACK: can get precise class?
             from . import best_dev_role
