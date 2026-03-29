@@ -212,7 +212,7 @@ class TestHgiGateway:
 
 
     @pytest.mark.asyncio
-    async def test_status_without_latest_dtm(self, hgi_gateway: HgiGateway):
+    async def test_status_without_latest_dtm(self, hgi_gateway: HgiGateway) -> None:
         # Mock the parent class's status method
         mock_parent_status = {"gateway_dtm": None}
         with patch.object(HgiGateway, "status", new_callable=AsyncMock) as mock_status:
