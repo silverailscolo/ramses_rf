@@ -5,8 +5,8 @@ This module combines tests for DeviceBase, HgiGateway, and BatteryState
 which all reside in ramses_rf/device/base.py.
 """
 
-from datetime import UTC, datetime, datetime as dt, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime as dt, timedelta as td
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -58,11 +58,11 @@ class TestDeviceBase:
         assert dev.is_available
 
         # Recent message
-        dev._last_msg_dtm = datetime.now(UTC)
+        dev._last_msg_dtm = dt.now(UTC)
         assert dev.is_available
 
         # Expired heartbeat (Default 1 hour)
-        expired_dtm = datetime.now(UTC) - timedelta(hours=1, seconds=1)
+        expired_dtm = dt.now(UTC) - td(hours=1, seconds=1)
         dev._last_msg_dtm = expired_dtm
         assert not dev.is_available
 
@@ -78,7 +78,7 @@ class TestDeviceBase:
         dev._SLUG = "NON_PROMOTABLE_SLUG"
 
         msg = MagicMock()
-        msg.dtm = datetime.now(UTC)
+        msg.dtm = dt.now(UTC)
 
         dev._handle_msg(msg)
 
@@ -151,7 +151,7 @@ class TestHgiGateway:
         :type hgi_gateway: HgiGateway
         """
         mock_msg = MagicMock()
-        mock_msg.dtm = datetime.now(UTC)
+        mock_msg.dtm = dt.now(UTC)
 
         hgi_gateway._gwy._engine._this_msg = mock_msg
         assert await hgi_gateway.is_active()
@@ -164,9 +164,7 @@ class TestHgiGateway:
         :type hgi_gateway: HgiGateway
         """
         mock_msg = MagicMock()
-        expired_dtm = datetime.now(UTC) - (
-            GATEWAY_MESSAGE_TIMEOUT + timedelta(seconds=1)
-        )
+        expired_dtm = dt.now(UTC) - (GATEWAY_MESSAGE_TIMEOUT + td(seconds=1))
         mock_msg.dtm = expired_dtm
 
         hgi_gateway._gwy._engine._this_msg = mock_msg
@@ -180,41 +178,7 @@ class TestHgiGateway:
         :type hgi_gateway: HgiGateway
         """
         mock_msg = MagicMock()
-        mock_msg.dtm = datetime.now()
+        mock_msg.dtm = dt.now()
 
         hgi_gateway._gwy._engine._this_msg = mock_msg
         assert await hgi_gateway.is_active()
-
-    @pytest.mark.asyncio
-    async def test_status_with_latest_dtm(self, hgi_gateway: HgiGateway) -> None:
-        # Mock the parent class's status method
-        latest_dt = dt(2023, 1, 1, 12, 0, 0)
-        mock_parent_status = {"gateway_dtm": latest_dt}
-        with patch.object(HgiGateway, "status", new_callable=AsyncMock) as mock_status:
-            mock_status.return_value = mock_parent_status
-
-            hgi_gateway.latest_dtm = latest_dt
-
-            # Call the status method
-            result = await hgi_gateway.status()
-
-            # Assert the result
-            assert result == {
-                **mock_parent_status,
-                "gateway_dtm": hgi_gateway.latest_dtm,
-            }
-
-    @pytest.mark.asyncio
-    async def test_status_without_latest_dtm(self, hgi_gateway: HgiGateway) -> None:
-        # Mock the parent class's status method
-        mock_parent_status = {"gateway_dtm": None}
-        with patch.object(HgiGateway, "status", new_callable=AsyncMock) as mock_status:
-            mock_status.return_value = mock_parent_status
-
-            hgi_gateway.latest_dtm = None
-
-            # Call the status method
-            result = await hgi_gateway.status()
-
-            # Assert the result
-            assert result == {**mock_parent_status, "gateway_dtm": None}
