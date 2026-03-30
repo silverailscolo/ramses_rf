@@ -5,21 +5,15 @@ This module combines tests for DeviceBase, HgiGateway, and BatteryState
 which all reside in ramses_rf/device/base.py.
 """
 
-from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock
-from collections.abc import Generator
-from datetime import datetime as dt
+from datetime import UTC, datetime, datetime as dt, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ramses_rf.const import GATEWAY_MESSAGE_TIMEOUT
 from ramses_rf.device.base import BatteryState, DeviceBase, HgiGateway
-from ramses_rf.database import MessageIndex
-from ramses_rf.device import HgiGateway
 from ramses_rf.gateway import Gateway
 from ramses_tx import Address
-from ramses_tx.typing import DeviceIdT
 
 
 @pytest.fixture
@@ -209,7 +203,6 @@ class TestHgiGateway:
                 **mock_parent_status,
                 "gateway_dtm": hgi_gateway.latest_dtm,
             }
-
 
     @pytest.mark.asyncio
     async def test_status_without_latest_dtm(self, hgi_gateway: HgiGateway) -> None:
