@@ -98,7 +98,7 @@ class DeviceBase(Entity):
 
     @property
     def heartbeat_timeout(self) -> td:
-        """Return the timeout before the device is considered unavailable.
+        """Return the timeout after which the device is considered unavailable.
 
         :return: The timeout duration before going unavailable.
         :rtype: td
@@ -483,7 +483,6 @@ class HgiGateway(Device):  # HGI (18:)
     """The HGI80 base class."""
 
     _SLUG: str = DevType.HGI
-    GATEWAY_DTM = "gateway_dtm"
 
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
@@ -493,7 +492,6 @@ class HgiGateway(Device):  # HGI (18:)
         self.ctl = None  # FIXME: a mess
         self._child_id = "gw"  # TODO
         self.tcs = None
-        self.latest_dtm: dt | None = None
 
     async def schema(self) -> dict[str, Any]:
         """Return the schema dictionary for the HGI Gateway."""
@@ -517,10 +515,6 @@ class HgiGateway(Device):  # HGI (18:)
 
         # Cleaner math because the constant is already a timedelta
         return bool((now - dtm) < GATEWAY_MESSAGE_TIMEOUT)
-
-    async def status(self) -> dict[str, Any]:
-        base_status = await super().status()
-        return {**base_status, self.GATEWAY_DTM: self.latest_dtm}
 
 
 class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible

@@ -700,9 +700,6 @@ class Gateway(GatewayInterface):
         setattr(msg, "_gwy", self)  # noqa: B010
 
         self._engine._this_msg, self._engine._prev_msg = msg, self._engine._this_msg
-        # here we log the dtm of the latest message passed to the dispatcher
-        if self.hgi is not None:
-            self.hgi.latest_dtm = msg.dtm
 
         # TODO: ideally remove this feature...
         assert self._engine._this_msg  # mypy check
