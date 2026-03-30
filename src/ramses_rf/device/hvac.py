@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ramses_rf import exceptions as exc
@@ -89,11 +89,11 @@ class HvacRemoteBase(DeviceHvac):
     """
 
     @property
-    def heartbeat_timeout(self) -> timedelta:
+    def heartbeat_timeout(self) -> td:
         """Return the timeout before the device is considered unavailable.
 
         :return: The timeout duration.
-        :rtype: timedelta
+        :rtype: td
         """
         return HEARTBEAT_TIMEOUT_REMOTE
 
@@ -106,11 +106,11 @@ class HvacSensorBase(DeviceHvac):
     """
 
     @property
-    def heartbeat_timeout(self) -> timedelta:
+    def heartbeat_timeout(self) -> td:
         """Return the timeout before the device is considered unavailable.
 
         :return: The timeout duration.
-        :rtype: timedelta
+        :rtype: td
         """
         return HEARTBEAT_TIMEOUT_SENSOR
 

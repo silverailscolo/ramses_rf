@@ -101,7 +101,7 @@ class DeviceBase(Entity):
         """Return the timeout before the device is considered unavailable.
 
         :return: The timeout duration before going unavailable.
-        :rtype: timedelta
+        :rtype: td
         """
         return HEARTBEAT_TIMEOUT_DEFAULT
 
@@ -517,7 +517,6 @@ class HgiGateway(Device):  # HGI (18:)
 
         # Cleaner math because the constant is already a timedelta
         return bool((now - dtm) < GATEWAY_MESSAGE_TIMEOUT)
-
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
