@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from ramses_rf import exceptions as exc
@@ -730,11 +730,11 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         # lf._msgs_ot_ctl_polled = {}
 
     @property
-    def heartbeat_timeout(self) -> timedelta:
+    def heartbeat_timeout(self) -> td:
         """Return the timeout before the device is considered unavailable.
 
         :return: The timeout duration.
-        :rtype: timedelta
+        :rtype: td
         """
         return HEARTBEAT_TIMEOUT_OTB
 
@@ -1510,11 +1510,11 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
     _STATE_ATTR = SZ_HEAT_DEMAND
 
     @property
-    def heartbeat_timeout(self) -> timedelta:
+    def heartbeat_timeout(self) -> td:
         """Return the timeout before the device is considered unavailable.
 
         :return: The timeout duration.
-        :rtype: timedelta
+        :rtype: td
         """
         return HEARTBEAT_TIMEOUT_TRV
 

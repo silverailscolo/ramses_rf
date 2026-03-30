@@ -5,7 +5,7 @@ This module combines tests for DeviceBase, HgiGateway, and BatteryState
 which all reside in ramses_rf/device/base.py.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime as dt, timedelta as td
 from unittest.mock import MagicMock
 
 import pytest
@@ -58,11 +58,11 @@ class TestDeviceBase:
         assert dev.is_available
 
         # Recent message
-        dev._last_msg_dtm = datetime.now(UTC)
+        dev._last_msg_dtm = dt.now(UTC)
         assert dev.is_available
 
         # Expired heartbeat (Default 1 hour)
-        expired_dtm = datetime.now(UTC) - timedelta(hours=1, seconds=1)
+        expired_dtm = dt.now(UTC) - td(hours=1, seconds=1)
         dev._last_msg_dtm = expired_dtm
         assert not dev.is_available
 
@@ -78,7 +78,7 @@ class TestDeviceBase:
         dev._SLUG = "NON_PROMOTABLE_SLUG"
 
         msg = MagicMock()
-        msg.dtm = datetime.now(UTC)
+        msg.dtm = dt.now(UTC)
 
         dev._handle_msg(msg)
 
@@ -151,7 +151,7 @@ class TestHgiGateway:
         :type hgi_gateway: HgiGateway
         """
         mock_msg = MagicMock()
-        mock_msg.dtm = datetime.now(UTC)
+        mock_msg.dtm = dt.now(UTC)
 
         hgi_gateway._gwy._engine._this_msg = mock_msg
         assert await hgi_gateway.is_active()
@@ -164,9 +164,7 @@ class TestHgiGateway:
         :type hgi_gateway: HgiGateway
         """
         mock_msg = MagicMock()
-        expired_dtm = datetime.now(UTC) - (
-            GATEWAY_MESSAGE_TIMEOUT + timedelta(seconds=1)
-        )
+        expired_dtm = dt.now(UTC) - (GATEWAY_MESSAGE_TIMEOUT + td(seconds=1))
         mock_msg.dtm = expired_dtm
 
         hgi_gateway._gwy._engine._this_msg = mock_msg
@@ -180,7 +178,7 @@ class TestHgiGateway:
         :type hgi_gateway: HgiGateway
         """
         mock_msg = MagicMock()
-        mock_msg.dtm = datetime.now()
+        mock_msg.dtm = dt.now()
 
         hgi_gateway._gwy._engine._this_msg = mock_msg
         assert await hgi_gateway.is_active()

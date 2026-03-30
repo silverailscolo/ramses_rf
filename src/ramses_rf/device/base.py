@@ -98,10 +98,10 @@ class DeviceBase(Entity):
 
     @property
     def heartbeat_timeout(self) -> td:
-        """Return the timeout before the device is considered unavailable.
+        """Return the timeout after which the device is considered unavailable.
 
         :return: The timeout duration before going unavailable.
-        :rtype: timedelta
+        :rtype: td
         """
         return HEARTBEAT_TIMEOUT_DEFAULT
 
