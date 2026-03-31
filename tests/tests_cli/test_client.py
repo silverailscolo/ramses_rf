@@ -5,7 +5,7 @@ import asyncio
 import io
 import json
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from datetime import datetime
+from datetime import datetime as dt
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
@@ -528,7 +528,7 @@ async def test_async_main_msg_handler(
         # Now test the callback with different message types
         # 1. Puzzle message
         msg1 = MagicMock(spec=Message)
-        msg1.dtm = datetime.now()
+        msg1.dtm = dt.now()
         msg1.code = Code._PUZZ
         # Mypy dislikes assigning to method slots on mocks without ignore
         msg1.__repr__ = MagicMock(return_value="PUZZLE_MSG")  # type: ignore[method-assign]
@@ -539,7 +539,7 @@ async def test_async_main_msg_handler(
         # 2. 1F09 (I) message
         # Use a fresh mock object to avoid state pollution
         msg2 = MagicMock(spec=Message)
-        msg2.dtm = datetime.now()
+        msg2.dtm = dt.now()
         msg2.code = Code._1F09
         msg2.verb = I_
         # Fix: Ensure src attribute exists for HGI check in handle_msg
@@ -585,7 +585,7 @@ async def test_async_main_long_format(
 
         # Trigger callback
         msg = MagicMock(spec=Message)
-        msg.dtm = datetime.now()
+        msg.dtm = dt.now()
         msg.__repr__ = MagicMock(return_value="LONG_MSG")  # type: ignore[method-assign]
         msg.payload = "PAYLOAD"
 

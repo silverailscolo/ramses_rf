@@ -83,6 +83,13 @@ repos:
       args: [-i]
       exclude: .pre-commit-config.yaml  # avoid false +ve
 
+    - id: datetime_aliases
+      name: enforce datetime as dt and timedelta as td
+      entry: 'from datetime import.*\b(datetime(?! as dt)|timedelta(?! as td))\b'
+      language: pygrep
+      types: [python]
+      exclude: .pre-commit-config.yaml  # avoid false +ve
+
     # - id: private imports
     #   name: check for private imports
     #   entry: 'from .* import _.*'
