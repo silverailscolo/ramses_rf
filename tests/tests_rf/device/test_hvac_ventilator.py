@@ -6,12 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ramses_rf import exceptions as exc
 from ramses_rf.const import DevType
 from ramses_rf.database import MessageIndex
 from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.gateway import Gateway
 from ramses_tx import Address
-from ramses_tx.const import Code
+from ramses_tx.const import Code, Priority
 from ramses_tx.typing import DeviceIdT
 
 # Test data
@@ -535,3 +536,71 @@ class TestHvacVentilator:
 
         if hvac_ventilator._gwy.msg_db:
             hvac_ventilator._gwy.msg_db.stop()
+
+
+async def test_set_fan_mode_with_bound_rem() -> None:
+    """Test set_fan_mode uses the bound REM as the source ID."""
+    dev = MagicMock(spec=HvacVentilator)
+    dev.id = "32:123456"
+    dev.get_bound_rem.return_value = "37:654321"
+
+    dev._gwy = MagicMock()
+    dev._gwy.async_send_cmd = AsyncMock(return_value="mock_packet")
+
+    # Patch the command builder so we can verify what gets passed to it
+    with patch("ramses_rf.device.hvac.Command.set_fan_mode") as mock_cmd:
+        mock_cmd.return_value = "mock_command"
+
+        # Call the unbound method passing our mock as 'self'
+        result = await HvacVentilator.set_fan_mode(dev, "low")
+
+        # 1. Verify it checked for a bound remote
+        dev.get_bound_rem.assert_called_once()
+
+        # 2. Verify the packet was built using the REM's ID ("37:654321")
+        mock_cmd.assert_called_once_with("32:123456", "low", src_id="37:654321")
+
+        # 3. Verify it was transmitted with the correct QoS
+        dev._gwy.async_send_cmd.assert_awaited_once_with(
+            "mock_command", num_repeats=2, priority=Priority.HIGH
+        )
+        assert result == "mock_packet"
+
+
+async def test_set_fan_mode_with_hgi_fallback() -> None:
+    """Test set_fan_mode falls back to the HGI if no REM is bound."""
+    dev = MagicMock(spec=HvacVentilator)
+    dev.id = "32:123456"
+    dev.get_bound_rem.return_value = None
+
+    # Simulate an available HGI
+    dev.hgi = MagicMock()
+    dev.hgi.id = "18:000730"
+
+    dev._gwy = MagicMock()
+    dev._gwy.async_send_cmd = AsyncMock(return_value="mock_packet")
+
+    with patch("ramses_rf.device.hvac.Command.set_fan_mode") as mock_cmd:
+        mock_cmd.return_value = "mock_command"
+
+        await HvacVentilator.set_fan_mode(dev, "high")
+
+        # Verify the packet was built using the HGI's ID ("18:000730")
+        mock_cmd.assert_called_once_with("32:123456", "high", src_id="18:000730")
+        dev._gwy.async_send_cmd.assert_awaited_once()
+
+
+async def test_set_fan_mode_no_src_id_raises() -> None:
+    """Test set_fan_mode raises CommandInvalid if no src_id can be determined."""
+    dev = MagicMock(spec=HvacVentilator)
+    dev.id = "32:123456"
+    dev.get_bound_rem.return_value = None
+
+    # Simulate NO available HGI (e.g. gateway not fully initialized)
+    dev.hgi = None
+
+    # Verify it raises the expected custom library exception
+    with pytest.raises(
+        exc.CommandInvalid, match="Cannot set fan mode without a bound REM or HGI"
+    ):
+        await HvacVentilator.set_fan_mode(dev, "auto")
