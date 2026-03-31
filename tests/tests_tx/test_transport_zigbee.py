@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-from datetime import timedelta
+from datetime import timedelta as td
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -1354,7 +1354,7 @@ class TestChunkBufferTTL(unittest.TestCase):
     def test_cleanup_removes_stale_buffers(self) -> None:
         from ramses_tx.helpers import dt_now
 
-        old_time = dt_now() - timedelta(seconds=self.t._CHUNK_TIMEOUT + 1)
+        old_time = dt_now() - td(seconds=self.t._CHUNK_TIMEOUT + 1)
         fresh_time = dt_now()
 
         self.t._chunk_buffers["stale_device"] = {
@@ -1376,7 +1376,7 @@ class TestChunkBufferTTL(unittest.TestCase):
     def test_maybe_handle_triggers_cleanup(self) -> None:
         from ramses_tx.helpers import dt_now
 
-        old_time = dt_now() - timedelta(seconds=self.t._CHUNK_TIMEOUT + 1)
+        old_time = dt_now() - td(seconds=self.t._CHUNK_TIMEOUT + 1)
         self.t._chunk_buffers["stale_device"] = {
             "timestamp": old_time,
             "total": 2,
