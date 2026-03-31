@@ -41,14 +41,7 @@ from ..interfaces import ProtocolInterface, TransportInterface
 from ..message import Message
 from ..packet import Packet
 from ..schemas import SZ_BLOCK_LIST, SZ_CLASS, SZ_INBOUND, SZ_KNOWN_LIST, SZ_OUTBOUND
-from ..typing import (
-    DeviceIdT,
-    DeviceListT,
-    ExceptionT,
-    MsgFilterT,
-    MsgHandlerT,
-    QosParams,
-)
+from ..typing import DeviceIdT, DeviceListT, MsgFilterT, MsgHandlerT, QosParams
 
 if TYPE_CHECKING:
     from .fsm import ProtocolContext
@@ -205,7 +198,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         else:
             self._wait_connection_lost.set_result(None)
 
-    async def wait_for_connection_lost(self, timeout: float = 1.0) -> ExceptionT | None:
+    async def wait_for_connection_lost(self, timeout: float = 1.0) -> Exception | None:
         """A courtesy function to wait until connection_lost() has been invoked.
 
         Includes scenarios where neither connection_made() nor connection_lost() were
@@ -217,11 +210,18 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             return None
 
         try:
-            return await asyncio.wait_for(self._wait_connection_lost, timeout)
+            await asyncio.wait_for(self._wait_connection_lost, timeout)
+            return None
         except TimeoutError as err:
             raise TransportError(
                 f"Transport did not unbind from Protocol within {timeout} secs"
             ) from err
+        except Exception as err:
+            # If the transport dropped unexpectedly, connection_lost(err) sets
+            # the exception on the future. Awaiting it raises the exception here.
+            # We catch and return it to satisfy the ExceptionT | None type hint
+            # and prevent teardown crashes in the caller.
+            return err
 
     def pause_writing(self) -> None:
         """Called when the transport's buffer goes over the high-water mark."""
