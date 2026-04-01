@@ -381,6 +381,11 @@ CODES_SCHEMA: dict[Code, CodeSchemaEntry] = {  # rf_unknown
         "name": "setpoint_now",  # setpt_now_next
         " I": r"^(0[0-9A-F]{13}){1,2}$",
     },  # TODO: This could be an array
+    Code._2209: {  # setpoint_bounds (legacy/DT4R variant)
+        "name": "setpoint_bounds_variant",
+        " I": r"^(0[0-9A-F][0-9A-F]{8}0[12]){1,4}(0[12]03)?$",
+        " W": r"^(0[0-9A-F][0-9A-F]{8}0[12])$",
+    },
     Code._22C9: {  # setpoint_bounds (was: ufh_setpoint)
         "name": "setpoint_bounds",
         " I": r"^(0[0-9A-F][0-9A-F]{8}0[12]){1,4}(0[12]03)?$",  # (0[12]03)? only if len(array) == 1
@@ -826,6 +831,8 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[VerbT, Any]]] = {
         Code._1FC9: {I_: {}, RQ: {}, RP: {}, W_: {}},
         Code._1F41: {I_: {}, RP: {}},
         Code._2249: {I_: {}},  # Hometronics, not Evohome
+        Code._2209: {I_: {}, W_: {}},  # ADDED: Allow CTL to receive DT4R bounds
+        Code._22C9: {I_: {}, W_: {}},  # ADDED: Allow CTL to receive DT4R bounds
         Code._22D9: {RQ: {}},
         Code._2309: {I_: {}, RP: {}},
         Code._2349: {I_: {}, RP: {}},
