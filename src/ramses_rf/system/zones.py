@@ -737,6 +737,15 @@ class Zone(ZoneSchedule):
             ),
         )
 
+    async def setpoint_bounds(self) -> dict[str, Any] | None:  # 22C9, 2209
+        """Return the zone's local setpoint bounds if defined by a thermostat."""
+        return cast(
+            dict[str, Any] | None,
+            await self.state_store._msg_value(
+                (Code._22C9, Code._2209), zone_idx=self.idx
+            ),
+        )
+
     async def set_setpoint(self, value: float | None) -> Packet | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""
         if value is None:
@@ -875,6 +884,7 @@ class Zone(ZoneSchedule):
             "config": await self.config(),
             "mode": await self.mode(),
             "name": await self.name(),
+            "setpoint_bounds": await self.setpoint_bounds(),
         }
 
     async def status(self) -> dict[str, Any]:
