@@ -857,6 +857,34 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         _LOGGER.debug("No bound REM or DIS devices found for FAN %s", self.id)
         return None
 
+    async def set_fan_mode(self, fan_mode: str | int) -> Packet:
+        """Set the operating mode/speed of the ventilator.
+
+        :param fan_mode: The desired fan mode (e.g., 'low', 'medium', 'high', 'boost').
+        :return: The sent packet.
+        :raises CommandInvalid: If unable to determine a valid source ID.
+        """
+        # 22F1 commands to a FAN typically must originate from a bound Remote (REM)
+        # We attempt to impersonate the first bound REM. If none exists, fallback to HGI.
+        src_id = self.get_bound_rem()
+
+        if not src_id:
+            if self.hgi:
+                src_id = self.hgi.id
+            else:
+                raise exc.CommandInvalid(
+                    f"{self}: Cannot set fan mode without a bound REM or HGI"
+                )
+
+        _LOGGER.debug(
+            "Sending set_fan_mode '%s' to %s via src %s", fan_mode, self.id, src_id
+        )
+
+        cmd = Command.set_fan_mode(self.id, fan_mode, src_id=src_id)
+        return await self._gwy.async_send_cmd(
+            cmd, num_repeats=2, priority=Priority.HIGH
+        )
+
     async def air_quality(self) -> float | None:
         """Return the current air quality measurement.
 

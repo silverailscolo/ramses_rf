@@ -1365,7 +1365,7 @@ def parser_1100(
     """
 
     def complex_idx(seqx: str) -> PayDictT._1100_IDX | PayDictT.EMPTY:
-        return {SZ_DOMAIN_ID: seqx} if seqx[:1] == "F" else {}  # type: ignore[typeddict-item]  # only FC
+        return {SZ_DOMAIN_ID: seqx} if seqx[:1] == "F" else {}  # type: ignore[typeddict-item, unused-ignore]  # only FC
 
     if msg.src.type == DEV_TYPE_MAP.JIM:  # Honeywell Japser, DEX
         assert msg.len == 19, msg.len
