@@ -182,3 +182,33 @@ class TestHgiGateway:
 
         hgi_gateway._gwy._engine._this_msg = mock_msg
         assert await hgi_gateway.is_active()
+
+    def test_message_timeout_custom(self, hgi_gateway: HgiGateway) -> None:
+        """Test that the custom gateway timeout is correctly extracted.
+
+        :param hgi_gateway: The gateway fixture.
+        :type hgi_gateway: HgiGateway
+        """
+        # Inject a custom timeout into the mocked gateway config
+        hgi_gateway._gwy.config.gateway_timeout = 15
+
+        assert hgi_gateway.message_timeout == td(minutes=15)
+
+    @pytest.mark.asyncio
+    async def test_is_active_custom_timeout(self, hgi_gateway: HgiGateway) -> None:
+        """Test is_active evaluates correctly against a custom timeout.
+
+        :param hgi_gateway: The gateway fixture.
+        :type hgi_gateway: HgiGateway
+        """
+        # Set a custom timeout of 15 minutes
+        hgi_gateway._gwy.config.gateway_timeout = 15
+
+        mock_msg = MagicMock()
+        # Create a timestamp 10 minutes in the past
+        # Under the default 5-minute timeout, this would be inactive.
+        # Under our custom 15-minute timeout, this must be active.
+        mock_msg.dtm = dt.now(UTC) - td(minutes=10)
+
+        hgi_gateway._gwy._engine._this_msg = mock_msg
+        assert await hgi_gateway.is_active() is True
