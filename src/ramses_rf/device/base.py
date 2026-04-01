@@ -493,28 +493,33 @@ class HgiGateway(Device):  # HGI (18:)
         self._child_id = "gw"  # TODO
         self.tcs = None
 
+    @property
+    def message_timeout(self) -> td:
+        """Return the dynamic timeout threshold for the gateway."""
+        # Safely extract the custom timeout from the GatewayConfig
+        custom_timeout = getattr(self._gwy.config, "gateway_timeout", None)
+
+        if custom_timeout is not None:
+            return td(minutes=int(custom_timeout))
+
+        return GATEWAY_MESSAGE_TIMEOUT
+
     async def schema(self) -> dict[str, Any]:
         """Return the schema dictionary for the HGI Gateway."""
         return {}
 
     async def is_active(self) -> bool:
-        """Return True if the gateway has received messages recently.
-
-        Evaluates the timestamp of the latest received message overall.
-        """
-        # Explicitly type the extracted object to pacify Mypy
+        """Return True if the gateway has received messages recently."""
         msg: Message | None = getattr(self._gwy._engine, "_this_msg", None)
 
         if not msg or not hasattr(msg, "dtm"):
             return False
 
-        # Extract dtm and assert its type
         dtm: dt = msg.dtm
-
         now = dt.now(UTC).astimezone(dtm.tzinfo) if dtm.tzinfo is not None else dt.now()
 
-        # Cleaner math because the constant is already a timedelta
-        return bool((now - dtm) < GATEWAY_MESSAGE_TIMEOUT)
+        # Compare against our new dynamic property
+        return bool((now - dtm) < self.message_timeout)
 
 
 class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible

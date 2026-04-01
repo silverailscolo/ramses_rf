@@ -129,6 +129,8 @@ class GatewayConfig:
     :type enforce_known_list: bool
     :param evofw_flag: Specific flag for evofw3 usage.
     :type evofw_flag: str | None
+    :param gateway_timeout: Custom timeout threshold in minutes for gateway availability.
+    :type gateway_timeout: int | None
     """
 
     disable_discovery: bool = False
@@ -154,6 +156,8 @@ class GatewayConfig:
     disable_qos: bool | None = None
     enforce_known_list: bool = False
     evofw_flag: str | None = None
+
+    gateway_timeout: int | None = None
 
 
 class Gateway(GatewayInterface):

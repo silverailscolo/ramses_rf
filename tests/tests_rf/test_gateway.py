@@ -69,12 +69,16 @@ async def test_gateway_with_config() -> None:
 
     :returns: None
     """
-    config = GatewayConfig(enforce_known_list=True)
+    # Added gateway_timeout=15 to the initialization
+    config = GatewayConfig(enforce_known_list=True, gateway_timeout=15)
+
     with warnings.catch_warnings(record=True) as recorded_warnings:
         warnings.simplefilter("always")
         gwy = Gateway("/dev/null", config=config)
 
     assert gwy.config.enforce_known_list is True
+    # Assert that the gateway config retained the custom timeout
+    assert gwy.config.gateway_timeout == 15
 
     deprecation_warnings = [
         w for w in recorded_warnings if issubclass(w.category, DeprecationWarning)
