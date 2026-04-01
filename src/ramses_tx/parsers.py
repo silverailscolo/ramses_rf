@@ -2040,6 +2040,10 @@ def parser_22c9(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
     return _parser(payload[:12])
 
 
+# Map the legacy DT4R bounds code to the above parser
+parser_2209 = parser_22c9
+
+
 # unknown_22d0, UFH system mode (heat/cool)
 def parser_22d0(payload: str, msg: Message) -> dict[str, Any]:
     """Parse the 22d0 (UFH system mode) packet.
