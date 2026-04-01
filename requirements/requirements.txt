@@ -1,5 +1,5 @@
 # Requirements to use the library via its CLI client.py
-# - last checked/updated: 2026-03-21 (c.f. HA 2026.3.3)
+# - last checked/updated: 2026-04-01 (c.f. HA 2026.4.0)
 #
 
 # library requirements (dependencies) are in pyproject.toml
