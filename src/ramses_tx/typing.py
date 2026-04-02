@@ -613,12 +613,13 @@ class PortConfigT(TypedDict):
 
 
 class PktLogConfigT(TypedDict):
-    file_name: str
-    rotate_backups: int
+    packet_log_path: str
+    packet_log_prefix: str
+    packet_log_retention_days: int | None
     rotate_bytes: int | None
     buffer_capacity: NotRequired[int]
-    flush_level: NotRequired[int]
-    flush_interval: NotRequired[float]
+    flush_level: NotRequired[int | str]
+    flush_interval: NotRequired[float | int]
 
 
 # CODES_SCHEMA entries

@@ -42,7 +42,10 @@ async def test_logging_lifecycle(tmp_path: Path) -> None:
         None,
         config=GatewayConfig(
             input_file=str(input_file),
-            packet_log={"file_name": str(log_file)},
+            packet_log={
+                "packet_log_path": str(tmp_path),
+                "packet_log_prefix": "packet",
+            },
         ),
     )
     await gwy.start()
@@ -106,7 +109,8 @@ async def test_flight_recorder_auto_flush(tmp_path: Path) -> None:
         config=GatewayConfig(
             input_file=str(input_file),
             packet_log={
-                "file_name": str(log_file),
+                "packet_log_path": str(tmp_path),
+                "packet_log_prefix": "flight_recorder_auto",
                 "buffer_capacity": 10,
                 "flush_level": logging.WARNING,  # Adjusted to pass PktLogFilter
             },
@@ -181,7 +185,8 @@ async def test_flight_recorder_manual_flush(tmp_path: Path) -> None:
         config=GatewayConfig(
             input_file=str(input_file),
             packet_log={
-                "file_name": str(log_file),
+                "packet_log_path": str(tmp_path),
+                "packet_log_prefix": "flight_recorder_manual",
                 "buffer_capacity": 10,
                 "flush_level": logging.ERROR,
             },
@@ -245,7 +250,8 @@ async def test_flight_recorder_time_flush(tmp_path: Path) -> None:
         config=GatewayConfig(
             input_file=str(input_file),
             packet_log={
-                "file_name": str(log_file),
+                "packet_log_path": str(tmp_path),
+                "packet_log_prefix": "flight_recorder_time",
                 "buffer_capacity": 10,
                 "flush_level": logging.ERROR,
                 "flush_interval": 0.2,  # Flush every 200ms

@@ -293,11 +293,11 @@ PACKET_LOG_BAD = (
     """,
     """
     packet_log:
-      file_name: null  # expected str for dictionary value @ data['packet_log']['file_name']
+      packet_log_prefix: null  # expected str for dictionary value @ data['packet_log']['packet_log_prefix']
     """,
     """
-    packet_log:  # required key not provided @ data['packet_log']['file_name']
-      rotate_backups: 7
+    packet_log:
+      packet_log_retention_days: string_instead_of_int
       rotate_bytes: 204800
     """,
 )
@@ -306,29 +306,29 @@ PACKET_LOG_GOOD = (
     {}
     """,
     """
-    packet_log: packet.log
+    packet_log: packet_log
     """,
     """
     packet_log: null  # expected str for dictionary value @ data['packet_log']
     """,
     """
     packet_log:
-      file_name: packet.log
+      packet_log_prefix: packet_log
     """,
     """
     packet_log:
-      file_name: packet.log
-      rotate_backups: 7
+      packet_log_prefix: packet_log
+      packet_log_retention_days: 7
     """,
     """
     packet_log:
-      file_name: packet.log
+      packet_log_prefix: packet_log
       rotate_bytes: 204800
     """,
     """
     packet_log:
-      file_name: packet.log
-      rotate_backups: 7
+      packet_log_prefix: packet_log
+      packet_log_retention_days: 7
       rotate_bytes: 204800
     """,
 )
@@ -805,8 +805,8 @@ ramses_cc:
     restore_state: true
 
   packet_log:
-    file_name: packet.log
-    rotate_backups: 28
+    packet_log_prefix: packet_log
+    packet_log_retention_days: 28
 
   ramses_rf:
     enforce_known_list: true
