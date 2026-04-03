@@ -24,7 +24,7 @@ class CommandDispatcher(Protocol):
         ...
 
 
-class MessageIndexInterface(Protocol):
+class MessageStoreInterface(Protocol):
     """Interface for the SQLite Message Index database."""
 
     def add(self, msg: Message) -> Message | None:
@@ -194,12 +194,12 @@ class GatewayInterface(Protocol):
         ...
 
     @property
-    def msg_db(self) -> MessageIndexInterface | None:
+    def msg_db(self) -> MessageStoreInterface | None:
         """Return the message database if configured."""
         ...
 
     @msg_db.setter
-    def msg_db(self, value: MessageIndexInterface | None) -> None:
+    def msg_db(self, value: MessageStoreInterface | None) -> None:
         """Set the message database."""
         ...
 
@@ -220,3 +220,7 @@ class GatewayInterface(Protocol):
     ) -> Packet:
         """Send a command asynchronously and return the resulting packet."""
         ...
+
+
+# Alias for backwards compatibility during Phase 2 migration
+MessageIndexInterface = MessageStoreInterface

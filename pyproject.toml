@@ -41,6 +41,7 @@
   dependencies = [
     "aiofiles>=23.2.1",             # latest
     "colorlog>=6.9.0",              # latest
+    "orjson>=3.9.0",                # added for Phase 2.1 Fat SQLite Backend
     "paho-mqtt>=2.1.0",             # latest
     "pyserial-asyncio-fast>=0.16",  # latest
     "voluptuous>=0.15.2",           # latest
@@ -65,7 +66,7 @@
 
 [tool.hatch.build]
   sources = ["src"]
-  artifacts = ["misc/ser2net.yaml",]
+  artifacts = ["misc/ser2net.yaml"]
 
 [tool.hatch.build.targets.wheel]
   packages = ["src/ramses_rf", "src/ramses_tx", "src/ramses_cli"]

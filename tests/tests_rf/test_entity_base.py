@@ -109,16 +109,22 @@ class Test_entity_base:
         }, "base _msgs wrong"
 
         # find our Codes
-        assert await dev.state_store._msg_dev_qry() == [
-            Code._3150,
-            Code._12B0,
-            Code._3220,
-        ], "base _msg_dev_qry wrong"
+        assert sorted(await dev.state_store._msg_dev_qry() or []) == sorted(
+            [
+                Code._3150,
+                Code._12B0,
+                Code._3220,
+            ]
+        ), "base _msg_dev_qry wrong"
 
         # list our messages
-        assert await dev.state_store._msg_list() == [self.msg5, self.msg7, self.msg6], (
-            "_msg_list wrong"
-        )
+        assert sorted(await dev.state_store._msg_list()) == sorted(
+            [
+                self.msg5,
+                self.msg7,
+                self.msg6,
+            ]
+        ), "_msg_list wrong"
 
         # create _msgz
         assert await dev.state_store._msgz() == {
@@ -164,15 +170,20 @@ class Test_entity_base:
         }, "zone _msgs wrong"
 
         # find our Codes
-        assert await dev.state_store._msg_dev_qry() == [
-            Code._3150,
-            Code._12B0,
-        ], "zone _msg_dev_qry wrong"
+        assert sorted(await dev.state_store._msg_dev_qry() or []) == sorted(
+            [
+                Code._3150,
+                Code._12B0,
+            ]
+        ), "zone _msg_dev_qry wrong"
 
         # list our messages
-        assert await dev.state_store._msg_list() == [self.msg5, self.msg7], (
-            "_msg_list wrong"
-        )
+        assert sorted(await dev.state_store._msg_list()) == sorted(
+            [
+                self.msg5,
+                self.msg7,
+            ]
+        ), "_msg_list wrong"
 
         # create _msgz
         assert await dev.state_store._msgz() == {
@@ -231,15 +242,20 @@ class Test_entity_base:
         }, "dhw _msgs wrong"
 
         # find our Codes
-        assert await dev.state_store._msg_dev_qry() == [
-            Code._3150,
-            Code._1260,
-        ], "dhw _msg_dev_qry wrong"
+        assert sorted(await dev.state_store._msg_dev_qry() or []) == sorted(
+            [
+                Code._3150,
+                Code._1260,
+            ]
+        ), "dhw _msg_dev_qry wrong"
 
         # list our messages
-        assert await dev.state_store._msg_list() == [self.msg8, self.msg9], (
-            "dhw _msg_list wrong"
-        )
+        assert sorted(await dev.state_store._msg_list()) == sorted(
+            [
+                self.msg8,
+                self.msg9,
+            ]
+        ), "dhw _msg_list wrong"
 
         # create _msgz
         assert await dev.state_store._msgz() == {

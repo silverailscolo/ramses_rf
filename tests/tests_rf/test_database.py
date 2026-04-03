@@ -4,6 +4,8 @@
 import contextlib
 from datetime import datetime as dt, timedelta as td
 
+import orjson
+
 from ramses_rf.database import MessageIndex
 from ramses_rf.exceptions import DatabaseQueryError
 from ramses_tx import Message, Packet
@@ -222,3 +224,24 @@ class TestMessageIndex:
         # assert len(await msg_db.all()) == 5
 
         msg_db.stop()  # close sqlite3 connection
+
+    async def test_fat_database_payload_serialization(self) -> None:
+        """Phase 2.1: Verify orjson payload serialization directly in SQLite."""
+        msg_db = MessageIndex(maintain=False)
+        msg_db.add(self.msg4)  # Contains a highly complex dictionary payload
+
+        # Force the StorageWorker to complete the SQL insert before we read it
+        msg_db.flush()
+
+        # Query the raw blob directly out of the database, bypassing the RAM cache
+        sql = "SELECT payload_blob FROM messages WHERE code = '31DA'"
+        res = await msg_db.qry_field(sql, ())
+        assert len(res) == 1
+
+        # Deserialize using orjson and assert it perfectly matches the parsed payload
+        raw_bytes = res[0][0]
+        decoded_payload = orjson.loads(raw_bytes)
+
+        assert decoded_payload == self.msg4.payload, "orjson serialization failed"
+
+        msg_db.stop()
