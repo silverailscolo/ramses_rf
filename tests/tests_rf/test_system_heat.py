@@ -2,9 +2,10 @@
 """Test the System heat logic, specifically packet processing."""
 
 import asyncio
+import logging
 from datetime import datetime as dt
 from typing import Any, Final
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -16,7 +17,8 @@ from ramses_tx.address import HGI_DEVICE_ID
 
 # A standard 3150 I-packet (Heat Demand) from a Controller
 # 3150 002 FCC8 -> domain_id=FC (System), demand=C8 (100%)
-# NOTE: Must use double space after RSSI (064) for ' I' verb parsing by Packet.from_port
+# NOTE: Must use double space after RSSI (064) for ' I' verb parsing
+# by Packet.from_port
 PKT_3150: Final = f"064  I --- 01:145038 --:------ 01:145038 {Code._3150} 002 FCC8"
 
 
@@ -24,7 +26,7 @@ PKT_3150: Final = f"064  I --- 01:145038 --:------ 01:145038 {Code._3150} 002 FC
 
 
 @pytest.fixture()
-def gwy_config() -> dict:
+def gwy_config() -> dict[str, Any]:
     """Return a valid configuration for the gateway."""
     return {}
 
@@ -39,7 +41,8 @@ def gwy_dev_id() -> str:
 
 
 def create_mock_message(tcs: SystemBase, payload: Any) -> MagicMock:
-    """Create a mock message that looks like it came from the TCS controller.
+    """Create a mock message that looks like it came from the TCS
+    controller.
 
     Includes internal structures (_pkt, _ctx) required for logging/caching.
     """
@@ -66,8 +69,8 @@ def create_mock_message(tcs: SystemBase, payload: Any) -> MagicMock:
 async def test_system_handle_msg_3150_real_packet(fake_evofw3: Gateway) -> None:
     """Check that a real 3150 packet is handled correctly.
 
-    If this passes, it means the current parser produces a payload (likely a dict)
-    that the current code can handle.
+    If this passes, it means the current parser produces a payload (likely
+    a dict) that the current code can handle.
     """
     gwy = fake_evofw3
     pkt = Packet.from_port(dt.now(), PKT_3150)
@@ -83,8 +86,7 @@ async def test_system_handle_msg_3150_real_packet(fake_evofw3: Gateway) -> None:
 async def test_system_handle_msg_3150_force_list(fake_evofw3: Gateway) -> None:
     """Simulate a parser returning a LIST payload.
 
-    THIS TEST IS EXPECTED TO FAIL (CRASH) on the current Master branch.
-    It confirms that IF the parser returns a list, the system breaks.
+    Confirms that the system correctly parses multi-zone payloads.
     """
     gwy = fake_evofw3
 
@@ -96,18 +98,15 @@ async def test_system_handle_msg_3150_force_list(fake_evofw3: Gateway) -> None:
     assert tcs is not None  # Ensure TCS exists for Mypy
 
     # Construct a List-based payload (New/Hybrid Style)
-    # The parser might return [ {domain: FC, demand: 0.5}, ... ]
+    # The parser might return[ {domain: FC, demand: 0.5}, ... ]
     payload = [{SZ_DOMAIN_ID: FC, "heat_demand": 0.5}]
 
     if not isinstance(tcs, SystemBase):
         pytest.fail("TCS is not an instance of SystemBase")
 
     msg = create_mock_message(tcs, payload)
-
-    # This should raise AttributeError: 'list' object has no attribute 'get'
     tcs._handle_msg(msg)
 
-    # If we get here, the code handled the list (or ignored it)
     # We verify if it actually extracted the value
     assert tcs._heat_demand == payload[0]
 
@@ -134,7 +133,115 @@ async def test_system_handle_msg_3150_force_dict(fake_evofw3: Gateway) -> None:
         pytest.fail("TCS is not an instance of SystemBase")
 
     msg = create_mock_message(tcs, payload)
-
     tcs._handle_msg(msg)
 
     assert tcs._heat_demand == payload
+
+
+@pytest.mark.asyncio
+async def test_system_handle_msg_3150_list_no_match(
+    fake_evofw3: Gateway,
+) -> None:
+    """Verify list payload ignores unrelated domains."""
+    gwy = fake_evofw3
+    pkt = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.pkt_received(pkt)
+    await asyncio.sleep(0)
+    tcs = gwy.tcs
+    assert tcs is not None
+
+    tcs._heat_demand = None
+    payload = [{"domain_id": "FA", "heat_demand": 0.5}]
+    msg = create_mock_message(tcs, payload)
+
+    tcs._handle_msg(msg)
+    assert tcs._heat_demand is None
+
+
+@pytest.mark.asyncio
+async def test_system_handle_msg_3150_dict_no_match(
+    fake_evofw3: Gateway,
+) -> None:
+    """Verify dict payload ignores unrelated domains."""
+    gwy = fake_evofw3
+    pkt = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.pkt_received(pkt)
+    await asyncio.sleep(0)
+    tcs = gwy.tcs
+    assert tcs is not None
+
+    tcs._heat_demand = None
+    payload = {"domain_id": "F9", "heat_demand": 0.5}
+    msg = create_mock_message(tcs, payload)
+
+    tcs._handle_msg(msg)
+    assert tcs._heat_demand is None
+
+
+@pytest.mark.asyncio
+async def test_system_handle_msg_3150_invalid_type(
+    fake_evofw3: Gateway, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Verify unexpected payload types are logged as warnings."""
+    gwy = fake_evofw3
+    pkt = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.pkt_received(pkt)
+    await asyncio.sleep(0)
+    tcs = gwy.tcs
+    assert tcs is not None
+
+    payload = "unexpected_string"
+    msg = create_mock_message(tcs, payload)
+
+    with caplog.at_level(logging.WARNING):
+        tcs._handle_msg(msg)
+
+    assert "Unexpected payload type" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_logbook_setup_discovery_creates_task(
+    fake_evofw3: Gateway,
+) -> None:
+    """Verify Logbook actively schedules fault log retrieval on discovery."""
+    gwy = fake_evofw3
+    pkt = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.pkt_received(pkt)
+    await asyncio.sleep(0)
+
+    tcs = gwy.tcs
+    assert tcs is not None
+
+    with patch.object(tcs, "get_faultlog", new_callable=AsyncMock) as mock_fault:
+        tcs._setup_discovery_cmds()
+        await asyncio.sleep(0)  # Yield to execute the newly created task
+        mock_fault.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_sysmode_system_mode_msg_db_fallback(
+    fake_evofw3: Gateway,
+) -> None:
+    """Verify system_mode gracefully falls back to the database cache."""
+    gwy = fake_evofw3
+    pkt = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.pkt_received(pkt)
+    await asyncio.sleep(0)
+
+    tcs = gwy.tcs
+    assert tcs is not None
+
+    mock_msg = MagicMock()
+    mock_msg.payload = {"system_mode": "01", "until": None}
+
+    # Use MagicMock instead of AsyncMock for the root object so synchronous
+    # functions like msg_db.add() and msg_db.stop() do not return coroutines.
+    gwy.msg_db = MagicMock()
+    gwy.msg_db.get = AsyncMock(return_value=[mock_msg])
+
+    result = await tcs.system_mode()
+
+    assert result == {"system_mode": "01", "until": None}
+    gwy.msg_db.get.assert_called_once_with(
+        code=Code._2E04, src=tcs._z_id, ctx=tcs._z_idx
+    )

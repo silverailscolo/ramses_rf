@@ -741,8 +741,8 @@ class Logbook(SystemBase):  # 0418
 
         cmd = Command.get_system_log_entry(self.id, 0)
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
-        # task = asyncio.create_task(self.get_faultlog())
-        # self._gwy.add_task(task)
+        task = asyncio.create_task(self.get_faultlog())
+        self._gwy.add_task(task)
 
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
         super()._handle_msg(msg)
@@ -914,6 +914,13 @@ class SysMode(SystemBase):  # 2E04
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
     async def system_mode(self) -> dict[str, Any] | None:  # 2E04
+        if self._gwy.msg_db:
+            msgs = await self._gwy.msg_db.get(
+                code=Code._2E04, src=self._z_id, ctx=self._z_idx
+            )
+            if msgs:
+                return cast(dict[str, Any], msgs[0].payload)
+
         return cast(
             dict[str, Any] | None, await self.state_store._msg_value(Code._2E04)
         )
