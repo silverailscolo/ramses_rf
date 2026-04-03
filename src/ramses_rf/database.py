@@ -27,6 +27,7 @@ import contextlib
 import logging
 import os
 import sqlite3
+import threading
 import uuid
 from collections import OrderedDict
 from datetime import datetime as dt, timedelta as td
@@ -110,6 +111,9 @@ class MessageStore:
         self._msgs: MsgDdT = OrderedDict()  # stores all messages for retrieval.
         self._msgz_: dict[str, Message] = {}  # Phase 2.4: hdr-based retrieval.
         # Filled & cleaned up in housekeeping_loop.
+
+        # Thread-safety lock to prevent Python 3.13 Segfaults
+        self._db_lock = threading.Lock()
 
         # For :memory: databases with multiple connections (Reader vs Worker)
         # We must use a Shared Cache URI so both threads see the same data.
@@ -197,11 +201,12 @@ class MessageStore:
 
         self._worker.stop()  # Stop the background thread
 
-        try:
-            self._cx.commit()  # just in case
-            self._cx.close()  # safely close reader connection
-        except sqlite3.ProgrammingError:
-            pass  # Connection might already be closed
+        with self._db_lock:
+            try:
+                self._cx.commit()  # just in case
+                self._cx.close()  # safely close reader connection
+            except sqlite3.ProgrammingError:
+                pass  # Connection might already be closed
 
     @property
     def msgs(self) -> MsgDdT:
@@ -222,9 +227,10 @@ class MessageStore:
         """
 
         def _fetch_all() -> list[Any]:
-            return self._cx.execute(
-                "SELECT * FROM messages ORDER BY dtm ASC"
-            ).fetchall()
+            with self._db_lock:
+                return self._cx.execute(
+                    "SELECT * FROM messages ORDER BY dtm ASC"
+                ).fetchall()
 
         try:
             rows = await asyncio.to_thread(_fetch_all)
@@ -499,7 +505,8 @@ class MessageStore:
         sql += " AND ".join(f"{k} = ?" for k in kwargs)
 
         def _execute_delete() -> None:
-            self._cx.execute(sql, tuple(kwargs.values()))
+            with self._db_lock:
+                self._cx.execute(sql, tuple(kwargs.values()))
 
         await asyncio.to_thread(_execute_delete)
 
@@ -578,7 +585,8 @@ class MessageStore:
         sql += " AND ".join(f"{k} = ?" for k in kw)
 
         def _fetch_dtms() -> list[Any]:
-            return self._cx.execute(sql, tuple(kw.values())).fetchall()
+            with self._db_lock:
+                return self._cx.execute(sql, tuple(kw.values())).fetchall()
 
         try:
             return await asyncio.to_thread(_fetch_dtms)
@@ -598,7 +606,8 @@ class MessageStore:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
         def _fetch_qry() -> list[Any]:
-            return self._cx.execute(sql, parameters).fetchall()
+            with self._db_lock:
+                return self._cx.execute(sql, parameters).fetchall()
 
         try:
             rows = await asyncio.to_thread(_fetch_qry)
@@ -637,7 +646,8 @@ class MessageStore:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
         def _fetch_rp() -> list[Any]:
-            return self._cx.execute(sql, parameters).fetchall()
+            with self._db_lock:
+                return self._cx.execute(sql, parameters).fetchall()
 
         try:
             rows = await asyncio.to_thread(_fetch_rp)
@@ -663,7 +673,8 @@ class MessageStore:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
         def _fetch_field() -> list[Any]:
-            return self._cx.execute(sql, parameters).fetchall()
+            with self._db_lock:
+                return self._cx.execute(sql, parameters).fetchall()
 
         try:
             return await asyncio.to_thread(_fetch_field)
@@ -674,7 +685,8 @@ class MessageStore:
         """Get all messages from the index."""
 
         def _fetch_all() -> list[Any]:
-            return self._cx.execute("SELECT * FROM messages").fetchall()
+            with self._db_lock:
+                return self._cx.execute("SELECT * FROM messages").fetchall()
 
         rows = await asyncio.to_thread(_fetch_all)
         lst: list[Message] = []
@@ -691,8 +703,9 @@ class MessageStore:
         """Clear the message index (remove indexes of all messages)."""
 
         def _clear_db() -> None:
-            self._cx.execute("DELETE FROM messages")
-            self._cx.commit()
+            with self._db_lock:
+                self._cx.execute("DELETE FROM messages")
+                self._cx.commit()
 
         await asyncio.to_thread(_clear_db)
         self._msgs.clear()
