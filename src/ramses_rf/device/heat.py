@@ -209,6 +209,11 @@ class Weather(DeviceHeat):  # 0002
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 0002
+        if self._gwy.msg_db:
+            msgs = await self._gwy.msg_db.get(code=Code._0002, src=self.id)
+            if msgs:
+                return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
+
         return cast(
             float | None,
             await self.state_store._msg_value(Code._0002, key=SZ_TEMPERATURE),
@@ -273,6 +278,11 @@ class DhwTemperature(DeviceHeat):  # 1260
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 1260
+        if self._gwy.msg_db:
+            msgs = await self._gwy.msg_db.get(code=Code._1260, src=self.id)
+            if msgs:
+                return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
+
         return cast(
             float | None,
             await self.state_store._msg_value(Code._1260, key=SZ_TEMPERATURE),
@@ -302,6 +312,11 @@ class Temperature(DeviceHeat):  # 30C9
     # .W --- 01:054173 34:145039 --:------ 1FC9 006 03-2309-04D39D  # real CTL
     # .I --- 34:145039 01:054173 --:------ 1FC9 006 00-30C9-8A368F
     async def temperature(self) -> float | None:  # 30C9
+        if self._gwy.msg_db:
+            msgs = await self._gwy.msg_db.get(code=Code._30C9, src=self.id)
+            if msgs:
+                return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
+
         return cast(
             float | None,
             await self.state_store._msg_value(Code._30C9, key=SZ_TEMPERATURE),
@@ -458,7 +473,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         # - all circuits bound to the same controller
 
         if msg.code == Code._0005:  # system_zones
-            # {'zone_type': '09', 'zone_mask': [1, 1, 1, 1, 1, 0, 0, 0], 'zone_class': 'underfloor_heating'}
+            # {'zone_type': '09', 'zone_mask':[1, 1, 1, 1, 1, 0, 0, 0], 'zone_class': 'underfloor_heating'}
 
             if msg.payload[SZ_ZONE_TYPE] not in (ZON_ROLE_MAP.ACT, ZON_ROLE_MAP.UFH):
                 return  # ignoring ZON_ROLE_MAP.SEN for now
@@ -481,8 +496,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
                 self._relay_demand_fa = msg
 
         elif msg.code == Code._000C:  # zone_devices
-            # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices': ['01:095421']}
-            # {'zone_type': '09', 'ufh_idx': '07', 'zone_idx': None, 'device_role': 'ufh_actuator', 'devices': []}
+            # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices':['01:095421']}
+            # {'zone_type': '09', 'ufh_idx': '07', 'zone_idx': None, 'device_role': 'ufh_actuator', 'devices':[]}
 
             if msg.payload[SZ_ZONE_TYPE] not in (ZON_ROLE_MAP.ACT, ZON_ROLE_MAP.UFH):
                 return  # ignoring ZON_ROLE_MAP.SEN for now
@@ -1455,6 +1470,17 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
             (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
         )
         return None if result is None else bool(result)
+
+    async def relay_demand(self) -> float | None:
+        """Return the relay demand of the BDR91."""
+        if (demand := await super().relay_demand()) is not None:
+            return demand
+        return cast(
+            float | None,
+            await self.state_store._msg_value(
+                (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
+            ),
+        )
 
     async def role(self) -> str | None:
         """Return the role of the BDR91A (there are six possibilities)."""
