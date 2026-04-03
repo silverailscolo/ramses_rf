@@ -7,6 +7,7 @@ import logging
 import queue
 import sqlite3
 import threading
+from pathlib import Path
 from typing import Any, NamedTuple
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,15 +33,22 @@ class PruneRequest(NamedTuple):
     dtm_limit: Any
 
 
-QueueItem = PacketLogEntry | PruneRequest | tuple[str, Any] | None
+class SnapshotRequest(NamedTuple):
+    """Represents a request to snapshot the in-memory DB to disk."""
+
+    pass
+
+
+QueueItem = PacketLogEntry | PruneRequest | SnapshotRequest | tuple[str, Any] | None
 
 
 class StorageWorker:
     """A background worker thread to handle blocking storage I/O asynchronously."""
 
-    def __init__(self, db_path: str = ":memory:") -> None:
+    def __init__(self, db_path: str = ":memory:", disk_path: str | None = None) -> None:
         """Initialize the storage worker thread."""
         self._db_path = db_path
+        self._disk_path = disk_path
         self._queue: queue.SimpleQueue[QueueItem] = queue.SimpleQueue()
         self._ready_event = threading.Event()
 
@@ -63,6 +71,10 @@ class StorageWorker:
     def submit_prune(self, dtm_limit: Any) -> None:
         """Submit a prune request for SQL deletion (Non-blocking)."""
         self._queue.put(PruneRequest(dtm_limit))
+
+    def submit_snapshot(self) -> None:
+        """Submit a disk snapshot request (Non-blocking)."""
+        self._queue.put(SnapshotRequest())
 
     def flush(self, timeout: float = 10.0) -> None:
         """Block until all currently pending tasks are processed."""
@@ -127,6 +139,22 @@ class StorageWorker:
                 with contextlib.suppress(sqlite3.Error):
                     conn.execute("PRAGMA read_uncommitted = true")
 
+            # Phase 2.4: Startup Hydration
+            if self._disk_path and (
+                self._db_path == ":memory:" or "mode=memory" in self._db_path
+            ):
+                disk_path_obj = Path(self._disk_path)
+                if disk_path_obj.exists():
+                    try:
+                        disk_conn = sqlite3.connect(self._disk_path)
+                        disk_conn.backup(conn)
+                        disk_conn.close()
+                        _LOGGER.info(
+                            "Hydrated memory DB from disk: %s", self._disk_path
+                        )
+                    except sqlite3.Error as err:
+                        _LOGGER.error("Failed to hydrate from disk: %s", err)
+
             self._init_db(conn)
             self._ready_event.set()  # Signal that tables exist
         except sqlite3.Error as err:
@@ -185,6 +213,16 @@ class StorageWorker:
                         _LOGGER.debug("Pruned records older than %s", item.dtm_limit)
                     except sqlite3.Error as err:
                         _LOGGER.error("SQL Prune Failed: %s", err)
+
+                elif isinstance(item, SnapshotRequest):
+                    if self._disk_path:
+                        try:
+                            disk_conn = sqlite3.connect(self._disk_path)
+                            conn.backup(disk_conn)
+                            disk_conn.close()
+                            _LOGGER.debug("Snapshot written to %s", self._disk_path)
+                        except sqlite3.Error as err:
+                            _LOGGER.error("SQL Snapshot Failed: %s", err)
 
                 elif isinstance(item, tuple) and item[0] == "MARKER":
                     # Flush requested

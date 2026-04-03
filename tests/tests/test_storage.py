@@ -45,10 +45,11 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
 
     # 1. Setup: Use pytest's temp path for the DB file
     db_path = tmp_path / "test_async_persistence.sqlite"
+    disk_path = tmp_path / "ramses.db"
 
     # 2. Initialize MessageIndex (starts the background StorageWorker)
     # We pass the path as a string, as expected by the class
-    idx = MessageIndex(db_path=str(db_path))
+    idx = MessageIndex(db_path=str(db_path), disk_path=str(disk_path))
 
     # Allow a tiny moment for the worker thread to initialize tables
     # using a deterministic polling loop instead of a flaky hardcoded sleep
@@ -134,5 +135,20 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         f"after waiting {wait_time}s."
     )
 
-    # 6. Cleanup
+    # Trigger and wait for disk snapshot explicitly
+    idx._worker.submit_snapshot()
+    idx.flush()
+
+    assert disk_path.exists(), "Snapshot file was not created on disk!"
+
+    # 6. Hydration Verification
+    idx2 = MessageIndex(db_path=":memory:", disk_path=str(disk_path))
+    await asyncio.sleep(0.5)
+
+    assert len(idx2.msgs) == MSG_COUNT, (
+        f"Hydration failed! Expected {MSG_COUNT} cached items, got {len(idx2.msgs)}."
+    )
+
+    # 7. Cleanup
     idx.stop()
+    idx2.stop()

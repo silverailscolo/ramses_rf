@@ -131,6 +131,8 @@ class GatewayConfig:
     :type evofw_flag: str | None
     :param gateway_timeout: Custom timeout threshold in minutes for gateway availability.
     :type gateway_timeout: int | None
+    :param database_path: Target disk path for the persistent SQLite MessageStore DB.
+    :type database_path: str | None
     """
 
     disable_discovery: bool = False
@@ -158,6 +160,7 @@ class GatewayConfig:
     evofw_flag: str | None = None
 
     gateway_timeout: int | None = None
+    database_path: str | None = "ramses.db"
 
 
 class Gateway(GatewayInterface):
@@ -419,7 +422,9 @@ class Gateway(GatewayInterface):
         :returns: None
         :rtype: None
         """
-        self._msg_db = MessageStore()  # start the index
+        self._msg_db = MessageStore(
+            disk_path=self.config.database_path
+        )  # start the index
 
     async def stop(self) -> None:
         """Stop the Gateway and tidy up.
