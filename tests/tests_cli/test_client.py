@@ -212,19 +212,24 @@ def test_normalise_config() -> None:
     # Case 1: Packet log as string
     lib_config: dict[str, Any] = {
         SZ_SERIAL_PORT: "/dev/ttyUSB0",
-        SZ_PACKET_LOG: "packet.log",
+        SZ_PACKET_LOG: "packet_log",
     }
     port, cfg = normalise_config(lib_config)
     assert port == "/dev/ttyUSB0"
     assert cfg is not None
-    assert cfg[SZ_PACKET_LOG]["file_name"] == "packet.log"
+    assert cfg[SZ_PACKET_LOG]["packet_log_prefix"] == "packet_log"
 
     # Case 2: Packet log as dict
-    lib_config = {SZ_PACKET_LOG: {"file_name": "packet.log", "rotate": True}}
+    lib_config = {
+        SZ_PACKET_LOG: {
+            "packet_log_prefix": "packet_log",
+            "rotate_bytes": 204800,
+        }
+    }
     port, cfg = normalise_config(lib_config)
     assert port is None
     assert cfg is not None
-    assert cfg[SZ_PACKET_LOG]["rotate"] is True
+    assert cfg[SZ_PACKET_LOG]["rotate_bytes"] == 204800
 
 
 def test_split_kwargs() -> None:

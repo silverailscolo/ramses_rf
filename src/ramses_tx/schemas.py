@@ -59,38 +59,57 @@ SZ_PACKET_SOURCE: Final = "packet_source"
 
 #
 # 2/5: Packet log configuration
-SZ_FILE_NAME: Final = "file_name"
 SZ_PACKET_LOG: Final = "packet_log"
-SZ_ROTATE_BACKUPS: Final = "rotate_backups"
+SZ_PACKET_LOG_PATH: Final = "packet_log_path"
+SZ_PACKET_LOG_PREFIX: Final = "packet_log_prefix"
+SZ_PACKET_LOG_RETENTION_DAYS: Final = "packet_log_retention_days"
+SZ_FLUSH_INTERVAL: Final = "flush_interval"
+SZ_BUFFER_CAPACITY: Final = "buffer_capacity"
 SZ_ROTATE_BYTES: Final = "rotate_bytes"
 
 
 def sch_packet_log_dict_factory(
-    default_backups: int = 0,
+    default_backups: int | None = None,
+    default_retention_days: int = 7,
 ) -> dict[vol.Required, vol.Any]:
     """
     :return: a packet log dict with a configurable default rotation policy.
     """
 
+    if default_backups is not None:
+        default_retention_days = default_backups
+
     SCH_PACKET_LOG_CONFIG = vol.Schema(
         {
-            vol.Optional(SZ_ROTATE_BACKUPS, default=default_backups): vol.Any(
-                None, int
-            ),
+            vol.Optional(SZ_PACKET_LOG_PATH, default=""): str,
+            vol.Optional(SZ_PACKET_LOG_PREFIX, default="packet_log"): str,
+            vol.Optional(
+                SZ_PACKET_LOG_RETENTION_DAYS, default=default_retention_days
+            ): vol.Any(None, int),
             vol.Optional(SZ_ROTATE_BYTES): vol.Any(None, int),
+            vol.Optional(SZ_FLUSH_INTERVAL, default=60): vol.Any(None, int, float),
+            vol.Optional(SZ_BUFFER_CAPACITY, default=0): vol.Any(None, int),
+            vol.Optional("flush_level"): vol.Any(None, int, str),
         },
         extra=vol.PREVENT_EXTRA,
     )
 
     SCH_PACKET_LOG_NAME = str
 
-    def NormalisePacketLog(rotate_backups: int = 0) -> Callable[..., Any]:
-        def normalise_packet_log(node_value: str | PktLogConfigT) -> PktLogConfigT:
+    def NormalisePacketLog(
+        retention_days: int = 7,
+    ) -> Callable[[str | PktLogConfigT], PktLogConfigT]:
+        def normalise_packet_log(
+            node_value: str | PktLogConfigT,
+        ) -> PktLogConfigT:
             if isinstance(node_value, str):
                 return {
-                    SZ_FILE_NAME: node_value,
-                    SZ_ROTATE_BACKUPS: rotate_backups,
+                    SZ_PACKET_LOG_PATH: "",
+                    SZ_PACKET_LOG_PREFIX: node_value,
+                    SZ_PACKET_LOG_RETENTION_DAYS: retention_days,
                     SZ_ROTATE_BYTES: None,
+                    SZ_FLUSH_INTERVAL: 60,
+                    SZ_BUFFER_CAPACITY: 0,
                 }
             return node_value
 
@@ -101,17 +120,16 @@ def sch_packet_log_dict_factory(
             None,
             vol.All(
                 SCH_PACKET_LOG_NAME,
-                NormalisePacketLog(rotate_backups=default_backups),
+                NormalisePacketLog(retention_days=default_retention_days),
             ),
-            SCH_PACKET_LOG_CONFIG.extend(
-                {vol.Required(SZ_FILE_NAME): SCH_PACKET_LOG_NAME}
-            ),
+            SCH_PACKET_LOG_CONFIG,
         )
     }
 
 
 SCH_PACKET_LOG = vol.Schema(
-    sch_packet_log_dict_factory(default_backups=7), extra=vol.PREVENT_EXTRA
+    sch_packet_log_dict_factory(default_retention_days=7),
+    extra=vol.PREVENT_EXTRA,
 )
 
 #

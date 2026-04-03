@@ -7,6 +7,7 @@ This module wraps logger to provide bespoke functionality, especially for timest
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import sys
@@ -237,24 +238,27 @@ def set_logger_timesource(dtm_now: Callable[..., dt]) -> None:
 def set_pkt_logging(
     logger: logging.Logger,
     cc_console: bool = False,
-    file_name: str | None = None,
-    rotate_backups: int = 0,
+    packet_log_path: str | None = "",
+    packet_log_prefix: str | None = "packet_log",
+    packet_log_retention_days: int = 7,
     rotate_bytes: int | None = None,
     buffer_capacity: int = 0,
     flush_level: int = logging.ERROR,
-    flush_interval: float = 0,
+    flush_interval: float = 60.0,
 ) -> QueueListener | None:
     """Create/configure handlers, formatters, etc.
 
     Parameters:
     - logger:         The logger to configure.
     - cc_console:     If True, output to stdout/stderr.
-    - file_name:      base of file to store packet logs in, from root
-    - rotate_backups: keep this many copies, and rotate at midnight unless:
-    - rotate_bytes:   rotate log files when log > rotate_size
+    - packet_log_path: base path to store packet logs in, from root
+    - packet_log_prefix: prefix of file to store packet logs in
+    - packet_log_retention_days: keep copies, rotate at midnight unless:
+    - rotate_bytes: rotate log files when log > rotate_size
     - buffer_capacity: If > 0, buffer logs in memory up to this capacity.
-    - flush_level:    The logging level that triggers the buffer to flush.
-    - flush_interval: Accepted here to satisfy kwargs unpacked from config (unused locally).
+    - flush_level: The logging level that triggers the buffer to flush.
+    - flush_interval: Accepted here to satisfy kwargs unpacked
+      from config (unused locally).
     """
 
     logger.propagate = False  # log file is distinct from any app/debug logging
@@ -266,17 +270,29 @@ def set_pkt_logging(
 
     handlers: list[logging.Handler] = []
 
+    file_name: str | None = None
+    if packet_log_prefix:
+        if packet_log_path:
+            os.makedirs(packet_log_path, exist_ok=True)
+            file_name = os.path.join(packet_log_path, f"{packet_log_prefix}.log")
+        else:
+            file_name = f"{packet_log_prefix}.log"
+
     if file_name:  # note: this opens the packet_log file IO and may block
         file_handler: logging.Handler
 
         if rotate_bytes:
-            rotate_backups = rotate_backups or 2
+            packet_log_retention_days = packet_log_retention_days or 2
             file_handler = logging.handlers.RotatingFileHandler(
-                file_name, maxBytes=rotate_bytes, backupCount=rotate_backups
+                file_name,
+                maxBytes=rotate_bytes,
+                backupCount=packet_log_retention_days,
             )
-        elif rotate_backups:
+        elif packet_log_retention_days:
             file_handler = TimedRotatingFileHandler(
-                file_name, when="MIDNIGHT", backupCount=rotate_backups
+                file_name,
+                when="MIDNIGHT",
+                backupCount=packet_log_retention_days,
             )
         else:
             file_handler = logging.FileHandler(file_name)

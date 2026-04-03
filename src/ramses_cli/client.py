@@ -33,9 +33,9 @@ from ramses_tx.schemas import (
     SZ_DISABLE_SENDING,
     SZ_ENFORCE_KNOWN_LIST,
     SZ_EVOFW_FLAG,
-    SZ_FILE_NAME,
     SZ_KNOWN_LIST,
     SZ_PACKET_LOG,
+    SZ_PACKET_LOG_PREFIX,
     SZ_SERIAL_PORT,
 )
 
@@ -117,7 +117,7 @@ def normalise_config(
     if packet_log is None:
         packet_log = {}
     elif isinstance(packet_log, str):
-        packet_log = {SZ_FILE_NAME: packet_log}
+        packet_log = {SZ_PACKET_LOG_PREFIX: packet_log}
     assert isinstance(packet_log, dict)
     lib_config[SZ_PACKET_LOG] = packet_log
 
