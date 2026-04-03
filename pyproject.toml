@@ -1,6 +1,6 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2026-04-01
+# last checked/updated: 2026-04-03
 #
 
 [project]
@@ -9,7 +9,6 @@
   description = "A stateful RAMSES-II protocol decoder & analyser."
   readme = "README.md"
   authors = [
-    # {name = "David Bonnes", email = "zxdavb@bonnes.me"},
     {name = "Egbert Broerse", email = "dcc2@ebroerse.nl"}
   ]
   maintainers = [
