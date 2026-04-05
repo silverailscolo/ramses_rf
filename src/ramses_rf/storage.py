@@ -23,6 +23,7 @@ class PacketLogEntry(NamedTuple):
     ctx: str | None
     hdr: str
     plk: str
+    payload_blob: bytes
 
 
 class PruneRequest(NamedTuple):
@@ -43,10 +44,11 @@ class StorageWorker:
         self._queue: queue.SimpleQueue[QueueItem] = queue.SimpleQueue()
         self._ready_event = threading.Event()
 
+        # Allows process exit even if stop() is missed
         self._thread = threading.Thread(
             target=self._run,
             name="RamsesStorage",
-            daemon=True,  # Allows process exit even if stop() is missed
+            daemon=True,
         )
         self._thread.start()
 
@@ -92,7 +94,8 @@ class StorageWorker:
                 code   TEXT(4)  NOT NULL,
                 ctx    TEXT,
                 hdr    TEXT     NOT NULL UNIQUE,
-                plk    TEXT     NOT NULL
+                plk    TEXT     NOT NULL,
+                payload_blob BLOB NOT NULL
             )
             """
         )
@@ -107,7 +110,6 @@ class StorageWorker:
 
         # Setup SQLite connection in this thread
         try:
-            # uri=True allows opening "file::memory:?cache=shared"
             conn = sqlite3.connect(
                 self._db_path,
                 detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
@@ -165,8 +167,8 @@ class StorageWorker:
                         conn.executemany(
                             """
                             INSERT OR REPLACE INTO messages
-                            (dtm, verb, src, dst, code, ctx, hdr, plk)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            (dtm, verb, src, dst, code, ctx, hdr, plk, payload_blob)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                             batch,
                         )

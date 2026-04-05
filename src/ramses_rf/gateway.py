@@ -60,7 +60,7 @@ from ramses_tx import (
 from ramses_tx.transport import TransportConfig
 from ramses_tx.typing import PktLogConfigT, PortConfigT
 
-from .database import MessageIndex
+from .database import MessageStore
 from .device import HgiGateway
 from .device_filter import DeviceFilter
 from .device_registry import DeviceRegistry
@@ -69,7 +69,7 @@ from .interfaces import (
     DeviceFilterInterface,
     DeviceRegistryInterface,
     GatewayInterface,
-    MessageIndexInterface,
+    MessageStoreInterface,
 )
 from .schemas import load_schema
 from .system import Evohome
@@ -253,7 +253,7 @@ class Gateway(GatewayInterface):
             hgi_id_provider=lambda: getattr(self.hgi, "id", None),
         )
 
-        self._msg_db: MessageIndexInterface | None = None
+        self._msg_db: MessageStoreInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
 
     def __repr__(self) -> str:
@@ -285,20 +285,20 @@ class Gateway(GatewayInterface):
         return self._gwy_config
 
     @property
-    def msg_db(self) -> MessageIndexInterface | None:
+    def msg_db(self) -> MessageStoreInterface | None:
         """Return the message database if configured.
 
-        :returns: The configured MessageIndexInterface or None.
-        :rtype: MessageIndexInterface | None
+        :returns: The configured MessageStoreInterface or None.
+        :rtype: MessageStoreInterface | None
         """
         return self._msg_db
 
     @msg_db.setter
-    def msg_db(self, value: MessageIndexInterface | None) -> None:
+    def msg_db(self, value: MessageStoreInterface | None) -> None:
         """Set the message database.
 
-        :param value: The MessageIndexInterface instance to set, or None.
-        :type value: MessageIndexInterface | None
+        :param value: The MessageStoreInterface instance to set, or None.
+        :type value: MessageStoreInterface | None
         """
         self._msg_db = value
 
@@ -383,7 +383,7 @@ class Gateway(GatewayInterface):
 
         # initialize SQLite index, set in _tx/Engine
         if self._engine._sqlite_index:  # TODO(eb): default to True in Q1 2026
-            _LOGGER.info("Ramses RF starts SQLite MessageIndex")
+            _LOGGER.info("Ramses RF starts SQLite MessageStore")
             # if activated in ramses_cc > Engine or set in tests
             self.create_sqlite_message_index()
 
@@ -414,12 +414,12 @@ class Gateway(GatewayInterface):
             )
 
     def create_sqlite_message_index(self) -> None:
-        """Initialize the SQLite MessageIndex.
+        """Initialize the SQLite MessageStore.
 
         :returns: None
         :rtype: None
         """
-        self._msg_db = MessageIndex()  # start the index
+        self._msg_db = MessageStore()  # start the index
 
     async def stop(self) -> None:
         """Stop the Gateway and tidy up.

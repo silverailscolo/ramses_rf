@@ -31,15 +31,18 @@ import sqlite3
 import uuid
 from collections import OrderedDict
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, NewType
+from typing import TYPE_CHECKING, Any, NewType, cast
+
+import orjson
 
 from ramses_tx import CODES_SCHEMA, RQ, Code, Message, Packet
 
 from .exceptions import DatabaseQueryError
 from .storage import PacketLogEntry, StorageWorker
 
+DtmStrT = NewType("DtmStrT", str)
+
 if TYPE_CHECKING:
-    DtmStrT = NewType("DtmStrT", str)
     MsgDdT = OrderedDict[DtmStrT, Message]
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,7 +90,7 @@ def payload_keys(parsed_payload: list[dict] | dict) -> str:  # type: ignore[type
     return _keys
 
 
-class MessageIndex:
+class MessageStore:
     """A central in-memory SQLite3 database for indexing RF messages.
     Index holds all the latest messages to & from all devices by `dtm`
     (timestamp) and `hdr` header
@@ -115,7 +118,7 @@ class MessageIndex:
         # Wait for the worker to create the tables.
         # This prevents "no such table" errors on immediate reads.
         if not self._worker.wait_for_ready(timeout=10.0):
-            _LOGGER.error("MessageIndex: StorageWorker timed out initializing database")
+            _LOGGER.error("MessageStore: StorageWorker timed out initializing database")
 
         # Connect to a SQLite DB (Read Connection)
         self._cx = sqlite3.connect(
@@ -144,13 +147,13 @@ class MessageIndex:
 
         if self.maintain:
             self._lock = asyncio.Lock()
-            self._last_housekeeping: dt = None  # type: ignore[assignment]
-            self._housekeeping_task = None  # type: ignore[assignment]
+            self._last_housekeeping: dt = cast(dt, None)
+            self._housekeeping_task = cast(asyncio.Task[None], None)
 
         self.start()
 
     def __repr__(self) -> str:
-        return f"MessageIndex({len(self._msgs)} messages)"  # or msg_db.count()
+        return f"MessageStore({len(self._msgs)} messages)"  # or msg_db.count()
 
     def start(self) -> None:
         """Start the housekeeper loop."""
@@ -201,7 +204,7 @@ class MessageIndex:
 
         async def housekeeping(dt_now: dt, _cutoff: td = td(days=1)) -> None:
             """
-            Deletes all messages older than a given delta from the dict using the MessageIndex.
+            Deletes all messages older than a given delta from the dict using the MessageStore.
             :param dt_now: current timestamp
             :param _cutoff: the oldest timestamp to retain, default is 24 hours ago
             """
@@ -221,10 +224,10 @@ class MessageIndex:
                 )
 
             except Exception as err:
-                _LOGGER.warning("MessageIndex housekeeping error: %s", err)
+                _LOGGER.warning("MessageStore housekeeping error: %s", err)
             else:
                 _LOGGER.debug(
-                    "MessageIndex housekeeping completed, retained messages >= %s",
+                    "MessageStore housekeeping completed, retained messages >= %s",
                     dtm_iso,
                 )
             finally:
@@ -233,12 +236,12 @@ class MessageIndex:
         while True:
             self._last_housekeeping = dt.now()
             await asyncio.sleep(3600)
-            _LOGGER.info("Starting next MessageIndex housekeeping")
+            _LOGGER.info("Starting next MessageStore housekeeping")
             await housekeeping(self._last_housekeeping)
 
     def add(self, msg: Message) -> Message | None:
         """
-        Add a single message to the MessageIndex.
+        Add a single message to the MessageStore.
         Logs a warning if there is a duplicate dtm.
 
         :returns: any message that was removed because it had the same header
@@ -249,7 +252,7 @@ class MessageIndex:
         old: Message | None = None  # avoid UnboundLocalError
 
         # Check in-memory cache for collision instead of blocking SQL
-        dtm_str: DtmStrT = msg.dtm.isoformat(timespec="microseconds")  # type: ignore[assignment]
+        dtm_str = cast(DtmStrT, msg.dtm.isoformat(timespec="microseconds"))
         if dtm_str in self._msgs:
             dup = (self._msgs[dtm_str],)
 
@@ -289,7 +292,7 @@ class MessageIndex:
         self, src: str, code: str = "", verb: str = "", payload: str = "00"
     ) -> None:
         """
-        Add a single record to the MessageIndex with timestamp `now()` and no Message contents.
+        Add a single record to the MessageStore with timestamp `now()` and no Message contents.
 
         :param src: device id to use as source address
         :param code: device id to use as destination address (can be identical)
@@ -298,7 +301,7 @@ class MessageIndex:
         """
         # Used by OtbGateway init, via entity_base.py (code=_3220)
         _now: dt = dt.now()
-        dtm: DtmStrT = _now.isoformat(timespec="microseconds")  # type: ignore[assignment]
+        dtm = cast(DtmStrT, _now.isoformat(timespec="microseconds"))
         hdr = f"{code}|{verb}|{src}|{payload}"
 
         # Prepare data tuple for worker
@@ -311,6 +314,7 @@ class MessageIndex:
             ctx=None,
             hdr=hdr,
             plk="|",
+            payload_blob=orjson.dumps({"payload": payload}),
         )
 
         self._worker.submit_packet(data)
@@ -341,6 +345,12 @@ class MessageIndex:
         else:
             msg_pkt_ctx = msg._pkt._ctx  # can be None
 
+        try:
+            payload_blob = orjson.dumps(msg.payload)
+        except orjson.JSONEncodeError as err:
+            _LOGGER.warning("Failed to serialize payload: %s", err)
+            payload_blob = b"{}"
+
         # Refactor: Worker uses INSERT OR REPLACE to handle collision
         data = PacketLogEntry(
             dtm=msg.dtm,
@@ -351,6 +361,7 @@ class MessageIndex:
             ctx=msg_pkt_ctx,
             hdr=msg._pkt._hdr,
             plk=payload_keys(msg.payload),
+            payload_blob=payload_blob,
         )
 
         self._worker.submit_packet(data)
@@ -389,7 +400,7 @@ class MessageIndex:
         else:
             if msgs is not None:
                 for m in msgs:
-                    dtm: DtmStrT = m.dtm.isoformat(timespec="microseconds")  # type: ignore[assignment]
+                    dtm = cast(DtmStrT, m.dtm.isoformat(timespec="microseconds"))
                     self._msgs.pop(dtm)
 
         finally:
@@ -414,7 +425,7 @@ class MessageIndex:
 
         return msgs
 
-    # MessageIndex msg_db query methods
+    # MessageStore msg_db query methods
 
     async def get(
         self, msg: Message | None = None, **kwargs: bool | dt | str
@@ -439,7 +450,7 @@ class MessageIndex:
 
     async def contains(self, **kwargs: bool | dt | str) -> bool:
         """
-        Check if the MessageIndex contains at least 1 record that matches the provided fields.
+        Check if the MessageStore contains at least 1 record that matches the provided fields.
 
         :param kwargs: (exact) SQLite table field_name: required_value pairs
         :return: True if at least one message fitting the given conditions is present, False when qry returned empty
@@ -449,7 +460,7 @@ class MessageIndex:
 
     async def _select_from(self, **kwargs: bool | dt | str) -> tuple[Message, ...]:
         """
-        Select message(s) using the MessageIndex.
+        Select message(s) using the MessageStore.
 
         :param kwargs: (exact) SQLite table field_name: required_value pairs
         :returns: a tuple of qualifying messages
@@ -463,12 +474,12 @@ class MessageIndex:
             if ts in self._msgs:
                 res.append(self._msgs[ts])
             else:
-                _LOGGER.debug("MessageIndex timestamp %s not in device messages", ts)
+                _LOGGER.debug("MessageStore timestamp %s not in device messages", ts)
         return tuple(res)
 
     async def qry_dtms(self, **kwargs: bool | dt | str) -> list[Any]:
         """
-        Select from the MessageIndex a list of dtms that match the provided arguments.
+        Select from the MessageStore a list of dtms that match the provided arguments.
 
         :param kwargs: data table field names and criteria
         :return: list of unformatted dtms that match, useful for msg lookup, or an empty list if 0 matches
@@ -522,7 +533,7 @@ class MessageIndex:
             if ts in self._msgs:
                 lst.append(self._msgs[ts])
             else:  # happens in tests with artificial msg from heat
-                _LOGGER.info("MessageIndex timestamp %s not in device messages", ts)
+                _LOGGER.info("MessageStore timestamp %s not in device messages", ts)
         return tuple(lst)
 
     async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
@@ -591,9 +602,9 @@ class MessageIndex:
             ts: DtmStrT = row[0].isoformat(timespec="microseconds")
             if ts in self._msgs:
                 lst.append(self._msgs[ts])
-                _LOGGER.debug("MessageIndex ts %s added to all.lst", ts)
+                _LOGGER.debug("MessageStore ts %s added to all.lst", ts)
             else:  # happens in tests and real evohome setups with dummy msg from heat init
-                _LOGGER.debug("MessageIndex ts %s not in device messages", ts)
+                _LOGGER.debug("MessageStore ts %s not in device messages", ts)
         return tuple(lst)
 
     async def clr(self) -> None:
@@ -605,3 +616,7 @@ class MessageIndex:
 
         await asyncio.to_thread(_clear_db)
         self._msgs.clear()
+
+
+# Alias for backwards compatibility during Phase 2 migration
+MessageIndex = MessageStore

@@ -3,7 +3,7 @@
 import asyncio
 import sqlite3
 import time
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta as td
 from pathlib import Path
 
 import pytest
@@ -17,7 +17,10 @@ def create_dummy_message(seq: int) -> Message:
     """Create a valid dummy packet/message for testing."""
     # Fake packet: RQ (Request) from fake device to fake device
     # Structure: ... RQ --- SrcID DstID --:------ 1F09 001 00
-    ts = dt.now().isoformat(timespec="microseconds")
+
+    # Ensure unique timestamps for burst testing to avoid RAM dict collisions
+    base_time = dt.now()
+    ts = (base_time + td(microseconds=seq)).isoformat(timespec="microseconds")
 
     # Ensure sequence fits in 6 digits
     seq_str = f"{seq % 999999:06d}"
@@ -33,11 +36,11 @@ def create_dummy_message(seq: int) -> Message:
 @pytest.mark.asyncio
 async def test_storage_worker_persistence(tmp_path: Path) -> None:
     """
-    Verify that the StorageWorker offloads writes asynchronously and persists data integrity.
+    Verify that the StorageWorker offloads writes asynchronously and persists data.
 
     This test ensures:
-    1. The main thread is NOT blocked during high-volume writes (Performance).
-    2. The background worker eventually writes all data to the file (Integrity).
+    1. Phase 2.3 (RAM-First): The main memory dict is instantly populated.
+    2. Phase 2.1 (Fat DB): The background worker eventually writes all data to SQL.
     """
 
     # 1. Setup: Use pytest's temp path for the DB file
@@ -80,6 +83,12 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         idx.add(msg)
 
     duration = time.perf_counter() - start_time
+
+    # Assertion: RAM-First Write-Behind Cache
+    # The in-memory dictionary MUST be populated instantly.
+    assert len(idx.msgs) == MSG_COUNT, (
+        "Phase 2.3 Fail: RAM cache was not instantly populated!"
+    )
 
     # Restore flush for the verification step
     idx.flush = real_flush  # type: ignore[method-assign]

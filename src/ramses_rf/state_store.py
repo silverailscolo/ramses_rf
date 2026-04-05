@@ -32,7 +32,7 @@ from .const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
 if TYPE_CHECKING:
     from ramses_tx.typing import HeaderT
 
-    from .database import MessageIndex
+    from .database import MessageStore
     from .interfaces import DeviceInterface, GatewayInterface
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class StateStore:
     """Manages database interactions and state queries for an entity.
 
     This class is intended to be composed into Entity classes rather than
-    inherited. It delegates heavy lifting to the Gateway's MessageIndex.
+    inherited. It delegates heavy lifting to the Gateway's MessageStore.
     """
 
     def __init__(self, entity: DeviceInterface, gwy: GatewayInterface) -> None:
@@ -61,8 +61,7 @@ class StateStore:
 
         # Legacy dictionaries (Deprecated since 0.52.1)
         self._msgs_: dict[Code, Message] = {}
-        if not self._gwy.msg_db:
-            self._msgz_: dict[Code, dict[VerbT, dict[bool | str | None, Message]]] = {}
+        self._msgz_: dict[Code, dict[VerbT, dict[bool | str | None, Message]]] = {}
 
     async def _msg_list(self) -> list[Message]:
         """Return a flattened list of all messages logged on this device.
@@ -70,22 +69,6 @@ class StateStore:
         :returns: A list of messages.
         :rtype: list[Message]
         """
-        if self._gwy.msg_db:
-            msg_list_qry: list[Message] = []
-            code_list = await self._msg_dev_qry()
-            if code_list:
-                msgs_dict = await self._msgs()
-                for code in code_list:
-                    if code in msgs_dict:
-                        msg_list_qry.append(msgs_dict[code])
-                    else:
-                        _LOGGER.debug(
-                            "_msg_list could not fetch self._msgs[%s] for %s",
-                            code,
-                            self._entity.id,
-                        )
-            return msg_list_qry
-
         msgz_dict = await self._msgz()
         return [
             msg
@@ -124,7 +107,7 @@ class StateStore:
         :type msg: Message
         """
         if self._gwy.msg_db:
-            await cast("MessageIndex", self._gwy.msg_db).rem(msg)
+            await cast("MessageStore", self._gwy.msg_db).rem(msg)
 
         entities: list[Any] = []
         if hasattr(msg.src, "tcs"):
@@ -142,9 +125,8 @@ class StateStore:
                 store = obj.state_store
                 if msg.code in store._msgs_ and store._msgs_[msg.code] == msg:
                     del store._msgs_[msg.code]
-                if not self._gwy.msg_db:
-                    with contextlib.suppress(KeyError):
-                        del store._msgz_[msg.code][msg.verb][msg._pkt._ctx]
+                with contextlib.suppress(KeyError):
+                    del store._msgz_[msg.code][msg.verb][msg._pkt._ctx]
 
     async def _get_msg_by_hdr(self, hdr: HeaderT) -> Message | None:
         """Return a msg, if any, that matches a given header.
@@ -253,13 +235,8 @@ class StateStore:
                 )
                 key = None
             try:
-                if self._gwy.msg_db:
-                    cd = await self._msg_qry_by_code_key(code, key, **kwargs, verb=verb)
-                    msg = (await self._msgs()).get(cd) if cd else None
-                else:
-                    msgz_dict = await self._msgz()
-                    msgs = msgz_dict[cast("Code", code)][verb]
-                    msg = max(msgs.values()) if msgs else None
+                cd = await self._msg_qry_by_code_key(code, key, **kwargs, verb=verb)
+                msg = (await self._msgs()).get(cd) if cd else None
             except KeyError:
                 msg = None
         elif isinstance(code, tuple):
@@ -341,42 +318,53 @@ class StateStore:
         :returns: A list of Codes or None.
         :rtype: list[Code] | None
         """
-        if not self._gwy.msg_db:
-            raise NotImplementedError("Missing MessageIndex")
-
-        res: list[Code] = []
+        res: set[Code] = set()
         entity_id = self._entity.id
+        is_dhw = entity_id[_ID_SLICE:] == "_HW"
+        is_zone = len(entity_id) > 9 and not is_dhw
+        zone_idx = entity_id[_ID_SLICE + 1 :] if is_zone else None
 
-        if len(entity_id) == 9:
-            sql = """
-                SELECT code from messages WHERE
-                verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND ctx LIKE ?
-            """
-            _ctx_qry = "%"
-        elif entity_id[_ID_SLICE:] == "_HW":
-            sql = """
-                SELECT code from messages WHERE
-                verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
-            """
-            _ctx_qry = "%dhw_idx%"
-        else:
-            sql = """
-                SELECT code from messages WHERE
-                verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND ctx LIKE ?
-            """
-            _ctx_qry = f"%{entity_id[_ID_SLICE + 1 :]}%"
-
-        for rec in await self._gwy.msg_db.qry_field(
-            sql, (entity_id[:_ID_SLICE], entity_id[:_ID_SLICE], _ctx_qry)
-        ):
-            res.append(Code(str(rec[0])))
-        return res
+        for code, verbs in self._msgz_.items():
+            for verb, ctxs in verbs.items():
+                if verb not in (I_, RP):
+                    continue
+                for ctx, msg in ctxs.items():
+                    if is_dhw:
+                        in_dict = isinstance(msg.payload, dict)
+                        in_list = isinstance(msg.payload, list)
+                        if (
+                            ctx in ("FC", "FA", "F9", "FA")
+                            or (in_dict and "dhw_idx" in msg.payload)
+                            or (
+                                in_list
+                                and any(
+                                    isinstance(d, dict) and "dhw_idx" in d
+                                    for d in msg.payload
+                                )
+                            )
+                        ):
+                            res.add(code)
+                    elif is_zone:
+                        in_dict = isinstance(msg.payload, dict)
+                        in_list = isinstance(msg.payload, list)
+                        if (
+                            ctx == zone_idx
+                            or (
+                                in_dict and str(msg.payload.get("zone_idx")) == zone_idx
+                            )
+                            or (
+                                in_list
+                                and any(
+                                    isinstance(d, dict)
+                                    and str(d.get("zone_idx")) == zone_idx
+                                    for d in msg.payload
+                                )
+                            )
+                        ):
+                            res.add(code)
+                    else:
+                        res.add(code)
+        return list(res)
 
     async def _msg_qry_by_code_key(
         self,
@@ -395,58 +383,87 @@ class StateStore:
         :returns: The Code of the most recent query result message or None.
         :rtype: Code | None
         """
-        if not self._gwy.msg_db:
-            raise NotImplementedError("Missing MessageIndex")
-
-        code_qry: str = "= "
-        if code is None:
-            code_qry = "LIKE '%'"
-        elif isinstance(code, tuple):
-            for cd in code:
-                code_qry += f"'{str(cd)}' OR code = '"
-            code_qry = code_qry[:-13]
-        else:
-            code_qry += str(code)
-
-        if kwargs.get("verb") and kwargs["verb"] in (" I", "RP"):
-            vb = f"('{str(kwargs['verb'])}',)"
-        else:
-            vb = "(' I', 'RP',)"
-
-        ctx_qry = "%"
-        if kwargs.get("zone_idx"):
-            ctx_qry = f"%{kwargs['zone_idx']}%"
-        elif kwargs.get("dhw_idx"):
-            ctx_qry = f"%{kwargs['dhw_idx']}%"
-        key_qry = "%" if key is None else f"%{key}%"
-
-        sql = """
-            SELECT dtm, code from messages WHERE
-            verb in ?
-            AND (src = ? OR dst = ?)
-            AND (code ?)
-            AND (ctx LIKE ?)
-            AND (plk LIKE ?)
-        """
-        latest: dt = dt(0, 0, 0)
-        res = None
+        latest: dt = dt.min
+        res: Code | None = None
 
         entity_id = self._entity.id
-        for rec in await self._gwy.msg_db.qry_field(
-            sql,
-            (
-                vb,
-                entity_id[:_ID_SLICE],
-                entity_id[:_ID_SLICE],
-                code_qry,
-                ctx_qry,
-                key_qry,
-            ),
-        ):
-            assert isinstance(rec[0], dt)
-            if rec[0] > latest:
-                res = Code(str(rec[1]))
-                latest = rec[0]
+        is_dhw = entity_id[_ID_SLICE:] == "_HW"
+        is_zone = len(entity_id) > 9 and not is_dhw
+        zone_idx = kwargs.get(
+            "zone_idx", entity_id[_ID_SLICE + 1 :] if is_zone else None
+        )
+        dhw_idx = kwargs.get("dhw_idx")
+
+        allowed_verbs = (
+            (kwargs.get("verb"),)
+            if kwargs.get("verb") in (" I", "RP")
+            else (" I", "RP")
+        )
+
+        for cd, verbs in self._msgz_.items():
+            if code is not None:
+                if isinstance(code, tuple) and cd not in code:
+                    continue
+                elif not isinstance(code, tuple) and cd != code:
+                    continue
+
+            for verb, ctxs in verbs.items():
+                if verb not in allowed_verbs:
+                    continue
+
+                for ctx, msg in ctxs.items():
+                    if zone_idx is not None:
+                        in_dict = isinstance(msg.payload, dict)
+                        in_list = isinstance(msg.payload, list)
+                        if not (
+                            str(ctx) == str(zone_idx)
+                            or (
+                                in_dict
+                                and str(msg.payload.get("zone_idx")) == str(zone_idx)
+                            )
+                            or (
+                                in_list
+                                and any(
+                                    isinstance(d, dict)
+                                    and str(d.get("zone_idx")) == str(zone_idx)
+                                    for d in msg.payload
+                                )
+                            )
+                        ):
+                            continue
+
+                    if dhw_idx is not None:
+                        in_dict = isinstance(msg.payload, dict)
+                        in_list = isinstance(msg.payload, list)
+                        if not (
+                            str(ctx) == str(dhw_idx)
+                            or ctx in ("FC", "FA", "F9", "FA")
+                            or (in_dict and "dhw_idx" in msg.payload)
+                            or (
+                                in_list
+                                and any(
+                                    isinstance(d, dict) and "dhw_idx" in d
+                                    for d in msg.payload
+                                )
+                            )
+                        ):
+                            continue
+
+                    if key is not None:
+                        if isinstance(msg.payload, dict):
+                            if key not in msg.payload:
+                                continue
+                        elif isinstance(msg.payload, list):
+                            if not any(
+                                isinstance(d, dict) and key in d for d in msg.payload
+                            ):
+                                continue
+                        else:
+                            continue
+
+                    if msg.dtm > latest:
+                        latest = msg.dtm
+                        res = cd
         return res
 
     async def _msg_qry(self, sql: str) -> list[dict[str, Any]]:
@@ -464,8 +481,9 @@ class StateStore:
                 sql, (entity_id[:_ID_SLICE], entity_id[:_ID_SLICE])
             ):
                 msgs_dict = await self._msgs()
-                _pl = msgs_dict[Code(str(rec[0]))].payload
-                res.append(cast("dict[str, Any]", _pl))
+                if Code(str(rec[0])) in msgs_dict:
+                    _pl = msgs_dict[Code(str(rec[0]))].payload
+                    res.append(cast("dict[str, Any]", _pl))
         return res
 
     async def _msgs(self) -> dict[Code, Message]:
@@ -474,41 +492,55 @@ class StateStore:
         :returns: Flat dict of messages by Code.
         :rtype: dict[Code, Message]
         """
-        if not self._gwy.msg_db:
-            return self._msgs_
-
         entity_id = self._entity.id
-        if len(entity_id) == 9:
-            sql = """
-                SELECT dtm, code from messages WHERE
-                verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND ctx LIKE ?
-            """
-            _ctx_qry = "%"
-        elif entity_id[_ID_SLICE:] == "_HW":
-            sql = """
-                SELECT dtm, code from messages WHERE
-                verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
-            """
-            _ctx_qry = "%dhw_idx%"
-        else:
-            sql = """
-                SELECT dtm, code from messages WHERE
-                verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND ctx LIKE ?
-            """
-            _ctx_qry = f"%{entity_id[_ID_SLICE + 1 :]}%"
+        is_dhw = entity_id[_ID_SLICE:] == "_HW"
+        is_zone = len(entity_id) > 9 and not is_dhw
+        zone_idx = entity_id[_ID_SLICE + 1 :] if is_zone else None
 
-        _msg_dict = {
-            Code(str(m.code)): m
-            for m in await self._gwy.msg_db.qry(
-                sql, (entity_id[:_ID_SLICE], entity_id[:_ID_SLICE], _ctx_qry)
-            )
-        }
+        _msg_dict: dict[Code, Message] = {}
+        for code, verbs in self._msgz_.items():
+            for verb, ctxs in verbs.items():
+                if verb not in (I_, RP):
+                    continue
+                for ctx, msg in ctxs.items():
+                    if is_dhw:
+                        in_dict = isinstance(msg.payload, dict)
+                        in_list = isinstance(msg.payload, list)
+                        if (
+                            ctx in ("FC", "FA", "F9", "FA")
+                            or (in_dict and "dhw_idx" in msg.payload)
+                            or (
+                                in_list
+                                and any(
+                                    isinstance(d, dict) and "dhw_idx" in d
+                                    for d in msg.payload
+                                )
+                            )
+                        ):
+                            if code not in _msg_dict or msg.dtm > _msg_dict[code].dtm:
+                                _msg_dict[code] = msg
+                    elif is_zone:
+                        in_dict = isinstance(msg.payload, dict)
+                        in_list = isinstance(msg.payload, list)
+                        if (
+                            ctx == zone_idx
+                            or (
+                                in_dict and str(msg.payload.get("zone_idx")) == zone_idx
+                            )
+                            or (
+                                in_list
+                                and any(
+                                    isinstance(d, dict)
+                                    and str(d.get("zone_idx")) == zone_idx
+                                    for d in msg.payload
+                                )
+                            )
+                        ):
+                            if code not in _msg_dict or msg.dtm > _msg_dict[code].dtm:
+                                _msg_dict[code] = msg
+                    else:
+                        if code not in _msg_dict or msg.dtm > _msg_dict[code].dtm:
+                            _msg_dict[code] = msg
         return _msg_dict
 
     async def _msgz(
@@ -519,20 +551,62 @@ class StateStore:
         :returns: Dict of messages nested by Code, Verb, Context.
         :rtype: dict[Code, dict[VerbT, dict[bool | str | None, Message]]]
         """
-        if not self._gwy.msg_db:
+        entity_id = self._entity.id
+        is_dhw = entity_id[_ID_SLICE:] == "_HW"
+        is_zone = len(entity_id) > 9 and not is_dhw
+
+        if not is_dhw and not is_zone:
             return self._msgz_
 
+        zone_idx = entity_id[_ID_SLICE + 1 :] if is_zone else None
         msgs_1: dict[Code, dict[VerbT, dict[bool | str | None, Message]]] = {}
-        msgs_dict = await self._msgs()
 
-        for msg in msgs_dict.values():
-            if msg.code not in msgs_1:
-                msgs_1[msg.code] = {msg.verb: {msg._pkt._ctx: msg}}
-            elif msg.verb not in msgs_1[msg.code]:
-                msgs_1[msg.code][msg.verb] = {msg._pkt._ctx: msg}
-            else:
-                msgs_1[msg.code][msg.verb][msg._pkt._ctx] = msg
-
+        for code, verbs in self._msgz_.items():
+            for verb, ctxs in verbs.items():
+                for ctx, msg in ctxs.items():
+                    if is_dhw:
+                        in_dict = isinstance(msg.payload, dict)
+                        in_list = isinstance(msg.payload, list)
+                        if (
+                            ctx in ("FC", "FA", "F9", "FA")
+                            or (in_dict and "dhw_idx" in msg.payload)
+                            or (
+                                in_list
+                                and any(
+                                    isinstance(d, dict) and "dhw_idx" in d
+                                    for d in msg.payload
+                                )
+                            )
+                        ):
+                            if code not in msgs_1:
+                                msgs_1[code] = {verb: {ctx: msg}}
+                            elif verb not in msgs_1[code]:
+                                msgs_1[code][verb] = {ctx: msg}
+                            else:
+                                msgs_1[code][verb][ctx] = msg
+                    elif is_zone:
+                        in_dict = isinstance(msg.payload, dict)
+                        in_list = isinstance(msg.payload, list)
+                        if (
+                            ctx == zone_idx
+                            or (
+                                in_dict and str(msg.payload.get("zone_idx")) == zone_idx
+                            )
+                            or (
+                                in_list
+                                and any(
+                                    isinstance(d, dict)
+                                    and str(d.get("zone_idx")) == zone_idx
+                                    for d in msg.payload
+                                )
+                            )
+                        ):
+                            if code not in msgs_1:
+                                msgs_1[code] = {verb: {ctx: msg}}
+                            elif verb not in msgs_1[code]:
+                                msgs_1[code][verb] = {ctx: msg}
+                            else:
+                                msgs_1[code][verb][ctx] = msg
         return msgs_1
 
     def _handle_msg(self, msg: Message) -> None:
@@ -543,13 +617,13 @@ class StateStore:
         """
         if self._gwy.msg_db:
             self._gwy.msg_db.add(msg)
+
+        if msg.code not in self._msgz_:
+            self._msgz_[msg.code] = {msg.verb: {msg._pkt._ctx: msg}}
+        elif msg.verb not in self._msgz_[msg.code]:
+            self._msgz_[msg.code][msg.verb] = {msg._pkt._ctx: msg}
         else:
-            if msg.code not in self._msgz_:
-                self._msgz_[msg.code] = {msg.verb: {msg._pkt._ctx: msg}}
-            elif msg.verb not in self._msgz_[msg.code]:
-                self._msgz_[msg.code][msg.verb] = {msg._pkt._ctx: msg}
-            else:
-                self._msgz_[msg.code][msg.verb][msg._pkt._ctx] = msg
+            self._msgz_[msg.code][msg.verb][msg._pkt._ctx] = msg
 
         if msg.verb in (I_, RP):
             self._msgs_[msg.code] = msg
