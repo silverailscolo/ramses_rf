@@ -758,22 +758,40 @@ class Zone(ZoneSchedule):
     async def temperature(self) -> float | None:  # 30C9
         if self._gwy.message_store:
             # evohome zones only get initial temp from src + idx, so use zone sensor if newer
-            sql = f"""
-                SELECT dtm from messages WHERE verb in (' I', 'RP')
-                AND code = '30C9'
-                AND (plk LIKE '%{SZ_TEMPERATURE}%')
-                AND ((src = ? AND ctx = ?) OR src = ?)
-            """
             sensor_id = "aa:aaaaaa"  # should not match any device_id
             if self._sensor:
                 sensor_id = self._sensor.id
-            # custom SQLite query on MessageIndex
-            msgs = await self._gwy.message_store.qry(
-                sql, (self.id[:_ID_SLICE], self.idx, sensor_id[:_ID_SLICE])
-            )
-            if msgs and len(msgs) > 0:
-                msgs_sorted = sorted(msgs, reverse=True)
-                return msgs_sorted[0].payload.get(SZ_TEMPERATURE)  # type: ignore[no-any-return]
+
+            found_msgs = []
+            for m in self._gwy.message_store.state_cache.values():
+                if m.verb in (I_, RP) and m.code == Code._30C9:
+                    if (
+                        m.src.id == self.id[:_ID_SLICE] and str(m._pkt._ctx) == self.idx
+                    ) or (m.src.id == sensor_id[:_ID_SLICE]):
+                        if isinstance(m.payload, dict) and SZ_TEMPERATURE in m.payload:
+                            found_msgs.append(m)
+                        elif isinstance(m.payload, list) and any(
+                            isinstance(d, dict) and SZ_TEMPERATURE in d
+                            for d in m.payload
+                        ):
+                            found_msgs.append(m)
+
+            if found_msgs:
+                latest_msg = max(found_msgs, key=lambda x: x.dtm)
+                if isinstance(latest_msg.payload, dict):
+                    return cast("float | None", latest_msg.payload.get(SZ_TEMPERATURE))
+                elif isinstance(latest_msg.payload, list):
+                    for d in latest_msg.payload:
+                        if isinstance(d, dict) and SZ_TEMPERATURE in d:
+                            if (
+                                d.get(SZ_ZONE_IDX) == self.idx
+                                or latest_msg.src.id == sensor_id[:_ID_SLICE]
+                            ):
+                                return cast("float | None", d.get(SZ_TEMPERATURE))
+                    if isinstance(latest_msg.payload[0], dict):
+                        return cast(
+                            "float | None", latest_msg.payload[0].get(SZ_TEMPERATURE)
+                        )
             return None
 
         return cast(

@@ -526,27 +526,13 @@ class Gateway(GatewayInterface):
             #     return True
             return include_expired or not msg._expired
 
+        pkts = {}
         if self.message_store:
             pkts = {
                 f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
                 for msg in await self.message_store.all(include_expired=True)
                 if wanted_msg(msg, include_expired=include_expired)
             }
-        else:  # deprecated, to be removed in Q1 2026
-            msgs = []
-            for device in self.device_registry.devices:
-                msgs.extend(await device.entity_state.get_all_messages())
-            for system in self.device_registry.systems:
-                msgs.extend(list((await system.entity_state._msgs()).values()))
-                for z in system.zones:
-                    msgs.extend(list((await z.entity_state._msgs()).values()))
-
-            pkts = {  # BUG: assumes pkts have unique dtms: may be untrue for contrived logs
-                f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
-                for msg in msgs
-                if wanted_msg(msg, include_expired=include_expired)
-            }
-            # _LOGGER.warning("Missing MessageIndex")
 
         await self._resume()
 

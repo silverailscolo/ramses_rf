@@ -12,8 +12,6 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_tx import Priority, QosParams
-from ramses_tx.address import ALL_DEVICE_ID
-from ramses_tx.const import RQ, Code
 
 from .discovery import DiscoveryService
 from .entity_state import EntityState
@@ -105,20 +103,11 @@ class _Entity:
             )
 
     def _handle_msg(self, msg: Message) -> None:
-        """Delegate message handling to the EntityState.
+        """Deprecated in Phase 2.5: Entities no longer cache their own packets.
 
-        :param msg: The message to process.
-        :type msg: Message
+        Routing is handled directly by the Gateway into the central MessageStore.
         """
-        if not (
-            msg.src.id == self.id[:_ID_SLICE]
-            or (msg.dst.id == self.id[:_ID_SLICE] and msg.verb != RQ)
-            or (msg.dst.id == ALL_DEVICE_ID and msg.code == Code._1FC9)
-        ):
-            return
-
-        # Direct the message to the EntityState for persistence and indexing
-        self.entity_state._handle_msg(msg)
+        pass
 
     def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task | None:
         """Proxy command sending to the Gateway.

@@ -113,18 +113,20 @@ class DiscoveryService:
 
         res: list[str] = []
         if self._gwy.message_store:
-            sql = """
-                SELECT ctx from messages WHERE
-                verb = 'RP'
-                AND code = '3220'
-                AND (src = ? OR dst = ?)
-            """
-            for rec in await self._gwy.message_store.qry_field(
-                sql, (self._entity.id[:9], self._entity.id[:9])
-            ):
-                _LOGGER.debug("Fetched OT ctx from index: %s", rec[0])
-                val = f"{rec[0]:02X}" if isinstance(rec[0], int) else str(rec[0])
-                res.append(val)
+            for msg in self._gwy.message_store.state_cache.values():
+                if (
+                    msg.verb == RP
+                    and msg.code == Code._3220
+                    and (
+                        msg.src.id == self._entity.id[:9]
+                        or msg.dst.id == self._entity.id[:9]
+                    )
+                ):
+                    ctx = msg._pkt._ctx
+                    _LOGGER.debug("Fetched OT ctx from index: %s", ctx)
+                    val = f"{ctx:02X}" if isinstance(ctx, int) else str(ctx)
+                    if val not in res:
+                        res.append(val)
         else:
             msgz_dict = await self._entity.entity_state._msgz()
             res_dict: dict[bool | str | None, Message] | list[Any] = msgz_dict[
@@ -253,23 +255,20 @@ class DiscoveryService:
                     if tcs:
                         tcs_id = getattr(tcs, "id", None)
                         if self._gwy.message_store and tcs_id:
-                            sql = """
-                                SELECT dtm, code from messages WHERE
-                                code = ?
-                                AND verb in (' I', 'RP')
-                                AND ctx = 'True'
-                                AND (src = ? OR dst = ?)
-                            """
-                            res = await self._gwy.message_store.qry(
-                                sql,
-                                (
-                                    cmd_code,
-                                    tcs_id[:9],
-                                    tcs_id[:9],
-                                ),
-                            )
-                            if len(res) > 0:
-                                msgs.append(res[0])
+                            found_msgs = []
+                            for m in self._gwy.message_store.state_cache.values():
+                                if (
+                                    m.code == cmd_code
+                                    and m.verb in (I_, RP)
+                                    and str(m._pkt._ctx) == "True"
+                                    and (
+                                        m.src.id == tcs_id[:9] or m.dst.id == tcs_id[:9]
+                                    )
+                                ):
+                                    found_msgs.append(m)
+
+                            if found_msgs:
+                                msgs.append(max(found_msgs, key=lambda x: x.dtm))
                             else:
                                 _LOGGER.debug(
                                     "No msg found for hdr %s, task code %s",
