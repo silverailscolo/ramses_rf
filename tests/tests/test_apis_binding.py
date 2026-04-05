@@ -55,7 +55,7 @@ class GatewayStub:
         self._engine._include = {}
         self._engine._enforce_known_list = False
 
-        self.msg_db = MessageIndex(maintain=False)
+        self.message_store = MessageIndex(maintain=False)
 
     @property
     def device_registry(self) -> "GatewayStub":

@@ -162,9 +162,6 @@ class MessageStore:
 
         _setup_db_adapters()  # DTM adapter/converter
 
-        # Schema creation is now handled safely by the SQLiteWorker to avoid races.
-        # self._setup_db_schema()
-
         if self.maintain:
             self._lock = asyncio.Lock()
             self._last_housekeeping: dt = cast(dt, None)
@@ -211,11 +208,12 @@ class MessageStore:
             self._worker.flush(timeout=5.0)
             self._worker.stop()  # Stop the background thread
 
-        if getattr(self, "_cx", None):
+        cx = getattr(self, "_cx", None)
+        if cx is not None:
             with self._db_lock:
                 try:
-                    self._cx.commit()  # just in case
-                    self._cx.close()  # safely close reader connection
+                    cx.commit()
+                    cx.close()
                 except sqlite3.ProgrammingError:
                     pass  # Connection might already be closed
 
@@ -242,17 +240,18 @@ class MessageStore:
 
         This routine runs as a non-blocking background task.
         """
-        if not getattr(self, "_cx", None):
+        cx = getattr(self, "_cx", None)
+        if cx is None:
             return
 
-        def _fetch_all() -> list[Any]:
+        def _fetch_all(conn: sqlite3.Connection) -> list[Any]:
             with self._db_lock:
-                return self._cx.execute(
+                return conn.execute(
                     "SELECT * FROM messages ORDER BY dtm ASC"
                 ).fetchall()
 
         try:
-            rows = await asyncio.to_thread(_fetch_all)
+            rows = await asyncio.to_thread(_fetch_all, cx)
         except sqlite3.Error as err:
             _LOGGER.error("Failed to fetch messages for hydration: %s", err)
             return
@@ -348,8 +347,6 @@ class MessageStore:
 
         :returns: any message that was removed because it had the same header
         """
-        # TODO: eventually, may be better to use SqlAlchemy
-
         dup: tuple[Message, ...] = tuple()  # avoid UnboundLocalError
         old: Message | None = None  # avoid UnboundLocalError
 
@@ -358,24 +355,16 @@ class MessageStore:
         if dtm_str in self._message_log:
             dup = (self._message_log[dtm_str],)
 
-        try:  # TODO: remove this, or apply only when source is a real packet log?
-            # We defer the write to the worker; return value (old) is not available synchronously
-            self._insert_into(msg)  # will delete old msg by hdr (not dtm!)
-
-        except (
-            sqlite3.Error
-        ):  # UNIQUE constraint failed: ? messages.dtm or .hdr (so: HACK)
+        try:
+            self._insert_into(msg)
+        except sqlite3.Error:
             pass
-
         else:
-            # _message_log dict requires a timestamp reformat
-            # add msg to self._message_log dict
             self._message_log[dtm_str] = msg
             if msg._pkt._hdr is not None:
                 self._state_cache[msg._pkt._hdr] = msg
-
         finally:
-            pass  # self._lock.release()
+            pass
 
         if (
             dup
@@ -403,13 +392,11 @@ class MessageStore:
         :param verb: two letter verb str to use
         :param payload: payload str to use
         """
-        # Used by OtbGateway init, via entity_base.py (code=_3220)
         _now: dt = dt.now()
         dtm = cast(DtmStrT, _now.isoformat(timespec="microseconds"))
         hdr = f"{code}|{verb}|{src}|{payload}"
 
         if self._worker:
-            # Prepare data tuple for worker
             data = PacketLogEntry(
                 dtm=_now,
                 verb=verb,
@@ -423,13 +410,9 @@ class MessageStore:
             )
             self._worker.submit_packet(data)
 
-        # Backward compatibility for Tests:
-        # Check specific env var set by pytest, which is more reliable than sys.modules
-        # In synchronous test mode, flush is a harmless no-op.
         if "PYTEST_CURRENT_TEST" in os.environ:
             self.flush()
 
-        # also add dummy 3220 msg to self._message_log dict to allow maintenance loop
         msg: Message = Message._from_pkt(
             Packet(_now, f"... {verb} --- {src} --:------ {src} {code} 005 0000000000")
         )
@@ -458,7 +441,6 @@ class MessageStore:
                 _LOGGER.warning("Failed to serialize payload: %s", err)
                 payload_blob = b"{}"
 
-            # Refactor: Worker uses INSERT OR REPLACE to handle collision
             data = PacketLogEntry(
                 dtm=msg.dtm,
                 verb=str(msg.verb),
@@ -473,75 +455,118 @@ class MessageStore:
 
             self._worker.submit_packet(data)
 
-        # Backward compatibility for Tests:
-        # Tests assume the DB update is instant. If running in pytest, flush immediately.
-        # This effectively makes the operation synchronous during tests to avoid rewriting tests.
         if "PYTEST_CURRENT_TEST" in os.environ:
             self.flush()
 
         return None
 
     async def rem(
-        self, msg: Message | None = None, **kwargs: Any
+        self,
+        msg: Message | None = None,
+        *,
+        dtm: dt | str | None = None,
+        src: str | None = None,
+        dst: str | None = None,
+        verb: str | None = None,
+        code: str | None = None,
+        ctx: Any | None = None,
+        hdr: str | None = None,
     ) -> tuple[Message, ...] | None:
-        """Remove a set of message(s) from the index.
-
-        :returns: any messages that were removed.
-        """
+        """Remove a set of message(s) from the index."""
+        kwargs = {
+            k: v
+            for k, v in {
+                "dtm": dtm,
+                "src": src,
+                "dst": dst,
+                "verb": verb,
+                "code": code,
+                "ctx": ctx,
+                "hdr": hdr,
+            }.items()
+            if v is not None
+        }
 
         if not bool(msg) ^ bool(kwargs):
             raise DatabaseQueryError(
                 "Either a Message or kwargs should be provided, not both"
             )
-        if msg:
-            kwargs["dtm"] = msg.dtm
 
         msgs: tuple[Message, ...] | None = None
-        try:  # make this operation atomic, i.e. update self._message_log only on success
-            msgs_to_remove = await self.get(**kwargs)
+        try:
+            # Safely unpack explicitly for strict typing
+            msgs_to_remove = await self.get(
+                msg=msg,
+                dtm=dtm,
+                src=src,
+                dst=dst,
+                verb=verb,
+                code=code,
+                ctx=ctx,
+                hdr=hdr,
+            )
+            cx = getattr(self, "_cx", None)
 
-            if self._worker and getattr(self, "_cx", None):
+            if self._worker and cx is not None:
+                if msg:
+                    kwargs["dtm"] = msg.dtm
+
                 sql = "DELETE FROM messages WHERE "
                 sql += " AND ".join(f"{k} = ?" for k in kwargs)
 
-                def _execute_delete() -> None:
-                    with self._db_lock:
-                        self._cx.execute(sql, tuple(kwargs.values()))
+                sql_params = tuple(kwargs.values())
 
-                await asyncio.to_thread(_execute_delete)
+                def _execute_delete(
+                    conn: sqlite3.Connection, query: str, params: tuple[Any, ...]
+                ) -> None:
+                    with self._db_lock:
+                        conn.execute(query, params)
+
+                await asyncio.to_thread(_execute_delete, cx, sql, sql_params)
 
             msgs = tuple(msgs_to_remove)
 
-        except sqlite3.Error as err:  # need to tighten?
-            if getattr(self, "_cx", None):
-                await asyncio.to_thread(self._cx.rollback)
+        except sqlite3.Error as err:
+            cx = getattr(self, "_cx", None)
+            if cx is not None:
+                await asyncio.to_thread(cx.rollback)
             raise DatabaseQueryError(f"Delete failed: {err}") from err
 
         else:
             if msgs is not None:
                 for m in msgs:
-                    dtm = cast(DtmStrT, m.dtm.isoformat(timespec="microseconds"))
-                    self._message_log.pop(dtm, None)
+                    dtm_val = cast(DtmStrT, m.dtm.isoformat(timespec="microseconds"))
+                    self._message_log.pop(dtm_val, None)
                     if m._pkt._hdr is not None:
                         self._state_cache.pop(m._pkt._hdr, None)
-
-        finally:
-            pass  # self._lock.release()
-
         return msgs
 
-    # MessageStore msg_db query methods
-
     async def get(
-        self, msg: Message | None = None, **kwargs: Any
+        self,
+        msg: Message | None = None,
+        *,
+        dtm: dt | str | None = None,
+        src: str | None = None,
+        dst: str | None = None,
+        verb: str | None = None,
+        code: str | None = None,
+        ctx: Any | None = None,
+        hdr: str | None = None,
     ) -> tuple[Message, ...]:
-        """
-        Public method to get a set of message(s) from the index.
-
-        :param msg: Message to return, by dtm (expect a single result as dtm is unique key)
-        :param kwargs: data table field names and criteria, e.g. (hdr=...)
-        :return: tuple of matching Messages
-        """
+        """Public method to get a set of message(s) from the index."""
+        kwargs = {
+            k: v
+            for k, v in {
+                "dtm": dtm,
+                "src": src,
+                "dst": dst,
+                "verb": verb,
+                "code": code,
+                "ctx": ctx,
+                "hdr": hdr,
+            }.items()
+            if v is not None
+        }
 
         if not (bool(msg) ^ bool(kwargs)):
             raise DatabaseQueryError(
@@ -552,10 +577,10 @@ class MessageStore:
             kwargs["dtm"] = msg.dtm
 
         if "ctx" in kwargs:
-            ctx = kwargs["ctx"]
-            if isinstance(ctx, str):
-                kwargs["ctx"] = ctx
-            elif ctx:
+            c_val = kwargs["ctx"]
+            if isinstance(c_val, str):
+                kwargs["ctx"] = c_val
+            elif c_val:
                 kwargs["ctx"] = "True"
             else:
                 kwargs["ctx"] = "False"
@@ -598,55 +623,76 @@ class MessageStore:
 
         return tuple(res)
 
-    async def contains(self, **kwargs: Any) -> bool:
-        """
-        Check if the MessageStore contains at least 1 record that matches the provided fields.
+    async def contains(
+        self,
+        *,
+        dtm: dt | str | None = None,
+        src: str | None = None,
+        dst: str | None = None,
+        verb: str | None = None,
+        code: str | None = None,
+        ctx: Any | None = None,
+        hdr: str | None = None,
+    ) -> bool:
+        """Check if the MessageStore contains at least 1 record that matches the provided fields."""
+        return (
+            len(
+                await self.get(
+                    dtm=dtm, src=src, dst=dst, verb=verb, code=code, ctx=ctx, hdr=hdr
+                )
+            )
+            > 0
+        )
 
-        :param kwargs: (exact) SQLite table field_name: required_value pairs
-        :return: True if at least one message fitting the given conditions is present, False when qry returned empty
-        """
-
-        return len(await self.get(**kwargs)) > 0
-
-    async def get_rp_codes(self, src_id: str, dst_id: str) -> list[Code]:
-        """
-        Get a list of Codes from the index, given parameters.
-
-        :param parameters: tuple of additional kwargs
-        :return: list of Code: value pairs
-        """
+    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
+        """Get a list of Codes from the index, given parameters."""
+        src_id = parameters[0]
+        dst_id = parameters[1] if len(parameters) > 1 else None
 
         codes = set()
         for m in self._state_cache.values():
             if m.verb == RP and (m.src.id == src_id or m.dst.id == dst_id):
                 codes.add(m.code)
 
-        def get_code(code: str) -> Code:
+        def get_code(c: str) -> Code:
             for Cd in CODES_SCHEMA:
-                if code == Cd:
+                if c == Cd:
                     return Cd
-            return Code(code)
+            return Code(c)
 
         return [get_code(str(c)) for c in codes]
 
+    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
+        """Deprecated: Returns empty for legacy callers."""
+        _LOGGER.warning(
+            "Legacy qry (SQL) called. Returning empty in CQRS architecture."
+        )
+        return ()
+
+    async def qry_field(
+        self, sql: str, parameters: tuple[str, ...]
+    ) -> list[tuple[dt | str, str]]:
+        """Deprecated: Returns empty for legacy callers."""
+        _LOGGER.warning(
+            "Legacy qry_field (SQL) called. Returning empty in CQRS architecture."
+        )
+        return []
+
     async def all(self, include_expired: bool = False) -> tuple[Message, ...]:
         """Get all messages from the index."""
-
-        # happens in tests and real evohome setups with dummy msg from heat init
-        # Now served exclusively from RAM rather than SQL _fetch_all().
         return tuple(self._message_log.values())
 
     async def clr(self) -> None:
         """Clear the message index (remove indexes of all messages)."""
+        cx = getattr(self, "_cx", None)
+        if cx is not None:
 
-        if getattr(self, "_cx", None):
-
-            def _clear_db() -> None:
+            def _clear_db(conn: sqlite3.Connection) -> None:
                 with self._db_lock:
-                    self._cx.execute("DELETE FROM messages")
-                    self._cx.commit()
+                    conn.execute("DELETE FROM messages")
+                    conn.commit()
 
-            await asyncio.to_thread(_clear_db)
+            await asyncio.to_thread(_clear_db, cx)
 
         self._message_log.clear()
         self._state_cache.clear()

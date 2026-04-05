@@ -56,10 +56,10 @@ async def assert_code_in_device_msgindex(
             return False
 
         # Check central SQLite MessageIndex if enabled
-        if gwy.msg_db:
-            return await gwy.msg_db.contains(
+        if gwy.message_store:
+            return await gwy.message_store.contains(
                 src=dev_id, code=str(code)
-            ) or await gwy.msg_db.contains(dst=dev_id, code=str(code))
+            ) or await gwy.message_store.contains(dst=dev_id, code=str(code))
 
         # Fallback to device's internal tracking dictionaries
         msgs = await dev.entity_state._msgs()

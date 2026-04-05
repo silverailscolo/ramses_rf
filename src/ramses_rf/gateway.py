@@ -257,7 +257,7 @@ class Gateway(GatewayInterface):
             hgi_id_provider=lambda: getattr(self.hgi, "id", None),
         )
 
-        self._msg_db: MessageStoreInterface | None = None
+        self._message_store: MessageStoreInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
 
     def __repr__(self) -> str:
@@ -289,22 +289,18 @@ class Gateway(GatewayInterface):
         return self._gwy_config
 
     @property
-    def msg_db(self) -> MessageStoreInterface | None:
+    def message_store(self) -> MessageStoreInterface | None:
         """Return the message database if configured.
-
-        :returns: The configured MessageStoreInterface or None.
-        :rtype: MessageStoreInterface | None
+        ...
         """
-        return self._msg_db
+        return self._message_store
 
-    @msg_db.setter
-    def msg_db(self, value: MessageStoreInterface | None) -> None:
+    @message_store.setter
+    def message_store(self, value: MessageStoreInterface | None) -> None:
         """Set the message database.
-
-        :param value: The MessageStoreInterface instance to set, or None.
-        :type value: MessageStoreInterface | None
+        ...
         """
-        self._msg_db = value
+        self._message_store = value
 
     @property
     def hgi(self) -> HgiGateway | None:
@@ -423,7 +419,7 @@ class Gateway(GatewayInterface):
         :returns: None
         :rtype: None
         """
-        self._msg_db = MessageStore(
+        self._message_store = MessageStore(
             disk_path=self.config.database_path
         )  # start the index
 
@@ -453,8 +449,8 @@ class Gateway(GatewayInterface):
             )
             self._pkt_log_listener = None
 
-        if self._msg_db:
-            self._msg_db.stop()
+        if self._message_store:
+            self._message_store.stop()
 
     async def _pause(self, *args: Any) -> None:
         """Pause the (unpaused) gateway (disables sending/discovery).
@@ -530,16 +526,16 @@ class Gateway(GatewayInterface):
             #     return True
             return include_expired or not msg._expired
 
-        if self.msg_db:
+        if self.message_store:
             pkts = {
                 f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
-                for msg in await self.msg_db.all(include_expired=True)
+                for msg in await self.message_store.all(include_expired=True)
                 if wanted_msg(msg, include_expired=include_expired)
             }
         else:  # deprecated, to be removed in Q1 2026
             msgs = []
             for device in self.device_registry.devices:
-                msgs.extend(await device.entity_state._msg_list())
+                msgs.extend(await device.entity_state.get_all_messages())
             for system in self.device_registry.systems:
                 msgs.extend(list((await system.entity_state._msgs()).values()))
                 for z in system.zones:

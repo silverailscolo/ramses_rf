@@ -114,7 +114,7 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     gateway.status = AsyncMock(return_value={"global": "status"})
 
     # Add msg_db attribute
-    gateway.msg_db = MessageIndex(maintain=False)
+    gateway.message_store = MessageIndex(maintain=False)
 
     # Mock system_by_id for print_results
     mock_sys = MagicMock()
@@ -261,7 +261,7 @@ async def test_print_summary(
 ) -> None:
     """Test the summary printing function with various flags."""
     # Mock msg_db to be None to trigger the alternative branch in show_crazys
-    mock_gateway.msg_db = None
+    mock_gateway.message_store = None
 
     kwargs: dict[str, Any] = {
         "show_schema": True,

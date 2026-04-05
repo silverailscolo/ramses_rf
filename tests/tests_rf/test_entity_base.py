@@ -37,7 +37,7 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
     gateway._loop.time = MagicMock(return_value=0.0)
 
     # activate the SQLite MessageIndex
-    gateway.msg_db = MessageIndex(maintain=False)
+    gateway.message_store = MessageIndex(maintain=False)
 
     yield gateway
 
@@ -81,8 +81,8 @@ class Test_entity_base:
         dev._handle_msg(self.msg5)
         dev._handle_msg(self.msg6)
         dev._handle_msg(self.msg7)
-        assert dev._gwy.msg_db
-        assert len(await dev._gwy.msg_db.all()) == 3, "len(msg_db.all) wrong"
+        assert dev._gwy.message_store
+        assert len(await dev._gwy.message_store.all()) == 3, "len(msg_db.all) wrong"
 
         # start tests
         assert dev.id == "04:189078"
@@ -93,7 +93,7 @@ class Test_entity_base:
             AND (src = ? OR dst = ?)
             AND ctx LIKE ?
         """
-        assert await dev._gwy.msg_db.qry(
+        assert await dev._gwy.message_store.qry(
             sql, (dev.id[:9], dev.id[:9], f"%{dev.id[10:]}%")
         ) == (
             self.msg5,
@@ -118,7 +118,7 @@ class Test_entity_base:
         ), "base _msg_dev_qry wrong"
 
         # list our messages
-        assert sorted(await dev.entity_state._msg_list()) == sorted(
+        assert sorted(await dev.entity_state.get_all_messages()) == sorted(
             [
                 self.msg5,
                 self.msg7,
@@ -133,7 +133,7 @@ class Test_entity_base:
             "3220": {"RP": {"11": self.msg6}},
         }, "base _msgz wrong"
 
-        mock_gateway.msg_db.stop()  # close sqlite3 connection
+        mock_gateway.message_store.stop()  # close sqlite3 connection
 
     async def test_entity_base_zone(self, mock_gateway: MagicMock) -> None:
         # works as expected
@@ -148,7 +148,7 @@ class Test_entity_base:
 
         # start tests
         assert dev.id == "04:189078_01"
-        assert dev._gwy.msg_db
+        assert dev._gwy.message_store
 
         sql = """
             SELECT dtm from messages WHERE
@@ -156,7 +156,7 @@ class Test_entity_base:
             AND (src = ? OR dst = ?)
             AND ctx LIKE ?
         """
-        assert await dev._gwy.msg_db.qry(
+        assert await dev._gwy.message_store.qry(
             sql, (dev.id[:9], dev.id[:9], f"%{dev.id[10:]}%")
         ) == (
             self.msg5,
@@ -178,7 +178,7 @@ class Test_entity_base:
         ), "zone _msg_dev_qry wrong"
 
         # list our messages
-        assert sorted(await dev.entity_state._msg_list()) == sorted(
+        assert sorted(await dev.entity_state.get_all_messages()) == sorted(
             [
                 self.msg5,
                 self.msg7,
@@ -191,7 +191,7 @@ class Test_entity_base:
             "3150": {" I": {"01": self.msg5}},
         }, "zone _msgz wrong"
 
-        mock_gateway.msg_db.stop()  # close sqlite3 connection
+        mock_gateway.message_store.stop()  # close sqlite3 connection
 
     msg8: Message = Message._from_pkt(
         Packet(
@@ -218,8 +218,10 @@ class Test_entity_base:
 
         # start tests
         assert dev.id == "01:145038_HW"
-        assert dev._gwy.msg_db
-        assert await dev._gwy.msg_db.all() == (self.msg8, self.msg9), "wrong dhw all"
+        assert dev._gwy.message_store
+        assert await dev._gwy.message_store.all() == (self.msg8, self.msg9), (
+            "wrong dhw all"
+        )
 
         sql = """
                 SELECT dtm from messages WHERE
@@ -230,7 +232,9 @@ class Test_entity_base:
         _ctx_qry = "%dhw_idx%"
 
         # fetch Messages
-        assert await dev._gwy.msg_db.qry(sql, (dev.id[:9], dev.id[:9], _ctx_qry)) == (
+        assert await dev._gwy.message_store.qry(
+            sql, (dev.id[:9], dev.id[:9], _ctx_qry)
+        ) == (
             self.msg8,
             self.msg9,
         ), "dhw qry wrong"
@@ -250,7 +254,7 @@ class Test_entity_base:
         ), "dhw _msg_dev_qry wrong"
 
         # list our messages
-        assert sorted(await dev.entity_state._msg_list()) == sorted(
+        assert sorted(await dev.entity_state.get_all_messages()) == sorted(
             [
                 self.msg8,
                 self.msg9,
@@ -263,7 +267,7 @@ class Test_entity_base:
             "3150": {" I": {"FC": self.msg8}},
         }, "dhw _msgz wrong"
 
-        mock_gateway.msg_db.stop()  # close sqlite3 connection
+        mock_gateway.message_store.stop()  # close sqlite3 connection
 
     def test_msg_value_msg_hardening(self, mock_gateway: MagicMock) -> None:
         """Test hardening fixes in _msg_value_msg (empty lists, full list return)."""
@@ -319,11 +323,11 @@ async def test_gh_396_sqlite_ot_context_type() -> None:
     # Setup
     gwy = MagicMock()
     gwy.config.disable_discovery = True
-    gwy.msg_db = MagicMock()
+    gwy.message_store = MagicMock()
 
     # Mock the database returning an integer (e.g. 0) instead of a string ("00")
     # This simulates the SQLite behavior reported in issue #396
-    gwy.msg_db.qry_field = AsyncMock(return_value=[[0]])
+    gwy.message_store.qry_field = AsyncMock(return_value=[[0]])
 
     # Instantiate the entity
     entity = Entity(gwy)
@@ -345,7 +349,7 @@ async def test_gh_396_legacy_ot_context() -> None:
     # Setup
     gwy = MagicMock()
     gwy.config.disable_discovery = True
-    gwy.msg_db = None  # Force legacy path
+    gwy.message_store = None  # Force legacy path
 
     entity = Entity(gwy)
     entity.id = DeviceIdT("01:123456")

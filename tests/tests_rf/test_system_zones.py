@@ -33,7 +33,7 @@ def mock_gwy() -> MagicMock:
     gwy.config.enable_eavesdrop = False
     gwy.device_registry.get_device.return_value = MagicMock()
     gwy.async_send_cmd = AsyncMock(return_value="mocked_packet")
-    gwy.msg_db = None
+    gwy.message_store = None
     return gwy
 
 

@@ -69,7 +69,7 @@ class DeviceBase(Entity):
     ) -> None:
         super().__init__(gwy, **kwargs)
 
-        # FIXME: gwy.msg_db entities must know their parent device ID and their own idx
+        # FIXME: gwy.message_store entities must know their parent device ID and their own idx
         self._z_id = dev_addr.id  # the responsible device is itself
         self._z_idx = None  # depends upon its location in the schema
 
@@ -208,7 +208,7 @@ class DeviceBase(Entity):
 
     async def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered (excludes battery-backup)."""
-        if self._gwy.msg_db:
+        if self._gwy.message_store:
             code_list = await self.entity_state._msg_dev_qry()
             return isinstance(self, BatteryState) or (
                 code_list is not None and Code._1060 in code_list
@@ -262,7 +262,7 @@ class DeviceBase(Entity):
             }
         )
 
-        result["_bind"] = await self.entity_state._msg_value(Code._1FC9)
+        result["_bind"] = await self.entity_state.get_value(Code._1FC9)
         return result
 
 
@@ -275,14 +275,14 @@ class BatteryState(DeviceBase):  # 1060
             return False
         return cast(
             bool | None,
-            await self.entity_state._msg_value(Code._1060, key=self.BATTERY_LOW),
+            await self.entity_state.get_value(Code._1060, key=self.BATTERY_LOW),
         )
 
     async def battery_state(self) -> dict[str, Any] | None:  # 1060
         if self.is_faked:
             return None
         return cast(
-            dict[str, Any] | None, await self.entity_state._msg_value(Code._1060)
+            dict[str, Any] | None, await self.entity_state.get_value(Code._1060)
         )
 
     async def status(self) -> dict[str, Any]:
@@ -306,7 +306,7 @@ class DeviceInfo(DeviceBase):  # 10E0
 
     async def device_info(self) -> dict[str, Any] | None:  # 10E0
         return cast(
-            dict[str, Any] | None, await self.entity_state._msg_value(Code._10E0)
+            dict[str, Any] | None, await self.entity_state.get_value(Code._10E0)
         )
 
     async def traits(self) -> dict[str, Any]:
@@ -457,7 +457,7 @@ class Fakeable(DeviceBase):
         if not traits.get(SZ_OEM_CODE):
             return cast(
                 str | None,
-                await self.entity_state._msg_value(Code._10E0, key=SZ_OEM_CODE),
+                await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE),
             )
         return cast(str | None, traits.get(SZ_OEM_CODE))
 

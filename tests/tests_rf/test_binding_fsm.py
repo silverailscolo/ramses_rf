@@ -380,7 +380,7 @@ async def _test_flow_10x(
     # old code:
     # supplicant._msgz[msg.code] = {msg.verb: {msg._pkt._ctx: msg}}
     # now: only supplicant ?! explains a lot of failures
-    # gwy_r.msg_db.add(msg)  # (for supplicant only?) >> remove from respondent/filter while adding
+    # gwy_r.message_store.add(msg)  # (for supplicant only?) >> remove from respondent/filter while adding
     # pkt = await supplicant._context._cast_addenda()
     # await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
     # assert pkt is not None

@@ -54,7 +54,7 @@ async def gwy() -> AsyncGenerator[Gateway, None]:  # NOTE: async to get running 
     """Return a vanilla system (with a known, minimal state)."""
     gwy = Gateway("/dev/null", config=GatewayConfig())
     gwy._engine._disable_sending = True
-    gwy.msg_db = MessageIndex()  # required to add heat dummy 3220 msg
+    gwy.message_store = MessageIndex()  # required to add heat dummy 3220 msg
     try:
         yield gwy
     finally:
@@ -233,8 +233,8 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
 
     # Ensure all packets from the log are written to the DB before returning
     # This is critical for tests using the StorageWorker
-    if gwy.msg_db:
-        gwy.msg_db.flush()
+    if gwy.message_store:
+        gwy.message_store.flush()
 
     return gwy
 

@@ -26,7 +26,7 @@ def mock_gwy() -> MagicMock:
     """Return a mock Gateway for device testing."""
     gwy = MagicMock()
     # Mock the persistent SQLite message database
-    gwy.msg_db = AsyncMock()
+    gwy.message_store = AsyncMock()
     gwy.async_send_cmd = AsyncMock()
     gwy.config = MagicMock()
     gwy.config.disable_discovery = True
@@ -86,7 +86,7 @@ async def test_bdr_switch_relay_demand_fallback(
 
 
 @pytest.mark.asyncio
-async def test_temperature_msg_db_fallback(
+async def test_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
     """Test Thermostat explicitly falls back to the persistent msg_db."""
@@ -97,12 +97,12 @@ async def test_temperature_msg_db_fallback(
     # Mock the database returning a cached 30C9 packet
     mock_msg = MagicMock()
     mock_msg.payload = {SZ_TEMPERATURE: 21.5}
-    mock_gwy.msg_db.get.return_value = [mock_msg]
+    mock_gwy.message_store.get.return_value = [mock_msg]
 
     temp = await device.temperature()
 
     assert temp == 21.5
-    mock_gwy.msg_db.get.assert_called_once_with(code=Code._30C9, src=device.id)
+    mock_gwy.message_store.get.assert_called_once_with(code=Code._30C9, src=device.id)
 
 
 @pytest.mark.asyncio
@@ -138,7 +138,7 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
 
 
 @pytest.mark.asyncio
-async def test_dhw_temperature_msg_db_fallback(
+async def test_dhw_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
     """Test DhwSensor falls back to the persistent msg_db."""
@@ -149,12 +149,12 @@ async def test_dhw_temperature_msg_db_fallback(
     # Mock the database returning a cached 1260 packet
     mock_msg = MagicMock()
     mock_msg.payload = {SZ_TEMPERATURE: 55.0}
-    mock_gwy.msg_db.get.return_value = [mock_msg]
+    mock_gwy.message_store.get.return_value = [mock_msg]
 
     temp = await device.temperature()
 
     assert temp == 55.0
-    mock_gwy.msg_db.get.assert_called_once_with(code=Code._1260, src=device.id)
+    mock_gwy.message_store.get.assert_called_once_with(code=Code._1260, src=device.id)
 
 
 @pytest.mark.asyncio
@@ -180,7 +180,7 @@ async def test_dhw_temperature_set_faked(
 
 
 @pytest.mark.asyncio
-async def test_weather_temperature_msg_db_fallback(
+async def test_weather_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
     """Test OutSensor falls back to the persistent msg_db."""
@@ -191,12 +191,12 @@ async def test_weather_temperature_msg_db_fallback(
     # Mock the database returning a cached 0002 packet
     mock_msg = MagicMock()
     mock_msg.payload = {SZ_TEMPERATURE: 12.5}
-    mock_gwy.msg_db.get.return_value = [mock_msg]
+    mock_gwy.message_store.get.return_value = [mock_msg]
 
     temp = await device.temperature()
 
     assert temp == 12.5
-    mock_gwy.msg_db.get.assert_called_once_with(code=Code._0002, src=device.id)
+    mock_gwy.message_store.get.assert_called_once_with(code=Code._0002, src=device.id)
 
 
 @pytest.mark.asyncio

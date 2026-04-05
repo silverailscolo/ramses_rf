@@ -312,8 +312,8 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
 
     else:
         logger_xxxx(msg)
-        if gwy.msg_db:
-            gwy.msg_db.add(msg)
+        if gwy.message_store:
+            gwy.message_store.add(msg)
             # why add it? enable for evohome
 
 

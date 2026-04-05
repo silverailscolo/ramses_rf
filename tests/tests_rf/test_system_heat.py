@@ -219,7 +219,7 @@ async def test_logbook_setup_discovery_creates_task(
 
 
 @pytest.mark.asyncio
-async def test_sysmode_system_mode_msg_db_fallback(
+async def test_sysmode_system_mode_message_store_fallback(
     fake_evofw3: Gateway,
 ) -> None:
     """Verify system_mode gracefully falls back to the database cache."""
@@ -236,12 +236,12 @@ async def test_sysmode_system_mode_msg_db_fallback(
 
     # Use MagicMock instead of AsyncMock for the root object so synchronous
     # functions like msg_db.add() and msg_db.stop() do not return coroutines.
-    gwy.msg_db = MagicMock()
-    gwy.msg_db.get = AsyncMock(return_value=[mock_msg])
+    gwy.message_store = MagicMock()
+    gwy.message_store.get = AsyncMock(return_value=[mock_msg])
 
     result = await tcs.system_mode()
 
     assert result == {"system_mode": "01", "until": None}
-    gwy.msg_db.get.assert_called_once_with(
+    gwy.message_store.get.assert_called_once_with(
         code=Code._2E04, src=tcs._z_id, ctx=tcs._z_idx
     )

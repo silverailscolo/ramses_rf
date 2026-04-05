@@ -84,11 +84,11 @@ class DiscoveryService:
         :returns: A dictionary mapping supported Codes to their names.
         :rtype: dict[Code, Any]
         """
-        if self._gwy.msg_db:
+        if self._gwy.message_store:
             return {
                 code: CODES_SCHEMA[code]["name"]
                 for code in sorted(
-                    await self._gwy.msg_db.get_rp_codes(
+                    await self._gwy.message_store.get_rp_codes(
                         (self._entity.id[:9], self._entity.id[:9])
                     )
                 )
@@ -112,14 +112,14 @@ class DiscoveryService:
             return cast("OtDataId", int(msg_id, 16))
 
         res: list[str] = []
-        if self._gwy.msg_db:
+        if self._gwy.message_store:
             sql = """
                 SELECT ctx from messages WHERE
                 verb = 'RP'
                 AND code = '3220'
                 AND (src = ? OR dst = ?)
             """
-            for rec in await self._gwy.msg_db.qry_field(
+            for rec in await self._gwy.message_store.qry_field(
                 sql, (self._entity.id[:9], self._entity.id[:9])
             ):
                 _LOGGER.debug("Fetched OT ctx from index: %s", rec[0])
@@ -252,7 +252,7 @@ class DiscoveryService:
                     tcs = getattr(self._entity, "tcs", None)
                     if tcs:
                         tcs_id = getattr(tcs, "id", None)
-                        if self._gwy.msg_db and tcs_id:
+                        if self._gwy.message_store and tcs_id:
                             sql = """
                                 SELECT dtm, code from messages WHERE
                                 code = ?
@@ -260,7 +260,7 @@ class DiscoveryService:
                                 AND ctx = 'True'
                                 AND (src = ? OR dst = ?)
                             """
-                            res = await self._gwy.msg_db.qry(
+                            res = await self._gwy.message_store.qry(
                                 sql,
                                 (
                                     cmd_code,
