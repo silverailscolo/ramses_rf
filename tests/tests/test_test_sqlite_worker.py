@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from ramses_rf.database import MessageIndex
+from ramses_rf.message_store import MessageIndex
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 

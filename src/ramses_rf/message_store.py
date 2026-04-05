@@ -1,3 +1,4 @@
+# src/ramses_rf/message_store.py
 #!/usr/bin/env python3
 """
 RAMSES RF - Message database and index.
@@ -38,7 +39,7 @@ import orjson
 from ramses_tx import CODES_SCHEMA, RQ, Code, Message, Packet
 
 from .exceptions import DatabaseQueryError
-from .storage import PacketLogEntry, StorageWorker
+from .sqlite_worker import PacketLogEntry, SQLiteWorker
 
 DtmStrT = NewType("DtmStrT", str)
 
@@ -123,12 +124,12 @@ class MessageStore:
 
         # Start the Storage Worker (Write Connection)
         # This thread handles all blocking INSERT/UPDATE operations
-        self._worker = StorageWorker(db_path, disk_path=disk_path)
+        self._worker = SQLiteWorker(db_path, disk_path=disk_path)
 
         # Wait for the worker to create the tables.
         # This prevents "no such table" errors on immediate reads.
         if not self._worker.wait_for_ready(timeout=10.0):
-            _LOGGER.error("MessageStore: StorageWorker timed out initializing database")
+            _LOGGER.error("MessageStore: SQLiteWorker timed out initializing database")
 
         # Connect to a SQLite DB (Read Connection)
         self._cx = sqlite3.connect(
@@ -152,7 +153,7 @@ class MessageStore:
 
         _setup_db_adapters()  # DTM adapter/converter
 
-        # Schema creation is now handled safely by the StorageWorker to avoid races.
+        # Schema creation is now handled safely by the SQLiteWorker to avoid races.
         # self._setup_db_schema()
 
         if self.maintain:

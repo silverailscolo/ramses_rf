@@ -1,7 +1,8 @@
+# src/ramses_rf/entity_state.py
 #!/usr/bin/env python3
 """RAMSES RF - State Storage and Database Query Component.
 
-This module provides the StateStore component, which manages database
+This module provides the EntityState component, which manages database
 interactions and state querying for an entity, replacing the legacy
 _MessageDB inheritance model.
 """
@@ -32,8 +33,8 @@ from .const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
 if TYPE_CHECKING:
     from ramses_tx.typing import HeaderT
 
-    from .database import MessageStore
     from .interfaces import DeviceInterface, GatewayInterface
+    from .message_store import MessageStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ _LOGGER = logging.getLogger(__name__)
 _ID_SLICE = 9
 
 
-class StateStore:
+class EntityState:
     """Manages database interactions and state queries for an entity.
 
     This class is intended to be composed into Entity classes rather than
@@ -49,7 +50,7 @@ class StateStore:
     """
 
     def __init__(self, entity: DeviceInterface, gwy: GatewayInterface) -> None:
-        """Initialize the StateStore.
+        """Initialize the EntityState.
 
         :param entity: The device or entity this store represents.
         :type entity: DeviceInterface
@@ -121,8 +122,8 @@ class StateStore:
                     entities.extend(tcs.zones)
 
         for obj in entities:
-            if hasattr(obj, "state_store"):
-                store = obj.state_store
+            if hasattr(obj, "entity_state"):
+                store = obj.entity_state
                 if msg.code in store._msgs_ and store._msgs_[msg.code] == msg:
                     del store._msgs_[msg.code]
                 with contextlib.suppress(KeyError):

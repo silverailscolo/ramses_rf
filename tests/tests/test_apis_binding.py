@@ -7,7 +7,6 @@ from typing import Any, TypeVar
 
 import pytest
 
-from ramses_rf.database import MessageIndex
 from ramses_rf.device.base import Fakeable  # initiate_binding_, wait_for_binding_
 from ramses_rf.device.heat import DhwSensor, Thermostat  # initiate_binding_process
 from ramses_rf.device.hvac import (  # initiate_binding_process
@@ -15,6 +14,7 @@ from ramses_rf.device.hvac import (  # initiate_binding_process
     HvacDisplayRemote,
     HvacRemote,
 )
+from ramses_rf.message_store import MessageIndex
 from ramses_tx.address import Address
 from ramses_tx.const import Code
 

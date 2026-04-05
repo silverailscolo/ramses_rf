@@ -32,8 +32,8 @@ from ramses_cli.client import (
 )
 from ramses_rf import GracefulExit
 from ramses_rf.const import DEV_TYPE_MAP, I_, Code
-from ramses_rf.database import MessageIndex
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.message_store import MessageIndex
 from ramses_rf.schemas import SZ_CONFIG, SZ_DISABLE_DISCOVERY
 from ramses_tx import exceptions as exc
 from ramses_tx.message import Message
@@ -98,9 +98,9 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     mock_dev.status = AsyncMock(return_value={"mock": "status"})
     mock_dev.traits = AsyncMock(return_value={"mock": "traits"})
 
-    # Mock message database interaction via the state_store component
-    mock_dev.state_store = MagicMock()
-    mock_dev.state_store._msgz = AsyncMock(
+    # Mock message database interaction via the entity_state component
+    mock_dev.entity_state = MagicMock()
+    mock_dev.entity_state._msgz = AsyncMock(
         return_value={
             Code._0005: {"verb": {"pkt": "msg_0005"}},
             Code._000C: {"verb": {"pkt": "msg_000C"}},

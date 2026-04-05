@@ -106,8 +106,8 @@ async def test_zone_schedule(mock_tcs: MagicMock) -> None:
     zon._schedule.set_schedule = AsyncMock()
     zon._schedule.schedule = []
 
-    zon.state_store = MagicMock()
-    zon.state_store._msg_value = AsyncMock(return_value={})
+    zon.entity_state = MagicMock()
+    zon.entity_state._msg_value = AsyncMock(return_value={})
 
     await zon.get_schedule(force_io=True)
     zon._schedule.get_schedule.assert_called_once_with(force_io=True)

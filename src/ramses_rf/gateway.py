@@ -1,3 +1,4 @@
+# src/ramses_rf/gateway.py
 #!/usr/bin/env python3
 
 # TODO:
@@ -60,7 +61,6 @@ from ramses_tx import (
 from ramses_tx.transport import TransportConfig
 from ramses_tx.typing import PktLogConfigT, PortConfigT
 
-from .database import MessageStore
 from .device import HgiGateway
 from .device_filter import DeviceFilter
 from .device_registry import DeviceRegistry
@@ -71,6 +71,7 @@ from .interfaces import (
     GatewayInterface,
     MessageStoreInterface,
 )
+from .message_store import MessageStore
 from .schemas import load_schema
 from .system import Evohome
 from .typing import DeviceListT
@@ -538,11 +539,11 @@ class Gateway(GatewayInterface):
         else:  # deprecated, to be removed in Q1 2026
             msgs = []
             for device in self.device_registry.devices:
-                msgs.extend(await device.state_store._msg_list())
+                msgs.extend(await device.entity_state._msg_list())
             for system in self.device_registry.systems:
-                msgs.extend(list((await system.state_store._msgs()).values()))
+                msgs.extend(list((await system.entity_state._msgs()).values()))
                 for z in system.zones:
-                    msgs.extend(list((await z.state_store._msgs()).values()))
+                    msgs.extend(list((await z.entity_state._msgs()).values()))
 
             pkts = {  # BUG: assumes pkts have unique dtms: may be untrue for contrived logs
                 f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"

@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import Device, dispatcher
-from ramses_rf.database import MessageIndex
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.message_store import MessageIndex
 from ramses_tx import Address, DeviceIdT, Message, Packet
 
 

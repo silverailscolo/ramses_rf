@@ -263,13 +263,13 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
         return cast(
-            PayDictT._1100 | None, await self.state_store._msg_value(Code._1100)
+            PayDictT._1100 | None, await self.entity_state._msg_value(Code._1100)
         )
 
     async def heat_demand(self) -> float | None:  # 3150/FC
         return cast(
             float | None,
-            await self.state_store._msg_value(
+            await self.entity_state._msg_value(
                 Code._3150, domain_id=FC, key=SZ_HEAT_DEMAND
             ),
         )
@@ -339,7 +339,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         """Return the system's configuration."""
 
         params: dict[str, Any] = {SZ_SYSTEM: {}}
-        params[SZ_SYSTEM]["tpi_params"] = await self.state_store._msg_value(Code._1100)
+        params[SZ_SYSTEM]["tpi_params"] = await self.entity_state._msg_value(Code._1100)
         return params
 
     async def status(self) -> dict[str, Any]:
@@ -404,7 +404,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             # TODO: use msgz/I, not RP
             secs = cast(
                 int | None,
-                await self.state_store._msg_value(Code._1F09, key="remaining_seconds"),
+                await self.entity_state._msg_value(Code._1F09, key="remaining_seconds"),
             )
             if secs is None or this.dtm > prev.dtm + td(seconds=secs + 5):
                 return  # can only compare against 30C9 pkt from the last cycle
@@ -427,7 +427,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             for d in self._gwy.device_registry.devices:
                 if isinstance(d, Temperature) and d.ctl in (self.ctl, None):
                     d_temp = await d.temperature()
-                    d_msgs = await d.state_store._msgs()
+                    d_msgs = await d.entity_state._msgs()
                     if (
                         d_temp is not None
                         and Code._30C9 in d_msgs
@@ -695,7 +695,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
     async def schedule_version(self) -> int | None:
         return cast(
             int | None,
-            await self.state_store._msg_value(Code._0006, key=SZ_CHANGE_COUNTER),
+            await self.entity_state._msg_value(Code._0006, key=SZ_CHANGE_COUNTER),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -715,7 +715,7 @@ class Language(SystemBase):  # 0100
 
     async def language(self) -> str | None:
         return cast(
-            str | None, await self.state_store._msg_value(Code._0100, key=SZ_LANGUAGE)
+            str | None, await self.entity_state._msg_value(Code._0100, key=SZ_LANGUAGE)
         )
 
     async def params(self) -> dict[str, Any]:
@@ -922,7 +922,7 @@ class SysMode(SystemBase):  # 2E04
                 return cast(dict[str, Any], msgs[0].payload)
 
         return cast(
-            dict[str, Any] | None, await self.state_store._msg_value(Code._2E04)
+            dict[str, Any] | None, await self.entity_state._msg_value(Code._2E04)
         )
 
     async def set_mode(

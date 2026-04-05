@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.database import MessageStore
+from ramses_rf.message_store import MessageStore
 from ramses_tx import exceptions as exc
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet

@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf.const import RP
-from ramses_rf.database import MessageIndex
 from ramses_rf.entity_base import Entity, _Entity
 from ramses_rf.gateway import Gateway
+from ramses_rf.message_store import MessageIndex
 from ramses_tx import Code, DeviceIdT, Message, Packet
 
 
@@ -102,14 +102,14 @@ class Test_entity_base:
         ), "base qry wrong"
 
         # create _msgs
-        assert await dev.state_store._msgs() == {
+        assert await dev.entity_state._msgs() == {
             "12B0": self.msg7,
             "3150": self.msg5,
             "3220": self.msg6,
         }, "base _msgs wrong"
 
         # find our Codes
-        assert sorted(await dev.state_store._msg_dev_qry() or []) == sorted(
+        assert sorted(await dev.entity_state._msg_dev_qry() or []) == sorted(
             [
                 Code._3150,
                 Code._12B0,
@@ -118,7 +118,7 @@ class Test_entity_base:
         ), "base _msg_dev_qry wrong"
 
         # list our messages
-        assert sorted(await dev.state_store._msg_list()) == sorted(
+        assert sorted(await dev.entity_state._msg_list()) == sorted(
             [
                 self.msg5,
                 self.msg7,
@@ -127,7 +127,7 @@ class Test_entity_base:
         ), "_msg_list wrong"
 
         # create _msgz
-        assert await dev.state_store._msgz() == {
+        assert await dev.entity_state._msgz() == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
             "3220": {"RP": {"11": self.msg6}},
@@ -164,13 +164,13 @@ class Test_entity_base:
         ), "zone qry wrong"
 
         # create _msgs
-        assert await dev.state_store._msgs() == {
+        assert await dev.entity_state._msgs() == {
             "12B0": self.msg7,
             "3150": self.msg5,
         }, "zone _msgs wrong"
 
         # find our Codes
-        assert sorted(await dev.state_store._msg_dev_qry() or []) == sorted(
+        assert sorted(await dev.entity_state._msg_dev_qry() or []) == sorted(
             [
                 Code._3150,
                 Code._12B0,
@@ -178,7 +178,7 @@ class Test_entity_base:
         ), "zone _msg_dev_qry wrong"
 
         # list our messages
-        assert sorted(await dev.state_store._msg_list()) == sorted(
+        assert sorted(await dev.entity_state._msg_list()) == sorted(
             [
                 self.msg5,
                 self.msg7,
@@ -186,7 +186,7 @@ class Test_entity_base:
         ), "_msg_list wrong"
 
         # create _msgz
-        assert await dev.state_store._msgz() == {
+        assert await dev.entity_state._msgz() == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
         }, "zone _msgz wrong"
@@ -236,13 +236,13 @@ class Test_entity_base:
         ), "dhw qry wrong"
 
         # create _msgs
-        assert await dev.state_store._msgs() == {
+        assert await dev.entity_state._msgs() == {
             "1260": self.msg9,
             "3150": self.msg8,
         }, "dhw _msgs wrong"
 
         # find our Codes
-        assert sorted(await dev.state_store._msg_dev_qry() or []) == sorted(
+        assert sorted(await dev.entity_state._msg_dev_qry() or []) == sorted(
             [
                 Code._3150,
                 Code._1260,
@@ -250,7 +250,7 @@ class Test_entity_base:
         ), "dhw _msg_dev_qry wrong"
 
         # list our messages
-        assert sorted(await dev.state_store._msg_list()) == sorted(
+        assert sorted(await dev.entity_state._msg_list()) == sorted(
             [
                 self.msg8,
                 self.msg9,
@@ -258,7 +258,7 @@ class Test_entity_base:
         ), "dhw _msg_list wrong"
 
         # create _msgz
-        assert await dev.state_store._msgz() == {
+        assert await dev.entity_state._msgz() == {
             "1260": {"RP": {"00": self.msg9}},
             "3150": {" I": {"FC": self.msg8}},
         }, "dhw _msgz wrong"
@@ -276,7 +276,7 @@ class Test_entity_base:
         msg_empty._expired = False
         msg_empty.code = Code._000A
 
-        assert dev.state_store._msg_value_msg(msg_empty) is None
+        assert dev.entity_state._msg_value_msg(msg_empty) is None
 
         # Case 2: Payload is a list, key='*' (should return full list)
         payload_list = [
@@ -289,25 +289,25 @@ class Test_entity_base:
         msg_list.code = Code._000A
 
         # key='*' -> return full list
-        val = dev.state_store._msg_value_msg(msg_list, key="*")
+        val = dev.entity_state._msg_value_msg(msg_list, key="*")
         assert val == payload_list
         assert isinstance(val, list)
 
         # key=None -> return full list (default behavior if key arg is omitted in call)
-        val = dev.state_store._msg_value_msg(msg_list)
+        val = dev.entity_state._msg_value_msg(msg_list)
         assert val == payload_list
 
         # Case 3: Legacy Fallback - Payload is list, specific key requested, no zone_idx
         # Should return value from index 0
-        val = dev.state_store._msg_value_msg(msg_list, key="val")
+        val = dev.entity_state._msg_value_msg(msg_list, key="val")
         assert val == 10  # from index 0 ('00')
 
         # Case 4: Correct filtering when zone_idx is provided
-        val = dev.state_store._msg_value_msg(msg_list, key="val", zone_idx="01")
+        val = dev.entity_state._msg_value_msg(msg_list, key="val", zone_idx="01")
         assert val == 20
 
         # Case 5: Zone not found in list
-        val = dev.state_store._msg_value_msg(msg_list, key="val", zone_idx="99")
+        val = dev.entity_state._msg_value_msg(msg_list, key="val", zone_idx="99")
         assert val is None
 
 
@@ -352,7 +352,7 @@ async def test_gh_396_legacy_ot_context() -> None:
 
     # Manually populate the legacy _msgz_ structure (backing attribute)
     # Structure: _msgz_[Code][Verb][Ctx] = Message
-    entity.state_store._msgz_ = {
+    entity.entity_state._msgz_ = {
         Code._3220: {
             RP: {
                 "05": MagicMock(),  # Standard hex string case

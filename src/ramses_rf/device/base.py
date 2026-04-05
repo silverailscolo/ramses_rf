@@ -209,11 +209,11 @@ class DeviceBase(Entity):
     async def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered (excludes battery-backup)."""
         if self._gwy.msg_db:
-            code_list = await self.state_store._msg_dev_qry()
+            code_list = await self.entity_state._msg_dev_qry()
             return isinstance(self, BatteryState) or (
                 code_list is not None and Code._1060 in code_list
             )  # TODO(eb): clean up next line Q1 2026
-        msgz = await self.state_store._msgz()
+        msgz = await self.entity_state._msgz()
         return isinstance(self, BatteryState) or Code._1060 in msgz
 
     @property
@@ -230,7 +230,7 @@ class DeviceBase(Entity):
 
     async def _is_present(self) -> bool:
         """Try to exclude ghost devices (as caused by corrupt packet addresses)."""
-        msgs = await self.state_store._msgs()
+        msgs = await self.entity_state._msgs()
         return any(
             m.src == self for m in msgs.values() if not m._expired
         )  # TODO: needs addressing
@@ -250,7 +250,7 @@ class DeviceBase(Entity):
     async def traits(self) -> dict[str, Any]:
         """Get the traits of the device."""
 
-        result = await self.state_store.traits()
+        result = await self.entity_state.traits()
 
         known_dev = self._gwy._engine._include.get(self.id)
 
@@ -262,7 +262,7 @@ class DeviceBase(Entity):
             }
         )
 
-        result["_bind"] = await self.state_store._msg_value(Code._1FC9)
+        result["_bind"] = await self.entity_state._msg_value(Code._1FC9)
         return result
 
 
@@ -275,14 +275,14 @@ class BatteryState(DeviceBase):  # 1060
             return False
         return cast(
             bool | None,
-            await self.state_store._msg_value(Code._1060, key=self.BATTERY_LOW),
+            await self.entity_state._msg_value(Code._1060, key=self.BATTERY_LOW),
         )
 
     async def battery_state(self) -> dict[str, Any] | None:  # 1060
         if self.is_faked:
             return None
         return cast(
-            dict[str, Any] | None, await self.state_store._msg_value(Code._1060)
+            dict[str, Any] | None, await self.entity_state._msg_value(Code._1060)
         )
 
     async def status(self) -> dict[str, Any]:
@@ -306,14 +306,14 @@ class DeviceInfo(DeviceBase):  # 10E0
 
     async def device_info(self) -> dict[str, Any] | None:  # 10E0
         return cast(
-            dict[str, Any] | None, await self.state_store._msg_value(Code._10E0)
+            dict[str, Any] | None, await self.entity_state._msg_value(Code._10E0)
         )
 
     async def traits(self) -> dict[str, Any]:
         """Return the traits of the device."""
 
         result = await super().traits()
-        msgs = await self.state_store._msgs()
+        msgs = await self.entity_state._msgs()
 
         if Code._10E0 in msgs or Code._10E0 in CODES_BY_DEV_SLUG.get(self._SLUG, []):
             result.update({"_info": await self.device_info()})
@@ -457,7 +457,7 @@ class Fakeable(DeviceBase):
         if not traits.get(SZ_OEM_CODE):
             return cast(
                 str | None,
-                await self.state_store._msg_value(Code._10E0, key=SZ_OEM_CODE),
+                await self.entity_state._msg_value(Code._10E0, key=SZ_OEM_CODE),
             )
         return cast(str | None, traits.get(SZ_OEM_CODE))
 

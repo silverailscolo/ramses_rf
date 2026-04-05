@@ -94,7 +94,7 @@ class DiscoveryService:
                 )
                 if self.is_not_deprecated_cmd(code)
             }
-        msgz_dict = await self._entity.state_store._msgz()
+        msgz_dict = await self._entity.entity_state._msgz()
         return {
             code: (CODES_SCHEMA[code]["name"] if code in CODES_SCHEMA else None)
             for code in sorted(msgz_dict)
@@ -126,7 +126,7 @@ class DiscoveryService:
                 val = f"{rec[0]:02X}" if isinstance(rec[0], int) else str(rec[0])
                 res.append(val)
         else:
-            msgz_dict = await self._entity.state_store._msgz()
+            msgz_dict = await self._entity.entity_state._msgz()
             res_dict: dict[bool | str | None, Message] | list[Any] = msgz_dict[
                 Code._3220
             ].get(RP, [])
@@ -240,7 +240,7 @@ class DiscoveryService:
             """Return the latest message for a header from any source."""
             msgs: list[Message] = []
             for v in (I_, RP):
-                m = await self._entity.state_store._get_msg_by_hdr(
+                m = await self._entity.entity_state._get_msg_by_hdr(
                     hdr[:5] + v + hdr[7:]
                 )
                 if m is not None:
@@ -277,7 +277,7 @@ class DiscoveryService:
                                     cmd_code,
                                 )
                         else:
-                            tcs_msgz = await tcs.state_store._msgz()
+                            tcs_msgz = await tcs.entity_state._msgz()
                             msgs.append(tcs_msgz[cmd_code][I_][True])
             except KeyError:
                 pass

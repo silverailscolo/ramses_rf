@@ -6,8 +6,8 @@ from datetime import datetime as dt, timedelta as td
 
 import orjson
 
-from ramses_rf.database import MessageIndex
 from ramses_rf.exceptions import DatabaseQueryError
+from ramses_rf.message_store import MessageIndex
 from ramses_tx import Message, Packet
 
 

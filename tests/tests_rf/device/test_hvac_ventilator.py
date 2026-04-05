@@ -8,9 +8,9 @@ import pytest
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import DevType
-from ramses_rf.database import MessageIndex
 from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.gateway import Gateway
+from ramses_rf.message_store import MessageIndex
 from ramses_tx import Address
 from ramses_tx.const import Code, Priority
 from ramses_tx.typing import DeviceIdT
@@ -189,7 +189,7 @@ class TestHvacVentilator:
 
         # Set up the message store  # deprecated, TODO(eb): remove Q1 2026
         if not hvac_ventilator._gwy.msg_db:
-            hvac_ventilator.state_store._msgs_ = {}
+            hvac_ventilator.entity_state._msgs_ = {}
 
         # Patch the _handle_2411_message method
         with patch.object(hvac_ventilator, "_handle_2411_message") as mock_handle:
@@ -219,7 +219,7 @@ class TestHvacVentilator:
 
         # Set up the message store  # deprecated, TODO(eb): remove Q1 2026
         if not hvac_ventilator._gwy.msg_db:
-            hvac_ventilator.state_store._msgs_ = {}
+            hvac_ventilator.entity_state._msgs_ = {}
 
         # Patch the parent class's _handle_msg method
         with patch(

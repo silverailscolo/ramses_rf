@@ -14,9 +14,9 @@ import pytest
 import voluptuous as vol
 
 from ramses_rf import Gateway
-from ramses_rf.database import MessageIndex
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import shrink
+from ramses_rf.message_store import MessageIndex
 from ramses_rf.schemas import SCH_GLOBAL_CONFIG, SCH_GLOBAL_SCHEMAS
 from ramses_tx.schemas import SCH_GLOBAL_TRAITS_DICT
 
