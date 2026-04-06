@@ -157,10 +157,10 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
             )  # actuator cycle
 
     async def actuator_cycle(self) -> dict | None:  # 3EF1
-        return cast(dict | None, await self.state_store._msg_value(Code._3EF1))
+        return cast(dict | None, await self.entity_state.get_value(Code._3EF1))
 
     async def actuator_state(self) -> dict | None:  # 3EF0
-        return cast(dict | None, await self.state_store._msg_value(Code._3EF0))
+        return cast(dict | None, await self.entity_state.get_value(Code._3EF0))
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -177,7 +177,7 @@ class HeatDemand(DeviceHeat):  # 3150
     async def heat_demand(self) -> float | None:  # 3150
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._3150, key=self.HEAT_DEMAND),
+            await self.entity_state.get_value(Code._3150, key=self.HEAT_DEMAND),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -194,7 +194,7 @@ class Setpoint(DeviceHeat):  # 2309
     async def setpoint(self) -> float | None:  # 2309
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._2309, key=self.SETPOINT),
+            await self.entity_state.get_value(Code._2309, key=self.SETPOINT),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -209,14 +209,14 @@ class Weather(DeviceHeat):  # 0002
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 0002
-        if self._gwy.msg_db:
-            msgs = await self._gwy.msg_db.get(code=Code._0002, src=self.id)
+        if self._gwy.message_store:
+            msgs = await self._gwy.message_store.get(code=Code._0002, src=self.id)
             if msgs:
                 return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
 
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._0002, key=SZ_TEMPERATURE),
+            await self.entity_state.get_value(Code._0002, key=SZ_TEMPERATURE),
         )
 
     async def set_temperature(self, value: float | None) -> Packet:
@@ -263,7 +263,7 @@ class RelayDemand(DeviceHeat):  # 0008
     async def relay_demand(self) -> float | None:  # 0008
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._0008, key=self.RELAY_DEMAND),
+            await self.entity_state.get_value(Code._0008, key=self.RELAY_DEMAND),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -278,14 +278,14 @@ class DhwTemperature(DeviceHeat):  # 1260
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 1260
-        if self._gwy.msg_db:
-            msgs = await self._gwy.msg_db.get(code=Code._1260, src=self.id)
+        if self._gwy.message_store:
+            msgs = await self._gwy.message_store.get(code=Code._1260, src=self.id)
             if msgs:
                 return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
 
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._1260, key=SZ_TEMPERATURE),
+            await self.entity_state.get_value(Code._1260, key=SZ_TEMPERATURE),
         )
 
     async def set_temperature(self, value: float | None) -> Packet:
@@ -312,14 +312,14 @@ class Temperature(DeviceHeat):  # 30C9
     # .W --- 01:054173 34:145039 --:------ 1FC9 006 03-2309-04D39D  # real CTL
     # .I --- 34:145039 01:054173 --:------ 1FC9 006 00-30C9-8A368F
     async def temperature(self) -> float | None:  # 30C9
-        if self._gwy.msg_db:
-            msgs = await self._gwy.msg_db.get(code=Code._30C9, src=self.id)
+        if self._gwy.message_store:
+            msgs = await self._gwy.message_store.get(code=Code._30C9, src=self.id)
             if msgs:
                 return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
 
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._30C9, key=SZ_TEMPERATURE),
+            await self.entity_state.get_value(Code._30C9, key=SZ_TEMPERATURE),
         )
 
     async def set_temperature(self, value: float | None) -> Packet:
@@ -568,23 +568,25 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     async def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
         return cast(
             float | None,
-            self.state_store._msg_value_msg(self._heat_demand, key=self.HEAT_DEMAND),
+            self.entity_state._msg_value_msg(self._heat_demand, key=self.HEAT_DEMAND),
         )
 
     async def heat_demands(self) -> dict | None:  # 3150|ufh_idx array
         # return self._heat_demands.payload if self._heat_demands else None
-        return cast(dict | None, self.state_store._msg_value_msg(self._heat_demands))
+        return cast(dict | None, self.entity_state._msg_value_msg(self._heat_demands))
 
     async def relay_demand(self) -> dict | None:  # 0008|FC
         return cast(
             dict | None,
-            self.state_store._msg_value_msg(self._relay_demand, key=SZ_RELAY_DEMAND),
+            self.entity_state._msg_value_msg(self._relay_demand, key=SZ_RELAY_DEMAND),
         )
 
     async def relay_demand_fa(self) -> dict | None:  # 0008|FA
         return cast(
             dict | None,
-            self.state_store._msg_value_msg(self._relay_demand_fa, key=SZ_RELAY_DEMAND),
+            self.entity_state._msg_value_msg(
+                self._relay_demand_fa, key=SZ_RELAY_DEMAND
+            ),
         )
 
     async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_idx array
@@ -667,7 +669,7 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
 
     async def dhw_params(self) -> PayDictT._10A0 | None:
         return cast(
-            PayDictT._10A0 | None, await self.state_store._msg_value(Code._10A0)
+            PayDictT._10A0 | None, await self.entity_state.get_value(Code._10A0)
         )
 
     async def params(self) -> dict[str, Any]:
@@ -729,17 +731,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         super().__init__(*args, traits=traits, **kwargs)
 
         self._child_id = FC  # NOTE: domain_id
-
-        # TODO(eb): cleanup
-        if not self._gwy.msg_db:
-            # self._add_record(
-            #     id=self.id, code=Code._3220, verb="RP", payload="00C0060101"
-            # )  # is parsed but pollutes the client.py
-            # adds a "sim" RP opentherm_msg to the SQLite MessageIndex with code _3220
-            # causes exc when fetching ALL, when no "real" msg was added to _msgs_. We skip those.
-            # else:
-            self.state_store._msgz_[Code._3220] = {RP: {}}  # No ctx! (not None)
-
         # lf._use_ot = self._gwy.config.use_native_ot
         self._msgs_ot: dict[MsgId, Message] = {}
         # lf._msgs_ot_ctl_polled = {}
@@ -934,7 +925,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             if (result_ot := self._ot_msg_value(self.RAMSES_TO_OT[code])) is not None:
                 return result_ot
 
-        result_ramses = await self.state_store._msg_value(code, key=key)
+        result_ramses = await self.entity_state.get_value(code, key=key)
         if self._gwy.config.use_native_ot == "avoid" and result_ramses is None:
             return self._ot_msg_value(self.RAMSES_TO_OT[code])
 
@@ -960,32 +951,32 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return result_ramses  # incl. use_native_ot == "never"
 
     async def bit_2_4(self) -> bool | None:  # 2401 - WIP
-        return await self.state_store._msg_flag(Code._2401, "_flags_2", 4)
+        return await self.entity_state.get_flag(Code._2401, "_flags_2", 4)
 
     async def bit_2_5(self) -> bool | None:  # 2401 - WIP
-        return await self.state_store._msg_flag(Code._2401, "_flags_2", 5)
+        return await self.entity_state.get_flag(Code._2401, "_flags_2", 5)
 
     async def bit_2_6(self) -> bool | None:  # 2401 - WIP
-        return await self.state_store._msg_flag(Code._2401, "_flags_2", 6)
+        return await self.entity_state.get_flag(Code._2401, "_flags_2", 6)
 
     async def bit_2_7(self) -> bool | None:  # 2401 - WIP
-        return await self.state_store._msg_flag(Code._2401, "_flags_2", 7)
+        return await self.entity_state.get_flag(Code._2401, "_flags_2", 7)
 
     async def bit_3_7(self) -> bool | None:  # 3EF0 (byte 3, only OTB)
-        return await self.state_store._msg_flag(Code._3EF0, "_flags_3", 7)
+        return await self.entity_state.get_flag(Code._3EF0, "_flags_3", 7)
 
     async def bit_6_6(self) -> bool | None:  # 3EF0 ?dhw_enabled (byte 3, only R8820A?)
-        return await self.state_store._msg_flag(Code._3EF0, "_flags_6", 6)
+        return await self.entity_state.get_flag(Code._3EF0, "_flags_6", 6)
 
     async def percent(self) -> float | None:  # 2401 - WIP (~3150|FC)
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._2401, key=SZ_HEAT_DEMAND),
+            await self.entity_state.get_value(Code._2401, key=SZ_HEAT_DEMAND),
         )
 
     async def value(self) -> int | None:  # 2401 - WIP
         return cast(
-            int | None, await self.state_store._msg_value(Code._2401, key="_value_2")
+            int | None, await self.entity_state.get_value(Code._2401, key="_value_2")
         )
 
     async def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
@@ -1012,7 +1003,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return cast(
             float | None,
             self._result_by_value(
-                None, await self.state_store._msg_value(Code._3EF0, key=SZ_CH_SETPOINT)
+                None, await self.entity_state.get_value(Code._3EF0, key=SZ_CH_SETPOINT)
             ),
         )
 
@@ -1040,7 +1031,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
             return cast(
                 float | None,
-                await self.state_store._msg_value(
+                await self.entity_state.get_value(
                     Code._3EF0, key=SZ_MAX_REL_MODULATION
                 ),
             )
@@ -1048,7 +1039,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             float | None,
             self._result_by_value(
                 self._ot_msg_value(MsgId._0E),  # NOTE: not reliable?
-                await self.state_store._msg_value(
+                await self.entity_state.get_value(
                     Code._3EF0, key=SZ_MAX_REL_MODULATION
                 ),
             ),
@@ -1066,7 +1057,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
             return cast(
                 float | None,
-                await self.state_store._msg_value(
+                await self.entity_state.get_value(
                     (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
                 ),
             )
@@ -1074,7 +1065,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             float | None,
             self._result_by_value(
                 self._ot_msg_value(MsgId._11),  # NOTE: not reliable?
-                await self.state_store._msg_value(
+                await self.entity_state.get_value(
                     (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
                 ),
             ),
@@ -1084,13 +1075,13 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
             return cast(
                 bool | None,
-                await self.state_store._msg_value(Code._3EF0, key=SZ_CH_ACTIVE),
+                await self.entity_state.get_value(Code._3EF0, key=SZ_CH_ACTIVE),
             )
         return cast(
             bool | None,
             self._result_by_value(
                 self._ot_msg_flag(MsgId._00, 8 + 1),  # NOTE: not reliable?
-                await self.state_store._msg_value(Code._3EF0, key=SZ_CH_ACTIVE),
+                await self.entity_state.get_value(Code._3EF0, key=SZ_CH_ACTIVE),
             ),
         )
 
@@ -1098,13 +1089,13 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
             return cast(
                 bool | None,
-                await self.state_store._msg_value(Code._3EF0, key=SZ_CH_ENABLED),
+                await self.entity_state.get_value(Code._3EF0, key=SZ_CH_ENABLED),
             )
         return cast(
             bool | None,
             self._result_by_value(
                 self._ot_msg_flag(MsgId._00, 0),  # NOTE: not reliable?
-                await self.state_store._msg_value(Code._3EF0, key=SZ_CH_ENABLED),
+                await self.entity_state.get_value(Code._3EF0, key=SZ_CH_ENABLED),
             ),
         )
 
@@ -1123,13 +1114,13 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
             return cast(
                 bool | None,
-                await self.state_store._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE),
+                await self.entity_state.get_value(Code._3EF0, key=SZ_DHW_ACTIVE),
             )
         return cast(
             bool | None,
             self._result_by_value(
                 self._ot_msg_flag(MsgId._00, 8 + 2),  # NOTE: not reliable?
-                await self.state_store._msg_value(Code._3EF0, key=SZ_DHW_ACTIVE),
+                await self.entity_state.get_value(Code._3EF0, key=SZ_DHW_ACTIVE),
             ),
         )
 
@@ -1152,13 +1143,13 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
             return cast(
                 bool | None,
-                await self.state_store._msg_value(Code._3EF0, key="flame_on"),
+                await self.entity_state.get_value(Code._3EF0, key="flame_on"),
             )
         return cast(
             bool | None,
             self._result_by_value(
                 self._ot_msg_flag(MsgId._00, 8 + 3),  # NOTE: not reliable?
-                await self.state_store._msg_value(Code._3EF0, key="flame_on"),
+                await self.entity_state.get_value(Code._3EF0, key="flame_on"),
             ),
         )
 
@@ -1254,50 +1245,50 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
 
     async def ramses_status(self) -> dict[str, Any]:
         return {
-            SZ_BOILER_OUTPUT_TEMP: await self.state_store._msg_value(
+            SZ_BOILER_OUTPUT_TEMP: await self.entity_state.get_value(
                 Code._3200, key=SZ_TEMPERATURE
             ),
-            SZ_BOILER_RETURN_TEMP: await self.state_store._msg_value(
+            SZ_BOILER_RETURN_TEMP: await self.entity_state.get_value(
                 Code._3210, key=SZ_TEMPERATURE
             ),
-            SZ_BOILER_SETPOINT: await self.state_store._msg_value(
+            SZ_BOILER_SETPOINT: await self.entity_state.get_value(
                 Code._22D9, key=SZ_SETPOINT
             ),
-            SZ_CH_MAX_SETPOINT: await self.state_store._msg_value(
+            SZ_CH_MAX_SETPOINT: await self.entity_state.get_value(
                 Code._1081, key=SZ_SETPOINT
             ),
-            SZ_CH_SETPOINT: await self.state_store._msg_value(
+            SZ_CH_SETPOINT: await self.entity_state.get_value(
                 Code._3EF0, key=SZ_CH_SETPOINT
             ),
-            SZ_CH_WATER_PRESSURE: await self.state_store._msg_value(
+            SZ_CH_WATER_PRESSURE: await self.entity_state.get_value(
                 Code._1300, key=SZ_PRESSURE
             ),
-            SZ_DHW_FLOW_RATE: await self.state_store._msg_value(
+            SZ_DHW_FLOW_RATE: await self.entity_state.get_value(
                 Code._12F0, key=SZ_DHW_FLOW_RATE
             ),
-            SZ_DHW_SETPOINT: await self.state_store._msg_value(
+            SZ_DHW_SETPOINT: await self.entity_state.get_value(
                 Code._1300, key=SZ_SETPOINT
             ),
-            SZ_DHW_TEMP: await self.state_store._msg_value(
+            SZ_DHW_TEMP: await self.entity_state.get_value(
                 Code._1260, key=SZ_TEMPERATURE
             ),
-            SZ_OUTSIDE_TEMP: await self.state_store._msg_value(
+            SZ_OUTSIDE_TEMP: await self.entity_state.get_value(
                 Code._1290, key=SZ_TEMPERATURE
             ),
-            SZ_REL_MODULATION_LEVEL: await self.state_store._msg_value(
+            SZ_REL_MODULATION_LEVEL: await self.entity_state.get_value(
                 (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
             ),
             #
-            SZ_CH_ACTIVE: await self.state_store._msg_value(
+            SZ_CH_ACTIVE: await self.entity_state.get_value(
                 Code._3EF0, key=SZ_CH_ACTIVE
             ),
-            SZ_CH_ENABLED: await self.state_store._msg_value(
+            SZ_CH_ENABLED: await self.entity_state.get_value(
                 Code._3EF0, key=SZ_CH_ENABLED
             ),
-            SZ_DHW_ACTIVE: await self.state_store._msg_value(
+            SZ_DHW_ACTIVE: await self.entity_state.get_value(
                 Code._3EF0, key=SZ_DHW_ACTIVE
             ),
-            SZ_FLAME_ACTIVE: await self.state_store._msg_value(
+            SZ_FLAME_ACTIVE: await self.entity_state.get_value(
                 Code._3EF0, key=SZ_FLAME_ACTIVE
             ),
         }
@@ -1466,7 +1457,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
     async def active(self) -> bool | None:  # 3EF0, 3EF1
         """Return the actuator's current state."""
-        result = await self.state_store._msg_value(
+        result = await self.entity_state.get_value(
             (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
         )
         return None if result is None else bool(result)
@@ -1477,7 +1468,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
             return demand
         return cast(
             float | None,
-            await self.state_store._msg_value(
+            await self.entity_state.get_value(
                 (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
             ),
         )
@@ -1502,7 +1493,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
     async def tpi_params(self) -> PayDictT._10A0 | None:
         return cast(
-            PayDictT._10A0 | None, await self.state_store._msg_value(Code._1100)
+            PayDictT._10A0 | None, await self.entity_state.get_value(Code._1100)
         )
 
     async def schema(self) -> dict[str, Any]:
@@ -1547,7 +1538,7 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
     async def heat_demand(self) -> float | None:  # 3150
         if (heat_demand := await super().heat_demand()) is None:
             if (
-                await self.state_store._msg_value(Code._3150) is None
+                await self.entity_state.get_value(Code._3150) is None
                 and await self.setpoint() is False
             ):
                 return 0  # instead of None (no 3150s sent when setpoint is False)
@@ -1556,7 +1547,7 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
     async def window_open(self) -> bool | None:  # 12B0
         return cast(
             bool | None,
-            await self.state_store._msg_value(Code._12B0, key=self.WINDOW_OPEN),
+            await self.entity_state.get_value(Code._12B0, key=self.WINDOW_OPEN),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -1591,7 +1582,7 @@ class UfhCircuit(Child, Entity):  # FIXME
     def __init__(self, ufc: UfhController, ufh_idx: str) -> None:
         super().__init__(ufc._gwy)
 
-        # FIXME: gwy.msg_db entities must know their parent device ID and their own idx
+        # FIXME: gwy.message_store entities must know their parent device ID and their own idx
         self._z_id = ufc.id
         self._z_idx = ufh_idx
 

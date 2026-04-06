@@ -549,14 +549,16 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         for device in [
             d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.CTL
         ]:
-            if gwy.msg_db:
-                for msg in await gwy.msg_db.get(device=device.id, code=Code._0005):
+            if gwy.message_store:
+                for msg in await gwy.message_store.get(src=device.id, code=Code._0005):
                     print(f"{msg._pkt}")
-                for msg in await gwy.msg_db.get(device=device.id, code=Code._000C):
+                for msg in await gwy.message_store.get(src=device.id, code=Code._000C):
                     print(f"{msg._pkt}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
-                for msg_code, verbs in (await device.state_store._msgz()).items():
+                for msg_code, verbs in (
+                    await device.entity_state.get_state_cache_nested()
+                ).items():
                     if msg_code in (Code._0005, Code._000C):
                         for verb in verbs.values():
                             for pkt in verb.values():
@@ -565,12 +567,12 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         for device in [
             d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
         ]:
-            if gwy.msg_db:
-                for msg in await gwy.msg_db.get(device=device.id):
+            if gwy.message_store:
+                for msg in await gwy.message_store.get(src=device.id):
                     print(f"{msg._pkt}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
-                for cd in (await device.state_store._msgz()).values():
+                for cd in (await device.entity_state.get_state_cache_nested()).values():
                     for verb in cd.values():
                         for pkt in verb.values():
                             print(f"{pkt}")

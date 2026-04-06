@@ -349,17 +349,18 @@ class DhwZone(ZoneSchedule):  # CS92A
 
     async def config(self) -> dict[str, Any] | None:  # 10A0
         return cast(
-            dict[str, Any] | None, await self.state_store._msg_value(Code._10A0)
+            dict[str, Any] | None, await self.entity_state.get_value(Code._10A0)
         )
 
     async def mode(self) -> dict[str, Any] | None:  # 1F41
         return cast(
-            dict[str, Any] | None, await self.state_store._msg_value(Code._1F41)
+            dict[str, Any] | None, await self.entity_state.get_value(Code._1F41)
         )
 
     async def setpoint(self) -> float | None:  # 10A0
         return cast(
-            float | None, await self.state_store._msg_value(Code._10A0, key=SZ_SETPOINT)
+            float | None,
+            await self.entity_state.get_value(Code._10A0, key=SZ_SETPOINT),
         )
 
     async def set_setpoint(self, value: float) -> Packet:  # 10A0
@@ -369,25 +370,25 @@ class DhwZone(ZoneSchedule):  # CS92A
     async def temperature(self) -> float | None:  # 1260
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._1260, key=SZ_TEMPERATURE),
+            await self.entity_state.get_value(Code._1260, key=SZ_TEMPERATURE),
         )
 
     async def heat_demand(self) -> float | None:  # 3150
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._3150, key=SZ_HEAT_DEMAND),
+            await self.entity_state.get_value(Code._3150, key=SZ_HEAT_DEMAND),
         )
 
     async def relay_demand(self) -> float | None:  # 0008
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._0008, key=SZ_RELAY_DEMAND),
+            await self.entity_state.get_value(Code._0008, key=SZ_RELAY_DEMAND),
         )
 
     async def relay_failsafe(self) -> float | None:  # 0009
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._0009, key=SZ_RELAY_FAILSAFE),
+            await self.entity_state.get_value(Code._0009, key=SZ_RELAY_FAILSAFE),
         )
 
     async def set_mode(
@@ -425,7 +426,7 @@ class DhwZone(ZoneSchedule):  # CS92A
     ) -> Packet:
         """Set the DHW parameters (setpoint, overrun, differential)."""
 
-        # dhw_params = self.state_store._msg_value(Code._10A0)
+        # dhw_params = self.entity_state.get_value(Code._10A0)
         # if setpoint is None:
         #     setpoint = dhw_params[SZ_SETPOINT]
         # if overrun is None:
@@ -703,8 +704,8 @@ class Zone(ZoneSchedule):
     async def name(self) -> str | None:  # 0004
         """Get the name of the zone."""
 
-        if self._gwy.msg_db:
-            msgs = await self._gwy.msg_db.get(
+        if self._gwy.message_store:
+            msgs = await self._gwy.message_store.get(
                 code=Code._0004, src=self._z_id, ctx=self._z_idx
             )
             _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")  # DEBUG issue #317
@@ -712,7 +713,7 @@ class Zone(ZoneSchedule):
 
         return cast(
             str | None,
-            await self.state_store._msg_value(
+            await self.entity_state.get_value(
                 Code._0004, key=SZ_NAME, zone_idx=self.idx
             ),
         )
@@ -720,19 +721,19 @@ class Zone(ZoneSchedule):
     async def config(self) -> dict[str, Any] | None:  # 000A
         return cast(
             dict[str, Any] | None,
-            await self.state_store._msg_value(Code._000A, zone_idx=self.idx),
+            await self.entity_state.get_value(Code._000A, zone_idx=self.idx),
         )
 
     async def mode(self) -> dict[str, Any] | None:  # 2349
         return cast(
             dict[str, Any] | None,
-            await self.state_store._msg_value(Code._2349, zone_idx=self.idx),
+            await self.entity_state.get_value(Code._2349, zone_idx=self.idx),
         )
 
     async def setpoint(self) -> float | None:  # 2309 (2349 is a superset of 2309)
         return cast(
             float | None,
-            await self.state_store._msg_value(
+            await self.entity_state.get_value(
                 (Code._2309, Code._2349), key=SZ_SETPOINT, zone_idx=self.idx
             ),
         )
@@ -741,7 +742,7 @@ class Zone(ZoneSchedule):
         """Return the zone's local setpoint bounds if defined by a thermostat."""
         return cast(
             dict[str, Any] | None,
-            await self.state_store._msg_value(
+            await self.entity_state.get_value(
                 (Code._22C9, Code._2209), zone_idx=self.idx
             ),
         )
@@ -755,29 +756,47 @@ class Zone(ZoneSchedule):
         return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
     async def temperature(self) -> float | None:  # 30C9
-        if self._gwy.msg_db:
+        if self._gwy.message_store:
             # evohome zones only get initial temp from src + idx, so use zone sensor if newer
-            sql = f"""
-                SELECT dtm from messages WHERE verb in (' I', 'RP')
-                AND code = '30C9'
-                AND (plk LIKE '%{SZ_TEMPERATURE}%')
-                AND ((src = ? AND ctx = ?) OR src = ?)
-            """
             sensor_id = "aa:aaaaaa"  # should not match any device_id
             if self._sensor:
                 sensor_id = self._sensor.id
-            # custom SQLite query on MessageIndex
-            msgs = await self._gwy.msg_db.qry(
-                sql, (self.id[:_ID_SLICE], self.idx, sensor_id[:_ID_SLICE])
-            )
-            if msgs and len(msgs) > 0:
-                msgs_sorted = sorted(msgs, reverse=True)
-                return msgs_sorted[0].payload.get(SZ_TEMPERATURE)  # type: ignore[no-any-return]
+
+            found_msgs = []
+            for m in self._gwy.message_store.state_cache.values():
+                if m.verb in (I_, RP) and m.code == Code._30C9:
+                    if (
+                        m.src.id == self.id[:_ID_SLICE] and str(m._pkt._ctx) == self.idx
+                    ) or (m.src.id == sensor_id[:_ID_SLICE]):
+                        if isinstance(m.payload, dict) and SZ_TEMPERATURE in m.payload:
+                            found_msgs.append(m)
+                        elif isinstance(m.payload, list) and any(
+                            isinstance(d, dict) and SZ_TEMPERATURE in d
+                            for d in m.payload
+                        ):
+                            found_msgs.append(m)
+
+            if found_msgs:
+                latest_msg = max(found_msgs, key=lambda x: x.dtm)
+                if isinstance(latest_msg.payload, dict):
+                    return cast("float | None", latest_msg.payload.get(SZ_TEMPERATURE))
+                elif isinstance(latest_msg.payload, list):
+                    for d in latest_msg.payload:
+                        if isinstance(d, dict) and SZ_TEMPERATURE in d:
+                            if (
+                                d.get(SZ_ZONE_IDX) == self.idx
+                                or latest_msg.src.id == sensor_id[:_ID_SLICE]
+                            ):
+                                return cast("float | None", d.get(SZ_TEMPERATURE))
+                    if isinstance(latest_msg.payload[0], dict):
+                        return cast(
+                            "float | None", latest_msg.payload[0].get(SZ_TEMPERATURE)
+                        )
             return None
 
         return cast(
             float | None,
-            await self.state_store._msg_value(
+            await self.entity_state.get_value(
                 Code._30C9, key=SZ_TEMPERATURE, zone_idx=self.idx
             ),
         )
@@ -797,7 +816,7 @@ class Zone(ZoneSchedule):
         """Return an estimate of the zone's current window_open state."""
         return cast(
             bool | None,
-            await self.state_store._msg_value(
+            await self.entity_state.get_value(
                 Code._12B0, key=SZ_WINDOW_OPEN, zone_idx=self.idx
             ),
         )
@@ -921,7 +940,7 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
     async def relay_demand(self) -> float | None:  # 0008 (NOTE: CTLs won't RP|0008)
         return cast(
             float | None,
-            await self.state_store._msg_value(Code._0008, key=SZ_RELAY_DEMAND),
+            await self.entity_state.get_value(Code._0008, key=SZ_RELAY_DEMAND),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -950,7 +969,7 @@ class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
         )
 
     async def mix_config(self) -> PayDictT._1030:
-        return cast(PayDictT._1030, await self.state_store._msg_value(Code._1030))
+        return cast(PayDictT._1030, await self.entity_state.get_value(Code._1030))
 
     async def params(self) -> dict[str, Any]:
         return {
@@ -979,7 +998,7 @@ class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
     async def heat_demand(self) -> float | None:  # 3150
         """Return the zone's heat demand, estimated from its devices' heat demand."""
         if (
-            demand := await self.state_store._msg_value(Code._3150, key=SZ_HEAT_DEMAND)
+            demand := await self.entity_state.get_value(Code._3150, key=SZ_HEAT_DEMAND)
         ) is not None:
             return _transform(demand)
         return None

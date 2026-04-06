@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.database import MessageStore
+from ramses_rf.message_store import MessageStore
 from ramses_tx import exceptions as exc
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
@@ -130,8 +130,8 @@ async def test_shuffle_from_log_file_sql(dir_name: Path) -> None:
     packets = shuffle_dict(packets)
 
     await gwy._restore_cached_packets(packets)
-    if gwy.msg_db:
-        gwy.msg_db.flush()
+    if gwy.message_store:
+        gwy.message_store.flush()
     await asyncio.sleep(0)  # Yield to allow flush callbacks to fire
 
     await assert_expected_set(gwy, expected)
@@ -147,7 +147,7 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
 
     # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
-    #         assert dev._msgs == gwy.msg_db.get(
+    #         assert dev._msgs == gwy.message_store.get(
     #             src=dev.id, dtms=list(dev._msgs.keys())
     #         ), f"Assert 0: {dev} qry != _msgs_"
 
@@ -163,7 +163,7 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
 
     # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
-    #         assert dev._msgs == gwy.msg_db.get(
+    #         assert dev._msgs == gwy.message_store.get(
     #             src=dev.id, dtms=list(dev._msgs.keys())
     #         ), f"Assert 2: {dev} qry != _msgs_"
 
@@ -185,7 +185,7 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
 
     # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
-    #         assert dev._msgs == gwy.msg_db.get(
+    #         assert dev._msgs == gwy.message_store.get(
     #             src=dev.id, dtms=list(dev._msgs.keys())
     #         ), f"Assert 1: {dev} qry != _msgs_"
 
@@ -197,15 +197,15 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
     for _ in range(3):
         packets = shuffle_dict(packets)
         await gwy._restore_cached_packets(packets)
-        if gwy.msg_db:
-            gwy.msg_db.flush()
+        if gwy.message_store:
+            gwy.message_store.flush()
         await asyncio.sleep(0)  # Yield to allow flush callbacks to fire
 
         await assert_expected_set(gwy, expected)
 
     # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
-    #         assert dev._msgs == gwy.msg_db.get(
+    #         assert dev._msgs == gwy.message_store.get(
     #             src=dev.id, dtms=list(dev._msgs.keys())
     #         ), f"Assert 3: {dev} qry != _msgs_"
 

@@ -211,8 +211,8 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
                 await reader_task
 
         # Ensure database is flushed if it exists
-        if gwy.msg_db:
-            gwy.msg_db.flush()
+        if gwy.message_store:
+            gwy.message_store.flush()
 
         # 5. Extract State for Snapshot
         # We create a deterministic dictionary of the system state

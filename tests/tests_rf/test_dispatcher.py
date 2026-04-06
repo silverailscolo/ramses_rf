@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import Device, dispatcher
-from ramses_rf.database import MessageIndex
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.message_store import MessageStore
 from ramses_tx import Address, DeviceIdT, Message, Packet
 
 
@@ -43,8 +43,8 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
 
     gateway._engine._include = {}
 
-    # activate the SQLite MessageIndex
-    gateway.msg_db = MessageIndex(maintain=False)
+    # activate the SQLite MessageStore
+    gateway.message_store = MessageStore(maintain=False)
 
     yield gateway
 
@@ -80,7 +80,7 @@ class Test_dispatcher_gateway:
 
         dispatcher._create_devices_from_addrs(mock_gateway, self.msg5)
 
-        mock_gateway.msg_db.stop()  # close sqlite3 connection
+        mock_gateway.message_store.stop()  # close sqlite3 connection
 
     def test_check_msg_addrs(self) -> None:
         """Test address validation."""

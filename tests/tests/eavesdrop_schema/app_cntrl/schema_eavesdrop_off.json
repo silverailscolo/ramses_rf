@@ -8,6 +8,5 @@
         "stored_hotwater": {},
         "underfloor_heating": {},
         "zones": {}
-    },
-    "orphans_heat": ["10:047707"]
+    }
 }

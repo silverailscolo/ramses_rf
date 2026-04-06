@@ -263,13 +263,13 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
         return cast(
-            PayDictT._1100 | None, await self.state_store._msg_value(Code._1100)
+            PayDictT._1100 | None, await self.entity_state.get_value(Code._1100)
         )
 
     async def heat_demand(self) -> float | None:  # 3150/FC
         return cast(
             float | None,
-            await self.state_store._msg_value(
+            await self.entity_state.get_value(
                 Code._3150, domain_id=FC, key=SZ_HEAT_DEMAND
             ),
         )
@@ -339,7 +339,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         """Return the system's configuration."""
 
         params: dict[str, Any] = {SZ_SYSTEM: {}}
-        params[SZ_SYSTEM]["tpi_params"] = await self.state_store._msg_value(Code._1100)
+        params[SZ_SYSTEM]["tpi_params"] = await self.entity_state.get_value(Code._1100)
         return params
 
     async def status(self) -> dict[str, Any]:
@@ -376,6 +376,148 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             )
             self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0)
 
+    async def _eavesdrop_zone_sensors(self, msg: Message, prev: Message | None) -> None:
+        """Discover zone sensors by correlating 30C9 temperature broadcasts.
+
+        This implements a bi-directional correlation strategy to handle out-of-order
+        packet logs, matching TRVs to Zones regardless of which broadcasts first.
+
+        :param msg: The incoming 30C9 message.
+        :type msg: Message
+        :param prev: The previously cached 30C9 message for temporal context.
+        :type prev: Message | None
+        """
+        if msg._has_array:
+            await self._eavesdrop_from_controller_broadcast(msg, prev)
+        elif msg.src.type == "04":
+            await self._eavesdrop_from_trv_broadcast(msg)
+
+    async def _eavesdrop_from_controller_broadcast(
+        self, msg: Message, prev: Message | None
+    ) -> None:
+        """Correlate recently heard TRV temperatures against a new zone array.
+
+        :param msg: The incoming 30C9 array message from the controller.
+        :type msg: Message
+        :param prev: The previous 30C9 array message to check which zones changed.
+        :type prev: Message | None
+        """
+        if prev is None:
+            return
+
+        # TODO: use msgz/I, not RP
+        secs = cast(
+            int | None,
+            await self.entity_state.get_value(Code._1F09, key="remaining_seconds"),
+        )
+        if secs is None or msg.dtm > prev.dtm + td(seconds=secs + 5):
+            # can only compare against 30C9 pkt from the last cycle
+            return
+
+        # _LOGGER.warning("System state (before): %s", self.schema)
+
+        # zones with changed temps
+        changed_zones: dict[str, float] = {
+            z[SZ_ZONE_IDX]: z[SZ_TEMPERATURE]
+            for z in msg.payload
+            if z not in prev.payload and z[SZ_TEMPERATURE] is not None
+        }
+        if not changed_zones:
+            # ctl's 30C9 says no zones have changed temps during this cycle
+            return
+
+        def _testable_zones(changed_zones: dict[str, float]) -> dict[float, str]:
+            return {
+                t1: i1
+                for i1, t1 in changed_zones.items()
+                if self.zone_by_idx[i1].sensor is None
+                and t1 not in [t2 for i2, t2 in changed_zones.items() if i2 != i1]
+            }
+
+        testable_zones = _testable_zones(changed_zones)
+        if not testable_zones:
+            return  # no testable zones
+
+        testable_sensors_map: dict[float, list[Device]] = {}
+        for d in self._gwy.device_registry.devices:
+            if isinstance(d, Temperature) and d.ctl in (self.ctl, None):
+                d_temp = await d.temperature()
+                d_msgs = await d.entity_state.get_message_log_flat()
+                if (
+                    d_temp is not None
+                    and Code._30C9 in d_msgs
+                    and d_msgs[Code._30C9].dtm > prev.dtm
+                ):
+                    if d_temp not in testable_sensors_map:
+                        testable_sensors_map[d_temp] = []
+                    testable_sensors_map[d_temp].append(d)
+
+        # COLLISION ABSTENTION: Drop temperatures reported by multiple sensors
+        unique_sensors = {
+            t: devs[0] for t, devs in testable_sensors_map.items() if len(devs) == 1
+        }
+
+        if not unique_sensors:
+            return  # no unique testable sensors available, must abstain
+
+        matched_pairs = {
+            sensor: zone_idx
+            for temp_z, zone_idx in testable_zones.items()
+            for temp_s, sensor in unique_sensors.items()
+            if temp_z == temp_s
+        }
+
+        for sensor, zone_idx in matched_pairs.items():
+            zone = self.zone_by_idx[zone_idx]
+            self._gwy.device_registry.get_device(sensor.id, parent=zone, is_sensor=True)
+
+        # _LOGGER.warning("System state (after): %s", self.schema)
+
+        # now see if we can allocate the controller as a sensor...
+        if any(z for z in self.zones if z.sensor is self.ctl):
+            return  # the controller is already a sensor
+
+        remaining_zones = _testable_zones(changed_zones)
+        if len(remaining_zones) != 1:
+            return  # no testable zones
+
+        temp, zone_idx = tuple(remaining_zones.items())[0]
+
+        # can safely(?) assume this zone is using the CTL as a sensor...
+        if not [s for s in unique_sensors if s == temp]:
+            zone = self.zone_by_idx[zone_idx]
+            self._gwy.device_registry.get_device(
+                self.ctl.id, parent=zone, is_sensor=True
+            )
+
+        # _LOGGER.warning("System state (finally): %s", self.schema)
+
+    async def _eavesdrop_from_trv_broadcast(self, msg: Message) -> None:
+        """Correlate a new TRV temperature broadcast against known zones.
+
+        :param msg: The incoming 30C9 message from a TRV.
+        :type msg: Message
+        """
+        if not isinstance(msg.payload, dict):
+            return
+
+        trv_temp = msg.payload.get(SZ_TEMPERATURE)
+        if trv_temp is None:
+            return
+
+        matching_zones = []
+        for zone in self.zones:
+            if zone.sensor is None:
+                zone_temp = await zone.temperature()
+                if zone_temp == trv_temp:
+                    matching_zones.append(zone)
+
+        # COLLISION ABSTENTION: Bind only if exactly one zone matches this temp
+        if len(matching_zones) == 1:
+            self._gwy.device_registry.get_device(
+                msg.src.id, parent=matching_zones[0], is_sensor=True
+            )
+
     def _handle_msg(self, msg: Message) -> None:
         """Process any relevant message.
 
@@ -389,88 +531,6 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 for k, v in d.items()
                 if k == SZ_ZONE_IDX
             ]
-
-        async def eavesdrop_zone_sensors(this: Message, prev: Message) -> None:
-            """Determine each zone's sensor by matching zone/sensor temperatures."""
-
-            def _testable_zones(changed_zones: dict[str, float]) -> dict[float, str]:
-                return {
-                    t1: i1
-                    for i1, t1 in changed_zones.items()
-                    if self.zone_by_idx[i1].sensor is None
-                    and t1 not in [t2 for i2, t2 in changed_zones.items() if i2 != i1]
-                }
-
-            # TODO: use msgz/I, not RP
-            secs = cast(
-                int | None,
-                await self.state_store._msg_value(Code._1F09, key="remaining_seconds"),
-            )
-            if secs is None or this.dtm > prev.dtm + td(seconds=secs + 5):
-                return  # can only compare against 30C9 pkt from the last cycle
-
-            # _LOGGER.warning("System state (before): %s", self.schema)
-
-            changed_zones: dict[str, float] = {
-                z[SZ_ZONE_IDX]: z[SZ_TEMPERATURE]
-                for z in this.payload
-                if z not in prev.payload and z[SZ_TEMPERATURE] is not None
-            }  # zones with changed temps
-            if not changed_zones:
-                return  # ctl's 30C9 says no zones have changed temps during this cycle
-
-            testable_zones = _testable_zones(changed_zones)
-            if not testable_zones:
-                return  # no testable zones
-
-            testable_sensors = {}
-            for d in self._gwy.device_registry.devices:
-                if isinstance(d, Temperature) and d.ctl in (self.ctl, None):
-                    d_temp = await d.temperature()
-                    d_msgs = await d.state_store._msgs()
-                    if (
-                        d_temp is not None
-                        and Code._30C9 in d_msgs
-                        and d_msgs[Code._30C9].dtm > prev.dtm
-                    ):
-                        testable_sensors[d_temp] = d
-
-            if not testable_sensors:
-                return  # no testable sensors
-
-            matched_pairs = {
-                sensor: zone_idx
-                for temp_z, zone_idx in testable_zones.items()
-                for temp_s, sensor in testable_sensors.items()
-                if temp_z == temp_s
-            }
-
-            for sensor, zone_idx in matched_pairs.items():
-                zone = self.zone_by_idx[zone_idx]
-                self._gwy.device_registry.get_device(
-                    sensor.id, parent=zone, is_sensor=True
-                )
-
-            # _LOGGER.warning("System state (after): %s", self.schema)
-
-            # now see if we can allocate the controller as a sensor...
-            if any(z for z in self.zones if z.sensor is self.ctl):
-                return  # the controller is already a sensor
-
-            remaining_zones = _testable_zones(changed_zones)
-            if len(remaining_zones) != 1:
-                return  # no testable zones
-
-            temp, zone_idx = tuple(remaining_zones.items())[0]
-
-            # can safely(?) assume this zone is using the CTL as a sensor...
-            if not [s for s in testable_sensors if s == temp]:
-                zone = self.zone_by_idx[zone_idx]
-                self._gwy.device_registry.get_device(
-                    self.ctl.id, parent=zone, is_sensor=True
-                )
-
-            # _LOGGER.warning("System state (finally): %s", self.schema)
 
         def handle_msg_by_zone_idx(zone_idx: str, msg: Message) -> None:
             if zone := self.zone_by_idx.get(zone_idx):
@@ -542,14 +602,14 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         if (  # TODO: edge case: 1 zone with CTL as SEN
             self._gwy.config.enable_eavesdrop
             and msg.code == Code._30C9
-            and (msg._has_array or len(self.zones) == 1)
             and any(z for z in self.zones if not z.sensor)
         ):
             prev = self._prev_30c9
-            self._prev_30c9 = msg
-            if prev is not None:
-                task = asyncio.create_task(eavesdrop_zone_sensors(msg, prev))
-                self._gwy.add_task(task)
+            if msg._has_array:
+                self._prev_30c9 = msg
+
+            task = asyncio.create_task(self._eavesdrop_zone_sensors(msg, prev))
+            self._gwy.add_task(task)
 
     # TODO: should be a private method
     def get_htg_zone(
@@ -695,7 +755,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
     async def schedule_version(self) -> int | None:
         return cast(
             int | None,
-            await self.state_store._msg_value(Code._0006, key=SZ_CHANGE_COUNTER),
+            await self.entity_state.get_value(Code._0006, key=SZ_CHANGE_COUNTER),
         )
 
     async def status(self) -> dict[str, Any]:
@@ -715,7 +775,7 @@ class Language(SystemBase):  # 0100
 
     async def language(self) -> str | None:
         return cast(
-            str | None, await self.state_store._msg_value(Code._0100, key=SZ_LANGUAGE)
+            str | None, await self.entity_state.get_value(Code._0100, key=SZ_LANGUAGE)
         )
 
     async def params(self) -> dict[str, Any]:
@@ -914,15 +974,15 @@ class SysMode(SystemBase):  # 2E04
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
     async def system_mode(self) -> dict[str, Any] | None:  # 2E04
-        if self._gwy.msg_db:
-            msgs = await self._gwy.msg_db.get(
+        if self._gwy.message_store:
+            msgs = await self._gwy.message_store.get(
                 code=Code._2E04, src=self._z_id, ctx=self._z_idx
             )
             if msgs:
                 return cast(dict[str, Any], msgs[0].payload)
 
         return cast(
-            dict[str, Any] | None, await self.state_store._msg_value(Code._2E04)
+            dict[str, Any] | None, await self.entity_state.get_value(Code._2E04)
         )
 
     async def set_mode(

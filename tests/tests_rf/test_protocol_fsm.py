@@ -33,10 +33,6 @@ from ramses_tx.typing import QosParams
 
 from .virtual_rf import VirtualRf
 
-# patched constants
-DEFAULT_MAX_RETRIES = 0  # #                ramses_tx.protocol
-MAX_DUTY_CYCLE = 1.0  # #                   ramses_tx.protocol
-
 # other constants
 CALL_LATER_DELAY = 0.001  # FIXME: this is hardware-specific
 
@@ -68,17 +64,17 @@ RQ_PKT_1 = Packet(dt.now(), f"... {RQ_CMD_STR_1}")
 RP_PKT_1 = Packet(dt.now(), f"... {RP_CMD_STR_1}")
 
 
-# ### FIXTURES #########################################################################
+# ### FIXTURES #################################################################
 
 
 @pytest.fixture(autouse=True)
 def patch_port_transport_delays() -> Generator[None, None, None]:
     """Bypass the real-world signature timeouts and duty cycle limits for tests."""
-    patch_1 = patch("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
-    patch_2 = patch("ramses_tx.transport.port._SIGNATURE_MAX_TRYS", 0)
-    patch_3 = patch("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0)
-
-    with patch_1, patch_2, patch_3:
+    with (
+        patch("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True),
+        patch("ramses_tx.transport.port._SIGNATURE_MAX_TRYS", 0),
+        patch("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0),
+    ):
         yield
 
 
@@ -93,7 +89,7 @@ async def protocol(rf: VirtualRf) -> AsyncGenerator[PortProtocol, None]:
     assert isinstance(protocol, PortProtocol)  # mypy
     assert isinstance(protocol._context, ProtocolContext)  # mypy
 
-    protocol._disable_qos = False  # HACK: needed for tests to succeed (default: None?)
+    protocol._disable_qos = False  # HACK: needed for tests to succeed
 
     assert protocol._context.echo_timeout == DEFAULT_ECHO_TIMEOUT
     assert protocol._context.reply_timeout == DEFAULT_RPLY_TIMEOUT
@@ -105,7 +101,7 @@ async def protocol(rf: VirtualRf) -> AsyncGenerator[PortProtocol, None]:
         protocol,
         config=TransportConfig(),
         port_name=rf.ports[0],
-        port_config={},
+        port_config=dict(),
     )
     # Cast to PortTransport to access internal test-specific details
     transport = cast(PortTransport, _transport)
@@ -133,7 +129,7 @@ async def protocol(rf: VirtualRf) -> AsyncGenerator[PortProtocol, None]:
         await rf.stop()
 
 
-# ######################################################################################
+# ##############################################################################
 
 
 async def assert_protocol_state(
@@ -192,7 +188,7 @@ async def async_pkt_received(  # type: ignore[no-any-unimported]
     # assert_state_temp(protocol, None, 0)
 
 
-# ### TESTS ############################################################################
+# ### TESTS ####################################################################
 
 
 async def _test_flow_30x(protocol: PortProtocol) -> None:
@@ -212,7 +208,9 @@ async def _test_flow_30x(protocol: PortProtocol) -> None:
     # STEP 2: Send an RQ cmd, then receive the corresponding RP pkt...
     task = rf._loop.create_task(protocol._send_cmd(RQ_CMD_0, qos=qos), name="send_2")
     protocol._loop.call_later(
-        CALL_LATER_DELAY, ser.write, bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n"
+        CALL_LATER_DELAY,
+        ser.write,
+        bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n",
     )
     assert await task == RP_PKT_0
 
@@ -225,14 +223,17 @@ async def _test_flow_30x(protocol: PortProtocol) -> None:
 
     # STEP 4: Send an RQ cmd, then receive the corresponding RP pkt...
     task = rf._loop.create_task(protocol._send_cmd(RQ_CMD_1, qos=qos), name="send_4A")
-    # sk = rf._loop.create_task(protocol._send_cmd(RQ_CMD_1, qos=qos), name="send_4B")
 
     # TODO: make these deterministic so ser replies *only after* it receives cmd
     protocol._loop.call_later(
-        CALL_LATER_DELAY, ser.write, bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n"
+        CALL_LATER_DELAY,
+        ser.write,
+        bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n",
     )
     protocol._loop.call_later(
-        CALL_LATER_DELAY, ser.write, bytes(str(RP_PKT_1).encode("ascii")) + b"\r\n"
+        CALL_LATER_DELAY,
+        ser.write,
+        bytes(str(RP_PKT_1).encode("ascii")) + b"\r\n",
     )
 
     assert await task == RP_PKT_1
@@ -242,7 +243,7 @@ async def _test_flow_401(protocol: PortProtocol) -> None:
     qos = QosParams(wait_for_reply=False)
 
     numbers = list(range(24))
-    tasks = {}
+    tasks = dict()
 
     for i in numbers:
         cmd = Command.put_sensor_temp("03:123456", i)
@@ -259,7 +260,7 @@ async def _test_flow_402(protocol: PortProtocol) -> None:
     qos = QosParams(wait_for_reply=False)
 
     numbers = list(range(24))
-    tasks = {}
+    tasks = dict()
 
     for i in numbers:
         cmd = Command.put_sensor_temp("03:123456", i)
@@ -286,7 +287,7 @@ async def _test_flow_qos_helper(
 async def _test_flow_60x(protocol: PortProtocol, num_cmds: int = 1) -> None:
     #
     # Setup...
-    tasks = []
+    tasks = list()
     for idx in range(num_cmds):
         cmd = Command.get_zone_temp("01:123456", f"{idx:02X}")
         coro = protocol._send_cmd(cmd, qos=QosParams(wait_for_reply=False))
@@ -399,30 +400,3 @@ async def test_flow_602(protocol: PortProtocol) -> None:
 async def test_flow_qos(protocol: PortProtocol) -> None:
     """Check the wait_for_reply kwarg."""
     await _test_flow_qos(protocol)
-
-
-# @pytest_asyncio.fixture
-# async def async_benchmark(benchmark: pytest.FixtureDef) -> Callable[..., None]:
-#     event_loop = asyncio.get_running_loop()
-
-#     def _wrapper(func: Callable, *args: Any, **kwargs: Any) -> None:
-#         if asyncio.iscoroutinefunction(func):
-
-#             @benchmark
-#             def _():
-#                 return event_loop.run_until_complete(func(*args, **kwargs))
-
-#         else:
-#             benchmark(func, *args, **kwargs)
-
-#     return _wrapper
-
-
-# @pytest.mark.xdist_group(name="virt_serial")
-# def test_benchmark_100(async_benchmark) -> None:
-#     async_benchmark(_test_flow_10x)
-
-
-# @pytest.mark.xdist_group(name="virt_serial")
-# def test_benchmark_300(async_benchmark) -> None:
-#     async_benchmark(_test_flow_30x)

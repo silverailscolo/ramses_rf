@@ -1,3 +1,4 @@
+# src/ramses_rf/entity_base.py
 #!/usr/bin/env python3
 """RAMSES RF - Base class for all RAMSES-II objects: devices and constructs."""
 
@@ -11,11 +12,9 @@ from types import ModuleType
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_tx import Priority, QosParams
-from ramses_tx.address import ALL_DEVICE_ID
-from ramses_tx.const import RQ, Code
 
 from .discovery import DiscoveryService
-from .state_store import StateStore
+from .entity_state import EntityState
 
 if TYPE_CHECKING:
     from ramses_tx import Command, Message, Packet
@@ -70,7 +69,7 @@ class _Entity:
         self._qos_tx_count = 0
 
         # Specialized components via Composition
-        self.state_store: StateStore = StateStore(
+        self.entity_state: EntityState = EntityState(
             cast("DeviceInterface", self), self._gwy
         )
         self.discovery: DiscoveryService = DiscoveryService(self, self._gwy)
@@ -104,20 +103,11 @@ class _Entity:
             )
 
     def _handle_msg(self, msg: Message) -> None:
-        """Delegate message handling to the StateStore.
+        """Deprecated in Phase 2.5: Entities no longer cache their own packets.
 
-        :param msg: The message to process.
-        :type msg: Message
+        Routing is handled directly by the Gateway into the central MessageStore.
         """
-        if not (
-            msg.src.id == self.id[:_ID_SLICE]
-            or (msg.dst.id == self.id[:_ID_SLICE] and msg.verb != RQ)
-            or (msg.dst.id == ALL_DEVICE_ID and msg.code == Code._1FC9)
-        ):
-            return
-
-        # Direct the message to the StateStore for persistence and indexing
-        self.state_store._handle_msg(msg)
+        pass
 
     def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task | None:
         """Proxy command sending to the Gateway.

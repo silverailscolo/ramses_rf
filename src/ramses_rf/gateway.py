@@ -60,7 +60,6 @@ from ramses_tx import (
 from ramses_tx.transport import TransportConfig
 from ramses_tx.typing import PktLogConfigT, PortConfigT
 
-from .database import MessageStore
 from .device import HgiGateway
 from .device_filter import DeviceFilter
 from .device_registry import DeviceRegistry
@@ -71,6 +70,7 @@ from .interfaces import (
     GatewayInterface,
     MessageStoreInterface,
 )
+from .message_store import MessageStore
 from .schemas import load_schema
 from .system import Evohome
 from .typing import DeviceListT
@@ -256,7 +256,7 @@ class Gateway(GatewayInterface):
             hgi_id_provider=lambda: getattr(self.hgi, "id", None),
         )
 
-        self._msg_db: MessageStoreInterface | None = None
+        self._message_store: MessageStoreInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
 
     def __repr__(self) -> str:
@@ -288,22 +288,18 @@ class Gateway(GatewayInterface):
         return self._gwy_config
 
     @property
-    def msg_db(self) -> MessageStoreInterface | None:
+    def message_store(self) -> MessageStoreInterface | None:
         """Return the message database if configured.
-
-        :returns: The configured MessageStoreInterface or None.
-        :rtype: MessageStoreInterface | None
+        ...
         """
-        return self._msg_db
+        return self._message_store
 
-    @msg_db.setter
-    def msg_db(self, value: MessageStoreInterface | None) -> None:
+    @message_store.setter
+    def message_store(self, value: MessageStoreInterface | None) -> None:
         """Set the message database.
-
-        :param value: The MessageStoreInterface instance to set, or None.
-        :type value: MessageStoreInterface | None
+        ...
         """
-        self._msg_db = value
+        self._message_store = value
 
     @property
     def hgi(self) -> HgiGateway | None:
@@ -384,11 +380,8 @@ class Gateway(GatewayInterface):
 
                 self.add_task(self._engine._loop.create_task(_periodic_flush()))
 
-        # initialize SQLite index, set in _tx/Engine
-        if self._engine._sqlite_index:  # TODO(eb): default to True in Q1 2026
-            _LOGGER.info("Ramses RF starts SQLite MessageStore")
-            # if activated in ramses_cc > Engine or set in tests
-            self.create_sqlite_message_index()
+        _LOGGER.info("Ramses RF starts central MessageStore")
+        self.create_sqlite_message_index()
 
         # temporarily turn on discovery, remember original state
         self.config.disable_discovery, disable_discovery = (
@@ -422,7 +415,7 @@ class Gateway(GatewayInterface):
         :returns: None
         :rtype: None
         """
-        self._msg_db = MessageStore(
+        self._message_store = MessageStore(
             disk_path=self.config.database_path
         )  # start the index
 
@@ -452,8 +445,8 @@ class Gateway(GatewayInterface):
             )
             self._pkt_log_listener = None
 
-        if self._msg_db:
-            self._msg_db.stop()
+        if self._message_store:
+            self._message_store.stop()
 
     async def _pause(self, *args: Any) -> None:
         """Pause the (unpaused) gateway (disables sending/discovery).
@@ -529,27 +522,13 @@ class Gateway(GatewayInterface):
             #     return True
             return include_expired or not msg._expired
 
-        if self.msg_db:
+        pkts = {}
+        if self.message_store:
             pkts = {
                 f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
-                for msg in await self.msg_db.all(include_expired=True)
+                for msg in await self.message_store.all(include_expired=True)
                 if wanted_msg(msg, include_expired=include_expired)
             }
-        else:  # deprecated, to be removed in Q1 2026
-            msgs = []
-            for device in self.device_registry.devices:
-                msgs.extend(await device.state_store._msg_list())
-            for system in self.device_registry.systems:
-                msgs.extend(list((await system.state_store._msgs()).values()))
-                for z in system.zones:
-                    msgs.extend(list((await z.state_store._msgs()).values()))
-
-            pkts = {  # BUG: assumes pkts have unique dtms: may be untrue for contrived logs
-                f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
-                for msg in msgs
-                if wanted_msg(msg, include_expired=include_expired)
-            }
-            # _LOGGER.warning("Missing MessageIndex")
 
         await self._resume()
 
@@ -579,15 +558,13 @@ class Gateway(GatewayInterface):
             """
             _LOGGER.info("Gateway: Clearing existing schema/state...")
 
-            # self._schema = {}
-
             self._tcs = None
             self.device_registry.devices.clear()
             self.device_registry.device_by_id.clear()
             self._engine._prev_msg = None
             self._engine._this_msg = None
 
-        tmp_transport: RamsesTransportT  # mypy hint
+        tmp_transport: RamsesTransportT
 
         _LOGGER.debug("Gateway: Restoring a cached packet log...")
         await self._pause()

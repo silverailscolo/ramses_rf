@@ -1,3 +1,4 @@
+# src/ramses_rf/sqlite_worker.py
 """RAMSES RF - Background storage worker for async I/O."""
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ class SnapshotRequest(NamedTuple):
 QueueItem = PacketLogEntry | PruneRequest | SnapshotRequest | tuple[str, Any] | None
 
 
-class StorageWorker:
+class SQLiteWorker:
     """A background worker thread to handle blocking storage I/O asynchronously."""
 
     def __init__(self, db_path: str = ":memory:", disk_path: str | None = None) -> None:
@@ -84,14 +85,14 @@ class StorageWorker:
 
         # Wait for the worker to set the sentinel
         if not sentinel.wait(timeout):
-            _LOGGER.warning("StorageWorker flush timed out")
+            _LOGGER.warning("SQLiteWorker flush timed out")
 
     def stop(self) -> None:
         """Signal the worker to stop processing and close resources safely."""
         self._queue.put(None)  # Poison pill
         self._thread.join(timeout=3.0)  # Give the worker a chance to wrap up gracefully
         if self._thread.is_alive():
-            _LOGGER.warning("StorageWorker thread did not cleanly exit.")
+            _LOGGER.warning("SQLiteWorker thread did not cleanly exit.")
 
     def _init_db(self, conn: sqlite3.Connection) -> None:
         """Initialize the database schema."""
@@ -118,7 +119,7 @@ class StorageWorker:
 
     def _run(self) -> None:
         """The main loop running in the background thread."""
-        _LOGGER.debug("StorageWorker thread started.")
+        _LOGGER.debug("SQLiteWorker thread started.")
 
         # Setup SQLite connection in this thread
         try:
@@ -229,9 +230,9 @@ class StorageWorker:
                     item[1].set()
 
             except Exception as err:
-                _LOGGER.exception("StorageWorker encountered an error: %s", err)
+                _LOGGER.exception("SQLiteWorker encountered an error: %s", err)
 
         # Cleanup
         with contextlib.suppress(sqlite3.ProgrammingError):
             conn.close()
-        _LOGGER.debug("StorageWorker thread stopped.")
+        _LOGGER.debug("SQLiteWorker thread stopped.")

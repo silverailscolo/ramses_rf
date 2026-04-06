@@ -33,7 +33,7 @@ def mock_gwy() -> MagicMock:
     gwy.config.enable_eavesdrop = False
     gwy.device_registry.get_device.return_value = MagicMock()
     gwy.async_send_cmd = AsyncMock(return_value="mocked_packet")
-    gwy.msg_db = None
+    gwy.message_store = None
     return gwy
 
 
@@ -106,8 +106,8 @@ async def test_zone_schedule(mock_tcs: MagicMock) -> None:
     zon._schedule.set_schedule = AsyncMock()
     zon._schedule.schedule = []
 
-    zon.state_store = MagicMock()
-    zon.state_store._msg_value = AsyncMock(return_value={})
+    zon.entity_state = MagicMock()
+    zon.entity_state._msg_value = AsyncMock(return_value={})
 
     await zon.get_schedule(force_io=True)
     zon._schedule.get_schedule.assert_called_once_with(force_io=True)

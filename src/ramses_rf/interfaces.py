@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Any, Protocol
 
-from ramses_tx import Code, Command, Message, Packet, Priority, QosParams
+from ramses_tx import Command, Message, Packet, Priority, QosParams
 
 from .typing import DeviceIdT, DeviceListT
 
@@ -25,59 +25,59 @@ class CommandDispatcher(Protocol):
 
 
 class MessageStoreInterface(Protocol):
-    """Interface for the SQLite Message Index database."""
-
-    def add(self, msg: Message) -> Message | None:
-        """Add a message to the index."""
-        ...
-
+    def add(self, msg: Any) -> Any: ...
     def add_record(
         self, src: str, code: str = "", verb: str = "", payload: str = "00"
-    ) -> None:
-        """Add a single record to the index."""
-        ...
-
-    async def rem(
-        self, msg: Message | None = None, **kwargs: Any
-    ) -> tuple[Message, ...] | None:
-        """Remove a set of message(s) from the index."""
-        ...
-
+    ) -> None: ...
     async def get(
-        self, msg: Message | None = None, **kwargs: Any
-    ) -> tuple[Message, ...]:
-        """Get a set of message(s) from the index."""
-        ...
-
-    async def contains(self, **kwargs: Any) -> bool:
-        """Check if the index contains at least 1 record matching the fields."""
-        ...
-
-    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
-        """Execute a custom SQL query returning messages."""
-        ...
-
+        self,
+        msg: Any | None = None,
+        *,
+        dtm: Any | None = None,
+        src: str | None = None,
+        dst: str | None = None,
+        verb: str | None = None,
+        code: str | None = None,
+        ctx: Any | None = None,
+        hdr: str | None = None,
+    ) -> tuple[Any, ...]: ...
+    async def rem(
+        self,
+        msg: Any | None = None,
+        *,
+        dtm: Any | None = None,
+        src: str | None = None,
+        dst: str | None = None,
+        verb: str | None = None,
+        code: str | None = None,
+        ctx: Any | None = None,
+        hdr: str | None = None,
+    ) -> tuple[Any, ...] | None: ...
+    async def contains(
+        self,
+        *,
+        dtm: Any | None = None,
+        src: str | None = None,
+        dst: str | None = None,
+        verb: str | None = None,
+        code: str | None = None,
+        ctx: Any | None = None,
+        hdr: str | None = None,
+    ) -> bool: ...
+    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Any]: ...
+    async def all(self, include_expired: bool = False) -> tuple[Any, ...]: ...
+    async def clr(self) -> None: ...
+    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Any, ...]: ...
     async def qry_field(
         self, sql: str, parameters: tuple[str, ...]
-    ) -> list[tuple[Any, ...]]:
-        """Execute a custom SQL query returning raw fields."""
-        ...
+    ) -> list[tuple[Any, ...]]: ...
 
-    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Code]:
-        """Get a list of Codes from the index."""
-        ...
-
-    async def all(self, include_expired: bool = False) -> tuple[Message, ...]:
-        """Get all messages from the index."""
-        ...
-
-    def flush(self) -> None:
-        """Flush the storage worker queue."""
-        ...
-
-    def stop(self) -> None:
-        """Stop the database and close connections."""
-        ...
+    @property
+    def log_by_dtm(self) -> Any: ...
+    @property
+    def state_cache(self) -> Any: ...
+    def flush(self) -> None: ...
+    def stop(self) -> None: ...
 
 
 class DeviceInterface(Protocol):
@@ -194,14 +194,10 @@ class GatewayInterface(Protocol):
         ...
 
     @property
-    def msg_db(self) -> MessageStoreInterface | None:
-        """Return the message database if configured."""
-        ...
+    def message_store(self) -> MessageStoreInterface | None: ...
 
-    @msg_db.setter
-    def msg_db(self, value: MessageStoreInterface | None) -> None:
-        """Set the message database."""
-        ...
+    @message_store.setter
+    def message_store(self, value: MessageStoreInterface | None) -> None: ...
 
     @property
     def config(self) -> Any:
@@ -220,7 +216,3 @@ class GatewayInterface(Protocol):
     ) -> Packet:
         """Send a command asynchronously and return the resulting packet."""
         ...
-
-
-# Alias for backwards compatibility during Phase 2 migration
-MessageIndexInterface = MessageStoreInterface

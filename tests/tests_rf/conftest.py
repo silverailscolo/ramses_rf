@@ -65,7 +65,7 @@ def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0)
 
 
-# TODO: add teardown to cleanup orphan MessageIndex thread
+# TODO: add teardown to cleanup orphan MessageStore thread
 # @pytest.fixture(scope="session", autouse=True)
 # def close_timer_threads(request: pytest.FixtureRequest) -> None:
 #     import threading

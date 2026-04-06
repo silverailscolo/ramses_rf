@@ -84,17 +84,17 @@ class DiscoveryService:
         :returns: A dictionary mapping supported Codes to their names.
         :rtype: dict[Code, Any]
         """
-        if self._gwy.msg_db:
+        if self._gwy.message_store:
             return {
                 code: CODES_SCHEMA[code]["name"]
                 for code in sorted(
-                    await self._gwy.msg_db.get_rp_codes(
+                    await self._gwy.message_store.get_rp_codes(
                         (self._entity.id[:9], self._entity.id[:9])
                     )
                 )
                 if self.is_not_deprecated_cmd(code)
             }
-        msgz_dict = await self._entity.state_store._msgz()
+        msgz_dict = await self._entity.entity_state.get_state_cache_nested()
         return {
             code: (CODES_SCHEMA[code]["name"] if code in CODES_SCHEMA else None)
             for code in sorted(msgz_dict)
@@ -112,24 +112,26 @@ class DiscoveryService:
             return cast("OtDataId", int(msg_id, 16))
 
         res: list[str] = []
-        if self._gwy.msg_db:
-            sql = """
-                SELECT ctx from messages WHERE
-                verb = 'RP'
-                AND code = '3220'
-                AND (src = ? OR dst = ?)
-            """
-            for rec in await self._gwy.msg_db.qry_field(
-                sql, (self._entity.id[:9], self._entity.id[:9])
-            ):
-                _LOGGER.debug("Fetched OT ctx from index: %s", rec[0])
-                val = f"{rec[0]:02X}" if isinstance(rec[0], int) else str(rec[0])
-                res.append(val)
+        if self._gwy.message_store:
+            for msg in self._gwy.message_store.log_by_dtm:
+                if (
+                    msg.verb == RP
+                    and msg.code == Code._3220
+                    and (
+                        msg.src.id == self._entity.id[:9]
+                        or msg.dst.id == self._entity.id[:9]
+                    )
+                ):
+                    ctx = msg._pkt._ctx
+                    _LOGGER.debug("Fetched OT ctx from index: %s", ctx)
+                    val = f"{ctx:02X}" if isinstance(ctx, int) else str(ctx)
+                    if val not in res:
+                        res.append(val)
         else:
-            msgz_dict = await self._entity.state_store._msgz()
+            msgz_dict = await self._entity.entity_state.get_state_cache_nested()
             res_dict: dict[bool | str | None, Message] | list[Any] = msgz_dict[
                 Code._3220
-            ].get(RP, [])
+            ].get(RP, {})
             assert isinstance(res_dict, dict)
             res = [str(k) for k in res_dict]
 
@@ -240,7 +242,7 @@ class DiscoveryService:
             """Return the latest message for a header from any source."""
             msgs: list[Message] = []
             for v in (I_, RP):
-                m = await self._entity.state_store._get_msg_by_hdr(
+                m = await self._entity.entity_state._get_msg_by_hdr(
                     hdr[:5] + v + hdr[7:]
                 )
                 if m is not None:
@@ -252,24 +254,21 @@ class DiscoveryService:
                     tcs = getattr(self._entity, "tcs", None)
                     if tcs:
                         tcs_id = getattr(tcs, "id", None)
-                        if self._gwy.msg_db and tcs_id:
-                            sql = """
-                                SELECT dtm, code from messages WHERE
-                                code = ?
-                                AND verb in (' I', 'RP')
-                                AND ctx = 'True'
-                                AND (src = ? OR dst = ?)
-                            """
-                            res = await self._gwy.msg_db.qry(
-                                sql,
-                                (
-                                    cmd_code,
-                                    tcs_id[:9],
-                                    tcs_id[:9],
-                                ),
-                            )
-                            if len(res) > 0:
-                                msgs.append(res[0])
+                        if self._gwy.message_store and tcs_id:
+                            found_msgs = []
+                            for m in self._gwy.message_store.log_by_dtm:
+                                if (
+                                    m.code == cmd_code
+                                    and m.verb in (I_, RP)
+                                    and str(m._pkt._ctx) == "True"
+                                    and (
+                                        m.src.id == tcs_id[:9] or m.dst.id == tcs_id[:9]
+                                    )
+                                ):
+                                    found_msgs.append(m)
+
+                            if found_msgs:
+                                msgs.append(max(found_msgs, key=lambda x: x.dtm))
                             else:
                                 _LOGGER.debug(
                                     "No msg found for hdr %s, task code %s",
@@ -277,7 +276,7 @@ class DiscoveryService:
                                     cmd_code,
                                 )
                         else:
-                            tcs_msgz = await tcs.state_store._msgz()
+                            tcs_msgz = await tcs.entity_state.get_state_cache_nested()
                             msgs.append(tcs_msgz[cmd_code][I_][True])
             except KeyError:
                 pass
