@@ -1164,6 +1164,24 @@ def decode_frame(
     if msg_type in (0b000, 0b010, 0b011, 0b110, 0b111):
         # if frame[4:] != "0000":  # NOTE: this is not a hard rule, even for 0b000
         #     raise ValueError(f"Invalid data-value for msg-type: 0x{frame[4:]}")
+
+        # Ensure expected value keys are populated to prevent KeyErrors upstream
+        if not msg_schema:
+            data_value[SZ_VALUE] = None
+        elif isinstance(msg_schema[VAL], dict):
+            val_hb = msg_schema[VAL].get(HB, msg_schema[VAL])
+            val_lb = msg_schema[VAL].get(LB, msg_schema[VAL])
+            if val_hb == FLAG8 and val_lb == FLAG8:
+                data_value[SZ_VALUE] = None
+            else:
+                data_value[SZ_VALUE_HB] = None
+                data_value[SZ_VALUE_LB] = None
+        elif isinstance(msg_schema.get(VAR), dict):
+            data_value[SZ_VALUE_HB] = None
+            data_value[SZ_VALUE_LB] = None
+        else:
+            data_value[SZ_VALUE] = None
+
         return OPENTHERM_MSG_TYPE[msg_type], data_id, data_value, msg_schema
 
     if not msg_schema:  # may be a corrupt payload
