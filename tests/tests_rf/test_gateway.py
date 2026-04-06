@@ -163,3 +163,32 @@ async def test_gateway_start_initiates_periodic_flush(
 
         # Verify a task was added to the event loop for the periodic flush
         mock_add_task.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_gateway_restore_cached_packets_dto() -> None:
+    """Test that the Gateway seamlessly converts JSON DTOs back into strings for the transport layer."""
+    config = GatewayConfig(disable_discovery=True)
+    gwy = Gateway("/dev/null", config=config)
+
+    with (
+        patch("ramses_rf.gateway.transport_factory", new_callable=AsyncMock) as mock_tf,
+        patch("ramses_rf.gateway.protocol_factory"),
+    ):
+        mock_tf.return_value.get_extra_info = AsyncMock()
+
+        # Simulate the new dictionary format provided by ramses_cc
+        packets = {
+            "2023-01-01T12:00:00.000000": {
+                "rssi": 45,
+                "frame": "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5",
+            }
+        }
+
+        await gwy._restore_cached_packets(packets, _clear_state=True)
+
+        # Verify the transport layer was handed perfectly formatted legacy string logs
+        called_args = mock_tf.call_args[1]
+        assert called_args["packet_dict"] == {
+            "2023-01-01T12:00:00.000000": "045 I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+        }

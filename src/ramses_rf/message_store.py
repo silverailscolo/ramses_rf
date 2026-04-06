@@ -269,9 +269,18 @@ class MessageStore:
                 code = row[4]
                 hdr = row[6]
                 payload_blob = row[8]
+
+                # Extract frame if available, else generate fallback dummy string
+                frame = (
+                    row[9]
+                    if len(row) > 9 and row[9]
+                    else f"{verb} --- {src} {dst} --:------ {code} 001 00"
+                )
                 dtm_str = cast(DtmStrT, dtm_val.isoformat(timespec="microseconds"))
 
-                pkt_line = f"... {verb} --- {src} {dst} --:------ {code} 001 00"
+                # Reconstruct exactly as received. RSSI is stripped natively,
+                # so we pad with `... ` to satisfy Packet logic.
+                pkt_line = f"... {frame}"
                 try:
                     pkt = Packet(dtm_val, pkt_line)
                     msg = Message._from_pkt(pkt)
@@ -407,6 +416,7 @@ class MessageStore:
                 hdr=hdr,
                 plk="|",
                 payload_blob=orjson.dumps({"payload": payload}),
+                frame=f"{verb} --- {src} {src} --:------ {code} 001 {payload}",
             )
             self._worker.submit_packet(data)
 
@@ -451,6 +461,7 @@ class MessageStore:
                 hdr=msg._pkt._hdr,
                 plk=payload_keys(msg.payload),
                 payload_blob=payload_blob,
+                frame=getattr(msg._pkt, "_frame", ""),
             )
 
             self._worker.submit_packet(data)

@@ -319,7 +319,7 @@ class Gateway(GatewayInterface):
         /,
         *,
         start_discovery: bool = True,
-        cached_packets: dict[str, str] | None = None,
+        cached_packets: dict[str, dict[str, Any] | str] | None = None,
     ) -> None:
         """Start the Gateway and Initiate discovery as required.
 
@@ -329,7 +329,7 @@ class Gateway(GatewayInterface):
         :param start_discovery: Whether to initiate the discovery process after start, defaults to True.
         :type start_discovery: bool, optional
         :param cached_packets: A dictionary of packet strings used to restore state, defaults to None.
-        :type cached_packets: dict[str, str] | None, optional
+        :type cached_packets: dict[str, dict[str, Any] | str] | None, optional
         :returns: None
         :rtype: None
         """
@@ -489,13 +489,13 @@ class Gateway(GatewayInterface):
 
     async def get_state(
         self, include_expired: bool = False
-    ) -> tuple[dict[str, Any], dict[str, str]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Return the current schema & state (may include expired packets).
 
         :param include_expired: If True, include expired packets in the state, defaults to False.
         :type include_expired: bool, optional
         :returns: A tuple containing the schema dictionary and the packet log dictionary.
-        :rtype: tuple[dict[str, Any], dict[str, str]]
+        :rtype: tuple[dict[str, Any], dict[str, Any]]
         """
 
         await self._pause()
@@ -522,10 +522,12 @@ class Gateway(GatewayInterface):
             #     return True
             return include_expired or not msg._expired
 
-        pkts = {}
+        pkts: dict[str, Any] = {}
         if self.message_store:
             pkts = {
-                f"{repr(msg._pkt)[:26]}": f"{repr(msg._pkt)[27:]}"
+                msg.dtm.isoformat(timespec="microseconds"): msg._pkt.to_dict(
+                    parsed_payload=msg.payload
+                )
                 for msg in await self.message_store.all(include_expired=True)
                 if wanted_msg(msg, include_expired=include_expired)
             }
@@ -535,15 +537,16 @@ class Gateway(GatewayInterface):
         return await self.schema(), dict(sorted(pkts.items()))
 
     async def _restore_cached_packets(
-        self, packets: dict[str, str], _clear_state: bool = False
+        self, packets: dict[str, dict[str, Any] | str], _clear_state: bool = False
     ) -> None:
         """Restore cached packets (may include expired packets).
 
         This process uses a temporary transport to replay the packet history
-        into the message handler.
+        into the message handler. Converts DTOs back to strings to satisfy
+        legacy requirements in `transport_factory`.
 
-        :param packets: A dictionary of packet strings.
-        :type packets: dict[str, str]
+        :param packets: A dictionary of packet strings or DTO dicts.
+        :type packets: dict[str, dict[str, Any] | str]
         :param _clear_state: If True, reset internal state before restoration (for testing), defaults to False.
         :type _clear_state: bool, optional
         :returns: None
@@ -572,6 +575,17 @@ class Gateway(GatewayInterface):
         if _clear_state:  # only intended for test suite use
             clear_state()
 
+        # Convert DTOs back to strings for the transport layer
+        packet_log: dict[str, str] = {}
+        for dtm, state in packets.items():
+            if isinstance(state, dict):
+                rssi_val = state.get("rssi")
+                rssi = f"{int(rssi_val):03d}" if rssi_val is not None else "..."
+                frame = state.get("frame", "")
+                packet_log[dtm] = f"{rssi[:3].ljust(3)} {frame}"
+            else:
+                packet_log[dtm] = str(state)
+
         # We do not always enforce the known_list whilst restoring a cache because
         # if it does not contain a correctly configured HGI, a 'working' address is
         # used (which could be different to the address in the cache) & wanted packets
@@ -598,7 +612,7 @@ class Gateway(GatewayInterface):
         tmp_transport = await transport_factory(
             tmp_protocol,
             config=TransportConfig(disable_sending=True),
-            packet_dict=packets,
+            packet_dict=packet_log,
         )
 
         await tmp_transport.get_extra_info(SZ_READER_TASK)

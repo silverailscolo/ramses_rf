@@ -26,6 +26,7 @@ class PacketLogEntry(NamedTuple):
     hdr: str
     plk: str
     payload_blob: bytes
+    frame: str
 
 
 class PruneRequest(NamedTuple):
@@ -108,10 +109,15 @@ class SQLiteWorker:
                 ctx    TEXT,
                 hdr    TEXT     NOT NULL UNIQUE,
                 plk    TEXT     NOT NULL,
-                payload_blob BLOB NOT NULL
+                payload_blob BLOB NOT NULL,
+                frame  TEXT     NOT NULL
             )
             """
         )
+        # Handle migration for users with the old schema (Phase 2.1 upgrade)
+        with contextlib.suppress(sqlite3.OperationalError):
+            cursor.execute("ALTER TABLE messages ADD COLUMN frame TEXT DEFAULT ''")
+
         # Create indexes to speed up future reads
         for col in ("verb", "src", "dst", "code", "ctx", "hdr"):
             cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{col} ON messages ({col})")
@@ -196,8 +202,9 @@ class SQLiteWorker:
                         conn.executemany(
                             """
                             INSERT OR REPLACE INTO messages
-                            (dtm, verb, src, dst, code, ctx, hdr, plk, payload_blob)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            (dtm, verb, src, dst, code, ctx, hdr, plk,
+                            payload_blob, frame)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                             batch,
                         )

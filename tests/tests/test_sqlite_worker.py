@@ -42,6 +42,7 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
     This test ensures:
     1. Phase 2.3 (RAM-First): The main memory dict is instantly populated.
     2. Phase 2.1 (Fat DB): The background worker eventually writes all data to SQL.
+    3. Phase 2.5 (Lossless Frame): The original `frame` string survives database hydration.
     """
 
     # 1. Setup: Use pytest's temp path for the DB file
@@ -146,6 +147,10 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
 
         assert disk_path.exists(), "Snapshot file was not created on disk!"
 
+        # Keep a reference to the original frame string for validation
+        original_msg = idx.log_by_dtm[0]
+        original_frame = getattr(original_msg._pkt, "_frame", None)
+
         # 6. Hydration Verification
         idx2 = MessageStore(db_path=":memory:", disk_path=str(disk_path))
         await asyncio.sleep(0.5)
@@ -153,6 +158,11 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         assert len(idx2.log_by_dtm) == MSG_COUNT, (
             f"Hydration failed! Expected {MSG_COUNT} cached items, got {len(idx2.log_by_dtm)}."
         )
+
+        # Ensure the frame was retained properly, meaning DTO conversion won't fail
+        hydrated_msg = idx2.log_by_dtm[0]
+        hydrated_frame = getattr(hydrated_msg._pkt, "_frame", None)
+        assert hydrated_frame == original_frame, "Lossless frame hydration failed!"
 
         # 7. Cleanup
         idx.stop()
