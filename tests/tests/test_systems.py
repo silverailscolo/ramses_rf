@@ -6,10 +6,12 @@ Includes gwy dicts (schema, traits, params, status).
 
 import asyncio
 from pathlib import Path, PurePath
+from unittest.mock import patch
 
 import pytest
 
 from ramses_rf import Gateway
+from ramses_rf.database import MessageStore
 from ramses_tx import exceptions as exc
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
@@ -34,8 +36,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 def test_payload_from_log_file(dir_name: Path) -> None:
-    """Assert that each message payload is as expected (different to other tests)."""
-    # RP --- 02:044328 18:200214 --:------ 2309 003 0007D0       # {'ufh_idx': '00', 'setpoint': 20.0}
+    """Assert that each message payload is as expected."""
+    # RP --- 02:044328 18:200214 --:------ 2309 003 0007D0
+    # {'ufh_idx': '00', 'setpoint': 20.0}
 
     def proc_log_line(log_line: str) -> None:
         if "#" not in log_line:
@@ -80,7 +83,14 @@ async def test_restore_from_log_file_sql(dir_name: Path) -> None:
     """Compare the system built from a log file with the expected results."""
 
     expected: dict = load_expected_results(dir_name) or {}
-    gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+
+    with patch(
+        "ramses_rf.gateway.MessageStore",
+        side_effect=lambda *args, **kwargs: MessageStore(
+            *args, **{**kwargs, "disk_path": None}
+        ),
+    ):
+        gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
 
     await assert_expected_set(gwy, expected)
 
@@ -88,7 +98,7 @@ async def test_restore_from_log_file_sql(dir_name: Path) -> None:
 
 
 async def test_shuffle_from_log_file(dir_name: Path) -> None:
-    """Compare the system built from a shuffled log file with the expected results."""
+    """Compare the system built from a shuffled log file with results."""
 
     expected: dict = load_expected_results(dir_name) or {}
     gwy: Gateway = await load_test_gwy(dir_name)
@@ -104,10 +114,17 @@ async def test_shuffle_from_log_file(dir_name: Path) -> None:
 
 
 async def test_shuffle_from_log_file_sql(dir_name: Path) -> None:
-    """Compare the system built from a shuffled log file with the expected results."""
+    """Compare the system built from a shuffled log file with results."""
 
     expected: dict = load_expected_results(dir_name) or {}
-    gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+
+    with patch(
+        "ramses_rf.gateway.MessageStore",
+        side_effect=lambda *args, **kwargs: MessageStore(
+            *args, **{**kwargs, "disk_path": None}
+        ),
+    ):
+        gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
 
     schema, packets = await gwy.get_state(include_expired=True)
     packets = shuffle_dict(packets)
@@ -123,7 +140,7 @@ async def test_shuffle_from_log_file_sql(dir_name: Path) -> None:
 
 
 async def test_fuzz_from_log_file(dir_name: Path) -> None:
-    """Compare the system built from a fuzzed log file with the expected results."""
+    """Compare the system built from a fuzzed log file with results."""
 
     expected: dict = load_expected_results(dir_name) or {}
     gwy: Gateway = await load_test_gwy(dir_name)
@@ -137,8 +154,8 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
     schema, packets = await gwy.get_state(include_expired=True)
 
     # This loop is non-deterministic, but should be stable (fails rarely)
-    # The logic is that the system state should be consistent regardless of the order
-    # of the packets (within reason)
+    # The logic is that the system state should be consistent regardless
+    # of the order of the packets (within reason)
     for _ in range(3):
         packets = shuffle_dict(packets)
         await gwy._restore_cached_packets(packets)
@@ -154,10 +171,17 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
 
 
 async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
-    """Compare the system built from a fuzzed log file with the expected results, using SQLite msg_db."""
+    """Compare system built from fuzzed log file, using SQLite msg_db."""
 
     expected: dict = load_expected_results(dir_name) or {}
-    gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+
+    with patch(
+        "ramses_rf.gateway.MessageStore",
+        side_effect=lambda *args, **kwargs: MessageStore(
+            *args, **{**kwargs, "disk_path": None}
+        ),
+    ):
+        gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
 
     # for dev in gwy.device_registry.devices:
     #     if dev._msgs:
@@ -168,8 +192,8 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
     schema, packets = await gwy.get_state(include_expired=True)
 
     # This loop is non-deterministic, but should be stable (fails rarely)
-    # The logic is that the system state should be consistent regardless of the order
-    # of the packets (within reason)
+    # The logic is that the system state should be consistent regardless
+    # of the order of the packets (within reason)
     for _ in range(3):
         packets = shuffle_dict(packets)
         await gwy._restore_cached_packets(packets)

@@ -20,7 +20,10 @@ class TestMessageIndex:
     _NOW = dt.now().replace(microsecond=0)
 
     msg1: Message = Message._from_pkt(
-        Packet(_NOW, "...  I --- 32:166025 --:------ 32:166025 1298 003 007FFF")
+        Packet(
+            _NOW,
+            "...  I --- 32:166025 --:------ 32:166025 1298 003 007FFF",
+        )
     )
     msg2: Message = Message._from_pkt(
         Packet(
@@ -31,13 +34,16 @@ class TestMessageIndex:
     msg3: Message = Message._from_pkt(
         Packet(
             _NOW + td(seconds=20),
-            "060  I --- 01:087939 --:------ 01:087939 2309 021 0007D00106400201F40301F40401F40501F40601F4",
+            "060  I --- 01:087939 --:------ 01:087939 2309 021 "
+            "0007D00106400201F40301F40401F40501F40601F4",
         )
     )
     msg4: Message = Message._from_pkt(
         Packet(
             _NOW + td(seconds=30),
-            "060  I --- 32:166025 --:------ 32:166025 31DA 030 00EF00019E00EF06E17FFF08020766BE09001F0000000000008500850000",
+            "060  I --- 32:166025 --:------ 32:166025 31DA 030 "
+            "00EF00019E00EF06E17FFF08020766BE09001F000000000000"
+            "8500850000",
         )
     )
     msg5: Message = Message._from_pkt(
@@ -63,7 +69,7 @@ class TestMessageIndex:
 
     async def test_add_msg(self) -> None:
         """Add a message to the MessageIndex."""
-        msg_db = MessageIndex()
+        msg_db = MessageIndex(disk_path=None)
         ret: Message | None
 
         # add a message
@@ -76,18 +82,18 @@ class TestMessageIndex:
         assert ret is None
         assert await msg_db.contains(code="1298")
         assert len(await msg_db.all()) == 1
-        assert (
-            str((await msg_db.all())[0])
-            == "||  32:166025 |            |  I | co2_level        |      || {'co2_level': None}"
+        assert str((await msg_db.all())[0]) == (
+            "||  32:166025 |            |  I | co2_level        "
+            "|      || {'co2_level': None}"
         )
 
         # add another message with same code
         ret = msg_db.add(self.msg2)  # replaced message
 
         assert ret is None  # Async add returns None, not the old msg
-        # assert (
-        #     str(ret)
-        #     == "||  32:166025 |            |  I | co2_level        |      || {'co2_level': None}"
+        # assert str(ret) == (
+        #     "||  32:166025 |            |  I | co2_level        "
+        #     "|      || {'co2_level': None}"
         # )
         assert len(await msg_db.all()) == 1
 
@@ -111,7 +117,7 @@ class TestMessageIndex:
 
     async def test_qry_msg(self) -> None:
         """Query the MessageIndex."""
-        msg_db = MessageIndex()
+        msg_db = MessageIndex(disk_path=None)
         msg_db.add(self.msg1)
         msg_db.add(self.msg2)
         msg_db.add(self.msg3)
@@ -167,7 +173,11 @@ class TestMessageIndex:
             ("1298", "|co2_level|"),
             (
                 "31DA",
-                "|hvac_id|exhaust_fan_speed|fan_info|_unknown_fan_info_flags|co2_level|indoor_humidity|exhaust_temp|indoor_temp|outdoor_temp|speed_capabilities|bypass_position|supply_fan_speed|remaining_mins|post_heat|pre_heat|supply_flow_fault|exhaust_flow_fault|_extra|",
+                "|hvac_id|exhaust_fan_speed|fan_info|_unknown_fan_info_flags"
+                "|co2_level|indoor_humidity|exhaust_temp|indoor_temp"
+                "|outdoor_temp|speed_capabilities|bypass_position"
+                "|supply_fan_speed|remaining_mins|post_heat|pre_heat"
+                "|supply_flow_fault|exhaust_flow_fault|_extra|",
             ),
         ]
         assert await msg_db.contains(plk="|co2_level|"), "payload keys missing"
@@ -220,28 +230,30 @@ class TestMessageIndex:
 
         # run maintenance loop
         # assert len(await msg_db.all()) == 5
-        # await msg_db._housekeeping_loop.housekeeping(self._NOW, _cutoff=dt(second=10))
+        # await msg_db._housekeeping_loop.housekeeping(
+        #     self._NOW, _cutoff=dt(second=10)
+        # )
         # assert len(await msg_db.all()) == 5
 
         msg_db.stop()  # close sqlite3 connection
 
     async def test_fat_database_payload_serialization(self) -> None:
         """Phase 2.1: Verify orjson payload serialization directly in SQLite."""
-        msg_db = MessageIndex(maintain=False)
+        msg_db = MessageIndex(maintain=False, disk_path=None)
         msg_db.add(self.msg4)  # Contains a highly complex dictionary payload
 
         # Force the StorageWorker to complete the SQL insert before we read it
         msg_db.flush()
 
-        # Query the raw blob directly out of the database, bypassing the RAM cache
+        # Query the raw blob directly out of the database, bypassing RAM cache
         sql = "SELECT payload_blob FROM messages WHERE code = '31DA'"
         res = await msg_db.qry_field(sql, ())
         assert len(res) == 1
 
-        # Deserialize using orjson and assert it perfectly matches the parsed payload
+        # Deserialize using orjson and assert it perfectly matches the payload
         raw_bytes = res[0][0]
         decoded_payload = orjson.loads(raw_bytes)
 
-        assert decoded_payload == self.msg4.payload, "orjson serialization failed"
+        assert decoded_payload == self.msg4.payload, "orjson payload failed"
 
         msg_db.stop()

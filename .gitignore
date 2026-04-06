@@ -187,3 +187,7 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# Local SQLite databases
+ramses.db
+*.sqlite

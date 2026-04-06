@@ -17,8 +17,7 @@ RAMSES RF - Message database and index.
    i7     get_rp_codes  src, dst     list(Code)        Discovery-supported_cmds
    =====  ============  ===========  ==========  ====  ========================
 
-[#fn1] A word of explanation.
-[^1]: ex = entity_base.py query methods
+[#fn1] A word of explanation.[^1]: ex = entity_base.py query methods
 """
 
 from __future__ import annotations
@@ -28,6 +27,7 @@ import contextlib
 import logging
 import os
 import sqlite3
+import threading
 import uuid
 from collections import OrderedDict
 from datetime import datetime as dt, timedelta as td
@@ -97,13 +97,23 @@ class MessageStore:
     (example of a hdr: ``000C|RP|01:223036|0208``)."""
 
     _housekeeping_task: asyncio.Task[None]
+    _hydration_task: asyncio.Task[None]
 
-    def __init__(self, maintain: bool = True, db_path: str = ":memory:") -> None:
+    def __init__(
+        self,
+        maintain: bool = True,
+        db_path: str = ":memory:",
+        disk_path: str | None = "ramses.db",
+    ) -> None:
         """Instantiate a message database/index."""
 
         self.maintain = maintain
         self._msgs: MsgDdT = OrderedDict()  # stores all messages for retrieval.
+        self._msgz_: dict[str, Message] = {}  # Phase 2.4: hdr-based retrieval.
         # Filled & cleaned up in housekeeping_loop.
+
+        # Thread-safety lock to prevent Python 3.13 Segfaults
+        self._db_lock = threading.Lock()
 
         # For :memory: databases with multiple connections (Reader vs Worker)
         # We must use a Shared Cache URI so both threads see the same data.
@@ -113,7 +123,7 @@ class MessageStore:
 
         # Start the Storage Worker (Write Connection)
         # This thread handles all blocking INSERT/UPDATE operations
-        self._worker = StorageWorker(db_path)
+        self._worker = StorageWorker(db_path, disk_path=disk_path)
 
         # Wait for the worker to create the tables.
         # This prevents "no such table" errors on immediate reads.
@@ -164,6 +174,10 @@ class MessageStore:
             ):
                 return
 
+            self._hydration_task = asyncio.create_task(
+                self._hydrate_ram(), name=f"{self.__class__.__name__}.hydrator"
+            )
+
             self._housekeeping_task = asyncio.create_task(
                 self._housekeeping_loop(), name=f"{self.__class__.__name__}.housekeeper"
             )
@@ -178,13 +192,21 @@ class MessageStore:
         ):
             self._housekeeping_task.cancel()  # stop the housekeeper
 
+        if getattr(self, "_hydration_task", None) and not self._hydration_task.done():
+            self._hydration_task.cancel()
+
+        # Trigger a final snapshot to ensure no data is lost on shutdown
+        self._worker.submit_snapshot()
+        self._worker.flush(timeout=5.0)
+
         self._worker.stop()  # Stop the background thread
 
-        try:
-            self._cx.commit()  # just in case
-            self._cx.close()  # safely close reader connection
-        except sqlite3.ProgrammingError:
-            pass  # Connection might already be closed
+        with self._db_lock:
+            try:
+                self._cx.commit()  # just in case
+                self._cx.close()  # safely close reader connection
+            except sqlite3.ProgrammingError:
+                pass  # Connection might already be closed
 
     @property
     def msgs(self) -> MsgDdT:
@@ -197,6 +219,55 @@ class MessageStore:
         This is primarily for testing to ensure data persistence before querying.
         """
         self._worker.flush()
+
+    async def _hydrate_ram(self) -> None:
+        """Hydrate RAM cache from the in-memory database.
+
+        This routine runs as a non-blocking background task.
+        """
+
+        def _fetch_all() -> list[Any]:
+            with self._db_lock:
+                return self._cx.execute(
+                    "SELECT * FROM messages ORDER BY dtm ASC"
+                ).fetchall()
+
+        try:
+            rows = await asyncio.to_thread(_fetch_all)
+        except sqlite3.Error as err:
+            _LOGGER.error("Failed to fetch messages for hydration: %s", err)
+            return
+
+        has_lock = getattr(self, "_lock", None)
+        if has_lock:
+            await self._lock.acquire()
+
+        try:
+            for row in rows:
+                dtm_val = row[0]
+                verb = row[1]
+                src = row[2]
+                dst = row[3]
+                code = row[4]
+                hdr = row[6]
+                payload_blob = row[8]
+                dtm_str = cast(DtmStrT, dtm_val.isoformat(timespec="microseconds"))
+
+                pkt_line = f"... {verb} --- {src} {dst} --:------ {code} 001 00"
+                try:
+                    pkt = Packet(dtm_val, pkt_line)
+                    msg = Message._from_pkt(pkt)
+                    msg._payload = orjson.loads(payload_blob)
+
+                    self._msgs[dtm_str] = msg
+                    self._msgz_[hdr] = msg
+                except Exception as err:
+                    _LOGGER.debug("Failed to reconstruct message for %s: %s", hdr, err)
+        finally:
+            if has_lock:
+                self._lock.release()
+
+        _LOGGER.info("Hydrated %d messages into RAM cache", len(rows))
 
     async def _housekeeping_loop(self) -> None:
         """Periodically remove stale messages from the index,
@@ -223,6 +294,14 @@ class MessageStore:
                     (k, v) for k, v in self._msgs.items() if k >= dtm_iso
                 )
 
+                valid_dtms = set(self._msgs.keys())
+                self._msgz_ = {
+                    hdr: m
+                    for hdr, m in self._msgz_.items()
+                    if cast(DtmStrT, m.dtm.isoformat(timespec="microseconds"))
+                    in valid_dtms
+                }
+
             except Exception as err:
                 _LOGGER.warning("MessageStore housekeeping error: %s", err)
             else:
@@ -235,9 +314,11 @@ class MessageStore:
 
         while True:
             self._last_housekeeping = dt.now()
-            await asyncio.sleep(3600)
+            await asyncio.sleep(900)
             _LOGGER.info("Starting next MessageStore housekeeping")
             await housekeeping(self._last_housekeeping)
+
+            self._worker.submit_snapshot()
 
     def add(self, msg: Message) -> Message | None:
         """
@@ -269,6 +350,8 @@ class MessageStore:
             # _msgs dict requires a timestamp reformat
             # add msg to self._msgs dict
             self._msgs[dtm_str] = msg
+            if msg._pkt._hdr is not None:
+                self._msgz_[msg._pkt._hdr] = msg
 
         finally:
             pass  # self._lock.release()
@@ -329,6 +412,7 @@ class MessageStore:
             Packet(_now, f"... {verb} --- {src} --:------ {src} {code} 005 0000000000")
         )
         self._msgs[dtm] = msg
+        self._msgz_[hdr] = msg
 
     def _insert_into(self, msg: Message) -> Message | None:
         """
@@ -401,7 +485,9 @@ class MessageStore:
             if msgs is not None:
                 for m in msgs:
                     dtm = cast(DtmStrT, m.dtm.isoformat(timespec="microseconds"))
-                    self._msgs.pop(dtm)
+                    self._msgs.pop(dtm, None)
+                    if m._pkt._hdr is not None:
+                        self._msgz_.pop(m._pkt._hdr, None)
 
         finally:
             pass  # self._lock.release()
@@ -419,7 +505,8 @@ class MessageStore:
         sql += " AND ".join(f"{k} = ?" for k in kwargs)
 
         def _execute_delete() -> None:
-            self._cx.execute(sql, tuple(kwargs.values()))
+            with self._db_lock:
+                self._cx.execute(sql, tuple(kwargs.values()))
 
         await asyncio.to_thread(_execute_delete)
 
@@ -498,7 +585,8 @@ class MessageStore:
         sql += " AND ".join(f"{k} = ?" for k in kw)
 
         def _fetch_dtms() -> list[Any]:
-            return self._cx.execute(sql, tuple(kw.values())).fetchall()
+            with self._db_lock:
+                return self._cx.execute(sql, tuple(kw.values())).fetchall()
 
         try:
             return await asyncio.to_thread(_fetch_dtms)
@@ -518,7 +606,8 @@ class MessageStore:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
         def _fetch_qry() -> list[Any]:
-            return self._cx.execute(sql, parameters).fetchall()
+            with self._db_lock:
+                return self._cx.execute(sql, parameters).fetchall()
 
         try:
             rows = await asyncio.to_thread(_fetch_qry)
@@ -557,7 +646,8 @@ class MessageStore:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
         def _fetch_rp() -> list[Any]:
-            return self._cx.execute(sql, parameters).fetchall()
+            with self._db_lock:
+                return self._cx.execute(sql, parameters).fetchall()
 
         try:
             rows = await asyncio.to_thread(_fetch_rp)
@@ -583,7 +673,8 @@ class MessageStore:
             raise DatabaseQueryError(f"{self}: Only SELECT queries are allowed")
 
         def _fetch_field() -> list[Any]:
-            return self._cx.execute(sql, parameters).fetchall()
+            with self._db_lock:
+                return self._cx.execute(sql, parameters).fetchall()
 
         try:
             return await asyncio.to_thread(_fetch_field)
@@ -594,7 +685,8 @@ class MessageStore:
         """Get all messages from the index."""
 
         def _fetch_all() -> list[Any]:
-            return self._cx.execute("SELECT * FROM messages").fetchall()
+            with self._db_lock:
+                return self._cx.execute("SELECT * FROM messages").fetchall()
 
         rows = await asyncio.to_thread(_fetch_all)
         lst: list[Message] = []
@@ -611,11 +703,13 @@ class MessageStore:
         """Clear the message index (remove indexes of all messages)."""
 
         def _clear_db() -> None:
-            self._cx.execute("DELETE FROM messages")
-            self._cx.commit()
+            with self._db_lock:
+                self._cx.execute("DELETE FROM messages")
+                self._cx.commit()
 
         await asyncio.to_thread(_clear_db)
         self._msgs.clear()
+        self._msgz_.clear()
 
 
 # Alias for backwards compatibility during Phase 2 migration
