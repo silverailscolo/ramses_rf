@@ -369,7 +369,6 @@ SZ_AUTOSTART: Final = "autostart"
 SZ_DISABLE_QOS: Final = "disable_qos"
 SZ_ENFORCE_KNOWN_LIST: Final[str] = f"enforce_{SZ_KNOWN_LIST}"
 SZ_EVOFW_FLAG: Final = "evofw_flag"
-SZ_SQLITE_INDEX: Final = "sqlite_index"
 SZ_LOG_ALL_MQTT: Final = "log_all_mqtt"
 SZ_USE_REGEX: Final = "use_regex"
 
@@ -379,7 +378,6 @@ SCH_ENGINE_DICT = {
     vol.Optional(SZ_DISABLE_QOS, default=None): vol.Any(None, bool),
     vol.Optional(SZ_ENFORCE_KNOWN_LIST, default=False): bool,
     vol.Optional(SZ_EVOFW_FLAG): vol.Any(None, str),
-    vol.Optional(SZ_SQLITE_INDEX, default=False): bool,
     vol.Optional(SZ_LOG_ALL_MQTT, default=False): bool,
     vol.Optional(SZ_USE_REGEX): dict,
     vol.Optional(SZ_COMMS_PARAMS): SCH_COMMS_PARAMS,
