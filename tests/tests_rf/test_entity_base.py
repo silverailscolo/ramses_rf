@@ -3,7 +3,7 @@
 
 from collections.abc import Generator
 from datetime import datetime as dt, timedelta as td
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -72,16 +72,16 @@ class Test_entity_base:
     )
 
     async def test_entity_base_dev(self, mock_gateway: MagicMock) -> None:
-        # issues fetching results
+        """Test the base entity behavior for a device."""
         dev = _Entity(mock_gateway)
         dev.id = DeviceIdT("04:189078")
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
+        assert dev._gwy.message_store is not None
         dev._gwy.message_store.add(self.msg5)
         dev._gwy.message_store.add(self.msg6)
         dev._gwy.message_store.add(self.msg7)
-        assert dev._gwy.message_store
         assert len(await dev._gwy.message_store.all()) == 3, "len(msg_db.all) wrong"
 
         # start tests
@@ -122,19 +122,19 @@ class Test_entity_base:
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
     async def test_entity_base_zone(self, mock_gateway: MagicMock) -> None:
-        # works as expected
+        """Test the base entity behavior for a zone."""
         dev = _Entity(mock_gateway)
         dev.id = DeviceIdT("04:189078_01")
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
+        assert dev._gwy.message_store is not None
         dev._gwy.message_store.add(self.msg5)
         dev._gwy.message_store.add(self.msg6)
         dev._gwy.message_store.add(self.msg7)
 
         # start tests
         assert dev.id == "04:189078_01"
-        assert dev._gwy.message_store
 
         # create _msgs
         assert await dev.entity_state._msgs() == {
@@ -180,18 +180,18 @@ class Test_entity_base:
     )
 
     async def test_entity_base_dhw(self, mock_gateway: MagicMock) -> None:
-        # works as expected
+        """Test the base entity behavior for DHW."""
         dev = _Entity(mock_gateway)
         dev.id = DeviceIdT("01:145038_HW")
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
+        assert dev._gwy.message_store is not None
         dev._gwy.message_store.add(self.msg8)
         dev._gwy.message_store.add(self.msg9)
 
         # start tests
         assert dev.id == "01:145038_HW"
-        assert dev._gwy.message_store
         assert await dev._gwy.message_store.all() == (self.msg8, self.msg9), (
             "wrong dhw all"
         )
@@ -323,19 +323,21 @@ async def test_gh_396_legacy_ot_context() -> None:
     entity = Entity(gwy)
     entity.id = DeviceIdT("01:123456")
 
-    # Manually populate the nested cache using the async method mock
-    entity.entity_state._msgz = AsyncMock(
-        return_value={
-            Code._3220: {
-                RP: {
-                    "05": MagicMock(),  # Standard hex string case
+    # Execute
+    with patch.object(
+        entity.entity_state,
+        "_msgz",
+        AsyncMock(
+            return_value={
+                Code._3220: {
+                    RP: {
+                        "05": MagicMock(),  # Standard hex string case
+                    }
                 }
             }
-        }
-    )
-
-    # Execute
-    cmds = await entity.discovery.supported_cmds_ot()
+        ),
+    ):
+        cmds = await entity.discovery.supported_cmds_ot()
 
     # Verify
     assert "0x05" in cmds

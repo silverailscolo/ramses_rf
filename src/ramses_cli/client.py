@@ -550,13 +550,9 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
             d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.CTL
         ]:
             if gwy.message_store:
-                for msg in await gwy.message_store.get(
-                    device=device.id, code=Code._0005
-                ):
+                for msg in await gwy.message_store.get(src=device.id, code=Code._0005):
                     print(f"{msg._pkt}")
-                for msg in await gwy.message_store.get(
-                    device=device.id, code=Code._000C
-                ):
+                for msg in await gwy.message_store.get(src=device.id, code=Code._000C):
                     print(f"{msg._pkt}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
@@ -570,7 +566,7 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
             d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
         ]:
             if gwy.message_store:
-                for msg in await gwy.message_store.get(device=device.id):
+                for msg in await gwy.message_store.get(src=device.id):
                     print(f"{msg._pkt}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError

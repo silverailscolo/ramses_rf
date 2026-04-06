@@ -406,7 +406,9 @@ class EntityState:
         msgs_1: Any = defaultdict(lambda: defaultdict(dict))
 
         if self._gwy.message_store is None:
-            return msgs_1
+            return cast(
+                "dict[Code, dict[VerbT, dict[bool | str | None, Message]]]", msgs_1
+            )
 
         entity_id = self._entity.id
         is_dhw = entity_id[_ID_SLICE:] == "_HW"
@@ -453,7 +455,7 @@ class EntityState:
             else:
                 msgs_1[code][verb][ctx] = msg
 
-        return msgs_1
+        return cast("dict[Code, dict[VerbT, dict[bool | str | None, Message]]]", msgs_1)
 
     async def _msgz(self) -> dict[Code, dict[VerbT, dict[bool | str | None, Message]]]:
         """Dynamically build a nested dict of all I/RP messages for this entity."""

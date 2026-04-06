@@ -9,8 +9,9 @@ import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.gateway import GatewayConfig
+from ramses_rf.helpers import shrink
 
-from .helpers import TEST_DIR, assert_expected, shrink
+from .helpers import TEST_DIR, assert_expected
 
 WORK_DIR = f"{TEST_DIR}/eavesdrop_schema"
 

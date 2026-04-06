@@ -187,10 +187,6 @@ class TestHvacVentilator:
             "_hgi": MagicMock(),
         }
 
-        # Set up the message store  # deprecated, TODO(eb): remove Q1 2026
-        if not hvac_ventilator._gwy.message_store:
-            hvac_ventilator.entity_state._msgs_ = {}
-
         # Patch the _handle_2411_message method
         with patch.object(hvac_ventilator, "_handle_2411_message") as mock_handle:
             # Call the method
@@ -216,10 +212,6 @@ class TestHvacVentilator:
         msg.dst.id = TEST_DEVICE_ID
         msg.verb = " I"
         msg.payload = {"some_key": "some_value"}
-
-        # Set up the message store  # deprecated, TODO(eb): remove Q1 2026
-        if not hvac_ventilator._gwy.message_store:
-            hvac_ventilator.entity_state._msgs_ = {}
 
         # Patch the parent class's _handle_msg method
         with patch(
