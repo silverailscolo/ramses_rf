@@ -90,7 +90,7 @@ async def test_restore_from_log_file_sql(dir_name: Path) -> None:
             *args, **{**kwargs, "disk_path": None}
         ),
     ):
-        gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+        gwy: Gateway = await load_test_gwy(dir_name)
 
     await assert_expected_set(gwy, expected)
 
@@ -124,7 +124,7 @@ async def test_shuffle_from_log_file_sql(dir_name: Path) -> None:
             *args, **{**kwargs, "disk_path": None}
         ),
     ):
-        gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+        gwy: Gateway = await load_test_gwy(dir_name)
 
     schema, packets = await gwy.get_state(include_expired=True)
     packets = shuffle_dict(packets)
@@ -181,7 +181,7 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
             *args, **{**kwargs, "disk_path": None}
         ),
     ):
-        gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+        gwy: Gateway = await load_test_gwy(dir_name)
 
     # for dev in gwy.device_registry.devices:
     #     if dev._msgs:

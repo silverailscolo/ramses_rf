@@ -184,8 +184,6 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     :return: The initialized gateway instance.
     :rtype: Gateway
     """
-    # TODO(eb): default sqlite_index to True Q1 2026
-    _sqlite_index = kwargs.pop("_sqlite_index", False)
     kwargs = SCH_GLOBAL_CONFIG({k: v for k, v in kwargs.items() if k[:1] != "_"})
 
     try:
@@ -223,7 +221,6 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
         safe_kwargs["schema"] = schema_kwargs
 
     gwy = Gateway(None, config=GatewayConfig(**safe_kwargs))
-    gwy._engine._sqlite_index = _sqlite_index  # TODO(eb): remove legacy Q2 2026
     await gwy.start()
 
     # The Gateway with input_file uses a Transport that processes the file automatically.
