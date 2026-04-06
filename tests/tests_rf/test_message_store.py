@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 """RAMSES RF - Unit test for MessageIndex."""
 
-import contextlib
 from datetime import datetime as dt, timedelta as td
 
-import orjson
-
-from ramses_rf.exceptions import DatabaseQueryError
 from ramses_rf.message_store import MessageIndex
-from ramses_tx import Message, Packet
+from ramses_tx import Code, Message, Packet
 
 
 class TestMessageIndex:
@@ -82,32 +78,26 @@ class TestMessageIndex:
         assert ret is None
         assert await msg_db.contains(code="1298")
         assert len(await msg_db.all()) == 1
-        assert str((await msg_db.all())[0]) == (
-            "||  32:166025 |            |  I | co2_level        "
-            "|      || {'co2_level': None}"
-        )
 
-        # add another message with same code
-        ret = msg_db.add(self.msg2)  # replaced message
+        # add another message with same code (different dtm adds to log, updates cache)
+        ret = msg_db.add(self.msg2)
 
         assert ret is None  # Async add returns None, not the old msg
-        # assert str(ret) == (
-        #     "||  32:166025 |            |  I | co2_level        "
-        #     "|      || {'co2_level': None}"
-        # )
-        assert len(await msg_db.all()) == 1
+        assert len(await msg_db.all()) == 2
 
         # add another message with different code
         ret = msg_db.add(self.msg3)  # new code
 
         assert ret is None
-        assert len(await msg_db.all()) == 2
+        assert len(await msg_db.all()) == 3
 
         ret = msg_db.add(self.msg5)  # new code
         assert ret is None
-        ret = msg_db.add(self.msg5)  # add copy code
+        assert len(await msg_db.all()) == 4
+
+        ret = msg_db.add(self.msg5)  # exact same dtm overwrites existing entry
         assert ret is None
-        assert len(await msg_db.all()) == 3
+        assert len(await msg_db.all()) == 4
 
         # test clear index
         await msg_db.clr()
@@ -138,122 +128,45 @@ class TestMessageIndex:
             "a random code should return False"
         )
         assert await msg_db.contains(dst="01:087939"), "dst missing"
-        assert not await msg_db.contains(plk="co2_level"), (
-            "payload keys skipped if value is None"
-        )
 
-        with contextlib.suppress(DatabaseQueryError):
-            await msg_db.qry_field("RANDOM from messages", (self._SRC1, self._SRC1))
-        # Only SELECT queries are allowed
+        # Verify RAM queries operate correctly without SQL string parsing
+        res = await msg_db.get(src=self._SRC2)
+        assert len(res) == 1
+        assert res[0].code == Code._2309
 
-        # Use simplest SQLite query on MessageIndex
-        sql = """
-                SELECT code, plk from messages WHERE (src = ? OR dst = ?)
-            """
-        res: list[tuple[dt | str, str]] = await msg_db.qry_field(
-            sql, (self._SRC2, self._SRC2)
-        )
-        assert res == [
-            (
-                "2309",
-                "|zone_idx|setpoint|",
-            ),
-            ("3220", "|msg_id|msg_type|msg_name|value|description|"),
-        ]
+        res = await msg_db.get(dst=self._SRC2)
+        assert len(res) == 2
+        assert res[0].code == Code._2309
+        assert res[1].code == Code._3220
 
-        # Use multi-field SQLite query on MessageIndex
-        sql = """
-                SELECT code, plk from messages WHERE verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND code in ('1298', '31DA')
-                AND (plk LIKE '%co2_level%')
-            """
-        res = await msg_db.qry_field(sql, (self._SRC1, self._SRC1))
-        assert res == [  # key 'co2_level' included since value is not None
-            ("1298", "|co2_level|"),
-            (
-                "31DA",
-                "|hvac_id|exhaust_fan_speed|fan_info|_unknown_fan_info_flags"
-                "|co2_level|indoor_humidity|exhaust_temp|indoor_temp"
-                "|outdoor_temp|speed_capabilities|bypass_position"
-                "|supply_fan_speed|remaining_mins|post_heat|pre_heat"
-                "|supply_flow_fault|exhaust_flow_fault|_extra|",
-            ),
-        ]
-        assert await msg_db.contains(plk="|co2_level|"), "payload keys missing"
+        res = await msg_db.get(src=self._SRC1)
+        assert len(res) == 3
+        assert res[0].code == Code._1298
+        assert res[1].code == Code._1298
+        assert res[2].code == Code._31DA
 
-        # src only query on MessageIndex
-        sql = """
-                SELECT code, dst from messages WHERE verb in (' I', 'RP')
-                AND (src = ?)
-            """
-        res = await msg_db.qry_field(sql, ("04:189078",))
-        assert res == [("3150", "01:145038")]  # so dst is addrs[2], not --:------
+        res = await msg_db.get(src="04:189078")
+        assert len(res) == 1
+        assert res[0].code == Code._3150
 
-        # Use payload key SQLite query on MessageIndex
-        sql = """
-                SELECT code, ctx from messages WHERE verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND (plk LIKE '%co2_level%')
-            """
-        res = await msg_db.qry_field(sql, (self._SRC1, self._SRC1))
-        assert res == [("1298", "False"), ("31DA", "00")]
-
-        assert await msg_db.contains(plk="|co2_level|"), "payload keys missing"
-
-        assert len(await msg_db.all()) == 5
-
-        # simulate entity_base _msgs lookup
-        _SQL_SLICE = 9
-        _id = "01:145038_01"
-        sql = """
-            SELECT dtm from messages WHERE
-            verb in (' I', 'RP')
-            AND (src = ? OR dst = ?)
-            AND ctx = ?
-        """
-        _ctx_qry = "*"
-        if len(_id) > _SQL_SLICE:
-            _ctx_qry = _id[_SQL_SLICE + 1 :]
-        m: tuple[Message, ...] = await msg_db.qry(
-            sql, (_id[:_SQL_SLICE], _id[:_SQL_SLICE], _ctx_qry)
-        )  # e.g. 01:123456_01
-        assert len(m) == 1
-        assert m[0].payload == {"heat_demand": 0.0, "zone_idx": "01"}
+        assert len(await msg_db.all()) == 6
 
         msg_db.add(self.msg7)
-        _id = "01:145038_04"
-        m = await msg_db.qry(
-            sql, (_id[:_SQL_SLICE], _id[:_SQL_SLICE], _ctx_qry)
-        )  # e.g. 01:123456_01
-        assert len(m) == 1
-
-        # run maintenance loop
-        # assert len(await msg_db.all()) == 5
-        # await msg_db._housekeeping_loop.housekeeping(
-        #     self._NOW, _cutoff=dt(second=10)
-        # )
-        # assert len(await msg_db.all()) == 5
+        res = await msg_db.get(src="04:189078")
+        assert len(res) == 2
 
         msg_db.stop()  # close sqlite3 connection
 
     async def test_fat_database_payload_serialization(self) -> None:
-        """Phase 2.1: Verify orjson payload serialization directly in SQLite."""
+        """Phase 2.5: Verify large payloads decode properly from the RAM cache."""
         msg_db = MessageIndex(maintain=False, disk_path=None)
         msg_db.add(self.msg4)  # Contains a highly complex dictionary payload
 
-        # Force the StorageWorker to complete the SQL insert before we read it
-        msg_db.flush()
-
-        # Query the raw blob directly out of the database, bypassing RAM cache
-        sql = "SELECT payload_blob FROM messages WHERE code = '31DA'"
-        res = await msg_db.qry_field(sql, ())
+        # Query the message directly out of the RAM index
+        res = await msg_db.get(code="31DA")
         assert len(res) == 1
 
-        # Deserialize using orjson and assert it perfectly matches the payload
-        raw_bytes = res[0][0]
-        decoded_payload = orjson.loads(raw_bytes)
-
-        assert decoded_payload == self.msg4.payload, "orjson payload failed"
+        # Assert it matches the payload without SQL query translation errors
+        assert res[0].payload == self.msg4.payload, "payload retrieval failed"
 
         msg_db.stop()

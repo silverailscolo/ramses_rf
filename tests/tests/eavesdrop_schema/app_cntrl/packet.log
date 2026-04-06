@@ -1,6 +1,5 @@
 ###
 
-2022-05-13T15:28:02.750000 045 RP --- 01:078710 18:199952 --:------ 0005 004 000F0100      # {'zone_type': '0F', 'zone_mask': [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'zone_class': 'appliance_control'}
 2022-03-13T15:28:02.753576 ... RP --- 01:078710 18:199952 --:------ 000C 006 000F7FFFFFFF  # {'zone_type': '0F', 'domain_id': 'FC', 'device_role': 'appliance_control', 'devices': []}
 
 2022-03-13T15:28:03.924687 ...  I --- 01:078710 --:------ 01:078710 0009 006 FC00FFF900FF  # [{'domain_id': 'FC', 'failsafe_enabled': False, 'unknown_0': 'FF'}, {'domain_id': 'F9', 'failsafe_enabled': False, 'unknown_0': 'FF'}]
@@ -17,3 +16,4 @@
 
 2022-03-13T15:28:56.108603 ... RQ --- 01:078710 10:047707 --:------ 3EF0 001 00            # {}
 2022-03-13T15:28:56.135849 ... RP --- 10:047707 01:078710 --:------ 3EF0 009 0000100000FF035A00  # {'modulation_level': 0.0, '_flags_2': '10', '_flags_3': [0, 0, 0, 0, 0, 0, 0, 0], 'ch_active': False, 'dhw_active': False, 'flame_active': False, '_unknown_4': '00', '_unknown_5': 'FF', '_flags_6': [0, 0, 0, 0, 0, 0, 1, 1], 'ch_enabled': True, 'ch_setpoint': 90, 'max_rel_modulation': 0.0}
+2022-05-13T15:28:02.750000 045 RP --- 01:078710 18:199952 --:------ 0005 004 000F0100      # {'zone_type': '0F', 'zone_mask': [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 'zone_class': 'appliance_control'}

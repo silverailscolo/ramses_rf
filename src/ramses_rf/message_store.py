@@ -218,9 +218,9 @@ class MessageStore:
                     pass  # Connection might already be closed
 
     @property
-    def log_by_dtm(self) -> MsgDdT:
-        """Return the messages in the index in a threadsafe way."""
-        return self._message_log
+    def log_by_dtm(self) -> tuple[Message, ...]:
+        """Return the messages in the index safely encapsulated as a tuple."""
+        return tuple(self._message_log.values())
 
     @property
     def state_cache(self) -> dict[str, Message]:
@@ -326,7 +326,7 @@ class MessageStore:
             else:
                 _LOGGER.debug(
                     "MessageStore housekeeping completed, retained messages >= %s",
-                    dtm_iso,
+                    dtm,
                 )
             finally:
                 self._lock.release()
@@ -586,7 +586,7 @@ class MessageStore:
                 kwargs["ctx"] = "False"
 
         res: list[Message] = []
-        for m in self._message_log.values():
+        for m in self.log_by_dtm:
             match = True
             for k, v in kwargs.items():
                 if k == "dtm" and m.dtm != v:
@@ -680,7 +680,7 @@ class MessageStore:
 
     async def all(self, include_expired: bool = False) -> tuple[Message, ...]:
         """Get all messages from the index."""
-        return tuple(self._message_log.values())
+        return self.log_by_dtm
 
     async def clr(self) -> None:
         """Clear the message index (remove indexes of all messages)."""

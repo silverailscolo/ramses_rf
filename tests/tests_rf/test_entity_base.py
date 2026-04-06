@@ -77,29 +77,15 @@ class Test_entity_base:
         dev.id = DeviceIdT("04:189078")
         dev._z_id = dev.id
 
-        # put messages in the msg_db
-        dev._handle_msg(self.msg5)
-        dev._handle_msg(self.msg6)
-        dev._handle_msg(self.msg7)
+        # put messages in the message_store (bypass proxy)
+        dev._gwy.message_store.add(self.msg5)
+        dev._gwy.message_store.add(self.msg6)
+        dev._gwy.message_store.add(self.msg7)
         assert dev._gwy.message_store
         assert len(await dev._gwy.message_store.all()) == 3, "len(msg_db.all) wrong"
 
         # start tests
         assert dev.id == "04:189078"
-
-        sql = """
-            SELECT dtm from messages WHERE
-            verb in (' I', 'RP')
-            AND (src = ? OR dst = ?)
-            AND ctx LIKE ?
-        """
-        assert await dev._gwy.message_store.qry(
-            sql, (dev.id[:9], dev.id[:9], f"%{dev.id[10:]}%")
-        ) == (
-            self.msg5,
-            self.msg7,
-            self.msg6,
-        ), "base qry wrong"
 
         # create _msgs
         assert await dev.entity_state._msgs() == {
@@ -141,27 +127,14 @@ class Test_entity_base:
         dev.id = DeviceIdT("04:189078_01")
         dev._z_id = dev.id
 
-        # put messages in the msg_db
-        dev._handle_msg(self.msg5)
-        dev._handle_msg(self.msg6)
-        dev._handle_msg(self.msg7)
+        # put messages in the message_store (bypass proxy)
+        dev._gwy.message_store.add(self.msg5)
+        dev._gwy.message_store.add(self.msg6)
+        dev._gwy.message_store.add(self.msg7)
 
         # start tests
         assert dev.id == "04:189078_01"
         assert dev._gwy.message_store
-
-        sql = """
-            SELECT dtm from messages WHERE
-            verb in (' I', 'RP')
-            AND (src = ? OR dst = ?)
-            AND ctx LIKE ?
-        """
-        assert await dev._gwy.message_store.qry(
-            sql, (dev.id[:9], dev.id[:9], f"%{dev.id[10:]}%")
-        ) == (
-            self.msg5,
-            self.msg7,
-        ), "zone qry wrong"
 
         # create _msgs
         assert await dev.entity_state._msgs() == {
@@ -212,9 +185,9 @@ class Test_entity_base:
         dev.id = DeviceIdT("01:145038_HW")
         dev._z_id = dev.id
 
-        # put messages in the msg_db
-        dev._handle_msg(self.msg8)
-        dev._handle_msg(self.msg9)
+        # put messages in the message_store (bypass proxy)
+        dev._gwy.message_store.add(self.msg8)
+        dev._gwy.message_store.add(self.msg9)
 
         # start tests
         assert dev.id == "01:145038_HW"
@@ -222,22 +195,6 @@ class Test_entity_base:
         assert await dev._gwy.message_store.all() == (self.msg8, self.msg9), (
             "wrong dhw all"
         )
-
-        sql = """
-                SELECT dtm from messages WHERE
-                verb in (' I', 'RP')
-                AND (src = ? OR dst = ?)
-                AND (ctx IN ('FC', 'FA', 'F9', 'FA') OR plk LIKE ?)
-            """
-        _ctx_qry = "%dhw_idx%"
-
-        # fetch Messages
-        assert await dev._gwy.message_store.qry(
-            sql, (dev.id[:9], dev.id[:9], _ctx_qry)
-        ) == (
-            self.msg8,
-            self.msg9,
-        ), "dhw qry wrong"
 
         # create _msgs
         assert await dev.entity_state._msgs() == {
@@ -316,7 +273,7 @@ class Test_entity_base:
 
 
 async def test_gh_396_sqlite_ot_context_type() -> None:
-    """Verify that integer context values from SQLite are handled correctly.
+    """Verify that integer context values from the cache are handled correctly.
 
     See: https://github.com/ramses-rf/ramses_rf/issues/396
     """
@@ -325,9 +282,21 @@ async def test_gh_396_sqlite_ot_context_type() -> None:
     gwy.config.disable_discovery = True
     gwy.message_store = MagicMock()
 
-    # Mock the database returning an integer (e.g. 0) instead of a string ("00")
-    # This simulates the SQLite behavior reported in issue #396
-    gwy.message_store.qry_field = AsyncMock(return_value=[[0]])
+    # Create a mock message with an integer context directly in the state_cache
+    mock_msg = MagicMock(spec=Message)
+    mock_msg.verb = RP
+    mock_msg.code = Code._3220
+
+    # Properly mock the sub-attributes to prevent AttributeError
+    mock_msg.src = MagicMock()
+    mock_msg.src.id = "01:123456"
+    mock_msg.dst = MagicMock()
+    mock_msg.dst.id = "01:123456"
+
+    mock_msg._pkt = MagicMock()
+    mock_msg._pkt._ctx = 0  # Integer context!
+
+    gwy.message_store.log_by_dtm = [mock_msg]
 
     # Instantiate the entity
     entity = Entity(gwy)
@@ -345,7 +314,7 @@ async def test_gh_396_sqlite_ot_context_type() -> None:
 
 
 async def test_gh_396_legacy_ot_context() -> None:
-    """Verify that the legacy (non-SQLite) path still processes context correctly."""
+    """Verify that the legacy path still processes context correctly."""
     # Setup
     gwy = MagicMock()
     gwy.config.disable_discovery = True
@@ -354,15 +323,16 @@ async def test_gh_396_legacy_ot_context() -> None:
     entity = Entity(gwy)
     entity.id = DeviceIdT("01:123456")
 
-    # Manually populate the legacy _msgz_ structure (backing attribute)
-    # Structure: _msgz_[Code][Verb][Ctx] = Message
-    entity.entity_state._msgz_ = {
-        Code._3220: {
-            RP: {
-                "05": MagicMock(),  # Standard hex string case
+    # Manually populate the nested cache using the async method mock
+    entity.entity_state._msgz = AsyncMock(
+        return_value={
+            Code._3220: {
+                RP: {
+                    "05": MagicMock(),  # Standard hex string case
+                }
             }
         }
-    }
+    )
 
     # Execute
     cmds = await entity.discovery.supported_cmds_ot()

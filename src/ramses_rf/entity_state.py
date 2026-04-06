@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import defaultdict
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, cast
 
@@ -121,7 +122,7 @@ class EntityState:
 
         if msg._pkt._hdr != hdr:
             raise exc.DatabaseQueryError(f"Header mismatch: {msg._pkt._hdr} != {hdr}")
-        return cast("Message | None", msg)
+        return msg
 
     async def get_flag(self, code: Code, key: str, idx: int) -> bool | None:
         """Get the boolean value of a specific flag within a message payload."""
@@ -383,14 +384,16 @@ class EntityState:
     def _msgs_(self) -> dict[Code, Message]:
         """Legacy compatibility property for synchronous access."""
         _msg_dict: dict[Code, Message] = {}
-        nested_cache = self._msgz_
-        for code, verbs in nested_cache.items():
+
+        # Build from _msgz_ to guarantee strict zone_idx isolation
+        for code, verbs in self._msgz_.items():
             for verb, ctxs in verbs.items():
                 if verb not in (I_, RP):
                     continue
                 for _, msg in ctxs.items():
                     if code not in _msg_dict or msg.dtm > _msg_dict[code].dtm:
                         _msg_dict[code] = msg
+
         return _msg_dict
 
     async def _msgs(self) -> dict[Code, Message]:
@@ -400,17 +403,17 @@ class EntityState:
     @property
     def _msgz_(self) -> dict[Code, dict[VerbT, dict[bool | str | None, Message]]]:
         """Legacy compatibility property for synchronous access to nested states."""
+        msgs_1: Any = defaultdict(lambda: defaultdict(dict))
+
+        if self._gwy.message_store is None:
+            return msgs_1
+
         entity_id = self._entity.id
         is_dhw = entity_id[_ID_SLICE:] == "_HW"
         is_zone = len(entity_id) > 9 and not is_dhw
         zone_idx = entity_id[_ID_SLICE + 1 :] if is_zone else None
 
-        msgs_1: dict[Code, dict[VerbT, dict[bool | str | None, Message]]] = {}
-
-        if self._gwy.message_store is None:
-            return msgs_1
-
-        for msg in list(self._gwy.message_store.state_cache.values()):
+        for msg in self._gwy.message_store.log_by_dtm:
             if not self._is_relevant_msg(msg):
                 continue
 
@@ -431,7 +434,7 @@ class EntityState:
                         )
                     )
                 ):
-                    msgs_1.setdefault(code, {}).setdefault(verb, {})[ctx] = msg
+                    msgs_1[code][verb][ctx] = msg
             elif is_zone:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
@@ -446,9 +449,9 @@ class EntityState:
                         )
                     )
                 ):
-                    msgs_1.setdefault(code, {}).setdefault(verb, {})[ctx] = msg
+                    msgs_1[code][verb][ctx] = msg
             else:
-                msgs_1.setdefault(code, {}).setdefault(verb, {})[ctx] = msg
+                msgs_1[code][verb][ctx] = msg
 
         return msgs_1
 

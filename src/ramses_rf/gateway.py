@@ -1,4 +1,3 @@
-# src/ramses_rf/gateway.py
 #!/usr/bin/env python3
 
 # TODO:
@@ -381,11 +380,8 @@ class Gateway(GatewayInterface):
 
                 self.add_task(self._engine._loop.create_task(_periodic_flush()))
 
-        # initialize SQLite index, set in _tx/Engine
-        if self._engine._sqlite_index:  # TODO(eb): default to True in Q1 2026
-            _LOGGER.info("Ramses RF starts SQLite MessageStore")
-            # if activated in ramses_cc > Engine or set in tests
-            self.create_sqlite_message_index()
+        _LOGGER.info("Ramses RF starts central MessageStore")
+        self.create_sqlite_message_index()
 
         # temporarily turn on discovery, remember original state
         self.config.disable_discovery, disable_discovery = (
@@ -562,15 +558,13 @@ class Gateway(GatewayInterface):
             """
             _LOGGER.info("Gateway: Clearing existing schema/state...")
 
-            # self._schema = {}
-
             self._tcs = None
             self.device_registry.devices.clear()
             self.device_registry.device_by_id.clear()
             self._engine._prev_msg = None
             self._engine._this_msg = None
 
-        tmp_transport: RamsesTransportT  # mypy hint
+        tmp_transport: RamsesTransportT
 
         _LOGGER.debug("Gateway: Restoring a cached packet log...")
         await self._pause()

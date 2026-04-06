@@ -113,7 +113,7 @@ class DiscoveryService:
 
         res: list[str] = []
         if self._gwy.message_store:
-            for msg in self._gwy.message_store.state_cache.values():
+            for msg in self._gwy.message_store.log_by_dtm:
                 if (
                     msg.verb == RP
                     and msg.code == Code._3220
@@ -131,7 +131,7 @@ class DiscoveryService:
             msgz_dict = await self._entity.entity_state._msgz()
             res_dict: dict[bool | str | None, Message] | list[Any] = msgz_dict[
                 Code._3220
-            ].get(RP, [])
+            ].get(RP, {})
             assert isinstance(res_dict, dict)
             res = [str(k) for k in res_dict]
 
@@ -256,7 +256,7 @@ class DiscoveryService:
                         tcs_id = getattr(tcs, "id", None)
                         if self._gwy.message_store and tcs_id:
                             found_msgs = []
-                            for m in self._gwy.message_store.state_cache.values():
+                            for m in self._gwy.message_store.log_by_dtm:
                                 if (
                                     m.code == cmd_code
                                     and m.verb in (I_, RP)

@@ -52,12 +52,12 @@ async def test_bdr_switch_relay_demand_standard(
     device.entity_state = MagicMock()
 
     # Simulate 0008 packet returning a valid demand
-    async def mock_msg_value(code: Code | tuple, key: str) -> float | None:
+    async def mock_get_value(code: Code | tuple, key: str) -> float | None:
         if code == Code._0008 and key == "relay_demand":
             return 0.45
         return None
 
-    device.entity_state._msg_value = AsyncMock(side_effect=mock_msg_value)
+    device.entity_state.get_value = AsyncMock(side_effect=mock_get_value)
 
     demand = await device.relay_demand()
     assert demand == 0.45
@@ -72,14 +72,14 @@ async def test_bdr_switch_relay_demand_fallback(
     device.entity_state = MagicMock()
 
     # Simulate 0008 missing, but 3EF0/3EF1 available
-    async def mock_msg_value(code: Code | tuple, key: str) -> float | None:
+    async def mock_get_value(code: Code | tuple, key: str) -> float | None:
         if code == Code._0008:
             return None
         if code == (Code._3EF0, Code._3EF1) and key == "modulation_level":
             return 0.85
         return None
 
-    device.entity_state._msg_value = AsyncMock(side_effect=mock_msg_value)
+    device.entity_state.get_value = AsyncMock(side_effect=mock_get_value)
 
     demand = await device.relay_demand()
     assert demand == 0.85
@@ -89,10 +89,10 @@ async def test_bdr_switch_relay_demand_fallback(
 async def test_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test Thermostat explicitly falls back to the persistent msg_db."""
+    """Test Thermostat explicitly falls back to the persistent message_store."""
     device = Thermostat(mock_gwy, mock_addr)
     device.entity_state = MagicMock()
-    device.entity_state._msg_value = AsyncMock(return_value=None)
+    device.entity_state.get_value = AsyncMock(return_value=None)
 
     # Mock the database returning a cached 30C9 packet
     mock_msg = MagicMock()
@@ -141,10 +141,10 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
 async def test_dhw_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test DhwSensor falls back to the persistent msg_db."""
+    """Test DhwSensor falls back to the persistent message_store."""
     device = DhwSensor(mock_gwy, mock_addr)
     device.entity_state = MagicMock()
-    device.entity_state._msg_value = AsyncMock(return_value=None)
+    device.entity_state.get_value = AsyncMock(return_value=None)
 
     # Mock the database returning a cached 1260 packet
     mock_msg = MagicMock()
@@ -183,10 +183,10 @@ async def test_dhw_temperature_set_faked(
 async def test_weather_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test OutSensor falls back to the persistent msg_db."""
+    """Test OutSensor falls back to the persistent message_store."""
     device = OutSensor(mock_gwy, mock_addr)
     device.entity_state = MagicMock()
-    device.entity_state._msg_value = AsyncMock(return_value=None)
+    device.entity_state.get_value = AsyncMock(return_value=None)
 
     # Mock the database returning a cached 0002 packet
     mock_msg = MagicMock()
@@ -230,16 +230,16 @@ async def test_trv_actuator_heat_demand(
     device.entity_state = MagicMock()
 
     # 1. State store returns None, Setpoint is False -> Demand is 0
-    device.entity_state._msg_value = AsyncMock(return_value=None)
+    device.entity_state.get_value = AsyncMock(return_value=None)
 
     with patch.object(device, "setpoint", AsyncMock(return_value=False)):
         assert await device.heat_demand() == 0
 
     # 2. State store returns valid demand
-    async def mock_msg_value(code: Code | tuple, **kwargs: Any) -> float:
+    async def mock_get_value(code: Code | tuple, **kwargs: Any) -> float:
         return 0.35
 
-    device.entity_state._msg_value = AsyncMock(side_effect=mock_msg_value)
+    device.entity_state.get_value = AsyncMock(side_effect=mock_get_value)
     assert await device.heat_demand() == 0.35
 
 
@@ -254,14 +254,14 @@ async def test_otb_gateway_modulation_prefer(
 
     # Because of a HACK in rel_modulation_level, "prefer" bypasses OT
     # and forces RAMSES entity_state retrieval.
-    device.entity_state._msg_value = AsyncMock(return_value=0.45)
+    device.entity_state.get_value = AsyncMock(return_value=0.45)
 
     with patch.object(device, "_ot_msg_value", return_value=0.60) as mock_ot:
         level = await device.rel_modulation_level()
 
         assert level == 0.45
         mock_ot.assert_not_called()
-        device.entity_state._msg_value.assert_awaited_once()
+        device.entity_state.get_value.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -272,14 +272,14 @@ async def test_otb_gateway_pressure_prefer(
     device = OtbGateway(mock_gwy, mock_addr)
     mock_gwy.config.use_native_ot = "prefer"
     device.entity_state = MagicMock()
-    device.entity_state._msg_value = AsyncMock()
+    device.entity_state.get_value = AsyncMock()
 
     with patch.object(device, "_ot_msg_value", return_value=1.5) as mock_ot:
         pressure = await device.ch_water_pressure()
 
         assert pressure == 1.5
         mock_ot.assert_called_once()
-        device.entity_state._msg_value.assert_not_called()
+        device.entity_state.get_value.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -292,13 +292,13 @@ async def test_otb_gateway_modulation_avoid(
     device.entity_state = MagicMock()
 
     # Provide both values, ensure RAMSES wins
-    device.entity_state._msg_value = AsyncMock(return_value=0.40)
+    device.entity_state.get_value = AsyncMock(return_value=0.40)
 
     with patch.object(device, "_ot_msg_value", return_value=0.60):
         level = await device.rel_modulation_level()
 
         assert level == 0.40
-        device.entity_state._msg_value.assert_awaited_once()
+        device.entity_state.get_value.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -311,11 +311,11 @@ async def test_otb_gateway_modulation_avoid_fallback(
     device.entity_state = MagicMock()
 
     # RAMSES returns None, OT returns value -> OT wins as fallback
-    device.entity_state._msg_value = AsyncMock(return_value=None)
+    device.entity_state.get_value = AsyncMock(return_value=None)
 
     with patch.object(device, "_ot_msg_value", return_value=0.75) as mock_ot:
         level = await device.rel_modulation_level()
 
         assert level == 0.75
-        device.entity_state._msg_value.assert_awaited_once()
+        device.entity_state.get_value.assert_awaited_once()
         mock_ot.assert_called_once()
