@@ -442,7 +442,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         for d in self._gwy.device_registry.devices:
             if isinstance(d, Temperature) and d.ctl in (self.ctl, None):
                 d_temp = await d.temperature()
-                d_msgs = await d.entity_state._msgs()
+                d_msgs = await d.entity_state.get_message_log_flat()
                 if (
                     d_temp is not None
                     and Code._30C9 in d_msgs

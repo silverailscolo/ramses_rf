@@ -556,7 +556,9 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
                     print(f"{msg._pkt}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
-                for msg_code, verbs in (await device.entity_state._msgz()).items():
+                for msg_code, verbs in (
+                    await device.entity_state.get_state_cache_nested()
+                ).items():
                     if msg_code in (Code._0005, Code._000C):
                         for verb in verbs.values():
                             for pkt in verb.values():
@@ -570,7 +572,7 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
                     print(f"{msg._pkt}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
-                for cd in (await device.entity_state._msgz()).values():
+                for cd in (await device.entity_state.get_state_cache_nested()).values():
                     for verb in cd.values():
                         for pkt in verb.values():
                             print(f"{pkt}")

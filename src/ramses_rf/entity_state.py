@@ -63,7 +63,7 @@ class EntityState:
 
     async def get_all_messages(self) -> list[Message]:
         """Return a flattened list of all messages logged on this device."""
-        msgz_dict = await self._get_state_cache_nested()
+        msgz_dict = await self.get_state_cache_nested()
         return [
             msg
             for code in msgz_dict.values()
@@ -80,7 +80,7 @@ class EntityState:
         verb: str = " I",
         payload: str = "00",
     ) -> None:
-        """Add a (dummy) record to the central SQLite MessageIndex."""
+        """Add a (dummy) record to the central SQLite MessageStore."""
         if self._gwy.message_store:
             self._gwy.message_store.add_record(
                 dev_id, code=str(code), verb=verb, payload=payload
@@ -106,7 +106,7 @@ class EntityState:
         code_str, verb_str, _, *args = hdr.split("|")
         code = Code(code_str)
         verb = VerbT(verb_str)
-        msgz_dict = await self._get_state_cache_nested()
+        msgz_dict = await self.get_state_cache_nested()
 
         try:
             if args and (ctx := args[0]):
@@ -164,15 +164,15 @@ class EntityState:
                 key = None
             try:
                 cd = await self.find_latest_code(code, key, **kwargs, verb=verb)
-                msg = (await self._get_message_log_flat()).get(cd) if cd else None
+                msg = (await self.get_message_log_flat()).get(cd) if cd else None
             except KeyError:
                 msg = None
         elif isinstance(code, tuple):
-            msgs_dict = await self._get_message_log_flat()
+            msgs_dict = await self.get_message_log_flat()
             msgs_list = [m for m in msgs_dict.values() if m.code in code]
             msg = max(msgs_list) if msgs_list else None
         else:
-            msgs_dict = await self._get_message_log_flat()
+            msgs_dict = await self.get_message_log_flat()
             msg = msgs_dict.get(code)
 
         return self._msg_value_msg(msg, key=key, **kwargs)
@@ -235,7 +235,7 @@ class EntityState:
         is_zone = len(entity_id) > 9 and not is_dhw
         zone_idx = entity_id[_ID_SLICE + 1 :] if is_zone else None
 
-        nested_cache = await self._get_state_cache_nested()
+        nested_cache = await self.get_state_cache_nested()
 
         for code, verbs in nested_cache.items():
             for verb, ctxs in verbs.items():
@@ -303,7 +303,7 @@ class EntityState:
             else (" I", "RP")
         )
 
-        nested_cache = await self._get_state_cache_nested()
+        nested_cache = await self.get_state_cache_nested()
 
         for cd, verbs in nested_cache.items():
             if code is not None:
@@ -380,13 +380,14 @@ class EntityState:
         )
         return []
 
-    @property
-    def _msgs_(self) -> dict[Code, Message]:
-        """Legacy compatibility property for synchronous access."""
+    async def get_message_log_flat(self) -> dict[Code, Message]:
+        """Dynamically build a flat dict of all I/RP messages logged for this entity."""
         _msg_dict: dict[Code, Message] = {}
 
-        # Build from _msgz_ to guarantee strict zone_idx isolation
-        for code, verbs in self._msgz_.items():
+        # Build from get_state_cache_nested to guarantee strict zone_idx isolation
+        nested_cache = await self.get_state_cache_nested()
+
+        for code, verbs in nested_cache.items():
             for verb, ctxs in verbs.items():
                 if verb not in (I_, RP):
                     continue
@@ -396,13 +397,10 @@ class EntityState:
 
         return _msg_dict
 
-    async def _msgs(self) -> dict[Code, Message]:
-        """Dynamically build a flat dict of all I/RP messages logged for this entity."""
-        return await self._get_message_log_flat()
-
-    @property
-    def _msgz_(self) -> dict[Code, dict[VerbT, dict[bool | str | None, Message]]]:
-        """Legacy compatibility property for synchronous access to nested states."""
+    async def get_state_cache_nested(
+        self,
+    ) -> dict[Code, dict[VerbT, dict[bool | str | None, Message]]]:
+        """Dynamically build a nested dict of all I/RP messages for this entity."""
         msgs_1: Any = defaultdict(lambda: defaultdict(dict))
 
         if self._gwy.message_store is None:
@@ -415,7 +413,12 @@ class EntityState:
         is_zone = len(entity_id) > 9 and not is_dhw
         zone_idx = entity_id[_ID_SLICE + 1 :] if is_zone else None
 
-        for msg in self._gwy.message_store.log_by_dtm:
+        # Handle both list and dict based message logs gracefully
+        log_iterable = self._gwy.message_store.log_by_dtm
+        if isinstance(log_iterable, dict):
+            log_iterable = log_iterable.values()
+
+        for msg in log_iterable:
             if not self._is_relevant_msg(msg):
                 continue
 
@@ -457,27 +460,13 @@ class EntityState:
 
         return cast("dict[Code, dict[VerbT, dict[bool | str | None, Message]]]", msgs_1)
 
-    async def _msgz(self) -> dict[Code, dict[VerbT, dict[bool | str | None, Message]]]:
-        """Dynamically build a nested dict of all I/RP messages for this entity."""
-        return await self._get_state_cache_nested()
-
-    async def _get_message_log_flat(self) -> dict[Code, Message]:
-        """Dynamically build a flat dict of all I/RP messages logged for this entity."""
-        return self._msgs_
-
-    async def _get_state_cache_nested(
-        self,
-    ) -> dict[Code, dict[VerbT, dict[bool | str | None, Message]]]:
-        """Dynamically build a nested dict of all I/RP messages for this entity."""
-        return self._msgz_
-
     def _handle_msg(self, msg: Message) -> None:
         """Deprecated: The proxy no longer caches its own packets."""
         pass
 
     async def traits(self) -> dict[str, Any]:
         """Get the codes seen by the entity."""
-        msgs_dict = await self._get_message_log_flat()
+        msgs_dict = await self.get_message_log_flat()
         codes = {
             code: (CODES_SCHEMA[code][SZ_NAME] if code in CODES_SCHEMA else None)
             for code in sorted(msgs_dict)

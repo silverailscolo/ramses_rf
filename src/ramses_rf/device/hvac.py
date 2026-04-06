@@ -961,7 +961,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: speed as percentage
         """
         speed: float = -1
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
         for code in [c for c in (Code._31D9, Code._31DA) if c in msgs]:
             if v := msgs[code].payload.get(SZ_EXHAUST_FAN_SPEED):
                 # if both packets exist and both have the key, use the highest value
@@ -1017,7 +1017,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     async def fan_info(self) -> str | None:
         """
-        Extract fan info description from MessageIndex _31D9 or _31DA payload,
+        Extract fan info description from MessageStore _31D9 or _31DA payload,
         e.g. "speed 2, medium".
         By its name, the result is picked up by a sensor in HA Climate UI.
         Some manufacturers (Orcon, Vasco) include the fan mode (auto, manual), others don't (Itho).
@@ -1025,7 +1025,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: string describing fan mode, speed
         """
         # if self._gwy.message_store:
-        # Use SQLite query on MessageIndex. res_rate/res_mode not exposed yet
+        # Use SQLite query on MessageStore. res_rate/res_mode not exposed yet
         # working fine in 0.52.4, no need to specify code, only payload key
         # sql = f"""
         #     SELECT code from messages WHERE verb in (' I', 'RP')
@@ -1033,9 +1033,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         #     AND (plk LIKE '%{SZ_FAN_MODE}%')
         # """
         # res_mode: list = self.entity_state._msg_qry(sql)
-        # # SQLite query on MessageIndex
+        # # SQLite query on MessageStore
         # _LOGGER.debug(
-        #     f"# Fetched FAN_MODE for {self.id} from MessageIndex: {res_mode}"
+        #     f"# Fetched FAN_MODE for {self.id} from MessageStore: {res_mode}"
         # )
 
         # sql = f"""
@@ -1044,12 +1044,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         #     AND (plk LIKE '%{SZ_FAN_RATE}%')
         # """
         # res_rate: list = self.entity_state._msg_qry(sql)
-        # # SQLite query on MessageIndex
+        # # SQLite query on MessageStore
         # _LOGGER.debug(
-        #     f"# Fetched FAN_RATE for {self.id} from MessageIndex: {res_rate}"
+        #     f"# Fetched FAN_RATE for {self.id} from MessageStore: {res_rate}"
         # )
 
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
         if Code._31D9 in msgs:
             # was a dict by Code
             # Itho, Vasco D60 and ClimaRad MiniBox fan send mode/speed in _31D9
@@ -1064,12 +1064,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     async def indoor_humidity(self) -> float | None:
         """
-        Extract indoor_humidity from MessageIndex _12A0 or _31DA payload
+        Extract indoor_humidity from MessageStore _12A0 or _31DA payload
         Just a demo for SQLite query helper at the moment.
 
         :return: float RH value from 0.0 to 1.0 = 100%
         """
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
         if Code._12A0 in msgs and isinstance(
             msgs[Code._12A0].payload, list
         ):  # FAN Ventura sends RH/temps as a list; element [0] contains indoor_hum
@@ -1102,7 +1102,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The outdoor relative humidity as a percentage (0-100), or None if not available
         :rtype: float | None
         """
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
         if Code._12A0 in msgs and isinstance(
             msgs[Code._12A0].payload, list
         ):  # FAN Ventura sends RH/temps as a list; element [1] contains outdoor_hum
@@ -1218,7 +1218,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The supply air temperature in Celsius, or None if not available
         :rtype: float | None
         """
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
         if Code._12A0 in msgs and isinstance(
             msgs[Code._12A0].payload, list
         ):  # FAN Ventura sends RH/temps as a list;
@@ -1232,7 +1232,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         )
 
     async def status(self) -> dict[str, Any]:
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
         base_status = await super().status()
         return {
             **base_status,
@@ -1253,7 +1253,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The temperature in degrees Celsius, or None if not available
         :rtype: float | None
         """
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
         if Code._12A0 in msgs and isinstance(
             msgs[Code._12A0].payload, list
         ):  # FAN Ventura sends RH/temps as a list; use element [1]

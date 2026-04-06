@@ -14,7 +14,7 @@ from ramses_rf.device.hvac import (  # initiate_binding_process
     HvacDisplayRemote,
     HvacRemote,
 )
-from ramses_rf.message_store import MessageIndex
+from ramses_rf.message_store import MessageStore
 from ramses_tx.address import Address
 from ramses_tx.const import Code
 
@@ -55,7 +55,7 @@ class GatewayStub:
         self._engine._include = {}
         self._engine._enforce_known_list = False
 
-        self.message_store = MessageIndex(maintain=False)
+        self.message_store = MessageStore(maintain=False)
 
     @property
     def device_registry(self) -> "GatewayStub":

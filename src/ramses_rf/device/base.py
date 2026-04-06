@@ -213,7 +213,7 @@ class DeviceBase(Entity):
             return isinstance(self, BatteryState) or (
                 code_list is not None and Code._1060 in code_list
             )  # TODO(eb): clean up next line Q1 2026
-        msgz = await self.entity_state._msgz()
+        msgz = await self.entity_state.get_state_cache_nested()
         return isinstance(self, BatteryState) or Code._1060 in msgz
 
     @property
@@ -230,7 +230,7 @@ class DeviceBase(Entity):
 
     async def _is_present(self) -> bool:
         """Try to exclude ghost devices (as caused by corrupt packet addresses)."""
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
         return any(
             m.src == self for m in msgs.values() if not m._expired
         )  # TODO: needs addressing
@@ -313,7 +313,7 @@ class DeviceInfo(DeviceBase):  # 10E0
         """Return the traits of the device."""
 
         result = await super().traits()
-        msgs = await self.entity_state._msgs()
+        msgs = await self.entity_state.get_message_log_flat()
 
         if Code._10E0 in msgs or Code._10E0 in CODES_BY_DEV_SLUG.get(self._SLUG, []):
             result.update({"_info": await self.device_info()})

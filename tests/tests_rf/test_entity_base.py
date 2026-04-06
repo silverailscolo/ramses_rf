@@ -10,7 +10,7 @@ import pytest
 from ramses_rf.const import RP
 from ramses_rf.entity_base import Entity, _Entity
 from ramses_rf.gateway import Gateway
-from ramses_rf.message_store import MessageIndex
+from ramses_rf.message_store import MessageStore
 from ramses_tx import Code, DeviceIdT, Message, Packet
 
 
@@ -36,8 +36,8 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
     gateway._loop.call_later = MagicMock()
     gateway._loop.time = MagicMock(return_value=0.0)
 
-    # activate the SQLite MessageIndex
-    gateway.message_store = MessageIndex(maintain=False)
+    # activate the SQLite MessageStore
+    gateway.message_store = MessageStore(maintain=False)
 
     yield gateway
 
@@ -88,11 +88,11 @@ class Test_entity_base:
         assert dev.id == "04:189078"
 
         # create _msgs
-        assert await dev.entity_state._msgs() == {
+        assert await dev.entity_state.get_message_log_flat() == {
             "12B0": self.msg7,
             "3150": self.msg5,
             "3220": self.msg6,
-        }, "base _msgs wrong"
+        }, "base message_log_flat wrong"
 
         # find our Codes
         assert sorted(await dev.entity_state._msg_dev_qry() or []) == sorted(
@@ -113,11 +113,11 @@ class Test_entity_base:
         ), "_msg_list wrong"
 
         # create _msgz
-        assert await dev.entity_state._msgz() == {
+        assert await dev.entity_state.get_state_cache_nested() == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
             "3220": {"RP": {"11": self.msg6}},
-        }, "base _msgz wrong"
+        }, "base state_cache_nested wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
@@ -137,10 +137,10 @@ class Test_entity_base:
         assert dev.id == "04:189078_01"
 
         # create _msgs
-        assert await dev.entity_state._msgs() == {
+        assert await dev.entity_state.get_message_log_flat() == {
             "12B0": self.msg7,
             "3150": self.msg5,
-        }, "zone _msgs wrong"
+        }, "zone message_log_flat wrong"
 
         # find our Codes
         assert sorted(await dev.entity_state._msg_dev_qry() or []) == sorted(
@@ -159,10 +159,10 @@ class Test_entity_base:
         ), "_msg_list wrong"
 
         # create _msgz
-        assert await dev.entity_state._msgz() == {
+        assert await dev.entity_state.get_state_cache_nested() == {
             "12B0": {" I": {"01": self.msg7}},
             "3150": {" I": {"01": self.msg5}},
-        }, "zone _msgz wrong"
+        }, "zone state_cache_nested wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
@@ -197,10 +197,10 @@ class Test_entity_base:
         )
 
         # create _msgs
-        assert await dev.entity_state._msgs() == {
+        assert await dev.entity_state.get_message_log_flat() == {
             "1260": self.msg9,
             "3150": self.msg8,
-        }, "dhw _msgs wrong"
+        }, "dhw message_log_flat wrong"
 
         # find our Codes
         assert sorted(await dev.entity_state._msg_dev_qry() or []) == sorted(
@@ -219,10 +219,10 @@ class Test_entity_base:
         ), "dhw _msg_list wrong"
 
         # create _msgz
-        assert await dev.entity_state._msgz() == {
+        assert await dev.entity_state.get_state_cache_nested() == {
             "1260": {"RP": {"00": self.msg9}},
             "3150": {" I": {"FC": self.msg8}},
-        }, "dhw _msgz wrong"
+        }, "dhw state_cache_nested wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
@@ -326,7 +326,7 @@ async def test_gh_396_legacy_ot_context() -> None:
     # Execute
     with patch.object(
         entity.entity_state,
-        "_msgz",
+        "get_state_cache_nested",
         AsyncMock(
             return_value={
                 Code._3220: {

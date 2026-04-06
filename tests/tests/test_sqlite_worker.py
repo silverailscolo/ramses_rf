@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from ramses_rf.message_store import MessageIndex
+from ramses_rf.message_store import MessageStore
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
@@ -51,9 +51,9 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
     # Temporarily hide the Pytest env var so the SQLiteWorker actually starts up
     pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
     try:
-        # 2. Initialize MessageIndex (starts the background StorageWorker)
+        # 2. Initialize MessageStore (starts the background StorageWorker)
         # We pass the path as a string, as expected by the class
-        idx = MessageIndex(db_path=str(db_path), disk_path=str(disk_path))
+        idx = MessageStore(db_path=str(db_path), disk_path=str(disk_path))
 
         # Allow a tiny moment for the worker thread to initialize tables
         # using a deterministic polling loop instead of a flaky hardcoded sleep
@@ -147,7 +147,7 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         assert disk_path.exists(), "Snapshot file was not created on disk!"
 
         # 6. Hydration Verification
-        idx2 = MessageIndex(db_path=":memory:", disk_path=str(disk_path))
+        idx2 = MessageStore(db_path=":memory:", disk_path=str(disk_path))
         await asyncio.sleep(0.5)
 
         assert len(idx2.log_by_dtm) == MSG_COUNT, (

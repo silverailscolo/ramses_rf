@@ -55,15 +55,15 @@ async def assert_code_in_device_msgindex(
         if not dev:
             return False
 
-        # Check central SQLite MessageIndex if enabled
+        # Check central SQLite MessageStore if enabled
         if gwy.message_store:
             return await gwy.message_store.contains(
                 src=dev_id, code=str(code)
             ) or await gwy.message_store.contains(dst=dev_id, code=str(code))
 
         # Fallback to device's internal tracking dictionaries
-        msgs = await dev.entity_state._msgs()
-        msgz = await dev.entity_state._msgz()
+        msgs = await dev.entity_state.get_message_log_flat()
+        msgz = await dev.entity_state.get_state_cache_nested()
         return code in msgs or code in msgz
 
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):

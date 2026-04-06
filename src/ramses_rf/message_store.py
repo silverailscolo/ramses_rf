@@ -696,7 +696,3 @@ class MessageStore:
 
         self._message_log.clear()
         self._state_cache.clear()
-
-
-# Alias for backwards compatibility during Phase 2 migration
-MessageIndex = MessageStore

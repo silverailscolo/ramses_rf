@@ -731,17 +731,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         super().__init__(*args, traits=traits, **kwargs)
 
         self._child_id = FC  # NOTE: domain_id
-
-        # TODO(eb): cleanup
-        if not self._gwy.message_store:
-            # self._add_record(
-            #     id=self.id, code=Code._3220, verb="RP", payload="00C0060101"
-            # )  # is parsed but pollutes the client.py
-            # adds a "sim" RP opentherm_msg to the SQLite MessageIndex with code _3220
-            # causes exc when fetching ALL, when no "real" msg was added to _msgs_. We skip those.
-            # else:
-            self.entity_state._msgz_[Code._3220] = {RP: {}}  # No ctx! (not None)
-
         # lf._use_ot = self._gwy.config.use_native_ot
         self._msgs_ot: dict[MsgId, Message] = {}
         # lf._msgs_ot_ctl_polled = {}

@@ -10,7 +10,7 @@ import pytest
 
 from ramses_rf import Device, dispatcher
 from ramses_rf.gateway import Gateway, GatewayConfig
-from ramses_rf.message_store import MessageIndex
+from ramses_rf.message_store import MessageStore
 from ramses_tx import Address, DeviceIdT, Message, Packet
 
 
@@ -43,8 +43,8 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
 
     gateway._engine._include = {}
 
-    # activate the SQLite MessageIndex
-    gateway.message_store = MessageIndex(maintain=False)
+    # activate the SQLite MessageStore
+    gateway.message_store = MessageStore(maintain=False)
 
     yield gateway
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""RAMSES RF - Unit test for MessageIndex."""
+"""RAMSES RF - Unit test for MessageStore."""
 
 from datetime import datetime as dt, timedelta as td
 
-from ramses_rf.message_store import MessageIndex
+from ramses_rf.message_store import MessageStore
 from ramses_tx import Code, Message, Packet
 
 
-class TestMessageIndex:
-    """Test  MessageIndex class."""
+class TestMessageStore:
+    """Test  MessageStore class."""
 
     _SRC1 = "32:166025"
     _SRC2 = "01:087939"  # (CTR)
@@ -64,8 +64,8 @@ class TestMessageIndex:
     )
 
     async def test_add_msg(self) -> None:
-        """Add a message to the MessageIndex."""
-        msg_db = MessageIndex(disk_path=None)
+        """Add a message to the MessageStore."""
+        msg_db = MessageStore(disk_path=None)
         ret: Message | None
 
         # add a message
@@ -106,8 +106,8 @@ class TestMessageIndex:
         msg_db.stop()  # close sqlite3 connection
 
     async def test_qry_msg(self) -> None:
-        """Query the MessageIndex."""
-        msg_db = MessageIndex(disk_path=None)
+        """Query the MessageStore."""
+        msg_db = MessageStore(disk_path=None)
         msg_db.add(self.msg1)
         msg_db.add(self.msg2)
         msg_db.add(self.msg3)
@@ -159,7 +159,7 @@ class TestMessageIndex:
 
     async def test_fat_database_payload_serialization(self) -> None:
         """Phase 2.5: Verify large payloads decode properly from the RAM cache."""
-        msg_db = MessageIndex(maintain=False, disk_path=None)
+        msg_db = MessageStore(maintain=False, disk_path=None)
         msg_db.add(self.msg4)  # Contains a highly complex dictionary payload
 
         # Query the message directly out of the RAM index

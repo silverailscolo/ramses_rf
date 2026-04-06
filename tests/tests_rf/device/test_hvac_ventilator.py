@@ -10,7 +10,7 @@ from ramses_rf import exceptions as exc
 from ramses_rf.const import DevType
 from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.gateway import Gateway
-from ramses_rf.message_store import MessageIndex
+from ramses_rf.message_store import MessageStore
 from ramses_tx import Address
 from ramses_tx.const import Code, Priority
 from ramses_tx.typing import DeviceIdT
@@ -42,7 +42,7 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
     gateway._loop.time = MagicMock(return_value=0.0)
     gateway._include = {}
     # Add msg_db attribute accessed by the message store
-    gateway.message_store = MessageIndex(maintain=False)
+    gateway.message_store = MessageStore(maintain=False)
 
     yield gateway
 

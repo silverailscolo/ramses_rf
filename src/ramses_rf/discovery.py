@@ -94,7 +94,7 @@ class DiscoveryService:
                 )
                 if self.is_not_deprecated_cmd(code)
             }
-        msgz_dict = await self._entity.entity_state._msgz()
+        msgz_dict = await self._entity.entity_state.get_state_cache_nested()
         return {
             code: (CODES_SCHEMA[code]["name"] if code in CODES_SCHEMA else None)
             for code in sorted(msgz_dict)
@@ -128,7 +128,7 @@ class DiscoveryService:
                     if val not in res:
                         res.append(val)
         else:
-            msgz_dict = await self._entity.entity_state._msgz()
+            msgz_dict = await self._entity.entity_state.get_state_cache_nested()
             res_dict: dict[bool | str | None, Message] | list[Any] = msgz_dict[
                 Code._3220
             ].get(RP, {})
@@ -276,7 +276,7 @@ class DiscoveryService:
                                     cmd_code,
                                 )
                         else:
-                            tcs_msgz = await tcs.entity_state._msgz()
+                            tcs_msgz = await tcs.entity_state.get_state_cache_nested()
                             msgs.append(tcs_msgz[cmd_code][I_][True])
             except KeyError:
                 pass

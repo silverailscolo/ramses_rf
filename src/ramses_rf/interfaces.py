@@ -216,7 +216,3 @@ class GatewayInterface(Protocol):
     ) -> Packet:
         """Send a command asynchronously and return the resulting packet."""
         ...
-
-
-# Alias for backwards compatibility during Phase 2 migration
-MessageIndexInterface = MessageStoreInterface
