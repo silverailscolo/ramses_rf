@@ -59,7 +59,7 @@ async def test_schedule_get_sql(dir_name: Path) -> None:
     with open(f"{dir_name}/schedule.json") as f:
         schedule = json.load(f)
 
-    gwy: Gateway = await load_test_gwy(dir_name, _sqlite_index=True)
+    gwy: Gateway = await load_test_gwy(dir_name)
     assert isinstance(gwy.tcs, Evohome)  # mypy
     try:
         zone: ZoneSchedule = gwy.tcs.dhw if gwy.tcs.dhw else gwy.tcs.zones[0]

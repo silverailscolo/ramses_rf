@@ -75,7 +75,6 @@ class Engine:
         disable_sending: bool = False,
         disable_qos: bool | None = None,
         enforce_known_list: bool = False,
-        sqlite_index: bool = False,
         log_all_mqtt: bool = False,
         evofw_flag: str | None = None,
         use_regex: dict[str, dict[str, str]] | None = None,
@@ -113,7 +112,6 @@ class Engine:
             self._include,
             self._exclude,
         )
-        self._sqlite_index = sqlite_index  # TODO Q1 2026: default True
         self._log_all_mqtt = log_all_mqtt
         self._evofw_flag = evofw_flag
         self._use_regex = use_regex or {}
