@@ -76,7 +76,7 @@ def test_packet_constructors() -> None:
     """
     dtm_str = DTM.isoformat()
 
-    # Test from_dict
+    # Test from_dict with legacy string (backward compatibility)
     pkt_dict = Packet.from_dict(dtm_str, f"{VALID_FRAME_I} # my comment")
     assert pkt_dict.dtm == DTM
     assert pkt_dict.rssi == "045"
@@ -98,6 +98,45 @@ def test_packet_constructors() -> None:
     # _from_cmd prepends "... " to the frame, simulating a blank RSSI from a command
     assert pkt_cmd.rssi == "..."
     assert pkt_cmd.verb == " I"
+
+
+def test_packet_dto_serialization() -> None:
+    """Test Packet DTO serialization and structured dictionary ingestion.
+
+    :return: None
+    """
+    pkt = Packet(DTM, VALID_FRAME_I, comment="1060| I|01:145038")
+
+    # 1. Test to_dict (Serialization)
+    pkt_dict = pkt.to_dict()
+
+    # Calculate the expected timezone-aware string dynamically to pass on any system
+    expected_dtm = DTM.astimezone().isoformat(timespec="microseconds")
+    assert pkt_dict["dtm"] == expected_dtm
+
+    assert pkt_dict["verb"] == " I"
+    assert pkt_dict["code"] == "1F09"
+    assert pkt_dict["rssi"] == 45  # Intentionally mapped to int for DTO
+    assert pkt_dict["frame"] == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+
+    # Check DeviceAddress resolution
+    assert pkt_dict["addr1"]["device_type"] == 1
+    assert pkt_dict["addr1"]["device_id"] == 145038
+
+    # Address 2 is blank in VALID_FRAME_I
+    assert pkt_dict["addr2"]["device_type"] is None  # --:------
+
+    # Address 3 has the actual destination in VALID_FRAME_I
+    assert pkt_dict["addr3"]["device_type"] == 1
+    assert pkt_dict["addr3"]["device_id"] == 145038
+
+    # 2. Test from_dict with a structured dictionary (Deserialization)
+    restored_pkt = Packet.from_dict(pkt_dict["dtm"], pkt_dict)
+
+    assert restored_pkt.dtm == DTM.astimezone()
+    assert restored_pkt.rssi == "045"  # Automatically padded back to 3 chars
+    assert restored_pkt.verb == " I"
+    assert restored_pkt._frame == pkt._frame
 
 
 def test_pkt_lifespan(monkeypatch: pytest.MonkeyPatch) -> None:
