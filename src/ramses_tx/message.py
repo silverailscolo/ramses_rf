@@ -485,6 +485,10 @@ def _check_msg_payload(msg: MessageBase, payload: str) -> None:
     if not regex:
         raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
 
+    # Bypass strict regex validation if the payload is functionally empty ("00")
+    if not msg._has_payload:
+        return
+
     if not re_compile_re_match(str(regex), payload):
         raise exc.PacketPayloadInvalid(
             f"Payload doesn't match {msg.verb}/{msg.code}: {payload} != {regex}"

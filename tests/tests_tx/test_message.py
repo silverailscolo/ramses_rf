@@ -2,6 +2,7 @@
 """Test the Message class and its exposed attributes, including RSSI."""
 
 from datetime import datetime as dt
+from typing import Any
 
 import pytest
 
@@ -11,9 +12,10 @@ from ramses_tx.packet import Packet
 # Constants for testing frames
 FRAME_STR_1 = "045 RQ --- 18:006402 13:049798 --:------ 1FC9 001 00"
 FRAME_STR_2 = "095  I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+FRAME_STR_EMPTY = "045 RP --- 37:153226 29:123160 --:------ 2411 001 00"
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def patch_parsers(monkeypatch: pytest.MonkeyPatch) -> None:
     """Mock out payload validation and parsing for isolated testing.
 
@@ -29,9 +31,11 @@ def patch_parsers(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_message_attributes() -> None:
+def test_message_attributes(patch_parsers: Any) -> None:
     """Test that the Message class correctly surfaces basic attributes and RSSI.
 
+    :param patch_parsers: The mock fixture for parsers.
+    :type patch_parsers: Any
     :return: None
     """
     dtm = dt(2023, 1, 1, 12, 0, 0)
@@ -51,9 +55,11 @@ def test_message_attributes() -> None:
     assert message._has_payload is False
 
 
-def test_message_parsing_and_rssi() -> None:
+def test_message_parsing_and_rssi(patch_parsers: Any) -> None:
     """Test that a different frame correctly sets RSSI and parses payload.
 
+    :param patch_parsers: The mock fixture for parsers.
+    :type patch_parsers: Any
     :return: None
     """
     dtm = dt.now()
@@ -70,9 +76,11 @@ def test_message_parsing_and_rssi() -> None:
     assert message.payload.get("mock_key") == "mock_val"
 
 
-def test_message_equality_and_comparison() -> None:
+def test_message_equality_and_comparison(patch_parsers: Any) -> None:
     """Test the equality and less-than operators of the Message class.
 
+    :param patch_parsers: The mock fixture for parsers.
+    :type patch_parsers: Any
     :return: None
     """
     dtm1 = dt(2023, 1, 1, 12, 0, 0)
@@ -94,9 +102,11 @@ def test_message_equality_and_comparison() -> None:
     assert msg1 < msg3
 
 
-def test_message_string_representations() -> None:
+def test_message_string_representations(patch_parsers: Any) -> None:
     """Test the string and repr outputs of the Message class.
 
+    :param patch_parsers: The mock fixture for parsers.
+    :type patch_parsers: Any
     :return: None
     """
     dtm = dt(2023, 1, 1, 12, 0, 0)
@@ -111,3 +121,21 @@ def test_message_string_representations() -> None:
     assert "18:006402" in msg_str
     assert "13:049798" in msg_str
     assert "RQ" in msg_str
+
+
+def test_startup_empty_payload_reproduction() -> None:
+    """Test that an empty payload bypasses strict regex and parses safely.
+
+    This test confirms the fix: functionally empty payloads ("00")
+    no longer raise PacketPayloadInvalid.
+
+    :return: None
+    """
+    dtm = dt.now()
+    packet = Packet(dtm, FRAME_STR_EMPTY)
+
+    # With the fix applied, this should instantiate without raising an exception
+    message = Message(packet)
+
+    assert message._has_payload is False
+    assert message.len == 1
