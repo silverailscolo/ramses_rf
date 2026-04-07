@@ -18,7 +18,7 @@ from ramses_rf.device.heat import (
 from ramses_rf.exceptions import DeviceNotFaked
 from ramses_tx import Code, Priority
 from ramses_tx.address import Address
-from ramses_tx.const import SZ_TEMPERATURE
+from ramses_tx.const import SZ_TEMPERATURE, MsgId
 
 
 @pytest.fixture
@@ -244,24 +244,29 @@ async def test_trv_actuator_heat_demand(
 
 
 @pytest.mark.asyncio
-async def test_otb_gateway_modulation_prefer(
+async def test_otb_gateway_modulation_quarantine_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test OtbGateway modulation 'prefer' hack prioritizes RAMSES."""
+    """Test OtbGateway modulation falls back to RAMSES due to quarantine."""
     device = OtbGateway(mock_gwy, mock_addr)
     mock_gwy.config.use_native_ot = "prefer"
     device.entity_state = MagicMock()
 
-    # Because of a HACK in rel_modulation_level, "prefer" bypasses OT
-    # and forces RAMSES entity_state retrieval.
+    # Simulate RAMSES returning 0.45
     device.entity_state.get_value = AsyncMock(return_value=0.45)
 
-    with patch.object(device, "_ot_msg_value", return_value=0.60) as mock_ot:
-        level = await device.rel_modulation_level()
+    # Inject a fake OpenTherm message. Because MsgId._11 is in the
+    # quarantine list, _ot_msg_value will ignore this and return None,
+    # forcing the fallback to RAMSES.
+    mock_msg = MagicMock()
+    mock_msg.payload = {"value": 0.60}  # SZ_VALUE
+    mock_msg._expired = False
+    device._msgs_ot[MsgId._11] = mock_msg
 
-        assert level == 0.45
-        mock_ot.assert_not_called()
-        device.entity_state.get_value.assert_awaited_once()
+    level = await device.rel_modulation_level()
+
+    assert level == 0.45
+    device.entity_state.get_value.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -33,6 +33,7 @@ from ramses_rf.const import (
 from ramses_rf.device import Device
 from ramses_rf.entity_base import Entity, class_by_attr
 from ramses_rf.helpers import shrink
+from ramses_rf.quirks import QUARANTINED_OT_MSG_IDS
 from ramses_rf.schemas import SCH_TCS, SZ_ACTUATORS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
 from ramses_tx import NON_DEV_ADDR, Command, Priority
@@ -886,6 +887,8 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         )
 
     def _ot_msg_value(self, msg_id: MsgId) -> int | float | list | None:
+        if msg_id in QUARANTINED_OT_MSG_IDS.get(self._SLUG, set()):
+            return None
         # data_id = int(msg_id, 16)
         if (msg := self._msgs_ot.get(msg_id)) and not msg._expired:
             # TODO: value_hb/_lb
@@ -1028,13 +1031,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         )
 
     async def max_rel_modulation(self) -> float | None:  # 3220|0E, or 3EF0 (byte 8)
-        if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(
-                float | None,
-                await self.entity_state.get_value(
-                    Code._3EF0, key=SZ_MAX_REL_MODULATION
-                ),
-            )
         return cast(
             float | None,
             self._result_by_value(
@@ -1054,13 +1050,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         )
 
     async def rel_modulation_level(self) -> float | None:  # 3220|11, or 3EF0/3EF1
-        if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(
-                float | None,
-                await self.entity_state.get_value(
-                    (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
-                ),
-            )
         return cast(
             float | None,
             self._result_by_value(
@@ -1072,11 +1061,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         )
 
     async def ch_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
-        if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(
-                bool | None,
-                await self.entity_state.get_value(Code._3EF0, key=SZ_CH_ACTIVE),
-            )
         return cast(
             bool | None,
             self._result_by_value(
@@ -1086,11 +1070,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         )
 
     async def ch_enabled(self) -> bool | None:  # 3220|00, or 3EF0 (byte 6)
-        if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(
-                bool | None,
-                await self.entity_state.get_value(Code._3EF0, key=SZ_CH_ENABLED),
-            )
         return cast(
             bool | None,
             self._result_by_value(
@@ -1111,11 +1090,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         )
 
     async def dhw_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
-        if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(
-                bool | None,
-                await self.entity_state.get_value(Code._3EF0, key=SZ_DHW_ACTIVE),
-            )
         return cast(
             bool | None,
             self._result_by_value(
@@ -1140,11 +1114,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         )
 
     async def flame_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
-        if self._gwy.config.use_native_ot == "prefer":  # HACK: there'll always be 3EF0
-            return cast(
-                bool | None,
-                await self.entity_state.get_value(Code._3EF0, key="flame_on"),
-            )
         return cast(
             bool | None,
             self._result_by_value(
