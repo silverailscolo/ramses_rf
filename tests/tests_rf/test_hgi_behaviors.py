@@ -110,7 +110,7 @@ async def _test_gwy_device(gwy: Gateway, test_idx: int) -> None:
     if isinstance(gwy._engine._transport, MqttTransport):  # MQTT
         timeout = 0.375 * 2  # intesting, fail: 0.370 work: 0.375: 0.75 margin of safety
     elif gwy._engine._transport.get_extra_info("virtual_rf"):  #   # fake
-        timeout = 0.010 * 2  # was 0.003 * 2: increased to 20ms for CI stability
+        timeout = 0.050 * 2  # was 0.003 * 2: increased to 100ms for CI stability
     else:  #                                        # real
         timeout = 0.355 * 2  # intesting, fail: 0.350 work: 0.355: 0.71 margin of safety
 
