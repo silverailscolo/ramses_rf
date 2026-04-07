@@ -9,11 +9,10 @@ from __future__ import annotations
 import contextlib
 from dataclasses import asdict, dataclass
 from datetime import datetime as dt, timedelta as td
-from enum import StrEnum
 from typing import Any
 
 from .command import Command
-from .const import I_, RP, RQ, W_, Code
+from .const import I_, RP, RQ, W_, Code, VerbT
 from .exceptions import PacketInvalid
 from .frame import Frame
 from .logger import getLogger  # overridden logger.getLogger
@@ -31,19 +30,6 @@ _TD_DAYS_001 = td(minutes=60 * 24)
 
 
 PKT_LOGGER = getLogger(f"{__name__}_log", pkt_log=True)
-
-
-class Verb(StrEnum):
-    """Enumeration of standard RAMSES-RF packet verbs.
-
-    The whitespace in Information and Write verbs is explicitly preserved
-    as required by the protocol.
-    """
-
-    I_ = " I"
-    RQ = "RQ"
-    RP = "RP"
-    W_ = " W"
 
 
 @dataclass
@@ -101,7 +87,7 @@ class PacketDTO:
     :param rssi: Signal strength indicator, or None if '---'.
     :type rssi: int | None
     :param verb: The strongly-typed packet verb.
-    :type verb: Verb
+    :type verb: VerbT
     :param seqn: The sequence number as a string, or None if '---'.
     :type seqn: str | None
     :param addr1: Address 1 (Usually Source), split into type and ID.
@@ -126,7 +112,7 @@ class PacketDTO:
 
     dtm: dt
     rssi: int | None
-    verb: Verb
+    verb: VerbT
     seqn: str | None
     addr1: DeviceAddress | None
     addr2: DeviceAddress | None
@@ -271,9 +257,9 @@ class Packet(Frame):
     ) -> PacketDTO:
         """Serialize the packet to a structured DTO object."""
         try:
-            verb_val = Verb(self.verb)
+            verb_val = VerbT(self.verb)
         except ValueError:
-            verb_val = Verb.I_
+            verb_val = VerbT.I_
 
         dtm = self.dtm
         if dtm.tzinfo is None:
