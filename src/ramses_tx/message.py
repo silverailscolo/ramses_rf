@@ -313,7 +313,12 @@ class MessageBase:
 
         try:  # parse the payload
             # TODO: only accept invalid packets to/from HGI when flag raised
-            _check_msg_payload(self, self._pkt.payload)  # ? InvalidPayloadError
+            try:
+                _check_msg_payload(self, self._pkt.payload)  # ? InvalidPayloadError
+            except exc.PacketPayloadInvalid as err:
+                if not self._has_payload:
+                    return {}  # Heartbeat fallback for null payloads
+                raise err
 
             if not self._has_payload and (
                 self.verb == RQ and self.code not in RQ_IDX_COMPLEX
@@ -484,10 +489,6 @@ def _check_msg_payload(msg: MessageBase, payload: str) -> None:
 
     if not regex:
         raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
-
-    # Bypass strict regex validation if the payload is functionally empty ("00")
-    if not msg._has_payload:
-        return
 
     if not re_compile_re_match(str(regex), payload):
         raise exc.PacketPayloadInvalid(
