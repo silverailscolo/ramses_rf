@@ -3169,6 +3169,10 @@ def parser_31e0(payload: str, msg: Message) -> dict | list[dict]:  # TODO: only 
     :raises AssertionError: If the payload suffix is not a recognized constant.
     """
 
+    # guard clause to return an empty dictionary when receiving a "00" payload
+    if payload == "00":
+        return {}
+
     # coding note:
     # case 0x31E0:  ' 12768:
     # {
