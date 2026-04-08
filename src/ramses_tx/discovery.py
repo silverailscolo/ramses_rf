@@ -10,7 +10,7 @@ import os
 import sys
 from functools import partial
 
-from serial import SerialException, serial_for_url  # type: ignore[import-untyped]
+from serial import SerialException, serial_for_url
 
 from . import exceptions as exc
 from .typing import SerPortNameT
@@ -21,7 +21,7 @@ __all__ = ["comports", "is_hgi80"]
 
 # OS-Specific imports and overrides
 if os.name == "nt":
-    from serial.tools.list_ports_windows import (  # type: ignore[import-untyped]
+    from serial.tools.list_ports_windows import (  # type: ignore[attr-defined]
         comports as comports,
     )
 
@@ -31,12 +31,10 @@ elif os.name != "posix":
     )
 
 elif sys.platform.lower()[:5] != "linux":
-    from serial.tools.list_ports_posix import (  # type: ignore[import-untyped]
-        comports as comports,
-    )
+    from serial.tools.list_ports_posix import comports as comports
 
 else:
-    from serial.tools.list_ports_linux import SysFS  # type: ignore[import-untyped]
+    from serial.tools.list_ports_linux import SysFS
 
     def list_links(devices: set[str]) -> list[str]:
         """Search for symlinks to ports already listed in devices."""
@@ -46,8 +44,9 @@ else:
                 links.append(device)
         return links
 
-    def comports(  # type: ignore[no-any-unimported]
-        include_links: bool = False, _hide_subsystems: list[str] | None = None
+    def comports(
+        include_links: bool = False,
+        _hide_subsystems: list[str] | None = None,
     ) -> list[SysFS]:
         """Return a list of Serial objects for all known serial ports."""
         if _hide_subsystems is None:
@@ -64,14 +63,16 @@ else:
         if include_links:
             devices.update(list_links(devices))
 
-        result: list[SysFS] = [  # type: ignore[no-any-unimported]
+        result: list[SysFS] = [
             d for d in map(SysFS, devices) if d.subsystem not in _hide_subsystems
         ]
         return result
 
 
 async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
-    """Return True if the device attached to the port has the attributes of a Honeywell HGI80."""
+    """Return True if the device attached to the port has the
+    attributes of a Honeywell HGI80.
+    """
     if serial_port[:7] == "mqtt://":
         return False  # ramses_esp
 
@@ -88,12 +89,11 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
     if not await loop.run_in_executor(None, os.path.exists, serial_port):
         raise exc.TransportSerialError(f"Unable to find {serial_port}")
 
-    if "by-id" not in serial_port:
-        pass
-    elif "TUSB3410" in serial_port:
-        return True
-    elif "evofw3" in serial_port or "FT232R" in serial_port or "NANO" in serial_port:
-        return False
+    if "by-id" in serial_port:
+        if "TUSB3410" in serial_port:
+            return True
+        if any(x in serial_port for x in ("evofw3", "FT232R", "NANO")):
+            return False
 
     try:
         komports = await loop.run_in_executor(
@@ -117,11 +117,12 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
         pass
     elif "TUSB3410" in product:
         return True
-    elif "evofw3" in product or "FT232R" in product or "NANO" in product:
+    elif any(x in product for x in ("evofw3", "FT232R", "NANO")):
         return False
 
     _LOGGER.warning(
-        f"{serial_port}: the gateway type is not determinable, will assume evofw3"
+        f"{serial_port}: the gateway type is not determinable, "
+        "will assume evofw3"
         + (
             ", TIP: specify the serial port by-id (i.e. /dev/serial/by-id/usb-...)"
             if "by-id" not in serial_port
