@@ -5,7 +5,7 @@ import asyncio
 from datetime import datetime as dt
 
 import pytest
-import serial  # type: ignore[import-untyped]
+import serial
 
 from ramses_rf import Command, Gateway, Packet
 from ramses_rf.gateway import GatewayConfig

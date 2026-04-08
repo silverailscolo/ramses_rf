@@ -148,7 +148,7 @@ def shrink_dict(old_dict: Any, keys: tuple[str, ...]) -> Any:
 
 async def test_ports() -> dict[str, Any]:
     """Test the comports."""
-    import serial.tools.list_ports  # type: ignore[import-untyped]
+    import serial.tools.list_ports
 
     return {
         p.device: p.description

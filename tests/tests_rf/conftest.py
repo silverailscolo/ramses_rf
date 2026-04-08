@@ -9,8 +9,8 @@ from typing import Any, Final, NoReturn, TypeAlias, TypedDict, cast
 from unittest.mock import patch
 
 import pytest
-import serial as ser  # type: ignore[import-untyped]
-from serial.tools.list_ports import comports  # type: ignore[import-untyped]
+import serial as ser
+from serial.tools.list_ports import comports
 
 from ramses_rf import Gateway
 from ramses_rf.device import HgiGateway

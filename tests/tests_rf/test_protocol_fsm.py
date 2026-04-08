@@ -13,7 +13,7 @@ from typing import cast
 from unittest.mock import patch
 
 import pytest
-import serial  # type: ignore[import-untyped]
+import serial
 
 from ramses_rf import Command, Message, Packet
 from ramses_tx import exceptions as exc
@@ -157,7 +157,7 @@ def assert_protocol_state_detail(
     assert bool(cmd) is isinstance(protocol._context.state, WantEcho | WantRply)
 
 
-async def async_pkt_received(  # type: ignore[no-any-unimported]
+async def async_pkt_received(
     protocol: PortProtocol,
     pkt: Packet,
     method: int = 0,
