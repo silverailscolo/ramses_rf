@@ -8,7 +8,7 @@ import asyncio
 from typing import Any
 
 import pytest
-import serial  # type: ignore[import-untyped]
+import serial
 
 from ramses_rf import Address, Code, Command, Gateway
 from ramses_rf.gateway import GatewayConfig

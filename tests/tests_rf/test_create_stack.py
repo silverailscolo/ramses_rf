@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import pytest
-import serial  # type: ignore[import-untyped]
+import serial
 
 from ramses_rf import Message
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code

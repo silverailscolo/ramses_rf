@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 DeviceIdT = NewType("DeviceIdT", str)
 DevIndexT = NewType("DevIndexT", str)
 SerPortNameT = NewType("SerPortNameT", str)
-ExceptionT = TypeVar("ExceptionT", bound=type[Exception])
+ExceptionT = TypeVar("ExceptionT", bound=Exception)
 HeaderT = NewType("HeaderT", str)
 PayloadT = NewType("PayloadT", str)
 

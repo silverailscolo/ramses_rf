@@ -172,3 +172,77 @@ class TestDispatcherErrorHandling:
         assert any(r.levelname == "WARNING" for r in caplog.records)
         # Check that traceback information is present (exc_info=True)
         assert any(r.exc_info is not None for r in caplog.records)
+
+
+class TestDispatcherHeartbeats:
+    """Test that heartbeat (empty) payloads are correctly dispatched to devices."""
+
+    @pytest.mark.parametrize(
+        ("pkt_line", "src_id", "dev_type"),
+        [
+            # TRV sending a 3150 heat demand heartbeat (1-byte "00" payload, I verb)
+            (
+                "045  I --- 04:123456 --:------ 04:123456 3150 001 00",
+                "04:123456",
+                "TRV",
+            ),
+            # FAN sending a 2411 fan parameters heartbeat (1-byte "00" payload, RP verb)
+            (
+                "045 RP --- 32:155617 29:123160 --:------ 2411 001 00",
+                "32:155617",
+                "FAN",
+            ),
+            # TRV sending a 12B0 window state heartbeat (1-byte "00" payload, I verb)
+            (
+                "045  I --- 04:123456 --:------ 04:123456 12B0 001 00",
+                "04:123456",
+                "TRV",
+            ),
+            # TRV sending an empty 2309 setpoint heartbeat (1-byte "00" payload, I verb)
+            (
+                "045  I --- 04:123456 --:------ 04:123456 2309 001 00",
+                "04:123456",
+                "TRV",
+            ),
+        ],
+    )
+    async def test_heartbeat_dispatch(
+        self,
+        mock_gateway: MagicMock,
+        pkt_line: str,
+        src_id: str,
+        dev_type: str,
+    ) -> None:
+        """Test that empty payload heartbeats are routed to update device timestamps."""
+        # 1. Parse the packet into a Message
+        # This confirms that message.py correctly validates and bypasses empty heartbeats
+        dtm = dt.now()
+        packet = Packet(dtm, pkt_line)
+        msg = Message(packet)
+
+        # Confirm it safely processed as an empty heartbeat message
+        assert msg._has_payload is False
+        assert msg.payload == {}
+
+        # 2. Setup the mock registry and device
+        # We mock a device matching the source ID and set its slug to pass validation
+        mock_dev = MagicMock(spec=Device)
+        mock_dev.id = src_id
+        mock_dev._SLUG = dev_type
+        mock_dev._is_binding = False
+        mock_dev.is_faked = False
+
+        # Inject the mock device into the registry so _create_devices_from_addrs maps to it
+        mock_gateway.device_registry.device_by_id[src_id] = mock_dev
+        mock_gateway.device_registry.get_device.return_value = mock_dev
+
+        # Give the mocked HGI a different ID so the packet is treated as remote
+        mock_gateway.hgi.id = "18:000730"
+
+        # 3. Process the message through the dispatcher
+        await dispatcher.process_msg(mock_gateway, msg)
+
+        # 4. Assert the message was explicitly dispatched to the device
+        # The dispatcher queues the update via gwy._engine._loop.call_soon()
+        # which triggers mock_dev._handle_msg(msg) containing the timestamp updates
+        mock_gateway._engine._loop.call_soon.assert_any_call(mock_dev._handle_msg, msg)

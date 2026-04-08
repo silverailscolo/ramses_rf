@@ -10,11 +10,7 @@ import os
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Final, TypeAlias
 
-from serial import (  # type: ignore[import-untyped]
-    Serial,
-    SerialException,
-    serial_for_url,
-)
+from serial import Serial, SerialException, serial_for_url
 
 from .. import exceptions as exc
 from ..interfaces import TransportInterface
@@ -89,7 +85,7 @@ async def transport_factory(
             loop=loop,
         )
 
-    def get_serial_instance(  # type: ignore[no-any-unimported]
+    def get_serial_instance(
         ser_name: SerPortNameT, ser_config: PortConfigT | None
     ) -> Serial:
         """Return a Serial instance for the given port name and config.
@@ -197,7 +193,9 @@ async def transport_factory(
     # Serial
     ser_instance = get_serial_instance(port_name, port_config)
 
-    if os.name == "nt" or ser_instance.portstr[:7] in ("rfc2217", "socket:"):
+    if os.name == "nt" or (
+        ser_instance.portstr and ser_instance.portstr[:7] in ("rfc2217", "socket:")
+    ):
         issue_warning()  # TODO: add tests for these...
 
     transport_port = PortTransport(

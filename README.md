@@ -36,7 +36,7 @@ This library includes a CLI and can be used as a standalone tool, but also is us
 
 ## Installation
 
-To use the `ramses_cc` Integration in Home Assistant, just install `Ramses RF` from HACS. It will take care of installing this library. See the [`Ramses_cc wiki`](https://github.com/ramses-rf/ramses_cc/wiki/1.-Installation) for details.
+To use the `ramses_cc` Integration in Home Assistant, just install `Ramses RF` using HACS. It will take care of installing this library. See the [`Ramses_cc wiki`](https://github.com/ramses-rf/ramses_cc/wiki/1.-Installation) for details.
 
 ### Ramses_rf CLI
 
