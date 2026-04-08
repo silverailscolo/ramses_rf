@@ -126,16 +126,36 @@ def test_message_string_representations(patch_parsers: Any) -> None:
 def test_startup_empty_payload_reproduction() -> None:
     """Test that an empty payload bypasses strict regex and parses safely.
 
-    This test confirms the fix: functionally empty payloads ("00")
-    no longer raise PacketPayloadInvalid.
+    This test runs WITHOUT mock parsers to confirm the heartbeat fallback:
+    functionally empty payloads ("00") that fail validation return {}.
 
     :return: None
     """
     dtm = dt.now()
     packet = Packet(dtm, FRAME_STR_EMPTY)
 
-    # With the fix applied, this should instantiate without raising an exception
+    # With the fix applied, 2411 RP "00" fails validation but safely returns {}
     message = Message(packet)
 
     assert message._has_payload is False
     assert message.len == 1
+    assert message.payload == {}
+
+
+def test_message_valid_empty_payload() -> None:
+    """Test that a valid empty payload is accurately parsed and NOT dropped.
+
+    Some protocol commands (like 1FC9 ' I') legitimately use a "00" payload
+    as actionable data (e.g., the "Confirm" phase of a binding process).
+    This ensures they are routed to the parser rather than fallback logic.
+
+    :return: None
+    """
+    dtm = dt.now()
+    # 1FC9 explicitly allows "00" in CODES_SCHEMA. It must successfully parse.
+    packet = Packet(dtm, "045  I --- 18:006402 13:049798 --:------ 1FC9 001 00")
+    message = Message(packet)
+
+    assert message._has_payload is False
+    assert message.payload.get("phase") == "confirm"
+    assert "bindings" in message.payload
