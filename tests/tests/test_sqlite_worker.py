@@ -172,3 +172,49 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         # Restore the Pytest environment variable for all subsequent tests
         if pytest_env is not None:
             os.environ["PYTEST_CURRENT_TEST"] = pytest_env
+
+
+@pytest.mark.asyncio
+async def test_storage_worker_delete(tmp_path: Path) -> None:
+    """Verify that the StorageWorker safely processes delete requests asynchronously."""
+    db_path = tmp_path / "test_async_delete.sqlite"
+    disk_path = tmp_path / "ramses_delete.db"
+
+    pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
+    try:
+        idx = MessageStore(db_path=str(db_path), disk_path=str(disk_path))
+
+        # Allow tables to initialize
+        for _ in range(50):
+            if db_path.exists():
+                break
+            await asyncio.sleep(0.01)
+
+        # 1. Insert a test message
+        msg = create_dummy_message(1)
+        idx.add(msg)
+
+        # Flush queue to disk so we can read it directly
+        assert idx._worker is not None
+        idx._worker.flush()
+
+        # Check DB row count == 1
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM messages")
+        assert cursor.fetchone()[0] == 1, "Failed to persist single insert."
+
+        # 2. Delete the message via the async queue pattern
+        await idx.rem(msg=msg)
+        idx._worker.flush()  # Force wait until delete transaction is processed
+
+        # Check DB row count == 0
+        cursor.execute("SELECT COUNT(*) FROM messages")
+        assert cursor.fetchone()[0] == 0, "Failed to async delete record."
+
+        conn.close()
+        idx.stop()
+
+    finally:
+        if pytest_env is not None:
+            os.environ["PYTEST_CURRENT_TEST"] = pytest_env
