@@ -516,9 +516,8 @@ class MessageStore:
                 ctx=ctx,
                 hdr=hdr,
             )
-            cx = getattr(self, "_cx", None)
 
-            if self._worker and cx is not None:
+            if self._worker:
                 if msg:
                     kwargs["dtm"] = msg.dtm
 
@@ -527,13 +526,7 @@ class MessageStore:
 
                 sql_params = tuple(kwargs.values())
 
-                def _execute_delete(
-                    conn: sqlite3.Connection, query: str, params: tuple[Any, ...]
-                ) -> None:
-                    with self._db_lock:
-                        conn.execute(query, params)
-
-                await asyncio.to_thread(_execute_delete, cx, sql, sql_params)
+                self._worker.submit_delete_message(sql, sql_params)
 
             msgs = tuple(msgs_to_remove)
 

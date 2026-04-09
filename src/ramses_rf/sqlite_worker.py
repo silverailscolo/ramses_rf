@@ -41,7 +41,27 @@ class SnapshotRequest(NamedTuple):
     pass
 
 
-QueueItem = PacketLogEntry | PruneRequest | SnapshotRequest | tuple[str, Any] | None
+class DeleteMessageRequest(NamedTuple):
+    """Represents a request to delete a specific message or set of messages."""
+
+    query: str
+    params: tuple[Any, ...]
+
+
+class FlushRequest(NamedTuple):
+    """Represents a request to flush the queue and signal completion."""
+
+    event: threading.Event
+
+
+QueueItem = (
+    PacketLogEntry
+    | PruneRequest
+    | SnapshotRequest
+    | DeleteMessageRequest
+    | FlushRequest
+    | None
+)
 
 
 class SQLiteWorker:
@@ -78,11 +98,15 @@ class SQLiteWorker:
         """Submit a disk snapshot request (Non-blocking)."""
         self._queue.put(SnapshotRequest())
 
+    def submit_delete_message(self, query: str, params: tuple[Any, ...]) -> None:
+        """Submit a request to delete specific messages (Non-blocking)."""
+        self._queue.put(DeleteMessageRequest(query, params))
+
     def flush(self, timeout: float = 10.0) -> None:
         """Block until all currently pending tasks are processed."""
         # We inject a special marker into the queue
         sentinel = threading.Event()
-        self._queue.put(("MARKER", sentinel))
+        self._queue.put(FlushRequest(sentinel))
 
         # Wait for the worker to set the sentinel
         if not sentinel.wait(timeout):
@@ -222,6 +246,14 @@ class SQLiteWorker:
                     except sqlite3.Error as err:
                         _LOGGER.error("SQL Prune Failed: %s", err)
 
+                elif isinstance(item, DeleteMessageRequest):
+                    try:
+                        conn.execute(item.query, item.params)
+                        conn.commit()
+                        _LOGGER.debug("Deleted specific message via queue.")
+                    except sqlite3.Error as err:
+                        _LOGGER.error("SQL Delete Message Failed: %s", err)
+
                 elif isinstance(item, SnapshotRequest):
                     if self._disk_path:
                         try:
@@ -232,9 +264,9 @@ class SQLiteWorker:
                         except sqlite3.Error as err:
                             _LOGGER.error("SQL Snapshot Failed: %s", err)
 
-                elif isinstance(item, tuple) and item[0] == "MARKER":
+                elif isinstance(item, FlushRequest):
                     # Flush requested
-                    item[1].set()
+                    item.event.set()
 
             except Exception as err:
                 _LOGGER.exception("SQLiteWorker encountered an error: %s", err)
