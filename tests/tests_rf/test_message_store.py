@@ -157,6 +157,27 @@ class TestMessageStore:
 
         msg_db.stop()  # close sqlite3 connection
 
+    async def test_rem_msg(self) -> None:
+        """Remove a message from the MessageStore."""
+        msg_db = MessageStore(disk_path=None)
+        msg_db.add(self.msg1)
+        msg_db.add(self.msg2)
+        msg_db.add(self.msg3)
+
+        assert len(await msg_db.all()) == 3
+
+        # 1. Remove by exact message object
+        await msg_db.rem(msg=self.msg1)
+        assert len(await msg_db.all()) == 2
+        assert not await msg_db.contains(dtm=self.msg1.dtm)
+
+        # 2. Remove by specific kwargs matching
+        await msg_db.rem(code="2309")  # Target msg3
+        assert len(await msg_db.all()) == 1
+        assert not await msg_db.contains(code="2309")
+
+        msg_db.stop()
+
     async def test_fat_database_payload_serialization(self) -> None:
         """Phase 2.5: Verify large payloads decode properly from the RAM cache."""
         msg_db = MessageStore(maintain=False, disk_path=None)
