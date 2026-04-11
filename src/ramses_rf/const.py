@@ -5,13 +5,22 @@ from __future__ import annotations
 
 from datetime import timedelta as td
 from enum import IntEnum
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
-from ramses_tx.const import (  # noqa: F401
+from ramses_tx.const import (
     DEFAULT_MAX_ZONES as DEFAULT_MAX_ZONES,
+    DEV_ROLE_MAP as DEV_ROLE_MAP,
+    DEV_TYPE_MAP as DEV_TYPE_MAP,
     DEVICE_ID_REGEX as DEVICE_ID_REGEX,
     DOMAIN_TYPE_MAP as DOMAIN_TYPE_MAP,
+    F9 as F9,
+    FA as FA,
     FAN_MODE as FAN_MODE,  # deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
+    FC as FC,
+    FF as FF,
+    I_ as I_,
+    RP as RP,
+    RQ as RQ,
     SYS_MODE_MAP as SYS_MODE_MAP,
     SZ_ACCEPT as SZ_ACCEPT,
     SZ_ACTUATORS as SZ_ACTUATORS,
@@ -85,44 +94,24 @@ from ramses_tx.const import (  # noqa: F401
     SZ_ZONE_MASK as SZ_ZONE_MASK,
     SZ_ZONE_TYPE as SZ_ZONE_TYPE,
     SZ_ZONES as SZ_ZONES,
-    ZON_MODE_MAP as ZON_MODE_MAP,
-    SystemType as SystemType,
-)
-
-from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_ as I_,
-    RP as RP,
-    RQ as RQ,
     W_ as W_,
-    Code as Code,
-    IndexT as IndexT,
-    VerbT as VerbT,
-)
-
-from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    F9 as F9,
-    FA as FA,
-    FC as FC,
-    FF as FF,
-    DEV_ROLE_MAP as DEV_ROLE_MAP,
-    DEV_TYPE_MAP as DEV_TYPE_MAP,
+    ZON_MODE_MAP as ZON_MODE_MAP,
     ZON_ROLE_MAP as ZON_ROLE_MAP,
+    Code as Code,
     DevRole as DevRole,
     DevType as DevType,
+    IndexT as IndexT,
+    SystemType as SystemType,
+    VerbT as VerbT,
     ZoneRole as ZoneRole,
 )
-
-if TYPE_CHECKING:
-    from ramses_tx.const import (  # noqa: F401, pylint: disable=unused-import
-        IndexT,
-        VerbT,
-    )
-
 
 __dev_mode__ = False  # NOTE: this is const.py
 
 
 class Discover(IntEnum):
+    """Flags for the discovery process."""
+
     NOTHING = 0
     SCHEMA = 1
     PARAMS = 2
