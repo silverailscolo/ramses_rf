@@ -139,22 +139,51 @@ DONT_UPDATE_ENTITIES: Final[int] = 1
 
 SCHED_REFRESH_INTERVAL: Final[int] = 3  # minutes
 
+HIGH_VOLUME_STATUS_CODES: Final = (
+    Code._0004,
+    Code._1060,
+    Code._2309,
+    Code._2349,
+    Code._30C9,
+)
+
 # Status codes for Worcester Bosch boilers - OT|OEM diagnostic code
 WB_STATUS_CODES: Final[dict[str, str]] = {
     "200": "CH system is being heated.",
     "201": "DHW system is being heated.",
-    "202": "Anti rapid cycle mode. The boiler has commenced anti-cycle period for CH.",
+    "202": (
+        "Anti rapid cycle mode. The boiler has commenced anti-cycle period for CH."
+    ),
     "203": "System standby mode.",
     "204": "System waiting, appliance waiting for heating system to cool.",
     "208": "Appliance in service Test mode (Min/Max)",
-    "265": "EMS controller has forced stand-by-mode due to low heating load (power required is less than the minimum output)",
-    "268": "Component test mode (is running the manual component test as activated in the menus).",
+    "265": (
+        "EMS controller has forced stand-by-mode due to low heating "
+        "load (power required is less than the minimum output)"
+    ),
+    "268": (
+        "Component test mode (is running the manual component test as "
+        "activated in the menus)."
+    ),
     "270": "Power up mode (appliance is powering up).",
     "283": "Burner starting. The fan and the pump are being controlled.",
-    "284": "Gas valve(s) opened, flame must be detected within safety time. The gas valve is being controlled.",
-    "305": "Anti fast cycle mode (DHW keep warm function). Diverter valve is held in DHW position for a period of time after DHW demand.",
-    "357": "Appliance in air purge mode. Primary heat exchanger air venting program active - approximately 100 seconds.",
-    "358": "Three way valve kick. If the 3-way valve hasn't moved in within 48 hours, the valve will operate once to prevent seizure",
+    "284": (
+        "Gas valve(s) opened, flame must be detected within safety "
+        "time. The gas valve is being controlled."
+    ),
+    "305": (
+        "Anti fast cycle mode (DHW keep warm function). Diverter valve "
+        "is held in DHW position for a period of time after DHW demand."
+    ),
+    "357": (
+        "Appliance in air purge mode. Primary heat exchanger air "
+        "venting program active - approximately 100 seconds."
+    ),
+    "358": (
+        "Three way valve kick. If the 3-way valve hasn't moved in "
+        "within 48 hours, the valve will operate once to prevent "
+        "seizure"
+    ),
 }
 
 # Device Availability Timeouts
