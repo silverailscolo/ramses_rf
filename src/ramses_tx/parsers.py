@@ -168,7 +168,7 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 )
 
 if TYPE_CHECKING:
-    from .message import MessageBase as Message  # HACK: merge MsgBase into Msg
+    from .message import Message
 
 _2411_TABLE = {k: v["description"] for k, v in _2411_PARAMS_SCHEMA.items()}
 

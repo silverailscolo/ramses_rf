@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 
-# TODO:
-# - self._tasks is not ThreadSafe
-
-
 """RAMSES RF - The serial to RF gateway (HGI80, not RFG100)."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections.abc import Awaitable, Callable
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, Never
 
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
@@ -56,6 +53,90 @@ if TYPE_CHECKING:
 DEV_MODE = False
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class ApplicationMessage(Message):
+    """Application-level message extended with gateway context and expiration."""
+
+    CANT_EXPIRE: float = -1.0  # sentinel value for fraction_expired
+    HAS_EXPIRED: float = 2.0  # fraction_expired >= HAS_EXPIRED
+    IS_EXPIRING: float = 0.8  # fraction_expired >= 0.8 (and < HAS_EXPIRED)
+
+    _engine: Engine | None = None
+    _fraction_expired: float | None = None
+
+    @classmethod
+    def from_message(cls, msg: Message) -> ApplicationMessage:
+        """Factory to safely promote a transport Message to an ApplicationMessage."""
+        # Initialize the subclass identically to how the base class initializes
+        return cls(msg._pkt)
+
+    def set_gateway(self, gwy: Engine) -> None:
+        """Set the gateway (engine) instance for this message.
+
+        :param gwy: The gateway (engine) instance to associate.
+        :type gwy: Engine
+        """
+        self._engine = gwy
+
+    @property
+    def _expired(self) -> bool:
+        """Return True if the message is dated, False otherwise.
+
+        :return: True if the message is dated, False otherwise.
+        :rtype: bool
+        """
+        # Safest fallback for unit tests without an engine
+        now = self._engine._dt_now() if self._engine else self.dtm
+
+        # 1. Enforce the hard 7-day expiration limit
+        if now - self.dtm > td(days=7):
+            return True
+
+        def fraction_expired(lifespan: td) -> float:
+            """Calculate the fraction of expired normal lifespan.
+
+            :param lifespan: The lifespan of the message.
+            :type lifespan: td
+            :return: The expired fraction.
+            :rtype: float
+            """
+            return float((now - self.dtm - td(seconds=3)) / lifespan)
+
+        # 1. Look for easy win...
+        if self._fraction_expired is not None:
+            if self._fraction_expired == self.CANT_EXPIRE:
+                return False
+            if self._fraction_expired >= self.HAS_EXPIRED:
+                return True
+
+        # 2. Need to update the fraction_expired...
+        # sync_cycle is a special case
+        if self.code == Code._1F09 and self.verb != RQ:
+            # RQs won't have remaining_seconds, RP/Ws have only partial
+            # cycle times
+            rem_secs = getattr(self.payload, "remaining_seconds", None)
+            if rem_secs is None and isinstance(self.payload, dict):
+                rem_secs = self.payload.get("remaining_seconds", 0)
+
+            self._fraction_expired = fraction_expired(
+                td(seconds=float(rem_secs or 0)),
+            )
+
+        # Can't expire
+        elif getattr(self._pkt, "_lifespan", None) is False:
+            self._fraction_expired = self.CANT_EXPIRE
+
+        # Can't expire
+        elif getattr(self._pkt, "_lifespan", None) is True:
+            raise NotImplementedError("Lifespan True not implemented")
+
+        else:
+            lifespan = getattr(self._pkt, "_lifespan", None)
+            assert isinstance(lifespan, td)
+            self._fraction_expired = fraction_expired(lifespan)
+
+        return self._fraction_expired >= self.HAS_EXPIRED
 
 
 class Engine:
@@ -132,9 +213,11 @@ class Engine:
         self._protocol: RamsesProtocolT = None  # type: ignore[assignment]
         self._transport: RamsesTransportT | None = None  # None until self.start()
 
-        self._prev_msg: Message | None = None
-        self._this_msg: Message | None = None
+        self._prev_msg: ApplicationMessage | None = None
+        self._this_msg: ApplicationMessage | None = None
 
+        # Thread-safe lock for task registry modifications
+        self._tasks_lock = threading.Lock()
         self._tasks: list[asyncio.Task] = []  # type: ignore[type-arg]
 
         self._set_msg_handler(self._msg_handler)  # sets self._protocol
@@ -180,7 +263,8 @@ class Engine:
         """Add a Message handler to the underlying Protocol.
 
         The optional filter will return True if the message is to be handled.
-        Returns a callable that can be used to subsequently remove the handler.
+        Returns a callable that can be used to subsequently remove the
+        handler.
         """
         return self._protocol.add_handler(msg_handler, msg_filter=msg_filter)
 
@@ -223,24 +307,29 @@ class Engine:
 
         if self._input_file:
             await self._protocol.wait_for_connection_lost(timeout=86400)
-            # timeout set to timeout=86400, to stop type checker complaint if sent to None
+            # timeout set to timeout=86400, to stop type checker complaint if
+            # sent to None
 
     async def stop(self) -> None:
         """Close the transport (will stop the protocol)."""
 
-        # Shutdown Safety - wait for tasks to clean up
-        tasks = [t for t in self._tasks if not t.done()]
-        for t in tasks:
-            t.cancel()
+        # Shutdown Safety - securely lock the task registry to clean up
+        with self._tasks_lock:
+            tasks = [t for t in self._tasks if not t.done()]
+            for t in tasks:
+                t.cancel()
 
         if tasks:
             await asyncio.wait(tasks)
 
-        # Clear any unretrieved exceptions from background tasks
-        for task in self._tasks:
-            if task.done() and not task.cancelled():
-                if exc := task.exception():
-                    _LOGGER.debug("Background task %s failed: %s", task.get_name(), exc)
+        # Clear any unretrieved exceptions from background tasks securely
+        with self._tasks_lock:
+            for task in self._tasks:
+                if task.done() and not task.cancelled():
+                    if exc := task.exception():
+                        _LOGGER.debug(
+                            "Background task %s failed: %s", task.get_name(), exc
+                        )
 
         if self._transport:
             self._transport.close()
@@ -248,38 +337,50 @@ class Engine:
 
         return None
 
+    async def _drop_msg(self, msg: Message) -> None:
+        """Discard messages silently while paused.
+
+        Acts as a safety drain for any in-flight packets that arrive between
+        the pause command and the transport fully halting.
+        """
+        _LOGGER.debug("Message dropped while engine paused: %s", msg)
+
     async def _pause(self, *args: Any) -> None:
         """Pause the (active) engine or raise a RuntimeError."""
-        # Async lock handling
         if self._engine_lock.locked():
             raise RuntimeError("Unable to pause engine, failed to acquire lock")
 
         await self._engine_lock.acquire()
+        try:
+            if self._engine_state is not None:
+                raise RuntimeError("Unable to pause engine, it is already paused")
 
-        if self._engine_state is not None:
+            # Secure state transition within lock
+            self._engine_state = (None, None, tuple())
+        finally:
             self._engine_lock.release()
-            raise RuntimeError("Unable to pause engine, it is already paused")
 
-        self._engine_state = (None, None, tuple())  # aka not None
-        self._engine_lock.release()  # is ok to release now
-
-        self._protocol.pause_writing()  # TODO: call_soon()?
+        # Schedule transport pauses cleanly via the event loop
+        self._loop.call_soon(self._protocol.pause_writing)
         if self._transport:
             pause_reading = getattr(self._transport, "pause_reading", None)
             if pause_reading:
-                pause_reading()  # TODO: call_soon()?
+                self._loop.call_soon(pause_reading)
 
-        self._protocol._msg_handler, handler = None, self._protocol._msg_handler  # type: ignore[assignment]
+        # Implement No-Op pattern instead of None to prevent 'NoneType callable' crashes
+        self._protocol._msg_handler, handler = (
+            self._drop_msg,
+            self._protocol._msg_handler,
+        )
+
         self._disable_sending, read_only = True, self._disable_sending
 
         self._engine_state = (handler, read_only, *args)
 
-    async def _resume(self) -> tuple[Any]:  # FIXME: not atomic
+    async def _resume(self) -> tuple[Any]:
         """Resume the (paused) engine or raise a RuntimeError."""
+        args: tuple[Any]
 
-        args: tuple[Any]  # mypy
-
-        # Async lock with timeout
         try:
             await asyncio.wait_for(self._engine_lock.acquire(), timeout=0.1)
         except TimeoutError as err:
@@ -287,39 +388,51 @@ class Engine:
                 "Unable to resume engine, failed to acquire lock"
             ) from err
 
-        if self._engine_state is None:
+        try:
+            if self._engine_state is None:
+                raise RuntimeError("Unable to resume engine, it was not paused")
+
+            # Atomic restoration of state inside the lock
+            self._protocol._msg_handler, self._disable_sending, *args = (
+                self._engine_state  # type: ignore[assignment]
+            )
+            self._engine_state = None
+        finally:
             self._engine_lock.release()
-            raise RuntimeError("Unable to resume engine, it was not paused")
 
-        self._protocol._msg_handler, self._disable_sending, *args = self._engine_state  # type: ignore[assignment]
-        self._engine_lock.release()
-
+        # Schedule transport resumes cleanly via the event loop
         if self._transport:
             resume_reading = getattr(self._transport, "resume_reading", None)
             if resume_reading:
-                resume_reading()
+                self._loop.call_soon(resume_reading)
         if not self._disable_sending:
-            self._protocol.resume_writing()
-
-        self._engine_state = None
+            self._loop.call_soon(self._protocol.resume_writing)
 
         return args
 
-    def add_task(self, task: asyncio.Task[Any]) -> None:  # TODO: needs a lock?
-        # keep a track of tasks, so we can tidy-up
-        self._tasks = [t for t in self._tasks if not t.done()]
-        self._tasks.append(task)
+    def add_task(self, task: asyncio.Task[Any]) -> None:
+        """Keep a track of tasks securely, so we can tidy-up."""
+        with self._tasks_lock:
+            self._tasks = [t for t in self._tasks if not t.done()]
+            self._tasks.append(task)
 
     @staticmethod
     def create_cmd(
-        verb: VerbT, device_id: DeviceIdT, code: Code, payload: PayloadT, **kwargs: Any
+        verb: VerbT,
+        device_id: DeviceIdT,
+        code: Code,
+        payload: PayloadT,
+        *,
+        from_id: str | None = None,
+        seqn: str | None = None,
     ) -> Command:
         """Make a command addressed to device_id."""
 
-        if [
-            k for k in kwargs if k not in ("from_id", "seqn")
-        ]:  # FIXME: deprecate QoS in kwargs
-            raise RuntimeError("Deprecated kwargs: %s", kwargs)
+        kwargs = {}
+        if from_id is not None:
+            kwargs["from_id"] = from_id
+        if seqn is not None:
+            kwargs["seqn"] = seqn
 
         return Command.from_attrs(verb, device_id, code, payload, **kwargs)
 
@@ -337,8 +450,8 @@ class Engine:
     ) -> Packet:
         """Send a Command and return the corresponding Packet.
 
-        If wait_for_reply is True (*and* the Command has a rx_header), return the
-        reply Packet. Otherwise, simply return the echo Packet.
+        If wait_for_reply is True (*and* the Command has a rx_header),
+        return the reply Packet. Otherwise, simply return the echo Packet.
 
         If the expected Packet can't be returned, raise:
             ProtocolSendFailed: tried to Tx Command, but didn't get echo/reply
@@ -365,18 +478,15 @@ class Engine:
 
     async def _msg_handler(self, msg: Message) -> None:
         """Process incoming messages from the protocol."""
-        # HACK: This is one consequence of an unpleasant anachronism
-        msg.__class__ = Message
+        # Promote the transport Message to an ApplicationMessage subclass
+        app_msg = ApplicationMessage.from_message(msg)
+        app_msg.set_gateway(self)
 
-        # MUST be set so ramses_rf properties (e.g. msg.src) can instantiate orphans
-        # Using setattr bypasses Mypy type assignment checks, keeping decoupling clean
-        setattr(msg, "_gwy", self)  # noqa: B010
-
-        self._this_msg, self._prev_msg = msg, self._this_msg
+        self._this_msg, self._prev_msg = app_msg, self._this_msg
 
         # Safely pass execution to Gateway's extended handling logic if defined
         handler = getattr(self, "_handle_msg", None)
         if handler:
-            res = handler(msg)
+            res = handler(app_msg)
             if asyncio.iscoroutine(res):
                 await res

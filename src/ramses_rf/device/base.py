@@ -24,7 +24,7 @@ from ramses_rf.entity_base import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
 from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED, SZ_KNOWN_LIST
 from ramses_rf.topology import Child
-from ramses_tx import Command, Packet, Priority, QosParams
+from ramses_tx import Command, Message, Packet, Priority, QosParams
 from ramses_tx.ramses import CODES_BY_DEV_SLUG, CODES_ONLY_FROM_CTL
 from ramses_tx.typing import PayloadT
 
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Zone
-    from ramses_tx import Address, DeviceIdT, IndexT, Message
+    from ramses_tx import Address, DeviceIdT, IndexT
 
 
 BIND_WAITING_TIMEOUT = 300  # how long to wait, listening for an offer
@@ -229,10 +229,12 @@ class DeviceBase(Entity):
         return self._binding_manager and self._binding_manager.is_binding is True
 
     async def _is_present(self) -> bool:
-        """Try to exclude ghost devices (as caused by corrupt packet addresses)."""
+        """Try to exclude ghost devices (as caused by corrupt packet
+        addresses).
+        """
         msgs = await self.entity_state.get_message_log_flat()
         return any(
-            m.src == self for m in msgs.values() if not m._expired
+            m.src == self for m in msgs.values() if not getattr(m, "_expired", False)
         )  # TODO: needs addressing
 
     async def schema(self) -> dict[str, Any]:
@@ -503,10 +505,6 @@ class HgiGateway(Device):  # HGI (18:)
             return td(minutes=int(custom_timeout))
 
         return GATEWAY_MESSAGE_TIMEOUT
-
-    async def schema(self) -> dict[str, Any]:
-        """Return the schema dictionary for the HGI Gateway."""
-        return {}
 
     async def is_active(self) -> bool:
         """Return True if the gateway has received messages recently."""

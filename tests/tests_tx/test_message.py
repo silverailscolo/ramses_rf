@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Test the Message class and its exposed attributes, including RSSI."""
 
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta as td
 from typing import Any
+from unittest.mock import Mock
 
 import pytest
 
+from ramses_tx.gateway import ApplicationMessage
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
@@ -159,3 +161,57 @@ def test_message_valid_empty_payload() -> None:
     assert message._has_payload is False
     assert message.payload.get("phase") == "confirm"
     assert "bindings" in message.payload
+
+
+def test_pure_message_separation(patch_parsers: Any) -> None:
+    """Test that the base Message class enforces strict separation of concerns.
+
+    It must NOT possess application-layer properties like `_expired`.
+
+    :param patch_parsers: The mock fixture for parsers.
+    :type patch_parsers: Any
+    :return: None
+    """
+    dtm = dt.now()
+    packet = Packet(dtm, FRAME_STR_1)
+    message = Message(packet)
+
+    with pytest.raises(AttributeError):
+        _ = message._expired
+
+
+def test_application_message_factory(patch_parsers: Any) -> None:
+    """Test ApplicationMessage successfully wraps a Message and handles expiration.
+
+    :param patch_parsers: The mock fixture for parsers.
+    :type patch_parsers: Any
+    :return: None
+    """
+    now = dt.now()
+    packet = Packet(now, FRAME_STR_1)
+    base_msg = Message(packet)
+
+    # 1. Test Factory Promotion ensures identical data mapping
+    app_msg = ApplicationMessage.from_message(base_msg)
+
+    assert app_msg.src == base_msg.src
+    assert app_msg.dst == base_msg.dst
+    assert app_msg.code == base_msg.code
+    assert app_msg.verb == base_msg.verb
+
+    # 2. Test Expiration (Fresh Packet)
+    # Should not be expired because (now - dtm) is ~0 seconds
+    assert app_msg._expired is False
+
+    # 3. Test Expiration (Old Packet > 7 Days)
+    old_dtm = now - td(days=8)
+    old_packet = Packet(old_dtm, FRAME_STR_1)
+    old_app_msg = ApplicationMessage.from_message(Message(old_packet))
+
+    # We must provide a mock engine so the isolated message has a concept of real time
+    mock_engine = Mock()
+    mock_engine._dt_now.return_value = now
+    old_app_msg.set_gateway(mock_engine)
+
+    # Now the 7-day expiration logic will correctly trigger!
+    assert old_app_msg._expired is True
