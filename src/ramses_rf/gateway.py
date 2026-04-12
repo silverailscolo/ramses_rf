@@ -36,6 +36,7 @@ from ramses_tx.const import (
     DEFAULT_WAIT_FOR_REPLY,
     SZ_ACTIVE_HGI,
 )
+from ramses_tx.gateway import ApplicationMessage
 from ramses_tx.logger import flush_packet_log
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 from ramses_tx.typing import PktLogConfigT, PortConfigT
@@ -544,7 +545,7 @@ class Gateway(GatewayInterface):
             if msg.code == Code._313F:
                 # usu. expired, useful 4 back-back restarts
                 return msg.verb in (I_, RP)
-            if msg._expired and not include_expired:
+            if getattr(msg, "_expired", False) and not include_expired:
                 return False
             if msg.code == Code._0404:
                 return msg.verb in (I_, W_) and msg._pkt._len > 7
@@ -552,7 +553,7 @@ class Gateway(GatewayInterface):
                 return False
             # if msg.code == Code._1FC9 and msg.verb != RP:
             #     return True
-            return include_expired or not msg._expired
+            return include_expired or not getattr(msg, "_expired", False)
 
         pkts: dict[str, Any] = {}
         if self.message_store:
@@ -745,11 +746,17 @@ class Gateway(GatewayInterface):
         :returns: None
         :rtype: None
         """
-        # Engine's logic replicated to map directly to the Gateway
-        msg.__class__ = Message
-        setattr(msg, "_gwy", self)  # noqa: B010
+        # 1. Promote the raw transport Message to an ApplicationMessage subclass
+        app_msg = ApplicationMessage.from_message(msg)
 
-        self._engine._this_msg, self._engine._prev_msg = msg, self._engine._this_msg
+        # 2. Attach the gateway/engine context (so ._expired works correctly)
+        app_msg.set_gateway(self._engine)
+
+        # 3. Restore the critical ramses_rf linkage for dynamic Address/Orphan resolution
+        setattr(app_msg, "_gwy", self)  # noqa: B010
+
+        # 4. Store it safely in the engine state
+        self._engine._this_msg, self._engine._prev_msg = app_msg, self._engine._this_msg
 
         # TODO: ideally remove this feature...
         assert self._engine._this_msg  # mypy check
@@ -757,12 +764,15 @@ class Gateway(GatewayInterface):
         if self._engine._prev_msg and detect_array_fragment(
             self._engine._this_msg, self._engine._prev_msg
         ):
-            msg._pkt._force_has_array()
-            msg._payload = self._engine._prev_msg.payload + (
-                msg.payload if isinstance(msg.payload, list) else [msg.payload]
+            app_msg._pkt._force_has_array()
+            app_msg._payload = self._engine._prev_msg.payload + (
+                app_msg.payload
+                if isinstance(app_msg.payload, list)
+                else [app_msg.payload]
             )
 
-        await process_msg(self, msg)
+        # Ensure the downstream application gets the extended subclass, not the pure Message
+        await process_msg(self, app_msg)
 
     def add_msg_handler(
         self,

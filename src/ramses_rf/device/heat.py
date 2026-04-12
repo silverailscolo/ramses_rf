@@ -109,6 +109,7 @@ if TYPE_CHECKING:
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Evohome, Zone
     from ramses_tx import Address, Message, Packet
+    from ramses_tx.gateway import ApplicationMessage
     from ramses_tx.opentherm import OtDataId
 
 
@@ -569,24 +570,36 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     async def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
         return cast(
             float | None,
-            self.entity_state._msg_value_msg(self._heat_demand, key=self.HEAT_DEMAND),
+            self.entity_state._msg_value_msg(
+                cast("ApplicationMessage | None", self._heat_demand),
+                key=self.HEAT_DEMAND,
+            ),
         )
 
     async def heat_demands(self) -> dict | None:  # 3150|ufh_idx array
         # return self._heat_demands.payload if self._heat_demands else None
-        return cast(dict | None, self.entity_state._msg_value_msg(self._heat_demands))
+        return cast(
+            dict | None,
+            self.entity_state._msg_value_msg(
+                cast("ApplicationMessage | None", self._heat_demands)
+            ),
+        )
 
     async def relay_demand(self) -> dict | None:  # 0008|FC
         return cast(
             dict | None,
-            self.entity_state._msg_value_msg(self._relay_demand, key=SZ_RELAY_DEMAND),
+            self.entity_state._msg_value_msg(
+                cast("ApplicationMessage | None", self._relay_demand),
+                key=SZ_RELAY_DEMAND,
+            ),
         )
 
     async def relay_demand_fa(self) -> dict | None:  # 0008|FA
         return cast(
             dict | None,
             self.entity_state._msg_value_msg(
-                self._relay_demand_fa, key=SZ_RELAY_DEMAND
+                cast("ApplicationMessage | None", self._relay_demand_fa),
+                key=SZ_RELAY_DEMAND,
             ),
         )
 
@@ -890,7 +903,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         if msg_id in QUARANTINED_OT_MSG_IDS.get(self._SLUG, set()):
             return None
         # data_id = int(msg_id, 16)
-        if (msg := self._msgs_ot.get(msg_id)) and not msg._expired:
+        if (msg := self._msgs_ot.get(msg_id)) and not getattr(msg, "_expired", False):
             # TODO: value_hb/_lb
             return msg.payload.get(SZ_VALUE)  # type: ignore[no-any-return]
         return None
