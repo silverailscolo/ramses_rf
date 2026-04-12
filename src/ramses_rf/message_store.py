@@ -13,12 +13,13 @@ RAMSES RF - Message database and index.
    i7     get_rp_codes  src, dst     list(Code)        Discovery-supported_cmds
    =====  ============  ===========  ==========  ====  ========================
 
-[#fn1] A word of explanation.[^1]: This table documents the primary methods
-used by external components (like `EntityState`) to query the central
-message store. As of Phase 2.5, legacy SQL-based query methods
+[#fn1] A word of explanation.[^1]: This table documents the primary
+methods used by external components (like `EntityState`) to query the
+central message store. As of Phase 2.5, legacy SQL-based query methods
 (`qry`, `qry_field`, `_select_from`) have been removed. The system now
 relies exclusively on fast RAM-based dictionary lookups to support a
-CQRS-style architecture and eliminate SQLite thread contention during tests.
+CQRS-style architecture and eliminate SQLite thread contention during
+tests.
 """
 
 from __future__ import annotations
@@ -28,7 +29,6 @@ import contextlib
 import logging
 import os
 import sqlite3
-import threading
 import uuid
 from collections import OrderedDict
 from datetime import datetime as dt, timedelta as td
@@ -53,19 +53,21 @@ def _setup_db_adapters() -> None:
     """Set up the database adapters and converters."""
 
     def adapt_datetime_iso(val: dt) -> str:
-        """Adapt datetime.datetime to timezone-naive ISO 8601 datetime to match _message_log dtm keys."""
+        """Adapt datetime.datetime to timezone-naive ISO 8601 datetime to
+        match _message_log dtm keys."""
         return val.isoformat(timespec="microseconds")
 
     sqlite3.register_adapter(dt, adapt_datetime_iso)
 
     def convert_datetime(val: bytes) -> dt:
-        """Convert ISO 8601 datetime to datetime.datetime object to import dtm in msg_db."""
+        """Convert ISO 8601 datetime to datetime.datetime object to import
+        dtm in msg_db."""
         return dt.fromisoformat(val.decode())
 
     sqlite3.register_converter("DTM", convert_datetime)
 
 
-def payload_keys(parsed_payload: list[dict] | dict) -> str:  # type: ignore[type-arg]
+def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
     """
     Copy payload keys for fast query check.
 
@@ -74,7 +76,7 @@ def payload_keys(parsed_payload: list[dict] | dict) -> str:  # type: ignore[type
     """
     _keys: str = "|"
 
-    def append_keys(ppl: dict) -> str:  # type: ignore[type-arg]
+    def append_keys(ppl: dict[str, Any]) -> str:
         _ks: str = ""
         for k, v in ppl.items():
             if (
@@ -109,12 +111,11 @@ class MessageStore:
         """Instantiate a message database/index."""
 
         self.maintain = maintain
-        self._message_log: MsgDdT = OrderedDict()  # stores all messages for retrieval.
-        self._state_cache: dict[str, Message] = {}  # Phase 2.4: hdr-based retrieval.
-        # Filled & cleaned up in housekeeping_loop.
-
-        # Thread-safety lock to prevent Python 3.13 Segfaults
-        self._db_lock = threading.Lock()
+        # In-memory RAM caches (Filled & cleaned up in housekeeping_loop)
+        # stores all messages for retrieval.
+        self._message_log: MsgDdT = OrderedDict()
+        # Caches the latest message per header (hdr) for fast state lookups.
+        self._state_cache: dict[str, Message] = {}
 
         # Synchronous Test Mode: Bypass background worker entirely if testing
         self._is_testing = "PYTEST_CURRENT_TEST" in os.environ
@@ -206,16 +207,17 @@ class MessageStore:
             # Trigger a final snapshot to ensure no data is lost on shutdown
             self._worker.submit_snapshot()
             self._worker.flush(timeout=5.0)
-            self._worker.stop()  # Stop the background thread
+            is_stopped = self._worker.stop(timeout=5.0)  # Stop the background thread
+            if not is_stopped:
+                _LOGGER.warning("MessageStore: SQLiteWorker shutdown timed out.")
 
         cx = getattr(self, "_cx", None)
         if cx is not None:
-            with self._db_lock:
-                try:
-                    cx.commit()
-                    cx.close()
-                except sqlite3.ProgrammingError:
-                    pass  # Connection might already be closed
+            try:
+                cx.commit()
+                cx.close()
+            except sqlite3.ProgrammingError:
+                pass  # Connection might already be closed
 
     @property
     def log_by_dtm(self) -> tuple[Message, ...]:
@@ -245,10 +247,7 @@ class MessageStore:
             return
 
         def _fetch_all(conn: sqlite3.Connection) -> list[Any]:
-            with self._db_lock:
-                return conn.execute(
-                    "SELECT * FROM messages ORDER BY dtm ASC"
-                ).fetchall()
+            return conn.execute("SELECT * FROM messages ORDER BY dtm ASC").fetchall()
 
         try:
             rows = await asyncio.to_thread(_fetch_all, cx)
@@ -302,9 +301,11 @@ class MessageStore:
 
         async def housekeeping(dt_now: dt, _cutoff: td = td(days=1)) -> None:
             """
-            Deletes all messages older than a given delta from the dict using the MessageStore.
+            Deletes all messages older than a given delta from the dict
+            using the MessageStore.
             :param dt_now: current timestamp
-            :param _cutoff: the oldest timestamp to retain, default is 24 hours ago
+            :param _cutoff: the oldest timestamp to retain, default is 24
+                hours ago
             """
             dtm = dt_now - _cutoff
 
@@ -315,7 +316,8 @@ class MessageStore:
             # Prune in-memory cache synchronously (Fast CPU-bound op)
             dtm_iso = dtm.isoformat(timespec="microseconds")
 
-            try:  # make this operation atomic, i.e. update self._message_log only on success
+            # make this operation atomic, i.e. update self._message_log only on success
+            try:
                 await self._lock.acquire()
                 # Rebuild dict keeping only newer items
                 self._message_log = OrderedDict(
@@ -356,8 +358,8 @@ class MessageStore:
 
         :returns: any message that was removed because it had the same header
         """
-        dup: tuple[Message, ...] = tuple()  # avoid UnboundLocalError
-        old: Message | None = None  # avoid UnboundLocalError
+        dup: tuple[Message, ...] = ()
+        old: Message | None = None
 
         # Check in-memory cache for collision instead of blocking SQL
         dtm_str = cast(DtmStrT, msg.dtm.isoformat(timespec="microseconds"))
@@ -394,10 +396,12 @@ class MessageStore:
         self, src: str, code: str = "", verb: str = "", payload: str = "00"
     ) -> None:
         """
-        Add a single record to the MessageStore with timestamp `now()` and no Message contents.
+        Add a single record to the MessageStore with timestamp `now()`
+        and no Message contents.
 
         :param src: device id to use as source address
-        :param code: device id to use as destination address (can be identical)
+        :param code: device id to use as destination address (can be
+            identical)
         :param verb: two letter verb str to use
         :param payload: payload str to use
         """
@@ -420,9 +424,6 @@ class MessageStore:
             )
             self._worker.submit_packet(data)
 
-        if "PYTEST_CURRENT_TEST" in os.environ:
-            self.flush()
-
         msg: Message = Message._from_pkt(
             Packet(_now, f"... {verb} --- {src} --:------ {src} {code} 005 0000000000")
         )
@@ -435,7 +436,7 @@ class MessageStore:
 
         :returns: any message replaced (by same hdr)
         """
-        assert msg._pkt._hdr is not None, "Skipping: Packet has no hdr: {msg._pkt}"
+        assert msg._pkt._hdr is not None, f"Skipping: Packet has no hdr: {msg._pkt}"
 
         if msg._pkt._ctx is True:
             msg_pkt_ctx = "True"
@@ -465,9 +466,6 @@ class MessageStore:
             )
 
             self._worker.submit_packet(data)
-
-        if "PYTEST_CURRENT_TEST" in os.environ:
-            self.flush()
 
         return None
 
@@ -638,7 +636,8 @@ class MessageStore:
         ctx: Any | None = None,
         hdr: str | None = None,
     ) -> bool:
-        """Check if the MessageStore contains at least 1 record that matches the provided fields."""
+        """Check if the MessageStore contains at least 1 record that
+        matches the provided fields."""
         return (
             len(
                 await self.get(
@@ -688,15 +687,8 @@ class MessageStore:
 
     async def clr(self) -> None:
         """Clear the message index (remove indexes of all messages)."""
-        cx = getattr(self, "_cx", None)
-        if cx is not None:
-
-            def _clear_db(conn: sqlite3.Connection) -> None:
-                with self._db_lock:
-                    conn.execute("DELETE FROM messages")
-                    conn.commit()
-
-            await asyncio.to_thread(_clear_db, cx)
+        if self._worker:
+            self._worker.submit_delete_message("DELETE FROM messages", ())
 
         self._message_log.clear()
         self._state_cache.clear()
