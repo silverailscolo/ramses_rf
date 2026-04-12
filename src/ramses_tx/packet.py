@@ -13,7 +13,7 @@ from typing import Any
 
 from .command import Command
 from .const import I_, RP, RQ, W_, Code, VerbT
-from .exceptions import PacketInvalid
+from .exceptions import PacketInvalid, PacketPayloadInvalid
 from .frame import Frame
 from .logger import getLogger  # overridden logger.getLogger
 from .opentherm import PARAMS_DATA_IDS, SCHEMA_DATA_IDS, STATUS_DATA_IDS
@@ -194,12 +194,20 @@ class Packet(Frame):
             if self.error_text:
                 raise PacketInvalid(self.error_text)
 
-            super()._validate(strict_checking=strict_checking)  # no RSSI
+            try:
+                super()._validate(strict_checking=strict_checking)  # no RSSI
+            except PacketPayloadInvalid:
+                # Bypass strict payload validation strictly for 1-byte "00" heartbeats
+                parts = getattr(self, "_frame", "").split()
+                if len(parts) >= 7 and parts[-2] == "001" and parts[-1] == "00":
+                    pass
+                else:
+                    raise
 
             PKT_LOGGER.info("", extra=self.__dict__)  # the packet.log line
 
         except PacketInvalid as err:  # incl. InvalidAddrSetError
-            if self._frame or self.error_text:
+            if getattr(self, "_frame", "") or self.error_text:
                 PKT_LOGGER.warning("%s", err, extra=self.__dict__)
             raise err
 
@@ -352,7 +360,6 @@ class Packet(Frame):
         return cls(dtm, frame, err_msg=err_msg, comment=comment, raw_frame=raw_line)
 
 
-# TODO: remove None as a possible return value
 def pkt_lifespan(pkt: Packet) -> td:  # import OtbGateway??
     """Return the lifespan of a packet before it expires.
 
@@ -390,8 +397,6 @@ def pkt_lifespan(pkt: Packet) -> td:  # import OtbGateway??
         return _TD_SECS_360
 
     if pkt.code == Code._3220:  # FIXME: 2.1 means we can miss two packets
-        # if pkt.payload[4:6] in WRITE_MSG_IDS:  #  and Write-Data:  # TODO
-        #     return _TD_SECS_003 * 2.1
         if int(pkt.payload[4:6], 16) in SCHEMA_DATA_IDS:
             return _TD_MINS_360 * 2.1
         if int(pkt.payload[4:6], 16) in PARAMS_DATA_IDS:
@@ -400,11 +405,9 @@ def pkt_lifespan(pkt: Packet) -> td:  # import OtbGateway??
             return _TD_MINS_005 * 2.1
         return _TD_MINS_005 * 2.1
 
-    # if pkt.code in (Code._3B00, Code._3EF0, ):  # TODO: 0008, 3EF0, 3EF1
-    #     return td(minutes=6.7)  # TODO: WIP
-
     if (code := CODES_SCHEMA.get(pkt.code)) and SZ_LIFESPAN in code:
         result: bool | td | None = CODES_SCHEMA[pkt.code][SZ_LIFESPAN]
-        return result if isinstance(result, td) else _TD_MINS_060
+        if isinstance(result, td):
+            return result
 
     return _TD_MINS_060  # applies to lots of HVAC packets

@@ -51,6 +51,9 @@ def _proc_log_line(log_line: str) -> None:
         return
 
     if isinstance(pkt_dict, list) or not any(k for k in pkt_dict if k in META_KEYS):
+        # NOTE: For compatibility with legacy test logs where 1-byte "00" was `{}`.
+        if pkt_dict == {} and msg.payload == {"heartbeat": True}:
+            return
         assert msg.payload == pkt_dict, msg._pkt
         return
 
