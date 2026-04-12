@@ -239,7 +239,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 return
         except asyncio.CancelledError:
             raise
-        except Exception as err:
+        except (
+            KeyError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            RuntimeError,
+            exc.RamsesException,
+        ) as err:
             _LOGGER.exception("Error handling incoming chunk: %s", err)
 
         self._frame_read(dt_now().isoformat(), _normalise(payload))
@@ -263,7 +270,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 )
         except asyncio.CancelledError:
             raise
-        except Exception as err:
+        except (
+            KeyError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            RuntimeError,
+            exc.RamsesException,
+        ) as err:
             _LOGGER.exception("Failed to schedule application ACK: %s", err)
 
     def cluster_command(
@@ -303,7 +317,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 return
         except asyncio.CancelledError:
             raise
-        except Exception as err:
+        except (
+            KeyError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            RuntimeError,
+            exc.RamsesException,
+        ) as err:
             _LOGGER.exception("Error handling incoming chunk: %s", err)
 
         self._frame_read(dt_now().isoformat(), _normalise(payload))
@@ -326,7 +347,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 )
         except asyncio.CancelledError:
             raise
-        except Exception as err:
+        except (
+            KeyError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            RuntimeError,
+            exc.RamsesException,
+        ) as err:
             _LOGGER.exception("Failed to schedule application ACK (cmd): %s", err)
 
     async def _write_frame(self, frame: str) -> None:
@@ -357,7 +385,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                         await asyncio.sleep(0.025)
                 except asyncio.CancelledError:
                     raise
-                except Exception as err:
+                except (
+                    KeyError,
+                    ValueError,
+                    TypeError,
+                    AttributeError,
+                    RuntimeError,
+                    exc.RamsesException,
+                ) as err:
                     _LOGGER.exception(
                         "Zigbee chunk %s/%s failed: %s - continuing",
                         seq,
@@ -376,7 +411,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     await asyncio.sleep(0.025)
             except asyncio.CancelledError:
                 raise
-            except Exception as err:
+            except (
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+                exc.RamsesException,
+            ) as err:
                 _LOGGER.exception(
                     "Zigbee chunk %s/%s failed: %s - continuing",
                     seq,
@@ -398,14 +440,28 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if cluster is not None:
             try:
                 cluster.remove_listener(self)
-            except Exception as err:
+            except (
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+                exc.RamsesException,
+            ) as err:
                 _LOGGER.exception("Failed to remove listener: %s", err)
 
         unsub = getattr(self, "_device_ready_unsub", None)
         if unsub is not None:
             try:
                 unsub()
-            except Exception as err:
+            except (
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+                exc.RamsesException,
+            ) as err:
                 _LOGGER.exception("Failed to unsubscribe: %s", err)
             self._device_ready_unsub = None
 
@@ -553,7 +609,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 )
             except asyncio.CancelledError:
                 raise
-            except Exception as err:
+            except (
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+                exc.RamsesException,
+            ) as err:
                 _LOGGER.exception("Failed to schedule application ACK: %s", err)
 
         if buf["received"] < total:
@@ -567,7 +630,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._frame_read(dt_now().isoformat(), _normalise(assembled))
         except asyncio.CancelledError:
             raise
-        except Exception as err:
+        except (
+            KeyError,
+            ValueError,
+            TypeError,
+            AttributeError,
+            RuntimeError,
+            exc.RamsesException,
+        ) as err:
             _LOGGER.exception("Error delivering assembled chunk: %s", err)
 
         # Cleanup
@@ -674,7 +744,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 for ep_id, ep_obj in getattr(device, "endpoints", {}).items():
                     try:
                         in_clusters = list(getattr(ep_obj, "in_clusters", {}).keys())
-                    except Exception:
+                    except (
+                        KeyError,
+                        ValueError,
+                        TypeError,
+                        AttributeError,
+                        RuntimeError,
+                    ):
                         in_clusters = (
                             list(getattr(ep_obj, "in_clusters", {}).keys())
                             if hasattr(ep_obj, "in_clusters")
@@ -682,7 +758,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                         )
                     try:
                         out_clusters = list(getattr(ep_obj, "out_clusters", {}).keys())
-                    except Exception:
+                    except (
+                        KeyError,
+                        ValueError,
+                        TypeError,
+                        AttributeError,
+                        RuntimeError,
+                    ):
                         out_clusters = (
                             list(getattr(ep_obj, "out_clusters", {}).keys())
                             if hasattr(ep_obj, "out_clusters")
@@ -690,7 +772,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                         )
                     ep_map[int(ep_id)] = {"in": in_clusters, "out": out_clusters}
                 _LOGGER.debug("ZHA device endpoints map: %s", ep_map)
-            except Exception:
+            except (KeyError, ValueError, TypeError, AttributeError, RuntimeError):
                 _LOGGER.debug("Failed to dump device endpoints for debugging")
 
             found = False
@@ -712,7 +794,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                         read_cluster = candidate
                         found = True
                         break
-                    except Exception:
+                    except exc.TransportZigbeeError:
                         continue
                 if found:
                     break
@@ -738,7 +820,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 for ep_id, ep_obj in getattr(device, "endpoints", {}).items():
                     try:
                         in_clusters = list(getattr(ep_obj, "in_clusters", {}).keys())
-                    except Exception:
+                    except (
+                        KeyError,
+                        ValueError,
+                        TypeError,
+                        AttributeError,
+                        RuntimeError,
+                    ):
                         in_clusters = (
                             list(getattr(ep_obj, "in_clusters", {}).keys())
                             if hasattr(ep_obj, "in_clusters")
@@ -746,7 +834,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                         )
                     try:
                         out_clusters = list(getattr(ep_obj, "out_clusters", {}).keys())
-                    except Exception:
+                    except (
+                        KeyError,
+                        ValueError,
+                        TypeError,
+                        AttributeError,
+                        RuntimeError,
+                    ):
                         out_clusters = (
                             list(getattr(ep_obj, "out_clusters", {}).keys())
                             if hasattr(ep_obj, "out_clusters")
@@ -754,7 +848,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                         )
                     ep_map[int(ep_id)] = {"in": in_clusters, "out": out_clusters}
                 _LOGGER.debug("ZHA device endpoints map: %s", ep_map)
-            except Exception:
+            except (KeyError, ValueError, TypeError, AttributeError, RuntimeError):
                 _LOGGER.debug("Failed to dump device endpoints for debugging")
 
             found = False
@@ -776,7 +870,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                         write_cluster = candidate
                         found = True
                         break
-                    except Exception:
+                    except exc.TransportZigbeeError:
                         continue
                 if found:
                     break
@@ -790,7 +884,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if cluster is not None:
             try:
                 cluster.remove_listener(self)
-            except Exception as err:
+            except (
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+                exc.RamsesException,
+            ) as err:
                 _LOGGER.exception("Failed to remove listener: %s", err)
 
         self._cluster = read_cluster
@@ -880,7 +981,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if old_cluster is not None:
             try:
                 old_cluster.remove_listener(self)
-            except Exception as err:
+            except (
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+                exc.RamsesException,
+            ) as err:
                 _LOGGER.exception("Failed to remove listener: %s", err)
 
         self._cluster = cluster

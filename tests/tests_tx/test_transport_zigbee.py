@@ -1388,5 +1388,33 @@ class TestChunkBufferTTL(unittest.TestCase):
         self.assertNotIn("stale_device", self.t._chunk_buffers)
 
 
+# ---------------------------------------------------------------------------
+# 26. Exception Filtering & Propagation
+# ---------------------------------------------------------------------------
+
+
+class CustomUnhandledError(Exception):
+    """A completely bespoke error guaranteed not to be in the whitelist."""
+
+    pass
+
+
+class TestExceptionPropagation(unittest.TestCase):
+    """Tests that non-whitelisted exceptions correctly propagate."""
+
+    def setUp(self) -> None:
+        self.t = _make_transport()
+        self.t._ensure_read_cluster_bound = MagicMock()
+
+    def test_unhandled_exception_propagates_out_of_callback(self) -> None:
+        """Ensure non-whitelisted exceptions crash the callback natively."""
+        self.t._maybe_handle_incoming_chunk = MagicMock(
+            side_effect=CustomUnhandledError("Expected propagation")
+        )
+
+        with self.assertRaises(CustomUnhandledError):
+            self.t.attribute_updated(self.t._attr_id, "1/2|part1")
+
+
 if __name__ == "__main__":
     unittest.main()
