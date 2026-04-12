@@ -337,7 +337,6 @@ class Command(Frame):
             _LOGGER.warning(f"{self} < Command is potentially invalid: {err}")
 
         self._rx_header: HeaderT | None = None
-        # self._source_entity: Entity | None = None  # TODO: is needed?
 
     @classmethod  # convenience constructor
     def from_attrs(
@@ -463,14 +462,31 @@ class Command(Frame):
 
     def __repr__(self) -> str:
         """Return an unambiguous string representation of this object."""
-        # e.g.: RQ --- 18:000730 01:145038 --:------ 000A 002 0800  # 000A|RQ|01:145038|08
+        # e.g.: RQ --- 18:000730 01:145038 --:------ 000A 002 0800
         comment = f" # {self._hdr}{f' ({self._ctx})' if self._ctx else ''}"
         return f"... {self}{comment}"
 
     def __str__(self) -> str:
         """Return a brief readable string representation of this object."""
-        # e.g.: 000A|RQ|01:145038|08
-        return super().__repr__()  # TODO: self._hdr
+        # e.g.: RQ --- 18:000730 01:145038 --:------ 000A 002 0800
+        return super().__repr__()
+
+    def clone_with_source(self, new_src: DeviceIdT | str) -> Command:
+        """Return a new Command instance identical to this one, but with a new source address.
+
+        This approach enforces standard immutability patterns, ensuring type safety and
+        avoiding in-place mutations of strictly-typed, read-only Frame attributes.
+
+        :param new_src: The new source device ID string to apply.
+        :type new_src: DeviceIdT | str
+        :return: A newly instantiated Command object.
+        :rtype: Command
+        """
+        new_frame = (
+            f"{self.verb} {self.seqn} {new_src} {self._addrs[1].id} {self._addrs[2].id} "
+            f"{self.code} {int(self.len_):03d} {self.payload}"
+        )
+        return type(self)(new_frame)
 
     @property
     def tx_header(self) -> HeaderT:
@@ -652,7 +668,7 @@ class Command(Frame):
         :type local_override: bool
         :param openwindow_function: If True, enables open window detection function
         :type openwindow_function: bool
-        :param multiroom_mode: If True, enables multi-room mode for this zone
+        :param multiroom_mode: If True, enables multiroom mode for this zone
         :type multiroom_mode: bool
         :return: A Command object for the W|000A message
         :rtype: Command
@@ -1568,8 +1584,6 @@ class Command(Frame):
     ) -> Command:
         """Create a bind offer message (I-type) for device binding.
 
-        # TODO: should preserve order of codes, else tests may fail
-
         This internal method constructs the initial bind offer message in the 3-way
         binding handshake. It's typically called by `put_bind()` and not used directly.
 
@@ -1592,7 +1606,6 @@ class Command(Frame):
             - The actual binding codes are filtered to exclude 1FC9 and 10E0
             - The order of codes is preserved in the output message
         """
-        # Filter out 1FC9 and 10E0 from the codes list
         kodes = [c for c in codes if c not in (Code._1FC9, Code._10E0)]
         if not kodes:  # might be []
             raise exc.CommandInvalid(f"Invalid codes for a bind offer: {codes}")
@@ -2915,4 +2928,4 @@ CODE_API_MAP = {
     f"{RQ}|{Code._30C9}": Command.get_zone_temp,
     f"{RQ}|{Code._12B0}": Command.get_zone_window_state,
     f"{I_}|{Code._31DA}": Command.get_hvac_fan_31da,  # .     has a test
-}  # TODO: RQ|0404 (Zone & DHW)
+}
