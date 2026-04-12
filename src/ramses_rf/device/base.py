@@ -213,8 +213,8 @@ class DeviceBase(Entity):
             return isinstance(self, BatteryState) or (
                 code_list is not None and Code._1060 in code_list
             )  # TODO(eb): clean up next line Q1 2026
-        msgz = await self.entity_state.get_state_cache_nested()
-        return isinstance(self, BatteryState) or Code._1060 in msgz
+        msgs = await self.entity_state.get_message_log_flat()
+        return isinstance(self, BatteryState) or Code._1060 in msgs
 
     @property
     def is_faked(self) -> bool:

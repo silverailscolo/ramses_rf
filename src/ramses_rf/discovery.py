@@ -94,11 +94,12 @@ class DiscoveryService:
                 )
                 if self.is_not_deprecated_cmd(code)
             }
-        msgz_dict = await self._entity.entity_state.get_state_cache_nested()
+        msgs = await self._entity.entity_state.get_all_messages()
+        rp_codes = {msg.code for msg in msgs if msg.verb == RP}
         return {
             code: (CODES_SCHEMA[code]["name"] if code in CODES_SCHEMA else None)
-            for code in sorted(msgz_dict)
-            if msgz_dict[code].get(RP) and self.is_not_deprecated_cmd(code)
+            for code in sorted(rp_codes)
+            if self.is_not_deprecated_cmd(code)
         }
 
     async def supported_cmds_ot(self) -> dict[str, Any]:
@@ -128,12 +129,13 @@ class DiscoveryService:
                     if val not in res:
                         res.append(val)
         else:
-            msgz_dict = await self._entity.entity_state.get_state_cache_nested()
-            res_dict: dict[bool | str | None, Message] | list[Any] = msgz_dict[
-                Code._3220
-            ].get(RP, {})
-            assert isinstance(res_dict, dict)
-            res = [str(k) for k in res_dict]
+            msgs = await self._entity.entity_state.get_all_messages()
+            for msg in msgs:
+                if msg.code == Code._3220 and msg.verb == RP:
+                    ctx = msg._pkt._ctx
+                    val = f"{ctx:02X}" if isinstance(ctx, int) else str(ctx)
+                    if val not in res:
+                        res.append(val)
 
         return {
             f"0x{msg_id}": OPENTHERM_MESSAGES[_to_data_id(msg_id)].get("en")
@@ -276,8 +278,16 @@ class DiscoveryService:
                                     cmd_code,
                                 )
                         else:
-                            tcs_msgz = await tcs.entity_state.get_state_cache_nested()
-                            msgs.append(tcs_msgz[cmd_code][I_][True])
+                            tcs_msgs = await tcs.entity_state.get_all_messages()
+                            found = [
+                                m
+                                for m in tcs_msgs
+                                if m.code == cmd_code
+                                and m.verb == I_
+                                and m._pkt._ctx is True
+                            ]
+                            if found:
+                                msgs.append(max(found, key=lambda x: x.dtm))
             except KeyError:
                 pass
 
