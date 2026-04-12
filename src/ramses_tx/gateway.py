@@ -64,12 +64,21 @@ class ApplicationMessage(Message):
 
     _engine: Engine | None = None
     _fraction_expired: float | None = None
+    _gwy: Any | None = None
 
     @classmethod
     def from_message(cls, msg: Message) -> ApplicationMessage:
         """Factory to safely promote a transport Message to an ApplicationMessage."""
         # Initialize the subclass identically to how the base class initializes
         return cls(msg._pkt)
+
+    def bind_context(self, gwy: Any) -> None:
+        """Explicitly assign the application context (gateway).
+
+        :param gwy: The application context (gateway) to associate.
+        :type gwy: Any
+        """
+        self._gwy = gwy
 
     def set_gateway(self, gwy: Engine) -> None:
         """Set the gateway (engine) instance for this message.
@@ -216,6 +225,8 @@ class Engine:
         self._prev_msg: ApplicationMessage | None = None
         self._this_msg: ApplicationMessage | None = None
 
+        self._history_lock = threading.Lock()
+
         # Thread-safe lock for task registry modifications
         self._tasks_lock = threading.Lock()
         self._tasks: list[asyncio.Task] = []  # type: ignore[type-arg]
@@ -233,6 +244,22 @@ class Engine:
             SZ_ACTIVE_HGI, default=HGI_DEV_ADDR.id
         )
         return f"{device_id} ({self.ser_name})"
+
+    def update_message_history(self, msg: ApplicationMessage) -> None:
+        """Update the message history in a thread-safe manner.
+
+        :param msg: The application message to add to the history.
+        :type msg: ApplicationMessage
+        """
+        with self._history_lock:
+            self._prev_msg = self._this_msg
+            self._this_msg = msg
+
+    def clear_message_history(self) -> None:
+        """Clear the message history in a thread-safe manner."""
+        with self._history_lock:
+            self._prev_msg = None
+            self._this_msg = None
 
     def _dt_now(self) -> dt:
         timesource: Callable[[], dt] = getattr(self._transport, "_dt_now", dt.now)
@@ -482,7 +509,7 @@ class Engine:
         app_msg = ApplicationMessage.from_message(msg)
         app_msg.set_gateway(self)
 
-        self._this_msg, self._prev_msg = app_msg, self._this_msg
+        self.update_message_history(app_msg)
 
         # Safely pass execution to Gateway's extended handling logic if defined
         handler = getattr(self, "_handle_msg", None)

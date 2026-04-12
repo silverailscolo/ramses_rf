@@ -598,8 +598,7 @@ class Gateway(GatewayInterface):
             self._tcs = None
             self.device_registry.devices.clear()
             self.device_registry.device_by_id.clear()
-            self._engine._prev_msg = None
-            self._engine._this_msg = None
+            self._engine.clear_message_history()
 
         _LOGGER.debug("Gateway: Restoring a cached packet log...")
         await self._pause()
@@ -753,10 +752,10 @@ class Gateway(GatewayInterface):
         app_msg.set_gateway(self._engine)
 
         # 3. Restore the critical ramses_rf linkage for dynamic Address/Orphan resolution
-        setattr(app_msg, "_gwy", self)  # noqa: B010
+        app_msg.bind_context(self)  # noqa: B010
 
         # 4. Store it safely in the engine state
-        self._engine._this_msg, self._engine._prev_msg = app_msg, self._engine._this_msg
+        self._engine.update_message_history(app_msg)
 
         # TODO: ideally remove this feature...
         assert self._engine._this_msg  # mypy check
