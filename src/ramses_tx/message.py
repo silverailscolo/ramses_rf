@@ -64,6 +64,8 @@ _MessageT = TypeVar("_MessageT", bound="Message")
 class Message:
     """The Message class; will trap/log invalid msgs."""
 
+    _gwy: Any | None = None
+
     def __init__(self, pkt: Packet) -> None:
         """Create a message from a valid packet.
 
