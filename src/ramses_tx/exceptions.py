@@ -51,12 +51,20 @@ class TransportError(_RamsesLowerError):
     """An error when sending or receiving frames (bytes) via the transport."""
 
 
+class TransportStateError(TransportError):
+    """The transport is in an invalid state for the requested operation."""
+
+
 class TransportSerialError(TransportError):
     """The transport's serial port has thrown an error."""
 
 
 class TransportSourceInvalid(TransportError):
     """The source of packets (frames) is not a valid type or configuration."""
+
+
+class TransportMqttError(TransportError):
+    """A failure occurred specifically within the MQTT transport layer."""
 
 
 class TransportZigbeeError(TransportError):
