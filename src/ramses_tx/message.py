@@ -14,8 +14,8 @@ from .address import Address
 from .command import Command
 from .const import DEV_TYPE_MAP, SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
 from .packet import Packet
-from .parsers import parse_payload
-from .ramses import CODE_IDX_ARE_COMPLEX, CODES_SCHEMA, RQ_IDX_COMPLEX
+from .parsers import PayloadDecoderPipeline
+from .ramses import CODE_IDX_ARE_COMPLEX, CODES_SCHEMA
 
 # TODO:
 # long-format msg.__str__ - alias columns don't line up
@@ -342,18 +342,15 @@ class Message:
         try:  # parse the payload
             # TODO: only accept invalid packets to/from HGI when flag raised
             try:
-                _check_msg_payload(self, self._pkt.payload)  # ? InvalidPayloadError
+                pipeline = PayloadDecoderPipeline()
+                result = pipeline.decode(self)
             except exc.PacketPayloadInvalid as err:
                 if not self._has_payload:
                     return {}  # Heartbeat fallback for null payloads
                 raise err
 
-            if not self._has_payload and (
-                self.verb == RQ and self.code not in RQ_IDX_COMPLEX
-            ):
+            if result is None:
                 return {}
-
-            result = parse_payload(self)  # invoke the code parsers
 
             if isinstance(result, list):
                 return result

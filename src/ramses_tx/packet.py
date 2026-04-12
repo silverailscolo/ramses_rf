@@ -13,7 +13,7 @@ from typing import Any
 
 from .command import Command
 from .const import I_, RP, RQ, W_, Code, VerbT
-from .exceptions import PacketInvalid, PacketPayloadInvalid
+from .exceptions import PacketInvalid
 from .frame import Frame
 from .logger import getLogger  # overridden logger.getLogger
 from .opentherm import PARAMS_DATA_IDS, SCHEMA_DATA_IDS, STATUS_DATA_IDS
@@ -194,15 +194,7 @@ class Packet(Frame):
             if self.error_text:
                 raise PacketInvalid(self.error_text)
 
-            try:
-                super()._validate(strict_checking=strict_checking)  # no RSSI
-            except PacketPayloadInvalid:
-                # Bypass strict payload validation strictly for 1-byte "00" heartbeats
-                parts = getattr(self, "_frame", "").split()
-                if len(parts) >= 7 and parts[-2] == "001" and parts[-1] == "00":
-                    pass
-                else:
-                    raise
+            super()._validate(strict_checking=strict_checking)  # no RSSI
 
             PKT_LOGGER.info("", extra=self.__dict__)  # the packet.log line
 
