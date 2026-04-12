@@ -718,10 +718,10 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     else:  # if no Exceptions raised, e.g. EOF when parsing, or Ctrl-C?
         msg = "ended without error (e.g. EOF)"
     finally:
-        with contextlib.suppress(asyncio.CancelledError):
-            await (
-                gwy.stop()
-            )  # Task cancellation is expected during shutdown, especially after EOF
+        with contextlib.suppress(asyncio.CancelledError, TimeoutError):
+            # Task cancellation is expected during shutdown, especially
+            # after EOF
+            await asyncio.wait_for(gwy.stop(), timeout=7.0)
 
     print(f"\r\nclient.py: Engine stopped: {msg}")
 
