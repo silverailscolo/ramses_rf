@@ -26,10 +26,8 @@ def patch_parsers(monkeypatch: pytest.MonkeyPatch) -> None:
     :return: None
     """
     monkeypatch.setattr(
-        "ramses_tx.message._check_msg_payload", lambda msg, payload: None
-    )
-    monkeypatch.setattr(
-        "ramses_tx.message.parse_payload", lambda msg: {"mock_key": "mock_val"}
+        "ramses_tx.message.PayloadDecoderPipeline.decode",
+        lambda self, msg: {"mock_key": "mock_val"},
     )
 
 
