@@ -103,7 +103,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not self._ieee or len(path_parts) < 6:
             raise exc.TransportSourceInvalid(
                 "Invalid Zigbee URL format. Expected "
-                "zigbee://ieee/cluster/attr/endpoint/write_cluster/write_attr/write_endpoint"
+                "zigbee://ieee/cluster/attr/endpoint/write_cluster/"
+                "write_attr/write_endpoint"
             )
 
         self._cluster_id = int(
@@ -253,10 +254,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
                 # Fire-and-forget ACK send on the cluster that delivered this payload
                 _LOGGER.debug("Scheduling application ACK: %s", ack)
-                try:
-                    target_cluster = self._cluster
-                except Exception:
-                    target_cluster = None
+                target_cluster = getattr(self, "_cluster", None)
 
                 self._track_task(
                     self._loop.create_task(
@@ -266,10 +264,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         except asyncio.CancelledError:
             raise
         except Exception as err:
-            _LOGGER.debug("Failed to schedule application ACK: %s", err)
+            _LOGGER.exception("Failed to schedule application ACK: %s", err)
 
     def cluster_command(
-        self, tsn: int, command_id: int, args: Any, *_args: Any, **_kwargs: Any
+        self,
+        tsn: int,
+        command_id: int,
+        args: Any,
+        *_args: Any,
+        **_kwargs: Any,
     ) -> None:
         """Callback invoked when a ZCL command is received on the bound cluster.
 
@@ -314,10 +317,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 ack = f"ACK {seq}/{total}"
 
                 _LOGGER.debug("Scheduling application ACK (cmd): %s", ack)
-                try:
-                    target_cluster = self._cluster
-                except Exception:
-                    target_cluster = None
+                target_cluster = getattr(self, "_cluster", None)
 
                 self._track_task(
                     self._loop.create_task(
@@ -327,7 +327,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         except asyncio.CancelledError:
             raise
         except Exception as err:
-            _LOGGER.debug("Failed to schedule application ACK (cmd): %s", err)
+            _LOGGER.exception("Failed to schedule application ACK (cmd): %s", err)
 
     async def _write_frame(self, frame: str) -> None:
         """Write a frame to the Zigbee device.
@@ -358,8 +358,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 except asyncio.CancelledError:
                     raise
                 except Exception as err:
-                    _LOGGER.warning(
-                        "Zigbee chunk %s/%s failed: %s - continuing", seq, total, err
+                    _LOGGER.exception(
+                        "Zigbee chunk %s/%s failed: %s - continuing",
+                        seq,
+                        total,
+                        err,
                     )
             # Real echo will come from ESP via cluster_command callback
             return
@@ -374,8 +377,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             except asyncio.CancelledError:
                 raise
             except Exception as err:
-                _LOGGER.warning(
-                    "Zigbee chunk %s/%s failed: %s - continuing", seq, total, err
+                _LOGGER.exception(
+                    "Zigbee chunk %s/%s failed: %s - continuing",
+                    seq,
+                    total,
+                    err,
                 )
 
     def close(self) -> None:
@@ -388,13 +394,21 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             if not task.done():
                 task.cancel()
 
-        if self._cluster:
-            with contextlib.suppress(Exception):
-                self._cluster.remove_listener(self)
-        if self._device_ready_unsub:
-            with contextlib.suppress(Exception):
-                self._device_ready_unsub()
+        cluster = getattr(self, "_cluster", None)
+        if cluster is not None:
+            try:
+                cluster.remove_listener(self)
+            except Exception as err:
+                _LOGGER.exception("Failed to remove listener: %s", err)
+
+        unsub = getattr(self, "_device_ready_unsub", None)
+        if unsub is not None:
+            try:
+                unsub()
+            except Exception as err:
+                _LOGGER.exception("Failed to unsubscribe: %s", err)
             self._device_ready_unsub = None
+
         super().close()
 
     async def _wait_for_gateway(self) -> Any:
@@ -485,7 +499,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             return (seq, total, body)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except (ValueError, TypeError, IndexError) as err:
+            _LOGGER.exception("Failed to parse chunk: %s", err)
             return None
 
     def _maybe_handle_incoming_chunk(self, payload: str) -> bool:
@@ -528,10 +543,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             try:
                 ack = f"ACK {seq}/{total}"
                 _LOGGER.info("Scheduling application ACK (part): %s", ack)
-                try:
-                    target_cluster = self._cluster
-                except Exception:
-                    target_cluster = None
+                target_cluster = getattr(self, "_cluster", None)
 
                 # Fire-and-forget ACK send on the cluster that delivered this payload
                 self._track_task(
@@ -565,7 +577,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         return True
 
     def _get_cluster(
-        self, device: Any, endpoint_id: int, cluster_id: int, direction: str = "in"
+        self,
+        device: Any,
+        endpoint_id: int,
+        cluster_id: int,
+        direction: str = "in",
     ) -> Any:
         """Retrieve a cluster object from a ZHA device endpoint.
 
@@ -589,7 +605,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 raise
             except Exception as err:
                 # Some ZHA implementations raise KeyError (or other exceptions)
-                # when the cluster is not present; normalize to TransportZigbeeError
+                # when the cluster is not present; normalize to
+                # TransportZigbeeError
                 raise exc.TransportZigbeeError(
                     f"Cluster lookup failed for 0x{cluster_id:04x} on "
                     f"endpoint {endpoint_id}: {err}"
@@ -633,7 +650,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         """
         try:
             read_cluster = self._get_cluster(
-                device, self._endpoint_id, self._cluster_id, self._read_direction
+                device,
+                self._endpoint_id,
+                self._cluster_id,
+                self._read_direction,
             )
         except exc.TransportZigbeeError:
             # Fallback: search all endpoints and both cluster directions
@@ -681,8 +701,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             device, int(ep_id), self._cluster_id, dir_try
                         )
                         _LOGGER.info(
-                            "Auto-selected endpoint %s (direction=%s) for read "
-                            "cluster 0x%04x",
+                            "Auto-selected endpoint %s (direction=%s) for "
+                            "read cluster 0x%04x",
                             ep_id,
                             dir_try,
                             self._cluster_id,
@@ -745,8 +765,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             device, int(ep_id), self._write_cluster_id, dir_try
                         )
                         _LOGGER.info(
-                            "Auto-selected endpoint %s (direction=%s) for write "
-                            "cluster 0x%04x",
+                            "Auto-selected endpoint %s (direction=%s) for "
+                            "write cluster 0x%04x",
                             ep_id,
                             dir_try,
                             self._write_cluster_id,
@@ -766,9 +786,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     f"on device {self._ieee}"
                 )
 
-        if self._cluster and hasattr(self._cluster, "remove_listener"):
-            with contextlib.suppress(Exception):
-                self._cluster.remove_listener(self)
+        cluster = getattr(self, "_cluster", None)
+        if cluster is not None:
+            try:
+                cluster.remove_listener(self)
+            except Exception as err:
+                _LOGGER.exception("Failed to remove listener: %s", err)
 
         self._cluster = read_cluster
         self._write_cluster = write_cluster
@@ -787,15 +810,19 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if self._use_command_mode:
             return
 
-        with contextlib.suppress(Exception):
+        try:
             await self._cluster.bind()
+        except (TimeoutError, ValueError, AttributeError) as err:
+            _LOGGER.exception("Failed to bind cluster: %s", err)
 
         configure = getattr(self._cluster, "configure_reporting", None)
         if not callable(configure):
             return
 
-        with contextlib.suppress(Exception):
+        try:
             await configure(self._attr_id, 0, 0xFFFE, None)
+        except (TimeoutError, ValueError, AttributeError) as err:
+            _LOGGER.exception("Failed to configure reporting: %s", err)
 
     def _refresh_write_cluster(self) -> Any | None:
         """Re-acquire the write cluster reference.
@@ -838,7 +865,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         try:
             cluster = self._get_cluster(
-                self._device, self._endpoint_id, self._cluster_id, self._read_direction
+                self._device,
+                self._endpoint_id,
+                self._cluster_id,
+                self._read_direction,
             )
         except exc.TransportZigbeeError:
             return
@@ -846,9 +876,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if cluster is self._cluster:
             return
 
-        if self._cluster and hasattr(self._cluster, "remove_listener"):
-            with contextlib.suppress(Exception):
-                self._cluster.remove_listener(self)
+        old_cluster = getattr(self, "_cluster", None)
+        if old_cluster is not None:
+            try:
+                old_cluster.remove_listener(self)
+            except Exception as err:
+                _LOGGER.exception("Failed to remove listener: %s", err)
 
         self._cluster = cluster
         if hasattr(self._cluster, "add_listener"):
@@ -988,9 +1021,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             raise
                         except Exception as err:
                             last_err = err
-                            _LOGGER.warning(
+                            _LOGGER.exception(
                                 "Zigbee write cmd %s/%s attempt %s failed "
-                                "(endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
+                                "(endpoint=%s cluster=0x%04x cmd=0x%02x): "
+                                "%s (%s)",
                                 seq,
                                 total,
                                 attempt,
@@ -1013,9 +1047,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             raise
                         except Exception as err:
                             last_err = err
-                            _LOGGER.warning(
-                                "Zigbee write server cmd %s/%s attempt %s failed "
-                                "(endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
+                            _LOGGER.exception(
+                                "Zigbee write server cmd %s/%s attempt %s "
+                                "failed (endpoint=%s cluster=0x%04x "
+                                "cmd=0x%02x): %s (%s)",
                                 seq,
                                 total,
                                 attempt,
@@ -1035,9 +1070,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             raise
                         except Exception as err:
                             last_err = err
-                            _LOGGER.warning(
-                                "Zigbee write generic cmd %s/%s attempt %s failed "
-                                "(endpoint=%s cluster=0x%04x cmd=0x%02x): %s (%s)",
+                            _LOGGER.exception(
+                                "Zigbee write generic cmd %s/%s attempt %s "
+                                "failed (endpoint=%s cluster=0x%04x "
+                                "cmd=0x%02x): %s (%s)",
                                 seq,
                                 total,
                                 attempt,
@@ -1048,8 +1084,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                                 type(err).__name__,
                             )
 
-                    # If we reach here, nothing succeeded — dump available mappings
-                    # for debugging
+                    # If we reach here, nothing succeeded — dump available
+                    # mappings for debugging
                     try:
                         client_map = getattr(
                             candidate, "client_commands", None
@@ -1063,15 +1099,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             client_map,
                             server_map,
                         )
-                    except Exception:
-                        pass
+                    except (AttributeError, KeyError) as err:
+                        _LOGGER.exception("Failed to dump command maps: %s", err)
                 except asyncio.CancelledError:
                     raise
                 except Exception as err:
                     last_err = err
-                    _LOGGER.warning(
-                        "Zigbee write cmd %s/%s attempt %s unexpected failure "
-                        "(endpoint=%s cluster=0x%04x): %s (%s)",
+                    _LOGGER.exception(
+                        "Zigbee write cmd %s/%s attempt %s unexpected "
+                        "failure (endpoint=%s cluster=0x%04x): %s (%s)",
                         seq,
                         total,
                         attempt,
@@ -1136,7 +1172,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 raise
             except Exception as err:
                 last_err = err
-                _LOGGER.warning(
+                _LOGGER.exception(
                     "Zigbee write chunk %s/%s attempt %s failed "
                     "(endpoint=%s cluster=0x%04x): %s",
                     seq,
@@ -1191,6 +1227,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     except asyncio.CancelledError:
                         raise
                     except Exception as err:
+                        _LOGGER.exception(
+                            "Target cluster command failed "
+                            "(cluster=0x%04x cmd=0x%02x): %s",
+                            getattr(target_cluster, "cluster_id", 0),
+                            use_cmd,
+                            err,
+                        )
                         raise exc.TransportZigbeeError(
                             f"Target cluster command failed "
                             f"(cluster=0x{getattr(target_cluster, 'cluster_id', 0):04x} "
@@ -1203,4 +1246,4 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         except asyncio.CancelledError:
             raise
         except Exception as err:
-            _LOGGER.warning("Zigbee unacked send failed: %s", err)
+            _LOGGER.exception("Zigbee unacked send failed: %s", err)
