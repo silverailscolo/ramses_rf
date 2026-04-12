@@ -52,8 +52,9 @@ async def test_gateway_legacy_kwargs_warning() -> None:
     """
     Test that passing undefined kwargs triggers a DeprecationWarning safely.
 
-    This ensures that older versions of downstream libraries passing arbitrary kwargs
-    do not crash (TypeError), but instead notify the user to upgrade their config.
+    This ensures that older versions of downstream libraries passing arbitrary
+    kwargs do not crash (TypeError), but instead notify the user to upgrade
+    their config.
 
     :returns: None
     """
@@ -89,10 +90,12 @@ async def test_gateway_with_config() -> None:
 @pytest.mark.asyncio
 async def test_gateway_stop_closes_listener_in_executor() -> None:
     """
-    Test that stopping the Gateway shuts down the packet log listener via the executor.
+    Test that stopping the Gateway shuts down the packet log listener via
+    the executor.
 
-    This ensures that blocking I/O operations (like closing file handlers) are offloaded
-    to a background thread, preventing the asyncio event loop from blocking.
+    This ensures that blocking I/O operations (like closing file handlers)
+    are offloaded to a background thread, preventing the asyncio event loop
+    from blocking.
 
     :returns: None
     """
@@ -118,11 +121,11 @@ async def test_gateway_stop_closes_listener_in_executor() -> None:
         # Verify run_in_executor was called to stop the listener
         mock_run_in_executor.assert_awaited_once()
 
-        # Extract the arguments passed to run_in_executor to ensure correct targeting
+        # Extract arguments passed to run_in_executor to ensure correct targeting
         call_args = mock_run_in_executor.call_args
         assert call_args is not None
 
-        # Arg 0: executor (None = default), Arg 1: function, Arg 2: listener instance
+        # Arg 0: executor (None=default), Arg 1: function, Arg 2: listener instance
         executor, func, listener_arg = call_args.args
         assert executor is None
         assert listener_arg is mock_listener
@@ -134,7 +137,8 @@ async def test_gateway_start_initiates_periodic_flush(
     mock_set_pkt_logging_config: AsyncMock,
 ) -> None:
     """
-    Test that starting the Gateway sets up the periodic flush task if configured.
+    Test that starting the Gateway sets up the periodic flush task if
+    configured.
 
     :param mock_set_pkt_logging_config: The patched configuration function.
     :returns: None
@@ -167,15 +171,26 @@ async def test_gateway_start_initiates_periodic_flush(
 
 @pytest.mark.asyncio
 async def test_gateway_restore_cached_packets_dto() -> None:
-    """Test that the Gateway seamlessly converts JSON DTOs back into strings for the transport layer."""
+    """
+    Test that the Gateway seamlessly parses JSON DTOs into Packet objects
+    and directly injects them into the protocol.
+    """
     config = GatewayConfig(disable_discovery=True)
     gwy = Gateway("/dev/null", config=config)
 
     with (
-        patch("ramses_rf.gateway.transport_factory", new_callable=AsyncMock) as mock_tf,
-        patch("ramses_rf.gateway.protocol_factory"),
+        patch("ramses_rf.gateway.protocol_factory") as mock_pf,
+        patch("ramses_rf.gateway.Packet.from_dict") as mock_from_dict,
     ):
-        mock_tf.return_value.get_extra_info = AsyncMock()
+        mock_protocol = MagicMock()
+        mock_pf.return_value = mock_protocol
+
+        # Mock the packet returned by from_dict to bypass strict frame regex
+        mock_pkt = MagicMock()
+        mock_pkt.__class__.__name__ = "Packet"
+        mock_pkt.rssi = "045"
+        mock_pkt._frame = "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+        mock_from_dict.return_value = mock_pkt
 
         # Simulate the new dictionary format provided by ramses_cc
         packets = {
@@ -187,8 +202,10 @@ async def test_gateway_restore_cached_packets_dto() -> None:
 
         await gwy._restore_cached_packets(packets, _clear_state=True)
 
-        # Verify the transport layer was handed perfectly formatted legacy string logs
-        called_args = mock_tf.call_args[1]
-        assert called_args["packet_dict"] == {
-            "2023-01-01T12:00:00.000000": "045 I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
-        }
+        # Verify from_dict was called with the correct args
+        mock_from_dict.assert_called_once_with(
+            "2023-01-01T12:00:00.000000", packets["2023-01-01T12:00:00.000000"]
+        )
+
+        # Verify the protocol layer was handed the parsed Packet object directly
+        mock_protocol.pkt_received.assert_called_once_with(mock_pkt)

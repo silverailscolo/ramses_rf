@@ -46,17 +46,17 @@ def validate_topic_path(path: str) -> str:
     :type path: str
     :return: The valid, normalized path.
     :rtype: str
-    :raises ValueError: If the path format is invalid.
+    :raises TransportMqttError: If the path format is invalid.
     """
     new_path = path or SZ_RAMSES_GATEWAY
     if new_path.startswith("/"):
         new_path = new_path[1:]
     if not new_path.startswith(SZ_RAMSES_GATEWAY):
-        raise ValueError(f"Invalid topic path: {path}")
+        raise exc.TransportMqttError(f"Invalid topic path: {path}")
     if new_path == SZ_RAMSES_GATEWAY:
         new_path += "/+"
     if len(new_path.split("/")) != 3:
-        raise ValueError(f"Invalid topic path: {path}")
+        raise exc.TransportMqttError(f"Invalid topic path: {path}")
     return new_path
 
 
@@ -111,7 +111,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._topic_sub = ""
         self._data_wildcard_topic = ""
 
-        self._mqtt_qos = int(parse_qs(self._broker_url.query).get("qos", ["0"])[0])
+        qos_val = parse_qs(self._broker_url.query).get("qos", ["0"])[0]
+        self._mqtt_qos = int(qos_val)
 
         self._connected = False
         self._connecting = False
@@ -132,7 +133,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._log_all = config.log_all
 
         self.client = mqtt.Client(
-            protocol=mqtt.MQTTv5, callback_api_version=CallbackAPIVersion.VERSION2
+            protocol=mqtt.MQTTv5,
+            callback_api_version=CallbackAPIVersion.VERSION2,
         )
         self.client.on_connect = self._on_connect
         self.client.on_connect_fail = self._on_connect_fail
@@ -155,8 +157,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                 60,
             )
             self.client.loop_start()
-        except Exception as err:
-            _LOGGER.error(f"Failed to initiate MQTT connection: {err}")
+        except (ValueError, OSError, MQTTException) as err:
+            _LOGGER.exception("Failed to initiate MQTT connection: %s", err)
             self._connecting = False
             self._schedule_reconnect()
 
@@ -166,10 +168,12 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             return
 
         _LOGGER.info(
-            f"Scheduling MQTT reconnect in {self._current_reconnect_interval} seconds"
+            "Scheduling MQTT reconnect in %s seconds",
+            self._current_reconnect_interval,
         )
         self._reconnect_task = self._loop.create_task(
-            self._reconnect_after_delay(), name="MqttTransport._reconnect_after_delay()"
+            self._reconnect_after_delay(),
+            name="MqttTransport._reconnect_after_delay()",
         )
 
     async def _reconnect_after_delay(self) -> None:
@@ -201,11 +205,11 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._connecting = False
 
         if reason_code.is_failure:
-            _LOGGER.error(f"MQTT connection failed: {reason_code.getName()}")
+            _LOGGER.error("MQTT connection failed: %s", reason_code.getName())
             self._schedule_reconnect()
             return
 
-        _LOGGER.info(f"MQTT connected: {reason_code.getName()}")
+        _LOGGER.info("MQTT connected: %s", reason_code.getName())
 
         self._current_reconnect_interval = self._reconnect_interval
 
@@ -221,17 +225,20 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             data_wildcard = self._topic_base.replace("/+", "/+/rx")
             self.client.subscribe(data_wildcard, qos=self._mqtt_qos)
             self._data_wildcard_topic = data_wildcard
-            _LOGGER.debug(f"Subscribed to data wildcard: {data_wildcard}")
+            _LOGGER.debug("Subscribed to data wildcard: %s", data_wildcard)
 
         if hasattr(self, "_topic_sub") and self._topic_sub:
             self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
-            _LOGGER.debug(f"Re-subscribed to specific topic: {self._topic_sub}")
+            _LOGGER.debug("Re-subscribed to specific topic: %s", self._topic_sub)
             if getattr(self, "_data_wildcard_topic", ""):
                 try:
                     self.client.unsubscribe(self._data_wildcard_topic)
                     _LOGGER.debug(
-                        f"Unsubscribed data wildcard after specific subscribe: {self._data_wildcard_topic}"
+                        "Unsubscribed data wildcard after specific subscribe: %s",
+                        self._data_wildcard_topic,
                     )
+                except (ValueError, MQTTException) as err:
+                    _LOGGER.exception("Error unsubscribing data wildcard: %s", err)
                 finally:
                     self._data_wildcard_topic = ""
 
@@ -264,14 +271,14 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             if reason_code is not None and hasattr(reason_code, "getName")
             else str(reason_code)
         )
-        _LOGGER.warning(f"MQTT disconnected: {reason_name}")
+        _LOGGER.warning("MQTT disconnected: %s", reason_name)
 
         was_connected = self._connected
         self._connected = False
 
         if was_connected and hasattr(self, "_topic_sub") and self._topic_sub:
             device_topic = self._topic_sub[:-3]
-            _LOGGER.warning(f"{self}: the MQTT device is offline: {device_topic}")
+            _LOGGER.warning("%s: the MQTT device is offline: %s", self, device_topic)
 
             if hasattr(self, "_protocol"):
                 self._protocol.pause_writing()
@@ -280,7 +287,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             self._schedule_reconnect()
 
     def _create_connection(self, msg: mqtt.MQTTMessage) -> None:
-        """Invoke the Protocols's connection_made() callback MQTT is established."""
+        """Invoke the Protocols's connection_made() callback MQTT is
+        established.
+        """
         assert msg.payload == b"online", "Coding error"
 
         if self._connected:
@@ -302,8 +311,11 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             try:
                 self.client.unsubscribe(self._data_wildcard_topic)
                 _LOGGER.debug(
-                    f"Unsubscribed data wildcard after device online: {self._data_wildcard_topic}"
+                    "Unsubscribed data wildcard after device online: %s",
+                    self._data_wildcard_topic,
                 )
+            except (ValueError, MQTTException) as err:
+                _LOGGER.exception("Error unsubscribing data wildcard: %s", err)
             finally:
                 self._data_wildcard_topic = ""
 
@@ -328,14 +340,18 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                     self._topic_sub and msg.topic == self._topic_sub[:-3]
                 ) or not self._topic_sub:
                     _LOGGER.warning(
-                        f"{self}: the ESP device is offline (via LWT): {msg.topic}"
+                        "%s: the ESP device is offline (via LWT): %s",
+                        self,
+                        msg.topic,
                     )
                     if hasattr(self, "_protocol"):
                         self._protocol.pause_writing()
 
             elif msg.payload == b"online":
                 _LOGGER.info(
-                    f"{self}: the ESP device is online (via status): {msg.topic}"
+                    "%s: the ESP device is online (via status): %s",
+                    self,
+                    msg.topic,
                 )
                 self._create_connection(msg)
 
@@ -346,7 +362,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             if len(topic_parts) >= 3 and topic_parts[-2] not in ("+", "*"):
                 gateway_id = topic_parts[-2]
                 _LOGGER.info(
-                    f"Inferring gateway connection from data topic: {gateway_id}"
+                    "Inferring gateway connection from data topic: %s",
+                    gateway_id,
                 )
 
                 self._topic_pub = f"{'/'.join(topic_parts[:-1])}/tx"
@@ -359,14 +376,17 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
                 try:
                     self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
-                except Exception as err:  # pragma: no cover - defensive
-                    _LOGGER.debug(f"Error subscribing specific topic: {err}")
+                except (ValueError, MQTTException) as err:
+                    _LOGGER.exception("Error subscribing specific topic: %s", err)
                 if getattr(self, "_data_wildcard_topic", ""):
                     try:
                         self.client.unsubscribe(self._data_wildcard_topic)
                         _LOGGER.debug(
-                            f"Unsubscribed data wildcard after inferring device: {self._data_wildcard_topic}"
+                            "Unsubscribed data wildcard after inferring device: %s",
+                            self._data_wildcard_topic,
                         )
+                    except (ValueError, MQTTException) as err:
+                        _LOGGER.exception("Error unsubscribing wildcard: %s", err)
                     finally:
                         self._data_wildcard_topic = ""
 
@@ -381,7 +401,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             dtm = dtm.astimezone().replace(tzinfo=None)
         if dtm < dt.now() - td(days=90):
             _LOGGER.warning(
-                f"{self}: Have you configured the SNTP settings on the ESP?"
+                "%s: Have you configured the SNTP settings on the ESP?",
+                self,
             )
 
         try:
@@ -393,8 +414,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
         """Transmit a frame via the underlying handler (e.g. serial port, MQTT)."""
         if not self._connected:
-            _LOGGER.debug(f"{self}: Dropping write - MQTT not connected")
-            return
+            raise exc.TransportStateError("Cannot write frame: MQTT not connected")
 
         timestamp = perf_counter()
         elapsed, self._timestamp = timestamp - self._timestamp, timestamp
@@ -403,7 +423,11 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         )
 
         if self._num_tokens < 1.0 - self._TOKEN_RATE and not disable_tx_limits:
-            _LOGGER.warning(f"{self}: Discarding write (tokens={self._num_tokens:.2f})")
+            _LOGGER.warning(
+                "%s: Discarding write (tokens=%.2f)",
+                self,
+                self._num_tokens,
+            )
             return
 
         self._num_tokens -= 1.0
@@ -413,7 +437,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if self._num_tokens < 0.0 and not disable_tx_limits:
             delay = (0 - self._num_tokens) / self._TOKEN_RATE
-            _LOGGER.debug(f"{self}: Sleeping (seconds={delay})")
+            _LOGGER.debug("%s: Sleeping (seconds=%s)", self, delay)
             await asyncio.sleep(delay)
 
         await super().write_frame(frame)
@@ -429,15 +453,17 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         try:
             self._publish(data)
-        except MQTTException as err:
-            _LOGGER.error(f"MQTT publish failed: {err}")
+        except (ValueError, MQTTException) as err:
+            _LOGGER.exception("MQTT publish failed: %s", err)
+            self._connected = False
+            if not self._closing:
+                self._schedule_reconnect()
             return
 
     def _publish(self, payload: str) -> None:
         """Publish the payload to the MQTT broker."""
         if not self._connected:
-            _LOGGER.debug("Cannot publish - MQTT not connected")
-            return
+            raise exc.TransportStateError("Cannot publish: MQTT not connected")
 
         info: mqtt.MQTTMessageInfo = self.client.publish(
             self._topic_pub, payload=payload, qos=self._mqtt_qos
@@ -446,7 +472,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         if not info:
             _LOGGER.warning("MQTT publish returned no info")
         elif info.rc != mqtt.MQTT_ERR_SUCCESS:
-            _LOGGER.warning(f"MQTT publish failed with code: {info.rc}")
+            _LOGGER.warning("MQTT publish failed with code: %s", info.rc)
             if info.rc in (mqtt.MQTT_ERR_NO_CONN, mqtt.MQTT_ERR_CONN_LOST):
                 self._connected = False
                 if not self._closing:
@@ -468,5 +494,5 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             self.client.unsubscribe(self._topic_sub)
             self.client.disconnect()
             self.client.loop_stop()
-        except Exception as err:
-            _LOGGER.debug(f"Error during MQTT cleanup: {err}")
+        except (ValueError, MQTTException) as err:
+            _LOGGER.exception("Error during MQTT cleanup: %s", err)

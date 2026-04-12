@@ -6,9 +6,8 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime as dt, timedelta as td
-from functools import lru_cache
-from typing import TYPE_CHECKING, Any, TypeAlias
+from datetime import datetime as dt
+from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
 from . import exceptions as exc
 from .address import Address
@@ -31,8 +30,6 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 )
 
 if TYPE_CHECKING:
-    from ramses_rf.gateway import Gateway
-
     from .const import IndexT, VerbT  # noqa: F401, pylint: disable=unused-import
 
 
@@ -42,8 +39,6 @@ __all__ = ["Message"]
 CODE_NAMES: dict[Code | str, str] = {k: v["name"] for k, v in CODES_SCHEMA.items()}
 
 MSG_FORMAT_10: str = "|| {:10s} | {:10s} | {:2s} | {:16s} | {:^4s} || {}"
-
-_TD_SECS_003: td = td(seconds=3)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,8 +57,11 @@ class PayloadBase:
 # Transition alias for typing until full payload migration is complete
 PayloadT: TypeAlias = Any  # PayloadBase | list[PayloadBase] | dict | list[dict]
 
+# TypeVar bound to Message to allow strict inheritance typing for class factories
+_MessageT = TypeVar("_MessageT", bound="Message")
 
-class MessageBase:
+
+class Message:
     """The Message class; will trap/log invalid msgs."""
 
     def __init__(self, pkt: Packet) -> None:
@@ -96,6 +94,32 @@ class MessageBase:
         self._payload: PayloadT = {}
 
         self._payload = self._validate(self._pkt.payload)  # ? may raise PacketInvalid
+
+    @classmethod
+    def _from_cmd(
+        cls: type[_MessageT], cmd: Command, dtm: dt | None = None
+    ) -> _MessageT:
+        """Create a Message (or subclass) from a Command.
+
+        :param cmd: The command.
+        :type cmd: Command
+        :param dtm: Datetime overrides.
+        :type dtm: dt | None
+        :return: The generated message.
+        :rtype: Message
+        """
+        return cls(Packet._from_cmd(cmd, dtm=dtm))
+
+    @classmethod
+    def _from_pkt(cls: type[_MessageT], pkt: Packet) -> _MessageT:
+        """Create a Message (or subclass) from a Packet.
+
+        :param pkt: The packet.
+        :type pkt: Packet
+        :return: The generated message.
+        :rtype: Message
+        """
+        return cls(pkt)
 
     def __str__(self) -> str:
         """Return a human-readable string representation of this object.
@@ -152,7 +176,7 @@ class MessageBase:
 
     def __eq__(self, other: object) -> bool:
         """Check equality against another Message."""
-        if not isinstance(other, MessageBase):
+        if not isinstance(other, Message):
             return NotImplemented
         return (self.src, self.dst, self.verb, self.code, self._pkt.payload) == (
             other.src,
@@ -164,7 +188,7 @@ class MessageBase:
 
     def __lt__(self, other: object) -> bool:
         """Compare timestamps for ordering."""
-        if not isinstance(other, MessageBase):
+        if not isinstance(other, Message):
             return NotImplemented
         return self.dtm < other.dtm
 
@@ -209,10 +233,12 @@ class MessageBase:
 
     @property
     def _idx(self) -> dict[str, str]:
-        """Get the domain_id/zone_idx/other_idx of a message payload, if any.
+        """Get the domain_id/zone_idx/other_idx of a message payload,
+        if any.
         Used to identify the zone/domain that a message applies to.
 
-        :return: an empty dict if there is none such, or None if undetermined.
+        :return: an empty dict if there is none such, or None if
+            undetermined.
         :rtype: dict[str, str]
         """
 
@@ -300,13 +326,13 @@ class MessageBase:
 
         return {index_name: self._pkt._idx}
 
-    # TODO: needs work...
     def _validate(self, raw_payload: str) -> PayloadT:
         """Validate a message packet payload, and parse it if valid.
 
         :param raw_payload: The raw payload string.
         :type raw_payload: str
-        :return: A dict containing key: value pairs, or a list/DTO created from the payload
+        :return: A dict containing key: value pairs, or a list/DTO
+            created from the payload
         :rtype: PayloadT
         :raises PacketInvalid: If it is not valid or parsable.
         """
@@ -344,7 +370,7 @@ class MessageBase:
             _LOGGER.exception("%s < %s", self._pkt, f"{err.__class__.__name__}({err})")
             raise exc.PacketInvalid("Bad packet") from err
 
-        except (AttributeError, LookupError, TypeError, ValueError) as err:  # TODO: dev
+        except (AttributeError, LookupError, TypeError, ValueError) as err:
             _LOGGER.exception(
                 "%s < Coding error: %s", self._pkt, f"{err.__class__.__name__}({err})"
             )
@@ -355,97 +381,6 @@ class MessageBase:
             raise exc.PacketInvalid from err
 
 
-class Message(MessageBase):
-    """Extend the Message class, so it is useful to a stateful Gateway.
-
-    Adds _expired attr to the Message class.
-    """
-
-    CANT_EXPIRE: float = -1.0  # sentinel value for fraction_expired
-
-    HAS_EXPIRED: float = 2.0  # fraction_expired >= HAS_EXPIRED
-    # .HAS_DIED = 1.0  # fraction_expired >= 1.0 (is expected lifespan)
-    IS_EXPIRING: float = 0.8  # fraction_expired >= 0.8 (and < HAS_EXPIRED)
-
-    _gwy: Gateway | None = None
-    _fraction_expired: float | None = None
-
-    @classmethod
-    def _from_cmd(cls, cmd: Command, dtm: dt | None = None) -> Message:
-        """Create a Message from a Command.
-
-        :param cmd: The command.
-        :type cmd: Command
-        :param dtm: Datetime overrides.
-        :type dtm: dt | None
-        :return: The generated message.
-        :rtype: Message
-        """
-        return cls(Packet._from_cmd(cmd, dtm=dtm))
-
-    @classmethod
-    def _from_pkt(cls, pkt: Packet) -> Message:
-        """Create a Message from a Packet.
-
-        :param pkt: The packet.
-        :type pkt: Packet
-        :return: The generated message.
-        :rtype: Message
-        """
-        return cls(pkt)
-
-    @property
-    def _expired(self) -> bool:
-        """Return True if the message is dated, False otherwise.
-
-        :return: True if the message is dated, False otherwise
-        :rtype: bool
-        """
-        # fraction_expired = (dt_now - self.dtm - _TD_SECONDS_003) / self._pkt._lifespan
-        # TODO: keep none >7d, even 10E0, etc.
-
-        def fraction_expired(lifespan: td) -> float:
-            """
-            :return: the packet's age as fraction of its 'normal' life span.
-            """
-            if self._gwy:  # self._gwy is set in ramses_tx.gateway.Engine._msg_handler
-                return float(
-                    (self._gwy._engine._dt_now() - self.dtm - _TD_SECS_003) / lifespan
-                )
-            return (dt.now() - self.dtm - _TD_SECS_003) / lifespan
-
-        # 1. Look for easy win...
-        if self._fraction_expired is not None:
-            if self._fraction_expired == self.CANT_EXPIRE:
-                return False
-            if self._fraction_expired >= self.HAS_EXPIRED:
-                return True
-
-        # 2. Need to update the fraction_expired...
-        if self.code == Code._1F09 and self.verb != RQ:  # sync_cycle is a special case
-            # RQs won't have remaining_seconds, RP/Ws have only partial cycle times
-            rem_secs = getattr(self.payload, "remaining_seconds", None)
-            if rem_secs is None and isinstance(self.payload, dict):
-                rem_secs = self.payload.get("remaining_seconds", 0)
-
-            self._fraction_expired = fraction_expired(
-                td(seconds=float(rem_secs or 0)),
-            )
-
-        elif self._pkt._lifespan is False:  # Can't expire
-            self._fraction_expired = self.CANT_EXPIRE
-
-        elif self._pkt._lifespan is True:  # Can't expire
-            raise NotImplementedError("Lifespan True not implemented")
-
-        else:
-            assert isinstance(self._pkt._lifespan, td)
-            self._fraction_expired = fraction_expired(self._pkt._lifespan)
-
-        return self._fraction_expired >= self.HAS_EXPIRED
-
-
-@lru_cache(maxsize=256)
 def re_compile_re_match(regex: str, string: str) -> bool:  # Optional[Match[Any]]
     """Check if the provided string matches the regex pattern.
 
@@ -456,24 +391,27 @@ def re_compile_re_match(regex: str, string: str) -> bool:  # Optional[Match[Any]
     :return: True if matched, False otherwise
     :rtype: bool
     """
-    # TODO: confirm this does speed things up
-    # Python has its own caching of re.compile, _MAXCACHE = 512
-    # https://github.com/python/cpython/blob/3.10/Lib/re.py
     return bool(re.compile(regex).match(string))
 
 
-def _check_msg_payload(msg: MessageBase, payload: str) -> None:
+def _check_msg_payload(msg: Message, payload: str) -> None:
     """Validate a packet's payload against its verb/code pair.
 
     :param msg: The message object being validated
-    :type msg: MessageBase
+    :type msg: Message
     :param payload: The raw hex payload string
     :type payload: str
     :raises PacketInvalid: If the code is unknown or verb/code pair is invalid.
     :raises PacketPayloadInvalid: If the payload does not match the expected regex.
     """
 
-    _ = repr(msg._pkt)  # HACK: ? raise InvalidPayloadError
+    try:
+        # Force packet evaluation via string representation (lazy parsing)
+        _ = repr(msg._pkt)
+    except Exception as err:
+        raise exc.PacketPayloadInvalid(
+            f"Packet formatting/evaluation failed: {err}"
+        ) from err
 
     if msg.code not in CODES_SCHEMA:
         raise exc.PacketInvalid(f"Unknown code: {msg.code}")

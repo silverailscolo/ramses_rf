@@ -59,19 +59,14 @@ if TYPE_CHECKING:
 
     from .heat import Evohome, _MultiZoneT, _StoredHwT
 
-
-# Kudos & many thanks to:
-# - @dbmandrake: valve_position -> heat_demand transform
-
-
-from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+from ramses_rf.const import (  # noqa: F401, isort: skip
     F9,
     FA,
     FC,
     FF,
 )
 
-from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+from ramses_rf.const import (  # noqa: F401, isort: skip
     I_,
     RP,
     RQ,
@@ -93,9 +88,11 @@ class ZoneBase(Child, Parent, Entity):
     def __init__(self, tcs: _MultiZoneT | _StoredHwT, zone_idx: str) -> None:
         super().__init__(tcs._gwy)
 
-        # FIXME: ZZZ entities must know their parent device ID and their own idx
+        # FIXME: ZZZ entities must know their parent device ID and their
+        # own idx
         self._z_id = tcs.id  # the responsible device is the controller
-        self._z_idx: DevIndexT = zone_idx  # the zone idx (ctx), 00-0B (or 0F), HW (FA)
+        # the zone idx (ctx), 00-0B (or 0F), HW (FA)
+        self._z_idx: DevIndexT = zone_idx
 
         self.id: str = f"{tcs.id}_{zone_idx}"
 
@@ -103,7 +100,7 @@ class ZoneBase(Child, Parent, Entity):
         self.ctl: Controller = tcs.ctl
         self._child_id: str = zone_idx
 
-        self._name = None  # param attr
+        self._name: str | None = None  # param attr
 
     # Should be a private method
     @classmethod
@@ -112,8 +109,9 @@ class ZoneBase(Child, Parent, Entity):
     ) -> ZoneBase:
         """Create a CH/DHW zone for a TCS and set its schema attrs.
 
-        The appropriate Zone class should have been determined by a factory.
-        Can be a heating zone (of a klass), or the DHW subsystem (idx must be 'HW').
+        The appropriate Zone class should have been determined by a
+        factory. Can be a heating zone (of a klass), or the DHW
+        subsystem (idx must be 'HW').
         """
 
         zon = cls(tcs, zone_idx)  # type: ignore[arg-type]
@@ -136,7 +134,9 @@ class ZoneBase(Child, Parent, Entity):
         return self._child_id
 
     async def schema(self) -> dict[str, Any]:
-        """Return the schema (can't change without destroying/re-creating entity)."""
+        """Return the schema (cannot change without re-creating
+        entity).
+        """
         return {}
 
     async def params(self) -> dict[str, Any]:
@@ -170,14 +170,17 @@ class ZoneSchedule(ZoneBase):  # 0404
 
     @property
     def schedule(self) -> InnerScheduleT | None:
-        """Return the latest retrieved schedule (not guaranteed to be up to date)."""
-        # inner: [{"day_of_week": 0, "switchpoints": [...], {"day_of_week": 1, ...
+        """Return the latest schedule (not guaranteed to be up to date)."""
+        # inner: [{"day_of_week": 0, "switchpoints": [...],
+        # {"day_of_week": 1, ...
         # outer: {"zone_idx": "01", "schedule": <inner>
 
         return self._schedule.schedule
 
     async def schedule_version(self) -> int | None:
-        """Return the version number associated with the latest retrieved schedule."""
+        """Return version number associated with latest retrieved
+        schedule.
+        """
         return self._schedule.version
 
     async def status(self) -> dict[str, Any]:
@@ -204,7 +207,8 @@ class DhwZone(ZoneSchedule):  # CS92A
 
         super().__init__(tcs, "HW")
 
-        # DhwZones have a sensor, but actuators are optional, depending on schema
+        # DhwZones have a sensor, but actuators are optional,
+        # depending on schema
         self._dhw_sensor: DhwSensor | None = None
         self._dhw_valve: BdrSwitch | None = None
         self._htg_valve: BdrSwitch | None = None
@@ -225,23 +229,28 @@ class DhwZone(ZoneSchedule):  # CS92A
         self.discovery.add_cmd(Command.get_dhw_temp(self.ctl.id), 60 * 15)
 
     def _handle_msg(self, msg: Message) -> None:
-        # def eavesdrop_dhw_sensor(this: Message, *, prev: Message | None = None) -> None:
-        # """Eavesdrop packets, or pairs of packets, to maintain the system state.
-
+        # def eavesdrop_dhw_sensor(
+        #     this: Message, *, prev: Message | None = None
+        # ) -> None:
+        # """Eavesdrop packets, or pairs of packets, to maintain the
+        # system state.
+        #
         # There are only 2 ways to find a controller's DHW sensor:
         # 1. The 10A0 RQ/RP *from/to a 07:* (1x/4h) - reliable
         # 2. Use sensor temp matching - non-deterministic
-
-        # Data from the CTL is considered more authoritative. The RQ is initiated by the
-        # DHW, so is not authoritative. The I/1260 is not to/from a controller, so is
-        # not useful.
+        #
+        # Data from the CTL is considered more authoritative. The RQ is
+        # initiated by the DHW, so is not authoritative. The I/1260 is
+        # not to/from a controller, so is not useful.
         # """
 
-        # # 10A0: RQ/07/01, RP/01/07: can get both parent controller & DHW sensor
+        # # 10A0: RQ/07/01, RP/01/07: can get both parent controller &
+        # DHW sensor
         # # 047 RQ --- 07:030741 01:102458 --:------ 10A0 006 00181F0003E4
         # # 062 RP --- 01:102458 07:030741 --:------ 10A0 006 0018380003E8
 
-        # # 1260: I/07: can't get which parent controller - would need to match temps
+        # # 1260: I/07: can't get parent controller - would need match
+        # # temps
         # # 045  I --- 07:045960 --:------ 07:045960 1260 003 000911
 
         # # 1F41: I/01: get parent controller, but not DHW sensor
@@ -262,7 +271,14 @@ class DhwZone(ZoneSchedule):  # CS92A
 
         assert (
             msg.src == self.ctl
-            and msg.code in (Code._0005, Code._000C, Code._10A0, Code._1260, Code._1F41)
+            and msg.code
+            in (
+                Code._0005,
+                Code._000C,
+                Code._10A0,
+                Code._1260,
+                Code._1F41,
+            )
             or msg.payload.get(SZ_DOMAIN_ID) in (F9, FA)
             or msg.payload.get(SZ_ZONE_IDX) == "HW"
         ), f"msg inappropriately routed to {self}"
@@ -293,20 +309,23 @@ class DhwZone(ZoneSchedule):  # CS92A
     def _update_schema(self, **schema: Any) -> None:
         """Update a DHW zone with new schema attrs.
 
-        Raise an exception if the new schema is not a superset of the existing schema.
+        Raise an exception if the new schema is not a superset of the
+        existing schema.
         """
 
         """Set the temp sensor for this DHW zone (07: only)."""
         """Set the heating valve relay for this DHW zone (13: only)."""
         """Set the hotwater valve relay for this DHW zone (13: only).
 
-        Check and ??? the DHW sensor (07:) of this system/CTL (if there is one).
+        Check and ??? the DHW sensor (07:) of this system/CTL (if there
+        is one).
 
         There is only 1 way to eavesdrop a controller's DHW sensor:
         1.  The 10A0 RQ/RP *from/to a 07:* (1x/4h)
 
-        The RQ is initiated by the DHW, so is not authoritative (the CTL will RP any RQ).
-        The I/1260 is not to/from a controller, so is not useful.
+        The RQ is initiated by the DHW, so is not authoritative (the CTL
+        will RP any RQ). The I/1260 is not to/from a controller, so is
+        not useful.
         """
 
         schema = shrink(SCH_TCS_DHW(schema))
@@ -450,8 +469,8 @@ class DhwZone(ZoneSchedule):  # CS92A
         """Return the schema of the DHW's."""
         return {
             SZ_SENSOR: self.sensor.id if self.sensor else None,
-            SZ_DHW_VALVE: self.hotwater_valve.id if self.hotwater_valve else None,
-            SZ_HTG_VALVE: self.heating_valve.id if self.heating_valve else None,
+            SZ_DHW_VALVE: (self.hotwater_valve.id if self.hotwater_valve else None),
+            SZ_HTG_VALVE: (self.heating_valve.id if self.heating_valve else None),
         }
 
     async def params(self) -> dict[str, Any]:
@@ -478,11 +497,13 @@ class Zone(ZoneSchedule):
     def __init__(self, tcs: _MultiZoneT, zone_idx: str) -> None:
         """Create a heating zone.
 
-        The type of zone may not be known at instantiation. Even when it is known, zones
-        are still created without a type before they are subsequently promoted, so that
-        both schemes (e.g. eavesdropping, vs probing) are the same.
+        The type of zone may not be known at instantiation. Even when it
+        is known, zones are still created without a type before they are
+        subsequently promoted, so that both schemes (e.g. eavesdropping,
+        vs probing) are the same.
 
-        In addition, an electric zone may subsequently turn out to be a zone valve zone.
+        In addition, an electric zone may subsequently turn out to be a
+        zone valve zone.
         """
         _LOGGER.debug("Creating a Zone: %s_%s (%s)", tcs.id, zone_idx, self.__class__)
 
@@ -504,7 +525,8 @@ class Zone(ZoneSchedule):
     def _update_schema(self, **schema: Any) -> None:
         """Update a heating zone with new schema attrs.
 
-        Raise an exception if the new schema is not a superset of the existing schema.
+        Raise an exception if the new schema is not a superset of the
+        existing schema.
         """
 
         def set_zone_type(zone_type: str) -> None:
@@ -570,26 +592,45 @@ class Zone(ZoneSchedule):
 
         for dev_role in (self._ROLE_ACTUATORS, DEV_ROLE_MAP.SEN):
             cmd = Command.from_attrs(
-                RQ, self.ctl.id, Code._000C, PayloadT(f"{self.idx}{dev_role}")
+                RQ,
+                self.ctl.id,
+                Code._000C,
+                PayloadT(f"{self.idx}{dev_role}"),
             )
             self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0.5)
 
+        # td should be > long sync_cycle duration (> 1hr)
         self.discovery.add_cmd(
-            Command.get_zone_config(self.ctl.id, self.idx), 60 * 60 * 6, delay=30
-        )  # td should be > long sync_cycle duration (> 1hr)
+            Command.get_zone_config(self.ctl.id, self.idx),
+            60 * 60 * 6,
+            delay=30,
+        )
         self.discovery.add_cmd(
-            Command.get_zone_name(self.ctl.id, self.idx), 60 * 60 * 6, delay=30
+            Command.get_zone_name(self.ctl.id, self.idx),
+            60 * 60 * 6,
+            delay=30,
         )
 
-        self.discovery.add_cmd(  # 2349 instead of 2309
-            Command.get_zone_mode(self.ctl.id, self.idx), 60 * 5, delay=30
-        )
-        self.discovery.add_cmd(  # 30C9
-            Command.get_zone_temp(self.ctl.id, self.idx), 60 * 5, delay=0
-        )  # td should be > sync_cycle duration,?delay in hope of picking up cycle
+        # 2349 instead of 2309
         self.discovery.add_cmd(
-            Command.get_zone_window_state(self.ctl.id, self.idx), 60 * 15, delay=60 * 5
-        )  # longer dt as low yield (factory duration is 30 min): prefer eavesdropping
+            Command.get_zone_mode(self.ctl.id, self.idx),
+            60 * 5,
+            delay=30,
+        )
+        # td should be > sync_cycle duration,?delay in hope of
+        # picking up cycle
+        self.discovery.add_cmd(  # 30C9
+            Command.get_zone_temp(self.ctl.id, self.idx),
+            60 * 5,
+            delay=0,
+        )
+        # longer dt as low yield (factory duration is 30 min): prefer
+        # eavesdropping
+        self.discovery.add_cmd(
+            Command.get_zone_window_state(self.ctl.id, self.idx),
+            60 * 15,
+            delay=60 * 5,
+        )
 
         # Cleanup inferior headers after registering all of them
         if [t for t in self.discovery.cmds if t[-2:] in ZON_ROLE_MAP.HEAT_ZONES] and (
@@ -640,20 +681,33 @@ class Zone(ZoneSchedule):
                 elif isinstance(this.src, UfhController):
                     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.UFH]})
 
-            assert (
-                msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC
-            ) and (  # DEX
+            # DEX
+            assert (msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC) and (
                 isinstance(msg.payload, dict)
                 or [d for d in msg.payload if d.get(SZ_ZONE_IDX) == self.idx]
             ), f"msg inappropriately routed to {self}"
 
-        assert (msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC) and (  # DEX
+        # DEX
+        assert (msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC) and (
             isinstance(msg.payload, list)
             or msg.code == Code._0005
             or msg.payload.get(SZ_ZONE_IDX) == self.idx
         ), f"msg inappropriately routed to {self}"
 
         super()._handle_msg(msg)
+
+        if msg.code == Code._0004:
+            if isinstance(msg.payload, dict):
+                if SZ_NAME in msg.payload:
+                    self._name = str(msg.payload[SZ_NAME])
+            elif isinstance(msg.payload, list):
+                for d in msg.payload:
+                    if (
+                        isinstance(d, dict)
+                        and d.get(SZ_ZONE_IDX) == self.idx
+                        and SZ_NAME in d
+                    ):
+                        self._name = str(d[SZ_NAME])
 
         if msg.code == Code._000C:
             if not msg.payload[SZ_DEVICES]:
@@ -703,20 +757,27 @@ class Zone(ZoneSchedule):
 
     async def name(self) -> str | None:  # 0004
         """Get the name of the zone."""
+        if self._name is not None:
+            return self._name
 
         if self._gwy.message_store:
             msgs = await self._gwy.message_store.get(
                 code=Code._0004, src=self._z_id, ctx=self._z_idx
             )
-            _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")  # DEBUG issue #317
-            return cast(str, msgs[0].payload.get(SZ_NAME)) if msgs else None
+            # DEBUG issue #317
+            _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")
+            if msgs:
+                self._name = cast(str, msgs[0].payload.get(SZ_NAME))
+                return self._name
+            return None
 
-        return cast(
+        self._name = cast(
             str | None,
             await self.entity_state.get_value(
                 Code._0004, key=SZ_NAME, zone_idx=self.idx
             ),
         )
+        return self._name
 
     async def config(self) -> dict[str, Any] | None:  # 000A
         return cast(
@@ -730,16 +791,21 @@ class Zone(ZoneSchedule):
             await self.entity_state.get_value(Code._2349, zone_idx=self.idx),
         )
 
-    async def setpoint(self) -> float | None:  # 2309 (2349 is a superset of 2309)
+    async def setpoint(self) -> float | None:
+        # 2309 (2349 is a superset of 2309)
         return cast(
             float | None,
             await self.entity_state.get_value(
-                (Code._2309, Code._2349), key=SZ_SETPOINT, zone_idx=self.idx
+                (Code._2309, Code._2349),
+                key=SZ_SETPOINT,
+                zone_idx=self.idx,
             ),
         )
 
     async def setpoint_bounds(self) -> dict[str, Any] | None:  # 22C9, 2209
-        """Return the zone's local setpoint bounds if defined by a thermostat."""
+        """Return the zone's local setpoint bounds if defined by
+        thermostat.
+        """
         return cast(
             dict[str, Any] | None,
             await self.entity_state.get_value(
@@ -757,7 +823,7 @@ class Zone(ZoneSchedule):
 
     async def temperature(self) -> float | None:  # 30C9
         if self._gwy.message_store:
-            # evohome zones only get initial temp from src + idx, so use zone sensor if newer
+            # evohome zones get initial temp from src + idx, so use sensor
             sensor_id = "aa:aaaaaa"  # should not match any device_id
             if self._sensor:
                 sensor_id = self._sensor.id
@@ -790,7 +856,8 @@ class Zone(ZoneSchedule):
                                 return cast("float | None", d.get(SZ_TEMPERATURE))
                     if isinstance(latest_msg.payload[0], dict):
                         return cast(
-                            "float | None", latest_msg.payload[0].get(SZ_TEMPERATURE)
+                            "float | None",
+                            latest_msg.payload[0].get(SZ_TEMPERATURE),
                         )
             return None
 
@@ -802,7 +869,9 @@ class Zone(ZoneSchedule):
         )
 
     async def heat_demand(self) -> float | None:  # 3150
-        """Return the zone's heat demand, estimated from its devices' heat demand."""
+        """Return the zone's heat demand, estimated from its devices'
+        heat demand.
+        """
         demands = []
         for d in self.actuators:
             if hasattr(d, "heat_demand"):
@@ -868,13 +937,21 @@ class Zone(ZoneSchedule):
         setpoint: float | None = None,
         until: dt | str | None = None,
     ) -> Packet:  # 2309/2349
-        """Override the zone's setpoint for a specified duration, or indefinitely."""
+        """Override the zone's setpoint for a specified duration, or
+        indefinitely.
+        """
 
-        if mode is not None or until is not None:  # Hometronics doesn't support 2349
+        # Hometronics doesn't support 2349
+        if mode is not None or until is not None:
             cmd = Command.set_zone_mode(
-                self.ctl.id, self.idx, mode=mode, setpoint=setpoint, until=until
+                self.ctl.id,
+                self.idx,
+                mode=mode,
+                setpoint=setpoint,
+                until=until,
             )
-        elif setpoint is not None:  # unsure if Hometronics supports setpoint of None
+        # unsure if Hometronics supports setpoint of None
+        elif setpoint is not None:
             cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, setpoint)
         else:
             raise exc.CommandInvalid("Invalid mode/setpoint")
@@ -916,9 +993,12 @@ class Zone(ZoneSchedule):
 
 
 class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
-    """For a small electric load controlled by a relay (never calls for heat)."""
+    """For a small electric load controlled by a relay (never calls
+    for heat).
+    """
 
-    # def __init__(self,...  # NOTE: since zones are promotable, we can't use this here
+    # NOTE: since zones are promotable, we can't use this here
+    # def __init__(self,...
 
     _SLUG: str = ZoneRole.ELE
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.ELE
@@ -926,18 +1006,22 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
-        # if msg.code == Code._0008:  # ZON zones are ELE zones that also call for heat
-        #     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZON_ROLE.VAL]})
+        # ZON zones are ELE zones that also call for heat
+        # if msg.code == Code._0008:
+        #     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.VAL]})
         if msg.code == Code._3150:
             raise exc.SystemInconsistent("EleZone cannot process 3150 (heat demand)")
         elif msg.code == Code._3EF0:
             raise exc.SystemInconsistent("EleZone cannot process 3EF0")
 
     async def heat_demand(self) -> float | None:
-        """Return 0 as the zone's heat demand, as electric zones don't call for heat."""
+        """Return 0 as the zone's heat demand, as electric zones don't
+        call for heat.
+        """
         return 0
 
-    async def relay_demand(self) -> float | None:  # 0008 (NOTE: CTLs won't RP|0008)
+    # 0008 (NOTE: CTLs won't RP|0008)
+    async def relay_demand(self) -> float | None:
         return cast(
             float | None,
             await self.entity_state.get_value(Code._0008, key=SZ_RELAY_DEMAND),
@@ -951,12 +1035,14 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
 
 
 class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
-    """For a modulating valve controlled by a HM80 (will also call for heat).
+    """For a modulating valve controlled by a HM80 (will also call
+    for heat).
 
     Note that HM80s are listen-only devices.
     """
 
-    # def __init__(self,...  # NOTE: since zones are promotable, we can't use this here
+    # NOTE: since zones are promotable, we can't use this here
+    # def __init__(self,...
 
     _SLUG: str = ZoneRole.MIX
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.MIX
@@ -979,24 +1065,26 @@ class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
 
 
 class RadZone(Zone):  # HR92/HR80
-    """For radiators controlled by HR92s or HR80s (will also call for heat)."""
+    """For radiators controlled by HR92s or HR80s (will also call heat)."""
 
-    # def __init__(self,...  # NOTE: since zones are promotable, we can't use this here
+    # NOTE: since zones are promotable, we can't use this here
+    # def __init__(self,...
 
     _SLUG: str = ZoneRole.RAD
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.RAD
 
 
 class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
-    """For underfloor heating controlled by an HCE80/HCC80 (will also call for heat)."""
+    """For underfloor heating controlled by HCE80/HCC80 (calls for heat)."""
 
-    # def __init__(self,...  # NOTE: since zones are promotable, we can't use this here
+    # NOTE: since zones are promotable, we can't use this here
+    # def __init__(self,...
 
     _SLUG: str = ZoneRole.UFH
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.UFH
 
     async def heat_demand(self) -> float | None:  # 3150
-        """Return the zone's heat demand, estimated from its devices' heat demand."""
+        """Return the zone's heat demand, estimated from its devices."""
         if (
             demand := await self.entity_state.get_value(Code._3150, key=SZ_HEAT_DEMAND)
         ) is not None:
@@ -1005,9 +1093,10 @@ class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
 
 
 class ValZone(EleZone):  # BDR91A/T
-    """For a motorised valve controlled by a BDR91 (will also call for heat)."""
+    """For a motorised valve controlled by a BDR91 (will also call heat)."""
 
-    # def __init__(self,...  # NOTE: since zones are promotable, we can't use this here
+    # NOTE: since zones are promotable, we can't use this here
+    # def __init__(self,...
 
     _SLUG: str = ZoneRole.VAL
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.VAL
@@ -1018,7 +1107,9 @@ class ValZone(EleZone):  # BDR91A/T
 
 
 def _transform(valve_pos: float) -> float:
-    """Transform a valve position (0-200) into a demand (%) (as used in the tcs UI)."""
+    """Transform a valve position (0-200) into a demand (%) (as used
+    in the tcs UI).
+    """
     # import math
     valve_pos = valve_pos * 100
     if valve_pos <= 30:
@@ -1040,7 +1131,8 @@ def zone_factory(
     msg: Message | None = None,
     **schema: Any,
 ) -> DhwZone | Zone:
-    """Return the zone class for a given zone_idx/klass (Zone or DhwZone).
+    """Return the zone class for a given zone_idx/klass (Zone or
+    DhwZone).
 
     Some zones are promotable to a compatible sub class (e.g. ELE->VAL).
     """
@@ -1053,14 +1145,18 @@ def zone_factory(
         eavesdrop: bool = False,
         **schema: Any,
     ) -> type[DhwZone] | type[Zone]:
-        """Return the initial zone class for a given zone_idx/klass (Zone or DhwZone)."""
+        """Return the initial zone class for a given zone_idx/klass
+        (Zone or DhwZone).
+        """
 
         # NOTE: for now, zones are always promoted after instantiation
 
-        # # a specified zone class always takes precedence (even if it is wrong)...
+        # a specified zone class always takes precedence (even if it
+        # is wrong)...
         # if cls := ZONE_CLASS_BY_SLUG.get(schema.get(SZ_CLASS)):
         #     _LOGGER.debug(
-        #         f"Using an explicitly-defined zone class for: {ctl_addr}_{idx} ({cls})"
+        #         f"Using an explicitly-defined zone class for: "
+        #         f"{ctl_addr}_{idx} ({cls})"
         #     )
         #     return cls
 
@@ -1072,9 +1168,12 @@ def zone_factory(
             return DhwZone
 
         # try:  # or, a class eavesdropped from the message code/payload...
-        #     if cls := best_zon_class(ctl_addr.type, msg=msg, eavesdrop=eavesdrop):
+        #     if cls := best_zon_class(
+        #         ctl_addr.type, msg=msg, eavesdrop=eavesdrop
+        #     ):
         #         _LOGGER.warning(
-        #             f"Using eavesdropped zone class for: {ctl_addr}_{idx} ({cls._SLUG})"
+        #             f"Using eavesdropped zone class for: "
+        #             f"{ctl_addr}_{idx} ({cls._SLUG})"
         #         )
         #         return cls  # might be DeviceHvac
         # except TypeError:

@@ -30,6 +30,7 @@ from . import exceptions as exc
 from .const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
 
 if TYPE_CHECKING:
+    from ramses_tx.gateway import ApplicationMessage
     from ramses_tx.typing import HeaderT
 
     from .interfaces import DeviceInterface, GatewayInterface
@@ -53,7 +54,7 @@ class EntityState:
         self._entity = entity
         self._gwy = gwy
 
-    def _is_relevant_msg(self, msg: Message) -> bool:
+    def _is_relevant_msg(self, msg: ApplicationMessage) -> bool:
         """Check if a central MessageStore packet is relevant to this entity."""
         return bool(
             msg.src.id == self._entity.id[:_ID_SLICE]
@@ -61,7 +62,7 @@ class EntityState:
             or (msg.dst.id == ALL_DEVICE_ID and msg.code == Code._1FC9)
         )
 
-    async def get_all_messages(self) -> list[Message]:
+    async def get_all_messages(self) -> list[ApplicationMessage]:
         """Return a flattened list of all messages logged on this device."""
         msgz_dict = await self.get_state_cache_nested()
         return [
@@ -86,12 +87,12 @@ class EntityState:
                 dev_id, code=str(code), verb=verb, payload=payload
             )
 
-    async def _delete_msg(self, msg: Message) -> None:
+    async def _delete_msg(self, msg: ApplicationMessage) -> None:
         """Remove the msg from the central state databases."""
         if self._gwy.message_store:
             await cast("MessageStore", self._gwy.message_store).rem(msg)
 
-    async def _get_msg_by_hdr(self, hdr: HeaderT) -> Message | None:
+    async def _get_msg_by_hdr(self, hdr: HeaderT) -> ApplicationMessage | None:
         """Return a msg, if any, that matches a given header."""
         if self._gwy.message_store:
             msgs = await self._gwy.message_store.get(hdr=hdr)
@@ -100,7 +101,7 @@ class EntityState:
                     raise exc.DatabaseQueryError(
                         f"Header mismatch: {msgs[0]._pkt._hdr} != {hdr}"
                     )
-                return cast("Message", msgs[0])
+                return cast("ApplicationMessage", msgs[0])
             return None
 
         code_str, verb_str, _, *args = hdr.split("|")
@@ -133,7 +134,10 @@ class EntityState:
     _msg_flag = get_flag
 
     async def get_value(
-        self, code: Code | tuple[Code, ...] | Message, *args: Any, **kwargs: Any
+        self,
+        code: Code | tuple[Code, ...] | ApplicationMessage,
+        *args: Any,
+        **kwargs: Any,
     ) -> Any:
         """Get the value for a Code from the database or from a Message."""
         if isinstance(code, (str, tuple)):
@@ -179,7 +183,7 @@ class EntityState:
 
     def _msg_value_msg(
         self,
-        msg: Message | None,
+        msg: ApplicationMessage | None,
         key: str | None = "*",
         zone_idx: str | None = None,
         domain_id: str | None = None,
@@ -187,7 +191,7 @@ class EntityState:
         """Get all or a specific key with its values from a Message."""
         if msg is None:
             return None
-        elif msg._expired:
+        elif getattr(msg, "_expired", False):
             loop = getattr(self._gwy, "_loop", asyncio.get_running_loop())
             loop.create_task(self._delete_msg(msg))
 
@@ -380,9 +384,9 @@ class EntityState:
         )
         return []
 
-    async def get_message_log_flat(self) -> dict[Code, Message]:
+    async def get_message_log_flat(self) -> dict[Code, ApplicationMessage]:
         """Dynamically build a flat dict of all I/RP messages logged for this entity."""
-        _msg_dict: dict[Code, Message] = {}
+        _msg_dict: dict[Code, ApplicationMessage] = {}
 
         # Build from get_state_cache_nested to guarantee strict zone_idx isolation
         nested_cache = await self.get_state_cache_nested()
@@ -399,13 +403,14 @@ class EntityState:
 
     async def get_state_cache_nested(
         self,
-    ) -> dict[Code, dict[VerbT, dict[bool | str | None, Message]]]:
+    ) -> dict[Code, dict[VerbT, dict[bool | str | None, ApplicationMessage]]]:
         """Dynamically build a nested dict of all I/RP messages for this entity."""
         msgs_1: Any = defaultdict(lambda: defaultdict(dict))
 
         if self._gwy.message_store is None:
             return cast(
-                "dict[Code, dict[VerbT, dict[bool | str | None, Message]]]", msgs_1
+                "dict[Code, dict[VerbT, dict[bool | str | None, ApplicationMessage]]]",
+                msgs_1,
             )
 
         entity_id = self._entity.id
@@ -458,9 +463,12 @@ class EntityState:
             else:
                 msgs_1[code][verb][ctx] = msg
 
-        return cast("dict[Code, dict[VerbT, dict[bool | str | None, Message]]]", msgs_1)
+        return cast(
+            "dict[Code, dict[VerbT, dict[bool | str | None, ApplicationMessage]]]",
+            msgs_1,
+        )
 
-    def _handle_msg(self, msg: Message) -> None:
+    def _handle_msg(self, msg: ApplicationMessage) -> None:
         """Deprecated: The proxy no longer caches its own packets."""
         pass
 

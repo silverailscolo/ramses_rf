@@ -72,24 +72,24 @@ class Test_dispatcher_gateway:
     )
 
     @pytest.mark.skip(reason="requires gwy")
-    def test_create_devices_from_addrs(self, mock_gateway: MagicMock) -> None:
-        """Test device creation from addresses."""
+    def test_instantiate_devices(self, mock_gateway: MagicMock) -> None:
+        """Test device creation from addresses via pipeline stage."""
         dev1 = Device(mock_gateway, Address(DeviceIdT("04:189078")))
         mock_gateway.device_registry.device_by_id.get = MagicMock(return_value=dev1)
         mock_gateway._check_dst_slug = MagicMock(return_value="CTL")
 
-        dispatcher._create_devices_from_addrs(mock_gateway, self.msg5)
+        dispatcher.instantiate_devices(mock_gateway, self.msg5)
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
-    def test_check_msg_addrs(self) -> None:
-        """Test address validation."""
-        dispatcher._check_msg_addrs(self.msg5)
-        dispatcher._check_msg_addrs(self.msg6)
+    def test_validate_addresses(self, mock_gateway: MagicMock) -> None:
+        """Test address validation via pipeline stage."""
+        dispatcher.validate_addresses(mock_gateway, self.msg5)
+        dispatcher.validate_addresses(mock_gateway, self.msg6)
 
-    def test_check_dst_slug(self) -> None:
-        """Test destination slug validation."""
-        dispatcher._check_dst_slug(self.msg5)
+    def test_validate_slugs(self, mock_gateway: MagicMock) -> None:
+        """Test destination slug validation via pipeline stage."""
+        dispatcher.validate_slugs(mock_gateway, self.msg5)
 
     def test_detect_array_fragment(self) -> None:
         """Test detection of array fragments."""
@@ -132,10 +132,10 @@ class TestDispatcherErrorHandling:
             )
         )
 
-        # Force a ValueError within process_msg by mocking _check_msg_addrs
+        # Force a ValueError within process_msg by mocking the first pipeline stage
         with (
             patch(
-                "ramses_rf.dispatcher._check_msg_addrs",
+                "ramses_rf.dispatcher.validate_addresses",
                 side_effect=ValueError("Test Error"),
             ),
             pytest.raises(ValueError, match="Test Error"),
@@ -156,10 +156,10 @@ class TestDispatcherErrorHandling:
             )
         )
 
-        # Force a ValueError within process_msg
+        # Force a ValueError within process_msg by mocking the first pipeline stage
         with (
             patch(
-                "ramses_rf.dispatcher._check_msg_addrs",
+                "ramses_rf.dispatcher.validate_addresses",
                 side_effect=ValueError("Test Error"),
             ),
             caplog.at_level(logging.WARNING),
@@ -232,7 +232,7 @@ class TestDispatcherHeartbeats:
         mock_dev._is_binding = False
         mock_dev.is_faked = False
 
-        # Inject the mock device into the registry so _create_devices_from_addrs maps to it
+        # Inject the mock device into the registry so instantiate_devices maps to it
         mock_gateway.device_registry.device_by_id[src_id] = mock_dev
         mock_gateway.device_registry.get_device.return_value = mock_dev
 

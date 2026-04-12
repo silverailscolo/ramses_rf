@@ -393,7 +393,6 @@ async def test_async_main_real_gateway_init() -> None:
         patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
         patch("ramses_rf.gateway.Gateway.start", new_callable=AsyncMock) as mock_start,
         patch("ramses_rf.gateway.Gateway.stop", new_callable=AsyncMock) as mock_stop,
-        patch("ramses_cli.client.asyncio.wait_for", new_callable=AsyncMock),
     ):
         await async_main(PARSE, lib_kwargs, **kwargs)
 

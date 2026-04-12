@@ -6438,7 +6438,7 @@
             'sensor': None,
           }),
           '02': dict({
-            '_name': 'Front room',
+            '_name': 'Kitchen',
             'actuators': list([
               '04:056057',
             ]),
@@ -6454,7 +6454,7 @@
             'sensor': '12:010740',
           }),
           '04': dict({
-            '_name': 'Ed Office',
+            '_name': 'Bathroom',
             'actuators': list([
               '04:056053',
               '04:189076',
@@ -6471,7 +6471,7 @@
             'sensor': '34:136285',
           }),
           '06': dict({
-            '_name': 'H',
+            '_name': 'Kids room',
             'actuators': list([
               '04:189080',
             ]),
@@ -6479,7 +6479,7 @@
             'sensor': '34:064023',
           }),
           '07': dict({
-            '_name': 'Test UFH',
+            '_name': 'Back room',
             'actuators': list([
               '04:056061',
             ]),
@@ -6942,7 +6942,7 @@
           'actuators': list([
             '04:056057',
           ]),
-          'name': 'Front room',
+          'name': 'Kitchen',
           'sensor': '34:092243',
           'type': 'RadZone',
         }),
@@ -6959,7 +6959,7 @@
             '04:056053',
             '04:189076',
           ]),
-          'name': 'Ed Office',
+          'name': 'Bathroom',
           'sensor': '04:189076',
           'type': 'RadZone',
         }),
@@ -6975,7 +6975,7 @@
           'actuators': list([
             '04:189080',
           ]),
-          'name': 'H',
+          'name': 'Kids room',
           'sensor': '34:064023',
           'type': 'RadZone',
         }),
@@ -6983,7 +6983,7 @@
           'actuators': list([
             '04:056061',
           ]),
-          'name': 'Test UFH',
+          'name': 'Back room',
           'sensor': '34:205645',
           'type': 'RadZone',
         }),

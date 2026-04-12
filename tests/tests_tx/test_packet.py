@@ -176,3 +176,23 @@ def test_packet_representations() -> None:
 
     # __str__ simply delegates to super().__repr__() which outputs just the formatted frame
     assert str(packet) == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+
+
+def test_packet_heartbeat_payload_bypass() -> None:
+    """Test that 1-byte '00' heartbeat payloads bypass strict validation.
+
+    :return: None
+    """
+    # A 3150 heat demand packet normally requires a 2-byte payload.
+    # We pass a 1-byte "00" payload, which should be intercepted and allowed.
+    heartbeat_frame = "045  I --- 04:123456 --:------ 04:123456 3150 001 00"
+
+    # This should instantiate successfully without throwing PacketPayloadInvalid!
+    packet = Packet(DTM, heartbeat_frame)
+
+    assert getattr(packet, "_len", 0) == 1
+    assert getattr(packet, "payload", "") == "00"
+
+    # As explicitly designed to preserve legacy test suite behavior, _has_payload remains
+    # False (as it fails the strict regex), but the packet instantiation survives.
+    assert packet._has_payload is False
