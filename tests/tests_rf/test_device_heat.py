@@ -10,6 +10,7 @@ import pytest
 from ramses_rf.const import SZ_PRESSURE
 from ramses_rf.device.heat import (
     BdrSwitch,
+    Controller,
     DhwSensor,
     OtbGateway,
     OutSensor,
@@ -445,3 +446,31 @@ async def test_otb_gateway_ignores_unknown_data_id(
     # The payload is dropped, so the sensor should safely evaluate to None
     oem_code = await device.oem_code()
     assert oem_code is None
+
+
+@pytest.mark.asyncio
+async def test_controller_discovers_system_mode(mock_gwy: MagicMock) -> None:
+    """Test that the Controller actively polls for system_mode (2E04) on startup."""
+    # 1. Override the fixture to ENABLE discovery for this specific test
+    mock_gwy.config.disable_discovery = False
+
+    # 2. Create a mock address for an Evohome Controller (type '01')
+    mock_addr = MagicMock(spec=Address)
+    mock_addr.id = "01:111111"
+    mock_addr.type = "01"
+
+    # 3. Instantiate the Controller
+    device = Controller(mock_gwy, mock_addr)
+
+    # 4. Explicitly trigger the discovery setup phase (normally done by the Gateway)
+    device._setup_discovery_cmds()
+
+    # 5. Extract all queued discovery commands scheduled by the device
+    # device.discovery.cmds is a dictionary keyed by the packet header
+    queued_cmds = [task["command"].code for task in device.discovery.cmds.values()]
+
+    # 6. Assert that the 2E04 (System Mode) packet was queued for polling
+    assert Code._2E04 in queued_cmds, (
+        "Diagnosis Failed: Controller did not queue a 2E04 (System Mode) "
+        "packet during discovery initialization."
+    )

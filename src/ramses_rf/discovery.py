@@ -294,27 +294,54 @@ class DiscoveryService:
             return max(msgs) if msgs else None
 
         def backoff(hdr: HeaderT, failures: int) -> td:
-            """Backoff the interval if there are/were any failures."""
-            if not _DBG_ENABLE_DISCOVERY_BACKOFF:
-                return cast("td", self.cmds[hdr][_SZ_INTERVAL])
+            """Calculate the backoff interval based on failure count."""
+            standard_interval: td = cast("td", self.cmds[hdr][_SZ_INTERVAL])
 
-            if failures > 5:
-                secs = 60 * 60 * 6
-                _LOGGER.error(
-                    f"No response for {hdr} ({failures}/5): throttling to 1/6h"
-                )
-            elif failures > 2:
-                _LOGGER.warning(
-                    f"No response for {hdr} ({failures}/5): retrying in {self.MAX_CYCLE_SECS}s"
-                )
-                secs = self.MAX_CYCLE_SECS
+            if failures == 0:
+                return standard_interval
+
+            # 1. ORIGINAL DEBUG BEHAVIOR: Aggressive rapid-fire polling
+            if _DBG_ENABLE_DISCOVERY_BACKOFF:
+                if failures > 5:
+                    secs = 60 * 60 * 6
+                    _LOGGER.error(
+                        f"No response for {hdr} ({failures}/5): throttling to 1/6h"
+                    )
+                elif failures > 2:
+                    _LOGGER.warning(
+                        f"No response for {hdr} ({failures}/5): retrying in {self.MAX_CYCLE_SECS}s"
+                    )
+                    secs = self.MAX_CYCLE_SECS
+                else:
+                    _LOGGER.info(
+                        f"No response for {hdr} ({failures}/5): retrying in {self.MIN_CYCLE_SECS}s"
+                    )
+                    secs = self.MIN_CYCLE_SECS
+                return td(seconds=secs)
+
+            # 2. NEW PRODUCTION BEHAVIOR: Safe exponential backoff
+            if failures == 1:
+                secs = 60
+                _LOGGER.info(f"No response for {hdr} (1/5): retrying in 1m")
+            elif failures == 2:
+                secs = 240
+                _LOGGER.warning(f"No response for {hdr} (2/5): retrying in 4m")
+            elif failures == 3:
+                secs = 450
+                _LOGGER.warning(f"No response for {hdr} (3/5): retrying in 7.5m")
+            elif failures == 4:
+                secs = 900
+                _LOGGER.warning(f"No response for {hdr} (4/5): retrying in 15m")
+            elif failures == 5:
+                secs = 1800
+                _LOGGER.warning(f"No response for {hdr} (5/5): retrying in 30m")
             else:
-                _LOGGER.info(
-                    f"No response for {hdr} ({failures}/5): retrying in {self.MIN_CYCLE_SECS}s"
+                secs = 3600
+                _LOGGER.error(
+                    f"No response for {hdr} ({failures}/5+): throttling to 1h"
                 )
-                secs = self.MIN_CYCLE_SECS
 
-            return td(seconds=secs)
+            return td(seconds=min(secs, standard_interval.total_seconds()))
 
         async def send_disc_cmd(
             hdr: HeaderT, task: dict[str, Any], timeout: float = 15
