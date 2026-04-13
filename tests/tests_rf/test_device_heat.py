@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
+from ramses_rf.const import SZ_PRESSURE
 from ramses_rf.device.heat import (
     BdrSwitch,
     DhwSensor,
@@ -16,9 +17,10 @@ from ramses_rf.device.heat import (
     TrvActuator,
 )
 from ramses_rf.exceptions import DeviceNotFaked
-from ramses_tx import Code, Priority
+from ramses_tx import Code, Message, Priority
 from ramses_tx.address import Address
-from ramses_tx.const import SZ_TEMPERATURE, MsgId
+from ramses_tx.const import I_, RP, SZ_TEMPERATURE, MsgId
+from ramses_tx.opentherm import SZ_MSG_ID, SZ_MSG_NAME, SZ_MSG_TYPE, SZ_VALUE, OtMsgType
 
 
 @pytest.fixture
@@ -41,6 +43,30 @@ def mock_addr() -> MagicMock:
     addr.id = "13:111111"
     addr.type = "13"
     return addr
+
+
+def _create_ot_msg(
+    msg_id: int,
+    msg_type: OtMsgType,
+    value: Any,
+    name: str,
+    verb: str = RP,
+) -> MagicMock:
+    """Helper to create a mocked 3220 OpenTherm Message."""
+    msg = MagicMock(spec=Message)
+    msg.verb = verb
+    msg.code = Code._3220
+    msg.payload = {
+        SZ_MSG_ID: msg_id,
+        SZ_MSG_TYPE: msg_type,
+        SZ_VALUE: value,
+        SZ_MSG_NAME: name,
+    }
+    msg._pkt = MagicMock()
+    # Topology validation checks the source and destination
+    msg.src = MagicMock()
+    msg.dst = MagicMock()
+    return msg
 
 
 @pytest.mark.asyncio
@@ -89,7 +115,7 @@ async def test_bdr_switch_relay_demand_fallback(
 async def test_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test Thermostat explicitly falls back to the persistent message_store."""
+    """Test Thermostat explicitly falls back to the message_store."""
     device = Thermostat(mock_gwy, mock_addr)
     device.entity_state = MagicMock()
     device.entity_state.get_value = AsyncMock(return_value=None)
@@ -324,3 +350,98 @@ async def test_otb_gateway_modulation_avoid_fallback(
         assert level == 0.75
         device.entity_state.get_value.assert_awaited_once()
         mock_ot.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_otb_gateway_water_pressure_packet_flow(
+    mock_gwy: MagicMock, mock_addr: MagicMock
+) -> None:
+    """Verify end-to-end packet processing for CH Water Pressure (0x12)."""
+    device = OtbGateway(mock_gwy, mock_addr)
+    # Force 'avoid' to test the RAMSES failure -> OT fallback path
+    mock_gwy.config.use_native_ot = "avoid"
+    device.entity_state = MagicMock()
+    device.entity_state.get_value = AsyncMock(return_value=None)
+
+    # 1. Simulate an arriving 3220 OpenTherm RP packet for Water Pressure
+    msg = _create_ot_msg(0x12, OtMsgType.READ_ACK, 1.5, "ch_water_pressure")
+    device._handle_msg(msg)
+
+    # 2. Assert the fixed fallback logic retrieves the value from the OT cache
+    pressure = await device.ch_water_pressure()
+
+    assert pressure == 1.5
+    # Confirm it attempted to fetch RAMSES Code._1300 first, failed, and fell back
+    device.entity_state.get_value.assert_awaited_once_with(Code._1300, key=SZ_PRESSURE)
+
+
+@pytest.mark.asyncio
+async def test_otb_gateway_boiler_temp_packet_flow(
+    mock_gwy: MagicMock, mock_addr: MagicMock
+) -> None:
+    """Verify end-to-end processing for Boiler Output Temp (Data-ID 0x19)."""
+    device = OtbGateway(mock_gwy, mock_addr)
+    # Force 'avoid' to test the RAMSES failure -> OT fallback path
+    mock_gwy.config.use_native_ot = "avoid"
+    device.entity_state = MagicMock()
+    device.entity_state.get_value = AsyncMock(return_value=None)
+
+    # 1. Simulate an arriving 3220 OpenTherm I_ packet for Boiler Temp
+    msg = _create_ot_msg(0x19, OtMsgType.DATA_INVALID, None, "boiler_temp")
+    device._handle_msg(msg)
+
+    # 2. Inject valid packet
+    msg_valid = _create_ot_msg(0x19, OtMsgType.READ_ACK, 45.5, "boiler_temp", I_)
+    device._handle_msg(msg_valid)
+
+    temp = await device.boiler_output_temp()
+
+    assert temp == 45.5
+    device.entity_state.get_value.assert_awaited_once_with(
+        Code._3200, key=SZ_TEMPERATURE
+    )
+
+
+@pytest.mark.asyncio
+async def test_otb_gateway_status_flags_packet_flow(
+    mock_gwy: MagicMock, mock_addr: MagicMock
+) -> None:
+    """Verify correct bitmask extraction for Status Flags (Data-ID 0x00)."""
+    device = OtbGateway(mock_gwy, mock_addr)
+    device.entity_state = MagicMock()
+    device.entity_state.get_value = AsyncMock(return_value=None)
+
+    # Setup 16-bit status flag array (0-indexed)
+    # Fault Present = index 8, Flame Active = index 11 (8 + 3)
+    flags = [0] * 16
+    flags[8] = 1
+    flags[11] = 1
+
+    msg = _create_ot_msg(0x00, OtMsgType.READ_ACK, flags, "status")
+    device._handle_msg(msg)
+
+    fault = await device.fault_present()
+    flame = await device.flame_active()
+    cooling = await device.cooling_active()  # index 12 (8 + 4), should be False
+
+    assert fault is True
+    assert flame is True
+    assert cooling is False
+
+
+@pytest.mark.asyncio
+async def test_otb_gateway_ignores_unknown_data_id(
+    mock_gwy: MagicMock, mock_addr: MagicMock
+) -> None:
+    """Ensure invalid/unknown OpenTherm packets are safely dropped."""
+    device = OtbGateway(mock_gwy, mock_addr)
+    device.entity_state = MagicMock()
+    device.entity_state.get_value = AsyncMock(return_value=None)
+
+    # Simulate Data-ID 0x73 (OEM code) returning an Unknown Data ID error
+    msg = _create_ot_msg(0x73, OtMsgType.UNKNOWN_DATAID, None, "oem_code")
+    device._handle_msg(msg)
+
+    # The payload is dropped, so the sensor should safely evaluate to None
+    oem_code = await device.oem_code()
+    assert oem_code is None
