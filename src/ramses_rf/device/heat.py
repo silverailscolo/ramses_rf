@@ -367,6 +367,15 @@ class Controller(DeviceHeat):  # CTL (01):
         self.tcs = None  # TODO: = self?
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
 
+    def _setup_discovery_cmds(self) -> None:
+        super()._setup_discovery_cmds()
+
+        if not self.is_faked:
+            self.discovery.add_cmd(
+                Command.from_attrs(RQ, self.id, Code._2E04, PayloadT("00")),
+                60 * 60,  # Poll every 60 minutes after initial startup query
+            )
+
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
