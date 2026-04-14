@@ -49,6 +49,7 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Child, Parent
 from ramses_tx import Address, Command, Message, Priority
+from ramses_tx.exceptions import ProtocolTimeoutError
 from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 
 from .schedule import InnerScheduleT, OuterScheduleT, Schedule
@@ -892,9 +893,13 @@ class Zone(ZoneSchedule):
 
     async def _get_temp(self) -> Packet | None:
         """Get the zone's latest temp from the Controller."""
-        return await self._gwy.async_send_cmd(
-            Command.get_zone_temp(self.ctl.id, self.idx)
-        )
+        try:
+            return await self._gwy.async_send_cmd(
+                Command.get_zone_temp(self.ctl.id, self.idx)
+            )
+        except ProtocolTimeoutError as err:
+            _LOGGER.warning(f"{self}: _get_temp timed out: {err}")
+            return None
 
     async def reset_config(self) -> Packet:  # 000A
         """Reset the zone's parameters to their default values."""
