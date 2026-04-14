@@ -219,10 +219,10 @@ async def test_logbook_setup_discovery_creates_task(
 
 
 @pytest.mark.asyncio
-async def test_sysmode_system_mode_message_store_fallback(
+async def test_sysmode_system_mode_sync_cache_lookup(
     fake_evofw3: Gateway,
 ) -> None:
-    """Verify system_mode gracefully falls back to the database cache."""
+    """Verify system_mode retrieves state synchronously from RAM cache."""
     gwy = fake_evofw3
     pkt = Packet.from_port(dt.now(), PKT_3150)
     gwy._engine._protocol.pkt_received(pkt)
@@ -232,16 +232,17 @@ async def test_sysmode_system_mode_message_store_fallback(
     assert tcs is not None
 
     mock_msg = MagicMock()
+    mock_msg.code = Code._2E04
+    mock_msg.src = MagicMock()
+    mock_msg.src.id = tcs._z_id
+    mock_msg.dtm = dt.now()
     mock_msg.payload = {"system_mode": "01", "until": None}
 
-    # Use MagicMock instead of AsyncMock for the root object so synchronous
-    # functions like msg_db.add() and msg_db.stop() do not return coroutines.
+    # Mock the central RAM state cache from Phase 2
     gwy.message_store = MagicMock()
-    gwy.message_store.get = AsyncMock(return_value=[mock_msg])
+    gwy.message_store.state_cache = {"mock_header": mock_msg}
 
-    result = await tcs.system_mode()
+    # Call the new synchronous @property lookup
+    result = tcs.system_mode
 
     assert result == {"system_mode": "01", "until": None}
-    gwy.message_store.get.assert_called_once_with(
-        code=Code._2E04, src=tcs._z_id, ctx=tcs._z_idx
-    )
