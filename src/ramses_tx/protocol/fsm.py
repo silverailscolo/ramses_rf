@@ -374,7 +374,7 @@ class ProtocolContext(StateMachineInterface):
 
             try:
                 await self._send_fnc(cmd)
-            except TransportError as err:
+            except Exception as err:
                 self.set_state(IsInIdle, exception=err)
 
         try:
