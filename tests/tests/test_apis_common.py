@@ -4,18 +4,26 @@
 from ramses_tx import exceptions as exc
 from ramses_tx.command import CODE_API_MAP, Command
 
-EXCLUDED_APIS = ("from_attrs", "_from_attrs", "from_cli", "get_fan_param")
+EXCLUDED_APIS = ("from_attrs", "_from_attrs", "from_cli")
 EXCLUDED_APIS += ()  # APIs not added to the CODE_API_MAP, should be an empty tuple
 
 
 def test_command_apis_via_map() -> None:
     """Check that all Command constructors are in CODE_API_MAP."""
 
-    cls_apis = {
-        v.__name__
-        for k, v in Command.__dict__.items()
-        if isinstance(v, classmethod) and k[:1] != "_" and k not in EXCLUDED_APIS
-    }
+    cls_apis = set()
+    # Iterate through the class hierarchy to pick up all Mixin methods
+    for base in Command.__mro__:
+        # Stop before picking up base constructors from Frame or Python object
+        if base.__name__ == "Frame" or base is object:
+            continue
+        for name, attr in base.__dict__.items():
+            if (
+                isinstance(attr, classmethod)
+                and name[:1] != "_"
+                and name not in EXCLUDED_APIS
+            ):
+                cls_apis.add(name)
 
     map_apis = {v.__name__ for v in CODE_API_MAP.values()}
 

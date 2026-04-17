@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime as dt
-from typing import TypeAlias
+from datetime import datetime as dt, timedelta as td
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from ..command import Command
 from ..const import (
@@ -24,6 +24,9 @@ from ..const import (
 from ..exceptions import ProtocolSendFailed
 from ..packet import Packet
 from ..typing import QosParams
+
+if TYPE_CHECKING:
+    from ..const import Code, VerbT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -166,3 +169,63 @@ class QosManager:
         :type old_val: int
         """
         self._multiplier = min(3, old_val + 1)
+
+
+class Qos:
+    """The QoS class - this is a mess - it is the first step in cleaning up QoS."""
+
+    # TODO: this needs work
+
+    POLL_INTERVAL = 0.002
+
+    TX_PRIORITY_DEFAULT = Priority.DEFAULT
+
+    # tx (from sent to gwy, to get back from gwy) seems to takes approx. 0.025s
+    TX_RETRIES_DEFAULT = 2
+    TX_RETRIES_MAX = 5
+    TX_TIMEOUT_DEFAULT = td(seconds=0.2)  # 0.20 OK, but too high?
+
+    RX_TIMEOUT_DEFAULT = td(seconds=0.50)  # 0.20 seems OK, 0.10 too low sometimes
+
+    TX_BACKOFFS_MAX = 2  # i.e. tx_timeout 2 ** MAX_BACKOFF
+
+    QOS_KEYS = ("priority", "max_retries", "timeout")
+    # priority, max_retries, rx_timeout, backoff
+    DEFAULT_QOS = (Priority.DEFAULT, TX_RETRIES_DEFAULT, TX_TIMEOUT_DEFAULT, True)
+    DEFAULT_QOS_TABLE = {
+        "RQ|0016": (Priority.HIGH, 5, None, True),
+        "RQ|0006": (Priority.HIGH, 5, None, True),
+        " I|0404": (Priority.HIGH, 3, td(seconds=0.30), True),
+        "RQ|0404": (Priority.HIGH, 3, td(seconds=1.00), True),
+        " W|0404": (Priority.HIGH, 3, td(seconds=1.00), True),
+        "RQ|0418": (Priority.LOW, 3, None, None),
+        "RQ|1F09": (Priority.HIGH, 5, None, True),
+        " I|1FC9": (Priority.HIGH, 2, td(seconds=1), False),
+        "RQ|3220": (Priority.DEFAULT, 1, td(seconds=1.2), False),
+        " W|3220": (Priority.HIGH, 3, td(seconds=1.2), False),
+    }  # The long timeout for the OTB is for total RTT to slave (boiler)
+
+    def __init__(
+        self,
+        *,
+        priority: Priority | None = None,  # TODO: deprecate
+        max_retries: int | None = None,  # TODO:   deprecate
+        timeout: td | None = None,  # TODO:        deprecate
+        backoff: bool | None = None,  # TODO:      deprecate
+    ) -> None:
+        self.priority = self.DEFAULT_QOS[0] if priority is None else priority
+        self.retry_limit = self.DEFAULT_QOS[1] if max_retries is None else max_retries
+        self.tx_timeout = self.TX_TIMEOUT_DEFAULT
+        self.rx_timeout = self.DEFAULT_QOS[2] if timeout is None else timeout
+        self.disable_backoff = not (self.DEFAULT_QOS[3] if backoff is None else backoff)
+
+        self.retry_limit = min(self.retry_limit, Qos.TX_RETRIES_MAX)
+
+    @classmethod  # constructor from verb|code pair
+    def verb_code(cls, verb: VerbT, code: str | Code, **kwargs: Any) -> Qos:
+        """Constructor to create a QoS based upon the defaults for a verb|code pair."""
+
+        default_qos = cls.DEFAULT_QOS_TABLE.get(f"{verb}|{code}", cls.DEFAULT_QOS)
+        return cls(
+            **{k: kwargs.get(k, default_qos[i]) for i, k in enumerate(cls.QOS_KEYS)}
+        )
