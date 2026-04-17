@@ -181,3 +181,23 @@ async def test_set_zone_mode_perm_setp() -> None:
     )
 
     assert str(cmd) == TEST_COMMANDS[4]
+
+
+async def test_clone_with_source() -> None:
+    """Test that clone_with_source creates an identical command with a new source."""
+    original_cmd = Command("RQ --- 18:000730 01:145038 --:------ 000A 002 0800")
+    assert original_cmd.src.id == "18:000730"
+
+    cloned_cmd = original_cmd.clone_with_source("18:123456")
+
+    # Assert cloned command is properly mutated
+    assert cloned_cmd is not original_cmd
+    assert cloned_cmd.src.id == "18:123456"
+    assert cloned_cmd.dst.id == "01:145038"
+    assert cloned_cmd.verb == "RQ"
+    assert cloned_cmd.code == "000A"
+    assert cloned_cmd.payload == "0800"
+    assert str(cloned_cmd) == "RQ --- 18:123456 01:145038 --:------ 000A 002 0800"
+
+    # Enforce strict immutability: the original command MUST NOT have changed
+    assert original_cmd.src.id == "18:000730"

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
@@ -135,7 +136,12 @@ from .opentherm import (
     OtMsgType,
     decode_frame,
 )
-from .ramses import _31D9_FAN_INFO_VASCO, _2411_PARAMS_SCHEMA
+from .ramses import (
+    _31D9_FAN_INFO_VASCO,
+    _2411_PARAMS_SCHEMA,
+    CODES_SCHEMA,
+    RQ_IDX_COMPLEX,
+)
 from .typing import PayDictT
 from .version import VERSION
 
@@ -4069,47 +4075,182 @@ _PAYLOAD_PARSERS = {
 }
 
 
-def parse_payload(msg: Message) -> dict[str, Any] | list[dict[str, Any]]:
-    """Apply the appropriate parser defined in this module to the message.
+class PayloadDecoder(ABC):
+    """Abstract base class for the payload decoder chain."""
 
-    :param msg: A Message object containing packet data and extra attributes
-    :type msg: Message
-    :return: A dict of key:value pairs or a list of such dicts
-    :rtype: dict[str, Any] | list[dict[str, Any]]
-    :raises AssertionError: If the packet fails an internal consistency check.
-    """
-    payload_str = getattr(msg._pkt, "payload", getattr(msg._pkt, "_payload", ""))
-    payload_len = getattr(msg._pkt, "len", getattr(msg._pkt, "_len", 0))
+    def __init__(self) -> None:
+        """Initialize the base decoder state."""
+        self._next_decoder: PayloadDecoder | None = None
 
-    if payload_len == 1 and payload_str == "00" and msg.code != Code._1FC9:
+    def set_next(self, decoder: PayloadDecoder) -> PayloadDecoder:
+        """Set the next decoder in the chain.
+
+        :param decoder: The next decoder
+        :type decoder: PayloadDecoder
+        :return: The next decoder
+        :rtype: PayloadDecoder
+        """
+        self._next_decoder = decoder
+        return decoder
+
+    @abstractmethod
+    def decode(
+        self, msg: Message, payload_str: str, payload_len: int
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Decode the payload. Returns None to bypass subsequent index merging.
+
+        :param msg: The message context
+        :type msg: Message
+        :param payload_str: The raw payload string
+        :type payload_str: str
+        :param payload_len: The payload length
+        :type payload_len: int
+        :return: The decoded result or None to trigger early bypass
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        """
+        if self._next_decoder:
+            return self._next_decoder.decode(msg, payload_str, payload_len)
+        return {}
+
+
+class RegexValidatorDecoder(PayloadDecoder):
+    """Decoder that evaluates empty payloads and validates basic constraints."""
+
+    def decode(
+        self, msg: Message, payload_str: str, payload_len: int
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Validate the payload string rules or execute early exit bypasses.
+
+        :param msg: The message context
+        :type msg: Message
+        :param payload_str: The raw payload string
+        :type payload_str: str
+        :param payload_len: The payload length
+        :type payload_len: int
+        :return: The decoded result or None to signal early exit
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        :raises PacketPayloadInvalid: If the validation rules fail.
+        """
         try:
-            res = _PAYLOAD_PARSERS.get(msg.code, parser_unknown)(payload_str, msg)
-            if res == {}:
-                return {}  # Preserve legacy test expectations explicitly
-        except Exception:
-            pass
-        return parser_heartbeat("00", msg)
+            # Force packet evaluation via string representation (lazy parsing)
+            _ = repr(msg._pkt)
+        except Exception as err:
+            raise exc.PacketPayloadInvalid(
+                f"Packet formatting/evaluation failed: {err}"
+            ) from err
 
-    try:
-        result = _PAYLOAD_PARSERS.get(msg.code, parser_unknown)(payload_str, msg)
-        if isinstance(result, dict) and msg.seqn and msg.seqn.isnumeric():
-            result["seqx_num"] = msg.seqn
-    except AssertionError as err:
-        _LOGGER.warning(
-            f"{msg!r} < {_INFORM_DEV_MSG} ({err}). "
-            f"This packet could not be parsed completely."
+        if msg.code in CODES_SCHEMA:
+            if msg.verb in ("RQ", "RP", " I", " W"):
+                regex = CODES_SCHEMA[msg.code].get(msg.verb)
+                if regex and not bool(re.compile(str(regex)).match(payload_str)):
+                    if not msg._has_payload:
+                        return None  # Sentinel for fallback handling on nulls
+                    raise exc.PacketPayloadInvalid(
+                        f"Payload doesn't match {msg.verb}/{msg.code}: {payload_str} != {regex}"
+                    )
+
+        # Standard bypass rule for requests with null payloads
+        if not msg._has_payload and (msg.verb == RQ and msg.code not in RQ_IDX_COMPLEX):
+            return None
+
+        if self._next_decoder:
+            return self._next_decoder.decode(msg, payload_str, payload_len)
+        return {}
+
+
+class HeartbeatDecoder(PayloadDecoder):
+    """Decoder that intercepts 1-byte '00' heartbeats."""
+
+    def decode(
+        self, msg: Message, payload_str: str, payload_len: int
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Intercept and decode heartbeat payloads.
+
+        :param msg: The message context
+        :type msg: Message
+        :param payload_str: The raw payload string
+        :type payload_str: str
+        :param payload_len: The payload length
+        :type payload_len: int
+        :return: The decoded result
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        """
+        if payload_len == 1 and payload_str == "00" and msg.code != Code._1FC9:
+            # Preserve legacy test expectations explicitly if parser matches {}
+            try:
+                res = _PAYLOAD_PARSERS.get(msg.code, parser_unknown)(payload_str, msg)
+                if res == {}:
+                    return None
+            except Exception:
+                pass
+            return parser_heartbeat(payload_str, msg)
+
+        if self._next_decoder:
+            return self._next_decoder.decode(msg, payload_str, payload_len)
+        return {}
+
+
+class StandardParserDecoder(PayloadDecoder):
+    """Decoder that routes payload to the appropriate 4-digit code parser."""
+
+    def decode(
+        self, msg: Message, payload_str: str, payload_len: int
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Route payload to the relevant parser function.
+
+        :param msg: The message context
+        :type msg: Message
+        :param payload_str: The raw payload string
+        :type payload_str: str
+        :param payload_len: The payload length
+        :type payload_len: int
+        :return: The decoded result
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        """
+        try:
+            result = _PAYLOAD_PARSERS.get(msg.code, parser_unknown)(payload_str, msg)
+            if isinstance(result, dict) and msg.seqn and msg.seqn.isnumeric():
+                result["seqx_num"] = msg.seqn
+            # Narrowing to strictly list or dict
+            if isinstance(result, list):
+                return result
+            if isinstance(result, dict):
+                return result
+            return {}
+        except AssertionError as err:
+            _LOGGER.warning(
+                f"{msg!r} < {_INFORM_DEV_MSG} ({err}). "
+                f"This packet could not be parsed completely."
+            )
+            err_result = {
+                "_payload": payload_str,
+                "_parse_error": f"AssertionError: {err}",
+                "_unknown_code": msg.code,
+            }
+            if msg.seqn and msg.seqn.isnumeric():
+                err_result["seqx_num"] = msg.seqn
+            return err_result
+
+
+class PayloadDecoderPipeline:
+    """The Chain of Responsibility pipeline for decoding RAMSES RF payloads."""
+
+    def __init__(self) -> None:
+        """Initialize the decoder pipeline."""
+        self.head = RegexValidatorDecoder()
+        self.head.set_next(HeartbeatDecoder()).set_next(StandardParserDecoder())
+
+    def decode(self, msg: Message) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Process a message through the payload decoding pipeline.
+
+        :param msg: A Message object containing packet data
+        :type msg: Message
+        :return: A dict of key:value pairs or a list of such dicts
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        """
+        payload_str: str = getattr(
+            msg._pkt, "payload", getattr(msg._pkt, "_payload", "")
         )
-        result = {
-            "_payload": payload_str,
-            "_parse_error": f"AssertionError: {err}",
-            "_unknown_code": msg.code,
-        }
-        if msg.seqn and msg.seqn.isnumeric():
-            result["seqx_num"] = msg.seqn
+        payload_len: int = getattr(msg._pkt, "len", getattr(msg._pkt, "_len", 0))
 
-    # Explicit type narrowing to satisfy Mypy strict mode [no-any-return]
-    if isinstance(result, list):
-        return result
-    if isinstance(result, dict):
-        return result
-    return {}
+        return self.head.decode(msg, payload_str, payload_len)

@@ -7,8 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ramses_rf.const import RP
+from ramses_rf.const import I_, RP
 from ramses_rf.entity_base import Entity, _Entity
+from ramses_rf.entity_state import StateCache
 from ramses_rf.gateway import Gateway
 from ramses_rf.message_store import MessageStore
 from ramses_tx import Code, DeviceIdT, Message, Packet
@@ -113,11 +114,11 @@ class Test_entity_base:
         ), "_msg_list wrong"
 
         # create _msgz
-        assert await dev.entity_state.get_state_cache_nested() == {
-            "12B0": {" I": {"01": self.msg7}},
-            "3150": {" I": {"01": self.msg5}},
-            "3220": {"RP": {"11": self.msg6}},
-        }, "base state_cache_nested wrong"
+        cache = await dev.entity_state._build_state_cache()
+        assert cache.get_message(Code._12B0, I_, "01") == self.msg7
+        assert cache.get_message(Code._3150, I_, "01") == self.msg5
+        assert cache.get_message(Code._3220, RP, "11") == self.msg6
+        assert len(cache.get_all()) == 3, "base state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
@@ -159,10 +160,10 @@ class Test_entity_base:
         ), "_msg_list wrong"
 
         # create _msgz
-        assert await dev.entity_state.get_state_cache_nested() == {
-            "12B0": {" I": {"01": self.msg7}},
-            "3150": {" I": {"01": self.msg5}},
-        }, "zone state_cache_nested wrong"
+        cache = await dev.entity_state._build_state_cache()
+        assert cache.get_message(Code._12B0, I_, "01") == self.msg7
+        assert cache.get_message(Code._3150, I_, "01") == self.msg5
+        assert len(cache.get_all()) == 2, "zone state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
@@ -219,10 +220,10 @@ class Test_entity_base:
         ), "dhw _msg_list wrong"
 
         # create _msgz
-        assert await dev.entity_state.get_state_cache_nested() == {
-            "1260": {"RP": {"00": self.msg9}},
-            "3150": {" I": {"FC": self.msg8}},
-        }, "dhw state_cache_nested wrong"
+        cache = await dev.entity_state._build_state_cache()
+        assert cache.get_message(Code._1260, RP, "00") == self.msg9
+        assert cache.get_message(Code._3150, I_, "FC") == self.msg8
+        assert len(cache.get_all()) == 2, "dhw state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
@@ -323,19 +324,22 @@ async def test_gh_396_legacy_ot_context() -> None:
     entity = Entity(gwy)
     entity.id = DeviceIdT("01:123456")
 
+    # Construct the mock message properly
+    mock_msg = MagicMock(spec=Message)
+    mock_msg.code = Code._3220
+    mock_msg.verb = RP
+    mock_msg._pkt = MagicMock()
+    mock_msg._pkt._ctx = "05"
+
+    # Construct the mock StateCache
+    fake_cache = StateCache()
+    fake_cache.add(Code._3220, RP, "05", mock_msg)
+
     # Execute
     with patch.object(
         entity.entity_state,
-        "get_state_cache_nested",
-        AsyncMock(
-            return_value={
-                Code._3220: {
-                    RP: {
-                        "05": MagicMock(),  # Standard hex string case
-                    }
-                }
-            }
-        ),
+        "_build_state_cache",
+        AsyncMock(return_value=fake_cache),
     ):
         cmds = await entity.discovery.supported_cmds_ot()
 

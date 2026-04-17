@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import defaultdict
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, cast
 
@@ -42,6 +41,44 @@ _LOGGER = logging.getLogger(__name__)
 _ID_SLICE = 9
 
 
+class StateCache:
+    """Encapsulates the state cache data collection for an entity."""
+
+    def __init__(self) -> None:
+        """Initialize the StateCache."""
+        self._cache: dict[tuple[Code, VerbT, Any], ApplicationMessage] = {}
+
+    def add(
+        self,
+        code: Code,
+        verb: VerbT,
+        ctx: Any,
+        msg: ApplicationMessage,
+    ) -> None:
+        """Add a message to the cache."""
+        self._cache[(code, verb, ctx)] = msg
+
+    def get_message(
+        self, code: Code, verb: VerbT, ctx: Any
+    ) -> ApplicationMessage | None:
+        """Retrieve a message by its code, verb, and context."""
+        return self._cache.get((code, verb, ctx))
+
+    def get_by_code(self, code: Code) -> list[ApplicationMessage]:
+        """Retrieve all messages for a specific code."""
+        return [msg for (c, _, _), msg in self._cache.items() if c == code]
+
+    def get_all(self) -> list[ApplicationMessage]:
+        """Retrieve all stored messages."""
+        return list(self._cache.values())
+
+    def get_records(
+        self,
+    ) -> list[tuple[Code, VerbT, Any, ApplicationMessage]]:
+        """Retrieve all cache records as tuples of (code, verb, ctx, msg)."""
+        return [(c, v, cx, m) for (c, v, cx), m in self._cache.items()]
+
+
 class EntityState:
     """Manages database interactions and state queries for an entity.
 
@@ -64,13 +101,8 @@ class EntityState:
 
     async def get_all_messages(self) -> list[ApplicationMessage]:
         """Return a flattened list of all messages logged on this device."""
-        msgz_dict = await self.get_state_cache_nested()
-        return [
-            msg
-            for code in msgz_dict.values()
-            for ctx in code.values()
-            for msg in ctx.values()
-        ]
+        cache = await self._build_state_cache()
+        return cache.get_all()
 
     _msg_list = get_all_messages
 
@@ -107,18 +139,17 @@ class EntityState:
         code_str, verb_str, _, *args = hdr.split("|")
         code = Code(code_str)
         verb = VerbT(verb_str)
-        msgz_dict = await self.get_state_cache_nested()
+        cache = await self._build_state_cache()
 
-        try:
-            if args and (ctx := args[0]):
-                msg = msgz_dict[code][verb][ctx]
-            elif False in msgz_dict[code][verb]:
-                msg = msgz_dict[code][verb][False]
-            elif None in msgz_dict[code][verb]:
-                msg = msgz_dict[code][verb][None]
-            else:
-                return None
-        except KeyError:
+        msg = None
+        if args and (ctx := args[0]):
+            msg = cache.get_message(code, verb, ctx)
+        else:
+            msg = cache.get_message(code, verb, False)
+            if msg is None:
+                msg = cache.get_message(code, verb, None)
+
+        if msg is None:
             return None
 
         if msg._pkt._hdr != hdr:
@@ -239,48 +270,42 @@ class EntityState:
         is_zone = len(entity_id) > 9 and not is_dhw
         zone_idx = entity_id[_ID_SLICE + 1 :] if is_zone else None
 
-        nested_cache = await self.get_state_cache_nested()
+        cache = await self._build_state_cache()
 
-        for code, verbs in nested_cache.items():
-            for verb, ctxs in verbs.items():
-                if verb not in (I_, RP):
-                    continue
-                for ctx, msg in ctxs.items():
-                    if is_dhw:
-                        in_dict = isinstance(msg.payload, dict)
-                        in_list = isinstance(msg.payload, list)
-                        if (
-                            ctx in ("FC", "FA", "F9", "FA")
-                            or (in_dict and "dhw_idx" in msg.payload)
-                            or (
-                                in_list
-                                and any(
-                                    isinstance(d, dict) and "dhw_idx" in d
-                                    for d in msg.payload
-                                )
-                            )
-                        ):
-                            res.add(code)
-                    elif is_zone:
-                        in_dict = isinstance(msg.payload, dict)
-                        in_list = isinstance(msg.payload, list)
-                        if (
-                            ctx == zone_idx
-                            or (
-                                in_dict and str(msg.payload.get("zone_idx")) == zone_idx
-                            )
-                            or (
-                                in_list
-                                and any(
-                                    isinstance(d, dict)
-                                    and str(d.get("zone_idx")) == zone_idx
-                                    for d in msg.payload
-                                )
-                            )
-                        ):
-                            res.add(code)
-                    else:
-                        res.add(code)
+        for code, verb, ctx, msg in cache.get_records():
+            if verb not in (I_, RP):
+                continue
+            if is_dhw:
+                in_dict = isinstance(msg.payload, dict)
+                in_list = isinstance(msg.payload, list)
+                if (
+                    ctx in ("FC", "FA", "F9", "FA")
+                    or (in_dict and "dhw_idx" in msg.payload)
+                    or (
+                        in_list
+                        and any(
+                            isinstance(d, dict) and "dhw_idx" in d for d in msg.payload
+                        )
+                    )
+                ):
+                    res.add(code)
+            elif is_zone:
+                in_dict = isinstance(msg.payload, dict)
+                in_list = isinstance(msg.payload, list)
+                if (
+                    ctx == zone_idx
+                    or (in_dict and str(msg.payload.get("zone_idx")) == zone_idx)
+                    or (
+                        in_list
+                        and any(
+                            isinstance(d, dict) and str(d.get("zone_idx")) == zone_idx
+                            for d in msg.payload
+                        )
+                    )
+                ):
+                    res.add(code)
+            else:
+                res.add(code)
         return list(res)
 
     async def find_latest_code(
@@ -307,72 +332,64 @@ class EntityState:
             else (" I", "RP")
         )
 
-        nested_cache = await self.get_state_cache_nested()
+        cache = await self._build_state_cache()
 
-        for cd, verbs in nested_cache.items():
+        for cd, verb, ctx, msg in cache.get_records():
             if code is not None:
                 if isinstance(code, tuple) and cd not in code:
                     continue
                 elif not isinstance(code, tuple) and cd != code:
                     continue
 
-            for verb, ctxs in verbs.items():
-                if verb not in allowed_verbs:
+            if verb not in allowed_verbs:
+                continue
+
+            if zone_idx is not None:
+                in_dict = isinstance(msg.payload, dict)
+                in_list = isinstance(msg.payload, list)
+                if not (
+                    str(ctx) == str(zone_idx)
+                    or (in_dict and str(msg.payload.get("zone_idx")) == str(zone_idx))
+                    or (
+                        in_list
+                        and any(
+                            isinstance(d, dict)
+                            and str(d.get("zone_idx")) == str(zone_idx)
+                            for d in msg.payload
+                        )
+                    )
+                ):
                     continue
 
-                for ctx, msg in ctxs.items():
-                    if zone_idx is not None:
-                        in_dict = isinstance(msg.payload, dict)
-                        in_list = isinstance(msg.payload, list)
-                        if not (
-                            str(ctx) == str(zone_idx)
-                            or (
-                                in_dict
-                                and str(msg.payload.get("zone_idx")) == str(zone_idx)
-                            )
-                            or (
-                                in_list
-                                and any(
-                                    isinstance(d, dict)
-                                    and str(d.get("zone_idx")) == str(zone_idx)
-                                    for d in msg.payload
-                                )
-                            )
-                        ):
-                            continue
+            if dhw_idx is not None:
+                in_dict = isinstance(msg.payload, dict)
+                in_list = isinstance(msg.payload, list)
+                if not (
+                    str(ctx) == str(dhw_idx)
+                    or ctx in ("FC", "FA", "F9", "FA")
+                    or (in_dict and "dhw_idx" in msg.payload)
+                    or (
+                        in_list
+                        and any(
+                            isinstance(d, dict) and "dhw_idx" in d for d in msg.payload
+                        )
+                    )
+                ):
+                    continue
 
-                    if dhw_idx is not None:
-                        in_dict = isinstance(msg.payload, dict)
-                        in_list = isinstance(msg.payload, list)
-                        if not (
-                            str(ctx) == str(dhw_idx)
-                            or ctx in ("FC", "FA", "F9", "FA")
-                            or (in_dict and "dhw_idx" in msg.payload)
-                            or (
-                                in_list
-                                and any(
-                                    isinstance(d, dict) and "dhw_idx" in d
-                                    for d in msg.payload
-                                )
-                            )
-                        ):
-                            continue
+            if key is not None:
+                if isinstance(msg.payload, dict):
+                    if key not in msg.payload:
+                        continue
+                elif isinstance(msg.payload, list):
+                    if not any(isinstance(d, dict) and key in d for d in msg.payload):
+                        continue
+                else:
+                    continue
 
-                    if key is not None:
-                        if isinstance(msg.payload, dict):
-                            if key not in msg.payload:
-                                continue
-                        elif isinstance(msg.payload, list):
-                            if not any(
-                                isinstance(d, dict) and key in d for d in msg.payload
-                            ):
-                                continue
-                        else:
-                            continue
-
-                    if msg.dtm > latest:
-                        latest = msg.dtm
-                        res = cd
+            if msg.dtm > latest:
+                latest = msg.dtm
+                res = cd
         return res
 
     _msg_qry_by_code_key = find_latest_code
@@ -388,30 +405,23 @@ class EntityState:
         """Dynamically build a flat dict of all I/RP messages logged for this entity."""
         _msg_dict: dict[Code, ApplicationMessage] = {}
 
-        # Build from get_state_cache_nested to guarantee strict zone_idx isolation
-        nested_cache = await self.get_state_cache_nested()
+        # Build from _build_state_cache to guarantee strict zone_idx isolation
+        cache = await self._build_state_cache()
 
-        for code, verbs in nested_cache.items():
-            for verb, ctxs in verbs.items():
-                if verb not in (I_, RP):
-                    continue
-                for _, msg in ctxs.items():
-                    if code not in _msg_dict or msg.dtm > _msg_dict[code].dtm:
-                        _msg_dict[code] = msg
+        for code, verb, _ctx, msg in cache.get_records():
+            if verb not in (I_, RP):
+                continue
+            if code not in _msg_dict or msg.dtm > _msg_dict[code].dtm:
+                _msg_dict[code] = msg
 
         return _msg_dict
 
-    async def get_state_cache_nested(
-        self,
-    ) -> dict[Code, dict[VerbT, dict[bool | str | None, ApplicationMessage]]]:
-        """Dynamically build a nested dict of all I/RP messages for this entity."""
-        msgs_1: Any = defaultdict(lambda: defaultdict(dict))
+    async def _build_state_cache(self) -> StateCache:
+        """Dynamically build a flat cache of all messages for this entity."""
+        cache = StateCache()
 
         if self._gwy.message_store is None:
-            return cast(
-                "dict[Code, dict[VerbT, dict[bool | str | None, ApplicationMessage]]]",
-                msgs_1,
-            )
+            return cache
 
         entity_id = self._entity.id
         is_dhw = entity_id[_ID_SLICE:] == "_HW"
@@ -444,7 +454,7 @@ class EntityState:
                         )
                     )
                 ):
-                    msgs_1[code][verb][ctx] = msg
+                    cache.add(code, verb, ctx, msg)
             elif is_zone:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
@@ -459,14 +469,11 @@ class EntityState:
                         )
                     )
                 ):
-                    msgs_1[code][verb][ctx] = msg
+                    cache.add(code, verb, ctx, msg)
             else:
-                msgs_1[code][verb][ctx] = msg
+                cache.add(code, verb, ctx, msg)
 
-        return cast(
-            "dict[Code, dict[VerbT, dict[bool | str | None, ApplicationMessage]]]",
-            msgs_1,
-        )
+        return cache
 
     def _handle_msg(self, msg: ApplicationMessage) -> None:
         """Deprecated: The proxy no longer caches its own packets."""

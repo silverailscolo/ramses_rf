@@ -26,10 +26,8 @@ def patch_parsers(monkeypatch: pytest.MonkeyPatch) -> None:
     :return: None
     """
     monkeypatch.setattr(
-        "ramses_tx.message._check_msg_payload", lambda msg, payload: None
-    )
-    monkeypatch.setattr(
-        "ramses_tx.message.parse_payload", lambda msg: {"mock_key": "mock_val"}
+        "ramses_tx.message.PayloadDecoderPipeline.decode",
+        lambda self, msg: {"mock_key": "mock_val"},
     )
 
 
@@ -199,11 +197,16 @@ def test_application_message_factory(patch_parsers: Any) -> None:
     assert app_msg.code == base_msg.code
     assert app_msg.verb == base_msg.verb
 
-    # 2. Test Expiration (Fresh Packet)
+    # 2. Test Context Binding
+    mock_gwy = object()
+    app_msg.bind_context(mock_gwy)
+    assert app_msg._gwy is mock_gwy
+
+    # 3. Test Expiration (Fresh Packet)
     # Should not be expired because (now - dtm) is ~0 seconds
     assert app_msg._expired is False
 
-    # 3. Test Expiration (Old Packet > 7 Days)
+    # 4. Test Expiration (Old Packet > 7 Days)
     old_dtm = now - td(days=8)
     old_packet = Packet(old_dtm, FRAME_STR_1)
     old_app_msg = ApplicationMessage.from_message(Message(old_packet))

@@ -367,6 +367,15 @@ class Controller(DeviceHeat):  # CTL (01):
         self.tcs = None  # TODO: = self?
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
 
+    def _setup_discovery_cmds(self) -> None:
+        super()._setup_discovery_cmds()
+
+        if not self.is_faked:
+            self.discovery.add_cmd(
+                Command.from_attrs(RQ, self.id, Code._2E04, PayloadT("00")),
+                60 * 60,  # Poll every 60 minutes after initial startup query
+            )
+
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
@@ -932,17 +941,14 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         key: str,
     ) -> Any | None:
         """Return a value using OpenTherm or RAMSES as per `config.use_native_ot`."""
-        # assert code in self.RAMSES_TO_OT and kwargs.get("key"):
+        use_ot = getattr(self._gwy.config, "use_native_ot", "avoid")
 
-        if self._gwy.config.use_native_ot == "always":
-            return self._ot_msg_value(self.RAMSES_TO_OT[code])
-
-        if self._gwy.config.use_native_ot == "prefer":
+        if use_ot in ("always", "prefer"):
             if (result_ot := self._ot_msg_value(self.RAMSES_TO_OT[code])) is not None:
                 return result_ot
 
         result_ramses = await self.entity_state.get_value(code, key=key)
-        if self._gwy.config.use_native_ot == "avoid" and result_ramses is None:
+        if result_ramses is None and use_ot != "never":
             return self._ot_msg_value(self.RAMSES_TO_OT[code])
 
         return result_ramses  # incl. use_native_ot == "never"
@@ -951,17 +957,13 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         self, result_ot: Any | None, result_ramses: Any | None
     ) -> Any | None:
         """Return a value using OpenTherm or RAMSES as per `config.use_native_ot`."""
-        #
+        use_ot = getattr(self._gwy.config, "use_native_ot", "avoid")
 
-        if self._gwy.config.use_native_ot == "always":
-            return result_ot
-
-        if self._gwy.config.use_native_ot == "prefer":
+        if use_ot in ("always", "prefer"):
             if result_ot is not None:
                 return result_ot
 
-        #
-        elif self._gwy.config.use_native_ot == "avoid" and result_ramses is None:
+        if result_ramses is None and use_ot != "never":
             return result_ot
 
         return result_ramses  # incl. use_native_ot == "never"

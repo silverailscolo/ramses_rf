@@ -973,17 +973,21 @@ class SysMode(SystemBase):  # 2E04
         cmd = Command.get_system_mode(self.id)
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
-    async def system_mode(self) -> dict[str, Any] | None:  # 2E04
-        if self._gwy.message_store:
-            msgs = await self._gwy.message_store.get(
-                code=Code._2E04, src=self._z_id, ctx=self._z_idx
-            )
-            if msgs:
-                return cast(dict[str, Any], msgs[0].payload)
+    @property
+    def system_mode(self) -> dict[str, Any] | None:  # 2E04
+        """Return the system mode synchronously from Hot State RAM."""
+        if not getattr(self, "_gwy", None) or not self._gwy.message_store:
+            return None
 
-        return cast(
-            dict[str, Any] | None, await self.entity_state.get_value(Code._2E04)
-        )
+        latest_msg = None
+        for msg in self._gwy.message_store.state_cache.values():
+            if msg.code == Code._2E04 and msg.src.id == self._z_id:
+                if latest_msg is None or msg.dtm > latest_msg.dtm:
+                    latest_msg = msg
+
+        if latest_msg:
+            return cast(dict[str, Any], latest_msg.payload)
+        return None
 
     async def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
@@ -1010,7 +1014,7 @@ class SysMode(SystemBase):  # 2E04
 
     async def params(self) -> dict[str, Any]:
         params = await super().params()
-        params[SZ_SYSTEM][SZ_SYSTEM_MODE] = await self.system_mode()
+        params[SZ_SYSTEM][SZ_SYSTEM_MODE] = self.system_mode
         return params
 
 

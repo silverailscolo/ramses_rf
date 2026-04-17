@@ -94,11 +94,12 @@ class DiscoveryService:
                 )
                 if self.is_not_deprecated_cmd(code)
             }
-        msgz_dict = await self._entity.entity_state.get_state_cache_nested()
+        msgs = await self._entity.entity_state.get_all_messages()
+        rp_codes = {msg.code for msg in msgs if msg.verb == RP}
         return {
             code: (CODES_SCHEMA[code]["name"] if code in CODES_SCHEMA else None)
-            for code in sorted(msgz_dict)
-            if msgz_dict[code].get(RP) and self.is_not_deprecated_cmd(code)
+            for code in sorted(rp_codes)
+            if self.is_not_deprecated_cmd(code)
         }
 
     async def supported_cmds_ot(self) -> dict[str, Any]:
@@ -128,12 +129,13 @@ class DiscoveryService:
                     if val not in res:
                         res.append(val)
         else:
-            msgz_dict = await self._entity.entity_state.get_state_cache_nested()
-            res_dict: dict[bool | str | None, Message] | list[Any] = msgz_dict[
-                Code._3220
-            ].get(RP, {})
-            assert isinstance(res_dict, dict)
-            res = [str(k) for k in res_dict]
+            msgs = await self._entity.entity_state.get_all_messages()
+            for msg in msgs:
+                if msg.code == Code._3220 and msg.verb == RP:
+                    ctx = msg._pkt._ctx
+                    val = f"{ctx:02X}" if isinstance(ctx, int) else str(ctx)
+                    if val not in res:
+                        res.append(val)
 
         return {
             f"0x{msg_id}": OPENTHERM_MESSAGES[_to_data_id(msg_id)].get("en")
@@ -276,35 +278,70 @@ class DiscoveryService:
                                     cmd_code,
                                 )
                         else:
-                            tcs_msgz = await tcs.entity_state.get_state_cache_nested()
-                            msgs.append(tcs_msgz[cmd_code][I_][True])
+                            tcs_msgs = await tcs.entity_state.get_all_messages()
+                            found = [
+                                m
+                                for m in tcs_msgs
+                                if m.code == cmd_code
+                                and m.verb == I_
+                                and m._pkt._ctx is True
+                            ]
+                            if found:
+                                msgs.append(max(found, key=lambda x: x.dtm))
             except KeyError:
                 pass
 
             return max(msgs) if msgs else None
 
         def backoff(hdr: HeaderT, failures: int) -> td:
-            """Backoff the interval if there are/were any failures."""
-            if not _DBG_ENABLE_DISCOVERY_BACKOFF:
-                return cast("td", self.cmds[hdr][_SZ_INTERVAL])
+            """Calculate the backoff interval based on failure count."""
+            standard_interval: td = cast("td", self.cmds[hdr][_SZ_INTERVAL])
 
-            if failures > 5:
-                secs = 60 * 60 * 6
-                _LOGGER.error(
-                    f"No response for {hdr} ({failures}/5): throttling to 1/6h"
-                )
-            elif failures > 2:
-                _LOGGER.warning(
-                    f"No response for {hdr} ({failures}/5): retrying in {self.MAX_CYCLE_SECS}s"
-                )
-                secs = self.MAX_CYCLE_SECS
+            if failures == 0:
+                return standard_interval
+
+            # 1. ORIGINAL DEBUG BEHAVIOR: Aggressive rapid-fire polling
+            if _DBG_ENABLE_DISCOVERY_BACKOFF:
+                if failures > 5:
+                    secs = 60 * 60 * 6
+                    _LOGGER.error(
+                        f"No response for {hdr} ({failures}/5): throttling to 1/6h"
+                    )
+                elif failures > 2:
+                    _LOGGER.warning(
+                        f"No response for {hdr} ({failures}/5): retrying in {self.MAX_CYCLE_SECS}s"
+                    )
+                    secs = self.MAX_CYCLE_SECS
+                else:
+                    _LOGGER.info(
+                        f"No response for {hdr} ({failures}/5): retrying in {self.MIN_CYCLE_SECS}s"
+                    )
+                    secs = self.MIN_CYCLE_SECS
+                return td(seconds=secs)
+
+            # 2. NEW PRODUCTION BEHAVIOR: Safe exponential backoff
+            if failures == 1:
+                secs = 60
+                _LOGGER.info(f"No response for {hdr} (1/5): retrying in 1m")
+            elif failures == 2:
+                secs = 240
+                _LOGGER.warning(f"No response for {hdr} (2/5): retrying in 4m")
+            elif failures == 3:
+                secs = 450
+                _LOGGER.warning(f"No response for {hdr} (3/5): retrying in 7.5m")
+            elif failures == 4:
+                secs = 900
+                _LOGGER.warning(f"No response for {hdr} (4/5): retrying in 15m")
+            elif failures == 5:
+                secs = 1800
+                _LOGGER.warning(f"No response for {hdr} (5/5): retrying in 30m")
             else:
-                _LOGGER.info(
-                    f"No response for {hdr} ({failures}/5): retrying in {self.MIN_CYCLE_SECS}s"
+                secs = 3600
+                _LOGGER.error(
+                    f"No response for {hdr} ({failures}/5+): throttling to 1h"
                 )
-                secs = self.MIN_CYCLE_SECS
 
-            return td(seconds=secs)
+            return td(seconds=min(secs, standard_interval.total_seconds()))
 
         async def send_disc_cmd(
             hdr: HeaderT, task: dict[str, Any], timeout: float = 15

@@ -24,6 +24,8 @@ from ramses_rf.system.zones import (
     zone_factory,
 )
 from ramses_tx import Message
+from ramses_tx.exceptions import ProtocolTimeoutError
+from ramses_tx.packet import Packet
 
 
 @pytest.fixture
@@ -278,3 +280,25 @@ def test_zone_factory_routing(mock_tcs: MagicMock) -> None:
 
     zon = zone_factory(mock_tcs, "03")
     assert isinstance(zon, Zone)
+
+
+@pytest.mark.asyncio
+async def test_zone_get_temp_handles_protocol_timeout(
+    mock_tcs: MagicMock,
+) -> None:
+    """Verify _get_temp gracefully handles ProtocolTimeoutError."""
+    # Arrange: Create a standard Zone
+    zon = Zone(mock_tcs, "01")
+
+    # Mock async_send_cmd to raise ProtocolTimeoutError
+    async def mock_send_cmd(*args: Any, **kwargs: Any) -> Packet:
+        raise ProtocolTimeoutError("Mocked 20-second FSM timeout")
+
+    mock_tcs._gwy.async_send_cmd = AsyncMock(side_effect=mock_send_cmd)
+
+    # Act & Assert: Call _get_temp, it should catch the timeout
+    # and return None without crashing the task runner.
+    result = await zon._get_temp()
+
+    # Verify it handled the exception and returned None
+    assert result is None
