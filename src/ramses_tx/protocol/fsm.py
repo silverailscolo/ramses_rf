@@ -26,6 +26,7 @@ from ..const import (
     Priority,
 )
 from ..exceptions import (
+    PacketPayloadInvalid,
     ProtocolError,
     ProtocolFsmError,
     ProtocolSendFailed,
@@ -325,7 +326,10 @@ class ProtocolContext(StateMachineInterface):
             raise ProtocolTimeoutError(msg) from err
 
         try:
-            return fut.result()
+            pkt = fut.result()
+            if pkt is None:
+                raise ProtocolSendFailed(f"{self}: Send failed: FSM returned None")
+            return pkt
         except ProtocolSendFailed:
             raise
         except (ProtocolError, TransportError) as err:
@@ -486,9 +490,14 @@ class WantEcho(ProtocolStateBase):
         """If the pkt is the expected Echo, transition to IsInIdle, or WantRply."""
         assert self._sent_cmd is not None
 
+        try:
+            pkt_hdr = pkt._hdr
+        except PacketPayloadInvalid:
+            return  # malformed packet, ignore
+
         if (
             self._sent_cmd.rx_header
-            and pkt._hdr == self._sent_cmd.rx_header
+            and pkt_hdr == self._sent_cmd.rx_header
             and (
                 pkt.dst.id == self._sent_cmd.src.id
                 or (
@@ -513,13 +522,13 @@ class WantEcho(ProtocolStateBase):
             self._context.set_state(IsInIdle, result=pkt)
             return
 
-        if HGI_DEVICE_ID in pkt._hdr:
+        if HGI_DEVICE_ID in pkt_hdr:
             assert pkt._hdr_ is not None
             pkt__hdr = HeaderT(
                 pkt._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
             )
         else:
-            pkt__hdr = pkt._hdr
+            pkt__hdr = pkt_hdr
 
         if pkt__hdr != self._sent_cmd.tx_header:
             return
@@ -549,7 +558,12 @@ class WantRply(ProtocolStateBase):
         assert self._sent_cmd is not None
         assert self._echo_pkt is not None
 
-        if pkt._hdr == self._sent_cmd.tx_header and pkt.src == self._echo_pkt.src:
+        try:
+            pkt_hdr = pkt._hdr
+        except PacketPayloadInvalid:
+            return  # malformed packet, ignore
+
+        if pkt_hdr == self._sent_cmd.tx_header and pkt.src == self._echo_pkt.src:
             level = (
                 logging.DEBUG
                 if self._context._cmd_tx_count < 3
@@ -566,11 +580,11 @@ class WantRply(ProtocolStateBase):
 
         if (
             self._sent_cmd.rx_header[:8] == "0418|RP|"  # type: ignore[index]
-            and self._sent_cmd.rx_header[:-2] == pkt._hdr[:-2]  # type: ignore[index]
+            and self._sent_cmd.rx_header[:-2] == pkt_hdr[:-2]  # type: ignore[index]
             and pkt.payload == "000000B0000000000000000000007FFFFF7000000000"
         ):
             self._rply_pkt = pkt
-        elif pkt._hdr != self._sent_cmd.rx_header:
+        elif pkt_hdr != self._sent_cmd.rx_header:
             return
         else:
             self._rply_pkt = pkt

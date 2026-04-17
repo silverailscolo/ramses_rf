@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, ClassVar, TypeAlias
 
 from ..command import Command
 from ..const import (
@@ -171,28 +172,46 @@ class QosManager:
         self._multiplier = min(3, old_val + 1)
 
 
+@dataclass(frozen=True)
 class Qos:
-    """The QoS class - this is a mess - it is the first step in cleaning up QoS."""
+    """Quality of Service (QoS) parameters for command transmission.
 
-    # TODO: this needs work
+    :param priority: The queue priority level for this command (default: Priority.DEFAULT).
+    :type priority: Priority
+    :param retry_limit: The maximum number of transmission retries allowed (default: 2).
+    :type retry_limit: int
+    :param tx_timeout: The timeout duration for the transmission phase (default: 0.2s).
+    :type tx_timeout: td
+    :param rx_timeout: The timeout duration to wait for a valid response (default: 0.5s).
+    :type rx_timeout: td
+    :param disable_backoff: If True, disables exponential backoff during retries (default: False).
+    :type disable_backoff: bool
+    """
 
-    POLL_INTERVAL = 0.002
+    priority: Priority = Priority.DEFAULT
+    retry_limit: int = 2
+    tx_timeout: td = td(seconds=0.2)
+    rx_timeout: td = td(seconds=0.50)
+    disable_backoff: bool = False
 
-    TX_PRIORITY_DEFAULT = Priority.DEFAULT
+    POLL_INTERVAL: ClassVar[float] = 0.002
+
+    TX_PRIORITY_DEFAULT: ClassVar[Priority] = Priority.DEFAULT
 
     # tx (from sent to gwy, to get back from gwy) seems to takes approx. 0.025s
-    TX_RETRIES_DEFAULT = 2
-    TX_RETRIES_MAX = 5
-    TX_TIMEOUT_DEFAULT = td(seconds=0.2)  # 0.20 OK, but too high?
+    TX_RETRIES_DEFAULT: ClassVar[int] = 2
+    TX_RETRIES_MAX: ClassVar[int] = 5
+    TX_TIMEOUT_DEFAULT: ClassVar[td] = td(seconds=0.2)  # 0.20 OK, but too high?
 
-    RX_TIMEOUT_DEFAULT = td(seconds=0.50)  # 0.20 seems OK, 0.10 too low sometimes
+    RX_TIMEOUT_DEFAULT: ClassVar[td] = td(
+        seconds=0.50
+    )  # 0.20 seems OK, 0.10 too low sometimes
 
-    TX_BACKOFFS_MAX = 2  # i.e. tx_timeout 2 ** MAX_BACKOFF
+    TX_BACKOFFS_MAX: ClassVar[int] = 2  # i.e. tx_timeout 2 ** MAX_BACKOFF
 
-    QOS_KEYS = ("priority", "max_retries", "timeout")
-    # priority, max_retries, rx_timeout, backoff
-    DEFAULT_QOS = (Priority.DEFAULT, TX_RETRIES_DEFAULT, TX_TIMEOUT_DEFAULT, True)
-    DEFAULT_QOS_TABLE = {
+    DEFAULT_QOS_TABLE: ClassVar[
+        dict[str, tuple[Priority, int, td | None, bool | None]]
+    ] = {
         "RQ|0016": (Priority.HIGH, 5, None, True),
         "RQ|0006": (Priority.HIGH, 5, None, True),
         " I|0404": (Priority.HIGH, 3, td(seconds=0.30), True),
@@ -205,27 +224,39 @@ class Qos:
         " W|3220": (Priority.HIGH, 3, td(seconds=1.2), False),
     }  # The long timeout for the OTB is for total RTT to slave (boiler)
 
-    def __init__(
-        self,
-        *,
-        priority: Priority | None = None,  # TODO: deprecate
-        max_retries: int | None = None,  # TODO:   deprecate
-        timeout: td | None = None,  # TODO:        deprecate
-        backoff: bool | None = None,  # TODO:      deprecate
-    ) -> None:
-        self.priority = self.DEFAULT_QOS[0] if priority is None else priority
-        self.retry_limit = self.DEFAULT_QOS[1] if max_retries is None else max_retries
-        self.tx_timeout = self.TX_TIMEOUT_DEFAULT
-        self.rx_timeout = self.DEFAULT_QOS[2] if timeout is None else timeout
-        self.disable_backoff = not (self.DEFAULT_QOS[3] if backoff is None else backoff)
-
-        self.retry_limit = min(self.retry_limit, Qos.TX_RETRIES_MAX)
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "retry_limit", min(self.retry_limit, self.TX_RETRIES_MAX)
+        )
 
     @classmethod  # constructor from verb|code pair
     def verb_code(cls, verb: VerbT, code: str | Code, **kwargs: Any) -> Qos:
         """Constructor to create a QoS based upon the defaults for a verb|code pair."""
 
-        default_qos = cls.DEFAULT_QOS_TABLE.get(f"{verb}|{code}", cls.DEFAULT_QOS)
+        default_qos = cls.DEFAULT_QOS_TABLE.get(
+            f"{verb}|{code}",
+            (
+                cls.TX_PRIORITY_DEFAULT,
+                cls.TX_RETRIES_DEFAULT,
+                cls.RX_TIMEOUT_DEFAULT,
+                True,
+            ),
+        )
+
+        priority = default_qos[0]
+        retry_limit = default_qos[1]
+        rx_timeout = (
+            default_qos[2] if default_qos[2] is not None else cls.RX_TIMEOUT_DEFAULT
+        )
+        disable_backoff = not default_qos[3] if default_qos[3] is not None else False
+
+        valid_kwargs = {
+            k: v for k, v in kwargs.items() if k in cls.__dataclass_fields__
+        }
+
         return cls(
-            **{k: kwargs.get(k, default_qos[i]) for i, k in enumerate(cls.QOS_KEYS)}
+            priority=valid_kwargs.get("priority", priority),
+            retry_limit=valid_kwargs.get("retry_limit", retry_limit),
+            rx_timeout=valid_kwargs.get("rx_timeout", rx_timeout),
+            disable_backoff=valid_kwargs.get("disable_backoff", disable_backoff),
         )

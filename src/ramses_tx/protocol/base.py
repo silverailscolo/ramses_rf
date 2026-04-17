@@ -74,9 +74,8 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._transport: TransportInterface | None = None
         self._loop = asyncio.get_running_loop()
 
-        self._pause_writing: bool = (
-            False  # FIXME: Start in R/O mode as no connection yet?
-        )
+        # Start in R/O mode; wait for connection_made() to resume writing
+        self._pause_writing: bool = True
         self._wait_connection_lost: asyncio.Future[None] | None = None
         self._wait_connection_made: asyncio.Future[TransportInterface] = (
             self._loop.create_future()
@@ -308,9 +307,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             priority=priority,
             qos=qos or DEFAULT_QOS,
         )
-
-        if not pkt:  # HACK: temporary workaround for returning None
-            raise ProtocolSendFailed(f"Failed to send command: {cmd} (REPORT THIS)")
 
         return pkt
 
