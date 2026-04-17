@@ -448,8 +448,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if _DBG_FORCE_FRAME_LOGGING:
             _LOGGER.warning("Tx: %s", data)
-        elif _LOGGER.getEffectiveLevel() == logging.INFO:
-            _LOGGER.info("Tx: %s", data)
+        elif _LOGGER.getEffectiveLevel() == logging.INFO or self._log_all:
+            _LOGGER.info("mq Tx: %s", data)
 
         try:
             self._publish(data)

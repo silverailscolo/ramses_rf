@@ -194,6 +194,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
 
         self._tx_bits_in_bucket = None
         self._tx_last_time_bit_added = None
+        self._log_all = config.log_all
 
         self._init_fut = self._loop.create_future()
 
@@ -323,10 +324,10 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         """Write some data bytes to the underlying transport."""
         data = bytes(frame, "ascii") + b"\r\n"
 
-        log_msg = f"Serial transport transmitting frame: {frame}"
+        log_msg = f"Serial transport Tx frame: {frame}"
         if _DBG_FORCE_FRAME_LOGGING:
             _LOGGER.warning(log_msg)
-        elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
+        elif _LOGGER.getEffectiveLevel() > logging.DEBUG or self._log_all:
             _LOGGER.info(log_msg)
         else:
             _LOGGER.debug(log_msg)
