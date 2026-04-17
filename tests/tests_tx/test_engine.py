@@ -9,9 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_tx.address import HGI_DEV_ADDR
+from ramses_tx.application_message import ApplicationMessage
 from ramses_tx.command import Command
 from ramses_tx.const import Code, Priority
-from ramses_tx.gateway import ApplicationMessage, Engine
+from ramses_tx.engine import Engine
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
@@ -97,7 +98,7 @@ async def test_engine_message_history_encapsulation(
 
 
 @pytest.mark.asyncio
-@patch("ramses_tx.gateway.transport_factory", new_callable=AsyncMock)
+@patch("ramses_tx.engine.transport_factory", new_callable=AsyncMock)
 async def test_engine_start_serial(
     mock_factory: AsyncMock, dummy_engine: Engine
 ) -> None:
@@ -113,7 +114,7 @@ async def test_engine_start_serial(
 
 
 @pytest.mark.asyncio
-@patch("ramses_tx.gateway.transport_factory", new_callable=AsyncMock)
+@patch("ramses_tx.engine.transport_factory", new_callable=AsyncMock)
 async def test_engine_start_file(mock_factory: AsyncMock) -> None:
     # Starting via file forces wait_for_connection_lost up to 86400 seconds
     engine = Engine(port_name=None, input_file="test.log")

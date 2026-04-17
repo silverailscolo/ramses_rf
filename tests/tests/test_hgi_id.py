@@ -26,7 +26,7 @@ async def test_hgi_id_injection() -> None:
     # Mock the transport factory to avoid creating a real connection/transport
     # We want to inspect the kwargs passed to it.
     with (
-        patch("ramses_tx.gateway.transport_factory") as mock_transport_factory,
+        patch("ramses_tx.engine.transport_factory") as mock_transport_factory,
         patch.object(
             gwy._engine._protocol, "wait_for_connection_made", new_callable=AsyncMock
         ),
@@ -68,7 +68,7 @@ async def test_hgi_id_default_behavior() -> None:
     gwy = Gateway("/dev/ttyMOCK", config=GatewayConfig(input_file=None))
 
     with (
-        patch("ramses_tx.gateway.transport_factory") as mock_transport_factory,
+        patch("ramses_tx.engine.transport_factory") as mock_transport_factory,
         patch.object(
             gwy._engine._protocol, "wait_for_connection_made", new_callable=AsyncMock
         ),

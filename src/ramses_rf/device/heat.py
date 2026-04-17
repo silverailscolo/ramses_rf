@@ -109,7 +109,7 @@ if TYPE_CHECKING:
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Evohome, Zone
     from ramses_tx import Address, Message, Packet
-    from ramses_tx.gateway import ApplicationMessage
+    from ramses_tx.application_message import ApplicationMessage
     from ramses_tx.opentherm import OtDataId
 
 

@@ -28,6 +28,7 @@ from ramses_tx import (
     protocol_factory,
     set_pkt_logging_config,
 )
+from ramses_tx.application_message import ApplicationMessage
 from ramses_tx.const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_MAX_RETRIES,
@@ -36,7 +37,6 @@ from ramses_tx.const import (
     DEFAULT_WAIT_FOR_REPLY,
     SZ_ACTIVE_HGI,
 )
-from ramses_tx.gateway import ApplicationMessage
 from ramses_tx.logger import flush_packet_log
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 from ramses_tx.typing import PktLogConfigT, PortConfigT
