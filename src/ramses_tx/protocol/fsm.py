@@ -374,6 +374,10 @@ class ProtocolContext(StateMachineInterface):
 
             try:
                 await self._send_fnc(cmd)
+            # NOTE this exception has been left deliberatley broad to
+            # allow any unexpected failures to correctly transition the
+            # FSM back to the IsInIdle state and injects the exception
+            # into the pending future to unblock the queue
             except Exception as err:
                 self.set_state(IsInIdle, exception=err)
 
