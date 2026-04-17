@@ -2,7 +2,7 @@
 """RAMSES RF - RAMSES-II compatible packet protocol base classes.
 
 This module provides the foundational protocol layers, handling transport
-binding, basic message dispatching, regex-based payload manipulation,
+binding, basic message dispatching, regex-based payload manipulation, logging
 and device ID filtering mechanisms.
 """
 
@@ -300,6 +300,14 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         if qos and qos.wait_for_reply and num_repeats:
             _LOGGER.warning(f"{cmd} < num_repeats set to 0, as wait_for_reply is True")
             num_repeats = 0  # the lesser crime over wait_for_reply=False
+
+        # Log outgoing cmd
+        if _DBG_FORCE_LOG_PACKETS:
+            _LOGGER.warning(f"Sent: {cmd}")
+        elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
+            _LOGGER.info(f"Sent: {cmd}")
+        else:
+            _LOGGER.debug(f"Sent: {cmd}")
 
         pkt = await self._send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
             cmd,

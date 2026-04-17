@@ -170,11 +170,14 @@ class StdOutFilter(logging.Filter):  # record.levelno < logging.WARNING
 
 
 class BlockMqttFilter(logging.Filter):
-    """Block mqtt traffic"""
+    """Block mqtt and Sent traffic"""
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Return True if the record is to be processed."""
-        return not record.getMessage().startswith("mq Rx: ")
+        return not (  # ignored if Config lag_all is True
+            record.getMessage().startswith("mq Rx: ")
+            or record.getMessage().startswith("Sent: ")
+        )
 
 
 class TimedRotatingFileHandler(_TimedRotatingFileHandler):
@@ -334,7 +337,7 @@ def set_pkt_logging(
 
         handler = logging.StreamHandler(stream=sys.stderr)
         handler.setFormatter(console_fmt)
-        handler.setLevel(logging.WARNING)  # musr be .WARNING or less
+        handler.setLevel(logging.WARNING)  # must be .WARNING or less
         handler.addFilter(StdErrFilter())  # record.levelno >= .WARNING
         handlers.append(handler)
 
