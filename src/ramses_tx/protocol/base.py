@@ -2,7 +2,7 @@
 """RAMSES RF - RAMSES-II compatible packet protocol base classes.
 
 This module provides the foundational protocol layers, handling transport
-binding, basic message dispatching, regex-based payload manipulation,
+binding, basic message dispatching, regex-based payload manipulation, logging
 and device ID filtering mechanisms.
 """
 
