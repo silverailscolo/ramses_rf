@@ -7,6 +7,7 @@ import pytest
 
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_tx.address import HGI_DEV_ADDR
+from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_ACTIVE_HGI
 
 TEST_HGI_ID = "18:005960"
@@ -20,13 +21,13 @@ async def test_hgi_id_injection() -> None:
     # We must provide a dummy port_name to satisfy Engine.__init__ validation
     gwy = Gateway(
         "/dev/ttyMOCK",
-        config=GatewayConfig(input_file=None, hgi_id=TEST_HGI_ID),
+        config=GatewayConfig(engine=EngineConfig(input_file=None, hgi_id=TEST_HGI_ID)),
     )
 
     # Mock the transport factory to avoid creating a real connection/transport
     # We want to inspect the kwargs passed to it.
     with (
-        patch("ramses_tx.gateway.transport_factory") as mock_transport_factory,
+        patch("ramses_tx.engine.transport_factory") as mock_transport_factory,
         patch.object(
             gwy._engine._protocol, "wait_for_connection_made", new_callable=AsyncMock
         ),
@@ -65,10 +66,12 @@ async def test_hgi_id_default_behavior() -> None:
     """Check that the Gateway defaults to the hardcoded ID when no custom ID is provided."""
 
     # 1. Instantiate Gateway WITHOUT the custom hgi_id using GatewayConfig
-    gwy = Gateway("/dev/ttyMOCK", config=GatewayConfig(input_file=None))
+    gwy = Gateway(
+        "/dev/ttyMOCK", config=GatewayConfig(engine=EngineConfig(input_file=None))
+    )
 
     with (
-        patch("ramses_tx.gateway.transport_factory") as mock_transport_factory,
+        patch("ramses_tx.engine.transport_factory") as mock_transport_factory,
         patch.object(
             gwy._engine._protocol, "wait_for_connection_made", new_callable=AsyncMock
         ),

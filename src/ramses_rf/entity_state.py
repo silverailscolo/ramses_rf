@@ -29,7 +29,7 @@ from . import exceptions as exc
 from .const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
 
 if TYPE_CHECKING:
-    from ramses_tx.gateway import ApplicationMessage
+    from ramses_tx.application_message import ApplicationMessage
     from ramses_tx.typing import HeaderT
 
     from .interfaces import DeviceInterface, GatewayInterface

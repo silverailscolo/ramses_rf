@@ -27,6 +27,7 @@ from ramses_rf.schemas import (
     SZ_REDUCE_PROCESSING,
 )
 from ramses_tx import is_valid_dev_id
+from ramses_tx.config import EngineConfig
 from ramses_tx.logger import CONSOLE_COLS, DEFAULT_DATEFMT, DEFAULT_FMT
 from ramses_tx.schemas import (
     SZ_DISABLE_QOS,
@@ -662,7 +663,15 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     if lib_kwargs:
         gwy_config_kwargs["schema"] = lib_kwargs
 
-    gwy_config = GatewayConfig(**gwy_config_kwargs)
+    # Separate the kwargs for the engine vs the gateway
+    engine_kwargs = {
+        k: v for k, v in gwy_config_kwargs.items() if hasattr(EngineConfig, k)
+    }
+    gwy_kwargs = {
+        k: v for k, v in gwy_config_kwargs.items() if hasattr(GatewayConfig, k)
+    }
+
+    gwy_config = GatewayConfig(engine=EngineConfig(**engine_kwargs), **gwy_kwargs)
 
     # Instantiate Gateway
     gwy = Gateway(

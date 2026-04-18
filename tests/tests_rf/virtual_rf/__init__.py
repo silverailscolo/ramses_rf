@@ -8,6 +8,7 @@ from unittest.mock import patch
 from ramses_rf import Gateway
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.schemas import SZ_CLASS, SZ_KNOWN_LIST
+from ramses_tx.config import EngineConfig
 
 from .const import MAX_NUM_PORTS, HgiFwTypes
 from .virtual_rf import VirtualRf
@@ -34,12 +35,13 @@ _DEFAULT_GWY_CONFIG = {
 def _get_hgi_id_for_schema(
     schema: dict[str, Any] | GatewayConfig, port_idx: int
 ) -> tuple[str, HgiFwTypes]:
-    """Return the Gateway's device_id for a schema (if required, construct an id).
+    """Return the Gateway's device_id for a schema (if required, construct
+    an id).
 
     Does not modify the schema.
 
-    Checks that only one Gateway is defined and ensures all 18: type devices
-    have an explicit HGI class trait.
+    Checks that only one Gateway is defined and ensures all 18: type
+    devices have an explicit HGI class trait.
     """
 
     if isinstance(schema, GatewayConfig):
@@ -72,13 +74,15 @@ def _get_hgi_id_for_schema(
 
 @patch("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", MIN_INTER_WRITE_GAP)
 async def rf_factory(
-    schemas: list[dict[str, Any] | GatewayConfig | None], start_gwys: bool = True
+    schemas: list[dict[str, Any] | GatewayConfig | None],
+    start_gwys: bool = True,
 ) -> tuple[VirtualRf, list[Gateway]]:
-    """Return the virtual network corresponding to a list of gateway schema/configs.
+    """Return the virtual network corresponding to a list of gateway
+    schema/configs.
 
-    Each dict entry will consist of a standard gateway config/schema (or None). Any
-    serial port configs are ignored, and are instead allocated sequentially from the
-    virtual RF pool.
+    Each dict entry will consist of a standard gateway config/schema (or
+    None). Any serial port configs are ignored, and are instead allocated
+    sequentially from the virtual RF pool.
     """
 
     if len(schemas) > MAX_NUM_PORTS:
@@ -98,7 +102,7 @@ async def rf_factory(
 
         with patch("ramses_tx.discovery.comports", rf.comports):
             if isinstance(schema, GatewayConfig):
-                schema.hgi_id = hgi_id
+                schema.engine.hgi_id = hgi_id
                 gwy_config = schema
             else:
                 config_kwargs: dict[str, Any] = {}
@@ -117,21 +121,31 @@ async def rf_factory(
 
                 config_kwargs.update(schema_copy)
 
-                valid_keys = {f.name for f in fields(GatewayConfig)}
-                safe_kwargs = {
-                    k: v for k, v in config_kwargs.items() if k in valid_keys
-                }
-                safe_kwargs["hgi_id"] = hgi_id
+                valid_gwy_keys = {f.name for f in fields(GatewayConfig)}
+                valid_eng_keys = {f.name for f in fields(EngineConfig)}
 
-                gwy_config = GatewayConfig(**safe_kwargs)
+                gwy_kwargs: dict[str, Any] = {}
+                eng_kwargs: dict[str, Any] = {}
+
+                for k, v in config_kwargs.items():
+                    if k in valid_gwy_keys:
+                        gwy_kwargs[k] = v
+                    elif k in valid_eng_keys:
+                        eng_kwargs[k] = v
+
+                eng_kwargs["hgi_id"] = hgi_id
+
+                if eng_kwargs:
+                    gwy_kwargs["engine"] = EngineConfig(**eng_kwargs)
+
+                gwy_config = GatewayConfig(**gwy_kwargs)
 
             gwy = Gateway(rf.ports[idx], config=gwy_config)
 
             if start_gwys:
                 await gwy.start()
-                gwy._engine._disable_sending = (
-                    False  # allows Virtual RF to capture/reply
-                )
+                # allows Virtual RF to capture/reply
+                gwy._engine._disable_sending = False
 
             gwys.append(gwy)
 
