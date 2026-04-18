@@ -176,17 +176,23 @@ class Gateway(GatewayInterface):
                 stacklevel=2,
             )
 
-            for key, value in kwargs.items():
-                if hasattr(self._gwy_config.engine, key):
-                    setattr(self._gwy_config.engine, key, value)
-                elif hasattr(self._gwy_config, key):
-                    setattr(self._gwy_config, key, value)
-                else:
-                    _LOGGER.error(
-                        "Gateway received unsupported kwarg: %s. "
-                        "This argument is ignored.",
-                        key,
-                    )
+            def _apply_kwargs(cfg_dict: dict[str, Any]) -> None:
+                """Recursively unpack nested dictionaries to apply configs."""
+                for key, value in cfg_dict.items():
+                    if hasattr(self._gwy_config.engine, key):
+                        setattr(self._gwy_config.engine, key, value)
+                    elif hasattr(self._gwy_config, key):
+                        setattr(self._gwy_config, key, value)
+                    elif isinstance(value, dict):
+                        _apply_kwargs(value)
+                    else:
+                        _LOGGER.error(
+                            "Gateway received unsupported kwarg: %s. "
+                            "This argument is ignored.",
+                            key,
+                        )
+
+            _apply_kwargs(kwargs)
 
         if self._gwy_config.debug_mode:
             _LOGGER.setLevel(logging.DEBUG)

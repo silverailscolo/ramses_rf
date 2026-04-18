@@ -1,12 +1,14 @@
 """Tests for the Gateway backward compatibility, deprecation shims, and lifecycle."""
 
 import warnings
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_tx.config import EngineConfig
+from ramses_tx.typing import PktLogConfigT
 
 
 @pytest.mark.asyncio
@@ -225,7 +227,8 @@ async def test_gateway_legacy_kwargs_deprecation() -> None:
     to using the strict GatewayConfig/EngineConfig DTOs.
     """
     with pytest.warns(
-        DeprecationWarning, match=r"Initializing Gateway with \*\*kwargs.*is deprecated"
+        DeprecationWarning,
+        match=r"Initializing Gateway with \*\*kwargs.*is deprecated",
     ):
         gwy = Gateway(
             port_name="/dev/null",
@@ -244,3 +247,37 @@ async def test_gateway_legacy_kwargs_deprecation() -> None:
     # 3. Verify unsupported arguments were safely ignored
     assert not hasattr(gwy.config, "invalid_fake_arg")
     assert not hasattr(gwy.config.engine, "invalid_fake_arg")
+
+
+@pytest.mark.asyncio
+async def test_gateway_nested_kwargs_unpacking() -> None:
+    """Test that nested kwargs from Home Assistant are correctly unpacked.
+
+    This ensures that the recursive adapter can reach into nested dictionaries
+    passed by ramses_cc to extract DTO-level configuration variables.
+    """
+    nested_kwargs = {
+        "ramses_rf": {
+            "enforce_known_list": True,
+            "nested_unsupported": "ignore",
+        },
+        "packet_log": {
+            "packet_log_retention_days": 7,
+        },
+    }
+
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        gwy = Gateway(port_name="/dev/null", **nested_kwargs)
+
+    # 1. Verify EngineConfig absorbed the nested transport/filtering kwarg
+    assert gwy.config.engine.enforce_known_list is True
+
+    # 2. Verify EngineConfig absorbed the nested dictionary kwarg directly
+    # Use PktLogConfigT to satisfy Mypy strict comparison check
+    assert gwy.config.engine.packet_log == cast(
+        PktLogConfigT, {"packet_log_retention_days": 7}
+    )
+
+    # 3. Verify nesting logic did not create phantom attributes
+    assert not hasattr(gwy.config, "ramses_rf")
+    assert not hasattr(gwy.config.engine, "nested_unsupported")
