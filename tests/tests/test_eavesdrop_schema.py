@@ -10,6 +10,7 @@ import pytest
 from ramses_rf import Gateway
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import shrink
+from ramses_tx.config import EngineConfig
 
 from .helpers import TEST_DIR, assert_expected
 
@@ -46,7 +47,8 @@ async def assert_schemas_equal(gwy: Gateway, expected_schema: dict[str, Any]) ->
     :type gwy: Gateway
     :param expected_schema: The schema dictionary expected to match.
     :type expected_schema: dict[str, Any]
-    :raises AssertionError: If the actual schema does not match the expected schema.
+    :raises AssertionError: If the actual schema does not match the
+        expected schema.
     :rtype: None
     """
     schema, packets = await gwy.get_state(include_expired=True)
@@ -69,15 +71,23 @@ async def assert_schemas_equal(gwy: Gateway, expected_schema: dict[str, Any]) ->
 
 # duplicate in test_eavesdrop_dev_class
 async def test_eavesdrop_off(dir_name: Path) -> None:
-    """Check discovery of schema and known_list *without* eavesdropping.
+    """Check discovery of schema and known_list *without*
+    eavesdropping.
 
-    :param dir_name: The directory containing the test packet log and schemas.
+    :param dir_name: The directory containing the test packet log and
+        schemas.
     :type dir_name: Path
     :rtype: None
     """
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=False))
+    gwy = Gateway(
+        None,
+        config=GatewayConfig(
+            enable_eavesdrop=False,
+            engine=EngineConfig(input_file=path),
+        ),
+    )
     await gwy.start()
 
     with open(f"{dir_name}/schema_eavesdrop_off.json") as f:
@@ -99,13 +109,20 @@ async def test_eavesdrop_off(dir_name: Path) -> None:
 async def test_eavesdrop_on_(dir_name: Path) -> None:
     """Check discovery of schema and known_list *with* eavesdropping.
 
-    :param dir_name: The directory containing the test packet log and schemas.
+    :param dir_name: The directory containing the test packet log and
+        schemas.
     :type dir_name: Path
     :rtype: None
     """
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=True))
+    gwy = Gateway(
+        None,
+        config=GatewayConfig(
+            enable_eavesdrop=True,
+            engine=EngineConfig(input_file=path),
+        ),
+    )
     await gwy.start()
 
     with open(f"{dir_name}/schema_eavesdrop_on.json") as f:

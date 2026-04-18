@@ -12,12 +12,14 @@ import serial
 
 from ramses_rf import Address, Code, Command, Gateway
 from ramses_rf.gateway import GatewayConfig
+from ramses_tx.config import EngineConfig
 from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import DeviceIdT
 from tests_rf.virtual_rf import VirtualRf, rf_factory
 
 # other constants
-ASSERT_CYCLE_TIME = 0.001  # max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TIME
+# max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TIME
+ASSERT_CYCLE_TIME = 0.001
 DEFAULT_MAX_SLEEP = 1
 
 
@@ -38,7 +40,7 @@ SCHEMA_1: dict[str, Any] = {
 }
 
 
-# ######################################################################################
+# #############################################################################
 
 
 async def assert_code_in_device_msgindex(
@@ -48,7 +50,9 @@ async def assert_code_in_device_msgindex(
     max_sleep: int = DEFAULT_MAX_SLEEP,
     test_not: bool = False,
 ) -> None:
-    """Fail if the device doesn't exist, or if it doesn't have the code in its msg_db."""
+    """Fail if the device doesn't exist, or if it doesn't have the code
+    in its msg_db.
+    """
 
     async def _has_code() -> bool:
         dev = gwy.device_registry.device_by_id.get(dev_id)
@@ -93,7 +97,9 @@ async def assert_devices(
 async def assert_this_pkt(
     transport: PortTransport, cmd: Command, max_sleep: int = DEFAULT_MAX_SLEEP
 ) -> None:
-    """Check, at the transport layer, that the current packet is as expected."""
+    """Check, at the transport layer, that the current packet is as
+    expected.
+    """
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)
         if transport._this_pkt and transport._this_pkt._frame == cmd._frame:
@@ -101,7 +107,7 @@ async def assert_this_pkt(
     assert transport._this_pkt and transport._this_pkt._frame == cmd._frame
 
 
-# ### TESTS ############################################################################
+# ### TESTS ###################################################################
 
 
 async def _test_virtual_rf_dev_disc(
@@ -121,7 +127,8 @@ async def _test_virtual_rf_dev_disc(
     await gwy_1.start()
     assert gwy_1._engine._protocol._transport
 
-    # NOTE: will pick up gwy 18:111111, since Foreign gwy detect has been removed
+    # NOTE: will pick up gwy 18:111111, since Foreign gwy detect has
+    # been removed
     await assert_devices(gwy_0, ["18:000000", "18:111111"])
     await assert_devices(gwy_1, ["18:111111"])
 
@@ -143,7 +150,8 @@ async def _test_virtual_rf_dev_disc(
     cmd = Command(" I --- 01:022222 --:------ 01:022222 1F09 003 0004B5")
     list(rf._port_to_object.values())[1].write(bytes(f"000 {cmd}\r\n".encode("ascii")))
 
-    # Fix: Reverted gwy_0 expected list to have 18:000000 since it is not receiving the injected packet
+    # Fix: Reverted gwy_0 expected list to have 18:000000 since it is
+    # not receiving the injected packet
     await assert_devices(gwy_0, ["01:010000", "01:011111", "18:000000", "18:111111"])
     await assert_devices(gwy_1, ["01:010000", "01:011111", "01:022222", "18:111111"])
 
@@ -175,7 +183,7 @@ async def _test_virtual_rf_pkt_flow(
     cmd = Command(" I --- 40:000000 --:------ 40:000000 22F1 003 000507")
     gwy_0.send_cmd(cmd, num_repeats=1)
 
-    # await assert_code_in_device_msgindex(gwy_0, "40:000000", Code._22F1)  # ?needs QoS
+    # await assert_code_in_device_msgindex(gwy_0, "40:000000", Code._22F1)
 
     await assert_this_pkt(gwy_0._engine._transport, cmd)
     await assert_this_pkt(gwy_1._engine._transport, cmd)
@@ -187,7 +195,9 @@ async def _test_virtual_rf_pkt_flow(
 # NOTE: does not use factory
 @pytest.mark.xdist_group(name="virt_serial")
 async def test_virtual_rf_dev_disc() -> None:
-    """Check the virtual RF network behaves as expected (device discovery)."""
+    """Check the virtual RF network behaves as expected (device
+    discovery).
+    """
 
     rf = VirtualRf(3)
 
@@ -195,12 +205,17 @@ async def test_virtual_rf_dev_disc() -> None:
     gwy_1: Gateway = None  # type: ignore[assignment]
 
     try:
+        gwy_config = GatewayConfig(
+            disable_discovery=GWY_CONFIG["disable_discovery"],
+            engine=EngineConfig(enforce_known_list=GWY_CONFIG["enforce_known_list"]),
+        )
+
         rf.set_gateway(rf.ports[0], "18:000000")
-        gwy_0 = Gateway(rf.ports[0], config=GatewayConfig(**GWY_CONFIG))
+        gwy_0 = Gateway(rf.ports[0], config=gwy_config)
         await assert_devices(gwy_0, [])
 
         rf.set_gateway(rf.ports[1], "18:111111")
-        gwy_1 = Gateway(rf.ports[1], config=GatewayConfig(**GWY_CONFIG))
+        gwy_1 = Gateway(rf.ports[1], config=gwy_config)
         await assert_devices(gwy_1, [])
 
         await _test_virtual_rf_dev_disc(rf, gwy_0, gwy_1)
@@ -229,7 +244,8 @@ async def test_virtual_rf_pkt_flow() -> None:
         )
 
         assert gwy_0._engine._protocol._transport
-        # NOTE: will pick up gwy 18:111111, since Foreign gwy detect has been removed
+        # NOTE: will pick up gwy 18:111111, since Foreign gwy detect has
+        # been removed
         await assert_devices(gwy_0, ["18:000000", "18:111111", "40:000000"])
 
         assert gwy_1._engine._protocol._transport

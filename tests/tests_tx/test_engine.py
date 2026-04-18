@@ -9,9 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_tx.address import HGI_DEV_ADDR
+from ramses_tx.application_message import ApplicationMessage
 from ramses_tx.command import Command
+from ramses_tx.config import EngineConfig
 from ramses_tx.const import Code, Priority
-from ramses_tx.gateway import ApplicationMessage, Engine
+from ramses_tx.engine import Engine
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
@@ -26,14 +28,19 @@ def mock_packet() -> Packet:
 async def dummy_engine() -> Engine:
     # Create an async dummy engine instance configured to disable sending.
     # Being an async fixture ensures it binds to the current test's event loop.
-    return Engine(port_name="/dev/null", disable_sending=True)
+    return Engine(
+        config=EngineConfig(port_name="/dev/null", disable_sending=True),
+    )
 
 
 @pytest.mark.asyncio
 async def test_engine_init_missing_source_raises() -> None:
     # Initializing without port_name or input_file must raise TypeError
-    with pytest.raises(TypeError, match="Either a port_name or an input_file"):
-        Engine(port_name=None, input_file=None)
+    with pytest.raises(
+        TypeError,
+        match="Either a port_name or an input_file",
+    ):
+        Engine(config=EngineConfig(port_name=None, disable_sending=True))
 
 
 @pytest.mark.asyncio
@@ -41,7 +48,9 @@ async def test_engine_init_port_and_file_ignores_file(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     # Providing both should log a warning and ignore the file
-    engine = Engine(port_name="/dev/null", input_file="test.log")
+    engine = Engine(
+        config=EngineConfig(port_name="/dev/null", input_file="test.log"),
+    )
     assert "Port (/dev/null) specified, so file (test.log) ignored" in caplog.text
     assert engine._input_file is None
     assert engine.ser_name == "/dev/null"
@@ -50,10 +59,12 @@ async def test_engine_init_port_and_file_ignores_file(
 @pytest.mark.asyncio
 async def test_engine_str_representations() -> None:
     # Test __str__ correctly identifies the active HGI ID
-    engine_hgi = Engine(port_name="/dev/null", hgi_id="18:123456")
+    engine_hgi = Engine(
+        config=EngineConfig(port_name="/dev/null", hgi_id="18:123456"),
+    )
     assert str(engine_hgi) == "18:123456 (/dev/null)"
 
-    engine_no_hgi = Engine(port_name="/dev/null")
+    engine_no_hgi = Engine(config=EngineConfig(port_name="/dev/null"))
     assert str(engine_no_hgi) == f"{HGI_DEV_ADDR.id} (/dev/null)"
 
     engine_no_hgi._transport = MagicMock()
@@ -97,7 +108,7 @@ async def test_engine_message_history_encapsulation(
 
 
 @pytest.mark.asyncio
-@patch("ramses_tx.gateway.transport_factory", new_callable=AsyncMock)
+@patch("ramses_tx.engine.transport_factory", new_callable=AsyncMock)
 async def test_engine_start_serial(
     mock_factory: AsyncMock, dummy_engine: Engine
 ) -> None:
@@ -113,10 +124,12 @@ async def test_engine_start_serial(
 
 
 @pytest.mark.asyncio
-@patch("ramses_tx.gateway.transport_factory", new_callable=AsyncMock)
+@patch("ramses_tx.engine.transport_factory", new_callable=AsyncMock)
 async def test_engine_start_file(mock_factory: AsyncMock) -> None:
     # Starting via file forces wait_for_connection_lost up to 86400 seconds
-    engine = Engine(port_name=None, input_file="test.log")
+    engine = Engine(
+        config=EngineConfig(port_name=None, input_file="test.log"),
+    )
     mock_transport = MagicMock()
     mock_factory.return_value = mock_transport
 
@@ -128,8 +141,10 @@ async def test_engine_start_file(mock_factory: AsyncMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_engine_stop_cleans_tasks_and_transport(dummy_engine: Engine) -> None:
-    # Tasks are correctly cancelled, transport is closed, and exceptions logged
+async def test_engine_stop_cleans_tasks_and_transport(
+    dummy_engine: Engine,
+) -> None:
+    # Tasks are correctly cancelled, transport is closed, exceptions logged
     async def dummy_coro() -> None:
         await asyncio.sleep(0.1)
 
@@ -168,7 +183,8 @@ async def test_engine_pause_resume(dummy_engine: Engine) -> None:
     await dummy_engine._pause("custom_arg")
     await asyncio.sleep(0)  # Yield to flush loop.call_soon callbacks
 
-    # Use cast to bypass Mypy's strict attribute narrowing across method calls
+    # Use cast to bypass Mypy's strict attribute narrowing across method
+    # calls
     assert cast(Any, dummy_engine._engine_state) is not None
     assert cast(Any, dummy_engine._disable_sending) is True
     dummy_engine._protocol.pause_writing.assert_called_once()
@@ -180,7 +196,8 @@ async def test_engine_pause_resume(dummy_engine: Engine) -> None:
     assert cast(Any, dummy_engine._engine_state) is None
     assert cast(Any, dummy_engine._disable_sending) is False
 
-    # Cast to list prevents Mypy comparison-overlap with `args` tuple type hint
+    # Cast to list prevents Mypy comparison-overlap with `args` tuple type
+    # hint
     assert list(args) == ["custom_arg"]
 
     dummy_engine._protocol.resume_writing.assert_called_once()
@@ -285,8 +302,11 @@ def test_application_message_expired_1f09_logic(mock_packet: Packet) -> None:
     assert app_msg._fraction_expired == 1.0
 
 
-def test_application_message_expired_lifespan_false(mock_packet: Packet) -> None:
-    # Packets specifically stating False for lifespan evaluate identically to CANT_EXPIRE
+def test_application_message_expired_lifespan_false(
+    mock_packet: Packet,
+) -> None:
+    # Packets specifically stating False for lifespan evaluate identically to
+    # CANT_EXPIRE
     mock_packet._lifespan = False
     app_msg = ApplicationMessage(mock_packet)
     app_msg.set_gateway(MagicMock())
@@ -296,7 +316,9 @@ def test_application_message_expired_lifespan_false(mock_packet: Packet) -> None
     assert app_msg._fraction_expired == ApplicationMessage.CANT_EXPIRE
 
 
-def test_application_message_expired_lifespan_true_raises(mock_packet: Packet) -> None:
+def test_application_message_expired_lifespan_true_raises(
+    mock_packet: Packet,
+) -> None:
     # Packets stating True for lifespan are not implemented yet
     mock_packet._lifespan = True
     app_msg = ApplicationMessage(mock_packet)
@@ -307,7 +329,9 @@ def test_application_message_expired_lifespan_true_raises(mock_packet: Packet) -
         _ = app_msg._expired
 
 
-def test_application_message_expired_standard_lifespan(mock_packet: Packet) -> None:
+def test_application_message_expired_standard_lifespan(
+    mock_packet: Packet,
+) -> None:
     # Lifespan durations are resolved based on standard td offsets
     mock_packet._lifespan = td(seconds=10)
     app_msg = ApplicationMessage(mock_packet)

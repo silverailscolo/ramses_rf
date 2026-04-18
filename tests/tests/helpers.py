@@ -18,6 +18,7 @@ from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import shrink
 from ramses_rf.message_store import MessageStore
 from ramses_rf.schemas import SCH_GLOBAL_CONFIG, SCH_GLOBAL_SCHEMAS
+from ramses_tx.config import EngineConfig
 from ramses_tx.schemas import SCH_GLOBAL_TRAITS_DICT
 
 SCH_GLOBAL_TRAITS = vol.Schema(SCH_GLOBAL_TRAITS_DICT, extra=vol.PREVENT_EXTRA)
@@ -27,10 +28,13 @@ SCH_GLOBAL_TRAITS = vol.Schema(SCH_GLOBAL_TRAITS_DICT, extra=vol.PREVENT_EXTRA)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-# logging.disable(logging.WARNING)  # usu. WARNING  # TODO: Verify original intent. Commented out as it breaks isolated logging logic in PR #413.
+# usu. WARNING  # TODO: Verify original intent. Commented out as it breaks
+# isolated logging logic in PR #413.
+# logging.disable(logging.WARNING)
 
 
-TEST_DIR = Path(__file__).resolve().parent  # TEST_DIR = f"{os.path.dirname(__file__)}"
+# TEST_DIR = f"{os.path.dirname(__file__)}"
+TEST_DIR = Path(__file__).resolve().parent
 
 
 def shuffle_dict(old_dict: dict[str, Any]) -> dict[str, Any]:
@@ -50,7 +54,8 @@ def shuffle_dict(old_dict: dict[str, Any]) -> dict[str, Any]:
 
 
 @pytest.fixture
-async def gwy() -> AsyncGenerator[Gateway, None]:  # NOTE: async to get running loop
+# NOTE: async to get running loop
+async def gwy() -> AsyncGenerator[Gateway, None]:
     """Return a vanilla system (with a known, minimal state)."""
     gwy = Gateway("/dev/null", config=GatewayConfig())
     gwy._engine._disable_sending = True
@@ -64,7 +69,8 @@ async def gwy() -> AsyncGenerator[Gateway, None]:  # NOTE: async to get running 
 def assert_expected(
     actual: dict[str, Any], expected: dict[str, Any] | None = None
 ) -> None:
-    """Compare an actual system state dict against the corresponding expected state.
+    """Compare an actual system state dict against the corresponding
+    expected state.
 
     :param actual: The actual state dictionary.
     :type actual: dict[str, Any]
@@ -82,7 +88,8 @@ def assert_expected(
 
 
 async def assert_expected_set(gwy: Gateway, expected: dict[str, Any]) -> None:
-    """Compare the actual system state against the expected system state.
+    """Compare the actual system state against the expected system
+    state.
 
     :param gwy: The gateway instance to check.
     :type gwy: Gateway
@@ -175,7 +182,8 @@ def find_test_tcs(gwy: Gateway | tuple[Gateway, ...]) -> Any:
 
 
 async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
-    """Create a system state from a packet log (using an optional configuration).
+    """Create a system state from a packet log (using an optional
+    configuration).
 
     :param dir_name: The directory containing config.json and packet.log.
     :type dir_name: Path
@@ -199,15 +207,20 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     config_kwargs = {**config_dict, **kwargs}
     config_kwargs["input_file"] = f"{dir_name}/packet.log"
 
-    valid_keys = {f.name for f in fields(GatewayConfig)}
-    safe_kwargs: dict[str, Any] = {}
+    valid_gwy_keys = {f.name for f in fields(GatewayConfig)}
+    valid_eng_keys = {f.name for f in fields(EngineConfig)}
+
+    gwy_kwargs: dict[str, Any] = {}
+    eng_kwargs: dict[str, Any] = {}
     schema_kwargs = config_kwargs.pop("schema", {})
 
     for k, v in config_kwargs.items():
         if k.startswith("_"):
             continue
-        if k in valid_keys:
-            safe_kwargs[k] = v
+        if k in valid_gwy_keys:
+            gwy_kwargs[k] = v
+        elif k in valid_eng_keys:
+            eng_kwargs[k] = v
         elif k in (
             "main_tcs",
             "orphans",
@@ -218,15 +231,20 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
             schema_kwargs[k] = v
 
     if schema_kwargs:
-        safe_kwargs["schema"] = schema_kwargs
+        gwy_kwargs["schema"] = schema_kwargs
 
-    gwy = Gateway(None, config=GatewayConfig(**safe_kwargs))
+    if eng_kwargs:
+        gwy_kwargs["engine"] = EngineConfig(**eng_kwargs)
+
+    gwy = Gateway(None, config=GatewayConfig(**gwy_kwargs))
     await gwy.start()
 
-    # The Gateway with input_file uses a Transport that processes the file automatically.
-    # We simply need to wait for the transport to finish reading the file.
+    # The Gateway with input_file uses a Transport that processes the file
+    # automatically. We simply need to wait for the transport to finish
+    # reading the file.
     # We pause discovery/sending during replay to avoid side effects.
-    await gwy._engine._protocol.wait_for_connection_lost()  # until packet log is EOF
+    # until packet log is EOF
+    await gwy._engine._protocol.wait_for_connection_lost()
 
     # Ensure all packets from the log are written to the DB before returning
     # This is critical for tests using the StorageWorker
@@ -237,7 +255,8 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
 
 
 def load_expected_results(dir_name: Path) -> dict[str, Any]:
-    """Return the expected (global) schema/params/status & traits (aka known_list).
+    """Return the expected (global) schema/params/status & traits
+    (aka known_list).
 
     :param dir_name: The directory containing the JSON result files.
     :type dir_name: Path
@@ -257,6 +276,7 @@ def load_expected_results(dir_name: Path) -> dict[str, Any]:
             known_list = json.load(f)["known_list"]
     except FileNotFoundError:
         known_list = {}
+
     known_list = SCH_GLOBAL_TRAITS({"known_list": shrink(known_list)})["known_list"]
 
     try:

@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from ramses_tx.gateway import ApplicationMessage
+from ramses_tx.application_message import ApplicationMessage
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 

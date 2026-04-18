@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""RAMSES RF - The serial to RF gateway (HGI80, not RFG100)."""
+"""RAMSES RF - The serial to RF engine."""
 
 from __future__ import annotations
 
@@ -8,10 +8,11 @@ import asyncio
 import logging
 import threading
 from collections.abc import Awaitable, Callable
-from datetime import datetime as dt, timedelta as td
+from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, Never
 
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
+from .application_message import ApplicationMessage
 from .command import Command
 from .const import (
     DEFAULT_DISABLE_QOS,
@@ -21,6 +22,7 @@ from .const import (
     DEFAULT_SEND_TIMEOUT,
     DEFAULT_WAIT_FOR_REPLY,
     SZ_ACTIVE_HGI,
+    Code,
     Priority,
 )
 from .message import Message
@@ -35,15 +37,8 @@ from .schemas import (
 from .transport import TransportConfig, transport_factory
 from .typing import PktLogConfigT, PortConfigT, QosParams
 
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    Code,
-    I_,
-    RP,
-    RQ,
-    W_,
-)
-
 if TYPE_CHECKING:
+    from .config import EngineConfig
     from .const import VerbT
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
@@ -55,164 +50,72 @@ DEV_MODE = False
 _LOGGER = logging.getLogger(__name__)
 
 
-class ApplicationMessage(Message):
-    """Application-level message extended with gateway context and expiration."""
-
-    CANT_EXPIRE: float = -1.0  # sentinel value for fraction_expired
-    HAS_EXPIRED: float = 2.0  # fraction_expired >= HAS_EXPIRED
-    IS_EXPIRING: float = 0.8  # fraction_expired >= 0.8 (and < HAS_EXPIRED)
-
-    _engine: Engine | None = None
-    _fraction_expired: float | None = None
-    _gwy: Any | None = None
-
-    @classmethod
-    def from_message(cls, msg: Message) -> ApplicationMessage:
-        """Factory to safely promote a transport Message to an ApplicationMessage."""
-        # Initialize the subclass identically to how the base class initializes
-        return cls(msg._pkt)
-
-    def bind_context(self, gwy: Any) -> None:
-        """Explicitly assign the application context (gateway).
-
-        :param gwy: The application context (gateway) to associate.
-        :type gwy: Any
-        """
-        self._gwy = gwy
-
-    def set_gateway(self, gwy: Engine) -> None:
-        """Set the gateway (engine) instance for this message.
-
-        :param gwy: The gateway (engine) instance to associate.
-        :type gwy: Engine
-        """
-        self._engine = gwy
-
-    @property
-    def _expired(self) -> bool:
-        """Return True if the message is dated, False otherwise.
-
-        :return: True if the message is dated, False otherwise.
-        :rtype: bool
-        """
-        # Safest fallback for unit tests without an engine
-        now = self._engine._dt_now() if self._engine else self.dtm
-
-        # 1. Enforce the hard 7-day expiration limit
-        if now - self.dtm > td(days=7):
-            return True
-
-        def fraction_expired(lifespan: td) -> float:
-            """Calculate the fraction of expired normal lifespan.
-
-            :param lifespan: The lifespan of the message.
-            :type lifespan: td
-            :return: The expired fraction.
-            :rtype: float
-            """
-            return float((now - self.dtm - td(seconds=3)) / lifespan)
-
-        # 1. Look for easy win...
-        if self._fraction_expired is not None:
-            if self._fraction_expired == self.CANT_EXPIRE:
-                return False
-            if self._fraction_expired >= self.HAS_EXPIRED:
-                return True
-
-        # 2. Need to update the fraction_expired...
-        # sync_cycle is a special case
-        if self.code == Code._1F09 and self.verb != RQ:
-            # RQs won't have remaining_seconds, RP/Ws have only partial
-            # cycle times
-            rem_secs = getattr(self.payload, "remaining_seconds", None)
-            if rem_secs is None and isinstance(self.payload, dict):
-                rem_secs = self.payload.get("remaining_seconds", 0)
-
-            self._fraction_expired = fraction_expired(
-                td(seconds=float(rem_secs or 0)),
-            )
-
-        # Can't expire
-        elif getattr(self._pkt, "_lifespan", None) is False:
-            self._fraction_expired = self.CANT_EXPIRE
-
-        # Can't expire
-        elif getattr(self._pkt, "_lifespan", None) is True:
-            raise NotImplementedError("Lifespan True not implemented")
-
-        else:
-            lifespan = getattr(self._pkt, "_lifespan", None)
-            assert isinstance(lifespan, td)
-            self._fraction_expired = fraction_expired(lifespan)
-
-        return self._fraction_expired >= self.HAS_EXPIRED
-
-
 class Engine:
-    """The engine class."""
+    """The engine class.
+
+    Manages the transport layer, protocol binding, task registry, and
+    asynchronous command dispatching for the RF network.
+    """
 
     def __init__(
         self,
-        port_name: str | None,
-        input_file: str | None = None,
-        port_config: PortConfigT | None = None,
-        packet_log: PktLogConfigT | None = None,
-        block_list: DeviceListT | None = None,
-        known_list: DeviceListT | None = None,
-        hgi_id: str | None = None,
+        config: EngineConfig,
         loop: asyncio.AbstractEventLoop | None = None,
         *,
-        disable_sending: bool = False,
-        disable_qos: bool | None = None,
-        enforce_known_list: bool = False,
-        log_all_mqtt: bool = False,
-        evofw_flag: str | None = None,
-        use_regex: dict[str, dict[str, str]] | None = None,
         transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
-        app_context: Any | None = None,
     ) -> None:
-        if port_name and input_file:
-            _LOGGER.warning(
-                "Port (%s) specified, so file (%s) ignored", port_name, input_file
-            )
-            input_file = None
+        self.config = config
 
-        self._disable_sending = disable_sending
-        if input_file:
+        if self.config.port_name and self.config.input_file:
+            _LOGGER.warning(
+                "Port (%s) specified, so file (%s) ignored",
+                self.config.port_name,
+                self.config.input_file,
+            )
+            self.config.input_file = None
+
+        self._disable_sending = self.config.disable_sending
+        if self.config.input_file:
             self._disable_sending = True
-        elif not port_name:
+        elif not self.config.port_name:
             raise TypeError("Either a port_name or an input_file must be specified")
 
-        self.ser_name = port_name
-        self._input_file = input_file
+        self.ser_name = self.config.port_name
+        self._input_file = self.config.input_file
 
-        self._port_config: PortConfigT | dict[Never, Never] = port_config or {}
-        self._packet_log: PktLogConfigT | dict[Never, Never] = packet_log or {}
+        self._port_config: PortConfigT | dict[Never, Never] = (
+            self.config.port_config or {}
+        )
+        self._packet_log: PktLogConfigT | dict[Never, Never] = (
+            self.config.packet_log or {}
+        )
         self._loop = loop or asyncio.get_running_loop()
 
-        self._exclude: DeviceListT = block_list or {}
-        self._include: DeviceListT = known_list or {}
+        self._exclude: DeviceListT = self.config.block_list or {}
+        self._include: DeviceListT = self.config.known_list or {}
         self._unwanted: list[DeviceIdT] = [
             NON_DEV_ADDR.id,
             ALL_DEV_ADDR.id,
             "01:000001",  # type: ignore[list-item]  # why this one?
         ]
         self._enforce_known_list = select_device_filter_mode(
-            enforce_known_list,
+            self.config.enforce_known_list,
             self._include,
             self._exclude,
         )
-        self._log_all_mqtt = log_all_mqtt
-        self._evofw_flag = evofw_flag
-        self._use_regex = use_regex or {}
+        self._log_all_mqtt = self.config.log_all_mqtt
+        self._evofw_flag = self.config.evofw_flag
+        self._use_regex = self.config.use_regex or {}
         self._disable_qos = (
-            disable_qos if disable_qos is not None else DEFAULT_DISABLE_QOS
+            self.config.disable_qos
+            if self.config.disable_qos is not None
+            else DEFAULT_DISABLE_QOS
         )
 
         self._transport_constructor = transport_constructor
-        self._app_context = app_context
+        self._app_context = self.config.app_context
 
-        self._hgi_id = hgi_id
+        self._hgi_id = self.config.hgi_id
 
         self._engine_lock = asyncio.Lock()
         self._engine_state: (
@@ -220,7 +123,7 @@ class Engine:
         ) = None
 
         self._protocol: RamsesProtocolT = None  # type: ignore[assignment]
-        self._transport: RamsesTransportT | None = None  # None until self.start()
+        self._transport: RamsesTransportT | None = None  # None until start()
 
         self._prev_msg: ApplicationMessage | None = None
         self._this_msg: ApplicationMessage | None = None
@@ -229,7 +132,7 @@ class Engine:
 
         # Thread-safe lock for task registry modifications
         self._tasks_lock = threading.Lock()
-        self._tasks: list[asyncio.Task] = []  # type: ignore[type-arg]
+        self._tasks: list[asyncio.Task[Any]] = []
 
         self._set_msg_handler(self._msg_handler)  # sets self._protocol
 
@@ -270,7 +173,6 @@ class Engine:
 
         The corresponding transport will be created later.
         """
-
         self._protocol = protocol_factory(
             msg_handler,
             disable_sending=self._disable_sending,
@@ -300,7 +202,6 @@ class Engine:
 
         Initiate receiving (Messages) and sending (Commands).
         """
-
         pkt_source: dict[str, Any] = {}  # [str, dict | str | TextIO]
         if self.ser_name:
             pkt_source[SZ_PORT_NAME] = self.ser_name
@@ -339,7 +240,6 @@ class Engine:
 
     async def stop(self) -> None:
         """Close the transport (will stop the protocol)."""
-
         # Shutdown Safety - securely lock the task registry to clean up
         with self._tasks_lock:
             tasks = [t for t in self._tasks if not t.done()]
@@ -355,7 +255,9 @@ class Engine:
                 if task.done() and not task.cancelled():
                     if exc := task.exception():
                         _LOGGER.debug(
-                            "Background task %s failed: %s", task.get_name(), exc
+                            "Background task %s failed: %s",
+                            task.get_name(),
+                            exc,
                         )
 
         if self._transport:
@@ -394,7 +296,8 @@ class Engine:
             if pause_reading:
                 self._loop.call_soon(pause_reading)
 
-        # Implement No-Op pattern instead of None to prevent 'NoneType callable' crashes
+        # Implement No-Op pattern instead of None to prevent 'NoneType
+        # callable' crashes
         self._protocol._msg_handler, handler = (
             self._drop_msg,
             self._protocol._msg_handler,
@@ -404,9 +307,9 @@ class Engine:
 
         self._engine_state = (handler, read_only, *args)
 
-    async def _resume(self) -> tuple[Any]:
+    async def _resume(self) -> tuple[Any, ...]:
         """Resume the (paused) engine or raise a RuntimeError."""
-        args: tuple[Any]
+        args: tuple[Any, ...]
 
         try:
             await asyncio.wait_for(self._engine_lock.acquire(), timeout=0.1)
@@ -435,7 +338,7 @@ class Engine:
         if not self._disable_sending:
             self._loop.call_soon(self._protocol.resume_writing)
 
-        return args
+        return tuple(args)
 
     def add_task(self, task: asyncio.Task[Any]) -> None:
         """Keep a track of tasks securely, so we can tidy-up."""
@@ -454,7 +357,6 @@ class Engine:
         seqn: str | None = None,
     ) -> Command:
         """Make a command addressed to device_id."""
-
         kwargs = {}
         if from_id is not None:
             kwargs["from_id"] = from_id
@@ -484,7 +386,6 @@ class Engine:
             ProtocolSendFailed: tried to Tx Command, but didn't get echo/reply
             ProtocolError:      didn't attempt to Tx Command for some reason
         """
-
         qos = QosParams(
             max_retries=max_retries,
             timeout=timeout,

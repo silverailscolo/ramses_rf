@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
 # TODO:
-# - sort out gwy.config...
 # - sort out reduced processing
-
 
 """RAMSES RF -the gateway (i.e. HGI80 / evofw3, not RFG100)."""
 
@@ -28,6 +26,8 @@ from ramses_tx import (
     protocol_factory,
     set_pkt_logging_config,
 )
+from ramses_tx.application_message import ApplicationMessage
+from ramses_tx.config import EngineConfig
 from ramses_tx.const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_MAX_RETRIES,
@@ -36,10 +36,8 @@ from ramses_tx.const import (
     DEFAULT_WAIT_FOR_REPLY,
     SZ_ACTIVE_HGI,
 )
-from ramses_tx.gateway import ApplicationMessage
 from ramses_tx.logger import flush_packet_log
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
-from ramses_tx.typing import PktLogConfigT, PortConfigT
 
 from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES
 
@@ -92,79 +90,39 @@ class GatewayConfig:
     :type reduce_processing: int
     :param max_zones: Maximum number of zones allowed, defaults to 12.
     :type max_zones: int
-    :param use_regex: Regex patterns for matching devices, defaults to
-        empty dict.
-    :type use_regex: dict[str, dict[str, str]]
-    :param use_aliases: Mapping of aliases for device IDs, defaults to
-        empty dict.
+    :param use_aliases: Mapping of aliases for device IDs.
     :type use_aliases: dict[str, str]
-    :param enforce_strict_handling: Enforce strict handling of packets,
-        defaults to False.
+    :param enforce_strict_handling: Enforce strict handling of packets.
     :type enforce_strict_handling: bool
     :param use_native_ot: Preference for using native OpenTherm.
     :type use_native_ot: Literal["always", "prefer", "avoid", "never"] | None
-    :param app_context: Optional application context object.
-    :type app_context: Any | None
     :param schema: Dictionary representing the schema.
     :type schema: dict[str, Any]
-    :param input_file: Path to a packet log file for playback/parsing.
-    :type input_file: str | None
-    :param port_config: Configuration dictionary for the serial port.
-    :type port_config: PortConfigT | None
-    :param packet_log: Configuration for packet logging.
-    :type packet_log: PktLogConfigT | None
-    :param block_list: A list of device IDs to block/ignore.
-    :type block_list: DeviceListT | None
-    :param known_list: A list of known device IDs and their traits.
-    :type known_list: DeviceListT | None
-    :param hgi_id: The Device ID to use for the HGI (gateway), overriding
-        defaults.
-    :type hgi_id: str | None
     :param debug_mode: If True, set the logger to debug mode.
     :type debug_mode: bool
-    :param disable_sending: Prevent sending any packets from the protocol.
-    :type disable_sending: bool
-    :param disable_qos: Disable the Quality of Service mechanism.
-    :type disable_qos: bool | None
-    :param enforce_known_list: Enforce that only known devices can be
-        created.
-    :type enforce_known_list: bool
-    :param evofw_flag: Specific flag for evofw3 usage.
-    :type evofw_flag: str | None
-    :param gateway_timeout: Custom timeout threshold in minutes for
-        gateway availability.
+    :param gateway_timeout: Custom timeout threshold in minutes.
     :type gateway_timeout: int | None
-    :param database_path: Target disk path for the persistent SQLite
-        MessageStore DB.
+    :param database_path: Target disk path for the SQLite DB.
     :type database_path: str | None
+    :param engine: Typed configuration object for the Transport layer.
+    :type engine: EngineConfig
     """
 
     disable_discovery: bool = False
     enable_eavesdrop: bool = False
     reduce_processing: int = 0
     max_zones: int = 12
-    use_regex: dict[str, dict[str, str]] = field(default_factory=dict)
     use_aliases: dict[str, str] = field(default_factory=dict)
     enforce_strict_handling: bool = False
     use_native_ot: Literal["always", "prefer", "avoid", "never"] | None = None
-    app_context: Any | None = None
 
-    # Legacy configuration parameters absorbed into the config DTO
     schema: dict[str, Any] = field(default_factory=dict)
-    input_file: str | None = None
-    port_config: PortConfigT | None = None
-    packet_log: PktLogConfigT | None = None
-    block_list: DeviceListT | None = None
-    known_list: DeviceListT | None = None
-    hgi_id: str | None = None
     debug_mode: bool = False
-    disable_sending: bool = False
-    disable_qos: bool | None = None
-    enforce_known_list: bool = False
-    evofw_flag: str | None = None
-
     gateway_timeout: int | None = None
     database_path: str | None = "ramses.db"
+
+    # Transport layer configuration encapsulated perfectly
+    engine: EngineConfig = field(default_factory=EngineConfig)
 
 
 class Gateway(GatewayInterface):
@@ -189,25 +147,25 @@ class Gateway(GatewayInterface):
         :param port_name: The serial port name (e.g., '/dev/ttyUSB0')
             or None if using a file.
         :type port_name: str | None
-        :param config: The typed configuration parameters for the
-            Gateway.
+        :param config: The typed configuration parameters.
         :type config: GatewayConfig | None, optional
-        :param loop: The asyncio event loop to use, defaults to None.
+        :param loop: The asyncio event loop to use.
         :type loop: asyncio.AbstractEventLoop | None, optional
-        :param transport_constructor: A factory for creating the
-            transport layer, defaults to None.
-        :type transport_constructor: Callable[...,
-            Awaitable[RamsesTransportT]] | None, optional
-        :param kwargs: Catch-all for legacy keyword arguments, managed
-            gracefully.
+        :param transport_constructor: A factory for creating transport.
+        :type transport_constructor: Callable | None, optional
+        :param kwargs: Catch-all for legacy keyword arguments.
         :type kwargs: Any
         """
+        self._gwy_config = config or GatewayConfig()
+
+        if port_name is not None:
+            self._gwy_config.engine.port_name = port_name
+
         if kwargs:
             keys = list(kwargs.keys())
-            _LOGGER.error(
-                "Gateway received unsupported kwargs: %s. These arguments "
-                "are ignored. Please migrate them to the GatewayConfig "
-                "object.",
+            _LOGGER.warning(
+                "Gateway received legacy kwargs: %s. Please migrate "
+                "ramses_cc to use the GatewayConfig object.",
                 keys,
             )
             warnings.warn(
@@ -218,27 +176,31 @@ class Gateway(GatewayInterface):
                 stacklevel=2,
             )
 
-        self._gwy_config = config or GatewayConfig()
+            def _apply_kwargs(cfg_dict: dict[str, Any]) -> None:
+                """Recursively unpack nested dictionaries to apply configs."""
+                for key, value in cfg_dict.items():
+                    if hasattr(self._gwy_config.engine, key):
+                        setattr(self._gwy_config.engine, key, value)
+                    elif hasattr(self._gwy_config, key):
+                        setattr(self._gwy_config, key, value)
+                    elif isinstance(value, dict):
+                        _apply_kwargs(value)
+                    else:
+                        _LOGGER.error(
+                            "Gateway received unsupported kwarg: %s. "
+                            "This argument is ignored.",
+                            key,
+                        )
+
+            _apply_kwargs(kwargs)
 
         if self._gwy_config.debug_mode:
             _LOGGER.setLevel(logging.DEBUG)
 
         self._engine = Engine(
-            port_name,
-            input_file=self._gwy_config.input_file,
-            port_config=self._gwy_config.port_config,
-            packet_log=self._gwy_config.packet_log,
-            block_list=cast("Any", self._gwy_config.block_list),
-            known_list=cast("Any", self._gwy_config.known_list),
+            self._gwy_config.engine,
             loop=loop,
-            hgi_id=self._gwy_config.hgi_id,
             transport_constructor=transport_constructor,
-            disable_sending=self._gwy_config.disable_sending,
-            disable_qos=self._gwy_config.disable_qos,
-            enforce_known_list=self._gwy_config.enforce_known_list,
-            evofw_flag=self._gwy_config.evofw_flag,
-            use_regex=self._gwy_config.use_regex,
-            app_context=self._gwy_config.app_context,
         )
 
         # Force the engine's protocol to use Gateway's message handler
@@ -413,9 +375,12 @@ class Gateway(GatewayInterface):
             self, known_list=self._engine._include, **self._schema
         )  # create faked too
 
-        await self._engine.start()  # TODO: do this *after* restore cache
+        # Restored cache *before* starting the engine to ensure historic
+        # state is reconstructed correctly before live RF packets arrive.
         if cached_packets:
             await self._restore_cached_packets(cached_packets)
+
+        await self._engine.start()
 
         # reset discovery to original state
         self.config.disable_discovery = disable_discovery
@@ -505,30 +470,22 @@ class Gateway(GatewayInterface):
 
         _LOGGER.debug("Gateway: Resuming engine...")
 
-        # args_tuple = await super()._resume()
-        # self.config.disable_discovery, *args = (
-        #     args_tuple  # type: ignore[assignment]
-        # )
-
         self.config.disable_discovery, *args = (
             await self._engine._resume()  # type: ignore[assignment]
         )
 
-        return args
+        return tuple(args)
 
     async def get_state(
         self, include_expired: bool = False
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Return the current schema & state (may include expired packets).
 
-        :param include_expired: If True, include expired packets in the
-            state, defaults to False.
+        :param include_expired: If True, include expired packets.
         :type include_expired: bool, optional
-        :returns: A tuple containing the schema dictionary and the packet
-            log dictionary.
+        :returns: A tuple containing the schema dict and packet log dict.
         :rtype: tuple[dict[str, Any], dict[str, Any]]
         """
-
         await self._pause()
 
         def wanted_msg(msg: Message, include_expired: bool = False) -> bool:
@@ -690,9 +647,11 @@ class Gateway(GatewayInterface):
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
-            SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self._engine._enforce_known_list},
+            SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self.config.engine.enforce_known_list},
             SZ_KNOWN_LIST: await self.device_registry.known_list(),
-            SZ_BLOCK_LIST: [{k: v} for k, v in self._engine._exclude.items()],
+            SZ_BLOCK_LIST: [
+                {k: v} for k, v in (self.config.engine.block_list or {}).items()
+            ],
             "_unwanted": sorted(self._engine._unwanted),
         }
 
@@ -880,7 +839,7 @@ class Gateway(GatewayInterface):
         )
 
         task = self._engine._loop.create_task(coro)
-        self.add_task(task)  # wait for these during stop()
+        self.add_task(task)
         return task
 
     async def async_send_cmd(
@@ -939,4 +898,4 @@ class Gateway(GatewayInterface):
             max_retries=max_retries,
             timeout=timeout,
             wait_for_reply=wait_for_reply,
-        )  # may: raise ProtocolError/ProtocolSendFailed
+        )

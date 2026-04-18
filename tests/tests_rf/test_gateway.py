@@ -1,11 +1,14 @@
 """Tests for the Gateway backward compatibility, deprecation shims, and lifecycle."""
 
 import warnings
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_tx.config import EngineConfig
+from ramses_tx.typing import PktLogConfigT
 
 
 @pytest.mark.asyncio
@@ -71,13 +74,16 @@ async def test_gateway_with_config() -> None:
     :returns: None
     """
     # Added gateway_timeout=15 to the initialization
-    config = GatewayConfig(enforce_known_list=True, gateway_timeout=15)
+    config = GatewayConfig(
+        gateway_timeout=15,
+        engine=EngineConfig(enforce_known_list=True),
+    )
 
     with warnings.catch_warnings(record=True) as recorded_warnings:
         warnings.simplefilter("always")
         gwy = Gateway("/dev/null", config=config)
 
-    assert gwy.config.enforce_known_list is True
+    assert gwy.config.engine.enforce_known_list is True
     # Assert that the gateway config retained the custom timeout
     assert gwy.config.gateway_timeout == 15
 
@@ -150,7 +156,9 @@ async def test_gateway_start_initiates_periodic_flush(
     # Configure a flush interval to trigger the task creation
     config = GatewayConfig(
         disable_discovery=True,
-        packet_log={"flush_interval": 60},
+        engine=EngineConfig(
+            packet_log={"flush_interval": 60},
+        ),
     )
     gwy = Gateway("/dev/null", config=config)
 
@@ -209,3 +217,67 @@ async def test_gateway_restore_cached_packets_dto() -> None:
 
         # Verify the protocol layer was handed the parsed Packet object directly
         mock_protocol.pkt_received.assert_called_once_with(mock_pkt)
+
+
+@pytest.mark.asyncio
+async def test_gateway_legacy_kwargs_deprecation() -> None:
+    """Test that legacy kwargs are gracefully mapped to config objects.
+
+    This ensures backward compatibility for ramses_cc while it transitions
+    to using the strict GatewayConfig/EngineConfig DTOs.
+    """
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"Initializing Gateway with \*\*kwargs.*is deprecated",
+    ):
+        gwy = Gateway(
+            port_name="/dev/null",
+            disable_sending=True,  # Transport-level (EngineConfig) kwarg
+            disable_discovery=True,  # RF-level (GatewayConfig) kwarg
+            invalid_fake_arg="ignore",  # Unsupported kwarg
+        )
+
+    # 1. Verify EngineConfig absorbed the transport kwarg
+    assert gwy.config.engine.disable_sending is True
+    assert gwy.config.engine.port_name == "/dev/null"
+
+    # 2. Verify GatewayConfig absorbed the RF kwarg
+    assert gwy.config.disable_discovery is True
+
+    # 3. Verify unsupported arguments were safely ignored
+    assert not hasattr(gwy.config, "invalid_fake_arg")
+    assert not hasattr(gwy.config.engine, "invalid_fake_arg")
+
+
+@pytest.mark.asyncio
+async def test_gateway_nested_kwargs_unpacking() -> None:
+    """Test that nested kwargs from Home Assistant are correctly unpacked.
+
+    This ensures that the recursive adapter can reach into nested dictionaries
+    passed by ramses_cc to extract DTO-level configuration variables.
+    """
+    nested_kwargs = {
+        "ramses_rf": {
+            "enforce_known_list": True,
+            "nested_unsupported": "ignore",
+        },
+        "packet_log": {
+            "packet_log_retention_days": 7,
+        },
+    }
+
+    with pytest.warns(DeprecationWarning, match="deprecated"):
+        gwy = Gateway(port_name="/dev/null", **nested_kwargs)
+
+    # 1. Verify EngineConfig absorbed the nested transport/filtering kwarg
+    assert gwy.config.engine.enforce_known_list is True
+
+    # 2. Verify EngineConfig absorbed the nested dictionary kwarg directly
+    # Use PktLogConfigT to satisfy Mypy strict comparison check
+    assert gwy.config.engine.packet_log == cast(
+        PktLogConfigT, {"packet_log_retention_days": 7}
+    )
+
+    # 3. Verify nesting logic did not create phantom attributes
+    assert not hasattr(gwy.config, "ramses_rf")
+    assert not hasattr(gwy.config.engine, "nested_unsupported")

@@ -13,6 +13,7 @@ import pytest
 from ramses_rf import Gateway
 from ramses_rf.device import DeviceHeat, DeviceHvac
 from ramses_rf.gateway import GatewayConfig
+from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_READER_TASK
 from ramses_tx.exceptions import TransportError
 
@@ -183,9 +184,11 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
         None,  # port_name is required (positional arg)
         config=GatewayConfig(
             disable_discovery=True,
-            disable_sending=True,
-            input_file=str(FIXTURE_FILE),
             reduce_processing=0,
+            engine=EngineConfig(
+                disable_sending=True,
+                input_file=str(FIXTURE_FILE),
+            ),
         ),
     )
 

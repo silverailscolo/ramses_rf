@@ -23,7 +23,6 @@ async def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     Verifies that when a non-standard port (like an MQTT URL) is passed,
     the Gateway is initialized correctly.
     """
-
     runner = CliRunner()
 
     # We use a valid-looking MQTT URL
@@ -52,12 +51,8 @@ async def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     await async_main(command, lib_kwargs, **kwargs)
 
     # 4. Assert Gateway was initialized with our URL
-    args, kwargs = mock_gateway.call_args
+    args, kwargs_call = mock_gateway.call_args
     assert args[0] == mqtt_url
-
-    # FIX: We no longer expect transport_constructor to be passed explicitly
-    # because it causes recursion issues in ramses_tx.transport_factory
-    # assert "transport_constructor" in kwargs
 
 
 @pytest.mark.asyncio
@@ -68,7 +63,6 @@ async def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> Non
     Verifies that standard serial port paths are still accepted and handled
     correctly by the Gateway initialization logic.
     """
-
     runner = CliRunner()
     serial_port = "/dev/ttyUSB0"
 
@@ -90,5 +84,5 @@ async def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> Non
     await async_main(command, lib_kwargs, **kwargs)
 
     # 4. Assert Gateway was instantiated
-    args, kwargs = mock_gateway.call_args
+    args, kwargs_call = mock_gateway.call_args
     assert args[0] == serial_port
