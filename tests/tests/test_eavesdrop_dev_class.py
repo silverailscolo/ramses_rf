@@ -8,6 +8,7 @@ import pytest
 
 from ramses_rf import Gateway, Message
 from ramses_rf.gateway import GatewayConfig
+from ramses_tx.config import EngineConfig
 
 from .helpers import TEST_DIR, assert_expected
 
@@ -32,7 +33,13 @@ async def test_packets_from_log_file(dir_name: Path) -> None:
 
     path = f"{dir_name}/packet.log"
 
-    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=False))
+    gwy = Gateway(
+        None,
+        config=GatewayConfig(
+            enable_eavesdrop=False,
+            engine=EngineConfig(input_file=path),
+        ),
+    )
     gwy.config.enable_eavesdrop = True  # Test setting this config attr
 
     gwy.add_msg_handler(proc_log_line)
@@ -48,12 +55,19 @@ async def test_dev_eavesdrop_on_(dir_name: Path) -> None:
     """Check discovery of schema and known_list *with* eavesdropping."""
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=True))
+    gwy = Gateway(
+        None,
+        config=GatewayConfig(
+            enable_eavesdrop=True,
+            engine=EngineConfig(input_file=path),
+        ),
+    )
     await gwy.start()
 
     with open(f"{dir_name}/known_list_eavesdrop_on.json") as f:
         assert_expected(
-            await gwy.device_registry.known_list(), json.load(f).get("known_list")
+            await gwy.device_registry.known_list(),
+            json.load(f).get("known_list"),
         )
 
     try:
@@ -70,13 +84,20 @@ async def test_dev_eavesdrop_off(dir_name: Path) -> None:
     """Check discovery of schema and known_list *without* eavesdropping."""
 
     path = f"{dir_name}/packet.log"
-    gwy = Gateway(None, config=GatewayConfig(input_file=path, enable_eavesdrop=False))
+    gwy = Gateway(
+        None,
+        config=GatewayConfig(
+            enable_eavesdrop=False,
+            engine=EngineConfig(input_file=path),
+        ),
+    )
     await gwy.start()
 
     try:
         with open(f"{dir_name}/known_list_eavesdrop_off.json") as f:
             assert_expected(
-                await gwy.device_registry.known_list(), json.load(f).get("known_list")
+                await gwy.device_registry.known_list(),
+                json.load(f).get("known_list"),
             )
     except FileNotFoundError:
         pass

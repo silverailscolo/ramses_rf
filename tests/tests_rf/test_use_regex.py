@@ -9,6 +9,7 @@ import serial
 
 from ramses_rf import Command, Gateway, Packet
 from ramses_rf.gateway import GatewayConfig
+from ramses_tx.config import EngineConfig
 from ramses_tx.protocol import PortProtocol
 from ramses_tx.schemas import SZ_INBOUND, SZ_OUTBOUND
 from ramses_tx.transport.helpers import _str
@@ -95,9 +96,11 @@ async def test_regex_inbound_() -> None:
         rf.ports[0],
         config=GatewayConfig(
             disable_discovery=True,
-            disable_qos=False,
-            enforce_known_list=False,
-            use_regex={SZ_INBOUND: RULES_INBOUND},
+            engine=EngineConfig(
+                disable_qos=False,
+                enforce_known_list=False,
+                use_regex={SZ_INBOUND: RULES_INBOUND},
+            ),
         ),
     )
     ser_1 = serial.Serial(rf.ports[1])
@@ -126,9 +129,11 @@ async def test_regex_with_qos() -> None:
         rf.ports[0],
         config=GatewayConfig(
             disable_discovery=True,
-            disable_qos=False,
-            enforce_known_list=False,
-            use_regex=RULES_COMBINED,
+            engine=EngineConfig(
+                disable_qos=False,
+                enforce_known_list=False,
+                use_regex=RULES_COMBINED,
+            ),
         ),
     )
     ser_1 = serial.Serial(rf.ports[1])

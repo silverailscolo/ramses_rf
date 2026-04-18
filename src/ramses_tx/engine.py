@@ -38,6 +38,7 @@ from .transport import TransportConfig, transport_factory
 from .typing import PktLogConfigT, PortConfigT, QosParams
 
 if TYPE_CHECKING:
+    from .config import EngineConfig
     from .const import VerbT
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
@@ -58,68 +59,63 @@ class Engine:
 
     def __init__(
         self,
-        port_name: str | None,
-        input_file: str | None = None,
-        port_config: PortConfigT | None = None,
-        packet_log: PktLogConfigT | None = None,
-        block_list: DeviceListT | None = None,
-        known_list: DeviceListT | None = None,
-        hgi_id: str | None = None,
+        config: EngineConfig,
         loop: asyncio.AbstractEventLoop | None = None,
         *,
-        disable_sending: bool = False,
-        disable_qos: bool | None = None,
-        enforce_known_list: bool = False,
-        log_all_mqtt: bool = False,
-        evofw_flag: str | None = None,
-        use_regex: dict[str, dict[str, str]] | None = None,
         transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
-        app_context: Any | None = None,
     ) -> None:
-        if port_name and input_file:
+        self.config = config
+
+        if self.config.port_name and self.config.input_file:
             _LOGGER.warning(
                 "Port (%s) specified, so file (%s) ignored",
-                port_name,
-                input_file,
+                self.config.port_name,
+                self.config.input_file,
             )
-            input_file = None
+            self.config.input_file = None
 
-        self._disable_sending = disable_sending
-        if input_file:
+        self._disable_sending = self.config.disable_sending
+        if self.config.input_file:
             self._disable_sending = True
-        elif not port_name:
+        elif not self.config.port_name:
             raise TypeError("Either a port_name or an input_file must be specified")
 
-        self.ser_name = port_name
-        self._input_file = input_file
+        self.ser_name = self.config.port_name
+        self._input_file = self.config.input_file
 
-        self._port_config: PortConfigT | dict[Never, Never] = port_config or {}
-        self._packet_log: PktLogConfigT | dict[Never, Never] = packet_log or {}
+        self._port_config: PortConfigT | dict[Never, Never] = (
+            self.config.port_config or {}
+        )
+        self._packet_log: PktLogConfigT | dict[Never, Never] = (
+            self.config.packet_log or {}
+        )
         self._loop = loop or asyncio.get_running_loop()
 
-        self._exclude: DeviceListT = block_list or {}
-        self._include: DeviceListT = known_list or {}
+        self._exclude: DeviceListT = self.config.block_list or {}
+        self._include: DeviceListT = self.config.known_list or {}
         self._unwanted: list[DeviceIdT] = [
             NON_DEV_ADDR.id,
             ALL_DEV_ADDR.id,
             "01:000001",  # type: ignore[list-item]  # why this one?
         ]
         self._enforce_known_list = select_device_filter_mode(
-            enforce_known_list,
+            self.config.enforce_known_list,
             self._include,
             self._exclude,
         )
-        self._log_all_mqtt = log_all_mqtt
-        self._evofw_flag = evofw_flag
-        self._use_regex = use_regex or {}
+        self._log_all_mqtt = self.config.log_all_mqtt
+        self._evofw_flag = self.config.evofw_flag
+        self._use_regex = self.config.use_regex or {}
         self._disable_qos = (
-            disable_qos if disable_qos is not None else DEFAULT_DISABLE_QOS
+            self.config.disable_qos
+            if self.config.disable_qos is not None
+            else DEFAULT_DISABLE_QOS
         )
 
         self._transport_constructor = transport_constructor
-        self._app_context = app_context
+        self._app_context = self.config.app_context
 
-        self._hgi_id = hgi_id
+        self._hgi_id = self.config.hgi_id
 
         self._engine_lock = asyncio.Lock()
         self._engine_state: (
