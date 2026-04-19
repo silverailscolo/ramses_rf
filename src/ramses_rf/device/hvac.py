@@ -291,7 +291,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             delay=30,
         )
 
-    async def start_poller(self) -> None:
+    def start_poller(self) -> None:
         """
         Start polling the filter_remaining state of a fan.
         Messages are cleaned up every 24h, the 10D0 message must be RQd
@@ -302,7 +302,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                     self._rq_cmd, num_repeats=2, priority=Priority.HIGH
                 )
             )
-            self._poller = schedule_task(task, 60 * 60 * 24)
+            self._poller = schedule_task(task, 60 * 60 * 24, delay=60)
             self._poller.set_name(f"{self.id}_10d0_poller")
             self._gwy.add_task(self._poller)
 
