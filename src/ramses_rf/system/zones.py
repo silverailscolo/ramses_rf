@@ -49,7 +49,7 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Child, Parent
 from ramses_tx import Address, Command, Message, Priority
-from ramses_tx.exceptions import ProtocolTimeoutError
+from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 
 from .schedule import InnerScheduleT, OuterScheduleT, Schedule
@@ -899,6 +899,13 @@ class Zone(ZoneSchedule):
             )
         except ProtocolTimeoutError as err:
             _LOGGER.warning(f"{self}: _get_temp timed out: {err}")
+            return None
+        except ProtocolSendFailed:
+            # Silently drop the request if the transport is inactive
+            # (e.g., during cache restoration prior to gateway startup).
+            _LOGGER.debug(
+                f"{self}: Dropped request: gateway transport is inactive.",
+            )
             return None
 
     async def reset_config(self) -> Packet:  # 000A
