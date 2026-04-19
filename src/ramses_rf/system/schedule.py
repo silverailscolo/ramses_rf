@@ -25,6 +25,7 @@ from ramses_rf.const import (
 )
 from ramses_tx.command import Command
 from ramses_tx.const import SZ_CHANGE_COUNTER, Priority
+from ramses_tx.exceptions import ProtocolSendFailed
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
@@ -289,6 +290,14 @@ class Schedule:  # 0404
             raise exc.ScheduleFlowError(
                 f"Failed to obtain schedule within {timeout} secs"
             ) from err
+        except ProtocolSendFailed:
+            # Silently drop the background request if the transport is
+            # inactive (e.g., during cache restoration prior to gateway
+            # startup).
+            _LOGGER.debug(
+                f"{self}: Dropped request: gateway transport is inactive.",
+            )
+            return None
 
         return self.schedule
 
