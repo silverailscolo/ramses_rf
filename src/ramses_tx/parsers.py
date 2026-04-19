@@ -1241,6 +1241,7 @@ def parser_10d0(payload: str, msg: Message) -> dict[str, Any]:
     # 2022-07-03T23:14:23.854089 000 RQ --- 37:155617 32:155617 --:------ 10D0 002 0000
     # 2022-07-03T23:14:23.876088 084 RP --- 32:155617 37:155617 --:------ 10D0 006 00B4B4C80000
 
+    # _I only sent after _W=reset, must RQ to fetch current val
     # 00-FF resets the counter, 00-47-B4-4F-0000 is the value (71 180 79).
     # Default is 180 180 200. The returned value is the amount of days (180),
     # total amount of days till change (180), percentage (200)
