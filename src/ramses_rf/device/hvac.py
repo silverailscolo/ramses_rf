@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from datetime import timedelta as td
@@ -10,6 +12,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
+    HEARTBEAT_TIMEOUT_FILTER,
     HEARTBEAT_TIMEOUT_REMOTE,
     HEARTBEAT_TIMEOUT_SENSOR,
     SZ_AIR_QUALITY,
@@ -45,6 +48,7 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.entity_base import class_by_attr
+from ramses_rf.helpers import schedule_task
 from ramses_tx import Address, Command, Message, Packet, Priority
 from ramses_tx.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR
 from ramses_tx.typing import PayloadT
@@ -256,15 +260,64 @@ class PresenceDetect(HvacSensorBase):  # 2E10
 class FilterChange(DeviceHvac):  # FAN: 10D0
     """The filter state sensor (10D0)."""
 
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        """Initialize the FilterChange class and start dayly polling.
+
+        :param args: Positional arguments passed to the parent class
+        :param traits: Strictly typed traits object for device creation
+        :param kwargs: Keyword arguments passed to the parent class
+        """
+        super().__init__(*args, traits=traits, **kwargs)
+
+        self._poller: asyncio.Task[None] | None = None
+        self._rq_cmd: Command = Command.from_attrs(
+            RQ, self.id, Code._10D0, PayloadT("00")
+        )
+
+        if not self._gwy.config.disable_discovery:  # discovery will poll for filter
+            try:
+                asyncio.get_running_loop().call_soon(self.start_poller)
+            except RuntimeError:
+                # Fallback if instantiated outside of a running event loop context
+                _LOGGER.debug(
+                    "No running event loop; filter_change poller not started."
+                )
+
     def _setup_discovery_cmds(self) -> None:
         """Set up the discovery commands for the filter change sensor."""
         super()._setup_discovery_cmds()
 
         self.discovery.add_cmd(
-            Command.from_attrs(RQ, self.id, Code._10D0, PayloadT("00")),
+            self._rq_cmd,
             60 * 60 * 24,
             delay=30,
         )
+
+    def start_poller(self) -> None:
+        """
+        Start polling the filter_remaining state of a fan.
+        Messages are cleaned up every 24h, the 10D0 message must be RQd
+        """
+        if not self._poller:
+            task = asyncio.create_task(
+                self._gwy.async_send_cmd(
+                    self._rq_cmd, num_repeats=2, priority=Priority.HIGH
+                )
+            )
+            self._poller = schedule_task(task, 60 * 60 * 24, delay=60)
+            self._poller.set_name(f"{self.id}_10d0_poller")
+            self._gwy.add_task(self._poller)
+
+    async def stop_poller(self) -> None:
+        """Stop the discovery poller (only if it is running)."""
+        if not self._poller or self._poller.done():
+            return
+
+        self._poller.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._poller
 
     async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.
@@ -285,6 +338,15 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         _val = await self.entity_state.get_value(Code._10D0, key=SZ_REMAINING_PERCENT)
         assert isinstance(_val, (float | type(None)))
         return _val
+
+    @property
+    def heartbeat_timeout(self) -> td:
+        """Return the timeout before the device is considered unavailable.
+
+        :return: The timeout duration.
+        :rtype: td
+        """
+        return HEARTBEAT_TIMEOUT_FILTER
 
 
 class RfsGateway(DeviceHvac):  # RFS: (spIDer gateway)
