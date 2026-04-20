@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
+    HEARTBEAT_TIMEOUT_FILTER,
     HEARTBEAT_TIMEOUT_REMOTE,
     HEARTBEAT_TIMEOUT_SENSOR,
     SZ_AIR_QUALITY,
@@ -275,11 +276,14 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             RQ, self.id, Code._10D0, PayloadT("00")
         )
 
-        try:
-            asyncio.get_running_loop().call_soon(self.start_poller)
-        except RuntimeError:
-            # Fallback if instantiated outside of a running event loop context
-            _LOGGER.debug("No running event loop; filter_change poller not started.")
+        if not self._gwy.config.disable_discovery:  # discovery will poll for filter
+            try:
+                asyncio.get_running_loop().call_soon(self.start_poller)
+            except RuntimeError:
+                # Fallback if instantiated outside of a running event loop context
+                _LOGGER.debug(
+                    "No running event loop; filter_change poller not started."
+                )
 
     def _setup_discovery_cmds(self) -> None:
         """Set up the discovery commands for the filter change sensor."""
@@ -334,6 +338,15 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         _val = await self.entity_state.get_value(Code._10D0, key=SZ_REMAINING_PERCENT)
         assert isinstance(_val, (float | type(None)))
         return _val
+
+    @property
+    def heartbeat_timeout(self) -> td:
+        """Return the timeout before the device is considered unavailable.
+
+        :return: The timeout duration.
+        :rtype: td
+        """
+        return HEARTBEAT_TIMEOUT_FILTER
 
 
 class RfsGateway(DeviceHvac):  # RFS: (spIDer gateway)

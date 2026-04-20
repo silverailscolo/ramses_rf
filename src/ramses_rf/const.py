@@ -178,6 +178,7 @@ WB_STATUS_CODES: Final[dict[str, str]] = {
 
 # Device Availability Timeouts
 HEARTBEAT_TIMEOUT_DEFAULT = td(hours=1)
+HEARTBEAT_TIMEOUT_FILTER = td(hours=24)
 HEARTBEAT_TIMEOUT_OTB = td(hours=24)
 HEARTBEAT_TIMEOUT_TRV = td(hours=12)
 HEARTBEAT_TIMEOUT_REMOTE = td(hours=24)
