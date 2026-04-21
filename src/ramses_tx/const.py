@@ -494,8 +494,8 @@ DEV_TYPE_MAP = attr_dict_factory(
         DevType.DT2: {"22": "digital_thermostat", AttrDict._SZ_AKA_SLUG: DevType.DTS},
         DevType.PRG: {"23": "programmer"},
         DevType.RFG: {
-            None: "rf_gateway"
-        },  # 30: RFG100, but could be Nuaire PIV-RM (=CTL)
+            "30": "rf_gateway"
+        },  # 30: RFG100, but could also be Nuaire PIV-RM (=CTL)
         DevType.RND: {"34": "round_thermostat"},
         # Other (jasper) devices
         DevType.JIM: {"08": "jasper_interface"},
