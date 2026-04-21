@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-# import asyncio
-# import contextlib
+import asyncio
+import contextlib
 import logging
 from collections.abc import Callable
 from datetime import timedelta as td
@@ -48,8 +48,7 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.entity_base import class_by_attr
-
-# from ramses_rf.helpers import schedule_task
+from ramses_rf.helpers import schedule_task
 from ramses_tx import Address, Command, Message, Packet, Priority
 from ramses_tx.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR
 from ramses_tx.typing import PayloadT
@@ -272,55 +271,54 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         """
         super().__init__(*args, traits=traits, **kwargs)
 
-        # self._poller: asyncio.Task[None] | None = None
+        self._poller: asyncio.Task[None] | None = None
         self._rq_cmd: Command = Command.from_attrs(
             RQ, self.id, Code._10D0, PayloadT("00")
         )
 
-        self._setup_discovery_cmds()  # will poll for filter_change
-
-        # if self._gwy.config.disable_discovery:  # discovery will poll for filter
-        #     try:
-        #         asyncio.get_running_loop().call_soon(self.start_poller)
-        #     except RuntimeError:
-        #         # Fallback if instantiated outside of a running event loop context
-        #         _LOGGER.debug(
-        #             "No running event loop; filter_change poller not started."
-        #         )
+        if self._gwy.config.disable_discovery:  # discovery will poll for filter
+            try:
+                asyncio.get_running_loop().call_soon(self.start_poller)
+            except RuntimeError:
+                # Fallback if instantiated outside of a running event loop context
+                _LOGGER.debug(
+                    "No running event loop; filter_change poller not started."
+                )
 
     def _setup_discovery_cmds(self) -> None:
         """Set up the discovery commands for the filter change sensor."""
         super()._setup_discovery_cmds()
 
-        _LOGGER.debug("_setup_discovery_cmds filter")  ## EBR debug
-        self.discovery.add_cmd(self._rq_cmd, 60 * 60 * 24, delay=30)
+        self.discovery.add_cmd(
+            self._rq_cmd,
+            60 * 60 * 24,
+            delay=30,
+        )
 
-    # def start_poller(self) -> None:
-    #     """
-    #     Start polling the filter_remaining state of a fan.
-    #     Messages are cleaned up every 12h, the 10D0 message must be RQd
-    #     """
-    #     if not self._poller:
-    #         task = asyncio.create_task(
-    #             self._gwy.async_send_cmd(
-    #                 self._rq_cmd, num_repeats=2, priority=Priority.HIGH
-    #             )
-    #         )
-    #         self._poller = schedule_task(
-    #             task, delay=120, period=120
-    #         )  # delay, period 60 * 60 * 12
-    #         self._poller.set_name(f"{self.id}_10d0_poller")
-    #         _LOGGER.debug("Starting filter poller")  ## EBR debug
-    #         self._gwy.add_task(self._poller)
-    #
-    # async def stop_poller(self) -> None:
-    #     """Stop the discovery poller (only if it is running)."""
-    #     if not self._poller or self._poller.done():
-    #         return
-    #
-    #     self._poller.cancel()
-    #     with contextlib.suppress(asyncio.CancelledError):
-    #         await self._poller
+    def start_poller(self) -> None:
+        """
+        Start polling the filter_remaining state of a fan.
+        Messages are cleaned up every 12h, the 10D0 message must be RQd
+        """
+        if not self._poller:
+            task = asyncio.create_task(
+                self._gwy.async_send_cmd(
+                    self._rq_cmd, num_repeats=2, priority=Priority.HIGH
+                )
+            )
+            self._poller = schedule_task(task, 60 * 60 * 12, delay=120)
+            self._poller.set_name(f"{self.id}_10d0_poller")
+            _LOGGER.debug("Starting filter poller")  ## EBR debug
+            self._gwy.add_task(self._poller)
+
+    async def stop_poller(self) -> None:
+        """Stop the discovery poller (only if it is running)."""
+        if not self._poller or self._poller.done():
+            return
+
+        self._poller.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._poller
 
     async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.
