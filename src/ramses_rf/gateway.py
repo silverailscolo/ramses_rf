@@ -787,6 +787,7 @@ class Gateway(GatewayInterface):
         :rtype: None
         """
         self._engine.add_task(task)
+        _LOGGER.debug("Gateway added task %s", task.get_name())  ## EBR debug
 
     @staticmethod
     def create_cmd(

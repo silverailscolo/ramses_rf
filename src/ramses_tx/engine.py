@@ -245,6 +245,7 @@ class Engine:
             tasks = [t for t in self._tasks if not t.done()]
             for t in tasks:
                 t.cancel()
+                _LOGGER.debug("Gateway stopped task %s", t.get_name())  ## EBR debug
 
         if tasks:
             await asyncio.wait(tasks)
@@ -345,6 +346,7 @@ class Engine:
         with self._tasks_lock:
             self._tasks = [t for t in self._tasks if not t.done()]
             self._tasks.append(task)
+            _LOGGER.debug("Engine appended task %s", task.get_name())  ## EBR debug
 
     @staticmethod
     def create_cmd(
