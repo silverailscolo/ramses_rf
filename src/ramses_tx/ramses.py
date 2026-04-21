@@ -1517,11 +1517,9 @@ _31DA_FAN_INFO: dict[int, str] = {
 # [RAMSES_ZONES[k].update(RAMSES_ZONES_ALL) for k in RAMSES_ZONES if k != ZON_ROLE.DHW]
 
 __all__ = [
-    "CODES_BY_DEV_SLUG",
     "CODES_SCHEMA",
     "CODE_NAME_LOOKUP",
     "CODES_BY_DEV_SLUG",
-    "CODES_SCHEMA",
     "HVAC_KLASS_BY_VC_PAIR",
     "_2411_PARAMS_SCHEMA",
     "SZ_DESCRIPTION",

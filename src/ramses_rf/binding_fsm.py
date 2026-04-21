@@ -91,6 +91,7 @@ BINDING_QOS = QosParams(
 class Vendor(StrEnum):
     """Enumeration of recognized hardware vendors."""
 
+    BROFER = "brofer"
     CLIMARAD = "climarad"
     ITHO = "itho"
     NUAIRE = "nuaire"
@@ -148,6 +149,7 @@ class BindRole(StrEnum):
 
 SCHEME_LOOKUP = {
     Vendor.ITHO: {"oem_code": "01"},
+    Vendor.BROFER: {"oem_code": "6A"},
     Vendor.NUAIRE: {"oem_code": "6C"},
     Vendor.CLIMARAD: {"oem_code": "65"},
     Vendor.VASCO: {"oem_code": "66"},

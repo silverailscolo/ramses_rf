@@ -17,3 +17,6 @@
 
 # Daalderop Spider (Room) WP Thermostat type 03-00476 from issue #103 by @Onl1ne1373
 2024-01-31T00:00:00.400000 ...  I --- 21:041873 --:------ 21:041873 3120 007 00F0B0060006FF     # {'unknown_0': 'F0B00600', 'unknown_5': '06', 'unknown_2': 'FF'}
+
+# Brofer HRU REM
+2026-03-25T09:05:52.421497 062  I --- 32:150621 --:------ 32:150621 3120 007 0070B000000AFF     # {'unknown_0': '70B00000', 'unknown_5': '0A', 'unknown_2': 'FF'}

@@ -27,7 +27,7 @@ __DEVICE_INFO_RAW: dict[str, DeviceFingerprint] = {
     "0001C8380A0100F1FF": {"slug": "RND", "dev_type": "34", "date": "2014-11-03", "desc": "T87RF2025"},  # .                    Round
     "0001C8380F0100F1FF": {"slug": "RND", "dev_type": "34", "date": "2017-05-03", "desc": "T87RF2025"},  # .                    Round
     # Odd - Vasco CTL/RFG
-    "0001C848260066FEFE": {"slug": "CTL", "dev_type": "30", "date": "2019-11-28", "desc": "BRDG-02EM23"},  # .                  Vasco Gateway (CTL/RFG/RFS?)
+    "0001C848260066FEFE": {"slug": "CTL", "dev_type": "30", "date": "2019-11-28", "desc": "BRDG-02EM23"},  # .                  Vasco Gateway (CTL/RFS?)
     # Odd - Jasper kit (device type implies a slug here too)
     "0002FF0801FFFFFFFE": {"slug": "JIM", "dev_type": "08", "date": "2016-11-28", "desc": "Jasper EIM"},
     "0002FF0802FFFFFFFE": {"slug": "JIM", "dev_type": "08", "date": "2017-11-10", "desc": "Jasper EIM"},
