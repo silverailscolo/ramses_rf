@@ -315,10 +315,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             delay=30,
         )  # 10D0 RQ filter_remaining, message must be RQd.
 
-        # send RQ first time
-        # _LOGGER.debug("HVAC sending first 10D0 cmd from %s", self._rq_cmd.src)
-        # await self._gwy.async_send_cmd(self._rq_cmd)
-
     async def start_poller(self) -> None:
         """Start the poller."""
         if not hasattr(self, "polling") or self.polling is None:
