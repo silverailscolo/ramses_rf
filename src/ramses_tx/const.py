@@ -493,7 +493,9 @@ DEV_TYPE_MAP = attr_dict_factory(
         DevType.OUT: {"17": "outdoor_sensor"},
         DevType.DT2: {"22": "digital_thermostat", AttrDict._SZ_AKA_SLUG: DevType.DTS},
         DevType.PRG: {"23": "programmer"},
-        DevType.RFG: {"30": "rf_gateway"},  # RFG100, Nuaire PIV-RM (=CTL)
+        DevType.RFG: {
+            None: "rf_gateway"
+        },  # 30: RFG100, but could be Nuaire PIV-RM (=CTL)
         DevType.RND: {"34": "round_thermostat"},
         # Other (jasper) devices
         DevType.JIM: {"08": "jasper_interface"},
@@ -504,7 +506,7 @@ DEV_TYPE_MAP = attr_dict_factory(
         DevType.FAN: {None: "ventilator"},  # Both Fans and HRUs
         DevType.HUM: {None: "rh_sensor"},
         DevType.PIR: {None: "presence_sensor"},
-        DevType.RFS: {None: "hvac_gateway"},  # Spider
+        DevType.RFS: {None: "hvac_gateway"},  # Spider, 30: or 21:
         DevType.REM: {None: "switch"},
         DevType.SW2: {None: "switch_variant"},
     },
