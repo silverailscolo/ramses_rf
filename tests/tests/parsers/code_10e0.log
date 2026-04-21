@@ -79,10 +79,9 @@
 2020-12-28T08:57:20.960942 079  I --- 31:012319 63:262142 --:------ 10E0 038 000002FF1F02FFFFFFFFFFFFFFFF040807E04A61737065722053746174205458585800000000  # {'description': 'Jasper Stat TXXX',    'date_2': '0000-00-00', 'date_1': '2016-08-04', 'manufacturer_sub_id': 'FF', 'product_id': '1F', 'oem_code': 'FF'}  #
 2022-11-15T14:01:45.372037 ...  I --- 31:035676 63:262142 --:------ 10E0 038 000002FF1F02FFFFFFFFFFFFFFFF100207E14A61737065722053746174205458585800000000  # {'description': 'Jasper Stat TXXX',    'date_2': '0000-00-00', 'date_1': '2017-02-16', 'manufacturer_sub_id': 'FF', 'product_id': '1F', 'oem_code': 'FF'}  #
 
-
-#
 # oem_code '00' / sub-id 'C8' - heat
 2021-12-20T08:24:09.117900 ...  I --- 34:021943 63:262142 --:------ 10E0 038 000001C8380A0100F1FF0C0107E1030B07DE5438375246323032350000000000000000000000  # {'description': 'T87RF2025',           'manufacturer_sub_id': 'C8', 'product_id': '38', 'oem_code': '00', 'date_1': '2014-11-03', 'date_2': '2017-01-12'}
+
 # oem_code '00' / sub-id 'C9', 30:069468 is a BUVA Boxstream
 2023-11-04T12:34:14.007611 062  I --- 30:068457 63:262142 --:------ 10E0 038 000001C9001B0000FEFEFFFFFFFF0E0507E2425244472D30324A415330310000000000000000  # {'description': 'BRDG-02JAS01',        'manufacturer_sub_id': 'C9', 'product_id': '00', 'date_2': '0000-00-00', 'date_1': '2018-05-14', 'oem_code': '00'}
 2022-01-01T00:00:00.000000 000  I --- 30:069468 63:262142 --:------ 10E0 038 000001C9001B0000FEFEFFFFFFFF0E0507E2425244472D30324A415330310000000000000000  # {'description': 'BRDG-02JAS01',        'manufacturer_sub_id': 'C9', 'product_id': '00', 'date_1': '2018-05-14', 'date_2': '0000-00-00', 'oem_code': '00'}  # BUVA Boxstream,
@@ -134,8 +133,11 @@
 2026-02-22T10:56:43.770144 065  I --- 32:166025 63:262142 --:------ 10E0 038 000001C85701016CFFFFFFFFFFFF110607E0564D532D32334333330000000000000000000000  # {'description': 'VMS-23C33',           'manufacturer_sub_id': 'C8', 'product_id': '57', 'oem_code': '6C', 'date_1': '2016-06-17', 'date_2': '0000-00-00'}  # {"_SLUG": "RFG", "make": "Nuaire", "model": "Drimaster Eco-RM"}  # Remote Monitoring, has extra sensors, binds to CO2
 
 # evohome peternash 2026-03 issue 557
-2026-03-22T19:13:36.467000 ...  I --- 22:012299 63:262142 --:------ 10E0 038 000002FF1F00FFFFFFFFFFFFFFFFFFFFFFFF4454342030323000C958300B15E98602B58C57C7  # {'oem_code': 'FF', 'manufacturer_sub_id': 'FF', 'product_id': '1F', 'date_1': '0000-00-00', 'date_2': '0000-00-00', 'description': 'DT4 020', '_unknown': 'C958300B15E98602B58C57C7'}
-# < Coding error: ValueError(fromhex() arg must contain an even number of hexadecimal digits). Caused by byte 30. Add odd/even check
+2026-03-22T19:13:36.467000 ...  I --- 22:012299 63:262142 --:------ 10E0 038 000002FF1F00FFFFFFFFFFFFFFFFFFFFFFFF4454342030323000C958300B15E98602B58C57C7  # {'description': 'DT4 020',             'manufacturer_sub_id': 'FF', 'product_id': '1F', 'oem_code': 'FF', 'date_1': '0000-00-00', 'date_2': '0000-00-00', '_unknown': 'C958300B15E98602B58C57C7'}
+# < Coding error: ValueError(fromhex() arg must contain an even number of hexadecimal digits). Caused by byte 30. Add odd/even check fixed in 0.56.4
+
+# oem_code '6A' Brofer RDCD30SH w/VMD-02RPS66-2 from HA forum user
+2026-04-08T21:57:54.694464 057  I --- 32:150621 63:262142 --:------ 10E0 038 000001C8A008056AFEFFFFFFFFFF100307E7564D442D303252505336362D3200000000000000  # {'description': 'VMD-02RPS66-2',       'manufacturer_sub_id': 'C8', 'product_id': 'A0', 'oem_code': '6A', 'date_1': '2023-03-16', 'date_2': '0000-00-00'}
 
 #
 # WIP
