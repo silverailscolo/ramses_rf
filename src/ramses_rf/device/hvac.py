@@ -298,7 +298,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
     def start_poller(self) -> None:
         """
         Start polling the filter_remaining state of a fan.
-        Messages are cleaned up every 24h, the 10D0 message must be RQd
+        Messages are cleaned up every 12h, the 10D0 message must be RQd
         """
         if not self._poller:
             task = asyncio.create_task(
@@ -306,7 +306,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                     self._rq_cmd, num_repeats=2, priority=Priority.HIGH
                 )
             )
-            self._poller = schedule_task(task, 60 * 60 * 24, delay=60)
+            self._poller = schedule_task(task, 60 * 60 * 12, delay=120)
             self._poller.set_name(f"{self.id}_10d0_poller")
             self._gwy.add_task(self._poller)
 
