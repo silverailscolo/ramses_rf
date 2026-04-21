@@ -276,7 +276,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             RQ, self.id, Code._10D0, PayloadT("00")
         )
 
-        if not self._gwy.config.disable_discovery:  # discovery will poll for filter
+        if self._gwy.config.disable_discovery:  # discovery will poll for filter
             try:
                 asyncio.get_running_loop().call_soon(self.start_poller)
             except RuntimeError:
