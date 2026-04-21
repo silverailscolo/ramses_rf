@@ -60,3 +60,6 @@
 2024-12-01T00:00:00.000001 000  I --- 29:098549 --:------ 29:098549 31D9 003 008001 # {'hvac_id': '00', 'exhaust_fan_speed': 0.005, 'fan_mode': '1 (trickle)', 'passive': False, 'damper_only': False, 'filter_dirty': False, 'frost_cycle': False, 'has_fault': True, '_flags': [1, 0, 0, 0, 0, 0, 0, 0]}
 2024-12-01T00:00:00.000002 000  I --- 29:098549 37:255488 --:------ 31D9 003 008001 # {'hvac_id': '00', 'exhaust_fan_speed': 0.005, 'fan_mode': '01', 'passive': False, 'damper_only': False, 'filter_dirty': False, 'frost_cycle': False, 'has_fault': True, '_flags': [1, 0, 0, 0, 0, 0, 0, 0]}
 2024-12-01T00:00:00.000003 000  I --- 29:098458 --:------ 29:098458 31D9 003 000001 # {'hvac_id': '00', 'exhaust_fan_speed': 0.005, 'fan_mode': '1 (trickle)', 'passive': False, 'damper_only': False, 'filter_dirty': False, 'frost_cycle': False, 'has_fault': False, '_flags': [0, 0, 0, 0, 0, 0, 0, 0]}
+
+# Brofer HRU
+2026-04-08T02:43:50.003415 057  I 077 32:150621 --:------ 32:150621 31D9 017 000A020020202020202020202020202008  # {'hvac_id': '00', 'exhaust_fan_speed': 0.01, 'fan_mode': '02', 'passive': True, 'damper_only': False, 'filter_dirty': False, 'frost_cycle': False, 'has_fault': False, '_flags': [0, 0, 0, 0, 1, 0, 1, 0], '_unknown_3': '00', '_unknown_4': '202020202020202020202020', 'unknown_16': '08', 'seqx_num': '077'}

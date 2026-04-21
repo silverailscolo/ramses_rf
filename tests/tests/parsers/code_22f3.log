@@ -22,3 +22,8 @@
 
 # curious 22f3 packet: invalid button combi pressed?
 2024-01-01T01:00:00.000000 123  I --- 29:123150 29:099029 --:------ 22F3 007 00020F00060000  # {'minutes': 15, 'flags': [0, 0, 0, 0, 0, 0, 1, 0], 'new_speed_mode': 'per_request', 'fallback_speed_mode': 'per_vent_speed', '_scheme': 'vasco', 'fan_mode': 'off'}
+
+# Brofer HRU VMD-02RPS66-2 REM
+2026-03-25T09:05:16.969800 068  I --- 32:125089 32:150621 --:------ 22F3 007 00001E00000000  # {'minutes': 30, 'flags': [0, 0, 0, 0, 0, 0, 0, 0], 'new_speed_mode': 'fan_boost', 'fallback_speed_mode': 'per_vent_speed'}
+2026-03-25T09:05:21.649278 068  I --- 32:125089 32:150621 --:------ 22F3 007 00003C00000000  # {'minutes': 60, 'flags': [0, 0, 0, 0, 0, 0, 0, 0], 'new_speed_mode': 'fan_boost', 'fallback_speed_mode': 'per_vent_speed'}
+2026-03-25T09:05:27.826842 068  I --- 32:125089 32:150621 --:------ 22F3 007 00005A00000000  # {'minutes': 90, 'flags': [0, 0, 0, 0, 0, 0, 0, 0], 'new_speed_mode': 'fan_boost', 'fallback_speed_mode': 'per_vent_speed'}
