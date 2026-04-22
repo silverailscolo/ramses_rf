@@ -7,6 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import ramses_tx.message as tx_msg
 from ramses_tx.application_message import ApplicationMessage
 from ramses_tx.message import Message
 from ramses_tx.packet import Packet
@@ -26,8 +27,15 @@ def patch_parsers(monkeypatch: pytest.MonkeyPatch) -> None:
     :return: None
     """
     monkeypatch.setattr(
-        "ramses_tx.message.PayloadDecoderPipeline.decode",
-        lambda self, msg: {"mock_key": "mock_val"},
+        tx_msg,
+        "_PAYLOAD_DECODER_CB",
+        lambda msg: {"mock_key": "mock_val", "phase": "confirm", "bindings": []},
+    )
+
+    monkeypatch.setattr(
+        tx_msg,
+        "_GET_CODE_NAME_CB",
+        lambda code: f"mock_name_{code}",
     )
 
 
@@ -123,14 +131,11 @@ def test_message_string_representations(patch_parsers: Any) -> None:
     assert "RQ" in msg_str
 
 
-def test_startup_empty_payload_reproduction() -> None:
-    """Test that an empty payload bypasses strict regex and parses safely.
+def test_startup_empty_payload_reproduction(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that an empty payload bypasses strict regex and parses safely."""
+    # Ensure this test is completely isolated from the global ramses_rf bridge
+    monkeypatch.setattr(tx_msg, "_PAYLOAD_DECODER_CB", None)
 
-    This test runs WITHOUT mock parsers to confirm the heartbeat fallback:
-    functionally empty payloads ("00") that fail validation return {}.
-
-    :return: None
-    """
     dtm = dt.now()
     packet = Packet(dtm, FRAME_STR_EMPTY)
 
@@ -142,7 +147,7 @@ def test_startup_empty_payload_reproduction() -> None:
     assert message.payload == {}
 
 
-def test_message_valid_empty_payload() -> None:
+def test_message_valid_empty_payload(patch_parsers: Any) -> None:
     """Test that a valid empty payload is accurately parsed and NOT dropped.
 
     Some protocol commands (like 1FC9 ' I') legitimately use a "00" payload

@@ -17,6 +17,7 @@ from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import ramses_tx.message as tx_msg
+from ramses_rf.parsers import PayloadDecoderPipeline
 from ramses_tx import (
     Command,
     Engine,
@@ -38,6 +39,7 @@ from ramses_tx.const import (
     SZ_ACTIVE_HGI,
 )
 from ramses_tx.logger import flush_packet_log
+from ramses_tx.ramses import CODES_SCHEMA
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 
 from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES
@@ -234,6 +236,7 @@ class Gateway(GatewayInterface):
         self._message_store: MessageStoreInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
 
+        # 1. Controller Knowledge Bridge
         def is_controller(device_id: str) -> bool:
             """Provide ramses_tx with domain knowledge safely.
 
@@ -923,3 +926,37 @@ class Gateway(GatewayInterface):
             timeout=timeout,
             wait_for_reply=wait_for_reply,
         )
+
+
+_decoder_pipeline = PayloadDecoderPipeline()
+
+
+# Semantic Parser Bridge
+def decode_payload(msg: Any) -> Any:
+    """Provide ramses_tx with the semantic payload decoder."""
+    return _decoder_pipeline.decode(msg)
+
+
+tx_msg._PAYLOAD_DECODER_CB = decode_payload
+
+
+# Schema & Routing Bridges
+def get_code_name(code: str) -> str:
+    """Provide ramses_tx with human-readable code names for logging."""
+    if code in CODES_SCHEMA:
+        return str(CODES_SCHEMA[Code(code)].get("name", f"unknown_{code}"))
+    return f"unknown_{code}"
+
+
+tx_msg._GET_CODE_NAME_CB = get_code_name
+
+
+def get_msg_idx(msg: Any) -> dict[str, str]:
+    """Provide ramses_tx with the semantic zone_idx/domain_id routing."""
+    tx_msg._GET_MSG_IDX_CB = None
+    idx_result = msg._idx
+    tx_msg._GET_MSG_IDX_CB = get_msg_idx
+    return cast("dict[str, str]", idx_result)
+
+
+tx_msg._GET_MSG_IDX_CB = get_msg_idx
