@@ -549,6 +549,14 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     _SLUG: str = DevType.FAN
 
+    # FAN-specific instance attributes (initialized in _init_fan_state)
+    _supports_2411: bool
+    _params_2411: dict[str, float]
+    _initialized_callback: Callable[[], None] | None
+    _param_update_callback: Callable[[str, Any], None] | None
+    _hgi: Any | None
+    _bound_devices: dict[str, str]
+
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
@@ -697,7 +705,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         self._params_2411[param_id] = value
         return True
 
-    def get_fan_param(self, param_id: str) -> Any | None:
+    def get_fan_param(self, param_id: str) -> float | None:
         """Retrieve a fan parameter value from the device's message store.
 
         This wrapper method gets a specific parameter value for a FAN device stored in
