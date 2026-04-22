@@ -23,9 +23,9 @@ from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
-from . import exceptions as exc
-from .address import ALL_DEV_ADDR, NON_DEV_ADDR, hex_id_to_dev_id
-from .const import (
+from ramses_tx import exceptions as exc
+from ramses_tx.address import ALL_DEV_ADDR, NON_DEV_ADDR, hex_id_to_dev_id
+from ramses_tx.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
     FAULT_DEVICE_CLASS,
@@ -95,8 +95,8 @@ from .const import (
     DevRole,
     FaultDeviceClass,
 )
-from .fingerprints import check_signature
-from .helpers import (
+from ramses_tx.fingerprints import check_signature
+from ramses_tx.helpers import (
     hex_to_bool,
     hex_to_date,
     hex_to_dtm,
@@ -127,7 +127,7 @@ from .helpers import (
     parse_supply_temp,
     parse_valve_demand,
 )
-from .opentherm import (
+from ramses_tx.opentherm import (
     EN,
     SZ_DESCRIPTION,
     SZ_MSG_ID,
@@ -136,14 +136,14 @@ from .opentherm import (
     OtMsgType,
     decode_frame,
 )
-from .ramses import (
+from ramses_tx.ramses import (
     _31D9_FAN_INFO_VASCO,
     _2411_PARAMS_SCHEMA,
     CODES_SCHEMA,
     RQ_IDX_COMPLEX,
 )
-from .typing import PayDictT
-from .version import VERSION
+from ramses_tx.typing import PayDictT
+from ramses_tx.version import VERSION
 
 # Kudos & many thanks to:
 # - Evsdd: 0404 (wow!)
@@ -155,14 +155,14 @@ from .version import VERSION
 # - RemyDeRuysscher: 10E0, 31DA (and related), others
 # - silverailscolo:  12A0, 31DA, others
 
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
     RP,
     RQ,
     W_,
     Code,
 )
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     F6,
     F8,
     F9,
@@ -173,7 +173,7 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 )
 
 if TYPE_CHECKING:
-    from .message import Message
+    from ramses_tx.message import Message
 
 _2411_TABLE = {k: v["description"] for k, v in _2411_PARAMS_SCHEMA.items()}
 
@@ -2189,7 +2189,9 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
         _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
 
     if msg._addrs[0] == NON_DEV_ADDR:  # and payload[4:6] == "04":
-        from .ramses import _22F1_MODE_ITHO as _22F1_FAN_MODE  # TODO: only if 04
+        from ramses_tx.ramses import (
+            _22F1_MODE_ITHO as _22F1_FAN_MODE,  # TODO: only if 04
+        )
 
         _22f1_mode_set: tuple[str, ...] = ("", "04")
         _22f1_scheme = "itho"
@@ -2203,13 +2205,13 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
     #     _22f1_scheme = "itho_2"
 
     elif payload[4:6] == "0A":
-        from .ramses import _22F1_MODE_NUAIRE as _22F1_FAN_MODE
+        from ramses_tx.ramses import _22F1_MODE_NUAIRE as _22F1_FAN_MODE
 
         _22f1_mode_set = ("", "0A")
         _22f1_scheme = "nuaire"
 
     elif payload[4:6] == "06":
-        from .ramses import _22F1_MODE_VASCO as _22F1_FAN_MODE
+        from ramses_tx.ramses import _22F1_MODE_VASCO as _22F1_FAN_MODE
 
         _22f1_mode_set = (
             "",
@@ -2219,7 +2221,7 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
         _22f1_scheme = "vasco"
 
     else:
-        from .ramses import _22F1_MODE_ORCON as _22F1_FAN_MODE
+        from ramses_tx.ramses import _22F1_MODE_ORCON as _22F1_FAN_MODE
 
         _22f1_mode_set = ("", "04", "07", "0B")  # 0B?
         _22f1_scheme = "orcon"
@@ -2575,7 +2577,7 @@ def parser_2410(payload: str, msg: Message) -> dict[str, Any]:
     # RP --- 10:048122 18:006402 --:------ 2410 020 00-00000000-00000000-00000001-00000001-00000C  # OTB
     # RP --- 32:155617 18:005904 --:------ 2410 020 00-00003EE8-00000000-FFFFFFFF-00000000-1002A6  # Orcon Fan
 
-    def unstuff(seqx: str) -> tuple:
+    def unstuff(seqx: str) -> tuple[bool, int, str | int]:
         val = int(seqx, 16)
         # if val & 0x40:
         #     raise TypeError
@@ -3468,7 +3470,7 @@ def parser_3b00(payload: str, msg: Message) -> PayDictT._3B00:
     # 063  I --- 01:078710 --:------ 01:078710 3B00 002 FCC8
     # 064  I --- 01:078710 --:------ 01:078710 3B00 002 FCC8
 
-    def complex_idx(payload: str, msg: Message) -> dict:  # has complex idx
+    def complex_idx(payload: str, msg: Message) -> dict[str, str]:  # has complex idx
         if (
             msg.verb == I_
             and msg.src.type in (DEV_TYPE_MAP.CTL, DEV_TYPE_MAP.PRG)
@@ -4255,3 +4257,56 @@ class PayloadDecoderPipeline:
         payload_len: int = getattr(msg._pkt, "len", getattr(msg._pkt, "_len", 0))
 
         return self.head.decode(msg, payload_str, payload_len)
+
+
+def re_compile_re_match(regex: str, string: str) -> bool:  # Optional[Match[Any]]
+    """Check if the provided string matches the regex pattern.
+
+    :param regex: The regex pattern string
+    :type regex: str
+    :param string: The text payload to test
+    :type string: str
+    :return: True if matched, False otherwise
+    :rtype: bool
+    """
+    return bool(re.compile(regex).match(string))
+
+
+def _check_msg_payload(msg: Message, payload: str) -> None:
+    """Validate a packet's payload against its verb/code pair.
+
+    :param msg: The message object being validated
+    :type msg: Message
+    :param payload: The raw hex payload string
+    :type payload: str
+    :raises PacketInvalid: If the code is unknown or verb/code pair is invalid.
+    :raises PacketPayloadInvalid: If the payload does not match the expected regex.
+    """
+
+    try:
+        # Force packet evaluation via string representation (lazy parsing)
+        _ = repr(msg._pkt)
+    except Exception as err:
+        raise exc.PacketPayloadInvalid(
+            f"Packet formatting/evaluation failed: {err}"
+        ) from err
+
+    if msg.code not in CODES_SCHEMA:
+        raise exc.PacketInvalid(f"Unknown code: {msg.code}")
+
+    # Guard the TypedDict access by verifying the key against literals
+    # We use a tuple of strings that match the CodeSchemaEntry keys
+    if msg.verb not in ("RQ", "RP", " I", " W"):
+        raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
+
+    # Now that we've checked the literal membership, Mypy allows the access
+    # We use .get() to return the regex (str) and safely handle missing verbs
+    regex = CODES_SCHEMA[msg.code].get(msg.verb)
+
+    if not regex:
+        raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
+
+    if not re_compile_re_match(str(regex), payload):
+        raise exc.PacketPayloadInvalid(
+            f"Payload doesn't match {msg.verb}/{msg.code}: {payload} != {regex}"
+        )

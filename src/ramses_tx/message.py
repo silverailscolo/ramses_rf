@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime as dt
@@ -16,8 +15,7 @@ from .command import Command
 from .const import DEV_TYPE_MAP, SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
 from .models import DeviceId, RawPacket, TransportMessage
 from .packet import Packet
-from .parsers import PayloadDecoderPipeline
-from .ramses import CODE_IDX_ARE_COMPLEX, CODES_SCHEMA
+from .ramses import CODE_IDX_ARE_COMPLEX
 
 # TODO:
 # long-format msg.__str__ - alias columns don't line up
@@ -37,8 +35,6 @@ if TYPE_CHECKING:
 
 __all__ = ["Message"]
 
-
-CODE_NAMES: dict[Code | str, str] = {k: v["name"] for k, v in CODES_SCHEMA.items()}
 
 MSG_FORMAT_10: str = "|| {:10s} | {:10s} | {:2s} | {:16s} | {:^4s} || {}"
 
@@ -66,6 +62,10 @@ _MessageT = TypeVar("_MessageT", bound="Message")
 _IS_CONTROLLER_CB: Callable[[str], bool] | None = None
 # Parser Bridge
 _PAYLOAD_DECODER_CB: Callable[[Any], Any] | None = None
+# Logging Bridge
+_GET_CODE_NAME_CB: Callable[[Code | str], str] | None = None
+# Routing Bridge
+_GET_MSG_IDX_CB: Callable[[Any], dict[str, str]] | None = None
 
 
 class Message:
@@ -170,7 +170,10 @@ class Message:
             name_0 = ""
             name_1 = self._name(self.src)
 
-        code_name = CODE_NAMES.get(self.code, f"unknown_{self.code}")
+        if _GET_CODE_NAME_CB is not None:
+            code_name = _GET_CODE_NAME_CB(self.code)
+        else:
+            code_name = f"unknown_{self.code}"
         self._str = MSG_FORMAT_10.format(
             name_0, name_1, self.verb, code_name, ctx(self._pkt), self.payload
         )
@@ -251,6 +254,8 @@ class Message:
             undetermined.
         :rtype: dict[str, str]
         """
+        if _GET_MSG_IDX_CB is not None:
+            return _GET_MSG_IDX_CB(self)
 
         # .I --- 01:145038 --:------ 01:145038 3B00 002 FCC8
 
@@ -418,8 +423,7 @@ class Message:
                     result = _PAYLOAD_DECODER_CB(self)
                 else:
                     # Fallback for legacy ramses_tx isolated tests
-                    pipeline = PayloadDecoderPipeline()
-                    result = pipeline.decode(self)
+                    return {}
             except exc.PacketPayloadInvalid as err:
                 if not self._has_payload:
                     return {}  # Heartbeat fallback for null payloads
@@ -454,56 +458,3 @@ class Message:
         except NotImplementedError as err:  # parser_unknown (unknown packet code)
             _LOGGER.warning("%s < Unknown packet code (cannot parse)", self._pkt)
             raise exc.PacketInvalid from err
-
-
-def re_compile_re_match(regex: str, string: str) -> bool:  # Optional[Match[Any]]
-    """Check if the provided string matches the regex pattern.
-
-    :param regex: The regex pattern string
-    :type regex: str
-    :param string: The text payload to test
-    :type string: str
-    :return: True if matched, False otherwise
-    :rtype: bool
-    """
-    return bool(re.compile(regex).match(string))
-
-
-def _check_msg_payload(msg: Message, payload: str) -> None:
-    """Validate a packet's payload against its verb/code pair.
-
-    :param msg: The message object being validated
-    :type msg: Message
-    :param payload: The raw hex payload string
-    :type payload: str
-    :raises PacketInvalid: If the code is unknown or verb/code pair is invalid.
-    :raises PacketPayloadInvalid: If the payload does not match the expected regex.
-    """
-
-    try:
-        # Force packet evaluation via string representation (lazy parsing)
-        _ = repr(msg._pkt)
-    except Exception as err:
-        raise exc.PacketPayloadInvalid(
-            f"Packet formatting/evaluation failed: {err}"
-        ) from err
-
-    if msg.code not in CODES_SCHEMA:
-        raise exc.PacketInvalid(f"Unknown code: {msg.code}")
-
-    # Guard the TypedDict access by verifying the key against literals
-    # We use a tuple of strings that match the CodeSchemaEntry keys
-    if msg.verb not in ("RQ", "RP", " I", " W"):
-        raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
-
-    # Now that we've checked the literal membership, Mypy allows the access
-    # We use .get() to return the regex (str) and safely handle missing verbs
-    regex = CODES_SCHEMA[msg.code].get(msg.verb)
-
-    if not regex:
-        raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
-
-    if not re_compile_re_match(str(regex), payload):
-        raise exc.PacketPayloadInvalid(
-            f"Payload doesn't match {msg.verb}/{msg.code}: {payload} != {regex}"
-        )
