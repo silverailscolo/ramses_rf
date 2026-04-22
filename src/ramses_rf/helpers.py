@@ -4,10 +4,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from inspect import iscoroutinefunction
 from typing import Any, TypeAlias
+
+_LOGGER = logging.getLogger(__name__)
+
 
 _SchemaT: TypeAlias = dict[str, Any]
 
@@ -111,21 +115,30 @@ def schedule_task(
 
     async def schedule_fnc(
         fnc: Awaitable[Any] | Callable[..., Any],
-        delay: float | None,
-        period: float | None,
+        _delay: float | None,
+        _period: float | None,
         *args: Any,
         **kwargs: Any,
     ) -> Any:
-        if delay:
-            await asyncio.sleep(delay)
 
-        if not period:
+        _LOGGER.debug("schedule_fnc _delay: %s, _period: %s", _delay, _period)
+
+        if _delay:
+            await asyncio.sleep(_delay)
+
+        _LOGGER.debug("schedule_fnc delay passed")
+
+        if not _period:
             await execute_fnc(fnc, *args, **kwargs)
             return
 
-        while period:
+        while _period:
+            _LOGGER.debug("schedule_fnc firing")
             await execute_fnc(fnc, *args, **kwargs)
-            await asyncio.sleep(period)
+            await asyncio.sleep(_period)
+
+    _LOGGER.debug("schedule_task delay: %s, period: %s", delay, period)
+    ## EBR debug
 
     return asyncio.create_task(  # do we need to pass in an event loop?
         schedule_fnc(fnc, delay, period, *args, **kwargs), name=str(fnc)

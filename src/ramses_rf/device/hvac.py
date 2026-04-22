@@ -306,7 +306,9 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                     self._rq_cmd, num_repeats=2, priority=Priority.HIGH
                 )
             )
-            self._poller = schedule_task(task, 120, 120)  # delay, period 60 * 60 * 12
+            self._poller = schedule_task(
+                task, delay=120, period=120
+            )  # delay, period 60 * 60 * 12
             self._poller.set_name(f"{self.id}_10d0_poller")
             _LOGGER.debug("Starting filter poller")  ## EBR debug
             self._gwy.add_task(self._poller)
