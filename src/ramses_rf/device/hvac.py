@@ -559,12 +559,20 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :param kwargs: Keyword arguments passed to the parent class
         """
         super().__init__(*args, traits=traits, **kwargs)
-        self._supports_2411 = False  # Flag for 2411 parameter support
-        self._params_2411: dict[str, float] = {}  # Store 2411 parameters here
-        self._initialized_callback = None  # Called when device is fully initialized
-        self._param_update_callback = None  # Called when 2411 parameters are updated
-        self._hgi: Any | None = None  # Will be set when HGI is available
-        self._bound_devices: dict[str, str] = {}  # Track bound devices (e.g., REM/DIS)
+        self._init_fan_state()
+
+    def _init_fan_state(self) -> None:
+        """Initialize FAN-specific instance attributes (idempotent)."""
+        self.__dict__.setdefault("_supports_2411", False)
+        self.__dict__.setdefault("_params_2411", {})
+        self.__dict__.setdefault("_initialized_callback", None)
+        self.__dict__.setdefault("_param_update_callback", None)
+        self.__dict__.setdefault("_hgi", None)
+        self.__dict__.setdefault("_bound_devices", {})
+
+    def _post_class_promote(self) -> None:
+        """Initialize FAN state when promoted from a generic HVAC device."""
+        self._init_fan_state()
 
     def set_initialized_callback(self, callback: Callable[[], None] | None) -> None:
         """Set a callback to be executed when the next message (any) is received.

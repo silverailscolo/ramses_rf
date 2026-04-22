@@ -367,6 +367,12 @@ class Controller(DeviceHeat):  # CTL (01):
         self.tcs = None  # TODO: = self?
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
 
+    def _post_class_promote(self) -> None:
+        """Initialize CTL state when promoted in-place from a generic device."""
+        self.__dict__.setdefault("tcs", None)
+        if not self.tcs:
+            self._make_tcs_controller()
+
     def _setup_discovery_cmds(self) -> None:
         super()._setup_discovery_cmds()
 
@@ -443,14 +449,20 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
+        self._init_ufh_state()
 
-        self.circuit_by_id = {f"{i:02X}": {} for i in range(8)}
+    def _init_ufh_state(self) -> None:
+        """Initialize UFH-specific instance attributes (idempotent)."""
+        self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
+        self.__dict__.setdefault("_setpoints", None)
+        self.__dict__.setdefault("_heat_demand", None)
+        self.__dict__.setdefault("_heat_demands", None)
+        self.__dict__.setdefault("_relay_demand", None)
+        self.__dict__.setdefault("_relay_demand_fa", None)
 
-        self._setpoints: Message | None = None
-        self._heat_demand: Message | None = None
-        self._heat_demands: Message | None = None
-        self._relay_demand: Message | None = None
-        self._relay_demand_fa: Message | None = None
+    def _post_class_promote(self) -> None:
+        """Initialize UFH state when promoted in-place from a generic device."""
+        self._init_ufh_state()
 
     def _setup_discovery_cmds(self) -> None:
         super()._setup_discovery_cmds()
@@ -674,6 +686,10 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
         super().__init__(*args, traits=traits, **kwargs)
 
         self._child_id = FA  # NOTE: domain_id
+
+    def _post_class_promote(self) -> None:
+        """Initialize DHW state when promoted in-place from a generic device."""
+        self.__dict__.setdefault("_child_id", FA)
 
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
         super()._handle_msg(msg)

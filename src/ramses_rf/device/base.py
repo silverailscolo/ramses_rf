@@ -205,6 +205,12 @@ class DeviceBase(Entity):
                 f" {SZ_CLASS} to '{DEV_TYPE_MAP[cls._SLUG]}'"
             )
             self.__class__ = cls
+            # Promotion swaps the class in-place and does not call the new
+            # class's __init__; give subclasses a chance to initialize any
+            # state that their __init__ would otherwise create.
+            post_init = getattr(self, "_post_class_promote", None)
+            if callable(post_init):
+                post_init()
 
     async def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered (excludes battery-backup)."""
