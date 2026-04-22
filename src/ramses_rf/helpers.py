@@ -121,7 +121,9 @@ def schedule_task(
         **kwargs: Any,
     ) -> Any:
 
-        _LOGGER.debug("schedule_fnc _delay: %s, _period: %s", _delay, _period)
+        _LOGGER.debug(
+            "schedule_fnc %s _delay: %s, _period: %s", kwargs["name"], _delay, _period
+        )
 
         if _delay:
             await asyncio.sleep(_delay)
@@ -133,7 +135,7 @@ def schedule_task(
             return
 
         while _period:
-            _LOGGER.debug("schedule_fnc firing")
+            _LOGGER.debug("schedule_fnc firing %s", kwargs["name"])
             await execute_fnc(fnc, *args, **kwargs)
             await asyncio.sleep(_period)
 
