@@ -14,6 +14,7 @@ from . import exceptions as exc
 from .address import Address
 from .command import Command
 from .const import DEV_TYPE_MAP, SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
+from .models import DeviceId, RawPacket, TransportMessage
 from .packet import Packet
 from .parsers import PayloadDecoderPipeline
 from .ramses import CODE_IDX_ARE_COMPLEX, CODES_SCHEMA
@@ -339,6 +340,62 @@ class Message:
         index_name = IDX_NAMES.get(self.code, idx_name)
 
         return {index_name: self._pkt._idx}
+
+    @property
+    def dto(self) -> TransportMessage:
+        """Generate a strictly-typed TransportMessage DTO from this legacy Message.
+
+        This acts as a safe, passive bridge to validate the new Data Transfer Objects
+        against the legacy snapshot tests before fully migrating the transport layer.
+        """
+        # 1. Extract the raw hex payload (safely handling legacy packet structures)
+        raw_hex_payload = getattr(
+            self._pkt, "payload", getattr(self._pkt, "_payload", "")
+        )
+        payload_length = getattr(self._pkt, "_len", getattr(self._pkt, "len", 0))
+
+        # 2. Extract the 3 raw addresses (handling potential missing/different legacy structures)
+        # Assuming legacy Packet stores addresses in a tuple or list called _addrs or similar.
+        # We fall back to the parsed src/dst if the raw tuple isn't strictly available.
+        addr1_str = str(getattr(self._pkt, "src", self.src))
+        addr2_str = str(getattr(self._pkt, "dst", self.dst))
+
+        if hasattr(self._pkt, "_addrs") and len(self._pkt._addrs) > 2:
+            addr3_str = str(self._pkt._addrs[2])
+        else:
+            addr3_str = "--:------"
+
+        # 3. Safely cast the legacy code (int | Code) to strict types for the DTOs
+        code_int = int(self.code)
+        code_str = f"{code_int:04X}"
+
+        # 4. Build the Layer 2 RawPacket
+        raw_pkt = RawPacket(
+            raw_packet=str(self._pkt),
+            rssi=str(getattr(self._pkt, "rssi", "000")),
+            verb=self.verb,
+            seq=str(getattr(self._pkt, "seqn", "---")),
+            device_id_1=addr1_str,
+            device_id_2=addr2_str,
+            device_id_3=addr3_str,
+            code=code_str,
+            payload_len=f"{payload_length:03d}",
+            payload=raw_hex_payload,
+        )
+
+        # 5. Build and return the Layer 4 TransportMessage DTO
+        return TransportMessage(
+            dtm=self.dtm,
+            source_packets=(raw_pkt,),
+            rssi=int(getattr(self._pkt, "rssi", 0)),
+            verb=self.verb,
+            device_id_1=DeviceId.from_string(addr1_str),
+            device_id_2=DeviceId.from_string(addr2_str),
+            device_id_3=DeviceId.from_string(addr3_str),
+            code=code_int,
+            payload_len=int(payload_length),
+            raw_payload=raw_hex_payload,
+        )
 
     def _validate(self, raw_payload: str) -> PayloadT:
         """Validate a message packet payload, and parse it if valid.
