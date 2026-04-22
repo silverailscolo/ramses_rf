@@ -38,6 +38,7 @@ from ramses_tx.const import (
     SZ_ACTIVE_HGI,
 )
 from ramses_tx.logger import flush_packet_log
+from ramses_tx.parsers import PayloadDecoderPipeline
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 
 from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES
@@ -255,6 +256,15 @@ class Gateway(GatewayInterface):
             return True
 
         tx_msg._IS_CONTROLLER_CB = is_controller
+
+        # Instantiate a single pipeline for the gateway to use
+        _decoder_pipeline = PayloadDecoderPipeline()
+
+        def decode_payload(msg: Any) -> Any:
+            """Provide ramses_tx with the semantic payload decoder."""
+            return _decoder_pipeline.decode(msg)
+
+        tx_msg._PAYLOAD_DECODER_CB = decode_payload
 
     def __repr__(self) -> str:
         """Return a string representation of the Gateway.

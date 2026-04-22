@@ -64,6 +64,8 @@ _MessageT = TypeVar("_MessageT", bound="Message")
 
 # Context Bridge
 _IS_CONTROLLER_CB: Callable[[str], bool] | None = None
+# Parser Bridge
+_PAYLOAD_DECODER_CB: Callable[[Any], Any] | None = None
 
 
 class Message:
@@ -411,8 +413,13 @@ class Message:
         try:  # parse the payload
             # TODO: only accept invalid packets to/from HGI when flag raised
             try:
-                pipeline = PayloadDecoderPipeline()
-                result = pipeline.decode(self)
+                if _PAYLOAD_DECODER_CB is not None:
+                    # Application layer (ramses_rf) is handling the semantic parsing
+                    result = _PAYLOAD_DECODER_CB(self)
+                else:
+                    # Fallback for legacy ramses_tx isolated tests
+                    pipeline = PayloadDecoderPipeline()
+                    result = pipeline.decode(self)
             except exc.PacketPayloadInvalid as err:
                 if not self._has_payload:
                     return {}  # Heartbeat fallback for null payloads
@@ -427,7 +434,7 @@ class Message:
                 return {**self._idx, **result}
 
             # Return the strongly-typed PayloadBase DTO object
-            return result  # type: ignore[unreachable]
+            return result
 
         except exc.PacketInvalid as err:
             _LOGGER.warning("%s < %s", self._pkt, err)
