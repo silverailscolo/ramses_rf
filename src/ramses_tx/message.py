@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
@@ -60,11 +61,15 @@ PayloadT: TypeAlias = Any  # PayloadBase | list[PayloadBase] | dict | list[dict]
 # TypeVar bound to Message to allow strict inheritance typing for class factories
 _MessageT = TypeVar("_MessageT", bound="Message")
 
+# Context Bridge
+_IS_CONTROLLER_CB: Callable[[str], bool] | None = None
+
 
 class Message:
     """The Message class; will trap/log invalid msgs."""
 
     _gwy: Any | None = None
+    _is_controller_cb: Callable[[str], bool] | None = None
 
     def __init__(self, pkt: Packet) -> None:
         """Create a message from a valid packet.
@@ -310,9 +315,16 @@ class Message:
         #     assert self._pkt._idx == "00", "What!! (BB)"
         #     return {}
 
-        if self.src.type == self.dst.type and not getattr(
-            self.src, "_is_controller", True
-        ):  # DEX
+        # BRIDGED LOGIC:
+        is_controller = True
+        if _IS_CONTROLLER_CB is not None:
+            # Use the injected domain logic from ramses_rf
+            is_controller = _IS_CONTROLLER_CB(self.src.id)
+        else:
+            # Fallback for legacy tests until they are updated
+            is_controller = getattr(self.src, "_is_controller", True)
+
+        if self.src.type == self.dst.type and not is_controller:  # DEX
             assert self._pkt._idx == "00", "What!! (BC)"
             return {}
 
