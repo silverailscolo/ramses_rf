@@ -290,6 +290,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         """Set up the discovery commands for the filter change sensor."""
         super()._setup_discovery_cmds()
 
+        _LOGGER.debug("_setup_discovery_cmds filter ")  ## EBR debug
         self.discovery.add_cmd(
             self._rq_cmd,
             60 * 60 * 24,
