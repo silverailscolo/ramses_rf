@@ -16,6 +16,7 @@ from datetime import datetime as dt, timedelta as td
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+import ramses_tx.message as tx_msg
 from ramses_tx import (
     Command,
     Engine,
@@ -40,6 +41,7 @@ from ramses_tx.logger import flush_packet_log
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 
 from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES
+from .typing import DeviceIdT
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -231,6 +233,28 @@ class Gateway(GatewayInterface):
 
         self._message_store: MessageStoreInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
+
+        def is_controller(device_id: str) -> bool:
+            """Provide ramses_tx with domain knowledge safely.
+
+            :param device_id: The string device ID (e.g., '01:145038').
+            :type device_id: str
+            :returns: True if the device is a controller or unknown, False otherwise.
+            :rtype: bool
+            """
+            # HACK: Preserve legacy bug-compatibility for snapshot tests.
+            # ramses_tx previously assumed UFCs (02:) were controllers because
+            # its Address object lacked domain knowledge and defaulted to True.
+            if device_id.startswith("02:"):
+                return True
+
+            dev = self._device_registry.device_by_id.get(cast(DeviceIdT, device_id))
+
+            if dev:
+                return getattr(dev, "_is_controller", True)
+            return True
+
+        tx_msg._IS_CONTROLLER_CB = is_controller
 
     def __repr__(self) -> str:
         """Return a string representation of the Gateway.
