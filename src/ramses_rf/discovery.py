@@ -191,11 +191,19 @@ class DiscoveryService:
             )
 
         if cmd.rx_header in self.cmds:
-            _LOGGER.info(f"cmd({cmd}): duplicate header not added to discovery")
+            _LOGGER.info("cmd(%s): duplicate header not added to discovery", cmd)
             return
 
         if delay:
             delay += random.uniform(0.05, 0.45)
+
+        _LOGGER.debug(
+            "add_cmd(cmd: %s, delay: %s, delay: %s) hdr: %s",
+            cmd,
+            interval,
+            delay,
+            cmd.rx_header,
+        )
 
         self.cmds[cmd.rx_header] = {
             _SZ_COMMAND: cmd,
