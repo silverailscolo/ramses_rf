@@ -382,6 +382,7 @@ class DiscoveryService:
                 return pkt
             return None
 
+        _LOGGER.debug("discover started")
         for hdr, task in self.cmds.items():
             dt_now = dt.now()
 
