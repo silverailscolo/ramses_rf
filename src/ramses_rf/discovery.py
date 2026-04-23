@@ -71,6 +71,7 @@ class DiscoveryService:
 
         if not gwy.config.disable_discovery:
             try:
+                _LOGGER.debug("DiscoveryService init start_poller")
                 asyncio.get_running_loop().call_soon(self.start_poller)
             except RuntimeError:
                 # Fallback if instantiated outside of a running event loop context
@@ -198,7 +199,7 @@ class DiscoveryService:
             delay += random.uniform(0.05, 0.45)
 
         _LOGGER.debug(
-            "add_cmd(cmd: %s, delay: %s, delay: %s) hdr: %s",
+            "add_cmd(cmd: %s, interval: %s, delay: %s) hdr: %s",
             cmd,
             interval,
             delay,

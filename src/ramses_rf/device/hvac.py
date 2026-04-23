@@ -832,7 +832,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         _LOGGER.debug("Adding single discovery command for all 2411 parameters")
         self.discovery.add_cmd(
             Command.from_attrs(RQ, self.id, Code._2411, PayloadT("00003F")),
-            interval=60 * 60 * 24,  # Check daily
+            60 * 60 * 24,  # Check daily
             delay=40,  # Initial delay before first discovery
         )
 
