@@ -217,6 +217,7 @@ class DiscoveryService:
 
     def start_poller(self) -> None:
         """Start the discovery poller (if it is not already running)."""
+        _LOGGER.debug("start_poller()")
         if self._poller and not self._poller.done():
             return
 
@@ -235,6 +236,7 @@ class DiscoveryService:
 
     async def poll_cmds(self) -> None:
         """Send any outstanding commands that are past due."""
+        _LOGGER.debug("poll_cmds()")
         while True:
             await self.discover()
 
