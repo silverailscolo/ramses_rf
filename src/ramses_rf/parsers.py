@@ -31,6 +31,7 @@ from ramses_tx.const import (
     FAULT_DEVICE_CLASS,
     FAULT_STATE,
     FAULT_TYPE,
+    LOOKUP_PUZZ,
     SYS_MODE_MAP,
     SZ_ACCEPT,
     SZ_ACTIVE,
@@ -176,16 +177,6 @@ if TYPE_CHECKING:
     from ramses_tx.message import Message
 
 _2411_TABLE = {k: v["description"] for k, v in _2411_PARAMS_SCHEMA.items()}
-
-LOOKUP_PUZZ = {
-    "10": "engine",  # .    # version str, e.g. v0.14.0
-    "11": "impersonating",  # pkt header, e.g. 30C9| I|03:123001 (15 characters, packed)
-    "12": "message",  # .   # message only, max len is 16 ascii characters
-    "13": "message",  # .   # message only, but without a timestamp, max len 22 chars
-    "20": "engine",  # .    # version str, e.g. v0.50.0, has higher-precision timestamp
-    "7F": "null",  # .      # packet is null / was nullified: payload to be ignored
-}  # "00" is reserved
-
 
 _INFORM_DEV_MSG = "Support the development of ramses_rf by reporting this packet"
 

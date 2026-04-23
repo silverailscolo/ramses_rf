@@ -7,8 +7,6 @@ from collections.abc import Iterable
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from ramses_rf.parsers import LOOKUP_PUZZ
-
 from .. import exceptions as exc
 from ..address import ALL_DEV_ADDR, Address, dev_id_to_hex_id
 from ..const import (
@@ -19,6 +17,7 @@ from ..const import (
     FC,
     FF,
     I_,
+    LOOKUP_PUZZ,
     RP,
     RQ,
     SYS_MODE_MAP,
