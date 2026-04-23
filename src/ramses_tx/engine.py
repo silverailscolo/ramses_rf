@@ -346,7 +346,9 @@ class Engine:
         with self._tasks_lock:
             self._tasks = [t for t in self._tasks if not t.done()]
             self._tasks.append(task)
-            _LOGGER.debug("Engine appended task %s", task.get_name())  ## EBR debug
+        _LOGGER.debug(
+            "Engine appended task %s to %s", task.get_name(), self._tasks
+        )  ## EBR debug
 
     @staticmethod
     def create_cmd(

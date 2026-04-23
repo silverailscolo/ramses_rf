@@ -139,7 +139,7 @@ def schedule_task(
             await execute_fnc(fnc, *args, **kwargs)
             await asyncio.sleep(_period)
 
-    _LOGGER.debug("schedule_task delay: %s, period: %s", delay, period)
+    _LOGGER.debug("schedule_task fnc: %s, delay: %s, period: %s", fnc, delay, period)
     ## EBR debug
 
     return asyncio.create_task(  # do we need to pass in an event loop?
