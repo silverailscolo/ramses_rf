@@ -397,6 +397,7 @@ class DiscoveryService:
 
             task[_SZ_NEXT_DUE] = dt_now + backoff(hdr, task[_SZ_FAILURES])
 
+            _LOGGER.debug("discover.send_disc_cmd(hdr: %s, task: %s)", hdr, task)
             if pkt := await send_disc_cmd(hdr, task):
                 task[_SZ_FAILURES] = 0
                 task[_SZ_LAST_PKT] = pkt
