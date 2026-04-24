@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ramses_tx.address import NON_DEV_ADDR, hex_id_to_dev_id
 from ramses_tx.const import (
@@ -492,7 +492,7 @@ def parser_22e5(payload: str, msg: Message) -> Mapping[str, float | None]:
     # RP --- 32:153258 18:005904 --:------ 22E5 004 00-96-C8-14
     # RP --- 32:155617 18:005904 --:------ 22E5 004 00-72-C8-14
 
-    return parser_22e0(payload, msg)
+    return cast("Mapping[str, float | None]", parser_22e0(payload, msg))
 
 
 # WIP: unknown, HVAC
@@ -512,7 +512,7 @@ def parser_22e9(payload: str, msg: Message) -> Mapping[str, float | str | None]:
             "unknown_4": payload[4:6],
             "unknown_6": payload[6:8],
         }
-    return parser_22e0(payload, msg)
+    return cast("Mapping[str, float | str | None]", parser_22e0(payload, msg))
 
 
 # fan_speed (switch_mode), HVAC
