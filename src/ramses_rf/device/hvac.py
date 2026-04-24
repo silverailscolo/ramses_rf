@@ -584,6 +584,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     def _post_class_promote(self) -> None:
         """Initialize FAN state when promoted from a generic HVAC device."""
         self._init_fan_state()
+        self._setup_discovery_cmds()  # sent?
 
     def set_initialized_callback(self, callback: Callable[[], None] | None) -> None:
         """Set a callback to be executed when the next message (any) is received.
@@ -825,6 +826,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             60 * 60 * 24,
             delay=15,
         )  # to learn scheme: orcon/itho/other (04/07/0?)
+
+        self.discovery.add_cmd(  # DEBUG EBR
+            Command.from_attrs(RQ, self.id, Code._10D0, PayloadT("00")),
+            60 * 60 * 24,
+            delay=30,
+        )  # update filter remaining
 
         # Add a single discovery command for all parameters (3F likely to be supported if any)
         # The handler will process the response and update the appropriate parameter and
