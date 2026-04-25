@@ -321,7 +321,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
         self.add_cmd(
             self._rq_cmd,
-            60 * 60 * 1,  # EBR TODO set to 60 * 60 * 24,
+            60 * 2,  # EBR TODO set to 60 * 60 * 24,
             delay=30,
         )  # 10D0 RQ filter_remaining, message must be RQd.
 
@@ -426,11 +426,11 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                 )
             except exc.ProtocolError as err:
                 _LOGGER.warning(
-                    f"{self.device_id}: Failed to send discovery cmd: {hdr}: {err}"
+                    f"{self.device_id}: Failed to send poll cmd: {hdr}: {err}"
                 )
             except TimeoutError as err:
                 _LOGGER.warning(
-                    f"{self.device_id}: Failed to send discovery cmd: {hdr} within {timeout} secs: {err}"
+                    f"{self.device_id}: Failed to send poll cmd: {hdr} within {timeout} secs: {err}"
                 )
             else:
                 return pkt
@@ -438,6 +438,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
         _LOGGER.debug("poller started")
         for hdr, task in self.cmds.items():
+            _LOGGER.debug("polling for %s", hdr)
             dt_now = dt.now()
 
             if task[_SZ_NEXT_DUE] > dt_now:
@@ -961,7 +962,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             delay=15,
         )  # to learn scheme: orcon/itho/other (04/07/0?)
 
-        self.discovery.add_cmd(  # DEBUG EBR
+        self.discovery.add_cmd(
             Command.from_attrs(RQ, self.id, Code._10D0, PayloadT("00")),
             60 * 60 * 24,
             delay=30,
