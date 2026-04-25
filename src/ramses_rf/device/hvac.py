@@ -313,7 +313,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             # Note that discovery will also poll for filter, so we might add:
             # and self._gwy.config.disable_discovery:
             try:
-                _LOGGER.debug("DiscoveryService init start_poller for %s", device_id)
+                _LOGGER.debug("HVAC init start_poller for %s", device_id)
                 asyncio.get_running_loop().call_soon(self.start_poller)
             except RuntimeError:
                 # Fallback if instantiated outside of a running event loop context
@@ -387,9 +387,10 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         if self._poller and not self._poller.done():
             return
 
-        self._poller = schedule_task(self.poll_cmds)
+        self._poller = schedule_task(self.poll_cmds, delay=120)
+        # this takes action just once if no period given, so it might have 0 tasks
         self._poller.set_name(f"{self.device_id}_hvac_poller")
-        self._gwy.add_task(self._poller)
+        self._gwy.add_task(self._poller)  # just for housekeeping
 
     async def stop_poller(self) -> None:
         """Stop the filter poller (only if it is running)."""
