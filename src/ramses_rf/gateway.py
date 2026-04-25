@@ -365,7 +365,7 @@ class Gateway(GatewayInterface):
                 if system.dhw:
                     system.dhw.discovery.start_poller()
 
-        def initiate_polling(dev_list: list[Device]) -> None:
+        async def initiate_polling(dev_list: list[Device]) -> None:
             """Initiate polling, on hvac Fan devices only.
 
             :param dev_list: List of devices to poll.
@@ -378,7 +378,7 @@ class Gateway(GatewayInterface):
             # Routing to components
             for device in dev_list:
                 if isinstance(device, HvacVentilator):
-                    device.init_poller(device.id)
+                    await device.init_poller(device.id)
 
         _, self._pkt_log_listener = await set_pkt_logging_config(
             cc_console=(self.config.reduce_processing >= DONT_CREATE_MESSAGES),
@@ -436,7 +436,7 @@ class Gateway(GatewayInterface):
                 self.device_registry.devices, self.device_registry.systems
             )
 
-        initiate_polling(  # polling of RQ-only Codes, HVAC 10D0
+        await initiate_polling(  # polling of RQ-only Codes, HVAC 10D0
             self.device_registry.devices
         )
 
