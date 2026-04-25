@@ -401,6 +401,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         """Send any outstanding commands that are past due."""
         _LOGGER.debug("FilterChange poll_cmds()")
         while True:
+            _LOGGER.debug("poll_cmds poll() loop")
             await self.poll()
 
             if self.cmds:
@@ -420,6 +421,8 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         ) -> Packet | None:
             """Send a scheduled command and wait for/return the response."""
             try:
+                _LOGGER.debug("poll_cmds > poll() send_poll_cmd(%s)", hdr)
+
                 pkt: Packet | None = await asyncio.wait_for(
                     self._gwy.async_send_cmd(task[_SZ_COMMAND]),
                     timeout=timeout,
