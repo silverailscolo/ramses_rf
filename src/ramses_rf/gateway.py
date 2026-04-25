@@ -52,7 +52,7 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     W_,
     Code,
 )
-from .device import HgiGateway
+from .device import HgiGateway, HvacVentilator
 from .device_filter import DeviceFilter
 from .device_registry import DeviceRegistry
 from .dispatcher import detect_array_fragment, process_msg
@@ -352,7 +352,7 @@ class Gateway(GatewayInterface):
             :returns: None
             :rtype: None
             """
-            _LOGGER.debug("Engine: Initiating/enabling discovery...")
+            _LOGGER.debug("Gateway: Initiating/enabling discovery...")
 
             # Routing to components
             for device in dev_list:
@@ -364,6 +364,21 @@ class Gateway(GatewayInterface):
                     zone.discovery.start_poller()
                 if system.dhw:
                     system.dhw.discovery.start_poller()
+
+        def initiate_polling(dev_list: list[Device]) -> None:
+            """Initiate polling, on hvac Fan devices only.
+
+            :param dev_list: List of devices to poll.
+            :type dev_list: list[Device]
+            :returns: None
+            :rtype: None
+            """
+            _LOGGER.debug("Gateway: Initiating polling...")
+
+            # Routing to components
+            for device in dev_list:
+                if isinstance(device, HvacVentilator):
+                    device.start_poller()  # or init_poller ?
 
         _, self._pkt_log_listener = await set_pkt_logging_config(
             cc_console=(self.config.reduce_processing >= DONT_CREATE_MESSAGES),
@@ -420,6 +435,10 @@ class Gateway(GatewayInterface):
             initiate_discovery(
                 self.device_registry.devices, self.device_registry.systems
             )
+
+        initiate_polling(  # polling of RQ-only Codes, HVAC 10D0
+            self.device_registry.devices
+        )
 
     def create_sqlite_message_index(self) -> None:
         """Initialize the SQLite MessageStore.

@@ -303,11 +303,18 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
     async def init_poller(self, device_id: str) -> None:
         """Create and start the filter_remaining poller.
-        Started from HA ramses_cc integration when client is initialized.
+        Started from HA ramses_cc integration after client is initialized.
         :param device_id: The ID of the device
         :type device_id: str
         """
         self.device_id = device_id
+
+        # first add the command
+        self.add_cmd(
+            self._rq_cmd,
+            60 * 2,  # EBR TODO set to 60 * 60 * 24,
+            delay=30,
+        )  # 10D0 RQ filter_remaining, message must be RQd.
 
         if not self._poller:
             # Note that discovery will also poll for filter, so we might add:
@@ -321,12 +328,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
         # send RQ first time
         await self._gwy.async_send_cmd(self._rq_cmd)
-
-        self.add_cmd(
-            self._rq_cmd,
-            60 * 2,  # EBR TODO set to 60 * 60 * 24,
-            delay=30,
-        )  # 10D0 RQ filter_remaining, message must be RQd.
 
     def add_cmd(
         self,
