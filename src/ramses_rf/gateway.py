@@ -378,7 +378,7 @@ class Gateway(GatewayInterface):
             # Routing to components
             for device in dev_list:
                 if isinstance(device, HvacVentilator):
-                    device.start_poller()  # or init_poller ?
+                    device.init_poller(device.id)
 
         _, self._pkt_log_listener = await set_pkt_logging_config(
             cc_console=(self.config.reduce_processing >= DONT_CREATE_MESSAGES),
