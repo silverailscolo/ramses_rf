@@ -301,7 +301,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         _LOGGER.debug("_setup_discovery_cmds filter")  ## EBR debug
         self.discovery.add_cmd(self._rq_cmd, 60 * 60 * 24, delay=30)
 
-    def init_poller(self, device_id: str) -> None:
+    async def init_poller(self, device_id: str) -> None:
         """Create and start the filter_remaining poller.
         Started from HA ramses_cc integration when client is initialized.
         :param device_id: The ID of the device
@@ -318,6 +318,9 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             except RuntimeError:
                 # Fallback if instantiated outside of a running event loop context
                 _LOGGER.debug("No running event loop; hvac poller not started.")
+
+        # send RQ first time
+        await self._gwy.async_send_cmd(self._rq_cmd)
 
         self.add_cmd(
             self._rq_cmd,
