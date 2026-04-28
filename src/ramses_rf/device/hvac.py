@@ -290,11 +290,14 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         self.device_id: str | None = None
         self.cmds: dict[HeaderT, dict[str, Any]] = {}
         self._poller: asyncio.Task[None] | None = None
-        hgi_id: str | None = None
-        if self._gwy and hasattr(self._gwy, "hgi") and self._gwy.hgi is not None:
-            hgi_id = self._gwy.hgi.id
+        # hgi_id: str | None = None
+        # if self._gwy and hasattr(self._gwy, "hgi") and self._gwy.hgi is not None:
+        #     hgi_id = self._gwy.hgi.id
         self._rq_cmd: Command = Command.from_attrs(
-            RQ, self.id, Code._10D0, PayloadT("00"), from_id=hgi_id
+            RQ,
+            self.id,
+            Code._10D0,
+            PayloadT("00"),  # , from_id=hgi_id
         )
         self.timeout = 12
 
@@ -330,8 +333,8 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                 _LOGGER.debug("No running event loop; hvac poller not started.")
 
         # send RQ first time
-        _LOGGER.debug("HVAC sending first 10D0 cmd from %s", self._rq_cmd.src)
-        await self._gwy.async_send_cmd(self._rq_cmd)
+        # _LOGGER.debug("HVAC sending first 10D0 cmd from %s", self._rq_cmd.src)
+        # await self._gwy.async_send_cmd(self._rq_cmd)
 
     def add_cmd(
         self,

@@ -460,9 +460,9 @@ class Gateway(GatewayInterface):
                 self.device_registry.devices, self.device_registry.systems
             )
 
-        await initiate_polling(  # polling of RQ-only Codes, HVAC 10D0
-            self.device_registry.devices
-        )
+        # await initiate_polling(  # polling of RQ-only Codes, HVAC 10D0
+        #     self.device_registry.devices
+        # )
 
     def create_sqlite_message_index(self) -> None:
         """Initialize the SQLite MessageStore.
