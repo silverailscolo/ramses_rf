@@ -290,8 +290,10 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         self.device_id: str | None = None
         self.cmds: dict[HeaderT, dict[str, Any]] = {}
         self._poller: asyncio.Task[None] | None = None
+        if self._hgi is None and self._gwy and hasattr(self._gwy, "hgi"):
+            self._hgi = self._gwy.hgi
         self._rq_cmd: Command = Command.from_attrs(
-            RQ, self.id, Code._10D0, PayloadT("00")
+            RQ, self.id, Code._10D0, PayloadT("00"), from_id=self._hgi.id
         )
         self.timeout = 12
 
@@ -299,7 +301,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         """Set up the discovery commands for the filter change sensor."""
         super()._setup_discovery_cmds()
 
-        _LOGGER.debug("_setup_discovery_cmds filter")  ## EBR debug
         self.discovery.add_cmd(self._rq_cmd, 60 * 60 * 24, delay=30)
 
     async def init_poller(self, device_id: str) -> None:
@@ -328,6 +329,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                 _LOGGER.debug("No running event loop; hvac poller not started.")
 
         # send RQ first time
+        _LOGGER.debug("HVAC sending first 10D0 cmd from %s", self._rq_cmd.src)
         await self._gwy.async_send_cmd(self._rq_cmd)
 
     def add_cmd(
