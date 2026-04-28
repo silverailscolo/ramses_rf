@@ -395,7 +395,8 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         if self._poller and not self._poller.done():
             return
 
-        self._poller = schedule_task(self.poll_cmds, delay=120)
+        self._poller = schedule_task(self.poll_cmds)
+        _LOGGER.debug("start_poller task created %s", self._poller.get_name())
         # this takes action just once if no period given, so it might have 0 tasks
         self._poller.set_name(f"{self.device_id}_hvac_poller")
         self._gwy.add_task(self._poller)  # just for housekeeping
@@ -426,7 +427,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
     async def poll(self) -> None:
         """Process the outstanding commands."""
-        # based on discovery.py
+        # method is based on discovery.py
 
         async def send_poll_cmd(
             hdr: HeaderT, task: dict[str, Any], timeout: float = 15
