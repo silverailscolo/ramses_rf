@@ -325,6 +325,11 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             _LOGGER.debug("FilterChange start_poller hgi=%s", self._gwy.hgi)
             if self._gwy is None:
                 asyncio.sleep(10)
+            assert self._gwy is not None  # just checking
+            if self._gwy.hgi is None:
+                asyncio.sleep(10)
+            assert self._gwy.hgi is not None
+
             self.polling = PollingService(self, self._gwy)  # if None, wait and retry
             self._rq_cmd = Command.from_attrs(
                 RQ,
@@ -635,9 +640,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
                     # Clear the callback so it's only called once
                     self._initialized_callback = None
 
-    def start_poller(self) -> None:
-        """Start the poller."""
-        super().start_poller()
+    # def start_poller(self) -> None:
+    #     """Start the poller."""
+    #     super().start_poller()
 
     def set_param_update_callback(
         self, callback: Callable[[str, Any], None] | None
