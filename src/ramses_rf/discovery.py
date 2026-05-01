@@ -240,6 +240,7 @@ class DiscoveryService:
         """Send any outstanding commands that are past due."""
         _LOGGER.debug("poll_cmds()")
         while True:
+            _LOGGER.debug("poll_cmds poll() loop")
             await self.discover()
 
             if self.cmds:

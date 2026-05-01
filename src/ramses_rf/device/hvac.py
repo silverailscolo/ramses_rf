@@ -50,6 +50,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.entity import class_by_attr
 from ramses_rf.helpers import schedule_task
+from ramses_rf.polling import PollingService
 from ramses_tx import Address, Command, Packet, Priority
 from ramses_tx.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR
 from ramses_tx.typing import PayloadT
@@ -262,15 +263,15 @@ class PresenceDetect(HvacSensorBase):  # 2E10
 
 
 # const for the hvac_poller
-_SZ_LAST_PKT: str = "last_msg"
-_SZ_NEXT_DUE: str = "next_due"
-_SZ_TIMEOUT: str = "timeout"
-_SZ_FAILURES: str = "failures"
-_SZ_INTERVAL: str = "interval"
-_SZ_COMMAND: str = "command"
-
-MAX_CYCLE_SECS: int = 30
-MIN_CYCLE_SECS: int = 3
+# _SZ_LAST_PKT: str = "last_msg"
+# _SZ_NEXT_DUE: str = "next_due"
+# _SZ_TIMEOUT: str = "timeout"
+# _SZ_FAILURES: str = "failures"
+# _SZ_INTERVAL: str = "interval"
+# _SZ_COMMAND: str = "command"
+#
+# MAX_CYCLE_SECS: int = 30
+# MIN_CYCLE_SECS: int = 3
 
 
 class FilterChange(DeviceHvac):  # FAN: 10D0
@@ -287,19 +288,13 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         """
         super().__init__(*args, traits=traits, **kwargs)
 
-        self.device_id: str | None = None
-        self.cmds: dict[HeaderT, dict[str, Any]] = {}
-        self._poller: asyncio.Task[None] | None = None
-        # hgi_id: str | None = None
-        # if self._gwy and hasattr(self._gwy, "hgi") and self._gwy.hgi is not None:
-        #     hgi_id = self._gwy.hgi.id
+        self.polling: PollingService = PollingService(self, self._gwy)
         self._rq_cmd: Command = Command.from_attrs(
             RQ,
             self.id,
             Code._10D0,
             PayloadT("00"),  # , from_id=hgi_id
         )
-        self.timeout = 12
 
     def _setup_discovery_cmds(self) -> None:
         """Set up the discovery commands for the filter change sensor."""
@@ -307,172 +302,35 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
         self.discovery.add_cmd(self._rq_cmd, 60 * 60 * 24, delay=30)
 
-    async def init_poller(self, device_id: str) -> None:
+    def _setup_polling_cmds(self) -> None:
         """Create and start the filter_remaining poller.
         Started from HA ramses_cc integration after client is initialized.
         :param device_id: The ID of the device
         :type device_id: str
         """
-        self.device_id = device_id
-
-        # first add the command
-        self.add_cmd(
+        # super()._setup_polling_cmds()
+        self.polling.add_cmd(
             self._rq_cmd,
-            60 * 2,  # EBR TODO set to 60 * 60 * 24,
+            60,  # EBR TODO set to 60 * 60 * 24,
             delay=30,
         )  # 10D0 RQ filter_remaining, message must be RQd.
-
-        if not self._poller:
-            # Note that discovery will also poll for filter, so we might add:
-            # and self._gwy.config.disable_discovery:
-            try:
-                _LOGGER.debug("HVAC init start_poller for %s", device_id)
-                asyncio.get_running_loop().call_soon(self.start_poller)
-            except RuntimeError:
-                # Fallback if instantiated outside of a running event loop context
-                _LOGGER.debug("No running event loop; hvac poller not started.")
 
         # send RQ first time
         # _LOGGER.debug("HVAC sending first 10D0 cmd from %s", self._rq_cmd.src)
         # await self._gwy.async_send_cmd(self._rq_cmd)
 
-    def add_cmd(
-        self,
-        cmd: Command,
-        interval: float,
-        *,
-        delay: float = 0,
-        timeout: float | None = None,
-    ) -> None:
-        """Schedule a command to run periodically.
-
-        :param cmd: The command to poll.
-        :type cmd: Command
-        :param interval: The polling interval in seconds.
-        :type interval: float
-        :param delay: The initial delay before the first poll, defaults to 0.
-        :type delay: float, optional
-        :param timeout: The request timeout, defaults to None.
-        :type timeout: float | None, optional
-        :raises CommandInvalid: If the header is missing.
-        """
-        if cmd.rx_header is None:
-            raise exc.CommandInvalid(
-                f"cmd({cmd}): invalid (null) header not added to discovery"
-            )
-
-        if cmd.rx_header in self.cmds:
-            _LOGGER.info("cmd(%s): duplicate header not added to discovery", cmd)
-            return
-
-        if delay:
-            delay += random.uniform(0.05, 0.45)
-
-        _LOGGER.debug(
-            "FilterChange add_cmd(cmd: %s, interval: %s, delay: %s) hdr: %s",
-            cmd,
-            interval,
-            delay,
-            cmd.rx_header,
-        )
-
-        self.cmds[cmd.rx_header] = {
-            _SZ_COMMAND: cmd,
-            _SZ_INTERVAL: td(seconds=max(interval, MAX_CYCLE_SECS)),
-            _SZ_LAST_PKT: None,
-            _SZ_NEXT_DUE: dt.now() + td(seconds=delay),
-            _SZ_TIMEOUT: timeout,
-            _SZ_FAILURES: 0,
-        }
-
     def start_poller(self) -> None:
-        """
-        Start polling a fan.
-        Messages are cleaned up every 12h.
-        """
-        """Start the discovery poller (if it is not already running)."""
-        _LOGGER.debug("start_poller()")
-        if self._poller and not self._poller.done():
-            return
-
-        self._poller = schedule_task(self.poll_cmds)
-        _LOGGER.debug("start_poller task created %s", self._poller.get_name())
-        # this takes action just once if no period given, so it might have 0 tasks
-        self._poller.set_name(f"{self.device_id}_hvac_poller")
-        self._gwy.add_task(self._poller)  # just for housekeeping
-
-    async def stop_poller(self) -> None:
-        """Stop the filter poller (only if it is running)."""
-        if not self._poller or self._poller.done():
-            return
-
-        self._poller.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await self._poller
-
-    async def poll_cmds(self) -> None:
-        """Send any outstanding commands that are past due."""
-        _LOGGER.debug("FilterChange poll_cmds()")
-        while True:
-            _LOGGER.debug("poll_cmds poll() loop")
-            await self.poll()
-
-            if self.cmds:
-                next_due = min(t[_SZ_NEXT_DUE] for t in self.cmds.values())
-                delay = max((next_due - dt.now()).total_seconds(), MIN_CYCLE_SECS)
-            else:
-                delay = MAX_CYCLE_SECS
-
-            await asyncio.sleep(min(delay, MAX_CYCLE_SECS))
-
-    async def poll(self) -> None:
-        """Process the outstanding commands."""
-        # method is based on discovery.py
-
-        async def send_poll_cmd(
-            hdr: HeaderT, task: dict[str, Any], timeout: float = 15
-        ) -> Packet | None:
-            """Send a scheduled command and wait for/return the response."""
-            try:
-                _LOGGER.debug("poll_cmds > poll() send_poll_cmd(%s)", hdr)
-
-                pkt: Packet | None = await asyncio.wait_for(
-                    self._gwy.async_send_cmd(task[_SZ_COMMAND]),
-                    timeout=timeout,
-                )
-            except exc.ProtocolError as err:
-                _LOGGER.warning(
-                    f"{self.device_id}: Failed to send poll cmd: {hdr}: {err}"
-                )
-            except TimeoutError as err:
-                _LOGGER.warning(
-                    f"{self.device_id}: Failed to send poll cmd: {hdr} within {timeout} secs: {err}"
-                )
-            else:
-                return pkt
-            return None
-
-        _LOGGER.debug("poller started")
-        for hdr, task in self.cmds.items():
-            _LOGGER.debug("polling for %s", hdr)
-            dt_now = dt.now()
-
-            if task[_SZ_NEXT_DUE] > dt_now:
-                continue
-
-            task[_SZ_NEXT_DUE] = dt_now + task[_SZ_INTERVAL]
-
-            _LOGGER.debug("hvac.send_poll_cmd(hdr: %s, task: %s)", hdr, task)
-            if pkt := await send_poll_cmd(hdr, task):
-                task[_SZ_FAILURES] = 0
-                task[_SZ_LAST_PKT] = pkt
-                task[_SZ_NEXT_DUE] = pkt.dtm + task[_SZ_INTERVAL]
-            else:
-                task[_SZ_FAILURES] += 1
-                task[_SZ_LAST_PKT] = None
-                task[_SZ_NEXT_DUE] = dt_now
-
-    # end of hvac poller
+        """Start the poller."""
+        if not hasattr(self, "polling") or self.polling is None:
+            self.polling = PollingService(self, self._gwy)
+            self._rq_cmd = Command.from_attrs(
+                RQ,
+                self.id,
+                Code._10D0,
+                PayloadT("00"),  # , from_id=hgi_id
+            )
+            self._setup_polling_cmds()
+        self.polling.start_poller()
 
     async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.
@@ -774,6 +632,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
                     # Clear the callback so it's only called once
                     self._initialized_callback = None
 
+    def start_poller(self) -> None:
+        """Start the poller."""
+        super().start_poller()
+
     def set_param_update_callback(
         self, callback: Callable[[str, Any], None] | None
     ) -> None:
@@ -1013,6 +875,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             self.discovery.add_cmd(
                 Command.from_attrs(RQ, self.id, code, PayloadT("00")), 60 * 30, delay=30
             )
+
+    def _setup_polling_cmds(self) -> None:
+        super()._setup_polling_cmds()
 
     def add_bound_device(self, device_id: str, device_type: str) -> None:
         """Add a bound device to this FAN.

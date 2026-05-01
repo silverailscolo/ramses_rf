@@ -402,7 +402,7 @@ class Gateway(GatewayInterface):
             # Routing to components
             for device in dev_list:
                 if isinstance(device, HvacVentilator):
-                    await device.init_poller(device.id)
+                    device.start_poller()
 
         _, self._pkt_log_listener = await set_pkt_logging_config(
             cc_console=(self.config.reduce_processing >= DONT_CREATE_MESSAGES),
@@ -460,9 +460,9 @@ class Gateway(GatewayInterface):
                 self.device_registry.devices, self.device_registry.systems
             )
 
-        # await initiate_polling(  # polling of RQ-only Codes, HVAC 10D0
-        #     self.device_registry.devices
-        # )
+        await initiate_polling(  # polling of RQ-only Codes, HVAC 10D0
+            self.device_registry.devices
+        )
 
     def create_sqlite_message_index(self) -> None:
         """Initialize the SQLite MessageStore.
