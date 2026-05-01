@@ -322,6 +322,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
     def start_poller(self) -> None:
         """Start the poller."""
         if not hasattr(self, "polling") or self.polling is None:
+            _LOGGER.debug("FilterChange start_poller hgi.id=%s", self._gwy.hgi.id)
             self.polling = PollingService(self, self._gwy)
             self._rq_cmd = Command.from_attrs(
                 RQ,
