@@ -319,15 +319,15 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         # _LOGGER.debug("HVAC sending first 10D0 cmd from %s", self._rq_cmd.src)
         # await self._gwy.async_send_cmd(self._rq_cmd)
 
-    def start_poller(self) -> None:
+    async def start_poller(self) -> None:
         """Start the poller."""
         if not hasattr(self, "polling") or self.polling is None:
             _LOGGER.debug("FilterChange start_poller hgi=%s", self._gwy.hgi)
             if self._gwy is None:
-                asyncio.sleep(10)
+                await asyncio.sleep(10)
             assert self._gwy is not None  # just checking
             if self._gwy.hgi is None:
-                asyncio.sleep(10)
+                await asyncio.sleep(10)
             assert self._gwy.hgi is not None
 
             self.polling = PollingService(self, self._gwy)  # if None, wait and retry
@@ -642,7 +642,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     # def start_poller(self) -> None:
     #     """Start the poller."""
-    #     super().start_poller()
+    #     await super().start_poller()
 
     def set_param_update_callback(
         self, callback: Callable[[str, Any], None] | None
