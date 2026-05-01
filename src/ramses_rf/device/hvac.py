@@ -323,7 +323,9 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         """Start the poller."""
         if not hasattr(self, "polling") or self.polling is None:
             _LOGGER.debug("FilterChange start_poller hgi=%s", self._gwy.hgi)
-            self.polling = PollingService(self, self._gwy)
+            if self._gwy is None:
+                asyncio.sleep(10)
+            self.polling = PollingService(self, self._gwy)  # if None, wait and retry
             self._rq_cmd = Command.from_attrs(
                 RQ,
                 self.id,
