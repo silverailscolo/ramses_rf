@@ -122,7 +122,7 @@ def schedule_task(
     ) -> Any:
 
         _LOGGER.debug(
-            "schedule_fnc %s _delay: %s, _period: %s", kwargs["name"], _delay, _period
+            "schedule_fnc %s _delay: %s, _period: %s", str(fnc), _delay, _period
         )
 
         if _delay:
@@ -135,11 +135,13 @@ def schedule_task(
             return
 
         while _period:
-            _LOGGER.debug("schedule_fnc firing %s", kwargs["name"])
+            _LOGGER.debug("schedule_fnc firing %s", str(fnc))
             await execute_fnc(fnc, *args, **kwargs)
             await asyncio.sleep(_period)
 
-    _LOGGER.debug("schedule_task fnc: %s, delay: %s, period: %s", fnc, delay, period)
+    _LOGGER.debug(
+        "schedule_task fnc: %s, delay: %s, period: %s", str(fnc), delay, period
+    )
     ## EBR debug
 
     return asyncio.create_task(  # do we need to pass in an event loop?
