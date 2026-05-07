@@ -136,8 +136,10 @@
 2026-03-22T19:13:36.467000 ...  I --- 22:012299 63:262142 --:------ 10E0 038 000002FF1F00FFFFFFFFFFFFFFFFFFFFFFFF4454342030323000C958300B15E98602B58C57C7  # {'description': 'DT4 020',             'manufacturer_sub_id': 'FF', 'product_id': '1F', 'oem_code': 'FF', 'date_1': '0000-00-00', 'date_2': '0000-00-00', '_unknown': 'C958300B15E98602B58C57C7'}
 # < Coding error: ValueError(fromhex() arg must contain an even number of hexadecimal digits). Caused by byte 30. Add odd/even check fixed in 0.56.4
 
-# oem_code '6A' Brofer RDCD30SH w/VMD-02RPS66-2 from HA forum user
+# oem_code '6A' Brofer
+# RDCD30SH w/VMD-02RPS66-2 from HA forum user
 2026-04-08T21:57:54.694464 057  I --- 32:150621 63:262142 --:------ 10E0 038 000001C8A008056AFEFFFFFFFFFF100307E7564D442D303252505336362D3200000000000000  # {'description': 'VMD-02RPS66-2',       'manufacturer_sub_id': 'C8', 'product_id': 'A0', 'oem_code': '6A', 'date_1': '2023-03-16', 'date_2': '0000-00-00'}
+# VMN-02LM11 remote ??
 
 #
 # WIP
