@@ -63,7 +63,6 @@ from .interfaces import (
     GatewayInterface,
     MessageStoreInterface,
 )
-from .message_store import MessageStore
 from .messages import Message
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
@@ -73,6 +72,7 @@ from .schemas import (
     SZ_ORPHANS,
     load_schema,
 )
+from .state import MessageStore
 from .system import Evohome
 from .typing import DeviceIdT, DeviceListT
 

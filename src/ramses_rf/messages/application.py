@@ -28,6 +28,7 @@ class ApplicationMessage(Message):
     _engine: Engine | None = None
     _fraction_expired: float | None = None
     _gwy: Any | None = None
+    _delete_task_queued: bool = False
 
     @classmethod
     def from_dto(cls, dto: PacketDTO) -> ApplicationMessage:

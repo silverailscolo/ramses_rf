@@ -1,4 +1,3 @@
-# src/ramses_rf/entity_base.py
 #!/usr/bin/env python3
 """RAMSES RF - Base class for all RAMSES-II objects: devices and constructs."""
 
@@ -8,13 +7,12 @@ import asyncio
 import logging
 from inspect import getmembers, isclass
 from sys import modules
-from types import ModuleType
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_tx import Priority, QosParams
 
 from .discovery import DiscoveryService
-from .entity_state import EntityState
+from .state import EntityState
 
 if TYPE_CHECKING:
     from ramses_tx import Command, Packet
@@ -44,8 +42,8 @@ def class_by_attr(name: str, attr: str) -> dict[str, Any]:
     :rtype: dict[str, Any]
     """
 
-    def predicate(m: ModuleType) -> bool:
-        return isclass(m) and m.__module__ == name and getattr(m, attr, None)
+    def predicate(m: Any) -> bool:
+        return isclass(m) and m.__module__ == name and bool(getattr(m, attr, None))
 
     return {getattr(c[1], attr): c[1] for c in getmembers(modules[name], predicate)}
 
@@ -110,7 +108,7 @@ class _Entity:
         """
         pass
 
-    def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task | None:
+    def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task[Any] | None:
         """Proxy command sending to the Gateway.
 
         :param cmd: The command to send.
@@ -118,7 +116,7 @@ class _Entity:
         :param kwargs: Optional sending parameters (e.g., priority).
         :type kwargs: Any
         :returns: The corresponding asyncio Task or None.
-        :rtype: asyncio.Task | None
+        :rtype: asyncio.Task[Any] | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
             _LOGGER.info(f"{cmd} < Sending was deprecated for {self}")
@@ -147,13 +145,20 @@ class _Entity:
             _LOGGER.warning(f"{cmd} < Sending was deprecated for {self}")
             return None
 
-        return await self._gwy.async_send_cmd(
-            cmd,
-            max_retries=qos.max_retries if qos else None,
-            priority=priority,
-            timeout=qos.timeout if qos else None,
-            wait_for_reply=qos.wait_for_reply if qos else None,
-        )
+        # Build kwargs dynamically to prevent passing `None` to strict Gateway args
+        kwargs: dict[str, Any] = {}
+        if priority is not None:
+            kwargs["priority"] = priority
+
+        if qos:
+            if hasattr(qos, "max_retries") and qos.max_retries is not None:
+                kwargs["max_retries"] = qos.max_retries
+            if hasattr(qos, "timeout") and qos.timeout is not None:
+                kwargs["timeout"] = qos.timeout
+            if hasattr(qos, "wait_for_reply") and qos.wait_for_reply is not None:
+                kwargs["wait_for_reply"] = qos.wait_for_reply
+
+        return await self._gwy.async_send_cmd(cmd, **kwargs)
 
 
 class Entity(_Entity):

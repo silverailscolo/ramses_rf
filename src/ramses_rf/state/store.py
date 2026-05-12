@@ -2,7 +2,7 @@
 """
 RAMSES RF - Message database and index.
 
-.. table:: Database Query Methods[^1][#fn1]
+.. table:: Database Query Methods
    :widths: auto
 
    =====  ============  ===========  ==========  ====  ========================
@@ -12,14 +12,6 @@ RAMSES RF - Message database and index.
    i2     contains      kwargs       bool        i1    EntityState
    i7     get_rp_codes  src, dst     list(Code)        Discovery-supported_cmds
    =====  ============  ===========  ==========  ====  ========================
-
-[#fn1] A word of explanation.[^1]: This table documents the primary
-methods used by external components (like `EntityState`) to query the
-central message store. As of Phase 2.5, legacy SQL-based query methods
-(`qry`, `qry_field`, `_select_from`) have been removed. The system now
-relies exclusively on fast RAM-based dictionary lookups to support a
-CQRS-style architecture and eliminate SQLite thread contention during
-tests.
 """
 
 from __future__ import annotations
@@ -38,9 +30,10 @@ import orjson
 
 from ramses_tx import CODES_SCHEMA, RP, RQ, Code, Packet
 
-from .exceptions import DatabaseQueryError
-from .messages import Message
-from .sqlite_worker import PacketLogEntry, SQLiteWorker
+from ..exceptions import DatabaseQueryError
+from ..messages.base import Message
+from ..routing import StateHeader
+from ..sqlite_worker import PacketLogEntry, SQLiteWorker
 
 DtmStrT = NewType("DtmStrT", str)
 
@@ -97,8 +90,7 @@ def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
 class MessageStore:
     """A central in-memory SQLite3 database for indexing RF messages.
     Index holds all the latest messages to & from all devices by `dtm`
-    (timestamp) and `hdr` header
-    (example of a hdr: ``000C|RP|01:223036|0208``)."""
+    (timestamp) and strictly-typed `StateHeader` DTOs."""
 
     _housekeeping_task: asyncio.Task[None]
     _hydration_task: asyncio.Task[None]
@@ -115,8 +107,8 @@ class MessageStore:
         # In-memory RAM caches (Filled & cleaned up in housekeeping_loop)
         # stores all messages for retrieval.
         self._message_log: MsgDdT = OrderedDict()
-        # Caches the latest message per header (hdr) for fast state lookups.
-        self._state_cache: dict[str, Message] = {}
+        # Caches the latest message per strictly-typed StateHeader.
+        self._state_cache: dict[StateHeader, Message] = {}
 
         # Synchronous Test Mode: Bypass background worker entirely if testing
         self._is_testing = "PYTEST_CURRENT_TEST" in os.environ
@@ -172,7 +164,7 @@ class MessageStore:
         self.start()
 
     def __repr__(self) -> str:
-        return f"MessageStore({len(self._message_log)} messages)"  # or msg_db.count()
+        return f"MessageStore({len(self._message_log)} messages)"
 
     def start(self) -> None:
         """Start the housekeeper loop."""
@@ -226,8 +218,8 @@ class MessageStore:
         return tuple(self._message_log.values())
 
     @property
-    def state_cache(self) -> dict[str, Message]:
-        """Return the latest messages in the index by header."""
+    def state_cache(self) -> dict[StateHeader, Message]:
+        """Return the latest messages in the index natively keyed by StateHeader."""
         return self._state_cache
 
     def flush(self) -> None:
@@ -287,7 +279,7 @@ class MessageStore:
                     msg._payload = orjson.loads(payload_blob)
 
                     self._message_log[dtm_str] = msg
-                    self._state_cache[hdr] = msg
+                    self._state_cache[msg.state_header] = msg
                 except Exception as err:
                     _LOGGER.debug("Failed to reconstruct message for %s: %s", hdr, err)
         finally:
@@ -327,8 +319,8 @@ class MessageStore:
 
                 valid_dtms = set(self._message_log.keys())
                 self._state_cache = {
-                    hdr: m
-                    for hdr, m in self._state_cache.items()
+                    m.state_header: m
+                    for m in self._state_cache.values()
                     if cast(DtmStrT, m.dtm.isoformat(timespec="microseconds"))
                     in valid_dtms
                 }
@@ -373,8 +365,7 @@ class MessageStore:
             pass
         else:
             self._message_log[dtm_str] = msg
-            if msg._pkt._hdr is not None:
-                self._state_cache[msg._pkt._hdr] = msg
+            self._state_cache[msg.state_header] = msg
         finally:
             pass
 
@@ -387,7 +378,7 @@ class MessageStore:
             _LOGGER.debug(
                 "Overwrote dtm (%s) for %s: %s (contrived log?)",
                 msg.dtm,
-                msg._pkt._hdr,
+                msg.state_header.legacy_hdr,
                 dup[0]._pkt,
             )
 
@@ -429,7 +420,7 @@ class MessageStore:
             Packet(_now, f"... {verb} --- {src} --:------ {src} {code} 005 0000000000")
         )
         self._message_log[dtm] = msg
-        self._state_cache[hdr] = msg
+        self._state_cache[msg.state_header] = msg
 
     def _insert_into(self, msg: Message) -> Message | None:
         """
@@ -437,15 +428,6 @@ class MessageStore:
 
         :returns: any message replaced (by same hdr)
         """
-        assert msg._pkt._hdr is not None, f"Skipping: Packet has no hdr: {msg._pkt}"
-
-        if msg._pkt._ctx is True:
-            msg_pkt_ctx = "True"
-        elif msg._pkt._ctx is False:
-            msg_pkt_ctx = "False"
-        else:
-            msg_pkt_ctx = msg._pkt._ctx  # can be None
-
         if self._worker:
             try:
                 payload_blob = orjson.dumps(msg.payload)
@@ -459,8 +441,8 @@ class MessageStore:
                 src=msg.src.id,
                 dst=msg.dst.id,
                 code=str(msg.code),
-                ctx=msg_pkt_ctx,
-                hdr=msg._pkt._hdr,
+                ctx=msg.context.as_string,
+                hdr=msg.state_header.legacy_hdr,
                 plk=payload_keys(msg.payload),
                 payload_blob=payload_blob,
                 frame=getattr(msg._pkt, "_frame", ""),
@@ -480,7 +462,7 @@ class MessageStore:
         verb: str | None = None,
         code: str | None = None,
         ctx: Any | None = None,
-        hdr: str | None = None,
+        hdr: str | StateHeader | None = None,
     ) -> tuple[Message, ...] | None:
         """Remove a set of message(s) from the index."""
         kwargs = {
@@ -540,8 +522,7 @@ class MessageStore:
                 for m in msgs:
                     dtm_val = cast(DtmStrT, m.dtm.isoformat(timespec="microseconds"))
                     self._message_log.pop(dtm_val, None)
-                    if m._pkt._hdr is not None:
-                        self._state_cache.pop(m._pkt._hdr, None)
+                    self._state_cache.pop(m.state_header, None)
         return msgs
 
     async def get(
@@ -554,7 +535,7 @@ class MessageStore:
         verb: str | None = None,
         code: str | None = None,
         ctx: Any | None = None,
-        hdr: str | None = None,
+        hdr: str | StateHeader | None = None,
     ) -> tuple[Message, ...]:
         """Public method to get a set of message(s) from the index."""
         kwargs = {
@@ -607,18 +588,17 @@ class MessageStore:
                 elif k == "code" and str(m.code) != v:
                     match = False
                     break
-                elif k == "hdr" and m._pkt._hdr != v:
-                    match = False
-                    break
+                elif k == "hdr":
+                    if isinstance(v, StateHeader):
+                        if m.state_header != v:
+                            match = False
+                            break
+                    else:
+                        if m.state_header.legacy_hdr != v:
+                            match = False
+                            break
                 elif k == "ctx":
-                    m_ctx = (
-                        "True"
-                        if m._pkt._ctx is True
-                        else "False"
-                        if m._pkt._ctx is False
-                        else str(m._pkt._ctx)
-                    )
-                    if m_ctx != v:
+                    if m.context.as_string != str(v):
                         match = False
                         break
             if match:
@@ -635,7 +615,7 @@ class MessageStore:
         verb: str | None = None,
         code: str | None = None,
         ctx: Any | None = None,
-        hdr: str | None = None,
+        hdr: str | StateHeader | None = None,
     ) -> bool:
         """Check if the MessageStore contains at least 1 record that
         matches the provided fields."""

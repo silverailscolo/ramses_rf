@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from ramses_tx.typing import DeviceIdT
 
     from .device import Controller
-    from .entity_base import Entity
+    from .entity import Entity
     from .system import Evohome
 
 

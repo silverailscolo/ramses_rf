@@ -31,7 +31,7 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.device import Device
-from ramses_rf.entity_base import Entity, class_by_attr
+from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.helpers import shrink
 from ramses_rf.quirks import QUARANTINED_OT_MSG_IDS
 from ramses_rf.schemas import SCH_TCS, SZ_ACTUATORS, SZ_CIRCUITS

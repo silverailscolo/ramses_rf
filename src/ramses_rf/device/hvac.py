@@ -47,7 +47,7 @@ from ramses_rf.const import (
     SZ_TEMPERATURE,
     DevType,
 )
-from ramses_rf.entity_base import class_by_attr
+from ramses_rf.entity import class_by_attr
 from ramses_rf.helpers import schedule_task
 from ramses_tx import Address, Command, Packet, Priority
 from ramses_tx.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR

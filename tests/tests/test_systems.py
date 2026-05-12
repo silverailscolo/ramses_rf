@@ -17,8 +17,8 @@ import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.helpers import shrink
-from ramses_rf.message_store import MessageStore
 from ramses_rf.messages import Message
+from ramses_rf.state import MessageStore
 from ramses_tx import exceptions as exc
 from ramses_tx.packet import Packet
 
@@ -70,6 +70,15 @@ class PacketShim:
         self._dto = dto
         self._hdr = getattr(dto, "code", "0000")
         self._frame = getattr(dto, "payload", "")
+
+    @property
+    def _ctx(self) -> Any:
+        """Mock the native L3 context extraction."""
+        code = getattr(self._dto, "code", "")
+        payload = getattr(self._dto, "payload", "")
+        if code == "3220" and len(payload) >= 6:
+            return payload[4:6]
+        return None
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._dto, name)
@@ -250,12 +259,6 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
     expected: dict = load_expected_results(dir_name) or {}
     gwy: Gateway = await load_test_gwy(dir_name)
 
-    # for dev in gwy.device_registry.devices:
-    #     if dev._msgs:
-    #         assert dev._msgs == gwy.message_store.get(
-    #             src=dev.id, dtms=list(dev._msgs.keys())
-    #         ), f"Assert 0: {dev} qry != _msgs_"
-
     schema, packets = await gwy.get_state(include_expired=True)
 
     # This loop is non-deterministic, but should be stable (fails rarely)
@@ -265,12 +268,6 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
         packets = shuffle_dict(packets)
         await gwy._restore_cached_packets(packets)
         await assert_expected_set(gwy, expected)
-
-    # for dev in gwy.device_registry.devices:
-    #     if dev._msgs:
-    #         assert dev._msgs == gwy.message_store.get(
-    #             src=dev.id, dtms=list(dev._msgs.keys())
-    #         ), f"Assert 2: {dev} qry != _msgs_"
 
     await gwy.stop()
 
@@ -290,12 +287,6 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
     ):
         gwy: Gateway = await load_test_gwy(dir_name)
 
-    # for dev in gwy.device_registry.devices:
-    #     if dev._msgs:
-    #         assert dev._msgs == gwy.message_store.get(
-    #             src=dev.id, dtms=list(dev._msgs.keys())
-    #         ), f"Assert 1: {dev} qry != _msgs_"
-
     schema, packets = await gwy.get_state(include_expired=True)
 
     # This loop is non-deterministic, but should be stable (fails rarely)
@@ -309,11 +300,5 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
         await asyncio.sleep(0)  # Yield to allow flush callbacks to fire
 
         await assert_expected_set(gwy, expected)
-
-    # for dev in gwy.device_registry.devices:
-    #     if dev._msgs:
-    #         assert dev._msgs == gwy.message_store.get(
-    #             src=dev.id, dtms=list(dev._msgs.keys())
-    #         ), f"Assert 3: {dev} qry != _msgs_"
 
     await gwy.stop()

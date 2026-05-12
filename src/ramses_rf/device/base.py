@@ -20,7 +20,7 @@ from ramses_rf.const import (
     SZ_OEM_CODE,
     DevType,
 )
-from ramses_rf.entity_base import Entity, class_by_attr
+from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
 from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED, SZ_KNOWN_LIST
 from ramses_rf.topology import Child
