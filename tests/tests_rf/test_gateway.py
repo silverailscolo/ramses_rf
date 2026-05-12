@@ -220,6 +220,42 @@ async def test_gateway_restore_cached_packets_dto() -> None:
 
 
 @pytest.mark.asyncio
+async def test_gateway_restore_cached_packets_naive_dtm() -> None:
+    """Restoring cached packets with naive datetime strings should not crash.
+
+    Regression for the TypeError raised by comparing offset-naive packet dtm
+    against the offset-aware cutoff (`dt.now(tz=UTC) - td(hours=1)`).
+    """
+    config = GatewayConfig(disable_discovery=True)
+    gwy = Gateway("/dev/null", config=config)
+
+    with (
+        patch("ramses_rf.gateway.protocol_factory") as mock_pf,
+        patch("ramses_rf.gateway.Packet.from_dict") as mock_from_dict,
+    ):
+        mock_protocol = MagicMock()
+        mock_pf.return_value = mock_protocol
+
+        mock_pkt = MagicMock()
+        mock_pkt.__class__.__name__ = "Packet"
+        mock_pkt.rssi = "045"
+        mock_pkt._frame = "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+        mock_from_dict.return_value = mock_pkt
+
+        # Naive datetime (no Z, no offset) as written by older cache files
+        packets = {
+            "2023-01-01T12:00:00.000000": {
+                "rssi": 45,
+                "frame": "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5",
+            }
+        }
+
+        await gwy._restore_cached_packets(packets, _clear_state=True)
+
+        mock_protocol.pkt_received.assert_called_once_with(mock_pkt)
+
+
+@pytest.mark.asyncio
 async def test_gateway_legacy_kwargs_deprecation() -> None:
     """Test that legacy kwargs are gracefully mapped to config objects.
 
