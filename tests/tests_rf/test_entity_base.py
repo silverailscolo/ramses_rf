@@ -11,8 +11,8 @@ from ramses_rf.const import I_, RP
 from ramses_rf.entity_base import Entity, _Entity
 from ramses_rf.entity_state import StateCache
 from ramses_rf.gateway import Gateway
-from ramses_rf.message import Message
 from ramses_rf.message_store import MessageStore
+from ramses_rf.messages import Message
 from ramses_tx import Code, DeviceIdT, Packet
 
 

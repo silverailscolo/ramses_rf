@@ -28,7 +28,7 @@ from ramses_tx import Command, Packet, Priority, QosParams
 from ramses_tx.ramses import CODES_BY_DEV_SLUG, CODES_ONLY_FROM_CTL
 from ramses_tx.typing import PayloadT
 
-from ..message import Message
+from ..messages import Message
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,

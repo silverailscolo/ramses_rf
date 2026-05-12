@@ -53,7 +53,7 @@ from ramses_tx import Address, Command, Packet, Priority
 from ramses_tx.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR
 from ramses_tx.typing import PayloadT
 
-from ..message import Message
+from ..messages import Message
 from .base import BatteryState, DeviceHvac, Fakeable
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import

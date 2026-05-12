@@ -16,11 +16,12 @@ from ramses_tx.models import DeviceId, RawPacket, TransportMessage
 from ramses_tx.ramses import CODE_IDX_ARE_COMPLEX
 from ramses_tx.typing import DeviceIdT
 
-from . import exceptions as exc
-from .const import DEV_TYPE_MAP, SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
-from .parsers.decoder import decode_packet
+from .. import exceptions as exc
+from ..const import DEV_TYPE_MAP, SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
+from ..parsers.decoder import decode_packet
+from ..routing import RoutingContext, StateHeader
 
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+from ..const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
     RP,
     RQ,
@@ -30,7 +31,7 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 
 if TYPE_CHECKING:
     # pylint: disable=unused-import
-    from .const import IndexT, VerbT  # noqa: F401
+    from ..const import IndexT, VerbT  # noqa: F401
 
 
 __all__ = ["Message"]
@@ -60,13 +61,6 @@ PayloadT: TypeAlias = Any
 # TypeVar bound to Message to allow strict inheritance typing
 _MessageT = TypeVar("_MessageT", bound="Message")
 
-# Context Bridge
-_IS_CONTROLLER_CB: Callable[[str], bool] | None = None
-# Logging Bridge
-_GET_CODE_NAME_CB: Callable[[Code | str], str] | None = None
-# Routing Bridge
-_GET_MSG_IDX_CB: Callable[[Any], dict[str, str]] | None = None
-
 
 class _LegacyPktShim:
     """A temporary shim bridging PacketDTO to legacy L3 attributes."""
@@ -82,40 +76,20 @@ class _LegacyPktShim:
 
     @property
     def _ctx(self) -> Any:
-        """Calculate the context dynamically.
-
-        :return: The context value.
-        :rtype: Any
-        """
-        code = str(getattr(self._msg, "code", ""))
-        payload = getattr(self._dto, "payload", "")
-        if code == "3220" and len(payload) >= 6:
-            return payload[4:6]
-        return getattr(self._msg, "_idx_val", None)
+        """Legacy context bridge."""
+        return self._msg.context.value
 
     @property
     def _hdr(self) -> str:
-        """Calculate the header dynamically.
-
-        :return: The header string.
-        :rtype: str
-        """
-        ctx = self._ctx
-        if ctx is True:
-            ctx_str = "True"
-        elif ctx is False:
-            ctx_str = "False"
-        else:
-            ctx_str = str(ctx)
-
-        code = str(getattr(self._msg, "code", ""))
-        verb = str(getattr(self._msg, "verb", ""))
-        src_id = self._msg.src.id if hasattr(self._msg, "src") else ""
-        return f"{code}|{verb}|{src_id}|{ctx_str}"
+        """Legacy header bridge."""
+        return self._msg.state_header.legacy_hdr
 
     @property
     def _frame(self) -> str:
-        """Calculate the frame string dynamically."""
+        """Legacy frame bridge for backwards compatibility in tests.
+
+        Calculates the frame string dynamically from the L7 properties.
+        """
         seqn = self._msg.seqn if self._msg.seqn else "---"
         addr1 = self._msg._addrs[0].id
         addr2 = self._msg._addrs[1].id
@@ -139,8 +113,12 @@ class _LegacyPktShim:
 class Message:
     """The Message class; will trap/log invalid msgs."""
 
+    # Domain Bridges (Injected by Gateway)
+    _IS_CONTROLLER_CB: Callable[[str], bool] | None = None
+    _GET_CODE_NAME_CB: Callable[[Code | str], str] | None = None
+    _GET_MSG_IDX_CB: Callable[[Any], dict[str, str]] | None = None
+
     _gwy: Any | None = None
-    _is_controller_cb: Callable[[str], bool] | None = None
 
     def __init__(self, dto: PacketDTO) -> None:
         """Create a message from a valid packet.
@@ -192,6 +170,33 @@ class Message:
         self._idx_val: str | bool = dto.payload[:2] if dto.payload else False
 
         self._payload = self._validate(dto.payload)
+
+    @property
+    def context(self) -> RoutingContext:
+        """Calculate the sub-payload context natively.
+
+        :return: The context value.
+        :rtype: RoutingContext
+        """
+        code = str(getattr(self, "code", ""))
+        payload = getattr(self._dto, "payload", "")
+        if code == "3220" and len(payload) >= 6:
+            return RoutingContext(payload[4:6])
+        return RoutingContext(getattr(self, "_idx_val", None))
+
+    @property
+    def state_header(self) -> StateHeader:
+        """Calculate the state routing header natively.
+
+        :return: The state header instance.
+        :rtype: StateHeader
+        """
+        return StateHeader.create(
+            code=self.code,
+            verb=self.verb,
+            source_id=self.src.id,
+            context_val=self.context.value,
+        )
 
     @property
     def _pkt(self) -> Any:
@@ -270,8 +275,8 @@ class Message:
             name_0 = ""
             name_1 = self._name(self.src)
 
-        if _GET_CODE_NAME_CB is not None:
-            code_name = _GET_CODE_NAME_CB(self.code)
+        if Message._GET_CODE_NAME_CB is not None:
+            code_name = Message._GET_CODE_NAME_CB(self.code)
         else:
             code_name = f"unknown_{self.code}"
 
@@ -379,8 +384,8 @@ class Message:
             undetermined.
         :rtype: dict[str, str]
         """
-        if _GET_MSG_IDX_CB is not None:
-            return _GET_MSG_IDX_CB(self)
+        if Message._GET_MSG_IDX_CB is not None:
+            return Message._GET_MSG_IDX_CB(self)
 
         IDX_NAMES = {
             Code._0002: "other_idx",
@@ -430,9 +435,9 @@ class Message:
 
         # BRIDGED LOGIC:
         is_controller = True
-        if _IS_CONTROLLER_CB is not None:
+        if Message._IS_CONTROLLER_CB is not None:
             # Use the injected domain logic from ramses_rf
-            is_controller = _IS_CONTROLLER_CB(self.src.id)
+            is_controller = Message._IS_CONTROLLER_CB(self.src.id)
         else:
             # Fallback for legacy tests until they are updated
             is_controller = getattr(self.src, "_is_controller", True)

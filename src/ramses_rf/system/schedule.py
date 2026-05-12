@@ -23,7 +23,7 @@ from ramses_rf.const import (
     SZ_TOTAL_FRAGS,
     SZ_ZONE_IDX,
 )
-from ramses_rf.message import Message
+from ramses_rf.messages import Message
 from ramses_tx.command import Command
 from ramses_tx.const import SZ_CHANGE_COUNTER, Priority
 from ramses_tx.exceptions import ProtocolSendFailed

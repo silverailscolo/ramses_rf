@@ -60,7 +60,7 @@ from ramses_tx.typing import PayDictT
 from .registry import register_parser
 
 if TYPE_CHECKING:
-    from ramses_rf.message import Message
+    from ramses_rf.messages import Message
 
 _LOGGER = logging.getLogger(__name__)
 _INFORM_DEV_MSG = "Support the development of ramses_rf by reporting this packet"

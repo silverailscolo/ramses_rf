@@ -39,7 +39,7 @@ import orjson
 from ramses_tx import CODES_SCHEMA, RP, RQ, Code, Packet
 
 from .exceptions import DatabaseQueryError
-from .message import Message
+from .messages import Message
 from .sqlite_worker import PacketLogEntry, SQLiteWorker
 
 DtmStrT = NewType("DtmStrT", str)

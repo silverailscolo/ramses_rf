@@ -63,7 +63,7 @@ from ramses_tx import (
 )
 from ramses_tx.typing import PayDictT, PayloadT
 
-from ..message import Message
+from ..messages import Message
 from .faultlog import FaultLog
 from .zones import zone_factory
 

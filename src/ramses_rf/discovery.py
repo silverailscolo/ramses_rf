@@ -22,7 +22,7 @@ from ramses_tx.ramses import CODES_SCHEMA
 
 from . import exceptions as exc
 from .helpers import schedule_task
-from .message import Message
+from .messages import Message
 
 if TYPE_CHECKING:
     from ramses_tx.const import MsgId

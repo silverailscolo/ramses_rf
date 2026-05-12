@@ -34,7 +34,7 @@ from .const import (
     DevType,
 )
 from .device import Device, Fakeable
-from .message import Message
+from .messages import Message
 
 if TYPE_CHECKING:
     from .gateway import Gateway

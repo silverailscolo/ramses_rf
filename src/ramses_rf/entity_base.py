@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .device import Controller
     from .gateway import Gateway
     from .interfaces import DeviceInterface
-    from .message import Message
+    from .messages import Message
     from .system import Evohome
 
 

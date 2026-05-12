@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_tx import Address
 
-    from ..message import Message
+    from ..messages import Message
 
 
 __all__ = [

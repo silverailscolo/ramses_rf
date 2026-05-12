@@ -42,9 +42,8 @@ from ramses_tx.ramses import CODES_SCHEMA
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 from ramses_tx.typing import PayloadT
 
-from . import message as rf_msg
-from .application_message import ApplicationMessage
 from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES
+from .messages import ApplicationMessage, Message as rf_msg
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -64,8 +63,8 @@ from .interfaces import (
     GatewayInterface,
     MessageStoreInterface,
 )
-from .message import Message
 from .message_store import MessageStore
+from .messages import Message
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
     SZ_CONFIG,

@@ -13,7 +13,7 @@ import logging
 from datetime import UTC, datetime as dt
 from typing import TYPE_CHECKING, Any, cast
 
-from ramses_rf.message import Message
+from ramses_rf.messages import Message
 from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -24,7 +24,7 @@ from . import exceptions as exc
 from .const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
 
 if TYPE_CHECKING:
-    from ramses_rf.application_message import ApplicationMessage
+    from ramses_rf.messages import ApplicationMessage
     from ramses_tx.typing import HeaderT
 
     from .interfaces import DeviceInterface, GatewayInterface

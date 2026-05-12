@@ -15,7 +15,7 @@ from .const import DEV_TYPE_MAP, F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR, SZ_ZON
 from .schemas import SZ_CIRCUITS
 
 if TYPE_CHECKING:
-    from ramses_rf.message import Message
+    from ramses_rf.messages import Message
     from ramses_tx.typing import DeviceIdT
 
     from .device import Controller

@@ -4,7 +4,7 @@
 from datetime import datetime as dt
 
 from ramses_rf.helpers import shrink
-from ramses_rf.message import Message
+from ramses_rf.messages import Message
 from ramses_tx.packet import Packet
 
 from .mocked_devices.command import MockCommand as Command

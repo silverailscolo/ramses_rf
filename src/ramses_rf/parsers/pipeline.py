@@ -19,7 +19,7 @@ from ramses_tx.ramses import CODES_SCHEMA, RQ_IDX_COMPLEX
 from .registry import get_parser
 
 if TYPE_CHECKING:
-    from ramses_rf.message import Message
+    from ramses_rf.messages import Message
 
 _LOGGER = logging.getLogger(__name__)
 _INFORM_DEV_MSG = "Support the development of ramses_rf by reporting this packet"

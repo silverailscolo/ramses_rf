@@ -52,7 +52,7 @@ from ramses_tx import Address, Command, Priority
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 
-from ..message import Message
+from ..messages import Message
 from .schedule import InnerScheduleT, OuterScheduleT, Schedule
 
 if TYPE_CHECKING:

@@ -10,8 +10,8 @@ import pytest
 
 from ramses_rf import Device, dispatcher
 from ramses_rf.gateway import Gateway, GatewayConfig
-from ramses_rf.message import Message
 from ramses_rf.message_store import MessageStore
+from ramses_rf.messages import Message
 from ramses_tx import Address, DeviceIdT, Packet
 
 

@@ -17,8 +17,8 @@ import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.helpers import shrink
-from ramses_rf.message import Message
 from ramses_rf.message_store import MessageStore
+from ramses_rf.messages import Message
 from ramses_tx import exceptions as exc
 from ramses_tx.packet import Packet
 
@@ -95,7 +95,7 @@ def global_test_patches() -> Generator[None, None, None]:
         patch("ramses_rf.gateway.dt", AwareDatetime),
         patch("ramses_tx.engine.dt", AwareDatetime),
         patch("ramses_tx.packet.dt", AwareDatetime),
-        patch("ramses_rf.message.Message._pkt", property(mocked_pkt_prop)),
+        patch("ramses_rf.messages.Message._pkt", property(mocked_pkt_prop)),
         patch(
             "ramses_rf.gateway.Gateway.async_send_cmd",
             patched_async_send_cmd,

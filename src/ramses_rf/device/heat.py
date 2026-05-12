@@ -106,13 +106,13 @@ from ramses_tx.const import (
 )
 
 if TYPE_CHECKING:
-    from ramses_rf.application_message import ApplicationMessage
+    from ramses_rf.messages import ApplicationMessage
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Evohome, Zone
     from ramses_tx import Address, Packet
     from ramses_tx.opentherm import OtDataId
 
-    from ..message import Message
+    from ..messages import Message
 
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
