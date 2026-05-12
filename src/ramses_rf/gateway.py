@@ -652,8 +652,10 @@ class Gateway(GatewayInterface):
             try:
                 clean_dtm = dtm.replace("Z", "+00:00")
                 pkt_dtm = dt.fromisoformat(clean_dtm)
+                if pkt_dtm.tzinfo is None:
+                    pkt_dtm = pkt_dtm.replace(tzinfo=UTC)
                 is_old = pkt_dtm < cutoff_dtm
-            except ValueError:
+            except (TypeError, ValueError):
                 is_old = False
 
             if is_old:
