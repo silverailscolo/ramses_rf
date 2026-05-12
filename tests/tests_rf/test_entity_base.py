@@ -11,7 +11,7 @@ from ramses_rf.const import I_, RP
 from ramses_rf.entity import Entity, _Entity
 from ramses_rf.gateway import Gateway
 from ramses_rf.messages import Message
-from ramses_rf.routing import StateHeader
+from ramses_rf.routing import RoutingContext, StateHeader
 from ramses_rf.state import MessageStore, StateCache
 from ramses_tx import Code, DeviceIdT, Packet
 
@@ -323,6 +323,10 @@ async def test_gh_396_sqlite_ot_context_type() -> None:
     mock_msg._pkt._hdr = "3220|RP|01:123456|0"
     mock_msg._idx_val = 0
 
+    # NEW: Properly mock the Native L7 domain properties
+    mock_msg.context = RoutingContext(0)
+    mock_msg.state_header = StateHeader.create(Code._3220, RP, "01:123456", 0)
+
     gwy.message_store.log_by_dtm = [mock_msg]
 
     # Instantiate the entity
@@ -361,7 +365,8 @@ async def test_gh_396_legacy_ot_context() -> None:
     mock_msg._pkt._hdr = "3220|RP|01:123456|05"
     mock_msg._idx_val = "05"
 
-    # NEW: Mock the native L7 state header
+    # NEW: Properly mock the Native L7 domain properties
+    mock_msg.context = RoutingContext("05")
     mock_msg.state_header = StateHeader.create(Code._3220, RP, "01:123456", "05")
 
     # Construct the mock StateCache

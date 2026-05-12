@@ -23,6 +23,7 @@ from ramses_tx.ramses import CODES_SCHEMA
 from . import exceptions as exc
 from .helpers import schedule_task
 from .messages import Message
+from .routing import StateHeader
 
 if TYPE_CHECKING:
     from ramses_tx.const import MsgId
@@ -124,7 +125,7 @@ class DiscoveryService:
                         or msg.dst.id == self._entity.id[:9]
                     )
                 ):
-                    ctx = msg._pkt._ctx
+                    ctx = msg.context.value
                     _LOGGER.debug("Fetched OT ctx from index: %s", ctx)
                     val = f"{ctx:02X}" if isinstance(ctx, int) else str(ctx)
                     if val not in res:
@@ -133,7 +134,7 @@ class DiscoveryService:
             msgs = await self._entity.entity_state.get_all_messages()
             for msg in msgs:
                 if msg.code == Code._3220 and msg.verb == RP:
-                    ctx = msg._pkt._ctx
+                    ctx = msg.context.value
                     val = f"{ctx:02X}" if isinstance(ctx, int) else str(ctx)
                     if val not in res:
                         res.append(val)
@@ -244,10 +245,17 @@ class DiscoveryService:
         async def find_latest_msg(hdr: HeaderT, task: dict[str, Any]) -> Message | None:
             """Return the latest message for a header from any source."""
             msgs: list[Message] = []
+
+            code_str, _, src_id, *args = hdr.split("|")
+            ctx_val: str | bool | None = args[0] if args else None
+            if ctx_val == "True":
+                ctx_val = True
+            elif ctx_val == "False":
+                ctx_val = False
+
             for v in (I_, RP):
-                m = await self._entity.entity_state._get_msg_by_hdr(
-                    hdr[:5] + v + hdr[7:]
-                )
+                search_hdr = StateHeader.create(code_str, v, src_id, ctx_val)
+                m = await self._entity.entity_state._get_msg_by_hdr(search_hdr)
                 if m is not None:
                     msgs.append(m)
 
@@ -263,7 +271,7 @@ class DiscoveryService:
                                 if (
                                     m.code == cmd_code
                                     and m.verb in (I_, RP)
-                                    and str(m._pkt._ctx) == "True"
+                                    and str(m.context.value) == "True"
                                     and (
                                         m.src.id == tcs_id[:9] or m.dst.id == tcs_id[:9]
                                     )
@@ -285,7 +293,7 @@ class DiscoveryService:
                                 for m in tcs_msgs
                                 if m.code == cmd_code
                                 and m.verb == I_
-                                and m._pkt._ctx is True
+                                and m.context.value is True
                             ]
                             if found:
                                 msgs.append(max(found, key=lambda x: x.dtm))
