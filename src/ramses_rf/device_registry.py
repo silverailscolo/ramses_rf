@@ -15,7 +15,7 @@ from .schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from .typing import DeviceIdT, DeviceListT, DeviceTraitsT
 
 if TYPE_CHECKING:
-    from ramses_rf.message import Message
+    from ramses_rf.messages import Message
 
     from .device import Device
     from .gateway import Gateway

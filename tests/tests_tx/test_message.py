@@ -7,9 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
-import ramses_rf.message as rf_msg
-from ramses_rf.application_message import ApplicationMessage
-from ramses_rf.message import Message
+from ramses_rf.messages import ApplicationMessage, Message
 from ramses_tx.packet import Packet
 
 # Constants for testing frames
@@ -27,9 +25,9 @@ def patch_parsers(monkeypatch: pytest.MonkeyPatch) -> None:
     :type monkeypatch: pytest.MonkeyPatch
     :return: None
     """
+    # Patch the function at the module level where it is used
     monkeypatch.setattr(
-        rf_msg,
-        "decode_packet",
+        "ramses_rf.messages.base.decode_packet",
         lambda dto: {
             "mock_key": "mock_val",
             "phase": "confirm",
@@ -37,8 +35,9 @@ def patch_parsers(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     )
 
+    # Patch the class variable on the Message class directly
     monkeypatch.setattr(
-        rf_msg,
+        Message,
         "_GET_CODE_NAME_CB",
         lambda code: f"mock_name_{code}",
     )
@@ -139,7 +138,7 @@ def test_message_string_representations(patch_parsers: Any) -> None:
 def test_startup_empty_payload_reproduction(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test that an empty payload bypasses strict regex and parses safely."""
     # Ensure this test is completely isolated from the global ramses_rf bridge
-    monkeypatch.setattr(rf_msg, "decode_packet", lambda dto: {})
+    monkeypatch.setattr("ramses_rf.messages.base.decode_packet", lambda dto: {})
 
     dtm = dt.now(tz=UTC)
     packet = Packet(dtm, FRAME_STR_EMPTY)

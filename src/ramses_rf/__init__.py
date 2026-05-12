@@ -22,7 +22,7 @@ from . import exceptions  # noqa: F401
 from .device import Device  # noqa: F401
 from .exceptions import CommandInvalid  # noqa: F401
 from .gateway import Gateway, GatewayConfig  # noqa: F401
-from .message import Message
+from .messages import Message
 from .version import VERSION  # noqa: F401
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import

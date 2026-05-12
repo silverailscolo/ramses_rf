@@ -6,7 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ramses_rf.entity_state import EntityState
+from ramses_rf.routing import RoutingContext, StateHeader
+from ramses_rf.state import EntityState
 from ramses_tx.const import I_, Code
 
 
@@ -28,6 +29,12 @@ class DummyMsg:
 
         self._payload_dict = payload_dict
         self.payload_access_count = 0
+
+        # NEW: Native L7 properties to satisfy the O(1) StateCache
+        self.context = RoutingContext(False)
+        self.state_header = StateHeader.create(
+            self.code, self.verb, self.src.id, self.context.value
+        )
 
     @property
     def payload(self) -> dict[str, Any]:
@@ -64,10 +71,10 @@ async def test_o1_push_model_ingest(zone_entity: EntityState) -> None:
     # Action: Simulate the Dispatcher pushing a newly arrived packet
     zone_entity.update_state(msg)
 
-    # Assert: The dictionary holds the message under the new context-aware tuple
-    expected_key = (Code._30C9, I_, False)
-    assert expected_key in zone_entity._current_state
-    assert zone_entity._current_state[expected_key] == msg
+    # Assert: The dictionary holds the message under the new DTO
+    expected_hdr = StateHeader.create(Code._30C9, I_, "04:123456", False)
+    assert expected_hdr in zone_entity._current_state
+    assert zone_entity._current_state[expected_hdr] == msg
 
 
 @pytest.mark.asyncio

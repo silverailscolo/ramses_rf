@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import datetime as dt
 from typing import Any
 
-from ramses_rf.message import Message
+from ramses_rf.messages import Message
 from ramses_tx.command import CODE_API_MAP, Command
 from ramses_tx.packet import Packet
 

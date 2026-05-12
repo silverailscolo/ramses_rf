@@ -10,7 +10,7 @@ from ramses_rf import exceptions as exc
 from ramses_rf.const import DevType
 from ramses_rf.device.hvac import HvacVentilator
 from ramses_rf.gateway import Gateway
-from ramses_rf.message_store import MessageStore
+from ramses_rf.state import MessageStore
 from ramses_tx import Address
 from ramses_tx.const import Code, Priority
 from ramses_tx.typing import DeviceIdT

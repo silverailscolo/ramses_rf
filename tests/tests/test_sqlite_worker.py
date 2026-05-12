@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from ramses_rf.message import Message
-from ramses_rf.message_store import MessageStore
+from ramses_rf.messages import Message
+from ramses_rf.state import MessageStore
 from ramses_tx.packet import Packet
 
 

@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ramses_rf.application_message import ApplicationMessage
 from ramses_rf.gateway import Gateway
+from ramses_rf.messages import ApplicationMessage
 from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.command import Command
 from ramses_tx.config import EngineConfig

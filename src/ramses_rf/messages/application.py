@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 """RAMSES RF - The Application Message module."""
 
 from __future__ import annotations
@@ -10,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.ramses import CODES_SCHEMA, SZ_LIFESPAN
 
-from .const import RQ, Code
-from .message import Message
+from ..const import RQ, Code
+from .base import Message
 
 if TYPE_CHECKING:
     from ramses_tx.engine import Engine
@@ -29,6 +28,7 @@ class ApplicationMessage(Message):
     _engine: Engine | None = None
     _fraction_expired: float | None = None
     _gwy: Any | None = None
+    _delete_task_queued: bool = False
 
     @classmethod
     def from_dto(cls, dto: PacketDTO) -> ApplicationMessage:
@@ -136,9 +136,9 @@ class ApplicationMessage(Message):
         # sync_cycle is a special case
         if self.code == Code._1F09 and self.verb != RQ:
             # RQs won't have remaining_seconds, RP/Ws have only partial
-            # cycle times
-            rem_secs = getattr(self.payload, "remaining_seconds", None)
-            if rem_secs is None and isinstance(self.payload, dict):
+            # cycle times. Use strictly safe dict access per Master Plan.
+            rem_secs = 0
+            if isinstance(self.payload, dict):
                 rem_secs = self.payload.get("remaining_seconds", 0)
 
             self._fraction_expired = fraction_expired(

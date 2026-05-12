@@ -7,7 +7,7 @@ from datetime import datetime as dt
 
 from ramses_rf.const import SZ_DOMAIN_ID
 from ramses_rf.helpers import shrink
-from ramses_rf.message import Message
+from ramses_rf.messages import Message
 from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.command import Command
 from ramses_tx.const import SZ_TIMESTAMP

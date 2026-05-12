@@ -35,7 +35,7 @@ from ramses_rf.device import (
     TrvActuator,
     UfhController,
 )
-from ramses_rf.entity_base import _ID_SLICE, Entity, class_by_attr
+from ramses_rf.entity import _ID_SLICE, Entity, class_by_attr
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
@@ -52,7 +52,7 @@ from ramses_tx import Address, Command, Priority
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 
-from ..message import Message
+from ..messages import Message
 from .schedule import InnerScheduleT, OuterScheduleT, Schedule
 
 if TYPE_CHECKING:

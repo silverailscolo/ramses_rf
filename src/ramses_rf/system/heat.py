@@ -36,7 +36,7 @@ from ramses_rf.device import (
     Temperature,
     UfhController,
 )
-from ramses_rf.entity_base import Entity, class_by_attr
+from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import ScheduleFlowError, SchemaInconsistentError
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
@@ -63,7 +63,7 @@ from ramses_tx import (
 )
 from ramses_tx.typing import PayDictT, PayloadT
 
-from ..message import Message
+from ..messages import Message
 from .faultlog import FaultLog
 from .zones import zone_factory
 

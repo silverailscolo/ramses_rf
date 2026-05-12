@@ -8,11 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf.const import I_, RP
-from ramses_rf.entity_base import Entity, _Entity
-from ramses_rf.entity_state import StateCache
+from ramses_rf.entity import Entity, _Entity
 from ramses_rf.gateway import Gateway
-from ramses_rf.message import Message
-from ramses_rf.message_store import MessageStore
+from ramses_rf.messages import Message
+from ramses_rf.routing import RoutingContext, StateHeader
+from ramses_rf.state import MessageStore, StateCache
 from ramses_tx import Code, DeviceIdT, Packet
 
 
@@ -114,11 +114,20 @@ class Test_entity_base:
             ]
         ), "_msg_list wrong"
 
-        # create _msgz
+        # create _msgz - use StateHeader objects for lookups
         cache = await dev.entity_state._build_state_cache()
-        assert cache.get_message(Code._12B0, I_, "01") == self.msg7
-        assert cache.get_message(Code._3150, I_, "01") == self.msg5
-        assert cache.get_message(Code._3220, RP, "11") == self.msg6
+        assert (
+            cache.get_message(StateHeader.create(Code._12B0, I_, "04:189078", "01"))
+            == self.msg7
+        )
+        assert (
+            cache.get_message(StateHeader.create(Code._3150, I_, "04:189078", "01"))
+            == self.msg5
+        )
+        assert (
+            cache.get_message(StateHeader.create(Code._3220, RP, "01:145038", "11"))
+            == self.msg6
+        )
         assert len(cache.get_all()) == 3, "base state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
@@ -162,8 +171,14 @@ class Test_entity_base:
 
         # create _msgz
         cache = await dev.entity_state._build_state_cache()
-        assert cache.get_message(Code._12B0, I_, "01") == self.msg7
-        assert cache.get_message(Code._3150, I_, "01") == self.msg5
+        assert (
+            cache.get_message(StateHeader.create(Code._12B0, I_, "04:189078", "01"))
+            == self.msg7
+        )
+        assert (
+            cache.get_message(StateHeader.create(Code._3150, I_, "04:189078", "01"))
+            == self.msg5
+        )
         assert len(cache.get_all()) == 2, "zone state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
@@ -223,8 +238,14 @@ class Test_entity_base:
 
         # create _msgz
         cache = await dev.entity_state._build_state_cache()
-        assert cache.get_message(Code._1260, RP, "00") == self.msg9
-        assert cache.get_message(Code._3150, I_, "FC") == self.msg8
+        assert (
+            cache.get_message(StateHeader.create(Code._1260, RP, "01:145038", "00"))
+            == self.msg9
+        )
+        assert (
+            cache.get_message(StateHeader.create(Code._3150, I_, "01:145038", "FC"))
+            == self.msg8
+        )
         assert len(cache.get_all()) == 2, "dhw state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
@@ -302,6 +323,10 @@ async def test_gh_396_sqlite_ot_context_type() -> None:
     mock_msg._pkt._hdr = "3220|RP|01:123456|0"
     mock_msg._idx_val = 0
 
+    # NEW: Properly mock the Native L7 domain properties
+    mock_msg.context = RoutingContext(0)
+    mock_msg.state_header = StateHeader.create(Code._3220, RP, "01:123456", 0)
+
     gwy.message_store.log_by_dtm = [mock_msg]
 
     # Instantiate the entity
@@ -340,9 +365,13 @@ async def test_gh_396_legacy_ot_context() -> None:
     mock_msg._pkt._hdr = "3220|RP|01:123456|05"
     mock_msg._idx_val = "05"
 
+    # NEW: Properly mock the Native L7 domain properties
+    mock_msg.context = RoutingContext("05")
+    mock_msg.state_header = StateHeader.create(Code._3220, RP, "01:123456", "05")
+
     # Construct the mock StateCache
     fake_cache = StateCache()
-    fake_cache.add(Code._3220, RP, "05", mock_msg)
+    fake_cache.add(mock_msg)
 
     # Execute
     with patch.object(

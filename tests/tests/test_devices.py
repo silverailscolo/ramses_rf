@@ -5,7 +5,7 @@ from pathlib import Path, PurePath
 
 import pytest
 
-from ramses_rf.message import Message
+from ramses_rf.messages import Message
 from ramses_tx import exceptions as exc
 from ramses_tx.packet import Packet
 

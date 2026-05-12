@@ -17,7 +17,7 @@ import voluptuous as vol
 from ramses_tx import ALL_DEV_ADDR, ALL_DEVICE_ID, Command, DevType, Priority, QosParams
 
 from . import exceptions as exc
-from .message import Message
+from .messages import Message
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
