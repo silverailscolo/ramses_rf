@@ -239,10 +239,10 @@
     "assignment",  # transport var reassigned between ZigbeeTransport and MqttTransport branches
   ]
 
-[[tool.mypy.overrides]]
-  module = "ramses_tx.parsers"
-
-  disallow_any_generics = false  # 89 - will be lots of work
+#[[tool.mypy.overrides]]
+#  module = "ramses_tx.parsers"
+#
+#  disallow_any_generics = false  # 89 - will be lots of work
 
 [[tool.mypy.overrides]]
   module = "ramses_rf.entity_base.*"
