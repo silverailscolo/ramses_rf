@@ -107,3 +107,42 @@ async def test_o1_get_value_eliminates_cpu_thrashing(
     # the dictionary lookup ensures the payload is accessed strictly ONCE
     # (just to extract the final value to return to Home Assistant).
     assert final_msg.payload_access_count == 1
+
+
+@pytest.mark.asyncio
+async def test_expired_message_deletion_queued_once(zone_entity: EntityState) -> None:
+    """Step 3: Verify that an expired message only queues a DB deletion task once.
+
+    This ensures we do not flood the SQLite worker queue when Home Assistant
+    repeatedly polls an entity that has an expired packet in its cache.
+    """
+    # 1. Setup an expired message
+    msg = DummyMsg(
+        "04:123456",
+        Code._30C9,
+        {"temperature": 21.0, "zone_idx": "00"},
+    )
+    msg._expired = True  # Flag it as expired (legacy mechanics)
+
+    # Push it into the O(1) state cache
+    zone_entity.update_state(msg)
+
+    # 2. Mock the async event loop to intercept the database queueing
+    mock_loop = MagicMock()
+    zone_entity._gwy._loop = mock_loop  # type: ignore[attr-defined]
+
+    # 3. Simulate Home Assistant polling the state multiple times (e.g., 3 state polls)
+    await zone_entity.get_value(Code._30C9)
+    await zone_entity.get_value(Code._30C9)
+    await zone_entity.get_value(Code._30C9)
+
+    # 4. Assertions
+    # The boolean flag must be applied securely to the object
+    assert getattr(msg, "_delete_task_queued", False) is True
+
+    # CRITICAL: Even though HA polled 3 times, it should only create 1 deletion task!
+    mock_loop.create_task.assert_called_once()
+
+    # 5. Cleanup: Close the trapped coroutine to prevent Pytest RuntimeWarning
+    coro = mock_loop.create_task.call_args[0][0]
+    coro.close()

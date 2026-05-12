@@ -87,32 +87,55 @@ class EntityState:
         self._gwy = gwy
         # NEW: Context-Aware O(1) Dictionary for Push-Model state caching
         self._current_state: dict[tuple[Code, VerbT, Any], ApplicationMessage] = {}
-        self._log_cursor: int = 0  # Tracks cursor position in global log
+        # Tracks cursor position in global log (Rewritten: tracks memory ID)
+        self._last_msg_id: int | None = None
 
     def _sync_state(self) -> None:
-        """Hybrid Push Model: Sync O(1) cache using a cursor on the global log."""
+        """Hybrid Push Model: Sync O(1) cache using a cursor on the
+        global log.
+        """
         if self._gwy.message_store is None:
             return
 
-        log_iterable = self._gwy.message_store.log_by_dtm
-        if isinstance(log_iterable, dict):
-            log_iterable = list(log_iterable.values())
+        msg_store = cast("MessageStore", self._gwy.message_store)
+        msg_log = getattr(msg_store, "_message_log", None)
 
-        current_len = len(log_iterable)
-        if current_len == self._log_cursor:
+        # In production msg_log is an OrderedDict, but tests inject MagicMocks.
+        # This fallback prevents StopIteration when testing.
+        if isinstance(msg_log, dict):
+            if not msg_log:
+                if getattr(self, "_last_msg_id", None) is not None:
+                    # The global log was cleared (e.g. cache reset). Rebuild.
+                    self._current_state.clear()
+                    self._last_msg_id = None
+                return
+            last_msg = msg_log[next(reversed(msg_log))]
+        else:
+            log_iterable = msg_store.log_by_dtm
+            if not log_iterable:
+                if getattr(self, "_last_msg_id", None) is not None:
+                    # The global log was cleared (e.g. cache reset). Rebuild.
+                    self._current_state.clear()
+                    self._last_msg_id = None
+                return
+            last_msg = log_iterable[-1]
+
+        current_id = id(last_msg)
+
+        if getattr(self, "_last_msg_id", None) == current_id:
             return  # No new packets, O(1) instant exit
 
-        if current_len < self._log_cursor:
-            # The global log was cleared (e.g. cache reset). Rebuild.
-            self._log_cursor = 0
-            self._current_state.clear()
+        self._last_msg_id = current_id
+
+        full_log = msg_store.log_by_dtm
+
+        # The global log was cleared (e.g. cache reset). Rebuild.
+        self._current_state.clear()
 
         # Only process NEW packets appended since the last sync
-        new_msgs = log_iterable[self._log_cursor :]
-        for msg in new_msgs:
-            self.update_state(msg)
-
-        self._log_cursor = current_len
+        # (Rewritten: processing all to fix cursor millisecond-collision)
+        for msg in full_log:
+            self.update_state(cast("ApplicationMessage", msg))
 
     def update_state(self, msg: ApplicationMessage) -> None:
         """Push model: Instantly cache relevant messages upon arrival."""
@@ -158,7 +181,9 @@ class EntityState:
         self._current_state[(msg.code, msg.verb, ctx)] = msg
 
     def _is_relevant_msg(self, msg: ApplicationMessage) -> bool:
-        """Check if a central MessageStore packet is relevant to this entity."""
+        """Check if a central MessageStore packet is relevant to this
+        entity.
+        """
         return bool(
             msg.src.id == self._entity.id[:_ID_SLICE]
             or (msg.dst.id == self._entity.id[:_ID_SLICE] and msg.verb != RQ)
@@ -312,8 +337,10 @@ class EntityState:
         if msg is None:
             return None
         elif getattr(msg, "_expired", False):
-            loop = getattr(self._gwy, "_loop", asyncio.get_running_loop())
-            loop.create_task(self._delete_msg(msg))
+            if not getattr(msg, "_delete_task_queued", False):
+                msg._delete_task_queued = True  # type: ignore[attr-defined]
+                loop = getattr(self._gwy, "_loop", asyncio.get_running_loop())
+                loop.create_task(self._delete_msg(msg))
 
         payload = msg.payload
 
@@ -498,7 +525,9 @@ class EntityState:
         return []
 
     async def get_message_log_flat(self) -> dict[Code, ApplicationMessage]:
-        """Dynamically build a flat dict of all I/RP messages logged for this entity."""
+        """Dynamically build a flat dict of all I/RP messages logged for
+        this entity.
+        """
         self._sync_state()
         _msg_dict: dict[Code, ApplicationMessage] = {}
 
