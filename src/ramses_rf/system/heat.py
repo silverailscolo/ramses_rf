@@ -68,7 +68,8 @@ from .faultlog import FaultLog
 from .zones import zone_factory
 
 if TYPE_CHECKING:
-    from ramses_tx import Address, Packet
+    from ramses_rf.address import Address
+    from ramses_tx import Packet
 
     from .faultlog import FaultIdxT, FaultLogEntry
     from .zones import DhwZone, Zone

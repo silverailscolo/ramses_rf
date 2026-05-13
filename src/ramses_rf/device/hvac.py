@@ -11,6 +11,7 @@ from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ramses_rf import exceptions as exc
+from ramses_rf.address import Address
 from ramses_rf.const import (
     HEARTBEAT_TIMEOUT_FILTER,
     HEARTBEAT_TIMEOUT_REMOTE,
@@ -49,7 +50,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.entity import class_by_attr
 from ramses_rf.helpers import schedule_task
-from ramses_tx import Address, Command, Packet, Priority
+from ramses_tx import Command, Packet, Priority
 from ramses_tx.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR
 from ramses_tx.typing import PayloadT
 

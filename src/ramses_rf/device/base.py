@@ -12,6 +12,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, cast
 
+from ramses_rf.address import Address
 from ramses_rf.binding_fsm import BindingManager, Vendor
 from ramses_rf.const import (
     DEV_TYPE_MAP,
@@ -42,7 +43,8 @@ if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Zone
-    from ramses_tx import Address, DeviceIdT, IndexT
+    from ramses_tx.const import IndexT
+    from ramses_tx.typing import DeviceIdT
 
 
 BIND_WAITING_TIMEOUT = 300  # how long to wait, listening for an offer
