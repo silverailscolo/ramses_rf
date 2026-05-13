@@ -138,7 +138,7 @@ async def test_gateway_stop_closes_listener_in_executor() -> None:
 
 
 @pytest.mark.asyncio
-@patch("ramses_rf.gateway.set_pkt_logging_config", new_callable=AsyncMock)
+@patch("ramses_rf.app.set_pkt_logging_config", new_callable=AsyncMock)
 async def test_gateway_start_initiates_periodic_flush(
     mock_set_pkt_logging_config: AsyncMock,
 ) -> None:
@@ -187,8 +187,8 @@ async def test_gateway_restore_cached_packets_dto() -> None:
     gwy = Gateway("/dev/null", config=config)
 
     with (
-        patch("ramses_rf.gateway.protocol_factory") as mock_pf,
-        patch("ramses_rf.gateway.Packet.from_dict") as mock_from_dict,
+        patch("ramses_rf.app.protocol_factory") as mock_pf,
+        patch("ramses_rf.app.Packet.from_dict") as mock_from_dict,
     ):
         mock_protocol = MagicMock()
         mock_pf.return_value = mock_protocol
@@ -230,8 +230,8 @@ async def test_gateway_restore_cached_packets_naive_dtm() -> None:
     gwy = Gateway("/dev/null", config=config)
 
     with (
-        patch("ramses_rf.gateway.protocol_factory") as mock_pf,
-        patch("ramses_rf.gateway.Packet.from_dict") as mock_from_dict,
+        patch("ramses_rf.app.protocol_factory") as mock_pf,
+        patch("ramses_rf.app.Packet.from_dict") as mock_from_dict,
     ):
         mock_protocol = MagicMock()
         mock_pf.return_value = mock_protocol

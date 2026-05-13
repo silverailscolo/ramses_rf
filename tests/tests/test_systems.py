@@ -101,7 +101,7 @@ def global_test_patches() -> Generator[None, None, None]:
             raise
 
     with (
-        patch("ramses_rf.gateway.dt", AwareDatetime),
+        patch("ramses_rf.app.dt", AwareDatetime),  # FIXED TARGET: moved to app.py
         patch("ramses_tx.engine.dt", AwareDatetime),
         patch("ramses_tx.packet.dt", AwareDatetime),
         patch("ramses_rf.messages.Message._pkt", property(mocked_pkt_prop)),
@@ -196,7 +196,7 @@ async def test_restore_from_log_file_sql(dir_name: Path) -> None:
 
     with (
         patch(
-            "ramses_rf.gateway.MessageStore",
+            "ramses_rf.app.MessageStore",  # FIXED TARGET: moved to app.py
             side_effect=lambda *args, **kwargs: MessageStore(
                 *args, **{**kwargs, "disk_path": None}
             ),
@@ -232,7 +232,7 @@ async def test_shuffle_from_log_file_sql(dir_name: Path) -> None:
 
     with (
         patch(
-            "ramses_rf.gateway.MessageStore",
+            "ramses_rf.app.MessageStore",  # FIXED TARGET: moved to app.py
             side_effect=lambda *args, **kwargs: MessageStore(
                 *args, **{**kwargs, "disk_path": None}
             ),
@@ -279,7 +279,7 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
 
     with (
         patch(
-            "ramses_rf.gateway.MessageStore",
+            "ramses_rf.app.MessageStore",  # FIXED TARGET: moved to app.py
             side_effect=lambda *args, **kwargs: MessageStore(
                 *args, **{**kwargs, "disk_path": None}
             ),
