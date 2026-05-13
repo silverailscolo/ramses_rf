@@ -9,6 +9,7 @@ from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from ramses_rf import exceptions as exc
+from ramses_rf.address import NON_DEV_ADDR
 from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
@@ -36,7 +37,7 @@ from ramses_rf.helpers import shrink
 from ramses_rf.quirks import QUARANTINED_OT_MSG_IDS
 from ramses_rf.schemas import SCH_TCS, SZ_ACTUATORS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
-from ramses_tx import NON_DEV_ADDR, Command, Priority
+from ramses_tx import Command, Priority
 from ramses_tx.const import SZ_NUM_REPEATS, SZ_PRIORITY, MsgId
 from ramses_tx.opentherm import (
     PARAMS_DATA_IDS,
@@ -106,10 +107,11 @@ from ramses_tx.const import (
 )
 
 if TYPE_CHECKING:
+    from ramses_rf.address import Address
     from ramses_rf.messages import ApplicationMessage
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Evohome, Zone
-    from ramses_tx import Address, Packet
+    from ramses_tx import Packet
     from ramses_tx.opentherm import OtDataId
 
     from ..messages import Message

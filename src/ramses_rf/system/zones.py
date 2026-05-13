@@ -9,6 +9,7 @@ from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ramses_rf import exceptions as exc
+from ramses_rf.address import Address
 from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
@@ -48,7 +49,7 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
 )
 from ramses_rf.topology import Child, Parent
-from ramses_tx import Address, Command, Priority
+from ramses_tx import Command, Priority
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 

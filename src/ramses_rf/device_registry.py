@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from ramses_tx import Address, is_valid_dev_id
+from ramses_rf.address import Address, is_valid_dev_id
 
 from .const import SZ_DEVICES
 from .device import DeviceHeat, DeviceHvac, Fakeable, device_factory
@@ -43,7 +43,8 @@ class DeviceRegistry:
 
         :param dev: The device instance to add.
         :type dev: Device
-        :raises SchemaInconsistentError: If the device already exists in the registry.
+        :raises SchemaInconsistentError: If the device already exists in
+            the registry.
         """
         if dev.id in self.device_by_id:
             raise SchemaInconsistentError(f"Device already exists: {dev.id}")
@@ -62,32 +63,34 @@ class DeviceRegistry:
     ) -> Device:
         """Return a device, creating it if it does not already exist.
 
-        :param device_id: The unique identifier for the device (e.g., '01:123456').
+        :param device_id: The unique identifier for the device.
         :type device_id: DeviceIdT
         :param msg: An optional initial message for the device to process.
         :type msg: Message | None
         :param parent: The parent entity of this device, if any.
         :type parent: Parent | None
-        :param child_id: The specific ID of the child component if applicable.
+        :param child_id: Specific ID of the child component if applicable.
         :type child_id: str | None
-        :param is_sensor: Indicates if this device should be treated as a sensor.
+        :param is_sensor: Indicates if this device is treated as a sensor.
         :type is_sensor: bool | None
         :returns: The existing or newly created device instance.
         :rtype: Device
-        :raises DeviceNotFoundError: If the device ID is blocked or not in the known_list.
+        :raises DeviceNotFoundError: If device ID is blocked or unknown.
         """
         try:
             self._gwy._device_filter.check_filter_lists(device_id)
         except DeviceNotFoundError:
             # have to allow for GWY not being in known_list...
-            # Proper composition fix: get the configured HGI ID directly from the Engine
+            # Proper composition fix: get the configured HGI ID directly
+            # from the Engine
             if device_id != self._gwy._engine._hgi_id:
                 raise
 
         dev = self.device_by_id.get(device_id)
 
         if not dev:
-            # voluptuous bug workaround: https://github.com/alecthomas/voluptuous/pull/524
+            # voluptuous bug workaround:
+            # https://github.com/alecthomas/voluptuous/pull/524
             _traits_raw: dict[str, Any] = dict(
                 self._gwy._engine._include.get(device_id, {})
             )
@@ -147,7 +150,8 @@ class DeviceRegistry:
         raise DeviceNotFaked(f"The device is not fakeable: {device_id}")
 
     async def known_list(self) -> DeviceListT:
-        """Return the working known_list (a superset of the provided known_list).
+        """Return the working known_list (a superset of the provided
+        known_list).
 
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT

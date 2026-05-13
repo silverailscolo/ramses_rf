@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
-from ramses_tx.address import Address
+from ramses_rf.address import Address
 from ramses_tx.command import Command
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.models import DeviceId, RawPacket, TransportMessage

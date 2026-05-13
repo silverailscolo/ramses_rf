@@ -10,14 +10,7 @@ from functools import partial
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
-from .address import (
-    ALL_DEV_ADDR,
-    ALL_DEVICE_ID,
-    NON_DEV_ADDR,
-    NON_DEVICE_ID,
-    Address,
-    is_valid_dev_id,
-)
+from .address import ALL_DEV_ADDR, ALL_DEVICE_ID, NON_DEV_ADDR, NON_DEVICE_ID, Address
 from .command import CODE_API_MAP, Command
 from .const import (
     DEV_ROLE_MAP,
@@ -145,6 +138,8 @@ __all__ = [
     "Engine",
 ]
 
+
+is_valid_dev_id = Address.is_valid
 
 if TYPE_CHECKING:
     from logging import Logger
