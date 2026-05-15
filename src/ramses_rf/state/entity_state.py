@@ -87,7 +87,8 @@ class EntityState:
     """Manages database interactions and state queries for an entity.
 
     This class acts as a stateless facade. It delegates all heavy lifting
-    to the Gateway's central MessageStore while serving as the SSOT ingestion point.
+    to the Gateway's central MessageStore while serving as the SSOT ingestion
+    point.
     """
 
     def __init__(self, entity: DeviceInterface, gwy: GatewayInterface) -> None:
@@ -98,8 +99,11 @@ class EntityState:
         self._current_state: dict[StateHeader, ApplicationMessage] = {}
         self._log_cursor: int = 0  # Tracks cursor position in global log
 
+        # Tracks DB tasks to maintain Message object immutability
+        self._pending_deletes: set[StateHeader] = set()
+
     def _sync_state(self) -> None:
-        """Hybrid Push Model: Sync O(1) cache using a cursor on the global log."""
+        """Hybrid Push Model: Sync O(1) cache using cursor on global log."""
         if self._gwy.message_store is None:
             return
 
@@ -115,6 +119,7 @@ class EntityState:
             # The global log was cleared (e.g. cache reset). Rebuild.
             self._log_cursor = 0
             self._current_state.clear()
+            self._pending_deletes.clear()
 
         # Only process NEW packets appended since the last sync
         new_msgs = log_iterable[self._log_cursor :]
@@ -171,11 +176,11 @@ class EntityState:
             ):
                 return  # Payload does not belong to DHW
 
-        # Context-aware O(1) Overwrite directly keyed by the DTO guarantees isolation
+        # Context-aware O(1) Overwrite directly keyed by DTO
         self._current_state[msg.state_header] = msg
 
     def _is_relevant_msg(self, msg: ApplicationMessage) -> bool:
-        """Check if a central MessageStore packet is relevant to this entity."""
+        """Check if a central MessageStore packet is relevant to entity."""
         return bool(
             msg.src.id == self._entity.id[:_ID_SLICE]
             or (msg.dst.id == self._entity.id[:_ID_SLICE] and msg.verb != RQ)
@@ -207,6 +212,7 @@ class EntityState:
         if self._gwy.message_store:
             store = cast("MessageStore", self._gwy.message_store)
             await store.rem(msg)
+        self._pending_deletes.discard(msg.state_header)
 
     async def _get_msg_by_hdr(
         self, hdr: HeaderT | StateHeader
@@ -260,7 +266,7 @@ class EntityState:
         return msg
 
     async def get_flag(self, code: Code, key: str, idx: int) -> bool | None:
-        """Get the boolean value of a specific flag within a message payload."""
+        """Get the boolean value of a specific flag within a payload."""
         if flags := await self.get_value(code, key=key):
             return bool(flags[idx])
         return None
@@ -348,10 +354,13 @@ class EntityState:
         """Get all or a specific key with its values from a Message."""
         if msg is None:
             return None
-        elif getattr(msg, "_expired", False):
-            if not getattr(msg, "_delete_task_queued", False):
-                msg._delete_task_queued = True  # Prevent queue flooding
+
+        if getattr(msg, "_expired", False):
+            hdr = msg.state_header
+            if hdr not in self._pending_deletes:
+                self._pending_deletes.add(hdr)
                 loop = getattr(self._gwy, "_loop", asyncio.get_running_loop())
+                # Fire and forget the task securely
                 loop.create_task(self._delete_msg(msg))
 
         payload = msg.payload
@@ -531,13 +540,11 @@ class EntityState:
 
     async def _msg_qry(self, sql: str) -> list[dict[str, Any]]:
         """Custom query for an entity's stored payloads."""
-        _LOGGER.warning(
-            "Legacy _msg_qry (SQL) called. Returning empty in CQRS architecture."
-        )
+        _LOGGER.warning("Legacy _msg_qry (SQL) called. Returning empty.")
         return []
 
     async def get_message_log_flat(self) -> dict[Code, ApplicationMessage]:
-        """Dynamically build a flat dict of all I/RP messages logged for this entity."""
+        """Dynamically build flat dict of all I/RP messages logged."""
         self._sync_state()
         _msg_dict: dict[Code, ApplicationMessage] = {}
 
