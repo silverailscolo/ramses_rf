@@ -1,3 +1,4 @@
+# src/ramses_rf/gateway.py
 #!/usr/bin/env python3
 """RAMSES RF - the gateway facade."""
 
@@ -27,7 +28,6 @@ from ramses_tx.ramses import CODES_SCHEMA
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 from ramses_tx.typing import PayloadT
 
-from .app import ApplicationMixin
 from .config import GatewayConfig as GatewayConfig
 from .const import Code, VerbT
 from .device import HgiGateway
@@ -40,6 +40,7 @@ from .interfaces import (
     GatewayInterface,
     MessageStoreInterface,
 )
+from .lifecycle import GatewayLifecycle
 from .messages import ApplicationMessage, Message as rf_msg
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
@@ -57,7 +58,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-class Gateway(ApplicationMixin, GatewayInterface):
+class Gateway(GatewayLifecycle, GatewayInterface):
     """The gateway class.
 
     This class serves as the primary interface for the RAMSES RF network.

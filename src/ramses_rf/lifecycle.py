@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RAMSES RF - Application Lifecycle Management."""
+"""RAMSES RF - Gateway Lifecycle Management."""
 
 from __future__ import annotations
 
@@ -35,8 +35,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-class ApplicationMixin:
-    """Application lifecycle management for the Gateway."""
+class GatewayLifecycle:
+    """Gateway lifecycle management and orchestration."""
 
     if TYPE_CHECKING:
 
