@@ -10,13 +10,14 @@ from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
 from ramses_rf.const import SZ_DEVICES
 from ramses_rf.device import DeviceHeat, DeviceHvac, Fakeable
+from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
     DeviceNotFaked,
     DeviceNotFoundError,
     SchemaInconsistentError,
 )
 from ramses_rf.interfaces import DeviceFilterInterface
-from ramses_rf.models import DeviceTraits
+from ramses_rf.models import DeviceTraits, TopologyChangedEvent
 from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
 
@@ -52,6 +53,90 @@ class DeviceRegistry:
         self._device_factory_cb = device_factory_cb
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
+
+    def handle_topology_event(self, event: TopologyChangedEvent) -> None:
+        """Process an immutable structural graph mutation event."""
+        if event.action == TopologyAction.BIND_DEVICE:
+            self._handle_bind_device(event)
+        elif event.action == TopologyAction.PROMOTE_CLASS:
+            self._handle_promote_class(event)
+        elif event.action == TopologyAction.CREATE_CONTROLLER:
+            self._handle_create_controller(event)
+        elif event.action == TopologyAction.CREATE_CIRCUIT:
+            self._handle_create_circuit(event)
+        elif event.action == TopologyAction.UPDATE_TRAITS:
+            self._handle_update_traits(event)
+
+    def _handle_bind_device(self, event: TopologyChangedEvent) -> None:
+        """Bind a child device to a parent device."""
+        if not event.parent_id or not event.child_id:
+            return
+        parent = self.device_by_id.get(event.parent_id)
+        child = self.device_by_id.get(event.child_id)
+        if parent and child:
+            child.set_parent(cast("Parent", parent))
+            _LOGGER.debug(f"Bound {child.id} to {parent.id} via {event.causation}")
+
+    def _handle_promote_class(self, event: TopologyChangedEvent) -> None:
+        """Safely instantiate a promoted class and migrate state."""
+        if not event.device_id:
+            return
+
+        old_dev = self.device_by_id.get(event.device_id)
+        if not old_dev:
+            return
+
+        new_class_slug = str(event.metadata.get("device_class"))
+        if not new_class_slug or getattr(old_dev, "_SLUG", None) == new_class_slug:
+            return
+
+        # Update the configuration traits safely
+        traits_dict = dict(self._config.known_list.get(event.device_id, {}))
+        traits_dict["class"] = new_class_slug
+        self._config.known_list[event.device_id] = traits_dict
+
+        # Instantiate the new strict device class via the factory
+        traits = DeviceTraits.from_dict(traits_dict)
+        new_dev = self._device_factory_cb(old_dev.addr, None, traits)
+
+        # Migrate essential topological state
+        new_dev.set_parent(getattr(old_dev, "_parent", None))
+
+        # Swap the object in the registry arrays
+        self.device_by_id[event.device_id] = new_dev
+        for idx, d in enumerate(self.devices):
+            if d.id == event.device_id:
+                self.devices[idx] = new_dev
+                break
+
+        _LOGGER.info(
+            f"Promoted {event.device_id} to {new_class_slug} via {event.causation}"
+        )
+
+    def _handle_create_controller(self, event: TopologyChangedEvent) -> None:
+        """Instruct a device to initialize its Evohome TCS."""
+        if not event.device_id:
+            return
+        dev = self.device_by_id.get(event.device_id)
+        if dev and hasattr(dev, "_make_tcs_controller"):
+            dev._make_tcs_controller()
+            _LOGGER.debug(f"Created Controller on {dev.id} via {event.causation}")
+
+    def _handle_create_circuit(self, event: TopologyChangedEvent) -> None:
+        """Instruct a UFH controller to initialize a circuit."""
+        if not event.device_id:
+            return
+        ufc = self.device_by_id.get(event.device_id)
+        if ufc and hasattr(ufc, "get_circuit"):
+            ufh_idx = str(event.metadata.get("ufh_idx"))
+            ufc.get_circuit(ufh_idx)
+            _LOGGER.debug(
+                f"Created Circuit {ufh_idx} on {ufc.id} via {event.causation}"
+            )
+
+    def _handle_update_traits(self, event: TopologyChangedEvent) -> None:
+        """Update traits for a specific device (Expansion Hook)."""
+        pass
 
     def _add_device(self, dev: Device) -> None:
         """Add a device to the registry.
