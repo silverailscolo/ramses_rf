@@ -7,6 +7,8 @@ from collections.abc import Iterable
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+from ramses_rf.protocol.opentherm import parity
+
 from .. import exceptions as exc
 from ..address import ALL_DEV_ADDR, dev_id_to_hex_id
 from ..const import (
@@ -33,7 +35,6 @@ from ..helpers import (
     hex_from_temp,
     timestamp,
 )
-from ..opentherm import parity
 from ..typing import DeviceIdT, PayloadT
 from ..version import VERSION
 from .base import CommandBase, _check_idx

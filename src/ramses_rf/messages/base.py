@@ -13,12 +13,12 @@ from ramses_rf.address import Address
 from ramses_tx.command import Command
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.models import DeviceId, RawPacket, TransportMessage
-from ramses_tx.ramses import CODE_IDX_ARE_COMPLEX
 from ramses_tx.typing import DeviceIdT
 
 from .. import exceptions as exc
 from ..const import DEV_TYPE_MAP, SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
 from ..parsers.decoder import decode_packet
+from ..protocol.ramses import CODE_IDX_ARE_COMPLEX
 from ..routing import RoutingContext, StateHeader
 
 from ..const import (  # noqa: F401, isort: skip, pylint: disable=unused-import

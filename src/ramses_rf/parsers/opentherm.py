@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING, Any
 from ramses_tx import exceptions as exc
 from ramses_tx.const import RQ, SZ_PAYLOAD, SZ_VALUE
 from ramses_tx.helpers import hex_to_flag8, hex_to_percent, parse_valve_demand
-from ramses_tx.opentherm import (
+from ramses_tx.typing import PayDictT
+
+from ..protocol.opentherm import (
     EN,
     SZ_DESCRIPTION,
     SZ_MSG_ID,
@@ -21,8 +23,6 @@ from ramses_tx.opentherm import (
     OtMsgType,
     decode_frame,
 )
-from ramses_tx.typing import PayDictT
-
 from .registry import register_parser
 
 if TYPE_CHECKING:

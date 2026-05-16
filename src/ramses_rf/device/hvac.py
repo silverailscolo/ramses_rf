@@ -51,10 +51,10 @@ from ramses_rf.const import (
 from ramses_rf.entity import class_by_attr
 from ramses_rf.helpers import schedule_task
 from ramses_tx import Command, Packet, Priority
-from ramses_tx.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR
 from ramses_tx.typing import PayloadT
 
 from ..messages import Message
+from ..protocol.ramses import CODES_OF_HVAC_DOMAIN_ONLY, HVAC_KLASS_BY_VC_PAIR
 from .base import BatteryState, DeviceHvac, Fakeable
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import

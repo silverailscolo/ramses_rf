@@ -81,7 +81,6 @@ from ramses_tx.const import (
     DevRole,
     FaultDeviceClass,
 )
-from ramses_tx.fingerprints import check_signature
 from ramses_tx.helpers import (
     hex_to_date,
     hex_to_dtm,
@@ -95,6 +94,7 @@ from ramses_tx.helpers import (
 from ramses_tx.typing import PayDictT
 from ramses_tx.version import VERSION
 
+from ..protocol.fingerprints import check_signature
 from .registry import register_parser
 
 if TYPE_CHECKING:

@@ -11,14 +11,19 @@ from dataclasses import asdict
 from datetime import datetime as dt, timedelta as td
 from typing import Any
 
+from ramses_rf.protocol.opentherm import (
+    PARAMS_DATA_IDS,
+    SCHEMA_DATA_IDS,
+    STATUS_DATA_IDS,
+)
+from ramses_rf.protocol.ramses import CODES_SCHEMA, SZ_LIFESPAN
+
 from .command import Command
 from .const import I_, RP, RQ, W_, Code, VerbT
 from .dtos import PacketDTO
 from .exceptions import PacketInvalid
 from .frame import Frame
 from .logger import getLogger  # overridden logger.getLogger
-from .opentherm import PARAMS_DATA_IDS, SCHEMA_DATA_IDS, STATUS_DATA_IDS
-from .ramses import CODES_SCHEMA, SZ_LIFESPAN
 
 # these trade memory for speed
 _TD_SECS_000 = td(seconds=0)

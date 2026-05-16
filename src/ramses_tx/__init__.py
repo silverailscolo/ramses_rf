@@ -10,6 +10,18 @@ from functools import partial
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
+from ramses_rf.protocol.ramses import (
+    _2411_PARAMS_SCHEMA,
+    CODES_BY_DEV_SLUG,
+    CODES_SCHEMA,
+    SZ_DATA_TYPE,
+    SZ_DATA_UNIT,
+    SZ_DESCRIPTION,
+    SZ_MAX_VALUE,
+    SZ_MIN_VALUE,
+    SZ_PRECISION,
+)
+
 from .address import ALL_DEV_ADDR, ALL_DEVICE_ID, NON_DEV_ADDR, NON_DEVICE_ID, Address
 from .command import CODE_API_MAP, Command
 from .const import (
@@ -39,17 +51,6 @@ from .engine import Engine
 from .logger import set_pkt_logging
 from .packet import PKT_LOGGER, Packet
 from .protocol import PortProtocol, ReadProtocol, protocol_factory
-from .ramses import (
-    _2411_PARAMS_SCHEMA,
-    CODES_BY_DEV_SLUG,
-    CODES_SCHEMA,
-    SZ_DATA_TYPE,
-    SZ_DATA_UNIT,
-    SZ_DESCRIPTION,
-    SZ_MAX_VALUE,
-    SZ_MIN_VALUE,
-    SZ_PRECISION,
-)
 from .schemas import SZ_BOUND_TO, SZ_SERIAL_PORT
 from .transport import RamsesTransportT, ZigbeeTransport, transport_factory
 from .typing import DeviceIdT, DeviceListT, QosParams

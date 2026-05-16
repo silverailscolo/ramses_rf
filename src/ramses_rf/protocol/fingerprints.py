@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from .typing import DeviceFingerprint
+from ramses_rf.typing import DeviceFingerprint
 
 __all__ = ["check_signature"]
 

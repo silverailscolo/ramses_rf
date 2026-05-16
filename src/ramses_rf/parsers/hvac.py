@@ -54,9 +54,9 @@ from ramses_tx.helpers import (
     parse_supply_flow,
     parse_supply_temp,
 )
-from ramses_tx.ramses import _31D9_FAN_INFO_VASCO, _2411_PARAMS_SCHEMA
 from ramses_tx.typing import PayDictT
 
+from ..protocol.ramses import _31D9_FAN_INFO_VASCO, _2411_PARAMS_SCHEMA
 from .registry import register_parser
 
 if TYPE_CHECKING:
@@ -537,7 +537,7 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
         _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
 
     if msg._addrs[0] == NON_DEV_ADDR:  # and payload[4:6] == "04":
-        from ramses_tx.ramses import (
+        from ramses_rf.protocol.ramses import (
             _22F1_MODE_ITHO as _22F1_FAN_MODE,  # TODO: only if 04
         )
 
@@ -545,13 +545,13 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
         _22f1_scheme = "itho"
 
     elif payload[4:6] == "0A":
-        from ramses_tx.ramses import _22F1_MODE_NUAIRE as _22F1_FAN_MODE
+        from ramses_rf.protocol.ramses import _22F1_MODE_NUAIRE as _22F1_FAN_MODE
 
         _22f1_mode_set = ("", "0A")
         _22f1_scheme = "nuaire"
 
     elif payload[4:6] == "06":
-        from ramses_tx.ramses import _22F1_MODE_VASCO as _22F1_FAN_MODE
+        from ramses_rf.protocol.ramses import _22F1_MODE_VASCO as _22F1_FAN_MODE
 
         _22f1_mode_set = (
             "",
@@ -561,7 +561,7 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
         _22f1_scheme = "vasco"
 
     else:
-        from ramses_tx.ramses import _22F1_MODE_ORCON as _22F1_FAN_MODE
+        from ramses_rf.protocol.ramses import _22F1_MODE_ORCON as _22F1_FAN_MODE
 
         _22f1_mode_set = ("", "04", "07", "0B")  # 0B?
         _22f1_scheme = "orcon"

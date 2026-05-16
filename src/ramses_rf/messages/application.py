@@ -7,9 +7,9 @@ from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
 from ramses_tx.dtos import PacketDTO
-from ramses_tx.ramses import CODES_SCHEMA, SZ_LIFESPAN
 
 from ..const import RQ, Code
+from ..protocol.ramses import CODES_SCHEMA, SZ_LIFESPAN
 from .base import Message
 
 if TYPE_CHECKING:

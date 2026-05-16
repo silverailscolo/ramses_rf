@@ -15,19 +15,19 @@ import random
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, cast
 
+from ramses_rf.protocol.opentherm import OPENTHERM_MESSAGES
 from ramses_tx import Command, Packet
 from ramses_tx.const import I_, RP, Code
-from ramses_tx.opentherm import OPENTHERM_MESSAGES
-from ramses_tx.ramses import CODES_SCHEMA
 
 from . import exceptions as exc
 from .helpers import schedule_task
 from .messages import Message
+from .protocol.ramses import CODES_SCHEMA
 from .routing import StateHeader
 
 if TYPE_CHECKING:
+    from ramses_rf.protocol.opentherm import OtDataId
     from ramses_tx.const import MsgId
-    from ramses_tx.opentherm import OtDataId
     from ramses_tx.typing import HeaderT
 
     from .gateway import Gateway

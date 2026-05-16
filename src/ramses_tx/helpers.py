@@ -10,6 +10,8 @@ from collections.abc import Iterable, Mapping
 from datetime import date, datetime as dt
 from typing import TYPE_CHECKING, Final, Literal, TypeAlias
 
+from ramses_rf.protocol.ramses import _31DA_FAN_INFO
+
 from .address import hex_id_to_dev_id
 from .const import (
     FAULT_DEVICE_CLASS,
@@ -49,7 +51,6 @@ from .const import (
     FaultState,
     FaultType,
 )
-from .ramses import _31DA_FAN_INFO
 
 if TYPE_CHECKING:
     from .typing import PayDictT
