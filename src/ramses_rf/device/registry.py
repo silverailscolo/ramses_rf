@@ -6,21 +6,24 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.address import Address, is_valid_dev_id
-
-from .const import SZ_DEVICES
-from .device import DeviceHeat, DeviceHvac, Fakeable, device_factory
-from .exceptions import DeviceNotFaked, DeviceNotFoundError, SchemaInconsistentError
-from .models import DeviceTraits
-from .schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
-from .typing import DeviceIdT, DeviceListT, DeviceTraitsT
+from ramses_rf.const import SZ_DEVICES
+from ramses_rf.device import DeviceHeat, DeviceHvac, Fakeable, device_factory
+from ramses_rf.exceptions import (
+    DeviceNotFaked,
+    DeviceNotFoundError,
+    SchemaInconsistentError,
+)
+from ramses_rf.interfaces import GatewayInterface
+from ramses_rf.models import DeviceTraits
+from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
+from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
 
 if TYPE_CHECKING:
+    from ramses_rf.device import Device
+    from ramses_rf.gateway import Gateway
     from ramses_rf.messages import Message
-
-    from .device import Device
-    from .gateway import Gateway
-    from .system import Evohome
-    from .topology import Parent
+    from ramses_rf.system import Evohome
+    from ramses_rf.topology import Parent
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,13 +31,13 @@ _LOGGER = logging.getLogger(__name__)
 class DeviceRegistry:
     """Service to manage the registry of known devices."""
 
-    def __init__(self, gateway: Gateway) -> None:
+    def __init__(self, gateway: GatewayInterface) -> None:
         """Initialize the DeviceRegistry.
 
         :param gateway: The Gateway instance for retrieving configuration.
-        :type gateway: Gateway
+        :type gateway: GatewayInterface
         """
-        self._gwy = gateway
+        self._gateway = gateway
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
@@ -78,12 +81,14 @@ class DeviceRegistry:
         :raises DeviceNotFoundError: If device ID is blocked or unknown.
         """
         try:
-            self._gwy._device_filter.check_filter_lists(device_id)
+            self._gateway._device_filter.check_filter_lists(  # type: ignore[attr-defined]
+                device_id
+            )
         except DeviceNotFoundError:
             # have to allow for GWY not being in known_list...
             # Proper composition fix: get the configured HGI ID directly
             # from the Engine
-            if device_id != self._gwy._engine._hgi_id:
+            if device_id != self._gateway._engine._hgi_id:  # type: ignore[attr-defined]
                 raise
 
         dev = self.device_by_id.get(device_id)
@@ -92,16 +97,21 @@ class DeviceRegistry:
             # voluptuous bug workaround:
             # https://github.com/alecthomas/voluptuous/pull/524
             _traits_raw: dict[str, Any] = dict(
-                self._gwy.config.known_list.get(device_id, {})
+                self._gateway.config.known_list.get(device_id, {})
             )
             _traits_raw.pop("commands", None)
 
             traits_dict: dict[str, Any] = SCH_TRAITS(
-                self._gwy.config.known_list.get(device_id, {})
+                self._gateway.config.known_list.get(device_id, {})
             )
             traits = DeviceTraits.from_dict(traits_dict)
 
-            dev = device_factory(self._gwy, Address(device_id), msg=msg, traits=traits)
+            dev = device_factory(
+                cast("Gateway", self._gateway),
+                Address(device_id),
+                msg=msg,
+                traits=traits,
+            )
 
             if traits.faked:
                 if isinstance(dev, Fakeable):
@@ -156,11 +166,13 @@ class DeviceRegistry:
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
         """
-        result: dict[str, Any] = {k: v for k, v in self._gwy.config.known_list.items()}
+        result: dict[str, Any] = {
+            k: v for k, v in self._gateway.config.known_list.items()
+        }
         for d in self.devices:
             if (
-                not self._gwy._engine._enforce_known_list
-                or d.id in self._gwy._engine._include
+                not self._gateway._engine._enforce_known_list  # type: ignore[attr-defined]
+                or d.id in self._gateway._engine._include  # type: ignore[attr-defined]
             ):
                 traits = await d.traits()
                 result[d.id] = cast(
