@@ -1,5 +1,6 @@
 """RAMSES RF - Abstract Base Classes and Interfaces."""
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Protocol
 
 from ramses_tx import Command, Packet, Priority, QosParams
@@ -30,6 +31,10 @@ class MessageStoreInterface(Protocol):
     def add_record(
         self, src: str, code: str = "", verb: str = "", payload: str = "00"
     ) -> None: ...
+    def start_consumer(self, in_queue: asyncio.Queue[Any]) -> None:
+        """Start the asynchronous queue consumer task for SSOT ingestion."""
+        ...
+
     async def get(
         self,
         msg: Any | None = None,

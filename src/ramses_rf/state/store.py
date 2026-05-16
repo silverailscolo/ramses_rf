@@ -32,6 +32,7 @@ from ramses_tx import CODES_SCHEMA, RP, RQ, Code, Packet
 
 from ..exceptions import DatabaseQueryError
 from ..messages.base import Message
+from ..messages.core import Message as CoreMessage
 from ..routing import StateHeader
 from ..sqlite_worker import PacketLogEntry, SQLiteWorker
 
@@ -113,6 +114,8 @@ class MessageStore:
         # Synchronous Test Mode: Bypass background worker entirely if testing
         self._is_testing = "PYTEST_CURRENT_TEST" in os.environ
 
+        self._consumer_task: asyncio.Task[None] | None = None
+
         if self._is_testing:
             self._worker: SQLiteWorker | None = None
             self._cx: sqlite3.Connection | None = None
@@ -186,15 +189,17 @@ class MessageStore:
     def stop(self) -> None:
         """Stop the housekeeper loop and resources."""
 
-        if (
-            self.maintain
-            and getattr(self, "_housekeeping_task", None)
-            and not self._housekeeping_task.done()
-        ):
-            self._housekeeping_task.cancel()  # stop the housekeeper
+        c_task = getattr(self, "_consumer_task", None)
+        if c_task and not c_task.done():
+            c_task.cancel()  # stop the SSOT queue consumer
 
-        if getattr(self, "_hydration_task", None) and not self._hydration_task.done():
-            self._hydration_task.cancel()
+        h_task = getattr(self, "_housekeeping_task", None)
+        if self.maintain and h_task and not h_task.done():
+            h_task.cancel()  # stop the housekeeper
+
+        hy_task = getattr(self, "_hydration_task", None)
+        if hy_task and not hy_task.done():
+            hy_task.cancel()
 
         if self._worker:
             # Trigger a final snapshot to ensure no data is lost on shutdown
@@ -229,6 +234,48 @@ class MessageStore:
         """
         if self._worker:
             self._worker.flush()
+
+    def start_consumer(self, in_queue: asyncio.Queue[CoreMessage]) -> None:
+        """Start the asynchronous queue consumer task for SSOT ingestion.
+
+        :param in_queue: The SSOT event bus queue from the Central Dispatcher.
+        :type in_queue: asyncio.Queue[CoreMessage]
+        """
+        c_task = getattr(self, "_consumer_task", None)
+        if c_task and not c_task.done():
+            return
+        self._consumer_task = asyncio.create_task(
+            self._consume_loop(in_queue), name=f"{self.__class__.__name__}.consumer"
+        )
+
+    async def _consume_loop(self, in_queue: asyncio.Queue[CoreMessage]) -> None:
+        """Continuously ingest messages from the event bus queue.
+
+        :param in_queue: The event bus queue.
+        :type in_queue: asyncio.Queue[CoreMessage]
+        """
+        while True:
+            core_msg = await in_queue.get()
+            try:
+                # Strangler Bridge: Pass the raw packet back to the legacy SSOT
+                if core_msg.packets:
+                    try:
+                        legacy_msg = Message(core_msg.packets[0])
+                        # Unwrap _array to preserve legacy List[Dict] compatibility
+                        if "_array" in core_msg.data:
+                            legacy_msg._payload = core_msg.data["_array"]
+                            legacy_msg._force_has_array()
+                        else:
+                            legacy_msg._payload = core_msg.data
+                        self.add(legacy_msg)
+                    except Exception as err:
+                        _LOGGER.debug(
+                            "MessageStore ignored legacy malformed packet: %s", err
+                        )
+            except Exception as err:
+                _LOGGER.error("MessageStore consumer failed to add message: %s", err)
+            finally:
+                in_queue.task_done()
 
     async def _hydrate_ram(self) -> None:
         """Hydrate RAM cache from the in-memory database.
