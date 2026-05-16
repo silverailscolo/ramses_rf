@@ -29,7 +29,7 @@ from ramses_tx.typing import PayloadT
 
 from .config import GatewayConfig as GatewayConfig
 from .const import Code, VerbT
-from .device import HgiGateway
+from .device import HgiGateway, device_factory
 from .device.filter import DeviceFilter
 from .device.registry import DeviceRegistry
 from .dispatcher import detect_array_fragment, process_msg
@@ -153,7 +153,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         )
 
         self._device_registry: DeviceRegistryInterface = DeviceRegistry(
-            self, self._device_filter, self._gwy_config
+            device_filter=self._device_filter,
+            config=self._gwy_config,
+            device_factory_cb=lambda addr, msg, traits: device_factory(
+                gwy=self, dev_addr=addr, msg=msg, traits=traits
+            ),
         )
 
         self._message_store: MessageStoreInterface | None = None

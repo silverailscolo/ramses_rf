@@ -3,25 +3,25 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
 from ramses_rf.const import SZ_DEVICES
-from ramses_rf.device import DeviceHeat, DeviceHvac, Fakeable, device_factory
+from ramses_rf.device import DeviceHeat, DeviceHvac, Fakeable
 from ramses_rf.exceptions import (
     DeviceNotFaked,
     DeviceNotFoundError,
     SchemaInconsistentError,
 )
-from ramses_rf.interfaces import DeviceFilterInterface, GatewayInterface
+from ramses_rf.interfaces import DeviceFilterInterface
 from ramses_rf.models import DeviceTraits
 from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
 
 if TYPE_CHECKING:
     from ramses_rf.device import Device
-    from ramses_rf.gateway import Gateway
     from ramses_rf.messages import Message
     from ramses_rf.system import Evohome
     from ramses_rf.topology import Parent
@@ -34,22 +34,22 @@ class DeviceRegistry:
 
     def __init__(
         self,
-        gateway: GatewayInterface,
         device_filter: DeviceFilterInterface,
         config: GatewayConfig,
+        device_factory_cb: Callable[[Address, Message | None, DeviceTraits], Device],
     ) -> None:
         """Initialize the DeviceRegistry.
 
-        :param gateway: The Gateway instance for retrieving configuration.
-        :type gateway: GatewayInterface
         :param device_filter: The injected filter for validating devices.
         :type device_filter: DeviceFilterInterface
         :param config: The gateway configuration object.
         :type config: GatewayConfig
+        :param device_factory_cb: A callback to instantiate domain devices.
+        :type device_factory_cb: Callable[[Address, Message | None, DeviceTraits], Device]
         """
-        self._gateway = gateway
         self._device_filter = device_filter
         self._config = config
+        self._device_factory_cb = device_factory_cb
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
@@ -95,7 +95,6 @@ class DeviceRegistry:
         try:
             self._device_filter.check_filter_lists(device_id)
         except DeviceNotFoundError:
-            # have to allow for GWY not being in known_list...
             if device_id != self._config.hgi_id:
                 raise
 
@@ -114,12 +113,7 @@ class DeviceRegistry:
             )
             traits = DeviceTraits.from_dict(traits_dict)
 
-            dev = device_factory(
-                cast("Gateway", self._gateway),
-                Address(device_id),
-                msg=msg,
-                traits=traits,
-            )
+            dev = self._device_factory_cb(Address(device_id), msg, traits)
 
             if traits.faked:
                 if isinstance(dev, Fakeable):
