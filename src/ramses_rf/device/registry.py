@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.address import Address, is_valid_dev_id
+from ramses_rf.config import GatewayConfig
 from ramses_rf.const import SZ_DEVICES
 from ramses_rf.device import DeviceHeat, DeviceHvac, Fakeable, device_factory
 from ramses_rf.exceptions import (
@@ -35,6 +36,7 @@ class DeviceRegistry:
         self,
         gateway: GatewayInterface,
         device_filter: DeviceFilterInterface,
+        config: GatewayConfig,
     ) -> None:
         """Initialize the DeviceRegistry.
 
@@ -42,9 +44,12 @@ class DeviceRegistry:
         :type gateway: GatewayInterface
         :param device_filter: The injected filter for validating devices.
         :type device_filter: DeviceFilterInterface
+        :param config: The gateway configuration object.
+        :type config: GatewayConfig
         """
         self._gateway = gateway
         self._device_filter = device_filter
+        self._config = config
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
@@ -91,9 +96,7 @@ class DeviceRegistry:
             self._device_filter.check_filter_lists(device_id)
         except DeviceNotFoundError:
             # have to allow for GWY not being in known_list...
-            # Proper composition fix: get the configured HGI ID directly
-            # from the Engine
-            if device_id != self._gateway._engine._hgi_id:  # type: ignore[attr-defined]
+            if device_id != self._config.hgi_id:
                 raise
 
         dev = self.device_by_id.get(device_id)
@@ -102,12 +105,12 @@ class DeviceRegistry:
             # voluptuous bug workaround:
             # https://github.com/alecthomas/voluptuous/pull/524
             _traits_raw: dict[str, Any] = dict(
-                self._gateway.config.known_list.get(device_id, {})
+                self._config.known_list.get(device_id, {})
             )
             _traits_raw.pop("commands", None)
 
             traits_dict: dict[str, Any] = SCH_TRAITS(
-                self._gateway.config.known_list.get(device_id, {})
+                self._config.known_list.get(device_id, {})
             )
             traits = DeviceTraits.from_dict(traits_dict)
 
@@ -171,13 +174,11 @@ class DeviceRegistry:
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
         """
-        result: dict[str, Any] = {
-            k: v for k, v in self._gateway.config.known_list.items()
-        }
+        result: dict[str, Any] = {k: v for k, v in self._config.known_list.items()}
         for d in self.devices:
             if (
-                not self._gateway._engine._enforce_known_list  # type: ignore[attr-defined]
-                or d.id in self._gateway._engine._include  # type: ignore[attr-defined]
+                not self._config.engine.enforce_known_list
+                or d.id in self._config.mac_filter_list
             ):
                 traits = await d.traits()
                 result[d.id] = cast(

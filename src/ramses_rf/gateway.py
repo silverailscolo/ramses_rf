@@ -153,7 +153,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         )
 
         self._device_registry: DeviceRegistryInterface = DeviceRegistry(
-            self, self._device_filter
+            self, self._device_filter, self._gwy_config
         )
 
         self._message_store: MessageStoreInterface | None = None
