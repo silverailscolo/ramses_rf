@@ -14,20 +14,18 @@ import re
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, cast
 
 from ..address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
 from ..command import Command
 from ..const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_NUM_REPEATS,
-    DEV_TYPE_MAP,
     I_,
     MAX_GAP_DURATION,
     MAX_NUM_REPEATS,
     SZ_ACTIVE_HGI,
     Code,
-    DevType,
     Priority,
 )
 from ..dtos import PacketDTO
@@ -40,8 +38,8 @@ from ..exceptions import (
 from ..helpers import dt_now
 from ..interfaces import ProtocolInterface, TransportInterface
 from ..packet import Packet
-from ..schemas import SZ_BLOCK_LIST, SZ_CLASS, SZ_INBOUND, SZ_KNOWN_LIST, SZ_OUTBOUND
-from ..typing import DeviceIdT, DeviceListT, MsgFilterT, MsgHandlerT, QosParams
+from ..schemas import SZ_BLOCK_LIST, SZ_INBOUND, SZ_KNOWN_LIST, SZ_OUTBOUND
+from ..typing import DeviceIdT, MsgFilterT, MsgHandlerT, QosParams
 
 if TYPE_CHECKING:
     from .fsm import ProtocolContext
@@ -452,23 +450,22 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         *,
         disable_warnings: bool = False,
         enforce_include_list: bool = False,
-        exclude_list: DeviceListT | None = None,
-        include_list: DeviceListT | None = None,
+        exclude_list: list[str] | None = None,
+        include_list: list[str] | None = None,
+        hgi_id: str | None = None,
     ) -> None:
         super().__init__(msg_handler)
 
-        exclude_list = exclude_list or {}
-        include_list = include_list or {}
+        exclude_list = exclude_list or []
+        include_list = include_list or []
 
         self.enforce_include = enforce_include_list
-        self._exclude = list(exclude_list.keys())
-        self._include = list(include_list.keys())
+        self._exclude = list(exclude_list)
+        self._include = list(include_list)
         self._include += [ALL_DEV_ADDR.id, NON_DEV_ADDR.id]
 
         self._active_hgi: DeviceIdT | None = None
-        self._known_hgi = self._extract_known_hgi_id(
-            include_list, disable_warnings=disable_warnings
-        )
+        self._known_hgi = hgi_id
 
         self._foreign_gwys_lst: list[DeviceIdT] = []
         self._foreign_last_run = dt.now().date()
@@ -477,79 +474,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
     def hgi_id(self) -> DeviceIdT:
         """Get the ID of the HGI handling the comms."""
         if not self._transport:
-            return self._known_hgi or HGI_DEV_ADDR.id
+            return cast("DeviceIdT", self._known_hgi or HGI_DEV_ADDR.id)
         hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
-        return hgi or self._known_hgi or HGI_DEV_ADDR.id
-
-    @staticmethod
-    def _extract_known_hgi_id(
-        include_list: DeviceListT,
-        /,
-        *,
-        disable_warnings: bool = False,
-        strict_checking: bool = False,
-    ) -> DeviceIdT | None:
-        """Return the device_id of the gateway specified in the
-        include_list, if any.
-
-        The 'Known' gateway is the predicted Active gateway, given the
-        known_list. The 'Active' gateway is the USB device that is
-        actually Tx/Rx-ing frames.
-
-        The Known gateway ID should be the Active gateway ID, but does
-        not have to match.
-
-        Will send a warning if the include_list is configured
-        incorrectly.
-        """
-        logger = _LOGGER.warning if not disable_warnings else _LOGGER.debug
-
-        explicit_hgis = [
-            k
-            for k, v in include_list.items()
-            if v.get(SZ_CLASS) in (DevType.HGI, DEV_TYPE_MAP[DevType.HGI])
-        ]
-        implicit_hgis = [
-            k
-            for k, v in include_list.items()
-            if not v.get(SZ_CLASS) and k[:2] == DEV_TYPE_MAP._hex(DevType.HGI)
-        ]
-
-        if not explicit_hgis and not implicit_hgis:
-            logger(
-                f"The {SZ_KNOWN_LIST} SHOULD include exactly one "
-                f"gateway (HGI), but does not (it should specify "
-                f"'class: HGI')"
-            )
-            return None
-
-        known_hgi = (explicit_hgis if explicit_hgis else implicit_hgis)[0]
-
-        if include_list[known_hgi].get(SZ_CLASS) not in (
-            DevType.HGI,
-            DEV_TYPE_MAP[DevType.HGI],
-        ):
-            logger(
-                f"The {SZ_KNOWN_LIST} SHOULD include exactly one "
-                f"gateway (HGI): {known_hgi} should specify 'class: "
-                f"HGI', as 18: is also used for HVAC"
-            )
-
-        elif len(explicit_hgis) > 1:
-            logger(
-                f"The {SZ_KNOWN_LIST} SHOULD include exactly one "
-                f"gateway (HGI): {known_hgi} is the chosen device id "
-                f"(why is there >1 HGI?)"
-            )
-
-        else:
-            _LOGGER.debug(
-                f"The {SZ_KNOWN_LIST} includes exactly one gateway (HGI): {known_hgi}"
-            )
-
-        if strict_checking:
-            return known_hgi if [known_hgi] == explicit_hgis else None
-        return known_hgi
+        return cast("DeviceIdT", hgi or self._known_hgi or HGI_DEV_ADDR.id)
 
     def _set_active_hgi(self, dev_id: DeviceIdT, by_signature: bool = False) -> None:
         """Set the Active Gateway (HGI) device_id.
@@ -618,7 +545,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             if self.enforce_include:
                 return False
 
-            if dev_id[:2] != DEV_TYPE_MAP.HGI:
+            if dev_id[:2] != "18":  # Hardcoded L2 filter for HGI class
                 continue
 
             if self._active_hgi:

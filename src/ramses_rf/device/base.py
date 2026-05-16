@@ -264,7 +264,7 @@ class DeviceBase(Entity):
 
         result = await self.entity_state.traits()
 
-        known_dev = self._gwy._engine._include.get(self.id)
+        known_dev = self._gwy.config.known_list.get(self.id)
 
         result.update(
             {
@@ -357,7 +357,7 @@ class Fakeable(DeviceBase):
         self._binding_manager: BindingManager | None = None
 
         # TOD: this is messy - device schema vs device traits
-        if self.id in gwy._engine._include and gwy._engine._include[self.id].get(
+        if self.id in gwy.config.known_list and gwy.config.known_list[self.id].get(
             SZ_FAKED
         ):
             self._make_fake()
@@ -370,7 +370,9 @@ class Fakeable(DeviceBase):
             return
 
         self._binding_manager = BindingManager(self, self._async_send_cmd)
-        self._gwy._engine._include[self.id][SZ_FAKED] = True  # TODO: remove this
+        if self.id not in self._gwy.config.known_list:
+            self._gwy.config.known_list[self.id] = {}
+        self._gwy.config.known_list[self.id][SZ_FAKED] = True  # TODO: remove this
         _LOGGER.info(f"Faking now enabled for: {self}")
 
     async def _async_send_cmd(

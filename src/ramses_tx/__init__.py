@@ -51,9 +51,9 @@ from .engine import Engine
 from .logger import set_pkt_logging
 from .packet import PKT_LOGGER, Packet
 from .protocol import PortProtocol, ReadProtocol, protocol_factory
-from .schemas import SZ_BOUND_TO, SZ_SERIAL_PORT
+from .schemas import SZ_SERIAL_PORT
 from .transport import RamsesTransportT, ZigbeeTransport, transport_factory
-from .typing import DeviceIdT, DeviceListT, QosParams
+from .typing import DeviceIdT, QosParams
 from .version import VERSION
 
 from .const import (  # isort: skip
@@ -77,7 +77,6 @@ __all__ = [
     "SZ_ZONE_IDX",
     "SZ_ZONE_MASK",
     "SZ_ZONE_TYPE",
-    "SZ_BOUND_TO",
     # Schema-related constants
     "SZ_DATA_UNIT",
     "SZ_DESCRIPTION",
@@ -109,7 +108,6 @@ __all__ = [
     "FF",
     #
     "DeviceIdT",
-    "DeviceListT",
     "DevRole",
     "DevType",
     "IndexT",
@@ -126,7 +124,6 @@ __all__ = [
     "PortProtocol",
     "ReadProtocol",
     "RamsesProtocolT",
-    "extract_known_hgi_id",
     "protocol_factory",
     #
     "RamsesTransportT",
@@ -159,17 +156,3 @@ async def set_pkt_logging_config(**config: Any) -> tuple[Logger, QueueListener |
         None, partial(set_pkt_logging, PKT_LOGGER, **config)
     )
     return PKT_LOGGER, listener
-
-
-def extract_known_hgi_id(
-    include_list: DeviceListT,
-    /,
-    *,
-    disable_warnings: bool = False,
-    strict_checking: bool = False,
-) -> DeviceIdT | None:
-    return PortProtocol._extract_known_hgi_id(
-        include_list,
-        disable_warnings=disable_warnings,
-        strict_checking=strict_checking,
-    )

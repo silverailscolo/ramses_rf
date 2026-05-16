@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from .const import VerbT
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
-    from .typing import DeviceIdT, DeviceListT, MsgHandlerT, PayloadT
+    from .typing import DeviceIdT, MsgHandlerT, PayloadT
 
 
 DEV_MODE = False
@@ -90,8 +90,8 @@ class Engine:
         )
         self._loop = loop or asyncio.get_running_loop()
 
-        self._exclude: DeviceListT = self.config.block_list or {}
-        self._include: DeviceListT = self.config.known_list or {}
+        self._exclude: list[str] = self.config.block_list or []
+        self._include: list[str] = self.config.known_list or []
         self._unwanted: list[DeviceIdT] = [
             NON_DEV_ADDR.id,
             ALL_DEV_ADDR.id,
@@ -155,6 +155,7 @@ class Engine:
             enforce_include_list=self._enforce_known_list,
             exclude_list=self._exclude,
             include_list=self._include,
+            hgi_id=self._hgi_id,
         )
 
     def add_msg_handler(

@@ -92,12 +92,12 @@ class DeviceRegistry:
             # voluptuous bug workaround:
             # https://github.com/alecthomas/voluptuous/pull/524
             _traits_raw: dict[str, Any] = dict(
-                self._gwy._engine._include.get(device_id, {})
+                self._gwy.config.known_list.get(device_id, {})
             )
             _traits_raw.pop("commands", None)
 
             traits_dict: dict[str, Any] = SCH_TRAITS(
-                self._gwy._engine._include.get(device_id, {})
+                self._gwy.config.known_list.get(device_id, {})
             )
             traits = DeviceTraits.from_dict(traits_dict)
 
@@ -156,7 +156,7 @@ class DeviceRegistry:
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
         """
-        result: dict[str, Any] = {k: v for k, v in self._gwy._engine._include.items()}
+        result: dict[str, Any] = {k: v for k, v in self._gwy.config.known_list.items()}
         for d in self.devices:
             if (
                 not self._gwy._engine._enforce_known_list

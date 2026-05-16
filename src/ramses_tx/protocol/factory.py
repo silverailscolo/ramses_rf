@@ -17,7 +17,7 @@ from ..const import DEFAULT_DISABLE_QOS
 from ..helpers import dt_now
 from ..logger import set_logger_timesource
 from ..transport import RamsesTransportT, TransportConfig, transport_factory
-from ..typing import DeviceListT, MsgHandlerT, PortConfigT, SerPortNameT
+from ..typing import MsgHandlerT, PortConfigT, SerPortNameT
 from .core import PortProtocol, RamsesProtocolT, ReadProtocol
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,8 +30,9 @@ def protocol_factory(
     disable_qos: bool | None = DEFAULT_DISABLE_QOS,
     disable_sending: bool | None = False,
     enforce_include_list: bool = False,
-    exclude_list: DeviceListT | None = None,
-    include_list: DeviceListT | None = None,
+    exclude_list: list[str] | None = None,
+    include_list: list[str] | None = None,
+    hgi_id: str | None = None,
 ) -> RamsesProtocolT:
     """Create and return a Ramses-specific async packet Protocol."""
     if disable_sending:
@@ -41,6 +42,7 @@ def protocol_factory(
             enforce_include_list=enforce_include_list,
             exclude_list=exclude_list,
             include_list=include_list,
+            hgi_id=hgi_id,
         )
 
     if disable_qos:
@@ -52,6 +54,7 @@ def protocol_factory(
         enforce_include_list=enforce_include_list,
         exclude_list=exclude_list,
         include_list=include_list,
+        hgi_id=hgi_id,
     )
 
 
@@ -70,8 +73,9 @@ async def create_stack(
     loop: asyncio.AbstractEventLoop | None = None,
     disable_qos: bool | None = DEFAULT_DISABLE_QOS,
     enforce_include_list: bool = False,
-    exclude_list: DeviceListT | None = None,
-    include_list: DeviceListT | None = None,
+    exclude_list: list[str] | None = None,
+    include_list: list[str] | None = None,
+    hgi_id: str | None = None,
 ) -> tuple[RamsesProtocolT, RamsesTransportT]:
     """Utility function to provide a Protocol / Transport pair.
 
@@ -90,6 +94,7 @@ async def create_stack(
         enforce_include_list=enforce_include_list,
         exclude_list=exclude_list,
         include_list=include_list,
+        hgi_id=hgi_id,
     )
 
     transport: RamsesTransportT = await (transport_factory_ or transport_factory)(

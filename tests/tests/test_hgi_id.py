@@ -17,11 +17,14 @@ TEST_HGI_ID = "18:005960"
 async def test_hgi_id_injection() -> None:
     """Check that the custom HGI ID is passed correctly to the Engine/Transport."""
 
-    # 1. Instantiate Gateway with the custom hgi_id via GatewayConfig
+    # 1. Instantiate Gateway with the custom hgi_id via GatewayConfig's known_list
     # We must provide a dummy port_name to satisfy Engine.__init__ validation
     gwy = Gateway(
         "/dev/ttyMOCK",
-        config=GatewayConfig(engine=EngineConfig(input_file=None, hgi_id=TEST_HGI_ID)),
+        config=GatewayConfig(
+            known_list={TEST_HGI_ID: {"class": "HGI"}},
+            engine=EngineConfig(input_file=None),
+        ),
     )
 
     # Mock the transport factory to avoid creating a real connection/transport
@@ -39,7 +42,7 @@ async def test_hgi_id_injection() -> None:
         # Configure the factory mock to return our transport mock (as an async result)
         mock_transport_factory.return_value = mock_transport
 
-        # 2. Check that the Engine (via composition) has stored the ID
+        # 2. Check that the Engine (via composition) has stored the ID correctly from L7
         assert gwy._engine._hgi_id == TEST_HGI_ID
 
         # 3. Check the string representation of the engine reflects the custom ID

@@ -50,7 +50,7 @@ from .schemas import (
     SZ_ORPHANS,
 )
 from .system import Evohome
-from .typing import DeviceIdT, DeviceListT
+from .typing import DeviceIdT
 
 if TYPE_CHECKING:
     from ramses_tx import RamsesTransportT
@@ -117,6 +117,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         if self._gwy_config.debug_mode:
             _LOGGER.setLevel(logging.DEBUG)
 
+        # Override EngineConfig with the stripped-down L7 properties
+        self._gwy_config.engine.hgi_id = self._gwy_config.hgi_id
+        self._gwy_config.engine.known_list = self._gwy_config.mac_filter_list
+        self._gwy_config.engine.block_list = list(self._gwy_config.block_list.keys())
+
         self._engine = Engine(
             self._gwy_config.engine,
             loop=loop,
@@ -142,8 +147,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._device_registry: DeviceRegistryInterface = DeviceRegistry(self)
 
         self._device_filter: DeviceFilterInterface = DeviceFilter(
-            include=cast(DeviceListT, self._engine._include),
-            exclude=cast(DeviceListT, self._engine._exclude),
+            include=self._engine._include,  # type: ignore[arg-type]
+            exclude=self._engine._exclude,  # type: ignore[arg-type]
             unwanted=self._engine._unwanted,
             enforce_known_list=self._engine._enforce_known_list,
             hgi_id_provider=lambda: getattr(self.hgi, "id", None),
@@ -221,9 +226,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
             SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self.config.engine.enforce_known_list},
             SZ_KNOWN_LIST: await self.device_registry.known_list(),
-            SZ_BLOCK_LIST: [
-                {k: v} for k, v in (self.config.engine.block_list or {}).items()
-            ],
+            SZ_BLOCK_LIST: self.config.engine.block_list or [],
             "_unwanted": sorted(self._engine._unwanted),
         }
 

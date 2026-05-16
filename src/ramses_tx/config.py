@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .typing import DeviceListT, PktLogConfigT, PortConfigT
+from .typing import PktLogConfigT, PortConfigT
 
 
 @dataclass
@@ -23,9 +23,9 @@ class EngineConfig:
     :param packet_log: Configuration for packet logging.
     :type packet_log: PktLogConfigT | None
     :param block_list: A list of device IDs to block/ignore.
-    :type block_list: DeviceListT | None
-    :param known_list: A list of known device IDs and their traits.
-    :type known_list: DeviceListT | None
+    :type block_list: list[str] | None
+    :param known_list: A list of known device IDs.
+    :type known_list: list[str] | None
     :param hgi_id: The Device ID to use for the HGI, overriding defaults.
     :type hgi_id: str | None
     :param disable_sending: Prevent sending any packets.
@@ -48,8 +48,8 @@ class EngineConfig:
     input_file: str | None = None
     port_config: PortConfigT | None = None
     packet_log: PktLogConfigT | None = None
-    block_list: DeviceListT | None = None
-    known_list: DeviceListT | None = None
+    block_list: list[str] | None = None
+    known_list: list[str] | None = None
     hgi_id: str | None = None
     disable_sending: bool = False
     disable_qos: bool | None = None
