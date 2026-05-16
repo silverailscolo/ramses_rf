@@ -144,14 +144,16 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         self._tcs: Evohome | None = None
 
-        self._device_registry: DeviceRegistryInterface = DeviceRegistry(self)
-
         self._device_filter: DeviceFilterInterface = DeviceFilter(
-            include=cast(list[DeviceIdT], self._engine._include),
-            exclude=cast(list[DeviceIdT], self._engine._exclude),
+            include=cast(list[DeviceIdT], self._gwy_config.mac_filter_list),
+            exclude=cast(list[DeviceIdT], list(self._gwy_config.block_list.keys())),
             unwanted=self._engine._unwanted,
-            enforce_known_list=self._engine._enforce_known_list,
+            enforce_known_list=self._gwy_config.engine.enforce_known_list,
             hgi_id_provider=lambda: getattr(self.hgi, "id", None),
+        )
+
+        self._device_registry: DeviceRegistryInterface = DeviceRegistry(
+            self, self._device_filter
         )
 
         self._message_store: MessageStoreInterface | None = None

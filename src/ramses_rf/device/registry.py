@@ -13,7 +13,7 @@ from ramses_rf.exceptions import (
     DeviceNotFoundError,
     SchemaInconsistentError,
 )
-from ramses_rf.interfaces import GatewayInterface
+from ramses_rf.interfaces import DeviceFilterInterface, GatewayInterface
 from ramses_rf.models import DeviceTraits
 from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
@@ -31,13 +31,20 @@ _LOGGER = logging.getLogger(__name__)
 class DeviceRegistry:
     """Service to manage the registry of known devices."""
 
-    def __init__(self, gateway: GatewayInterface) -> None:
+    def __init__(
+        self,
+        gateway: GatewayInterface,
+        device_filter: DeviceFilterInterface,
+    ) -> None:
         """Initialize the DeviceRegistry.
 
         :param gateway: The Gateway instance for retrieving configuration.
         :type gateway: GatewayInterface
+        :param device_filter: The injected filter for validating devices.
+        :type device_filter: DeviceFilterInterface
         """
         self._gateway = gateway
+        self._device_filter = device_filter
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
@@ -81,9 +88,7 @@ class DeviceRegistry:
         :raises DeviceNotFoundError: If device ID is blocked or unknown.
         """
         try:
-            self._gateway._device_filter.check_filter_lists(  # type: ignore[attr-defined]
-                device_id
-            )
+            self._device_filter.check_filter_lists(device_id)
         except DeviceNotFoundError:
             # have to allow for GWY not being in known_list...
             # Proper composition fix: get the configured HGI ID directly
