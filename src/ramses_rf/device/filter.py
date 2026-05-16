@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from ramses_rf.exceptions import DeviceNotFoundError
+from ramses_rf.typing import DeviceIdT
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_KNOWN_LIST
-
-from .exceptions import DeviceNotFoundError
-from .typing import DeviceIdT, DeviceListT
 
 
 class DeviceFilter:
@@ -15,18 +14,18 @@ class DeviceFilter:
 
     def __init__(
         self,
-        include: DeviceListT,
-        exclude: DeviceListT,
+        include: list[DeviceIdT],
+        exclude: list[DeviceIdT],
         unwanted: list[DeviceIdT],
         enforce_known_list: bool,
         hgi_id_provider: Callable[[], str | None],
     ) -> None:
         """Initialize the DeviceFilter.
 
-        :param include: The dictionary of allowed devices and their traits.
-        :type include: DeviceListT
-        :param exclude: The dictionary of blocked devices.
-        :type exclude: DeviceListT
+        :param include: The list of allowed device IDs.
+        :type include: list[DeviceIdT]
+        :param exclude: The list of blocked device IDs.
+        :type exclude: list[DeviceIdT]
         :param unwanted: A shared list tracking invalid or dynamically rejected device IDs.
         :type unwanted: list[DeviceIdT]
         :param enforce_known_list: Whether to strictly enforce the inclusion list.

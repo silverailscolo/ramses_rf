@@ -30,8 +30,8 @@ from ramses_tx.typing import PayloadT
 from .config import GatewayConfig as GatewayConfig
 from .const import Code, VerbT
 from .device import HgiGateway
-from .device_filter import DeviceFilter
-from .device_registry import DeviceRegistry
+from .device.filter import DeviceFilter
+from .device.registry import DeviceRegistry
 from .dispatcher import detect_array_fragment, process_msg
 from .interfaces import (
     DeviceFilterInterface,
@@ -147,8 +147,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._device_registry: DeviceRegistryInterface = DeviceRegistry(self)
 
         self._device_filter: DeviceFilterInterface = DeviceFilter(
-            include=self._engine._include,  # type: ignore[arg-type]
-            exclude=self._engine._exclude,  # type: ignore[arg-type]
+            include=cast(list[DeviceIdT], self._engine._include),
+            exclude=cast(list[DeviceIdT], self._engine._exclude),
             unwanted=self._engine._unwanted,
             enforce_known_list=self._engine._enforce_known_list,
             hgi_id_provider=lambda: getattr(self.hgi, "id", None),
