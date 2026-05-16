@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from ramses_tx.opentherm import (
+from ramses_rf.protocol.opentherm import (
     F8_8,
     FLAG8,
     S8,
@@ -135,7 +135,7 @@ def test_decode_frame_read_data_null_injection() -> None:
     assert data_4[SZ_VALUE] is None
 
     # 5. Empty / corrupt schema fallback mapping (SZ_VALUE injected as None)
-    with patch.dict("ramses_tx.opentherm.OPENTHERM_MESSAGES", {0x3E: {}}):
+    with patch.dict("ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES", {0x3E: {}}):
         _, _, data_5, _ = decode_frame(build_frame(0b000, 0x3E, "0000"))
         assert data_5[SZ_VALUE] is None
 
@@ -189,12 +189,12 @@ def test_decode_frame_read_ack_valid_values() -> None:
 def test_decode_frame_fallback_values() -> None:
     # 1. Unrecognized VAL string string falls back to U16 processing
     with patch.dict(
-        "ramses_tx.opentherm.OPENTHERM_MESSAGES", {0x3E: {"val": "UNKNOWN"}}
+        "ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES", {0x3E: {"val": "UNKNOWN"}}
     ):
         _, _, data_1, _ = decode_frame(build_frame(0b100, 0x3E, "0305"))
         assert data_1[SZ_VALUE] == 773
 
     # 2. Corrupt / empty schema dictionary falls back to U16 processing
-    with patch.dict("ramses_tx.opentherm.OPENTHERM_MESSAGES", {0x3E: {}}):
+    with patch.dict("ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES", {0x3E: {}}):
         _, _, data_2, _ = decode_frame(build_frame(0b100, 0x3E, "0305"))
         assert data_2[SZ_VALUE] == 773

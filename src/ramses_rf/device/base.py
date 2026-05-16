@@ -26,10 +26,10 @@ from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
 from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED, SZ_KNOWN_LIST
 from ramses_rf.topology import Child
 from ramses_tx import Command, Packet, Priority, QosParams
-from ramses_tx.ramses import CODES_BY_DEV_SLUG, CODES_ONLY_FROM_CTL
 from ramses_tx.typing import PayloadT
 
 from ..messages import Message
+from ..protocol.ramses import CODES_BY_DEV_SLUG, CODES_ONLY_FROM_CTL
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,

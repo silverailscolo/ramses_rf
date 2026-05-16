@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import timedelta as td
 from typing import Any, Final
 
-from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
     RP,
     RQ,
@@ -25,9 +25,10 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     Code,
     VerbT,
     SZ_NAME,
+    DevType,
 )
-from .const import DevType
-from .typing import CodeSchemaEntry
+
+from ..typing import CodeSchemaEntry
 
 SZ_LIFESPAN: Final = "lifespan"  # WIP
 

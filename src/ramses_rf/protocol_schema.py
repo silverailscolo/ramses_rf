@@ -27,7 +27,8 @@ from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     SZ_NAME,
 )
 from ramses_tx.const import DevType
-from ramses_tx.typing import CodeSchemaEntry
+
+from .typing import CodeSchemaEntry
 
 SZ_LIFESPAN: Final = "lifespan"  # WIP
 

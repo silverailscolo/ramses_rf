@@ -9,6 +9,7 @@ architecture using native StateHeader dictionary lookups.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from datetime import UTC, datetime as dt
 from typing import TYPE_CHECKING, Any, cast
@@ -17,11 +18,11 @@ from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
 from ramses_tx.const import I_, RP, RQ, Code, VerbT
-from ramses_tx.ramses import CODES_SCHEMA
 
 from .. import exceptions as exc
 from ..const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
 from ..messages import ApplicationMessage, Message
+from ..protocol.ramses import CODES_SCHEMA
 from ..routing import RoutingContext, StateHeader
 
 if TYPE_CHECKING:
@@ -358,10 +359,15 @@ class EntityState:
         if getattr(msg, "_expired", False):
             hdr = msg.state_header
             if hdr not in self._pending_deletes:
-                self._pending_deletes.add(hdr)
-                loop = getattr(self._gwy, "_loop", asyncio.get_running_loop())
-                # Fire and forget the task securely
-                loop.create_task(self._delete_msg(msg))
+                loop = getattr(self._gwy, "_loop", None)
+                if loop is None:
+                    with contextlib.suppress(RuntimeError):
+                        loop = asyncio.get_running_loop()
+
+                # Protect against the Mock Trap during testing
+                if isinstance(loop, asyncio.AbstractEventLoop):
+                    self._pending_deletes.add(hdr)
+                    loop.create_task(self._delete_msg(msg))
 
         payload = msg.payload
 

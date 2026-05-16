@@ -11,10 +11,10 @@ import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
+from ramses_rf.protocol.ramses import CODES_SCHEMA, RQ_IDX_COMPLEX
 from ramses_tx import exceptions as exc
 from ramses_tx.const import RQ, Code
 from ramses_tx.helpers import hex_to_temp
-from ramses_tx.ramses import CODES_SCHEMA, RQ_IDX_COMPLEX
 
 from .registry import get_parser
 

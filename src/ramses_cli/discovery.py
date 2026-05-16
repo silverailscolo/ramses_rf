@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any, Final, cast
 from ramses_rf import exceptions as exc
 from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
 from ramses_rf.device import Fakeable
+from ramses_rf.protocol.opentherm import OTB_DATA_IDS
 from ramses_tx import CODES_SCHEMA, Command, DeviceIdT, Priority
-from ramses_tx.opentherm import OTB_DATA_IDS
 from ramses_tx.typing import PayloadT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -369,7 +369,7 @@ async def script_scan_fan(gwy: Gateway, dev_id: DeviceIdT) -> None:
     """
     _LOGGER.warning("scan_fan() invoked - expect a lot of nonsense")
 
-    from ramses_tx.ramses import _DEV_KLASSES_HVAC
+    from ramses_rf.protocol.ramses import _DEV_KLASSES_HVAC
 
     OUT_CODES = (
         Code._0016,

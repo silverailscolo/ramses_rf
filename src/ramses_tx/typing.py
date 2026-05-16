@@ -2,7 +2,7 @@
 """RAMSES RF - Typing for RamsesProtocol & RamsesTransport."""
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime as dt, timedelta as td
+from datetime import datetime as dt
 from enum import EnumCheck, StrEnum, verify
 from typing import (
     TYPE_CHECKING,
@@ -684,26 +684,3 @@ class PktLogConfigT(TypedDict):
     buffer_capacity: NotRequired[int]
     flush_level: NotRequired[int | str]
     flush_interval: NotRequired[float | int]
-
-
-# CODES_SCHEMA entries
-CodeSchemaEntry = TypedDict(
-    "CodeSchemaEntry",
-    {
-        "name": str,
-        " I": str,  # Regex
-        "RQ": str,  # Regex
-        "RP": str,  # Regex
-        " W": str,  # Regex
-        "lifespan": bool | td | None,
-    },
-    total=False,
-)
-
-
-# For fingerprints.py
-class DeviceFingerprint(TypedDict):
-    slug: str
-    dev_type: str
-    date: str
-    desc: str

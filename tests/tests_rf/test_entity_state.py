@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime as dt
 from typing import Any
 from unittest.mock import MagicMock
@@ -138,8 +139,10 @@ async def test_expired_message_deletion_queued_once(zone_entity: EntityState) ->
     zone_entity.update_state(msg)
 
     # 2. Mock the async event loop to intercept the database queueing cleanly
-    mock_loop = MagicMock()
-    mock_loop.create_task = MagicMock()
+    # Tell the mock to explicitly inherit the spec of an AbstractEventLoop
+    mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
+    # Safely close the coroutine when the mock receives it to prevent GC warnings
+    mock_loop.create_task = MagicMock(side_effect=lambda coro: coro.close())
     zone_entity._gwy._loop = mock_loop  # type: ignore[attr-defined]
 
     # 3. Simulate Home Assistant polling the state multiple times

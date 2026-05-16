@@ -39,7 +39,9 @@ from ramses_rf.schemas import SCH_TCS, SZ_ACTUATORS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
 from ramses_tx import Command, Priority
 from ramses_tx.const import SZ_NUM_REPEATS, SZ_PRIORITY, MsgId
-from ramses_tx.opentherm import (
+from ramses_tx.typing import PayDictT, PayloadT
+
+from ..protocol.opentherm import (
     PARAMS_DATA_IDS,
     SCHEMA_DATA_IDS,
     STATUS_DATA_IDS,
@@ -49,9 +51,7 @@ from ramses_tx.opentherm import (
     SZ_VALUE,
     OtMsgType,
 )
-from ramses_tx.ramses import CODES_OF_HEAT_DOMAIN_ONLY, CODES_ONLY_FROM_CTL
-from ramses_tx.typing import PayDictT, PayloadT
-
+from ..protocol.ramses import CODES_OF_HEAT_DOMAIN_ONLY, CODES_ONLY_FROM_CTL
 from .base import BatteryState, DeviceHeat, Fakeable
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -112,9 +112,9 @@ if TYPE_CHECKING:
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Evohome, Zone
     from ramses_tx import Packet
-    from ramses_tx.opentherm import OtDataId
 
     from ..messages import Message
+    from ..protocol.opentherm import OtDataId
 
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs

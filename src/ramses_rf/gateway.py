@@ -24,7 +24,6 @@ from ramses_tx.const import (
 )
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.exceptions import ProtocolSendFailed
-from ramses_tx.ramses import CODES_SCHEMA
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 from ramses_tx.typing import PayloadT
 
@@ -42,6 +41,7 @@ from .interfaces import (
 )
 from .lifecycle import GatewayLifecycle
 from .messages import ApplicationMessage, Message as rf_msg
+from .protocol.ramses import CODES_SCHEMA
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
     SZ_CONFIG,
