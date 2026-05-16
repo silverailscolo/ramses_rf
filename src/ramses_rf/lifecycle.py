@@ -9,12 +9,7 @@ from datetime import UTC, datetime as dt, timedelta as td
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any, cast
 
-from ramses_tx import (
-    Packet,
-    extract_known_hgi_id,
-    protocol_factory,
-    set_pkt_logging_config,
-)
+from ramses_tx import Packet, protocol_factory, set_pkt_logging_config
 from ramses_tx.logger import flush_packet_log
 
 from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES, I_, RP, RQ, W_, Code
@@ -111,7 +106,9 @@ class GatewayLifecycle:
         )
 
         load_schema(
-            cast("Gateway", self), known_list=self._engine._include, **self._schema
+            cast("Gateway", self),
+            known_list=self.config.known_list,  # type: ignore[arg-type]
+            **self._schema,
         )
 
         if cached_packets:
@@ -225,12 +222,7 @@ class GatewayLifecycle:
             clear_state()
 
         enforce_include_list = bool(
-            self._engine._enforce_known_list
-            and extract_known_hgi_id(
-                self._engine._include,
-                disable_warnings=True,
-                strict_checking=True,
-            )
+            self._engine._enforce_known_list and self.config.hgi_id
         )
 
         tmp_protocol = protocol_factory(

@@ -45,7 +45,7 @@ class GatewayStub:
 
     def __init__(self) -> None:
         """Initialize the GatewayStub."""
-        self.config = SimpleNamespace(disable_discovery=True)
+        self.config = SimpleNamespace(disable_discovery=True, known_list={})
 
         self.device_by_id: dict[str, Fakeable] = {}
         self.devices: list[Fakeable] = []
