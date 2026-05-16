@@ -3,6 +3,22 @@
 
 This module manages the graph relationships (Parent/Child) between RAMSES
 entities, such as the association between a Zone and its Actuators.
+
+# ARCHITECTURE NOTE: Topology & Heuristic Eavesdropping
+#
+# Determining bindings to a controller:
+#  - Config: As per any explicitly loaded schema.
+#  - Discovery: If in 000C packet, or packet *to* device where src is a controller.
+#  - Eavesdrop: If packet *from* device where dst is a controller.
+#
+# Determining location in a schema (domain/DHW/zone):
+#  - Config: As per any explicitly loaded schema.
+#  - Discovery: If in 000C pkt - (Note: unable to do this for 10: & 00: TRVs).
+#  - Discovery: From packet fingerprint, excl. payloads (only for 10:).
+#  - Eavesdrop: From packet fingerprint, incl. payloads.
+#
+# NOTE: L7 Messages are routed only to physical Devices. Routing to virtual entities
+# (i.e., Systems, Zones, Circuits) is handled internally by those Devices (e.g., UFC to UfhCircuit).
 """
 
 from __future__ import annotations
