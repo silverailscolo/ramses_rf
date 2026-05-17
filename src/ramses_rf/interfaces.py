@@ -9,6 +9,7 @@ from .messages import Message
 from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
+    from .models import TopologyChangedEvent
     from .topology import Parent
 
 
@@ -188,6 +189,10 @@ class DeviceRegistryInterface(Protocol):
 
     async def status(self) -> dict[str, Any]:
         """Return the status for all devices."""
+        ...
+
+    def handle_topology_event(self, event: "TopologyChangedEvent") -> None:
+        """Process an immutable structural graph mutation event."""
         ...
 
 

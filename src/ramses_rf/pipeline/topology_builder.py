@@ -12,6 +12,7 @@ from ramses_rf.const import (
     SZ_ZONE_TYPE,
     ZON_ROLE_MAP,
     Code,
+    DevType,
 )
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages import Message
@@ -32,13 +33,17 @@ class TopologyBuilder:
     def __init__(
         self,
         emit_event_cb: Callable[[TopologyChangedEvent], None],
+        enable_eavesdrop: bool = False,
     ) -> None:
         """Initialize the TopologyBuilder.
 
         :param emit_event_cb: Callback to emit topology events back
             onto the central event bus or directly to the registry.
+        :param enable_eavesdrop: If False, heuristic class promotions
+            are disabled. Explicit bindings (e.g., 000C) still process.
         """
         self._emit = emit_event_cb
+        self._enable_eavesdrop = enable_eavesdrop
 
     async def consume(self, msg: Message) -> None:
         """Ingest a message and evaluate all heuristic rulesets.
@@ -57,6 +62,9 @@ class TopologyBuilder:
         dynamically promote themselves to Controllers. We now extract
         that logic into this explicit, trackable rule.
         """
+        if not self._enable_eavesdrop:
+            return
+
         if msg.verb == I_ and msg.code in CODES_ONLY_FROM_CTL:
             # If a device broadcasts a code only controllers can send,
             # we deduce it must be a controller.
@@ -73,7 +81,13 @@ class TopologyBuilder:
         UFCs broadcast their circuit mappings via 000C messages.
         We intercept these to bind the UFC to the Controller and map
         the individual circuits to their corresponding zones.
+        Note: This is explicit configuration data, not a heuristic,
+        so it is processed regardless of the enable_eavesdrop flag.
         """
+        # Prefix Guard: Ensure the source is actually an Underfloor Heating Controller
+        if msg.src.type != "02":
+            return
+
         if msg.code != Code._000C:
             return
 
@@ -116,14 +130,17 @@ class TopologyBuilder:
     def _evaluate_hvac_rules(self, msg: Message) -> None:
         """Evaluate rules specific to Ventilation and HVAC.
 
-        HVAC devices are often identified by their unique payload codes
-        (like 31DA for ventilators or 1298 for CO2 sensors).
+        HVAC devices share prefixes (e.g., 32: can be a Fan, CO2, etc.).
+        Therefore, we promote classes based purely on signature codes.
         """
+        if not self._enable_eavesdrop:
+            return
+
         if msg.code in (Code._31D9, Code._31DA):
             event = TopologyChangedEvent(
                 action=TopologyAction.PROMOTE_CLASS,
                 device_id=msg.src.id,
-                metadata={"device_class": "FAN"},
+                metadata={"device_class": DevType.FAN},
                 causation="Rule_HVAC_Fan_Signature",
             )
             self._emit(event)
@@ -132,7 +149,7 @@ class TopologyBuilder:
             event = TopologyChangedEvent(
                 action=TopologyAction.PROMOTE_CLASS,
                 device_id=msg.src.id,
-                metadata={"device_class": "CO2"},
+                metadata={"device_class": DevType.CO2},
                 causation="Rule_HVAC_CO2_Signature",
             )
             self._emit(event)
@@ -141,8 +158,17 @@ class TopologyBuilder:
             event = TopologyChangedEvent(
                 action=TopologyAction.PROMOTE_CLASS,
                 device_id=msg.src.id,
-                metadata={"device_class": "HUM"},
+                metadata={"device_class": DevType.HUM},
                 causation="Rule_HVAC_HUM_Signature",
+            )
+            self._emit(event)
+
+        elif msg.code in (Code._22F1, Code._22F3):
+            event = TopologyChangedEvent(
+                action=TopologyAction.PROMOTE_CLASS,
+                device_id=msg.src.id,
+                metadata={"device_class": DevType.REM},
+                causation="Rule_HVAC_REM_Signature",
             )
             self._emit(event)
 
@@ -152,20 +178,24 @@ class TopologyBuilder:
         OpenTherm Bridges exclusively use 3220. DHW sensors are deduced
         via 1260 and 10A0 packets.
         """
-        if msg.code == Code._3220:
+        if not self._enable_eavesdrop:
+            return
+
+        # Prefix Guard: Prevent cross-promotion (e.g., OTB sending 1260)
+        if msg.code == Code._3220 and msg.src.type == "10":
             event = TopologyChangedEvent(
                 action=TopologyAction.PROMOTE_CLASS,
                 device_id=msg.src.id,
-                metadata={"device_class": "OTB"},
+                metadata={"device_class": DevType.OTB},
                 causation="Rule_OTB_3220_Signature",
             )
             self._emit(event)
 
-        elif msg.code in (Code._1260, Code._10A0):
+        elif msg.code in (Code._1260, Code._10A0) and msg.src.type == "07":
             event = TopologyChangedEvent(
                 action=TopologyAction.PROMOTE_CLASS,
                 device_id=msg.src.id,
-                metadata={"device_class": "DHW"},
+                metadata={"device_class": DevType.DHW},
                 causation="Rule_DHW_Signature",
             )
             self._emit(event)

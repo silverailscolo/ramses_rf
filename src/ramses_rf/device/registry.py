@@ -90,28 +90,43 @@ class DeviceRegistry:
         if not new_class_slug or getattr(old_dev, "_SLUG", None) == new_class_slug:
             return
 
+        # Keep a backup of old traits for rollback
+        old_traits_dict = dict(self._config.known_list.get(event.device_id, {}))
+
         # Update the configuration traits safely
-        traits_dict = dict(self._config.known_list.get(event.device_id, {}))
+        traits_dict = dict(old_traits_dict)
         traits_dict["class"] = new_class_slug
         self._config.known_list[event.device_id] = traits_dict
 
-        # Instantiate the new strict device class via the factory
-        traits = DeviceTraits.from_dict(traits_dict)
-        new_dev = self._device_factory_cb(old_dev.addr, None, traits)
+        # Pop the old device from the tracking dictionaries to allow the factory
+        # to safely call _add_device during __init__ without raising a
+        # SchemaInconsistentError
+        self.device_by_id.pop(event.device_id, None)
+        self.devices = [d for d in self.devices if d.id != event.device_id]
 
-        # Migrate essential topological state
-        new_dev.set_parent(getattr(old_dev, "_parent", None))
+        try:
+            # Instantiate the new strict device class via the factory
+            traits = DeviceTraits.from_dict(traits_dict)
+            new_dev = self._device_factory_cb(old_dev.addr, None, traits)
 
-        # Swap the object in the registry arrays
-        self.device_by_id[event.device_id] = new_dev
-        for idx, d in enumerate(self.devices):
-            if d.id == event.device_id:
-                self.devices[idx] = new_dev
-                break
+            # Migrate essential topological state ONLY if a parent existed
+            if old_parent := getattr(old_dev, "_parent", None):
+                new_dev.set_parent(old_parent)
 
-        _LOGGER.info(
-            f"Promoted {event.device_id} to {new_class_slug} via {event.causation}"
-        )
+            # The factory's Device.__init__ automatically calls _add_device,
+            # inserting the new object into self.device_by_id and self.devices
+            _LOGGER.info(
+                f"Promoted {event.device_id} to {new_class_slug} via {event.causation}"
+            )
+        except Exception:
+            # Rollback on failure: pop the failed new_dev out first
+            self.device_by_id.pop(event.device_id, None)
+            self.devices = [d for d in self.devices if d.id != event.device_id]
+            self._add_device(old_dev)
+
+            # Revert the traits dictionary
+            self._config.known_list[event.device_id] = old_traits_dict
+            raise
 
     def _handle_create_controller(self, event: TopologyChangedEvent) -> None:
         """Instruct a device to initialize its Evohome TCS."""
