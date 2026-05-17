@@ -38,6 +38,7 @@ from ramses_rf.device import (
 )
 from ramses_rf.entity import _ID_SLICE, Entity, class_by_attr
 from ramses_rf.helpers import shrink
+from ramses_rf.models import DemandState, ScheduleState, TemperatureState
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
     SCH_TCS_ZONES_ZON,
@@ -90,6 +91,11 @@ class ZoneBase(Child, Parent, Entity):
 
     def __init__(self, tcs: _MultiZoneT | _StoredHwT, zone_idx: str) -> None:
         super().__init__(tcs._gwy)
+
+        # Parallel CQRS States
+        self.temp_state = TemperatureState()
+        self.demand_state = DemandState()
+        self.schedule_state = ScheduleState(zone_idx=zone_idx, days=())
 
         # FIXME: ZZZ entities must know their parent device ID and their
         # own idx
@@ -685,7 +691,10 @@ class Zone(ZoneSchedule):
                     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.UFH]})
 
             # DEX
-            assert (msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC) and (
+            assert (
+                msg.src == self.ctl
+                or getattr(msg.src, "type", None) in (DEV_TYPE_MAP.UFC, "04")
+            ) and (
                 isinstance(msg.payload, dict)
                 or [d for d in msg.payload if d.get(SZ_ZONE_IDX) == self.idx]
             ), f"msg inappropriately routed to {self}"

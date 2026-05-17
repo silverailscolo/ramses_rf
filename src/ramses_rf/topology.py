@@ -27,11 +27,10 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from . import exceptions as exc
-from .const import DEV_TYPE_MAP, F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR, SZ_ZONE_IDX
+from .const import F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR
 from .schemas import SZ_CIRCUITS
 
 if TYPE_CHECKING:
-    from ramses_rf.messages import Message
     from ramses_tx.typing import DeviceIdT
 
     from .device import Controller
@@ -169,8 +168,8 @@ class Parent:
 class Child:
     """A Device can be the Child of a Parent (System, Zone, or UFH Controller).
 
-    A Child maintains a reference to its Parent and handles eavesdropping
-    logic to determine its topological position in the network.
+    A Child maintains a reference to its Parent and relies on the central
+    Event Bus for topological updates.
     """
 
     def __init__(
@@ -192,51 +191,6 @@ class Child:
         self._parent = parent
         self._is_sensor = is_sensor
         self._child_id: str | None = None
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Listen to network traffic to determine topological associations.
-
-        :param msg: The message to process for eavesdropping.
-        :type msg: Message
-        """
-
-        def eavesdrop_parent_zone() -> None:
-            if msg.src.__class__.__name__ == "UfhController":
-                return
-
-            if SZ_ZONE_IDX not in msg.payload:
-                return
-
-            if hasattr(self, "type") and hasattr(self, "set_parent"):
-                # Use type checks to link actuators or sensors to their controllers
-                if self.type in DEV_TYPE_MAP.HEAT_ZONE_ACTUATORS:
-                    self.set_parent(
-                        cast("Parent", msg.dst), child_id=msg.payload[SZ_ZONE_IDX]
-                    )
-
-                elif self.type in DEV_TYPE_MAP.THM_DEVICES:
-                    self.set_parent(
-                        cast("Parent", msg.dst),
-                        child_id=msg.payload[SZ_ZONE_IDX],
-                        is_sensor=True,
-                    )
-
-        # Call Parent Entity's handler first
-        super()._handle_msg(msg)  # type: ignore[misc]
-
-        # Cast self to Entity to access the gateway configuration
-        this_entity = cast("Entity", self)
-
-        # Safety check to see if eavesdropping is enabled and relevant
-        if not this_entity._gwy.config.enable_eavesdrop or (
-            msg.src is msg.dst
-            or msg.dst.__class__.__name__ not in ("Controller", "UfhController")
-        ):
-            return
-
-        # If topological position is unknown, try to eavesdrop it
-        if not self._parent or not self._child_id:
-            eavesdrop_parent_zone()
 
     def _get_parent(
         self,
@@ -356,7 +310,7 @@ class Child:
 
         return parent, child_id
 
-    def set_parent(
+    def _apply_topology_link(
         self,
         parent: Parent | None,
         *,
@@ -364,6 +318,9 @@ class Child:
         is_sensor: bool | None = None,
     ) -> Parent:
         """Establish a topological link to a parent entity.
+
+        This is a protected method that MUST only be called by the
+        DeviceRegistry when processing a validated TopologyChangedEvent.
 
         :param parent: The parent to link to.
         :type parent: Parent | None

@@ -97,3 +97,102 @@ class TopologyChangedEvent:
     causation: str = "TopologyBuilder"
 
     timestamp: dt = field(default_factory=_now_utc)
+
+
+# --- Phase 2.95: CQRS Domain Read-Models and Events ---
+
+
+@dataclass(frozen=True, slots=True)
+class StateUpdatedEvent:
+    """An immutable event representing a state update for an entity.
+
+    Includes the OpenTelemetry tracing triad to guarantee perfect
+    observability of the event lineage.
+    """
+
+    entity_id: str
+    state: Any
+    event_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    correlation_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    causation_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    timestamp: dt = field(default_factory=_now_utc)
+
+
+# --- Compositional State Blocks ---
+
+
+@dataclass(frozen=True, slots=True)
+class TemperatureState:
+    """State for entities that measure or target temperature."""
+
+    temperature: float | None = None
+    setpoint: float | None = None
+    last_updated: dt = field(default_factory=_now_utc)
+
+
+@dataclass(frozen=True, slots=True)
+class DemandState:
+    """State for entities that request or actuate heat/cooling."""
+
+    heat_demand: float | None = None
+    relay_active: bool = False
+    last_updated: dt = field(default_factory=_now_utc)
+
+
+# --- Nested Value Objects for Schedules ---
+
+
+@dataclass(frozen=True, slots=True)
+class SwitchPoint:
+    """A single schedule setpoint rule."""
+
+    time_of_day: str
+    setpoint: float | None = None
+    enabled: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DailySchedule:
+    """A daily schedule block containing immutable switchpoints."""
+
+    day_of_week: int
+    switchpoints: tuple[SwitchPoint, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduleState:
+    """The immutable state of a zone's 7-day schedule."""
+
+    zone_idx: str
+    days: tuple[DailySchedule, ...]
+    version: int | None = None
+    is_current: bool = False
+    last_updated: dt = field(default_factory=_now_utc)
+
+
+# --- Stateful Fault Logs ---
+
+
+@dataclass(frozen=True, slots=True)
+class FaultLogEntry:
+    """An immutable record of a specific system fault."""
+
+    timestamp: str
+    fault_state: str  # e.g., "Restore", "Fault"
+    fault_type: str
+    domain_id: str | None = None
+    device_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FaultLogState:
+    """The immutable state of the system's 64-slot fault log."""
+
+    entries: tuple[FaultLogEntry, ...] = field(default_factory=tuple)
+    is_current: bool = False
+    last_updated: dt = field(default_factory=_now_utc)
+
+    @property
+    def latest_fault(self) -> FaultLogEntry | None:
+        """Convenience pointer for API consumers to grab the newest fault."""
+        return self.entries[-1] if self.entries else None

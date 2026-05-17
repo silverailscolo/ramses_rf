@@ -121,7 +121,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
         else:
             raise TransportSourceInvalid(
-                f"Packet source is not dict, TextIOWrapper or str: {self._pkt_source:!r}"
+                f"Packet source is not dict, TextIOWrapper or str: {self._pkt_source!r}"
             )
 
     async def _process_line_from_raw(self, line: str) -> None:

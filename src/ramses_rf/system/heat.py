@@ -190,32 +190,35 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
                 return
 
             # note the order: most to least reliable
-            app_cntrl = None
+            app_cntrl: BdrSwitch | OtbGateway | None = None
 
             if (
                 this.code in (Code._22D9, Code._3220) and this.verb == RQ
             ):  # TODO: RPs too?
-                # dst could be an Address...
-                if this.src == self.ctl and isinstance(this.dst, OtbGateway):  # type: ignore[unreachable]
-                    app_cntrl = this.dst  # type: ignore[unreachable]
+                dst_dev = self._gwy.device_registry.device_by_id.get(this.dst.id)
+                if this.src.id == self.ctl.id and isinstance(dst_dev, OtbGateway):
+                    app_cntrl = dst_dev
 
             elif this.code == Code._3EF0 and this.verb == RQ:
-                # dst could be an Address...
-                if this.src == self.ctl and isinstance(
-                    this.dst,  # type: ignore[unreachable]
-                    BdrSwitch | OtbGateway,
+                dst_dev = self._gwy.device_registry.device_by_id.get(this.dst.id)
+                if this.src.id == self.ctl.id and isinstance(
+                    dst_dev,
+                    (BdrSwitch, OtbGateway),
                 ):
-                    app_cntrl = this.dst  # type: ignore[unreachable]
+                    app_cntrl = dst_dev
 
             elif this.code == Code._3B00 and this.verb == I_ and prev is not None:
-                if this.src == self.ctl and isinstance(prev.src, BdrSwitch):  # type: ignore[unreachable]
-                    if prev.code == this.code and prev.verb == this.verb:  # type: ignore[unreachable]
-                        app_cntrl = prev.src
+                prev_src_dev = self._gwy.device_registry.device_by_id.get(prev.src.id)
+                if this.src.id == self.ctl.id and isinstance(prev_src_dev, BdrSwitch):
+                    if prev.code == this.code and prev.verb == this.verb:
+                        app_cntrl = prev_src_dev
 
             if app_cntrl is not None:
-                app_cntrl.set_parent(self, child_id=FC)  # type: ignore[unreachable]
+                self._gwy.device_registry.get_device(
+                    app_cntrl.id, parent=self, child_id=FC
+                )
 
-        # # assert msg.src is self.ctl, f"msg inappropriately routed to {self}"
+        # # assert msg.src.id == self.ctl.id, f"msg inappropriately routed to {self}"
 
         super()._handle_msg(msg)
 
@@ -229,7 +232,8 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
                     )  # sets self._app_cntrl
             else:
                 _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: {type(msg.payload)} (expected dict)"
+                    f"{msg!r} < Unexpected payload type for {msg.code}: "
+                    f"{type(msg.payload)} (expected dict)"
                 )
             return
 
@@ -245,7 +249,8 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
                     self._heat_demand = msg.payload
             else:
                 _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: {type(msg.payload)} (expected list/dict)"
+                    f"{msg!r} < Unexpected payload type for {msg.code}: "
+                    f"{type(msg.payload)} (expected list/dict)"
                 )
 
         if self._gwy.config.enable_eavesdrop and not self.appliance_control:
@@ -277,7 +282,8 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
     async def is_calling_for_heat(self) -> NoReturn:
         raise NotImplementedError(
-            f"{self}: is_calling_for_heat attr is deprecated, use bool(await heat_demand())"
+            f"{self}: is_calling_for_heat attr is deprecated, "
+            "use bool(await heat_demand())"
         )
 
     async def schema(self) -> dict[str, Any]:
@@ -320,7 +326,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             if zone[SZ_SENSOR] and zone[SZ_SENSOR][:2] == DEV_TYPE_MAP.CTL:  # DEX
                 _zone = {SZ_SENSOR: zone[SZ_SENSOR]}
             if devices := [
-                d for d in zone[SZ_ACTUATORS] if d[:2] == DEV_TYPE_MAP.TR0
+                d for d in zone[SZ_ACTUATORS] if d[:2] == DEV_TYPE_MAP.TRV
             ]:  # DEX
                 _zone.update({SZ_ACTUATORS: devices})
             if _zone:
@@ -390,7 +396,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         """
         if msg._has_array:
             await self._eavesdrop_from_controller_broadcast(msg, prev)
-        elif msg.src.type == "04":
+        elif getattr(msg.src, "type", None) == "04":
             await self._eavesdrop_from_trv_broadcast(msg)
 
     async def _eavesdrop_from_controller_broadcast(
@@ -575,7 +581,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             return
 
         # the CTL knows, but does not announce temps for multiroom_mode zones
-        if msg.code == Code._30C9 and msg._has_array:
+        if msg.code == Code._30C9 and getattr(msg, "_has_array", False):
             for z in self.zones:
                 if z.idx not in (x[SZ_ZONE_IDX] for x in msg.payload):
                     task = asyncio.create_task(z._get_temp())
@@ -583,7 +589,8 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
         # If some zones still don't have a sensor, maybe eavesdrop?
         if self._gwy.config.enable_eavesdrop and (
-            msg.code in (Code._000A, Code._2309, Code._30C9) and msg._has_array
+            msg.code in (Code._000A, Code._2309, Code._30C9)
+            and getattr(msg, "_has_array", False)
         ):  # could do Code._000A, but only 1/hr
             eavesdrop_zones(msg)
 
@@ -606,7 +613,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             and any(z for z in self.zones if not z.sensor)
         ):
             prev = self._prev_30c9
-            if msg._has_array:
+            if getattr(msg, "_has_array", False):
                 self._prev_30c9 = msg
 
             task = asyncio.create_task(self._eavesdrop_zone_sensors(msg, prev))
@@ -687,7 +694,8 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
                 self._msg_0006 = msg
             else:
                 _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: {type(msg.payload)} (expected dict)"
+                    f"{msg!r} < Unexpected payload type for {msg.code}: "
+                    f"{type(msg.payload)} (expected dict)"
                 )
 
     async def _schedule_version(self, *, force_io: bool = False) -> tuple[int, bool]:
@@ -797,6 +805,11 @@ class Logbook(SystemBase):  # 0418
 
         self._faultlog: FaultLog = FaultLog(self)
 
+    @property
+    def faultlog(self) -> FaultLog:
+        """Return the system's fault log."""
+        return self._faultlog
+
     def _setup_discovery_cmds(self) -> None:
         super()._setup_discovery_cmds()
 
@@ -813,7 +826,8 @@ class Logbook(SystemBase):  # 0418
                 self._faultlog.handle_msg(msg)
             else:
                 _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: {type(msg.payload)} (expected dict)"
+                    f"{msg!r} < Unexpected payload type for {msg.code}: "
+                    f"{type(msg.payload)} (expected dict)"
                 )
 
     async def get_faultlog(
@@ -1249,7 +1263,8 @@ def system_factory(
         # a specified system class always takes precedence (even if it is wrong)...
         if klass and (cls := SYS_CLASS_BY_SLUG.get(klass)):
             _LOGGER.debug(
-                f"Using an explicitly-defined system class for: {ctl_addr} ({cls._SLUG})"
+                f"Using an explicitly-defined system class for: {ctl_addr} "
+                f"({cls._SLUG})"
             )
             return cls
 

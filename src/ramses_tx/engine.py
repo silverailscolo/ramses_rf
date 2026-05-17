@@ -240,7 +240,7 @@ class Engine:
 
     async def _drop_msg(self, msg: PacketDTO) -> None:
         """Discard messages silently while paused."""
-        _LOGGER.debug("Message dropped while engine paused: %s", msg)
+        _LOGGER.info("Message dropped while engine paused: %s", msg)
 
     async def _pause(self, *args: Any) -> None:
         """Pause the (active) engine or raise a RuntimeError."""

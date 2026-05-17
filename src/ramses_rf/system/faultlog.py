@@ -10,6 +10,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, NewType, TypeAlias
 
 from ramses_rf import exceptions as exc
+from ramses_rf.models import FaultLogState, StateUpdatedEvent
 from ramses_tx import Command, Packet
 from ramses_tx.const import (
     SZ_LOG_ENTRY,
@@ -148,12 +149,23 @@ class FaultLog:  # 0418
         self.id = tcs.id
         self._gwy = tcs._gwy
 
+        self.state = FaultLogState()
+
         self._log: FaultLogT = {}
         self._map: FaultMapT = OrderedDict()
         self._log_done: bool | None = None
 
         self._is_current: bool = False  # if we know our log is out of date
         self._get_lock = asyncio.Lock()
+
+    def apply_state_update(self, event: StateUpdatedEvent) -> None:
+        """Replace the internal CQRS read-model state with a new immutable object.
+
+        This method acts as the single ingestion point for state changes, completely
+        bypassing legacy packet interception.
+        """
+        if isinstance(event.state, FaultLogState):
+            self.state = event.state
 
     def _insert_into_map(self, idx: FaultIdxT, dtm: FaultDtmT | None) -> FaultMapT:
         """Rebuild the map (as best as possible), given the a log entry."""
