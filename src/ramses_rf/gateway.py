@@ -41,7 +41,7 @@ from .interfaces import (
 )
 from .lifecycle import GatewayLifecycle
 from .messages import ApplicationMessage, Message as rf_msg
-from .protocol.ramses import CODES_SCHEMA
+from .pipeline.topology_builder import TopologyBuilder
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
     SZ_CONFIG,
@@ -160,6 +160,12 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             ),
         )
 
+        # Instantiate the new asynchronous Topology Builder engine
+        self._topology_builder = TopologyBuilder(
+            emit_event_cb=self._device_registry.handle_topology_event,
+            enable_eavesdrop=self._gwy_config.enable_eavesdrop,
+        )
+
         self._message_store: MessageStoreInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
 
@@ -276,6 +282,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 else [app_msg.payload]
             )
 
+        # NEW: Feed the async TopologyBuilder so it can structurally map the
+        # graph *before* the message state is ingested by the Read-Models.
+        if isinstance(getattr(app_msg, "payload", None), dict):
+            await self._topology_builder.consume(app_msg)
+
         await process_msg(self, app_msg)
 
     def add_msg_handler(
@@ -359,35 +370,14 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 timeout=timeout,
                 wait_for_reply=wait_for_reply,
             )
-        except ProtocolSendFailed as err:
+        except (ProtocolSendFailed, NotImplementedError) as err:
             if (
                 self.config.disable_discovery
                 or self._engine._disable_sending
                 or "Inactive" in str(err)
+                or "Read-Only" in str(err)
             ):
                 raise asyncio.CancelledError(
                     f"Gateway shutting down, suppressed teardown leak: {err}"
                 ) from err
             raise
-
-
-# Schema & Routing Bridges
-def get_code_name(code: str) -> str:
-    """Provide ramses_tx with human-readable code names for logging."""
-    if code in CODES_SCHEMA:
-        return str(CODES_SCHEMA[Code(code)].get("name", f"unknown_{code}"))
-    return f"unknown_{code}"
-
-
-rf_msg._GET_CODE_NAME_CB = get_code_name
-
-
-def get_msg_idx(msg: Any) -> dict[str, str]:
-    """Provide ramses_tx with the semantic zone_idx/domain_id routing."""
-    rf_msg._GET_MSG_IDX_CB = None
-    idx_result = msg._idx
-    rf_msg._GET_MSG_IDX_CB = get_msg_idx
-    return cast("dict[str, str]", idx_result)
-
-
-rf_msg._GET_MSG_IDX_CB = get_msg_idx

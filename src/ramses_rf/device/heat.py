@@ -9,14 +9,12 @@ from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from ramses_rf import exceptions as exc
-from ramses_rf.address import NON_DEV_ADDR
 from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
     DOMAIN_TYPE_MAP,
     HEARTBEAT_TIMEOUT_OTB,
     HEARTBEAT_TIMEOUT_TRV,
-    SZ_DEVICES,
     SZ_DOMAIN_ID,
     SZ_HEAT_DEMAND,
     SZ_PRESSURE,
@@ -35,7 +33,7 @@ from ramses_rf.device import Device
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.helpers import shrink
 from ramses_rf.quirks import QUARANTINED_OT_MSG_IDS
-from ramses_rf.schemas import SCH_TCS, SZ_ACTUATORS, SZ_CIRCUITS
+from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
 from ramses_tx import Command, Priority
 from ramses_tx.const import SZ_NUM_REPEATS, SZ_PRIORITY, MsgId
@@ -51,7 +49,7 @@ from ..protocol.opentherm import (
     SZ_VALUE,
     OtMsgType,
 )
-from ..protocol.ramses import CODES_OF_HEAT_DOMAIN_ONLY, CODES_ONLY_FROM_CTL
+from ..protocol.ramses import CODES_OF_HEAT_DOMAIN_ONLY
 from .base import BatteryState, DeviceHeat, Fakeable
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -367,7 +365,6 @@ class Controller(DeviceHeat):  # CTL (01):
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
 
-        # self.ctl = None
         self.tcs = None  # TODO: = self?
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
 
@@ -530,14 +527,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
                 return  # ignoring ZON_ROLE_MAP.SEN for now
 
             ufh_idx = msg.payload[SZ_UFH_IDX]  # circuit idx
+            # Read-Model Update ONLY. No `self.set_parent()` graph mutation here.
             self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: msg.payload[SZ_ZONE_IDX]}
-            if msg.payload[SZ_ZONE_IDX] is not None:  # [SZ_DEVICES][0] will be the CTL
-                self.set_parent(
-                    self._gwy.device_registry.get_device(
-                        msg.payload[SZ_DEVICES][0]
-                    ).tcs,
-                    # child_id=msg.payload[SZ_ZONE_IDX],
-                )
 
         elif msg.code == Code._22C9:  # setpoint_bounds
             # .I --- 02:017205 --:------ 02:017205 22C9 024 00076C0A280101076C0A28010...
@@ -774,9 +765,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         super().__init__(*args, traits=traits, **kwargs)
 
         self._child_id = FC  # NOTE: domain_id
-        # lf._use_ot = self._gwy.config.use_native_ot
         self._msgs_ot: dict[MsgId, Message] = {}
-        # lf._msgs_ot_ctl_polled = {}
 
     @property
     def heartbeat_timeout(self) -> td:
@@ -1282,7 +1271,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_REL_MODULATION_LEVEL: await self.entity_state.get_value(
                 (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
             ),
-            #
             SZ_CH_ACTIVE: await self.entity_state.get_value(
                 Code._3EF0, key=SZ_CH_ACTIVE
             ),
@@ -1325,7 +1313,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         base_status = await super().status()
         return {
             **base_status,  # incl. actuator_cycle, actuator_state
-            #
             SZ_BOILER_OUTPUT_TEMP: await self.boiler_output_temp(),
             SZ_BOILER_RETURN_TEMP: await self.boiler_return_temp(),
             SZ_BOILER_SETPOINT: await self.boiler_setpoint(),
@@ -1338,7 +1325,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_OEM_CODE: await self.oem_code(),
             SZ_OUTSIDE_TEMP: await self.outside_temp(),
             SZ_REL_MODULATION_LEVEL: await self.rel_modulation_level(),
-            #
             SZ_CH_ACTIVE: await self.ch_active(),
             SZ_CH_ENABLED: await self.ch_enabled(),
             SZ_COOLING_ACTIVE: await self.cooling_active(),
@@ -1362,47 +1348,6 @@ class Thermostat(BatteryState, Setpoint, Temperature, Fakeable):  # THM (..):
     _SLUG = DevType.THM
     _STATE_ATTR = SZ_TEMPERATURE
 
-    def _handle_msg(self, msg: Message) -> None:
-        super()._handle_msg(msg)
-
-        if msg.verb != I_ or self._iz_controller is not None:
-            return
-
-        # NOTE: this has only been tested on a 12:, does it work for a 34: too?
-        if all(
-            (
-                msg._addrs[0] is self.addr,
-                msg._addrs[1] is NON_DEV_ADDR,
-                msg._addrs[2] is self.addr,
-            )
-        ):
-            if self._iz_controller is None:
-                # _LOGGER.info(f"{msg!r} # IS_CONTROLLER (10): is FALSE")
-                self._iz_controller = False
-            elif self._iz_controller:
-                raise exc.SystemInconsistent(
-                    f"{msg!r} # IS_CONTROLLER (11): was TRUE, now False"
-                )
-
-            if msg.code in CODES_ONLY_FROM_CTL:
-                raise exc.PacketInvalid(f"{msg!r} # IS_CONTROLLER (12); is CORRUPT PKT")
-
-        elif all(
-            (
-                msg._addrs[0] is NON_DEV_ADDR,
-                msg._addrs[1] is NON_DEV_ADDR,
-                msg._addrs[2] is self.addr,
-            )
-        ):
-            if self._iz_controller is None:
-                # _LOGGER.info(f"{msg!r} # IS_CONTROLLER (20): is TRUE")
-                self._iz_controller = msg
-                self._make_tcs_controller(msg=msg)
-            elif self._iz_controller is False:
-                raise exc.SystemInconsistent(
-                    f"{msg!r} # IS_CONTROLLER (21): was FALSE, now True"
-                )
-
     async def initiate_binding_process(self) -> Packet:
         return await super()._initiate_binding_process(
             (Code._2309, Code._30C9, Code._0008)
@@ -1425,12 +1370,6 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
     _SLUG = DevType.BDR
     _STATE_ATTR = "active"
-
-    # def __init__(self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any) -> None:
-    #     super().__init__(*args, traits=traits, **kwargs)
-
-    #     if kwargs.get(SZ_DOMAIN_ID) == FC:  # TODO: F9/FA/FC, zone_idx
-    #         self.ctl._set_app_cntrl(self)
 
     def _setup_discovery_cmds(self) -> None:
         """Discover BDRs.
@@ -1586,7 +1525,8 @@ class UfhCircuit(Child, Entity):  # FIXME
     def __init__(self, ufc: UfhController, ufh_idx: str) -> None:
         super().__init__(ufc._gwy)
 
-        # FIXME: gwy.message_store entities must know their parent device ID and their own idx
+        # FIXME: gwy.message_store entities must know their parent device ID
+        # and their own idx
         self._z_id = ufc.id
         self._z_idx = ufh_idx
 
@@ -1599,43 +1539,8 @@ class UfhCircuit(Child, Entity):  # FIXME
         self._ctl: Controller = None
         self._zone: Zone | None = None
 
-    # def __str__(self) -> str:
-    #     return f"{self.id} ({self._zone and self._zone._child_id})"
-
     def _update_schema(self, **kwargs: Any) -> None:
         raise NotImplementedError
-
-    def _handle_msg(self, msg: Message) -> None:
-        super()._handle_msg(msg)
-
-        if msg.code != Code._000C or not msg.payload[SZ_DEVICES]:  # zone_devices
-            return
-
-        # FIXME: is messy
-        if not (dev_ids := msg.payload[SZ_DEVICES]):
-            return
-        if len(dev_ids) != 1:
-            raise exc.PacketPayloadInvalid("No devices")
-
-        # ctl = self._gwy.device_registry.device_by_id.get(dev_ids[0])
-        ctl: Controller = self._gwy.device_registry.get_device(dev_ids[0])
-        if not ctl or (self._ctl and self._ctl is not ctl):
-            raise exc.PacketPayloadInvalid("No CTL")
-        self._ctl = ctl
-
-        ctl._make_tcs_controller()
-        # self.set_parent(ctl.tcs)
-
-        zon = ctl.tcs.get_htg_zone(msg.payload[SZ_ZONE_IDX])
-        if not zon:
-            raise exc.PacketPayloadInvalid("No Zone")
-        if self._zone and self._zone is not zon:
-            raise exc.PacketPayloadInvalid("Wrong Zone")
-        self._zone = zon
-
-        if self.ufc not in self._zone.actuators:
-            schema = {SZ_ACTUATORS: [self.ufc.id], SZ_CIRCUITS: [self.id]}
-            self._zone._update_schema(**schema)
 
     @property
     def ufx_idx(self) -> str:

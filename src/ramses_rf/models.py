@@ -3,8 +3,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, datetime as dt
 from typing import Any
+
+from ramses_rf.enums import TopologyAction
+from ramses_rf.typing import DeviceIdT
 
 
 @dataclass
@@ -18,7 +23,9 @@ class DeviceTraits:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DeviceTraits:
-        """Construct DeviceTraits safely from a dynamically parsed dictionary."""
+        """Construct DeviceTraits safely from a dynamically parsed
+        dictionary.
+        """
         return cls(
             device_class=data.get("class"),
             alias=data.get("alias"),
@@ -29,7 +36,8 @@ class DeviceTraits:
     def to_dict(self) -> dict[str, Any]:
         """Serialize back to a dictionary.
 
-        Useful for bridging the boundary into legacy methods expecting **kwargs.
+        Useful for bridging the boundary into legacy methods expecting
+        **kwargs.
         """
         result: dict[str, Any] = {}
         if self.device_class is not None:
@@ -41,3 +49,51 @@ class DeviceTraits:
         if self.scheme is not None:
             result["scheme"] = self.scheme
         return result
+
+
+def _now_utc() -> dt:
+    """Return the current timezone-aware UTC datetime.
+
+    This helper function is required for dataclass default factories.
+    If `default=dt.now(UTC)` is used directly in a dataclass field,
+    Python evaluates the function exactly once when the module is
+    imported. As a result, every event instantiated during the
+    runtime would share the exact same timestamp. By providing this
+    zero-argument callable to `default_factory`, we ensure a fresh,
+    accurate timestamp is generated every time an object is created.
+    """
+    return dt.now(UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class TopologyChangedEvent:
+    """Immutable event representing a structural change in the network
+    graph.
+    """
+
+    # The structural action to perform
+    action: TopologyAction
+
+    # -- Entity Identifiers (Populated based on the Action) --
+
+    # Used for single-device actions (e.g., PROMOTE_CLASS, UPDATE_TRAITS)
+    device_id: DeviceIdT | None = None
+
+    # Used together for structural relationship actions (e.g., BIND_DEVICE)
+    parent_id: DeviceIdT | None = None
+    child_id: DeviceIdT | None = None
+
+    # -- Context & Observability --
+
+    # Flexible domain-specific metadata (e.g., {"zone_idx": "01",
+    # "is_sensor": True})
+    metadata: dict[str, str | int | float | bool] = field(default_factory=dict)
+
+    # The Tracing Triad (Observability & Debugging)
+    event_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    correlation_id: uuid.UUID = field(default_factory=uuid.uuid4)
+    # causation identifies the rule/engine that generated this guess
+    # (e.g., "Rule_000C")
+    causation: str = "TopologyBuilder"
+
+    timestamp: dt = field(default_factory=_now_utc)

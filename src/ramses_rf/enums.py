@@ -16,3 +16,13 @@ class Action(StrEnum):
 
     SET_TEMPERATURE = "set_temperature"
     SET_MODE = "set_mode"
+
+
+class TopologyAction(StrEnum):
+    """Structural graph mutation actions."""
+
+    PROMOTE_CLASS = "promote_class"
+    UPDATE_TRAITS = "update_traits"
+    BIND_DEVICE = "bind_device"
+    CREATE_CONTROLLER = "create_controller"
+    CREATE_CIRCUIT = "create_circuit"
