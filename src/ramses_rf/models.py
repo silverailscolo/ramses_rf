@@ -196,3 +196,88 @@ class FaultLogState:
     def latest_fault(self) -> FaultLogEntry | None:
         """Convenience pointer for API consumers to grab the newest fault."""
         return self.entries[-1] if self.entries else None
+
+
+@dataclass(frozen=True, slots=True)
+class OpenThermState:
+    """The immutable state of an OpenTherm Bridge (OTB) boiler matrix."""
+
+    boiler_output_temp: float | None = None
+    boiler_return_temp: float | None = None
+    boiler_setpoint: float | None = None
+    ch_max_setpoint: float | None = None
+    ch_setpoint: float | None = None
+    ch_water_pressure: float | None = None
+    dhw_flow_rate: float | None = None
+    dhw_setpoint: float | None = None
+    dhw_temp: float | None = None
+    max_rel_modulation: float | None = None
+    oem_code: float | None = None
+    outside_temp: float | None = None
+    rel_modulation_level: float | None = None
+
+    # Status Flags
+    ch_active: bool | None = None
+    ch_enabled: bool | None = None
+    cooling_active: bool | None = None
+    cooling_enabled: bool | None = None
+    dhw_active: bool | None = None
+    dhw_blocking: bool | None = None
+    dhw_enabled: bool | None = None
+    fault_present: bool | None = None
+    flame_active: bool | None = None
+    otc_active: bool | None = None
+    summer_mode: bool | None = None
+
+    # Counter Metrics
+    burner_hours: float | None = None
+    burner_starts: float | None = None
+    burner_failed_starts: float | None = None
+    ch_pump_hours: float | None = None
+    ch_pump_starts: float | None = None
+    dhw_burner_hours: float | None = None
+    dhw_burner_starts: float | None = None
+    dhw_pump_hours: float | None = None
+    dhw_pump_starts: float | None = None
+    flame_signal_low: float | None = None
+
+    last_updated: dt = field(default_factory=lambda: dt.now())
+
+
+@dataclass(frozen=True, slots=True)
+class HvacState:
+    """The immutable state of an HVAC ventilation or fan entity."""
+
+    co2_level: int | None = None
+    air_quality: float | None = None
+    air_quality_basis: float | None = None
+    bypass_mode: str | None = None
+    bypass_position: float | str | None = None
+    bypass_state: str | None = None
+    exhaust_fan_speed: float | None = None
+    exhaust_flow: float | None = None
+    exhaust_temp: float | None = None
+    fan_rate: str | None = None
+    fan_mode: str | None = None
+    fan_info: str | None = None
+    indoor_humidity: float | None = None
+    indoor_temp: float | None = None
+    outdoor_humidity: float | None = None
+    outdoor_temp: float | None = None
+    post_heat: int | None = None
+    pre_heat: int | None = None
+    remaining_mins: int | None = None
+    request_fan_speed: float | None = None
+    request_reason: str | None = None
+    speed_capabilities: int | None = None
+    supply_fan_speed: float | None = None
+    supply_flow: float | None = None
+    supply_temp: float | None = None
+    temperature: float | None = None
+    dewpoint_temp: float | None = None
+    presence_detected: bool | None = None
+    filter_remaining_days: int | None = None
+    filter_remaining_percent: float | None = None
+    boost_timer_mins: int | None = None
+
+    last_updated: dt = field(default_factory=lambda: dt.now())

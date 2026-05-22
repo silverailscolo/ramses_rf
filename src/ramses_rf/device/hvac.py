@@ -50,6 +50,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.entity import class_by_attr
 from ramses_rf.helpers import schedule_task
+from ramses_rf.models import HvacState
 from ramses_tx import Command, Packet, Priority
 from ramses_tx.typing import PayloadT
 
@@ -94,6 +95,24 @@ class HvacRemoteBase(DeviceHvac):
     It provides common functionality and interfaces for remote control operations.
     """
 
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        """Initialize the HvacRemoteBase class.
+
+        :param args: Positional arguments passed to the parent class
+        :param traits: Strictly typed traits object for device creation
+        :param kwargs: Keyword arguments passed to the parent class
+        """
+        super().__init__(*args, traits=traits, **kwargs)
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
+
+    def _post_class_promote(self) -> None:
+        """Initialize state when promoted from a generic HVAC device."""
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
+
     @property
     def heartbeat_timeout(self) -> td:
         """Return the timeout before the device is considered unavailable.
@@ -110,6 +129,24 @@ class HvacSensorBase(DeviceHvac):
     This class serves as a base for all sensor devices in the HVAC domain.
     It provides common functionality for sensor data collection and processing.
     """
+
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        """Initialize the HvacSensorBase class.
+
+        :param args: Positional arguments passed to the parent class
+        :param traits: Strictly typed traits object for device creation
+        :param kwargs: Keyword arguments passed to the parent class
+        """
+        super().__init__(*args, traits=traits, **kwargs)
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
+
+    def _post_class_promote(self) -> None:
+        """Initialize state when promoted from a generic HVAC device."""
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
 
     @property
     def heartbeat_timeout(self) -> td:
@@ -272,6 +309,8 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         :param kwargs: Keyword arguments passed to the parent class
         """
         super().__init__(*args, traits=traits, **kwargs)
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
 
         self._poller: asyncio.Task[None] | None = None
         self._rq_cmd: Command = Command.from_attrs(
@@ -286,6 +325,11 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
                 _LOGGER.debug(
                     "No running event loop; filter_change poller not started."
                 )
+
+    def _post_class_promote(self) -> None:
+        """Initialize state when promoted from a generic HVAC device."""
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
 
     def _setup_discovery_cmds(self) -> None:
         """Set up the discovery commands for the filter change sensor."""
@@ -366,10 +410,17 @@ class RfsGateway(DeviceHvac):  # RFS: (spIDer gateway)
         :param kwargs: Keyword arguments passed to the parent class
         """
         super().__init__(*args, traits=traits, **kwargs)
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
 
         self.ctl = None
         self._child_id = "hv"  # NOTE: domain_id
         self.tcs = None
+
+    def _post_class_promote(self) -> None:
+        """Initialize state when promoted from a generic HVAC device."""
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
 
 
 class HvacHumiditySensor(BatteryState, IndoorHumidity, Fakeable):  # HUM: I/12A0
@@ -579,9 +630,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         self.__dict__.setdefault("_param_update_callback", None)
         self.__dict__.setdefault("_hgi", None)
         self.__dict__.setdefault("_bound_devices", {})
+        if not hasattr(self, "hvac_state"):
+            self.hvac_state = HvacState()
 
     def _post_class_promote(self) -> None:
         """Initialize FAN state when promoted from a generic HVAC device."""
+        super()._post_class_promote()
         self._init_fan_state()
 
     def set_initialized_callback(self, callback: Callable[[], None] | None) -> None:

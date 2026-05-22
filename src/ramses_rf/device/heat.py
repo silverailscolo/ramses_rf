@@ -107,14 +107,24 @@ from ramses_tx.const import (
 if TYPE_CHECKING:
     from ramses_rf.address import Address
     from ramses_rf.messages import ApplicationMessage
-    from ramses_rf.models import DemandState, DeviceTraits, TemperatureState
+    from ramses_rf.models import (
+        DemandState,
+        DeviceTraits,
+        OpenThermState,
+        TemperatureState,
+    )
     from ramses_rf.system import Evohome, Zone
     from ramses_tx import Packet
 
     from ..messages import Message
     from ..protocol.opentherm import OtDataId
 else:
-    from ramses_rf.models import DemandState, DeviceTraits, TemperatureState
+    from ramses_rf.models import (
+        DemandState,
+        DeviceTraits,
+        OpenThermState,
+        TemperatureState,
+    )
 
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
@@ -777,12 +787,32 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the OpenTherm Bridge device software twin.
+
+        :param args: Positional arguments passed to base class.
+        :param traits: Strictly typed traits definition object.
+        :type traits: DeviceTraits | None
+        :param kwargs: Keyword arguments passed to base class.
+        """
         super().__init__(*args, traits=traits, **kwargs)
         self.temp_state = TemperatureState()
         self.demand_state = DemandState()
+        self.opentherm_state = OpenThermState()
 
         self._child_id = FC  # NOTE: domain_id
         self._msgs_ot: dict[MsgId, Message] = {}
+
+    def _post_class_promote(self) -> None:
+        """Initialize OTB state when promoted in-place from a generic device."""
+        self.__dict__.setdefault("_child_id", FC)
+        self.__dict__.setdefault("_msgs_ot", {})
+
+        if not hasattr(self, "temp_state"):
+            self.temp_state = TemperatureState()
+        if not hasattr(self, "demand_state"):
+            self.demand_state = DemandState()
+        if not hasattr(self, "opentherm_state"):
+            self.opentherm_state = OpenThermState()
 
     @property
     def heartbeat_timeout(self) -> td:

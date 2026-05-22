@@ -15,6 +15,8 @@ from .discovery import DiscoveryService
 from .models import (
     DemandState,
     FaultLogState,
+    HvacState,
+    OpenThermState,
     ScheduleState,
     StateUpdatedEvent,
     TemperatureState,
@@ -120,6 +122,11 @@ class _Entity:
 
         This method acts as the single ingestion point for state changes, completely
         bypassing legacy packet interception.
+
+        :param event: The StateUpdatedEvent container wrapping the new frozen state.
+        :type event: StateUpdatedEvent
+        :return: None
+        :rtype: None
         """
         if isinstance(event.state, TemperatureState) and hasattr(self, "temp_state"):
             setattr(self, "temp_state", event.state)  # noqa: B010
@@ -129,6 +136,12 @@ class _Entity:
             setattr(self, "schedule_state", event.state)  # noqa: B010
         elif isinstance(event.state, FaultLogState) and hasattr(self, "state"):
             setattr(self, "state", event.state)  # noqa: B010
+        elif isinstance(event.state, OpenThermState) and hasattr(
+            self, "opentherm_state"
+        ):
+            setattr(self, "opentherm_state", event.state)  # noqa: B010
+        elif isinstance(event.state, HvacState) and hasattr(self, "hvac_state"):
+            setattr(self, "hvac_state", event.state)  # noqa: B010
 
     def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task[Any] | None:
         """Proxy command sending to the Gateway.

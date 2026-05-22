@@ -377,13 +377,27 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
 
 def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None:
-    """Translate 0418 fault log data into a frozen StateUpdatedEvent."""
+    """Translate 0418 fault log data into a frozen StateUpdatedEvent.
+
+    This handles the immutable tuple appending tracking required by the
+    CQRS FaultLogState read-model container.
+
+    :param target: The target entity software twin to update.
+    :type target: Any
+    :param p: The parsed message payload dictionary.
+    :type p: dict[str, Any]
+    :param msg: The immutable Message L7 envelope.
+    :type msg: Message
+    :return: None
+    :rtype: None
+    """
     if msg.code != "0418" or not hasattr(target, "state"):
         return
     if type(target.state).__name__ != "FaultLogState":
         return
 
-    if "log_idx" not in p or p.get("log_entry") is None:
+    # Guard: Ensure the entry index exists in the parsed payload
+    if "log_idx" not in p:
         return
 
     from ramses_rf.system.faultlog import FaultLogEntry
@@ -391,11 +405,13 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
     with contextlib.suppress(Exception):
         entry = FaultLogEntry.from_msg(msg)
 
-        new_entries = dict(target.state.entries)
-        new_entries[entry.timestamp] = entry
+        # Append to the immutable tuple, safely removing stale matching timestamps
+        current_entries = getattr(target.state, "entries", ())
+        filtered = [e for e in current_entries if e.timestamp != entry.timestamp]
+        new_entries = tuple(filtered) + (entry,)
 
-        latest = target.state.latest_fault
-        if entry.fault_state.value == "fault":
+        latest = getattr(target.state, "latest_fault", None)
+        if getattr(entry.fault_state, "value", str(entry.fault_state)) == "fault":
             latest = entry
 
         new_state = dataclasses.replace(
