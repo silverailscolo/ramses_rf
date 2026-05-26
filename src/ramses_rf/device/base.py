@@ -42,7 +42,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
-    from ramses_rf.system import Zone
+    from ramses_rf.systems import Zone
     from ramses_tx.const import IndexT
     from ramses_tx.typing import DeviceIdT
 

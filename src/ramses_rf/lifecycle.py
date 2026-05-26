@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from .device import Device
     from .gateway import Gateway
     from .interfaces import DeviceRegistryInterface, MessageStoreInterface
-    from .system import Evohome
+    from .systems import Evohome
 
 _LOGGER = logging.getLogger(__name__)
 

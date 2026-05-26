@@ -14,7 +14,7 @@ from typing import Any
 from ramses_rf.const import Code, DevType
 from ramses_rf.messages import Message
 from ramses_rf.models import HvacState, OpenThermState, StateUpdatedEvent
-from ramses_rf.pipeline.ingestion import StateIngestionWorker
+from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.protocol.opentherm import OtDataId
 
 
@@ -117,7 +117,7 @@ def test_worker_opentherm_modulation_parsing() -> None:
     gwy_adapter = FakeGatewayAdapter(registry)
     queue: asyncio.Queue[Message] = asyncio.Queue()
 
-    worker = StateIngestionWorker(gwy_adapter, queue)
+    worker = StateProjector(gwy_adapter, queue)
 
     # 2. Construct an isolated mock Message envelope for modulation
     mock_msg = MockMessage(
@@ -147,7 +147,7 @@ def test_worker_opentherm_status_flag_parsing() -> None:
     gwy_adapter = FakeGatewayAdapter(registry)
     queue: asyncio.Queue[Message] = asyncio.Queue()
 
-    worker = StateIngestionWorker(gwy_adapter, queue)
+    worker = StateProjector(gwy_adapter, queue)
 
     # Construct an array payload matching standard OpenTherm status flags
     # index 9 is ch_active, index 11 is flame_active
@@ -181,7 +181,7 @@ def test_worker_hvac_state_parsing() -> None:
     gwy_adapter = FakeGatewayAdapter(registry)
     queue: asyncio.Queue[Message] = asyncio.Queue()
 
-    worker = StateIngestionWorker(gwy_adapter, queue)
+    worker = StateProjector(gwy_adapter, queue)
 
     # Construct a spoofed HVAC packet payload (e.g., Code._31D9 or Code._22F1)
     hvac_payload = {

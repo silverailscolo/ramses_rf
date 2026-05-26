@@ -36,10 +36,10 @@ async def test_trace_trv_implicit_binding(tmp_path: Path) -> None:
 
     with (
         patch(
-            "ramses_rf.system.heat.MultiZone._handle_msg",
+            "ramses_rf.systems.tcs.MultiZone._handle_msg",
             wraps=gwy.tcs._handle_msg if getattr(gwy, "tcs", None) else None,  # type: ignore[union-attr]
         ) as mock_mz_handle,
-        patch("ramses_rf.system.zones.Zone._handle_msg") as mock_z_handle,
+        patch("ramses_rf.systems.zones.Zone._handle_msg") as mock_z_handle,
         patch(
             "ramses_rf.device.registry.DeviceRegistry.get_device",
             wraps=gwy.device_registry.get_device,

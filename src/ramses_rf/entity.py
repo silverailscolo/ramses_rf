@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .gateway import Gateway
     from .interfaces import DeviceInterface
     from .messages import Message
-    from .system import Evohome
+    from .systems.tcs import Evohome
 
 
 _QOS_TX_LIMIT = 12

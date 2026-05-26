@@ -24,7 +24,7 @@ from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
 if TYPE_CHECKING:
     from ramses_rf.device import Device
     from ramses_rf.messages import Message
-    from ramses_rf.system import Evohome
+    from ramses_rf.systems import Evohome
     from ramses_rf.topology import Parent
 
 _LOGGER = logging.getLogger(__name__)

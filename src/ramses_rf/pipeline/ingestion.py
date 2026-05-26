@@ -92,11 +92,11 @@ OPENTHERM_FIELD_MAP: Final[dict[OtDataId, str]] = {
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
 
-class StateIngestionWorker:
-    """Worker task that transforms incoming telemetry into immutable states."""
+class StateProjector:
+    """Projector task that transforms incoming telemetry into immutable states."""
 
     def __init__(self, gwy: Any, ssot_queue: asyncio.Queue[Message]) -> None:
-        """Initialize the state ingestion background worker.
+        """Initialize the state projector background worker.
 
         :param gwy: The active Gateway facade instance.
         :type gwy: Any
@@ -108,7 +108,7 @@ class StateIngestionWorker:
         self._task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
-        """Start the background consumer worker loop.
+        """Start the background consumer projector loop.
 
         :return: None
         :rtype: None
@@ -117,7 +117,7 @@ class StateIngestionWorker:
             self._task = asyncio.create_task(self._worker_loop())
 
     async def stop(self) -> None:
-        """Stop the background consumer worker loop cleanly.
+        """Stop the background consumer projector loop cleanly.
 
         :return: None
         :rtype: None

@@ -1,4 +1,3 @@
-# src/ramses_rf/gateway.py
 #!/usr/bin/env python3
 """RAMSES RF - the gateway facade."""
 
@@ -49,7 +48,7 @@ from .schemas import (
     SZ_MAIN_TCS,
     SZ_ORPHANS,
 )
-from .system import Evohome
+from .systems.tcs import Evohome
 from .typing import DeviceIdT
 
 if TYPE_CHECKING:

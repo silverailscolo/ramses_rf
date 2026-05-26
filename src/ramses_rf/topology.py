@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
     from .device import Controller
     from .entity import Entity
-    from .system import Evohome
+    from .systems.tcs import Evohome
 
 
 _LOGGER = logging.getLogger(__name__)

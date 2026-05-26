@@ -14,7 +14,7 @@ from ramses_rf.exceptions import (
     SystemSchemaInconsistent,
 )
 from ramses_rf.messages import Message
-from ramses_rf.system.zones import (
+from ramses_rf.systems.zones import (
     DhwZone,
     EleZone,
     UfhZone,

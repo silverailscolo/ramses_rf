@@ -9,8 +9,8 @@ import pytest
 from ramses_rf import Gateway
 from ramses_rf.device import Controller
 from ramses_rf.gateway import GatewayConfig
-from ramses_rf.system import Evohome, Zone
-from ramses_rf.system.schedule import InnerScheduleT
+from ramses_rf.systems import Evohome, Zone
+from ramses_rf.systems.schedule import InnerScheduleT
 from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.protocol import PortProtocol
 from ramses_tx.typing import DeviceIdT

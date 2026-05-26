@@ -33,7 +33,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 )
 
 if TYPE_CHECKING:
-    from ramses_rf.system.heat import _LogbookT
+    from ramses_rf.systems.tcs import _LogbookT
 
 
 FaultTupleT: TypeAlias = tuple[FaultType, FaultDeviceClass, DeviceIdT | None, str]

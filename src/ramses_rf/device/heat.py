@@ -113,7 +113,7 @@ if TYPE_CHECKING:
         OpenThermState,
         TemperatureState,
     )
-    from ramses_rf.system import Evohome, Zone
+    from ramses_rf.systems import Evohome, Zone
     from ramses_tx import Packet
 
     from ..messages import Message
@@ -416,7 +416,7 @@ class Controller(DeviceHeat):  # CTL (01):
             If a TCS is created, attach it to this device (which should be a CTL).
             """
 
-            from ramses_rf.system import system_factory
+            from ramses_rf.systems import system_factory
 
             schema = shrink(SCH_TCS(schema))
 

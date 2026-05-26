@@ -400,7 +400,7 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
     if "log_idx" not in p:
         return
 
-    from ramses_rf.system.faultlog import FaultLogEntry
+    from ramses_rf.systems.faultlog import FaultLogEntry
 
     with contextlib.suppress(Exception):
         entry = FaultLogEntry.from_msg(msg)

@@ -20,7 +20,7 @@ from ramses_rf.const import DevType
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.models import HvacState, OpenThermState
 from ramses_rf.pipeline.dispatcher import CentralDispatcher
-from ramses_rf.pipeline.ingestion import StateIngestionWorker
+from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_tx.const import SZ_READER_TASK
 
 # Constants defining the target log file fixtures
@@ -93,7 +93,7 @@ async def test_cqrs_opentherm_state_parity() -> None:
 
     pipeline_in_queue: asyncio.Queue[Any] = asyncio.Queue()
     dispatcher = CentralDispatcher(pipeline_in_queue)
-    worker = StateIngestionWorker(gwy, dispatcher.ssot_queue)
+    worker = StateProjector(gwy, dispatcher.ssot_queue)
 
     await dispatcher.start()
     await worker.start()
@@ -173,7 +173,7 @@ async def test_cqrs_hvac_state_parity() -> None:
 
     pipeline_in_queue: asyncio.Queue[Any] = asyncio.Queue()
     dispatcher = CentralDispatcher(pipeline_in_queue)
-    worker = StateIngestionWorker(gwy, dispatcher.ssot_queue)
+    worker = StateProjector(gwy, dispatcher.ssot_queue)
 
     await dispatcher.start()
     await worker.start()
