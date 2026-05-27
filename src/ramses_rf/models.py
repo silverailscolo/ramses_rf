@@ -131,11 +131,55 @@ class TemperatureState:
 
 
 @dataclass(frozen=True, slots=True)
+class TrvState:
+    """State for TRV (Thermostatic Radiator Valve) entities."""
+
+    window_open: bool | None = None
+    last_updated: dt = field(default_factory=_now_utc)
+
+
+@dataclass(frozen=True, slots=True)
 class DemandState:
     """State for entities that request or actuate heat/cooling."""
 
     heat_demand: float | None = None
     relay_active: bool = False
+    relay_demand: float | None = None
+    relay_failsafe: bool | None = None
+    last_updated: dt = field(default_factory=_now_utc)
+
+
+@dataclass(frozen=True, slots=True)
+class DhwState:
+    """State for DHW (Domestic Hot Water) entities."""
+
+    setpoint: float | None = None
+    overrun: int | None = None
+    differential: float | None = None
+    mode: str | None = None
+    active: bool | None = None
+    until: dt | str | None = None
+    temperature: float | None = None
+    last_updated: dt = field(default_factory=_now_utc)
+
+
+@dataclass(frozen=True, slots=True)
+class SystemState:
+    """State for central system controllers."""
+
+    system_mode: str | None = None
+    until: dt | str | None = None
+    datetime: str | None = None
+    language: str | None = None
+    last_updated: dt = field(default_factory=_now_utc)
+
+
+@dataclass(frozen=True, slots=True)
+class PowerState:
+    """Power and battery state for wireless entities."""
+
+    battery_low: bool | None = None
+    battery_level: float | None = None
     last_updated: dt = field(default_factory=_now_utc)
 
 
@@ -241,7 +285,7 @@ class OpenThermState:
     dhw_pump_starts: float | None = None
     flame_signal_low: float | None = None
 
-    last_updated: dt = field(default_factory=lambda: dt.now())
+    last_updated: dt = field(default_factory=_now_utc)
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,4 +324,4 @@ class HvacState:
     filter_remaining_percent: float | None = None
     boost_timer_mins: int | None = None
 
-    last_updated: dt = field(default_factory=lambda: dt.now())
+    last_updated: dt = field(default_factory=_now_utc)

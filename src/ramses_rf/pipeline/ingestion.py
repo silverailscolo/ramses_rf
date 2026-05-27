@@ -172,6 +172,11 @@ class StateProjector:
                 try:
                     self._update_opentherm_state(src_dev, p, msg)
                     self._update_hvac_state(src_dev, p, msg)
+                    self._update_power_state(src_dev, p, msg)
+                    self._update_dhw_state(src_dev, p, msg)
+                    self._update_system_state(src_dev, p, msg)
+                    self._update_temperature_state(src_dev, p, msg)
+                    self._update_demand_state(src_dev, p, msg)
                 except Exception as err:
                     _LOGGER.error(
                         "CQRS state extraction failed for src %s: %s", src_dev.id, err
@@ -186,6 +191,11 @@ class StateProjector:
                     try:
                         self._update_opentherm_state(dst_dev, p, msg)
                         self._update_hvac_state(dst_dev, p, msg)
+                        self._update_power_state(dst_dev, p, msg)
+                        self._update_dhw_state(dst_dev, p, msg)
+                        self._update_system_state(dst_dev, p, msg)
+                        self._update_temperature_state(dst_dev, p, msg)
+                        self._update_demand_state(dst_dev, p, msg)
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS state extraction failed for dst %s: %s",
@@ -342,6 +352,140 @@ class StateProjector:
             return
 
         new_state = dataclasses.replace(target.hvac_state, **updates)
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        target.apply_state_update(event)
+
+    def _update_power_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
+        """Translate battery opcodes into PowerState."""
+        if not hasattr(target, "power_state"):
+            return
+
+        updates: dict[str, Any] = {}
+        if msg.code == Code._1060:
+            if "battery_low" in p:
+                updates["battery_low"] = p["battery_low"]
+            if "battery_level" in p:
+                updates["battery_level"] = p["battery_level"]
+
+        if not updates:
+            return
+
+        new_state = dataclasses.replace(target.power_state, **updates)
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        target.apply_state_update(event)
+
+    def _update_dhw_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
+        """Translate DHW opcodes into DhwState."""
+        if not hasattr(target, "dhw_state"):
+            return
+
+        updates: dict[str, Any] = {}
+        if msg.code == Code._10A0:
+            for k in ("setpoint", "overrun", "differential"):
+                if k in p:
+                    updates[k] = p[k]
+        elif msg.code == Code._1260:
+            if "temperature" in p:
+                updates["temperature"] = p["temperature"]
+        elif msg.code == Code._1F41:
+            for k in ("mode", "active", "until"):
+                if k in p:
+                    updates[k] = p[k]
+
+        if not updates:
+            return
+
+        new_state = dataclasses.replace(target.dhw_state, **updates)
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        target.apply_state_update(event)
+
+    def _update_system_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
+        """Translate system configuration opcodes into SystemState."""
+        if not hasattr(target, "system_state"):
+            return
+
+        updates: dict[str, Any] = {}
+        if msg.code == Code._0100:
+            if "language" in p:
+                updates["language"] = p["language"]
+        elif msg.code == Code._2E04:
+            if "system_mode" in p:
+                updates["system_mode"] = p["system_mode"]
+            if "until" in p:
+                updates["until"] = p["until"]
+        elif msg.code == Code._313F:
+            if "datetime" in p:
+                updates["datetime"] = p["datetime"]
+
+        if not updates:
+            return
+
+        new_state = dataclasses.replace(target.system_state, **updates)
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        target.apply_state_update(event)
+
+    def _update_temperature_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
+        """Translate temperature/TRV opcodes into TrvState."""
+        if not hasattr(target, "trv_state"):
+            return
+
+        updates: dict[str, Any] = {}
+        if msg.code == Code._12B0 and "window_open" in p:
+            updates["window_open"] = p["window_open"]
+
+        if not updates:
+            return
+
+        new_state = dataclasses.replace(target.trv_state, **updates)
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        target.apply_state_update(event)
+
+    def _update_demand_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
+        """Translate demand opcodes into DemandState."""
+        if not hasattr(target, "demand_state"):
+            return
+
+        updates: dict[str, Any] = {}
+        if msg.code == Code._0008 and "relay_demand" in p:
+            updates["relay_demand"] = p["relay_demand"]
+        elif msg.code == Code._0009 and "relay_failsafe" in p:
+            updates["relay_failsafe"] = p["relay_failsafe"]
+
+        if not updates:
+            return
+
+        new_state = dataclasses.replace(target.demand_state, **updates)
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
             state=new_state,
