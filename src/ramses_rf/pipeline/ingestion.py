@@ -47,7 +47,17 @@ from ramses_rf.const import (
     Code,
 )
 from ramses_rf.messages import Message
-from ramses_rf.models import StateUpdatedEvent
+from ramses_rf.models import (
+    DemandState,
+    DhwState,
+    HvacState,
+    OpenThermState,
+    PowerState,
+    StateUpdatedEvent,
+    SystemState,
+    TemperatureState,
+    TrvState,
+)
 from ramses_rf.protocol.opentherm import OtDataId
 
 # --- Translation Maps (Static Constant Blocks) ---
@@ -183,8 +193,6 @@ class StateProjector:
                     )
 
             # Route to Destination Device (Aggregation)
-            # Controller entities (like Fans and Boilers) must inherit the state
-            # of the sensors transmitting directly to them to mimic legacy behavior.
             if msg.dst.id != "--:------" and msg.dst.id != msg.src.id:
                 dst_dev = registry.device_by_id.get(msg.dst.id)
                 if dst_dev:
@@ -206,19 +214,12 @@ class StateProjector:
     def _update_opentherm_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate OpenTherm frames or parallel heating opcodes into OpenThermState.
-
-        :param target: The target software twin entity to update.
-        :type target: Any
-        :param p: The parsed message payload dictionary.
-        :type p: dict[str, Any]
-        :param msg: The communication message envelope.
-        :type msg: Message
-        :return: None
-        :rtype: None
-        """
+        """Translate OpenTherm frames or parallel heating opcodes into OpenThermState."""
         if not hasattr(target, "opentherm_state"):
-            return
+            if getattr(target, "_SLUG", "") == "OTB":
+                target.opentherm_state = OpenThermState()
+            else:
+                return
 
         updates: dict[str, Any] = {}
 
@@ -279,28 +280,24 @@ class StateProjector:
             return
 
         new_state = dataclasses.replace(target.opentherm_state, **updates)
+        target.opentherm_state = new_state  # Explicit shadow hydration
+
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
-        target.apply_state_update(event)
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
 
     def _update_hvac_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
-        """Translate complex multi-opcode ventilation payloads into HvacState.
-
-        :param target: The target software twin entity to update.
-        :type target: Any
-        :param p: The parsed message payload dictionary.
-        :type p: dict[str, Any]
-        :param msg: The communication message envelope.
-        :type msg: Message
-        :return: None
-        :rtype: None
-        """
-        if not hasattr(target, "hvac_state"):
+        """Translate complex multi-opcode ventilation payloads into HvacState."""
+        if getattr(target, "_SLUG", "") in ("CTL", "BDR", "TRV", "OTB", "UFC", "DHW"):
             return
+
+        if not hasattr(target, "hvac_state"):
+            target.hvac_state = HvacState()
 
         updates: dict[str, Any] = {}
 
@@ -352,18 +349,21 @@ class StateProjector:
             return
 
         new_state = dataclasses.replace(target.hvac_state, **updates)
+        target.hvac_state = new_state  # Explicit shadow hydration
+
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
-        target.apply_state_update(event)
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
 
     def _update_power_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
         """Translate battery opcodes into PowerState."""
         if not hasattr(target, "power_state"):
-            return
+            target.power_state = PowerState()
 
         updates: dict[str, Any] = {}
         if msg.code == Code._1060:
@@ -376,18 +376,24 @@ class StateProjector:
             return
 
         new_state = dataclasses.replace(target.power_state, **updates)
+        target.power_state = new_state  # Explicit shadow hydration
+
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
-        target.apply_state_update(event)
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
 
     def _update_dhw_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
         """Translate DHW opcodes into DhwState."""
-        if not hasattr(target, "dhw_state"):
+        if msg.code not in (Code._10A0, Code._1260, Code._1F41):
             return
+
+        if not hasattr(target, "dhw_state"):
+            target.dhw_state = DhwState()
 
         updates: dict[str, Any] = {}
         if msg.code == Code._10A0:
@@ -406,20 +412,26 @@ class StateProjector:
             return
 
         new_state = dataclasses.replace(target.dhw_state, **updates)
+        target.dhw_state = new_state  # Explicit shadow hydration
+
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
-        target.apply_state_update(event)
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
 
     def _update_system_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
         """Translate system configuration opcodes into SystemState."""
-        if not hasattr(target, "system_state"):
+        if msg.code not in (Code._0100, Code._2E04, Code._313F):
             return
+
+        if not hasattr(target, "system_state"):
+            target.system_state = SystemState()
 
         updates: dict[str, Any] = {}
         if msg.code == Code._0100:
@@ -438,46 +450,76 @@ class StateProjector:
             return
 
         new_state = dataclasses.replace(target.system_state, **updates)
+        target.system_state = new_state  # Explicit shadow hydration
+
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
-        target.apply_state_update(event)
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
 
     def _update_temperature_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate temperature/TRV opcodes into TrvState."""
-        if not hasattr(target, "trv_state"):
-            return
-
-        updates: dict[str, Any] = {}
+        """Translate temperature/TRV opcodes into TrvState & TemperatureState."""
         if msg.code == Code._12B0 and "window_open" in p:
-            updates["window_open"] = p["window_open"]
+            if not hasattr(target, "trv_state"):
+                target.trv_state = TrvState()
 
-        if not updates:
-            return
+            new_trv = dataclasses.replace(
+                target.trv_state, window_open=p["window_open"]
+            )
+            target.trv_state = new_trv  # Explicit shadow hydration
 
-        new_state = dataclasses.replace(target.trv_state, **updates)
-        event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
-            state=new_state,
-            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
-            causation_id=getattr(msg, "message_id", uuid.uuid4()),
-        )
-        target.apply_state_update(event)
+            event = StateUpdatedEvent(
+                entity_id=getattr(target, "id", "unknown"),
+                state=new_trv,
+                correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+                causation_id=getattr(msg, "message_id", uuid.uuid4()),
+            )
+            if hasattr(target, "apply_state_update"):
+                target.apply_state_update(event)
+
+        if msg.code in (Code._30C9, Code._1260, Code._0002):
+            if not hasattr(target, "temp_state"):
+                target.temp_state = TemperatureState()
+
+            updates = {}
+            if "temperature" in p:
+                updates["temperature"] = p["temperature"]
+            if "setpoint" in p:
+                updates["setpoint"] = p["setpoint"]
+
+            if updates:
+                new_temp = dataclasses.replace(target.temp_state, **updates)
+                target.temp_state = new_temp  # Explicit shadow hydration
+
+                event = StateUpdatedEvent(
+                    entity_id=getattr(target, "id", "unknown"),
+                    state=new_temp,
+                    correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+                    causation_id=getattr(msg, "message_id", uuid.uuid4()),
+                )
+                if hasattr(target, "apply_state_update"):
+                    target.apply_state_update(event)
 
     def _update_demand_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
         """Translate demand opcodes into DemandState."""
-        if not hasattr(target, "demand_state"):
+        if msg.code not in (Code._3150, Code._0008, Code._0009):
             return
 
+        if not hasattr(target, "demand_state"):
+            target.demand_state = DemandState()
+
         updates: dict[str, Any] = {}
-        if msg.code == Code._0008 and "relay_demand" in p:
+        if msg.code == Code._3150 and "heat_demand" in p:
+            updates["heat_demand"] = p["heat_demand"]
+        elif msg.code == Code._0008 and "relay_demand" in p:
             updates["relay_demand"] = p["relay_demand"]
         elif msg.code == Code._0009 and "relay_failsafe" in p:
             updates["relay_failsafe"] = p["relay_failsafe"]
@@ -486,10 +528,13 @@ class StateProjector:
             return
 
         new_state = dataclasses.replace(target.demand_state, **updates)
+        target.demand_state = new_state  # Explicit shadow hydration
+
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
-        target.apply_state_update(event)
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
