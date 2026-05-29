@@ -339,8 +339,14 @@ async def test_read_model_baseline_snapshot(
             if reader_task:
                 await reader_task
 
-        # CRITICAL: Give the async queues a moment to drain into the projector!
-        await asyncio.sleep(0.5)
+        # CRITICAL: Deterministically wait for the new CQRS engine to finish.
+        # This guarantees every packet in the pipeline is fully projected into memory.
+        await pipeline_in_queue.join()
+        await dispatcher.ssot_queue.join()
+
+        # Give the slow legacy monolithic event loop generous time to settle
+        # its background topology-building tasks in heavily loaded CI environments.
+        await asyncio.sleep(2.0)
 
         if gwy.message_store:
             gwy.message_store.flush()
