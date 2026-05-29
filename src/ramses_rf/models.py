@@ -323,5 +323,8 @@ class HvacState:
     filter_remaining_days: int | None = None
     filter_remaining_percent: float | None = None
     boost_timer_mins: int | None = None
+    filter_dirty: bool | None = None
+    frost_cycle: bool | None = None
+    has_fault: bool | None = None
 
     last_updated: dt = field(default_factory=_now_utc)

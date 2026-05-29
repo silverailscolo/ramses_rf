@@ -29,6 +29,9 @@ from ramses_rf.const import (
     SZ_FAN_INFO,
     SZ_FAN_MODE,
     SZ_FAN_RATE,
+    SZ_FILTER_DIRTY,
+    SZ_FROST_CYCLE,
+    SZ_HAS_FAULT,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_OUTDOOR_HUMIDITY,
@@ -1398,6 +1401,39 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return cast(
             float | None,
             await self.entity_state.get_value(Code._12A0, key=SZ_TEMPERATURE),
+        )
+
+    async def filter_dirty(self) -> bool | None:
+        """Return the dirty filter diagnostic flag.
+
+        :return: True if the filter is dirty, False if clean, or None if unavailable.
+        :rtype: bool | None
+        """
+        return cast(
+            bool | None,
+            await self.entity_state.get_value(Code._31D9, key=SZ_FILTER_DIRTY),
+        )
+
+    async def frost_cycle(self) -> bool | None:
+        """Return the frost cycle diagnostic flag.
+
+        :return: True if the frost cycle is active, False otherwise, or None if unavailable.
+        :rtype: bool | None
+        """
+        return cast(
+            bool | None,
+            await self.entity_state.get_value(Code._31D9, key=SZ_FROST_CYCLE),
+        )
+
+    async def has_fault(self) -> bool | None:
+        """Return the hardware fault diagnostic flag.
+
+        :return: True if a fault is active, False otherwise, or None if unavailable.
+        :rtype: bool | None
+        """
+        return cast(
+            bool | None,
+            await self.entity_state.get_value(Code._31D9, key=SZ_HAS_FAULT),
         )
 
 

@@ -22,6 +22,9 @@ from ramses_tx.const import (
     SZ_DEMAND,
     SZ_FAN_MODE,
     SZ_FAN_RATE,
+    SZ_FILTER_DIRTY,
+    SZ_FROST_CYCLE,
+    SZ_HAS_FAULT,
     SZ_MODE,
     SZ_REMAINING_DAYS,
     SZ_REMAINING_PERCENT,
@@ -993,9 +996,9 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
         SZ_FAN_MODE: payload[4:6],  # orcon, vasco/climarad
         "passive": bool(bitmap & 0x02),
         "damper_only": bool(bitmap & 0x04),  # i.e. valve only
-        "filter_dirty": bool(bitmap & 0x20),
-        "frost_cycle": bool(bitmap & 0x40),
-        "has_fault": bool(bitmap & 0x80),
+        SZ_FILTER_DIRTY: bool(bitmap & 0x20),
+        SZ_FROST_CYCLE: bool(bitmap & 0x40),
+        SZ_HAS_FAULT: bool(bitmap & 0x80),
         "_flags": hex_to_flag8(payload[2:4]),
     }
 
