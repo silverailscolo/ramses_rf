@@ -7,6 +7,15 @@ import logging
 import math
 from typing import Any, TypeVar
 
+from ramses_rf.protocol.ramses import (
+    _22F1_MODE_ORCON,
+    _2411_PARAMS_SCHEMA,
+    SZ_DATA_TYPE,
+    SZ_MAX_VALUE,
+    SZ_MIN_VALUE,
+    SZ_PRECISION,
+)
+
 from .. import exceptions as exc
 from ..address import NON_DEV_ADDR
 from ..const import I_, RQ, W_, Code
@@ -18,14 +27,6 @@ from ..helpers import (
     hex_from_double,
     hex_from_percent,
     hex_from_temp,
-)
-from ..ramses import (
-    _22F1_MODE_ORCON,
-    _2411_PARAMS_SCHEMA,
-    SZ_DATA_TYPE,
-    SZ_MAX_VALUE,
-    SZ_MIN_VALUE,
-    SZ_PRECISION,
 )
 from ..typing import DeviceIdT, PayloadT
 from .base import CommandBase

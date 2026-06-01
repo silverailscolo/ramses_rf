@@ -11,8 +11,9 @@ import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.const import FC, I_, SZ_DOMAIN_ID, Code
+from ramses_rf.messages import Message
 from ramses_rf.system.heat import SystemBase
-from ramses_tx import Message, Packet
+from ramses_tx import Packet
 from ramses_tx.address import HGI_DEVICE_ID
 
 # A standard 3150 I-packet (Heat Demand) from a Controller

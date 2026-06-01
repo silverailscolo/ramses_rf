@@ -1,0 +1,126 @@
+"""RAMSES RF - Asynchronous payload decoder engine pipeline."""
+
+import asyncio
+import contextlib
+import logging
+from typing import Any
+
+from ramses_rf.address import Address
+from ramses_rf.enums import Topic
+from ramses_rf.messages.core import Message
+from ramses_rf.parsers.decoder import decode_packet
+from ramses_tx import exceptions as exc
+from ramses_tx.dtos import PacketDTO
+from ramses_tx.typing import DeviceIdT
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class DecoderEngine:
+    """Asynchronous pipeline task to decode PacketDTOs into L7 Messages."""
+
+    def __init__(
+        self,
+        in_queue: asyncio.Queue[PacketDTO],
+        out_queue: asyncio.Queue[Message],
+    ) -> None:
+        """Initialize the decoder engine queues.
+
+        :param in_queue: Queue providing stitched transport packets.
+        :type in_queue: asyncio.Queue[PacketDTO]
+        :param out_queue: Queue receiving fully decoded Messages.
+        :type out_queue: asyncio.Queue[Message]
+        """
+        self._in_queue = in_queue
+        self._out_queue = out_queue
+        self._task: asyncio.Task[None] | None = None
+
+    async def start(self) -> None:
+        """Start the background consumer task."""
+        if self._task is None:
+            self._task = asyncio.create_task(self._loop())
+
+    async def stop(self) -> None:
+        """Stop the background consumer task cleanly."""
+        if self._task:
+            self._task.cancel()
+            with (
+                contextlib.suppress(asyncio.CancelledError),
+            ):
+                await self._task
+            self._task = None
+
+    async def _loop(self) -> None:
+        """Main asynchronous loop consuming the input queue."""
+        while True:
+            dto = await self._in_queue.get()
+            try:
+                await self._process_packet(dto)
+            except Exception as err:
+                _LOGGER.exception("DecoderEngine failed to process packet: %s", err)
+            finally:
+                self._in_queue.task_done()
+
+    async def _process_packet(self, dto: PacketDTO) -> None:
+        """Decode a single PacketDTO and output a frozen Message.
+
+        :param dto: The inbound packet to decode.
+        :type dto: PacketDTO
+        """
+        try:
+            try:
+                raw_data = decode_packet(dto)
+            except exc.PacketPayloadInvalid:
+                # Fallback for null payloads mirroring legacy base.py logic
+                if self._has_payload(dto):
+                    raise
+                raw_data = {}
+        except exc.PacketInvalid as err:
+            _LOGGER.warning("Invalid packet discarded: %s", repr(err))
+            return
+
+        # Ensure strict adherence to dict[str, Any] L7 constraints
+        data: dict[str, Any] = (
+            {"_array": raw_data} if isinstance(raw_data, list) else dict(raw_data)
+        )
+
+        # Safe L2 positional MAC resolution matching legacy routing
+        addr1 = dto.addr1 if dto.addr1 else "--:------"
+        addr2 = dto.addr2 if dto.addr2 else "--:------"
+        addr3 = dto.addr3 if dto.addr3 else "--:------"
+
+        valid = [a for a in (addr1, addr2, addr3) if a and a != "--:------"]
+        src_id = valid[0] if valid else "--:------"
+        dst_id = valid[1] if len(valid) > 1 else src_id
+
+        # Instantiate the immutable historical fact at the pipeline's edge
+        msg = Message(
+            topic=Topic.RAW_EVENT,
+            src=Address(DeviceIdT(src_id)),
+            dst=Address(DeviceIdT(dst_id)),
+            data=data,
+            packets=(dto,),
+            timestamp=dto.timestamp,
+        )
+
+        await self._out_queue.put(msg)
+
+    def _has_payload(self, dto: PacketDTO) -> bool:
+        """Return False if there is no payload, matching legacy rules.
+
+        :param dto: The packet being evaluated.
+        :type dto: PacketDTO
+        :return: True if payload is expected, False otherwise.
+        :rtype: bool
+        """
+        try:
+            length = int(dto.length)
+        except ValueError:
+            length = 0
+
+        if length == 1:
+            return False
+        if str(dto.verb).strip() == "RQ":
+            if length == 2 and dto.code != "0016":
+                return False
+        return True

@@ -24,7 +24,7 @@ from ramses_rf.system.schedule import (
     SZ_SWITCHPOINTS,
     SZ_TIME_OF_DAY,
 )
-from ramses_tx import Message
+from ramses_rf.messages import Message
 
 WORK_DIR = f"{TEST_DIR}/configs"
 CONFIG_FILE = "config_heat.json"

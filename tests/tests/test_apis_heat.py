@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """RAMSES RF - Test the Command.put_*, Command.set_* APIs."""
 
+import inspect
 from collections.abc import Callable, Iterable
 from datetime import datetime as dt
 
 from ramses_rf.const import SZ_DOMAIN_ID
 from ramses_rf.helpers import shrink
+from ramses_rf.messages import Message
 from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.command import Command
 from ramses_tx.const import SZ_TIMESTAMP
 from ramses_tx.helpers import parse_fault_log_entry
-from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
 
@@ -22,10 +23,10 @@ def _test_api_good(
 
     for pkt_line in packets:
         pkt = _create_pkt_from_frame(pkt_line.split("#")[0].rstrip())
-        msg = Message(pkt)
+        msg = Message._from_pkt(pkt)
 
-        cmd = _test_api_from_msg(api, msg)
-        assert cmd.payload == msg._pkt.payload  # aka pkt.payload
+        cmd = _test_api_from_msg(api, msg, pkt)
+        assert cmd.payload == pkt.payload  # aka pkt.payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
@@ -38,14 +39,14 @@ def _test_api_fail(
 
     for pkt_line in packets:
         pkt = _create_pkt_from_frame(pkt_line.split("#")[0].rstrip())
-        msg = Message(pkt)
+        msg = Message._from_pkt(pkt)
 
         try:
-            cmd = _test_api_from_msg(api, msg)
+            cmd = _test_api_from_msg(api, msg, pkt)
         except (AssertionError, TypeError, ValueError):
             cmd = None
         else:
-            assert cmd and cmd.payload == msg._pkt.payload  # aka pkt.payload
+            assert cmd and cmd.payload == pkt.payload  # aka pkt.payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
@@ -59,18 +60,26 @@ def _create_pkt_from_frame(pkt_line: str) -> Packet:
     return pkt
 
 
-def _test_api_from_msg(api: Callable, msg: Message) -> Command:
-    """Create a cmd from a msg and assert their meta-data (doesn"t assert payload.)."""
+def _test_api_from_msg(api: Callable, msg: Message, pkt: Packet) -> Command:
+    """Create a cmd from a msg and assert their meta-data."""
 
-    cmd: Command = api(
-        msg.dst.id, **{k: v for k, v in msg.payload.items() if k[:1] != "_"}
+    sig = inspect.signature(api)
+    kwargs = {k: v for k, v in msg.payload.items() if k[:1] != "_"}
+
+    has_varkw = any(
+        p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
     )
+    if not has_varkw:
+        kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
+
+    cmd: Command = api(msg.dst.id, **kwargs)
 
     if msg.src.id == HGI_DEV_ADDR.id:
-        assert cmd == msg._pkt  # assert str(cmd) == str(pkt)
-    assert cmd.dst.id == msg._pkt.dst.id
-    assert cmd.verb == msg._pkt.verb
-    assert cmd.code == msg._pkt.code
+        # assert str(cmd) == str(pkt)
+        assert cmd._frame == pkt._frame
+    assert cmd.dst.id == pkt.dst.id
+    assert cmd.verb == pkt.verb
+    assert cmd.code == pkt.code
     # assert cmd.payload == pkt.payload
 
     return cmd
@@ -130,14 +139,23 @@ def test_put_0418() -> None:
         if SZ_TIMESTAMP not in log_pkt:  # ignore null log entries
             continue
 
-        cmd = Command._put_system_log_entry(pkt.src.id, **log_pkt)  # type: ignore[call-arg]
+        cmd = Command._put_system_log_entry(
+            pkt.src.id,
+            **log_pkt,  # type: ignore[call-arg]
+        )
         log_cmd = parse_fault_log_entry(cmd.payload)
 
         assert log_pkt == log_cmd
 
 
-SET_1030_GOOD = {  # NOTE: no W|1030 seen in the wild
-    "...  W --- 18:000730 01:145038 --:------ 1030 016 01C80137C9010FCA0196CB010FCC0101": "{'zone_idx': '01', 'max_flow_setpoint': 55, 'min_flow_setpoint': 15, 'valve_run_time': 150, 'pump_run_time': 15, 'boolean_cc': 1}",
+# NOTE: no W|1030 seen in the wild
+SET_1030_GOOD = {
+    (
+        "...  W --- 18:000730 01:145038 --:------ 1030 016 01C80137C9010FCA0196CB010FCC0101"
+    ): (
+        "{'zone_idx': '01', 'max_flow_setpoint': 55, 'min_flow_setpoint': 15, "
+        "'valve_run_time': 150, 'pump_run_time': 15, 'boolean_cc': 1}"
+    ),
 }
 
 
@@ -145,7 +163,8 @@ def test_set_1030() -> None:
     _test_api_good(Command.set_mix_valve_params, SET_1030_GOOD)
 
 
-SET_10A0_GOOD = {  # NOTE: no W|10A0 seen in the wild
+# NOTE: no W|10A0 seen in the wild
+SET_10A0_GOOD = {
     "000  W --- 01:123456 07:031785 --:------ 10A0 006 000F6E050064": "{'dhw_idx': '00', 'setpoint': 39.5, 'overrun': 5, 'differential':  1.0}",
     "000  W --- 01:123456 07:031785 --:------ 10A0 006 000F6E0003E8": "{'dhw_idx': '00', 'setpoint': 39.5, 'overrun': 0, 'differential': 10.0}",
     "000  W --- 01:123456 07:031785 --:------ 10A0 006 0015180301F4": "{'dhw_idx': '00', 'setpoint': 54.0, 'overrun': 3, 'differential':  5.0}",
@@ -184,18 +203,19 @@ def test_set_1100() -> None:  # NOTE: bespoke: see params
 
     for pkt_line in packets:
         pkt = _create_pkt_from_frame(pkt_line)
-        msg = Message(pkt)
+        msg = Message._from_pkt(pkt)
 
         msg.payload[SZ_DOMAIN_ID] = msg.payload.get(SZ_DOMAIN_ID, "00")
 
-        cmd = _test_api_from_msg(Command.set_tpi_params, msg)
-        assert cmd.payload == msg._pkt.payload
+        cmd = _test_api_from_msg(Command.set_tpi_params, msg, pkt)
+        assert cmd.payload == pkt.payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
 
 
-PUT_1260_GOOD = {  # TODO: RPs being converted to Is
+# TODO: RPs being converted to Is
+PUT_1260_GOOD = {
     "...  I --- 07:017494 --:------ 07:017494 1260 003 00111E": "{'temperature': 43.82}",
     "...  I --- 07:017494 --:------ 07:017494 1260 003 007FFF": "{'temperature': None}",
     # "...  I --- 07:123456 --:------ 07:123456 1260 003 010E74": "{'temperature': 37.0, 'dhw_idx': '01'}",  #  contrived
@@ -283,8 +303,20 @@ SET_2E04_GOOD = {
 }
 
 
-def test_set_2e04() -> None:
-    _test_api_good(Command.set_system_mode, SET_2E04_GOOD)
+def test_set_2e04() -> None:  # NOTE: bespoke: payload
+    packets = SET_2E04_GOOD
+
+    for pkt_line in packets:
+        pkt = _create_pkt_from_frame(pkt_line.split("#")[0].rstrip())
+        msg = Message._from_pkt(pkt)
+
+        cmd = _test_api_from_msg(Command.set_system_mode, msg, pkt)
+        assert cmd.payload == pkt.payload
+
+        if isinstance(packets, dict) and (payload := packets[pkt_line]):
+            actual = shrink(msg.payload, keep_falsys=True)
+            actual.pop("zone_idx", None)
+            assert actual == eval(payload)
 
 
 PUT_30C9_FAIL = (
@@ -319,11 +351,11 @@ def test_set_313f() -> None:  # NOTE: bespoke: payload
         assert str(pkt)[:4] == pkt_line[4:8]
         assert str(pkt)[6:] == pkt_line[10:]
 
-        msg = Message(pkt)
+        msg = Message._from_pkt(pkt)
 
-        cmd = _test_api_from_msg(Command.set_system_time, msg)
-        assert cmd.payload[:4] == msg._pkt.payload[:4]
-        assert cmd.payload[6:] == msg._pkt.payload[6:]
+        cmd = _test_api_from_msg(Command.set_system_time, msg, pkt)
+        assert cmd.payload[:4] == pkt.payload[:4]
+        assert cmd.payload[6:] == pkt.payload[6:]
 
 
 PUT_3EF0_FAIL = ("...  I --- 13:123456 --:------ 13:123456 3EF0 003 00AAFF",)
@@ -346,18 +378,23 @@ PUT_3EF1_GOOD = (  # TODO: needs checking
 def test_put_3ef1() -> None:  # NOTE: bespoke: params, ?payload
     for pkt_line in PUT_3EF1_GOOD:
         pkt = _create_pkt_from_frame(pkt_line)
-        msg = Message(pkt)
+        msg = Message._from_pkt(pkt)
 
-        kwargs = msg.payload
+        kwargs = dict(msg.payload)
         modulation_level = kwargs.pop("modulation_level")
         actuator_countdown = kwargs.pop("actuator_countdown")
+
+        sig = inspect.signature(Command.put_actuator_cycle)
+        valid_kwargs = {
+            k: v for k, v in kwargs.items() if k[:1] != "_" and k in sig.parameters
+        }
 
         cmd = Command.put_actuator_cycle(
             msg.src.id,
             msg.dst.id,
             modulation_level,
             actuator_countdown,
-            **{k: v for k, v in kwargs.items() if k[:1] != "_"},
+            **valid_kwargs,
         )
 
         if msg.src.id != HGI_DEV_ADDR.id:

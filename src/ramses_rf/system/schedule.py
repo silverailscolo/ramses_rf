@@ -23,10 +23,10 @@ from ramses_rf.const import (
     SZ_TOTAL_FRAGS,
     SZ_ZONE_IDX,
 )
+from ramses_rf.messages import Message
 from ramses_tx.command import Command
 from ramses_tx.const import SZ_CHANGE_COUNTER, Priority
 from ramses_tx.exceptions import ProtocolSendFailed
-from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -320,7 +320,7 @@ class Schedule:  # 0404
             pkt: Packet = await self._gwy.async_send_cmd(
                 cmd, wait_for_reply=True, priority=Priority.HIGH
             )
-            msg = Message(pkt)
+            msg = Message._from_pkt(pkt)
             assert isinstance(msg.payload, dict)  # mypy check
             return msg.payload  # may: TimeoutError?
 

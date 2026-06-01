@@ -14,12 +14,12 @@ import pytest
 import voluptuous as vol
 
 from ramses_rf import Gateway
+from ramses_rf.config import SCH_GLOBAL_TRAITS_DICT
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import shrink
-from ramses_rf.message_store import MessageStore
 from ramses_rf.schemas import SCH_GLOBAL_CONFIG, SCH_GLOBAL_SCHEMAS
+from ramses_rf.state import MessageStore
 from ramses_tx.config import EngineConfig
-from ramses_tx.schemas import SCH_GLOBAL_TRAITS_DICT
 
 SCH_GLOBAL_TRAITS = vol.Schema(SCH_GLOBAL_TRAITS_DICT, extra=vol.PREVENT_EXTRA)
 

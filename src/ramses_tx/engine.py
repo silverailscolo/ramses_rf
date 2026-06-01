@@ -12,7 +12,6 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, Never
 
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
-from .application_message import ApplicationMessage
 from .command import Command
 from .const import (
     DEFAULT_DISABLE_QOS,
@@ -25,7 +24,7 @@ from .const import (
     Code,
     Priority,
 )
-from .message import Message
+from .dtos import PacketDTO
 from .packet import Packet
 from .protocol import protocol_factory
 from .schemas import (
@@ -42,7 +41,7 @@ if TYPE_CHECKING:
     from .const import VerbT
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
-    from .typing import DeviceIdT, DeviceListT, MsgHandlerT, PayloadT
+    from .typing import DeviceIdT, MsgHandlerT, PayloadT
 
 
 DEV_MODE = False
@@ -91,8 +90,8 @@ class Engine:
         )
         self._loop = loop or asyncio.get_running_loop()
 
-        self._exclude: DeviceListT = self.config.block_list or {}
-        self._include: DeviceListT = self.config.known_list or {}
+        self._exclude: list[str] = self.config.block_list or []
+        self._include: list[str] = self.config.known_list or []
         self._unwanted: list[DeviceIdT] = [
             NON_DEV_ADDR.id,
             ALL_DEV_ADDR.id,
@@ -123,18 +122,13 @@ class Engine:
         ) = None
 
         self._protocol: RamsesProtocolT = None  # type: ignore[assignment]
-        self._transport: RamsesTransportT | None = None  # None until start()
-
-        self._prev_msg: ApplicationMessage | None = None
-        self._this_msg: ApplicationMessage | None = None
-
-        self._history_lock = threading.Lock()
+        self._transport: RamsesTransportT | None = None
 
         # Thread-safe lock for task registry modifications
         self._tasks_lock = threading.Lock()
         self._tasks: list[asyncio.Task[Any]] = []
 
-        self._set_msg_handler(self._msg_handler)  # sets self._protocol
+        self._set_msg_handler(self._msg_handler)
 
     def __str__(self) -> str:
         if self._hgi_id:
@@ -148,31 +142,12 @@ class Engine:
         )
         return f"{device_id} ({self.ser_name})"
 
-    def update_message_history(self, msg: ApplicationMessage) -> None:
-        """Update the message history in a thread-safe manner.
-
-        :param msg: The application message to add to the history.
-        :type msg: ApplicationMessage
-        """
-        with self._history_lock:
-            self._prev_msg = self._this_msg
-            self._this_msg = msg
-
-    def clear_message_history(self) -> None:
-        """Clear the message history in a thread-safe manner."""
-        with self._history_lock:
-            self._prev_msg = None
-            self._this_msg = None
-
     def _dt_now(self) -> dt:
         timesource: Callable[[], dt] = getattr(self._transport, "_dt_now", dt.now)
         return timesource()
 
     def _set_msg_handler(self, msg_handler: MsgHandlerT) -> None:
-        """Create an appropriate protocol for the packet source (transport).
-
-        The corresponding transport will be created later.
-        """
+        """Create an appropriate protocol for the packet source."""
         self._protocol = protocol_factory(
             msg_handler,
             disable_sending=self._disable_sending,
@@ -180,6 +155,7 @@ class Engine:
             enforce_include_list=self._enforce_known_list,
             exclude_list=self._exclude,
             include_list=self._include,
+            hgi_id=self._hgi_id,
         )
 
     def add_msg_handler(
@@ -187,14 +163,9 @@ class Engine:
         msg_handler: MsgHandlerT,
         /,
         *,
-        msg_filter: Callable[[Message], bool] | None = None,
+        msg_filter: Callable[[PacketDTO], bool] | None = None,
     ) -> Callable[[], None]:
-        """Add a Message handler to the underlying Protocol.
-
-        The optional filter will return True if the message is to be handled.
-        Returns a callable that can be used to subsequently remove the
-        handler.
-        """
+        """Add a Message handler to the underlying Protocol."""
         return self._protocol.add_handler(msg_handler, msg_filter=msg_filter)
 
     async def start(self) -> None:
@@ -202,12 +173,12 @@ class Engine:
 
         Initiate receiving (Messages) and sending (Commands).
         """
-        pkt_source: dict[str, Any] = {}  # [str, dict | str | TextIO]
+        pkt_source: dict[str, Any] = {}
         if self.ser_name:
             pkt_source[SZ_PORT_NAME] = self.ser_name
             pkt_source[SZ_PORT_CONFIG] = self._port_config
-        else:  # if self._input_file:
-            pkt_source[SZ_PACKET_LOG] = self._input_file  # filename as string
+        else:
+            pkt_source[SZ_PACKET_LOG] = self._input_file
 
         transport_config = TransportConfig(
             disable_sending=bool(self._disable_sending),
@@ -221,7 +192,6 @@ class Engine:
         if self._hgi_id:
             extra_info[SZ_ACTIVE_HGI] = self._hgi_id
 
-        # incl. await protocol.wait_for_connection_made(timeout=5)
         self._transport = await transport_factory(
             self._protocol,
             config=transport_config,
@@ -240,6 +210,8 @@ class Engine:
 
     async def stop(self) -> None:
         """Close the transport (will stop the protocol)."""
+        self._disable_sending = True
+
         # Shutdown Safety - securely lock the task registry to clean up
         with self._tasks_lock:
             tasks = [t for t in self._tasks if not t.done()]
@@ -266,12 +238,8 @@ class Engine:
 
         return None
 
-    async def _drop_msg(self, msg: Message) -> None:
-        """Discard messages silently while paused.
-
-        Acts as a safety drain for any in-flight packets that arrive between
-        the pause command and the transport fully halting.
-        """
+    async def _drop_msg(self, msg: PacketDTO) -> None:
+        """Discard messages silently while paused."""
         _LOGGER.debug("Message dropped while engine paused: %s", msg)
 
     async def _pause(self, *args: Any) -> None:
@@ -296,8 +264,6 @@ class Engine:
             if pause_reading:
                 self._loop.call_soon(pause_reading)
 
-        # Implement No-Op pattern instead of None to prevent 'NoneType
-        # callable' crashes
         self._protocol._msg_handler, handler = (
             self._drop_msg,
             self._protocol._msg_handler,
@@ -377,24 +343,12 @@ class Engine:
         timeout: float = DEFAULT_SEND_TIMEOUT,
         wait_for_reply: bool | None = DEFAULT_WAIT_FOR_REPLY,
     ) -> Packet:
-        """Send a Command and return the corresponding Packet.
-
-        If wait_for_reply is True (*and* the Command has a rx_header),
-        return the reply Packet. Otherwise, simply return the echo Packet.
-
-        If the expected Packet can't be returned, raise:
-            ProtocolSendFailed: tried to Tx Command, but didn't get echo/reply
-            ProtocolError:      didn't attempt to Tx Command for some reason
-        """
+        """Send a Command and return the corresponding Packet."""
         qos = QosParams(
             max_retries=max_retries,
             timeout=timeout,
             wait_for_reply=wait_for_reply,
         )
-
-        # adjust priority, WFR here?
-        # if cmd.code in (Code._0005, Code._000C) and qos.wait_for_reply is None:
-        #     qos.wait_for_reply = True
 
         return await self._protocol.send_cmd(
             cmd,
@@ -402,19 +356,13 @@ class Engine:
             num_repeats=num_repeats,
             priority=priority,
             qos=qos,
-        )  # may: raise ProtocolError/ProtocolSendFailed
+        )
 
-    async def _msg_handler(self, msg: Message) -> None:
+    async def _msg_handler(self, msg: PacketDTO) -> None:
         """Process incoming messages from the protocol."""
-        # Promote the transport Message to an ApplicationMessage subclass
-        app_msg = ApplicationMessage.from_message(msg)
-        app_msg.set_gateway(self)
-
-        self.update_message_history(app_msg)
-
-        # Safely pass execution to Gateway's extended handling logic if defined
+        # Safely pass execution to Gateway's extended handling logic
         handler = getattr(self, "_handle_msg", None)
         if handler:
-            res = handler(app_msg)
+            res = handler(msg)
             if asyncio.iscoroutine(res):
                 await res

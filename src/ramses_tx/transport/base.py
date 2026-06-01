@@ -237,12 +237,27 @@ class _FullTransport(_ReadTransport):
         if self._closing is True:
             raise exc.TransportError("Transport is closing or has closed")
 
+        self._log_tx_packet(frame)
         self._track_transmit_rate()
         await self._write_frame(frame)
 
     async def _write_frame(self, frame: str) -> None:
         """Write some data bytes to the underlying transport."""
         raise NotImplementedError("_write_frame() not implemented here")
+
+    def _log_tx_packet(self, frame: str) -> None:
+        """Emit outbound frames to the packet log for symmetry with inbound logs."""
+        frame_clean = frame.strip()
+        if not frame_clean:
+            return
+
+        if not frame_clean[:3].isdigit():
+            frame_clean = f"000 {frame_clean}"
+
+        try:
+            Packet(dt_now(), frame_clean)
+        except Exception as err:  # pragma: no cover - defensive
+            _LOGGER.debug("Failed to log Tx frame: %s", err)
 
 
 _RegexRuleT: TypeAlias = dict[str, str]

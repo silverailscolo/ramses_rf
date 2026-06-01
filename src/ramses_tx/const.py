@@ -1016,3 +1016,13 @@ IndexT = Literal[
     "F0", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "FA", "FB", "FC", "FD", "FE", "FF"
 ]
 # fmt: on
+
+
+LOOKUP_PUZZ = {
+    "10": "engine",  # .    # version str, e.g. v0.14.0
+    "11": "impersonating",  # pkt header, e.g. 30C9| I|03:123001 (15 characters, packed)
+    "12": "message",  # .   # message only, max len is 16 ascii characters
+    "13": "message",  # .   # message only, but without a timestamp, max len 22 chars
+    "20": "engine",  # .    # version str, e.g. v0.50.0, has higher-precision timestamp
+    "7F": "null",  # .      # packet is null / was nullified: payload to be ignored
+}  # "00" is reserved

@@ -16,7 +16,8 @@ from ramses_tx.transport.helpers import _str
 from tests_rf.virtual_rf import VirtualRf
 
 # other constants
-ASSERT_CYCLE_TIME = 0.0005  # max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TIME
+# max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TIME
+ASSERT_CYCLE_TIME = 0.0005
 DEFAULT_MAX_SLEEP = 0.1
 
 
@@ -54,7 +55,7 @@ TESTS_INBOUND = {  # sent by other, received
 }
 
 
-# ### FIXTURES #########################################################################
+# ### FIXTURES ##########################################################
 
 
 @pytest.fixture(autouse=True)
@@ -72,22 +73,17 @@ async def assert_this_pkt(
     """Check, at the gateway layer, that the current packet is as expected."""
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)
-        if (
-            gwy._engine._this_msg
-            and gwy._engine._this_msg._pkt._frame == expected._frame
-        ):
+        if gwy._this_msg and gwy._this_msg._pkt._frame == expected._frame:
             break
-    assert (
-        gwy._engine._this_msg and gwy._engine._this_msg._pkt._frame == expected._frame
-    )
+    assert gwy._this_msg and gwy._this_msg._pkt._frame == expected._frame
 
 
-# ### TESTS ############################################################################
+# ### TESTS #############################################################
 
 
 @pytest.mark.xdist_group(name="virt_serial")
 async def test_regex_inbound_() -> None:
-    """Check the inbound filters work as expected (this test works without QoS)."""
+    """Check the inbound filters work as expected (works without QoS)."""
 
     rf = VirtualRf(2)
 
@@ -145,9 +141,8 @@ async def test_regex_with_qos() -> None:
         await rf.stop()
         pytest.skip("QoS protocol not enabled")
     else:
-        assert (
-            gwy_0._engine._protocol._disable_qos is False
-        )  # needed for successful tests
+        # needed for successful tests
+        assert gwy_0._engine._protocol._disable_qos is False
 
     try:
         await gwy_0.start()
@@ -160,7 +155,8 @@ async def test_regex_with_qos() -> None:
             if cmd.rx_header:  # we won't be getting any replies
                 continue
 
-            pkt_src = await gwy_0.async_send_cmd(cmd)  # , timeout=DEFAULT_WAIT_TIMEOUT)
+            # , timeout=DEFAULT_WAIT_TIMEOUT)
+            pkt_src = await gwy_0.async_send_cmd(cmd)
             assert str(pkt_src) == before
 
             pkt_dst = Packet.from_port(dt.now(), _str(ser_1.read(ser_1.in_waiting)))

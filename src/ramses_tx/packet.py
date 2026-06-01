@@ -7,17 +7,23 @@ Decode/process a packet (packet that was received).
 from __future__ import annotations
 
 import contextlib
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime as dt, timedelta as td
 from typing import Any
 
+from ramses_rf.protocol.opentherm import (
+    PARAMS_DATA_IDS,
+    SCHEMA_DATA_IDS,
+    STATUS_DATA_IDS,
+)
+from ramses_rf.protocol.ramses import CODES_SCHEMA, SZ_LIFESPAN
+
 from .command import Command
 from .const import I_, RP, RQ, W_, Code, VerbT
+from .dtos import PacketDTO
 from .exceptions import PacketInvalid
 from .frame import Frame
 from .logger import getLogger  # overridden logger.getLogger
-from .opentherm import PARAMS_DATA_IDS, SCHEMA_DATA_IDS, STATUS_DATA_IDS
-from .ramses import CODES_SCHEMA, SZ_LIFESPAN
 
 # these trade memory for speed
 _TD_SECS_000 = td(seconds=0)
@@ -30,109 +36,6 @@ _TD_DAYS_001 = td(minutes=60 * 24)
 
 
 PKT_LOGGER = getLogger(f"{__name__}_log", pkt_log=True)
-
-
-@dataclass
-class DeviceAddress:
-    """Represents a split RAMSES-RF device address.
-
-    :param device_type: The 2-digit device type, or None if '--'.
-    :type device_type: int | None
-    :param device_id: The 6-digit device ID, or None if '------'.
-    :type device_id: int | None
-    """
-
-    device_type: int | None
-    device_id: int | None
-
-    @property
-    def is_no_device(self) -> bool:
-        """Checks if the address represents 'no device' (--:------)."""
-        return self.device_type is None and self.device_id is None
-
-    @property
-    def is_null_device(self) -> bool:
-        """Checks if the address represents the 'null device'."""
-        return self.device_type == 63 and self.device_id == 262142
-
-    def __str__(self) -> str:
-        """Reconstructs the address string, preserving leading zeros."""
-        if self.is_no_device:
-            return "--:------"
-
-        # Safe fallback for Mypy type-checking if only one part is None
-        d_type = self.device_type if self.device_type is not None else 0
-        d_id = self.device_id if self.device_id is not None else 0
-
-        return f"{d_type:02d}:{d_id:06d}"
-
-    @classmethod
-    def from_string(cls, addr_str: str) -> DeviceAddress | None:
-        """Parse a standard address string into a DeviceAddress object."""
-        if not addr_str or addr_str == "--:------":
-            return cls(None, None)
-        try:
-            parts = addr_str.split(":")
-            return cls(int(parts[0]), int(parts[1]))
-        except (ValueError, IndexError):
-            return None
-
-
-@dataclass
-class PacketDTO:
-    """The optimized DTO for RAMSES-RF packets.
-
-    :param dtm: Timezone-aware timestamp of the packet capture.
-    :type dtm: dt
-    :param rssi: Signal strength indicator, or None if '---'.
-    :type rssi: int | None
-    :param verb: The strongly-typed packet verb.
-    :type verb: VerbT
-    :param seqn: The sequence number as a string, or None if '---'.
-    :type seqn: str | None
-    :param addr1: Address 1 (Usually Source), split into type and ID.
-    :type addr1: DeviceAddress | None
-    :param addr2: Address 2, split into type and ID.
-    :type addr2: DeviceAddress | None
-    :param addr3: Address 3 (Usually Dest), split into type and ID.
-    :type addr3: DeviceAddress | None
-    :param code: The hex command code as a string (e.g., "30C9").
-    :type code: str
-    :param payload_length: The integer byte length of the payload.
-    :type payload_length: int | None
-    :param raw_payload: The raw hexadecimal payload string.
-    :type raw_payload: str
-    :param parsed_payload: The dictionary/list parsed by the library.
-    :type parsed_payload: dict[str, Any] | list[Any] | None
-    :param is_multipart: True if this packet is part of a larger array.
-    :type is_multipart: bool
-    :param frame: The full raw packet string for exact reconstruction.
-    :type frame: str
-    """
-
-    dtm: dt
-    rssi: int | None
-    verb: VerbT
-    seqn: str | None
-    addr1: DeviceAddress | None
-    addr2: DeviceAddress | None
-    addr3: DeviceAddress | None
-    code: str
-    payload_length: int | None
-    raw_payload: str
-    parsed_payload: dict[str, Any] | list[Any] | None
-    is_multipart: bool
-    frame: str
-
-    @property
-    def generated_comment(self) -> str:
-        """Dynamically regenerates the standard log comment to save memory.
-
-        :return: A formatted comment string (e.g., "1060| I|01:145038").
-        :rtype: str
-        """
-        addr_str = str(self.addr1) if self.addr1 else ""
-        return f"{self.code}|{self.verb.value}|{addr_str}"
 
 
 class Packet(Frame):
@@ -252,70 +155,89 @@ class Packet(Frame):
             dtm = dt.now()
         return cls.from_port(dtm, f"... {cmd._frame}")
 
-    def to_dto(
-        self, parsed_payload: dict[str, Any] | list[Any] | None = None
-    ) -> PacketDTO:
+    def to_dto(self) -> PacketDTO:
         """Serialize the packet to a structured DTO object."""
-        try:
-            verb_val = VerbT(self.verb)
-        except ValueError:
-            verb_val = VerbT.I_
-
         dtm = self.dtm
         if dtm.tzinfo is None:
             dtm = dtm.astimezone()
 
         rssi_str = self.rssi.strip()
-        rssi = int(rssi_str) if rssi_str and rssi_str != "..." else None
+        if not rssi_str or rssi_str == "...":
+            rssi_str = ""
 
         frame = getattr(self, "_frame", "")
         parts = frame.split()
 
-        code = getattr(self, "code", "")
-        seqn = getattr(self, "_seqn", None)
-        raw_payload = ""
-        payload_length = getattr(self, "_len", None)
+        code_str = getattr(self, "code", "")
+        seq_str = ""
+        payload_str = ""
+        length_str = ""
 
-        addr1 = addr2 = addr3 = None
+        addr1_str = ""
+        addr2_str = ""
+        addr3_str = ""
 
         if len(parts) >= 7:
-            code = parts[-3]
-            with contextlib.suppress(ValueError):
-                payload_length = int(parts[-2], 16)
-            raw_payload = parts[-1]
+            code_str = parts[-3]
+            length_str = parts[-2]
+            payload_str = parts[-1]
 
             # The addresses are reliably positioned relative to the end of the frame
-            addr3 = DeviceAddress.from_string(parts[-4])
-            addr2 = DeviceAddress.from_string(parts[-5])
-            addr1 = DeviceAddress.from_string(parts[-6])
+            addr3_str = parts[-4]
+            addr2_str = parts[-5]
+            addr1_str = parts[-6]
 
             if len(parts) >= 8 and parts[1] != "---":
-                seqn = parts[1]
+                seq_str = parts[1]
+
+        # Enforce strict 2-character rule for the verb
+        raw_verb = str(getattr(self, "verb", "")).strip()
+        try:
+            verb_val = VerbT(f"{raw_verb:>2}").value
+        except ValueError:
+            verb_val = " I"
+
+        # Final string formatting guarantee
+        verb_str = f"{verb_val.strip():>2}"
 
         return PacketDTO(
-            dtm=dtm,
-            rssi=rssi,
-            verb=verb_val,
-            seqn=seqn,
-            addr1=addr1,
-            addr2=addr2,
-            addr3=addr3,
-            code=code,
-            payload_length=payload_length,
-            raw_payload=raw_payload,
-            parsed_payload=parsed_payload,
-            is_multipart=getattr(self, "_has_array", False),
-            frame=frame,
+            timestamp=dtm,
+            rssi=rssi_str,
+            verb=verb_str,
+            seq=seq_str,
+            addr1=addr1_str,
+            addr2=addr2_str,
+            addr3=addr3_str,
+            code=code_str,
+            length=length_str,
+            payload=payload_str,
         )
 
     def to_dict(
         self, parsed_payload: dict[str, Any] | list[Any] | None = None
     ) -> dict[str, Any]:
         """Serialize the packet to a structured dictionary."""
-        dto = self.to_dto(parsed_payload=parsed_payload)
-        data = asdict(dto)
-        data["dtm"] = data["dtm"].isoformat(timespec="microseconds")
-        data["verb"] = dto.verb.value
+        dto = self.to_dto()
+        data: dict[str, Any] = asdict(dto)
+
+        ts: dt = data["timestamp"]
+        data["dtm"] = ts.isoformat(timespec="microseconds")
+        del data["timestamp"]
+
+        # SHIM: Legacy upstream dependency expects RSSI as an int or None
+        rssi_val = data.get("rssi")
+        if not rssi_val or rssi_val in ("...", "---"):
+            data["rssi"] = None
+        else:
+            with contextlib.suppress(ValueError):
+                data["rssi"] = int(rssi_val)
+
+        # SHIM: Legacy upstream state-restoration expects the raw frame string
+        data["frame"] = getattr(self, "_frame", "")
+
+        if parsed_payload is not None:
+            data["parsed_payload"] = parsed_payload
+
         return data
 
     @classmethod

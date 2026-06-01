@@ -9,7 +9,6 @@ from ramses_rf import Address, Command, Message, Packet
 from ramses_rf.system.faultlog import FaultLog, FaultLogEntry
 from ramses_tx.address import HGI_DEVICE_ID
 from ramses_tx.const import SZ_LOG_ENTRY, FaultDeviceClass, FaultState, FaultType
-from ramses_tx.typing import DeviceIdT, LogIdxT
 
 from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -18,6 +17,7 @@ from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     W_,
     Code,
 )
+from ramses_tx.typing import DeviceIdT, LogIdxT
 
 from .helpers import TEST_DIR
 
@@ -119,7 +119,8 @@ def _proc_log_line(log_line: str) -> None:
     except ValueError:
         return
 
-    msg = Message(pkt)
+    # Utilize the correct shim to cast directly to PacketDTO
+    msg = Message._from_pkt(pkt)
     if msg.code != Code._0418 or not msg.payload.get(SZ_LOG_ENTRY):
         return
 
@@ -130,9 +131,12 @@ def _proc_log_line(log_line: str) -> None:
 def _proc_null_fault_entry(fault_log: FaultLog, _log_idx: LogIdxT = "00") -> None:
     """Return a 0418 packet with no entry."""
     cmd = Command.from_attrs(
-        I_, CTL_ID, Code._0418, f"0000{_log_idx}B0000000000000000000007FFFFF7000000000"
+        I_,
+        CTL_ID,
+        Code._0418,
+        f"0000{_log_idx}B0000000000000000000007FFFFF7000000000",
     )
-    fault_log.handle_msg(Message(Packet._from_cmd(cmd)))
+    fault_log.handle_msg(Message._from_cmd(cmd))
 
 
 def _proc_test_fault_entry(
@@ -150,7 +154,7 @@ def _proc_test_fault_entry(
         _log_idx=_log_idx,
         timestamp=entry.timestamp,
     )
-    fault_log.handle_msg(Message(Packet._from_cmd(cmd)))
+    fault_log.handle_msg(Message._from_cmd(cmd))
 
 
 # ### TESTS ###########################################################################
@@ -247,7 +251,8 @@ def test_faultlog_instantiation_3() -> None:
     # the missing entry arrives, only after a new entry
     _proc_test_fault_entry(fault_log, "02")  # pushes others down
     _proc_test_fault_entry(fault_log, "01")  # pushes others down
-    _proc_test_fault_entry(fault_log, "04", _log_idx="03")  # _log_idx was 01, above
+    # _log_idx was 01, above
+    _proc_test_fault_entry(fault_log, "04", _log_idx="03")
 
     assert fault_log._map == {
         0: "21-12-23T00:58:01",
@@ -311,7 +316,8 @@ def test_faultlog_instantiation_4() -> None:
         5: "21-12-23T00:54:05",
     }
 
-    _proc_test_fault_entry(fault_log, "04", _log_idx="04")  # _log_idx was 01, above
+    # _log_idx was 01, above
+    _proc_test_fault_entry(fault_log, "04", _log_idx="04")
 
     assert fault_log._map == {
         1: "21-12-23T00:58:01",

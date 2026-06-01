@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 from functools import partial
+from typing import Protocol, cast
 
 from serial import SerialException, serial_for_url
 
@@ -17,13 +18,34 @@ from .typing import SerPortNameT
 
 _LOGGER = logging.getLogger(__name__)
 
+
+# NOTE: The upstream pyserial stubs expose different concrete types per
+# platform (Windows/Posix/Linux).  We consolidate the common attributes we
+# rely on inside a tiny Protocol so that mypy sees one consistent shape whatever
+# the host OS is, and (importantly) so that our comports() wrapper can keep a
+# single signature across the conditional branches below.
+class _PortInfo(Protocol):
+    device: str
+    product: str | None
+    vid: int | None
+    name: str
+
+
 __all__ = ["comports", "is_hgi80"]
 
 # OS-Specific imports and overrides
 if os.name == "nt":
-    from serial.tools.list_ports_windows import (  # type: ignore[attr-defined]
-        comports as comports,
-    )
+    from serial.tools.list_ports_windows import comports as _win_comports
+
+    def comports(
+        include_links: bool = False,
+        _hide_subsystems: list[str] | None = None,
+    ) -> list[_PortInfo]:
+        # Windows ignores the Linux-only keyword arguments, but keeping them in
+        # the signature keeps type-checkers happy because all branches now look
+        # identical.
+        del include_links, _hide_subsystems
+        return cast(list[_PortInfo], _win_comports())
 
 elif os.name != "posix":
     raise ImportError(
@@ -31,7 +53,17 @@ elif os.name != "posix":
     )
 
 elif sys.platform.lower()[:5] != "linux":
-    from serial.tools.list_ports_posix import comports as comports
+    from serial.tools.list_ports_posix import comports as _posix_comports
+
+    def comports(
+        include_links: bool = False,
+        _hide_subsystems: list[str] | None = None,
+    ) -> list[_PortInfo]:
+        # Same reasoning as the Windows branch: pyserial does not take these
+        # kwargs on macOS/Unix, but exposing them suppresses "definition differs"
+        # errors when mypy analyses this file on other platforms.
+        del include_links, _hide_subsystems
+        return cast(list[_PortInfo], _posix_comports())
 
 else:
     from serial.tools.list_ports_linux import SysFS
@@ -47,7 +79,7 @@ else:
     def comports(
         include_links: bool = False,
         _hide_subsystems: list[str] | None = None,
-    ) -> list[SysFS]:
+    ) -> list[_PortInfo]:
         """Return a list of Serial objects for all known serial ports."""
         if _hide_subsystems is None:
             _hide_subsystems = ["platform"]
@@ -63,10 +95,13 @@ else:
         if include_links:
             devices.update(list_links(devices))
 
+        # map(SysFS, ...) yields SysFS objects lazily; the cast at the end tells
+        # the type-checker that every branch of comports() ultimately returns
+        # something satisfying _PortInfo.
         result: list[SysFS] = [
             d for d in map(SysFS, devices) if d.subsystem not in _hide_subsystems
         ]
-        return result
+        return cast(list[_PortInfo], result)
 
 
 async def is_hgi80(serial_port: SerPortNameT) -> bool | None:

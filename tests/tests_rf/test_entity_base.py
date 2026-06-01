@@ -8,11 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf.const import I_, RP
-from ramses_rf.entity_base import Entity, _Entity
-from ramses_rf.entity_state import StateCache
+from ramses_rf.entity import Entity, _Entity
 from ramses_rf.gateway import Gateway
-from ramses_rf.message_store import MessageStore
-from ramses_tx import Code, DeviceIdT, Message, Packet
+from ramses_rf.messages import Message
+from ramses_rf.routing import RoutingContext, StateHeader
+from ramses_rf.state import MessageStore, StateCache
+from ramses_tx import Code, DeviceIdT, Packet
 
 
 @pytest.fixture
@@ -88,11 +89,11 @@ class Test_entity_base:
         # start tests
         assert dev.id == "04:189078"
 
-        # create _msgs
+        # create _msgs using internal Enums instead of strings
         assert await dev.entity_state.get_message_log_flat() == {
-            "12B0": self.msg7,
-            "3150": self.msg5,
-            "3220": self.msg6,
+            Code._12B0: self.msg7,
+            Code._3150: self.msg5,
+            Code._3220: self.msg6,
         }, "base message_log_flat wrong"
 
         # find our Codes
@@ -113,11 +114,20 @@ class Test_entity_base:
             ]
         ), "_msg_list wrong"
 
-        # create _msgz
+        # create _msgz - use StateHeader objects for lookups
         cache = await dev.entity_state._build_state_cache()
-        assert cache.get_message(Code._12B0, I_, "01") == self.msg7
-        assert cache.get_message(Code._3150, I_, "01") == self.msg5
-        assert cache.get_message(Code._3220, RP, "11") == self.msg6
+        assert (
+            cache.get_message(StateHeader.create(Code._12B0, I_, "04:189078", "01"))
+            == self.msg7
+        )
+        assert (
+            cache.get_message(StateHeader.create(Code._3150, I_, "04:189078", "01"))
+            == self.msg5
+        )
+        assert (
+            cache.get_message(StateHeader.create(Code._3220, RP, "01:145038", "11"))
+            == self.msg6
+        )
         assert len(cache.get_all()) == 3, "base state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
@@ -139,8 +149,8 @@ class Test_entity_base:
 
         # create _msgs
         assert await dev.entity_state.get_message_log_flat() == {
-            "12B0": self.msg7,
-            "3150": self.msg5,
+            Code._12B0: self.msg7,
+            Code._3150: self.msg5,
         }, "zone message_log_flat wrong"
 
         # find our Codes
@@ -161,8 +171,14 @@ class Test_entity_base:
 
         # create _msgz
         cache = await dev.entity_state._build_state_cache()
-        assert cache.get_message(Code._12B0, I_, "01") == self.msg7
-        assert cache.get_message(Code._3150, I_, "01") == self.msg5
+        assert (
+            cache.get_message(StateHeader.create(Code._12B0, I_, "04:189078", "01"))
+            == self.msg7
+        )
+        assert (
+            cache.get_message(StateHeader.create(Code._3150, I_, "04:189078", "01"))
+            == self.msg5
+        )
         assert len(cache.get_all()) == 2, "zone state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
@@ -173,6 +189,7 @@ class Test_entity_base:
             "045  I --- 01:145038 --:------ 01:145038 3150 002 FC90",  # heat_demand
         )
     )
+
     msg9: Message = Message._from_pkt(
         Packet(
             _NOW + td(seconds=80),
@@ -199,8 +216,8 @@ class Test_entity_base:
 
         # create _msgs
         assert await dev.entity_state.get_message_log_flat() == {
-            "1260": self.msg9,
-            "3150": self.msg8,
+            Code._1260: self.msg9,
+            Code._3150: self.msg8,
         }, "dhw message_log_flat wrong"
 
         # find our Codes
@@ -221,8 +238,14 @@ class Test_entity_base:
 
         # create _msgz
         cache = await dev.entity_state._build_state_cache()
-        assert cache.get_message(Code._1260, RP, "00") == self.msg9
-        assert cache.get_message(Code._3150, I_, "FC") == self.msg8
+        assert (
+            cache.get_message(StateHeader.create(Code._1260, RP, "01:145038", "00"))
+            == self.msg9
+        )
+        assert (
+            cache.get_message(StateHeader.create(Code._3150, I_, "01:145038", "FC"))
+            == self.msg8
+        )
         assert len(cache.get_all()) == 2, "dhw state_cache wrong"
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
@@ -294,8 +317,15 @@ async def test_gh_396_sqlite_ot_context_type() -> None:
     mock_msg.dst = MagicMock()
     mock_msg.dst.id = "01:123456"
 
+    # Assign MagicMock property dynamically to avoid class scope bleeding
     mock_msg._pkt = MagicMock()
-    mock_msg._pkt._ctx = 0  # Integer context!
+    mock_msg._pkt._ctx = 0
+    mock_msg._pkt._hdr = "3220|RP|01:123456|0"
+    mock_msg._idx_val = 0
+
+    # NEW: Properly mock the Native L7 domain properties
+    mock_msg.context = RoutingContext(0)
+    mock_msg.state_header = StateHeader.create(Code._3220, RP, "01:123456", 0)
 
     gwy.message_store.log_by_dtm = [mock_msg]
 
@@ -328,12 +358,20 @@ async def test_gh_396_legacy_ot_context() -> None:
     mock_msg = MagicMock(spec=Message)
     mock_msg.code = Code._3220
     mock_msg.verb = RP
+
+    # Assign MagicMock property dynamically to avoid class scope bleeding
     mock_msg._pkt = MagicMock()
     mock_msg._pkt._ctx = "05"
+    mock_msg._pkt._hdr = "3220|RP|01:123456|05"
+    mock_msg._idx_val = "05"
+
+    # NEW: Properly mock the Native L7 domain properties
+    mock_msg.context = RoutingContext("05")
+    mock_msg.state_header = StateHeader.create(Code._3220, RP, "01:123456", "05")
 
     # Construct the mock StateCache
     fake_cache = StateCache()
-    fake_cache.add(Code._3220, RP, "05", mock_msg)
+    fake_cache.add(mock_msg)
 
     # Execute
     with patch.object(

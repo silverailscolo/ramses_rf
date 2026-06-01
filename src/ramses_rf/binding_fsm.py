@@ -14,17 +14,10 @@ from typing import TYPE_CHECKING, Final
 
 import voluptuous as vol
 
-from ramses_tx import (
-    ALL_DEV_ADDR,
-    ALL_DEVICE_ID,
-    Command,
-    DevType,
-    Message,
-    Priority,
-    QosParams,
-)
+from ramses_tx import ALL_DEV_ADDR, ALL_DEVICE_ID, Command, DevType, Priority, QosParams
 
 from . import exceptions as exc
+from .messages import Message
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -218,7 +211,8 @@ class BindingManagerBase:
             self._state, (RespHasBoundAsRespondent, SuppHasBoundAsSupplicant)
         ):
             _LOGGER.info(
-                f"{self._dev.id}: Binding process completed: {type(prev_state).__name__} -> {state.__name__} (role: {self.role})"
+                f"{self._dev.id}: Binding process completed: "
+                f"{type(prev_state).__name__} -> {state.__name__} (role: {self.role})"
             )
 
         if _DBG_MAINTAIN_STATE_CHAIN:  # HACK for debugging
@@ -273,7 +267,7 @@ class BindingManagerRespondent(BindingManagerBase):
         *,
         idx: IndexT = "00",
         require_ratify: bool = False,
-    ) -> tuple[Packet, Packet, Packet, Packet | None]:
+    ) -> tuple[Message, Packet, Message, Message | None]:
         """Device starts binding as a Respondent, by listening for an Offer.
 
         Returns the Supplicant's Offer or raises an exception if the binding is
@@ -282,7 +276,7 @@ class BindingManagerRespondent(BindingManagerBase):
         :param accept_codes: An iterable of codes this device accepts.
         :param idx: The index to bind to, defaults to '00'.
         :param require_ratify: If True, require an addenda stage.
-        :return: A tuple containing the (tender, accept, affirm, ratify) packets.
+        :return: A tuple containing the (tender, accept, affirm, ratify) objects.
         :raises exc.BindingFsmError: If already binding.
         """
 
@@ -307,7 +301,7 @@ class BindingManagerRespondent(BindingManagerBase):
             ratify = None
 
         # self._set_as_bound(tender, accept, affirm, ratify)
-        return tender._pkt, accept, affirm._pkt, (ratify._pkt if ratify else None)
+        return tender, accept, affirm, ratify
 
     async def _wait_for_offer(self, timeout: float = _TENDER_WAIT_TIME) -> Message:
         """Resp waits timeout seconds for an Offer to arrive & returns it.
@@ -378,7 +372,7 @@ class BindingManagerSupplicant(BindingManagerBase):
         *,
         confirm_code: Code | None = None,
         ratify_cmd: Command | None = None,
-    ) -> tuple[Packet, Packet, Packet, Packet | None]:
+    ) -> tuple[Packet, Message, Packet, Packet | None]:
         """Device starts binding as a Supplicant, by sending an Offer.
 
         Returns the Respondent's Accept, or raises an exception if the binding is
@@ -387,7 +381,7 @@ class BindingManagerSupplicant(BindingManagerBase):
         :param offer_codes: An iterable of codes to offer.
         :param confirm_code: An optional confirm code override.
         :param ratify_cmd: An optional ratification command to finalize binding.
-        :return: A tuple containing the (tender, accept, affirm, ratify) packets.
+        :return: A tuple containing the (tender, accept, affirm, ratify) objects.
         :raises exc.BindingFsmError: If already binding.
         """
 
@@ -414,7 +408,7 @@ class BindingManagerSupplicant(BindingManagerBase):
             ratify = None
 
         # self._set_as_bound(tender, accept, affirm, ratify)
-        return tender, accept._pkt, affirm, ratify
+        return tender, accept, affirm, ratify
 
     async def _make_offer(
         self,
@@ -609,10 +603,10 @@ class BindStateBase:
         raise NotImplementedError
 
     @staticmethod
-    def is_phase(cmd: Command | Packet, phase: BindPhase) -> bool:
-        """Evaluate if the given command or packet corresponds to the specified binding phase.
+    def is_phase(cmd: Command | Message, phase: BindPhase) -> bool:
+        """Evaluate if the given command or message corresponds to the specified binding phase.
 
-        :param cmd: The command or packet object.
+        :param cmd: The command or message object.
         :param phase: The binding phase to test against.
         :return: True if the command is aligned with the phase, False otherwise.
         """
@@ -696,7 +690,7 @@ class _DevIsWaitingForMsg(BindStateBase):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the waited-for pkt, transition to the next state."""
-        if not self._fut.done() and self.is_phase(msg._pkt, self._expected_pkt_phase):
+        if not self._fut.done() and self.is_phase(msg, self._expected_pkt_phase):
             self._fut.set_result(msg)
 
 
@@ -747,7 +741,7 @@ class _DevIsReadyToSendCmd(BindStateBase):
         if self._fut.done():
             return
         if (self._cmd and msg._pkt == self._cmd) or (
-            self.is_phase(msg._pkt, self._expected_cmd_phase)
+            self.is_phase(msg, self._expected_cmd_phase)
             and msg.src.id == self._context._dev.id
         ):
             self._fut.set_result(msg)
@@ -762,7 +756,7 @@ class _DevSendCmdUntilReply(_DevIsWaitingForMsg, _DevIsReadyToSendCmd):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the expected reply, transition to the next state."""
-        if not self._fut.done() and self.is_phase(msg._pkt, self._expected_pkt_phase):
+        if not self._fut.done() and self.is_phase(msg, self._expected_pkt_phase):
             self._fut.set_result(msg)
 
 

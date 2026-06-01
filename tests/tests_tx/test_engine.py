@@ -2,32 +2,45 @@
 
 import asyncio
 import logging
+from dataclasses import replace
 from datetime import datetime as dt, timedelta as td
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ramses_rf.gateway import Gateway
+from ramses_rf.messages import ApplicationMessage
 from ramses_tx.address import HGI_DEV_ADDR
-from ramses_tx.application_message import ApplicationMessage
 from ramses_tx.command import Command
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import Code, Priority
+from ramses_tx.dtos import PacketDTO
 from ramses_tx.engine import Engine
-from ramses_tx.message import Message
-from ramses_tx.packet import Packet
 
 
 @pytest.fixture
-def mock_packet() -> Packet:
-    # Create a fresh mock packet for tests
-    return Packet(dt.now(), "045 RQ --- 18:006402 13:049798 --:------ 1FC9 001 00")
+def mock_dto() -> PacketDTO:
+    # Create a fresh mock packet DTO for tests
+    return PacketDTO(
+        timestamp=dt.now(),
+        rssi="045",
+        verb="RQ",
+        seq="---",
+        addr1="18:006402",
+        addr2="13:049798",
+        addr3="--:------",
+        code="1FC9",
+        length="001",
+        payload="00",
+    )
 
 
 @pytest.fixture
 async def dummy_engine() -> Engine:
     # Create an async dummy engine instance configured to disable sending.
-    # Being an async fixture ensures it binds to the current test's event loop.
+    # Being an async fixture ensures it binds to the current test's event
+    # loop.
     return Engine(
         config=EngineConfig(port_name="/dev/null", disable_sending=True),
     )
@@ -86,25 +99,26 @@ async def test_engine_dt_now(dummy_engine: Engine) -> None:
 
 @pytest.mark.asyncio
 async def test_engine_message_history_encapsulation(
-    dummy_engine: Engine, mock_packet: Packet
+    mock_dto: PacketDTO,
 ) -> None:
-    # Verify the thread-safe message history updates correctly
-    msg1 = ApplicationMessage(mock_packet)
-    msg2 = ApplicationMessage(mock_packet)
+    # Verify the thread-safe message history updates correctly on Gateway
+    gwy = Gateway(port_name="/dev/null")
+    msg1 = ApplicationMessage(mock_dto)
+    msg2 = ApplicationMessage(mock_dto)
 
-    dummy_engine.update_message_history(msg1)
-    assert dummy_engine._this_msg is msg1
-    assert dummy_engine._prev_msg is None
+    gwy.update_message_history(msg1)
+    assert gwy._this_msg is msg1
+    assert gwy._prev_msg is None
 
-    dummy_engine.update_message_history(msg2)
-    assert dummy_engine._this_msg is msg2
+    gwy.update_message_history(msg2)
+    assert gwy._this_msg is msg2
 
     # Use cast to bypass Mypy's strict sequential attribute narrowing
-    assert cast(Any, dummy_engine._prev_msg) is msg1
+    assert cast(Any, gwy._prev_msg) is msg1
 
-    dummy_engine.clear_message_history()
-    assert cast(Any, dummy_engine._this_msg) is None
-    assert cast(Any, dummy_engine._prev_msg) is None
+    gwy.clear_message_history()
+    assert cast(Any, gwy._this_msg) is None
+    assert cast(Any, gwy._prev_msg) is None
 
 
 @pytest.mark.asyncio
@@ -126,7 +140,8 @@ async def test_engine_start_serial(
 @pytest.mark.asyncio
 @patch("ramses_tx.engine.transport_factory", new_callable=AsyncMock)
 async def test_engine_start_file(mock_factory: AsyncMock) -> None:
-    # Starting via file forces wait_for_connection_lost up to 86400 seconds
+    # Starting via file forces wait_for_connection_lost up to 86400
+    # seconds
     engine = Engine(
         config=EngineConfig(port_name=None, input_file="test.log"),
     )
@@ -232,9 +247,19 @@ async def test_engine_drop_msg(
     caplog: pytest.LogCaptureFixture, dummy_engine: Engine
 ) -> None:
     # The drop handler safely drops messages and logs them
-    msg = ApplicationMessage(
-        Packet(dt.now(), "045 RQ --- 18:006402 13:049798 --:------ 1FC9 001 00")
+    dto = PacketDTO(
+        timestamp=dt.now(),
+        rssi="045",
+        verb="RQ",
+        seq="---",
+        addr1="18:006402",
+        addr2="13:049798",
+        addr3="--:------",
+        code="1FC9",
+        length="001",
+        payload="00",
     )
+    msg = ApplicationMessage(dto)
     with caplog.at_level(logging.DEBUG):
         await dummy_engine._drop_msg(msg)
 
@@ -262,40 +287,34 @@ async def test_engine_async_send_cmd(dummy_engine: Engine) -> None:
 
 
 @pytest.mark.asyncio
-async def test_engine_msg_handler(dummy_engine: Engine, mock_packet: Packet) -> None:
-    # Validates promotion and custom handle routing in Msg handler
-    msg = Message(mock_packet)
-
+async def test_engine_msg_handler(dummy_engine: Engine, mock_dto: PacketDTO) -> None:
+    # Validates that engine routes the DTO to the registered handler
     mock_handler = AsyncMock()
     dummy_engine._handle_msg = mock_handler
 
-    await dummy_engine._msg_handler(msg)
+    await dummy_engine._msg_handler(mock_dto)
 
-    assert dummy_engine._this_msg is not None
-    assert isinstance(dummy_engine._this_msg, ApplicationMessage)
-    assert dummy_engine._this_msg._engine is dummy_engine
-    mock_handler.assert_awaited_once_with(dummy_engine._this_msg)
+    mock_handler.assert_awaited_once_with(mock_dto)
 
 
-def test_application_message_bind_context(mock_packet: Packet) -> None:
+def test_application_message_bind_context(mock_dto: PacketDTO) -> None:
     # Bind context successfully sets arbitrary properties
-    app_msg = ApplicationMessage(mock_packet)
+    app_msg = ApplicationMessage(mock_dto)
     mock_gwy = object()
     app_msg.bind_context(mock_gwy)
     assert app_msg._gwy is mock_gwy
 
 
-def test_application_message_expired_1f09_logic(mock_packet: Packet) -> None:
+def test_application_message_expired_1f09_logic(mock_dto: PacketDTO) -> None:
     # Payload specific expiration correctly resolves via remaining_seconds
-    mock_packet.verb = "RP"
-    mock_packet.code = Code._1F09
+    modified_dto = replace(mock_dto, verb="RP", code=str(Code._1F09))
 
-    app_msg = ApplicationMessage(mock_packet)
+    app_msg = ApplicationMessage(modified_dto)
     app_msg._payload = {"remaining_seconds": 2}
 
     # Needs Mock Engine to simulate immediate dt_now vs elapsed time
     app_msg.set_gateway(MagicMock())
-    app_msg._engine._dt_now = lambda: mock_packet.dtm + td(seconds=5)
+    app_msg._engine._dt_now = lambda: modified_dto.timestamp + td(seconds=5)
 
     # Lifespan fraction (5 - 3) / 2 = 1.0 (Less than HAS_EXPIRED: 2.0)
     assert app_msg._expired is False
@@ -303,49 +322,51 @@ def test_application_message_expired_1f09_logic(mock_packet: Packet) -> None:
 
 
 def test_application_message_expired_lifespan_false(
-    mock_packet: Packet,
+    mock_dto: PacketDTO,
 ) -> None:
-    # Packets specifically stating False for lifespan evaluate identically to
-    # CANT_EXPIRE
-    mock_packet._lifespan = False
-    app_msg = ApplicationMessage(mock_packet)
+    # Packets specifically stating False for lifespan evaluate identically
+    # to CANT_EXPIRE
+    app_msg = ApplicationMessage(mock_dto)
     app_msg.set_gateway(MagicMock())
-    app_msg._engine._dt_now = lambda: mock_packet.dtm
+    app_msg._engine._dt_now = lambda: mock_dto.timestamp
 
-    assert app_msg._expired is False
-    assert app_msg._fraction_expired == ApplicationMessage.CANT_EXPIRE
+    with patch.object(app_msg, "_get_lifespan", return_value=False):
+        assert app_msg._expired is False
+        assert app_msg._fraction_expired == ApplicationMessage.CANT_EXPIRE
 
 
 def test_application_message_expired_lifespan_true_raises(
-    mock_packet: Packet,
+    mock_dto: PacketDTO,
 ) -> None:
     # Packets stating True for lifespan are not implemented yet
-    mock_packet._lifespan = True
-    app_msg = ApplicationMessage(mock_packet)
+    app_msg = ApplicationMessage(mock_dto)
     app_msg.set_gateway(MagicMock())
-    app_msg._engine._dt_now = lambda: mock_packet.dtm
+    app_msg._engine._dt_now = lambda: mock_dto.timestamp
 
-    with pytest.raises(NotImplementedError, match="Lifespan True not implemented"):
+    with (
+        patch.object(app_msg, "_get_lifespan", return_value=True),
+        pytest.raises(NotImplementedError, match="Lifespan True not implemented"),
+    ):
         _ = app_msg._expired
 
 
 def test_application_message_expired_standard_lifespan(
-    mock_packet: Packet,
+    mock_dto: PacketDTO,
 ) -> None:
     # Lifespan durations are resolved based on standard td offsets
-    mock_packet._lifespan = td(seconds=10)
-    app_msg = ApplicationMessage(mock_packet)
+    app_msg = ApplicationMessage(mock_dto)
     app_msg.set_gateway(MagicMock())
-    app_msg._engine._dt_now = lambda: mock_packet.dtm + td(seconds=25)
+    app_msg._engine._dt_now = lambda: mock_dto.timestamp + td(seconds=25)
 
-    # Fraction: (25 - 3) / 10 = 2.2 >= 2.0 (HAS_EXPIRED)
-    assert app_msg._expired is True
-    assert app_msg._fraction_expired == 2.2
+    with patch.object(app_msg, "_get_lifespan", return_value=td(seconds=10)):
+        # Fraction: (25 - 3) / 10 = 2.2 >= 2.0 (HAS_EXPIRED)
+        assert app_msg._expired is True
+        assert app_msg._fraction_expired == 2.2
 
 
-def test_application_message_expired_fast_path(mock_packet: Packet) -> None:
+def test_application_message_expired_fast_path(mock_dto: PacketDTO) -> None:
     # Early returns using pre-calculated fractions bypass dt calculation
-    app_msg = ApplicationMessage(mock_packet)
+    app_msg = ApplicationMessage(mock_dto)
     app_msg._fraction_expired = ApplicationMessage.CANT_EXPIRE
     assert app_msg._expired is False
 

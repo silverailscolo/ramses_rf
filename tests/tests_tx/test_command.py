@@ -201,3 +201,19 @@ async def test_clone_with_source() -> None:
 
     # Enforce strict immutability: the original command MUST NOT have changed
     assert original_cmd.src.id == "18:000730"
+
+
+async def test_rq_missing_target() -> None:
+    """Test parameter checks for RQ missing target."""
+    try:
+        _ = Command._from_attrs(
+            verb="RQ",
+            code="0016",
+            payload="00",
+            addr0="--:------",
+            addr1="--:------",
+        )
+    except CommandInvalid:
+        pass
+    else:
+        assert False

@@ -180,7 +180,12 @@ class CommandBase(Frame):
         addr1 = addr1 or NON_DEV_ADDR.id
         addr2 = addr2 or NON_DEV_ADDR.id
 
-        _, _, *addrs = pkt_addrs(" ".join((addr0, addr1, addr2)))
+        if verb == "RQ" and addr0 == NON_DEV_ADDR.id and addr1 == NON_DEV_ADDR.id:
+            raise exc.CommandInvalid(
+                "Cannot generate RQ command without a valid target address"
+            )
+
+        _, _, *addrs = pkt_addrs(" ".join((str(addr0), str(addr1), str(addr2))))
 
         if seqn is None or seqn in ("", "-", "--", "---"):
             seqn = "---"

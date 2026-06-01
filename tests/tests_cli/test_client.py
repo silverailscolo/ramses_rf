@@ -33,10 +33,10 @@ from ramses_cli.client import (
 from ramses_rf import GracefulExit
 from ramses_rf.const import DEV_TYPE_MAP, I_, Code
 from ramses_rf.gateway import Gateway, GatewayConfig
-from ramses_rf.message_store import MessageStore
+from ramses_rf.messages import Message
 from ramses_rf.schemas import SZ_CONFIG, SZ_DISABLE_DISCOVERY
+from ramses_rf.state import MessageStore
 from ramses_tx import exceptions as exc
-from ramses_tx.message import Message
 from ramses_tx.schemas import SZ_PACKET_LOG, SZ_SERIAL_PORT
 
 STDIN = io.StringIO("053  I --- 01:123456 --:------ 01:123456 3150 002 FC00\r\n")
@@ -512,7 +512,7 @@ async def test_async_main_msg_handler(
     }
 
     # We need to capture the callback passed to add_msg_handler
-    captured_callback: Callable[[Message], Awaitable[None]] | None = None
+    captured_callback: Callable[[Any], Awaitable[None]] | None = None
 
     def capture_cb(cb: Any) -> None:
         nonlocal captured_callback
@@ -522,7 +522,10 @@ async def test_async_main_msg_handler(
 
     with (
         patch("ramses_cli.client.Gateway", return_value=mock_gateway),
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
     ):
         # Run main to trigger registration
         await async_main(PARSE, lib_kwargs, **kwargs)
@@ -536,7 +539,9 @@ async def test_async_main_msg_handler(
         msg1.code = Code._PUZZ
         # Mypy dislikes assigning to method slots on mocks without ignore
         msg1.__repr__ = MagicMock(return_value="PUZZLE_MSG")  # type: ignore[method-assign]
-        await captured_callback(msg1)
+
+        with patch("ramses_cli.client.Message", return_value=msg1):
+            await captured_callback(MagicMock())
         out = capsys.readouterr().out
         assert "PUZZLE_MSG" in out
 
@@ -551,7 +556,8 @@ async def test_async_main_msg_handler(
         msg2.src.type = "01"  # Controller type, definitely not HGI
         msg2.__repr__ = MagicMock(return_value="1F09_MSG")  # type: ignore[method-assign]
 
-        await captured_callback(msg2)
+        with patch("ramses_cli.client.Message", return_value=msg2):
+            await captured_callback(MagicMock())
         out = capsys.readouterr().out
         assert "1F09_MSG" in out
 
@@ -573,7 +579,7 @@ async def test_async_main_long_format(
     }
 
     # Capture the callback
-    captured_callback: Callable[[Message], Awaitable[None]] | None = None
+    captured_callback: Callable[[Any], Awaitable[None]] | None = None
 
     def capture_cb(cb: Any) -> None:
         nonlocal captured_callback
@@ -583,7 +589,10 @@ async def test_async_main_long_format(
 
     with (
         patch("ramses_cli.client.Gateway", return_value=mock_gateway),
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
     ):
         await async_main(PARSE, lib_kwargs, **kwargs)
 
@@ -594,7 +603,8 @@ async def test_async_main_long_format(
         msg.payload = "PAYLOAD"
 
         assert captured_callback is not None
-        await captured_callback(msg)
+        with patch("ramses_cli.client.Message", return_value=msg):
+            await captured_callback(MagicMock())
 
         out = capsys.readouterr().out
         # Verify long format output (timestamp ... repr # payload)

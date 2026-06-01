@@ -26,7 +26,7 @@ from ..const import (
 from ..exceptions import ProtocolError, ProtocolSendFailed, ProtocolTimeoutError
 from ..interfaces import TransportInterface
 from ..packet import Packet
-from ..typing import DeviceListT, MsgHandlerT, QosParams
+from ..typing import MsgHandlerT, QosParams
 from .base import DEFAULT_QOS, _DeviceIdFilterMixin
 from .fsm import ProtocolContext
 
@@ -45,8 +45,9 @@ class ReadProtocol(_DeviceIdFilterMixin):
         /,
         *,
         enforce_include_list: bool = False,
-        exclude_list: DeviceListT | None = None,
-        include_list: DeviceListT | None = None,
+        exclude_list: list[str] | None = None,
+        include_list: list[str] | None = None,
+        hgi_id: str | None = None,
     ) -> None:
         """Initialize the Read-Only protocol.
 
@@ -54,10 +55,12 @@ class ReadProtocol(_DeviceIdFilterMixin):
         :type msg_handler: MsgHandlerT
         :param enforce_include_list: Flag to strictly enforce the include list.
         :type enforce_include_list: bool
-        :param exclude_list: Dictionary of device IDs to block.
-        :type exclude_list: DeviceListT | None
-        :param include_list: Dictionary of device IDs to allow.
-        :type include_list: DeviceListT | None
+        :param exclude_list: List of device IDs to block.
+        :type exclude_list: list[str] | None
+        :param include_list: List of device IDs to allow.
+        :type include_list: list[str] | None
+        :param hgi_id: The active HGI device ID.
+        :type hgi_id: str | None
         """
         super().__init__(
             msg_handler,
@@ -65,6 +68,7 @@ class ReadProtocol(_DeviceIdFilterMixin):
             enforce_include_list=enforce_include_list,
             exclude_list=exclude_list,
             include_list=include_list,
+            hgi_id=hgi_id,
         )
         self._pause_writing = True
 
@@ -106,8 +110,9 @@ class PortProtocol(_DeviceIdFilterMixin):
         *,
         disable_qos: bool | None = DEFAULT_DISABLE_QOS,
         enforce_include_list: bool = False,
-        exclude_list: DeviceListT | None = None,
-        include_list: DeviceListT | None = None,
+        exclude_list: list[str] | None = None,
+        include_list: list[str] | None = None,
+        hgi_id: str | None = None,
     ) -> None:
         """Add a FSM to the Protocol, to provide QoS.
 
@@ -117,10 +122,12 @@ class PortProtocol(_DeviceIdFilterMixin):
         :type disable_qos: bool | None
         :param enforce_include_list: Flag to strictly enforce the include list.
         :type enforce_include_list: bool
-        :param exclude_list: Dictionary of device IDs to block.
-        :type exclude_list: DeviceListT | None
-        :param include_list: Dictionary of device IDs to allow.
-        :type include_list: DeviceListT | None
+        :param exclude_list: List of device IDs to block.
+        :type exclude_list: list[str] | None
+        :param include_list: List of device IDs to allow.
+        :type include_list: list[str] | None
+        :param hgi_id: The active HGI device ID.
+        :type hgi_id: str | None
         """
         super().__init__(
             msg_handler,
@@ -128,6 +135,7 @@ class PortProtocol(_DeviceIdFilterMixin):
             enforce_include_list=enforce_include_list,
             exclude_list=exclude_list,
             include_list=include_list,
+            hgi_id=hgi_id,
         )
         self._context = ProtocolContext(self)
         self._disable_qos = disable_qos

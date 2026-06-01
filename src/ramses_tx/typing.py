@@ -2,7 +2,7 @@
 """RAMSES RF - Typing for RamsesProtocol & RamsesTransport."""
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime as dt, timedelta as td
+from datetime import datetime as dt
 from enum import EnumCheck, StrEnum, verify
 from typing import (
     TYPE_CHECKING,
@@ -28,7 +28,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from .message import Message
+    from .dtos import PacketDTO
     from .packet import Packet
 
 
@@ -45,14 +45,15 @@ PayloadT = NewType("PayloadT", str)
 class DeviceTraitsT(TypedDict):
     alias: str | None
     faked: bool | None
-    class_: str | None  # 'class' is a reserved keyword
+    class_: str | None  # "class" is a reserved keyword
 
 
 DeviceListT: TypeAlias = dict[DeviceIdT, DeviceTraitsT]
 
+
 if TYPE_CHECKING:
-    MsgFilterT = Callable[[Message], bool]
-    MsgHandlerT = Callable[[Message], Awaitable[None]]
+    MsgFilterT = Callable[["PacketDTO"], bool]
+    MsgHandlerT = Callable[["PacketDTO"], Awaitable[None]]
 else:
     MsgFilterT = Callable[[Any], bool]
     MsgHandlerT = Callable[[Any], Awaitable[None]]
@@ -70,7 +71,11 @@ class QosParams:
         wait_for_reply: bool | None = DEFAULT_WAIT_FOR_REPLY,
     ) -> None:
         """Create a QosParams instance."""
-        self._max_retries = DEFAULT_MAX_RETRIES if max_retries is None else max_retries
+        if max_retries is None:
+            self._max_retries = DEFAULT_MAX_RETRIES
+        else:
+            self._max_retries = max_retries
+
         self._timeout = timeout or DEFAULT_SEND_TIMEOUT
         self._wait_for_reply = wait_for_reply
 
@@ -129,14 +134,73 @@ class SendParams:
 # TypedDicts (formerly in typed_dicts.py)
 _HexToTempT: TypeAlias = float | None
 
-# fmt: off
+
 LogIdxT = Literal[
-    '00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '0A', '0B', '0C', '0D', '0E', '0F',
-    '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '1A', '1B', '1C', '1D', '1E', '1F',
-    '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '2A', '2B', '2C', '2D', '2E', '2F',
-    '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '3A', '3B', '3C', '3D', '3E', '3F',
+    "00",
+    "01",
+    "02",
+    "03",
+    "04",
+    "05",
+    "06",
+    "07",
+    "08",
+    "09",
+    "0A",
+    "0B",
+    "0C",
+    "0D",
+    "0E",
+    "0F",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "1A",
+    "1B",
+    "1C",
+    "1D",
+    "1E",
+    "1F",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25",
+    "26",
+    "27",
+    "28",
+    "29",
+    "2A",
+    "2B",
+    "2C",
+    "2D",
+    "2E",
+    "2F",
+    "30",
+    "31",
+    "32",
+    "33",
+    "34",
+    "35",
+    "36",
+    "37",
+    "38",
+    "39",
+    "3A",
+    "3B",
+    "3C",
+    "3D",
+    "3E",
+    "3F",
 ]
-# fmt: on
 
 
 class _FlowRate(TypedDict):
@@ -620,26 +684,3 @@ class PktLogConfigT(TypedDict):
     buffer_capacity: NotRequired[int]
     flush_level: NotRequired[int | str]
     flush_interval: NotRequired[float | int]
-
-
-# CODES_SCHEMA entries
-CodeSchemaEntry = TypedDict(
-    "CodeSchemaEntry",
-    {
-        "name": str,
-        " I": str,  # Regex
-        "RQ": str,  # Regex
-        "RP": str,  # Regex
-        " W": str,  # Regex
-        "lifespan": bool | td | None,
-    },
-    total=False,
-)
-
-
-# For fingerprints.py
-class DeviceFingerprint(TypedDict):
-    slug: str
-    dev_type: str
-    date: str
-    desc: str

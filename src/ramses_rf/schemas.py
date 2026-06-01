@@ -23,36 +23,37 @@ from ramses_tx.const import (
     SZ_ZONE_TYPE,
     SZ_ZONES,
 )
-
-# TODO: deprecate re-exporting (via as) in favour of direct imports
 from ramses_tx.schemas import (  # noqa: F401
-    SCH_DEVICE_ID_ANY,
-    SCH_DEVICE_ID_APP,
-    SCH_DEVICE_ID_BDR,
-    SCH_DEVICE_ID_CTL,
-    SCH_DEVICE_ID_DHW,
-    SCH_DEVICE_ID_HGI,
-    SCH_DEVICE_ID_SEN,
-    SCH_DEVICE_ID_UFC,
     SCH_ENGINE_DICT,
-    SCH_GLOBAL_TRAITS_DICT,
-    SCH_TRAITS as SCH_TRAITS,
-    SZ_ALIAS as SZ_ALIAS,
     SZ_BLOCK_LIST,
-    SZ_BOUND_TO as SZ_BOUND_TO,
-    SZ_CLASS as SZ_CLASS,
     SZ_DISABLE_SENDING,
     SZ_ENFORCE_KNOWN_LIST,
-    SZ_FAKED as SZ_FAKED,
     SZ_KNOWN_LIST as SZ_KNOWN_LIST,
     SZ_PACKET_LOG,
-    SZ_SCHEME as SZ_SCHEME,
     sch_packet_log_dict_factory,
     select_device_filter_mode,
 )
 from ramses_tx.typing import DeviceIdT
 
 from . import exceptions as exc
+
+# Import elevated L7 domain concepts from ramses_rf.config instead of ramses_tx.schemas
+from .config import (
+    SCH_DEVICE_ID_ANY,
+    SCH_DEVICE_ID_APP,
+    SCH_DEVICE_ID_BDR,
+    SCH_DEVICE_ID_CTL,
+    SCH_DEVICE_ID_DHW,
+    SCH_DEVICE_ID_SEN,
+    SCH_DEVICE_ID_UFC,
+    SCH_GLOBAL_TRAITS_DICT,
+    SCH_TRAITS as SCH_TRAITS,
+    SZ_ALIAS as SZ_ALIAS,
+    SZ_BOUND_TO as SZ_BOUND_TO,
+    SZ_CLASS as SZ_CLASS,
+    SZ_FAKED as SZ_FAKED,
+    SZ_SCHEME as SZ_SCHEME,
+)
 
 # TODO: deprecate re-exporting (via as) in favour of direct imports
 from .const import (

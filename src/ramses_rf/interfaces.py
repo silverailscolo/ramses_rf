@@ -1,12 +1,15 @@
 """RAMSES RF - Abstract Base Classes and Interfaces."""
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Protocol
 
-from ramses_tx import Command, Message, Packet, Priority, QosParams
+from ramses_tx import Command, Packet, Priority, QosParams
 
+from .messages import Message
 from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
+    from .models import TopologyChangedEvent
     from .topology import Parent
 
 
@@ -29,6 +32,10 @@ class MessageStoreInterface(Protocol):
     def add_record(
         self, src: str, code: str = "", verb: str = "", payload: str = "00"
     ) -> None: ...
+    def start_consumer(self, in_queue: asyncio.Queue[Any]) -> None:
+        """Start the asynchronous queue consumer task for SSOT ingestion."""
+        ...
+
     async def get(
         self,
         msg: Any | None = None,
@@ -182,6 +189,10 @@ class DeviceRegistryInterface(Protocol):
 
     async def status(self) -> dict[str, Any]:
         """Return the status for all devices."""
+        ...
+
+    def handle_topology_event(self, event: "TopologyChangedEvent") -> None:
+        """Process an immutable structural graph mutation event."""
         ...
 
 

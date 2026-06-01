@@ -49,7 +49,9 @@ from .hvac import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 
 if TYPE_CHECKING:
     from ramses_rf import Gateway
-    from ramses_tx import Address, Message
+    from ramses_rf.address import Address
+
+    from ..messages import Message
 
 
 __all__ = [

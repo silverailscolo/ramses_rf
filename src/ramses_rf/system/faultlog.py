@@ -10,7 +10,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, NewType, TypeAlias
 
 from ramses_rf import exceptions as exc
-from ramses_tx import Command, Message, Packet
+from ramses_tx import Command, Packet
 from ramses_tx.const import (
     SZ_LOG_ENTRY,
     SZ_LOG_IDX,
@@ -20,6 +20,8 @@ from ramses_tx.const import (
 )
 from ramses_tx.helpers import parse_fault_log_entry
 from ramses_tx.typing import DeviceIdT, PayloadT
+
+from ..messages import Message
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -248,7 +250,7 @@ class FaultLog:  # 0418
         assert cmd.rx_header and cmd.rx_header[:-2] == pkt._hdr[:-2]  # reply to this RQ
 
         if cmd._idx == "00":  # no need to hack
-            return Message(pkt)
+            return Message._from_pkt(pkt)
 
         idx = cmd.rx_header[-2:]  # cmd._idx could be bool/None?
         pkt.payload = PayloadT(f"0000{idx}B0000000000000000000007FFFFF7000000000")
@@ -262,7 +264,7 @@ class FaultLog:  # 0418
             f"{self}: Coding error"
         )
 
-        msg = Message(pkt)
+        msg = Message._from_pkt(pkt)
         msg._payload = {SZ_LOG_IDX: idx, SZ_LOG_ENTRY: None}  # PayDictT._0418_NULL
 
         return msg
@@ -310,7 +312,9 @@ class FaultLog:  # 0418
                     self._process_msg(msg)  # since pkt via dispatcher aint got idx
                     break
 
-                self._process_msg(Message(pkt))  # JIC dispatcher doesn't do this for us
+                self._process_msg(
+                    Message._from_pkt(pkt)
+                )  # JIC dispatcher doesn't do this for us
 
             # Only mark as current if the entire requested fetch completed without timing out
             if not error_occurred:

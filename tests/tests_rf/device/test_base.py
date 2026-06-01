@@ -25,8 +25,13 @@ def mock_gateway() -> MagicMock:
     """
     gwy = MagicMock(spec=Gateway)
     gwy.config.enable_eavesdrop = False
+    gwy.config.gateway_timeout = None
+    gwy.config.timezone = None
+    gwy.config.tzinfo = None
+    gwy.tzinfo = None
     gwy._engine = MagicMock()
     gwy._engine._this_msg = None
+    gwy._this_msg = None
     return gwy
 
 
@@ -123,7 +128,8 @@ class TestHgiGateway:
     """Test HgiGateway class."""
 
     def test_initialization(self, hgi_gateway: HgiGateway) -> None:
-        """Test that the gateway device initializes with expected defaults.
+        """Test that the gateway device initializes with expected
+        defaults.
 
         :param hgi_gateway: The gateway fixture.
         :type hgi_gateway: HgiGateway
@@ -140,7 +146,7 @@ class TestHgiGateway:
         :param hgi_gateway: The gateway fixture.
         :type hgi_gateway: HgiGateway
         """
-        hgi_gateway._gwy._engine._this_msg = None
+        hgi_gateway._gwy._engine._this_msg = None  # type: ignore[attr-defined]
         assert not await hgi_gateway.is_active()
 
     @pytest.mark.asyncio
@@ -153,12 +159,13 @@ class TestHgiGateway:
         mock_msg = MagicMock()
         mock_msg.dtm = dt.now(UTC)
 
-        hgi_gateway._gwy._engine._this_msg = mock_msg
+        hgi_gateway._gwy._engine._this_msg = mock_msg  # type: ignore[attr-defined]
         assert await hgi_gateway.is_active()
 
     @pytest.mark.asyncio
     async def test_is_active_expired_msg(self, hgi_gateway: HgiGateway) -> None:
-        """Test is_active returns False when the latest message is too old.
+        """Test is_active returns False when the latest message is too
+        old.
 
         :param hgi_gateway: The gateway fixture.
         :type hgi_gateway: HgiGateway
@@ -167,7 +174,7 @@ class TestHgiGateway:
         expired_dtm = dt.now(UTC) - (GATEWAY_MESSAGE_TIMEOUT + td(seconds=1))
         mock_msg.dtm = expired_dtm
 
-        hgi_gateway._gwy._engine._this_msg = mock_msg
+        hgi_gateway._gwy._engine._this_msg = mock_msg  # type: ignore[attr-defined]
         assert not await hgi_gateway.is_active()
 
     @pytest.mark.asyncio
@@ -180,7 +187,7 @@ class TestHgiGateway:
         mock_msg = MagicMock()
         mock_msg.dtm = dt.now()
 
-        hgi_gateway._gwy._engine._this_msg = mock_msg
+        hgi_gateway._gwy._engine._this_msg = mock_msg  # type: ignore[attr-defined]
         assert await hgi_gateway.is_active()
 
     def test_message_timeout_custom(self, hgi_gateway: HgiGateway) -> None:
@@ -210,5 +217,5 @@ class TestHgiGateway:
         # Under our custom 15-minute timeout, this must be active.
         mock_msg.dtm = dt.now(UTC) - td(minutes=10)
 
-        hgi_gateway._gwy._engine._this_msg = mock_msg
+        hgi_gateway._gwy._engine._this_msg = mock_msg  # type: ignore[attr-defined]
         assert await hgi_gateway.is_active() is True

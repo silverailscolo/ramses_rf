@@ -116,19 +116,15 @@ def test_packet_dto_serialization() -> None:
 
     assert pkt_dict["verb"] == " I"
     assert pkt_dict["code"] == "1F09"
-    assert pkt_dict["rssi"] == 45  # Intentionally mapped to int for DTO
+    assert (
+        pkt_dict["rssi"] == 45
+    )  # Intentionally mapped to int for legacy downstream compatibility
     assert pkt_dict["frame"] == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
 
-    # Check DeviceAddress resolution
-    assert pkt_dict["addr1"]["device_type"] == 1
-    assert pkt_dict["addr1"]["device_id"] == 145038
-
-    # Address 2 is blank in VALID_FRAME_I
-    assert pkt_dict["addr2"]["device_type"] is None  # --:------
-
-    # Address 3 has the actual destination in VALID_FRAME_I
-    assert pkt_dict["addr3"]["device_type"] == 1
-    assert pkt_dict["addr3"]["device_id"] == 145038
+    # Check Address resolution strictly maps to the primitive DTO strings
+    assert pkt_dict["addr1"] == "01:145038"
+    assert pkt_dict["addr2"] == "--:------"
+    assert pkt_dict["addr3"] == "01:145038"
 
     # 2. Test from_dict with a structured dictionary (Deserialization)
     restored_pkt = Packet.from_dict(pkt_dict["dtm"], pkt_dict)

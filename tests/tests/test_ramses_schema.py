@@ -4,8 +4,7 @@
 from ramses_rf import RQ
 from ramses_rf.device.heat import HEAT_CLASS_BY_SLUG
 from ramses_rf.device.hvac import HVAC_CLASS_BY_SLUG
-from ramses_tx.const import Code, DevType
-from ramses_tx.ramses import (
+from ramses_rf.protocol.ramses import (
     _DEV_KLASSES_HEAT,
     _DEV_KLASSES_HVAC,
     _HVAC_VC_PAIR_BY_CLASS,
@@ -16,6 +15,7 @@ from ramses_tx.ramses import (
     HVAC_KLASS_BY_VC_PAIR,
     RQ_NO_PAYLOAD,
 )
+from ramses_tx.const import Code, DevType
 
 
 def test_code_counts() -> None:

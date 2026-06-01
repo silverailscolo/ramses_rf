@@ -11,7 +11,7 @@ concurrent access to pty.openpty().
 
 import asyncio
 from collections.abc import Generator
-from datetime import datetime as dt
+from datetime import UTC, datetime as dt
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -260,6 +260,15 @@ async def assert_context_state(
 # ### TESTS ############################################################################
 
 
+def _assert_l7_parity(msg: Message, cmd: Packet) -> None:
+    """Assert that a received L7 Message matches a transmitted L3/L4 Packet."""
+    assert msg.verb == cmd.verb
+    assert str(msg.code) == str(cmd.code)
+    assert msg.src.id == cmd.src.id
+    assert msg.dst.id == cmd.dst.id
+    assert msg._dto.payload == cmd.payload
+
+
 # TODO: test addenda phase of binding handshake
 async def _test_flow_10x(
     gwy_r: Gateway,
@@ -287,109 +296,92 @@ async def _test_flow_10x(
     assert resp_bm is not None
     assert supp_bm is not None
 
-    #
-    # Step R0: Respondent initial state
-    resp_bm.set_state(_BindStates.NEEDING_TENDER)
-    await assert_context_state(respondent, _BindStates.NEEDING_TENDER)
+    async with asyncio.TaskGroup() as tg:
+        #
+        # Step R0: Respondent initial state
+        resp_bm.set_state(_BindStates.NEEDING_TENDER)
+        await assert_context_state(respondent, _BindStates.NEEDING_TENDER)
 
-    #
-    # Step S0: Supplicant initial state
-    supp_bm.set_state(_BindStates.NEEDING_ACCEPT)
-    await assert_context_state(supplicant, _BindStates.NEEDING_ACCEPT)
+        #
+        # Step S0: Supplicant initial state
+        supp_bm.set_state(_BindStates.NEEDING_ACCEPT)
+        await assert_context_state(supplicant, _BindStates.NEEDING_ACCEPT)
 
-    #
-    # Step R1: Respondent expects an Offer
-    resp_task = asyncio.create_task(resp_bm._wait_for_offer())
+        #
+        # Step R1: Respondent expects an Offer
+        resp_task = tg.create_task(resp_bm._wait_for_offer())
 
-    #
-    # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
-    msg = Message(Packet(dt.now(), "000 " + pkt_flow_expected[_TENDER]))
-    codes = [b[1] for b in msg.payload["bindings"] if b[1] != Code._1FC9]
+        #
+        # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
+        pkt_str = "000 " + pkt_flow_expected[_TENDER]
+        msg = Message(Packet(dt.now(tz=UTC), pkt_str).to_dto())
+        codes = [b[1] for b in msg.payload["bindings"] if b[1] != Code._1FC9]
 
-    pkt = await supp_bm._make_offer(codes)
-    await assert_context_state(supplicant, _BindStates.NEEDING_ACCEPT)
-    assert pkt is not None
+        pkt = await supp_bm._make_offer(codes)
+        await assert_context_state(supplicant, _BindStates.NEEDING_ACCEPT)
+        assert pkt is not None
 
-    await resp_task
-    await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
+        await resp_task
+        await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
 
-    if (
-        not isinstance(gwy_r._engine._protocol, PortProtocol)
-        or getattr(gwy_r._engine._protocol, "_context", None) is None
-    ):
-        pytest.skip("QoS protocol not enabled")
+        if (
+            not isinstance(gwy_r._engine._protocol, PortProtocol)
+            or getattr(gwy_r._engine._protocol, "_context", None) is None
+        ):
+            pytest.skip("QoS protocol not enabled")
 
-    tender = resp_task.result()
-    assert tender._pkt == pkt, "Resp's Msg doesn't match Supp's Offer cmd"
+        tender = resp_task.result()
+        _assert_l7_parity(tender, pkt)
 
-    supp_task = asyncio.create_task(supp_bm._wait_for_accept(tender))
+        supp_task = tg.create_task(supp_bm._wait_for_accept(tender))
 
-    #
-    # Step R2: Respondent expects a Confirm after sending an Accept (accepts Offer)
-    msg = Message(Packet(dt.now(), "000 " + pkt_flow_expected[_ACCEPT]))
-    codes = [b[1] for b in msg.payload["bindings"]]
+        #
+        # Step R2: Respondent expects a Confirm after sending an Accept (accepts Offer)
+        pkt_str = "000 " + pkt_flow_expected[_ACCEPT]
+        msg = Message(Packet(dt.now(tz=UTC), pkt_str).to_dto())
+        codes = [b[1] for b in msg.payload["bindings"]]
 
-    pkt = await resp_bm._accept_offer(tender, codes)
-    await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
-    assert pkt is not None
+        pkt = await resp_bm._accept_offer(tender, codes)
+        await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
+        assert pkt is not None
 
-    await supp_task
-    await assert_context_state(supplicant, _BindStates.TO_SEND_AFFIRM)
+        await supp_task
+        await assert_context_state(supplicant, _BindStates.TO_SEND_AFFIRM)
 
-    accept = supp_task.result()
-    assert accept._pkt == pkt, "Supp's Msg doesn't match Resp's Accept cmd"
+        accept = supp_task.result()
+        _assert_l7_parity(accept, pkt)
 
-    resp_task = asyncio.create_task(resp_bm._wait_for_confirm(accept))
+        resp_task = tg.create_task(resp_bm._wait_for_confirm(accept))
 
-    #
-    # Step S2: Supplicant sends a Confirm (confirms Accept)
-    msg = Message(Packet(dt.now(), "000 " + pkt_flow_expected[_AFFIRM]))
-    codes = [b[1] for b in msg.payload["bindings"] if len(b) > 1]
+        #
+        # Step S2: Supplicant sends a Confirm (confirms Accept)
+        pkt_str = "000 " + pkt_flow_expected[_AFFIRM]
+        msg = Message(Packet(dt.now(tz=UTC), pkt_str).to_dto())
+        codes = [b[1] for b in msg.payload["bindings"] if len(b) > 1]
 
-    pkt = await supp_bm._confirm_accept(accept, confirm_code=codes)
-    await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
-    assert pkt is not None
+        pkt = await supp_bm._confirm_accept(accept, confirm_code=codes)
+        await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
+        assert pkt is not None
 
-    if len(pkt_flow_expected) > _RATIFY:  # FIXME
-        supp_bm.set_state(_BindStates.TO_SEND_RATIFY)  # HACK: easiest way
+        if len(pkt_flow_expected) > _RATIFY:  # FIXME
+            supp_bm.set_state(_BindStates.TO_SEND_RATIFY)  # HACK: easiest way
 
-    await resp_task
-    await assert_context_state(respondent, _BindStates.HAS_BOUND_RESP)
+        await resp_task
+        await assert_context_state(respondent, _BindStates.HAS_BOUND_RESP)
 
-    if len(pkt_flow_expected) > _RATIFY:  # FIXME
-        resp_bm.set_state(_BindStates.NEEDING_RATIFY)  # HACK: easiest way
+        if len(pkt_flow_expected) > _RATIFY:  # FIXME
+            resp_bm.set_state(_BindStates.NEEDING_RATIFY)  # HACK: easiest way
 
-    affirm = resp_task.result()
-    assert affirm._pkt == pkt, "Resp's Msg doesn't match Supp's Confirm cmd"
+        affirm = resp_task.result()
+        _assert_l7_parity(affirm, pkt)
 
-    #
-    # Some bindings don't include an Addenda...
-    if len(pkt_flow_expected) <= _RATIFY:  # i.e. no addenda  FIXME
-        return
+        #
+        # Some bindings don't include an Addenda...
+        if len(pkt_flow_expected) <= _RATIFY:  # i.e. no addenda  FIXME
+            return
 
-    await assert_context_state(respondent, _BindStates.NEEDING_RATIFY)
-    await assert_context_state(supplicant, _BindStates.TO_SEND_RATIFY)
-
-    # # Step R3: Respondent expects an Addenda (optional)
-    # resp_task = asyncio.create_task(
-    #     respondent._context._wait_for_addenda(accept, timeout=0.05)
-    # )
-
-    # # Step S3: Supplicant sends an Addenda (optional)
-    # msg = Message(Packet(dt.now(), "000 " + pkt_flow_expected[_RATIFY]))
-    # old code:
-    # supplicant._msgz[msg.code] = {msg.verb: {msg._pkt._ctx: msg}}
-    # now: only supplicant ?! explains a lot of failures
-    # gwy_r.message_store.add(msg)  # (for supplicant only?) >> remove from respondent/filter while adding
-    # pkt = await supplicant._context._cast_addenda()
-    # await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
-    # assert pkt is not None
-
-    # await assert_context_state(respondent, _BindStates.HAS_BOUND_RESP)
-    # await resp_task
-
-    # ratify = resp_task.result()
-    # assert ratify._pkt == pkt, "Resp's Msg doesn't match Supp's Addenda cmd"
+        await assert_context_state(respondent, _BindStates.NEEDING_RATIFY)
+        await assert_context_state(supplicant, _BindStates.TO_SEND_RATIFY)
 
 
 # TODO: test addenda phase of binding handshake
@@ -421,7 +413,6 @@ async def _test_flow_20x(
     resp_coro = respondent._wait_for_binding_request(
         accept_codes, idx=idx, require_ratify=require_ratify
     )
-    resp_task = asyncio.create_task(resp_coro)
 
     # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
     payload = pkt_flow_expected[_TENDER][46:]
@@ -437,23 +428,31 @@ async def _test_flow_20x(
     supp_coro = supplicant._initiate_binding_process(
         offer_codes, confirm_code=confirm_code, ratify_cmd=ratify_cmd
     )
-    supp_task = asyncio.create_task(supp_coro)
 
     # Step 2: Wait until flow is completed (or timeout)
-    await asyncio.gather(resp_task, supp_task)
+    async with asyncio.TaskGroup() as tg:
+        resp_task = tg.create_task(resp_coro)
+        supp_task = tg.create_task(supp_coro)
 
     resp_flow = resp_task.result()
     supp_flow = supp_task.result()
 
     for i in range(len(pkt_flow_expected)):
-        assert resp_flow[i] == supp_flow[i]
-        assert resp_flow[i] == Command(pkt_flow_expected[i])
+        expected_cmd = Command(pkt_flow_expected[i])
 
-        assert str(resp_flow[i]) == str(supp_flow[i])
-        assert str(resp_flow[i]) == pkt_flow_expected[i]
+        r_obj = cast(Any, resp_flow[i])
+        if isinstance(r_obj, Message):
+            _assert_l7_parity(r_obj, expected_cmd)
+        else:
+            assert str(r_obj) == pkt_flow_expected[i]
+
+        s_obj = cast(Any, supp_flow[i])
+        if isinstance(s_obj, Message):
+            _assert_l7_parity(s_obj, expected_cmd)
+        else:
+            assert str(s_obj) == pkt_flow_expected[i]
 
 
-# TODO: binding working without QoS  # @patch("ramses_tx.protocol._DBG_DISABLE_QOS", True)
 @pytest.mark.xdist_group(name="virt_serial")
 async def test_flow_100(test_set: dict[str, Any]) -> None:
     """Check packet flow / state change of a binding at context layer."""
@@ -479,7 +478,6 @@ async def test_flow_100(test_set: dict[str, Any]) -> None:
         await rf.stop()
 
 
-# TODO: binding working without QoS  # @patch("ramses_tx.protocol._DBG_DISABLE_QOS", True)
 @pytest.mark.xdist_group(name="virt_serial")
 async def test_flow_200(test_set: dict[str, Any]) -> None:
     """Check packet flow / state change of a binding at device layer."""

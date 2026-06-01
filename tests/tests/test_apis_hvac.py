@@ -5,35 +5,37 @@ from collections.abc import Callable
 from datetime import datetime as dt
 from typing import Any
 
+from ramses_rf.messages import Message
 from ramses_tx.command import CODE_API_MAP, Command
-from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
 
-def _test_api(api: Callable, packets: dict[str]) -> None:  # NOTE: incl. addr_set check
+def _test_api(
+    api: Callable, packets: dict[str, dict[str, Any]]
+) -> None:  # NOTE: incl. addr_set check
     """Test a verb|code pair that has a Command constructor, src and dst."""
 
     for pkt_line, kwargs in packets.items():
         pkt = _create_pkt_from_frame(pkt_line)
 
-        msg = Message(pkt)
+        msg = Message._from_pkt(pkt)
 
         _test_api_from_kwargs(api, pkt, **kwargs)
-        _test_api_from_msg(api, msg)
+        _test_api_from_msg(api, msg, pkt)
 
 
 def _test_api_one(
-    api: Callable, packets: dict[str]
+    api: Callable, packets: dict[str, dict[str, Any]]
 ) -> None:  # NOTE: incl. addr_set check
     """Test a verb|code pair that has a Command constructor and src, but no dst."""
 
     for pkt_line, kwargs in packets.items():
         pkt = _create_pkt_from_frame(pkt_line)
 
-        msg = Message(pkt)
+        msg = Message._from_pkt(pkt)
 
         _test_api_one_from_kwargs(api, pkt, **kwargs)
-        _test_api_one_from_msg(api, msg)
+        _test_api_one_from_msg(api, msg, pkt)
 
 
 def _create_pkt_from_frame(pkt_line: str) -> Packet:
@@ -44,7 +46,7 @@ def _create_pkt_from_frame(pkt_line: str) -> Packet:
     return pkt
 
 
-def _test_api_from_msg(api: Callable, msg: Message) -> Command:
+def _test_api_from_msg(api: Callable, msg: Message, pkt: Packet) -> Command:
     """Create a cmd from a msg with a src_id, and assert they're equal
     (*also* asserts payload)."""
 
@@ -54,12 +56,12 @@ def _test_api_from_msg(api: Callable, msg: Message) -> Command:
         **{k: v for k, v in msg.payload.items() if k[:1] != "_"},
     )
 
-    assert cmd == msg._pkt  # must have exact same addr set
+    assert cmd._frame == pkt._frame  # must have exact same addr set
 
     return cmd
 
 
-def _test_api_one_from_msg(api: Callable, msg: Message) -> Command:
+def _test_api_one_from_msg(api: Callable, msg: Message, pkt: Packet) -> Command:
     """Create a cmd from a msg and assert they're equal (*also* asserts payload)."""
 
     cmd: Command = api(
@@ -68,7 +70,7 @@ def _test_api_one_from_msg(api: Callable, msg: Message) -> Command:
         # requirement turned off as it skips required item like _unknown_fan_info_flags
     )
 
-    assert cmd == msg._pkt  # must have exact same addr set
+    assert cmd._frame == pkt._frame  # must have exact same addr set
 
     return cmd
 
@@ -186,7 +188,13 @@ GET_31DA_KWARGS = {
         "supply_temp": 22.0,
         "indoor_temp": 21.86,
         "outdoor_temp": 21.78,
-        "speed_capabilities": ["off", "low_med_high", "timer", "boost", "auto"],
+        "speed_capabilities": [
+            "off",
+            "low_med_high",
+            "timer",
+            "boost",
+            "auto",
+        ],
         "fan_info": "away",
         "_unknown_fan_info_flags": [0, 0, 0],
         "exhaust_fan_speed": 0.1,
@@ -338,7 +346,13 @@ GET_31DA_KWARGS = {
         "supply_temp": 20.08,
         "indoor_temp": 23.76,
         "outdoor_temp": 18.47,
-        "speed_capabilities": ["off", "low_med_high", "timer", "boost", "post_heater"],
+        "speed_capabilities": [
+            "off",
+            "low_med_high",
+            "timer",
+            "boost",
+            "post_heater",
+        ],
         "bypass_position": 0.85,
         "fan_info": "speed 2, medium",
         "_unknown_fan_info_flags": [0, 0, 0],

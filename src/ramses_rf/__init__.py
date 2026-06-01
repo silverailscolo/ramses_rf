@@ -16,12 +16,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from ramses_tx import Address, Command, Message, Packet  # noqa: F401
+from ramses_tx import Address, Command, Packet  # noqa: F401
 
 from . import exceptions  # noqa: F401
+from .config import GatewayConfig  # noqa: F401
 from .device import Device  # noqa: F401
 from .exceptions import CommandInvalid  # noqa: F401
-from .gateway import Gateway, GatewayConfig  # noqa: F401
+from .gateway import Gateway  # noqa: F401
+from .messages import Message
 from .version import VERSION  # noqa: F401
 
 from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import

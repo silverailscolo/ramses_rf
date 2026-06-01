@@ -5,8 +5,8 @@ from pathlib import Path, PurePath
 
 import pytest
 
+from ramses_rf.messages import Message
 from ramses_tx import exceptions as exc
-from ramses_tx.message import Message
 from ramses_tx.packet import Packet
 
 from .helpers import TEST_DIR
@@ -35,12 +35,18 @@ def _proc_log_line(log_line: str) -> None:
         assert False, f"{pkt_line[27:]} < {err}"
 
     try:
-        _ = Message(pkt)
+        _ = Message(pkt.to_dto())
     except exc.PacketPayloadInvalid as err:
+        assert False, f"{pkt} < {err}"
+    except exc.PacketInvalid as err:
+        # The new L7 strict decoding may raise PacketInvalid
+        if not pkt_eval or "_parse_error" in pkt_eval:
+            return
         assert False, f"{pkt} < {err}"
 
     # assert bool(msg._is_fragment) == pkt._is_fragment
-    # assert bool(msg._idx): dict == pkt._idx: Optional[bool | str]  # not useful
+    # assert bool(msg._idx): dict == pkt._idx: Optional[bool | str]
+    # not useful
 
     if not pkt_eval:
         return

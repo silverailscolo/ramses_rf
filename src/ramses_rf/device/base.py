@@ -12,6 +12,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, cast
 
+from ramses_rf.address import Address
 from ramses_rf.binding_fsm import BindingManager, Vendor
 from ramses_rf.const import (
     DEV_TYPE_MAP,
@@ -20,13 +21,15 @@ from ramses_rf.const import (
     SZ_OEM_CODE,
     DevType,
 )
-from ramses_rf.entity_base import Entity, class_by_attr
+from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
-from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED, SZ_KNOWN_LIST
+from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.topology import Child
-from ramses_tx import Command, Message, Packet, Priority, QosParams
-from ramses_tx.ramses import CODES_BY_DEV_SLUG, CODES_ONLY_FROM_CTL
+from ramses_tx import Command, Packet, Priority, QosParams
 from ramses_tx.typing import PayloadT
+
+from ..messages import Message
+from ..protocol.ramses import CODES_BY_DEV_SLUG
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -40,7 +43,8 @@ if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
     from ramses_rf.system import Zone
-    from ramses_tx import Address, DeviceIdT, IndexT
+    from ramses_tx.const import IndexT
+    from ramses_tx.typing import DeviceIdT
 
 
 BIND_WAITING_TIMEOUT = 300  # how long to wait, listening for an offer
@@ -69,15 +73,12 @@ class DeviceBase(Entity):
     ) -> None:
         super().__init__(gwy, **kwargs)
 
-        # FIXME: gwy.message_store entities must know their parent device ID and their own idx
+        # FIXME: gwy.message_store entities must know their parent device ID
+        # and their own idx
         self._z_id = dev_addr.id  # the responsible device is itself
         self._z_idx = None  # depends upon its location in the schema
 
         self.id: DeviceIdT = dev_addr.id
-
-        # self.tcs = None  # NOTE: Heat (CH/DHW) devices only
-        # self.ctl = None
-        # self._child_id = None  # also in Child class
 
         self.addr = dev_addr
         self.type = dev_addr.type  # DEX  # TODO: remove this attr? use SLUG?
@@ -156,13 +157,6 @@ class DeviceBase(Entity):
         return dev
 
     def _setup_discovery_cmds(self) -> None:
-        # super()._setup_discovery_cmds()
-        # sometimes, battery-powered devices will respond to an RQ (e.g. bind mode)
-
-        # if discover_flag & Discover.TRAITS:
-        # self.discovery.add_cmd(cmd(RQ, Code._1FC9, "00", self.id), 60 * 60 * 24)
-        # self.discovery.add_cmd(cmd(RQ, Code._0016, "00", self.id), 60 * 60)
-
         pass
 
     def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task | None:
@@ -176,35 +170,8 @@ class DeviceBase(Entity):
         return super()._send_cmd(cmd, **kwargs)
 
     def _handle_msg(self, msg: Message) -> None:
-        # # assert msg.src is self or (
-        # #     msg.code == Code._1FC9 and msg.payload[SZ_PHASE] == SZ_OFFER
-        # # ), f"msg from {msg.src} inappropriately routed to {self}"
-
         super()._handle_msg(msg)
         self._last_msg_dtm = getattr(msg, "dtm", None)
-
-        if self._SLUG in DEV_TYPE_MAP.PROMOTABLE_SLUGS:  # HACK: can get precise class?
-            from . import best_dev_role
-
-            cls = best_dev_role(
-                self.addr, msg=msg, eavesdrop=self._gwy.config.enable_eavesdrop
-            )
-
-            if cls._SLUG in (DevType.DEV, self._SLUG):
-                return  # either a demotion (DEV), or not promotion (HEA/HVC)
-
-            if self._SLUG == DevType.HEA and cls._SLUG in DEV_TYPE_MAP.HVAC_SLUGS:
-                return  # TODO: should raise error if CODES_OF_HVAC_DOMAIN_ONLY?
-
-            if self._SLUG == DevType.HVC and cls._SLUG not in DEV_TYPE_MAP.HVAC_SLUGS:
-                return  # TODO: should raise error if CODES_OF_HEAT_DOMAIN_ONLY?
-
-            _LOGGER.warning(
-                f"Promoting the device class of {self} to {cls._SLUG}"
-                f" - use a {SZ_KNOWN_LIST} to explicitly set this device's"
-                f" {SZ_CLASS} to '{DEV_TYPE_MAP[cls._SLUG]}'"
-            )
-            self.__class__ = cls
 
     async def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered (excludes battery-backup)."""
@@ -254,7 +221,7 @@ class DeviceBase(Entity):
 
         result = await self.entity_state.traits()
 
-        known_dev = self._gwy._engine._include.get(self.id)
+        known_dev = self._gwy.config.known_list.get(self.id)
 
         result.update(
             {
@@ -299,7 +266,6 @@ class DeviceInfo(DeviceBase):  # 10E0
     def _setup_discovery_cmds(self) -> None:
         super()._setup_discovery_cmds()
 
-        # if discover_flag & Discover.SCHEMA:
         if self._SLUG not in CODES_BY_DEV_SLUG or RP in CODES_BY_DEV_SLUG[
             self._SLUG
         ].get(Code._10E0, {}):
@@ -323,7 +289,6 @@ class DeviceInfo(DeviceBase):  # 10E0
         return result
 
 
-# NOTE: devices (Thermostat) not attrs (Temperature) are faked
 class Fakeable(DeviceBase):
     """There are two types of Faking: impersonation (of real devices) and full-faking.
 
@@ -346,8 +311,7 @@ class Fakeable(DeviceBase):
 
         self._binding_manager: BindingManager | None = None
 
-        # TOD: this is messy - device schema vs device traits
-        if self.id in gwy._engine._include and gwy._engine._include[self.id].get(
+        if self.id in gwy.config.known_list and gwy.config.known_list[self.id].get(
             SZ_FAKED
         ):
             self._make_fake()
@@ -360,7 +324,9 @@ class Fakeable(DeviceBase):
             return
 
         self._binding_manager = BindingManager(self, self._async_send_cmd)
-        self._gwy._engine._include[self.id][SZ_FAKED] = True  # TODO: remove this
+        if self.id not in self._gwy.config.known_list:
+            self._gwy.config.known_list[self.id] = {}
+        self._gwy.config.known_list[self.id][SZ_FAKED] = True  # TODO: remove this
         _LOGGER.info(f"Faking now enabled for: {self}")
 
     async def _async_send_cmd(
@@ -447,7 +413,7 @@ class Fakeable(DeviceBase):
 
         msgs = await self._binding_manager.initiate_binding_process(
             codes, confirm_code=confirm_code, ratify_cmd=ratify_cmd
-        )  # TODO: if successful, re-discover schema?
+        )
         return msgs
 
     async def initiate_binding_process(self) -> Packet:
@@ -544,19 +510,6 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
 
         self._iz_controller: None | bool | Message = None
 
-    def _handle_msg(self, msg: Message) -> None:
-        super()._handle_msg(msg)
-
-        if msg.verb != I_ or self._iz_controller is not None:
-            return
-
-        if not self._iz_controller and msg.code in CODES_ONLY_FROM_CTL:
-            if self._iz_controller is None:
-                _LOGGER.info(f"{msg!r} # IS_CONTROLLER (00): is TRUE")
-                self._make_tcs_controller(msg=msg)
-            elif self._iz_controller is False:  # TODO: raise CorruptStateError
-                _LOGGER.error(f"{msg!r} # IS_CONTROLLER (01): was FALSE, now True")
-
     def _make_tcs_controller(
         self, *, msg: Message | None = None, **schema: Any
     ) -> None:  # CH/DHW
@@ -568,12 +521,6 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
             )
 
         self._iz_controller = self._iz_controller or msg or True
-
-    # @property
-    # def controller(self):  # -> Optional[Controller]:
-    #     """Return the entity's controller, if known."""
-
-    #     return self.ctl  # TODO: if the controller is not known, try to find it?
 
     @property
     def _is_controller(self) -> None | bool:
@@ -608,24 +555,6 @@ class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
         super().__init__(gwy, dev_addr, traits=traits, **kwargs)
 
         self._child_id = "hv"  # TODO: domain_id/deprecate
-
-    # def _handle_msg(self, msg: Message) -> None:
-    #     super()._handle_msg(msg)
-
-    #     # if type(self) is DeviceHvac:
-    #     #     if self.type == DEV_TYPE_MAP.RFG:  # self.__class__ is Device, DEX
-    #     #         # TODO: the RFG codes need checking
-    #     #         if msg.code in (Code._31D9, Code._31DA) and msg.verb in (I_, RP):
-    #     #             self.__class__ = HvacVentilator
-    #     #         elif msg.code in (Code._0006, Code._0418, Code._3220) and msg.verb == RQ:
-    #     #             self.__class__ = RfgGateway
-    #     #         elif msg.code in (Code._313F,) and msg.verb == W_:
-    #     #             self.__class__ = RfgGateway
-    #     #     if type(self) is not Device:
-    #     #         _LOGGER.warning(f"Promoted a device type for: {self}")
-
-    #     if msg.code in (Code._1298, Code._12A0, Code._22F1, Code._22F3):
-    #         self._hvac_trick()
 
 
 # e.g. {"HGI": HgiGateway}

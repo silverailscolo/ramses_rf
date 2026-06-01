@@ -9,6 +9,7 @@ from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from ramses_rf import exceptions as exc
+from ramses_rf.address import Address
 from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
@@ -35,7 +36,7 @@ from ramses_rf.device import (
     TrvActuator,
     UfhController,
 )
-from ramses_rf.entity_base import _ID_SLICE, Entity, class_by_attr
+from ramses_rf.entity import _ID_SLICE, Entity, class_by_attr
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
@@ -48,10 +49,11 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
 )
 from ramses_rf.topology import Child, Parent
-from ramses_tx import Address, Command, Message, Priority
+from ramses_tx import Command, Priority
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 
+from ..messages import Message
 from .schedule import InnerScheduleT, OuterScheduleT, Schedule
 
 if TYPE_CHECKING:

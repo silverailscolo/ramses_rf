@@ -13,6 +13,7 @@ from ramses_rf.exceptions import (
     SystemInconsistent,
     SystemSchemaInconsistent,
 )
+from ramses_rf.messages import Message
 from ramses_rf.system.zones import (
     DhwZone,
     EleZone,
@@ -23,7 +24,6 @@ from ramses_rf.system.zones import (
     _transform,
     zone_factory,
 )
-from ramses_tx import Message
 from ramses_tx.exceptions import ProtocolTimeoutError
 from ramses_tx.packet import Packet
 

@@ -36,7 +36,7 @@ from ramses_rf.device import (
     Temperature,
     UfhController,
 )
-from ramses_rf.entity_base import Entity, class_by_attr
+from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import ScheduleFlowError, SchemaInconsistentError
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
@@ -59,16 +59,17 @@ from ramses_tx import (
     ZON_ROLE_MAP,
     Command,
     DeviceIdT,
-    Message,
     Priority,
 )
 from ramses_tx.typing import PayDictT, PayloadT
 
+from ..messages import Message
 from .faultlog import FaultLog
 from .zones import zone_factory
 
 if TYPE_CHECKING:
-    from ramses_tx import Address, Packet
+    from ramses_rf.address import Address
+    from ramses_tx import Packet
 
     from .faultlog import FaultIdxT, FaultLogEntry
     from .zones import DhwZone, Zone
@@ -716,7 +717,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
             cmd, wait_for_reply=True, priority=Priority.HIGH
         )
         if pkt:
-            self._msg_0006 = Message(pkt)
+            self._msg_0006 = Message._from_pkt(pkt)
 
         return self._msg_0006.payload[SZ_CHANGE_COUNTER], True  # global_ver, did_io
 

@@ -14,7 +14,7 @@ from ramses_rf.device.hvac import (  # initiate_binding_process
     HvacDisplayRemote,
     HvacRemote,
 )
-from ramses_rf.message_store import MessageStore
+from ramses_rf.state import MessageStore
 from ramses_tx.address import Address
 from ramses_tx.const import Code
 
@@ -45,7 +45,7 @@ class GatewayStub:
 
     def __init__(self) -> None:
         """Initialize the GatewayStub."""
-        self.config = SimpleNamespace(disable_discovery=True)
+        self.config = SimpleNamespace(disable_discovery=True, known_list={})
 
         self.device_by_id: dict[str, Fakeable] = {}
         self.devices: list[Fakeable] = []

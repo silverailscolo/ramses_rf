@@ -52,8 +52,14 @@ pytestmark = pytest.mark.asyncio()
 @pytest.fixture(autouse=True)
 def patch_strict_checking(monkeypatch: pytest.MonkeyPatch) -> None:
     """Apply the strict checking monkeypatch globally to all tests in this module."""
+    # Retain the legacy transport patch
     monkeypatch.setattr(
         "ramses_tx.address._DBG_DISABLE_STRICT_CHECKING",
+        _DBG_DISABLE_STRICT_CHECKING,
+    )
+    # Target the new OSI L7 boundary where the logic actually lives
+    monkeypatch.setattr(
+        "ramses_rf.address._DBG_DISABLE_STRICT_CHECKING",
         _DBG_DISABLE_STRICT_CHECKING,
     )
 

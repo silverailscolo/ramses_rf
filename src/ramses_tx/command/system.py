@@ -7,8 +7,10 @@ from collections.abc import Iterable
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
+from ramses_rf.protocol.opentherm import parity
+
 from .. import exceptions as exc
-from ..address import ALL_DEV_ADDR, Address, dev_id_to_hex_id
+from ..address import ALL_DEV_ADDR, dev_id_to_hex_id
 from ..const import (
     DEV_TYPE_MAP,
     FAULT_DEVICE_CLASS,
@@ -17,6 +19,7 @@ from ..const import (
     FC,
     FF,
     I_,
+    LOOKUP_PUZZ,
     RP,
     RQ,
     SYS_MODE_MAP,
@@ -32,8 +35,6 @@ from ..helpers import (
     hex_from_temp,
     timestamp,
 )
-from ..opentherm import parity
-from ..parsers import LOOKUP_PUZZ
 from ..typing import DeviceIdT, PayloadT
 from ..version import VERSION
 from .base import CommandBase, _check_idx
@@ -356,7 +357,7 @@ class SystemMixins(CommandBase):
         if not kodes:
             raise exc.CommandInvalid(f"Invalid codes for a bind offer: {codes}")
 
-        hex_id = Address.convert_to_hex(cast(DeviceIdT, src_id))
+        hex_id = dev_id_to_hex_id(cast(DeviceIdT, src_id))
         payload = "".join(f"00{c}{hex_id}" for c in kodes)
 
         if oem_code:
@@ -379,7 +380,7 @@ class SystemMixins(CommandBase):
         if not codes:
             raise exc.CommandInvalid(f"Invalid codes for a bind accept: {codes}")
 
-        hex_id = Address.convert_to_hex(cast(DeviceIdT, src_id))
+        hex_id = dev_id_to_hex_id(cast(DeviceIdT, src_id))
         payload = "".join(f"{idx or '00'}{c}{hex_id}" for c in codes)
 
         return cls.from_attrs(W_, dst_id, Code._1FC9, PayloadT(payload), from_id=src_id)
@@ -396,7 +397,7 @@ class SystemMixins(CommandBase):
         if not codes:
             payload = idx or "00"
         else:
-            hex_id = Address.convert_to_hex(cast(DeviceIdT, src_id))
+            hex_id = dev_id_to_hex_id(cast(DeviceIdT, src_id))
             payload = f"{idx or '00'}{codes[0]}{hex_id}"
 
         return cls.from_attrs(I_, dst_id, Code._1FC9, PayloadT(payload), from_id=src_id)

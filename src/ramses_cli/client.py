@@ -16,7 +16,16 @@ from asyncclick.exceptions import ClickException, Exit
 from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
-from ramses_rf.const import DONT_CREATE_MESSAGES, SZ_ZONE_IDX
+from ramses_rf.const import (
+    DEV_TYPE_MAP,
+    DONT_CREATE_MESSAGES,
+    I_,
+    RP,
+    RQ,
+    SZ_ZONE_IDX,
+    W_,
+    Code,
+)
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import deep_merge
 from ramses_rf.schemas import (
@@ -28,6 +37,7 @@ from ramses_rf.schemas import (
 )
 from ramses_tx import is_valid_dev_id
 from ramses_tx.config import EngineConfig
+from ramses_tx.dtos import PacketDTO
 from ramses_tx.logger import CONSOLE_COLS, DEFAULT_DATEFMT, DEFAULT_FMT
 from ramses_tx.schemas import (
     SZ_DISABLE_QOS,
@@ -42,15 +52,6 @@ from ramses_tx.schemas import (
 
 from .debug import SZ_DBG_MODE, start_debugging
 from .discovery import GET_FAULTS, GET_SCHED, SET_SCHED, spawn_scripts
-
-from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    DEV_TYPE_MAP,
-    Code,
-)
 
 if TYPE_CHECKING:
     from _typeshed import SupportsRead
@@ -77,7 +78,7 @@ PRINT_STATE = False  # print engine state
 # GET_STATE = False  # get engine state
 # SET_STATE = False  # set engine state
 
-# this is called after import colorlog to ensure its handlers wrap the correct streams
+# this is called after import colorlog to ensure its handlers wrap correctly
 logging.basicConfig(level=logging.WARNING, format=DEFAULT_FMT, datefmt=DEFAULT_DATEFMT)
 
 
@@ -106,7 +107,7 @@ def normalise_config(
     """Convert a HA config dict into the client library's own format.
 
     :param lib_config: The configuration dictionary from Home Assistant.
-    :return: A tuple containing the serial port (if any) and the normalized configuration dictionary.
+    :return: A tuple containing the serial port and normalized config.
     """
 
     serial_port = lib_config.pop(SZ_SERIAL_PORT, None)
@@ -130,9 +131,9 @@ def split_kwargs(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Split kwargs into cli/library kwargs.
 
-    :param obj: A tuple containing the current CLI and library configuration dictionaries.
+    :param obj: Tuple of CLI and library configuration dictionaries.
     :param kwargs: The keyword arguments to split.
-    :return: A tuple containing the updated CLI and library configuration dictionaries.
+    :return: Tuple containing updated CLI and library configurations.
     """
     cli_kwargs, lib_kwargs = obj
 
@@ -157,12 +158,12 @@ class DeviceIdParamType(click.ParamType):
         :param param: The parameter being converted.
         :param ctx: The Click context.
         :return: The converted Device ID.
-        :raises click.BadParameter: If the value is not a valid Device ID.
+        :raises click.BadParameter: If value is not a valid Device ID.
         """
         if is_valid_dev_id(value):
             return value.upper()
         self.fail(f"{value!r} is not a valid device_id", param, ctx)
-        assert False  # satisfy mypy, as self.fail raises BadParameter and never returns
+        assert False  # satisfy mypy
 
 
 # Args/Params for both RF and file
@@ -312,7 +313,7 @@ async def parse(
 
     :param obj: The context object containing configuration.
     :param kwargs: Additional keyword arguments.
-    :return: A tuple containing the command name, library configuration, and CLI configuration.
+    :return: Tuple of command name, library config, and CLI config.
     """
     config, lib_config = split_kwargs(obj, kwargs)
 
@@ -335,18 +336,20 @@ async def parse(
     help="scan_disc|scan_full|scan_hard|bind device_id",
 )
 @click.option(  # --poll-devices device_id, device_id,...
-    "--poll-devices", type=click.STRING, help="e.g. 'device_id, device_id, ...'"
+    "--poll-devices",
+    type=click.STRING,
+    help="e.g. 'device_id, device_id, ...'",
 )
 @click.pass_obj
 async def monitor(
     obj: Any, /, discover: None | bool = None, **kwargs: Any
 ) -> tuple[Literal["monitor"], dict[str, str], dict[str, str]]:
-    """Monitor (eavesdrop and/or probe) a serial port for messages/packets.
+    """Monitor (eavesdrop and/or probe) a serial port for messages.
 
     :param obj: The context object containing configuration.
-    :param discover: Whether to enable discovery. If None, inferred from other arguments.
+    :param discover: Whether to enable discovery.
     :param kwargs: Additional keyword arguments.
-    :return: A tuple containing the command name, library configuration, and CLI configuration.
+    :return: Tuple of command name, library config, and CLI config.
     """
     config, lib_config = split_kwargs(obj, kwargs)
 
@@ -386,14 +389,18 @@ async def monitor(
 @click.pass_obj
 async def execute(
     obj: Any, /, **kwargs: Any
-) -> tuple[Literal["execute"], dict[str | None, str | dict[str, Any]], dict[str, str]]:
+) -> tuple[
+    Literal["execute"],
+    dict[str | None, str | dict[str, Any]],
+    dict[str, str],
+]:
     """Execute any specified scripts, return the results, then quit.
 
     Disables discovery, and enforces a strict allow_list.
 
-    :param obj: A tuple containing the CLI and library configuration dictionaries.
+    :param obj: Tuple containing CLI and library configuration dicts.
     :param kwargs: Additional arguments passed to the command.
-    :return: A tuple containing the command string, library config, and CLI config.
+    :return: Tuple of command string, library config, and CLI config.
     """
     config, lib_config = split_kwargs(obj, kwargs)
 
@@ -424,13 +431,15 @@ async def execute(
 async def listen(
     obj: Any, /, **kwargs: Any
 ) -> tuple[
-    Literal["listen"], dict[str, str | dict[str, str | None] | None], dict[str, Any]
+    Literal["listen"],
+    dict[str, str | dict[str, str | None] | None],
+    dict[str, Any],
 ]:
     """Listen to (eavesdrop only) a serial port for messages/packets.
 
     :param obj: The context object containing configuration.
     :param kwargs: Additional keyword arguments.
-    :return: A tuple containing the command name, library configuration, and CLI configuration.
+    :return: Tuple of command name, library config, and CLI config.
     """
     config, lib_config = split_kwargs(obj, kwargs)
 
@@ -452,7 +461,8 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
         ]._faultlog.faultlog
 
         if fault_log:
-            [print(f"{k:02X}", v) for k, v in fault_log.items()]
+            for k, v in fault_log.items():
+                print(f"{k:02X}", v)
         else:
             print("No fault log, or failed to get the fault log.")
 
@@ -481,7 +491,8 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
 def _write_state(schema: dict[str, Any], msgs: dict[str, str]) -> None:
     """Write the state to the file system (blocking)."""
     with open("state_msgs.log", "w") as f:
-        [f.write(f"{dtm} {pkt}\r\n") for dtm, pkt in msgs.items()]  # if not m._expired
+        for dtm, pkt in msgs.items():
+            f.write(f"{dtm} {pkt}\r\n")  # if not m._expired
 
     with open("state_schema.json", "w") as f:
         f.write(json.dumps(schema, indent=4))
@@ -541,7 +552,8 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
 
     if kwargs.get("show_traits"):  # show device traits
         result = {
-            d.id: await d.traits()  # {k: v for k, v in (await d.traits()).items() if k[:1] == "_"}
+            # {k: v for k, v in (await d.traits()).items() if k[:1] == "_"}
+            d.id: await d.traits()
             for d in sorted(gwy.device_registry.devices)
         }
         print(json.dumps(result, indent=4), "\r\n")
@@ -583,21 +595,22 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
 async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) -> None:
     """Execute the main asynchronous logic for the CLI.
 
-    :param command: The command to execute (e.g., "execute", "monitor", "listen", "parse").
+    :param command: The command to execute (e.g., "monitor", "parse").
     :param lib_kwargs: Configuration arguments for the library.
     :param kwargs: Additional CLI arguments.
     """
 
-    async def handle_msg(_msg: Message) -> None:
+    async def handle_msg(dto: PacketDTO) -> None:
         """Process the message as it arrives (a callback).
 
         In this case, the message is merely printed.
         """
+        _msg = Message(dto)
 
         if kwargs["long_format"]:  # HACK for test/dev
             print(
-                f"{_msg.dtm.isoformat(timespec='microseconds')} ... {_msg!r}"
-                f"  # {_msg.payload}"  # or f'  # ("{msg.src!r}", "{msg.dst!r}")'
+                f"{_msg.dtm.isoformat(timespec='microseconds')} ... "
+                f"{_msg!r}  # {_msg.payload}"  # or f'  # ("{msg.src!r}", "{msg.dst!r}")'
             )
             return
 
@@ -753,7 +766,7 @@ cli.add_command(listen)
 
 
 def _run_cli() -> None:
-    """Run the CLI via asyncclick and execute the core application engine."""
+    """Run the CLI via asyncclick and execute the application engine."""
     try:
         result = cli(standalone_mode=False)
     except ClickException as err:
@@ -772,8 +785,8 @@ def _run_cli() -> None:
 def main() -> None:  # pragma: no cover
     """Entry point for the CLI.
 
-    Parses arguments, sets up the event loop (including Windows-specific policies),
-    and runs the main asynchronous loop (optionally with profiling).
+    Parses arguments, sets up the event loop (including Windows-specific
+    policies), and runs the main loop (optionally with profiling).
     """
     print("\r\nclient.py: Starting ramses_rf...")
 

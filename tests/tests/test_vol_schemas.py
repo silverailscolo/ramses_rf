@@ -7,6 +7,7 @@ import pytest
 import voluptuous as vol
 import yaml
 
+from ramses_rf.config import SCH_GLOBAL_TRAITS_DICT
 from ramses_rf.schemas import (
     SCH_GATEWAY_DICT,
     SCH_GLOBAL_SCHEMAS,
@@ -15,7 +16,6 @@ from ramses_rf.schemas import (
 )
 from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
-    SCH_GLOBAL_TRAITS_DICT,
     sch_packet_log_dict_factory,
     sch_serial_port_dict_factory,
 )
@@ -58,15 +58,16 @@ def no_duplicates_constructor(
 ) -> Any:
     """Check for duplicate keys."""
     mapping: dict[str, Any] = {}
+    _loader: Any = loader  # Bypass PyYAML typing differences between local and CI
     for key_node, value_node in node.value:
-        key = loader.construct_object(key_node, deep=deep)  # type: ignore[no-untyped-call]
+        key = _loader.construct_object(key_node, deep=deep)
         if key in mapping:
             raise yaml.constructor.ConstructorError(
                 f"Duplicate key: {key} ('{mapping[key]}' overwrites '{value_node}')"
             )
-        value = loader.construct_object(value_node, deep=deep)  # type: ignore[no-untyped-call]
+        value = _loader.construct_object(value_node, deep=deep)
         mapping[key] = value
-    return loader.construct_mapping(node, deep)
+    return _loader.construct_mapping(node, deep)
 
 
 class CheckForDuplicatesLoader(yaml.Loader):

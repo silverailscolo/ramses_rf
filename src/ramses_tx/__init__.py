@@ -10,15 +10,19 @@ from functools import partial
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
-from .address import (
-    ALL_DEV_ADDR,
-    ALL_DEVICE_ID,
-    NON_DEV_ADDR,
-    NON_DEVICE_ID,
-    Address,
-    is_valid_dev_id,
+from ramses_rf.protocol.ramses import (
+    _2411_PARAMS_SCHEMA,
+    CODES_BY_DEV_SLUG,
+    CODES_SCHEMA,
+    SZ_DATA_TYPE,
+    SZ_DATA_UNIT,
+    SZ_DESCRIPTION,
+    SZ_MAX_VALUE,
+    SZ_MIN_VALUE,
+    SZ_PRECISION,
 )
-from .application_message import ApplicationMessage
+
+from .address import ALL_DEV_ADDR, ALL_DEVICE_ID, NON_DEV_ADDR, NON_DEVICE_ID, Address
 from .command import CODE_API_MAP, Command
 from .const import (
     DEV_ROLE_MAP,
@@ -45,23 +49,11 @@ from .const import (
 from .discovery import is_hgi80
 from .engine import Engine
 from .logger import set_pkt_logging
-from .message import Message
 from .packet import PKT_LOGGER, Packet
 from .protocol import PortProtocol, ReadProtocol, protocol_factory
-from .ramses import (
-    _2411_PARAMS_SCHEMA,
-    CODES_BY_DEV_SLUG,
-    CODES_SCHEMA,
-    SZ_DATA_TYPE,
-    SZ_DATA_UNIT,
-    SZ_DESCRIPTION,
-    SZ_MAX_VALUE,
-    SZ_MIN_VALUE,
-    SZ_PRECISION,
-)
-from .schemas import SZ_BOUND_TO, SZ_SERIAL_PORT
+from .schemas import SZ_SERIAL_PORT
 from .transport import RamsesTransportT, ZigbeeTransport, transport_factory
-from .typing import DeviceIdT, DeviceListT, QosParams
+from .typing import DeviceIdT, QosParams
 from .version import VERSION
 
 from .const import (  # isort: skip
@@ -85,7 +77,6 @@ __all__ = [
     "SZ_ZONE_IDX",
     "SZ_ZONE_MASK",
     "SZ_ZONE_TYPE",
-    "SZ_BOUND_TO",
     # Schema-related constants
     "SZ_DATA_UNIT",
     "SZ_DESCRIPTION",
@@ -117,7 +108,6 @@ __all__ = [
     "FF",
     #
     "DeviceIdT",
-    "DeviceListT",
     "DevRole",
     "DevType",
     "IndexT",
@@ -127,7 +117,6 @@ __all__ = [
     "Address",
     "Code",
     "Command",
-    "Message",
     "Packet",
     "Priority",
     "QosParams",
@@ -135,7 +124,6 @@ __all__ = [
     "PortProtocol",
     "ReadProtocol",
     "RamsesProtocolT",
-    "extract_known_hgi_id",
     "protocol_factory",
     #
     "RamsesTransportT",
@@ -145,10 +133,11 @@ __all__ = [
     #
     "is_valid_dev_id",
     "set_pkt_logging_config",
-    "ApplicationMessage",
     "Engine",
 ]
 
+
+is_valid_dev_id = Address.is_valid
 
 if TYPE_CHECKING:
     from logging import Logger
@@ -167,17 +156,3 @@ async def set_pkt_logging_config(**config: Any) -> tuple[Logger, QueueListener |
         None, partial(set_pkt_logging, PKT_LOGGER, **config)
     )
     return PKT_LOGGER, listener
-
-
-def extract_known_hgi_id(
-    include_list: DeviceListT,
-    /,
-    *,
-    disable_warnings: bool = False,
-    strict_checking: bool = False,
-) -> DeviceIdT | None:
-    return PortProtocol._extract_known_hgi_id(
-        include_list,
-        disable_warnings=disable_warnings,
-        strict_checking=strict_checking,
-    )
