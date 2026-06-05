@@ -370,8 +370,6 @@ class Controller(DeviceHeat):  # CTL (01):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
 
         self.tcs = None  # TODO: = self?
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
@@ -458,8 +456,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
         self._init_ufh_state()
 
     def _init_ufh_state(self) -> None:
@@ -689,8 +685,6 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
 
         self._child_id = FA  # NOTE: domain_id
 
@@ -739,8 +733,6 @@ class OutSensor(Weather, Fakeable):  # OUT: 17
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
 
     # async def initiate_binding_process(self) -> Packet:
     #     return await super()._initiate_binding_process(...)
@@ -789,8 +781,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         :param kwargs: Keyword arguments passed to base class.
         """
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
         self.opentherm_state = OpenThermState()
 
         self._child_id = FC  # NOTE: domain_id
@@ -1393,8 +1383,6 @@ class Thermostat(BatteryState, Setpoint, Temperature, Fakeable):  # THM (..):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
 
     async def initiate_binding_process(self) -> Packet:
         return await super()._initiate_binding_process(
@@ -1423,8 +1411,6 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
 
     def _setup_discovery_cmds(self) -> None:
         """Discover BDRs.
@@ -1528,8 +1514,6 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
 
     @property
     def heartbeat_timeout(self) -> td:
@@ -1571,8 +1555,6 @@ class JimDevice(Actuator):  # BDR (08):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
 
 
 class JstDevice(RelayDemand):  # BDR (31):
@@ -1583,8 +1565,6 @@ class JstDevice(RelayDemand):  # BDR (31):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-        self.temp_state = TemperatureState()
-        self.demand_state = DemandState()
 
 
 class UfhCircuit(Child, Entity):  # FIXME
