@@ -32,6 +32,7 @@ from ramses_rf.const import (
 from ramses_rf.device import Device
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.helpers import shrink
+from ramses_rf.models import DemandState, DeviceTraits, OpenThermState, TemperatureState
 from ramses_rf.quirks import QUARANTINED_OT_MSG_IDS
 from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
@@ -118,13 +119,6 @@ if TYPE_CHECKING:
 
     from ..messages import Message
     from ..protocol.opentherm import OtDataId
-else:
-    from ramses_rf.models import (
-        DemandState,
-        DeviceTraits,
-        OpenThermState,
-        TemperatureState,
-    )
 
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
