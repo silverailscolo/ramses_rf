@@ -10,7 +10,7 @@ import logging
 # )
 
 
-from .heat import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+from .tcs import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     Evohome,
     System,
     system_factory,
@@ -28,7 +28,7 @@ from .zones import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 
 
 __all__ = [
-    # .heat
+    # .tcs
     "Evohome",
     "System",
     "system_factory",

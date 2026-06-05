@@ -12,6 +12,15 @@ from typing import TYPE_CHECKING, Any, cast
 from ramses_tx import Priority, QosParams
 
 from .discovery import DiscoveryService
+from .models import (
+    DemandState,
+    FaultLogState,
+    HvacState,
+    OpenThermState,
+    ScheduleState,
+    StateUpdatedEvent,
+    TemperatureState,
+)
 from .state import EntityState
 
 if TYPE_CHECKING:
@@ -22,7 +31,7 @@ if TYPE_CHECKING:
     from .gateway import Gateway
     from .interfaces import DeviceInterface
     from .messages import Message
-    from .system import Evohome
+    from .systems.tcs import Evohome
 
 
 _QOS_TX_LIMIT = 12
@@ -107,6 +116,32 @@ class _Entity:
         Routing is handled directly by the Gateway into the central MessageStore.
         """
         pass
+
+    def apply_state_update(self, event: StateUpdatedEvent) -> None:
+        """Replace the internal CQRS read-model state with a new immutable object.
+
+        This method acts as the single ingestion point for state changes, completely
+        bypassing legacy packet interception.
+
+        :param event: The StateUpdatedEvent container wrapping the new frozen state.
+        :type event: StateUpdatedEvent
+        :return: None
+        :rtype: None
+        """
+        if isinstance(event.state, TemperatureState) and hasattr(self, "temp_state"):
+            setattr(self, "temp_state", event.state)  # noqa: B010
+        elif isinstance(event.state, DemandState) and hasattr(self, "demand_state"):
+            setattr(self, "demand_state", event.state)  # noqa: B010
+        elif isinstance(event.state, ScheduleState) and hasattr(self, "schedule_state"):
+            setattr(self, "schedule_state", event.state)  # noqa: B010
+        elif isinstance(event.state, FaultLogState) and hasattr(self, "state"):
+            setattr(self, "state", event.state)  # noqa: B010
+        elif isinstance(event.state, OpenThermState) and hasattr(
+            self, "opentherm_state"
+        ):
+            setattr(self, "opentherm_state", event.state)  # noqa: B010
+        elif isinstance(event.state, HvacState) and hasattr(self, "hvac_state"):
+            setattr(self, "hvac_state", event.state)  # noqa: B010
 
     def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task[Any] | None:
         """Proxy command sending to the Gateway.

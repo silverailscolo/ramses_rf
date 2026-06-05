@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import logging
+import uuid
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from ramses_tx import ALL_DEV_ADDR, CODES_BY_DEV_SLUG
 
@@ -28,8 +30,8 @@ from .const import (
     Code,
     DevType,
 )
-from .device import Device, Fakeable
 from .messages import Message
+from .models import StateUpdatedEvent
 from .protocol.ramses import (
     CODES_OF_HEAT_DOMAIN,
     CODES_OF_HEAT_DOMAIN_ONLY,
@@ -139,38 +141,46 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
     :rtype: bool
     """
     try:
-        # FIXME: changing Address to Devices is messy: ? Protocol for same method signatures
-        # prefer Devices but can continue with Addresses if required...
-        msg.src = gwy.device_registry.device_by_id.get(msg.src.id, msg.src)
-        msg.dst = gwy.device_registry.device_by_id.get(msg.dst.id, msg.dst)
+        # FIXME: changing Address to Devices is messy: ? Protocol for same
+        # method signatures. prefer Devices but can continue with Addresses...
+        src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
+        dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
 
         # Devices need to know their controller, ?and their location ('parent' domain)
         # NB: only addrs processed here, packet metadata is processed elsewhere
 
         # Determining bindings to a controller:
-        #  - configury; As per any schema                                                   # codespell:ignore configury
+        #  - configury; As per any schema      # codespell:ignore configury
         #  - discovery: If in 000C pkt, or pkt *to* device where src is a controller
         #  - eavesdrop: If pkt *from* device where dst is a controller
 
         # Determining location in a schema (domain/DHW/zone):
-        #  - configury; As per any schema                                                   # codespell:ignore configury
+        #  - configury; As per any schema      # codespell:ignore configury
         #  - discovery: If in 000C pkt - unable for 10: & 00: (TRVs)
         #  - discovery: from packet fingerprint, excl. payloads (only for 10:)
         #  - eavesdrop: from packet fingerprint, incl. payloads
 
-        if not isinstance(msg.src, Device):  # type: ignore[unreachable]
+        if src_dev is None:
             # may: DeviceNotFoundError, but don't suppress
-            msg.src = gwy.device_registry.get_device(msg.src.id)
+            src_dev = gwy.device_registry.get_device(msg.src.id)
             if msg.dst.id == msg.src.id:
-                msg.dst = msg.src
                 return True
 
         if not gwy.config.enable_eavesdrop:
             return True
 
-        if not isinstance(msg.dst, Device) and msg.src != gwy.hgi:  # type: ignore[unreachable]
+        hgi_id = gwy.hgi.id if gwy.hgi else None
+        if dst_dev is None and msg.src.id != hgi_id:
             with contextlib.suppress(exc.DeviceNotFoundError):
-                msg.dst = gwy.device_registry.get_device(msg.dst.id)
+                gwy.device_registry.get_device(msg.dst.id)
+
+        # Eavesdrop: Instantiate implicitly referenced devices (e.g., parent
+        # controller in addr2)
+        if hasattr(msg._pkt, "_addrs"):
+            for addr in msg._pkt._addrs:
+                if addr.id not in (msg.src.id, getattr(msg.dst, "id", None)):
+                    with contextlib.suppress(exc.DeviceNotFoundError):
+                        gwy.device_registry.get_device(addr.id)
 
     except exc.DeviceNotFoundError as err:
         (_LOGGER.error if _DBG_INCREASE_LOG_LEVELS else _LOGGER.warning)(
@@ -197,7 +207,9 @@ def validate_slugs(gwy: Gateway, msg: Message) -> bool:
     :rtype: bool
     """
     # 1. Check Source Slug
-    slug = getattr(msg.src, "_SLUG", None)
+    src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
+    slug = getattr(src_dev, "_SLUG", None)
+
     if slug not in (None, DevType.HGI, DevType.DEV, DevType.HEA, DevType.HVC):
         # TODO: use DEV_TYPE_MAP.PROMOTABLE_SLUGS
         if slug not in CODES_BY_DEV_SLUG:
@@ -213,40 +225,233 @@ def validate_slugs(gwy: Gateway, msg: Message) -> bool:
 
     # 2. Check Destination Slug
     if (
-        msg.src._SLUG != DevType.HGI  # avoid: msg.src.id != gwy.hgi.id
+        slug != DevType.HGI  # avoid: msg.src.id != gwy.hgi.id
         and msg.verb != I_
-        and msg.dst != msg.src
+        and msg.dst.id != msg.src.id
     ):
         # HGI80 can do what it likes
         # receiving an I_ isn't currently in the schema & so can't yet be tested
-        slug = getattr(msg.dst, "_SLUG", None)
-        if slug not in (None, DevType.HGI, DevType.DEV, DevType.HEA, DevType.HVC):
-            if slug not in CODES_BY_DEV_SLUG:
+        dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
+        dst_slug = getattr(dst_dev, "_SLUG", None)
+
+        if dst_slug not in (None, DevType.HGI, DevType.DEV, DevType.HEA, DevType.HVC):
+            if dst_slug not in CODES_BY_DEV_SLUG:
                 raise exc.PacketInvalid(
-                    f"{msg!r} < Unknown dst slug ({slug}), is it HVAC?"
+                    f"{msg!r} < Unknown dst slug ({dst_slug}), is it HVAC?"
                 )
 
-            if f"{slug}/{msg.verb}/{msg.code}" not in (f"CTL/{RQ}/{Code._3EF1}",):
+            if f"{dst_slug}/{msg.verb}/{msg.code}" not in (f"CTL/{RQ}/{Code._3EF1}",):
                 # HACK: an exception-to-the-rule that need sorting
-                if msg.code not in CODES_BY_DEV_SLUG[slug]:
+                if msg.code not in CODES_BY_DEV_SLUG[dst_slug]:
                     raise exc.PacketInvalid(
-                        f"{msg!r} < Unexpected code for dst ({slug}) to Rx"
+                        f"{msg!r} < Unexpected code for dst ({dst_slug}) to Rx"
                     )
 
                 if f"{msg.verb}/{msg.code}" not in (f"{W_}/{Code._0001}",):
                     # HACK: an exception-to-the-rule that need sorting
-                    if f"{slug}/{msg.verb}/{msg.code}" not in (
+                    if f"{dst_slug}/{msg.verb}/{msg.code}" not in (
                         f"{DevType.BDR}/{RQ}/{Code._3EF0}",
                     ):
                         # HACK: an exception-to-the-rule that need sorting
                         if {RQ: RP, RP: RQ, W_: I_}[msg.verb] not in CODES_BY_DEV_SLUG[
-                            slug
+                            dst_slug
                         ][msg.code]:
                             raise exc.PacketInvalid(
-                                f"{msg!r} < Unexpected verb/code for dst ({slug}) to Rx"
+                                f"{msg!r} < Unexpected verb/code for dst "
+                                f"({dst_slug}) to Rx"
                             )
 
     return gwy.config.reduce_processing < DONT_UPDATE_ENTITIES
+
+
+def _resolve_logical_targets(
+    gwy: Gateway, msg: Message, p: dict[str, Any]
+) -> list[Any]:
+    """Resolve all logical software twins that should ingest this payload."""
+    targets = []
+    src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
+    dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
+
+    # 1. Fault logs strictly target the TCS (if it exists) or the source device
+    if msg.code == "0418":
+        if src_dev and hasattr(src_dev, "tcs") and src_dev.tcs:
+            targets.append(getattr(src_dev.tcs, "faultlog", src_dev))
+        elif src_dev:
+            targets.append(src_dev)
+        return targets
+
+    # 2. Hardware twin (Sender) always gets the update UNLESS it's a Controller/UFC
+    # actively broadcasting an array of children's states (e.g., a 30C9 sync).
+    src_type = getattr(src_dev, "type", None)
+    has_arr = getattr(msg, "_has_array", False)
+    if src_type not in ("01", "02") or not has_arr:
+        if src_dev:
+            targets.append(src_dev)
+
+    # 3. Hardware twin (Destination) gets the update.
+    # Legacy routes packets to the destination device's cache. To maintain
+    # strict parity, we mirror this.
+    if msg.dst.id != msg.src.id and getattr(msg.dst, "id", "") != "63:262142":
+        if (
+            dst_dev
+            and hasattr(dst_dev, "apply_state_update")
+            and dst_dev not in targets
+        ):
+            targets.append(dst_dev)
+
+    # 4. Virtual twins (Zones) get updates if explicitly addressed by idx.
+    if "zone_idx" in p and src_dev and hasattr(src_dev, "tcs") and src_dev.tcs:
+        if zone := src_dev.tcs.zone_by_idx.get(p["zone_idx"]):
+            if zone not in targets:
+                targets.append(zone)
+
+    # 5. Domain twins (TCS, DHW) get updates.
+    if "domain_id" in p and src_dev and hasattr(src_dev, "tcs") and src_dev.tcs:
+        domain_id = p["domain_id"]
+        if domain_id == "FC" and src_dev.tcs not in targets:
+            targets.append(src_dev.tcs)
+        elif domain_id in ("FA", "F9") and hasattr(src_dev.tcs, "dhw"):
+            if src_dev.tcs.dhw not in targets:
+                targets.append(src_dev.tcs.dhw)
+
+    return targets
+
+
+def _update_temperature_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+    """Translate temperature data into a frozen StateUpdatedEvent."""
+    if not hasattr(target, "temp_state"):
+        return
+
+    updates: dict[str, Any] = {}
+
+    if "temperature" in p:
+        # Legacy Parity: Physical sensors only track their own local sensor readings.
+        # We must ignore Zone temperature syncs sent TO them by the Controller.
+        target_id = getattr(target, "id", str(target))
+        src_id = getattr(msg.src, "id", str(msg.src))
+
+        if getattr(target, "_SLUG", "") in ("TRV", "THM") and src_id != target_id:
+            pass
+        else:
+            updates["temperature"] = p["temperature"]
+
+    if "setpoint" in p:
+        updates["setpoint"] = p["setpoint"]
+
+    if not updates:
+        return
+
+    new_state = dataclasses.replace(target.temp_state, **updates)
+    event = StateUpdatedEvent(
+        entity_id=getattr(target, "id", "unknown"),
+        state=new_state,
+        correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+        causation_id=getattr(msg, "message_id", uuid.uuid4()),
+    )
+    target.apply_state_update(event)
+
+
+def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+    """Translate demand data into a frozen StateUpdatedEvent."""
+    if not hasattr(target, "demand_state"):
+        return
+
+    updates: dict[str, Any] = {}
+    if "heat_demand" in p:
+        updates["heat_demand"] = p["heat_demand"]
+    if "relay_demand" in p:
+        updates["heat_demand"] = p["relay_demand"]
+        updates["relay_active"] = float(p["relay_demand"]) > 0.0
+
+    if not updates:
+        return
+
+    new_state = dataclasses.replace(target.demand_state, **updates)
+    event = StateUpdatedEvent(
+        entity_id=getattr(target, "id", "unknown"),
+        state=new_state,
+        correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+        causation_id=getattr(msg, "message_id", uuid.uuid4()),
+    )
+    target.apply_state_update(event)
+
+
+def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+    """Translate 0418 fault log data into a frozen StateUpdatedEvent.
+
+    This handles the immutable tuple appending tracking required by the
+    CQRS FaultLogState read-model container.
+
+    :param target: The target entity software twin to update.
+    :type target: Any
+    :param p: The parsed message payload dictionary.
+    :type p: dict[str, Any]
+    :param msg: The immutable Message L7 envelope.
+    :type msg: Message
+    :return: None
+    :rtype: None
+    """
+    if msg.code != "0418" or not hasattr(target, "state"):
+        return
+    if type(target.state).__name__ != "FaultLogState":
+        return
+
+    # Guard: Ensure the entry index exists in the parsed payload
+    if "log_idx" not in p:
+        return
+
+    from ramses_rf.systems.faultlog import FaultLogEntry
+
+    with contextlib.suppress(Exception):
+        entry = FaultLogEntry.from_msg(msg)
+
+        # Append to the immutable tuple, safely removing stale matching timestamps
+        current_entries = getattr(target.state, "entries", ())
+        filtered = [e for e in current_entries if e.timestamp != entry.timestamp]
+        new_entries = tuple(filtered) + (entry,)
+
+        latest = getattr(target.state, "latest_fault", None)
+        if getattr(entry.fault_state, "value", str(entry.fault_state)) == "fault":
+            latest = entry
+
+        new_state = dataclasses.replace(
+            target.state, entries=new_entries, latest_fault=latest
+        )
+
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        target.apply_state_update(event)
+
+
+def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
+    """Parallel ingestion engine to populate immutable CQRS read-models.
+
+    This acts as a Strangler Fig, intercepting decoded payloads and mapping
+    them directly into the new `StateUpdatedEvent` structures.
+    """
+    # Legacy Parity: Request packets do not contain authoritative telemetry.
+    if getattr(msg, "verb", "") == "RQ":
+        return
+
+    if not isinstance(msg.payload, (dict, list)):
+        return
+
+    payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
+
+    for p in payloads:
+        if not isinstance(p, dict):
+            continue
+
+        targets = _resolve_logical_targets(gwy, msg, p)
+        for target in targets:
+            with contextlib.suppress(AttributeError, TypeError, ValueError):
+                _update_temperature_state(target, p, msg)
+                _update_demand_state(target, p, msg)
+                _update_faultlog_state(target, p, msg)
 
 
 def route_payload(gwy: Gateway, msg: Message) -> None:
@@ -265,10 +470,11 @@ def route_payload(gwy: Gateway, msg: Message) -> None:
     # NOTE: here, msgs are routed only to devices: routing to other entities (i.e.
     # systems, zones, circuits) is done by those devices (e.g. UFC to UfhCircuit)
 
-    if isinstance(msg.src, Device):  # type: ignore[unreachable]
-        gwy._engine._loop.call_soon(msg.src._handle_msg, msg)  # type: ignore[unreachable]
+    src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
+    if src_dev is not None:
+        gwy._engine._loop.call_soon(src_dev._handle_msg, msg)
 
-    # TODO: only be for fully-faked (not Fakable) dst (it picks up via RF if not)
+    devices: list[Any] = []
 
     if (
         msg.code == Code._1FC9
@@ -276,32 +482,37 @@ def route_payload(gwy: Gateway, msg: Message) -> None:
         and msg.payload.get(SZ_PHASE) == SZ_OFFER  # 2. Safely check for key
     ):
         devices = [
-            d for d in gwy.device_registry.devices if d != msg.src and d._is_binding
+            d
+            for d in gwy.device_registry.devices
+            if d.id != msg.src.id and d._is_binding
         ]
 
-    elif msg.dst == ALL_DEV_ADDR:  # some offers use dst=63:, so after 1FC9 offer
+    elif msg.dst.id == ALL_DEV_ADDR.id:  # some offers use dst=63:, so after 1FC9
         devices = [
-            d for d in gwy.device_registry.devices if d != msg.src and d.is_faked
+            d for d in gwy.device_registry.devices if d.id != msg.src.id and d.is_faked
         ]
-
-    elif msg.dst is not msg.src and isinstance(msg.dst, Fakeable):  # type: ignore[unreachable]
-        # to eavesdrop pkts from other devices, but relevant to this device
-        # dont: msg.dst._handle_msg(msg)
-        devices = [msg.dst]  # type: ignore[unreachable]
-
-    # TODO: this may not be required...
-    elif hasattr(msg.src, SZ_DEVICES):  # FIXME: use isinstance()
-        # elif isinstance(msg.src, Controller):
-        # .I --- 22:060293 --:------ 22:060293 0008 002 000C
-        # .I --- 01:054173 --:------ 01:054173 0008 002 03AA
-        # needed for (e.g.) faked relays: each device decides if the pkt is useful
-        devices = msg.src.devices
 
     else:
-        devices = []
+        dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
+        if msg.dst.id != msg.src.id and dst_dev is not None:
+            devices.append(dst_dev)
 
-    for d in devices:  # FIXME: some may be Addresses?
-        gwy._engine._loop.call_soon(d._handle_msg, msg)
+        if src_dev and hasattr(src_dev, SZ_DEVICES) and src_dev.devices:
+            for d in src_dev.devices:
+                if d.id != msg.src.id and d not in devices:
+                    devices.append(d)
+
+    # Add Eavesdropping Correlation Routing
+    if gwy.config.enable_eavesdrop and hasattr(msg._pkt, "_addrs"):
+        for addr in msg._pkt._addrs:
+            if addr.id != msg.src.id and addr.id != getattr(msg.dst, "id", None):
+                if dev := gwy.device_registry.device_by_id.get(addr.id):
+                    if dev not in devices:
+                        devices.append(dev)
+
+    for d in devices:
+        if d.id != msg.src.id:
+            gwy._engine._loop.call_soon(d._handle_msg, msg)
 
 
 async def process_msg(gwy: Gateway, msg: Message) -> None:
@@ -328,6 +539,8 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
         if not validate_slugs(gwy, msg):
             _log_message(gwy, msg)
             return
+
+        _cqrs_ingestion_engine(gwy, msg)
 
         route_payload(gwy, msg)
 

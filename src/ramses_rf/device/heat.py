@@ -32,6 +32,7 @@ from ramses_rf.const import (
 from ramses_rf.device import Device
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.helpers import shrink
+from ramses_rf.models import DemandState, DeviceTraits, OpenThermState, TemperatureState
 from ramses_rf.quirks import QUARANTINED_OT_MSG_IDS
 from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
@@ -107,8 +108,13 @@ from ramses_tx.const import (
 if TYPE_CHECKING:
     from ramses_rf.address import Address
     from ramses_rf.messages import ApplicationMessage
-    from ramses_rf.models import DeviceTraits
-    from ramses_rf.system import Evohome, Zone
+    from ramses_rf.models import (
+        DemandState,
+        DeviceTraits,
+        OpenThermState,
+        TemperatureState,
+    )
+    from ramses_rf.systems import Evohome, Zone
     from ramses_tx import Packet
 
     from ..messages import Message
@@ -402,7 +408,7 @@ class Controller(DeviceHeat):  # CTL (01):
             If a TCS is created, attach it to this device (which should be a CTL).
             """
 
-            from ramses_rf.system import system_factory
+            from ramses_rf.systems import system_factory
 
             schema = shrink(SCH_TCS(schema))
 
@@ -723,6 +729,11 @@ class OutSensor(Weather, Fakeable):  # OUT: 17
     _SLUG = DevType.OUT
     _STATE_ATTR = SZ_TEMPERATURE
 
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
+
     # async def initiate_binding_process(self) -> Packet:
     #     return await super()._initiate_binding_process(...)
 
@@ -762,10 +773,30 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the OpenTherm Bridge device software twin.
+
+        :param args: Positional arguments passed to base class.
+        :param traits: Strictly typed traits definition object.
+        :type traits: DeviceTraits | None
+        :param kwargs: Keyword arguments passed to base class.
+        """
         super().__init__(*args, traits=traits, **kwargs)
+        self.opentherm_state = OpenThermState()
 
         self._child_id = FC  # NOTE: domain_id
         self._msgs_ot: dict[MsgId, Message] = {}
+
+    def _post_class_promote(self) -> None:
+        """Initialize OTB state when promoted in-place from a generic device."""
+        self.__dict__.setdefault("_child_id", FC)
+        self.__dict__.setdefault("_msgs_ot", {})
+
+        if not hasattr(self, "temp_state"):
+            self.temp_state = TemperatureState()
+        if not hasattr(self, "demand_state"):
+            self.demand_state = DemandState()
+        if not hasattr(self, "opentherm_state"):
+            self.opentherm_state = OpenThermState()
 
     @property
     def heartbeat_timeout(self) -> td:
@@ -1348,6 +1379,11 @@ class Thermostat(BatteryState, Setpoint, Temperature, Fakeable):  # THM (..):
     _SLUG = DevType.THM
     _STATE_ATTR = SZ_TEMPERATURE
 
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
+
     async def initiate_binding_process(self) -> Packet:
         return await super()._initiate_binding_process(
             (Code._2309, Code._30C9, Code._0008)
@@ -1370,6 +1406,11 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
     _SLUG = DevType.BDR
     _STATE_ATTR = "active"
+
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
 
     def _setup_discovery_cmds(self) -> None:
         """Discover BDRs.
@@ -1469,6 +1510,11 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
     _SLUG = DevType.TRV
     _STATE_ATTR = SZ_HEAT_DEMAND
 
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
+
     @property
     def heartbeat_timeout(self) -> td:
         """Return the timeout before the device is considered unavailable.
@@ -1505,10 +1551,20 @@ class JimDevice(Actuator):  # BDR (08):
     _SLUG: str = DevType.JIM
     _STATE_ATTR = None
 
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
+
 
 class JstDevice(RelayDemand):  # BDR (31):
     _SLUG: str = DevType.JST
     _STATE_ATTR = None
+
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
 
 
 class UfhCircuit(Child, Entity):  # FIXME

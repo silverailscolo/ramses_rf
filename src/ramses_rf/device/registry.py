@@ -24,7 +24,7 @@ from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
 if TYPE_CHECKING:
     from ramses_rf.device import Device
     from ramses_rf.messages import Message
-    from ramses_rf.system import Evohome
+    from ramses_rf.systems import Evohome
     from ramses_rf.topology import Parent
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class DeviceRegistry:
         :param config: The gateway configuration object.
         :type config: GatewayConfig
         :param device_factory_cb: A callback to instantiate domain devices.
-        :type device_factory_cb: Callable[[Address, Message | None, DeviceTraits], Device]
+        :type device_factory_cb: Callable
         """
         self._device_filter = device_filter
         self._config = config
@@ -54,28 +54,78 @@ class DeviceRegistry:
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
+        # INDUSTRY BEST PRACTICE: The Dispatcher (Command) Pattern
+        # --------------------------------------------------------
+        # Instead of a long, procedural if/elif chain, we map incoming
+        # actions directly to their handler methods. This guarantees O(1)
+        # routing speed and makes it incredibly easy for new developers
+        # to trace exactly where an event is processed.
+        self._event_routers: dict[
+            TopologyAction, Callable[[TopologyChangedEvent], None]
+        ] = {
+            TopologyAction.BIND_DEVICE: self._handle_bind_device,
+            TopologyAction.PROMOTE_CLASS: self._handle_promote_class,
+            TopologyAction.CREATE_CONTROLLER: self._handle_create_controller,
+            TopologyAction.CREATE_CIRCUIT: self._handle_create_circuit,
+            TopologyAction.UPDATE_TRAITS: self._handle_update_traits,
+        }
+
     def handle_topology_event(self, event: TopologyChangedEvent) -> None:
-        """Process an immutable structural graph mutation event."""
-        if event.action == TopologyAction.BIND_DEVICE:
-            self._handle_bind_device(event)
-        elif event.action == TopologyAction.PROMOTE_CLASS:
-            self._handle_promote_class(event)
-        elif event.action == TopologyAction.CREATE_CONTROLLER:
-            self._handle_create_controller(event)
-        elif event.action == TopologyAction.CREATE_CIRCUIT:
-            self._handle_create_circuit(event)
-        elif event.action == TopologyAction.UPDATE_TRAITS:
-            self._handle_update_traits(event)
+        """Process an immutable structural graph mutation event.
+
+        This method acts as the central ingestion point for the Write-Model.
+        It looks up the correct handler for the event's action and
+        executes it.
+        """
+        handler = self._event_routers.get(event.action)
+        if handler:
+            handler(event)
+        else:
+            _LOGGER.warning(f"No registry handler defined for action: {event.action}")
 
     def _handle_bind_device(self, event: TopologyChangedEvent) -> None:
         """Bind a child device to a parent device."""
         if not event.parent_id or not event.child_id:
             return
-        parent = self.device_by_id.get(event.parent_id)
-        child = self.device_by_id.get(event.child_id)
-        if parent and child:
-            child.set_parent(cast("Parent", parent))
-            _LOGGER.debug(f"Bound {child.id} to {parent.id} via {event.causation}")
+
+        # Ensure the parent exists in the registry BEFORE we attempt
+        # to inspect its TCS! This completely eliminates the race condition
+        # when a sensor broadcasts before its controller does.
+        parent = self.get_device(event.parent_id)
+
+        # INTERCEPT: If the metadata targets a specific zone, the true
+        # parent is the Zone object, not the main Controller.
+        if parent and event.metadata and "zone_idx" in event.metadata:
+            zone_idx = str(event.metadata["zone_idx"])
+            if hasattr(parent, "tcs") and parent.tcs:
+                if hasattr(parent.tcs, "get_htg_zone"):
+                    parent = parent.tcs.get_htg_zone(zone_idx)
+                elif hasattr(parent.tcs, "get_zone"):
+                    parent = parent.tcs.get_zone(zone_idx)
+                elif zone_idx in parent.tcs.zone_by_idx:
+                    parent = parent.tcs.zone_by_idx[zone_idx]
+
+        if parent:
+            # Extract domain_id for DHW (FA) or UFH (F9) if applicable
+            raw_domain_id = event.metadata.get("domain_id") if event.metadata else None
+            child_id_alias = str(raw_domain_id) if raw_domain_id is not None else None
+
+            # Safely extract is_sensor without coercing None to False,
+            # allowing legacy code to correctly deduce actuators.
+            raw_is_sensor = event.metadata.get("is_sensor") if event.metadata else None
+            is_sensor = bool(raw_is_sensor) if raw_is_sensor is not None else None
+
+            # Route the binding back through get_device to ensure full
+            # L7 registration (state inheritance, API hooks, etc.)
+            self.get_device(
+                event.child_id,
+                parent=cast("Parent", parent),
+                child_id=child_id_alias,
+                is_sensor=is_sensor,
+            )
+            _LOGGER.debug(
+                f"Bound {event.child_id} to {parent.id} via {event.causation}"
+            )
 
     def _handle_promote_class(self, event: TopologyChangedEvent) -> None:
         """Safely instantiate a promoted class and migrate state."""
@@ -111,10 +161,8 @@ class DeviceRegistry:
 
             # Migrate essential topological state ONLY if a parent existed
             if old_parent := getattr(old_dev, "_parent", None):
-                new_dev.set_parent(old_parent)
+                new_dev._apply_topology_link(old_parent)
 
-            # The factory's Device.__init__ automatically calls _add_device,
-            # inserting the new object into self.device_by_id and self.devices
             _LOGGER.info(
                 f"Promoted {event.device_id} to {new_class_slug} via {event.causation}"
             )
@@ -222,7 +270,7 @@ class DeviceRegistry:
                     _LOGGER.warning(f"The device is not fakeable: {dev}")
 
         if parent or child_id:
-            dev.set_parent(parent, child_id=child_id, is_sensor=is_sensor)
+            dev._apply_topology_link(parent, child_id=child_id, is_sensor=is_sensor)
 
         return dev
 
@@ -346,3 +394,88 @@ class DeviceRegistry:
             if isinstance(d, DeviceHvac) and await d._is_present():
                 orphans.append(d.id)
         return sorted(orphans)
+
+    def _promote_device_class(self, event: TopologyChangedEvent) -> None:
+        """Safely instantiate a promoted class and migrate its state.
+
+        :param event: The promotion event containing the device_id.
+        :type event: TopologyChangedEvent
+        """
+        if not event.device_id or not event.metadata:
+            return
+
+        target_class = event.metadata.get("device_class")
+        if not isinstance(target_class, str):
+            return
+
+        old_dev = self.device_by_id.get(event.device_id)
+        if not old_dev:
+            return
+
+        if getattr(old_dev, "_SLUG", None) == target_class:
+            return
+
+        _LOGGER.info(
+            "Promoting device %s from %s to %s",
+            event.device_id,
+            getattr(old_dev, "_SLUG", "Unknown"),
+            target_class,
+        )
+
+        # 1. Prepare traits for the new class (retaining faked status)
+        traits = DeviceTraits(
+            device_class=target_class,
+            faked=getattr(old_dev, "is_faked", False),
+        )
+
+        # 2. Instantiate using the completely decoupled factory
+        new_dev = self._device_factory_cb(old_dev.addr, None, traits)
+
+        # 3. Migrate CQRS Read-Model State
+        if hasattr(old_dev, "temp_state") and hasattr(new_dev, "temp_state"):
+            new_dev.temp_state = old_dev.temp_state
+
+        if hasattr(old_dev, "demand_state") and hasattr(new_dev, "demand_state"):
+            new_dev.demand_state = old_dev.demand_state
+
+        # 4. Swap the reference in the registry
+        self.device_by_id[event.device_id] = new_dev
+
+    def _bind_device(self, event: TopologyChangedEvent) -> None:
+        """Bind a child device to a parent domain or zone.
+
+        :param event: The binding event containing parent_id & child_id.
+        :type event: TopologyChangedEvent
+        """
+        if not event.parent_id or not event.child_id:
+            return
+
+        parent = self.device_by_id.get(event.parent_id)
+        child = self.device_by_id.get(event.child_id)
+
+        if not parent or not child:
+            return
+
+        metadata = event.metadata or {}
+        is_sensor = bool(metadata.get("is_sensor", False))
+
+        child_domain_id_raw = metadata.get("child_id")
+        child_domain_id = (
+            str(child_domain_id_raw) if child_domain_id_raw is not None else None
+        )
+
+        _LOGGER.debug(
+            "Binding %s to parent %s (sensor=%s, domain=%s)",
+            event.child_id,
+            event.parent_id,
+            is_sensor,
+            child_domain_id,
+        )
+
+        # Safely apply the topology link, bypassing legacy mutable logic
+        if hasattr(child, "_apply_topology_link"):
+            child._apply_topology_link(
+                cast("Parent", parent),
+                is_sensor=is_sensor,
+                child_id=child_domain_id,
+            )
