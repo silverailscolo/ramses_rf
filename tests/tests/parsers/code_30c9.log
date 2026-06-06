@@ -14,3 +14,5 @@
 
 # evohome from cesar.florin HCC80 controlled via round thermostat talking to a BDR91 relay
 2025-09-09T18:54:06.865752 054  I --- 34:030020 --:------ 34:030020 30C9 003 0009D7                  # {'temperature': 25.19}
+# ATAG IC Econ 35 Plus on evohome
+2026-06-01T07:22:30.644125 078  I --- 34:121023 --:------ 34:121023 30C9 003 0007BA                  #  {'temperature': 19.78}
