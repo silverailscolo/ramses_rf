@@ -3,7 +3,7 @@
 
 # TODO: add test for ramses_tx.frame.pkt_header()
 
-from ramses_rf.system.zones import _transform
+from ramses_rf.systems.zones import _transform
 from ramses_tx.command import Command
 from ramses_tx.exceptions import CommandInvalid, PacketInvalid
 from ramses_tx.helpers import (

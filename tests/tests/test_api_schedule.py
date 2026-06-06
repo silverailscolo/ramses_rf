@@ -9,8 +9,8 @@ import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
-from ramses_rf.system import Evohome
-from ramses_rf.system.schedule import (
+from ramses_rf.systems import Evohome
+from ramses_rf.systems.schedule import (
     SCH_SCHEDULE_DHW_OUTER,
     SCH_SCHEDULE_ZON_OUTER,
     SZ_ENABLED,
@@ -19,7 +19,7 @@ from ramses_rf.system.schedule import (
     fragz_to_full_sched,
     full_sched_to_fragz,
 )
-from ramses_rf.system.zones import ZoneSchedule
+from ramses_rf.systems.zones import ZoneSchedule
 
 from .helpers import TEST_DIR, load_test_gwy
 

@@ -249,13 +249,13 @@
     "unreachable",  #  14
   ]
 
-[[tool.mypy.overrides]]
-  module = "ramses_rf.system.zones"
-
-  disable_error_code = [
-    "assignment",  #    6
-    "unreachable",  #  10
-  ]
+#[[tool.mypy.overrides]]
+#  module = "ramses_rf.systems.zones"
+#
+#  disable_error_code = [
+#    "assignment",  #    6
+#    "unreachable",  #  10
+#  ]
 
 [[tool.mypy.overrides]]
   module = "tests.*"

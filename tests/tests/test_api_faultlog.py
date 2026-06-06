@@ -6,7 +6,7 @@ from datetime import datetime as dt
 from typing import Any
 
 from ramses_rf import Address, Command, Message, Packet
-from ramses_rf.system.faultlog import FaultLog, FaultLogEntry
+from ramses_rf.systems.faultlog import FaultLog, FaultLogEntry
 from ramses_tx.address import HGI_DEVICE_ID
 from ramses_tx.const import SZ_LOG_ENTRY, FaultDeviceClass, FaultState, FaultType
 

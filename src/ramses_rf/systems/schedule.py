@@ -38,7 +38,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 )
 
 if TYPE_CHECKING:
-    from ramses_rf.system.zones import DhwZone, Zone
+    from ramses_rf.systems.zones import DhwZone, Zone
 
 
 # Constants

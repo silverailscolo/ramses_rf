@@ -23,6 +23,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
+from ramses_rf.models import DemandState, TemperatureState
 from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.topology import Child
 from ramses_tx import Command, Packet, Priority, QosParams
@@ -42,7 +43,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
-    from ramses_rf.system import Zone
+    from ramses_rf.systems import Zone
     from ramses_tx.const import IndexT
     from ramses_tx.typing import DeviceIdT
 
@@ -509,6 +510,9 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         self._child_id = None  # domain_id, or zone_idx
 
         self._iz_controller: None | bool | Message = None
+
+        self.temp_state = TemperatureState()
+        self.demand_state = DemandState()
 
     def _make_tcs_controller(
         self, *, msg: Message | None = None, **schema: Any

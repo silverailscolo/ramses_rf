@@ -38,6 +38,7 @@ from ramses_rf.device import (
 )
 from ramses_rf.entity import _ID_SLICE, Entity, class_by_attr
 from ramses_rf.helpers import shrink
+from ramses_rf.models import DemandState, ScheduleState, TemperatureState
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
     SCH_TCS_ZONES_ZON,
@@ -60,7 +61,7 @@ if TYPE_CHECKING:
     from ramses_tx import Packet
     from ramses_tx.typing import DeviceIdT, DevIndexT
 
-    from .heat import Evohome, _MultiZoneT, _StoredHwT
+    from .tcs import Evohome, _MultiZoneT, _StoredHwT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip
     F9,
@@ -83,7 +84,7 @@ _LOGGER = logging.getLogger(__name__)
 class ZoneBase(Child, Parent, Entity):
     """The Zone/DHW base class."""
 
-    _SLUG: str | None = None
+    _SLUG: str | None = None  # type: ignore[assignment]
 
     _ROLE_ACTUATORS: str | None = None
     _ROLE_SENSORS: str | None = None
@@ -91,15 +92,20 @@ class ZoneBase(Child, Parent, Entity):
     def __init__(self, tcs: _MultiZoneT | _StoredHwT, zone_idx: str) -> None:
         super().__init__(tcs._gwy)
 
+        # Parallel CQRS States
+        self.temp_state = TemperatureState()
+        self.demand_state = DemandState()
+        self.schedule_state = ScheduleState(zone_idx=zone_idx, days=())
+
         # FIXME: ZZZ entities must know their parent device ID and their
         # own idx
         self._z_id = tcs.id  # the responsible device is the controller
         # the zone idx (ctx), 00-0B (or 0F), HW (FA)
-        self._z_idx: DevIndexT = zone_idx
+        self._z_idx: DevIndexT = cast("DevIndexT", zone_idx)
 
-        self.id: str = f"{tcs.id}_{zone_idx}"
+        self.id: DeviceIdT = cast("DeviceIdT", f"{tcs.id}_{zone_idx}")
 
-        self.tcs: Evohome = tcs
+        self.tcs: Evohome = cast("Evohome", tcs)
         self.ctl: Controller = tcs.ctl
         self._child_id: str = zone_idx
 
@@ -108,7 +114,7 @@ class ZoneBase(Child, Parent, Entity):
     # Should be a private method
     @classmethod
     def create_from_schema(
-        cls, tcs: _MultiZoneT, zone_idx: str, **schema: Any
+        cls, tcs: _MultiZoneT | _StoredHwT, zone_idx: str, **schema: Any
     ) -> ZoneBase:
         """Create a CH/DHW zone for a TCS and set its schema attrs.
 
@@ -196,7 +202,7 @@ class ZoneSchedule(ZoneBase):  # 0404
 class DhwZone(ZoneSchedule):  # CS92A
     """The DHW class."""
 
-    _SLUG: str = ZoneRole.DHW
+    _SLUG: str | None = ZoneRole.DHW  # type: ignore[assignment]
 
     def __init__(self, tcs: _StoredHwT, zone_idx: str = "HW") -> None:
         _LOGGER.debug("Creating a DHW for TCS: %s_HW (%s)", tcs.id, self.__class__)
@@ -335,21 +341,21 @@ class DhwZone(ZoneSchedule):  # CS92A
 
         if dev_id := schema.get(SZ_SENSOR):
             dhw_sensor = self._gwy.device_registry.get_device(
-                dev_id, parent=self, child_id=FA, is_sensor=True
+                cast("DeviceIdT", dev_id), parent=self, child_id=FA, is_sensor=True
             )
             assert isinstance(dhw_sensor, DhwSensor)  # mypy
             self._dhw_sensor = dhw_sensor
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
             dhw_valve = self._gwy.device_registry.get_device(
-                dev_id, parent=self, child_id=FA
+                cast("DeviceIdT", dev_id), parent=self, child_id=FA
             )
             assert isinstance(dhw_valve, BdrSwitch)  # mypy
             self._dhw_valve = dhw_valve
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HT1]):
             htg_valve = self._gwy.device_registry.get_device(
-                dev_id, parent=self, child_id=F9
+                cast("DeviceIdT", dev_id), parent=self, child_id=F9
             )
             assert isinstance(htg_valve, BdrSwitch)  # mypy
             self._htg_valve = htg_valve
@@ -494,7 +500,7 @@ class DhwZone(ZoneSchedule):  # CS92A
 class Zone(ZoneSchedule):
     """The Zone class for all zone types (but not DHW)."""
 
-    _SLUG: str | None = None
+    _SLUG: str | None = None  # type: ignore[assignment]
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.ACT
 
     def __init__(self, tcs: _MultiZoneT, zone_idx: str) -> None:
@@ -568,12 +574,10 @@ class Zone(ZoneSchedule):
                     f"{self} changed zone class: from {self._SLUG} to {klass}"
                 )
 
-            self.__class__ = ZONE_CLASS_BY_SLUG[klass]
+            self.__class__ = cast("type[Zone]", ZONE_CLASS_BY_SLUG[klass])
             _LOGGER.debug("Promoted a Zone: %s (%s)", self.id, self.__class__)
 
             self._setup_discovery_cmds()
-
-        dev_id: DeviceIdT
 
         # if schema.get(SZ_CLASS) == ZON_ROLE_MAP[ZON_ROLE.ACT]:
         #     schema.pop(SZ_CLASS)
@@ -582,13 +586,13 @@ class Zone(ZoneSchedule):
         if klass := schema.get(SZ_CLASS):
             set_zone_type(ZON_ROLE_MAP[klass])
 
-        if dev_id := schema.get(SZ_SENSOR):
+        if sensor_id := schema.get(SZ_SENSOR):
             self._sensor = self._gwy.device_registry.get_device(
-                dev_id, parent=self, is_sensor=True
+                cast("DeviceIdT", sensor_id), parent=self, is_sensor=True
             )
 
-        for dev_id in schema.get(SZ_ACTUATORS, []):
-            self._gwy.device_registry.get_device(dev_id, parent=self)
+        for act_id in schema.get(SZ_ACTUATORS, []):
+            self._gwy.device_registry.get_device(cast("DeviceIdT", act_id), parent=self)
 
     def _setup_discovery_cmds(self) -> None:
         # super()._setup_discovery_cmds()
@@ -677,15 +681,19 @@ class Zone(ZoneSchedule):
                     ZoneRole.VAL,
                 ), self._SLUG
 
-                if isinstance(this.src, TrvActuator):
+                src = cast("Any", this.src)
+                if isinstance(src, TrvActuator):
                     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.RAD]})
-                elif isinstance(this.src, BdrSwitch):
+                elif isinstance(src, BdrSwitch):
                     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.VAL]})
-                elif isinstance(this.src, UfhController):
+                elif isinstance(src, UfhController):
                     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.UFH]})
 
             # DEX
-            assert (msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC) and (
+            assert (
+                msg.src == self.ctl
+                or getattr(msg.src, "type", None) in (DEV_TYPE_MAP.UFC, "04")
+            ) and (
                 isinstance(msg.payload, dict)
                 or [d for d in msg.payload if d.get(SZ_ZONE_IDX) == self.idx]
             ), f"msg inappropriately routed to {self}"
@@ -1014,7 +1022,7 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
     # NOTE: since zones are promotable, we can't use this here
     # def __init__(self,...
 
-    _SLUG: str = ZoneRole.ELE
+    _SLUG: str | None = ZoneRole.ELE
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.ELE
 
     def _handle_msg(self, msg: Message) -> None:
@@ -1058,7 +1066,7 @@ class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
     # NOTE: since zones are promotable, we can't use this here
     # def __init__(self,...
 
-    _SLUG: str = ZoneRole.MIX
+    _SLUG: str | None = ZoneRole.MIX
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.MIX
 
     def _setup_discovery_cmds(self) -> None:
@@ -1084,7 +1092,7 @@ class RadZone(Zone):  # HR92/HR80
     # NOTE: since zones are promotable, we can't use this here
     # def __init__(self,...
 
-    _SLUG: str = ZoneRole.RAD
+    _SLUG: str | None = ZoneRole.RAD
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.RAD
 
 
@@ -1094,7 +1102,7 @@ class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
     # NOTE: since zones are promotable, we can't use this here
     # def __init__(self,...
 
-    _SLUG: str = ZoneRole.UFH
+    _SLUG: str | None = ZoneRole.UFH
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.UFH
 
     async def heat_demand(self) -> float | None:  # 3150
@@ -1112,7 +1120,7 @@ class ValZone(EleZone):  # BDR91A/T
     # NOTE: since zones are promotable, we can't use this here
     # def __init__(self,...
 
-    _SLUG: str = ZoneRole.VAL
+    _SLUG: str | None = ZoneRole.VAL
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.VAL
 
     async def heat_demand(self) -> float | None:  # 0008 (NOTE: not 3150)
@@ -1199,13 +1207,16 @@ def zone_factory(
         )
         return Zone
 
-    zon: DhwZone | Zone = best_zon_class(  # type: ignore[type-var]
-        tcs.ctl.addr,
-        idx,
-        msg=msg,
-        eavesdrop=tcs._gwy.config.enable_eavesdrop,
-        **schema,
-    ).create_from_schema(tcs, idx, **schema)
+    zon = cast(
+        "DhwZone | Zone",
+        best_zon_class(
+            tcs.ctl.addr,
+            idx,
+            msg=msg,
+            eavesdrop=tcs._gwy.config.enable_eavesdrop,
+            **schema,
+        ).create_from_schema(tcs, idx, **schema),
+    )
 
     # assert isinstance(zon, DhwZone | Zone)  # mypy
     return zon

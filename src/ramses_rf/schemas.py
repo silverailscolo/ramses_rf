@@ -72,7 +72,7 @@ from .const import (
 if TYPE_CHECKING:
     from .device import Device
     from .gateway import Gateway
-    from .system import Evohome
+    from .systems import Evohome
 
 
 _LOGGER = logging.getLogger(__name__)
