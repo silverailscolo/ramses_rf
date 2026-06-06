@@ -1,5 +1,5 @@
 # Requirements to dev/test the source code
-# - last checked/updated: 2026-06-04 (c.f. 0.56.9 / HA 2026.6.0)
+# - last checked/updated: 2026-06-06 (c.f. 0.57.0 / HA 2026.6.0)
 # - HA core reqs: https://github.com/home-assistant/core/blob/dev/requirements.txt
 
 # for using the ramses_rf library with CLI
@@ -11,7 +11,7 @@
 
 # used for development (linting)
   prek == 0.4.3                                 # latest, same as ramses_cc
-  ruff >= 0.15.15                                 # HA uses 0.15.5 ! also in: pre-commit-config.yaml
+  ruff >= 0.15.15                               # HA uses 0.15.5 ! also in: pre-commit-config.yaml
 
 # used for development (typing)
   mypy >= 2.1.0                                 # HA uses  1.19.0a4 !
