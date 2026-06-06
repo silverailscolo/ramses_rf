@@ -56,7 +56,8 @@ __DEVICE_INFO_RAW: dict[str, DeviceFingerprint] = {
     "0001C895050567FEFF": {"slug": "FAN", "dev_type": "32", "date": "2020-07-01", "desc": "VMD-15RMS86"},  # .                  31DA, 12A0, 22F7, 2411 (and I|042F, I|313F, I|3120)
     "0001C8950B0A67FEFF": {"slug": "FAN", "dev_type": "32", "date": "2021-01-21", "desc": "VMD-15RMS86"},  # .                  31D9, 31DA, 12A0, 313F (and I|042F, I|3120)
     "0001C81D150765FFFF": {"slug": "FAN", "dev_type": "29", "date": "0000-00-00", "desc": "VMC-07RP01"},   # .                  ClimaRad MiniBox
-    "0001C83A190F66FFFF": {"slug": "FAN", "dev_type": "32", "date": "0000-00-00", "desc": "VMD-17RPS01"},  # .                  Vasco D60Vasco D60
+    "0001C83A190F66FFFF": {"slug": "FAN", "dev_type": "32", "date": "0000-00-00", "desc": "VMD-17RPS01"},  # .                  Vasco D60
+    "0001C84F0E0A6AFEFF": {"slug": "FAN", "dev_type": "32", "date": "2017-12-11", "desc": "VMD-02RPS54"},  # .                  Hopper D375 HRU
 
     # PIV - usu. Nuaire
     "0001C90011006CFEFF": {"slug": "FAN", "dev_type": "30", "date": "2016-09-09", "desc": "BRDG-02JAS01"},  # .      NOTE: 30:  31D9, 31DA, 1F09 (a PIV)
