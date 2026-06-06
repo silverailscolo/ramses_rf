@@ -1072,12 +1072,13 @@ def parser_3ef0(payload: str, msg: Message) -> PayDictT._3EF0 | PayDictT._JASPER
         # only 10:040239 does 0b01000000, only Itho Autotemp does 0b00010000
 
         assert "_unknown_4" not in result or (
-            payload[8:10] in ("FF", "00", "01", "02", "04", "0A")
+            payload[8:10] in ("FF", "00", "01", "02", "04", "07", "0A")
         ), f"byte 4: {payload[8:10]}"
         # only 10:040239 does 04
 
         assert "_unknown_5" not in result or (
-            payload[10:12] in ("00", "13", "1C", "2F", "FF")
+            payload[10:12]
+            in ("00", "01", "08", "10", "13", "14", "1C", "1D", "2F", "FF")
         ), f"byte 5: {payload[10:12]}"
 
         assert "_flags_6" not in result or (
