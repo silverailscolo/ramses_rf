@@ -25,39 +25,55 @@ from ramses_tx.dtos import PacketDTO
 
 from .registry import get_parser
 
+# Constants
 _INFORM_DEV_MSG = "Support the development of ramses_rf by reporting this packet"
 
+# Variables
 _LOGGER = logging.getLogger(__name__)
 
 
 def _get_code(code_str: str) -> Code | None:
-    """Safely convert a string to a Code enum, returning None if invalid."""
+    """Safely convert a string to a Code enum, returning None if invalid.
+
+    :param code_str: The raw string representation of the packet code.
+    :return: A matching Code enum object or None if invalid.
+    """
     try:
         return Code(code_str)
     except ValueError:
         return None
 
 
-class _MockAddress:
+class _LegacyAddress:
     """Adapter class to mimic ramses_tx.Address for legacy parsers."""
 
     def __init__(self, addr_str: str) -> None:
-        """Initialize the mock address with id and type."""
+        """Initialize the legacy address with id and type.
+
+        :param addr_str: The raw address string instance.
+        """
         self.id = addr_str
         self.type = addr_str.split(":")[0] if ":" in addr_str else ""
 
     def __eq__(self, other: Any) -> bool:
-        """Evaluate equality based on address ID."""
+        """Evaluate equality based on address ID.
+
+        :param other: The other object to compare against.
+        :return: True if addresses match, otherwise NotImplemented.
+        """
         if hasattr(other, "id"):
             return bool(self.id == other.id)
         return NotImplemented
 
 
-class _MockMessage:
+class _LegacyMessage:
     """Anti-corruption adapter mimicking the legacy ramses_tx.Message interface."""
 
     def __init__(self, dto: PacketDTO) -> None:
-        """Initialize the mock message using data strictly from the DTO."""
+        """Initialize the legacy message using data strictly from the DTO.
+
+        :param dto: The data transfer object representation of the packet.
+        """
         self.verb = dto.verb  # Do not strip: Preserves padding for I_ (" I")
         self.seqn = dto.seq
         try:
@@ -71,7 +87,7 @@ class _MockMessage:
         self._len = int(len(self.payload) / 2)
 
         # Instance interning cache to support Python 'is'/'is not' identity checks
-        self._addr_cache: dict[str, _MockAddress] = {}
+        self._addr_cache: dict[str, _LegacyAddress] = {}
 
         raw_addrs = [dto.addr1, dto.addr2, dto.addr3]
         valid_addrs = [a for a in raw_addrs if a and a != "--:------"]
@@ -102,15 +118,22 @@ class _MockMessage:
 
         self._has_array = self._calculate_has_array()
 
-    def _get_addr(self, addr_str: str) -> _MockAddress:
-        """Retrieve or create an interned mock address instance."""
+    def _get_addr(self, addr_str: str) -> _LegacyAddress:
+        """Retrieve or create an interned legacy address instance.
+
+        :param addr_str: The address identity string.
+        :return: A cached or newly instantiated _LegacyAddress object.
+        """
         if addr_str not in self._addr_cache:
-            self._addr_cache[addr_str] = _MockAddress(addr_str)
+            self._addr_cache[addr_str] = _LegacyAddress(addr_str)
         return self._addr_cache[addr_str]
 
     @property
     def _has_payload(self) -> bool:
-        """Return False if there is no payload, matching legacy message.py exactly."""
+        """Return False if there is no payload, matching legacy message.py exactly.
+
+        :return: True if a parsable payload is expected, otherwise False.
+        """
         if self._len == 1:
             return False
         if self.verb.strip() == "RQ":
@@ -121,7 +144,10 @@ class _MockMessage:
         return True
 
     def _calculate_has_array(self) -> bool:
-        """Determine if the payload represents an array."""
+        """Determine if the payload represents an array.
+
+        :return: True if payload structure models an array configuration.
+        """
         if self.code == "1FC9":
             return self.verb.strip() != "RQ"
 
@@ -144,7 +170,10 @@ class _MockMessage:
 
     @property
     def _has_ctl(self) -> bool:
-        """Return True if the packet is to/from a controller."""
+        """Return True if the packet is to/from a controller.
+
+        :return: Boolean evaluation denoting controller interaction flags.
+        """
         if self._has_ctl_ is not None:
             return self._has_ctl_
 
@@ -169,7 +198,10 @@ class _MockMessage:
 
     @property
     def _idx(self) -> bool | str:
-        """Return the payload's index, if any."""
+        """Return the payload's index, if any.
+
+        :return: String value of index parameter or boolean flag state.
+        """
         if self._idx_ is not None:
             return self._idx_
 
@@ -178,7 +210,11 @@ class _MockMessage:
         return self._idx_
 
     def _pkt_idx(self) -> bool | str | None:
-        """Extract the exact index leveraging protocol_schema definitions."""
+        """Extract the exact index leveraging protocol_schema definitions.
+
+        :return: String or boolean representation if index parsing passes constraints.
+        :raises exc.PacketPayloadInvalid: If structural legacy checks fail validations.
+        """
         if self.code == "0005":
             return self._has_array
 
@@ -243,7 +279,10 @@ class _MockMessage:
 
     @property
     def _ctx(self) -> bool | str:
-        """Return the payload's full context, if any."""
+        """Return the payload's full context, if any.
+
+        :return: Context state metadata mapping.
+        """
         if self._ctx_ is not None:
             return self._ctx_
 
@@ -257,8 +296,12 @@ class _MockMessage:
         return self._ctx_
 
 
-def _build_idx_dict(msg: _MockMessage) -> dict[str, str]:
-    """Build the dictionary for index merging, matching message.py logic exactly."""
+def _build_idx_dict(msg: _LegacyMessage) -> dict[str, str]:
+    """Build the dictionary for index merging, matching message.py logic exactly.
+
+    :param msg: The _LegacyMessage instance being processed.
+    :return: Generated payload structural dictionary mappings.
+    """
     if not isinstance(msg._idx, str):
         return {}
 
@@ -317,8 +360,13 @@ def _build_idx_dict(msg: _MockMessage) -> dict[str, str]:
     return {index_name: idx_val}
 
 
-def parser_unknown(payload: str, msg: _MockMessage) -> dict[str, Any]:
-    """Apply a generic parser for unrecognized packet codes."""
+def parser_unknown(payload: str, msg: _LegacyMessage) -> dict[str, Any]:
+    """Apply a generic parser for unrecognized packet codes.
+
+    :param payload: The raw hex string of the packet payload.
+    :param msg: The legacy message abstraction layer object.
+    :return: Standard structural error dictionaries or generic value payloads.
+    """
     if msg.len == 2 and payload[:2] == "00":
         return {
             "_payload": payload,
@@ -343,8 +391,13 @@ def parser_unknown(payload: str, msg: _MockMessage) -> dict[str, Any]:
     }
 
 
-def parser_heartbeat(payload: str, msg: _MockMessage) -> dict[str, Any]:
-    """Parse a 1-byte heartbeat packet (payload '00')."""
+def parser_heartbeat(payload: str, msg: _LegacyMessage) -> dict[str, Any]:
+    """Parse a 1-byte heartbeat packet (payload '00').
+
+    :param payload: The raw packet payload value string.
+    :param msg: The legacy structural envelope message object.
+    :return: Decoded validation flags.
+    """
     return {"heartbeat": True}
 
 
@@ -356,15 +409,26 @@ class PayloadDecoder(ABC):
         self._next_decoder: PayloadDecoder | None = None
 
     def set_next(self, decoder: "PayloadDecoder") -> "PayloadDecoder":
-        """Set the next decoder in the chain."""
+        """Set the next decoder in the chain.
+
+        :param decoder: The next step implementation payload decoder instance.
+        :return: Fluid returned instance object.
+        """
         self._next_decoder = decoder
         return decoder
 
     @abstractmethod
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _MockMessage
+        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
-        """Decode the payload."""
+        """Decode the payload.
+
+        :param dto: The packet raw serialization structure object.
+        :param payload_str: Raw configuration hex payload representation.
+        :param payload_len: Clean length tracking metric.
+        :param msg: Internal compatibility envelope schema instance.
+        :return: Extracted parser structural outputs.
+        """
         if self._next_decoder:
             return self._next_decoder.decode(dto, payload_str, payload_len, msg)
         return {}
@@ -374,8 +438,9 @@ class RegexValidatorDecoder(PayloadDecoder):
     """Decoder that evaluates empty payloads and validates constraints."""
 
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _MockMessage
+        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Validate expressions against schema and enforce strict execution conditions."""
         try:
             _ = repr(dto)
         except Exception as err:
@@ -414,8 +479,9 @@ class HeartbeatDecoder(PayloadDecoder):
     """Decoder that intercepts 1-byte '00' heartbeats."""
 
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _MockMessage
+        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Evaluate and intercept simple heartbeat packages."""
         if payload_len == 1 and payload_str == "00" and dto.code != "1FC9":
             try:
                 parser = get_parser(dto.code) or parser_unknown
@@ -435,8 +501,9 @@ class StandardParserDecoder(PayloadDecoder):
     """Decoder routing payload to the appropriate 4-digit code parser."""
 
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _MockMessage
+        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Parse structured metrics passing execution objects forward to specific system decoders."""
         try:
             parser = get_parser(dto.code) or parser_unknown
             result = parser(payload_str, msg)
@@ -464,17 +531,23 @@ class DtoPayloadDecoderPipeline:
     """The Chain of Responsibility pipeline for decoding DTO payloads."""
 
     def __init__(self) -> None:
+        """Initialize pipeline linking specific system validation decoders."""
         self.head = RegexValidatorDecoder()
         self.head.set_next(HeartbeatDecoder()).set_next(StandardParserDecoder())
 
     def decode(self, dto: PacketDTO) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Route tracking models cleanly through downstream chain decoders.
+
+        :param dto: The network transfer packet state container model.
+        :return: Fully structured mapping outputs or null evaluations.
+        """
         payload_str: str = dto.payload
         try:
             payload_len: int = int(dto.length)
         except ValueError:
             payload_len = 0
 
-        msg = _MockMessage(dto)
+        msg = _LegacyMessage(dto)
 
         # 1. Parsing Phase (Catches and suppresses exceptions for null payloads)
         try:
@@ -508,7 +581,11 @@ class DtoPayloadDecoderPipeline:
 
 
 def decode_packet(dto: PacketDTO) -> dict[str, Any] | list[dict[str, Any]]:
-    """Entry point for the new DTO-based payload decoder."""
+    """Entry point for the new DTO-based payload decoder.
+
+    :param dto: The network protocol target transfer object packet frame.
+    :return: Processed semantic runtime dictionary details.
+    """
     pipeline = DtoPayloadDecoderPipeline()
     result = pipeline.decode(dto)
 
