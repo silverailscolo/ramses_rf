@@ -699,10 +699,17 @@ class Zone(ZoneSchedule):
             ), f"msg inappropriately routed to {self}"
 
         # DEX
-        assert (msg.src == self.ctl or msg.src.type == DEV_TYPE_MAP.UFC) and (
+        assert (
+            msg.src == self.ctl
+            or getattr(msg.src, "type", None)
+            in ("02", "03", "04", "08", "12", "13", "18", "22", "30", "34")
+        ) and (
             isinstance(msg.payload, list)
             or msg.code == Code._0005
-            or msg.payload.get(SZ_ZONE_IDX) == self.idx
+            or (
+                isinstance(msg.payload, dict)
+                and msg.payload.get(SZ_ZONE_IDX, self.idx) == self.idx
+            )
         ), f"msg inappropriately routed to {self}"
 
         super()._handle_msg(msg)
