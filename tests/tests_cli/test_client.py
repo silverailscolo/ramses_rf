@@ -80,6 +80,9 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     gateway.config.disable_discovery = False
     gateway.config.enable_eavesdrop = False
 
+    # Fix: Provide a dictionary for known_list so json.dumps doesn't crash on MagicMock
+    gateway.config.known_list = {"18:123456": {"class": "HGI"}}
+
     # Fix: Mock the loop inside the engine
     gateway._engine._loop = MagicMock()
     gateway._engine._loop.call_soon = MagicMock()
@@ -333,6 +336,51 @@ async def test_print_engine_state(
     out = capsys.readouterr().out
     assert "schema" in out
     assert "packets" in out
+
+
+@pytest.mark.asyncio
+async def test_async_main_kwargs_separation(mock_gateway: MagicMock) -> None:
+    """Test that L7 config keys are not passed to EngineConfig.
+
+    This ensures that Phase 2.77 decoupled traits (like known_list and hgi_id)
+    are routed strictly to GatewayConfig and blocked from EngineConfig instantiation.
+    """
+
+    # ARRANGE
+    lib_kwargs: dict[str, Any] = {
+        SZ_CONFIG: {},
+        SZ_PACKET_LOG: {},
+        "known_list": {"18:123456": {"class": "HGI", "faked": True}},
+        "hgi_id": "18:123456",
+    }
+    kwargs: dict[str, Any] = {
+        "long_format": False,
+        "restore_schema": None,
+        "restore_state": None,
+        "print_state": 0,
+        SZ_INPUT_FILE: "input.log",
+    }
+
+    # ACT
+    with (
+        patch("ramses_cli.client.Gateway", return_value=mock_gateway) as mock_gwy_class,
+        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+    ):
+        await async_main(PARSE, lib_kwargs, **kwargs)
+
+        call_kwargs = mock_gwy_class.call_args.kwargs
+        config_obj: GatewayConfig = call_kwargs["config"]
+
+        # ASSERT - L7 receives the dictionary
+        assert isinstance(config_obj, GatewayConfig)
+        assert config_obj.known_list == {"18:123456": {"class": "HGI", "faked": True}}
+        assert config_obj.hgi_id == "18:123456"
+
+        # ASSERT - L3 does NOT receive the nested dict from the kwargs unpacker
+        # EngineConfig defaults to None for these properties. We verify they
+        # were successfully filtered out during the dictionary comprehension.
+        assert config_obj.engine.known_list is None
+        assert config_obj.engine.hgi_id is None
 
 
 @pytest.mark.asyncio
