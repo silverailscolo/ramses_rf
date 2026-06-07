@@ -118,7 +118,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         # Override EngineConfig with the stripped-down L7 properties
         self._gwy_config.engine.hgi_id = self._gwy_config.hgi_id
-        self._gwy_config.engine.known_list = self._gwy_config.mac_filter_list
+        self._gwy_config.engine.known_list = list(self._gwy_config.known_list.keys())
         self._gwy_config.engine.block_list = list(self._gwy_config.block_list.keys())
 
         self._engine = Engine(
@@ -144,7 +144,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._tcs: Evohome | None = None
 
         self._device_filter: DeviceFilterInterface = DeviceFilter(
-            include=cast(list[DeviceIdT], self._gwy_config.mac_filter_list),
+            include=cast(list[DeviceIdT], list(self._gwy_config.known_list.keys())),
             exclude=cast(list[DeviceIdT], list(self._gwy_config.block_list.keys())),
             unwanted=self._engine._unwanted,
             enforce_known_list=self._gwy_config.engine.enforce_known_list,
