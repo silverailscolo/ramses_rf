@@ -34,6 +34,8 @@ This library includes a CLI and can be used as a standalone tool, but also is us
  - [ramses_cc](https://github.com/ramses-rf/ramses_cc), a Home Assistant integration
  - [evohome-Listener](https://github.com/smar000/evohome-Listener), an MQTT gateway
 
+Our [Code of Conduct](CODE_OF_CONDUCT.md) applies to all use of this repository and the code it creates.
+
 ## Installation
 
 To use the `ramses_cc` Integration in Home Assistant, just install `Ramses RF` using HACS. It will take care of installing this library. See the [`Ramses_cc wiki`](https://github.com/ramses-rf/ramses_cc/wiki/1.-Installation) for details.
