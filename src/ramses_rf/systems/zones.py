@@ -13,6 +13,7 @@ from ramses_rf.address import Address
 from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
+    SZ_DHW_IDX,
     SZ_DOMAIN_ID,
     SZ_HEAT_DEMAND,
     SZ_NAME,
@@ -79,6 +80,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip
 )
 
 _LOGGER = logging.getLogger(__name__)
+_TRACE = logging.getLogger("ramses_rf.legacy_trace")
 
 
 class ZoneBase(Child, Parent, Entity):
@@ -290,25 +292,39 @@ class DhwZone(ZoneSchedule):  # CS92A
             )
             or msg.payload.get(SZ_DOMAIN_ID) in (F9, FA)
             or msg.payload.get(SZ_ZONE_IDX) == "HW"
+            or msg.payload.get(SZ_DHW_IDX) is not None
         ), f"msg inappropriately routed to {self}"
 
         super()._handle_msg(msg)
 
         if (
             msg.code != Code._000C
-            or msg.payload[SZ_ZONE_TYPE] not in (DEV_ROLE_MAP.DHW, DEV_ROLE_MAP.HTG)
-            or not msg.payload[SZ_DEVICES]
+            or msg.payload.get(SZ_ZONE_TYPE) not in (DEV_ROLE_MAP.DHW, DEV_ROLE_MAP.HTG)
+            or not msg.payload.get(SZ_DEVICES)
         ):
             return
 
-        assert len(msg.payload[SZ_DEVICES]) == 1
+        devices = msg.payload.get(SZ_DEVICES, [])
+        if not devices:
+            return
 
-        self._gwy.device_registry.get_device(
-            msg.payload[SZ_DEVICES][0],
-            parent=self,
-            child_id=msg.payload[SZ_DOMAIN_ID],
-            is_sensor=(msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.DHW),
-        )  # sets self._dhw_sensor/_dhw_valve/_htg_valve
+        assert len(devices) == 1
+
+        try:
+            self._gwy.device_registry.get_device(
+                devices[0],
+                parent=self,
+                child_id=msg.payload.get(SZ_DOMAIN_ID),
+                is_sensor=(msg.payload.get(SZ_ZONE_TYPE) == DEV_ROLE_MAP.DHW),
+            )  # sets self._dhw_sensor/_dhw_valve/_htg_valve
+        except (
+            exc.DeviceNotFoundError,
+            exc.SchemaInconsistentError,
+            exc.SystemSchemaInconsistent,
+        ) as err:
+            _TRACE.warning(
+                f"SUPPRESSED in DhwZone 000C handler: {err}. Packet dropped."
+            )
 
         # TODO: may need to move earlier in method
         # # If still don't have a sensor, can eavesdrop 10A0
@@ -340,25 +356,53 @@ class DhwZone(ZoneSchedule):  # CS92A
         schema = shrink(SCH_TCS_DHW(schema))
 
         if dev_id := schema.get(SZ_SENSOR):
-            dhw_sensor = self._gwy.device_registry.get_device(
-                cast("DeviceIdT", dev_id), parent=self, child_id=FA, is_sensor=True
-            )
-            assert isinstance(dhw_sensor, DhwSensor)  # mypy
-            self._dhw_sensor = dhw_sensor
+            try:
+                dhw_sensor = self._gwy.device_registry.get_device(
+                    cast("DeviceIdT", dev_id),
+                    parent=self,
+                    child_id=FA,
+                    is_sensor=True,
+                )
+                assert isinstance(dhw_sensor, DhwSensor)  # mypy
+                self._dhw_sensor = dhw_sensor
+            except (
+                exc.DeviceNotFoundError,
+                exc.SchemaInconsistentError,
+                exc.SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(f"SUPPRESSED in DhwZone._update_schema (sensor): {err}")
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
-            dhw_valve = self._gwy.device_registry.get_device(
-                cast("DeviceIdT", dev_id), parent=self, child_id=FA
-            )
-            assert isinstance(dhw_valve, BdrSwitch)  # mypy
-            self._dhw_valve = dhw_valve
+            try:
+                dhw_valve = self._gwy.device_registry.get_device(
+                    cast("DeviceIdT", dev_id), parent=self, child_id=FA
+                )
+                assert isinstance(dhw_valve, BdrSwitch)  # mypy
+                self._dhw_valve = dhw_valve
+            except (
+                exc.DeviceNotFoundError,
+                exc.SchemaInconsistentError,
+                exc.SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(
+                    f"SUPPRESSED in DhwZone._update_schema (dhw_valve): {err}"
+                )
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HT1]):
-            htg_valve = self._gwy.device_registry.get_device(
-                cast("DeviceIdT", dev_id), parent=self, child_id=F9
-            )
-            assert isinstance(htg_valve, BdrSwitch)  # mypy
-            self._htg_valve = htg_valve
+            try:
+                htg_valve = self._gwy.device_registry.get_device(
+                    cast("DeviceIdT", dev_id), parent=self, child_id=F9
+                )
+                assert isinstance(htg_valve, BdrSwitch)  # mypy
+                self._htg_valve = htg_valve
+            except (
+                exc.DeviceNotFoundError,
+                exc.SchemaInconsistentError,
+                exc.SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(
+                    f"SUPPRESSED in DhwZone._update_schema (htg_valve): {err}"
+                )
 
     @property
     def sensor(self) -> DhwSensor | None:
@@ -377,12 +421,14 @@ class DhwZone(ZoneSchedule):  # CS92A
 
     async def config(self) -> dict[str, Any] | None:  # 10A0
         return cast(
-            dict[str, Any] | None, await self.entity_state.get_value(Code._10A0)
+            dict[str, Any] | None,
+            await self.entity_state.get_value(Code._10A0),
         )
 
     async def mode(self) -> dict[str, Any] | None:  # 1F41
         return cast(
-            dict[str, Any] | None, await self.entity_state.get_value(Code._1F41)
+            dict[str, Any] | None,
+            await self.entity_state.get_value(Code._1F41),
         )
 
     async def setpoint(self) -> float | None:  # 10A0
@@ -587,12 +633,28 @@ class Zone(ZoneSchedule):
             set_zone_type(ZON_ROLE_MAP[klass])
 
         if sensor_id := schema.get(SZ_SENSOR):
-            self._sensor = self._gwy.device_registry.get_device(
-                cast("DeviceIdT", sensor_id), parent=self, is_sensor=True
-            )
+            try:
+                self._sensor = self._gwy.device_registry.get_device(
+                    cast("DeviceIdT", sensor_id), parent=self, is_sensor=True
+                )
+            except (
+                exc.DeviceNotFoundError,
+                exc.SchemaInconsistentError,
+                exc.SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(f"SUPPRESSED in Zone._update_schema (sensor): {err}")
 
         for act_id in schema.get(SZ_ACTUATORS, []):
-            self._gwy.device_registry.get_device(cast("DeviceIdT", act_id), parent=self)
+            try:
+                self._gwy.device_registry.get_device(
+                    cast("DeviceIdT", act_id), parent=self
+                )
+            except (
+                exc.DeviceNotFoundError,
+                exc.SchemaInconsistentError,
+                exc.SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(f"SUPPRESSED in Zone._update_schema (actuator): {err}")
 
     def _setup_discovery_cmds(self) -> None:
         # super()._setup_discovery_cmds()
@@ -728,25 +790,56 @@ class Zone(ZoneSchedule):
                         self._name = str(d[SZ_NAME])
 
         if msg.code == Code._000C:
-            if not msg.payload[SZ_DEVICES]:
+            devices = msg.payload.get(SZ_DEVICES, [])
+            if not devices:
                 return
 
-            if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.SEN:
-                dev_id = msg.payload[SZ_DEVICES][0]
-                self._sensor = self._gwy.device_registry.get_device(
-                    dev_id, parent=self, is_sensor=True
-                )
+            zone_type = msg.payload.get(SZ_ZONE_TYPE)
 
-            elif msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.ACT:
-                for dev_id in msg.payload[SZ_DEVICES]:
-                    self._gwy.device_registry.get_device(dev_id, parent=self)
+            if zone_type == DEV_ROLE_MAP.SEN:
+                dev_id = devices[0]
+                try:
+                    self._sensor = self._gwy.device_registry.get_device(
+                        dev_id, parent=self, is_sensor=True
+                    )
+                except (
+                    exc.DeviceNotFoundError,
+                    exc.SchemaInconsistentError,
+                    exc.SystemSchemaInconsistent,
+                ) as err:
+                    _TRACE.warning(
+                        f"SUPPRESSED in Zone 000C handler (sensor): {err}. "
+                        f"Packet dropped."
+                    )
 
-            elif msg.payload[SZ_ZONE_TYPE] in ZON_ROLE_MAP.HEAT_ZONES:
-                for dev_id in msg.payload[SZ_DEVICES]:
-                    self._gwy.device_registry.get_device(dev_id, parent=self)
-                self._update_schema(
-                    **{SZ_CLASS: ZON_ROLE_MAP[msg.payload[SZ_ZONE_TYPE]]}
-                )
+            elif zone_type == DEV_ROLE_MAP.ACT:
+                for dev_id in devices:
+                    try:
+                        self._gwy.device_registry.get_device(dev_id, parent=self)
+                    except (
+                        exc.DeviceNotFoundError,
+                        exc.SchemaInconsistentError,
+                        exc.SystemSchemaInconsistent,
+                    ) as err:
+                        _TRACE.warning(
+                            f"SUPPRESSED in Zone 000C handler (actuator): {err}. "
+                            f"Packet dropped."
+                        )
+
+            elif zone_type in ZON_ROLE_MAP.HEAT_ZONES:
+                for dev_id in devices:
+                    try:
+                        self._gwy.device_registry.get_device(dev_id, parent=self)
+                    except (
+                        exc.DeviceNotFoundError,
+                        exc.SchemaInconsistentError,
+                        exc.SystemSchemaInconsistent,
+                    ) as err:
+                        _TRACE.warning(
+                            f"SUPPRESSED in Zone 000C handler (heat_actuator): {err}. "
+                            f"Packet dropped."
+                        )
+                self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[zone_type]})
 
             # TODO: testing this concept, hoping to learn device_id of UFC
             # if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.UFH:

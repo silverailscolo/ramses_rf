@@ -4,18 +4,22 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from datetime import UTC, datetime as dt, timedelta as td
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_tx import Packet, protocol_factory, set_pkt_logging_config
+from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.logger import flush_packet_log
 
 from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES, I_, RP, RQ, W_, Code
+from .exceptions import DeviceNotFoundError
 from .messages import Message
 from .schemas import load_schema
 from .state import MessageStore
+from .typing import DeviceIdT
 
 if TYPE_CHECKING:
     from ramses_tx import Engine
@@ -111,10 +115,30 @@ class GatewayLifecycle:
             **self._schema,
         )
 
+        # Bootstrap the local hardware adapter (HGI) into the registry early if configured.
+        # Because the adapter has no topological bonds to a heating controller,
+        # the TopologyBuilder pipeline will never emit a BIND_DEVICE event for it.
+        if self.config.hgi_id:
+            with contextlib.suppress(DeviceNotFoundError):
+                self.device_registry.get_device(cast(DeviceIdT, self.config.hgi_id))
+
         if cached_packets:
             await self._restore_cached_packets(cached_packets)
 
         await self._engine.start()
+
+        # If the underlying transport dynamically discovered the hardware adapter
+        # (e.g. from parsing the first frames of a log file stream), sync the
+        # configuration state and explicitly register it into the graph.
+        if self._engine._transport:
+            if hgi_id := self._engine._transport.get_extra_info(SZ_ACTIVE_HGI):
+                hgi_str = str(hgi_id)
+                if not self.config.hgi_id:
+                    self.config.hgi_id = hgi_str
+                    if hasattr(self.config.engine, "hgi_id"):
+                        self.config.engine.hgi_id = hgi_str
+                with contextlib.suppress(DeviceNotFoundError):
+                    self.device_registry.get_device(cast(DeviceIdT, hgi_str))
 
         self.config.disable_discovery = disable_discovery
 

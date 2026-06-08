@@ -128,23 +128,24 @@ async def _test_virtual_rf_dev_disc(
     assert gwy_1._engine._protocol._transport
 
     # NOTE: will pick up gwy 18:111111, since Foreign gwy detect has
-    # been removed
+    # been removed. Consequently, gwy_1 will also see gwy_0's earlier
+    # broadcasts on the shared virtual bus.
     await assert_devices(gwy_0, ["18:000000", "18:111111"])
-    await assert_devices(gwy_1, ["18:111111"])
+    await assert_devices(gwy_1, ["18:000000", "18:111111"])
 
     # TEST 1: Tx to all from GWY /dev/pty/0 (NB: no RSSI)
     cmd = Command(" I --- 01:010000 --:------ 01:010000 1F09 003 0004B5")
     gwy_0.send_cmd(cmd)
 
     await assert_devices(gwy_0, ["01:010000", "18:000000", "18:111111"])
-    await assert_devices(gwy_1, ["01:010000", "18:111111"])
+    await assert_devices(gwy_1, ["01:010000", "18:000000", "18:111111"])
 
     # TEST 2: Tx to all from non-GWY /dev/pty/2 (NB: no RSSI)
     cmd = Command(" I --- 01:011111 --:------ 01:011111 1F09 003 0004B5")
     ser_2.write(bytes(f"{cmd}\r\n".encode("ascii")))
 
     await assert_devices(gwy_0, ["01:010000", "01:011111", "18:000000", "18:111111"])
-    await assert_devices(gwy_1, ["01:010000", "01:011111", "18:111111"])
+    await assert_devices(gwy_1, ["01:010000", "01:011111", "18:000000", "18:111111"])
 
     # TEST 3: Rx only by *only one* GWY (NB: needs RSSI)
     cmd = Command(" I --- 01:022222 --:------ 01:022222 1F09 003 0004B5")
@@ -153,7 +154,9 @@ async def _test_virtual_rf_dev_disc(
     # Fix: Reverted gwy_0 expected list to have 18:000000 since it is
     # not receiving the injected packet
     await assert_devices(gwy_0, ["01:010000", "01:011111", "18:000000", "18:111111"])
-    await assert_devices(gwy_1, ["01:010000", "01:011111", "01:022222", "18:111111"])
+    await assert_devices(
+        gwy_1, ["01:010000", "01:011111", "01:022222", "18:000000", "18:111111"]
+    )
 
 
 async def _test_virtual_rf_pkt_flow(
