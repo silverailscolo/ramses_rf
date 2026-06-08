@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import logging
 import sys
@@ -548,7 +549,7 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         print(f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n")
 
     if kwargs.get("show_knowns"):  # show device hints (show-knowns)
-        print(f"allow_list (hints) = {json.dumps(gwy._engine._include, indent=4)}\r\n")
+        print(f"allow_list (hints) = {json.dumps(gwy.config.known_list, indent=4)}\r\n")
 
     if kwargs.get("show_traits"):  # show device traits
         result = {
@@ -677,12 +678,18 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
         gwy_config_kwargs["schema"] = lib_kwargs
 
     # Separate the kwargs for the engine vs the gateway
+    # Exclude L7 traits completely from the Engine constructor
+    l7_only_keys = {"known_list", "block_list", "hgi_id"}
+
+    engine_fields = {f.name for f in dataclasses.fields(EngineConfig)}
+    gwy_fields = {f.name for f in dataclasses.fields(GatewayConfig)}
+
     engine_kwargs = {
-        k: v for k, v in gwy_config_kwargs.items() if hasattr(EngineConfig, k)
+        k: v
+        for k, v in gwy_config_kwargs.items()
+        if k in engine_fields and k not in l7_only_keys
     }
-    gwy_kwargs = {
-        k: v for k, v in gwy_config_kwargs.items() if hasattr(GatewayConfig, k)
-    }
+    gwy_kwargs = {k: v for k, v in gwy_config_kwargs.items() if k in gwy_fields}
 
     gwy_config = GatewayConfig(engine=EngineConfig(**engine_kwargs), **gwy_kwargs)
 
