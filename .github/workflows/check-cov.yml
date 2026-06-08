@@ -91,18 +91,20 @@ jobs:
           output: both
           thresholds: '80 95'
 
-      - name: Add Coverage PR Comment
-        if: github.event_name == 'pull_request_target'
-        uses: thollander/actions-comment-pull-request@v3
-        with:
-          file-path: code-coverage-results.md
-          comment-tag: code-coverage-results.md  # replaces existing by this name
-          mode: recreate
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-#      - name: Add Pytest Coverage comment
-#        uses: MishaKav/pytest-coverage-comment@v1
+#      - name: Add Coverage PR Comment
+#        if: github.event_name == 'pull_request_target'
+#        uses: thollander/actions-comment-pull-request@v3
 #        with:
-#          pytest-xml-coverage-path: ./coverage.xml
+#          file-path: code-coverage-results.md
+#          comment-tag: code-coverage-results.md  # replaces existing by this name
+#          mode: recreate
+
+      - name: Add Pytest Coverage comment
+        uses: MishaKav/pytest-coverage-comment@v1
+        with:
+          pytest-xml-coverage-path: ./coverage.xml
+          # custom settings
+          report-only-changed-files: true
+          remove-links-to-files: true
 
       - run: echo "🍏 This job's status is ${{ job.status }}."
