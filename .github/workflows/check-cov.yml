@@ -91,9 +91,9 @@ jobs:
           output: both
           thresholds: '80 95'
 
-      - name: Pytest coverage comment
-        uses: MishaKav/pytest-coverage-comment@v1
-        with:
-          pytest-xml-coverage-path: ./coverage.xml
+#      - name: Pytest coverage comment
+#        uses: MishaKav/pytest-coverage-comment@v1
+#        with:
+#          pytest-xml-coverage-path: ./coverage.xml
 
       - run: echo "🍏 This job's status is ${{ job.status }}."
