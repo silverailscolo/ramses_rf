@@ -91,15 +91,9 @@ jobs:
           output: both
           thresholds: '80 95'
 
-#      - name: Add Coverage PR Comment
-#        if: github.event_name == 'pull_request_target'
-#        uses: thollander/actions-comment-pull-request@v3
-#        with:
-#          file-path: code-coverage-results.md
-#          comment-tag: code-coverage-results.md  # replaces existing by this name
-#          mode: recreate
-
       - name: Add Pytest Coverage comment
+        # can only run on pr_target repository
+        if: github.event_name == 'pull_request_target'
         uses: MishaKav/pytest-coverage-comment@v1
         with:
           pytest-xml-coverage-path: ./coverage.xml
