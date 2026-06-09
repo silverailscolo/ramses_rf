@@ -31,4 +31,4 @@
 
 # used for build/deploy
   hatch >= 1.17.0
-  hatchling >= 1.29.0
+  hatchling >= 1.30.1
