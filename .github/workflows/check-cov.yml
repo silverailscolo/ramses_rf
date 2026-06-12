@@ -91,41 +91,14 @@ jobs:
           output: both
           thresholds: '80 95'
 
-      - name: Add Coverage PR Comment
-        # from: https://github.com/marketplace/actions/comment-pull-request
+      - name: Add Pytest Coverage comment
+        # can only run on pr_target repository
         if: github.event_name == 'pull_request_target'
-        uses: thollander/actions-comment-pull-request@v3
+        uses: MishaKav/pytest-coverage-comment@v1
         with:
-          file-path: code-coverage-results.md
-          comment-tag: code-coverage-results.md  # replaces existing by this name
-          mode: recreate
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-        # or: https://github.com/marketplace/actions/sticky-pull-request-comment
-        #        if: github.event_name == 'pull_request'
-        #        with:
-        #          recreate: true
-        #          path: code-coverage-results.md
-        # GITHUB_TOKEN is implicitly passed in
-
-#      - name: Create Coverage Badge
-#        # from: https://github.com/marketplace/actions/coverage-py-badge
-#        uses: tj-actions/coverage-badge-py@v2
-#        id: coverage-badge-py
-#        with:
-#            # Output path to write the
-#            # coverage badge.
-#            # Type: string
-#            # Default: "coverage.svg"
-#            output: 'misc/coverage-badge.svg'
-#
-#            # Overwrite an existing coverage badge.
-#            # Type: boolean
-#            # Default: "true"
-#            overwrite: ''
-#
-#            # Current working directory
-#            # Type: string
-#            # Default: "."
-#            working-directory: ''
+          pytest-xml-coverage-path: ./coverage.xml
+          # custom settings
+          report-only-changed-files: true
+          remove-links-to-files: true
 
       - run: echo "🍏 This job's status is ${{ job.status }}."

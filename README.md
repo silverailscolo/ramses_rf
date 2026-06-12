@@ -1,3 +1,4 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Linting](https://github.com/ramses-rf/ramses_rf/actions/workflows/check-lint.yml/badge.svg)
 ![Typing](https://github.com/ramses-rf/ramses_rf/actions/workflows/check-type.yml/badge.svg)
 ![Testing](https://github.com/ramses-rf/ramses_rf/actions/workflows/check-test.yml/badge.svg)
@@ -33,6 +34,8 @@ Other systems may well work, such as some Itho Daalderop HVAC systems, use this 
 This library includes a CLI and can be used as a standalone tool, but also is used as a client library by:
  - [ramses_cc](https://github.com/ramses-rf/ramses_cc), a Home Assistant integration
  - [evohome-Listener](https://github.com/smar000/evohome-Listener), an MQTT gateway
+
+Our [Code of Conduct](CODE_OF_CONDUCT.md) applies to all use of this repository and the code it creates.
 
 ## Installation
 
