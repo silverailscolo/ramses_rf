@@ -156,6 +156,8 @@ class GatewayConfig:
     :type block_list: dict[str, Any]
     :param engine: Typed configuration object for the Transport layer.
     :type engine: EngineConfig
+    :param hgi_id: The explicit Device ID of the active HGI hardware.
+    :type hgi_id: str | None
     """
 
     disable_discovery: bool = False
@@ -177,25 +179,26 @@ class GatewayConfig:
     # Transport layer configuration encapsulated perfectly
     engine: EngineConfig = field(default_factory=EngineConfig)
 
-    @property
-    def hgi_id(self) -> str | None:
-        """Get the Device ID of the active HGI from the known_list."""
-        explicit_hgis = [
-            k
-            for k, v in self.known_list.items()
-            if v.get(SZ_CLASS) in (DevType.HGI, DEV_TYPE_MAP[DevType.HGI])
-        ]
-        implicit_hgis = [
-            k
-            for k, v in self.known_list.items()
-            if not v.get(SZ_CLASS) and k[:2] == DEV_TYPE_MAP._hex(DevType.HGI)
-        ]
+    hgi_id: str | None = None
 
-        if explicit_hgis:
-            return explicit_hgis[0]
-        if implicit_hgis:
-            return implicit_hgis[0]
-        return None
+    def __post_init__(self) -> None:
+        """Initialize computed properties natively on startup."""
+        if not self.hgi_id:
+            explicit_hgis = [
+                k
+                for k, v in self.known_list.items()
+                if v.get(SZ_CLASS) in (DevType.HGI, DEV_TYPE_MAP[DevType.HGI])
+            ]
+            implicit_hgis = [
+                k
+                for k, v in self.known_list.items()
+                if not v.get(SZ_CLASS) and k[:2] == DEV_TYPE_MAP._hex(DevType.HGI)
+            ]
+
+            if explicit_hgis:
+                self.hgi_id = explicit_hgis[0]
+            elif implicit_hgis:
+                self.hgi_id = implicit_hgis[0]
 
     @property
     def mac_filter_list(self) -> list[str]:

@@ -22,7 +22,7 @@ from ramses_tx.const import (
     Priority,
 )
 from ramses_tx.dtos import PacketDTO
-from ramses_tx.exceptions import ProtocolSendFailed
+from ramses_tx.exceptions import PacketInvalid, ProtocolSendFailed
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 from ramses_tx.typing import PayloadT
 
@@ -263,7 +263,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return status_dict
 
     async def _msg_handler(self, dto: PacketDTO) -> None:
-        app_msg = ApplicationMessage.from_dto(dto)
+        try:
+            app_msg = ApplicationMessage.from_dto(dto)
+        except PacketInvalid:
+            return
+
         app_msg.set_gateway(self._engine)
         app_msg.bind_context(self)  # noqa: B010
         self.update_message_history(app_msg)

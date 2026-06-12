@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from ramses_rf.const import (
     I_,
+    RQ,
     SZ_DEVICES,
     SZ_DOMAIN_ID,
+    SZ_TEMPERATURE,
     SZ_UFH_IDX,
     SZ_ZONE_IDX,
     SZ_ZONE_TYPE,
@@ -21,6 +23,7 @@ from ramses_rf.enums import TopologyAction
 from ramses_rf.messages import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.protocol.ramses import CODES_ONLY_FROM_CTL
+from ramses_tx import DeviceIdT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +59,17 @@ class TopologyBuilder:
         self._emit = emit_event_cb
         self._enable_eavesdrop = enable_eavesdrop
 
+        # FIXME: LEGACY DEBT - State Cache for Flawed Temporal Rules
+        # The legacy architecture relied on comparing current packets
+        # against previously observed packets to deduce bindings
+        # (e.g., 30C9 temperature matching, 3B00 sequential matching).
+        # This cache isolates that fragile state until Phase 3 rewrites.
+        self._legacy_debt_cache: dict[str, Any] = {
+            "prev_3b00": None,
+            "trv_temps": {},
+            "zone_temps": {},
+        }
+
         # The active list of heuristic rules. Order does not matter,
         # as each rule independently yields its own isolated events.
         self._rules: list[Callable[[Message], None]] = [
@@ -67,6 +81,9 @@ class TopologyBuilder:
             self._evaluate_dhw_opentherm_rules,
             self._evaluate_heating_prefix_rules,
             self._evaluate_appliance_control_sync_rules,
+            self._evaluate_appliance_eavesdrop_rules,
+            self._evaluate_zone_sensor_matching_rules,
+            self._evaluate_zone_type_eavesdrop_rules,
         ]
 
     async def consume(self, msg: Message) -> None:
@@ -78,9 +95,14 @@ class TopologyBuilder:
             try:
                 rule(msg)
             except Exception as err:
-                # Isolate rule execution. A crash in a new, experimental
-                # quirk rule must not bring down the discovery pipeline.
-                _LOGGER.error(f"Error evaluating topology rule {rule.__name__}: {err}")
+                # Do not spam the logs with topology rejection errors when
+                # enforcing strict schemas or ignoring missing/poison devices.
+                if "changed app_cntrl" in str(err) or "Can't create" in str(err):
+                    _LOGGER.debug("Topology rule %s bypassed: %s", rule.__name__, err)
+                else:
+                    _LOGGER.error(
+                        "Error evaluating topology rule %s: %s", rule.__name__, err
+                    )
 
     def _evaluate_evohome_rules(self, msg: Message) -> None:
         """Evaluate rules specific to the Evohome CH/DHW ecosystem.
@@ -386,5 +408,149 @@ class TopologyBuilder:
                     child_id=msg.dst.id,
                     metadata={"domain_id": "FC", "device_role": "appliance_control"},
                     causation="Rule_Direct_Relay_Sync",
+                )
+                self._emit(event)
+
+    def _evaluate_appliance_eavesdrop_rules(self, msg: Message) -> None:
+        """Evaluate the legacy passive eavesdropping of the System Relay.
+
+        # TODO: PARITY FLAW - This replicates legacy `eavesdrop_appliance_control`.
+        It relies on fragile assumptions regarding typical message flows
+        (e.g., 3220, 3EF0, 3B00) between the Controller and the Heat Relay.
+        """
+        if not self._enable_eavesdrop:
+            return
+
+        if msg.code not in (Code._3220, Code._3B00, Code._3EF0):
+            return
+
+        app_cntrl_id: DeviceIdT | None = None
+
+        if msg.code == Code._3220 and msg.verb == RQ:
+            if msg.src.type == "01" and msg.dst and msg.dst.type == "10":
+                app_cntrl_id = msg.dst.id
+
+        elif msg.code == Code._3EF0 and msg.verb == RQ:
+            if msg.src.type == "01" and msg.dst and msg.dst.type in ("10", "13"):
+                app_cntrl_id = msg.dst.id
+
+        elif msg.code == Code._3B00 and msg.verb == I_:
+            # Sequence matching: 13: broadcasts 3B00, followed by 01: broadcasting 3B00
+            if msg.src.type == "13":
+                self._legacy_debt_cache["prev_3b00"] = msg
+            elif msg.src.type == "01":
+                prev = self._legacy_debt_cache.get("prev_3b00")
+                if prev and prev.payload == msg.payload:
+                    app_cntrl_id = prev.src.id
+
+        if app_cntrl_id is not None:
+            event = TopologyChangedEvent(
+                action=TopologyAction.BIND_DEVICE,
+                parent_id=msg.src.id,  # Assume src is the Controller
+                child_id=app_cntrl_id,
+                metadata={"domain_id": "FC", "device_role": "appliance_control"},
+                causation="Rule_Legacy_Appliance_Eavesdrop",
+            )
+            self._emit(event)
+
+    def _evaluate_zone_sensor_matching_rules(self, msg: Message) -> None:
+        """Evaluate the legacy collision-abstention temperature matching.
+
+        # TODO: PARITY FLAW - This replicates `_eavesdrop_zone_sensors`.
+        It binds TRVs to Zones by matching random temperature telemetry.
+        It is highly prone to race conditions and false positives.
+        """
+        if not self._enable_eavesdrop or msg.code != Code._30C9:
+            return
+
+        # 1. TRV Temp Cache Population
+        if getattr(msg.src, "type", None) == "04" and isinstance(msg.payload, dict):
+            temp = msg.payload.get(SZ_TEMPERATURE)
+            if temp is not None:
+                self._legacy_debt_cache["trv_temps"][msg.src.id] = temp
+
+        # 2. Controller Zone Temp Cache Population
+        if getattr(msg, "_has_array", False) and msg.src.type == "01":
+            payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
+            ctl_id = msg.src.id
+            ctl_cache = self._legacy_debt_cache["zone_temps"].setdefault(ctl_id, {})
+
+            for z in payloads:
+                z_idx = z.get(SZ_ZONE_IDX)
+                z_tmp = z.get(SZ_TEMPERATURE)
+                if z_idx is not None and z_tmp is not None:
+                    ctl_cache[z_idx] = z_tmp
+
+        # 3. Collision Abstention Cross-Match
+        # This intentionally mimics the legacy logic: if exactly one TRV matches
+        # exactly one Zone temperature, we bind them.
+        trvs = cast(dict[DeviceIdT, float], self._legacy_debt_cache["trv_temps"])
+        ctls = cast(
+            dict[DeviceIdT, dict[str, float]], self._legacy_debt_cache["zone_temps"]
+        )
+
+        for cache_ctl_id, zones in ctls.items():
+            for z_idx, z_tmp in zones.items():
+                matching_trvs = [t_id for t_id, t_tmp in trvs.items() if t_tmp == z_tmp]
+                # Flawed logic: only bind if exactly ONE TRV shares this temperature
+                if len(matching_trvs) == 1:
+                    trv_id = matching_trvs[0]
+                    event = TopologyChangedEvent(
+                        action=TopologyAction.BIND_DEVICE,
+                        parent_id=cache_ctl_id,
+                        child_id=trv_id,
+                        metadata={"zone_idx": str(z_idx), "is_sensor": True},
+                        causation="Rule_Legacy_Temperature_Matching",
+                    )
+                    self._emit(event)
+
+    def _evaluate_zone_type_eavesdrop_rules(self, msg: Message) -> None:
+        """Evaluate the legacy passive promotion of zone classes.
+
+        # TODO: PARITY FLAW - This replicates `eavesdrop_zone_type` from `zones.py`.
+        It arbitrarily maps zones to VAL, ELE, RAD, or UFH based purely on
+        telemetry packet signatures.
+        """
+        if not self._enable_eavesdrop:
+            return
+
+        payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
+
+        for p in payloads:
+            if not isinstance(p, dict):
+                continue
+
+            zone_idx = p.get(SZ_ZONE_IDX)
+            if zone_idx is None:
+                continue
+
+            zone_class: str | None = None
+
+            # 0008/0009 packets denote Electric or Valve configurations
+            if msg.code in (Code._0008, Code._0009):
+                zone_class = ZON_ROLE_MAP["ELE"]
+
+            # 3150 Demand mappings denote specific actuator types
+            elif msg.code == Code._3150:
+                src_type = getattr(msg.src, "type", None)
+                if src_type == "04":
+                    zone_class = ZON_ROLE_MAP["RAD"]
+                elif src_type == "13":
+                    zone_class = ZON_ROLE_MAP["VAL"]
+                elif src_type == "02":
+                    zone_class = ZON_ROLE_MAP["UFH"]
+
+            if zone_class is not None:
+                # We emit a BIND_DEVICE action targeting the controller,
+                # passing the deduced zone_class as metadata for the projection.
+                event = TopologyChangedEvent(
+                    action=TopologyAction.BIND_DEVICE,
+                    parent_id=msg.src.id,  # Typically the Controller
+                    child_id=msg.src.id,  # Self-referential to update the zone metadata
+                    metadata={
+                        "zone_idx": str(zone_idx),
+                        "zone_class": zone_class,
+                    },
+                    causation="Rule_Legacy_Zone_Type_Eavesdrop",
                 )
                 self._emit(event)
