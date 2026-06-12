@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from pathlib import Path
 
 import pytest
 
@@ -55,12 +56,12 @@ async def async_flush_queues(gwy: Gateway) -> None:
 async def test_ramses_rf_isolated_topology() -> None:
     """Test ramses_rf parsing an input log and building a graph."""
 
-    # TODO: Update this path to point to the log file you upload
-    INPUT_FILE = "/home/phil/software/ramses_cc/tests/tests_old/test_data/system_1.log"
+    work_dir = Path(__file__).parent
+    input_file = work_dir / "logs" / "system_1.log"
 
     engine_config = EngineConfig(
         disable_qos=True,
-        input_file=INPUT_FILE,
+        input_file=str(input_file),
     )
 
     gwy_config = GatewayConfig(
