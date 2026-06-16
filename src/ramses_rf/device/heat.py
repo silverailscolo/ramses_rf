@@ -505,10 +505,13 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         if msg.code == Code._0005:  # system_zones
             # {'zone_type': '09', 'zone_mask':[1, 1, 1, 1, 1, 0, 0, 0], 'zone_class': 'underfloor_heating'}
 
-            if msg.payload[SZ_ZONE_TYPE] not in (ZON_ROLE_MAP.ACT, ZON_ROLE_MAP.UFH):
+            if msg.payload.get(SZ_ZONE_TYPE) not in (
+                ZON_ROLE_MAP.ACT,
+                ZON_ROLE_MAP.UFH,
+            ):
                 return  # ignoring ZON_ROLE_MAP.SEN for now
 
-            for idx, flag in enumerate(msg.payload[SZ_ZONE_MASK]):
+            for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, [])):
                 ufh_idx = f"{idx:02X}"
                 if not flag:
                     self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: None}
@@ -529,12 +532,17 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
             # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices':['01:095421']}
             # {'zone_type': '09', 'ufh_idx': '07', 'zone_idx': None, 'device_role': 'ufh_actuator', 'devices':[]}
 
-            if msg.payload[SZ_ZONE_TYPE] not in (ZON_ROLE_MAP.ACT, ZON_ROLE_MAP.UFH):
+            if msg.payload.get(SZ_ZONE_TYPE) not in (
+                ZON_ROLE_MAP.ACT,
+                ZON_ROLE_MAP.UFH,
+            ):
                 return  # ignoring ZON_ROLE_MAP.SEN for now
 
-            ufh_idx = msg.payload[SZ_UFH_IDX]  # circuit idx
+            ufh_idx = msg.payload.get(SZ_UFH_IDX)  # circuit idx
+            if ufh_idx is None:
+                return
             # Read-Model Update ONLY. No `self.set_parent()` graph mutation here.
-            self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: msg.payload[SZ_ZONE_IDX]}
+            self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: msg.payload.get(SZ_ZONE_IDX)}
 
         elif msg.code == Code._22C9:  # setpoint_bounds
             # .I --- 02:017205 --:------ 02:017205 22C9 024 00076C0A280101076C0A28010...

@@ -15,6 +15,7 @@ from ramses_rf.exceptions import (
     DeviceNotFaked,
     DeviceNotFoundError,
     SchemaInconsistentError,
+    SystemSchemaInconsistent,
 )
 from ramses_rf.interfaces import DeviceFilterInterface
 from ramses_rf.models import DeviceTraits, TopologyChangedEvent
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from ramses_rf.topology import Parent
 
 _LOGGER = logging.getLogger(__name__)
+_TRACE = logging.getLogger("ramses_rf.legacy_trace")
 
 
 class DeviceRegistry:
@@ -75,13 +77,28 @@ class DeviceRegistry:
 
         This method acts as the central ingestion point for the Write-Model.
         It looks up the correct handler for the event's action and
-        executes it.
+        executes it gracefully to ensure background queue tasks never crash.
         """
         handler = self._event_routers.get(event.action)
-        if handler:
-            handler(event)
-        else:
+        if not handler:
             _LOGGER.warning(f"No registry handler defined for action: {event.action}")
+            return
+
+        try:
+            handler(event)
+        except (
+            DeviceNotFoundError,
+            SchemaInconsistentError,
+            SystemSchemaInconsistent,
+        ) as err:
+            # Safely reject the mutation if it violates the static schema constraints
+            _TRACE.debug(f"Topology mutation safely rejected ({event.action}): {err}")
+        except Exception as err:
+            # Exception Shield: Catch-all to absolutely guarantee the asyncio
+            # background task does not silently die.
+            _TRACE.exception(
+                f"CRITICAL: Registry event router caught unhandled exception: {err}"
+            )
 
     def _handle_bind_device(self, event: TopologyChangedEvent) -> None:
         """Bind a child device to a parent device."""
@@ -117,12 +134,19 @@ class DeviceRegistry:
 
             # Route the binding back through get_device to ensure full
             # L7 registration (state inheritance, API hooks, etc.)
-            self.get_device(
-                event.child_id,
-                parent=cast("Parent", parent),
-                child_id=child_id_alias,
-                is_sensor=is_sensor,
-            )
+            try:
+                self.get_device(
+                    event.child_id,
+                    parent=cast("Parent", parent),
+                    child_id=child_id_alias,
+                    is_sensor=is_sensor,
+                )
+            except (DeviceNotFoundError, SchemaInconsistentError) as err:
+                _TRACE.error(
+                    f"BIND EXCEPTION: Failed routing event {event.child_id} "
+                    f"to {parent.id}: {err}"
+                )
+                raise
             _LOGGER.debug(
                 f"Bound {event.child_id} to {parent.id} via {event.causation}"
             )
@@ -139,6 +163,11 @@ class DeviceRegistry:
         new_class_slug = str(event.metadata.get("device_class"))
         if not new_class_slug or getattr(old_dev, "_SLUG", None) == new_class_slug:
             return
+
+        _TRACE.info(
+            f"PROMOTING CLASS: {event.device_id} from "
+            f"{getattr(old_dev, '_SLUG', 'None')} to {new_class_slug}"
+        )
 
         # Keep a backup of old traits for rollback
         old_traits_dict = dict(self._config.known_list.get(event.device_id, {}))
@@ -166,7 +195,8 @@ class DeviceRegistry:
             _LOGGER.info(
                 f"Promoted {event.device_id} to {new_class_slug} via {event.causation}"
             )
-        except Exception:
+        except Exception as err:
+            _TRACE.error(f"PROMOTE EXCEPTION: Rollback on {event.device_id}: {err}")
             # Rollback on failure: pop the failed new_dev out first
             self.device_by_id.pop(event.device_id, None)
             self.devices = [d for d in self.devices if d.id != event.device_id]
@@ -242,8 +272,11 @@ class DeviceRegistry:
         """
         try:
             self._device_filter.check_filter_lists(device_id)
-        except DeviceNotFoundError:
+        except DeviceNotFoundError as err:
             if device_id != self._config.hgi_id:
+                _TRACE.error(
+                    f"FILTER EXCEPTION: Device {device_id} failed filter checks: {err}"
+                )
                 raise
 
         dev = self.device_by_id.get(device_id)
@@ -261,7 +294,11 @@ class DeviceRegistry:
             )
             traits = DeviceTraits.from_dict(traits_dict)
 
-            dev = self._device_factory_cb(Address(device_id), msg, traits)
+            try:
+                dev = self._device_factory_cb(Address(device_id), msg, traits)
+            except Exception as err:
+                _TRACE.error(f"FACTORY EXCEPTION: Failed creating {device_id}: {err}")
+                raise
 
             if traits.faked:
                 if isinstance(dev, Fakeable):
@@ -270,7 +307,14 @@ class DeviceRegistry:
                     _LOGGER.warning(f"The device is not fakeable: {dev}")
 
         if parent or child_id:
-            dev._apply_topology_link(parent, child_id=child_id, is_sensor=is_sensor)
+            try:
+                dev._apply_topology_link(parent, child_id=child_id, is_sensor=is_sensor)
+            except (DeviceNotFoundError, SchemaInconsistentError) as err:
+                _TRACE.error(
+                    f"LINK EXCEPTION: Failed linking {device_id} to parent "
+                    f"{getattr(parent, 'id', None)}: {err}"
+                )
+                raise
 
         return dev
 
@@ -474,8 +518,15 @@ class DeviceRegistry:
 
         # Safely apply the topology link, bypassing legacy mutable logic
         if hasattr(child, "_apply_topology_link"):
-            child._apply_topology_link(
-                cast("Parent", parent),
-                is_sensor=is_sensor,
-                child_id=child_domain_id,
-            )
+            try:
+                child._apply_topology_link(
+                    cast("Parent", parent),
+                    is_sensor=is_sensor,
+                    child_id=child_domain_id,
+                )
+            except (DeviceNotFoundError, SchemaInconsistentError) as err:
+                _TRACE.error(
+                    f"BIND EXCEPTION: Failed applying topology link for "
+                    f"{event.child_id}: {err}"
+                )
+                raise

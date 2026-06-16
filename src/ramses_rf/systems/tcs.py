@@ -37,7 +37,12 @@ from ramses_rf.device import (
     UfhController,
 )
 from ramses_rf.entity import Entity, class_by_attr
-from ramses_rf.exceptions import ScheduleFlowError, SchemaInconsistentError
+from ramses_rf.exceptions import (
+    DeviceNotFoundError,
+    ScheduleFlowError,
+    SchemaInconsistentError,
+    SystemSchemaInconsistent,
+)
 from ramses_rf.helpers import shrink
 from ramses_rf.schemas import (
     DEFAULT_MAX_ZONES,
@@ -95,6 +100,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 
 
 _LOGGER = logging.getLogger(__name__)
+_TRACE = logging.getLogger("ramses_rf.legacy_trace")
 
 
 _SystemT = TypeVar("_SystemT", bound="Evohome")
@@ -186,7 +192,12 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             # 09:03:59.693 051  I --- 13:237335 --:------ 13:237335 3B00 002 00C8
             # 09:04:02.667 045  I --- 01:145038 --:------ 01:145038 3B00 002 FCC8
 
-            if this.code not in (Code._22D9, Code._3220, Code._3B00, Code._3EF0):
+            if this.code not in (
+                Code._22D9,
+                Code._3220,
+                Code._3B00,
+                Code._3EF0,
+            ):
                 return
 
             # note the order: most to least reliable
@@ -214,22 +225,42 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
                         app_cntrl = prev_src_dev
 
             if app_cntrl is not None:
-                self._gwy.device_registry.get_device(
-                    app_cntrl.id, parent=self, child_id=FC
-                )
-
-        # # assert msg.src.id == self.ctl.id, f"msg inappropriately routed to {self}"
+                try:
+                    self._gwy.device_registry.get_device(
+                        app_cntrl.id, parent=self, child_id=FC
+                    )
+                except (
+                    DeviceNotFoundError,
+                    SchemaInconsistentError,
+                    SystemSchemaInconsistent,
+                ) as err:
+                    _TRACE.warning(
+                        f"SUPPRESSED in eavesdrop_appliance_control: {err}. "
+                        f"Packet dropped."
+                    )
 
         super()._handle_msg(msg)
 
         if msg.code == Code._000C:
             if isinstance(msg.payload, dict):
-                if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.APP and msg.payload.get(
-                    SZ_DEVICES
-                ):
-                    self._gwy.device_registry.get_device(
-                        msg.payload[SZ_DEVICES][0], parent=self, child_id=FC
-                    )  # sets self._app_cntrl
+                if msg.payload.get(
+                    SZ_ZONE_TYPE
+                ) == DEV_ROLE_MAP.APP and msg.payload.get(SZ_DEVICES):
+                    try:
+                        self._gwy.device_registry.get_device(
+                            msg.payload.get(SZ_DEVICES, [])[0],
+                            parent=self,
+                            child_id=FC,
+                        )  # sets self._app_cntrl
+                    except (
+                        DeviceNotFoundError,
+                        SchemaInconsistentError,
+                        SystemSchemaInconsistent,
+                    ) as err:
+                        _TRACE.warning(
+                            f"SUPPRESSED in SystemBase 000C handler: {err}. "
+                            f"Retaining configured device."
+                        )
             else:
                 _LOGGER.warning(
                     f"{msg!r} < Unexpected payload type for {msg.code}: "
@@ -269,7 +300,8 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
         return cast(
-            PayDictT._1100 | None, await self.entity_state.get_value(Code._1100)
+            PayDictT._1100 | None,
+            await self.entity_state.get_value(Code._1100),
         )
 
     async def heat_demand(self) -> float | None:  # 3150/FC
@@ -425,9 +457,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
         # zones with changed temps
         changed_zones: dict[str, float] = {
-            z[SZ_ZONE_IDX]: z[SZ_TEMPERATURE]
+            z.get(SZ_ZONE_IDX): z.get(SZ_TEMPERATURE)
             for z in msg.payload
-            if z not in prev.payload and z[SZ_TEMPERATURE] is not None
+            if z not in prev.payload and z.get(SZ_TEMPERATURE) is not None
         }
         if not changed_zones:
             # ctl's 30C9 says no zones have changed temps during this cycle
@@ -476,7 +508,16 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
         for sensor, zone_idx in matched_pairs.items():
             zone = self.zone_by_idx[zone_idx]
-            self._gwy.device_registry.get_device(sensor.id, parent=zone, is_sensor=True)
+            try:
+                self._gwy.device_registry.get_device(
+                    sensor.id, parent=zone, is_sensor=True
+                )
+            except (
+                DeviceNotFoundError,
+                SchemaInconsistentError,
+                SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(f"SUPPRESSED in correlation matching: {err}")
 
         # _LOGGER.warning("System state (after): %s", self.schema)
 
@@ -493,9 +534,16 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         # can safely(?) assume this zone is using the CTL as a sensor...
         if not [s for s in unique_sensors if s == temp]:
             zone = self.zone_by_idx[zone_idx]
-            self._gwy.device_registry.get_device(
-                self.ctl.id, parent=zone, is_sensor=True
-            )
+            try:
+                self._gwy.device_registry.get_device(
+                    self.ctl.id, parent=zone, is_sensor=True
+                )
+            except (
+                DeviceNotFoundError,
+                SchemaInconsistentError,
+                SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(f"SUPPRESSED in ctl correlation matching: {err}")
 
         # _LOGGER.warning("System state (finally): %s", self.schema)
 
@@ -521,9 +569,16 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
         # COLLISION ABSTENTION: Bind only if exactly one zone matches this temp
         if len(matching_zones) == 1:
-            self._gwy.device_registry.get_device(
-                msg.src.id, parent=matching_zones[0], is_sensor=True
-            )
+            try:
+                self._gwy.device_registry.get_device(
+                    msg.src.id, parent=matching_zones[0], is_sensor=True
+                )
+            except (
+                DeviceNotFoundError,
+                SchemaInconsistentError,
+                SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(f"SUPPRESSED in trv correlation matching: {err}")
 
     def _handle_msg(self, msg: Message) -> None:
         """Process any relevant message.
@@ -547,43 +602,49 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
         super()._handle_msg(msg)
 
-        if msg.code not in (Code._0005, Code._000A, Code._2309, Code._30C9) and (
-            SZ_ZONE_IDX not in msg.payload  # 0004,0008,0009,000C,0404,12B0,2349,3150
-        ):
+        if msg.code not in (
+            Code._0005,
+            Code._000A,
+            Code._2309,
+            Code._30C9,
+        ) and (
+            SZ_ZONE_IDX not in msg.payload
+        ):  # 0004,0008,0009,000C,0404,12B0,2349,3150
             return
 
         # TODO: a I/0005 may have changed: del or add zones
         if msg.code == Code._0005:
-            if (zone_type := msg.payload[SZ_ZONE_TYPE]) in ZON_ROLE_MAP.HEAT_ZONES:
+            if (zone_type := msg.payload.get(SZ_ZONE_TYPE)) in ZON_ROLE_MAP.HEAT_ZONES:
                 [
                     self.get_htg_zone(
                         f"{idx:02X}", **{SZ_CLASS: ZON_ROLE_MAP[zone_type]}
                     )
-                    for idx, flag in enumerate(msg.payload[SZ_ZONE_MASK])
+                    for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, []))
                     if flag == 1
                 ]
             elif zone_type in DEV_ROLE_MAP.HEAT_DEVICES:
                 [
                     self.get_htg_zone(f"{idx:02X}", msg=msg)
-                    for idx, flag in enumerate(msg.payload[SZ_ZONE_MASK])
+                    for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, []))
                     if flag == 1
                 ]
             return
 
         # TODO: a I/000C may have changed: del or add devices
         if msg.code == Code._000C:
-            if msg.payload[SZ_ZONE_TYPE] not in DEV_ROLE_MAP.HEAT_DEVICES:
+            if msg.payload.get(SZ_ZONE_TYPE) not in DEV_ROLE_MAP.HEAT_DEVICES:
                 return
-            if msg.payload[SZ_DEVICES]:
-                self.get_htg_zone(msg.payload[SZ_ZONE_IDX], msg=msg)
-            elif zon := self.zone_by_idx.get(msg.payload[SZ_ZONE_IDX]):
+            zone_idx = msg.payload.get(SZ_ZONE_IDX)
+            if msg.payload.get(SZ_DEVICES):
+                self.get_htg_zone(zone_idx, msg=msg)
+            elif zon := self.zone_by_idx.get(zone_idx):
                 zon._handle_msg(msg)  # tell existing zone: no device
             return
 
         # the CTL knows, but does not announce temps for multiroom_mode zones
         if msg.code == Code._30C9 and getattr(msg, "_has_array", False):
             for z in self.zones:
-                if z.idx not in (x[SZ_ZONE_IDX] for x in msg.payload):
+                if z.idx not in (x.get(SZ_ZONE_IDX) for x in msg.payload):
                     task = asyncio.create_task(z._get_temp())
                     self._gwy.add_task(task)
 
@@ -727,7 +788,10 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         if pkt:
             self._msg_0006 = Message._from_pkt(pkt)
 
-        return self._msg_0006.payload[SZ_CHANGE_COUNTER], True  # global_ver, did_io
+        return (
+            self._msg_0006.payload[SZ_CHANGE_COUNTER],
+            True,
+        )  # global_ver, did_io
 
     def _refresh_schedules(self) -> None:
         zone: Zone
@@ -784,7 +848,8 @@ class Language(SystemBase):  # 0100
 
     async def language(self) -> str | None:
         return cast(
-            str | None, await self.entity_state.get_value(Code._0100, key=SZ_LANGUAGE)
+            str | None,
+            await self.entity_state.get_value(Code._0100, key=SZ_LANGUAGE),
         )
 
     async def params(self) -> dict[str, Any]:
@@ -821,7 +886,7 @@ class Logbook(SystemBase):  # 0418
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
         super()._handle_msg(msg)
 
-        if msg.code == Code._0418:  # and msg.verb in (I_, RP):
+        if msg.code == Code._0418 and msg.verb in (I_, RP):
             if isinstance(msg.payload, dict):
                 self._faultlog.handle_msg(msg)
             else:
@@ -907,9 +972,9 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         # TODO: a I/0005 may have changed zones & may need a restart (del) or not (add)
         if (
             msg.code == Code._000C
-            and msg.payload[SZ_ZONE_TYPE] in DEV_ROLE_MAP.DHW_DEVICES
+            and msg.payload.get(SZ_ZONE_TYPE) in DEV_ROLE_MAP.DHW_DEVICES
         ):
-            if msg.payload[SZ_DEVICES]:
+            if msg.payload.get(SZ_DEVICES):
                 self.get_dhw_zone(msg=msg)  # create DHW zone if required
             elif self._dhw:
                 self._dhw._handle_msg(msg)  # tell existing DHW zone: no device
@@ -1050,7 +1115,8 @@ class Datetime(SystemBase):  # 313F
             and self._gwy._engine._transport
         ):
             diff = abs(
-                dt.fromisoformat(msg.payload[SZ_DATETIME]) - self._gwy._engine._dt_now()
+                dt.fromisoformat(msg.payload.get(SZ_DATETIME, ""))
+                - self._gwy._engine._dt_now()
             )
             if diff > td(minutes=5):
                 _LOGGER.warning(f"{msg!r} < excessive datetime difference: {diff}")
@@ -1118,9 +1184,18 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         if schema.get(SZ_SYSTEM) and (
             dev_id := schema[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL)
         ):
-            self._app_cntrl = self._gwy.device_registry.get_device(
-                dev_id, parent=self, child_id=FC
-            )
+            try:
+                self._app_cntrl = self._gwy.device_registry.get_device(
+                    dev_id, parent=self, child_id=FC
+                )
+            except (
+                DeviceNotFoundError,
+                SchemaInconsistentError,
+                SystemSchemaInconsistent,
+            ) as err:
+                _TRACE.warning(
+                    f"SUPPRESSED in System._update_schema (app_cntrl): {err}"
+                )
 
         if _schema := (schema.get(SZ_DHW_SYSTEM)):  # type: ignore[assignment]
             self.get_dhw_zone(**_schema)  # self._dhw = ...
@@ -1172,14 +1247,16 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         # FC: 00-C8 (no F9, FA), TODO: deprecate as FC only?
         if not self._heat_demands:
             return None
-        return {k: v.payload["heat_demand"] for k, v in self._heat_demands.items()}
+        return {k: v.payload.get("heat_demand") for k, v in self._heat_demands.items()}
 
     @property
     def relay_demands(self) -> dict[str, Any] | None:  # 0008
         # FC: 00-C8, F9: 00-C8, FA: 00 or C8 only (01: all 3, 02: FC/FA only)
         if not self._relay_demands:
             return None
-        return {k: v.payload["relay_demand"] for k, v in self._relay_demands.items()}
+        return {
+            k: v.payload.get("relay_demand") for k, v in self._relay_demands.items()
+        }
 
     @property
     def relay_failsafes(self) -> dict[str, Any] | None:  # 0009

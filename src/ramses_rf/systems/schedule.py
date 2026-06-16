@@ -121,7 +121,8 @@ _LOGGER = logging.getLogger(__name__)
 def schema_sched(schema_switchpoint: vol.Schema) -> vol.Schema:
     """Generate a voluptuous schema for a weekly schedule.
 
-    :param schema_switchpoint: The schema describing an individual switchpoint.
+    :param schema_switchpoint: The schema describing an individual
+        switchpoint.
     :return: A voluptuous Schema object for the 7-day schedule array.
     """
     schema_sched_day = vol.Schema(
@@ -218,30 +219,44 @@ class Schedule:  # 0404
         :param msg: The incoming message to parse.
         """
         if msg.code == Code._0006:  # keep up, in cause is useful to know in future
-            self._global_ver = msg.payload[SZ_CHANGE_COUNTER]
+            self._global_ver = msg.payload.get(SZ_CHANGE_COUNTER, 0)
             return
 
         if msg.code != Code._0404:
             return
 
+        if msg.verb == RQ:
+            return
+
         # can do via here, or via gwy.async_send_cmd(cmd)
         # next line also in self._get_schedule(), so protected here with a lock
-        if msg.payload[SZ_TOTAL_FRAGS] != 0xFF and self.tcs.zone_lock_idx != self.idx:
-            self._payload_set = self._update_payload_set(self._payload_set, msg.payload)
+        if (
+            msg.payload.get(SZ_TOTAL_FRAGS) != 0xFF
+            and self.tcs.zone_lock_idx != self.idx
+        ):
+            try:
+                self._payload_set = self._update_payload_set(
+                    self._payload_set, msg.payload
+                )
+            except exc.ScheduleError as err:
+                _LOGGER.warning(
+                    "%s: Dropped corrupted schedule fragments: %s", self, err
+                )
+                self._payload_set = list(EMPTY_PAYLOAD_SET)
 
     async def _is_dated(self, *, force_io: bool = False) -> tuple[bool, bool]:
-        """Indicate if it is possible that a more recent schedule is available.
+        """Indicate if a more recent schedule might be available.
 
-        If required, retrieve the latest global version (change counter) from the
-        TCS.
+        If required, retrieve the latest global version (change counter)
+        from the TCS.
 
-        There may be a false positive if another zone's schedule is changed when
-        this zone's schedule has not. There may be a false negative if this zone's
-        schedule was changed only very recently and a cached global version was
-        used.
+        There may be a false positive if another zone's schedule is
+        changed when this zone's schedule has not. There may be a false
+        negative if this zone's schedule was changed only very recently
+        and a cached global version was used.
 
-        If `force_io`, then a true negative is guaranteed (it forces an RQ|0006 unless
-        self._global_ver > self._sched_ver).
+        If `force_io`, then a true negative is guaranteed (it forces an
+        RQ|0006 unless self._global_ver > self._sched_ver).
 
         :param force_io: True to force an IO request to check versions.
         :return: A tuple of (is_dated, did_io).
@@ -257,30 +272,39 @@ class Schedule:  # 0404
         # this may cause an I/O...
         self._global_ver, did_io = await self.tcs._schedule_version()
         if did_io or self._global_ver > self._sched_ver:
-            return self._global_ver > self._sched_ver, did_io  # is_dated, did_io
+            return (
+                self._global_ver > self._sched_ver,
+                did_io,
+            )  # is_dated, did_io
 
         if force_io:  # this will cause an I/O...
             self._global_ver, did_io = await self.tcs._schedule_version(
                 force_io=force_io
             )
 
-        return self._global_ver > self._sched_ver, did_io  # is_dated, did_io
+        return (
+            self._global_ver > self._sched_ver,
+            did_io,
+        )  # is_dated, did_io
 
     async def get_schedule(
         self, *, force_io: bool = False, timeout: float = 15
     ) -> InnerScheduleT | None:
         """Retrieve/return the brief schedule of a zone.
 
-        Return the cached schedule (which may have been eavesdropped) only if the
-        global change counter has not increased.
-        Otherwise, RQ the latest schedule from the controller and return that.
+        Return the cached schedule (which may have been eavesdropped)
+        only if the global change counter has not increased. Otherwise,
+        RQ the latest schedule from the controller and return that.
 
-        If `force_io`, then the latest schedule is guaranteed (it forces an RQ|0006).
+        If `force_io`, then the latest schedule is guaranteed (it forces
+        an RQ|0006).
 
-        :param force_io: Set to True to force fetching a new schedule from the controller.
+        :param force_io: Set to True to force fetching a new schedule
+            from the controller.
         :param timeout: Maximum time in seconds to wait for the schedule.
         :return: The schedule details or None if not found.
-        :raises exc.ScheduleFlowError: If unable to obtain the schedule before timeout.
+        :raises exc.ScheduleFlowError: If unable to obtain the schedule
+            before timeout.
         """
         try:
             await asyncio.wait_for(
@@ -302,7 +326,8 @@ class Schedule:  # 0404
         return self.schedule
 
     async def _get_schedule(self, *, force_io: bool = False) -> None:
-        """Retrieve/return the schedule of a zone and sets `self._full_schedule`.
+        """Retrieve/return the schedule of a zone and sets
+        `self._full_schedule`.
 
         :param force_io: Set to True to force IO fetching.
         """
@@ -343,7 +368,19 @@ class Schedule:  # 0404
                 break
             fragment = await get_fragment(frag_num)
             # next line also in self._handle_msg(), so protected there with a lock
-            self._payload_set = self._update_payload_set(self._payload_set, fragment)
+            try:
+                self._payload_set = self._update_payload_set(
+                    self._payload_set, fragment
+                )
+            except exc.ScheduleError as err:
+                _LOGGER.warning(
+                    "%s: Dropped corrupted schedule fragments during fetch: %s",
+                    self,
+                    err,
+                )
+                self._payload_set = list(EMPTY_PAYLOAD_SET)
+                break
+
             if self._full_schedule:  # TODO: potential for infinite loop?
                 self._sched_ver = self._global_ver  # type: ignore[unreachable]
                 break
@@ -351,14 +388,16 @@ class Schedule:  # 0404
         self.tcs._release_lock()
 
     def _proc_payload_set(self, payload_set: _PayloadSetT) -> OuterScheduleT | None:
-        """Process a payload set and return the full schedule (sets `self._schedule`).
+        """Process a payload set and return the full schedule (sets
+        `self._schedule`).
 
-        If the schedule is for DHW, set the `zone_idx` key to 'HW' (to avoid confusing
-        with zone '00').
+        If the schedule is for DHW, set the `zone_idx` key to 'HW' (to
+        avoid confusing with zone '00').
 
         :param payload_set: The completed array of fragment payloads.
         :return: The full schedule block.
-        :raises exc.ScheduleError: On failure to decompress fragment string blob.
+        :raises exc.ScheduleError: On failure to decompress fragment
+            string blob.
         """
         # TODO: relying upon caller to ensure set is only empty or full
 
@@ -368,7 +407,9 @@ class Schedule:  # 0404
 
         try:
             schedule = fragz_to_full_sched(
-                payload[SZ_FRAGMENT] for payload in payload_set if payload
+                str(payload[SZ_FRAGMENT])
+                for payload in payload_set
+                if payload and SZ_FRAGMENT in payload
             )  # TODO: messy - what is set not full
         except zlib.error as err:
             raise exc.ScheduleError("Failed to decompress schedule fragments") from err
@@ -384,8 +425,9 @@ class Schedule:  # 0404
     ) -> _PayloadSetT:
         """Add a fragment to a frag set and process/return the new set.
 
-        If the frag set is complete, check for a schedule (sets `self._schedule`).
-        If required, start a new frag set with the fragment.
+        If the frag set is complete, check for a schedule (sets
+        `self._schedule`). If required, start a new frag set with the
+        fragment.
 
         :param payload_set: The existing fragment collection.
         :param payload: The new payload dict to integrate.
@@ -393,19 +435,31 @@ class Schedule:  # 0404
         """
 
         def init_payload_set(payload: _PayloadT) -> _PayloadSetT:
-            _payload_set: _PayloadSetT = [None] * payload[SZ_TOTAL_FRAGS]
-            _payload_set[payload[SZ_FRAG_NUMBER] - 1] = payload
+            total_frags = payload.get(SZ_TOTAL_FRAGS)
+            frag_num = payload.get(SZ_FRAG_NUMBER)
+
+            if total_frags is None or frag_num is None:
+                return list(EMPTY_PAYLOAD_SET)
+
+            _payload_set: _PayloadSetT = [None] * total_frags
+
+            # Guard against invalid fragment indices that could cause IndexError
+            if 0 < frag_num <= total_frags:
+                _payload_set[frag_num - 1] = payload
             return _payload_set
 
-        if payload[SZ_TOTAL_FRAGS] is None:  # zone has no schedule
+        if payload.get(SZ_TOTAL_FRAGS) is None:  # zone has no schedule
             payload_set = list(EMPTY_PAYLOAD_SET)
             self._proc_payload_set(payload_set)
             return payload_set
 
-        if payload[SZ_TOTAL_FRAGS] != _len(payload_set):  # sched has changed
+        if payload.get(SZ_TOTAL_FRAGS) != _len(payload_set):  # sched has changed
             return init_payload_set(payload)
 
-        payload_set[payload[SZ_FRAG_NUMBER] - 1] = payload
+        frag_num = payload.get(SZ_FRAG_NUMBER)
+        if frag_num is not None and 0 < frag_num <= _len(payload_set):
+            payload_set[frag_num - 1] = payload
+
         if None in payload_set or self._proc_payload_set(
             payload_set
         ):  # sets self._schedule
@@ -418,8 +472,10 @@ class Schedule:  # 0404
     ) -> InnerScheduleT | None:
         """Set the schedule of a zone.
 
-        :param schedule: The array representing the days of the week schedule.
-        :param force_refresh: True to query and retrieve the new schedule directly after setting.
+        :param schedule: The array representing the days of the week
+            schedule.
+        :param force_refresh: True to query and retrieve the new
+            schedule directly after setting.
         :return: The updated InnerSchedule array.
         :raises exc.ScheduleError: On validation or serialization failure.
         :raises exc.ScheduleFlowError: On transmission timeout.
@@ -449,7 +505,8 @@ class Schedule:  # 0404
             except vol.MultipleInvalid as err:
                 raise exc.ScheduleError(f"failed to set schedule: {err}") from err
 
-            if self.idx == "HW":  # HACK: to avoid confusing dhw with zone '00'
+            if self.idx == "HW":
+                # HACK: to avoid confusing dhw with zone '00'
                 full_schedule[SZ_ZONE_IDX] = "00"
 
             return full_schedule
@@ -548,8 +605,10 @@ def fragz_to_full_sched(fragments: Iterable[_FragmentT]) -> _OuterSchedule:
 def full_sched_to_fragz(full_schedule: _OuterSchedule) -> list[_FragmentT]:
     """Convert a schedule into a set of fragments (a blob).
 
-    :param full_schedule: The `_OuterSchedule` dictionary representation.
-    :return: A list of string fragments representing the zlib compressed binary.
+    :param full_schedule: The `_OuterSchedule` dictionary
+        representation.
+    :return: A list of string fragments representing the zlib compressed
+        binary.
     :raises KeyError: If expected keys are missing from the structure.
     """
     cobj = zlib.compressobj(level=9, wbits=14)
@@ -587,7 +646,9 @@ def _struct_pack(
     tod = int(tod_[:2]) * 60 + int(tod_[3:])
 
     if SZ_HEAT_SETPOINT in switchpoint:
-        val = int(switchpoint[SZ_HEAT_SETPOINT] * 100)  # type: ignore[typeddict-item]
+        val = int(
+            switchpoint[SZ_HEAT_SETPOINT] * 100  # type: ignore[typeddict-item]
+        )
     else:
         val = int(bool(switchpoint[SZ_ENABLED]))
 

@@ -39,6 +39,7 @@ if TYPE_CHECKING:
 
 
 _LOGGER = logging.getLogger(__name__)
+_TRACE = logging.getLogger("ramses_rf.legacy_trace")
 
 
 class Parent:
@@ -104,62 +105,73 @@ class Parent:
         if hasattr(self, "childs") and child not in self.childs:
             pass
 
-        if is_sensor and child_id == FA:
-            if self._dhw_sensor and self._dhw_sensor is not child:
-                raise exc.SystemSchemaInconsistent(
-                    f"{self} changed dhw_sensor (from {self._dhw_sensor} to {child})"
-                )
-            self._dhw_sensor = child
+        try:
+            if is_sensor and child_id == FA:
+                if self._dhw_sensor and self._dhw_sensor is not child:
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed dhw_sensor (from {self._dhw_sensor} to {child})"
+                    )
+                self._dhw_sensor = child
 
-        elif is_sensor and hasattr(self, SZ_SENSOR):
-            if getattr(self, SZ_SENSOR, None) and getattr(self, SZ_SENSOR) is not child:
-                raise exc.SystemSchemaInconsistent(
-                    f"{self} changed zone sensor (from {getattr(self, SZ_SENSOR)} to {child})"
-                )
-            self._sensor = child
+            elif is_sensor and hasattr(self, SZ_SENSOR):
+                if (
+                    getattr(self, SZ_SENSOR, None)
+                    and getattr(self, SZ_SENSOR) is not child
+                ):
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed zone sensor (from {getattr(self, SZ_SENSOR)} to {child})"
+                    )
+                self._sensor = child
 
-        elif is_sensor:
-            raise exc.SchemaInconsistentError(
-                f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
+            elif is_sensor:
+                raise exc.SchemaInconsistentError(
+                    f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
+                )
+
+            elif hasattr(self, SZ_CIRCUITS):
+                if child not in self.circuit_by_id:
+                    self.circuit_by_id[child.id] = child
+
+            elif hasattr(self, SZ_ACTUATORS):
+                if child not in self.actuators:
+                    self.actuators.append(child)
+                    self.actuator_by_id[child.id] = child
+
+            elif child_id == F9:
+                if self._htg_valve and self._htg_valve is not child:
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed htg_valve (from {self._htg_valve} to {child})"
+                    )
+                self._htg_valve = child
+
+            elif child_id == FA:
+                if self._dhw_valve and self._dhw_valve is not child:
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed dhw_valve (from {self._dhw_valve} to {child})"
+                    )
+                self._dhw_valve = child
+
+            elif child_id == FC:
+                if self._app_cntrl and self._app_cntrl is not child:
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed app_cntrl (from {self._app_cntrl} to {child})"
+                    )
+                self._app_cntrl = child
+
+            elif child_id == FF:
+                pass
+
+            else:
+                raise exc.SchemaInconsistentError(
+                    f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
+                )
+
+        except (exc.SchemaInconsistentError, exc.SystemSchemaInconsistent) as err:
+            _TRACE.error(
+                f"ADD_CHILD EXCEPTION: Validating {child} to parent {self} "
+                f"failed: {err}"
             )
-
-        elif hasattr(self, SZ_CIRCUITS):
-            if child not in self.circuit_by_id:
-                self.circuit_by_id[child.id] = child
-
-        elif hasattr(self, SZ_ACTUATORS):
-            if child not in self.actuators:
-                self.actuators.append(child)
-                self.actuator_by_id[child.id] = child
-
-        elif child_id == F9:
-            if self._htg_valve and self._htg_valve is not child:
-                raise exc.SystemSchemaInconsistent(
-                    f"{self} changed htg_valve (from {self._htg_valve} to {child})"
-                )
-            self._htg_valve = child
-
-        elif child_id == FA:
-            if self._dhw_valve and self._dhw_valve is not child:
-                raise exc.SystemSchemaInconsistent(
-                    f"{self} changed dhw_valve (from {self._dhw_valve} to {child})"
-                )
-            self._dhw_valve = child
-
-        elif child_id == FC:
-            if self._app_cntrl and self._app_cntrl is not child:
-                raise exc.SystemSchemaInconsistent(
-                    f"{self} changed app_cntrl (from {self._app_cntrl} to {child})"
-                )
-            self._app_cntrl = child
-
-        elif child_id == FF:
-            pass
-
-        else:
-            raise exc.SchemaInconsistentError(
-                f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
-            )
+            raise
 
         self.childs.append(child)
         self.child_by_id[child.id] = child
@@ -223,17 +235,20 @@ class Child:
         if parent_class == "Controller":
             parent = cast(Any, parent).tcs
             parent_class = parent.__class__.__name__
+            _TRACE.info(f"SUB-CONTROLLER: {self} shifted parent to {parent_class}")
 
         if parent_class in ("Evohome", "System") and child_id:
             if child_id in (F9, FA):
                 parent = cast(Any, parent).get_dhw_zone()
                 parent_class = parent.__class__.__name__
+                _TRACE.info(f"DHW SHIFT: {self} shifted parent to {parent_class}")
             elif (
                 hasattr(parent, "_max_zones")
                 and int(child_id, 16) < cast(Any, parent)._max_zones
             ):
                 parent = cast(Any, parent).get_htg_zone(child_id)
                 parent_class = parent.__class__.__name__
+                _TRACE.info(f"ZONE SHIFT: {self} shifted parent to {parent_class}")
 
         elif (
             parent_class
@@ -251,10 +266,12 @@ class Child:
             child_id = child_id or getattr(parent, "idx", None)
 
         if self._parent and self._parent != parent:
-            raise exc.SystemSchemaInconsistent(
+            err_msg = (
                 f"{self} can't change parent "
                 f"({self._parent}_{self._child_id} to {parent}_{child_id})"
             )
+            _TRACE.error(f"PARENT CHANGE EXCEPTION: {err_msg}")
+            raise exc.SystemSchemaInconsistent(err_msg)
 
         PARENT_RULES: dict[str, dict[str, tuple[str, ...]]] = {
             "DhwZone": {SZ_ACTUATORS: ("BdrSwitch",), SZ_SENSOR: ("DhwSensor",)},
@@ -295,15 +312,24 @@ class Child:
 
         rules = PARENT_RULES.get(parent_class)
         if not rules:
+            _TRACE.error(f"PARENT RULES EXCEPTION: {parent} is not a valid parent.")
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: not a valid parent"
             )
 
         if is_sensor and self_class not in rules[SZ_SENSOR]:
+            _TRACE.error(
+                f"RULES EXCEPTION: Sensor {self} must be {rules[SZ_SENSOR]} "
+                f"for parent {parent}"
+            )
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: Sensor {self} must be {rules[SZ_SENSOR]}"
             )
         if not is_sensor and self_class not in rules[SZ_ACTUATORS]:
+            _TRACE.error(
+                f"RULES EXCEPTION: Actuator {self} must be {rules[SZ_ACTUATORS]} "
+                f"for parent {parent}"
+            )
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: Actuator {self} must be {rules[SZ_ACTUATORS]}"
             )
@@ -332,23 +358,28 @@ class Child:
         :rtype: Parent
         :raises SystemSchemaInconsistent: If a controller conflict occurs.
         """
-        parent, child_id = self._get_parent(
-            parent, child_id=child_id, is_sensor=is_sensor
-        )
-        ctl = (
-            parent
-            if parent.__class__.__name__ == "UfhController"
-            else getattr(parent, "ctl", None)
-        )
-
-        this_entity = cast("Entity", self)
-
-        if this_entity.ctl and this_entity.ctl is not ctl:
-            raise exc.SystemSchemaInconsistent(
-                f"{self} can't change controller: {this_entity.ctl} to {ctl}"
+        try:
+            parent, child_id = self._get_parent(
+                parent, child_id=child_id, is_sensor=is_sensor
+            )
+            ctl = (
+                parent
+                if parent.__class__.__name__ == "UfhController"
+                else getattr(parent, "ctl", None)
             )
 
-        parent._add_child(self, child_id=child_id, is_sensor=is_sensor)
+            this_entity = cast("Entity", self)
+
+            if this_entity.ctl and this_entity.ctl is not ctl:
+                raise exc.SystemSchemaInconsistent(
+                    f"{self} can't change controller: {this_entity.ctl} to {ctl}"
+                )
+
+            parent._add_child(self, child_id=child_id, is_sensor=is_sensor)
+
+        except (exc.SchemaInconsistentError, exc.SystemSchemaInconsistent) as err:
+            _TRACE.error(f"LINK EXCEPTION: Failed applying link for {self}: {err}")
+            raise
 
         self._child_id = child_id
         self._parent = parent
