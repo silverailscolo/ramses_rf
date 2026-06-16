@@ -6,7 +6,7 @@
 
 ## Installation
 
-Confirm you have Python 3.13.x installed by running:
+Confirm you have Python 3.14.x installed by running:
 ```commandline
 python3 --version
 ```
