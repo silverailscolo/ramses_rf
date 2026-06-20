@@ -9,7 +9,9 @@ from ramses_rf.address import Address
 from ramses_rf.enums import Topic
 from ramses_rf.messages.core import Message
 from ramses_rf.parsers.decoder import decode_packet
+from ramses_rf.routing import StateHeader
 from ramses_tx import exceptions as exc
+from ramses_tx.const import Code
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.typing import DeviceIdT
 
@@ -34,6 +36,9 @@ class DecoderEngine:
         self._in_queue = in_queue
         self._out_queue = out_queue
         self._task: asyncio.Task[None] | None = None
+
+        # Anti-spam tracker to ensure we only log each unknown code once per session
+        self._unknown_codes: set[str] = set()
 
     async def start(self) -> None:
         """Start the background consumer task."""
@@ -93,9 +98,38 @@ class DecoderEngine:
         src_id = valid[0] if valid else "--:------"
         dst_id = valid[1] if len(valid) > 1 else src_id
 
+        # COMMUNITY LOGGING HOOK: Trap unknown command codes gracefully
+        try:
+            Code(dto.code)
+        except ValueError:
+            if dto.code not in self._unknown_codes:
+                self._unknown_codes.add(dto.code)
+                _LOGGER.warning(
+                    "Unknown command code '%s' detected from device %s. "
+                    "Please help support the development of ramses_rf by raising "
+                    "an issue on GitHub with your packet log to help us decode it! "
+                    "Payload: %s",
+                    dto.code,
+                    src_id,
+                    dto.payload,
+                )
+
+        # Native L7 Context & Header Generation
+        ctx_val: str | bool | None = dto.payload[:2] if dto.payload else False
+        if dto.code == "3220" and len(dto.payload) >= 6:
+            ctx_val = dto.payload[4:6]
+
+        header = StateHeader.create(
+            code=dto.code,
+            verb=dto.verb,
+            source_id=src_id,
+            context_val=ctx_val,
+        )
+
         # Instantiate the immutable historical fact at the pipeline's edge
         msg = Message(
             topic=Topic.RAW_EVENT,
+            header=header,
             src=Address(DeviceIdT(src_id)),
             dst=Address(DeviceIdT(dst_id)),
             data=data,

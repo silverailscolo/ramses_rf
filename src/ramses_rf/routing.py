@@ -62,9 +62,9 @@ class StateHeader:
     the event-driven Master Plan (routing into topics and dest_ids).
     """
 
-    code: Code
-    verb: VerbT
-    source_id: DeviceIdT
+    code: Code | str
+    verb: VerbT | str
+    source_id: DeviceIdT | str
     context: RoutingContext
 
     @classmethod
@@ -88,9 +88,18 @@ class StateHeader:
         :return: The immutable StateHeader instance.
         :rtype: StateHeader
         """
-        # Safely promote strings to rich types if necessary
-        safe_code = Code(code) if isinstance(code, str) else code
-        safe_verb = VerbT(verb) if isinstance(verb, str) else verb
+        # Safely promote strings to rich types, gracefully falling back to
+        # strings for unregistered OEM/Debug hardware codes.
+        try:
+            safe_code: Code | str = Code(code) if isinstance(code, str) else code
+        except ValueError:
+            safe_code = code
+
+        try:
+            safe_verb: VerbT | str = VerbT(verb) if isinstance(verb, str) else verb
+        except ValueError:
+            safe_verb = verb
+
         safe_src = DeviceIdT(source_id) if isinstance(source_id, str) else source_id
 
         return cls(

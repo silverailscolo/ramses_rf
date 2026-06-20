@@ -9,6 +9,7 @@ from ramses_rf.address import Address
 from ramses_rf.enums import Topic
 from ramses_rf.messages.core import Message
 from ramses_rf.pipeline.dispatcher import CentralDispatcher
+from ramses_rf.routing import StateHeader
 from ramses_tx.dtos import PacketDTO
 
 
@@ -31,8 +32,12 @@ def _mock_message(
         length="000",
         payload="00",
     )
+    mock_header = StateHeader.create(
+        code=code, verb=" I", source_id=src_id, context_val=None
+    )
     return Message(
         topic=Topic.RAW_EVENT,
+        header=mock_header,
         src=Address(src_id),
         dst=Address(dst_id),
         data=data,
