@@ -81,6 +81,19 @@ def assert_expected(
     """
 
     def _assert_expected(actual_: dict[str, Any], expect_: dict[str, Any]) -> None:
+        if actual_ != expect_:
+            print("\n--- DIAGNOSTIC OUTPUT ---")
+            for k, v in actual_.items():
+                if k not in expect_:
+                    print(f"EXTRA: {k} = {v}")
+                elif v != expect_[k]:
+                    print(f"MISMATCH {k}: Act={v}, Exp={expect_[k]}")
+
+            for k in expect_:
+                if k not in actual_:
+                    print(f"MISSING {k}: Exp={expect_[k]}")
+            print("-------------------------\n")
+
         assert actual_ == expect_
 
     if expected:

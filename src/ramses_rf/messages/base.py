@@ -545,3 +545,12 @@ class Message:
                 f"{err.__class__.__name__}({err})",
             )
             raise exc.PacketInvalid("Bad packet") from err
+
+    @property
+    def addr3(self) -> Address:
+        """Return the third address field (the logical destination or owner).
+
+        :return: The third address object.
+        :rtype: Address
+        """
+        return self._addrs[2]

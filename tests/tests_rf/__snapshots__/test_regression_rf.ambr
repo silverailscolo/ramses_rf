@@ -437,9 +437,17 @@
       }),
       dict({
         'battery_low': None,
+        'id': '01:555555',
+        'is_alive': None,
+        'tcs_id': '01:555555',
+        'type': 'Controller',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': None,
         'id': '02:000921',
         'is_alive': None,
-        'tcs_id': None,
+        'tcs_id': '01:191718',
         'type': 'UfhController',
         'zone_idx': None,
       }),
@@ -743,7 +751,7 @@
           '03': dict({
           }),
         }),
-        'tcs_id': None,
+        'tcs_id': '01:555555',
         'type': 'UfhController',
         'zone_idx': None,
       }),
@@ -6654,6 +6662,26 @@
           'appliance_control': None,
         }),
         'underfloor_heating': dict({
+          '02:000921': dict({
+            'circuits': dict({
+              '00': dict({
+              }),
+              '01': dict({
+              }),
+              '02': dict({
+              }),
+              '03': dict({
+              }),
+              '04': dict({
+              }),
+              '05': dict({
+              }),
+              '06': dict({
+              }),
+              '07': dict({
+              }),
+            }),
+          }),
         }),
         'zones': dict({
         }),
@@ -6955,6 +6983,39 @@
             'class': 'radiator_valve',
             'sensor': None,
           }),
+        }),
+      }),
+      '01:555555': dict({
+        'orphans': list([
+        ]),
+        'stored_hotwater': dict({
+        }),
+        'system': dict({
+          'appliance_control': None,
+        }),
+        'underfloor_heating': dict({
+          '02:123456': dict({
+            'circuits': dict({
+              '00': dict({
+              }),
+              '01': dict({
+              }),
+              '02': dict({
+              }),
+              '03': dict({
+              }),
+              '04': dict({
+              }),
+              '05': dict({
+              }),
+              '06': dict({
+              }),
+              '07': dict({
+              }),
+            }),
+          }),
+        }),
+        'zones': dict({
         }),
       }),
       'main_tcs': '01:145038',

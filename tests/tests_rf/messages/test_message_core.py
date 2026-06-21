@@ -5,6 +5,7 @@ from datetime import UTC, datetime as dt
 from ramses_rf.address import Address
 from ramses_rf.enums import Topic
 from ramses_rf.messages.core import Message
+from ramses_rf.routing import StateHeader
 from ramses_tx.dtos import PacketDTO
 
 
@@ -26,8 +27,14 @@ def test_message_enrichment_and_lineage() -> None:
     )
 
     # 1. Create the base Message (RAW_EVENT)
+
+    mock_header = StateHeader.create(
+        code="30C9", verb=" I", source_id="01:111111", context_val=None
+    )
+
     msg = Message(
         topic=Topic.RAW_EVENT,
+        header=mock_header,
         src=src,
         dst=dst,
         data={"raw_temp": 45.6},
