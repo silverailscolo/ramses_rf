@@ -6,7 +6,9 @@ from typing import Any
 
 from ramses_rf.address import Address
 from ramses_rf.enums import Topic
+from ramses_rf.routing import StateHeader
 from ramses_tx.dtos import PacketDTO
+from ramses_tx.typing import DeviceIdT
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +17,8 @@ class Message:
 
     :param topic: The event bus routing discriminator.
     :type topic: Topic
+    :param header: The immutable L7 routing state header.
+    :type header: StateHeader
     :param src: The logical origin of the message.
     :type src: Address
     :param dst: The logical target of the message.
@@ -30,12 +34,26 @@ class Message:
     """
 
     topic: Topic
+    header: StateHeader
     src: Address
     dst: Address
     data: dict[str, Any]
     packets: tuple[PacketDTO, ...]
     timestamp: dt
     lineage: tuple["Message", ...] = field(default_factory=tuple)
+
+    @property
+    def addr3(self) -> Address:
+        """Return the third address field (the logical destination or owner).
+
+        :return: The third address object.
+        :rtype: Address
+        """
+        if not self.packets:
+            return Address(DeviceIdT("--:------"))
+
+        addr_str = self.packets[0].addr3
+        return Address(DeviceIdT(addr_str if addr_str else "--:------"))
 
     def get(self, key: str, default: Any = None) -> Any:
         """Safely extract payload properties without KeyError.

@@ -72,10 +72,8 @@ class CentralDispatcher:
         self.ssot_queue.put_nowait(msg)
         self.discovery_queue.put_nowait(msg)
 
-        if not msg.packets:
-            return
-
-        code = msg.packets[0].code
+        # Retrieve the code natively from the L7 header
+        code = str(msg.header.code)
 
         # 2. Binding Anomaly (1FC9 Offers)
         if code == _CODE_BINDING and msg.data.get("phase") == _PHASE_OFFER:

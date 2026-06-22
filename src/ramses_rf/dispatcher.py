@@ -13,7 +13,7 @@ import uuid
 from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_tx import ALL_DEV_ADDR, CODES_BY_DEV_SLUG
+from ramses_tx import ALL_DEV_ADDR
 
 from . import exceptions as exc
 from .const import (
@@ -37,6 +37,7 @@ from .protocol.ramses import (
     CODES_OF_HEAT_DOMAIN_ONLY,
     CODES_OF_HVAC_DOMAIN_ONLY,
 )
+from .protocol_schema import CODES_BY_DEV_SLUG
 
 if TYPE_CHECKING:
     from .gateway import Gateway
@@ -109,7 +110,11 @@ def validate_addresses(gwy: Gateway, msg: Message) -> bool:
         # .I --- 18:013393 18:000730 --:------ 0001 005 00FFFF0200     # invalid
         # .I --- 01:078710 --:------ 01:144246 1F09 003 FF04B5         # invalid
         # .I --- 29:151550 29:237552 --:------ 22F3 007 00023C03040000 # valid? HVAC
-        if msg.code in CODES_OF_HEAT_DOMAIN_ONLY:
+
+        # 🚨 CQRS Bypass: Permit UFCs (02:) to communicate directly (e.g. Autotemp)
+        if msg.src.type == "02":
+            pass
+        elif msg.code in CODES_OF_HEAT_DOMAIN_ONLY:
             raise exc.PacketAddrSetInvalid(
                 f"Invalid addr pair: {msg.src!r}/{msg.dst!r}"
             )
