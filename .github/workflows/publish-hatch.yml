@@ -17,7 +17,7 @@ jobs:
     name: Build release to /dist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install hatch and Update Dependencies
         run: |
