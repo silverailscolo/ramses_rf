@@ -23,7 +23,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
-from ramses_rf.models import DemandState, TemperatureState
+from ramses_rf.models import DemandState, PowerState, TemperatureState
 from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.topology import Child
 from ramses_tx import Command, Packet, Priority, QosParams
@@ -86,6 +86,8 @@ class DeviceBase(Entity):
 
         self._scheme: Vendor | None = traits.scheme if traits else None
         self._last_msg_dtm: dt | None = None
+
+        self.power_state = PowerState()
 
     def __str__(self) -> str:
         if self._STATE_ATTR and hasattr(self, self._STATE_ATTR):
@@ -243,17 +245,17 @@ class BatteryState(DeviceBase):  # 1060
     async def battery_low(self) -> None | bool:  # 1060
         if self.is_faked:
             return False
-        return cast(
-            bool | None,
-            await self.entity_state.get_value(Code._1060, key=self.BATTERY_LOW),
-        )
+        return self.power_state.battery_low
 
     async def battery_state(self) -> dict[str, Any] | None:  # 1060
         if self.is_faked:
             return None
-        return cast(
-            dict[str, Any] | None, await self.entity_state.get_value(Code._1060)
-        )
+        if self.power_state.battery_level is None:
+            return None
+        return {
+            self.BATTERY_LOW: self.power_state.battery_low,
+            self.BATTERY_STATE: self.power_state.battery_level,
+        }
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()

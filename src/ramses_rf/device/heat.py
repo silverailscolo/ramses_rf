@@ -32,7 +32,13 @@ from ramses_rf.const import (
 from ramses_rf.device import Device
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.helpers import shrink
-from ramses_rf.models import DemandState, DeviceTraits, OpenThermState, TemperatureState
+from ramses_rf.models import (
+    DemandState,
+    DeviceTraits,
+    OpenThermState,
+    TemperatureState,
+    TrvState,
+)
 from ramses_rf.quirks import QUARANTINED_OT_MSG_IDS
 from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
@@ -108,12 +114,6 @@ from ramses_tx.const import (
 if TYPE_CHECKING:
     from ramses_rf.address import Address
     from ramses_rf.messages import ApplicationMessage
-    from ramses_rf.models import (
-        DemandState,
-        DeviceTraits,
-        OpenThermState,
-        TemperatureState,
-    )
     from ramses_rf.systems import Evohome, Zone
     from ramses_tx import Packet
 
@@ -185,10 +185,7 @@ class HeatDemand(DeviceHeat):  # 3150
     HEAT_DEMAND: Final = SZ_HEAT_DEMAND  # percentage valve open (0.0-1.0)
 
     async def heat_demand(self) -> float | None:  # 3150
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._3150, key=self.HEAT_DEMAND),
-        )
+        return self.demand_state.heat_demand
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -202,10 +199,7 @@ class Setpoint(DeviceHeat):  # 2309
     SETPOINT: Final = SZ_SETPOINT  # degrees Celsius
 
     async def setpoint(self) -> float | None:  # 2309
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._2309, key=self.SETPOINT),
-        )
+        return self.temp_state.setpoint
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -219,15 +213,7 @@ class Weather(DeviceHeat):  # 0002
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 0002
-        if self._gwy.message_store:
-            msgs = await self._gwy.message_store.get(code=Code._0002, src=self.id)
-            if msgs:
-                return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
-
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._0002, key=SZ_TEMPERATURE),
-        )
+        return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Packet:
         """Fake the outdoor temperature of the sensor."""
@@ -271,10 +257,7 @@ class RelayDemand(DeviceHeat):  # 0008
             self.discovery.add_cmd(Command.get_relay_demand(self.id), 60 * 15)
 
     async def relay_demand(self) -> float | None:  # 0008
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._0008, key=self.RELAY_DEMAND),
-        )
+        return self.demand_state.relay_demand
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -288,15 +271,7 @@ class DhwTemperature(DeviceHeat):  # 1260
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 1260
-        if self._gwy.message_store:
-            msgs = await self._gwy.message_store.get(code=Code._1260, src=self.id)
-            if msgs:
-                return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
-
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._1260, key=SZ_TEMPERATURE),
-        )
+        return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Packet:
         """Fake the DHW temperature of the sensor."""
@@ -322,15 +297,7 @@ class Temperature(DeviceHeat):  # 30C9
     # .W --- 01:054173 34:145039 --:------ 1FC9 006 03-2309-04D39D  # real CTL
     # .I --- 34:145039 01:054173 --:------ 1FC9 006 00-30C9-8A368F
     async def temperature(self) -> float | None:  # 30C9
-        if self._gwy.message_store:
-            msgs = await self._gwy.message_store.get(code=Code._30C9, src=self.id)
-            if msgs:
-                return cast(float | None, msgs[0].payload.get(SZ_TEMPERATURE))
-
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._30C9, key=SZ_TEMPERATURE),
-        )
+        return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Packet:
         """Fake the indoor temperature of the sensor."""
@@ -1522,6 +1489,7 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
+        self.trv_state = TrvState()
 
     @property
     def heartbeat_timeout(self) -> td:
@@ -1533,19 +1501,13 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint, Temperature):  # TRV (04):
         return HEARTBEAT_TIMEOUT_TRV
 
     async def heat_demand(self) -> float | None:  # 3150
-        if (heat_demand := await super().heat_demand()) is None:
-            if (
-                await self.entity_state.get_value(Code._3150) is None
-                and await self.setpoint() is False
-            ):
+        if (heat_demand := self.demand_state.heat_demand) is None:
+            if await self.setpoint() is False:
                 return 0  # instead of None (no 3150s sent when setpoint is False)
         return heat_demand
 
     async def window_open(self) -> bool | None:  # 12B0
-        return cast(
-            bool | None,
-            await self.entity_state.get_value(Code._12B0, key=self.WINDOW_OPEN),
-        )
+        return self.trv_state.window_open
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
