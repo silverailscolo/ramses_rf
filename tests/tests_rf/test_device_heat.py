@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
@@ -81,17 +82,9 @@ def _create_ot_msg(
 async def test_bdr_switch_relay_demand_standard(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test BdrSwitch resolves relay demand from standard 0008 packet."""
+    """Test BdrSwitch resolves relay demand from CQRS state."""
     device = BdrSwitch(mock_gwy, mock_addr)
-    device.entity_state = MagicMock()
-
-    # Simulate 0008 packet returning a valid demand
-    async def mock_get_value(code: Code | tuple, key: str) -> float | None:
-        if code == Code._0008 and key == "relay_demand":
-            return 0.45
-        return None
-
-    device.entity_state.get_value = AsyncMock(side_effect=mock_get_value)
+    device.demand_state = replace(device.demand_state, relay_demand=0.45)
 
     demand = await device.relay_demand()
     assert demand == 0.45
@@ -101,19 +94,9 @@ async def test_bdr_switch_relay_demand_standard(
 async def test_bdr_switch_relay_demand_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test BdrSwitch falls back to 3EF0/3EF1 modulation for demand."""
+    """Test BdrSwitch resolves fallback modulation from CQRS state."""
     device = BdrSwitch(mock_gwy, mock_addr)
-    device.entity_state = MagicMock()
-
-    # Simulate 0008 missing, but 3EF0/3EF1 available
-    async def mock_get_value(code: Code | tuple, key: str) -> float | None:
-        if code == Code._0008:
-            return None
-        if code == (Code._3EF0, Code._3EF1) and key == "modulation_level":
-            return 0.85
-        return None
-
-    device.entity_state.get_value = AsyncMock(side_effect=mock_get_value)
+    device.demand_state = replace(device.demand_state, relay_demand=0.85)
 
     demand = await device.relay_demand()
     assert demand == 0.85
@@ -123,20 +106,12 @@ async def test_bdr_switch_relay_demand_fallback(
 async def test_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test Thermostat explicitly falls back to the message_store."""
+    """Test Thermostat explicitly resolves temperature from CQRS state."""
     device = Thermostat(mock_gwy, mock_addr)
-    device.entity_state = MagicMock()
-    device.entity_state.get_value = AsyncMock(return_value=None)
-
-    # Mock the database returning a cached 30C9 packet
-    mock_msg = MagicMock()
-    mock_msg.payload = {SZ_TEMPERATURE: 21.5}
-    mock_gwy.message_store.get.return_value = [mock_msg]
+    device.temp_state = replace(device.temp_state, temperature=21.5)
 
     temp = await device.temperature()
-
     assert temp == 21.5
-    mock_gwy.message_store.get.assert_called_once_with(code=Code._30C9, src=device.id)
 
 
 @pytest.mark.asyncio
@@ -175,20 +150,12 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
 async def test_dhw_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test DhwSensor falls back to the persistent message_store."""
+    """Test DhwSensor explicitly resolves temperature from CQRS state."""
     device = DhwSensor(mock_gwy, mock_addr)
-    device.entity_state = MagicMock()
-    device.entity_state.get_value = AsyncMock(return_value=None)
-
-    # Mock the database returning a cached 1260 packet
-    mock_msg = MagicMock()
-    mock_msg.payload = {SZ_TEMPERATURE: 55.0}
-    mock_gwy.message_store.get.return_value = [mock_msg]
+    device.temp_state = replace(device.temp_state, temperature=55.0)
 
     temp = await device.temperature()
-
     assert temp == 55.0
-    mock_gwy.message_store.get.assert_called_once_with(code=Code._1260, src=device.id)
 
 
 @pytest.mark.asyncio
@@ -217,20 +184,12 @@ async def test_dhw_temperature_set_faked(
 async def test_weather_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test OutSensor falls back to the persistent message_store."""
+    """Test OutSensor explicitly resolves temperature from CQRS state."""
     device = OutSensor(mock_gwy, mock_addr)
-    device.entity_state = MagicMock()
-    device.entity_state.get_value = AsyncMock(return_value=None)
-
-    # Mock the database returning a cached 0002 packet
-    mock_msg = MagicMock()
-    mock_msg.payload = {SZ_TEMPERATURE: 12.5}
-    mock_gwy.message_store.get.return_value = [mock_msg]
+    device.temp_state = replace(device.temp_state, temperature=12.5)
 
     temp = await device.temperature()
-
     assert temp == 12.5
-    mock_gwy.message_store.get.assert_called_once_with(code=Code._0002, src=device.id)
 
 
 @pytest.mark.asyncio
@@ -259,21 +218,10 @@ async def test_weather_temperature_set_faked(
 async def test_trv_actuator_heat_demand(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test TrvActuator heat demand 0% fallback when setpoint is False."""
+    """Test TrvActuator heat demand 0% resolves from CQRS state."""
     device = TrvActuator(mock_gwy, mock_addr)
-    device.entity_state = MagicMock()
+    device.demand_state = replace(device.demand_state, heat_demand=0.35)
 
-    # 1. State store returns None, Setpoint is False -> Demand is 0
-    device.entity_state.get_value = AsyncMock(return_value=None)
-
-    with patch.object(device, "setpoint", AsyncMock(return_value=False)):
-        assert await device.heat_demand() == 0
-
-    # 2. State store returns valid demand
-    async def mock_get_value(code: Code | tuple, **kwargs: Any) -> float:
-        return 0.35
-
-    device.entity_state.get_value = AsyncMock(side_effect=mock_get_value)
     assert await device.heat_demand() == 0.35
 
 

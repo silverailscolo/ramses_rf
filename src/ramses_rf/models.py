@@ -183,6 +183,21 @@ class PowerState:
     last_updated: dt = field(default_factory=_now_utc)
 
 
+@dataclass(frozen=True, slots=True)
+class ZoneState:
+    """State for standard heating zones."""
+
+    mode: str | None = None
+    setpoint: float | None = None
+    until: dt | str | None = None
+    min_temp: float | None = None
+    max_temp: float | None = None
+    local_override: bool | None = None
+    openwindow_function: bool | None = None
+    multiroom_mode: bool | None = None
+    last_updated: dt = field(default_factory=_now_utc)
+
+
 # --- Nested Value Objects for Schedules ---
 
 
