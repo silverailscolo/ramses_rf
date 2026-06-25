@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.device import Device, DeviceHeat, DeviceHvac
+from ramses_rf.devices import Device, DeviceHeat, DeviceHvac
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.pipeline.dispatcher import CentralDispatcher
 from ramses_rf.pipeline.ingestion import StateProjector

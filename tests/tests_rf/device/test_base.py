@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from ramses_rf.const import GATEWAY_MESSAGE_TIMEOUT
-from ramses_rf.device.base import BatteryState, DeviceBase, HgiGateway
+from ramses_rf.devices.dev_base import BatteryState, DeviceBase, HgiGateway
 from ramses_rf.gateway import Gateway
 from ramses_tx import Address
 

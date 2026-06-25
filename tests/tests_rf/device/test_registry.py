@@ -10,8 +10,8 @@ import pytest
 
 from ramses_rf.address import Address
 from ramses_rf.config import GatewayConfig
-from ramses_rf.device.filter import DeviceFilter
-from ramses_rf.device.registry import DeviceRegistry
+from ramses_rf.devices.dev_filter import DeviceFilter
+from ramses_rf.devices.dev_registry import DeviceRegistry
 from ramses_rf.exceptions import DeviceNotFoundError, SchemaInconsistentError
 from ramses_rf.models import DeviceTraits
 from ramses_rf.typing import DeviceIdT

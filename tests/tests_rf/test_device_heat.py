@@ -1,4 +1,4 @@
-"""Test the ramses_rf.device.heat module."""
+"""Test the ramses_rf.devices module."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import pytest
 
 from ramses_rf.const import SZ_PRESSURE
-from ramses_rf.device.heat import (
+from ramses_rf.devices import (
     BdrSwitch,
     Controller,
     DhwSensor,
@@ -27,14 +27,17 @@ from ramses_rf.protocol.opentherm import (
     SZ_VALUE,
     OtMsgType,
 )
-from ramses_tx import Code, Priority
 from ramses_tx.address import Address
-from ramses_tx.const import I_, RP, SZ_TEMPERATURE, MsgId
+from ramses_tx.const import I_, RP, SZ_TEMPERATURE, Code, MsgId, Priority
 
 
 @pytest.fixture
 def mock_gwy() -> MagicMock:
-    """Return a mock Gateway for device testing."""
+    """Return a mock Gateway for device testing.
+
+    :return: A mocked Gateway instance.
+    :rtype: MagicMock
+    """
     gwy = MagicMock()
     # Mock the persistent SQLite message database
     gwy.message_store = AsyncMock()
@@ -47,7 +50,11 @@ def mock_gwy() -> MagicMock:
 
 @pytest.fixture
 def mock_addr() -> MagicMock:
-    """Return a mock Address for device instantiation."""
+    """Return a mock Address for device instantiation.
+
+    :return: A mocked Address instance.
+    :rtype: MagicMock
+    """
     addr = MagicMock(spec=Address)
     addr.id = "13:111111"
     addr.type = "13"
@@ -61,7 +68,21 @@ def _create_ot_msg(
     name: str,
     verb: str = RP,
 ) -> MagicMock:
-    """Helper to create a mocked 3220 OpenTherm Message."""
+    """Helper to create a mocked 3220 OpenTherm Message.
+
+    :param msg_id: The numeric ID of the message.
+    :type msg_id: int
+    :param msg_type: The OpenTherm message type enum.
+    :type msg_type: OtMsgType
+    :param value: The value for the mock packet payload.
+    :type value: Any
+    :param name: The name of the OpenTherm parameter.
+    :type name: str
+    :param verb: The message verb.
+    :type verb: str
+    :return: A mocked Message object.
+    :rtype: MagicMock
+    """
     msg = MagicMock(spec=Message)
     msg.verb = verb
     msg.code = Code._3220
@@ -82,7 +103,13 @@ def _create_ot_msg(
 async def test_bdr_switch_relay_demand_standard(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test BdrSwitch resolves relay demand from CQRS state."""
+    """Test BdrSwitch resolves relay demand from CQRS state.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = BdrSwitch(mock_gwy, mock_addr)
     device.demand_state = replace(device.demand_state, relay_demand=0.45)
 
@@ -94,7 +121,13 @@ async def test_bdr_switch_relay_demand_standard(
 async def test_bdr_switch_relay_demand_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test BdrSwitch resolves fallback modulation from CQRS state."""
+    """Test BdrSwitch resolves fallback modulation from CQRS state.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = BdrSwitch(mock_gwy, mock_addr)
     device.demand_state = replace(device.demand_state, relay_demand=0.85)
 
@@ -106,7 +139,13 @@ async def test_bdr_switch_relay_demand_fallback(
 async def test_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test Thermostat explicitly resolves temperature from CQRS state."""
+    """Test Thermostat explicitly resolves temperature from CQRS state.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = Thermostat(mock_gwy, mock_addr)
     device.temp_state = replace(device.temp_state, temperature=21.5)
 
@@ -116,7 +155,13 @@ async def test_temperature_message_store_fallback(
 
 @pytest.mark.asyncio
 async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) -> None:
-    """Test Thermostat faking successfully delegates to Gateway."""
+    """Test Thermostat faking successfully delegates to Gateway.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = Thermostat(mock_gwy, mock_addr)
 
     # 1. Test failure when not faked
@@ -133,7 +178,7 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
         patch.object(
             Thermostat, "is_faked", new_callable=PropertyMock, return_value=True
         ),
-        patch("ramses_rf.device.heat.Command.put_sensor_temp") as mock_cmd_gen,
+        patch("ramses_tx.command.Command.put_sensor_temp") as mock_cmd_gen,
     ):
         mock_cmd = MagicMock()
         mock_cmd_gen.return_value = mock_cmd
@@ -150,7 +195,13 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
 async def test_dhw_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test DhwSensor explicitly resolves temperature from CQRS state."""
+    """Test DhwSensor explicitly resolves temperature from CQRS state.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = DhwSensor(mock_gwy, mock_addr)
     device.temp_state = replace(device.temp_state, temperature=55.0)
 
@@ -162,14 +213,20 @@ async def test_dhw_temperature_message_store_fallback(
 async def test_dhw_temperature_set_faked(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test DhwSensor faking triggers put_dhw_temp."""
+    """Test DhwSensor faking triggers put_dhw_temp.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = DhwSensor(mock_gwy, mock_addr)
 
     with (
         patch.object(
             DhwSensor, "is_faked", new_callable=PropertyMock, return_value=True
         ),
-        patch("ramses_rf.device.heat.Command.put_dhw_temp") as mock_cmd_gen,
+        patch("ramses_tx.command.Command.put_dhw_temp") as mock_cmd_gen,
     ):
         mock_cmd = MagicMock()
         mock_cmd_gen.return_value = mock_cmd
@@ -184,7 +241,13 @@ async def test_dhw_temperature_set_faked(
 async def test_weather_temperature_message_store_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test OutSensor explicitly resolves temperature from CQRS state."""
+    """Test OutSensor explicitly resolves temperature from CQRS state.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OutSensor(mock_gwy, mock_addr)
     device.temp_state = replace(device.temp_state, temperature=12.5)
 
@@ -196,14 +259,20 @@ async def test_weather_temperature_message_store_fallback(
 async def test_weather_temperature_set_faked(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test OutSensor faking triggers put_outdoor_temp."""
+    """Test OutSensor faking triggers put_outdoor_temp.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OutSensor(mock_gwy, mock_addr)
 
     with (
         patch.object(
             OutSensor, "is_faked", new_callable=PropertyMock, return_value=True
         ),
-        patch("ramses_rf.device.heat.Command.put_outdoor_temp") as mock_cmd_gen,
+        patch("ramses_tx.command.Command.put_outdoor_temp") as mock_cmd_gen,
     ):
         mock_cmd = MagicMock()
         mock_cmd_gen.return_value = mock_cmd
@@ -218,7 +287,13 @@ async def test_weather_temperature_set_faked(
 async def test_trv_actuator_heat_demand(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test TrvActuator heat demand 0% resolves from CQRS state."""
+    """Test TrvActuator heat demand 0% resolves from CQRS state.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = TrvActuator(mock_gwy, mock_addr)
     device.demand_state = replace(device.demand_state, heat_demand=0.35)
 
@@ -229,7 +304,13 @@ async def test_trv_actuator_heat_demand(
 async def test_otb_gateway_modulation_quarantine_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test OtbGateway modulation falls back to RAMSES due to quarantine."""
+    """Test OtbGateway modulation falls back to RAMSES due to quarantine.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OtbGateway(mock_gwy, mock_addr)
     mock_gwy.config.use_native_ot = "prefer"
     device.entity_state = MagicMock()
@@ -255,7 +336,13 @@ async def test_otb_gateway_modulation_quarantine_fallback(
 async def test_otb_gateway_pressure_prefer(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test standard prefer logic prioritizes OT (e.g., water pressure)."""
+    """Test standard prefer logic prioritizes OT (e.g., water pressure).
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OtbGateway(mock_gwy, mock_addr)
     mock_gwy.config.use_native_ot = "prefer"
     device.entity_state = MagicMock()
@@ -273,7 +360,13 @@ async def test_otb_gateway_pressure_prefer(
 async def test_otb_gateway_modulation_avoid(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test OtbGateway prioritizes RAMSES when native_ot is avoid."""
+    """Test OtbGateway prioritizes RAMSES when native_ot is avoid.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OtbGateway(mock_gwy, mock_addr)
     mock_gwy.config.use_native_ot = "avoid"
     device.entity_state = MagicMock()
@@ -292,7 +385,13 @@ async def test_otb_gateway_modulation_avoid(
 async def test_otb_gateway_modulation_avoid_fallback(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Test OtbGateway falls back to OT when native_ot is avoid but empty."""
+    """Test OtbGateway falls back to OT when native_ot is avoid but empty.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OtbGateway(mock_gwy, mock_addr)
     mock_gwy.config.use_native_ot = "avoid"
     device.entity_state = MagicMock()
@@ -312,7 +411,13 @@ async def test_otb_gateway_modulation_avoid_fallback(
 async def test_otb_gateway_water_pressure_packet_flow(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Verify end-to-end packet processing for CH Water Pressure (0x12)."""
+    """Verify end-to-end packet processing for CH Water Pressure (0x12).
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OtbGateway(mock_gwy, mock_addr)
     # Force 'avoid' to test the RAMSES failure -> OT fallback path
     mock_gwy.config.use_native_ot = "avoid"
@@ -335,7 +440,13 @@ async def test_otb_gateway_water_pressure_packet_flow(
 async def test_otb_gateway_boiler_temp_packet_flow(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Verify end-to-end processing for Boiler Output Temp (Data-ID 0x19)."""
+    """Verify end-to-end processing for Boiler Output Temp (Data-ID 0x19).
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OtbGateway(mock_gwy, mock_addr)
     # Force 'avoid' to test the RAMSES failure -> OT fallback path
     mock_gwy.config.use_native_ot = "avoid"
@@ -362,7 +473,13 @@ async def test_otb_gateway_boiler_temp_packet_flow(
 async def test_otb_gateway_status_flags_packet_flow(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Verify correct bitmask extraction for Status Flags (Data-ID 0x00)."""
+    """Verify correct bitmask extraction for Status Flags (Data-ID 0x00).
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OtbGateway(mock_gwy, mock_addr)
     device.entity_state = MagicMock()
     device.entity_state.get_value = AsyncMock(return_value=None)
@@ -389,7 +506,13 @@ async def test_otb_gateway_status_flags_packet_flow(
 async def test_otb_gateway_ignores_unknown_data_id(
     mock_gwy: MagicMock, mock_addr: MagicMock
 ) -> None:
-    """Ensure invalid/unknown OpenTherm packets are safely dropped."""
+    """Ensure invalid/unknown OpenTherm packets are safely dropped.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    :param mock_addr: The mocked address.
+    :type mock_addr: MagicMock
+    """
     device = OtbGateway(mock_gwy, mock_addr)
     device.entity_state = MagicMock()
     device.entity_state.get_value = AsyncMock(return_value=None)
@@ -405,7 +528,11 @@ async def test_otb_gateway_ignores_unknown_data_id(
 
 @pytest.mark.asyncio
 async def test_controller_discovers_system_mode(mock_gwy: MagicMock) -> None:
-    """Test that the Controller actively polls for system_mode (2E04) on startup."""
+    """Test that the Controller actively polls for system_mode (2E04) on startup.
+
+    :param mock_gwy: The mocked gateway.
+    :type mock_gwy: MagicMock
+    """
     # 1. Override the fixture to ENABLE discovery for this specific test
     mock_gwy.config.disable_discovery = False
 

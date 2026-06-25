@@ -27,7 +27,7 @@ from ramses_rf.const import (
     SZ_ZONE_TYPE,
     SZ_ZONES,
 )
-from ramses_rf.device import (
+from ramses_rf.devices import (
     BdrSwitch,
     Controller,
     Device,

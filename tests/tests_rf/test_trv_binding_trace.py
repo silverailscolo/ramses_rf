@@ -7,7 +7,7 @@ import pytest
 
 from ramses_rf.address import Address
 from ramses_rf.config import GatewayConfig
-from ramses_rf.device.registry import DeviceRegistry
+from ramses_rf.devices.dev_registry import DeviceRegistry
 from ramses_rf.enums import Topic, TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent

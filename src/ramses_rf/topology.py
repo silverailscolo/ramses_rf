@@ -33,7 +33,7 @@ from .schemas import SZ_CIRCUITS
 if TYPE_CHECKING:
     from ramses_tx.typing import DeviceIdT
 
-    from .device import Controller
+    from .devices import Controller
     from .entity import Entity
     from .systems.tcs import Evohome
 

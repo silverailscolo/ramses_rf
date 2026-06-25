@@ -3,7 +3,7 @@
 
 from ramses_rf import Device
 from ramses_rf.binding_fsm import BindingManager
-from ramses_rf.device import Fakeable
+from ramses_rf.devices import Fakeable
 
 
 def ensure_fakeable(dev: Device, make_fake: bool = True) -> None:

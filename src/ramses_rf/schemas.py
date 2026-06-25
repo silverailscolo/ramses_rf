@@ -70,7 +70,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from .device import Device
+    from .devices import Device
     from .gateway import Gateway
     from .systems import Evohome
 
@@ -357,7 +357,7 @@ def load_schema(
 ) -> None:
     """Instantiate all entities in the schema, and faked devices in the known_list."""
 
-    from .device import Fakeable  # circular import
+    from .devices import Fakeable  # circular import
 
     known_list = known_list or {}
 

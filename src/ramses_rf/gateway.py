@@ -28,9 +28,7 @@ from ramses_tx.typing import PayloadT
 
 from .config import GatewayConfig as GatewayConfig
 from .const import Code, VerbT
-from .device import HgiGateway, device_factory
-from .device.filter import DeviceFilter
-from .device.registry import DeviceRegistry
+from .devices import DeviceFilter, DeviceRegistry, HgiGateway, device_factory
 from .dispatcher import detect_array_fragment, process_msg
 from .interfaces import (
     DeviceFilterInterface,
