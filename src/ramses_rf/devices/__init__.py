@@ -16,6 +16,7 @@ from .dev_registry import DeviceRegistry
 
 from .dev_base import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     BASE_CLASS_BY_SLUG as _BASE_CLASS_BY_SLUG,
+    BatteryState,
     Device,
     Fakeable,
     DeviceHeat,
@@ -38,7 +39,7 @@ from .heat_controllers import (
 )
 from .heat_sensors import DhwSensor, OutSensor, Temperature
 from .heat_thermostats import Thermostat, TrvActuator
-from .hvac_remotes import HvacDisplayRemote, HvacRemote
+from .hvac_remotes import HvacDisplayRemote, HvacRemote, HvacRemoteBase
 from .hvac_sensors import HvacCarbonDioxideSensor, HvacHumiditySensor
 from .hvac_ventilators import HvacVentilator, RfsGateway
 from .opentherm_bridge import OtbGateway
@@ -55,6 +56,7 @@ __all__ = [
     "DeviceFilter",
     "DeviceRegistry",
     "BASE_CLASS_BY_SLUG",
+    "BatteryState",
     "Fakeable",
     "DeviceHeat",
     "HgiGateway",
@@ -77,6 +79,7 @@ __all__ = [
     "HvacDisplayRemote",
     "HvacHumiditySensor",
     "HvacRemote",
+    "HvacRemoteBase",
     "HvacVentilator",
     "RfsGateway",
     "class_dev_hvac",
