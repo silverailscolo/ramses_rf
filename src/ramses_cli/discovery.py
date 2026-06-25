@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
-from ramses_rf.device import Fakeable
+from ramses_rf.devices import Fakeable
 from ramses_rf.protocol.opentherm import OTB_DATA_IDS
 from ramses_tx import CODES_SCHEMA, Command, DeviceIdT, Priority
 from ramses_tx.typing import PayloadT
@@ -28,7 +28,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 
 if TYPE_CHECKING:
     from ramses_rf import Gateway
-    from ramses_rf.device import Controller
+    from ramses_rf.devices import Controller
     from ramses_tx import IndexT
 
 

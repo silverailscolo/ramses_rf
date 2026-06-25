@@ -27,7 +27,7 @@ from ramses_rf.const import (
     DevRole,
     ZoneRole,
 )
-from ramses_rf.device import (
+from ramses_rf.devices import (
     BdrSwitch,
     Controller,
     Device,

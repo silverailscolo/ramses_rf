@@ -20,7 +20,7 @@ from ramses_tx import Address, Command, Packet  # noqa: F401
 
 from . import exceptions  # noqa: F401
 from .config import GatewayConfig  # noqa: F401
-from .device import Device  # noqa: F401
+from .devices import Device  # noqa: F401
 from .exceptions import CommandInvalid  # noqa: F401
 from .gateway import Gateway  # noqa: F401
 from .messages import Message

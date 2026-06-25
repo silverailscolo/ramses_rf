@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.device import Controller
+from ramses_rf.devices import Controller
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.systems import Evohome
 from ramses_tx.address import HGI_DEVICE_ID, Address

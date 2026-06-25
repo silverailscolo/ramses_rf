@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.device import DeviceHeat, DeviceHvac
+from ramses_rf.devices import DeviceHeat, DeviceHvac
 from ramses_rf.gateway import GatewayConfig
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_READER_TASK

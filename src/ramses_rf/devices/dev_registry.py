@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
 from ramses_rf.const import SZ_DEVICES
-from ramses_rf.device import DeviceHeat, DeviceHvac, Fakeable
+from ramses_rf.devices.dev_base import DeviceHeat, DeviceHvac, Fakeable
 from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
     DeviceNotFaked,
@@ -26,7 +26,7 @@ from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
 
 if TYPE_CHECKING:
-    from ramses_rf.device import Device
+    from ramses_rf.devices.dev_base import Device
     from ramses_rf.messages import Message
     from ramses_rf.systems import Evohome
     from ramses_rf.topology import Parent
@@ -589,7 +589,8 @@ class DeviceRegistry:
         return {
             d.id: d.tcs
             for d in self.devices
-            if hasattr(d, "tcs") and getattr(d.tcs, "id", None) == d.id
+            if hasattr(d, "tcs")
+            and getattr(getattr(d, "tcs", None), "id", None) == d.id
         }
 
     @property
@@ -609,12 +610,12 @@ class DeviceRegistry:
         """
         orphans = []
         for d in self.devices:
-            if (
-                not getattr(d, "tcs", None)
-                and isinstance(d, DeviceHeat)
-                and await d._is_present()
-            ):
-                orphans.append(d.id)
+            if not getattr(d, "tcs", None) and isinstance(d, DeviceHeat):
+                is_present = (
+                    await d._is_present() if hasattr(d, "_is_present") else False
+                )
+                if is_present:
+                    orphans.append(d.id)
         return sorted(orphans)
 
     async def get_hvac_orphans(self) -> list[DeviceIdT]:
@@ -625,8 +626,12 @@ class DeviceRegistry:
         """
         orphans = []
         for d in self.devices:
-            if isinstance(d, DeviceHvac) and await d._is_present():
-                orphans.append(d.id)
+            if isinstance(d, DeviceHvac):
+                is_present = (
+                    await d._is_present() if hasattr(d, "_is_present") else False
+                )
+                if is_present:
+                    orphans.append(d.id)
         return sorted(orphans)
 
     def _promote_device_class(self, event: TopologyChangedEvent) -> None:
@@ -735,6 +740,8 @@ class DeviceRegistry:
             topology.
         :rtype: dict[str, Any]
         """
+        _ACTIVE_DEGRADATION: bool = False
+
         schema: dict[str, Any] = {}
         systems = self.systems
         bound_devices: set[str] = set()
@@ -764,7 +771,7 @@ class DeviceRegistry:
                 #
                 # TODO: PHASE 3 - Change `if False:` to `if True:` to unleash the
                 # true CQRS shadow state and fix the legacy dropped-device bugs!
-                if False:
+                if _ACTIVE_DEGRADATION:
                     # --- APPLY NATIVE CQRS SHADOW STATE ---
                     cqrs_acts: dict[str, set[str]] = getattr(
                         self, "_cqrs_actuators", {}
@@ -835,7 +842,7 @@ class DeviceRegistry:
         raw_heat_orphans = await self.get_heat_orphans()
         raw_hvac_orphans = await self.get_hvac_orphans()
 
-        if False:  # Matching the active degradation flag above
+        if _ACTIVE_DEGRADATION:
             schema["orphans_heat"] = [
                 d for d in raw_heat_orphans if d not in bound_devices
             ]

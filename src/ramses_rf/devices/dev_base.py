@@ -13,7 +13,7 @@ from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.address import Address
-from ramses_rf.binding_fsm import BindingManager, Vendor
+from ramses_rf.binding_fsm import BindingManager
 from ramses_rf.const import (
     DEV_TYPE_MAP,
     GATEWAY_MESSAGE_TIMEOUT,
@@ -43,7 +43,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
-    from ramses_rf.systems import Zone
+    from ramses_rf.systems import Evohome, Zone
     from ramses_tx.const import IndexT
     from ramses_tx.typing import DeviceIdT
 
@@ -60,7 +60,7 @@ class DeviceBase(Entity):
     """The Device base class - can also be used for unknown device types."""
 
     _SLUG: str = DevType.DEV
-    _STATE_ATTR: str = None
+    _STATE_ATTR: str | None = None
 
     _binding_manager: BindingManager | None = None
 
@@ -84,7 +84,7 @@ class DeviceBase(Entity):
         self.addr = dev_addr
         self.type = dev_addr.type  # DEX  # TODO: remove this attr? use SLUG?
 
-        self._scheme: Vendor | None = traits.scheme if traits else None
+        self._scheme: str | None = traits.scheme if traits else None
         self._last_msg_dtm: dt | None = None
 
         self.power_state = PowerState()
@@ -98,7 +98,7 @@ class DeviceBase(Entity):
     def __lt__(self, other: object) -> bool:
         if not hasattr(other, "id"):
             return NotImplemented
-        return self.id < other.id  # type: ignore[no-any-return]
+        return bool(self.id < other.id)
 
     @property
     def heartbeat_timeout(self) -> td:
@@ -124,7 +124,7 @@ class DeviceBase(Entity):
         else:
             now = dt.now()
 
-        return (now - self._last_msg_dtm) <= self.heartbeat_timeout
+        return bool((now - self._last_msg_dtm) <= self.heartbeat_timeout)
 
     def _update_traits(self, traits: DeviceTraits) -> None:
         """Update a device with new schema attributes.
@@ -162,7 +162,7 @@ class DeviceBase(Entity):
     def _setup_discovery_cmds(self) -> None:
         pass
 
-    def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task | None:
+    def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task[Any] | None:
         if (
             isinstance(self, BatteryState)
             and not self.is_faked
@@ -196,7 +196,7 @@ class DeviceBase(Entity):
     def _is_binding(self) -> bool:
         """Return True if the (faked) device is actively binding."""
 
-        return self._binding_manager and self._binding_manager.is_binding is True
+        return bool(self._binding_manager and self._binding_manager.is_binding is True)
 
     async def _is_present(self) -> bool:
         """Try to exclude ghost devices (as caused by corrupt packet
@@ -364,7 +364,7 @@ class Fakeable(DeviceBase):
         *,
         idx: IndexT = "00",
         require_ratify: bool = False,
-    ) -> tuple[Packet, Packet, Packet, Packet | None]:
+    ) -> tuple[Message, Packet, Message, Message | None]:
         """Listen for a binding and return the Offer packets.
 
         :param accept_codes: The codes allowed for this binding
@@ -374,7 +374,7 @@ class Fakeable(DeviceBase):
         :param require_ratify: Whether a ratification step is required, defaults to False
         :type require_ratify: bool
         :return: A tuple of the four binding transaction packets
-        :rtype: tuple[Packet, Packet, Packet, Packet | None]
+        :rtype: tuple[Message, Packet, Message, Message | None]
         """
 
         if not self._binding_manager:
@@ -392,7 +392,7 @@ class Fakeable(DeviceBase):
         *,
         idx: IndexT = "00",
         require_ratify: bool = False,
-    ) -> tuple[Packet, Packet, Packet, Packet | None]:
+    ) -> tuple[Message, Packet, Message, Message | None]:
         raise NotImplementedError
 
     async def _initiate_binding_process(
@@ -402,7 +402,7 @@ class Fakeable(DeviceBase):
         *,
         confirm_code: Code | None = None,
         ratify_cmd: Command | None = None,
-    ) -> tuple[Packet, Packet, Packet, Packet | None]:
+    ) -> tuple[Packet, Message, Packet, Packet | None]:
         """Start a binding and return the Accept, or raise an exception."""
         # confirm_code can be FFFF.
 
@@ -419,7 +419,9 @@ class Fakeable(DeviceBase):
         )
         return msgs
 
-    async def initiate_binding_process(self) -> Packet:
+    async def initiate_binding_process(
+        self,
+    ) -> tuple[Packet, Message, Packet, Packet | None]:
         raise NotImplementedError
 
     async def oem_code(self) -> str | None:
@@ -460,9 +462,9 @@ class HgiGateway(Device):  # HGI (18:)
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
 
-        self.ctl = None  # FIXME: a mess
+        self.ctl: Device | None = None  # type: ignore[assignment] # FIXME: a mess
         self._child_id = "gw"  # TODO
-        self.tcs = None
+        self.tcs: Evohome | None = None  # type: ignore[assignment]
 
     @property
     def message_timeout(self) -> td:
@@ -507,8 +509,8 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
     ) -> None:
         super().__init__(gwy, dev_addr, traits=traits, **kwargs)
 
-        self.ctl = None
-        self.tcs = None
+        self.ctl: Device | None = None  # type: ignore[assignment]
+        self.tcs: Evohome | None = None  # type: ignore[assignment]
         self._child_id = None  # domain_id, or zone_idx
 
         self._iz_controller: None | bool | Message = None
@@ -542,7 +544,7 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
     def zone(self) -> Zone | None:
         """Return the device's parent zone, if known."""
 
-        return self._parent
+        return cast("Zone | None", self._parent)
 
 
 class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR

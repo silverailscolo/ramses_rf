@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from ramses_tx.dtos import PacketDTO
 
     from .config import GatewayConfig
-    from .device import Device
+    from .devices import Device
     from .gateway import Gateway
     from .interfaces import DeviceRegistryInterface, MessageStoreInterface
     from .systems import Evohome

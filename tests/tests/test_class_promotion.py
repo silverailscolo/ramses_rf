@@ -21,8 +21,7 @@ from typing import Any, Protocol, TypeVar
 import pytest
 
 from ramses_rf.const import FA
-from ramses_rf.device.heat import Controller, DhwSensor, UfhController
-from ramses_rf.device.hvac import HvacVentilator
+from ramses_rf.devices import Controller, DhwSensor, HvacVentilator, UfhController
 from ramses_rf.systems import Evohome
 
 _InstanceT = TypeVar("_InstanceT")
