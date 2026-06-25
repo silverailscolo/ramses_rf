@@ -488,7 +488,13 @@ class WantEcho(ProtocolStateBase):
 
     def pkt_rcvd(self, pkt: Packet) -> None:
         """If the pkt is the expected Echo, transition to IsInIdle, or WantRply."""
-        assert self._sent_cmd is not None
+        if self._sent_cmd is None:
+            _LOGGER.debug(
+                "%s: received packet while _sent_cmd is None "
+                "(unsolicited broadcast?), ignoring",
+                self._context,
+            )
+            return
 
         try:
             pkt_hdr = pkt._hdr
@@ -555,8 +561,13 @@ class WantRply(ProtocolStateBase):
 
     def pkt_rcvd(self, pkt: Packet) -> None:
         """If the pkt is the expected reply, transition to IsInIdle."""
-        assert self._sent_cmd is not None
-        assert self._echo_pkt is not None
+        if self._sent_cmd is None or self._echo_pkt is None:
+            _LOGGER.debug(
+                "%s: received packet while _sent_cmd/_echo_pkt is None "
+                "(unsolicited broadcast?), ignoring",
+                self._context,
+            )
+            return
 
         try:
             pkt_hdr = pkt._hdr
