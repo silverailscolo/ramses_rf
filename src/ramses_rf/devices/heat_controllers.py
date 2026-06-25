@@ -1,0 +1,417 @@
+"""RAMSES RF - Heating Controller Devices."""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Any, Final, cast
+
+from ramses_rf.const import (
+    DEV_ROLE_MAP,
+    FA,
+    FC,
+    RQ,
+    SZ_DOMAIN_ID,
+    SZ_HEAT_DEMAND,
+    SZ_RELAY_DEMAND,
+    SZ_UFH_IDX,
+    SZ_ZONE_IDX,
+    SZ_ZONE_MASK,
+    SZ_ZONE_TYPE,
+    ZON_ROLE_MAP,
+    Code,
+    DevType,
+)
+from ramses_rf.entity import Entity
+from ramses_rf.helpers import shrink
+from ramses_rf.models import DeviceTraits
+from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
+from ramses_rf.topology import Child, Parent
+from ramses_tx import Command
+from ramses_tx.typing import DeviceIdT, DevIndexT, PayloadT
+
+from .dev_base import DeviceHeat
+
+if TYPE_CHECKING:
+    from ramses_rf.systems import Evohome, Zone
+
+    from ..messages import Message
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
+class Controller(DeviceHeat):  # CTL (01):
+    """The Controller base class."""
+
+    HEAT_DEMAND: Final = SZ_HEAT_DEMAND
+
+    _SLUG = DevType.CTL
+    _STATE_ATTR = HEAT_DEMAND
+
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
+
+        self.tcs: Evohome | None = None  # TODO: = self?
+        self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
+
+    def _post_class_promote(self) -> None:
+        """Initialize CTL state when promoted in-place from a generic device."""
+        self.__dict__.setdefault("tcs", None)
+        if not self.tcs:
+            self._make_tcs_controller()
+
+    def _setup_discovery_cmds(self) -> None:
+        super()._setup_discovery_cmds()
+
+        if not self.is_faked:
+            self.discovery.add_cmd(
+                Command.from_attrs(RQ, self.id, Code._2E04, PayloadT("00")),
+                60 * 60,  # Poll every 60 minutes after initial startup query
+            )
+
+    def _handle_msg(self, msg: Message) -> None:
+        super()._handle_msg(msg)
+
+        if self.tcs:
+            self.tcs._handle_msg(msg)
+
+    def _make_tcs_controller(
+        self, *, msg: Message | None = None, **schema: Any
+    ) -> None:  # CH/DHW
+        """Attach a TCS (create/update as required) after passing it any msg."""
+
+        def get_system(*, msg: Message | None = None, **schema: Any) -> Evohome:
+            """Return a TCS (temperature control system), create it if required.
+
+            Use the schema to create/update it, then pass it any msg to handle.
+
+            TCSs are uniquely identified by a controller ID.
+            If a TCS is created, attach it to this device (which should be a CTL).
+            """
+
+            from ramses_rf.systems import system_factory
+
+            schema = shrink(SCH_TCS(schema))
+
+            if not self.tcs:
+                self.tcs = cast("Evohome", system_factory(self, msg=msg, **schema))
+
+            elif schema and self.tcs:
+                self.tcs._update_schema(**schema)
+
+            if msg and self.tcs:
+                self.tcs._handle_msg(msg)
+            return self.tcs
+
+        super()._make_tcs_controller(msg=None, **schema)
+
+        self.tcs = get_system(msg=msg, **schema)
+
+
+class Programmer(Controller):  # PRG (23):
+    """The Controller base class."""
+
+    _SLUG = DevType.PRG
+
+
+class RfgGateway(DeviceHeat):  # RFG (30:)
+    """The RFG100 base class."""
+
+    _SLUG = DevType.RFG
+
+    _STATE_ATTR = None
+
+
+class UfhController(Parent, DeviceHeat):  # UFC (02):
+    """The UFC class, the HCE80 that controls the UFH zones."""
+
+    HEAT_DEMAND: Final = SZ_HEAT_DEMAND
+
+    _SLUG = DevType.UFC
+    _STATE_ATTR = HEAT_DEMAND
+
+    _child_id = FA
+    _iz_controller = True
+
+    childs: list[Child]  # TODO: check (code so complex, not sure if this is true)
+
+    _setpoints: Message | None
+    _heat_demand: Message | None
+    _heat_demands: Message | None
+    _relay_demand: Message | None
+    _relay_demand_fa: Message | None
+
+    # 12:27:24.398 067  I --- 02:000921 --:------ 01:191718 3150 002 0360
+    # 12:27:24.546 068  I --- 02:000921 --:------ 01:191718 3150 002 065A
+    # 12:27:24.693 067  I --- 02:000921 --:------ 01:191718 3150 002 045C
+    # 12:27:24.824 059  I --- 01:191718 --:------ 01:191718 3150 002 FC5C
+    # 12:27:24.857 067  I --- 02:000921 --:------ 02:000921 3150 006 0060-015A-025C
+
+    def __init__(
+        self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, traits=traits, **kwargs)
+        self._init_ufh_state()
+
+    def _init_ufh_state(self) -> None:
+        """Initialize UFH-specific instance attributes (idempotent)."""
+        self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
+        self.__dict__.setdefault("_setpoints", None)
+        self.__dict__.setdefault("_heat_demand", None)
+        self.__dict__.setdefault("_heat_demands", None)
+        self.__dict__.setdefault("_relay_demand", None)
+        self.__dict__.setdefault("_relay_demand_fa", None)
+
+    def _post_class_promote(self) -> None:
+        """Initialize UFH state when promoted in-place from a generic device."""
+        self._init_ufh_state()
+
+    def _setup_discovery_cmds(self) -> None:
+        super()._setup_discovery_cmds()
+
+        # Only RPs are: 0001, 0005/000C, 10E0, 000A/2309 & 22D0
+
+        cmd = Command.from_attrs(
+            RQ, self.id, Code._0005, PayloadT(f"00{DEV_ROLE_MAP.UFH}")
+        )
+        self.discovery.add_cmd(cmd, 60 * 60 * 24)
+
+        # TODO: this needs work
+        # if discover_flag & Discover.PARAMS:  # only 2309 has any potential?
+        for ufc_idx in getattr(self, "circuit_by_id", {}):
+            cmd = Command.get_zone_config(self.id, ufc_idx)
+            self.discovery.add_cmd(cmd, 60 * 60 * 6)
+
+            cmd = Command.get_zone_setpoint(self.id, ufc_idx)
+            self.discovery.add_cmd(cmd, 60 * 60 * 6)
+
+        for ufc_idx in range(8):
+            payload = PayloadT(f"{ufc_idx:02X}{DEV_ROLE_MAP.UFH}")
+            cmd = Command.from_attrs(RQ, self.id, Code._000C, payload)
+            self.discovery.add_cmd(cmd, 60 * 60 * 24)
+
+    def _handle_msg(self, msg: Message) -> None:
+        super()._handle_msg(msg)
+
+        # Several assumptions are made, regarding 000C pkts:
+        # - UFC bound only to CTL (not, e.g. SEN)
+        # - all circuits bound to the same controller
+
+        if msg.code == Code._0005:  # system_zones
+            # {'zone_type': '09', 'zone_mask':[1, 1, 1, 1, 1, 0, 0, 0], 'zone_class': 'underfloor_heating'}
+
+            if msg.payload.get(SZ_ZONE_TYPE) not in (
+                ZON_ROLE_MAP.ACT,
+                ZON_ROLE_MAP.UFH,
+            ):
+                return  # ignoring ZON_ROLE_MAP.SEN for now
+
+            for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, [])):
+                ufh_idx = f"{idx:02X}"
+                if not flag:
+                    self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: None}
+                # FIXME: this causing tests to fail when read-only protocol
+                # elif SZ_ZONE_IDX not in self.circuit_by_id[ufh_idx]:
+                #     cmd = Command.from_attrs(
+                #         RQ, self.ctl.id, Code._000C, f"{ufh_idx}{DEV_ROLE_MAP.UFH}"
+                #     )
+                #     self._send_cmd(cmd)
+
+        elif msg.code == Code._0008:  # relay_demand
+            if msg.payload.get(SZ_DOMAIN_ID) == FC:
+                self._relay_demand = msg
+            else:  # FA
+                self._relay_demand_fa = msg
+
+        elif msg.code == Code._000C:  # zone_devices
+            # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices':['01:095421']}
+            # {'zone_type': '09', 'ufh_idx': '07', 'zone_idx': None, 'device_role': 'ufh_actuator', 'devices':[]}
+
+            if msg.payload.get(SZ_ZONE_TYPE) not in (
+                ZON_ROLE_MAP.ACT,
+                ZON_ROLE_MAP.UFH,
+            ):
+                return  # ignoring ZON_ROLE_MAP.SEN for now
+
+            ufh_idx = msg.payload.get(SZ_UFH_IDX)  # circuit idx
+            if ufh_idx is None:
+                return
+            # Read-Model Update ONLY. No `self.set_parent()` graph mutation here.
+            self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: msg.payload.get(SZ_ZONE_IDX)}
+
+        elif msg.code == Code._22C9:  # setpoint_bounds
+            # .I --- 02:017205 --:------ 02:017205 22C9 024 00076C0A280101076C0A28010...
+            # .I --- 02:017205 --:------ 02:017205 22C9 006 04076C0A2801
+            self._setpoints = msg
+
+        elif msg.code == Code._3150:  # heat_demands
+            if isinstance(msg.payload, list):  # the circuit demands
+                self._heat_demands = msg
+            elif msg.payload.get(SZ_DOMAIN_ID) == FC:
+                self._heat_demand = msg
+            else:
+                zone_idx = msg.payload.get(SZ_ZONE_IDX)
+                msg_dst_tcs = getattr(msg.dst, "tcs", None)
+                if zone_idx and msg_dst_tcs and hasattr(msg_dst_tcs, "zone_by_idx"):
+                    if zone := msg_dst_tcs.zone_by_idx.get(zone_idx):
+                        zone._handle_msg(msg)
+
+        # elif msg.code not in (Code._10E0, Code._22D0):
+        #     print("xxx")
+        # "0008|FA/FC", "22C9|array", "22D0|none", "3150|ZZ/array(/FC?)"
+
+    # TODO: should be a private method
+    def get_circuit(
+        self, cct_idx: str, *, msg: Message | None = None, **schema: Any
+    ) -> Any:
+        """Return a UFH circuit, create it if required.
+
+        First, use the schema to create/update it, then pass it any msg to handle.
+
+        Circuits are uniquely identified by a UFH controller ID|cct_idx pair.
+        If a circuit is created, attach it to this UFC.
+        """
+
+        schema = {}  # shrink(SCH_CCT(schema))
+
+        cct = cast("UfhCircuit | None", self.child_by_id.get(cct_idx))
+        if not cct:
+            cct = UfhCircuit(self, cct_idx)
+            self.child_by_id[cct_idx] = cct
+            self.childs.append(cct)
+
+        elif schema:
+            cct._update_schema(**schema)
+
+        if msg:
+            cct._handle_msg(msg)
+        return cct
+
+    # @property
+    # def circuits(self) -> dict:  # 000C
+    #     return self.circuit_by_id
+
+    async def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
+        return cast(
+            float | None,
+            self.entity_state._msg_value_msg(
+                getattr(self, "_heat_demand", None),
+                key=self.HEAT_DEMAND,
+            ),
+        )
+
+    async def heat_demands(self) -> dict[str, Any] | None:  # 3150|ufh_idx array
+        # return self._heat_demands.payload if self._heat_demands else None
+        return cast(
+            dict[str, Any] | None,
+            self.entity_state._msg_value_msg(getattr(self, "_heat_demands", None)),
+        )
+
+    async def relay_demand(self) -> dict[str, Any] | None:  # 0008|FC
+        return cast(
+            dict[str, Any] | None,
+            self.entity_state._msg_value_msg(
+                getattr(self, "_relay_demand", None),
+                key=SZ_RELAY_DEMAND,
+            ),
+        )
+
+    async def relay_demand_fa(self) -> dict[str, Any] | None:  # 0008|FA
+        return cast(
+            dict[str, Any] | None,
+            self.entity_state._msg_value_msg(
+                getattr(self, "_relay_demand_fa", None),
+                key=SZ_RELAY_DEMAND,
+            ),
+        )
+
+    async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_idx array
+        if getattr(self, "_setpoints", None) is None:
+            return None
+
+        payload = self._setpoints.payload  # type: ignore[union-attr]
+
+        # 22C9 payload can be a list, flat dict(if indexed by schema), or dict of dicts
+        if isinstance(payload, list):
+            items: list[dict[str, Any]] = payload
+        elif isinstance(payload, dict):
+            # It's a single circuit (flat dict) if SZ_UFH_IDX is present,
+            # otherwise it's a map of circuits (dict of dicts).
+            items = [payload] if SZ_UFH_IDX in payload else list(payload.values())
+        else:
+            return None
+
+        return {
+            c[SZ_UFH_IDX]: {
+                k: v for k, v in c.items() if k in ("temp_low", "temp_high")
+            }
+            for c in items
+            if isinstance(c, dict) and SZ_UFH_IDX in c
+        }
+
+    async def schema(self) -> dict[str, Any]:
+        base_schema = await super().schema()
+        return {
+            **base_schema,
+            SZ_CIRCUITS: getattr(self, "circuit_by_id", {}),
+        }
+
+    async def params(self) -> dict[str, Any]:
+        base_params = await super().params()
+        return {
+            **base_params,
+            SZ_CIRCUITS: await self.setpoints(),
+        }
+
+    async def status(self) -> dict[str, Any]:
+        base_status = await super().status()
+        return {
+            **base_status,
+            SZ_HEAT_DEMAND: await self.heat_demand(),
+            SZ_RELAY_DEMAND: await self.relay_demand(),
+            f"{SZ_RELAY_DEMAND}_fa": await self.relay_demand_fa(),
+        }
+
+
+class UfhCircuit(Child, Entity):  # FIXME
+    """The UFH circuit class (UFC:circuit is much like CTL/TCS:zone).
+
+    NOTE: for circuits, there's a difference between :
+     - `self.ctl`: the UFH controller, and
+     - `self.tcs.ctl`: the Evohome controller
+    """
+
+    _SLUG: str = "CCT"  # previously None, strict Mypy fix
+    _STATE_ATTR: str | None = None
+
+    def __init__(self, ufc: UfhController, ufh_idx: str) -> None:
+        super().__init__(ufc._gwy)
+
+        # FIXME: gwy.message_store entities must know their parent device ID
+        # and their own idx
+        self._z_id = ufc.id
+        self._z_idx = cast("DevIndexT", ufh_idx)
+
+        self.id: DeviceIdT = cast("DeviceIdT", f"{ufc.id}_{ufh_idx}")
+
+        self.ufc: UfhController = ufc
+        self._child_id = ufh_idx
+
+        # TODO: _ctl should be: .ufc? .ctl?
+        self._ctl: Controller | None = None
+        self._zone: Zone | None = None
+
+    def _update_schema(self, **kwargs: Any) -> None:
+        raise NotImplementedError
+
+    @property
+    def ufx_idx(self) -> str:
+        return str(self._child_id)
+
+    @property
+    def zone_idx(self) -> str | None:
+        if self._zone:
+            return str(self._zone._child_id)
+        return None

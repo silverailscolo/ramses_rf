@@ -3,6 +3,7 @@
 
 import asyncio
 import logging
+from dataclasses import replace
 from datetime import datetime as dt
 from typing import Any, Final
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -223,7 +224,7 @@ async def test_logbook_setup_discovery_creates_task(
 async def test_sysmode_system_mode_sync_cache_lookup(
     fake_evofw3: Gateway,
 ) -> None:
-    """Verify system_mode retrieves state synchronously from RAM cache."""
+    """Verify system_mode retrieves state synchronously from CQRS read-model."""
     gwy = fake_evofw3
     pkt = Packet.from_port(dt.now(), PKT_3150)
     gwy._engine._protocol.pkt_received(pkt)
@@ -232,16 +233,7 @@ async def test_sysmode_system_mode_sync_cache_lookup(
     tcs = gwy.tcs
     assert tcs is not None
 
-    mock_msg = MagicMock()
-    mock_msg.code = Code._2E04
-    mock_msg.src = MagicMock()
-    mock_msg.src.id = tcs._z_id
-    mock_msg.dtm = dt.now()
-    mock_msg.payload = {"system_mode": "01", "until": None}
-
-    # Mock the central RAM state cache from Phase 2
-    gwy.message_store = MagicMock()
-    gwy.message_store.state_cache = {"mock_header": mock_msg}
+    tcs.system_state = replace(tcs.system_state, system_mode="01", until=None)
 
     # Call the new synchronous @property lookup
     result = tcs.system_mode

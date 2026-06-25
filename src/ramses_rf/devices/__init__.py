@@ -4,15 +4,19 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import DEV_TYPE_MAP
 from ramses_rf.models import DeviceTraits
 from ramses_tx.const import DevType
 
-from .base import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+from .dev_filter import DeviceFilter
+from .dev_registry import DeviceRegistry
+
+from .dev_base import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     BASE_CLASS_BY_SLUG as _BASE_CLASS_BY_SLUG,
+    BatteryState,
     Device,
     Fakeable,
     DeviceHeat,
@@ -20,32 +24,25 @@ from .base import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     DeviceHvac,
 )
 
-
-from .heat import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    HEAT_CLASS_BY_SLUG as _HEAT_CLASS_BY_SLUG,
-    BdrSwitch,
+from ..protocol.ramses import (
+    CODES_OF_HEAT_DOMAIN_ONLY,
+    CODES_OF_HVAC_DOMAIN_ONLY,
+    HVAC_KLASS_BY_VC_PAIR,
+)
+from .heat_actuators import BdrSwitch, JimDevice, JstDevice
+from .heat_controllers import (
     Controller,
-    DhwSensor,
-    OtbGateway,
-    OutSensor,
-    Temperature,
-    Thermostat,
-    TrvActuator,
+    Programmer,
+    RfgGateway,
     UfhCircuit,
     UfhController,
-    class_dev_heat,
 )
-
-
-from .hvac import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    HVAC_CLASS_BY_SLUG as _HVAC_CLASS_BY_SLUG,
-    HvacCarbonDioxideSensor,
-    HvacHumiditySensor,
-    HvacRemote,
-    HvacVentilator,
-    RfsGateway,
-    class_dev_hvac,
-)
+from .heat_sensors import DhwSensor, OutSensor, Temperature
+from .heat_thermostats import Thermostat, TrvActuator
+from .hvac_remotes import HvacDisplayRemote, HvacRemote, HvacRemoteBase
+from .hvac_sensors import HvacCarbonDioxideSensor, HvacHumiditySensor
+from .hvac_ventilators import HvacVentilator, RfsGateway
+from .opentherm_bridge import OtbGateway
 
 if TYPE_CHECKING:
     from ramses_rf import Gateway
@@ -53,10 +50,13 @@ if TYPE_CHECKING:
 
     from ..messages import Message
 
-
 __all__ = [
     # .base
     "Device",
+    "DeviceFilter",
+    "DeviceRegistry",
+    "BASE_CLASS_BY_SLUG",
+    "BatteryState",
     "Fakeable",
     "DeviceHeat",
     "HgiGateway",
@@ -67,6 +67,7 @@ __all__ = [
     "DhwSensor",
     "OtbGateway",
     "OutSensor",
+    "RfgGateway",
     "Temperature",
     "Thermostat",
     "TrvActuator",
@@ -75,8 +76,10 @@ __all__ = [
     "class_dev_heat",
     # .hvac
     "HvacCarbonDioxideSensor",
+    "HvacDisplayRemote",
     "HvacHumiditySensor",
     "HvacRemote",
+    "HvacRemoteBase",
     "HvacVentilator",
     "RfsGateway",
     "class_dev_hvac",
@@ -87,6 +90,33 @@ __all__ = [
 
 _LOGGER = logging.getLogger(__name__)
 
+# Gather explicit classes to form the SLUG maps natively (No Magic/Reflection)
+_HEAT_CLASSES = (
+    BdrSwitch,
+    Controller,
+    DhwSensor,
+    OtbGateway,
+    OutSensor,
+    Temperature,
+    Thermostat,
+    TrvActuator,
+    UfhController,
+    JimDevice,
+    JstDevice,
+    Programmer,
+    RfgGateway,
+)
+_HEAT_CLASS_BY_SLUG = {cls._SLUG: cls for cls in _HEAT_CLASSES if hasattr(cls, "_SLUG")}
+
+_HVAC_CLASSES = (
+    HvacCarbonDioxideSensor,
+    HvacHumiditySensor,
+    HvacRemote,
+    HvacDisplayRemote,
+    HvacVentilator,
+    RfsGateway,
+)
+_HVAC_CLASS_BY_SLUG = {cls._SLUG: cls for cls in _HVAC_CLASSES if hasattr(cls, "_SLUG")}
 
 _CLASS_BY_SLUG = _BASE_CLASS_BY_SLUG | _HEAT_CLASS_BY_SLUG | _HVAC_CLASS_BY_SLUG
 
@@ -191,4 +221,63 @@ def device_factory(
             f"Faked devices from the HVAC domain must have an explicit class: {dev_addr}"
         )
 
-    return cls.create_from_schema(gwy, dev_addr, traits=traits)
+    # Cast strictly resolves Mypy reporting base class returns instead of Device
+    return cast(Device, cls.create_from_schema(gwy, dev_addr, traits=traits))
+
+
+def class_dev_heat(
+    dev_addr: Address, *, msg: Message | None = None, eavesdrop: bool = False
+) -> type[DeviceHeat]:
+    """Return a device class, but only if the device must be from the CH/DHW group.
+
+    May return a device class, DeviceHeat (which will need promotion).
+    """
+
+    if dev_addr.type in DEV_TYPE_MAP.THM_DEVICES:
+        return _HEAT_CLASS_BY_SLUG[DevType.THM]
+
+    try:
+        slug = DEV_TYPE_MAP.slug(dev_addr.type)
+    except KeyError:
+        pass
+    else:
+        return _HEAT_CLASS_BY_SLUG[slug]
+
+    if not eavesdrop:
+        raise exc.DeviceNotRecognised(
+            f"No CH/DHW class for: {dev_addr} (no eavesdropping)"
+        )
+
+    if msg and msg.code in CODES_OF_HEAT_DOMAIN_ONLY:
+        return DeviceHeat
+
+    raise exc.DeviceNotRecognised(
+        f"No CH/DHW class for: {dev_addr} (unknown type: {dev_addr.type})"
+    )
+
+
+def class_dev_hvac(
+    dev_addr: Address, *, msg: Message | None = None, eavesdrop: bool = False
+) -> type[DeviceHvac]:
+    """Return a device class, but only if the device must be from the HVAC group.
+
+    May return a base class, `DeviceHvac`, which will need promotion.
+    """
+
+    if not eavesdrop:
+        raise exc.DeviceNotRecognised(
+            f"No HVAC class for: {dev_addr} (no eavesdropping)"
+        )
+
+    if msg is None:
+        raise exc.DeviceNotRecognised(f"No HVAC class for: {dev_addr} (no msg)")
+
+    if klass := HVAC_KLASS_BY_VC_PAIR.get((msg.verb, msg.code)):
+        return _HVAC_CLASS_BY_SLUG[klass]
+
+    if msg.code in CODES_OF_HVAC_DOMAIN_ONLY:
+        return DeviceHvac
+
+    raise exc.DeviceNotRecognised(
+        f"No HVAC class for: {dev_addr} (insufficient meta-data)"
+    )

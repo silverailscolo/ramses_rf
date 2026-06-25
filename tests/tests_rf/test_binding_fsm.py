@@ -25,7 +25,7 @@ from ramses_rf.binding_fsm import (
     BindStateBase,
     _BindStates,
 )
-from ramses_rf.device import Fakeable
+from ramses_rf.devices import Fakeable
 from ramses_rf.gateway import GatewayConfig
 from ramses_tx import Priority, QosParams
 from ramses_tx.protocol import PortProtocol

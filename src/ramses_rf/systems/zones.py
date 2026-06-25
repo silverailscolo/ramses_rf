@@ -18,10 +18,8 @@ from ramses_rf.const import (
     SZ_HEAT_DEMAND,
     SZ_NAME,
     SZ_RELAY_DEMAND,
-    SZ_RELAY_FAILSAFE,
     SZ_SETPOINT,
     SZ_TEMPERATURE,
-    SZ_WINDOW_OPEN,
     SZ_ZONE_IDX,
     SZ_ZONE_TYPE,
     ZON_MODE_MAP,
@@ -29,7 +27,7 @@ from ramses_rf.const import (
     DevRole,
     ZoneRole,
 )
-from ramses_rf.device import (
+from ramses_rf.devices import (
     BdrSwitch,
     Controller,
     Device,
@@ -37,9 +35,16 @@ from ramses_rf.device import (
     TrvActuator,
     UfhController,
 )
-from ramses_rf.entity import _ID_SLICE, Entity, class_by_attr
+from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.helpers import shrink
-from ramses_rf.models import DemandState, ScheduleState, TemperatureState
+from ramses_rf.models import (
+    DemandState,
+    DhwState,
+    ScheduleState,
+    TemperatureState,
+    TrvState,
+    ZoneState,
+)
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
     SCH_TCS_ZONES_ZON,
@@ -98,6 +103,8 @@ class ZoneBase(Child, Parent, Entity):
         self.temp_state = TemperatureState()
         self.demand_state = DemandState()
         self.schedule_state = ScheduleState(zone_idx=zone_idx, days=())
+        self.trv_state = TrvState()
+        self.zone_state = ZoneState()
 
         # FIXME: ZZZ entities must know their parent device ID and their
         # own idx
@@ -217,6 +224,7 @@ class DhwZone(ZoneSchedule):  # CS92A
             )
 
         super().__init__(tcs, "HW")
+        self.dhw_state = DhwState()
 
         # DhwZones have a sensor, but actuators are optional,
         # depending on schema
@@ -420,50 +428,41 @@ class DhwZone(ZoneSchedule):  # CS92A
         return "Stored HW"
 
     async def config(self) -> dict[str, Any] | None:  # 10A0
-        return cast(
-            dict[str, Any] | None,
-            await self.entity_state.get_value(Code._10A0),
-        )
+        if self.dhw_state.setpoint is None:
+            return None
+        return {
+            SZ_SETPOINT: self.dhw_state.setpoint,
+            "overrun": self.dhw_state.overrun,
+            "differential": self.dhw_state.differential,
+        }
 
     async def mode(self) -> dict[str, Any] | None:  # 1F41
-        return cast(
-            dict[str, Any] | None,
-            await self.entity_state.get_value(Code._1F41),
-        )
+        if self.dhw_state.mode is None:
+            return None
+        return {
+            "mode": self.dhw_state.mode,
+            "active": self.dhw_state.active,
+            "until": self.dhw_state.until,
+        }
 
     async def setpoint(self) -> float | None:  # 10A0
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._10A0, key=SZ_SETPOINT),
-        )
+        return self.dhw_state.setpoint
 
     async def set_setpoint(self, value: float) -> Packet:  # 10A0
         """Set the target temperature for the DHW zone."""
         return await self.set_config(setpoint=value)
 
     async def temperature(self) -> float | None:  # 1260
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._1260, key=SZ_TEMPERATURE),
-        )
+        return self.temp_state.temperature
 
     async def heat_demand(self) -> float | None:  # 3150
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._3150, key=SZ_HEAT_DEMAND),
-        )
+        return self.demand_state.heat_demand
 
     async def relay_demand(self) -> float | None:  # 0008
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._0008, key=SZ_RELAY_DEMAND),
-        )
+        return self.demand_state.relay_demand
 
     async def relay_failsafe(self) -> float | None:  # 0009
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._0009, key=SZ_RELAY_FAILSAFE),
-        )
+        return self.demand_state.relay_failsafe
 
     async def set_mode(
         self,
@@ -891,27 +890,28 @@ class Zone(ZoneSchedule):
         return self._name
 
     async def config(self) -> dict[str, Any] | None:  # 000A
-        return cast(
-            dict[str, Any] | None,
-            await self.entity_state.get_value(Code._000A, zone_idx=self.idx),
-        )
+        if self.zone_state.min_temp is None:
+            return None
+        return {
+            "min_temp": self.zone_state.min_temp,
+            "max_temp": self.zone_state.max_temp,
+            "local_override": self.zone_state.local_override,
+            "openwindow_function": self.zone_state.openwindow_function,
+            "multiroom_mode": self.zone_state.multiroom_mode,
+        }
 
     async def mode(self) -> dict[str, Any] | None:  # 2349
-        return cast(
-            dict[str, Any] | None,
-            await self.entity_state.get_value(Code._2349, zone_idx=self.idx),
-        )
+        if self.zone_state.mode is None:
+            return None
+        return {
+            "mode": self.zone_state.mode,
+            SZ_SETPOINT: self.zone_state.setpoint,
+            "until": self.zone_state.until,
+        }
 
     async def setpoint(self) -> float | None:
         # 2309 (2349 is a superset of 2309)
-        return cast(
-            float | None,
-            await self.entity_state.get_value(
-                (Code._2309, Code._2349),
-                key=SZ_SETPOINT,
-                zone_idx=self.idx,
-            ),
-        )
+        return self.temp_state.setpoint
 
     async def setpoint_bounds(self) -> dict[str, Any] | None:  # 22C9, 2209
         """Return the zone's local setpoint bounds if defined by
@@ -933,73 +933,17 @@ class Zone(ZoneSchedule):
         return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
     async def temperature(self) -> float | None:  # 30C9
-        if self._gwy.message_store:
-            # evohome zones get initial temp from src + idx, so use sensor
-            sensor_id = "aa:aaaaaa"  # should not match any device_id
-            if self._sensor:
-                sensor_id = self._sensor.id
-
-            found_msgs = []
-            for m in self._gwy.message_store.state_cache.values():
-                if m.verb in (I_, RP) and m.code == Code._30C9:
-                    if (
-                        m.src.id == self.id[:_ID_SLICE] and str(m._pkt._ctx) == self.idx
-                    ) or (m.src.id == sensor_id[:_ID_SLICE]):
-                        if isinstance(m.payload, dict) and SZ_TEMPERATURE in m.payload:
-                            found_msgs.append(m)
-                        elif isinstance(m.payload, list) and any(
-                            isinstance(d, dict) and SZ_TEMPERATURE in d
-                            for d in m.payload
-                        ):
-                            found_msgs.append(m)
-
-            if found_msgs:
-                latest_msg = max(found_msgs, key=lambda x: x.dtm)
-                if isinstance(latest_msg.payload, dict):
-                    return cast("float | None", latest_msg.payload.get(SZ_TEMPERATURE))
-                elif isinstance(latest_msg.payload, list):
-                    for d in latest_msg.payload:
-                        if isinstance(d, dict) and SZ_TEMPERATURE in d:
-                            if (
-                                d.get(SZ_ZONE_IDX) == self.idx
-                                or latest_msg.src.id == sensor_id[:_ID_SLICE]
-                            ):
-                                return cast("float | None", d.get(SZ_TEMPERATURE))
-                    if isinstance(latest_msg.payload[0], dict):
-                        return cast(
-                            "float | None",
-                            latest_msg.payload[0].get(SZ_TEMPERATURE),
-                        )
-            return None
-
-        return cast(
-            float | None,
-            await self.entity_state.get_value(
-                Code._30C9, key=SZ_TEMPERATURE, zone_idx=self.idx
-            ),
-        )
+        return self.temp_state.temperature
 
     async def heat_demand(self) -> float | None:  # 3150
         """Return the zone's heat demand, estimated from its devices'
         heat demand.
         """
-        demands = []
-        for d in self.actuators:
-            if hasattr(d, "heat_demand"):
-                demand = await d.heat_demand()
-                if demand is not None:
-                    demands.append(demand)
-
-        return _transform(max(demands + [0])) if demands else None
+        return self.demand_state.heat_demand
 
     async def window_open(self) -> bool | None:  # 12B0
         """Return an estimate of the zone's current window_open state."""
-        return cast(
-            bool | None,
-            await self.entity_state.get_value(
-                Code._12B0, key=SZ_WINDOW_OPEN, zone_idx=self.idx
-            ),
-        )
+        return self.trv_state.window_open
 
     async def _get_temp(self) -> Packet | None:
         """Get the zone's latest temp from the Controller."""
@@ -1144,10 +1088,7 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
 
     # 0008 (NOTE: CTLs won't RP|0008)
     async def relay_demand(self) -> float | None:
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._0008, key=SZ_RELAY_DEMAND),
-        )
+        return self.demand_state.relay_demand
 
     async def status(self) -> dict[str, Any]:
         return {
@@ -1207,10 +1148,8 @@ class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
 
     async def heat_demand(self) -> float | None:  # 3150
         """Return the zone's heat demand, estimated from its devices."""
-        if (
-            demand := await self.entity_state.get_value(Code._3150, key=SZ_HEAT_DEMAND)
-        ) is not None:
-            return _transform(demand)
+        if self.demand_state.heat_demand is not None:
+            return _transform(self.demand_state.heat_demand)
         return None
 
 

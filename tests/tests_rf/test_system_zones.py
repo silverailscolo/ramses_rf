@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf.const import I_, ZON_ROLE_MAP, Code
-from ramses_rf.device import BdrSwitch, DhwSensor
+from ramses_rf.devices import BdrSwitch, DhwSensor
 from ramses_rf.exceptions import (
     SchemaInconsistentError,
     SystemInconsistent,

@@ -18,7 +18,6 @@ from ramses_rf.const import (
     SZ_DEVICES,
     SZ_DHW_IDX,
     SZ_DOMAIN_ID,
-    SZ_HEAT_DEMAND,
     SZ_LANGUAGE,
     SZ_SENSOR,
     SZ_SYSTEM_MODE,
@@ -28,7 +27,7 @@ from ramses_rf.const import (
     SZ_ZONE_TYPE,
     SZ_ZONES,
 )
-from ramses_rf.device import (
+from ramses_rf.devices import (
     BdrSwitch,
     Controller,
     Device,
@@ -44,6 +43,7 @@ from ramses_rf.exceptions import (
     SystemSchemaInconsistent,
 )
 from ramses_rf.helpers import shrink
+from ramses_rf.models import DemandState, SystemState
 from ramses_rf.schemas import (
     DEFAULT_MAX_ZONES,
     SCH_TCS,
@@ -147,6 +147,9 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
         self._app_cntrl: BdrSwitch | OtbGateway | None = None
         self._heat_demand: dict[str, Any] | None = None
+
+        self.system_state = SystemState()
+        self.demand_state = DemandState()
 
     def __repr__(self) -> str:
         return f"{self.ctl.id} ({self._SLUG})"
@@ -305,12 +308,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         )
 
     async def heat_demand(self) -> float | None:  # 3150/FC
-        return cast(
-            float | None,
-            await self.entity_state.get_value(
-                Code._3150, domain_id=FC, key=SZ_HEAT_DEMAND
-            ),
-        )
+        return self.demand_state.heat_demand
 
     async def is_calling_for_heat(self) -> NoReturn:
         raise NotImplementedError(
@@ -847,10 +845,7 @@ class Language(SystemBase):  # 0100
         self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=60 * 15)
 
     async def language(self) -> str | None:
-        return cast(
-            str | None,
-            await self.entity_state.get_value(Code._0100, key=SZ_LANGUAGE),
-        )
+        return self.system_state.language
 
     async def params(self) -> dict[str, Any]:
         params = await super().params()
@@ -1056,18 +1051,12 @@ class SysMode(SystemBase):  # 2E04
     @property
     def system_mode(self) -> dict[str, Any] | None:  # 2E04
         """Return the system mode synchronously from Hot State RAM."""
-        if not getattr(self, "_gwy", None) or not self._gwy.message_store:
+        if self.system_state.system_mode is None:
             return None
-
-        latest_msg = None
-        for msg in self._gwy.message_store.state_cache.values():
-            if msg.code == Code._2E04 and msg.src.id == self._z_id:
-                if latest_msg is None or msg.dtm > latest_msg.dtm:
-                    latest_msg = msg
-
-        if latest_msg:
-            return cast(dict[str, Any], latest_msg.payload)
-        return None
+        return {
+            SZ_SYSTEM_MODE: self.system_state.system_mode,
+            "until": self.system_state.until,
+        }
 
     async def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None

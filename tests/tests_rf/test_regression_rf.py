@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.device import DeviceHeat, DeviceHvac
+from ramses_rf.devices import DeviceHeat, DeviceHvac
 from ramses_rf.gateway import GatewayConfig
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_READER_TASK
@@ -22,6 +22,21 @@ if TYPE_CHECKING:
 
 # Navigate up from tests/tests_rf/test_regression_rf.py to tests/fixtures/
 FIXTURE_FILE = Path(__file__).parents[1] / "fixtures" / "regression_packets_sorted.txt"
+
+
+async def drain_cqrs_queues(gwy: Gateway) -> None:
+    """Ensure all CQRS event bus queues are fully drained before proceeding."""
+    dispatcher = getattr(gwy, "dispatcher", None)
+
+    if dispatcher:
+        if hasattr(dispatcher, "discovery_queue"):
+            await dispatcher.discovery_queue.join()
+        if hasattr(dispatcher, "ssot_queue"):
+            await dispatcher.ssot_queue.join()
+        if hasattr(dispatcher, "binding_fsm_queue"):
+            await dispatcher.binding_fsm_queue.join()
+
+    await asyncio.sleep(0)
 
 
 async def _get_attr_value(obj: Any, attr: str) -> Any:
@@ -212,6 +227,9 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
             reader_task = gwy._engine._transport.get_extra_info(SZ_READER_TASK)
             if reader_task:
                 await reader_task
+
+        # Drain CQRS Event Bus to hydrate all read-models prior to assertion
+        await drain_cqrs_queues(gwy)
 
         # Ensure database is flushed if it exists
         if gwy.message_store:

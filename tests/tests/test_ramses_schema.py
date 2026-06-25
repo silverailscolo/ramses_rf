@@ -2,8 +2,7 @@
 """RAMSES RF - Test the RAMSES II schema."""
 
 from ramses_rf import RQ
-from ramses_rf.device.heat import HEAT_CLASS_BY_SLUG
-from ramses_rf.device.hvac import HVAC_CLASS_BY_SLUG
+from ramses_rf.devices import HEAT_DEV_CLASS_BY_SLUG, HVAC_DEV_CLASS_BY_SLUG
 from ramses_rf.protocol.ramses import (
     _DEV_KLASSES_HEAT,
     _DEV_KLASSES_HVAC,
@@ -37,18 +36,22 @@ def test_verb_code_pairs() -> None:
 def test_device_heat_slugs() -> None:
     """Every Heat device slug should have an entry in it domain's _DEV_KLASSES_*."""
 
-    assert not [s for s in _DEV_KLASSES_HEAT if s not in HEAT_CLASS_BY_SLUG]
+    assert not [s for s in _DEV_KLASSES_HEAT if s not in HEAT_DEV_CLASS_BY_SLUG]
     assert not [
-        s for s in HEAT_CLASS_BY_SLUG if s not in _DEV_KLASSES_HEAT and s != DevType.HEA
+        s
+        for s in HEAT_DEV_CLASS_BY_SLUG
+        if s not in _DEV_KLASSES_HEAT and s != DevType.HEA
     ]
 
 
 def test_device_hvac_slugs() -> None:
     """Every HVAC device slug should have an entry in it domain's _DEV_KLASSES_*."""
 
-    assert not [s for s in _DEV_KLASSES_HVAC if s not in HVAC_CLASS_BY_SLUG]
+    assert not [s for s in _DEV_KLASSES_HVAC if s not in HVAC_DEV_CLASS_BY_SLUG]
     assert not [
-        s for s in HVAC_CLASS_BY_SLUG if s not in _DEV_KLASSES_HVAC and s != DevType.HVC
+        s
+        for s in HVAC_DEV_CLASS_BY_SLUG
+        if s not in _DEV_KLASSES_HVAC and s != DevType.HVC
     ]
 
 

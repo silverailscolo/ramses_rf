@@ -14,7 +14,7 @@ import serial as ser
 from serial.tools.list_ports import comports
 
 from ramses_rf import Gateway
-from ramses_rf.device import HgiGateway
+from ramses_rf.devices import HgiGateway
 from ramses_rf.gateway import GatewayConfig
 from ramses_tx import exceptions as exc
 from ramses_tx.address import HGI_DEVICE_ID

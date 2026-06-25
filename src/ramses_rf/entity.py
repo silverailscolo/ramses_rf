@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from ramses_tx import Command, Packet
     from ramses_tx.typing import DeviceIdT, DevIndexT
 
-    from .device import Controller
+    from .devices import Controller
     from .gateway import Gateway
     from .interfaces import DeviceInterface
     from .messages import Message
