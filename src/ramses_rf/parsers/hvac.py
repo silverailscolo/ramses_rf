@@ -986,7 +986,6 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
 
     # NOTE: 31D9[4:6] is fan_speed (ClimaRad minibox, Itho) *or* fan_mode (Orcon, Vasco)
     result = {
-        **parse_exhaust_fan_speed(payload[4:6]),  # for itho
         SZ_FAN_MODE: payload[4:6],  # orcon, vasco/climarad
         "passive": bool(bitmap & 0x02),
         "damper_only": bool(bitmap & 0x04),  # i.e. valve only
@@ -995,6 +994,15 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
         SZ_HAS_FAULT: bool(bitmap & 0x80),
         "_flags": hex_to_flag8(payload[2:4]),
     }
+
+    # Orcon and Brofer long payloads provide accurate fan speed in 31DA.
+    # Emitting exhaust_fan_speed here incorrectly converts mode bytes to speed.
+    # Itho formats end with "00", whereas Orcon/Brofer formats end with "04" or "08".
+    _is_mode_only = (
+        len(payload) >= 34 and payload[8:32] == "20" * 12 and payload[32:34] != "00"
+    )
+    if not _is_mode_only:
+        result.update(parse_exhaust_fan_speed(payload[4:6]))  # for itho, nuaire
 
     # Fan Mode Lookup 1 for Vasco codes
     if msg.len == 3:  # usu: I -->20: (no seq#)
