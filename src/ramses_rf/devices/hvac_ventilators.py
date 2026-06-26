@@ -646,7 +646,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             "Sending set_fan_mode '%s' to %s via src %s", fan_mode, self.id, src_id
         )
 
-        cmd = Command.set_fan_mode(self.id, fan_mode, src_id=src_id)
+        cmd = Command.set_fan_mode(
+            self.id, fan_mode, scheme=self._scheme or "orcon", src_id=src_id
+        )
         return await self._gwy.async_send_cmd(
             cmd, num_repeats=2, priority=Priority.HIGH
         )
