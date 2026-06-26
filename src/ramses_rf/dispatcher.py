@@ -23,9 +23,38 @@ from .const import (
     I_,
     RP,
     RQ,
+    SZ_AIR_QUALITY,
+    SZ_AIR_QUALITY_BASIS,
+    SZ_BYPASS_MODE,
+    SZ_BYPASS_POSITION,
+    SZ_BYPASS_STATE,
+    SZ_CO2_LEVEL,
     SZ_DEVICES,
+    SZ_EXHAUST_FAN_SPEED,
+    SZ_EXHAUST_FLOW,
+    SZ_EXHAUST_TEMP,
+    SZ_FAN_INFO,
+    SZ_FAN_MODE,
+    SZ_FAN_RATE,
+    SZ_FILTER_DIRTY,
+    SZ_FROST_CYCLE,
+    SZ_HAS_FAULT,
+    SZ_INDOOR_HUMIDITY,
+    SZ_INDOOR_TEMP,
     SZ_OFFER,
+    SZ_OUTDOOR_HUMIDITY,
+    SZ_OUTDOOR_TEMP,
     SZ_PHASE,
+    SZ_POST_HEAT,
+    SZ_PRE_HEAT,
+    SZ_PRESENCE_DETECTED,
+    SZ_REMAINING_MINS,
+    SZ_REQ_REASON,
+    SZ_SPEED_CAPABILITIES,
+    SZ_SUPPLY_FAN_SPEED,
+    SZ_SUPPLY_FLOW,
+    SZ_SUPPLY_TEMP,
+    SZ_TEMPERATURE,
     W_,
     Code,
     DevType,
@@ -296,10 +325,15 @@ def _resolve_logical_targets(
     # 3. Hardware twin (Destination) gets the update.
     # Legacy routes packets to the destination device's cache. To maintain
     # strict parity, we mirror this.
+    # HVAC packets (e.g. 22F1 fan_mode from REM→FAN) target the destination
+    # device's hvac_state directly, so we also accept devices that have
+    # hvac_state even if they lack apply_state_update.
     if msg.dst.id != msg.src.id and getattr(msg.dst, "id", "") != "63:262142":
         if (
             dst_dev
-            and hasattr(dst_dev, "apply_state_update")
+            and (
+                hasattr(dst_dev, "apply_state_update") or hasattr(dst_dev, "hvac_state")
+            )
             and dst_dev not in targets
         ):
             targets.append(dst_dev)
@@ -432,6 +466,87 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
         target.apply_state_update(event)
 
 
+def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+    """Translate HVAC ventilation payloads into a frozen HvacState.
+
+    Handles 31D9/31DA/22F1/22F3/10D0/12A0/1298 and related opcodes,
+    porting the logic from ``pipeline/ingestion.py`` into the dispatcher's
+    CQRS ingestion engine.  See issue #649 / #547.
+    """
+    if getattr(target, "_SLUG", "") in ("CTL", "BDR", "TRV", "OTB", "UFC", "DHW"):
+        return
+
+    if not hasattr(target, "hvac_state"):
+        return
+
+    from ramses_rf import quirks
+
+    p = quirks.apply_hvac_quirks(p, target.hvac_state, msg.code)
+
+    fields = [
+        SZ_CO2_LEVEL,
+        SZ_AIR_QUALITY,
+        SZ_AIR_QUALITY_BASIS,
+        SZ_BYPASS_MODE,
+        SZ_BYPASS_POSITION,
+        SZ_BYPASS_STATE,
+        SZ_EXHAUST_FAN_SPEED,
+        SZ_EXHAUST_FLOW,
+        SZ_EXHAUST_TEMP,
+        SZ_FAN_RATE,
+        SZ_FAN_MODE,
+        SZ_FAN_INFO,
+        SZ_INDOOR_HUMIDITY,
+        SZ_INDOOR_TEMP,
+        SZ_OUTDOOR_HUMIDITY,
+        SZ_OUTDOOR_TEMP,
+        SZ_POST_HEAT,
+        SZ_PRE_HEAT,
+        SZ_PRESENCE_DETECTED,
+        SZ_REMAINING_MINS,
+        SZ_SPEED_CAPABILITIES,
+        SZ_SUPPLY_FAN_SPEED,
+        SZ_SUPPLY_FLOW,
+        SZ_SUPPLY_TEMP,
+        SZ_TEMPERATURE,
+        SZ_FILTER_DIRTY,
+        SZ_FROST_CYCLE,
+        SZ_HAS_FAULT,
+        SZ_REQ_REASON,
+        "dewpoint_temp",
+    ]
+
+    updates: dict[str, Any] = {}
+    for f in fields:
+        if f in p:
+            updates[f] = p[f]
+
+    # Handle non-standard names passed by the semantic parsers
+    if "remaining_days" in p:
+        updates["filter_remaining_days"] = p["remaining_days"]
+    if "remaining_percent" in p:
+        updates["filter_remaining_percent"] = p["remaining_percent"]
+    if "minutes" in p and msg.code == Code._22F3:
+        updates["boost_timer_mins"] = p["minutes"]
+    if "req_speed" in p:
+        updates["request_fan_speed"] = p["req_speed"]
+
+    if not updates:
+        return
+
+    new_state = dataclasses.replace(target.hvac_state, **updates)
+    target.hvac_state = new_state
+
+    event = StateUpdatedEvent(
+        entity_id=getattr(target, "id", "unknown"),
+        state=new_state,
+        correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+        causation_id=getattr(msg, "message_id", uuid.uuid4()),
+    )
+    if hasattr(target, "apply_state_update"):
+        target.apply_state_update(event)
+
+
 def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
     """Parallel ingestion engine to populate immutable CQRS read-models.
 
@@ -454,6 +569,7 @@ def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
         targets = _resolve_logical_targets(gwy, msg, p)
         for target in targets:
             with contextlib.suppress(AttributeError, TypeError, ValueError):
+                _update_hvac_state(target, p, msg)
                 _update_temperature_state(target, p, msg)
                 _update_demand_state(target, p, msg)
                 _update_faultlog_state(target, p, msg)

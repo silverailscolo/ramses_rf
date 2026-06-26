@@ -261,8 +261,8 @@ class DeviceRegistry:
         old_traits_dict = dict(self._config.known_list.get(event.device_id, {}))
 
         # Update the configuration traits safely
+        traits_dict = dict(old_traits_dict)
         if old_traits_dict.get("class") != new_class_slug:
-            traits_dict = dict(old_traits_dict)
             traits_dict["class"] = new_class_slug
             self._config.known_list[event.device_id] = traits_dict
 
