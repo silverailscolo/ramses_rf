@@ -732,7 +732,7 @@ def test_device_traits_to_dict_unboxes_enums() -> None:
 
 @pytest.mark.asyncio
 async def test_hvac_ventilator_status_dictionary_shim() -> None:
-    """Ensure the status dictionary remaps keys and unboxes Enums."""
+    """Ensure the status dictionary explicitly maintains legacy keys."""
 
     # Arrange
     mock_gwy = MagicMock()
@@ -750,7 +750,39 @@ async def test_hvac_ventilator_status_dictionary_shim() -> None:
     # Assert
     assert "temperature" in status_dict
     assert status_dict["temperature"] == 21.5
-    assert "indoor_temp" not in status_dict
+
+    # Bug A: indoor_temp is a primary key that Home Assistant expects.
+    # It must not be dropped when mapping to 'temperature'.
+    assert "indoor_temp" in status_dict
+    assert status_dict["indoor_temp"] == 21.5
 
     assert status_dict["fan_mode"] == "active_fault"
     assert not isinstance(status_dict["fan_mode"], Enum)
+
+
+@pytest.mark.asyncio
+async def test_hvac_ventilator_status_shim_unboxes_list_of_enums() -> None:
+    """Ensure the status shim safely unboxes lists containing Enums."""
+
+    # Arrange
+    mock_gwy = MagicMock()
+    mock_gwy.config.disable_discovery = True
+
+    ventilator = HvacVentilator(mock_gwy, Address("32:123456"))
+    ventilator.hvac_state = HvacState(
+        speed_capabilities=cast(list[str], [MockEnum.TEST_VAL, MockEnum.TEST_VAL])
+    )
+
+    # Act
+    status_dict = await ventilator.status()
+
+    # Assert
+    assert "speed_capabilities" in status_dict
+    capabilities = status_dict["speed_capabilities"]
+
+    # Bug B: speed_capabilities is a list of Enums. The duck-typing getattr()
+    # approach silently fails to unbox the items inside the list, causing JSON
+    # serialisation failures downstream.
+    assert isinstance(capabilities, list)
+    assert all(not isinstance(item, Enum) for item in capabilities)
+    assert capabilities[0] == "active_fault"
