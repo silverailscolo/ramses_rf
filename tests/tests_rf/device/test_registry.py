@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from typing import cast
+import logging
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,9 +13,16 @@ from ramses_rf.address import Address
 from ramses_rf.config import GatewayConfig
 from ramses_rf.devices.dev_filter import DeviceFilter
 from ramses_rf.devices.dev_registry import DeviceRegistry
+from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import DeviceNotFoundError, SchemaInconsistentError
-from ramses_rf.models import DeviceTraits
+from ramses_rf.models import DeviceTraits, TopologyChangedEvent
 from ramses_rf.typing import DeviceIdT
+
+if TYPE_CHECKING:
+    from ramses_rf.devices.dev_base import Device
+    from ramses_rf.messages import Message
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @pytest.fixture
@@ -152,3 +160,58 @@ def test_registry_enforces_filter_lists() -> None:
 
     with pytest.raises(DeviceNotFoundError):
         registry.get_device(blocked_id)
+
+
+@pytest.mark.asyncio
+async def test_fan_promotion_race_condition() -> None:
+    """Test that early PROMOTE_CLASS events correctly apply via the SSOT.
+
+    This reproduces the race condition where a TopologyBuilder emits a
+    promotion event before the packet processing pipeline has actually
+    instantiated the device in memory.
+    """
+    # Arrange
+    config = GatewayConfig(known_list={})
+    filter_mock = MagicMock()
+    captured_traits: list[DeviceTraits] = []
+
+    def mock_device_factory(
+        addr: Address,
+        msg: Message | None,
+        traits: DeviceTraits,
+    ) -> Device:
+        """Mock factory to track what traits were passed at creation."""
+        captured_traits.append(traits)
+        dev_mock = MagicMock()
+        dev_mock.id = addr.id
+        dev_mock.addr = addr
+        dev_mock._SLUG = traits.device_class
+        return cast("Device", dev_mock)
+
+    registry = DeviceRegistry(filter_mock, config, mock_device_factory)
+    fan_id = "32:111111"
+
+    event = TopologyChangedEvent(
+        action=TopologyAction.PROMOTE_CLASS,
+        device_id=fan_id,
+        metadata={"device_class": "FAN"},
+        causation="test_eavesdrop",
+    )
+
+    # Act 1: The TopologyBuilder fires the event early (Race Condition)
+    registry.handle_topology_event(event)
+
+    # Act 2: The packet pipeline finally requests the device
+    dev = registry.get_device(fan_id)
+
+    # Assert
+    # 1. The registry must have mutated the Single Source of Truth
+    assert fan_id in config.known_list
+    assert config.known_list[fan_id].get("class") == "ventilator"
+
+    # 2. The factory must have received the correct promoted traits
+    assert len(captured_traits) == 1
+    assert captured_traits[0].device_class == "ventilator"
+
+    # 3. The returned device must act as the promoted class
+    assert getattr(dev, "_SLUG", None) == "ventilator"
