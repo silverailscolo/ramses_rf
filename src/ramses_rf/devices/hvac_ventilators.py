@@ -885,6 +885,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             SZ_FAN_MODE: await self.fan_mode(),
             SZ_FAN_RATE: await self.fan_rate(),
             SZ_FILTER_DIRTY: await self.filter_dirty(),
+            "filter_remaining": await self.filter_remaining(),
+            "filter_remaining_percent": await self.filter_remaining_percent(),
             SZ_FROST_CYCLE: await self.frost_cycle(),
             SZ_HAS_FAULT: await self.has_fault(),
             SZ_INDOOR_HUMIDITY: await self.indoor_humidity(),
