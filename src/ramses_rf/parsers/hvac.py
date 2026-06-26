@@ -32,6 +32,7 @@ from ramses_tx.const import (
     SZ_SETPOINT_BOUNDS,
     SZ_TEMPERATURE,
     W_,
+    Code,
 )
 from ramses_tx.helpers import (
     hex_to_flag8,
@@ -533,10 +534,24 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
     except AssertionError as err:
         _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
 
-    if msg._addrs[0] == NON_DEV_ADDR:  # and payload[4:6] == "04":
-        from ramses_rf.protocol.ramses import (
-            _22F1_MODE_ITHO as _22F1_FAN_MODE,  # TODO: only if 04
-        )
+    # Scheme detection: the mode_max byte (payload[4:6]) is the primary
+    # indicator.  mode_max=04 → itho (5 modes: 00-04), mode_max=0A → nuaire,
+    # mode_max=06 → vasco, and mode_max 07/0B/empty → orcon (8 modes: 00-07).
+    #
+    # Previously, mode_max=04 was only treated as itho when the source was
+    # the broadcast address (NON_DEV_ADDR).  Directed 22F1 packets from Itho
+    # remotes (e.g. CVE-S CO2 with AUTO RFT-N, see issue #87) were therefore
+    # misidentified as orcon, causing fan_mode names to be wrong
+    # (02→"medium" instead of "low", 04→"auto" instead of "high", etc.).
+    #
+    # The mode_max=04 → itho detection is scoped to standalone 22F1 packets
+    # (msg.code == 22F1) to avoid affecting 22F3 boost payloads, which embed
+    # 22F1-style mode info but may use different mode_max conventions.
+    is_standalone_22f1 = getattr(msg, "code", None) == Code._22F1
+    if is_standalone_22f1 and (
+        payload[4:6] == "04" or (msg._addrs[0] == NON_DEV_ADDR and not payload[4:6])
+    ):  # broadcast, 2-byte → itho
+        from ramses_rf.protocol.ramses import _22F1_MODE_ITHO as _22F1_FAN_MODE
 
         _22f1_mode_set: tuple[str, ...] = ("", "04")
         _22f1_scheme = "itho"
@@ -560,7 +575,7 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
     else:
         from ramses_rf.protocol.ramses import _22F1_MODE_ORCON as _22F1_FAN_MODE
 
-        _22f1_mode_set = ("", "04", "07", "0B")  # 0B?
+        _22f1_mode_set = ("", "07", "0B")  # 0B?
         _22f1_scheme = "orcon"
 
     try:

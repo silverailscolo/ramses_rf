@@ -3,6 +3,7 @@
 
 # TODO: add test for ramses_tx.frame.pkt_header()
 
+from ramses_rf.messages import Message
 from ramses_rf.systems.zones import _transform
 from ramses_tx.command import Command
 from ramses_tx.exceptions import CommandInvalid, PacketInvalid
@@ -30,6 +31,82 @@ from ramses_tx.packet import Packet
 from .helpers import TEST_DIR
 
 WORK_DIR = f"{TEST_DIR}/parser_helpers"
+
+
+# --- 22F1 parser scheme detection tests (issue #87) ---
+
+
+def _make_22f1_msg(pkt_str: str) -> Message:
+    """Build a Message from a raw packet string for parser testing."""
+    pkt = Packet.from_file(pkt_str[:26], pkt_str[27:])
+    return Message(pkt.to_dto())
+
+
+def test_22f1_itho_directed_mode_max_04() -> None:
+    """Directed 22F1 with mode_max=04 must be itho, not orcon (issue #87).
+
+    Previously, only broadcast (NON_DEV_ADDR) packets with mode_max=04 were
+    identified as itho.  Directed packets from Itho remotes (e.g. CVE-S CO2
+    with AUTO RFT-N) were misidentified as orcon, causing:
+      02 → "medium" (orcon) instead of "low"    (itho)
+      04 → "auto"   (orcon) instead of "high"   (itho)
+      03 → "high"   (orcon) instead of "medium" (itho)
+    """
+    # Low:    37:198669 → 37:019136, 22F1 003 000204
+    msg = _make_22f1_msg(
+        "2023-11-12T19:48:24.587738 044  I --- 37:198669 37:019136 --:------ 22F1 003 000204"
+    )
+    result = msg.payload
+    assert result["_scheme"] == "itho"
+    assert result["fan_mode"] == "low"
+    assert result["_mode_idx"] == "02"
+    assert result["_mode_max"] == "04"
+
+    # High:   37:198669 → 37:019136, 22F1 003 000404
+    msg = _make_22f1_msg(
+        "2023-11-12T19:48:28.266746 045  I --- 37:198669 37:019136 --:------ 22F1 003 000404"
+    )
+    result = msg.payload
+    assert result["_scheme"] == "itho"
+    assert result["fan_mode"] == "high"
+
+    # Medium: 37:198669 → 37:019136, 22F1 003 000304
+    msg = _make_22f1_msg(
+        "2023-11-12T19:48:31.786152 043  I --- 37:198669 37:019136 --:------ 22F1 003 000304"
+    )
+    result = msg.payload
+    assert result["_scheme"] == "itho"
+    assert result["fan_mode"] == "medium"
+
+
+def test_22f1_itho_broadcast_still_itho() -> None:
+    """Broadcast 22F1 with mode_max=04 must still be itho (no regression)."""
+    msg = _make_22f1_msg(
+        "2021-02-12T17:27:06.905245 075  I 015 --:------ --:------ 39:159057 22F1 003 000204"
+    )
+    result = msg.payload
+    assert result["_scheme"] == "itho"
+    assert result["fan_mode"] == "low"
+
+
+def test_22f1_orcon_directed_mode_max_07_still_orcon() -> None:
+    """Directed 22F1 with mode_max=07 must still be orcon (no regression)."""
+    msg = _make_22f1_msg(
+        "2022-06-22T21:36:43.354510 ...  I --- 37:155617 32:155617 --:------ 22F1 003 000207"
+    )
+    result = msg.payload
+    assert result["_scheme"] == "orcon"
+    assert result["fan_mode"] == "medium"
+
+
+def test_22f1_vasco_directed_mode_max_06_still_vasco() -> None:
+    """Directed 22F1 with mode_max=06 must still be vasco (no regression)."""
+    msg = _make_22f1_msg(
+        "2024-10-10T22:26:28.420378 041  I --- 29:091138 32:022222 --:------ 22F1 003 000206"
+    )
+    result = msg.payload
+    assert result["_scheme"] == "vasco"
+    assert result["fan_mode"] == "low"
 
 
 def test_helper_demand_transform() -> None:
