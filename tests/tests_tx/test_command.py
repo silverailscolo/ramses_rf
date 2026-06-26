@@ -5,6 +5,8 @@ import logging
 from datetime import datetime as dt, timedelta as td
 from typing import Final
 
+import pytest
+
 from ramses_tx.command import Command
 from ramses_tx.const import SYS_MODE_MAP, ZON_MODE_MAP
 from ramses_tx.exceptions import CommandInvalid
@@ -217,3 +219,88 @@ async def test_rq_missing_target() -> None:
         pass
     else:
         assert False
+
+
+# --- set_fan_mode (22F1) scheme-aware payload tests (issue #547) ---
+
+
+def test_set_fan_mode_orcon_2byte_default() -> None:
+    """Default scheme (orcon) produces a 3-byte payload with mode_max=07."""
+    cmd = Command.set_fan_mode("37:111111", "low", src_id="18:000730")
+    # ORCON: low=01, mode_max=07 -> payload "000107"
+    assert cmd.payload == "000107"
+    assert str(cmd.code) == "22F1"
+
+
+def test_set_fan_mode_orcon_2byte_explicit() -> None:
+    """Explicit orcon scheme with mode_max='' produces legacy 2-byte payload."""
+    cmd = Command.set_fan_mode(
+        "37:111111", "low", scheme="orcon", src_id="18:000730", mode_max=""
+    )
+    # 2-byte legacy form: idx + mode only
+    assert cmd.payload == "0001"
+
+
+def test_set_fan_mode_itho_3byte() -> None:
+    """Itho scheme produces 3-byte payload with mode_max=04."""
+    cmd = Command.set_fan_mode("37:111111", "low", scheme="itho", src_id="18:000730")
+    # ITHO: low=02, mode_max=04 -> "000204"
+    assert cmd.payload == "000204"
+
+
+def test_set_fan_mode_vasco_3byte() -> None:
+    """Vasco scheme produces 3-byte payload with mode_max=06."""
+    cmd = Command.set_fan_mode("37:111111", "high", scheme="vasco", src_id="18:000730")
+    # VASCO: high=04, mode_max=06 -> "000406"
+    assert cmd.payload == "000406"
+
+
+def test_set_fan_mode_siber_3byte_from_issue() -> None:
+    """Siber DF Evo 4 payloads from issue #547 (orcon scheme, mode_max=07)."""
+    # low:  003 000207
+    cmd_low = Command.set_fan_mode(
+        "37:111111", "low", scheme="orcon", src_id="18:000730"
+    )
+    assert cmd_low.payload == "000107"
+
+    # The issue lists Siber modes as 02=low,03=medium,04=high,07=boost.
+    # With orcon scheme these map to: 02=medium,03=high,04=auto,07=off.
+    # For Siber, the user should use the itho scheme or raw int indices.
+    # Verify int index works: 02 -> "000207"
+    cmd_int = Command.set_fan_mode(
+        "37:111111", 0x02, scheme="orcon", src_id="18:000730"
+    )
+    assert cmd_int.payload == "000207"
+
+
+def test_set_fan_mode_nuaire_3byte() -> None:
+    """Nuaire scheme produces 3-byte payload with mode_max=0A."""
+    cmd = Command.set_fan_mode(
+        "37:111111", "normal", scheme="nuaire", src_id="18:000730"
+    )
+    # NUAIRE: normal=02, mode_max=0A -> "00020A"
+    assert cmd.payload == "00020A"
+
+
+def test_set_fan_mode_int_index() -> None:
+    """Integer fan_mode is treated as a hex mode index."""
+    cmd = Command.set_fan_mode("37:111111", 3, scheme="orcon", src_id="18:000730")
+    assert cmd.payload == "000307"
+
+
+def test_set_fan_mode_none_is_off() -> None:
+    """None fan_mode maps to mode 00 (off/away)."""
+    cmd = Command.set_fan_mode("37:111111", None, scheme="orcon", src_id="18:000730")
+    assert cmd.payload == "000007"
+
+
+def test_set_fan_mode_invalid_scheme_raises() -> None:
+    """An unknown scheme raises CommandInvalid."""
+    with pytest.raises(CommandInvalid, match="scheme is not valid"):
+        Command.set_fan_mode("37:111111", "low", scheme="bogus", src_id="18:000730")
+
+
+def test_set_fan_mode_invalid_mode_raises() -> None:
+    """A mode not in the scheme's map raises CommandInvalid."""
+    with pytest.raises(CommandInvalid, match="fan_mode is not valid"):
+        Command.set_fan_mode("37:111111", "turbo", scheme="itho", src_id="18:000730")

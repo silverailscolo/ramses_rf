@@ -636,6 +636,7 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     """Test set_fan_mode uses the bound REM as the source ID."""
     dev = MagicMock(spec=HvacVentilator)
     dev.id = "32:123456"
+    dev._scheme = "orcon"
     dev.get_bound_rem.return_value = "37:654321"
 
     dev._gwy = MagicMock()
@@ -652,7 +653,9 @@ async def test_set_fan_mode_with_bound_rem() -> None:
         dev.get_bound_rem.assert_called_once()
 
         # 2. Verify the packet was built using the REM's ID ("37:654321")
-        mock_cmd.assert_called_once_with("32:123456", "low", src_id="37:654321")
+        mock_cmd.assert_called_once_with(
+            "32:123456", "low", scheme="orcon", src_id="37:654321"
+        )
 
         # 3. Verify it was transmitted with the correct QoS
         dev._gwy.async_send_cmd.assert_awaited_once_with(
@@ -665,6 +668,7 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     """Test set_fan_mode falls back to the HGI if no REM is bound."""
     dev = MagicMock(spec=HvacVentilator)
     dev.id = "32:123456"
+    dev._scheme = "orcon"
     dev.get_bound_rem.return_value = None
 
     # Simulate an available HGI
@@ -680,7 +684,9 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
         await HvacVentilator.set_fan_mode(dev, "high")
 
         # Verify the packet was built using the HGI's ID ("18:000730")
-        mock_cmd.assert_called_once_with("32:123456", "high", src_id="18:000730")
+        mock_cmd.assert_called_once_with(
+            "32:123456", "high", scheme="orcon", src_id="18:000730"
+        )
         dev._gwy.async_send_cmd.assert_awaited_once()
 
 
