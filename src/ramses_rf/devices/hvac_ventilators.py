@@ -413,9 +413,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     def _handle_2411_message(self, msg: Message) -> None:
         """Handle incoming 2411 parameter messages.
 
-        This method processes 2411 parameter update messages, updates the device's
-        message store, and triggers any registered parameter update callbacks.
-        It handles parameter value normalization and validation.
+        This method processes 2411 parameter update messages, updates the
+        device's message store, and triggers any registered parameter update
+        callbacks. It handles parameter value normalization and validation.
 
         :param msg: The incoming 2411 message
         :type msg: Message to process
@@ -444,7 +444,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         if param_id == "75" and isinstance(param_value, (int, float)):
             param_value = round(float(param_value), 1)
         elif param_id in ("52", "95"):  # Percentage parameters
-            param_value = round(float(param_value), 3)  # Keep precision for percentages
+            # Keep precision for percentages
+            param_value = round(float(param_value), 3)
 
         # Store in params
         old_value = self.get_2411_param(param_id)
@@ -527,12 +528,16 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             Code._22F8,  # Air quality base
         ):
             self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, code, PayloadT("00")), 60 * 30, delay=15
+                Command.from_attrs(RQ, self.id, code, PayloadT("00")),
+                60 * 30,
+                delay=15,
             )
 
         for code in (Code._313E, Code._3222):
             self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, code, PayloadT("00")), 60 * 30, delay=30
+                Command.from_attrs(RQ, self.id, code, PayloadT("00")),
+                60 * 30,
+                delay=30,
             )
 
     def add_bound_device(self, device_id: str, device_type: str) -> None:
@@ -625,7 +630,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def set_fan_mode(self, fan_mode: str | int) -> Packet | None:
         """Set the operating mode/speed of the ventilator.
 
-        :param fan_mode: The desired fan mode (e.g., 'low', 'medium', 'high', 'boost').
+        :param fan_mode: The desired fan mode (e.g., 'low', 'medium', 'high',
+                         'boost').
         :return: The sent packet.
         :raises CommandInvalid: If unable to determine a valid source ID.
         """
@@ -643,7 +649,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
                 )
 
         _LOGGER.debug(
-            "Sending set_fan_mode '%s' to %s via src %s", fan_mode, self.id, src_id
+            "Sending set_fan_mode '%s' to %s via src %s",
+            fan_mode,
+            self.id,
+            src_id,
         )
 
         cmd = Command.set_fan_mode(self.id, fan_mode, src_id=src_id)
@@ -654,7 +663,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def air_quality(self) -> float | None:
         """Return the current air quality measurement.
 
-        :return: The air quality measurement as a float, or None if not available
+        :return: The air quality measurement as a float, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.air_quality
@@ -721,7 +731,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def exhaust_temp(self) -> float | None:
         """Return the current exhaust air temperature.
 
-        :return: The exhaust air temperature in degrees Celsius, or None if not available
+        :return: The exhaust air temperature in degrees Celsius, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.exhaust_temp
@@ -768,7 +779,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def indoor_temp(self) -> float | None:
         """Return the current indoor temperature.
 
-        :return: The indoor temperature in degrees Celsius, or None if not available
+        :return: The indoor temperature in degrees Celsius, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.indoor_temp
@@ -788,7 +800,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def outdoor_temp(self) -> float | None:
         """Return the outdoor temperature in Celsius.
 
-        :return: The outdoor temperature in degrees Celsius, or None if not available
+        :return: The outdoor temperature in degrees Celsius, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.outdoor_temp
@@ -820,7 +833,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def request_fan_speed(self) -> float | None:
         """Return the requested fan speed.
 
-        :return: The requested fan speed as a percentage, or None if not available
+        :return: The requested fan speed as a percentage, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.request_fan_speed
@@ -915,13 +929,18 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         for key, value in merged_status.items():
             # Ensure Enums are serialised to strings to prevent leakage
             k_str = str(getattr(key, "value", key))
-            v_clean = getattr(value, "value", value)
 
-            # Legacy shim: remap newer CQRS keys to legacy downstream keys
-            if k_str in ("indoor_temperature", "indoor_temp"):
-                k_str = "temperature"
+            # Safely unbox lists containing Enums (e.g. speed_capabilities)
+            if isinstance(value, list):
+                v_clean = [getattr(item, "value", item) for item in value]
+            else:
+                v_clean = getattr(value, "value", value)
 
             shim_status[k_str] = v_clean
+
+            # Legacy shim: map newer CQRS keys back to legacy downstream keys
+            if k_str in ("indoor_temperature", "indoor_temp"):
+                shim_status["temperature"] = v_clean
 
         return shim_status
 
@@ -938,7 +957,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def filter_dirty(self) -> bool | None:
         """Return the dirty filter diagnostic flag.
 
-        :return: True if the filter is dirty, False if clean, or None if unavailable.
+        :return: True if the filter is dirty, False if clean, or None if
+                 unavailable.
         :rtype: bool | None
         """
         return self.hvac_state.filter_dirty
@@ -946,7 +966,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def frost_cycle(self) -> bool | None:
         """Return the frost cycle diagnostic flag.
 
-        :return: True if the frost cycle is active, False otherwise, or None if unavailable.
+        :return: True if the frost cycle is active, False otherwise, or None
+                 if unavailable.
         :rtype: bool | None
         """
         return self.hvac_state.frost_cycle
@@ -954,7 +975,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def has_fault(self) -> bool | None:
         """Return the hardware fault diagnostic flag.
 
-        :return: True if a fault is active, False otherwise, or None if unavailable.
+        :return: True if a fault is active, False otherwise, or None if
+                 unavailable.
         :rtype: bool | None
         """
         return self.hvac_state.has_fault
