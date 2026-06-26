@@ -40,13 +40,13 @@ class DeviceTraits:
         """
         result: dict[str, Any] = {}
         if self.device_class is not None:
-            result["class"] = self.device_class
+            result["class"] = getattr(self.device_class, "value", self.device_class)
         if self.alias is not None:
             result["alias"] = self.alias
         if self.faked is not None:
             result["faked"] = self.faked
         if self.scheme is not None:
-            result["scheme"] = self.scheme
+            result["scheme"] = getattr(self.scheme, "value", self.scheme)
         return result
 
 
