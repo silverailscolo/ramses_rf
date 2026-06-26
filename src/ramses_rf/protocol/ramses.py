@@ -227,6 +227,7 @@ CODES_SCHEMA: dict[Code, CodeSchemaEntry] = {  # rf_unknown
         "name": "filter_change",
         " I": r"^00[0-9A-F]{6}(0000|FFFF)?$",
         "RQ": r"^00(00)?$",
+        "RP": r"^00[0-9A-F]{6}(0000|FFFF)?$",  # same structure as I_
         " W": r"^00FF$",
     },
     Code._10E0: {  # device_info
