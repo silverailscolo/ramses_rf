@@ -10,41 +10,45 @@ from ramses_tx.dtos import PacketDTO
 
 _LOGGER = logging.getLogger(__name__)
 
-# Codes whose ``I`` packets are *always* array fragments at the L3 layer and
-# can therefore be safely buffered for reassembly using only (code, verb)
-# inspection -- the only metadata available to this module via PacketDTO.
+# Codes whose ``I`` packets are *always* array fragments at the L3 layer
+# and can therefore be safely buffered for reassembly using only (code,
+# verb) inspection -- the only metadata available to this module via
+# PacketDTO.
 #
-# Audit of ramses_rf.protocol.ramses.CODES_WITH_ARRAYS (the authoritative
-# schema, which lists 0005/0009/000A/2309/30C9/2249/22C9/3150 plus the
-# special-cased 000C/1FC9) for issue #669:
+# Audit of ramses_rf.protocol.ramses.CODES_WITH_ARRAYS (the
+# authoritative schema, which lists 0005/0009/000A/2309/30C9/2249/22C9/
+# 3150 plus the special-cased 000C/1FC9) for issue #669:
 #
-#   - 000A, 22C9: safe.  Their ``I`` packets from a controller/UFC are arrays
-#     (a lone single-element ``I`` is an acceptable false negative, as noted
-#     in ramses_tx.frame.Frame._has_array).
-#   - 2309, 30C9: NOT safe to add here.  These routinely emit *single* zone
-#     packets (one zone's temperature) that must pass straight through.  The
-#     frame layer distinguishes array vs single via a payload-length multiple
-#     heuristic (Frame._has_array) that this module does not have access to.
-#   - 3150: NOT safe here for the same reason -- a single heat-demand packet
-#     is indistinguishable from a fragment without the length/domain check
-#     (and the UFC-only src.type guard) that lives in the frame layer.
-#   - 1FC9, 000C, 0005, 0009, 2249: special-cased or non-fragmenting here.
+#   - 000A, 22C9: safe. Their ``I`` packets from a controller/UFC are
+#     arrays (a lone single-element ``I`` is an acceptable false
+#     negative, as noted in ramses_tx.frame.Frame._has_array).
+#   - 2309, 30C9: NOT safe to add here. These routinely emit *single*
+#     zone packets (one zone's temperature) that must pass straight
+#     through. The frame layer distinguishes array vs single via a
+#     payload-length multiple heuristic (Frame._has_array) that this
+#     module does not have access to.
+#   - 3150: NOT safe here for the same reason -- a single heat-demand
+#     packet is indistinguishable from a fragment without the
+#     length/domain check (and the UFC-only src.type guard) that lives
+#     in the frame layer.
+#   - 1FC9, 000C, 0005, 0009, 2249: special-cased or non-fragmenting
+#     here.
 #
 # Expanding this set to 2309/30C9/3150 correctly requires migrating the
-# Frame._has_array length heuristic into (or exposing it to) the reassembly
-# pipeline, which is part of the broader #608 schema migration.  Until then,
-# the conservative set below matches the legacy detect_array_fragment()
-# behaviour in dispatcher.py without introducing false buffering of routine
-# single-zone packets.  See issue #669.
+# Frame._has_array length heuristic into (or exposing it to) the
+# reassembly pipeline, which is part of the broader #608 schema
+# migration. Until then, the conservative set below matches the legacy
+# detect_array_fragment() behaviour in dispatcher.py without introducing
+# false buffering of routine single-zone packets. See issue #669.
 _ARRAY_CODES: Final[tuple[str, ...]] = (
     "000A",
     "22C9",
 )
 _VERB_I: Final[str] = " I"
 
-# A pending array is keyed by (src_id, code) so that an intervening packet
-# from a different source (or a different code) does not abort an in-flight
-# reassembly.  See issue #669 (sliding window buffer).
+# A pending array is keyed by (src_id, code) so that an intervening
+# packet from a different source (or a different code) does not abort
+# an in-flight reassembly. See issue #669 (sliding window buffer).
 _PendingKey = tuple[str, str]
 
 
@@ -54,11 +58,11 @@ class ReassemblyBuffer:
     Consumes raw PacketDTOs from the transport layer, buffers potential
     array fragments, and outputs unified PacketDTOs.
 
-    Unlike a single-slot buffer, this implementation maintains a *sliding
-    window* of pending arrays keyed by ``(src_id, code)``.  An unrelated
-    packet (RF noise, or a broadcast from a different device) that arrives
-    between two fragments of an array therefore passes straight through
-    without aborting the in-progress reassembly.
+    Unlike a single-slot buffer, this implementation maintains a
+    *sliding window* of pending arrays keyed by ``(src_id, code)``. An
+    unrelated packet (RF noise, or a broadcast from a different device)
+    that arrives between two fragments of an array therefore passes
+    straight through without aborting the in-progress reassembly.
     """
 
     def __init__(
@@ -100,7 +104,8 @@ class ReassemblyBuffer:
         """Main asynchronous loop consuming the input queue."""
         while True:
             try:
-                # Wait for a packet, or timeout if we have any pending arrays
+                # Wait for a packet, or timeout if we have any pending
+                # arrays
                 timeout = self._array_timeout if self._pending else None
                 dto = await asyncio.wait_for(self._in_queue.get(), timeout=timeout)
                 await self._process_packet(dto)
@@ -114,10 +119,10 @@ class ReassemblyBuffer:
     async def _flush_stale_pending(self) -> None:
         """Flush every pending array whose timeout has expired.
 
-        The loop's ``wait_for`` only times out when no packet has arrived
-        for ``array_timeout`` seconds, so every pending entry (which was
-        buffered at or before the most recently received packet) is stale
-        by definition when this is called.
+        The loop's ``wait_for`` only times out when no packet has
+        arrived for ``array_timeout`` seconds, so every pending entry
+        (which was buffered at or before the most recently received
+        packet) is stale by definition when this is called.
         """
         # Snapshot the keys to avoid mutating the dict while iterating.
         for key in list(self._pending):
@@ -136,7 +141,7 @@ class ReassemblyBuffer:
         """Evaluate a packet for array stitching or passthrough.
 
         A packet is matched against a pending array for the same
-        ``(src_id, code)``.  Unrelated packets (different source or code)
+        ``(src_id, code)``. Unrelated packets (different source or code)
         are passed straight through without disturbing any in-flight
         reassembly.
 
@@ -158,8 +163,9 @@ class ReassemblyBuffer:
             await self._out_queue.put(stitched_dto)
             del self._pending[key]
         else:
-            # The pending fragment for this key is not continued by `dto`:
-            # flush the stale pending packet and re-evaluate `dto` itself.
+            # The pending fragment for this key is not continued by
+            # `dto`: flush the stale pending packet and re-evaluate
+            # `dto` itself.
             _LOGGER.warning(
                 "%s < Array reassembly interrupted for %s: flushing "
                 "incomplete multi-packet message",
