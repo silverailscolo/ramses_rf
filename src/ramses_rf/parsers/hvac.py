@@ -998,10 +998,10 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
     # Orcon and Brofer long payloads provide accurate fan speed in 31DA.
     # Emitting exhaust_fan_speed here incorrectly converts mode bytes to speed.
     # Itho formats end with "00", whereas Orcon/Brofer formats end with "04" or "08".
-    _is_mode_only = (
-        len(payload) >= 34 and payload[8:32] == "20" * 12 and payload[32:34] != "00"
+    _has_exhaust_fan_speed = (
+        len(payload) < 34 or payload[8:32] != "20" * 12 or payload[32:34] == "00"
     )
-    if not _is_mode_only:
+    if _has_exhaust_fan_speed:
         result.update(parse_exhaust_fan_speed(payload[4:6]))  # for itho, nuaire
 
     # Fan Mode Lookup 1 for Vasco codes
