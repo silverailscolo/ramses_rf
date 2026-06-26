@@ -15,16 +15,23 @@ def base_time() -> dt:
     return dt(2026, 5, 15, 12, 0, 0, tzinfo=UTC)
 
 
-def create_dto(verb: str, code: str, payload: str, timestamp: dt) -> PacketDTO:
+def create_dto(
+    verb: str,
+    code: str,
+    payload: str,
+    timestamp: dt,
+    *,
+    addr1: str = "01:158182",
+) -> PacketDTO:
     """Helper to generate mock PacketDTOs for testing."""
     return PacketDTO(
         timestamp=timestamp,
         rssi="-70",
         verb=verb,
         seq="000",
-        addr1="01:158182",
+        addr1=addr1,
         addr2="--:------",
-        addr3="01:158182",
+        addr3=addr1,
         code=code,
         length=f"{len(payload) // 2:03d}",
         payload=payload,
@@ -108,30 +115,123 @@ async def test_timeout_flush(base_time: dt) -> None:
 
 
 @pytest.mark.asyncio
-async def test_interruption_flush(base_time: dt) -> None:
-    """Test that an unrelated packet flushes the buffer."""
+async def test_unrelated_packet_does_not_abort_reassembly(base_time: dt) -> None:
+    """An unrelated packet passes through without flushing a pending array.
+
+    This is the core sliding-window behaviour from issue #669: an intervening
+    packet (RF noise, or a broadcast from a different device/code) must NOT
+    abort an in-flight array reassembly.  The unrelated packet is emitted
+    immediately and the pending fragment is preserved for its matching peer.
+    """
     in_q: asyncio.Queue[PacketDTO] = asyncio.Queue()
     out_q: asyncio.Queue[PacketDTO] = asyncio.Queue()
     buffer = ReassemblyBuffer(in_q, out_q)
 
     await buffer.start()
 
-    # Send the first fragment
+    # Send the first fragment of a 000A array
     frag1 = create_dto(" I", "000A", "001201F4", base_time)
     await in_q.put(frag1)
 
-    # Send an unrelated packet immediately
-    unrelated = create_dto(" I", "30C9", "0001C8", base_time)
+    # The pending fragment is buffered, nothing emitted yet
+    assert out_q.empty()
+
+    # An unrelated 30C9 packet arrives between the two fragments
+    unrelated = create_dto(" I", "30C9", "0001C8", base_time + td(seconds=1))
     await in_q.put(unrelated)
 
-    # First, we should receive the flushed fragment
-    out_pkt_1 = await asyncio.wait_for(out_q.get(), timeout=1.0)
-    assert out_pkt_1.code == "000A"
-    assert out_pkt_1.payload == "001201F4"
+    # The unrelated packet passes straight through immediately...
+    out_pkt_unrelated = await asyncio.wait_for(out_q.get(), timeout=1.0)
+    assert out_pkt_unrelated.code == "30C9"
+    assert out_pkt_unrelated.payload == "0001C8"
 
-    # Next, we should receive the unrelated packet
-    out_pkt_2 = await asyncio.wait_for(out_q.get(), timeout=1.0)
-    assert out_pkt_2.code == "30C9"
-    assert out_pkt_2.payload == "0001C8"
+    # ...and the 000A fragment is STILL buffered (not flushed)
+    assert out_q.empty()
+
+    # The second 000A fragment now arrives and completes the array
+    frag2 = create_dto(" I", "000A", "081001F409C4", base_time + td(seconds=2))
+    await in_q.put(frag2)
+
+    out_pkt_stitched = await asyncio.wait_for(out_q.get(), timeout=1.0)
+    assert out_pkt_stitched.code == "000A"
+    assert out_pkt_stitched.payload == "001201F4081001F409C4"
+    assert out_pkt_stitched.length == "010"
+
+    await buffer.stop()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_arrays_from_different_sources(base_time: dt) -> None:
+    """Two arrays from different sources reassemble in parallel.
+
+    The sliding window keys pending arrays by (src_id, code), so fragments
+    from two distinct devices interleaved over the radio must each stitch
+    with their own peer rather than aborting one another.
+    """
+    in_q: asyncio.Queue[PacketDTO] = asyncio.Queue()
+    out_q: asyncio.Queue[PacketDTO] = asyncio.Queue()
+    buffer = ReassemblyBuffer(in_q, out_q)
+
+    await buffer.start()
+
+    # Device A starts an array
+    frag_a1 = create_dto(" I", "000A", "001201F4", base_time, addr1="01:158182")
+    await in_q.put(frag_a1)
+
+    # Device B starts an array (same code, different src) before A completes
+    frag_b1 = create_dto(
+        " I", "000A", "00AA00BB", base_time + td(seconds=1), addr1="01:223036"
+    )
+    await in_q.put(frag_b1)
+
+    # Neither is emitted yet: both are buffered concurrently
+    assert out_q.empty()
+
+    # Device A's second fragment arrives
+    frag_a2 = create_dto(
+        " I", "000A", "081001F409C4", base_time + td(seconds=2), addr1="01:158182"
+    )
+    await in_q.put(frag_a2)
+
+    out_a = await asyncio.wait_for(out_q.get(), timeout=1.0)
+    assert out_a.addr1 == "01:158182"
+    assert out_a.payload == "001201F4081001F409C4"
+
+    # Device B's second fragment arrives
+    frag_b2 = create_dto(
+        " I", "000A", "0810AABBCC", base_time + td(seconds=3), addr1="01:223036"
+    )
+    await in_q.put(frag_b2)
+
+    out_b = await asyncio.wait_for(out_q.get(), timeout=1.0)
+    assert out_b.addr1 == "01:223036"
+    assert out_b.payload == "00AA00BB0810AABBCC"
+
+    await buffer.stop()
+
+
+@pytest.mark.asyncio
+async def test_timeout_flushes_all_pending(base_time: dt) -> None:
+    """A timeout flushes every pending array, not just a single slot."""
+    in_q: asyncio.Queue[PacketDTO] = asyncio.Queue()
+    out_q: asyncio.Queue[PacketDTO] = asyncio.Queue()
+
+    buffer = ReassemblyBuffer(in_q, out_q, array_timeout=0.1)
+
+    await buffer.start()
+
+    # Two unrelated pending arrays from different sources
+    await in_q.put(create_dto(" I", "000A", "001201F4", base_time, addr1="01:158182"))
+    await in_q.put(create_dto(" I", "000A", "00AA00BB", base_time, addr1="01:223036"))
+
+    # Both should be flushed after the timeout
+    flushed: list[PacketDTO] = []
+    for _ in range(2):
+        flushed.append(await asyncio.wait_for(out_q.get(), timeout=0.5))
+
+    flushed_codes = sorted(p.addr1 for p in flushed)
+    assert flushed_codes == ["01:158182", "01:223036"]
+    for p in flushed:
+        assert p.code == "000A"
 
     await buffer.stop()
