@@ -2,6 +2,8 @@
 """Unittests for the HvacVentilator class."""
 
 from collections.abc import Generator
+from enum import Enum
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +12,8 @@ from ramses_rf import exceptions as exc
 from ramses_rf.const import DevType
 from ramses_rf.devices import HvacVentilator
 from ramses_rf.gateway import Gateway
+from ramses_rf.models.state_base import DeviceTraits
+from ramses_rf.models.state_hvac import HvacState
 from ramses_rf.state import MessageStore
 from ramses_tx import Address
 from ramses_tx.const import Code, Priority
@@ -694,3 +698,53 @@ async def test_set_fan_mode_no_src_id_raises() -> None:
         exc.CommandInvalid, match="Cannot set fan mode without a bound REM or HGI"
     ):
         await HvacVentilator.set_fan_mode(dev, "auto")
+
+
+class MockEnum(Enum):
+    """Mock enum to simulate boundary leakage."""
+
+    TEST_VAL = "active_fault"
+
+
+def test_device_traits_to_dict_unboxes_enums() -> None:
+    """Ensure DeviceTraits serialises Enums to raw strings for legacy APIs."""
+
+    # Arrange
+    traits = DeviceTraits(
+        device_class=cast(str, MockEnum.TEST_VAL),
+        scheme=cast(str, MockEnum.TEST_VAL),
+    )
+
+    # Act
+    result = traits.to_dict()
+
+    # Assert
+    assert result["class"] == "active_fault"
+    assert result["scheme"] == "active_fault"
+    assert not isinstance(result["class"], Enum)
+
+
+@pytest.mark.asyncio
+async def test_hvac_ventilator_status_dictionary_shim() -> None:
+    """Ensure the status dictionary remaps keys and unboxes Enums."""
+
+    # Arrange
+    mock_gwy = MagicMock()
+    mock_gwy.config.disable_discovery = True
+
+    ventilator = HvacVentilator(mock_gwy, Address("32:123456"))
+    ventilator.hvac_state = HvacState(
+        indoor_temp=21.5,
+        fan_mode=cast(str, MockEnum.TEST_VAL),
+    )
+
+    # Act
+    status_dict = await ventilator.status()
+
+    # Assert
+    assert "temperature" in status_dict
+    assert status_dict["temperature"] == 21.5
+    assert "indoor_temp" not in status_dict
+
+    assert status_dict["fan_mode"] == "active_fault"
+    assert not isinstance(status_dict["fan_mode"], Enum)
