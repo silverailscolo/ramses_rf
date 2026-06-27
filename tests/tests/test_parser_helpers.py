@@ -109,6 +109,29 @@ def test_22f1_vasco_directed_mode_max_06_still_vasco() -> None:
     assert result["fan_mode"] == "low"
 
 
+# --- 2411 parser data_type tests (issue #740) ---
+
+
+def test_2411_data_type_13_ventura_filter_time() -> None:
+    """2411 param 31 with data_type 13 (ClimaRad Ventura) must parse without warning.
+
+    The Ventura sends data_type 13 instead of 10 for the filter time parameter.
+    See issue #740.
+    """
+    msg = _make_22f1_msg(
+        "2026-06-26T22:08:35.885000 040 RP --- 32:022222 29:091138 --:------ 2411 022 "
+        "0000313E130000006400000000000075300000000164"
+    )
+    result = msg.payload
+    assert result["parameter"] == "31"
+    assert result["description"] == "Time to change filter (days)"
+    assert result["value"] == 100  # 0x00000064 = 100
+    assert result["min_value"] == 0
+    assert result["max_value"] == 30000  # 0x00007530
+    assert result["precision"] == 1
+    assert "_unknown_data_type" not in result
+
+
 def test_helper_demand_transform() -> None:
     assert [x[1] for x in TRANSFORMS] == [_transform(x[0]) for x in TRANSFORMS]
 
