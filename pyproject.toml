@@ -337,3 +337,62 @@
 
 [tool.ruff.lint.per-file-ignores]
   "tests/*" = ["ASYNC"]
+
+[tool.importlinter]
+root_packages = [
+    "ramses_rf",
+    "ramses_tx",
+    "ramses_cli"
+]
+ignore_type_checking_imports = true
+
+# 1. Macro Level: CLI -> App -> Transport (OSI L1-L3 vs L4-L7)
+[[tool.importlinter.contracts]]
+name = "Macro Package Separation"
+type = "layers"
+layers = [
+    "ramses_cli",
+    "ramses_rf",
+    "ramses_tx",
+]
+
+# 2. ramses_rf: The Event-Driven CQRS Hierarchy
+[[tool.importlinter.contracts]]
+name = "ramses_rf CQRS Architecture Layers"
+type = "layers"
+layers = [
+    "ramses_rf.gateway",      # L7 Orchestrator / Facade (Top)
+    "ramses_rf.pipeline",     # Async Event Bus (Reassembly, Decoder, Dispatcher, TopologyBuilder)
+    "ramses_rf.systems",      # CQRS Read-Models (Systems / Zones)
+    "ramses_rf.devices",       # CQRS Read-Models & Registry
+    "ramses_rf.state",        # SSOT Database / Caches
+    "ramses_rf.schemas",      # Pure DTO Validation
+    "ramses_rf.messages",     # Immutable Event Envelopes
+    "ramses_rf.routing",      # O(1) Routing Headers
+    "ramses_rf.protocol",     # L7 Protocol Semantics (OpenTherm, Fingerprints)
+    "ramses_rf.models",       # Pure Primitives / Enums / DTOs (Bottom)
+]
+
+# 3. CQRS Firewall: Entities cannot mutate topology or touch the pipeline
+[[tool.importlinter.contracts]]
+name = "CQRS Read-Model Isolation"
+type = "forbidden"
+source_modules = [
+    "ramses_rf.devices",
+    "ramses_rf.systems",
+]
+forbidden_modules = [
+    "ramses_rf.pipeline",
+    "ramses_rf.gateway",
+]
+
+# 4. ramses_tx: Pure L1-L3 Networking Stack
+[[tool.importlinter.contracts]]
+name = "ramses_tx Internal Stack Separation"
+type = "layers"
+layers = [
+    "ramses_tx.engine",
+    "ramses_tx.protocol",
+    "ramses_tx.frame",
+    "ramses_tx.transport",
+]

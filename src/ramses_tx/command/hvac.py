@@ -78,6 +78,7 @@ class HvacMixins(CommandBase):
         src_id: DeviceIdT | str | None = None,
         idx: str = "00",
         mode_max: str | None = None,
+        legacy_format: bool = False,
     ) -> _T:
         """Build a 22F1 (fan mode) command for the given scheme.
 
@@ -90,7 +91,7 @@ class HvacMixins(CommandBase):
         :param idx: The payload index byte, defaults to "00".
         :param mode_max: Optional override for the 3rd payload byte (mode_max).
             If None, auto-determined from the scheme via ``_22F1_MODE_MAX``.
-            Set to an empty string to force a 2-byte payload.
+        :param legacy_format: If True, forces a legacy 2-byte payload.
         """
         if scheme not in _22F1_SCHEMES:
             raise exc.CommandInvalid(
@@ -118,10 +119,13 @@ class HvacMixins(CommandBase):
             )
 
         # Determine the mode_max (3rd byte) for 3-byte payloads.
-        # When mode_max is explicitly "", the caller wants a 2-byte payload.
         if mode_max is None:
             mode_max = _22F1_MODE_MAX.get(scheme)
-        payload = f"{idx}{mode}{mode_max}" if mode_max else f"{idx}{mode}"
+
+        if legacy_format or not mode_max:
+            payload = f"{idx}{mode}"
+        else:
+            payload = f"{idx}{mode}{mode_max}"
 
         if src_id and seqn:
             raise exc.CommandInvalid(
@@ -184,12 +188,14 @@ class HvacMixins(CommandBase):
             int(param_id, 16)
         except ValueError as err:
             raise exc.CommandInvalid(
-                f"Invalid parameter ID: '{param_id}'. Must be a 2-digit hexadecimal value (00-FF)"
+                f"Invalid parameter ID: '{param_id}'. "
+                "Must be a 2-digit hexadecimal value (00-FF)"
             ) from err
 
         if (param_schema := _2411_PARAMS_SCHEMA.get(param_id)) is None:
             raise exc.CommandInvalid(
-                f"Unknown parameter ID: '{param_id}'. This parameter is not defined in the device schema"
+                f"Unknown parameter ID: '{param_id}'. "
+                "This parameter is not defined in the device schema"
             )
 
         min_val = param_schema[SZ_MIN_VALUE]
@@ -200,7 +206,8 @@ class HvacMixins(CommandBase):
         try:
             if isinstance(value, float) and not math.isfinite(value):
                 raise exc.CommandInvalid(
-                    f"Parameter {param_id}: Invalid value '{value}'. Must be a finite number"
+                    f"Parameter {param_id}: Invalid value '{value}'. "
+                    "Must be a finite number"
                 )
 
             if str(data_type) == "01":  # %
@@ -211,7 +218,9 @@ class HvacMixins(CommandBase):
                 trailer = "0032"
                 if not min_val_scaled <= value_scaled <= max_val_scaled:
                     raise exc.CommandInvalid(
-                        f"Parameter {param_id}: Value {value_scaled / 10}% is out of allowed range ({min_val_scaled / 10}% to {max_val_scaled / 10}%)"
+                        f"Parameter {param_id}: Value {value_scaled / 10}% "
+                        f"is out of allowed range ({min_val_scaled / 10}% "
+                        f"to {max_val_scaled / 10}%)"
                     )
             elif str(data_type) == "0F":  # %
                 value_scaled = int(round((float(value) / 100.0) / float(precision)))
@@ -221,7 +230,9 @@ class HvacMixins(CommandBase):
                 trailer = "0032"
                 if not min_val_scaled <= value_scaled <= max_val_scaled:
                     raise exc.CommandInvalid(
-                        f"Parameter {param_id}: Value {value_scaled / 2}% is out of allowed range ({min_val_scaled / 2}% to {max_val_scaled / 2}%)"
+                        f"Parameter {param_id}: Value {value_scaled / 2}% "
+                        f"is out of allowed range ({min_val_scaled / 2}% "
+                        f"to {max_val_scaled / 2}%)"
                     )
             elif str(data_type) == "92":  # °C
                 value_rounded = round(float(value) * 10) / 10
@@ -232,7 +243,10 @@ class HvacMixins(CommandBase):
                 trailer = "0001"
                 if not min_val_scaled <= value_scaled <= max_val_scaled:
                     raise exc.CommandInvalid(
-                        f"Parameter {param_id}: Temperature {value_scaled / 100:.1f}°C is out of allowed range ({min_val_scaled / 100:.1f}°C to {max_val_scaled / 100:.1f}°C)"
+                        f"Parameter {param_id}: "
+                        f"Temperature {value_scaled / 100:.1f}°C is out of "
+                        f"allowed range ({min_val_scaled / 100:.1f}°C to "
+                        f"{max_val_scaled / 100:.1f}°C)"
                     )
             elif (
                 (str(data_type) == "00")
@@ -249,11 +263,15 @@ class HvacMixins(CommandBase):
                 if not min_val_scaled <= value_scaled <= max_val_scaled:
                     unit = "minutes" if data_type == "00" else ""
                     raise exc.CommandInvalid(
-                        f"Parameter {param_id}: Value {value_scaled}{' ' + unit if unit else ''} is out of allowed range ({min_val_scaled} to {max_val_scaled}{' ' + unit if unit else ''})"
+                        f"Parameter {param_id}: Value {value_scaled}"
+                        f"{' ' + unit if unit else ''} is out of allowed "
+                        f"range ({min_val_scaled} to {max_val_scaled}"
+                        f"{' ' + unit if unit else ''})"
                     )
             else:
                 raise exc.CommandInvalid(
-                    f"Parameter {param_id}: Invalid data type '{data_type}'. Must be one of '00', '01', '0F', '10', '20', '90', or '92'"
+                    f"Parameter {param_id}: Invalid data type '{data_type}'. "
+                    "Must be one of '00', '01', '0F', '10', '20', '90', or '92'"
                 )
 
             leading = "00"
@@ -266,9 +284,11 @@ class HvacMixins(CommandBase):
             precision_hex = f"{precision_scaled:08X}"
 
             _LOGGER.debug(
-                f"set_fan_param: value={value}, min={min_val}, max={max_val}, precision={precision}"
-                f"\n  Scaled: value={value_scaled} (0x{value_hex}), min={min_val_scaled} (0x{min_hex}), "
-                f"max={max_val_scaled} (0x{max_hex}), precision={precision_scaled} (0x{precision_hex})"
+                f"set_fan_param: value={value}, min={min_val}, "
+                f"max={max_val}, precision={precision}\n  Scaled: "
+                f"value={value_scaled} (0x{value_hex}), min={min_val_scaled} "
+                f"(0x{min_hex}), max={max_val_scaled} (0x{max_hex}), "
+                f"precision={precision_scaled} (0x{precision_hex})"
             )
 
             payload = (
@@ -283,7 +303,8 @@ class HvacMixins(CommandBase):
             )
             payload = "".join(payload)
             _LOGGER.debug(
-                f"set_fan_param: Final frame: {W_} --- {src_id} {fan_id} --:------ 2411 {len(payload):03d} {payload}"
+                f"set_fan_param: Final frame: {W_} --- {src_id} {fan_id} "
+                f"--:------ 2411 {len(payload):03d} {payload}"
             )
 
             return cls._from_attrs(
@@ -326,7 +347,8 @@ class HvacMixins(CommandBase):
             int(param_id, 16)
         except ValueError as err:
             raise exc.CommandInvalid(
-                f"Invalid parameter ID: '{param_id}'. Must be a 2-character hex string (00-FF)."
+                f"Invalid parameter ID: '{param_id}'. "
+                "Must be a 2-character hex string (00-FF)."
             ) from err
 
         payload = f"0000{param_id.upper()}"
