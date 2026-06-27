@@ -161,9 +161,9 @@ def test_worker_opentherm_status_flag_parsing() -> None:
 
     worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
 
-    assert device.opentherm_state.ch_active is True
-    assert device.opentherm_state.flame_active is True
-    assert device.opentherm_state.ch_enabled is False
+    assert device.opentherm_state.flags.ch_active is True
+    assert device.opentherm_state.flags.flame_active is True
+    assert device.opentherm_state.flags.ch_enabled is False
 
 
 def test_worker_hvac_state_parsing() -> None:

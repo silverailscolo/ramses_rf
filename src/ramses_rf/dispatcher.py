@@ -516,19 +516,36 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         "dewpoint_temp",
     ]
 
+    # Filter out null-marker values that 31DA/31D9 snapshots emit for
+    # sensors the device does not have.  Without this, every polling cycle
+    # (~10 min) overwrites good telemetry from 22F1/12A0/22F7 with null
+    # markers, causing sensors to bounce to None/FF/0.  See issue #742.
+    _NULL_HUMIDITY_FIELDS = frozenset({SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY})
+
     updates: dict[str, Any] = {}
     for f in fields:
-        if f in p:
-            updates[f] = p[f]
+        if f not in p:
+            continue
+        val = p[f]
+        # None = "not implemented" (e.g. EF in bypass_position)
+        if val is None:
+            continue
+        # "FF" = "no data" marker from 31D9 raw hex fan_mode
+        if f == SZ_FAN_MODE and val == "FF":
+            continue
+        # 0.0 for humidity = "no sensor" (00 parses as 0%, physically impossible)
+        if f in _NULL_HUMIDITY_FIELDS and val == 0:
+            continue
+        updates[f] = val
 
     # Handle non-standard names passed by the semantic parsers
-    if "days_remaining" in p:
+    if "days_remaining" in p and p["days_remaining"] is not None:
         updates["filter_remaining_days"] = p["days_remaining"]
-    if "percent_remaining" in p:
+    if "percent_remaining" in p and p["percent_remaining"] is not None:
         updates["filter_remaining_percent"] = p["percent_remaining"]
-    if "minutes" in p and msg.code == Code._22F3:
+    if "minutes" in p and msg.code == Code._22F3 and p["minutes"] is not None:
         updates["boost_timer_mins"] = p["minutes"]
-    if "req_speed" in p:
+    if "req_speed" in p and p["req_speed"] is not None:
         updates["request_fan_speed"] = p["req_speed"]
 
     if not updates:

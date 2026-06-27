@@ -166,6 +166,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._message_store: MessageStoreInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
 
+        # Initialize placeholder for the CQRS StateProjector
+        self.state_projector = None
+
         self._prev_msg: ApplicationMessage | None = None
         self._this_msg: ApplicationMessage | None = None
         self._history_lock = threading.Lock()
@@ -311,6 +314,12 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             await self._topology_builder.consume(core_msg)
 
         await process_msg(self, app_msg)
+
+        # Phase 2.95 CQRS Strangler Bridge: Because the Phase 2.99 Async Queue Cutover
+        # is currently paused, we must feed the CQRS StateProjector synchronously
+        # here so the PR 2 Read-Models get properly hydrated in production.
+        if self.state_projector is not None:
+            self.state_projector.process_message_state(app_msg)
 
     def add_msg_handler(
         self,
