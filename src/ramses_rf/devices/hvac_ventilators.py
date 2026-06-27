@@ -147,7 +147,8 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
     async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.
 
-        :return: Number of days remaining until filter change, or None if not available
+        :return: Number of days remaining until filter change, or None if
+                 not available
         :rtype: int | None
         """
         return self.hvac_state.filter_remaining_days
@@ -155,7 +156,8 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
     async def filter_remaining_percent(self) -> float | None:
         """Return the remaining filter life as a percentage.
 
-        :return: Percentage of filter life remaining (0-100), or None if not available
+        :return: Percentage of filter life remaining (0-100), or None if
+                 not available
         :rtype: float | None
         """
         return self.hvac_state.filter_remaining_percent
@@ -204,7 +206,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     The cardinal codes are 31D9, 31DA.  Signature is RP/31DA.
 
     Also handles 2411 parameter messages for configuration.
-    Since 2411 is not supported by all vendors, discovery is used to determine if it is supported.
+    Since 2411 is not supported by all vendors, discovery is used to
+    determine if it is supported.
     Since more than 1 different parameters can be sent on 2411 messages,
     we process these in the dedicated _handle_2411_message method.
     """
@@ -255,13 +258,16 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         self._init_fan_state()
 
     def set_initialized_callback(self, callback: Callable[[], None] | None) -> None:
-        """Set a callback to be executed when the next message (any) is received.
+        """Set a callback to be executed when the next message (any) is
+        received.
 
-        The callback will be used exactly once to indicate that the device is fully functional.
-        In ramses_cc, 2411 entities are created - on the fly - only for devices that support them.
+        The callback will be used exactly once to indicate that the device
+        is fully functional. In ramses_cc, 2411 entities are created - on
+        the fly - only for devices that support them.
 
-        :param callback: A callable that takes no arguments and returns None.
-                         If None, any existing callback will be cleared.
+        :param callback: A callable that takes no arguments and returns
+                         None. If None, any existing callback will be
+                         cleared.
         :type callback: Callable[[], None] | None
         :raises ValueError: If the callback is not callable and not None
         """
@@ -295,17 +301,19 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     ) -> None:
         """Set a callback to be called when 2411 parameters are updated.
 
-        This method registers a callback function that will be invoked whenever
-        a 2411 parameter is updated. The callback receives the parameter ID and
-        its new value as arguments.
+        This method registers a callback function that will be invoked
+        whenever a 2411 parameter is updated. The callback receives the
+        parameter ID and its new value as arguments.
 
-        Since 2411 parameters are configuration entities, we are not polling for them
-        and we update them immediately after receiving a 2411 message. We don't wait for them,
-        we only process when we see a 2411 response for our device. The request may have come
-        from another REM or DIS, but we will update to that as well.
+        Since 2411 parameters are configuration entities, we are not
+        polling for them and we update them immediately after receiving a
+        2411 message. We don't wait for them, we only process when we see
+        a 2411 response for our device. The request may have come from
+        another REM or DIS, but we will update to that as well.
 
-        :param callback: A callable that will be invoked with (param_id, value) when a
-                         2411 parameter is updated, or None to clear the current callback
+        :param callback: A callable that will be invoked with (param_id, value)
+                         when a 2411 parameter is updated, or None to clear
+                         the current callback
         :type callback: Callable[[str, Any], None] | None
         """
         self._param_update_callback = callback
@@ -380,15 +388,17 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     def get_fan_param(self, param_id: str) -> float | None:
         """Retrieve a fan parameter value from the device's message store.
 
-        This wrapper method gets a specific parameter value for a FAN device stored in
-        _params_2411 dict. It first makes sure we use the proper param_id format
+        This wrapper method gets a specific parameter value for a FAN device
+        stored in _params_2411 dict. It first makes sure we use the proper
+        param_id format.
 
         :param param_id: The parameter ID to retrieve.
         :type param_id: str
         :return: The parameter value if found, None otherwise
         :rtype: float | None
         """
-        # Ensure param_id is uppercase and strip leading zeros for consistency
+        # Ensure param_id is uppercase and strip leading zeros for
+        # consistency with get_fan_param
         param_id = (
             str(param_id).upper().lstrip("0") or "0"
         )  # Handle case where param_id is "0"
@@ -403,9 +413,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     def _handle_2411_message(self, msg: Message) -> None:
         """Handle incoming 2411 parameter messages.
 
-        This method processes 2411 parameter update messages, updates the device's
-        message store, and triggers any registered parameter update callbacks.
-        It handles parameter value normalization and validation.
+        This method processes 2411 parameter update messages, updates the
+        device's message store, and triggers any registered parameter update
+        callbacks. It handles parameter value normalization and validation.
 
         :param msg: The incoming 2411 message
         :type msg: Message to process
@@ -421,7 +431,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             _LOGGER.debug("Missing parameter ID or value in 2411 message: %s", msg)
             return
 
-        # Normalize param_id: uppercase and strip leading zeros for consistency with get_fan_param
+        # Normalize param_id: uppercase and strip leading zeros for
+        # consistency with get_fan_param
         param_id = str(param_id).upper().lstrip("0") or "0"
 
         # Mark that we support 2411 parameters
@@ -433,7 +444,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         if param_id == "75" and isinstance(param_value, (int, float)):
             param_value = round(float(param_value), 1)
         elif param_id in ("52", "95"):  # Percentage parameters
-            param_value = round(float(param_value), 3)  # Keep precision for percentages
+            # Keep precision for percentages
+            param_value = round(float(param_value), 3)
 
         # Store in params
         old_value = self.get_2411_param(param_id)
@@ -458,8 +470,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         handling for 2411 parameter messages. It updates the device state and
         triggers any necessary callbacks.
 
-        After handling the messages, it calls the initialized callback - if set - to notify that
-        the device was fully initialized.
+        After handling the messages, it calls the initialized callback - if set
+        - to notify that the device was fully initialized.
 
         :param msg: The incoming message to process
         :type msg: Message
@@ -495,9 +507,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             delay=15,
         )  # to learn scheme: orcon/itho/other (04/07/0?)
 
-        # Add a single discovery command for all parameters (3F likely to be supported if any)
-        # The handler will process the response and update the appropriate parameter and
-        # also set the supports_2411 flag
+        # Add a single discovery command for all parameters (3F likely to be
+        # supported if any). The handler will process the response and update
+        # the appropriate parameter and also set the supports_2411 flag.
         _LOGGER.debug("Adding single discovery command for all 2411 parameters")
         self.discovery.add_cmd(
             Command.from_attrs(RQ, self.id, Code._2411, PayloadT("00003F")),
@@ -516,23 +528,29 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             Code._22F8,  # Air quality base
         ):
             self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, code, PayloadT("00")), 60 * 30, delay=15
+                Command.from_attrs(RQ, self.id, code, PayloadT("00")),
+                60 * 30,
+                delay=15,
             )
 
         for code in (Code._313E, Code._3222):
             self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, code, PayloadT("00")), 60 * 30, delay=30
+                Command.from_attrs(RQ, self.id, code, PayloadT("00")),
+                60 * 30,
+                delay=30,
             )
 
     def add_bound_device(self, device_id: str, device_type: str) -> None:
         """Add a bound device to this FAN.
 
         This method registers a REM or DIS device as bound to this FAN device.
-        Bound devices are required for certain operations like setting parameters.
+        Bound devices are required for certain operations like setting
+        parameters.
 
-        A bound device is needed to be able to send 2411 parameter Set messages,
-        or the device will not accept and respond to them.
-        In HomeAssistant, ramses_cc, you can set a bound device in the device configuration.
+        A bound device is needed to be able to send 2411 parameter Set
+        messages, or the device will not accept and respond to them.
+        In HomeAssistant, ramses_cc, you can set a bound device in the device
+        configuration.
 
         System schema and known devices example:
 
@@ -583,10 +601,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     def get_bound_rem(self) -> str | None:
         """Get the first bound REM/DIS device ID for this FAN.
 
-        This method retrieves the device ID of the first bound REM or DIS device.
-        Bound devices are required for certain operations like setting parameters.
+        This method retrieves the device ID of the first bound REM or DIS
+        device. Bound devices are required for certain operations like setting
+        parameters.
 
-        :return: The device ID of the first bound REM or DIS device, or None if none found
+        :return: The device ID of the first bound REM or DIS device, or None
+                 if none found
         :rtype: str | None
         """
         if not self._bound_devices:
@@ -610,12 +630,14 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def set_fan_mode(self, fan_mode: str | int) -> Packet | None:
         """Set the operating mode/speed of the ventilator.
 
-        :param fan_mode: The desired fan mode (e.g., 'low', 'medium', 'high', 'boost').
+        :param fan_mode: The desired fan mode (e.g., 'low', 'medium', 'high',
+                         'boost').
         :return: The sent packet.
         :raises CommandInvalid: If unable to determine a valid source ID.
         """
-        # 22F1 commands to a FAN typically must originate from a bound Remote (REM)
-        # We attempt to impersonate the first bound REM. If none exists, fallback to HGI.
+        # 22F1 commands to a FAN typically must originate from a bound Remote
+        # (REM). We attempt to impersonate the first bound REM. If none
+        # exists, fallback to HGI.
         src_id = self.get_bound_rem()
 
         if not src_id:
@@ -627,10 +649,15 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
                 )
 
         _LOGGER.debug(
-            "Sending set_fan_mode '%s' to %s via src %s", fan_mode, self.id, src_id
+            "Sending set_fan_mode '%s' to %s via src %s",
+            fan_mode,
+            self.id,
+            src_id,
         )
 
-        cmd = Command.set_fan_mode(self.id, fan_mode, src_id=src_id)
+        cmd = Command.set_fan_mode(
+            self.id, fan_mode, scheme=self._scheme or "orcon", src_id=src_id
+        )
         return await self._gwy.async_send_cmd(
             cmd, num_repeats=2, priority=Priority.HIGH
         )
@@ -638,7 +665,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def air_quality(self) -> float | None:
         """Return the current air quality measurement.
 
-        :return: The air quality measurement as a float, or None if not available
+        :return: The air quality measurement as a float, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.air_quality
@@ -662,8 +690,11 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     async def bypass_position(self) -> float | str | None:
         """
-        Position info is found in 22F7 and in 31DA. The most recent packet is returned.
-        :return: bypass position as percentage: 0.0 (closed) or 1.0 (open), on error: "x_faulted"
+        Position info is found in 22F7 and in 31DA. The most recent packet
+        is returned.
+
+        :return: bypass position as percentage: 0.0 (closed) or 1.0 (open),
+                 on error: "x_faulted"
         """
         return self.hvac_state.bypass_position
 
@@ -686,6 +717,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         """
         Some fans (Vasco, Itho) use Code._31D9 for speed + mode,
         Orcon sends SZ_EXHAUST_FAN_SPEED in 31DA. See parser for details.
+
         :return: speed as percentage
         """
         return self.hvac_state.exhaust_fan_speed
@@ -701,15 +733,16 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def exhaust_temp(self) -> float | None:
         """Return the current exhaust air temperature.
 
-        :return: The exhaust air temperature in degrees Celsius, or None if not available
+        :return: The exhaust air temperature in degrees Celsius, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.exhaust_temp
 
     async def fan_rate(self) -> str | None:
         """
-        Lookup fan mode description from _22F4  message payload, e.g. "low", "medium", "boost".
-        For manufacturers Orcon, Vasco, ClimaRad.
+        Lookup fan mode description from _22F4 message payload, e.g. "low",
+        "medium", "boost". For manufacturers Orcon, Vasco, ClimaRad.
 
         :return: int or str describing rate of fan
         """
@@ -717,8 +750,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     async def fan_mode(self) -> str | None:
         """
-        Lookup fan mode description from _22F4  message payload, e.g. "auto", "manual", "off".
-        For manufacturers Orcon, Vasco, ClimaRad.
+        Lookup fan mode description from _22F4 message payload, e.g. "auto",
+        "manual", "off". For manufacturers Orcon, Vasco, ClimaRad.
 
         :return: a string describing mode
         """
@@ -729,7 +762,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         Extract fan info description from MessageStore _31D9 or _31DA payload,
         e.g. "speed 2, medium".
         By its name, the result is picked up by a sensor in HA Climate UI.
-        Some manufacturers (Orcon, Vasco) include the fan mode (auto, manual), others don't (Itho).
+        Some manufacturers (Orcon, Vasco) include the fan mode (auto, manual),
+        others don't (Itho).
 
         :return: string describing fan mode, speed
         """
@@ -747,7 +781,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def indoor_temp(self) -> float | None:
         """Return the current indoor temperature.
 
-        :return: The indoor temperature in degrees Celsius, or None if not available
+        :return: The indoor temperature in degrees Celsius, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.indoor_temp
@@ -755,9 +790,11 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def outdoor_humidity(self) -> float | None:
         """Return the outdoor relative humidity.
 
-        Handles special case for Ventura devices that send humidity data in 12A0 messages.
+        Handles special case for Ventura devices that send humidity data in
+        12A0 messages.
 
-        :return: The outdoor relative humidity as a percentage (0-100), or None if not available
+        :return: The outdoor relative humidity as a percentage (0-100),
+                 or None if not available
         :rtype: float | None
         """
         return self.hvac_state.outdoor_humidity
@@ -765,7 +802,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def outdoor_temp(self) -> float | None:
         """Return the outdoor temperature in Celsius.
 
-        :return: The outdoor temperature in degrees Celsius, or None if not available
+        :return: The outdoor temperature in degrees Celsius, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.outdoor_temp
@@ -797,7 +835,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def request_fan_speed(self) -> float | None:
         """Return the requested fan speed.
 
-        :return: The requested fan speed as a percentage, or None if not available
+        :return: The requested fan speed as a percentage, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.request_fan_speed
@@ -836,9 +875,11 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def supply_temp(self) -> float | None:
         """Return the supply air temperature.
 
-        Handles special case for Ventura devices that send temperature data in 12A0 messages.
+        Handles special case for Ventura devices that send temperature data
+        in 12A0 messages.
 
-        :return: The supply air temperature in Celsius, or None if not available
+        :return: The supply air temperature in Celsius, or None if not
+                 available
         :rtype: float | None
         """
         return self.hvac_state.supply_temp
@@ -860,6 +901,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             SZ_FAN_MODE: await self.fan_mode(),
             SZ_FAN_RATE: await self.fan_rate(),
             SZ_FILTER_DIRTY: await self.filter_dirty(),
+            "filter_remaining": await self.filter_remaining(),
+            "filter_remaining_percent": await self.filter_remaining_percent(),
             SZ_FROST_CYCLE: await self.frost_cycle(),
             SZ_HAS_FAULT: await self.has_fault(),
             SZ_INDOOR_HUMIDITY: await self.indoor_humidity(),
@@ -879,10 +922,29 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         }
 
         # Emulate the legacy behaviour by only exposing populated payload keys
-        return {
+        merged_status = {
             **base_status,
             **{k: v for k, v in cqrs_status.items() if v is not None},
         }
+
+        shim_status: dict[str, Any] = {}
+        for key, value in merged_status.items():
+            # Ensure Enums are serialised to strings to prevent leakage
+            k_str = str(getattr(key, "value", key))
+
+            # Safely unbox lists containing Enums (e.g. speed_capabilities)
+            if isinstance(value, list):
+                v_clean = [getattr(item, "value", item) for item in value]
+            else:
+                v_clean = getattr(value, "value", value)
+
+            shim_status[k_str] = v_clean
+
+            # Legacy shim: map newer CQRS keys back to legacy downstream keys
+            if k_str in ("indoor_temperature", "indoor_temp"):
+                shim_status["temperature"] = v_clean
+
+        return shim_status
 
     async def temperature(self) -> float | None:  # Celsius
         """Return the current temperature in Celsius.
@@ -897,7 +959,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def filter_dirty(self) -> bool | None:
         """Return the dirty filter diagnostic flag.
 
-        :return: True if the filter is dirty, False if clean, or None if unavailable.
+        :return: True if the filter is dirty, False if clean, or None if
+                 unavailable.
         :rtype: bool | None
         """
         return self.hvac_state.filter_dirty
@@ -905,7 +968,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def frost_cycle(self) -> bool | None:
         """Return the frost cycle diagnostic flag.
 
-        :return: True if the frost cycle is active, False otherwise, or None if unavailable.
+        :return: True if the frost cycle is active, False otherwise, or None
+                 if unavailable.
         :rtype: bool | None
         """
         return self.hvac_state.frost_cycle
@@ -913,7 +977,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     async def has_fault(self) -> bool | None:
         """Return the hardware fault diagnostic flag.
 
-        :return: True if a fault is active, False otherwise, or None if unavailable.
+        :return: True if a fault is active, False otherwise, or None if
+                 unavailable.
         :rtype: bool | None
         """
         return self.hvac_state.has_fault

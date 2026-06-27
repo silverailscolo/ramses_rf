@@ -242,10 +242,6 @@ class DeviceRegistry:
         if not event.device_id or not event.metadata:
             return
 
-        old_dev = self.device_by_id.get(event.device_id)
-        if not old_dev:
-            return
-
         new_class_slug_raw = str(event.metadata.get("device_class"))
         slug_map = {
             "HUM": "rh_sensor",
@@ -256,22 +252,33 @@ class DeviceRegistry:
         dict_key = new_class_slug_raw.split(".")[-1]
         new_class_slug = slug_map.get(dict_key, new_class_slug_raw)
 
-        if not new_class_slug or getattr(old_dev, "_SLUG", None) == new_class_slug:
+        if not new_class_slug:
+            return
+
+        # 1. ALWAYS update the configuration known_list first
+        # This structurally resolves early-packet race conditions via the SSOT.
+        # Keep a backup of old traits for rollback.
+        old_traits_dict = dict(self._config.known_list.get(event.device_id, {}))
+
+        # Update the configuration traits safely
+        traits_dict = dict(old_traits_dict)
+        if old_traits_dict.get("class") != new_class_slug:
+            traits_dict["class"] = new_class_slug
+            self._config.known_list[event.device_id] = traits_dict
+
+        old_dev = self.device_by_id.get(event.device_id)
+        if not old_dev:
+            # Device doesn't exist yet, but the SSOT is updated. get_device()
+            # will naturally instantiate it with the correct class shortly.
+            return
+
+        if getattr(old_dev, "_SLUG", None) == new_class_slug:
             return
 
         _TRACE.info(
             f"PROMOTING CLASS: {event.device_id} from "
             f"{getattr(old_dev, '_SLUG', 'None')} to {new_class_slug}"
         )
-
-        # 1. ALWAYS update the configuration known_list first
-        # Keep a backup of old traits for rollback
-        old_traits_dict = dict(self._config.known_list.get(event.device_id, {}))
-
-        # Update the configuration traits safely
-        traits_dict = dict(old_traits_dict)
-        traits_dict["class"] = new_class_slug
-        self._config.known_list[event.device_id] = traits_dict
 
         # 2. Proceed with dynamic substitution ONLY if the device already exists in
         # memory. Pop the old device from the tracking dictionaries to allow the
@@ -284,6 +291,7 @@ class DeviceRegistry:
             # Instantiate the new strict device class via the factory
             traits = DeviceTraits.from_dict(traits_dict)
             new_dev = self._device_factory_cb(old_dev.addr, None, traits)
+            new_dev._setup_discovery_cmds()
 
             # FORCE IT BACK IN: In case the factory doesn't auto-register
             if new_dev.id not in self.device_by_id:
@@ -486,6 +494,7 @@ class DeviceRegistry:
 
             try:
                 dev = self._device_factory_cb(Address(device_id), msg, traits)
+                dev._setup_discovery_cmds()
             except Exception as err:
                 _TRACE.error(f"FACTORY EXCEPTION: Failed creating {device_id}: {err}")
                 raise
@@ -669,6 +678,7 @@ class DeviceRegistry:
 
         # 2. Instantiate using the completely decoupled factory
         new_dev = self._device_factory_cb(old_dev.addr, None, traits)
+        new_dev._setup_discovery_cmds()
 
         # 3. Migrate CQRS Read-Model State
         if hasattr(old_dev, "temp_state") and hasattr(new_dev, "temp_state"):

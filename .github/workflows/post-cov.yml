@@ -1,0 +1,47 @@
+name: Post Coverage Comment
+
+on:
+  workflow_run:
+    workflows: ["Coverage"]
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  post-comment:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Download coverage artifact
+        id: download
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: coverage-artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Read PR number
+        if: steps.download.outcome == 'success'
+        id: pr-number
+        run: echo "PR_NUMBER=$(cat pr-number.txt)" >> $GITHUB_ENV
+
+      - name: Add Pytest Coverage comment
+        if: steps.download.outcome == 'success'
+        # can only run on pr_target repository originally, now runs
+        # safely via artifact decoupling
+        uses: MishaKav/pytest-coverage-comment@v1
+        with:
+          pytest-xml-coverage-path: ./coverage.xml
+          issue-number: ${{ env.PR_NUMBER }}
+          # custom settings
+          report-only-changed-files: true
+          remove-links-to-files: true
+
+      - run: echo "🍏 This job's status is ${{ job.status }}."

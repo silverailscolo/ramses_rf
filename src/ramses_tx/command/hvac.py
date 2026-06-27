@@ -8,7 +8,7 @@ import math
 from typing import Any, TypeVar
 
 from ramses_rf.protocol.ramses import (
-    _22F1_MODE_ORCON,
+    _22F1_SCHEMES,
     _2411_PARAMS_SCHEMA,
     SZ_DATA_TYPE,
     SZ_MAX_VALUE,
@@ -34,6 +34,16 @@ from .base import CommandBase
 _LOGGER = logging.getLogger(__name__)
 
 _T = TypeVar("_T", bound=CommandBase)
+
+# Mode-max (3rd payload byte) per scheme, used to build 3-byte 22F1 payloads
+# for devices that require them (e.g. Siber DF Evo 4, ClimaRad MiniBox).
+# See issue #547.  When None, the builder emits a 2-byte payload (legacy form).
+_22F1_MODE_MAX: dict[str, str | None] = {
+    "itho": "04",
+    "nuaire": "0A",
+    "vasco": "06",
+    "orcon": "07",
+}
 
 
 class HvacMixins(CommandBase):
@@ -63,11 +73,33 @@ class HvacMixins(CommandBase):
         fan_id: DeviceIdT | str,
         fan_mode: int | str | None,
         *,
+        scheme: str = "orcon",
         seqn: int | str | None = None,
         src_id: DeviceIdT | str | None = None,
         idx: str = "00",
+        mode_max: str | None = None,
     ) -> _T:
-        _22F1_MODE_ORCON_MAP = {v: k for k, v in _22F1_MODE_ORCON.items()}
+        """Build a 22F1 (fan mode) command for the given scheme.
+
+        :param fan_id: The target fan device ID.
+        :param fan_mode: The desired mode (int index, hex string, or name).
+        :param scheme: The fan manufacturer scheme (orcon/itho/vasco/nuaire).
+            Defaults to "orcon" for backward compatibility.  See issue #547.
+        :param seqn: Optional sequence number (mutually exclusive with src_id).
+        :param src_id: Optional source device ID (mutually exclusive with seqn).
+        :param idx: The payload index byte, defaults to "00".
+        :param mode_max: Optional override for the 3rd payload byte (mode_max).
+            If None, auto-determined from the scheme via ``_22F1_MODE_MAX``.
+            Set to an empty string to force a 2-byte payload.
+        """
+        if scheme not in _22F1_SCHEMES:
+            raise exc.CommandInvalid(
+                f"fan_mode scheme is not valid: {scheme} "
+                f"(expected one of: {', '.join(sorted(_22F1_SCHEMES))})"
+            )
+
+        mode_map = _22F1_SCHEMES[scheme]
+        mode_map_r = {v: k for k, v in mode_map.items()}
 
         if fan_mode is None:
             mode = "00"
@@ -76,12 +108,20 @@ class HvacMixins(CommandBase):
         else:
             mode = fan_mode
 
-        if mode in _22F1_MODE_ORCON:
-            payload = f"{idx}{mode}"
-        elif mode in _22F1_MODE_ORCON_MAP:
-            payload = f"{idx}{_22F1_MODE_ORCON_MAP[mode]}"
+        if mode in mode_map:
+            pass
+        elif mode in mode_map_r:
+            mode = mode_map_r[mode]
         else:
-            raise exc.CommandInvalid(f"fan_mode is not valid: {fan_mode}")
+            raise exc.CommandInvalid(
+                f"fan_mode is not valid for scheme '{scheme}': {fan_mode}"
+            )
+
+        # Determine the mode_max (3rd byte) for 3-byte payloads.
+        # When mode_max is explicitly "", the caller wants a 2-byte payload.
+        if mode_max is None:
+            mode_max = _22F1_MODE_MAX.get(scheme)
+        payload = f"{idx}{mode}{mode_max}" if mode_max else f"{idx}{mode}"
 
         if src_id and seqn:
             raise exc.CommandInvalid(

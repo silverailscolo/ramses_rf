@@ -2,6 +2,8 @@
 """Unittests for the HvacVentilator class."""
 
 from collections.abc import Generator
+from enum import Enum
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +12,8 @@ from ramses_rf import exceptions as exc
 from ramses_rf.const import DevType
 from ramses_rf.devices import HvacVentilator
 from ramses_rf.gateway import Gateway
+from ramses_rf.models.state_base import DeviceTraits
+from ramses_rf.models.state_hvac import HvacState
 from ramses_rf.state import MessageStore
 from ramses_tx import Address
 from ramses_tx.const import Code, Priority
@@ -632,6 +636,7 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     """Test set_fan_mode uses the bound REM as the source ID."""
     dev = MagicMock(spec=HvacVentilator)
     dev.id = "32:123456"
+    dev._scheme = "orcon"
     dev.get_bound_rem.return_value = "37:654321"
 
     dev._gwy = MagicMock()
@@ -648,7 +653,9 @@ async def test_set_fan_mode_with_bound_rem() -> None:
         dev.get_bound_rem.assert_called_once()
 
         # 2. Verify the packet was built using the REM's ID ("37:654321")
-        mock_cmd.assert_called_once_with("32:123456", "low", src_id="37:654321")
+        mock_cmd.assert_called_once_with(
+            "32:123456", "low", scheme="orcon", src_id="37:654321"
+        )
 
         # 3. Verify it was transmitted with the correct QoS
         dev._gwy.async_send_cmd.assert_awaited_once_with(
@@ -661,6 +668,7 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     """Test set_fan_mode falls back to the HGI if no REM is bound."""
     dev = MagicMock(spec=HvacVentilator)
     dev.id = "32:123456"
+    dev._scheme = "orcon"
     dev.get_bound_rem.return_value = None
 
     # Simulate an available HGI
@@ -676,7 +684,9 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
         await HvacVentilator.set_fan_mode(dev, "high")
 
         # Verify the packet was built using the HGI's ID ("18:000730")
-        mock_cmd.assert_called_once_with("32:123456", "high", src_id="18:000730")
+        mock_cmd.assert_called_once_with(
+            "32:123456", "high", scheme="orcon", src_id="18:000730"
+        )
         dev._gwy.async_send_cmd.assert_awaited_once()
 
 
@@ -694,3 +704,85 @@ async def test_set_fan_mode_no_src_id_raises() -> None:
         exc.CommandInvalid, match="Cannot set fan mode without a bound REM or HGI"
     ):
         await HvacVentilator.set_fan_mode(dev, "auto")
+
+
+class MockEnum(Enum):
+    """Mock enum to simulate boundary leakage."""
+
+    TEST_VAL = "active_fault"
+
+
+def test_device_traits_to_dict_unboxes_enums() -> None:
+    """Ensure DeviceTraits serialises Enums to raw strings for legacy APIs."""
+
+    # Arrange
+    traits = DeviceTraits(
+        device_class=cast(str, MockEnum.TEST_VAL),
+        scheme=cast(str, MockEnum.TEST_VAL),
+    )
+
+    # Act
+    result = traits.to_dict()
+
+    # Assert
+    assert result["class"] == "active_fault"
+    assert result["scheme"] == "active_fault"
+    assert not isinstance(result["class"], Enum)
+
+
+@pytest.mark.asyncio
+async def test_hvac_ventilator_status_dictionary_shim() -> None:
+    """Ensure the status dictionary explicitly maintains legacy keys."""
+
+    # Arrange
+    mock_gwy = MagicMock()
+    mock_gwy.config.disable_discovery = True
+
+    ventilator = HvacVentilator(mock_gwy, Address("32:123456"))
+    ventilator.hvac_state = HvacState(
+        indoor_temp=21.5,
+        fan_mode=cast(str, MockEnum.TEST_VAL),
+    )
+
+    # Act
+    status_dict = await ventilator.status()
+
+    # Assert
+    assert "temperature" in status_dict
+    assert status_dict["temperature"] == 21.5
+
+    # Bug A: indoor_temp is a primary key that Home Assistant expects.
+    # It must not be dropped when mapping to 'temperature'.
+    assert "indoor_temp" in status_dict
+    assert status_dict["indoor_temp"] == 21.5
+
+    assert status_dict["fan_mode"] == "active_fault"
+    assert not isinstance(status_dict["fan_mode"], Enum)
+
+
+@pytest.mark.asyncio
+async def test_hvac_ventilator_status_shim_unboxes_list_of_enums() -> None:
+    """Ensure the status shim safely unboxes lists containing Enums."""
+
+    # Arrange
+    mock_gwy = MagicMock()
+    mock_gwy.config.disable_discovery = True
+
+    ventilator = HvacVentilator(mock_gwy, Address("32:123456"))
+    ventilator.hvac_state = HvacState(
+        speed_capabilities=cast(list[str], [MockEnum.TEST_VAL, MockEnum.TEST_VAL])
+    )
+
+    # Act
+    status_dict = await ventilator.status()
+
+    # Assert
+    assert "speed_capabilities" in status_dict
+    capabilities = status_dict["speed_capabilities"]
+
+    # Bug B: speed_capabilities is a list of Enums. The duck-typing getattr()
+    # approach silently fails to unbox the items inside the list, causing JSON
+    # serialisation failures downstream.
+    assert isinstance(capabilities, list)
+    assert all(not isinstance(item, Enum) for item in capabilities)
+    assert capabilities[0] == "active_fault"

@@ -22,23 +22,13 @@ on:
       "tests/**",
     ]
 
-  pull_request_target:
-    branches: [ "master" ]
-    paths: [
-      ".github/workflows/check-cov.yml",
-      "pyproject.toml",
-      "requirements/**",
-      "src/**.py",
-      "tests/**",
-    ]
-
   schedule:
     - cron: "0 7 * * 5"
 
   workflow_dispatch:
 
 permissions:
-  pull-requests: write
+  contents: read
 
 jobs:
   coverage:
@@ -91,14 +81,18 @@ jobs:
           output: both
           thresholds: '80 95'
 
-      - name: Add Pytest Coverage comment
-        # can only run on pr_target repository
-        if: github.event_name == 'pull_request_target'
-        uses: MishaKav/pytest-coverage-comment@v1
+      - name: Save PR number
+        if: github.event_name == 'pull_request'
+        run: echo ${{ github.event.pull_request.number }} > pr-number.txt
+
+      - name: Upload coverage artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
         with:
-          pytest-xml-coverage-path: ./coverage.xml
-          # custom settings
-          report-only-changed-files: true
-          remove-links-to-files: true
+          name: coverage-artifact
+          path: |
+            coverage.xml
+            pr-number.txt
+          overwrite: true
 
       - run: echo "🍏 This job's status is ${{ job.status }}."

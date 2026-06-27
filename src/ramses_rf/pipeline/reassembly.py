@@ -10,8 +10,46 @@ from ramses_tx.dtos import PacketDTO
 
 _LOGGER = logging.getLogger(__name__)
 
-_ARRAY_CODES: Final[tuple[str, ...]] = ("000A", "22C9")
+# Codes whose ``I`` packets are *always* array fragments at the L3 layer
+# and can therefore be safely buffered for reassembly using only (code,
+# verb) inspection -- the only metadata available to this module via
+# PacketDTO.
+#
+# Audit of ramses_rf.protocol.ramses.CODES_WITH_ARRAYS (the
+# authoritative schema, which lists 0005/0009/000A/2309/30C9/2249/22C9/
+# 3150 plus the special-cased 000C/1FC9) for issue #669:
+#
+#   - 000A, 22C9: safe. Their ``I`` packets from a controller/UFC are
+#     arrays (a lone single-element ``I`` is an acceptable false
+#     negative, as noted in ramses_tx.frame.Frame._has_array).
+#   - 2309, 30C9: NOT safe to add here. These routinely emit *single*
+#     zone packets (one zone's temperature) that must pass straight
+#     through. The frame layer distinguishes array vs single via a
+#     payload-length multiple heuristic (Frame._has_array) that this
+#     module does not have access to.
+#   - 3150: NOT safe here for the same reason -- a single heat-demand
+#     packet is indistinguishable from a fragment without the
+#     length/domain check (and the UFC-only src.type guard) that lives
+#     in the frame layer.
+#   - 1FC9, 000C, 0005, 0009, 2249: special-cased or non-fragmenting
+#     here.
+#
+# Expanding this set to 2309/30C9/3150 correctly requires migrating the
+# Frame._has_array length heuristic into (or exposing it to) the
+# reassembly pipeline, which is part of the broader #608 schema
+# migration. Until then, the conservative set below matches the legacy
+# detect_array_fragment() behaviour in dispatcher.py without introducing
+# false buffering of routine single-zone packets. See issue #669.
+_ARRAY_CODES: Final[tuple[str, ...]] = (
+    "000A",
+    "22C9",
+)
 _VERB_I: Final[str] = " I"
+
+# A pending array is keyed by (src_id, code) so that an intervening
+# packet from a different source (or a different code) does not abort
+# an in-flight reassembly. See issue #669 (sliding window buffer).
+_PendingKey = tuple[str, str]
 
 
 class ReassemblyBuffer:
@@ -19,6 +57,12 @@ class ReassemblyBuffer:
 
     Consumes raw PacketDTOs from the transport layer, buffers potential
     array fragments, and outputs unified PacketDTOs.
+
+    Unlike a single-slot buffer, this implementation maintains a
+    *sliding window* of pending arrays keyed by ``(src_id, code)``. An
+    unrelated packet (RF noise, or a broadcast from a different device)
+    that arrives between two fragments of an array therefore passes
+    straight through without aborting the in-progress reassembly.
     """
 
     def __init__(
@@ -41,7 +85,7 @@ class ReassemblyBuffer:
         self._array_timeout = array_timeout
         self._task: asyncio.Task[None] | None = None
 
-        self._pending_dto: PacketDTO | None = None
+        self._pending: dict[_PendingKey, PacketDTO] = {}
 
     async def start(self) -> None:
         """Start the background consumer task."""
@@ -60,53 +104,78 @@ class ReassemblyBuffer:
         """Main asynchronous loop consuming the input queue."""
         while True:
             try:
-                # Wait for a packet, or timeout if we have a pending array
-                timeout = self._array_timeout if self._pending_dto else None
+                # Wait for a packet, or timeout if we have any pending
+                # arrays
+                timeout = self._array_timeout if self._pending else None
                 dto = await asyncio.wait_for(self._in_queue.get(), timeout=timeout)
                 await self._process_packet(dto)
                 self._in_queue.task_done()
 
             except TimeoutError:
-                # Timeout exceeded, flush the pending packet
-                if self._pending_dto:
-                    _LOGGER.warning(
-                        "%s < Array reassembly timeout (%ss): flushing "
-                        "incomplete multi-packet message",
-                        self._pending_dto.code,
-                        self._array_timeout,
-                    )
-                    await self._out_queue.put(self._pending_dto)
-                    self._pending_dto = None
+                # One or more pending arrays have exceeded their timeout:
+                # flush every stale pending packet in arrival-key order.
+                await self._flush_stale_pending()
+
+    async def _flush_stale_pending(self) -> None:
+        """Flush every pending array whose timeout has expired.
+
+        The loop's ``wait_for`` only times out when no packet has
+        arrived for ``array_timeout`` seconds, so every pending entry
+        (which was buffered at or before the most recently received
+        packet) is stale by definition when this is called.
+        """
+        # Snapshot the keys to avoid mutating the dict while iterating.
+        for key in list(self._pending):
+            pending = self._pending.pop(key, None)
+            if pending is None:
+                continue
+            _LOGGER.warning(
+                "%s < Array reassembly timeout (%ss): flushing "
+                "incomplete multi-packet message",
+                pending.code,
+                self._array_timeout,
+            )
+            await self._out_queue.put(pending)
 
     async def _process_packet(self, dto: PacketDTO) -> None:
         """Evaluate a packet for array stitching or passthrough.
 
+        A packet is matched against a pending array for the same
+        ``(src_id, code)``. Unrelated packets (different source or code)
+        are passed straight through without disturbing any in-flight
+        reassembly.
+
         :param dto: The inbound packet to evaluate.
         :type dto: PacketDTO
         """
-        if self._pending_dto is None:
+        key: _PendingKey = (dto.addr1, dto.code)
+        pending = self._pending.get(key)
+
+        if pending is None:
             if self._is_potential_array_start(dto):
-                self._pending_dto = dto
+                self._pending[key] = dto
             else:
                 await self._out_queue.put(dto)
             return
 
-        if self._is_array_fragment(self._pending_dto, dto):
-            stitched_dto = self._stitch_dtos(self._pending_dto, dto)
+        if self._is_array_fragment(pending, dto):
+            stitched_dto = self._stitch_dtos(pending, dto)
             await self._out_queue.put(stitched_dto)
-            self._pending_dto = None
+            del self._pending[key]
         else:
-            # Flush the old pending dto and evaluate the new one
+            # The pending fragment for this key is not continued by
+            # `dto`: flush the stale pending packet and re-evaluate
+            # `dto` itself.
             _LOGGER.warning(
-                "%s < Array reassembly interrupted by %s: flushing "
+                "%s < Array reassembly interrupted for %s: flushing "
                 "incomplete multi-packet message",
-                self._pending_dto.code,
-                dto.code,
+                pending.code,
+                key,
             )
-            await self._out_queue.put(self._pending_dto)
-            self._pending_dto = None
+            await self._out_queue.put(pending)
+            del self._pending[key]
             if self._is_potential_array_start(dto):
-                self._pending_dto = dto
+                self._pending[key] = dto
             else:
                 await self._out_queue.put(dto)
 
