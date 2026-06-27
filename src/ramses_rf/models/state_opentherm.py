@@ -8,25 +8,10 @@ from datetime import datetime as dt
 from .state_base import _now_utc
 
 
-@dataclass(frozen=True, slots=True)
-class OpenThermState:
-    """The immutable state of an OpenTherm Bridge (OTB) boiler matrix."""
+@dataclass(frozen=True)
+class OpenThermFlags:
+    """Immutable representation of OpenTherm status flags."""
 
-    boiler_output_temp: float | None = None
-    boiler_return_temp: float | None = None
-    boiler_setpoint: float | None = None
-    ch_max_setpoint: float | None = None
-    ch_setpoint: float | None = None
-    ch_water_pressure: float | None = None
-    dhw_flow_rate: float | None = None
-    dhw_setpoint: float | None = None
-    dhw_temp: float | None = None
-    max_rel_modulation: float | None = None
-    oem_code: float | None = None
-    outside_temp: float | None = None
-    rel_modulation_level: float | None = None
-
-    # Status Flags
     ch_active: bool | None = None
     ch_enabled: bool | None = None
     cooling_active: bool | None = None
@@ -39,16 +24,47 @@ class OpenThermState:
     otc_active: bool | None = None
     summer_mode: bool | None = None
 
-    # Counter Metrics
-    burner_hours: float | None = None
-    burner_starts: float | None = None
-    burner_failed_starts: float | None = None
-    ch_pump_hours: float | None = None
-    ch_pump_starts: float | None = None
-    dhw_burner_hours: float | None = None
-    dhw_burner_starts: float | None = None
-    dhw_pump_hours: float | None = None
-    dhw_pump_starts: float | None = None
-    flame_signal_low: float | None = None
+
+@dataclass(frozen=True)
+class OpenThermTemperatures:
+    """Immutable representation of OpenTherm temperatures."""
+
+    boiler_output: float | None = None
+    boiler_return: float | None = None
+    boiler_setpoint: float | None = None
+    ch_max_setpoint: float | None = None
+    ch_setpoint: float | None = None
+    dhw: float | None = None
+    dhw_setpoint: float | None = None
+    outside: float | None = None
+
+
+@dataclass(frozen=True)
+class OpenThermCounters:
+    """Immutable representation of OpenTherm counters."""
+
+    burner_failed_starts: int | None = None
+    burner_hours: int | None = None
+    burner_starts: int | None = None
+    ch_pump_hours: int | None = None
+    ch_pump_starts: int | None = None
+    dhw_burner_hours: int | None = None
+    dhw_burner_starts: int | None = None
+    dhw_pump_hours: int | None = None
+    dhw_pump_starts: int | None = None
+    flame_signal_low: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OpenThermState:
+    """The immutable state of an OpenTherm Bridge (OTB) boiler matrix."""
 
     last_updated: dt = field(default_factory=_now_utc)
+    flags: OpenThermFlags = field(default_factory=OpenThermFlags)
+    temperatures: OpenThermTemperatures = field(default_factory=OpenThermTemperatures)
+    counters: OpenThermCounters = field(default_factory=OpenThermCounters)
+    ch_water_pressure: float | None = None
+    dhw_flow_rate: float | None = None
+    max_rel_modulation: float | None = None
+    rel_modulation_level: float | None = None
+    oem_code: int | None = None

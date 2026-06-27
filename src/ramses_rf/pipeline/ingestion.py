@@ -30,7 +30,6 @@ from ramses_rf.const import (
     SZ_FAN_INFO,
     SZ_FAN_MODE,
     SZ_FAN_RATE,
-    SZ_FLAME_ACTIVE,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_OUTDOOR_HUMIDITY,
@@ -63,41 +62,41 @@ from ramses_rf.protocol.opentherm import OtDataId
 
 # --- Translation Maps (Static Constant Blocks) ---
 
-RAMSES_HEATING_MAP: Final[dict[Code, tuple[str, str]]] = {
-    Code._3200: (SZ_TEMPERATURE, "boiler_output_temp"),
-    Code._3210: (SZ_TEMPERATURE, "boiler_return_temp"),
-    Code._22D9: ("setpoint", "boiler_setpoint"),
-    Code._1081: ("setpoint", "ch_max_setpoint"),
-    Code._1300: ("pressure", "ch_water_pressure"),
-    Code._12F0: ("dhw_flow_rate", "dhw_flow_rate"),
-    Code._10A0: ("setpoint", "dhw_setpoint"),
-    Code._1260: ("temperature", "dhw_temp"),
-    Code._1290: ("temperature", "outside_temp"),
+RAMSES_HEATING_MAP: Final[dict[Code, tuple[str, str, str]]] = {
+    Code._3200: (SZ_TEMPERATURE, "temperatures", "boiler_output"),
+    Code._3210: (SZ_TEMPERATURE, "temperatures", "boiler_return"),
+    Code._22D9: ("setpoint", "temperatures", "boiler_setpoint"),
+    Code._1081: ("setpoint", "temperatures", "ch_max_setpoint"),
+    Code._1300: ("pressure", "base", "ch_water_pressure"),
+    Code._12F0: ("dhw_flow_rate", "base", "dhw_flow_rate"),
+    Code._10A0: ("setpoint", "temperatures", "dhw_setpoint"),
+    Code._1260: ("temperature", "temperatures", "dhw"),
+    Code._1290: ("temperature", "temperatures", "outside"),
 }
 
-OPENTHERM_FIELD_MAP: Final[dict[OtDataId, str]] = {
-    OtDataId.BOILER_OUTPUT_TEMP: "boiler_output_temp",
-    OtDataId.BOILER_RETURN_TEMP: "boiler_return_temp",
-    OtDataId.CONTROL_SETPOINT: "boiler_setpoint",
-    OtDataId.CH_MAX_SETPOINT: "ch_max_setpoint",
-    OtDataId.CH_WATER_PRESSURE: "ch_water_pressure",
-    OtDataId.DHW_FLOW_RATE: "dhw_flow_rate",
-    OtDataId.DHW_SETPOINT: "dhw_setpoint",
-    OtDataId.DHW_TEMP: "dhw_temp",
-    OtDataId.OEM_CODE: "oem_code",
-    OtDataId.OUTSIDE_TEMP: "outside_temp",
-    OtDataId.REL_MODULATION_LEVEL: "rel_modulation_level",
-    OtDataId._0E: "max_rel_modulation",
-    OtDataId.BURNER_HOURS: "burner_hours",
-    OtDataId.BURNER_STARTS: "burner_starts",
-    OtDataId.BURNER_FAILED_STARTS: "burner_failed_starts",
-    OtDataId.CH_PUMP_HOURS: "ch_pump_hours",
-    OtDataId.CH_PUMP_STARTS: "ch_pump_starts",
-    OtDataId.DHW_BURNER_HOURS: "dhw_burner_hours",
-    OtDataId.DHW_BURNER_STARTS: "dhw_burner_starts",
-    OtDataId.DHW_PUMP_HOURS: "dhw_pump_hours",
-    OtDataId.DHW_PUMP_STARTS: "dhw_pump_starts",
-    OtDataId.FLAME_LOW_SIGNALS: "flame_signal_low",
+OPENTHERM_FIELD_MAP: Final[dict[OtDataId, tuple[str, str]]] = {
+    OtDataId.BOILER_OUTPUT_TEMP: ("temperatures", "boiler_output"),
+    OtDataId.BOILER_RETURN_TEMP: ("temperatures", "boiler_return"),
+    OtDataId.CONTROL_SETPOINT: ("temperatures", "boiler_setpoint"),
+    OtDataId.CH_MAX_SETPOINT: ("temperatures", "ch_max_setpoint"),
+    OtDataId.CH_WATER_PRESSURE: ("base", "ch_water_pressure"),
+    OtDataId.DHW_FLOW_RATE: ("base", "dhw_flow_rate"),
+    OtDataId.DHW_SETPOINT: ("temperatures", "dhw_setpoint"),
+    OtDataId.DHW_TEMP: ("temperatures", "dhw"),
+    OtDataId.OEM_CODE: ("base", "oem_code"),
+    OtDataId.OUTSIDE_TEMP: ("temperatures", "outside"),
+    OtDataId.REL_MODULATION_LEVEL: ("base", "rel_modulation_level"),
+    OtDataId._0E: ("base", "max_rel_modulation"),
+    OtDataId.BURNER_HOURS: ("counters", "burner_hours"),
+    OtDataId.BURNER_STARTS: ("counters", "burner_starts"),
+    OtDataId.BURNER_FAILED_STARTS: ("counters", "burner_failed_starts"),
+    OtDataId.CH_PUMP_HOURS: ("counters", "ch_pump_hours"),
+    OtDataId.CH_PUMP_STARTS: ("counters", "ch_pump_starts"),
+    OtDataId.DHW_BURNER_HOURS: ("counters", "dhw_burner_hours"),
+    OtDataId.DHW_BURNER_STARTS: ("counters", "dhw_burner_starts"),
+    OtDataId.DHW_PUMP_HOURS: ("counters", "dhw_pump_hours"),
+    OtDataId.DHW_PUMP_STARTS: ("counters", "dhw_pump_starts"),
+    OtDataId.FLAME_LOW_SIGNALS: ("counters", "flame_signal_low"),
 }
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
@@ -190,7 +189,9 @@ class StateProjector:
                     self._update_demand_state(src_dev, p, msg)
                 except Exception as err:
                     _LOGGER.error(
-                        "CQRS state extraction failed for src %s: %s", src_dev.id, err
+                        "CQRS state extraction failed for src %s: %s",
+                        src_dev.id,
+                        err,
                     )
 
             # Route to Destination Device (Aggregation)
@@ -215,14 +216,17 @@ class StateProjector:
     def _update_opentherm_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate OpenTherm frames or parallel heating opcodes into OpenThermState."""
+        """Translate OpenTherm frames or parallel opcodes into OpenThermState."""
         if not hasattr(target, "opentherm_state"):
             if getattr(target, "_SLUG", "") == "OTB":
                 target.opentherm_state = OpenThermState()
             else:
                 return
 
-        updates: dict[str, Any] = {}
+        upd_base: dict[str, Any] = {}
+        upd_flag: dict[str, Any] = {}
+        upd_temp: dict[str, Any] = {}
+        upd_count: dict[str, Any] = {}
 
         if msg.code == Code._3220:
             raw_id = p.get("msg_id")
@@ -241,7 +245,7 @@ class StateProjector:
                 and isinstance(val, (list, tuple))
                 and len(val) >= 13
             ):
-                updates.update(
+                upd_flag.update(
                     {
                         "ch_enabled": bool(val[0]),
                         "dhw_enabled": bool(val[1]),
@@ -257,30 +261,61 @@ class StateProjector:
                     }
                 )
             elif val is not None and msg_id in OPENTHERM_FIELD_MAP:
-                updates[OPENTHERM_FIELD_MAP[msg_id]] = val
+                category, field_key = OPENTHERM_FIELD_MAP[msg_id]
+                if category == "base":
+                    upd_base[field_key] = val
+                elif category == "temperatures":
+                    upd_temp[field_key] = val
+                elif category == "counters":
+                    upd_count[field_key] = val
+                elif category == "flags":
+                    upd_flag[field_key] = val
         else:
             if msg.code in RAMSES_HEATING_MAP:
-                payload_key, state_field = RAMSES_HEATING_MAP[msg.code]
+                payload_key, category, state_field = RAMSES_HEATING_MAP[msg.code]
                 if payload_key in p:
-                    updates[state_field] = p[payload_key]
+                    if category == "base":
+                        upd_base[state_field] = p[payload_key]
+                    elif category == "temperatures":
+                        upd_temp[state_field] = p[payload_key]
             elif msg.code in (Code._3EF0, Code._3EF1):
-                for field_key in (
-                    "rel_modulation_level",
-                    "max_rel_modulation",
-                    "ch_setpoint",
-                    SZ_CH_ACTIVE,
-                    SZ_CH_ENABLED,
-                    SZ_DHW_ACTIVE,
-                ):
-                    if field_key in p:
-                        updates[field_key] = p[field_key]
+                if "rel_modulation_level" in p:
+                    upd_base["rel_modulation_level"] = p["rel_modulation_level"]
+                if "max_rel_modulation" in p:
+                    upd_base["max_rel_modulation"] = p["max_rel_modulation"]
+                if "ch_setpoint" in p:
+                    upd_temp["ch_setpoint"] = p["ch_setpoint"]
+                if SZ_CH_ACTIVE in p:
+                    upd_flag["ch_active"] = p[SZ_CH_ACTIVE]
+                if SZ_CH_ENABLED in p:
+                    upd_flag["ch_enabled"] = p[SZ_CH_ENABLED]
+                if SZ_DHW_ACTIVE in p:
+                    upd_flag["dhw_active"] = p[SZ_DHW_ACTIVE]
                 if "flame_on" in p:
-                    updates[SZ_FLAME_ACTIVE] = p["flame_on"]
+                    upd_flag["flame_active"] = p["flame_on"]
 
-        if not updates:
+        if not any((upd_base, upd_flag, upd_temp, upd_count)):
             return
 
-        new_state = dataclasses.replace(target.opentherm_state, **updates)
+        new_flags = target.opentherm_state.flags
+        if upd_flag:
+            new_flags = dataclasses.replace(new_flags, **upd_flag)
+
+        new_temps = target.opentherm_state.temperatures
+        if upd_temp:
+            new_temps = dataclasses.replace(new_temps, **upd_temp)
+
+        new_counters = target.opentherm_state.counters
+        if upd_count:
+            new_counters = dataclasses.replace(new_counters, **upd_count)
+
+        new_state = dataclasses.replace(
+            target.opentherm_state,
+            flags=new_flags,
+            temperatures=new_temps,
+            counters=new_counters,
+            **upd_base,
+        )
         target.opentherm_state = new_state  # Explicit shadow hydration
 
         event = StateUpdatedEvent(

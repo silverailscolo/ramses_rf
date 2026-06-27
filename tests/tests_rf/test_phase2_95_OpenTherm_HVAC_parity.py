@@ -53,7 +53,7 @@ def suppress_noisy_logs(caplog: pytest.LogCaptureFixture) -> None:
 
 
 async def _get_legacy_value(dev: Any, attr_name: str) -> Any:
-    """Safely extract legacy state values across synchronous or async property bounds.
+    """Safely extract legacy state values across synchronous or async bounds.
 
     Handles standard attributes, @properties, synchronous methods,
     and asynchronous coroutine methods seamlessly.
@@ -127,25 +127,40 @@ async def test_cqrs_opentherm_state_parity() -> None:
             cqrs_ot = cast(OpenThermState, dev.opentherm_state)
             assert cqrs_ot is not None, f"{dev} missing CQRS opentherm_state container"
 
-            # 1. Modulation Matrix Verification
-            legacy_mod = await _get_legacy_value(dev, "rel_modulation_level")
-            if legacy_mod is not None:
-                assert cqrs_ot.rel_modulation_level == legacy_mod
+            # Map legacy properties to the new CQRS Read-Model coordinates
+            parity_map = {
+                "rel_modulation_level": cqrs_ot.rel_modulation_level,
+                "ch_water_pressure": cqrs_ot.ch_water_pressure,
+                "dhw_flow_rate": cqrs_ot.dhw_flow_rate,
+                "max_rel_modulation": cqrs_ot.max_rel_modulation,
+                "boiler_output_temp": cqrs_ot.temperatures.boiler_output,
+                "boiler_return_temp": cqrs_ot.temperatures.boiler_return,
+                "boiler_setpoint": cqrs_ot.temperatures.boiler_setpoint,
+                "ch_max_setpoint": cqrs_ot.temperatures.ch_max_setpoint,
+                "ch_setpoint": cqrs_ot.temperatures.ch_setpoint,
+                "dhw_setpoint": cqrs_ot.temperatures.dhw_setpoint,
+                "dhw_temp": cqrs_ot.temperatures.dhw,
+                "outside_temp": cqrs_ot.temperatures.outside,
+                "ch_active": cqrs_ot.flags.ch_active,
+                "ch_enabled": cqrs_ot.flags.ch_enabled,
+                "cooling_active": cqrs_ot.flags.cooling_active,
+                "cooling_enabled": cqrs_ot.flags.cooling_enabled,
+                "dhw_active": cqrs_ot.flags.dhw_active,
+                "dhw_blocking": cqrs_ot.flags.dhw_blocking,
+                "dhw_enabled": cqrs_ot.flags.dhw_enabled,
+                "fault_present": cqrs_ot.flags.fault_present,
+                "flame_active": cqrs_ot.flags.flame_active,
+                "otc_active": cqrs_ot.flags.otc_active,
+                "summer_mode": cqrs_ot.flags.summer_mode,
+            }
 
-            # 2. Boiler Water Flow Telemetry Verification
-            legacy_out = await _get_legacy_value(dev, "boiler_output_temp")
-            if legacy_out is not None:
-                assert cqrs_ot.boiler_output_temp == legacy_out
-
-            # 3. Boiler Return Water Telemetry Verification
-            legacy_ret = await _get_legacy_value(dev, "boiler_return_temp")
-            if legacy_ret is not None:
-                assert cqrs_ot.boiler_return_temp == legacy_ret
-
-            # 4. Status Bitmask Flags Verification
-            legacy_flame = await _get_legacy_value(dev, "flame_active")
-            if legacy_flame is not None:
-                assert cqrs_ot.flame_active == legacy_flame
+            for legacy_prop, cqrs_val in parity_map.items():
+                legacy_val = await _get_legacy_value(dev, legacy_prop)
+                if legacy_val is not None:
+                    assert cqrs_val == legacy_val, (
+                        f"Mismatch on {legacy_prop}: "
+                        f"Legacy={legacy_val}, CQRS={cqrs_val}"
+                    )
 
     assert otb_count > 0, "No OpenTherm Bridge (OTB) entity found in context"
 
