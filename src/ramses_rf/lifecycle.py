@@ -17,6 +17,7 @@ from ramses_tx.logger import flush_packet_log
 from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES, I_, RP, RQ, W_, Code
 from .exceptions import DeviceNotFoundError
 from .messages import Message
+from .pipeline.ingestion import StateProjector
 from .schemas import load_schema
 from .state import MessageStore
 from .typing import DeviceIdT
@@ -48,6 +49,7 @@ class GatewayLifecycle:
         _message_store: MessageStoreInterface | None
         _pkt_log_listener: QueueListener | None
         _schema: dict[str, Any]
+        state_projector: StateProjector | None
 
         def add_task(self, task: asyncio.Task[Any]) -> None: ...
         def clear_message_history(self) -> None: ...
@@ -104,6 +106,12 @@ class GatewayLifecycle:
         _LOGGER.info("Ramses RF starts central MessageStore")
         self.create_sqlite_message_index()
 
+        # Initialize the CQRS State Projector with a dummy queue.
+        # We do not call .start() because the Phase 2.75 async cutover is paused.
+        # It will be fed synchronously via the _msg_handler bridge.
+        if self.state_projector is None:
+            self.state_projector = StateProjector(self, asyncio.Queue())
+
         self.config.disable_discovery, disable_discovery = (
             True,
             self.config.disable_discovery,
@@ -155,6 +163,11 @@ class GatewayLifecycle:
         """Stop the Gateway and tidy up."""
         self.config.disable_discovery = True
         await self._engine.stop()
+
+        # The StateProjector background worker isn't running, but we call stop
+        # just to be architecturally safe and clean up any dangling references.
+        if self.state_projector is not None:
+            await self.state_projector.stop()
 
         if self._pkt_log_listener:
 

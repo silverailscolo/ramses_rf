@@ -398,154 +398,88 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         )
 
     async def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
-        return cast(
-            float | None, await self._result_by_lookup(Code._3200, key=SZ_TEMPERATURE)
-        )
+        return self.opentherm_state.temperatures.boiler_output
 
     async def boiler_return_temp(self) -> float | None:  # 3220|1C, or 3210
-        return cast(
-            float | None, await self._result_by_lookup(Code._3210, key=SZ_TEMPERATURE)
-        )
+        return self.opentherm_state.temperatures.boiler_return
 
     async def boiler_setpoint(self) -> float | None:  # 3220|01, or 22D9
-        return cast(
-            float | None, await self._result_by_lookup(Code._22D9, key=SZ_SETPOINT)
-        )
+        return self.opentherm_state.temperatures.boiler_setpoint
 
     async def ch_max_setpoint(self) -> float | None:  # 3220|39, or 1081
-        return cast(
-            float | None, await self._result_by_lookup(Code._1081, key=SZ_SETPOINT)
-        )
+        return self.opentherm_state.temperatures.ch_max_setpoint
 
     async def ch_setpoint(self) -> float | None:  # 3EF0 (byte 7, only R8820A?)
-        return cast(
-            float | None,
-            self._result_by_value(
-                None, await self.entity_state.get_value(Code._3EF0, key=SZ_CH_SETPOINT)
-            ),
-        )
+        return self.opentherm_state.temperatures.ch_setpoint
 
     async def ch_water_pressure(self) -> float | None:  # 3220|12, or 1300
-        return cast(
-            float | None, await self._result_by_lookup(Code._1300, key=SZ_PRESSURE)
-        )
+        return self.opentherm_state.ch_water_pressure
 
     async def dhw_flow_rate(self) -> float | None:  # 3220|13, or 12F0
-        return cast(
-            float | None, await self._result_by_lookup(Code._12F0, key=SZ_DHW_FLOW_RATE)
-        )
+        return self.opentherm_state.dhw_flow_rate
 
     async def dhw_setpoint(self) -> float | None:  # 3220|38, or 10A0
-        return cast(
-            float | None, await self._result_by_lookup(Code._10A0, key=SZ_SETPOINT)
-        )
+        return self.opentherm_state.temperatures.dhw_setpoint
 
     async def dhw_temp(self) -> float | None:  # 3220|1A, or 1260
-        return cast(
-            float | None, await self._result_by_lookup(Code._1260, key=SZ_TEMPERATURE)
-        )
+        return self.opentherm_state.temperatures.dhw
 
-    async def max_rel_modulation(self) -> float | None:  # 3220|0E, or 3EF0 (byte 8)
-        return cast(
-            float | None,
-            self._result_by_value(
-                self._ot_msg_value(MsgId._0E),  # NOTE: not reliable?
-                await self.entity_state.get_value(
-                    Code._3EF0, key=SZ_MAX_REL_MODULATION
-                ),
-            ),
-        )
+    async def max_rel_modulation(
+        self,
+    ) -> float | None:  # 3220|0E, or 3EF0 (byte 8) NOTE: not reliable?
+        return self.opentherm_state.max_rel_modulation
 
     async def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
         return cast(float | None, self._ot_msg_value(MsgId._73))
 
     async def outside_temp(self) -> float | None:  # 3220|1B, 1290
-        return cast(
-            float | None, await self._result_by_lookup(Code._1290, key=SZ_TEMPERATURE)
-        )
+        return self.opentherm_state.temperatures.outside
 
-    async def rel_modulation_level(self) -> float | None:  # 3220|11, or 3EF0/3EF1
-        return cast(
-            float | None,
-            self._result_by_value(
-                self._ot_msg_value(MsgId._11),  # NOTE: not reliable?
-                await self.entity_state.get_value(
-                    (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
-                ),
-            ),
-        )
+    async def rel_modulation_level(
+        self,
+    ) -> float | None:  # 3220|11, or 3EF0/3EF1 NOTE: not reliable?
+        return self.opentherm_state.rel_modulation_level
 
-    async def ch_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
-        return cast(
-            bool | None,
-            self._result_by_value(
-                self._ot_msg_flag(MsgId._00, 8 + 1),  # NOTE: not reliable?
-                await self.entity_state.get_value(Code._3EF0, key=SZ_CH_ACTIVE),
-            ),
-        )
+    async def ch_active(
+        self,
+    ) -> bool | None:  # 3220|00, or 3EF0 (byte 3) NOTE: not reliable?
+        return self.opentherm_state.flags.ch_active
 
-    async def ch_enabled(self) -> bool | None:  # 3220|00, or 3EF0 (byte 6)
-        return cast(
-            bool | None,
-            self._result_by_value(
-                self._ot_msg_flag(MsgId._00, 0),  # NOTE: not reliable?
-                await self.entity_state.get_value(Code._3EF0, key=SZ_CH_ENABLED),
-            ),
-        )
+    async def ch_enabled(
+        self,
+    ) -> bool | None:  # 3220|00, or 3EF0 (byte 6) NOTE: not reliable?
+        return self.opentherm_state.flags.ch_enabled
 
     async def cooling_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return cast(
-            bool | None,
-            self._result_by_value(self._ot_msg_flag(MsgId._00, 8 + 4), None),
-        )
+        return self.opentherm_state.flags.cooling_active
 
     async def cooling_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return cast(
-            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 2), None)
-        )
+        return self.opentherm_state.flags.cooling_enabled
 
-    async def dhw_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
-        return cast(
-            bool | None,
-            self._result_by_value(
-                self._ot_msg_flag(MsgId._00, 8 + 2),  # NOTE: not reliable?
-                await self.entity_state.get_value(Code._3EF0, key=SZ_DHW_ACTIVE),
-            ),
-        )
+    async def dhw_active(
+        self,
+    ) -> bool | None:  # 3220|00, or 3EF0 (byte 3) NOTE: not reliable?
+        return self.opentherm_state.flags.dhw_active
 
     async def dhw_blocking(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return cast(
-            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 6), None)
-        )
+        return self.opentherm_state.flags.dhw_blocking
 
     async def dhw_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return cast(
-            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 1), None)
-        )
+        return self.opentherm_state.flags.dhw_enabled
 
     async def fault_present(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return cast(
-            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 8), None)
-        )
+        return self.opentherm_state.flags.fault_present
 
-    async def flame_active(self) -> bool | None:  # 3220|00, or 3EF0 (byte 3)
-        return cast(
-            bool | None,
-            self._result_by_value(
-                self._ot_msg_flag(MsgId._00, 8 + 3),  # NOTE: not reliable?
-                await self.entity_state.get_value(Code._3EF0, key="flame_on"),
-            ),
-        )
+    async def flame_active(
+        self,
+    ) -> bool | None:  # 3220|00, or 3EF0 (byte 3) NOTE: not reliable?
+        return self.opentherm_state.flags.flame_active
 
     async def otc_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return cast(
-            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 3), None)
-        )
+        return self.opentherm_state.flags.otc_active
 
     async def summer_mode(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
-        return cast(
-            bool | None, self._result_by_value(self._ot_msg_flag(MsgId._00, 5), None)
-        )
+        return self.opentherm_state.flags.summer_mode
 
     async def opentherm_schema(self) -> dict[str, Any]:
         result: dict[str, Any] = {
