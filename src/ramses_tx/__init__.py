@@ -10,18 +10,6 @@ from functools import partial
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
-from ramses_rf.protocol.ramses import (
-    _2411_PARAMS_SCHEMA,
-    CODES_BY_DEV_SLUG,
-    CODES_SCHEMA,
-    SZ_DATA_TYPE,
-    SZ_DATA_UNIT,
-    SZ_DESCRIPTION,
-    SZ_MAX_VALUE,
-    SZ_MIN_VALUE,
-    SZ_PRECISION,
-)
-
 from .address import ALL_DEV_ADDR, ALL_DEVICE_ID, NON_DEV_ADDR, NON_DEVICE_ID, Address
 from .command import CODE_API_MAP, Command
 from .const import (
@@ -77,14 +65,6 @@ __all__ = [
     "SZ_ZONE_IDX",
     "SZ_ZONE_MASK",
     "SZ_ZONE_TYPE",
-    # Schema-related constants
-    "SZ_DATA_UNIT",
-    "SZ_DESCRIPTION",
-    "SZ_DATA_TYPE",
-    "SZ_MAX_VALUE",
-    "SZ_MIN_VALUE",
-    "SZ_PRECISION",
-    "_2411_PARAMS_SCHEMA",
     #
     "ALL_DEV_ADDR",
     "ALL_DEVICE_ID",
@@ -92,8 +72,6 @@ __all__ = [
     "NON_DEVICE_ID",
     #
     "CODE_API_MAP",
-    "CODES_BY_DEV_SLUG",  # shouldn't export this
-    "CODES_SCHEMA",
     "DEV_ROLE_MAP",
     "DEV_TYPE_MAP",
     "ZON_ROLE_MAP",
@@ -133,7 +111,6 @@ __all__ = [
     #
     "is_valid_dev_id",
     "set_pkt_logging_config",
-    "Engine",
 ]
 
 
