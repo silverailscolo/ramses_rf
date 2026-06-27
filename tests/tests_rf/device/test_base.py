@@ -30,7 +30,8 @@ def mock_gateway() -> MagicMock:
     gwy.config.tzinfo = None
     gwy.tzinfo = None
     gwy._engine = MagicMock()
-    gwy._engine._this_msg = None
+    gwy._engine._protocol = MagicMock()
+    gwy._engine._protocol._this_msg = None
     gwy._this_msg = None
     return gwy
 
@@ -146,7 +147,7 @@ class TestHgiGateway:
         :param hgi_gateway: The gateway fixture.
         :type hgi_gateway: HgiGateway
         """
-        hgi_gateway._gwy._engine._this_msg = None  # type: ignore[attr-defined]
+        hgi_gateway._gwy._engine._protocol._this_msg = None
         assert not await hgi_gateway.is_active()
 
     @pytest.mark.asyncio
@@ -157,9 +158,9 @@ class TestHgiGateway:
         :type hgi_gateway: HgiGateway
         """
         mock_msg = MagicMock()
-        mock_msg.dtm = dt.now(UTC)
+        mock_msg.timestamp = dt.now(UTC)
 
-        hgi_gateway._gwy._engine._this_msg = mock_msg  # type: ignore[attr-defined]
+        hgi_gateway._gwy._engine._protocol._this_msg = mock_msg
         assert await hgi_gateway.is_active()
 
     @pytest.mark.asyncio
@@ -172,9 +173,9 @@ class TestHgiGateway:
         """
         mock_msg = MagicMock()
         expired_dtm = dt.now(UTC) - (GATEWAY_MESSAGE_TIMEOUT + td(seconds=1))
-        mock_msg.dtm = expired_dtm
+        mock_msg.timestamp = expired_dtm
 
-        hgi_gateway._gwy._engine._this_msg = mock_msg  # type: ignore[attr-defined]
+        hgi_gateway._gwy._engine._protocol._this_msg = mock_msg
         assert not await hgi_gateway.is_active()
 
     @pytest.mark.asyncio
@@ -185,9 +186,9 @@ class TestHgiGateway:
         :type hgi_gateway: HgiGateway
         """
         mock_msg = MagicMock()
-        mock_msg.dtm = dt.now()
+        mock_msg.timestamp = dt.now()
 
-        hgi_gateway._gwy._engine._this_msg = mock_msg  # type: ignore[attr-defined]
+        hgi_gateway._gwy._engine._protocol._this_msg = mock_msg
         assert await hgi_gateway.is_active()
 
     def test_message_timeout_custom(self, hgi_gateway: HgiGateway) -> None:
@@ -215,7 +216,7 @@ class TestHgiGateway:
         # Create a timestamp 10 minutes in the past
         # Under the default 5-minute timeout, this would be inactive.
         # Under our custom 15-minute timeout, this must be active.
-        mock_msg.dtm = dt.now(UTC) - td(minutes=10)
+        mock_msg.timestamp = dt.now(UTC) - td(minutes=10)
 
-        hgi_gateway._gwy._engine._this_msg = mock_msg  # type: ignore[attr-defined]
+        hgi_gateway._gwy._engine._protocol._this_msg = mock_msg
         assert await hgi_gateway.is_active() is True

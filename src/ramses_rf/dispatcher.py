@@ -522,10 +522,10 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
             updates[f] = p[f]
 
     # Handle non-standard names passed by the semantic parsers
-    if "remaining_days" in p:
-        updates["filter_remaining_days"] = p["remaining_days"]
-    if "remaining_percent" in p:
-        updates["filter_remaining_percent"] = p["remaining_percent"]
+    if "days_remaining" in p:
+        updates["filter_remaining_days"] = p["days_remaining"]
+    if "percent_remaining" in p:
+        updates["filter_remaining_percent"] = p["percent_remaining"]
     if "minutes" in p and msg.code == Code._22F3:
         updates["boost_timer_mins"] = p["minutes"]
     if "req_speed" in p:

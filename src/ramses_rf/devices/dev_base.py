@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from ramses_rf.models import DeviceTraits
     from ramses_rf.systems import Evohome, Zone
     from ramses_tx.const import IndexT
+    from ramses_tx.dtos import PacketDTO
     from ramses_tx.typing import DeviceIdT
 
 
@@ -479,12 +480,14 @@ class HgiGateway(Device):  # HGI (18:)
 
     async def is_active(self) -> bool:
         """Return True if the gateway has received messages recently."""
-        msg: Message | None = getattr(self._gwy._engine, "_this_msg", None)
+        msg: PacketDTO | None = getattr(
+            getattr(self._gwy._engine, "_protocol", None), "_this_msg", None
+        )
 
-        if not msg or not hasattr(msg, "dtm"):
+        if not msg or not hasattr(msg, "timestamp"):
             return False
 
-        dtm: dt = msg.dtm
+        dtm: dt = msg.timestamp
         now = dt.now(UTC).astimezone(dtm.tzinfo) if dtm.tzinfo is not None else dt.now()
 
         # Compare against our new dynamic property
