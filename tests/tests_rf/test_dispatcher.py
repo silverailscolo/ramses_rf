@@ -9,8 +9,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import Device, dispatcher
+from ramses_rf.const import (
+    SZ_BYPASS_POSITION,
+    SZ_FAN_MODE,
+    SZ_INDOOR_HUMIDITY,
+    Code,
+    DevType,
+)
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.messages import Message
+from ramses_rf.models import HvacState
 from ramses_rf.state import MessageStore
 from ramses_tx import Address, DeviceIdT, Packet
 
@@ -266,3 +274,86 @@ class TestDispatcherHeartbeats:
         # which triggers mock_dev._handle_msg(msg) containing the
         # timestamp updates
         mock_gateway._engine._loop.call_soon.assert_any_call(mock_dev._handle_msg, msg)
+
+
+class TestHvacStateNullMarkerFiltering:
+    """Test that _update_hvac_state does not overwrite good state with
+    null-marker values from 31DA/31D9 snapshots.
+
+    See issue #742: HVAC sensors bounce to None/FF/0 every ~10 min because
+    31DA polling snapshots include "no sensor" values for unsupported sensors.
+    """
+
+    def _make_device(self) -> MagicMock:
+        """Create a mock HVAC device with a real HvacState."""
+        dev = MagicMock()
+        dev.id = "32:153289"
+        dev._SLUG = DevType.FAN
+        dev.hvac_state = HvacState()
+        dev.events = []
+        return dev
+
+    def _make_msg(self, code: Code, payload: dict) -> MagicMock:
+        """Create a mock message with the given code and payload."""
+        msg = MagicMock()
+        msg.code = code
+        msg.payload = payload
+        return msg
+
+    def test_none_bypass_position_does_not_overwrite_good_value(self) -> None:
+        """bypass_position=None (EF = not implemented) must not overwrite."""
+        dev = self._make_device()
+        dev.hvac_state = HvacState(bypass_position=0.5)
+
+        payload = {SZ_BYPASS_POSITION: None}
+        msg = self._make_msg(Code._31DA, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.bypass_position == 0.5
+
+    def test_ff_fan_mode_does_not_overwrite_good_value(self) -> None:
+        """fan_mode='FF' (no data from 31D9) must not overwrite."""
+        dev = self._make_device()
+        dev.hvac_state = HvacState(fan_mode="low")
+
+        payload = {SZ_FAN_MODE: "FF"}
+        msg = self._make_msg(Code._31D9, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.fan_mode == "low"
+
+    def test_zero_humidity_does_not_overwrite_good_value(self) -> None:
+        """indoor_humidity=0.0 (00 = no sensor) must not overwrite."""
+        dev = self._make_device()
+        dev.hvac_state = HvacState(indoor_humidity=0.55)
+
+        payload = {SZ_INDOOR_HUMIDITY: 0.0}
+        msg = self._make_msg(Code._31DA, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.indoor_humidity == 0.55
+
+    def test_good_values_still_update(self) -> None:
+        """Normal (non-null-marker) values must still update the state."""
+        dev = self._make_device()
+        dev.hvac_state = HvacState(fan_mode="low", indoor_humidity=0.40)
+
+        payload = {SZ_FAN_MODE: "high", SZ_INDOOR_HUMIDITY: 0.55}
+        msg = self._make_msg(Code._22F1, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.fan_mode == "high"
+        assert dev.hvac_state.indoor_humidity == 0.55
+
+    def test_null_markers_do_not_set_initial_state(self) -> None:
+        """Null markers must not set state from None to a null value."""
+        dev = self._make_device()
+        # All fields start as None
+
+        payload = {SZ_FAN_MODE: "FF", SZ_INDOOR_HUMIDITY: 0.0, SZ_BYPASS_POSITION: None}
+        msg = self._make_msg(Code._31DA, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.fan_mode is None
+        assert dev.hvac_state.indoor_humidity is None
+        assert dev.hvac_state.bypass_position is None

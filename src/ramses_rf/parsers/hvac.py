@@ -794,6 +794,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
         "01": (2, centile),  # 52 (0.0-25.0) (%)
         "0F": (2, hex_to_percent),  # xx (0.0-1.0) (%)
         "10": (4, counter),  # 31 (0-1800) (days)
+        "13": (4, counter),  # 31 - ClimaRad Ventura filter time (variant)
         "20": (4, counter),  # 01 - Support parameter
         "90": (4, counter),  # 3E - Away mode Exhaust fan rate (%)
         "92": (4, hex_to_temp),  # 75 (0-30) (C)
