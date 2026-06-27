@@ -842,7 +842,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
                     "precision": f"0x{payload[34:42]}",
                     "_value_42": payload[42:],
                 }
-            _LOGGER.warning(f"{warningmsg}. Found values: {result}")
+            _LOGGER.warning(f"{warningmsg} Found values: {result}")
             return result
 
         length, parser = _2411_DATA_TYPES[payload[8:10]]
