@@ -1,7 +1,7 @@
 """RAMSES RF - Asynchronous CQRS State Ingestion Engine.
 
-Consumes messages from the central dispatcher queues and translates decoded
-telemetry payloads into frozen, observable StateUpdatedEvents.
+Consumes messages from the central dispatcher queues and translates
+decoded telemetry payloads into frozen, observable StateUpdatedEvents.
 """
 
 from __future__ import annotations
@@ -15,43 +15,73 @@ from typing import Any, Final
 
 from ramses_rf import quirks
 from ramses_rf.const import (
+    SZ_ACTIVE,
+    SZ_ACTUATOR_ENABLED,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
+    SZ_BATTERY_LEVEL,
+    SZ_BATTERY_LOW,
     SZ_BYPASS_MODE,
     SZ_BYPASS_POSITION,
     SZ_BYPASS_STATE,
     SZ_CH_ACTIVE,
     SZ_CH_ENABLED,
+    SZ_CH_SETPOINT,
     SZ_CO2_LEVEL,
+    SZ_DATETIME,
+    SZ_DEWPOINT_TEMP,
     SZ_DHW_ACTIVE,
+    SZ_DHW_FLOW_RATE,
+    SZ_DIFFERENTIAL,
+    SZ_DOMAIN_ID,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
     SZ_EXHAUST_TEMP,
     SZ_FAN_INFO,
     SZ_FAN_MODE,
     SZ_FAN_RATE,
+    SZ_FLAME_ON,
+    SZ_HEAT_DEMAND,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
+    SZ_LANGUAGE,
+    SZ_MAX_REL_MODULATION,
     SZ_MINUTES,
+    SZ_MODE,
+    SZ_MODULATION_LEVEL,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
+    SZ_OVERRUN,
     SZ_POST_HEAT,
     SZ_PRE_HEAT,
     SZ_PRESENCE_DETECTED,
+    SZ_PRESSURE,
+    SZ_REL_MODULATION_LEVEL,
+    SZ_RELAY_DEMAND,
+    SZ_RELAY_FAILSAFE,
     SZ_REMAINING_DAYS,
     SZ_REMAINING_MINS,
     SZ_REMAINING_PERCENT,
     SZ_REQ_REASON,
     SZ_REQ_SPEED,
+    SZ_SETPOINT,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
     SZ_SUPPLY_TEMP,
+    SZ_SYSTEM_MODE,
+    SZ_TEMP_HIGH,
+    SZ_TEMP_LOW,
     SZ_TEMPERATURE,
+    SZ_UFH_IDX,
+    SZ_UNTIL,
+    SZ_WINDOW_OPEN,
+    SZ_ZONE_IDX,
     Code,
 )
 from ramses_rf.messages import Message
 from ramses_rf.models import (
+    ActuatorState,
     DemandState,
     DhwState,
     HvacState,
@@ -61,6 +91,7 @@ from ramses_rf.models import (
     SystemState,
     TemperatureState,
     TrvState,
+    UfhState,
 )
 from ramses_rf.protocol.opentherm import OtDataId
 
@@ -69,13 +100,13 @@ from ramses_rf.protocol.opentherm import OtDataId
 RAMSES_HEATING_MAP: Final[dict[Code, tuple[str, str, str]]] = {
     Code._3200: (SZ_TEMPERATURE, "temperatures", "boiler_output"),
     Code._3210: (SZ_TEMPERATURE, "temperatures", "boiler_return"),
-    Code._22D9: ("setpoint", "temperatures", "boiler_setpoint"),
-    Code._1081: ("setpoint", "temperatures", "ch_max_setpoint"),
-    Code._1300: ("pressure", "base", "ch_water_pressure"),
-    Code._12F0: ("dhw_flow_rate", "base", "dhw_flow_rate"),
-    Code._10A0: ("setpoint", "temperatures", "dhw_setpoint"),
-    Code._1260: ("temperature", "temperatures", "dhw"),
-    Code._1290: ("temperature", "temperatures", "outside"),
+    Code._22D9: (SZ_SETPOINT, "temperatures", "boiler_setpoint"),
+    Code._1081: (SZ_SETPOINT, "temperatures", "ch_max_setpoint"),
+    Code._1300: (SZ_PRESSURE, "base", "ch_water_pressure"),
+    Code._12F0: (SZ_DHW_FLOW_RATE, "base", "dhw_flow_rate"),
+    Code._10A0: (SZ_SETPOINT, "temperatures", "dhw_setpoint"),
+    Code._1260: (SZ_TEMPERATURE, "temperatures", "dhw"),
+    Code._1290: (SZ_TEMPERATURE, "temperatures", "outside"),
 }
 
 OPENTHERM_FIELD_MAP: Final[dict[OtDataId, tuple[str, str]]] = {
@@ -107,14 +138,17 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
 
 class StateProjector:
-    """Projector task that transforms incoming telemetry into immutable states."""
+    """Projector task that transforms incoming telemetry into immutable
+    states.
+    """
 
     def __init__(self, gwy: Any, ssot_queue: asyncio.Queue[Message]) -> None:
         """Initialize the state projector background worker.
 
         :param gwy: The active Gateway facade instance.
         :type gwy: Any
-        :param ssot_queue: Single Source of Truth Queue from CentralDispatcher.
+        :param ssot_queue: Single Source of Truth Queue from
+            CentralDispatcher.
         :type ssot_queue: asyncio.Queue[Message]
         """
         self._gwy = gwy
@@ -158,7 +192,8 @@ class StateProjector:
                 self._queue.task_done()
 
     def process_message_state(self, msg: Message) -> None:
-        """Route valid inbound message envelopes to their respective engines.
+        """Route valid inbound message envelopes to their respective
+        engines.
 
         :param msg: The message envelope containing raw telemetry.
         :type msg: Message
@@ -172,15 +207,28 @@ class StateProjector:
 
         payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
 
-        registry = getattr(self._gwy, "device_registry", None)
-        if not registry:
-            return
-
+        # Unfold dict-of-dicts arrays (e.g. {'00': {'ufh_idx': '00'}})
+        unfolded_payloads: list[dict[str, Any]] = []
         for p in payloads:
             if not isinstance(p, dict):
                 continue
 
-            # Hexagonal Boundary Enforcement: Route telemetry to the Source device
+            if (
+                SZ_UFH_IDX not in p
+                and SZ_ZONE_IDX not in p
+                and SZ_DOMAIN_ID not in p
+                and all(isinstance(v, dict) for v in p.values())
+            ):
+                unfolded_payloads.extend([v for v in p.values() if isinstance(v, dict)])
+            else:
+                unfolded_payloads.append(p)
+
+        registry = getattr(self._gwy, "device_registry", None)
+        if not registry:
+            return
+
+        for p in unfolded_payloads:
+            # Hexagonal Boundary Enforcement: Route telemetry to Source
             src_dev = registry.device_by_id.get(msg.src.id)
             if src_dev:
                 try:
@@ -191,9 +239,11 @@ class StateProjector:
                     self._update_system_state(src_dev, p, msg)
                     self._update_temperature_state(src_dev, p, msg)
                     self._update_demand_state(src_dev, p, msg)
+                    self._update_ufh_state(src_dev, p, msg)
+                    self._update_actuator_state(src_dev, p, msg)
                 except Exception as err:
                     _LOGGER.error(
-                        "CQRS state extraction failed for src %s: %s",
+                        "CQRS extraction failed for src %s: %s",
                         src_dev.id,
                         err,
                     )
@@ -210,9 +260,11 @@ class StateProjector:
                         self._update_system_state(dst_dev, p, msg)
                         self._update_temperature_state(dst_dev, p, msg)
                         self._update_demand_state(dst_dev, p, msg)
+                        self._update_ufh_state(dst_dev, p, msg)
+                        self._update_actuator_state(dst_dev, p, msg)
                     except Exception as err:
                         _LOGGER.error(
-                            "CQRS state extraction failed for dst %s: %s",
+                            "CQRS extraction failed for dst %s: %s",
                             dst_dev.id,
                             err,
                         )
@@ -220,10 +272,13 @@ class StateProjector:
     def _update_opentherm_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate OpenTherm frames or parallel opcodes into OpenThermState."""
-        if not hasattr(target, "opentherm_state"):
+        """Translate OpenTherm frames or parallel opcodes into
+        OpenThermState.
+        """
+        current_state = getattr(target, "opentherm_state", None)
+        if current_state is None:
             if getattr(target, "_SLUG", "") == "OTB":
-                target.opentherm_state = OpenThermState()
+                current_state = OpenThermState()
             else:
                 return
 
@@ -276,51 +331,57 @@ class StateProjector:
                     upd_flag[field_key] = val
         else:
             if msg.code in RAMSES_HEATING_MAP:
-                payload_key, category, state_field = RAMSES_HEATING_MAP[msg.code]
+                data = RAMSES_HEATING_MAP[msg.code]
+                payload_key, category, state_field = data
                 if payload_key in p:
                     if category == "base":
                         upd_base[state_field] = p[payload_key]
                     elif category == "temperatures":
                         upd_temp[state_field] = p[payload_key]
             elif msg.code in (Code._3EF0, Code._3EF1):
-                if "rel_modulation_level" in p:
-                    upd_base["rel_modulation_level"] = p["rel_modulation_level"]
-                if "max_rel_modulation" in p:
-                    upd_base["max_rel_modulation"] = p["max_rel_modulation"]
-                if "ch_setpoint" in p:
-                    upd_temp["ch_setpoint"] = p["ch_setpoint"]
+                if SZ_REL_MODULATION_LEVEL in p:
+                    upd_base["rel_modulation_level"] = p[SZ_REL_MODULATION_LEVEL]
+                if SZ_MAX_REL_MODULATION in p:
+                    upd_base["max_rel_modulation"] = p[SZ_MAX_REL_MODULATION]
+                if SZ_CH_SETPOINT in p:
+                    upd_temp["ch_setpoint"] = p[SZ_CH_SETPOINT]
                 if SZ_CH_ACTIVE in p:
                     upd_flag["ch_active"] = p[SZ_CH_ACTIVE]
                 if SZ_CH_ENABLED in p:
                     upd_flag["ch_enabled"] = p[SZ_CH_ENABLED]
                 if SZ_DHW_ACTIVE in p:
                     upd_flag["dhw_active"] = p[SZ_DHW_ACTIVE]
-                if "flame_on" in p:
-                    upd_flag["flame_active"] = p["flame_on"]
+                if SZ_FLAME_ON in p:
+                    # NOTE: semantic parser maps this specifically
+                    upd_flag["flame_active"] = p[SZ_FLAME_ON]
 
         if not any((upd_base, upd_flag, upd_temp, upd_count)):
             return
 
-        new_flags = target.opentherm_state.flags
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            upd_base["last_updated"] = dtm
+
+        new_flags = current_state.flags
         if upd_flag:
             new_flags = dataclasses.replace(new_flags, **upd_flag)
 
-        new_temps = target.opentherm_state.temperatures
+        new_temps = current_state.temperatures
         if upd_temp:
             new_temps = dataclasses.replace(new_temps, **upd_temp)
 
-        new_counters = target.opentherm_state.counters
+        new_counters = current_state.counters
         if upd_count:
             new_counters = dataclasses.replace(new_counters, **upd_count)
 
         new_state = dataclasses.replace(
-            target.opentherm_state,
+            current_state,
             flags=new_flags,
             temperatures=new_temps,
             counters=new_counters,
             **upd_base,
         )
-        target.opentherm_state = new_state  # Explicit shadow hydration
+        target.opentherm_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
@@ -332,19 +393,24 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_hvac_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
-        """Translate complex multi-opcode ventilation payloads into HvacState.
+        """Translate complex multi-opcode ventilation payloads into
+        HvacState.
 
-        Applies hardware-specific stateful FSM rules (via the Quirks middleware)
-        prior to hydration.
+        Applies hardware-specific stateful FSM rules (via the Quirks
+        middleware) prior to hydration.
         """
-        if getattr(target, "_SLUG", "") in ("CTL", "BDR", "TRV", "OTB", "UFC", "DHW"):
+        if getattr(target, "_SLUG", "") in (
+            "CTL",
+            "BDR",
+            "TRV",
+            "OTB",
+            "UFC",
+            "DHW",
+        ):
             return
 
-        if not hasattr(target, "hvac_state"):
-            target.hvac_state = HvacState()
-
-        # Execute Quirk Resolution Middleware
-        p = quirks.apply_hvac_quirks(p, target.hvac_state, msg.code)
+        current_state = getattr(target, "hvac_state", None) or HvacState()
+        p = quirks.apply_hvac_quirks(p, current_state, msg.code)
 
         updates: dict[str, Any] = {}
 
@@ -374,7 +440,7 @@ class StateProjector:
             SZ_SUPPLY_FLOW,
             SZ_SUPPLY_TEMP,
             SZ_TEMPERATURE,
-            "dewpoint_temp",
+            SZ_DEWPOINT_TEMP,
         ]
 
         for f in fields:
@@ -396,8 +462,12 @@ class StateProjector:
         if not updates:
             return
 
-        new_state = dataclasses.replace(target.hvac_state, **updates)
-        target.hvac_state = new_state  # Explicit shadow hydration
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            updates["last_updated"] = dtm
+
+        new_state = dataclasses.replace(current_state, **updates)
+        target.hvac_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
@@ -410,21 +480,23 @@ class StateProjector:
 
     def _update_power_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
         """Translate battery opcodes into PowerState."""
-        if not hasattr(target, "power_state"):
-            target.power_state = PowerState()
-
         updates: dict[str, Any] = {}
         if msg.code == Code._1060:
-            if "battery_low" in p:
-                updates["battery_low"] = p["battery_low"]
-            if "battery_level" in p:
-                updates["battery_level"] = p["battery_level"]
+            if SZ_BATTERY_LOW in p:
+                updates["battery_low"] = p[SZ_BATTERY_LOW]
+            if SZ_BATTERY_LEVEL in p:
+                updates["battery_level"] = p[SZ_BATTERY_LEVEL]
 
         if not updates:
             return
 
-        new_state = dataclasses.replace(target.power_state, **updates)
-        target.power_state = new_state  # Explicit shadow hydration
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            updates["last_updated"] = dtm
+
+        current_state = getattr(target, "power_state", None) or PowerState()
+        new_state = dataclasses.replace(current_state, **updates)
+        target.power_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
@@ -440,27 +512,35 @@ class StateProjector:
         if msg.code not in (Code._10A0, Code._1260, Code._1F41):
             return
 
-        if not hasattr(target, "dhw_state"):
-            target.dhw_state = DhwState()
-
         updates: dict[str, Any] = {}
         if msg.code == Code._10A0:
-            for k in ("setpoint", "overrun", "differential"):
-                if k in p:
-                    updates[k] = p[k]
+            if SZ_SETPOINT in p:
+                updates["setpoint"] = p[SZ_SETPOINT]
+            if SZ_OVERRUN in p:
+                updates["overrun"] = p[SZ_OVERRUN]
+            if SZ_DIFFERENTIAL in p:
+                updates["differential"] = p[SZ_DIFFERENTIAL]
         elif msg.code == Code._1260:
-            if "temperature" in p:
-                updates["temperature"] = p["temperature"]
+            if SZ_TEMPERATURE in p:
+                updates["temperature"] = p[SZ_TEMPERATURE]
         elif msg.code == Code._1F41:
-            for k in ("mode", "active", "until"):
-                if k in p:
-                    updates[k] = p[k]
+            if SZ_MODE in p:
+                updates["mode"] = p[SZ_MODE]
+            if SZ_ACTIVE in p:
+                updates["active"] = p[SZ_ACTIVE]
+            if SZ_UNTIL in p:
+                updates["until"] = p[SZ_UNTIL]
 
         if not updates:
             return
 
-        new_state = dataclasses.replace(target.dhw_state, **updates)
-        target.dhw_state = new_state  # Explicit shadow hydration
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            updates["last_updated"] = dtm
+
+        current_state = getattr(target, "dhw_state", None) or DhwState()
+        new_state = dataclasses.replace(current_state, **updates)
+        target.dhw_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
@@ -478,27 +558,29 @@ class StateProjector:
         if msg.code not in (Code._0100, Code._2E04, Code._313F):
             return
 
-        if not hasattr(target, "system_state"):
-            target.system_state = SystemState()
-
         updates: dict[str, Any] = {}
         if msg.code == Code._0100:
-            if "language" in p:
-                updates["language"] = p["language"]
+            if SZ_LANGUAGE in p:
+                updates["language"] = p[SZ_LANGUAGE]
         elif msg.code == Code._2E04:
-            if "system_mode" in p:
-                updates["system_mode"] = p["system_mode"]
-            if "until" in p:
-                updates["until"] = p["until"]
+            if SZ_SYSTEM_MODE in p:
+                updates["system_mode"] = p[SZ_SYSTEM_MODE]
+            if SZ_UNTIL in p:
+                updates["until"] = p[SZ_UNTIL]
         elif msg.code == Code._313F:
-            if "datetime" in p:
-                updates["datetime"] = p["datetime"]
+            if SZ_DATETIME in p:
+                updates["datetime"] = p[SZ_DATETIME]
 
         if not updates:
             return
 
-        new_state = dataclasses.replace(target.system_state, **updates)
-        target.system_state = new_state  # Explicit shadow hydration
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            updates["last_updated"] = dtm
+
+        current_state = getattr(target, "system_state", None) or SystemState()
+        new_state = dataclasses.replace(current_state, **updates)
+        target.system_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
@@ -512,15 +594,19 @@ class StateProjector:
     def _update_temperature_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate temperature/TRV opcodes into TrvState & TemperatureState."""
-        if msg.code == Code._12B0 and "window_open" in p:
-            if not hasattr(target, "trv_state"):
-                target.trv_state = TrvState()
+        """Translate temperature/TRV opcodes into TrvState &
+        TemperatureState.
+        """
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
 
-            new_trv = dataclasses.replace(
-                target.trv_state, window_open=p["window_open"]
-            )
-            target.trv_state = new_trv  # Explicit shadow hydration
+        if msg.code == Code._12B0 and SZ_WINDOW_OPEN in p:
+            current_trv = getattr(target, "trv_state", None) or TrvState()
+            trv_updates = {"window_open": p[SZ_WINDOW_OPEN]}
+            if dtm:
+                trv_updates["last_updated"] = dtm
+
+            new_trv = dataclasses.replace(current_trv, **trv_updates)
+            target.trv_state = new_trv
 
             event = StateUpdatedEvent(
                 entity_id=getattr(target, "id", "unknown"),
@@ -532,18 +618,19 @@ class StateProjector:
                 target.apply_state_update(event)
 
         if msg.code in (Code._30C9, Code._1260, Code._0002):
-            if not hasattr(target, "temp_state"):
-                target.temp_state = TemperatureState()
-
-            updates = {}
-            if "temperature" in p:
-                updates["temperature"] = p["temperature"]
-            if "setpoint" in p:
-                updates["setpoint"] = p["setpoint"]
+            updates: dict[str, Any] = {}
+            if SZ_TEMPERATURE in p:
+                updates["temperature"] = p[SZ_TEMPERATURE]
+            if SZ_SETPOINT in p:
+                updates["setpoint"] = p[SZ_SETPOINT]
 
             if updates:
-                new_temp = dataclasses.replace(target.temp_state, **updates)
-                target.temp_state = new_temp  # Explicit shadow hydration
+                if dtm:
+                    updates["last_updated"] = dtm
+
+                current_temp = getattr(target, "temp_state", None) or TemperatureState()
+                new_temp = dataclasses.replace(current_temp, **updates)
+                target.temp_state = new_temp
 
                 event = StateUpdatedEvent(
                     entity_id=getattr(target, "id", "unknown"),
@@ -561,22 +648,121 @@ class StateProjector:
         if msg.code not in (Code._3150, Code._0008, Code._0009):
             return
 
-        if not hasattr(target, "demand_state"):
-            target.demand_state = DemandState()
-
         updates: dict[str, Any] = {}
-        if msg.code == Code._3150 and "heat_demand" in p:
-            updates["heat_demand"] = p["heat_demand"]
-        elif msg.code == Code._0008 and "relay_demand" in p:
-            updates["relay_demand"] = p["relay_demand"]
-        elif msg.code == Code._0009 and "relay_failsafe" in p:
-            updates["relay_failsafe"] = p["relay_failsafe"]
+        if msg.code == Code._3150 and SZ_HEAT_DEMAND in p:
+            updates["heat_demand"] = p[SZ_HEAT_DEMAND]
+        elif msg.code == Code._0008 and SZ_RELAY_DEMAND in p:
+            updates["relay_demand"] = p[SZ_RELAY_DEMAND]
+        elif msg.code == Code._0009 and SZ_RELAY_FAILSAFE in p:
+            updates["relay_failsafe"] = p[SZ_RELAY_FAILSAFE]
 
         if not updates:
             return
 
-        new_state = dataclasses.replace(target.demand_state, **updates)
-        target.demand_state = new_state  # Explicit shadow hydration
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            updates["last_updated"] = dtm
+
+        current_state = getattr(target, "demand_state", None) or DemandState()
+        new_state = dataclasses.replace(current_state, **updates)
+        target.demand_state = new_state
+
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
+
+    def _update_ufh_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
+        """Translate UFH circuit arrays and bounds into UfhState."""
+        if msg.code not in (Code._3150, Code._0008, Code._22C9):
+            return
+
+        if getattr(target, "_SLUG", "") != "UFC":
+            return
+
+        current_state = getattr(target, "ufh_state", None) or UfhState()
+        updates: dict[str, Any] = {}
+
+        if msg.code == Code._3150 and SZ_UFH_IDX in p and SZ_HEAT_DEMAND in p:
+            new_demands = dict(current_state.heat_demands)
+            new_demands[p[SZ_UFH_IDX]] = p[SZ_HEAT_DEMAND]
+            updates["heat_demands"] = new_demands
+        elif (
+            msg.code == Code._0008
+            and p.get(SZ_DOMAIN_ID) == "FA"
+            and SZ_RELAY_DEMAND in p
+        ):
+            updates["relay_demand_fa"] = p[SZ_RELAY_DEMAND]
+        elif msg.code == Code._22C9 and SZ_UFH_IDX in p:
+            new_sp = dict(current_state.setpoints)
+            sp_data = dict(new_sp.get(p[SZ_UFH_IDX], {}))
+            if SZ_TEMP_LOW in p:
+                sp_data["temp_low"] = p[SZ_TEMP_LOW]
+            if SZ_TEMP_HIGH in p:
+                sp_data["temp_high"] = p[SZ_TEMP_HIGH]
+
+            new_sp[p[SZ_UFH_IDX]] = sp_data
+            updates["setpoints"] = new_sp
+
+        if not updates:
+            return
+
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            updates["last_updated"] = dtm
+
+        new_state = dataclasses.replace(current_state, **updates)
+        target.ufh_state = new_state
+
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
+
+    def _update_actuator_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
+        """Translate actuator state opcodes into ActuatorState."""
+        if msg.code not in (Code._3EF0, Code._3EF1):
+            return
+
+        updates: dict[str, Any] = {}
+        if SZ_MODULATION_LEVEL in p:
+            # NOTE: semantic parser custom keys
+            updates["modulation_level"] = p[SZ_MODULATION_LEVEL]
+        elif SZ_REL_MODULATION_LEVEL in p:
+            updates["modulation_level"] = p[SZ_REL_MODULATION_LEVEL]
+
+        if SZ_ACTUATOR_ENABLED in p:
+            updates["actuator_enabled"] = p[SZ_ACTUATOR_ENABLED]
+        if SZ_CH_ACTIVE in p:
+            updates["ch_active"] = p[SZ_CH_ACTIVE]
+        if SZ_CH_ENABLED in p:
+            updates["ch_enabled"] = p[SZ_CH_ENABLED]
+        if SZ_DHW_ACTIVE in p:
+            updates["dhw_active"] = p[SZ_DHW_ACTIVE]
+        if SZ_FLAME_ON in p:
+            # NOTE: semantic parser custom keys
+            updates["flame_active"] = p[SZ_FLAME_ON]
+
+        if not updates:
+            return
+
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            updates["last_updated"] = dtm
+
+        current_state = getattr(target, "act_state", None) or ActuatorState()
+        new_state = dataclasses.replace(current_state, **updates)
+        target.act_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
