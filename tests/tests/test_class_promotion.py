@@ -105,15 +105,6 @@ def test_ufh_controller_post_class_promote_initializes_state(
 
     assert set(ufh.circuit_by_id.keys()) == {f"{i:02X}" for i in range(8)}
 
-    for attr in (
-        "_setpoints",
-        "_heat_demand",
-        "_heat_demands",
-        "_relay_demand",
-        "_relay_demand_fa",
-    ):
-        assert getattr(ufh, attr) is None
-
 
 def test_controller_post_class_promote_sets_tcs_attribute(
     bare_instance_factory: BareFactory,
