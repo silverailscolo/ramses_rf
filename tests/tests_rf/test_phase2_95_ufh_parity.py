@@ -130,7 +130,11 @@ async def test_cqrs_ufh_and_actuator_state_parity() -> None:
 
             legacy_demands = await _get_legacy_value(dev, "heat_demands")
             if legacy_demands is not None:
-                assert cqrs_ufh.heat_demands == legacy_demands
+                expected_list = [
+                    {"ufx_idx": str(k), "heat_demand": v}
+                    for k, v in cqrs_ufh.heat_demands.items()
+                ]
+                assert expected_list == legacy_demands
 
             legacy_setpoints = await _get_legacy_value(dev, "setpoints")
             if legacy_setpoints is not None:

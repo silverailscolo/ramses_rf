@@ -63,14 +63,54 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
             )  # actuator cycle
 
     async def actuator_cycle(self) -> dict[str, Any] | None:  # 3EF1
-        return cast(
-            dict[str, Any] | None, await self.entity_state.get_value(Code._3EF1)
-        )
+        """Return the actuator cycle state.
+
+        # TODO: Refactor for #714 (CQRS API Boundaries).
+        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        """
+        state = getattr(self, "act_state", None)
+        if not state:
+            return None
+
+        raw_dict = {
+            "actuator_countdown": state.actuator_countdown,
+            "cycle_countdown": state.cycle_countdown,
+            "actuator_enabled": state.actuator_enabled,
+            "modulation_level": state.modulation_level,
+        }
+
+        # Dynamically strip None values to mimic legacy optional keys
+        clean_dict = {k: v for k, v in raw_dict.items() if v is not None}
+        return clean_dict if clean_dict else None
 
     async def actuator_state(self) -> dict[str, Any] | None:  # 3EF0
-        return cast(
-            dict[str, Any] | None, await self.entity_state.get_value(Code._3EF0)
+        """Return the actuator modulation state.
+
+        # TODO: Refactor for #714 (CQRS API Boundaries).
+        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        """
+        state = getattr(self, "act_state", None)
+        if not state:
+            return None
+
+        flame_status = (
+            state.flame_on if state.flame_on is not None else state.flame_active
         )
+
+        raw_dict = {
+            "ch_active": state.ch_active,
+            "ch_enabled": state.ch_enabled,
+            "ch_setpoint": state.ch_setpoint,
+            "cool_active": state.cool_active,
+            "dhw_active": state.dhw_active,
+            "flame_on": flame_status,
+            "max_rel_modulation": state.max_rel_modulation,
+            "modulation_level": state.modulation_level,
+        }
+
+        # Dynamically strip None values to mimic legacy optional keys
+        clean_dict = {k: v for k, v in raw_dict.items() if v is not None}
+        return clean_dict if clean_dict else None
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -178,21 +218,17 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
     async def active(self) -> bool | None:  # 3EF0, 3EF1
         """Return the actuator's current state."""
-        result = await self.entity_state.get_value(
-            (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
-        )
-        return None if result is None else bool(result)
+        state = getattr(self, "act_state", None)
+        if state and state.modulation_level is not None:
+            return bool(state.modulation_level)
+        return None
 
     async def relay_demand(self) -> float | None:
         """Return the relay demand of the BDR91."""
         if (demand := await super().relay_demand()) is not None:
             return demand
-        return cast(
-            float | None,
-            await self.entity_state.get_value(
-                (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
-            ),
-        )
+        state = getattr(self, "act_state", None)
+        return state.modulation_level if state else None
 
     async def role(self) -> str | None:
         """Return the role of the BDR91A (there are six possibilities)."""

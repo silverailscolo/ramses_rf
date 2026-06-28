@@ -107,4 +107,11 @@ class ActuatorState:
     ch_enabled: bool | None = None
     dhw_active: bool | None = None
     flame_active: bool | None = None
+    # Legacy payload restorations for ramses_cc backwards compatibility
+    ch_setpoint: float | None = None
+    cool_active: bool | None = None
+    flame_on: bool | None = None
+    max_rel_modulation: float | None = None
+    actuator_countdown: int | None = None
+    cycle_countdown: int | None = None
     last_updated: dt = field(default_factory=_now_utc)
