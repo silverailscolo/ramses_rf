@@ -85,3 +85,26 @@ class ZoneState:
     openwindow_function: bool | None = None
     multiroom_mode: bool | None = None
     last_updated: dt = field(default_factory=_now_utc)
+
+
+@dataclass(frozen=True, slots=True)
+class UfhState:
+    """State for Underfloor Heating (UFH) controllers."""
+
+    heat_demands: dict[str, float | None] = field(default_factory=dict)
+    setpoints: dict[str, dict[str, float | None]] = field(default_factory=dict)
+    relay_demand_fa: float | None = None
+    last_updated: dt = field(default_factory=_now_utc)
+
+
+@dataclass(frozen=True, slots=True)
+class ActuatorState:
+    """State for boiler and heating actuators (e.g., BDR91)."""
+
+    modulation_level: float | None = None
+    actuator_enabled: bool | None = None
+    ch_active: bool | None = None
+    ch_enabled: bool | None = None
+    dhw_active: bool | None = None
+    flame_active: bool | None = None
+    last_updated: dt = field(default_factory=_now_utc)
