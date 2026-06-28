@@ -11,7 +11,7 @@ import asyncio
 import uuid
 from typing import Any
 
-from ramses_rf.const import Code, DevType
+from ramses_rf.const import SZ_REMAINING_DAYS, Code, DevType
 from ramses_rf.messages import Message
 from ramses_rf.models import HvacState, OpenThermState, StateUpdatedEvent
 from ramses_rf.pipeline.ingestion import StateProjector
@@ -189,7 +189,7 @@ def test_worker_hvac_state_parsing() -> None:
         "indoor_humidity": 45.2,
         "fan_mode": "auto",
         "presence_detected": True,
-        "remaining_days": 120,
+        SZ_REMAINING_DAYS: 120,
     }
 
     mock_msg = MockMessage(

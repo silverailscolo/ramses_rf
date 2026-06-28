@@ -18,7 +18,7 @@ from ramses_rf.protocol.ramses import (
 
 from .. import exceptions as exc
 from ..address import NON_DEV_ADDR
-from ..const import I_, RQ, W_, Code
+from ..const import I_, RQ, SZ_MINUTES, W_, Code
 from ..helpers import (
     air_quality_code,
     capability_bits,
@@ -261,7 +261,7 @@ class HvacMixins(CommandBase):
                 precision_scaled = int(precision)
                 trailer = "0001"
                 if not min_val_scaled <= value_scaled <= max_val_scaled:
-                    unit = "minutes" if data_type == "00" else ""
+                    unit = SZ_MINUTES if data_type == "00" else ""
                     raise exc.CommandInvalid(
                         f"Parameter {param_id}: Value {value_scaled}"
                         f"{' ' + unit if unit else ''} is out of allowed "

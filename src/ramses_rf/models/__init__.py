@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from .state_base import DeviceTraits, StateUpdatedEvent, TopologyChangedEvent, _now_utc
 from .state_climate import (
+    ActuatorState,
     DemandState,
     DhwState,
     PowerState,
     SystemState,
     TemperatureState,
     TrvState,
+    UfhState,
     ZoneState,
 )
 from .state_faults import FaultLogEntry, FaultLogState
@@ -29,6 +31,8 @@ __all__ = [
     "SystemState",
     "PowerState",
     "ZoneState",
+    "UfhState",
+    "ActuatorState",
     "FaultLogEntry",
     "FaultLogState",
     "OpenThermState",

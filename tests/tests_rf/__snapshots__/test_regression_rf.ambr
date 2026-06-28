@@ -445,8 +445,17 @@
       }),
       dict({
         'battery_low': None,
+        'heat_demand': 0.98,
+        'heat_demands': list([
+          dict({
+            'heat_demand': 0.98,
+            'ufx_idx': '06',
+          }),
+        ]),
         'id': '02:000921',
         'is_alive': None,
+        'setpoints': dict({
+        }),
         'tcs_id': '01:191718',
         'type': 'UfhController',
         'zone_idx': None,
@@ -465,12 +474,20 @@
         'is_alive': None,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 21.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 21.0,
           }),
           '02': dict({
+            'temp_high': 26.0,
+            'temp_low': 21.0,
           }),
           '03': dict({
+            'temp_high': 26.0,
+            'temp_low': 21.0,
           }),
         }),
         'tcs_id': None,
@@ -493,8 +510,12 @@
         'is_alive': None,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 15.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 15.0,
           }),
         }),
         'tcs_id': None,
@@ -515,6 +536,10 @@
           }),
           dict({
             'heat_demand': 0.0,
+            'ufx_idx': '0B',
+          }),
+          dict({
+            'heat_demand': 0.0,
             'ufx_idx': '02',
           }),
         ]),
@@ -523,10 +548,16 @@
         'relay_demand': 0.0,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 14.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 15.0,
           }),
           '02': dict({
+            'temp_high': 26.0,
+            'temp_low': 15.0,
           }),
         }),
         'tcs_id': '01:195932',
@@ -544,19 +575,35 @@
       dict({
         'battery_low': None,
         'heat_demand': 0.62,
+        'heat_demands': list([
+          dict({
+            'heat_demand': 0.59,
+            'ufx_idx': '00',
+          }),
+        ]),
         'id': '02:017205',
         'is_alive': None,
         'relay_demand': 1.0,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 20.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 20.0,
           }),
           '02': dict({
+            'temp_high': 26.0,
+            'temp_low': 20.0,
           }),
           '03': dict({
+            'temp_high': 26.0,
+            'temp_low': 20.0,
           }),
           '04': dict({
+            'temp_high': 26.0,
+            'temp_low': 20.0,
           }),
         }),
         'tcs_id': '01:087939',
@@ -569,14 +616,24 @@
         'is_alive': None,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
           '02': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
           '03': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
           '04': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
         }),
         'tcs_id': None,
@@ -597,6 +654,8 @@
         'id': '02:033545',
         'is_alive': None,
         'relay_demand': 0.0,
+        'setpoints': dict({
+        }),
         'tcs_id': None,
         'type': 'UfhController',
         'zone_idx': None,
@@ -625,15 +684,33 @@
             'heat_demand': 0.0,
             'ufx_idx': '02',
           }),
+          dict({
+            'heat_demand': 0.74,
+            'ufx_idx': '08',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '07',
+          }),
+          dict({
+            'heat_demand': 0.0,
+            'ufx_idx': '03',
+          }),
         ]),
         'id': '02:044328',
         'is_alive': None,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 20.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 13.0,
           }),
           '02': dict({
+            'temp_high': 26.0,
+            'temp_low': 8.0,
           }),
         }),
         'tcs_id': '01:073976',
@@ -662,10 +739,16 @@
         'relay_demand': 1.0,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 21.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 21.0,
           }),
           '02': dict({
+            'temp_high': 26.0,
+            'temp_low': 21.0,
           }),
         }),
         'tcs_id': '01:073976',
@@ -681,7 +764,7 @@
             'ufx_idx': '00',
           }),
           dict({
-            'heat_demand': 0.78,
+            'heat_demand': 0.0,
             'ufx_idx': '01',
           }),
           dict({
@@ -693,22 +776,40 @@
             'ufx_idx': '03',
           }),
           dict({
-            'heat_demand': 0.0,
+            'heat_demand': 0.23,
             'ufx_idx': '04',
+          }),
+          dict({
+            'heat_demand': 0.39,
+            'ufx_idx': '05',
+          }),
+          dict({
+            'heat_demand': 1.0,
+            'ufx_idx': '06',
           }),
         ]),
         'id': '02:044446',
         'is_alive': None,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 19.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 16.5,
           }),
           '02': dict({
+            'temp_high': 26.0,
+            'temp_low': 17.0,
           }),
           '03': dict({
+            'temp_high': 26.0,
+            'temp_low': 17.0,
           }),
           '04': dict({
+            'temp_high': 26.0,
+            'temp_low': 20.0,
           }),
         }),
         'tcs_id': '01:073976',
@@ -733,6 +834,7 @@
       }),
       dict({
         'battery_low': None,
+        'heat_demand': 0.22,
         'heat_demands': list([
           dict({
             'heat_demand': 0.81,
@@ -743,12 +845,20 @@
         'is_alive': None,
         'setpoints': dict({
           '00': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
           '01': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
           '02': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
           '03': dict({
+            'temp_high': 26.0,
+            'temp_low': 5.0,
           }),
         }),
         'tcs_id': '01:555555',
@@ -777,6 +887,8 @@
         'is_alive': None,
         'setpoints': dict({
           '05': dict({
+            'temp_high': None,
+            'temp_low': 21.0,
           }),
         }),
         'tcs_id': None,
@@ -869,6 +981,8 @@
         'is_alive': None,
         'setpoints': dict({
           '03': dict({
+            'temp_high': None,
+            'temp_low': 19.5,
           }),
         }),
         'tcs_id': None,
@@ -881,6 +995,8 @@
         'is_alive': None,
         'setpoints': dict({
           '03': dict({
+            'temp_high': None,
+            'temp_low': 20.0,
           }),
         }),
         'tcs_id': None,
@@ -892,7 +1008,25 @@
         'id': '02:250984',
         'is_alive': None,
         'setpoints': dict({
+          '03': dict({
+            'temp_high': None,
+            'temp_low': 19.0,
+          }),
+          '04': dict({
+            'temp_high': None,
+            'temp_low': 19.0,
+          }),
+          '05': dict({
+            'temp_high': None,
+            'temp_low': 19.0,
+          }),
+          '06': dict({
+            'temp_high': None,
+            'temp_low': 19.0,
+          }),
           '07': dict({
+            'temp_high': None,
+            'temp_low': 19.0,
           }),
         }),
         'tcs_id': None,
@@ -2219,6 +2353,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': False,
@@ -2239,6 +2376,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': True,
           'ch_enabled': True,
@@ -2276,6 +2416,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': False,
@@ -2312,6 +2455,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'cool_active': False,
@@ -2328,6 +2474,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': True,
           'ch_enabled': True,
@@ -2356,6 +2505,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': True,
           'ch_enabled': True,
@@ -2377,6 +2529,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': False,
@@ -2405,6 +2560,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': True,
@@ -2447,7 +2605,6 @@
       dict({
         'actuator_cycle': dict({
           'actuator_countdown': 60,
-          'cycle_countdown': None,
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
@@ -2479,6 +2636,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': True,
@@ -2535,7 +2695,6 @@
       dict({
         'actuator_cycle': dict({
           'actuator_countdown': 60,
-          'cycle_countdown': None,
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
@@ -2558,12 +2717,15 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': True,
-          'cool_active': False,
-          'dhw_active': False,
+          'cool_active': True,
+          'dhw_active': True,
           'flame_on': True,
-          'modulation_level': 0.3,
+          'modulation_level': 0.0,
         }),
         'battery_low': None,
         'boiler_output_temp': 65.0,
@@ -2575,6 +2737,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'cool_active': False,
@@ -2613,6 +2778,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': True,
           'cool_active': False,
@@ -2665,6 +2833,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.135,
+        }),
         'actuator_state': dict({
           'ch_active': True,
           'cool_active': False,
@@ -2686,6 +2857,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'cool_active': False,
@@ -2727,6 +2901,9 @@
         'zone_idx': None,
       }),
       dict({
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'ch_active': False,
           'cool_active': False,
@@ -2853,6 +3030,9 @@
           'cycle_countdown': 493,
           'modulation_level': 1.0,
         }),
+        'actuator_state': dict({
+          'modulation_level': 1.0,
+        }),
         'battery_low': None,
         'id': '13:031208',
         'is_alive': None,
@@ -2863,6 +3043,9 @@
       }),
       dict({
         'active': False,
+        'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
         'actuator_state': dict({
           'modulation_level': 0.0,
         }),
@@ -3005,6 +3188,9 @@
       }),
       dict({
         'active': True,
+        'actuator_cycle': dict({
+          'modulation_level': 1.0,
+        }),
         'actuator_state': dict({
           'modulation_level': 1.0,
         }),
@@ -3037,6 +3223,9 @@
         'actuator_cycle': dict({
           'actuator_countdown': 988,
           'cycle_countdown': 988,
+          'modulation_level': 1.0,
+        }),
+        'actuator_state': dict({
           'modulation_level': 1.0,
         }),
         'battery_low': None,
@@ -3096,6 +3285,9 @@
           'cycle_countdown': 255,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'id': '13:237335',
         'is_alive': None,
@@ -3109,6 +3301,9 @@
         'actuator_cycle': dict({
           'actuator_countdown': 26,
           'cycle_countdown': 26,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
           'modulation_level': 0.0,
         }),
         'battery_low': None,

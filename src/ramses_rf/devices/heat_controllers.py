@@ -137,12 +137,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
     childs: list[Child]  # TODO: check (code so complex, not sure if this is true)
 
-    _setpoints: Message | None
-    _heat_demand: Message | None
-    _heat_demands: Message | None
-    _relay_demand: Message | None
-    _relay_demand_fa: Message | None
-
     # 12:27:24.398 067  I --- 02:000921 --:------ 01:191718 3150 002 0360
     # 12:27:24.546 068  I --- 02:000921 --:------ 01:191718 3150 002 065A
     # 12:27:24.693 067  I --- 02:000921 --:------ 01:191718 3150 002 045C
@@ -158,11 +152,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     def _init_ufh_state(self) -> None:
         """Initialize UFH-specific instance attributes (idempotent)."""
         self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
-        self.__dict__.setdefault("_setpoints", None)
-        self.__dict__.setdefault("_heat_demand", None)
-        self.__dict__.setdefault("_heat_demands", None)
-        self.__dict__.setdefault("_relay_demand", None)
-        self.__dict__.setdefault("_relay_demand_fa", None)
 
     def _post_class_promote(self) -> None:
         """Initialize UFH state when promoted in-place from a generic device."""
@@ -221,9 +210,9 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
         elif msg.code == Code._0008:  # relay_demand
             if msg.payload.get(SZ_DOMAIN_ID) == FC:
-                self._relay_demand = msg
+                pass
             else:  # FA
-                self._relay_demand_fa = msg
+                pass
 
         elif msg.code == Code._000C:  # zone_devices
             # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices':['01:095421']}
@@ -244,13 +233,13 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         elif msg.code == Code._22C9:  # setpoint_bounds
             # .I --- 02:017205 --:------ 02:017205 22C9 024 00076C0A280101076C0A28010...
             # .I --- 02:017205 --:------ 02:017205 22C9 006 04076C0A2801
-            self._setpoints = msg
+            pass
 
         elif msg.code == Code._3150:  # heat_demands
             if isinstance(msg.payload, list):  # the circuit demands
-                self._heat_demands = msg
+                pass
             elif msg.payload.get(SZ_DOMAIN_ID) == FC:
-                self._heat_demand = msg
+                pass
             else:
                 zone_idx = msg.payload.get(SZ_ZONE_IDX)
                 msg_dst_tcs = getattr(msg.dst, "tcs", None)
@@ -294,62 +283,43 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     #     return self.circuit_by_id
 
     async def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
-        return cast(
-            float | None,
-            self.entity_state._msg_value_msg(
-                getattr(self, "_heat_demand", None),
-                key=self.HEAT_DEMAND,
-            ),
-        )
+        state = getattr(self, "demand_state", None)
+        return state.heat_demand if state else None
 
-    async def heat_demands(self) -> dict[str, Any] | None:  # 3150|ufh_idx array
-        # return self._heat_demands.payload if self._heat_demands else None
-        return cast(
-            dict[str, Any] | None,
-            self.entity_state._msg_value_msg(getattr(self, "_heat_demands", None)),
-        )
+    async def heat_demands(self) -> list[dict[str, Any]] | None:  # 3150|ufh_idx array
+        """Return the UFH heat demands.
 
-    async def relay_demand(self) -> dict[str, Any] | None:  # 0008|FC
-        return cast(
-            dict[str, Any] | None,
-            self.entity_state._msg_value_msg(
-                getattr(self, "_relay_demand", None),
-                key=SZ_RELAY_DEMAND,
-            ),
-        )
+        # TODO: Refactor for #714 (CQRS API Boundaries).
+        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        """
+        state = getattr(self, "ufh_state", None)
+        if state and state.heat_demands:
+            return [
+                {"ufx_idx": str(k), "heat_demand": v}
+                for k, v in state.heat_demands.items()
+            ]
+        return None
 
-    async def relay_demand_fa(self) -> dict[str, Any] | None:  # 0008|FA
-        return cast(
-            dict[str, Any] | None,
-            self.entity_state._msg_value_msg(
-                getattr(self, "_relay_demand_fa", None),
-                key=SZ_RELAY_DEMAND,
-            ),
-        )
+    async def relay_demand(self) -> float | None:  # 0008|FC
+        state = getattr(self, "demand_state", None)
+        return state.relay_demand if state else None
+
+    async def relay_demand_fa(self) -> float | None:  # 0008|FA
+        state = getattr(self, "ufh_state", None)
+        return state.relay_demand_fa if state else None
 
     async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_idx array
-        if getattr(self, "_setpoints", None) is None:
+        """Return the UFH setpoints.
+
+        # TODO: Refactor for #714 (CQRS API Boundaries).
+        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        """
+        state = getattr(self, "ufh_state", None)
+        if state is None:
             return None
 
-        payload = self._setpoints.payload  # type: ignore[union-attr]
-
-        # 22C9 payload can be a list, flat dict(if indexed by schema), or dict of dicts
-        if isinstance(payload, list):
-            items: list[dict[str, Any]] = payload
-        elif isinstance(payload, dict):
-            # It's a single circuit (flat dict) if SZ_UFH_IDX is present,
-            # otherwise it's a map of circuits (dict of dicts).
-            items = [payload] if SZ_UFH_IDX in payload else list(payload.values())
-        else:
-            return None
-
-        return {
-            c[SZ_UFH_IDX]: {
-                k: v for k, v in c.items() if k in ("temp_low", "temp_high")
-            }
-            for c in items
-            if isinstance(c, dict) and SZ_UFH_IDX in c
-        }
+        # Return the dictionary exactly as is (even if empty `{}`, to match legacy)
+        return cast(dict[str, Any], state.setpoints)
 
     async def schema(self) -> dict[str, Any]:
         base_schema = await super().schema()
