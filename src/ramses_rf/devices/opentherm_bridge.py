@@ -3,25 +3,11 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
-from ramses_rf.const import (
-    FC,
-    HEARTBEAT_TIMEOUT_OTB,
-    I_,
-    RP,
-    RQ,
-    SZ_HEAT_DEMAND,
-    SZ_PRESSURE,
-    SZ_SETPOINT,
-    SZ_TEMPERATURE,
-    Code,
-    DevType,
-)
+from ramses_rf.const import FC, HEARTBEAT_TIMEOUT_OTB, I_, RP, RQ, Code, DevType
 from ramses_rf.models import DemandState, DeviceTraits, OpenThermState, TemperatureState
-from ramses_rf.quirks import QUARANTINED_OT_MSG_IDS
 from ramses_tx import Command, Priority
 from ramses_tx.const import (
     SZ_BOILER_OUTPUT_TEMP,
@@ -138,11 +124,13 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         self.opentherm_state = OpenThermState()
 
         self._child_id = FC  # NOTE: domain_id
+        # TODO[F4-PR2]: Purge legacy OpenTherm write-model tracking.
         self._msgs_ot: dict[MsgId, Message] = {}
 
     def _post_class_promote(self) -> None:
         """Initialize OTB state when promoted in-place from a generic device."""
         self.__dict__.setdefault("_child_id", FC)
+        # TODO[F4-PR2]: Purge legacy OpenTherm write-model tracking.
         self.__dict__.setdefault("_msgs_ot", {})
 
         if not hasattr(self, "temp_state"):
@@ -236,6 +224,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
                     Command.from_attrs(RQ, self.id, code, PayloadT("00")), 300
                 )
 
+    # TODO[F4-PR2]: Purge legacy OpenTherm write-model tracking.
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
@@ -296,105 +285,12 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         else:
             self.discovery.deprecate_code_ctx(msg._pkt, reset=True)
 
-    def _ot_msg_flag(self, msg_id: MsgId, flag_idx: int) -> bool | None:
-        flags = cast(list[int], self._ot_msg_value(msg_id))
-        return bool(flags[flag_idx]) if flags else None
-
     @staticmethod
     def _ot_msg_name(msg: Message) -> str:  # TODO: remove
         return (
             msg.payload[SZ_MSG_NAME]
             if isinstance(msg.payload[SZ_MSG_NAME], str)
             else f"{msg.payload[SZ_MSG_ID]:02X}"
-        )
-
-    def _ot_msg_value(self, msg_id: MsgId) -> int | float | list[int] | None:
-        if msg_id in QUARANTINED_OT_MSG_IDS.get(self._SLUG, set()):
-            return None
-        # data_id = int(msg_id, 16)
-        if (msg := self._msgs_ot.get(msg_id)) and not getattr(msg, "_expired", False):
-            # TODO: value_hb/_lb
-            return msg.payload.get(SZ_VALUE)  # type: ignore[no-any-return]
-        return None
-
-    def _result_by_callback(
-        self, cbk_ot: Callable[[], Any] | None, cbk_ramses: Callable[[], Any] | None
-    ) -> Any | None:
-        """Return a value using OpenTherm or RAMSES as per `config.use_native_ot`."""
-        use_ot = getattr(self._gwy.config, "use_native_ot", "avoid")
-        if use_ot == "always":
-            return cbk_ot() if cbk_ot else None
-        if use_ot == "prefer":
-            if cbk_ot and (result := cbk_ot()) is not None:
-                return result
-
-        result_ramses = cbk_ramses() if cbk_ramses is not None else None
-        if use_ot == "avoid" and result_ramses is None:
-            return cbk_ot() if cbk_ot else None
-        return result_ramses  # incl. use_native_ot == "never"
-
-    async def _result_by_lookup(
-        self,
-        code: Code,
-        /,
-        *,
-        key: str,
-    ) -> Any | None:
-        """Return a value using OpenTherm or RAMSES as per `config.use_native_ot`."""
-        use_ot = getattr(self._gwy.config, "use_native_ot", "avoid")
-
-        if use_ot in ("always", "prefer"):
-            if (result_ot := self._ot_msg_value(self.RAMSES_TO_OT[code])) is not None:
-                return result_ot
-
-        result_ramses = await self.entity_state.get_value(code, key=key)
-        if result_ramses is None and use_ot != "never":
-            return self._ot_msg_value(self.RAMSES_TO_OT[code])
-
-        return result_ramses  # incl. use_native_ot == "never"
-
-    def _result_by_value(
-        self, result_ot: Any | None, result_ramses: Any | None
-    ) -> Any | None:
-        """Return a value using OpenTherm or RAMSES as per `config.use_native_ot`."""
-        use_ot = getattr(self._gwy.config, "use_native_ot", "avoid")
-
-        if use_ot in ("always", "prefer"):
-            if result_ot is not None:
-                return result_ot
-
-        if result_ramses is None and use_ot != "never":
-            return result_ot
-
-        return result_ramses  # incl. use_native_ot == "never"
-
-    async def bit_2_4(self) -> bool | None:  # 2401 - WIP
-        return await self.entity_state.get_flag(Code._2401, "_flags_2", 4)
-
-    async def bit_2_5(self) -> bool | None:  # 2401 - WIP
-        return await self.entity_state.get_flag(Code._2401, "_flags_2", 5)
-
-    async def bit_2_6(self) -> bool | None:  # 2401 - WIP
-        return await self.entity_state.get_flag(Code._2401, "_flags_2", 6)
-
-    async def bit_2_7(self) -> bool | None:  # 2401 - WIP
-        return await self.entity_state.get_flag(Code._2401, "_flags_2", 7)
-
-    async def bit_3_7(self) -> bool | None:  # 3EF0 (byte 3, only OTB)
-        return await self.entity_state.get_flag(Code._3EF0, "_flags_3", 7)
-
-    async def bit_6_6(self) -> bool | None:  # 3EF0 ?dhw_enabled (byte 3, only R8820A?)
-        return await self.entity_state.get_flag(Code._3EF0, "_flags_6", 6)
-
-    async def percent(self) -> float | None:  # 2401 - WIP (~3150|FC)
-        return cast(
-            float | None,
-            await self.entity_state.get_value(Code._2401, key=SZ_HEAT_DEMAND),
-        )
-
-    async def value(self) -> int | None:  # 2401 - WIP
-        return cast(
-            int | None, await self.entity_state.get_value(Code._2401, key="_value_2")
         )
 
     async def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
@@ -430,7 +326,11 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return self.opentherm_state.max_rel_modulation
 
     async def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
-        return cast(float | None, self._ot_msg_value(MsgId._73))
+        if (msg := self._msgs_ot.get(MsgId._73)) and not getattr(
+            msg, "_expired", False
+        ):
+            return cast(float | None, msg.payload.get(SZ_VALUE))
+        return None
 
     async def outside_temp(self) -> float | None:  # 3220|1B, 1290
         return self.opentherm_state.temperatures.outside
@@ -495,16 +395,16 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
 
     async def opentherm_counters(self) -> dict[str, Any]:  # all are U16
         return {
-            SZ_BURNER_HOURS: self._ot_msg_value(MsgId._78),
-            SZ_BURNER_STARTS: self._ot_msg_value(MsgId._74),
-            SZ_BURNER_FAILED_STARTS: self._ot_msg_value(MsgId._71),
-            SZ_CH_PUMP_HOURS: self._ot_msg_value(MsgId._79),
-            SZ_CH_PUMP_STARTS: self._ot_msg_value(MsgId._75),
-            SZ_DHW_BURNER_HOURS: self._ot_msg_value(MsgId._7B),
-            SZ_DHW_BURNER_STARTS: self._ot_msg_value(MsgId._77),
-            SZ_DHW_PUMP_HOURS: self._ot_msg_value(MsgId._7A),
-            SZ_DHW_PUMP_STARTS: self._ot_msg_value(MsgId._76),
-            SZ_FLAME_SIGNAL_LOW: self._ot_msg_value(MsgId._72),
+            SZ_BURNER_HOURS: self.opentherm_state.counters.burner_hours,
+            SZ_BURNER_STARTS: self.opentherm_state.counters.burner_starts,
+            SZ_BURNER_FAILED_STARTS: self.opentherm_state.counters.burner_failed_starts,
+            SZ_CH_PUMP_HOURS: self.opentherm_state.counters.ch_pump_hours,
+            SZ_CH_PUMP_STARTS: self.opentherm_state.counters.ch_pump_starts,
+            SZ_DHW_BURNER_HOURS: self.opentherm_state.counters.dhw_burner_hours,
+            SZ_DHW_BURNER_STARTS: self.opentherm_state.counters.dhw_burner_starts,
+            SZ_DHW_PUMP_HOURS: self.opentherm_state.counters.dhw_pump_hours,
+            SZ_DHW_PUMP_STARTS: self.opentherm_state.counters.dhw_pump_starts,
+            SZ_FLAME_SIGNAL_LOW: self.opentherm_state.counters.flame_signal_low,
         }  # 0x73 is not a counter: is OEM diagnostic code...
 
     async def opentherm_params(
@@ -521,93 +421,12 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             for m, p in result.items()
         }
 
-    async def opentherm_status(
-        self,
-    ) -> dict[str, Any]:  # F8_8, U16 (only OEM_CODE) or bool
-        return {  # most these are in: STATUS_DATA_IDS
-            SZ_BOILER_OUTPUT_TEMP: self._ot_msg_value(MsgId._19),
-            SZ_BOILER_RETURN_TEMP: self._ot_msg_value(MsgId._1C),
-            SZ_BOILER_SETPOINT: self._ot_msg_value(MsgId._01),
-            # SZ_CH_MAX_SETPOINT: self._ot_msg_value(MsgId._39),  # in PARAMS_DATA_IDS
-            SZ_CH_WATER_PRESSURE: self._ot_msg_value(MsgId._12),
-            SZ_DHW_FLOW_RATE: self._ot_msg_value(MsgId._13),
-            # SZ_DHW_SETPOINT: self._ot_msg_value(MsgId._38),  # in PARAMS_DATA_IDS
-            SZ_DHW_TEMP: self._ot_msg_value(MsgId._1A),
-            SZ_OEM_CODE: self._ot_msg_value(MsgId._73),
-            SZ_OUTSIDE_TEMP: self._ot_msg_value(MsgId._1B),
-            SZ_REL_MODULATION_LEVEL: self._ot_msg_value(MsgId._11),
-            #
-            # SZ...: self._ot_msg_value(MsgId._05),  # in STATUS_DATA_IDS
-            # SZ...: self._ot_msg_value(MsgId._18),  # in STATUS_DATA_IDS
-            #
-            SZ_CH_ACTIVE: self._ot_msg_flag(MsgId._00, 8 + 1),
-            SZ_CH_ENABLED: self._ot_msg_flag(MsgId._00, 0),
-            SZ_COOLING_ACTIVE: self._ot_msg_flag(MsgId._00, 8 + 4),
-            SZ_COOLING_ENABLED: self._ot_msg_flag(MsgId._00, 2),
-            SZ_DHW_ACTIVE: self._ot_msg_flag(MsgId._00, 8 + 2),
-            SZ_DHW_BLOCKING: self._ot_msg_flag(MsgId._00, 6),
-            SZ_DHW_ENABLED: self._ot_msg_flag(MsgId._00, 1),
-            SZ_FAULT_PRESENT: self._ot_msg_flag(MsgId._00, 8),
-            SZ_FLAME_ACTIVE: self._ot_msg_flag(MsgId._00, 8 + 3),
-            SZ_SUMMER_MODE: self._ot_msg_flag(MsgId._00, 5),
-            SZ_OTC_ACTIVE: self._ot_msg_flag(MsgId._00, 3),
-        }
-
     async def ramses_schema(self) -> PayDictT.EMPTY:
         return {}
 
     async def ramses_params(self) -> dict[str, float | None]:
         return {
             SZ_MAX_REL_MODULATION: await self.max_rel_modulation(),
-        }
-
-    async def ramses_status(self) -> dict[str, Any]:
-        return {
-            SZ_BOILER_OUTPUT_TEMP: await self.entity_state.get_value(
-                Code._3200, key=SZ_TEMPERATURE
-            ),
-            SZ_BOILER_RETURN_TEMP: await self.entity_state.get_value(
-                Code._3210, key=SZ_TEMPERATURE
-            ),
-            SZ_BOILER_SETPOINT: await self.entity_state.get_value(
-                Code._22D9, key=SZ_SETPOINT
-            ),
-            SZ_CH_MAX_SETPOINT: await self.entity_state.get_value(
-                Code._1081, key=SZ_SETPOINT
-            ),
-            SZ_CH_SETPOINT: await self.entity_state.get_value(
-                Code._3EF0, key=SZ_CH_SETPOINT
-            ),
-            SZ_CH_WATER_PRESSURE: await self.entity_state.get_value(
-                Code._1300, key=SZ_PRESSURE
-            ),
-            SZ_DHW_FLOW_RATE: await self.entity_state.get_value(
-                Code._12F0, key=SZ_DHW_FLOW_RATE
-            ),
-            SZ_DHW_SETPOINT: await self.entity_state.get_value(
-                Code._1300, key=SZ_SETPOINT
-            ),
-            SZ_DHW_TEMP: await self.entity_state.get_value(
-                Code._1260, key=SZ_TEMPERATURE
-            ),
-            SZ_OUTSIDE_TEMP: await self.entity_state.get_value(
-                Code._1290, key=SZ_TEMPERATURE
-            ),
-            SZ_REL_MODULATION_LEVEL: await self.entity_state.get_value(
-                (Code._3EF0, Code._3EF1), key=self.MODULATION_LEVEL
-            ),
-            SZ_CH_ACTIVE: await self.entity_state.get_value(
-                Code._3EF0, key=SZ_CH_ACTIVE
-            ),
-            SZ_CH_ENABLED: await self.entity_state.get_value(
-                Code._3EF0, key=SZ_CH_ENABLED
-            ),
-            SZ_DHW_ACTIVE: await self.entity_state.get_value(
-                Code._3EF0, key=SZ_DHW_ACTIVE
-            ),
-            SZ_FLAME_ACTIVE: await self.entity_state.get_value(
-                Code._3EF0, key=SZ_FLAME_ACTIVE
-            ),
         }
 
     async def traits(self) -> dict[str, Any]:
@@ -661,7 +480,4 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_FLAME_ACTIVE: await self.flame_active(),
             SZ_SUMMER_MODE: await self.summer_mode(),
             SZ_OTC_ACTIVE: await self.otc_active(),
-            #
-            # "status_opentherm": await self.opentherm_status(),
-            # "status_ramses_ii": await self.ramses_status(),
         }
