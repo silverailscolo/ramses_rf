@@ -25,6 +25,7 @@ from ramses_tx.const import (
     SZ_FILTER_DIRTY,
     SZ_FROST_CYCLE,
     SZ_HAS_FAULT,
+    SZ_MINUTES,
     SZ_MODE,
     SZ_REMAINING_DAYS,
     SZ_REMAINING_PERCENT,
@@ -650,7 +651,7 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
     }.get(int(payload[2:4], 0x10) & 0x38)  # 0b0011-1000
 
     units = {
-        0x00: "minutes",
+        0x00: SZ_MINUTES,
         0x40: "hours",
         0x80: "index",  # TODO: days, day-of-week, day-of-month?
     }.get(int(payload[2:4], 0x10) & 0xC0)  # 0b1100-0000
@@ -660,7 +661,7 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
 
     if msg.len >= 3:
         result = {
-            "minutes" if units != "index" else "index": duration,
+            SZ_MINUTES if units != "index" else "index": duration,
             "flags": hex_to_flag8(payload[2:4]),
             "new_speed_mode": new_speed,
             "fallback_speed_mode": fallback_speed,

@@ -107,10 +107,12 @@ SZ_FILTER_REMAINING: Final = "filter_remaining"
 SZ_FILTER_REMAINING_PERCENT: Final = "filter_remaining_percent"
 SZ_INDOOR_HUMIDITY: Final = "indoor_humidity"
 SZ_INDOOR_TEMP: Final = "indoor_temp"
+SZ_MINUTES: Final = "minutes"
 SZ_OUTDOOR_HUMIDITY: Final = "outdoor_humidity"
 SZ_OUTDOOR_TEMP: Final = "outdoor_temp"
 SZ_POST_HEAT: Final = "post_heat"
 SZ_PRE_HEAT: Final = "pre_heat"
+SZ_PRESENCE_DETECTED: Final = "presence_detected"
 SZ_REL_HUMIDITY: Final = "rel_humidity"
 SZ_REMAINING_DAYS: Final = "days_remaining"
 SZ_REMAINING_MINS: Final = "remaining_mins"
@@ -121,8 +123,6 @@ SZ_SUPPLY_FAN_SPEED: Final = "supply_fan_speed"
 SZ_SUPPLY_FLOW: Final = "supply_flow"
 SZ_SUPPLY_TEMP: Final = "supply_temp"
 SZ_SPEED_CAPABILITIES: Final = "speed_capabilities"
-
-SZ_PRESENCE_DETECTED: Final = "presence_detected"
 
 
 # used by OTB

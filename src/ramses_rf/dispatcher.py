@@ -41,6 +41,7 @@ from .const import (
     SZ_HAS_FAULT,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
+    SZ_MINUTES,
     SZ_OFFER,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
@@ -543,8 +544,8 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         updates["filter_remaining_days"] = p["days_remaining"]
     if "percent_remaining" in p and p["percent_remaining"] is not None:
         updates["filter_remaining_percent"] = p["percent_remaining"]
-    if "minutes" in p and msg.code == Code._22F3 and p["minutes"] is not None:
-        updates["boost_timer_mins"] = p["minutes"]
+    if SZ_MINUTES in p and msg.code == Code._22F3 and p[SZ_MINUTES] is not None:
+        updates["boost_timer_mins"] = p[SZ_MINUTES]
     if "req_speed" in p and p["req_speed"] is not None:
         updates["request_fan_speed"] = p["req_speed"]
 
