@@ -137,12 +137,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
     childs: list[Child]  # TODO: check (code so complex, not sure if this is true)
 
-    _setpoints: Message | None
-    _heat_demand: Message | None
-    _heat_demands: Message | None
-    _relay_demand: Message | None
-    _relay_demand_fa: Message | None
-
     # 12:27:24.398 067  I --- 02:000921 --:------ 01:191718 3150 002 0360
     # 12:27:24.546 068  I --- 02:000921 --:------ 01:191718 3150 002 065A
     # 12:27:24.693 067  I --- 02:000921 --:------ 01:191718 3150 002 045C
@@ -158,11 +152,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     def _init_ufh_state(self) -> None:
         """Initialize UFH-specific instance attributes (idempotent)."""
         self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
-        self.__dict__.setdefault("_setpoints", None)
-        self.__dict__.setdefault("_heat_demand", None)
-        self.__dict__.setdefault("_heat_demands", None)
-        self.__dict__.setdefault("_relay_demand", None)
-        self.__dict__.setdefault("_relay_demand_fa", None)
 
     def _post_class_promote(self) -> None:
         """Initialize UFH state when promoted in-place from a generic device."""
@@ -221,9 +210,9 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
         elif msg.code == Code._0008:  # relay_demand
             if msg.payload.get(SZ_DOMAIN_ID) == FC:
-                self._relay_demand = msg
+                pass
             else:  # FA
-                self._relay_demand_fa = msg
+                pass
 
         elif msg.code == Code._000C:  # zone_devices
             # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices':['01:095421']}
@@ -244,13 +233,13 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         elif msg.code == Code._22C9:  # setpoint_bounds
             # .I --- 02:017205 --:------ 02:017205 22C9 024 00076C0A280101076C0A28010...
             # .I --- 02:017205 --:------ 02:017205 22C9 006 04076C0A2801
-            self._setpoints = msg
+            pass
 
         elif msg.code == Code._3150:  # heat_demands
             if isinstance(msg.payload, list):  # the circuit demands
-                self._heat_demands = msg
+                pass
             elif msg.payload.get(SZ_DOMAIN_ID) == FC:
-                self._heat_demand = msg
+                pass
             else:
                 zone_idx = msg.payload.get(SZ_ZONE_IDX)
                 msg_dst_tcs = getattr(msg.dst, "tcs", None)
