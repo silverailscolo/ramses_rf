@@ -513,7 +513,6 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         SZ_FILTER_DIRTY,
         SZ_FROST_CYCLE,
         SZ_HAS_FAULT,
-        SZ_REQ_REASON,
         "dewpoint_temp",
     ]
 
@@ -548,6 +547,8 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         updates["boost_timer_mins"] = p[SZ_MINUTES]
     if "req_speed" in p and p["req_speed"] is not None:
         updates["request_fan_speed"] = p["req_speed"]
+    if SZ_REQ_REASON in p and p[SZ_REQ_REASON] is not None:
+        updates["request_reason"] = p[SZ_REQ_REASON]
 
     if not updates:
         return
