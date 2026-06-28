@@ -21,6 +21,7 @@ from ramses_rf.messages import Message
 from ramses_rf.models import HvacState
 from ramses_rf.state import MessageStore
 from ramses_tx import Address, DeviceIdT, Packet
+from ramses_tx.const import SZ_REQ_REASON
 
 
 @pytest.fixture
@@ -357,3 +358,96 @@ class TestHvacStateNullMarkerFiltering:
         assert dev.hvac_state.fan_mode is None
         assert dev.hvac_state.indoor_humidity is None
         assert dev.hvac_state.bypass_position is None
+
+    # --- req_reason → request_reason mapping (PR #745) ---
+
+    def test_req_reason_maps_to_request_reason(self) -> None:
+        """SZ_REQ_REASON (parser key 'req_reason') must map to
+        HvacState.request_reason, not be passed as 'req_reason'.
+
+        Regression test for the CQRS state extraction failure:
+            HvacState.__init__() got an unexpected keyword argument
+            'req_reason'
+        """
+        dev = self._make_device()
+
+        payload = {SZ_REQ_REASON: "HUM"}
+        msg = self._make_msg(Code._2210, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.request_reason == "HUM"
+
+    def test_req_reason_co2(self) -> None:
+        """req_reason='CO2' (payload byte 02) must map to request_reason."""
+        dev = self._make_device()
+
+        payload = {SZ_REQ_REASON: "CO2"}
+        msg = self._make_msg(Code._2210, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.request_reason == "CO2"
+
+    def test_req_reason_idle(self) -> None:
+        """req_reason='IDL' (payload byte 00) must map to request_reason."""
+        dev = self._make_device()
+
+        payload = {SZ_REQ_REASON: "IDL"}
+        msg = self._make_msg(Code._2210, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.request_reason == "IDL"
+
+    def test_req_reason_does_not_overwrite_with_none(self) -> None:
+        """A None req_reason must not overwrite an existing request_reason."""
+        dev = self._make_device()
+        dev.hvac_state = HvacState(request_reason="HUM")
+
+        payload = {SZ_REQ_REASON: None}
+        msg = self._make_msg(Code._2210, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.request_reason == "HUM"
+
+    def test_req_reason_with_other_fields(self) -> None:
+        """req_reason must update alongside other fields without error."""
+        dev = self._make_device()
+
+        payload = {SZ_REQ_REASON: "CO2", SZ_FAN_MODE: "high", SZ_INDOOR_HUMIDITY: 0.55}
+        msg = self._make_msg(Code._2210, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.request_reason == "CO2"
+        assert dev.hvac_state.fan_mode == "high"
+        assert dev.hvac_state.indoor_humidity == 0.55
+
+    def test_req_reason_absent_does_not_clear(self) -> None:
+        """If req_reason is absent from the payload, request_reason must
+        not be touched."""
+        dev = self._make_device()
+        dev.hvac_state = HvacState(request_reason="HUM")
+
+        payload = {SZ_FAN_MODE: "low"}
+        msg = self._make_msg(Code._22F1, payload)
+
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.request_reason == "HUM"
+        assert dev.hvac_state.fan_mode == "low"
+
+    def test_no_req_reason_error_raised(self) -> None:
+        """Ensure _update_hvac_state does not raise TypeError for
+        req_reason (the original bug).
+
+        Before the fix, SZ_REQ_REASON was in the fields list and was
+        passed directly as updates['req_reason'] to dataclasses.replace,
+        causing:
+            TypeError: HvacState.__init__() got an unexpected keyword
+            argument 'req_reason'
+        """
+        dev = self._make_device()
+
+        payload = {SZ_REQ_REASON: "HUM", SZ_FAN_MODE: "auto"}
+        msg = self._make_msg(Code._2210, payload)
+
+        # Must not raise
+        dispatcher._update_hvac_state(dev, payload, msg)
+        assert dev.hvac_state.request_reason == "HUM"
