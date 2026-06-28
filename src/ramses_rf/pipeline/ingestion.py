@@ -16,6 +16,7 @@ from typing import Any, Final
 from ramses_rf import quirks
 from ramses_rf.const import (
     SZ_ACTIVE,
+    SZ_ACTUATOR_COUNTDOWN,
     SZ_ACTUATOR_ENABLED,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
@@ -28,6 +29,8 @@ from ramses_rf.const import (
     SZ_CH_ENABLED,
     SZ_CH_SETPOINT,
     SZ_CO2_LEVEL,
+    SZ_COOL_ACTIVE,
+    SZ_CYCLE_COUNTDOWN,
     SZ_DATETIME,
     SZ_DEWPOINT_TEMP,
     SZ_DHW_ACTIVE,
@@ -65,13 +68,12 @@ from ramses_rf.const import (
     SZ_REQ_REASON,
     SZ_REQ_SPEED,
     SZ_SETPOINT,
+    SZ_SETPOINT_BOUNDS,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
     SZ_SUPPLY_TEMP,
     SZ_SYSTEM_MODE,
-    SZ_TEMP_HIGH,
-    SZ_TEMP_LOW,
     SZ_TEMPERATURE,
     SZ_UFH_IDX,
     SZ_UNTIL,
@@ -207,7 +209,7 @@ class StateProjector:
 
         payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
 
-        # Unfold dict-of-dicts arrays (e.g. {'00': {'ufh_idx': '00'}})
+        # Unfold dict-of-dicts arrays (e.g. {'00': {'temp_low': 10}})
         unfolded_payloads: list[dict[str, Any]] = []
         for p in payloads:
             if not isinstance(p, dict):
@@ -216,10 +218,16 @@ class StateProjector:
             if (
                 SZ_UFH_IDX not in p
                 and SZ_ZONE_IDX not in p
+                and "ufx_idx" not in p
                 and SZ_DOMAIN_ID not in p
                 and all(isinstance(v, dict) for v in p.values())
             ):
-                unfolded_payloads.extend([v for v in p.values() if isinstance(v, dict)])
+                for k, v in p.items():
+                    if isinstance(v, dict):
+                        # Inject the outer index key so it isn't lost during unfold
+                        v_copy = dict(v)
+                        v_copy[SZ_UFH_IDX] = k
+                        unfolded_payloads.append(v_copy)
             else:
                 unfolded_payloads.append(p)
 
@@ -649,10 +657,24 @@ class StateProjector:
             return
 
         updates: dict[str, Any] = {}
+        slug = getattr(target, "_SLUG", "")
+
         if msg.code == Code._3150 and SZ_HEAT_DEMAND in p:
-            updates["heat_demand"] = p[SZ_HEAT_DEMAND]
+            # Prevent flattened array payloads (e.g., UFH circuit demands)
+            # from overwriting the controller's aggregate FC heat demand.
+            if slug in ("CTL", "UFC"):
+                if p.get(SZ_DOMAIN_ID) == "FC":
+                    updates["heat_demand"] = p[SZ_HEAT_DEMAND]
+            elif SZ_UFH_IDX not in p and "ufx_idx" not in p:
+                updates["heat_demand"] = p[SZ_HEAT_DEMAND]
+
         elif msg.code == Code._0008 and SZ_RELAY_DEMAND in p:
-            updates["relay_demand"] = p[SZ_RELAY_DEMAND]
+            # Prevent FA (UFH) relay demands from overwriting FC relay demand
+            if slug == "UFC" and p.get(SZ_DOMAIN_ID) != "FC":
+                pass
+            else:
+                updates["relay_demand"] = p[SZ_RELAY_DEMAND]
+
         elif msg.code == Code._0009 and SZ_RELAY_FAILSAFE in p:
             updates["relay_failsafe"] = p[SZ_RELAY_FAILSAFE]
 
@@ -687,9 +709,12 @@ class StateProjector:
         current_state = getattr(target, "ufh_state", None) or UfhState()
         updates: dict[str, Any] = {}
 
-        if msg.code == Code._3150 and SZ_UFH_IDX in p and SZ_HEAT_DEMAND in p:
+        # Safely extract index matching legacy typo "ufx_idx"
+        idx = p.get("ufx_idx") or p.get(SZ_UFH_IDX) or p.get(SZ_ZONE_IDX)
+
+        if msg.code == Code._3150 and idx is not None and SZ_HEAT_DEMAND in p:
             new_demands = dict(current_state.heat_demands)
-            new_demands[p[SZ_UFH_IDX]] = p[SZ_HEAT_DEMAND]
+            new_demands[str(idx)] = p[SZ_HEAT_DEMAND]
             updates["heat_demands"] = new_demands
         elif (
             msg.code == Code._0008
@@ -697,15 +722,18 @@ class StateProjector:
             and SZ_RELAY_DEMAND in p
         ):
             updates["relay_demand_fa"] = p[SZ_RELAY_DEMAND]
-        elif msg.code == Code._22C9 and SZ_UFH_IDX in p:
+        elif msg.code == Code._22C9 and idx is not None:
             new_sp = dict(current_state.setpoints)
-            sp_data = dict(new_sp.get(p[SZ_UFH_IDX], {}))
-            if SZ_TEMP_LOW in p:
-                sp_data["temp_low"] = p[SZ_TEMP_LOW]
-            if SZ_TEMP_HIGH in p:
-                sp_data["temp_high"] = p[SZ_TEMP_HIGH]
+            sp_data = dict(new_sp.get(str(idx), {}))
 
-            new_sp[p[SZ_UFH_IDX]] = sp_data
+            # Legacy parsers return an empty dict if no bounds exist.
+            # Only populate the bounds if they are explicitly present.
+            bounds = p.get(SZ_SETPOINT_BOUNDS)
+            if isinstance(bounds, tuple) and len(bounds) == 2:
+                sp_data["temp_low"] = bounds[0]
+                sp_data["temp_high"] = bounds[1]
+
+            new_sp[str(idx)] = sp_data
             updates["setpoints"] = new_sp
 
         if not updates:
@@ -750,8 +778,21 @@ class StateProjector:
         if SZ_DHW_ACTIVE in p:
             updates["dhw_active"] = p[SZ_DHW_ACTIVE]
         if SZ_FLAME_ON in p:
-            # NOTE: semantic parser custom keys
+            # NOTE: semantic parser maps this specifically
             updates["flame_active"] = p[SZ_FLAME_ON]
+            updates["flame_on"] = p[SZ_FLAME_ON]
+
+        # Legacy diagnostic payloads restored for backwards compatibility
+        if SZ_CH_SETPOINT in p:
+            updates["ch_setpoint"] = p[SZ_CH_SETPOINT]
+        if SZ_MAX_REL_MODULATION in p:
+            updates["max_rel_modulation"] = p[SZ_MAX_REL_MODULATION]
+        if SZ_COOL_ACTIVE in p:
+            updates["cool_active"] = p[SZ_COOL_ACTIVE]
+        if SZ_ACTUATOR_COUNTDOWN in p:
+            updates["actuator_countdown"] = p[SZ_ACTUATOR_COUNTDOWN]
+        if SZ_CYCLE_COUNTDOWN in p:
+            updates["cycle_countdown"] = p[SZ_CYCLE_COUNTDOWN]
 
         if not updates:
             return

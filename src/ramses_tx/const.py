@@ -163,6 +163,10 @@ SZ_FLAME_ACTIVE: Final = "flame_active"
 SZ_SUMMER_MODE: Final = "summer_mode"
 SZ_OTC_ACTIVE: Final = "otc_active"
 
+SZ_ACTUATOR_COUNTDOWN: Final = "actuator_countdown"
+SZ_COOL_ACTIVE: Final = "cool_active"
+SZ_CYCLE_COUNTDOWN: Final = "cycle_countdown"
+
 
 @verify(EnumCheck.UNIQUE)
 class Priority(IntEnum):
