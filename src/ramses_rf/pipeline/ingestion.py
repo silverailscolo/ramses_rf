@@ -32,13 +32,17 @@ from ramses_rf.const import (
     SZ_FAN_RATE,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
+    SZ_MINUTES,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
     SZ_POST_HEAT,
     SZ_PRE_HEAT,
     SZ_PRESENCE_DETECTED,
+    SZ_REMAINING_DAYS,
     SZ_REMAINING_MINS,
+    SZ_REMAINING_PERCENT,
     SZ_REQ_REASON,
+    SZ_REQ_SPEED,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
@@ -378,16 +382,16 @@ class StateProjector:
                 updates[f] = p[f]
 
         # Handle non-standard names passed by the semantic parsers
-        if "remaining_days" in p:
-            updates["filter_remaining_days"] = p["remaining_days"]
-        if "remaining_percent" in p:
-            updates["filter_remaining_percent"] = p["remaining_percent"]
-        if "minutes" in p and msg.code == Code._22F3:
-            updates["boost_timer_mins"] = p["minutes"]
-        if "req_speed" in p:
-            updates["request_fan_speed"] = p["req_speed"]
-        if "req_reason" in p:
-            updates[SZ_REQ_REASON] = p["req_reason"]
+        if SZ_REMAINING_DAYS in p:
+            updates["filter_remaining_days"] = p[SZ_REMAINING_DAYS]
+        if SZ_REMAINING_PERCENT in p:
+            updates["filter_remaining_percent"] = p[SZ_REMAINING_PERCENT]
+        if SZ_MINUTES in p and msg.code == Code._22F3:
+            updates["boost_timer_mins"] = p[SZ_MINUTES]
+        if SZ_REQ_SPEED in p:
+            updates["request_fan_speed"] = p[SZ_REQ_SPEED]
+        if SZ_REQ_REASON in p:
+            updates["request_reason"] = p[SZ_REQ_REASON]
 
         if not updates:
             return
