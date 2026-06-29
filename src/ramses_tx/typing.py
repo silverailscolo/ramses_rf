@@ -288,7 +288,7 @@ class BypassPosition(TypedDict):
 
 
 class FanInfo(TypedDict):
-    fan_info: str
+    fan_info: str | None
     _unknown_fan_info_flags: list[int]
 
 
