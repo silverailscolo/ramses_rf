@@ -780,16 +780,23 @@ def parse_fan_info(value: HexStr2) -> PayDictT.FAN_INFO:
     if not isinstance(value, str) or len(value) != 2:
         raise ValueError(f"Invalid value: {value}, is not a 2-char hex string")
 
-    # if value == "EF":  # TODO: Not implemented???
-    #     return {SZ_FAN_INFO: None}
+    # TODO: Not implemented???  # EF, FF = no data / not implemented
+    if value in ("EF", "FF"):
+        return {
+            SZ_FAN_INFO: None,
+            "_unknown_fan_info_flags": [0, 0, 0],
+        }
 
-    assert int(value, 16) & 0xE0 in (
-        0x00,
-        0x20,
-        0x40,
-        0x60,
-        0x80,
-    ), f"invalid fan_info: {int(value, 16) & 0xE0}"
+    if int(value, 16) & 0xE0 not in (0x00, 0x20, 0x40, 0x60, 0x80):
+        # Unknown fan_info code (e.g. Ventura 0x1F) — return as unknown
+        # instead of crashing with AssertionError.  The quirks layer
+        # will prevent it from overwriting a valid fan_info from 22F1/22F4.
+        return {
+            SZ_FAN_INFO: f"-unknown 0x{value}-",
+            "_unknown_fan_info_flags": [
+                (int(value, 16) >> x) & 1 for x in range(7, 4, -1)
+            ],
+        }
 
     flags = list((int(value, 16) & (1 << x)) >> x for x in range(7, 4, -1))
 

@@ -29,7 +29,13 @@ from typing import Any, Final
 
 from ramses_rf.const import DevType
 from ramses_rf.models import HvacState
-from ramses_tx.const import MsgId
+from ramses_tx.const import (
+    SZ_FAN_MODE,
+    SZ_INDOOR_HUMIDITY,
+    SZ_OUTDOOR_HUMIDITY,
+    SZ_REL_HUMIDITY,
+    MsgId,
+)
 
 # Map of device types to sets of OpenTherm MsgIds that are known to be unreliable
 QUARANTINED_OT_MSG_IDS: Final[dict[str, set[MsgId]]] = {
@@ -57,20 +63,64 @@ def apply_hvac_quirks(
     """
     mutated = dict(payload)
 
-    # STRUCTURAL QUIRK: Ventura 12A0 Array Elements
+    # STRUCTURAL QUIRK: 12A0 Array Elements (Ventura V1x, Orcon, etc.)
     # The parser returns list elements with an 'hvac_idx'. We must map these
     # generic keys to their specific domain locations.
+    # idx=00: indoor sensor  → indoor_humidity, indoor_temp
+    # idx=01: supply sensor   → rel_humidity (parser key), supply_temp
+    # idx=02: outdoor sensor  → outdoor_humidity, outdoor_temp
+    #
+    # parse_humidity_element returns different key names per idx:
+    #   idx=00 → SZ_INDOOR_HUMIDITY ("indoor_humidity")
+    #   idx=01 → SZ_REL_HUMIDITY ("rel_humidity")  — NOT "indoor_humidity"!
+    #   idx=02 → SZ_OUTDOOR_HUMIDITY ("outdoor_humidity")
+    #
+    # HvacState has no supply_humidity field, so idx=01's rel_humidity is
+    # dropped (not in the dispatcher's field list).  idx=02's outdoor_humidity
+    # is already correct and needs no remapping.
     if msg_code == "12A0":
         idx = mutated.get("hvac_idx", "00")
         if idx == "00":
             if "temperature" in mutated:
                 mutated["indoor_temp"] = mutated["temperature"]
         elif idx == "01":
-            if "indoor_humidity" in mutated:
-                mutated["outdoor_humidity"] = mutated.pop("indoor_humidity")
+            # parse_humidity_element returns "rel_humidity", not
+            # "indoor_humidity" — the old code checked the wrong key.
+            # There is no supply_humidity field in HvacState, so we
+            # pop the key to prevent it overwriting indoor_humidity
+            # from idx=00 via the dispatcher's "temperature" fallback.
+            if SZ_REL_HUMIDITY in mutated:
+                mutated.pop(SZ_REL_HUMIDITY)
+            if "indoor_humidity" in mutated:  # safety: old parser path
+                mutated.pop("indoor_humidity")
             if "temperature" in mutated:
                 mutated["supply_temp"] = mutated.pop("temperature")
+        elif idx == "02":
+            # parse_humidity_element already returns outdoor_humidity for
+            # idx=02, so no humidity remapping is needed.  Only remap
+            # temperature → outdoor_temp.
+            if "temperature" in mutated:
+                mutated["outdoor_temp"] = mutated.pop("temperature")
         return mutated
+
+    # QUIRK: 31DA humidity 0.0 → None (null-marker normalisation)
+    # Some devices (e.g. Ventura V1x) send 0x00 for indoor/outdoor humidity in
+    # 31DA when no sensor is present.  This parses as 0.0 (physically impossible
+    # on Earth).  Normalise to None so both ingestion paths (dispatcher and
+    # StateProjector) filter it out.  See ramses_cc#742.
+    if msg_code == "31DA":
+        for key in (SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY):
+            if key in mutated and mutated[key] == 0.0:
+                mutated[key] = None
+
+    # QUIRK: 31D9 fan_mode "FF" → None (null-marker normalisation)
+    # 31D9 sends raw hex "FF" for fan_mode when no data is available.  The
+    # dispatcher filters this, but the StateProjector (ingestion.py) does not.
+    # Normalise to None so both paths filter it.  The valid fan_mode comes
+    # from 22F4 (or 22F1 for some schemes).  See ramses_cc#742.
+    if msg_code == "31D9" and SZ_FAN_MODE in mutated:
+        if mutated[SZ_FAN_MODE] == "FF":
+            mutated[SZ_FAN_MODE] = None
 
     if not current_state:
         return mutated
@@ -86,13 +136,39 @@ def apply_hvac_quirks(
             ):
                 mutated["exhaust_fan_speed"] = current_state.exhaust_fan_speed
 
-    # QUIRK: Vasco/ClimaRad 31D9 vs 31DA 'fan_info' precedence
-    # Vasco passes string mode details in 31D9. Itho uses 31DA. We must not
-    # overwrite a valid, rich string from 31D9 with a blank or 'off' string
-    # from a generic 31DA.
+    # QUIRK: 31DA 'fan_info' precedence over 22F1/22F4
+    # 31DA snapshots include a fan_info byte that may be a null marker or an
+    # unknown code for devices that report fan state via 22F1/22F4 instead.
+    # We must not overwrite a valid, rich string from 22F1/22F4/31D9 with:
+    #   - "" or "off"  (blank/null markers)
+    #   - "-unknown 0xNN-"  (unrecognised codes, e.g. Ventura's 0x1F)
     if msg_code == "31DA" and "fan_info" in mutated:
-        if mutated["fan_info"] in ("off", ""):
-            if current_state.fan_info and current_state.fan_info not in ("off", ""):
+        incoming = mutated["fan_info"]
+        if incoming in ("off", "") or (
+            isinstance(incoming, str) and incoming.startswith("-unknown")
+        ):
+            if (
+                current_state.fan_info
+                and current_state.fan_info
+                not in (
+                    "off",
+                    "",
+                )
+                and not current_state.fan_info.startswith("-unknown")
+            ):
                 mutated["fan_info"] = current_state.fan_info
+
+    # QUIRK: 31DA 'bypass_position' null-marker prevention
+    # Some devices (e.g. Ventura V1x) report bypass_position via 22F7, not
+    # 31DA.  Their 31DA snapshot includes 0x00 for bypass_position, which
+    # parses as 0.0 (a seemingly valid value).  We must not overwrite a
+    # non-zero bypass_position from 22F7 with this null marker.
+    if msg_code == "31DA" and "bypass_position" in mutated:
+        if mutated["bypass_position"] == 0.0:
+            if (
+                current_state.bypass_position is not None
+                and current_state.bypass_position != 0.0
+            ):
+                mutated["bypass_position"] = current_state.bypass_position
 
     return mutated
