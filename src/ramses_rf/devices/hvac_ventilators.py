@@ -115,6 +115,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         Started from HA ramses_cc integration after client is initialized.
         """
         # no superclass method
+        _LOGGER.debug("_setup_polling_cmds for %s", self.id)
         self.polling.add_cmd(
             self._rq_cmd,
             60,  # EBR TODO set to 60 * 60 * 24,
@@ -126,6 +127,8 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         Start polling the filter_remaining state of a fan.
         Messages are cleaned up every 12h, the 10D0 message must be RQd
         """
+        _LOGGER.debug("FilterChange start_poller hgi=%s", self._gwy.hgi)
+
         if self.polling is None:
             assert self._gwy is not None  # just checking
             assert self._gwy.hgi is not None
@@ -140,7 +143,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         )
         self._setup_polling_cmds()
         self.polling.start_poller()
-        _LOGGER.debug("FilterChange start_poller hgi=%s", self._gwy.hgi)
 
     async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.
@@ -296,6 +298,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
     def start_poller(self) -> None:  # TODO starts from ramses_cc to debug
         """Start the poller."""
+        _LOGGER.debug("HvacVentilator start_poller hgi=%s", self._gwy.hgi)
         super().start_poller()
 
     def set_param_update_callback(

@@ -129,7 +129,7 @@ class PollingService:
         Messages are cleaned up every 12h.
         """
         """Start the filter poller (if it is not already running)."""
-        _LOGGER.debug("start_poller()")
+        _LOGGER.debug("start_poller() on gwy hgi %s", self._gwy.hgi)
         if self._poller and not self._poller.done():
             return
 
