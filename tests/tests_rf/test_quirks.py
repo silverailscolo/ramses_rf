@@ -638,16 +638,22 @@ class TestQuirks31DAHumidityNormalisation:
 
 
 # ---------------------------------------------------------------------------
-# 31D9 fan_mode "FF" → None normalisation
+# 31D9 raw-hex fan_mode → None normalisation
 # ---------------------------------------------------------------------------
 
 
 class TestQuirks31D9FanModeNormalisation:
-    """31D9 sends raw hex "FF" for fan_mode when no data is available.
-    The quirks normalise it to None so that BOTH ingestion paths filter it.
-    The valid fan_mode comes from 22F4 (or 22F1 for some schemes).
+    """31D9 long-payload devices (Orcon, Brofer) send raw hex bytes for
+    fan_mode (e.g. "04", "FF", "C8").  These are not semantic names and
+    conflict with the semantic fan_mode from 22F4/22F1.  The quirks
+    normalise any 2-char hex string to None so that BOTH ingestion paths
+    filter it.  The valid semantic fan_mode comes from 22F4 (polled) or
+    22F1 (command reply).
 
-    See ramses_cc#742.
+    Vasco/ClimaRad short payloads (msg.len == 3) are already converted to
+    semantic strings by the parser and are preserved.
+
+    See ramses_cc issue 723 and ramses_cc issue 742.
     """
 
     def test_fan_mode_ff_normalised_to_none(self) -> None:
@@ -658,30 +664,78 @@ class TestQuirks31D9FanModeNormalisation:
         result = _quirk(payload, None, "31D9")
         assert result[SZ_FAN_MODE] is None
 
-    def test_fan_mode_valid_passes_through(self) -> None:
-        """A valid fan_mode should pass through unchanged."""
+    def test_fan_mode_04_normalised_to_none(self) -> None:
+        """fan_mode='04' (raw hex, Orcon) from 31D9 should be normalised."""
         from ramses_tx.const import SZ_FAN_MODE
 
-        payload = {SZ_FAN_MODE: "05"}
+        payload = {SZ_FAN_MODE: "04"}
         result = _quirk(payload, None, "31D9")
-        assert result[SZ_FAN_MODE] == "05"
+        assert result[SZ_FAN_MODE] is None
 
-    def test_fan_mode_ff_with_existing_state(self) -> None:
-        """fan_mode='FF' should be normalised even with existing state."""
+    def test_fan_mode_c8_normalised_to_none(self) -> None:
+        """fan_mode='C8' (raw hex, Itho boost) from 31D9 should be normalised."""
         from ramses_tx.const import SZ_FAN_MODE
 
-        state = _make_state()
-        payload = {SZ_FAN_MODE: "FF"}
+        payload = {SZ_FAN_MODE: "C8"}
+        result = _quirk(payload, None, "31D9")
+        assert result[SZ_FAN_MODE] is None
+
+    def test_fan_mode_00_normalised_to_none(self) -> None:
+        """fan_mode='00' (raw hex, off) from 31D9 should be normalised."""
+        from ramses_tx.const import SZ_FAN_MODE
+
+        payload = {SZ_FAN_MODE: "00"}
+        result = _quirk(payload, None, "31D9")
+        assert result[SZ_FAN_MODE] is None
+
+    def test_fan_mode_semantic_auto_preserved(self) -> None:
+        """Semantic fan_mode='auto' (from Vasco lookup) should pass through."""
+        from ramses_tx.const import SZ_FAN_MODE
+
+        payload = {SZ_FAN_MODE: "auto"}
+        result = _quirk(payload, None, "31D9")
+        assert result[SZ_FAN_MODE] == "auto"
+
+    def test_fan_mode_semantic_off_preserved(self) -> None:
+        """Semantic fan_mode='off' (from Vasco lookup) should pass through."""
+        from ramses_tx.const import SZ_FAN_MODE
+
+        payload = {SZ_FAN_MODE: "off"}
+        result = _quirk(payload, None, "31D9")
+        assert result[SZ_FAN_MODE] == "off"
+
+    def test_fan_mode_semantic_vasco_speed_preserved(self) -> None:
+        """Semantic fan_mode='4 (boost)' (from Vasco lookup) should pass through."""
+        from ramses_tx.const import SZ_FAN_MODE
+
+        payload = {SZ_FAN_MODE: "4 (boost)"}
+        result = _quirk(payload, None, "31D9")
+        assert result[SZ_FAN_MODE] == "4 (boost)"
+
+    def test_fan_mode_raw_hex_with_existing_state(self) -> None:
+        """Raw hex fan_mode should be normalised even with existing state."""
+        from ramses_tx.const import SZ_FAN_MODE
+
+        state = _make_state(fan_mode="auto")
+        payload = {SZ_FAN_MODE: "04"}
         result = _quirk(payload, state, "31D9")
         assert result[SZ_FAN_MODE] is None
 
-    def test_fan_mode_ff_only_for_31d9(self) -> None:
-        """The fan_mode 'FF' normalisation should only apply to 31D9."""
+    def test_fan_mode_raw_hex_only_for_31d9(self) -> None:
+        """The raw-hex normalisation should only apply to 31D9, not 22F4."""
         from ramses_tx.const import SZ_FAN_MODE
 
-        payload = {SZ_FAN_MODE: "FF"}
+        payload = {SZ_FAN_MODE: "04"}
         result = _quirk(payload, None, "22F4")
-        assert result[SZ_FAN_MODE] == "FF"
+        assert result[SZ_FAN_MODE] == "04"
+
+    def test_fan_mode_lowercase_hex_normalised(self) -> None:
+        """Lowercase raw hex should also be normalised."""
+        from ramses_tx.const import SZ_FAN_MODE
+
+        payload = {SZ_FAN_MODE: "0a"}
+        result = _quirk(payload, None, "31D9")
+        assert result[SZ_FAN_MODE] is None
 
 
 # ---------------------------------------------------------------------------

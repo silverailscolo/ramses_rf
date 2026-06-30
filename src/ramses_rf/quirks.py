@@ -121,14 +121,30 @@ def apply_hvac_quirks(
             if key in mutated and mutated[key] == 0.0:
                 mutated[key] = None
 
-    # QUIRK: 31D9 fan_mode "FF" → None (null-marker normalisation)
-    # 31D9 sends raw hex "FF" for fan_mode when no data is available.  The
-    # dispatcher filters this, but the StateProjector (ingestion.py) does not.
-    # Normalise to None so both paths filter it.  The valid fan_mode comes
-    # from 22F4 (or 22F1 for some schemes).  See ramses_cc#742.
+    # QUIRK: 31D9 raw-hex fan_mode → None (semantic-value preservation)
+    # For long-payload devices (Orcon, Brofer, etc.), the 31D9 parser sets
+    # fan_mode = payload[4:6] — a raw hex byte like "04", "C8", "FF".  These
+    # are NOT semantic names and conflict with the semantic fan_mode from
+    # 22F4 ("off", "paused", "auto", "manual") or 22F1 (scheme-specific
+    # names like "away", "low", "high", "boost").  The raw hex overwrites
+    # the good semantic value every 31D9 broadcast cycle, causing fan_mode
+    # to toggle (e.g. "auto" ↔ "04").
+    #
+    # Vasco/ClimaRad short payloads (msg.len == 3) are already converted to
+    # semantic strings by the parser's _31D9_FAN_INFO_VASCO lookup, so they
+    # won't match the hex pattern and are preserved.
+    #
+    # Drop any fan_mode that is a 2-char hex string (raw byte).  The
+    # authoritative semantic fan_mode comes from 22F4 (polled) or 22F1
+    # (command reply).  See ramses_cc issue 723.
     if msg_code == "31D9" and SZ_FAN_MODE in mutated:
-        if mutated[SZ_FAN_MODE] == "FF":
-            mutated[SZ_FAN_MODE] = None
+        val = mutated[SZ_FAN_MODE]
+        if isinstance(val, str) and len(val) == 2:
+            try:
+                int(val, 16)  # is it a raw hex byte?
+                mutated[SZ_FAN_MODE] = None
+            except ValueError:
+                pass  # semantic string, keep it
 
     if not current_state:
         return mutated
