@@ -190,7 +190,7 @@ class PollingService:
                 return pkt
             return None
 
-        _LOGGER.debug("poller started")
+        _LOGGER.debug("poller cycle started for items %s", self.cmds)
         for hdr, task in self.cmds.items():
             _LOGGER.debug("polling for %s", hdr)
             dt_now = dt.now()
