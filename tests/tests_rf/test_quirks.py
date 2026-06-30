@@ -138,19 +138,29 @@ class TestQuirks12A0Idx02:
     """12A0 idx=02: outdoor sensor.
 
     parse_humidity_element already returns ``outdoor_humidity`` for idx=02,
-    so no humidity remapping is needed.  Only temperature → outdoor_temp.
+    so no humidity remapping is needed.
+
+    The temperature field is NOT remapped to outdoor_temp — 12A0 comes from
+    a separate HUM sensor, and remapping it creates a second outdoor_temp
+    source that conflicts with 31DA's outdoor_temp on the FAN's hvac_state.
+    See ramses_cc#742.
     """
 
-    def test_idx02_remaps_temperature_to_outdoor_temp(self) -> None:
-        """idx=02 temperature should be remapped to outdoor_temp."""
+    def test_idx02_does_not_remap_temperature_to_outdoor_temp(self) -> None:
+        """idx=02 temperature should NOT be remapped to outdoor_temp.
+
+        31DA is the authoritative source for outdoor_temp.  Remapping 12A0
+        idx=02 temperature causes outdoor_temp to bounce between the HUM
+        sensor reading (12A0) and the FAN snapshot (31DA).
+        """
         payload = {
             "hvac_idx": "02",
             SZ_OUTDOOR_HUMIDITY: 0.69,
             "temperature": 27.42,
         }
         result = _quirk(payload, None, "12A0")
-        assert result[SZ_OUTDOOR_TEMP] == 27.42
-        assert "temperature" not in result
+        assert SZ_OUTDOOR_TEMP not in result
+        assert "temperature" in result  # left as-is, not remapped
 
     def test_idx02_preserves_outdoor_humidity(self) -> None:
         """idx=02 outdoor_humidity should pass through unchanged."""
@@ -205,8 +215,8 @@ class TestQuirks12A0FullList:
         # idx=01
         assert SZ_REL_HUMIDITY not in results[1]
         assert "temperature" not in results[1] or results[1].get("supply_temp") is None
-        # idx=02
-        assert results[2][SZ_OUTDOOR_TEMP] == 27.42
+        # idx=02: outdoor_humidity passes through, temperature is NOT remapped
+        assert SZ_OUTDOOR_TEMP not in results[2]  # not remapped (31DA is authoritative)
         assert results[2][SZ_OUTDOOR_HUMIDITY] == 0.69
 
     def test_ventura_real_payload_pattern(self) -> None:
@@ -253,8 +263,8 @@ class TestQuirks12A0FullList:
         # temperature=None gets popped into supply_temp
         assert results[1].get(SZ_SUPPLY_TEMP) is None
 
-        # idx=02: outdoor
-        assert results[2][SZ_OUTDOOR_TEMP] == 27.42
+        # idx=02: outdoor (humidity only, temp NOT remapped to outdoor_temp)
+        assert SZ_OUTDOOR_TEMP not in results[2]  # not remapped (31DA is authoritative)
         assert results[2][SZ_OUTDOOR_HUMIDITY] == pytest.approx(0.271, abs=0.01)
 
 
