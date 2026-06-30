@@ -138,7 +138,9 @@ async def _test_gwy_device(gwy: Gateway, test_idx: int) -> None:
         assert False, pkt  # should have failed, but has not!
 
     # NOTE: both HGI80/evofw3 will swap out addr0 (only) for its own device_id
-    if cmd_str[7:16] == HGI_DEVICE_ID:
+    # evofw3 will also patch src if it is the HGI placeholder (incl. --:------
+    # which Command normalizes to 18:000730 when addr0 is 18:000730)
+    if cmd_str[7:16] == HGI_DEVICE_ID or (not is_hgi80 and cmd.src.id == HGI_DEVICE_ID):
         pkt_str = cmd_str[:7] + gwy.hgi.id + cmd_str[16:]
     else:
         pkt_str = cmd_str
