@@ -530,9 +530,15 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         # None = "not implemented" (e.g. EF in bypass_position)
         if val is None:
             continue
-        # "FF" = "no data" marker from 31D9 raw hex fan_mode
-        if f == SZ_FAN_MODE and val == "FF":
-            continue
+        # Raw hex (e.g. "FF", "04") = non-semantic fan_mode from 31D9
+        # long-payload devices; the quirk normalises these to None, but
+        # filter here as belt-and-suspenders.  See ramses_cc issue 723.
+        if f == SZ_FAN_MODE and isinstance(val, str) and len(val) == 2:
+            try:
+                int(val, 16)
+                continue
+            except ValueError:
+                pass
         # 0.0 for humidity = "no sensor" (00 parses as 0%, physically impossible)
         if f in _NULL_HUMIDITY_FIELDS and val == 0:
             continue

@@ -302,6 +302,13 @@ class PortProtocol(_DeviceIdFilterMixin):
             _LOGGER.warning(f"{cmd} < num_repeats set to 0, as wait_for_reply is True")
             num_repeats = 0
 
+        # Patch command with actual HGI ID if it uses the default placeholder.
+        # PortProtocol.send_cmd overrides _BaseProtocol.send_cmd (which does this
+        # patching at base.py:309), so we must replicate it here. Without this,
+        # all commands go out with the 18:000730 placeholder instead of the real
+        # HGI ID. See ramses_cc#757.
+        cmd = self._patch_cmd_if_needed(cmd)
+
         # Manual filter check to avoid calling super().send_cmd(), which fails
         if not self._is_wanted_addrs(cmd.src.id, cmd.dst.id, sending=True):
             raise ProtocolError(f"Command excluded by device_id filter: {cmd}")

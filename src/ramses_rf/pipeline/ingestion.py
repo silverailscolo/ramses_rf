@@ -451,9 +451,33 @@ class StateProjector:
             SZ_DEWPOINT_TEMP,
         ]
 
+        # Filter out null-marker values that 31DA/31D9 snapshots emit for
+        # sensors the device does not have.  Without this, every polling cycle
+        # (~10 min) overwrites good telemetry from 22F1/12A0/22F7 with null
+        # markers, causing sensors to bounce to None/FF/0.  See issue #742.
+        # This must mirror the filtering in dispatcher._update_hvac_state.
+        _NULL_HUMIDITY_FIELDS = frozenset({SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY})
+
         for f in fields:
-            if f in p:
-                updates[f] = p[f]
+            if f not in p:
+                continue
+            val = p[f]
+            # None = "not implemented" (e.g. EF in bypass_position)
+            if val is None:
+                continue
+            # Raw hex (e.g. "FF", "04") = non-semantic fan_mode from 31D9
+            # long-payload devices; the quirk normalises these to None, but
+            # filter here as belt-and-suspenders.  See ramses_cc issue 723.
+            if f == SZ_FAN_MODE and isinstance(val, str) and len(val) == 2:
+                try:
+                    int(val, 16)
+                    continue
+                except ValueError:
+                    pass
+            # 0.0 for humidity = "no sensor" (00 parses as 0%, physically impossible)
+            if f in _NULL_HUMIDITY_FIELDS and val == 0:
+                continue
+            updates[f] = val
 
         # Handle non-standard names passed by the semantic parsers
         if SZ_REMAINING_DAYS in p:
