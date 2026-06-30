@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
-# import contextlib
 import logging
 from collections.abc import Callable
 from datetime import timedelta as td
@@ -80,7 +77,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
-        """Initialize the FilterChange class and start dayly polling.
+        """Initialize the FilterChange class and start daily polling.
 
         :param args: Positional arguments passed to the parent class
         :param traits: Strictly typed traits object for device creation
@@ -125,18 +122,14 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             delay=30,
         )  # 10D0 RQ filter_remaining, message must be RQd.
 
-    async def start_poller(self) -> None:
+    def start_poller(self) -> None:
         """
         Start polling the filter_remaining state of a fan.
         Messages are cleaned up every 12h, the 10D0 message must be RQd
         """
         if not hasattr(self, "polling") or self.polling is None:
             _LOGGER.debug("FilterChange start_poller hgi=%s", self._gwy.hgi)
-            if self._gwy is None:
-                await asyncio.sleep(10)
             assert self._gwy is not None  # just checking
-            if self._gwy.hgi is None:
-                await asyncio.sleep(10)
             assert self._gwy.hgi is not None
 
             self.polling = PollingService(self, self._gwy)  # if None, wait and retry
@@ -311,9 +304,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
                     # Clear the callback so it's only called once
                     self._initialized_callback = None
 
-    # def start_poller(self) -> None:  # TODO starts from ramses_cc to debug
-    #     """Start the poller."""
-    #     await super().start_poller()
+    def start_poller(self) -> None:  # TODO starts from ramses_cc to debug
+        """Start the poller."""
+        super().start_poller()
 
     def set_param_update_callback(
         self, callback: Callable[[str, Any], None] | None
