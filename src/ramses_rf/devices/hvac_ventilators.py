@@ -91,12 +91,13 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             self.hvac_state = HvacState()
 
         self.polling: PollingService = PollingService(self, self._gwy)
-        self._rq_cmd: Command = Command.from_attrs(
-            RQ,
-            self.id,
-            Code._10D0,
-            PayloadT("00"),  # , from_id=hgi_id
-        )
+        _LOGGER.debug("FilterChange init PollingService created")
+        # self._rq_cmd: Command = Command.from_attrs(
+        #     RQ,
+        #     self.id,
+        #     Code._10D0,
+        #     PayloadT("00"),  # , from_id=hgi_id
+        # )
 
     def _post_class_promote(self) -> None:
         """Initialize state when promoted from a generic HVAC device."""
@@ -139,13 +140,14 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             assert self._gwy.hgi is not None
 
             self.polling = PollingService(self, self._gwy)  # if None, wait and retry
-            self._rq_cmd = Command.from_attrs(
-                RQ,
-                self.id,
-                Code._10D0,
-                PayloadT("00"),  # , from_id=hgi_id
-            )
-            self._setup_polling_cmds()
+
+        self._rq_cmd = Command.from_attrs(
+            RQ,
+            self.id,
+            Code._10D0,
+            PayloadT("00"),  # , from_id=hgi_id
+        )
+        self._setup_polling_cmds()
         self.polling.start_poller()
 
     # async def stop_poller(self) -> None:
