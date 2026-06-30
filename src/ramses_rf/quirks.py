@@ -97,10 +97,18 @@ def apply_hvac_quirks(
                 mutated["supply_temp"] = mutated.pop("temperature")
         elif idx == "02":
             # parse_humidity_element already returns outdoor_humidity for
-            # idx=02, so no humidity remapping is needed.  Only remap
-            # temperature → outdoor_temp.
-            if "temperature" in mutated:
-                mutated["outdoor_temp"] = mutated.pop("temperature")
+            # idx=02, so no humidity remapping is needed.
+            #
+            # NOTE: idx=02 also includes a temperature field, but we do NOT
+            # remap it to outdoor_temp.  The 12A0 array comes from a separate
+            # HUM sensor, and the dispatcher routes it to the FAN's hvac_state
+            # (as dst target).  If we remap temperature → outdoor_temp here,
+            # it creates a second outdoor_temp source that conflicts with
+            # 31DA's outdoor_temp, causing the sensor to bounce between the
+            # two values every polling cycle.  31DA is the authoritative
+            # source for outdoor_temp; 12A0 idx=02 only contributes
+            # outdoor_humidity.  See ramses_cc#742.
+            pass
         return mutated
 
     # QUIRK: 31DA humidity 0.0 → None (null-marker normalisation)
