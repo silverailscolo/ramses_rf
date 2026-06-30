@@ -87,14 +87,13 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
 
-        self.polling: PollingService = PollingService(self, self._gwy)
-        _LOGGER.debug("FilterChange init PollingService created")
-        # self._rq_cmd: Command = Command.from_attrs(
-        #     RQ,
-        #     self.id,
-        #     Code._10D0,
-        #     PayloadT("00"),  # , from_id=hgi_id
-        # )
+        self.polling: PollingService | None = None
+        self._rq_cmd: Command = Command.from_attrs(
+            RQ,
+            self.id,
+            Code._10D0,
+            PayloadT("00"),  # , from_id=hgi_id
+        )
 
     def _post_class_promote(self) -> None:
         """Initialize state when promoted from a generic HVAC device."""
@@ -115,7 +114,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         """Create and start the filter_remaining poller.
         Started from HA ramses_cc integration after client is initialized.
         """
-        # super()._setup_polling_cmds()
+        # no superclass method
         self.polling.add_cmd(
             self._rq_cmd,
             60,  # EBR TODO set to 60 * 60 * 24,
@@ -127,12 +126,11 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         Start polling the filter_remaining state of a fan.
         Messages are cleaned up every 12h, the 10D0 message must be RQd
         """
-        if not hasattr(self, "polling") or self.polling is None:
-            _LOGGER.debug("FilterChange start_poller hgi=%s", self._gwy.hgi)
+        if self.polling is None:
             assert self._gwy is not None  # just checking
             assert self._gwy.hgi is not None
-
-            self.polling = PollingService(self, self._gwy)  # if None, wait and retry
+            self.polling = PollingService(self, self._gwy)
+            _LOGGER.debug("FilterChange init PollingService created")
 
         self._rq_cmd = Command.from_attrs(
             RQ,
@@ -142,15 +140,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         )
         self._setup_polling_cmds()
         self.polling.start_poller()
-
-    # async def stop_poller(self) -> None:
-    #     """Stop the discovery poller (only if it is running)."""
-    #     if not self._poller or self._poller.done():
-    #         return
-    #
-    #     self._poller.cancel()
-    #     with contextlib.suppress(asyncio.CancelledError):
-    #         await self._poller
+        _LOGGER.debug("FilterChange start_poller hgi=%s", self._gwy.hgi)
 
     async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.
