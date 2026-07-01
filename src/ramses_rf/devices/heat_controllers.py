@@ -115,6 +115,20 @@ class Programmer(Controller):  # PRG (23):
 
     _SLUG = DevType.PRG
 
+    def _setup_discovery_cmds(self) -> None:
+        super()._setup_discovery_cmds()
+
+        if not self.is_faked:
+            # PRGs respond to RP for 1090, 10A0, 3EF1
+            self.discovery.add_cmd(
+                Command.from_attrs(RQ, self.id, Code._1090, PayloadT("00")),
+                60 * 60 * 6,  # every 6 hours
+            )
+            self.discovery.add_cmd(
+                Command.from_attrs(RQ, self.id, Code._10A0, PayloadT("00")),
+                60 * 60 * 6,
+            )
+
 
 class RfgGateway(DeviceHeat):  # RFG (30:)
     """The RFG100 base class."""
