@@ -85,6 +85,12 @@ _ZONE_BINDING_CODES: frozenset[str] = frozenset(
     {"3150", "30C9", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09"}
 )
 
+# 32: is unambiguous — always a FAN. A FAN sends 22F1 (which maps to REM in
+# HVAC_KLASS_BY_VC_PAIR) but is still a FAN, so the prefix must win.
+# 37: is ambiguous (REM, CO2, or HUM all use 37:) — needs the VC pair to
+# distinguish, so it's NOT in this set.
+_UNAMBIGUOUS_HVAC_PREFIXES: frozenset[str] = frozenset({"32"})
+
 
 # ---------------------------------------------------------------------------
 # Data class
@@ -482,23 +488,29 @@ def _classify(
     """Classify a device based on prefix, verb/code, and accumulated evidence.
 
     Priority:
-    1. Verb+code pair (HVAC) — strongest signal for HVAC devices
+    1. HVAC prefix (32:=FAN, 37:=REM) — unambiguous, takes precedence over
+       verb/code pairs (a FAN sends 22F1, but that doesn't make it a REM)
     2. CTL-only codes — if device sends these, it's a CTL
-    3. Prefix — fallback for CH devices
-    4. Accumulated codes — if we have a dev with codes_seen, re-evaluate
+    3. Verb+code pair (HVAC) — for non-HVAC prefixes that send HVAC codes
+    4. CH prefix — fallback for heating domain devices
+    5. Accumulated codes — re-evaluate with full evidence
     """
     prefix = dev_id[:2]
 
-    # 1. Check verb+code pair (HVAC domain)
-    vc_key = (verb, code)
-    if vc_key in _VC_TO_TYPE:
-        return _VC_TO_TYPE[vc_key]
+    # 1. Unambiguous HVAC prefixes (32:=FAN) — check first
+    if prefix in _UNAMBIGUOUS_HVAC_PREFIXES:
+        return _PREFIX_TO_TYPE[prefix]
 
     # 2. CTL-only codes (only if this device is the sender)
     if is_src and code in _CTL_ONLY_CODES:
         return DevType.CTL
 
-    # 3. Check accumulated codes if we have a dev
+    # 3. Check verb+code pair (HVAC domain, for non-HVAC prefixes)
+    vc_key = (verb, code)
+    if vc_key in _VC_TO_TYPE:
+        return _VC_TO_TYPE[vc_key]
+
+    # 4. Check accumulated codes if we have a dev
     if dev and is_src:
         for c in dev.codes_seen:
             if c in _CTL_ONLY_CODES:
@@ -509,7 +521,7 @@ def _classify(
                 if (v, c) in _VC_TO_TYPE:
                     return _VC_TO_TYPE[(v, c)]
 
-    # 4. Prefix fallback
+    # 5. CH prefix fallback
     if prefix in _PREFIX_TO_TYPE:
         return _PREFIX_TO_TYPE[prefix]
 

@@ -159,6 +159,15 @@ class TestClassify:
         """I 1298 → CO2."""
         assert _classify("37:123456", "1298", " I", is_src=True) == DevType.CO2
 
+    def test_hvac_prefix_wins_over_vc_pair(self) -> None:
+        """A FAN (32:) sending 22F1 should stay FAN, not become REM."""
+        assert _classify("32:157747", "22F1", " I", is_src=True) == DevType.FAN
+
+    def test_vc_pair_for_non_hvac_prefix(self) -> None:
+        """A non-HVAC prefix sending an HVAC code should use the VC pair."""
+        # 18: is HGI, but if it sends I 31DA it's acting as FAN
+        assert _classify("18:123456", "31DA", " I", is_src=True) == DevType.FAN
+
     def test_ctl_only_code(self) -> None:
         """A device sending 1030 (CTL-only code) is classified as CTL."""
         assert _classify("01:145038", "1030", " I", is_src=True) == DevType.CTL
