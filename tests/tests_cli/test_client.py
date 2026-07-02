@@ -850,3 +850,181 @@ def test_run_cli_valid() -> None:
 
         mock_exit.assert_not_called()
         mock_main.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests for the scan command and _print_scan_results
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_async_main_scan(mock_gateway: MagicMock) -> None:
+    """Test async_main logic for the SCAN command."""
+    from ramses_cli.client import SCAN
+
+    lib_kwargs: dict[str, Any] = {
+        SZ_CONFIG: {"reduce_processing": 0},
+        SZ_PACKET_LOG: {},
+    }
+    kwargs: dict[str, Any] = {
+        "long_format": False,
+        "restore_schema": None,
+        "restore_state": None,
+        "print_state": 0,
+        SZ_INPUT_FILE: "input.log",
+        "scan_duration": 0,  # 0 = until interrupted, but we'll cancel quickly
+        "scan_output": None,
+    }
+
+    with (
+        patch("ramses_cli.client.Gateway", return_value=mock_gateway),
+        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch("ramses_cli.client.DiscoveryScan") as mock_scan_cls,
+    ):
+        mock_scan_engine = MagicMock()
+        mock_scan_engine.start = MagicMock()
+        mock_scan_engine.stop = MagicMock()
+        mock_scan_engine.get_devices.return_value = []
+        mock_scan_cls.return_value = mock_scan_engine
+
+        # Use a very short sleep to avoid hanging the test
+        async def short_sleep(_: float) -> None:
+            pass
+
+        with patch("asyncio.sleep", side_effect=short_sleep):
+            await async_main(SCAN, lib_kwargs, **kwargs)
+
+        mock_scan_engine.start.assert_called_once()
+        mock_scan_engine.stop.assert_called_once()
+        mock_gateway.start.assert_awaited_once()
+        mock_gateway.stop.assert_awaited_once()
+
+
+def test_print_scan_results_with_devices(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test _print_scan_results formats device output correctly."""
+    from ramses_cli.client import _print_scan_results
+    from ramses_rf.discovery_scan import DiscoveredDevice
+
+    devices = [
+        DiscoveredDevice(
+            device_id="01:145038",
+            first_seen="2026-01-01T00:00:00",
+            last_seen="2026-01-01T00:00:01",
+            likely_type="CTL",
+            codes_seen=["2E04", "000C"],
+            bound_to=None,
+            zone_idx="0A",
+            rssi=-68.0,
+            confidence="high",
+            is_battery=False,
+            src_count=5,
+            dst_count=2,
+        ),
+        DiscoveredDevice(
+            device_id="04:056053",
+            first_seen="2026-01-01T00:00:00",
+            last_seen="2026-01-01T00:00:01",
+            likely_type="TRV",
+            codes_seen=["3150"],
+            bound_to="01:145038",
+            zone_idx="02",
+            rssi=-72.0,
+            confidence="high",
+            is_battery=True,
+            src_count=3,
+            dst_count=0,
+        ),
+    ]
+
+    mock_scan = MagicMock()
+    mock_scan.get_devices.return_value = devices
+
+    _print_scan_results(mock_scan, None)
+
+    captured = capsys.readouterr()
+    assert "Found 2 device(s)" in captured.out
+    assert "01:145038" in captured.out
+    assert "CTL" in captured.out
+    assert "04:056053" in captured.out
+    assert "TRV" in captured.out
+    assert "zone=02" in captured.out
+    assert "bound to 01:145038" in captured.out
+    assert "battery" in captured.out
+
+
+def test_print_scan_results_no_devices(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test _print_scan_results when no devices are found."""
+    from ramses_cli.client import _print_scan_results
+
+    mock_scan = MagicMock()
+    mock_scan.get_devices.return_value = []
+
+    _print_scan_results(mock_scan, None)
+
+    captured = capsys.readouterr()
+    assert "No unknown devices discovered" in captured.out
+
+
+def test_print_scan_results_export_to_file(
+    tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test _print_scan_results exports JSON to file when output path is given."""
+    from ramses_cli.client import _print_scan_results
+    from ramses_rf.discovery_scan import DiscoveredDevice
+
+    devices = [
+        DiscoveredDevice(
+            device_id="32:157747",
+            first_seen="2026-01-01T00:00:00",
+            last_seen="2026-01-01T00:00:01",
+            likely_type="FAN",
+            codes_seen=["31DA"],
+            bound_to=None,
+            zone_idx=None,
+            rssi=-70.0,
+            confidence="medium",
+            is_battery=False,
+            src_count=2,
+            dst_count=0,
+        ),
+    ]
+
+    mock_scan = MagicMock()
+    mock_scan.get_devices.return_value = devices
+    mock_scan.export_json.return_value = '{"devices": []}'
+
+    output_file = str(tmp_path / "found.json")
+    _print_scan_results(mock_scan, output_file)
+
+    captured = capsys.readouterr()
+    assert f"Exported to {output_file}" in captured.out
+    assert (tmp_path / "found.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_scan_command_disables_sending_and_discovery() -> None:
+    """Test that the scan command callback forces disable_sending and disable_discovery."""
+    from ramses_cli.client import SCAN, cli
+    from ramses_rf.schemas import SZ_CONFIG, SZ_DISABLE_DISCOVERY
+
+    lib_config: dict[str, Any] = {SZ_CONFIG: {}}
+    cli_config: dict[str, Any] = {}
+
+    runner = CliRunner()
+    with patch("ramses_cli.client.split_kwargs", return_value=(cli_config, lib_config)):
+        # standalone_mode=False returns the command's return value
+        result = await runner.invoke(
+            cli,
+            ["scan", "/dev/ttyUSB0", "--output", "found.json", "--duration", "60"],
+            standalone_mode=False,
+        )
+
+        assert result.exit_code == 0, f"CLI failed: {result.output}"
+
+        # scan() returns (SCAN, lib_config, cli_config)
+        command, lib_kwargs, cli_kwargs = result.return_value
+        assert command == SCAN
+        assert lib_kwargs[SZ_CONFIG]["disable_sending"] is True
+        assert lib_kwargs[SZ_CONFIG][SZ_DISABLE_DISCOVERY] is True
+        assert cli_kwargs["scan_duration"] == 60
+        assert cli_kwargs["scan_output"] == "found.json"

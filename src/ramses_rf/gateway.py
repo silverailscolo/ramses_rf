@@ -330,6 +330,18 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     ) -> Callable[[], None]:
         return self._engine.add_msg_handler(msg_handler, msg_filter=msg_filter)
 
+    def add_raw_pkt_handler(
+        self,
+        msg_handler: Callable[[PacketDTO], Awaitable[None]],
+        /,
+    ) -> Callable[[], None]:
+        """Add a raw packet handler that fires before the device ID filter.
+
+        Used by the passive scan engine to see packets from unknown devices
+        even when ``enforce_known_list=True``.
+        """
+        return self._engine.add_raw_pkt_handler(msg_handler)
+
     def add_task(self, task: asyncio.Task[Any]) -> None:
         self._engine.add_task(task)
 
