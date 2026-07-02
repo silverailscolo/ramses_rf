@@ -14,10 +14,13 @@ These tests verify:
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime as dt
 from typing import Any
 from unittest.mock import MagicMock
+
+import pytest
 
 from ramses_rf.const import DevType
 from ramses_rf.discovery_scan import (
@@ -637,7 +640,7 @@ class TestNoTopologyMutation:
 
     def test_no_schema_modification(self) -> None:
         """The scan should not modify the schema."""
-        original_schema = {"01:145038": {}}
+        original_schema: dict[str, Any] = {"01:145038": {}}
         gwy = make_mock_gateway(schema=original_schema)
         scan = DiscoveryScan(gwy)
         scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
@@ -688,3 +691,153 @@ class TestOutOfOrderDiscovery:
         assert "2E04" in ctl.codes_seen
         # Confidence should upgrade to medium (src_count >= 1 + codes >= 2)
         assert ctl.confidence in ("medium", "high")
+
+
+# ---------------------------------------------------------------------------
+# Integration: virtual RF with mixed CH + HVAC traffic
+# ---------------------------------------------------------------------------
+
+
+class TestVirtualRfIntegration:
+    """Integration test using the virtual RF to simulate live traffic.
+
+    Sends mixed CH + HVAC packets through a virtual serial port and verifies
+    the scan engine discovers and classifies them correctly, even with
+    enforce_known_list=True.
+    """
+
+    @pytest.mark.asyncio
+    async def test_mixed_ch_hvac_discovery(self) -> None:
+        """Scan discovers CH + HVAC devices from simulated RF traffic.
+
+        Uses the virtual RF harness to send raw packet frames through a
+        virtual serial port, just like real RF traffic.
+        """
+        from tests_rf.virtual_rf import HgiFwTypes, VirtualRf
+
+        HGI_ID = "18:222222"
+        CTL_ID = "01:145038"
+        TRV_ID = "04:056053"
+        DHW_ID = "07:046947"
+        BDR_ID = "10:067219"
+        FAN_ID = "32:157747"
+        REM_ID = "37:179540"
+
+        # Raw packet frames (evofw3 format: no RSSI, gateway adds it)
+        # Must be terminated with \r\n for the virtual RF to process them
+        # Payload length must match the declared hex length byte
+        raw_pkts: list[bytes] = [
+            # CTL broadcasts system mode
+            b" I --- 01:145038 18:222222 --:------ 2E04 003 000200\r\n",
+            # CTL sends zone device map (000C)
+            b" I --- 01:145038 18:222222 --:------ 000C 006 000F0035D5B1\r\n",
+            # TRV sends heat demand to CTL (zone 02)
+            b" I --- 04:056053 01:145038 --:------ 3150 006 02C800000000\r\n",
+            # TRV sends battery info
+            b" I --- 04:056053 01:145038 --:------ 1060 003 00C800\r\n",
+            # DHW sensor sends to CTL
+            b" I --- 07:046947 01:145038 --:------ 10A0 006 01C800000000\r\n",
+            # BDR sends state
+            b" I --- 10:067219 01:145038 --:------ 0008 002 00FF\r\n",
+            # FAN broadcasts fan state (31DA, 30 bytes payload)
+            b" I --- 32:157747 --:------ 32:157747 31DA 030 00EF007FFF3A2F04C404E204A904BA68000003C8C80000EFEF20A91F0500\r\n",
+            # FAN broadcasts fan info (31D9, 17 bytes payload)
+            b" I --- 32:157747 --:------ 32:157747 31D9 017 001A020020202020202020202020202008\r\n",
+            # REM sends fan mode to FAN
+            b" I --- 37:179540 32:157747 --:------ 22F1 003 000107\r\n",
+            # REM sends battery
+            b" I --- 37:179540 32:157747 --:------ 1060 003 00C800\r\n",
+        ]
+
+        rf = VirtualRf(2)
+        try:
+            rf.set_gateway(rf.ports[0], HGI_ID, fw_type=HgiFwTypes.EVOFW3)
+
+            from unittest.mock import patch
+
+            from ramses_rf.gateway import Gateway, GatewayConfig
+            from ramses_tx.config import EngineConfig
+
+            engine_config = EngineConfig(
+                disable_qos=True,
+                enforce_known_list=True,
+                disable_sending=True,
+            )
+            gwy_config = GatewayConfig(
+                disable_discovery=True,
+                enable_eavesdrop=False,
+                engine=engine_config,
+                known_list={HGI_ID: {}},  # only HGI — everything else unknown
+                schema={},
+            )
+
+            with patch("ramses_tx.discovery.comports", rf.comports):
+                gwy = Gateway(rf.ports[0], config=gwy_config)
+                await gwy.start()
+
+            scan = DiscoveryScan(gwy)
+            scan.start()
+
+            # Dump packets into the virtual RF (one at a time to avoid buffer overflow)
+            for pkt in raw_pkts:
+                await rf.dump_frames_to_rf([pkt])
+                await asyncio.sleep(0.05)
+            await asyncio.sleep(1)  # let packets fully process
+
+            scan.stop()
+
+            # Verify registry only has HGI
+            registry_ids = set(gwy.device_registry.device_by_id.keys())
+            assert registry_ids == {HGI_ID}, (
+                f"Registry should only have HGI, got: {registry_ids}"
+            )
+
+            # Verify scan discovered all unknown devices
+            discovered = {d.device_id: d for d in scan.get_devices()}
+            assert CTL_ID in discovered, (
+                f"CTL not discovered: {list(discovered.keys())}"
+            )
+            assert TRV_ID in discovered, (
+                f"TRV not discovered: {list(discovered.keys())}"
+            )
+            assert DHW_ID in discovered, (
+                f"DHW not discovered: {list(discovered.keys())}"
+            )
+            assert BDR_ID in discovered, (
+                f"BDR not discovered: {list(discovered.keys())}"
+            )
+            assert FAN_ID in discovered, (
+                f"FAN not discovered: {list(discovered.keys())}"
+            )
+            assert REM_ID in discovered, (
+                f"REM not discovered: {list(discovered.keys())}"
+            )
+
+            # Verify classification
+            assert discovered[CTL_ID].likely_type == "CTL"
+            assert discovered[TRV_ID].likely_type == "TRV"
+            assert discovered[DHW_ID].likely_type == "DHW"
+            assert discovered[BDR_ID].likely_type == "BDR"
+            assert discovered[FAN_ID].likely_type == "FAN"
+            assert discovered[REM_ID].likely_type == "REM"
+
+            # Verify TRV has zone binding
+            trv = discovered[TRV_ID]
+            assert trv.zone_idx == "02"
+            assert trv.bound_to == CTL_ID
+            assert trv.confidence == "high"
+            assert trv.is_battery is True
+
+            # Verify FAN is classified as FAN (not REM, despite 22F1)
+            fan = discovered[FAN_ID]
+            assert fan.likely_type == "FAN"
+            assert "31DA" in fan.codes_seen
+
+            # Verify REM is classified as REM
+            rem = discovered[REM_ID]
+            assert rem.likely_type == "REM"
+            assert "22F1" in rem.codes_seen
+
+            await gwy.stop()
+        finally:
+            await rf.stop()
