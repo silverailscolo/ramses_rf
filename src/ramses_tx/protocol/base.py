@@ -69,6 +69,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         super().__init__()
         self._msg_handler = msg_handler
         self._msg_handlers: list[tuple[MsgHandlerT, MsgFilterT | None]] = []
+        self._raw_pkt_handlers: list[MsgHandlerT] = []
 
         self._transport: TransportInterface | None = None
         self._loop = asyncio.get_running_loop()
@@ -143,6 +144,28 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         if entry not in self._msg_handlers:
             self._msg_handlers.append(entry)
+
+        return del_handler
+
+    def add_raw_pkt_handler(
+        self,
+        msg_handler: MsgHandlerT,
+        /,
+    ) -> Callable[[], None]:
+        """Add a raw packet handler that fires BEFORE the device ID filter.
+
+        Raw handlers receive every valid PacketDTO, including packets from
+        unknown devices that would be filtered out by enforce_known_list.
+        Used by the passive scan engine to discover unknown devices.
+
+        :param msg_handler: The handler function to add.
+        :return: A callable to remove the handler.
+        """
+        self._raw_pkt_handlers.append(msg_handler)
+
+        def del_handler() -> None:
+            if msg_handler in self._raw_pkt_handlers:
+                self._raw_pkt_handlers.remove(msg_handler)
 
         return del_handler
 
@@ -554,6 +577,18 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         return True
 
     def _pkt_received(self, pkt: Packet) -> None:
+        # Fire raw handlers before the device ID filter (for the scan engine)
+        if self._raw_pkt_handlers:
+            try:
+                dto = pkt.to_dto()
+            except PacketInvalid as err:
+                _LOGGER.debug(f"Dropped invalid packet for raw handlers: {err}")
+            else:
+                for handler in self._raw_pkt_handlers:
+                    res = handler(dto)
+                    if asyncio.iscoroutine(res):
+                        self._loop.create_task(res)
+
         if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
             _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
             return

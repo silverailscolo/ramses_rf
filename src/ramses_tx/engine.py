@@ -168,6 +168,17 @@ class Engine:
         """Add a Message handler to the underlying Protocol."""
         return self._protocol.add_handler(msg_handler, msg_filter=msg_filter)
 
+    def add_raw_pkt_handler(
+        self,
+        msg_handler: MsgHandlerT,
+        /,
+    ) -> Callable[[], None]:
+        """Add a raw packet handler that fires before the device ID filter.
+
+        See ``_BaseProtocol.add_raw_pkt_handler`` for details.
+        """
+        return self._protocol.add_raw_pkt_handler(msg_handler)
+
     async def start(self) -> None:
         """Create a suitable transport for the specified packet source.
 

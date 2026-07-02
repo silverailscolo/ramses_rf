@@ -27,6 +27,7 @@ from ramses_rf.const import (
     W_,
     Code,
 )
+from ramses_rf.discovery_scan import DiscoveryScan
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import deep_merge
 from ramses_rf.schemas import (
@@ -87,6 +88,7 @@ EXECUTE: Final = "execute"
 LISTEN: Final = "listen"
 MONITOR: Final = "monitor"
 PARSE: Final = "parse"
+SCAN: Final = "scan"
 
 
 COLORS = {
@@ -304,7 +306,7 @@ class PortCommand(
 
 
 #
-# 1/4: PARSE (a file, +/- eavesdrop)
+# 1/5: PARSE (a file, +/- eavesdrop)
 @click.command(cls=FileCommand)  # parse a packet log file, then stop
 @click.pass_obj
 async def parse(
@@ -324,7 +326,7 @@ async def parse(
 
 
 #
-# 2/4: MONITOR (listen to RF, +/- discovery, +/- eavesdrop)
+# 2/5: MONITOR (listen to RF, +/- discovery, +/- eavesdrop)
 @click.command(cls=PortCommand)  # (optionally) execute a command/script, then monitor
 @click.option("-d/-nd", "--discover/--no-discover", default=None)  # --no-discover
 @click.option(  # --exec-cmd 'RQ 01:123456 1F09 00'
@@ -366,7 +368,7 @@ async def monitor(
 
 
 #
-# 3/4: EXECUTE (send cmds to RF, +/- discovery, +/- eavesdrop)
+# 3/5: EXECUTE (send cmds to RF, +/- discovery, +/- eavesdrop)
 @click.command(cls=PortCommand)  # execute a (complex) script, then stop
 @click.option("-d/-nd", "--discover/--no-discover", default=None)  # --no-discover
 @click.option(  # --exec-cmd 'RQ 01:123456 1F09 00'
@@ -426,7 +428,7 @@ async def execute(
 
 
 #
-# 4/4: LISTEN (to RF, +/- eavesdrop - NO sending/discovery)
+# 4/5: LISTEN (to RF, +/- eavesdrop - NO sending/discovery)
 @click.command(cls=PortCommand)  # (optionally) execute a command, then listen
 @click.pass_obj
 async def listen(
@@ -448,6 +450,84 @@ async def listen(
     lib_config[SZ_CONFIG][SZ_DISABLE_SENDING] = True
 
     return LISTEN, lib_config, config
+
+
+#
+# 5/5: SCAN (passive device discovery — listen, classify, export, stop)
+@click.command(cls=PortCommand)
+@click.option(  # --duration seconds (0 = until Ctrl-C)
+    "-d",
+    "--duration",
+    type=int,
+    default=300,
+    help="scan duration in seconds (0 = until interrupted)",
+)
+@click.option(  # --output file
+    "-o",
+    "--output",
+    type=click.Path(),
+    help="export discovered devices to JSON file",
+)
+@click.pass_obj
+async def scan(
+    obj: Any, /, duration: int = 300, **kwargs: Any
+) -> tuple[Literal["scan"], dict[str, str], dict[str, Any]]:
+    """Passive device scan: listen to RF, classify unknown devices, export.
+
+    No discovery, no eavesdrop, no sending — pure observation.
+    Discovered devices are classified by prefix and verb/code pairs.
+
+    :param obj: The context object containing configuration.
+    :param duration: Scan duration in seconds (0 = until interrupted).
+    :param kwargs: Additional keyword arguments.
+    :return: Tuple of command name, library config, and CLI config.
+    """
+    config, lib_config = split_kwargs(obj, kwargs)
+
+    print(" - sending is force-disabled (passive scan)")
+    lib_config[SZ_CONFIG][SZ_DISABLE_SENDING] = True
+    lib_config[SZ_CONFIG][SZ_DISABLE_DISCOVERY] = True
+
+    # Pass duration and output via kwargs (consumed in async_main)
+    config["scan_duration"] = duration
+    config["scan_output"] = kwargs.get("output")
+
+    return SCAN, lib_config, config
+
+
+def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
+    """Print discovered devices and optionally export to JSON file.
+
+    :param scan: The DiscoveryScan engine instance.
+    :param output_path: Optional file path to export JSON to.
+    """
+    devices = scan.get_devices()
+    if not devices:
+        print("No unknown devices discovered.")
+        return
+
+    print(f"\nFound {len(devices)} device(s):\n")
+    print(f"  {'Device ID':<12} {'Type':<6} {'Conf':<7} {'RSSI':>6}  Details")
+    print(f"  {'-' * 12} {'-' * 6} {'-' * 7} {'-' * 6}  {'-' * 30}")
+    for dev in sorted(devices, key=lambda d: d.device_id):
+        rssi_str = f"{dev.rssi:.0f}" if dev.rssi is not None else "-"
+        details = ""
+        if dev.zone_idx:
+            details += f"zone={dev.zone_idx}  "
+        if dev.bound_to:
+            details += f"bound to {dev.bound_to}"
+        if dev.is_battery:
+            details += "  battery" if details else "battery"
+        print(
+            f"  {dev.device_id:<12} {dev.likely_type:<6} "
+            f"{dev.confidence:<7} {rssi_str:>6}  {details}".rstrip()
+        )
+
+    if output_path:
+        json_data = scan.export_json()
+        with open(output_path, "w") as f:
+            f.write(json_data)
+        print(f"\nExported to {output_path}")
 
 
 def print_results(gwy: Gateway, **kwargs: Any) -> None:
@@ -718,23 +798,36 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
         # python client.py -rrr listen /dev/ttyUSB0
         # cat *.log | head | python client.py parse
 
-        if command == EXECUTE:
+        if command == EXECUTE:  # 3/5
             tasks = spawn_scripts(gwy, **kwargs)
             await asyncio.gather(*tasks)
 
-        elif command == MONITOR:
+        elif command == MONITOR:  # 2/5
             _ = spawn_scripts(gwy, **kwargs)
             await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
-        elif command == PARSE:
+        elif command == PARSE:  # 1/5
             # Wait indefinitely until EOF closes the transport
             await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
 
-        elif command == LISTEN:
+        elif command == LISTEN:  # 4/5
             await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
             # timeout set to timeout=86400, to stop type checker complaint if sent to None
+
+        elif command == SCAN:  # 5/5
+            scan_engine = DiscoveryScan(gwy)
+            scan_engine.start()
+            duration = kwargs.get("scan_duration", 300)
+            if duration > 0:
+                print(f" - scanning for {duration} seconds...")
+                await asyncio.sleep(duration)
+            else:
+                print(" - scanning until interrupted (Ctrl-C)...")
+                await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
+            scan_engine.stop()
+            _print_scan_results(scan_engine, kwargs.get("scan_output"))
 
     except asyncio.CancelledError:
         msg = "ended via: CancelledError (e.g. SIGINT)"
@@ -770,6 +863,7 @@ cli.add_command(parse)
 cli.add_command(monitor)
 cli.add_command(execute)
 cli.add_command(listen)
+cli.add_command(scan)
 
 
 def _run_cli() -> None:
