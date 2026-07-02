@@ -148,11 +148,16 @@ class DiscoveryScan:
     # -- lifecycle -----------------------------------------------------------
 
     def start(self) -> None:
-        """Register as a msg_handler on the gateway."""
+        """Register as a raw packet handler on the gateway.
+
+        Uses ``add_raw_pkt_handler`` (not ``add_msg_handler``) so the scan
+        sees packets from unknown devices even when ``enforce_known_list=True``.
+        The raw handler fires before the device ID filter.
+        """
         if self._remove_handler is not None:
             _LOGGER.warning("DiscoveryScan.start(): already running")
             return
-        self._remove_handler = self._gwy.add_msg_handler(self._on_packet)
+        self._remove_handler = self._gwy.add_raw_pkt_handler(self._on_packet)
         _LOGGER.info("DiscoveryScan: started (passive observer)")
 
     def stop(self) -> None:

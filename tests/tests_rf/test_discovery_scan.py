@@ -72,7 +72,7 @@ def make_mock_gateway(
     gwy._gwy_config = MagicMock()
     gwy._gwy_config.known_list = known_list or {}
     gwy._gwy_config.schema = schema or {}
-    gwy.add_msg_handler = MagicMock(return_value=lambda: None)
+    gwy.add_raw_pkt_handler = MagicMock(return_value=lambda: None)
     return gwy
 
 
@@ -331,13 +331,13 @@ class TestDiscoveryScanLifecycle:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan.start()
-        assert gwy.add_msg_handler.called
+        assert gwy.add_raw_pkt_handler.called
         assert scan.is_running is True
 
     def test_stop_unregisters_handler(self) -> None:
         gwy = make_mock_gateway()
         removed = MagicMock()
-        gwy.add_msg_handler = MagicMock(return_value=removed)
+        gwy.add_raw_pkt_handler = MagicMock(return_value=removed)
         scan = DiscoveryScan(gwy)
         scan.start()
         scan.stop()
@@ -349,7 +349,7 @@ class TestDiscoveryScanLifecycle:
         scan = DiscoveryScan(gwy)
         scan.start()
         scan.start()  # should not double-register
-        assert gwy.add_msg_handler.call_count == 1
+        assert gwy.add_raw_pkt_handler.call_count == 1
 
     def test_stop_without_start_is_noop(self) -> None:
         gwy = make_mock_gateway()
