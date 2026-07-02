@@ -227,7 +227,7 @@ class DiscoveryScan:
         dst = dto.addr2.strip()
         addr3 = dto.addr3.strip() if dto.addr3 else ""
         code = str(dto.code).strip()
-        verb = dto.verb.strip() if dto.verb else ""
+        verb = dto.verb if dto.verb else ""
 
         # Parse RSSI (stored as string in PacketDTO)
         rssi: float | None = None

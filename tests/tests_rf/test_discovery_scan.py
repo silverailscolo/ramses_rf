@@ -841,3 +841,190 @@ class TestVirtualRfIntegration:
             await gwy.stop()
         finally:
             await rf.stop()
+
+    @pytest.mark.asyncio
+    async def test_resume_after_export_import(self) -> None:
+        """Scan can export its state, a new scan can import it and continue.
+
+        Simulates an HA restart: scan1 discovers devices, exports JSON,
+        scan2 imports the JSON and continues scanning, discovering new
+        devices that appeared after the restart.
+        """
+        from tests_rf.virtual_rf import HgiFwTypes, VirtualRf
+
+        HGI_ID = "18:333333"
+        CTL_ID = "01:145038"
+        TRV_ID = "04:056053"
+        FAN_ID = "32:157747"
+
+        # Phase 1 packets: CTL + TRV
+        phase1_pkts: list[bytes] = [
+            b" I --- 01:145038 18:333333 --:------ 2E04 003 000200\r\n",
+            b" I --- 04:056053 01:145038 --:------ 3150 006 02C800000000\r\n",
+        ]
+
+        # Phase 2 packets: FAN (new device after "restart")
+        phase2_pkts: list[bytes] = [
+            b" I --- 32:157747 --:------ 32:157747 31DA 030 00EF007FFF3A2F04C404E204A904BA68000003C8C80000EFEF20A91F0500\r\n",
+        ]
+
+        rf = VirtualRf(2)
+        try:
+            rf.set_gateway(rf.ports[0], HGI_ID, fw_type=HgiFwTypes.EVOFW3)
+
+            from unittest.mock import patch
+
+            from ramses_rf.gateway import Gateway, GatewayConfig
+            from ramses_tx.config import EngineConfig
+
+            engine_config = EngineConfig(
+                disable_qos=True,
+                enforce_known_list=True,
+                disable_sending=True,
+            )
+            gwy_config = GatewayConfig(
+                disable_discovery=True,
+                enable_eavesdrop=False,
+                engine=engine_config,
+                known_list={HGI_ID: {}},
+                schema={},
+            )
+
+            # --- Phase 1: scan and export ---
+            with patch("ramses_tx.discovery.comports", rf.comports):
+                gwy = Gateway(rf.ports[0], config=gwy_config)
+                await gwy.start()
+
+            scan1 = DiscoveryScan(gwy)
+            scan1.start()
+            for pkt in phase1_pkts:
+                await rf.dump_frames_to_rf([pkt])
+                await asyncio.sleep(0.05)
+            await asyncio.sleep(0.5)
+            scan1.stop()
+
+            devices1 = {d.device_id: d for d in scan1.get_devices()}
+            assert CTL_ID in devices1
+            assert TRV_ID in devices1
+            assert FAN_ID not in devices1  # FAN not seen yet
+
+            # Export state
+            json_state = scan1.export_json()
+            assert CTL_ID in json_state
+            assert TRV_ID in json_state
+
+            await gwy.stop()
+
+            # --- Phase 2: new scan imports state and continues ---
+            with patch("ramses_tx.discovery.comports", rf.comports):
+                gwy2 = Gateway(rf.ports[0], config=gwy_config)
+                await gwy2.start()
+
+            scan2 = DiscoveryScan(gwy2)
+            scan2.import_json(json_state)  # resume from exported state
+
+            # Verify imported devices are present before scanning
+            imported = {d.device_id: d for d in scan2.get_devices()}
+            assert CTL_ID in imported
+            assert TRV_ID in imported
+            assert FAN_ID not in imported  # not yet
+
+            scan2.start()
+            for pkt in phase2_pkts:
+                await rf.dump_frames_to_rf([pkt])
+                await asyncio.sleep(0.05)
+            await asyncio.sleep(0.5)
+            scan2.stop()
+
+            # Verify all devices now present
+            devices2 = {d.device_id: d for d in scan2.get_devices()}
+            assert CTL_ID in devices2  # from import
+            assert TRV_ID in devices2  # from import
+            assert FAN_ID in devices2  # newly discovered
+            assert devices2[FAN_ID].likely_type == "FAN"
+
+            await gwy2.stop()
+        finally:
+            await rf.stop()
+
+    @pytest.mark.asyncio
+    async def test_hvac_co2_and_hum_classification(self) -> None:
+        """Scan correctly classifies CO2 and HUM devices via VC pairs.
+
+        37: prefix is ambiguous (REM, CO2, HUM all use it), so the VC pair
+        must distinguish them:
+        - I 1298 → CO2
+        - I 22F1 → REM
+        - I 31E0 → HUM (if in HVAC_KLASS_BY_VC_PAIR)
+        """
+        from tests_rf.virtual_rf import HgiFwTypes, VirtualRf
+
+        HGI_ID = "18:444444"
+        CO2_ID = "37:111111"
+        REM_ID = "37:222222"
+
+        raw_pkts: list[bytes] = [
+            # CO2 sends air quality (I 1298)
+            b" I --- 37:111111 18:444444 --:------ 1298 013 00EF007FFF3A2F04C404E204A9\r\n",
+            # REM sends fan mode (I 22F1)
+            b" I --- 37:222222 32:157747 --:------ 22F1 003 000107\r\n",
+        ]
+
+        rf = VirtualRf(2)
+        try:
+            rf.set_gateway(rf.ports[0], HGI_ID, fw_type=HgiFwTypes.EVOFW3)
+
+            from unittest.mock import patch
+
+            from ramses_rf.gateway import Gateway, GatewayConfig
+            from ramses_tx.config import EngineConfig
+
+            engine_config = EngineConfig(
+                disable_qos=True,
+                enforce_known_list=True,
+                disable_sending=True,
+            )
+            gwy_config = GatewayConfig(
+                disable_discovery=True,
+                enable_eavesdrop=False,
+                engine=engine_config,
+                known_list={HGI_ID: {}},
+                schema={},
+            )
+
+            with patch("ramses_tx.discovery.comports", rf.comports):
+                gwy = Gateway(rf.ports[0], config=gwy_config)
+                await gwy.start()
+
+            scan = DiscoveryScan(gwy)
+            scan.start()
+            for pkt in raw_pkts:
+                await rf.dump_frames_to_rf([pkt])
+                await asyncio.sleep(0.05)
+            await asyncio.sleep(0.5)
+            scan.stop()
+
+            discovered = {d.device_id: d for d in scan.get_devices()}
+
+            # CO2 should be classified as CO2 (via I 1298 VC pair)
+            assert CO2_ID in discovered, (
+                f"CO2 not discovered: {list(discovered.keys())}"
+            )
+            assert discovered[CO2_ID].likely_type == "CO2", (
+                f"Expected CO2, got {discovered[CO2_ID].likely_type}"
+            )
+
+            # REM should be classified as REM (via I 22F1 VC pair)
+            assert REM_ID in discovered, (
+                f"REM not discovered: {list(discovered.keys())}"
+            )
+            assert discovered[REM_ID].likely_type == "REM", (
+                f"Expected REM, got {discovered[REM_ID].likely_type}"
+            )
+
+            # Both are 37: prefix but different types — VC pair disambiguates
+            assert discovered[CO2_ID].likely_type != discovered[REM_ID].likely_type
+
+            await gwy.stop()
+        finally:
+            await rf.stop()
