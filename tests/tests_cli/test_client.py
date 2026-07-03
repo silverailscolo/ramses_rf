@@ -1015,7 +1015,7 @@ async def test_scan_command_disables_sending_and_discovery() -> None:
         # standalone_mode=False returns the command's return value
         result = await runner.invoke(
             cli,
-            ["scan", "/dev/ttyUSB0", "--output", "found.json", "--duration", "60"],
+            ["scan", "/dev/ttyUSB0", "--file", "found.json", "--duration", "60"],
             standalone_mode=False,
         )
 

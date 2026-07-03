@@ -488,9 +488,9 @@ async def scan(
     lib_config[SZ_CONFIG][SZ_DISABLE_SENDING] = True
     lib_config[SZ_CONFIG][SZ_DISABLE_DISCOVERY] = True
 
-    # Pass duration and output via kwargs (consumed in async_main)
+    # Pass duration and output file via kwargs (consumed in async_main)
     config["scan_duration"] = duration
-    config["scan_output"] = kwargs.get("output")
+    config["scan_output"] = kwargs.get("file")
 
     return SCAN, lib_config, config
 
