@@ -462,9 +462,9 @@ async def listen(
     default=300,
     help="scan duration in seconds (0 = until interrupted)",
 )
-@click.option(  # --output file
-    "-o",
-    "--output",
+@click.option(  # --file
+    "-f",
+    "--file",
     type=click.Path(),
     help="export discovered devices to JSON file",
 )
