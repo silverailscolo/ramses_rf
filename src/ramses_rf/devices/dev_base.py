@@ -43,7 +43,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
-    from ramses_rf.systems import Evohome, Zone
+    from ramses_rf.systems import Zone
     from ramses_tx.const import IndexT
     from ramses_tx.dtos import PacketDTO
     from ramses_tx.typing import DeviceIdT
@@ -463,9 +463,7 @@ class HgiGateway(Device):  # HGI (18:)
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
 
-        self.ctl: Device | None = None  # type: ignore[assignment] # FIXME: a mess
         self._child_id = "gw"  # TODO
-        self.tcs: Evohome | None = None  # type: ignore[assignment]
 
     @property
     def message_timeout(self) -> td:
@@ -512,8 +510,6 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
     ) -> None:
         super().__init__(gwy, dev_addr, traits=traits, **kwargs)
 
-        self.ctl: Device | None = None  # type: ignore[assignment]
-        self.tcs: Evohome | None = None  # type: ignore[assignment]
         self._child_id = None  # domain_id, or zone_idx
 
         self._iz_controller: None | bool | Message = None

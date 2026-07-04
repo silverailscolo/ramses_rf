@@ -102,6 +102,14 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 _LOGGER = logging.getLogger(__name__)
 _TRACE = logging.getLogger("ramses_rf.legacy_trace")
 
+# Polling interval for dormant DHW (Domestic Hot Water) entities.
+# Dormant entities, particularly battery-powered DHW sensors (e.g. CS92A),
+# change state infrequently and may remain 'Unknown' after boot. We
+# explicitly poll their state to hydrate the system. To preserve the
+# battery life of wireless sensors, this interval defaults to 24 hours.
+# Users can decrease this value if more frequent updates are desired.
+DHW_POLLING_INTERVAL_SECS: int = 60 * 60 * 24
+
 
 _SystemT = TypeVar("_SystemT", bound="Evohome")
 
@@ -118,7 +126,7 @@ SYS_KLASS = SimpleNamespace(
 
 
 class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
-    """The TCS base class."""
+    """The TCS base class orchestrating system-level operations."""
 
     _SLUG: str = None  # type: ignore[assignment]
 
@@ -126,6 +134,11 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
     childs: list[Device]  # type: ignore[assignment]
 
     def __init__(self, ctl: Controller) -> None:
+        """Initialise the TCS base class.
+
+        :param ctl: The central controller device for this system.
+        :type ctl: Controller
+        """
         _LOGGER.debug("Creating a TCS for CTL: %s (%s)", ctl.id, self.__class__)
 
         if ctl.id in ctl._gwy.device_registry.system_by_id:
@@ -155,6 +168,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         return f"{self.ctl.id} ({self._SLUG})"
 
     def _setup_discovery_cmds(self) -> None:
+        """Configure the system-level discovery commands."""
         # super()._setup_discovery_cmds()
 
         for payload in (
@@ -169,19 +183,23 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         self.discovery.add_cmd(cmd, 60 * 60 * 6, delay=5)
 
     def _handle_msg(self, msg: Message) -> None:
+        """Handle incoming messages routed to the base system."""
+
         def eavesdrop_appliance_control(
             this: Message, *, prev: Message | None = None
         ) -> None:
             """Discover the heat relay (10: or 13:) for this system.
 
-            There's' 3 ways to find a controller's heat relay (in order of reliability):
+            There are 3 ways to find a controller's heat relay (by
+            reliability):
             1.  The 3220 RQ/RP *to/from a 10:* (1x/5min)
             2a. The 3EF0 RQ/RP *to/from a 10:* (1x/1min)
             2b. The 3EF0 RQ (no RP) *to a 13:* (3x/60min)
-            3.  The 3B00 I/I exchange between a CTL & a 13: (TPI cycle rate, usu. 6x/hr)
+            3.  The 3B00 I/I exchange between a CTL & a 13: (TPI cycle,
+                usu. 6x/hr)
 
-            Data from the CTL is considered 'authoritative'. The 1FC9 RQ/RP exchange
-            to/from a CTL is too rare to be useful.
+            Data from the CTL is considered 'authoritative'. The 1FC9
+            RQ/RP exchange to/from a CTL is too rare to be useful.
             """
 
             # 18:14:14.025 066 RQ --- 01:078710 10:067219 --:------ 3220 005 0000050000
@@ -302,23 +320,37 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         )
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
+        """Return the TPI parameters for the system.
+
+        :returns: The TPI parameters dictionary, if available.
+        :rtype: PayDictT._1100 | None
+        """
         return cast(
             PayDictT._1100 | None,
             await self.entity_state.get_value(Code._1100),
         )
 
     async def heat_demand(self) -> float | None:  # 3150/FC
+        """Return the current heat demand for the system.
+
+        :returns: The heat demand fraction, or None if unknown.
+        :rtype: float | None
+        """
         return self.demand_state.heat_demand
 
     async def is_calling_for_heat(self) -> NoReturn:
+        """Check if the system is actively calling for heat (Deprecated)."""
         raise NotImplementedError(
             f"{self}: is_calling_for_heat attr is deprecated, "
             "use bool(await heat_demand())"
         )
 
     async def schema(self) -> dict[str, Any]:
-        """Return the system's schema."""
+        """Return the system's schema.
 
+        :returns: The schema dictionary.
+        :rtype: dict[str, Any]
+        """
         schema: dict[str, Any] = {SZ_SYSTEM: {}}
 
         schema[SZ_SYSTEM][SZ_APPLIANCE_CONTROL] = (
@@ -337,8 +369,11 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         return schema
 
     async def _schema_min(self) -> dict[str, Any]:
-        """Return the system's minimal-alised schema."""
+        """Return the system's minimalised schema.
 
+        :returns: The minimalised schema dictionary.
+        :rtype: dict[str, Any]
+        """
         schema: dict[str, Any] = await self.schema()
         result: dict[str, Any] = {}
 
@@ -373,15 +408,21 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         return result  # TODO: check against vol schema
 
     async def params(self) -> dict[str, Any]:
-        """Return the system's configuration."""
+        """Return the system's configuration.
 
+        :returns: The configuration parameters dictionary.
+        :rtype: dict[str, Any]
+        """
         params: dict[str, Any] = {SZ_SYSTEM: {}}
         params[SZ_SYSTEM]["tpi_params"] = await self.entity_state.get_value(Code._1100)
         return params
 
     async def status(self) -> dict[str, Any]:
-        """Return the system's current state."""
+        """Return the system's current state.
 
+        :returns: The state and status dictionary.
+        :rtype: dict[str, Any]
+        """
         status: dict[str, Any] = {SZ_SYSTEM: {}}
         status[SZ_SYSTEM]["heat_demand"] = await self.heat_demand()
 
@@ -393,7 +434,10 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
 
 class MultiZone(SystemBase):  # 0005 (+/- 000C?)
+    """A system variant supporting multiple heating zones."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise a multi-zone system."""
         super().__init__(*args, **kwargs)
 
         self.zones: list[Zone] = []
@@ -405,6 +449,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         self._prev_30c9: Message | None = None  # used to eavesdrop zone sensors
 
     def _setup_discovery_cmds(self) -> None:
+        """Configure discovery commands for zone types."""
         super()._setup_discovery_cmds()
 
         for zone_type in list(ZON_ROLE_MAP.HEAT_ZONES) + [ZON_ROLE_MAP.SEN]:
@@ -416,8 +461,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
     async def _eavesdrop_zone_sensors(self, msg: Message, prev: Message | None) -> None:
         """Discover zone sensors by correlating 30C9 temperature broadcasts.
 
-        This implements a bi-directional correlation strategy to handle out-of-order
-        packet logs, matching TRVs to Zones regardless of which broadcasts first.
+        This implements a bi-directional correlation strategy to handle
+        out-of-order packet logs, matching TRVs to zones regardless of
+        which broadcasts first.
 
         :param msg: The incoming 30C9 message.
         :type msg: Message
@@ -436,7 +482,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
         :param msg: The incoming 30C9 array message from the controller.
         :type msg: Message
-        :param prev: The previous 30C9 array message to check which zones changed.
+        :param prev: The previous 30C9 array message to check changes.
         :type prev: Message | None
         """
         if prev is None:
@@ -684,10 +730,18 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
     ) -> Zone:
         """Return a heating zone, create it if required.
 
-        First, use the schema to create/update it, then pass it any msg to handle.
+        First, use the schema to create/update it, then pass it any msg
+        to handle. Heating zones are uniquely identified by a tcs_id
+        and zone_idx pair. If created, attach it to this TCS.
 
-        Heating zones are uniquely identified by a tcs_id|zone_idx pair.
-        If a zone is created, attach it to this TCS.
+        :param zone_idx: The hexadecimal string identifier for the zone.
+        :type zone_idx: str
+        :param msg: An optional message to handle upon creation.
+        :type msg: Message | None, optional
+        :param schema: Keyword arguments defining the zone schema.
+        :type schema: Any
+        :returns: The created or retrieved heating zone.
+        :rtype: Zone
         """
 
         schema = shrink(SCH_TCS_ZONES_ZON(schema))
@@ -706,6 +760,11 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         return zon
 
     async def schema(self) -> dict[str, Any]:
+        """Return the multi-zone system schema.
+
+        :returns: The schema dictionary.
+        :rtype: dict[str, Any]
+        """
         base_schema = await super().schema()
         return {
             **base_schema,
@@ -713,6 +772,11 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         }
 
     async def params(self) -> dict[str, Any]:
+        """Return the multi-zone system parameters.
+
+        :returns: The parameters dictionary.
+        :rtype: dict[str, Any]
+        """
         base_params = await super().params()
         return {
             **base_params,
@@ -720,6 +784,11 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         }
 
     async def status(self) -> dict[str, Any]:
+        """Return the multi-zone system status.
+
+        :returns: The status dictionary.
+        :rtype: dict[str, Any]
+        """
         base_status = await super().status()
         return {
             **base_status,
@@ -728,7 +797,10 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
 
 class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
+    """A system variant managing schedule synchronisation."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise schedule synchronisation."""
         super().__init__(*args, **kwargs)
 
         self._msg_0006: Message = None  # type: ignore[assignment]
@@ -738,6 +810,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         self.zone_lock_idx: str | None = None
 
     def _setup_discovery_cmds(self) -> None:
+        """Configure discovery commands for schedules."""
         super()._setup_discovery_cmds()
 
         cmd = Command.get_schedule_version(self.id)
@@ -758,12 +831,16 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
                 )
 
     async def _schedule_version(self, *, force_io: bool = False) -> tuple[int, bool]:
-        """Return the global schedule version number, and an indication if I/O was done.
+        """Return the global schedule version number and an I/O boolean.
 
-        If `force_io`, then RQ the latest change counter from the TCS rather than
-        rely upon a recent (cached) value.
+        If `force_io` is True, request the latest change counter from the
+        TCS rather than rely upon a recent (cached) value. Cached values
+        are only used if less than 3 minutes old.
 
-        Cached values are only used if less than 3 minutes old.
+        :param force_io: Force a network request, defaults to False.
+        :type force_io: bool, optional
+        :returns: A tuple containing the version number and an I/O flag.
+        :rtype: tuple[int, bool]
         """
 
         # RQ --- 30:185469 01:037519 --:------ 0006 001 00
@@ -792,6 +869,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         )  # global_ver, did_io
 
     def _refresh_schedules(self) -> None:
+        """Trigger a refresh of all zone and DHW schedules."""
         zone: Zone
 
         for zone in getattr(self, SZ_ZONES, []):
@@ -802,6 +880,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
             self._gwy.add_task(task)
 
     async def _obtain_lock(self, zone_idx: str) -> None:
+        """Obtain the asyncio lock for zone schedule operations."""
         timeout_dtm = dt.now() + td(minutes=3)
         while dt.now() < timeout_dtm:
             self.zone_lock.acquire()
@@ -819,17 +898,28 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
             )
 
     def _release_lock(self) -> None:
+        """Release the asyncio lock for zone schedule operations."""
         self.zone_lock.acquire()
         self.zone_lock_idx = None
         self.zone_lock.release()
 
     async def schedule_version(self) -> int | None:
+        """Return the current global schedule version.
+
+        :returns: The current schedule version, or None if unknown.
+        :rtype: int | None
+        """
         return cast(
             int | None,
             await self.entity_state.get_value(Code._0006, key=SZ_CHANGE_COUNTER),
         )
 
     async def status(self) -> dict[str, Any]:
+        """Return the schedule status.
+
+        :returns: The schedule status dictionary.
+        :rtype: dict[str, Any]
+        """
         base_status = await super().status()
         return {
             **base_status,
@@ -838,23 +928,39 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
 
 
 class Language(SystemBase):  # 0100
+    """A system variant supporting language configuration."""
+
     def _setup_discovery_cmds(self) -> None:
+        """Configure discovery for system language."""
         super()._setup_discovery_cmds()
 
         cmd = Command.get_system_language(self.id)
         self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=60 * 15)
 
     async def language(self) -> str | None:
+        """Return the current language configuration.
+
+        :returns: The system language string, or None if unknown.
+        :rtype: str | None
+        """
         return self.system_state.language
 
     async def params(self) -> dict[str, Any]:
+        """Return the language parameters.
+
+        :returns: The language parameters dictionary.
+        :rtype: dict[str, Any]
+        """
         params = await super().params()
         params[SZ_SYSTEM][SZ_LANGUAGE] = await self.language()
         return params
 
 
 class Logbook(SystemBase):  # 0418
+    """A system variant supporting fault logbook retrieval."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise the fault logbook."""
         super().__init__(*args, **kwargs)
 
         self._prev_event: Message = None  # type: ignore[assignment]
@@ -871,6 +977,7 @@ class Logbook(SystemBase):  # 0418
         return self._faultlog
 
     def _setup_discovery_cmds(self) -> None:
+        """Configure discovery for the fault log."""
         super()._setup_discovery_cmds()
 
         cmd = Command.get_system_log_entry(self.id, 0)
@@ -879,6 +986,7 @@ class Logbook(SystemBase):  # 0418
         self._gwy.add_task(task)
 
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
+        """Handle logbook-specific incoming messages."""
         super()._handle_msg(msg)
 
         if msg.code == Code._0418 and msg.verb in (I_, RP):
@@ -898,6 +1006,17 @@ class Logbook(SystemBase):  # 0418
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> dict[FaultIdxT, FaultLogEntry] | None:
+        """Retrieve the fault log entries from the system.
+
+        :param start: The starting fault index, defaults to 0.
+        :type start: int, optional
+        :param limit: The maximum number of entries, defaults to None.
+        :type limit: int | None, optional
+        :param force_refresh: Force a network request, defaults to False.
+        :type force_refresh: bool, optional
+        :returns: A dictionary of fault log entries, if available.
+        :rtype: dict[FaultIdxT, FaultLogEntry] | None
+        """
         return await self._faultlog.get_faultlog(
             start=start, limit=limit, force_refresh=force_refresh
         )
@@ -911,7 +1030,7 @@ class Logbook(SystemBase):  # 0418
 
     @property
     def latest_event(self) -> str | None:
-        """Return the most recently logged event (fault or restore), if any."""
+        """Return the most recently logged event (fault or restore)."""
         if not self._faultlog.latest_event:
             return None
         return str(self._faultlog.latest_event)
@@ -924,6 +1043,11 @@ class Logbook(SystemBase):  # 0418
         return str(self._faultlog.latest_fault)
 
     async def status(self) -> dict[str, Any]:
+        """Return the logbook status.
+
+        :returns: The logbook status dictionary.
+        :rtype: dict[str, Any]
+        """
         base_status = await super().status()
         return {
             **base_status,
@@ -934,15 +1058,19 @@ class Logbook(SystemBase):  # 0418
 
 
 class StoredHw(SystemBase):  # 10A0, 1260, 1F41
+    """A system variant managing Domestic Hot Water (DHW)."""
+
     MIN_SETPOINT = 30.0  # NOTE: these may be removed
     MAX_SETPOINT = 85.0
     DEFAULT_SETPOINT = 50.0
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise the StoredHw system."""
         super().__init__(*args, **kwargs)
         self._dhw: DhwZone = None  # type: ignore[assignment]
 
     def _setup_discovery_cmds(self) -> None:
+        """Configure discovery commands for DHW sensors and valves."""
         super()._setup_discovery_cmds()
 
         for payload in (
@@ -953,7 +1081,24 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
             cmd = Command.from_attrs(RQ, self.id, Code._000C, PayloadT(payload))
             self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0)
 
+        self.discovery.add_cmd(
+            Command.get_dhw_params(self.id),
+            DHW_POLLING_INTERVAL_SECS,
+            delay=5,
+        )
+        self.discovery.add_cmd(
+            Command.get_dhw_temp(self.id),
+            DHW_POLLING_INTERVAL_SECS,
+            delay=10,
+        )
+        self.discovery.add_cmd(
+            Command.get_dhw_mode(self.id),
+            DHW_POLLING_INTERVAL_SECS,
+            delay=15,
+        )
+
     def _handle_msg(self, msg: Message) -> None:
+        """Handle incoming messages related to DHW."""
         super()._handle_msg(msg)
 
         if (
@@ -985,10 +1130,16 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
     def get_dhw_zone(self, *, msg: Message | None = None, **schema: Any) -> DhwZone:
         """Return a DHW zone, create it if required.
 
-        First, use the schema to create/update it, then pass it any msg to handle.
-
-        DHW zones are uniquely identified by a controller ID.
+        First, use the schema to create/update it, then pass it any msg
+        to handle. DHW zones are uniquely identified by a controller ID.
         If a DHW zone is created, attach it to this TCS.
+
+        :param msg: An optional message to handle upon creation.
+        :type msg: Message | None, optional
+        :param schema: Keyword arguments defining the zone schema.
+        :type schema: Any
+        :returns: The created or retrieved DHW zone.
+        :rtype: DhwZone
         """
 
         schema = shrink(SCH_TCS_DHW(schema))
@@ -1005,21 +1156,26 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
 
     @property
     def dhw(self) -> DhwZone | None:
+        """Return the DHW zone instance."""
         return self._dhw
 
     @property
     def dhw_sensor(self) -> Device | None:
+        """Return the DHW sensor device."""
         return self._dhw.sensor if self._dhw else None
 
     @property
     def hotwater_valve(self) -> Device | None:
+        """Return the hot water valve device."""
         return self._dhw.hotwater_valve if self._dhw else None
 
     @property
     def heating_valve(self) -> Device | None:
+        """Return the heating valve device."""
         return self._dhw.heating_valve if self._dhw else None
 
     async def schema(self) -> dict[str, Any]:
+        """Return the DHW system schema."""
         base_schema = await super().schema()
         return {
             **base_schema,
@@ -1027,6 +1183,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         }
 
     async def params(self) -> dict[str, Any]:
+        """Return the DHW system parameters."""
         base_params = await super().params()
         return {
             **base_params,
@@ -1034,6 +1191,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         }
 
     async def status(self) -> dict[str, Any]:
+        """Return the DHW system status."""
         base_status = await super().status()
         return {
             **base_status,
@@ -1042,7 +1200,10 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
 
 
 class SysMode(SystemBase):  # 2E04
+    """A system variant managing the overall system mode."""
+
     def _setup_discovery_cmds(self) -> None:
+        """Configure discovery for the system mode."""
         super()._setup_discovery_cmds()
 
         cmd = Command.get_system_mode(self.id)
@@ -1053,6 +1214,9 @@ class SysMode(SystemBase):  # 2E04
 
         If the state is unpopulated (e.g., after boot), an explicit RQ is
         dispatched to the network to hydrate the CQRS model.
+
+        :returns: A dictionary with system mode and until time.
+        :rtype: dict[str, Any] | None
         """
         if self.system_state.system_mode is None:
             cmd = Command.get_system_mode(self.id)
@@ -1066,12 +1230,14 @@ class SysMode(SystemBase):  # 2E04
     async def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
     ) -> Packet:
-        """
-        Set a system mode for a specified duration, or indefinitely.
+        """Set a system mode for a specified duration, or indefinitely.
 
-        :param system_mode: 2-digit item from SYS_MODE_MAP, positional
-        :param until: optional: end of set period
-        :return:
+        :param system_mode: 2-digit item from SYS_MODE_MAP, positional.
+        :type system_mode: int | str | None
+        :param until: End of the set period, defaults to None.
+        :type until: dt | str | None, optional
+        :returns: The packet containing the command payload.
+        :rtype: Packet
         """
         cmd = Command.set_system_mode(self.id, system_mode, until=until)
         return await self._gwy.async_send_cmd(
@@ -1079,27 +1245,40 @@ class SysMode(SystemBase):  # 2E04
         )
 
     async def set_auto(self) -> Packet:
-        """Revert system to Auto, set non-PermanentOverride zones to FollowSchedule."""
+        """Revert system to Auto, setting zones to FollowSchedule.
+
+        :returns: The packet containing the command payload.
+        :rtype: Packet
+        """
         return await self.set_mode(SYS_MODE_MAP.AUTO)
 
     async def reset_mode(self) -> Packet:
-        """Revert system to Auto, force *all* zones to FollowSchedule."""
+        """Revert system to Auto, force all zones to FollowSchedule.
+
+        :returns: The packet containing the command payload.
+        :rtype: Packet
+        """
         return await self.set_mode(SYS_MODE_MAP.AUTO_WITH_RESET)
 
     async def params(self) -> dict[str, Any]:
+        """Return the system mode parameters."""
         params = await super().params()
         params[SZ_SYSTEM][SZ_SYSTEM_MODE] = await self.system_mode()
         return params
 
 
 class Datetime(SystemBase):  # 313F
+    """A system variant managing system date and time."""
+
     def _setup_discovery_cmds(self) -> None:
+        """Configure discovery for system time."""
         super()._setup_discovery_cmds()
 
         cmd = Command.get_system_time(self.id)
         self.discovery.add_cmd(cmd, 60 * 60, delay=0)
 
     def _handle_msg(self, msg: Message) -> None:
+        """Handle incoming datetime synchronisation messages."""
         super()._handle_msg(msg)
 
         # FIXME: refactoring protocol stack
@@ -1116,23 +1295,37 @@ class Datetime(SystemBase):  # 313F
                 _LOGGER.warning(f"{msg!r} < excessive datetime difference: {diff}")
 
     async def get_datetime(self) -> dt | None:
+        """Retrieve the current system datetime.
+
+        :returns: The system datetime, or None if unavailable.
+        :rtype: dt | None
+        """
         cmd = Command.get_system_time(self.id)
         pkt = await self._gwy.async_send_cmd(cmd, wait_for_reply=True)
         msg = Message._from_pkt(pkt)
         return dt.fromisoformat(msg.payload[SZ_DATETIME])
 
     async def set_datetime(self, dtm: dt) -> Packet:
-        """Set the date and time of the system."""
+        """Set the date and time of the system.
 
+        :param dtm: The datetime object to set.
+        :type dtm: dt
+        :returns: The packet containing the command payload.
+        :rtype: Packet
+        """
         cmd = Command.set_system_time(self.id, dtm)
         return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
 
 class UfHeating(SystemBase):
+    """A system variant supporting underfloor heating."""
+
     def _ufh_ctls(self) -> list[UfhController]:
+        """Return a sorted list of underfloor heating controllers."""
         return sorted([d for d in self.childs if isinstance(d, UfhController)])
 
     async def schema(self) -> dict[str, Any]:
+        """Return the underfloor heating schema."""
         base_schema = await super().schema()
         return {
             **base_schema,
@@ -1140,6 +1333,7 @@ class UfHeating(SystemBase):
         }
 
     async def params(self) -> dict[str, Any]:
+        """Return the underfloor heating parameters."""
         base_params = await super().params()
         return {
             **base_params,
@@ -1147,6 +1341,7 @@ class UfHeating(SystemBase):
         }
 
     async def status(self) -> dict[str, Any]:
+        """Return the underfloor heating status."""
         base_status = await super().status()
         return {
             **base_status,
@@ -1155,11 +1350,18 @@ class UfHeating(SystemBase):
 
 
 class System(StoredHw, Datetime, Logbook, SystemBase):
-    """The Temperature Control System class."""
+    """The main Temperature Control System (TCS) class."""
 
     _SLUG: str = SYS_KLASS.SYS
 
     def __init__(self, ctl: Controller, **kwargs: Any) -> None:
+        """Initialise the TCS system.
+
+        :param ctl: The central controller device.
+        :type ctl: Controller
+        :param kwargs: Additional keyword arguments for the system.
+        :type kwargs: Any
+        """
         super().__init__(ctl, **kwargs)
 
         self._heat_demands: dict[str, Any] = {}
@@ -1169,7 +1371,8 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
     def _update_schema(self, **schema: Any) -> None:
         """Update a CH/DHW system with new schema attrs.
 
-        Raise an exception if the new schema is not a superset of the existing schema.
+        Raise an exception if the new schema is not a superset of the
+        existing schema.
         """
 
         _schema: dict[str, Any]
@@ -1204,8 +1407,15 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
     def create_from_schema(cls, ctl: Controller, **schema: Any) -> System:
         """Create a CH/DHW system for a CTL and set its schema attrs.
 
-        The appropriate System class should have been determined by a factory.
-        Schema attrs include: class (klass) & others.
+        The appropriate System class should have been determined by a
+        factory. Schema attrs include: class (klass) & others.
+
+        :param ctl: The central controller device.
+        :type ctl: Controller
+        :param schema: Schema attributes for the system.
+        :type schema: Any
+        :returns: The configured system instance.
+        :rtype: System
         """
 
         tcs = cls(ctl)
@@ -1213,6 +1423,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         return tcs
 
     def _handle_msg(self, msg: Message) -> None:
+        """Handle general incoming messages for the system."""
         super()._handle_msg(msg)
 
         if not isinstance(msg.payload, dict):
@@ -1238,6 +1449,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
 
     @property
     def heat_demands(self) -> dict[str, Any] | None:  # 3150
+        """Return the current heat demands per domain."""
         # FC: 00-C8 (no F9, FA), TODO: deprecate as FC only?
         if not self._heat_demands:
             return None
@@ -1245,6 +1457,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
 
     @property
     def relay_demands(self) -> dict[str, Any] | None:  # 0008
+        """Return the current relay demands per domain."""
         # FC: 00-C8, F9: 00-C8, FA: 00 or C8 only (01: all 3, 02: FC/FA only)
         if not self._relay_demands:
             return None
@@ -1254,13 +1467,17 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
 
     @property
     def relay_failsafes(self) -> dict[str, Any] | None:  # 0009
+        """Return the current relay failsafes per domain."""
         if not self._relay_failsafes:
             return None
         return {}  # FIXME: failsafe_enabled
 
     async def status(self) -> dict[str, Any]:
-        """Return the system's current state."""
+        """Return the system's current state.
 
+        :returns: The status dictionary.
+        :rtype: dict[str, Any]
+        """
         status = await super().status()
         # assert SZ_SYSTEM in status  # TODO: removeme
 
@@ -1272,16 +1489,22 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
 
 
 class Evohome(ScheduleSync, Language, SysMode, MultiZone, UfHeating, System):
+    """The Evohome system class."""
+
     _SLUG: str = SYS_KLASS.TCS  # evohome
 
     # older evohome don't have zone_type=ELE
 
 
 class Chronotherm(Evohome):
+    """The Chronotherm system class."""
+
     _SLUG: str = SYS_KLASS.SYS
 
 
 class Hometronics(System):
+    """The Hometronics system class."""
+
     _SLUG: str = SYS_KLASS.SYS
 
     # These are only ever been seen from a Hometronics controller
@@ -1304,10 +1527,14 @@ class Hometronics(System):
 
 
 class Programmer(Evohome):
+    """The Programmer system class."""
+
     _SLUG: str = SYS_KLASS.PRG
 
 
 class Sundial(Evohome):
+    """The Sundial system class."""
+
     _SLUG: str = SYS_KLASS.SYS
 
 
@@ -1318,7 +1545,17 @@ SYS_CLASS_BY_SLUG: dict[str, type[System]] = class_by_attr(__name__, "_SLUG")
 def system_factory(
     ctl: Controller, *, msg: Message | None = None, **schema: Any
 ) -> System:
-    """Return the system class for a given controller/schema (defaults to evohome)."""
+    """Return the system class for a given controller/schema.
+
+    :param ctl: The central controller device.
+    :type ctl: Controller
+    :param msg: An optional message to handle.
+    :type msg: Message | None, optional
+    :param schema: Additional schema attributes.
+    :type schema: Any
+    :returns: The created system instance.
+    :rtype: System
+    """
 
     def best_tcs_class(
         ctl_addr: Address,
@@ -1327,7 +1564,19 @@ def system_factory(
         eavesdrop: bool = False,
         **schema: Any,
     ) -> type[System]:
-        """Return the system class for a given CTL/schema (defaults to evohome)."""
+        """Return the best system class for a given CTL/schema.
+
+        :param ctl_addr: The central controller address.
+        :type ctl_addr: Address
+        :param msg: An optional message.
+        :type msg: Message | None, optional
+        :param eavesdrop: Whether eavesdropping is enabled.
+        :type eavesdrop: bool, optional
+        :param schema: Additional schema attributes.
+        :type schema: Any
+        :returns: The appropriate system class type.
+        :rtype: type[System]
+        """
 
         klass: str = schema.get(SZ_CLASS)  # type: ignore[assignment]
 

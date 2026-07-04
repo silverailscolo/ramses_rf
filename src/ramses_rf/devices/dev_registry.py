@@ -596,7 +596,7 @@ class DeviceRegistry:
         :rtype: dict[DeviceIdT, Evohome]
         """
         return {
-            d.id: d.tcs
+            d.id: cast("Evohome", d.tcs)
             for d in self.devices
             if hasattr(d, "tcs")
             and getattr(getattr(d, "tcs", None), "id", None) == d.id

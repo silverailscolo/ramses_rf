@@ -380,22 +380,29 @@ class TestQuirks31DAFanInfo:
 class TestQuirks31DABypassPosition:
     """31DA bypass_position=0.0 null-marker prevention.
 
-    Devices like the Ventura V1x report bypass_position via 22F7, not 31DA.
+    Devices like Orcon report bypass_position via 22F7, not 31DA.
     Their 31DA snapshot includes 0x00 for bypass_position, which parses as
     0.0 (a seemingly valid value).  This must not overwrite a non-zero
     bypass_position from 22F7.
     """
 
-    def test_zero_bypass_preserves_nonzero_existing(self) -> None:
-        """bypass_position=0.0 from 31DA must not overwrite a non-zero value."""
+    def test_zero_bypass_overwrites_nonzero_existing(self) -> None:
+        """bypass_position=0.0 from 31DA can overwrite any value."""
         state = _make_state(bypass_position=0.5)
+        payload = {SZ_BYPASS_POSITION: 0.0}
+        result = _quirk(payload, state, "31DA")
+        assert result[SZ_BYPASS_POSITION] == 0.0
+
+    def test_zero_bypass_preserves_nonzero_existing_with_mode(self) -> None:
+        """bypass_position=0.0 from 31DA must not overwrite a non-zero value."""
+        state = _make_state(bypass_position=0.5, bypass_mode="auto")
         payload = {SZ_BYPASS_POSITION: 0.0}
         result = _quirk(payload, state, "31DA")
         assert result[SZ_BYPASS_POSITION] == 0.5
 
-    def test_zero_bypass_preserves_string_existing(self) -> None:
+    def test_zero_bypass_preserves_string_existing_with_mode(self) -> None:
         """bypass_position=0.0 must not overwrite a string value (e.g. 'off')."""
-        state = _make_state(bypass_position="off")
+        state = _make_state(bypass_position="off", bypass_mode="auto")
         payload = {SZ_BYPASS_POSITION: 0.0}
         result = _quirk(payload, state, "31DA")
         assert result[SZ_BYPASS_POSITION] == "off"
@@ -426,6 +433,13 @@ class TestQuirks31DABypassPosition:
         payload = {SZ_BYPASS_POSITION: 0.0}
         result = _quirk(payload, state, "31DA")
         assert result[SZ_BYPASS_POSITION] == 0.0
+
+    def test_zero_bypass_with_none_existing_preserves_with_mode(self) -> None:
+        """If current bypass_position is None, 0.0 passes through."""
+        state = _make_state(bypass_position=None, bypass_mode="auto")
+        payload = {SZ_BYPASS_POSITION: 0.0}
+        result = _quirk(payload, state, "31DA")
+        assert result[SZ_BYPASS_POSITION] is None
 
     def test_bypass_quirk_only_for_31da(self) -> None:
         """The bypass_position quirk should only apply to 31DA."""
@@ -491,6 +505,57 @@ class TestQuirks31DAVenturaIntegration:
             indoor_temp=28.42,
             outdoor_temp=27.42,
             bypass_position=0.5,
+            fan_info="auto",
+            fan_mode="auto",
+            exhaust_fan_speed=60.0,
+        )
+
+        # Simulate the 31DA payload (post-parser dict)
+        payload = {
+            "hvac_id": "00",
+            "exhaust_fan_speed": 0.0,  # null marker
+            SZ_FAN_INFO: "-unknown 0x1F-",  # unknown code
+            "air_quality": None,
+            "co2_level": 758,
+            SZ_INDOOR_HUMIDITY: 0.0,  # null marker (filtered by dispatcher)
+            SZ_OUTDOOR_HUMIDITY: None,  # EF = not implemented
+            "exhaust_temp": 27.42,
+            SZ_SUPPLY_TEMP: None,  # 7FFF
+            "indoor_temp": 28.42,
+            "outdoor_temp": 28.14,
+            "speed_capabilities": ["off", "timer", "boost"],
+            SZ_BYPASS_POSITION: 0.0,  # null marker
+            "supply_fan_speed": 0.0,
+            "remaining_mins": 0,
+            "post_heat": 0.0,
+            "pre_heat": 0.0,
+            "supply_flow": 133.0,
+            "exhaust_flow": 133.0,
+        }
+
+        result = _quirk(payload, state, "31DA")
+
+        # Quirks should preserve these values
+        assert result[SZ_FAN_INFO] == "auto"  # not '-unknown 0x1F-'
+        assert result[SZ_BYPASS_POSITION] == 0.0  # updated
+        assert result["exhaust_fan_speed"] == 60.0  # not 0.0
+
+        # These pass through (dispatcher will filter the null markers)
+        assert result[SZ_INDOOR_HUMIDITY] is None  # quirks normalise 0.0 → None
+        assert result[SZ_OUTDOOR_HUMIDITY] is None  # dispatcher filters this
+        assert result[SZ_SUPPLY_TEMP] is None  # dispatcher filters this
+
+    def test_orcon_31da_does_not_overwrite_good_state(self) -> None:
+        """Full Orcon 31DA payload must not overwrite good values
+        from 12A0/22F1/22F4/22F7."""
+        # Simulate state established by 12A0 + 22F1 + 22F7
+        state = _make_state(
+            indoor_humidity=0.63,
+            outdoor_humidity=0.69,
+            indoor_temp=28.42,
+            outdoor_temp=27.42,
+            bypass_position=0.5,
+            bypass_mode="auto",
             fan_info="auto",
             fan_mode="auto",
             exhaust_fan_speed=60.0,
