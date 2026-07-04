@@ -1048,10 +1048,15 @@ class SysMode(SystemBase):  # 2E04
         cmd = Command.get_system_mode(self.id)
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
-    @property
-    def system_mode(self) -> dict[str, Any] | None:  # 2E04
-        """Return the system mode synchronously from Hot State RAM."""
+    async def system_mode(self) -> dict[str, Any] | None:  # 2E04
+        """Return the system mode asynchronously from Hot State RAM.
+
+        If the state is unpopulated (e.g., after boot), an explicit RQ is
+        dispatched to the network to hydrate the CQRS model.
+        """
         if self.system_state.system_mode is None:
+            cmd = Command.get_system_mode(self.id)
+            await self._gwy.async_send_cmd(cmd)
             return None
         return {
             SZ_SYSTEM_MODE: self.system_state.system_mode,
@@ -1083,7 +1088,7 @@ class SysMode(SystemBase):  # 2E04
 
     async def params(self) -> dict[str, Any]:
         params = await super().params()
-        params[SZ_SYSTEM][SZ_SYSTEM_MODE] = self.system_mode
+        params[SZ_SYSTEM][SZ_SYSTEM_MODE] = await self.system_mode()
         return params
 
 
