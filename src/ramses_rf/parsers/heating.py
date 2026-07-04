@@ -119,7 +119,10 @@ def parser_0005(payload: str, msg: Message) -> dict[str, Any] | list[dict[str, A
         }
 
     if msg.verb == RQ:  # RQs have a context: zone_type
-        return {SZ_ZONE_TYPE: payload[2:4], SZ_ZONE_CLASS: DEV_ROLE_MAP[payload[2:4]]}
+        return {
+            SZ_ZONE_TYPE: payload[2:4],
+            SZ_ZONE_CLASS: DEV_ROLE_MAP[payload[2:4]],
+        }
 
     if msg._has_array:
         assert msg.verb == I_ and msg.src.type == DEV_TYPE_MAP.RND, (
@@ -170,8 +173,9 @@ def parser_0009(payload: str, msg: Message) -> dict[str, Any] | list[dict[str, A
     """Parse the 0009 (relay_failsafe) packet.
     The relay failsafe mode.
 
-    The failsafe mode defines the relay behaviour if the RF communication is lost (e.g.
-    when a room thermostat stops communicating due to discharged batteries):
+    The failsafe mode defines the relay behaviour if the RF communication is
+    lost (e.g. when a room thermostat stops communicating due to discharged
+    batteries):
 
     - False (disabled) - if RF comms are lost, relay will be held in OFF position
     - True  (enabled)  - if RF comms are lost, relay will cycle at 20% ON, 80% OFF
@@ -447,7 +451,9 @@ def parser_1100(
     """
 
     def complex_idx(seqx: str) -> PayDictT._1100_IDX | PayDictT.EMPTY:
-        return {SZ_DOMAIN_ID: seqx} if seqx[:1] == "F" else {}  # type: ignore[typeddict-item, unused-ignore]  # only FC
+        if seqx[:1] == "F":
+            return {SZ_DOMAIN_ID: seqx}  # type: ignore[typeddict-item, unused-ignore]  # only FC
+        return {}
 
     if msg.src.type == DEV_TYPE_MAP.JIM:  # Honeywell Japser, DEX
         assert msg.len == 19, msg.len
@@ -528,7 +534,8 @@ def parser_12b0(payload: str, msg: Message) -> PayDictT._12B0:
     :rtype: PayDictT._12B0
     :raises AssertionError: If the payload state bytes are unrecognized.
     """
-    assert payload[2:] in ("0000", "C800", "FFFF"), payload[2:]  # "FFFF" means N/A
+    # "FFFF" means N/A
+    assert payload[2:] in ("0000", "C800", "FFFF"), payload[2:]
 
     return {
         SZ_WINDOW_OPEN: hex_to_bool(payload[2:4]),
@@ -550,13 +557,14 @@ def parser_12c0(payload: str, msg: Message) -> PayDictT._12C0:
     if payload[2:4] == "80":
         temp: float | None = None
     elif payload[4:6] == "00":  # units are 1.0 F
-        temp = int(payload[2:4], 16)
+        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} (Fahrenheit TRV detected)")
+        temp = round((int(payload[2:4], 16) - 32) * 5 / 9, 2)
     else:  # if payload[4:] == "01":  # units are 0.5 C
         temp = int(payload[2:4], 16) / 2
 
     result: PayDictT._12C0 = {
         SZ_TEMPERATURE: temp,
-        "units": {"00": "Fahrenheit", "01": "Celsius"}[payload[4:6]],  # type: ignore[typeddict-item]
+        "units": "Celsius",
     }
     if len(payload) > 6:
         result["_unknown_6"] = payload[6:]
@@ -868,12 +876,14 @@ def parser_3150(payload: str, msg: Message) -> dict[str, Any] | list[dict[str, A
     :rtype: dict[str, Any] | list[dict[str, Any]]
     """
     # event-driven, and periodically; FC domain is maximum of all zones
-    # TODO: all have a valid domain will UFC/CTL respond to an RQ, for FC, for a zone?
+    # TODO: all have a valid domain will UFC/CTL respond to an RQ,
+    # for FC, for a zone?
 
     # .I --- 04:136513 --:------ 01:158182 3150 002 01CA < often seen CA, artefact?
 
     def complex_idx(seqx: str, msg: Message) -> dict[str, str]:
-        # assert seqx[:2] == FC or (int(seqx[:2], 16) < MAX_ZONES)  # <5, 8 for UFC
+        # assert seqx[:2] == FC or (int(seqx[:2], 16) < MAX_ZONES)  # <5,
+        # 8 for UFC
         idx_name = "ufx_idx" if msg.src.type == DEV_TYPE_MAP.UFC else SZ_ZONE_IDX  # DEX
         return {SZ_DOMAIN_ID if seqx[:1] == "F" else idx_name: seqx[:2]}
 
@@ -926,13 +936,16 @@ def parser_3b00(payload: str, msg: Message) -> PayDictT._3B00:
 
     This signal marks the start or end of a TPI cycle to synchronize relay behavior.
 
-    The heat relay regularly broadcasts a 3B00 at the end(?) of every TPI cycle, the
-    frequency of which is determined by the (TPI) cycle rate in 1100.
+    The heat relay regularly broadcasts a 3B00 at the end(?) of every TPI
+    cycle, the frequency of which is determined by the (TPI) cycle rate in
+    1100.
 
-    The CTL subsequently broadcasts a 3B00 (i.e. at the start of every TPI cycle).
+    The CTL subsequently broadcasts a 3B00 (i.e. at the start of every TPI
+    cycle).
 
-    The OTB does not send these packets, but the CTL sends a regular broadcast anyway
-    for the benefit of any zone actuators (e.g. zone valve zones).
+    The OTB does not send these packets, but the CTL sends a regular
+    broadcast anyway for the benefit of any zone actuators (e.g. zone
+    valve zones).
 
     :param payload: The raw hex payload
     :type payload: str
@@ -988,7 +1001,8 @@ def parser_3ef0(payload: str, msg: Message) -> PayDictT._3EF0 | PayDictT._JASPER
     :type msg: Message
     :return: A dictionary of modulation levels, flags, and setpoints
     :rtype: PayDictT._3EF0 | PayDictT._JASPER
-    :raises AssertionError: If payload constants, flags, or message lengths are unrecognized.
+    :raises AssertionError: If payload constants, flags, or message lengths
+        are unrecognized.
     """
     result: dict[str, Any]
 
@@ -1006,7 +1020,8 @@ def parser_3ef0(payload: str, msg: Message) -> PayDictT._3EF0 | PayDictT._JASPER
     # NOTE: some [2:4] appear to intend 0x00-0x64 (high_res=False), instead of 0x00-0xC8
     # NOTE: for best compatibility, all will be switched to 0x00-0xC8 (high_res=True)
 
-    if msg.len == 3:  # I|BDR|003 (the following are the only two payloads ever seen)
+    if msg.len == 3:
+        # I|BDR|003 (the following are the only two payloads ever seen)
         # .I --- 13:042805 --:------ 13:042805 3EF0 003 0000FF
         # .I --- 13:023770 --:------ 13:023770 3EF0 003 00C8FF
         assert payload[2:4] in ("00", "C8"), f"byte 1: {payload[2:4]} (not 00/C8)"
@@ -1064,7 +1079,12 @@ def parser_3ef0(payload: str, msg: Message) -> PayDictT._3EF0 | PayDictT._JASPER
         #     payload[2:4] == "00"
         # ), f"bytes 1+2: {payload[2:6]}"  # 97% is 00 when 11, but not always
 
-        assert payload[4:6] in ("00", "10", "11", "FF"), f"byte 2: {payload[4:6]}"
+        assert payload[4:6] in (
+            "00",
+            "10",
+            "11",
+            "FF",
+        ), f"byte 2: {payload[4:6]}"
 
         assert "_flags_3" not in result or (
             payload[6:8] == "FF" or int(payload[6:8], 0x10) & 0b10100000 == 0
@@ -1103,7 +1123,8 @@ def parser_3ef1(payload: str, msg: Message) -> PayDictT._3EF1 | PayDictT._JASPER
     :type msg: Message
     :return: A dictionary of modulation levels and cycle/actuator countdowns
     :rtype: PayDictT._3EF1 | PayDictT._JASPER
-    :raises AssertionError: If the countdown values exceed recognized thresholds.
+    :raises AssertionError: If the countdown values exceed recognized
+        thresholds.
     """
     if msg.src.type == DEV_TYPE_MAP.JIM:  # Honeywell Jasper, DEX
         assert msg.len == 18, f"expecting len 18, got: {msg.len}"
@@ -1124,21 +1145,24 @@ def parser_3ef1(payload: str, msg: Message) -> PayDictT._3EF1 | PayDictT._JASPER
     percent = hex_to_percent(payload[10:12])
 
     if payload[12:] == "FF":  # is BDR
-        assert percent is None or percent in (0, 1), f"byte 5: {payload[10:12]}"
+        assert percent is None or percent in (
+            0,
+            1,
+        ), f"byte 5: {payload[10:12]}"
 
     else:  # is OTB
         # assert (
         #     re.compile(r"^00[0-9A-F]{10}10").match(payload)
         # ), "doesn't match: " + r"^00[0-9A-F]{10}10"
         assert payload[2:6] == "7FFF", f"byte 1: {payload[2:6]}"
-        assert payload[6:10] == "003C", f"byte 3: {payload[6:10]}"  # 60 seconds
+        assert payload[6:10] == "003C", f"byte 3: {payload[6:10]}"  # 60s
         assert percent is None or percent <= 1, f"byte 5: {payload[10:12]}"
 
     cycle_countdown = None if payload[2:6] == "7FFF" else int(payload[2:6], 16)
     if cycle_countdown is not None:
         if cycle_countdown > 0x7FFF:
             cycle_countdown -= 0x10000
-        assert cycle_countdown < 7200, f"byte 1: {payload[2:6]}"  # 7200 seconds
+        assert cycle_countdown < 7200, f"byte 1: {payload[2:6]}"  # 7200s
 
     actuator_countdown = None if payload[6:10] == "7FFF" else int(payload[6:10], 16)
     if actuator_countdown is not None:

@@ -221,10 +221,10 @@ async def test_logbook_setup_discovery_creates_task(
 
 
 @pytest.mark.asyncio
-async def test_sysmode_system_mode_sync_cache_lookup(
+async def test_sysmode_system_mode_async_cache_lookup(
     fake_evofw3: Gateway,
 ) -> None:
-    """Verify system_mode retrieves state synchronously from CQRS read-model."""
+    """Verify system_mode retrieves state asynchronously from CQRS read-model."""
     gwy = fake_evofw3
     pkt = Packet.from_port(dt.now(), PKT_3150)
     gwy._engine._protocol.pkt_received(pkt)
@@ -235,7 +235,7 @@ async def test_sysmode_system_mode_sync_cache_lookup(
 
     tcs.system_state = replace(tcs.system_state, system_mode="01", until=None)
 
-    # Call the new synchronous @property lookup
-    result = tcs.system_mode
+    # Call the newly refactored async method lookup
+    result = await tcs.system_mode()
 
     assert result == {"system_mode": "01", "until": None}

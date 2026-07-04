@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test the System zones logic, providing maximum test coverage for zones.py."""
 
+import dataclasses
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -311,3 +312,45 @@ async def test_zone_get_temp_handles_protocol_timeout(
 
     # Verify it handled the exception and returned None
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_zone_name_from_cqrs_state(mock_tcs: MagicMock) -> None:
+    """Test zone name is retrieved natively from the CQRS ZoneState."""
+    # Arrange
+    zon = Zone(mock_tcs, "00")
+    zon.zone_state = dataclasses.replace(zon.zone_state, name="Lounge")
+    mock_tcs._gwy.message_store = AsyncMock()
+
+    # Act
+    result = await zon.name()
+
+    # Assert
+    assert result == "Lounge"
+    mock_tcs._gwy.message_store.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_zone_name_event_sourced_hydration(mock_tcs: MagicMock) -> None:
+    """Test zone name hydrates from the message store if missing from state."""
+    # Arrange
+    zon = Zone(mock_tcs, "01")
+
+    # Simulate historical packets (a dict payload, followed by a list payload)
+    msg_old = MagicMock()
+    msg_old.payload = {"zone_idx": "01", "name": "Old Name"}
+
+    msg_new = MagicMock()
+    msg_new.payload = [{"zone_idx": "01", "name": "Kitchen"}]
+
+    mock_store = AsyncMock()
+    mock_store.get.return_value = [msg_old, msg_new]
+    mock_tcs._gwy.message_store = mock_store
+
+    # Act
+    result = await zon.name()
+
+    # Assert
+    assert result == "Kitchen"
+    assert zon.zone_state.name == "Kitchen"
+    mock_store.get.assert_called_once_with(code=Code._0004, src=zon._z_id)
