@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any, cast
 
-from ramses_tx import Command, Engine, Packet
+from ramses_tx import I_, RP, Command, Engine, Packet
 from ramses_tx.const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_MAX_RETRIES,
@@ -262,6 +262,43 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         )
         status_dict["_tx_rate"] = tx_rate
         return status_dict
+
+    async def get_state(
+        self, include_expired: bool = False
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return the current system state for warm restarts (e.g., for HA ramses_cc).
+
+        This returns a tuple of (schema, packets). The packets payload is sourced
+        directly from the OSI L7 MessageStore, containing the single most recent
+        packet for every unique StateHeader. It strictly maps ``dtm_str`` to a
+        dictionary containing ``code``, ``verb``, and ``payload`` to maintain
+        parity with legacy serializers.
+
+        :param include_expired: Included for backward compatibility, unused.
+        :type include_expired: bool
+        :return: A tuple containing the schema dictionary and the state dictionary.
+        :rtype: tuple[dict[str, Any], dict[str, Any]]
+        """
+        state_dict: dict[str, Any] = {}
+        if self.message_store is not None:
+            # Use getattr fallback in case interface strictly lacks state_cache mapping
+            state_cache = getattr(self.message_store, "state_cache", {})
+
+            for msg in state_cache.values():
+                if msg.verb not in (I_, RP):
+                    continue
+
+                dtm_str = msg.dtm.isoformat(timespec="microseconds")
+                state_dict[dtm_str] = {
+                    "verb": msg.verb,
+                    "src": msg.src.id,
+                    "dst": msg.dst.id,
+                    "code": str(msg.code),
+                    "payload": msg.payload,
+                }
+
+        schema_dict = await self.schema()
+        return schema_dict, state_dict
 
     async def _msg_handler(self, dto: PacketDTO) -> None:
         try:
