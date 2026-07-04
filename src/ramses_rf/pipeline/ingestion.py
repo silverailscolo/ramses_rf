@@ -52,6 +52,7 @@ from ramses_rf.const import (
     SZ_MINUTES,
     SZ_MODE,
     SZ_MODULATION_LEVEL,
+    SZ_NAME,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
     SZ_OVERRUN,
@@ -94,6 +95,7 @@ from ramses_rf.models import (
     TemperatureState,
     TrvState,
     UfhState,
+    ZoneState,
 )
 from ramses_rf.protocol.opentherm import OtDataId
 
@@ -235,6 +237,9 @@ class StateProjector:
         if not registry:
             return
 
+        systems = getattr(registry, "systems", [])
+        system_by_id = {s.id: s for s in systems}
+
         for p in unfolded_payloads:
             # Hexagonal Boundary Enforcement: Route telemetry to Source
             src_dev = registry.device_by_id.get(msg.src.id)
@@ -274,6 +279,20 @@ class StateProjector:
                         _LOGGER.error(
                             "CQRS extraction failed for dst %s: %s",
                             dst_dev.id,
+                            err,
+                        )
+
+            # Route CQRS state to Systems (TCS) and Zones
+            if SZ_ZONE_IDX in p and msg.src.id in system_by_id:
+                tcs = system_by_id[msg.src.id]
+                zone = tcs.zone_by_idx.get(str(p[SZ_ZONE_IDX]))
+                if zone:
+                    try:
+                        self._update_zone_state(zone, p, msg)
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for zone %s: %s",
+                            zone.id,
                             err,
                         )
 
@@ -828,6 +847,35 @@ class StateProjector:
         current_state = getattr(target, "act_state", None) or ActuatorState()
         new_state = dataclasses.replace(current_state, **updates)
         target.act_state = new_state
+
+        event = StateUpdatedEvent(
+            entity_id=getattr(target, "id", "unknown"),
+            state=new_state,
+            correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+            causation_id=getattr(msg, "message_id", uuid.uuid4()),
+        )
+        if hasattr(target, "apply_state_update"):
+            target.apply_state_update(event)
+
+    def _update_zone_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
+        """Translate zone configuration opcodes into ZoneState."""
+        if msg.code != Code._0004:
+            return
+
+        updates: dict[str, Any] = {}
+        if SZ_NAME in p:
+            updates["name"] = str(p[SZ_NAME])
+
+        if not updates:
+            return
+
+        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        if dtm:
+            updates["last_updated"] = dtm
+
+        current_state = getattr(target, "zone_state", None) or ZoneState()
+        new_state = dataclasses.replace(current_state, **updates)
+        target.zone_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),

@@ -76,6 +76,7 @@ class PowerState:
 class ZoneState:
     """State for standard heating zones."""
 
+    name: str | None = None
     mode: str | None = None
     setpoint: float | None = None
     until: dt | str | None = None
