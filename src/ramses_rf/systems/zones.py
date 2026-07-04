@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import math
 from datetime import datetime as dt, timedelta as td
@@ -867,15 +868,32 @@ class Zone(ZoneSchedule):
 
     async def name(self) -> str | None:  # 0004
         """Get the name of the zone."""
-        if self._name is None:
-            # TODO update this getter to pick up zone name properly
-            #  from stored packets
-            self._name = cast(
-                str | None,
-                await self.entity_state.get_value(
-                    Code._0004, key=SZ_NAME, zone_idx=self.idx
-                ),
-            )
+        # Primary check against the active CQRS State Projector
+        if self.zone_state.name is not None:
+            return self.zone_state.name
+
+        # Retroactive Event-Sourced Hydration: Bypasses the soon-to-be-deleted
+        # EntityState by hydrating late-instantiated entities directly from the Store
+        if self._gwy.message_store:
+            msgs = await self._gwy.message_store.get(code=Code._0004, src=self._z_id)
+            for msg in reversed(msgs):
+                p_load = msg.payload
+                if isinstance(p_load, dict):
+                    if str(p_load.get(SZ_ZONE_IDX)) == self.idx and SZ_NAME in p_load:
+                        self.zone_state = dataclasses.replace(
+                            self.zone_state, name=str(p_load[SZ_NAME])
+                        )
+                        return self.zone_state.name
+                elif isinstance(p_load, list):
+                    for d in p_load:
+                        if isinstance(d, dict):
+                            if str(d.get(SZ_ZONE_IDX)) == self.idx and SZ_NAME in d:
+                                self.zone_state = dataclasses.replace(
+                                    self.zone_state, name=str(d[SZ_NAME])
+                                )
+                                return self.zone_state.name
+
+        # Legacy fallback logic pending the F4-PR2 Lobotomy
         return self._name
 
     async def config(self) -> dict[str, Any] | None:  # 000A
