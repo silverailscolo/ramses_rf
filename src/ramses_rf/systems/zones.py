@@ -867,26 +867,15 @@ class Zone(ZoneSchedule):
 
     async def name(self) -> str | None:  # 0004
         """Get the name of the zone."""
-        if self._name is not None:
-            return self._name
-
-        if self._gwy.message_store:
-            msgs = await self._gwy.message_store.get(
-                code=Code._0004, src=self._z_id, ctx=self._z_idx
+        if self._name is None:
+            # TODO update this getter to pick up zone name properly
+            #  from stored packets
+            self._name = cast(
+                str | None,
+                await self.entity_state.get_value(
+                    Code._0004, key=SZ_NAME, zone_idx=self.idx
+                ),
             )
-            # DEBUG issue #317
-            _LOGGER.debug(f"Pick Zone.name from: {msgs}[0])")
-            if msgs:
-                self._name = cast(str, msgs[0].payload.get(SZ_NAME))
-                return self._name
-            return None
-
-        self._name = cast(
-            str | None,
-            await self.entity_state.get_value(
-                Code._0004, key=SZ_NAME, zone_idx=self.idx
-            ),
-        )
         return self._name
 
     async def config(self) -> dict[str, Any] | None:  # 000A
@@ -1025,7 +1014,7 @@ class Zone(ZoneSchedule):
         return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
     async def set_name(self, name: str) -> Packet:
-        """Set the zone's name."""
+        """Set the zone's name in the CTL."""
 
         cmd = Command.set_zone_name(self.ctl.id, self.idx, name)
         return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
