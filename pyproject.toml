@@ -239,24 +239,6 @@
     "assignment",  # transport var reassigned between ZigbeeTransport and MqttTransport branches
   ]
 
-#[[tool.mypy.overrides]]
-#  module = "ramses_rf.devices.*"
-#
-#  disable_error_code = [
-#    "assignment",  #   18 - doable
-#    "return-value",  # 64
-#    "type-arg",  #     10 - doable
-#    "unreachable",  #  14
-#  ]
-
-#[[tool.mypy.overrides]]
-#  module = "ramses_rf.systems.zones"
-#
-#  disable_error_code = [
-#    "assignment",  #    6
-#    "unreachable",  #  10
-#  ]
-
 [[tool.mypy.overrides]]
   module = "tests.*"
 
