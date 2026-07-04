@@ -299,16 +299,6 @@ class BatteryState(DeviceBase):  # 1060
     BATTERY_LOW = "battery_low"  # boolean
     BATTERY_STATE = "battery_state"  # percentage (0.0-1.0)
 
-    def _setup_discovery_cmds(self) -> None:
-        """Enqueue a 1060 battery status request during discovery."""
-        super()._setup_discovery_cmds()
-
-        if self._SLUG not in CODES_BY_DEV_SLUG or RP in CODES_BY_DEV_SLUG[
-            self._SLUG
-        ].get(Code._1060, {}):
-            cmd = Command.from_attrs(RQ, self.id, Code._1060, PayloadT("00"))
-            self.discovery.add_cmd(cmd, 60 * 60 * 24)
-
     async def battery_low(self) -> None | bool:  # 1060
         """Return the current low battery warning state.
 
