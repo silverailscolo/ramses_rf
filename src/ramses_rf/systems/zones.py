@@ -950,7 +950,24 @@ class Zone(ZoneSchedule):
 
     async def window_open(self) -> bool | None:  # 12B0
         """Return an estimate of the zone's current window_open state."""
-        return self.trv_state.window_open
+        if not self.actuators:
+            return self.trv_state.window_open
+
+        states: list[bool | None] = []
+        for act in self.actuators:
+            if isinstance(act, TrvActuator):
+                states.append(await act.window_open())
+
+        if not states:
+            return self.trv_state.window_open
+
+        if any(state is True for state in states):
+            return True
+
+        if any(state is None for state in states):
+            return None
+
+        return False
 
     async def _get_temp(self) -> Packet | None:
         """Get the zone's latest temp from the Controller."""
