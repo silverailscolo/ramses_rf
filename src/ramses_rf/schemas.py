@@ -406,6 +406,8 @@ def load_tcs(gwy: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evohome
     # schema = SCH_TCS_ZONES_ZON(schema)
 
     ctl = _get_device(gwy, ctl_id)
+    if ctl.tcs is None:
+        raise exc.SchemaInconsistentError(f"No TCS assigned to controller {ctl.id}")
     ctl.tcs._update_schema(**schema)
 
     for dev_id in schema.get(SZ_UFH_SYSTEM, {}):  # UFH controllers

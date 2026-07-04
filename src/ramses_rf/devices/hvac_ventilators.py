@@ -53,9 +53,6 @@ from ramses_tx.typing import PayloadT
 from .dev_base import DeviceHvac
 
 if TYPE_CHECKING:
-    from ramses_rf.devices.dev_base import Device
-    from ramses_rf.systems import Evohome
-
     from ..messages import Message
 
 # TODO: Switch this module to utilise the (run-time) decorator design pattern...
@@ -190,9 +187,7 @@ class RfsGateway(DeviceHvac):  # RFS: (spIDer gateway)
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
 
-        self.ctl: Device | None = None  # type: ignore[assignment]
         self._child_id = "hv"  # NOTE: domain_id
-        self.tcs: Evohome | None = None  # type: ignore[assignment]
 
     def _post_class_promote(self) -> None:
         """Initialize state when promoted from a generic HVAC device."""

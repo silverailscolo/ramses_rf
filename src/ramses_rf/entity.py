@@ -85,8 +85,8 @@ class _Entity:
         # Context required by children (Zones/Devices)
         self._z_id: DeviceIdT = None  # type: ignore[assignment]
         self._z_idx: DevIndexT | None = None
-        self.ctl: Controller = None  # type: ignore[assignment]
-        self.tcs: Evohome = None  # type: ignore[assignment]
+        self.ctl: Controller | None = None
+        self.tcs: Evohome | None = None
 
     def __repr__(self) -> str:
         return f"{self.id} ({self._SLUG})"
