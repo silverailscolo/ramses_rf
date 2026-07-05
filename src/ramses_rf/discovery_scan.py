@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from ramses_rf.const import DevType
 from ramses_rf.protocol.ramses import HVAC_KLASS_BY_VC_PAIR
+from ramses_tx.const import SZ_ACTIVE_HGI
 
 if TYPE_CHECKING:
     from ramses_rf.gateway import Gateway
@@ -192,9 +193,25 @@ class DiscoveryScan:
     def _is_known(self, dev_id: str) -> bool:
         """Check if a device is already known to the gateway.
 
-        A device is "known" if it's in the known_list, schema, or
-        already in the device registry.
+        A device is "known" if it's the gateway itself, in the known_list,
+        schema, or already in the device registry.
         """
+        # The gateway's own HGI is never a "discovered" device.
+        # Check the active HGI ID from the transport directly — the device
+        # may not be in the device_registry yet when the first packets arrive.
+        # TODO: when multiple HGI gateways are supported, this must check
+        # against all gateway IDs, not just the single active one.
+        engine = getattr(self._gwy, "_engine", None)
+        transport = getattr(engine, "_transport", None) if engine else None
+        if transport is not None:
+            active_hgi = transport.get_extra_info(SZ_ACTIVE_HGI)
+            if active_hgi == dev_id:
+                return True
+        # Also check via the hgi property (covers the case where the device
+        # is in the registry but the transport extra_info is not set)
+        if self._gwy.hgi and self._gwy.hgi.id == dev_id:
+            return True
+
         # Check device registry (already created devices)
         if dev_id in self._gwy.device_registry.device_by_id:
             return True
