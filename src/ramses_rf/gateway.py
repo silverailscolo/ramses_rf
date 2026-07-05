@@ -291,8 +291,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 dtm_str = msg.dtm.isoformat(timespec="microseconds")
                 state_dict[dtm_str] = {
                     "verb": msg.verb,
-                    "src": msg.src.id,
-                    "dst": msg.dst.id,
+                    "src": msg.src.id,  # Keep for downstream legacy parsers
+                    "dst": msg.dst.id,  # Keep for downstream legacy parsers
+                    "addr1": msg._addrs[0].id,  # <-- Exact raw addr1
+                    "addr2": msg._addrs[1].id,  # <-- Exact raw addr2
+                    "addr3": msg._addrs[2].id,  # <-- Exact raw addr3
                     "code": str(msg.code),
                     "payload": msg.payload,
                 }
