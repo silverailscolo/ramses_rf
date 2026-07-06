@@ -1,6 +1,6 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2026-07-04
+# last checked/updated: 2026-07-06
 #
 
 [project]
@@ -87,6 +87,13 @@
     "tests/"
   ]
   norecursedirs = "deprecated/*"
+
+  # Kill hanging tests after 60 seconds
+  # Without this, a hung test runs until GitHub Actions kills the job.
+  timeout = 60
+  # Continue collecting/running other tests after a timeout, don't abort
+  # the entire session.
+  timeout_method = "thread"
 
   # pytest-cov slows down our tests to 10 mins, so leave off.
   # We run coverage in a separate workflow on python 3.13 only (fastest)
