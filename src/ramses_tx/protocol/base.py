@@ -14,7 +14,7 @@ import re
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from ..address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
 from ..command import Command
@@ -70,6 +70,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._msg_handler = msg_handler
         self._msg_handlers: list[tuple[MsgHandlerT, MsgFilterT | None]] = []
         self._raw_pkt_handlers: list[MsgHandlerT] = []
+        self._handler_tasks: set[asyncio.Task[Any]] = set()
 
         self._transport: TransportInterface | None = None
         self._loop = asyncio.get_running_loop()
@@ -93,6 +94,16 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._inbound_regex: dict[str, str] = {}
         self._outbound_regex: dict[str, str] = {}
         self._tracked_sync_cycles: deque[Packet] = deque(maxlen=3)
+
+    def _create_handler_task(self, coro: Any) -> None:
+        """Create a fire-and-forget task for a message handler coroutine.
+
+        The task is tracked in _handler_tasks so it can be cancelled in
+        connection_lost().
+        """
+        task = self._loop.create_task(coro)
+        self._handler_tasks.add(task)
+        task.add_done_callback(self._handler_tasks.discard)
 
     @property
     def hgi_id(self) -> DeviceIdT:
@@ -217,6 +228,12 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         if self._wait_connection_lost.done():
             return
+
+        # Cancel any pending handler tasks
+        for task in self._handler_tasks:
+            if not task.done():
+                task.cancel()
+        self._handler_tasks.clear()
 
         self._wait_connection_made = self._loop.create_future()
         if err:
@@ -452,13 +469,13 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             # Ensure safe dispatch to either coroutine or standard handler
             res = self._msg_handler(msg)
             if asyncio.iscoroutine(res):
-                self._loop.create_task(res)
+                self._create_handler_task(res)
 
         for callback, msg_filter in self._msg_handlers:
             if msg_filter is None or msg_filter(msg):
                 res = callback(msg)
                 if asyncio.iscoroutine(res):
-                    self._loop.create_task(res)
+                    self._create_handler_task(res)
 
 
 class _DeviceIdFilterMixin(_BaseProtocol):
@@ -587,7 +604,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                 for handler in self._raw_pkt_handlers:
                     res = handler(dto)
                     if asyncio.iscoroutine(res):
-                        self._loop.create_task(res)
+                        self._create_handler_task(res)
 
         if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
             _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
