@@ -1,4 +1,9 @@
-"""Tests for the CQRS-compliant self-hydrating system_mode getter."""
+"""Tests for the CQRS-compliant system_mode getter.
+
+The getter is a pure read — it returns the cached Hot State RAM value
+without dispatching any commands.  Hydration is handled by the discovery
+queue configured in ``_setup_discovery_cmds``.
+"""
 
 from __future__ import annotations
 
@@ -10,16 +15,18 @@ import pytest
 from ramses_rf.const import SZ_SYSTEM_MODE
 from ramses_rf.devices import Controller
 from ramses_rf.systems.tcs import Evohome
-from ramses_tx.command import Command
 
 
 @pytest.mark.asyncio
-async def test_system_mode_triggers_network_rq_when_cqrs_empty() -> None:
-    """Test that system_mode triggers a physical network RQ if CQRS state is empty.
+async def test_system_mode_returns_none_when_cqrs_empty() -> None:
+    """Test that system_mode returns None when CQRS state is empty.
+
+    The getter must NOT dispatch any commands — hydration is the
+    responsibility of the discovery queue, not the getter.
 
     Arrange: An Evohome controller with an empty hot CQRS state.
     Act: Retrieve the system mode via the async getter.
-    Assert: An explicit network RQ (2E04) is dispatched.
+    Assert: Returns None and no network RQ is dispatched.
     """
 
     # Arrange
@@ -41,18 +48,12 @@ async def test_system_mode_triggers_network_rq_when_cqrs_empty() -> None:
     )
 
     # Act
-    await tcs.system_mode()
+    result = await tcs.system_mode()
 
     # Assert
-    # Verify that an active network request was dispatched to hydrate the state
-    mock_gwy.async_send_cmd.assert_called_once()
-
-    # Extract the command passed to async_send_cmd
-    cmd: Command = mock_gwy.async_send_cmd.call_args[0][0]
-
-    assert cmd.verb == "RQ"
-    assert cmd.code == "2E04"
-    assert cmd.dst.id == mock_ctl.id
+    assert result is None
+    # No command should be dispatched by a getter (CQRS: reads have no side-effects)
+    mock_gwy.async_send_cmd.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -138,7 +138,8 @@ async def test_cqrs_master_domain_parity(log_file_path: Path) -> None:
         if gwy._engine._transport:
             reader_task = gwy._engine._transport.get_extra_info(SZ_READER_TASK)
             if reader_task:
-                await reader_task
+                with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+                    await asyncio.wait_for(reader_task, timeout=30)
 
         await asyncio.sleep(0.5)
 

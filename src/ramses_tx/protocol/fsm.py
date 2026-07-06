@@ -94,6 +94,13 @@ class ProtocolContext(StateMachineInterface):
 
         self._send_fnc: Callable[[Command], Coroutine[Any, Any, None]] = None  # type: ignore[assignment]
 
+        # Track send_fnc_wrapper tasks so they can be cancelled on teardown.
+        # These are created by _send_cmd() via loop.create_task() and are NOT
+        # visible to the Engine's task registry, so without tracking them here
+        # they linger as "Lingering task" errors in tests and can block
+        # gateway.stop() in production.
+        self._send_tasks: set[asyncio.Task[None]] = set()
+
         self.set_state(Inactive)
 
     def __repr__(self) -> str:
@@ -264,6 +271,13 @@ class ProtocolContext(StateMachineInterface):
 
     def connection_lost(self, err: Exception | None) -> None:
         """Handle the transport connection being lost."""
+        # Cancel any in-flight send_fnc_wrapper tasks that are not tracked
+        # by the Engine's task registry.  Without this, they linger as
+        # "Lingering task" errors and can block gateway.stop().
+        for task in list(self._send_tasks):
+            task.cancel()
+        self._send_tasks.clear()
+
         self._state.connection_lost()
 
     def pkt_received(self, pkt: Packet) -> None:
@@ -390,7 +404,9 @@ class ProtocolContext(StateMachineInterface):
         except ProtocolFsmError as err:
             self.set_state(IsInIdle, exception=err)
         else:
-            self._loop.create_task(send_fnc_wrapper(cmd))
+            task = self._loop.create_task(send_fnc_wrapper(cmd))
+            self._send_tasks.add(task)
+            task.add_done_callback(self._send_tasks.discard)
 
 
 class ProtocolStateBase:

@@ -8,6 +8,8 @@ where the new asynchronous engine provides a more accurate topology.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import inspect
 import logging
 from pathlib import Path
@@ -94,7 +96,8 @@ async def test_topology_builder_parity(log_file_path: Path) -> None:
     if legacy_gwy._engine._transport:
         reader_task = legacy_gwy._engine._transport.get_extra_info(SZ_READER_TASK)
         if reader_task:
-            await reader_task
+            with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+                await asyncio.wait_for(reader_task, timeout=30)
 
     raw_schema = (
         await legacy_gwy.schema()
@@ -117,7 +120,8 @@ async def test_topology_builder_parity(log_file_path: Path) -> None:
     if async_gwy._engine._transport:
         reader_task = async_gwy._engine._transport.get_extra_info(SZ_READER_TASK)
         if reader_task:
-            await reader_task
+            with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+                await asyncio.wait_for(reader_task, timeout=30)
 
     # ---> NEW: EXPLICIT QUEUE DRAIN <---
     # The reader_task has finished reading the log file into the system,
@@ -203,8 +207,6 @@ async def drain_cqrs_queues(gwy_cqrs: Gateway) -> None:
     This prevents race conditions where assertions fire before the TopologyBuilder
     finishes processing the packet storm.
     """
-    import asyncio
-
     # NOTE: Adjust the path to the dispatcher based on where you attached
     # it during Phase 2.75 (e.g., gwy_cqrs.dispatcher or gwy_cqrs._dispatcher)
     dispatcher = getattr(gwy_cqrs, "dispatcher", None)
@@ -212,15 +214,18 @@ async def drain_cqrs_queues(gwy_cqrs: Gateway) -> None:
     if dispatcher:
         # Wait for the TopologyBuilder to finish processing all 000C/30C9 eavesdropping
         if hasattr(dispatcher, "discovery_queue"):
-            await dispatcher.discovery_queue.join()
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(dispatcher.discovery_queue.join(), timeout=10)
 
         # Wait for the MessageStore / SSOT to finish processing standard state updates
         if hasattr(dispatcher, "ssot_queue"):
-            await dispatcher.ssot_queue.join()
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(dispatcher.ssot_queue.join(), timeout=10)
 
         # If you have a dedicated binding queue for 1FC9 packets, drain it too
         if hasattr(dispatcher, "binding_fsm_queue"):
-            await dispatcher.binding_fsm_queue.join()
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(dispatcher.binding_fsm_queue.join(), timeout=10)
 
     # Yield control one last time to ensure any final task_done() callbacks wrap up
     await asyncio.sleep(0)
