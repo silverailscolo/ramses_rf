@@ -473,9 +473,18 @@ async def test_flow_100(test_set: dict[str, Any]) -> None:
     try:
         await _test_flow_10x(gwys[0], gwys[1], test_set, pkt_flow)
     finally:
+        # Cancel any pending binding FSM timers before stopping gateways.
+        for gwy in gwys:
+            for dev in gwy.device_registry.device_by_id.values():
+                bm = getattr(dev, "_binding_manager", None)
+                if bm:
+                    bm.cancel()
         for gwy in gwys:
             await gwy.stop()
         await rf.stop()
+        # Yield to the event loop so cancelled TimerHandles are processed
+        # before pytest's verify_cleanup fixture checks for lingering timers.
+        await asyncio.sleep(0)
 
 
 @pytest.mark.xdist_group(name="virt_serial")
@@ -498,6 +507,13 @@ async def test_flow_200(test_set: dict[str, Any]) -> None:
     try:
         await _test_flow_20x(gwys[0], gwys[1], test_set, pkt_flow)
     finally:
+        # Cancel any pending binding FSM timers before stopping gateways.
+        for gwy in gwys:
+            for dev in gwy.device_registry.device_by_id.values():
+                bm = getattr(dev, "_binding_manager", None)
+                if bm:
+                    bm.cancel()
         for gwy in gwys:
             await gwy.stop()
         await rf.stop()
+        await asyncio.sleep(0)

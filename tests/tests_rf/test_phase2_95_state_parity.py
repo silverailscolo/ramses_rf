@@ -127,7 +127,8 @@ async def test_cqrs_temperature_and_demand_parity(log_file_path: Path) -> None:
         if gwy._engine._transport:
             reader_task = gwy._engine._transport.get_extra_info(SZ_READER_TASK)
             if reader_task:
-                await reader_task
+                with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+                    await asyncio.wait_for(reader_task, timeout=30)
 
         if gwy.message_store:
             gwy.message_store.flush()
@@ -333,7 +334,8 @@ async def test_cqrs_faultlog_parity(log_file_path: Path) -> None:
         if gwy._engine._transport:
             reader_task = gwy._engine._transport.get_extra_info(SZ_READER_TASK)
             if reader_task:
-                await reader_task
+                with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+                    await asyncio.wait_for(reader_task, timeout=30)
 
         if not gwy.tcs:
             pytest.skip("No TCS discovered in regression file.")

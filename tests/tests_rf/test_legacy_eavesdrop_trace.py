@@ -135,4 +135,16 @@ async def test_trace_legacy_topology_discovery() -> None:
         )
         print(f"\n\n--- FINAL DEVICES DISCOVERED ---\n{devices}\n")
 
+        # Stop any discovery pollers that were auto-started for eavesdropped
+        # devices before stopping the gateway.  Some devices (e.g. FilterChange)
+        # have their own stop_poller() separate from DiscoveryService.stop_poller().
+        for dev in gwy.device_registry.devices:
+            if hasattr(dev, "stop_poller"):
+                with contextlib.suppress(Exception):
+                    await dev.stop_poller()
+            disc = getattr(dev, "discovery", None)
+            if disc:
+                with contextlib.suppress(Exception):
+                    await disc.stop_poller()
+
         await gwy.stop()

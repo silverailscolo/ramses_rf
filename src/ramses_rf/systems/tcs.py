@@ -1210,17 +1210,18 @@ class SysMode(SystemBase):  # 2E04
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
     async def system_mode(self) -> dict[str, Any] | None:  # 2E04
-        """Return the system mode asynchronously from Hot State RAM.
+        """Return the system mode from Hot State RAM.
 
-        If the state is unpopulated (e.g., after boot), an explicit RQ is
-        dispatched to the network to hydrate the CQRS model.
+        This is a pure read — it does **not** dispatch any commands.
+        Hydration is handled by the discovery queue configured in
+        ``_setup_discovery_cmds`` (a 2E04 RQ every 5 minutes with a
+        5-second initial delay).
 
-        :returns: A dictionary with system mode and until time.
+        :returns: A dictionary with system mode and until time, or
+            ``None`` if the state has not yet been hydrated.
         :rtype: dict[str, Any] | None
         """
         if self.system_state.system_mode is None:
-            cmd = Command.get_system_mode(self.id)
-            await self._gwy.async_send_cmd(cmd)
             return None
         return {
             SZ_SYSTEM_MODE: self.system_state.system_mode,
