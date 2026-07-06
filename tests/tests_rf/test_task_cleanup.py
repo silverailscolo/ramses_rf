@@ -92,8 +92,10 @@ async def test_entity_state_delete_tasks_cancelled_on_log_reset() -> None:
             self.payload = {"temperature": 21.0, "zone_idx": "00"}
 
             # state_header property
-            ctx = RoutingContext(I_, "04:123456", Code._30C9)
-            self.state_header = StateHeader(ctx, "00")
+            ctx = RoutingContext("00")
+            self.state_header = StateHeader(
+                code=Code._30C9, verb=I_, source_id="04:123456", context=ctx
+            )
 
     gwy = MagicMock()
     gwy._loop = asyncio.get_running_loop()
@@ -197,7 +199,7 @@ async def test_gateway_stop_cancels_discovery_pollers() -> None:
                     with contextlib.suppress(Exception):
                         await _orig()
 
-                disc.stop_poller = _tracked_stop  # type: ignore[method-assign]
+                disc.stop_poller = _tracked_stop
 
         await gwy.stop()
 
