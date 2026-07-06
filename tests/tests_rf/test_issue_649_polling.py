@@ -1,6 +1,6 @@
 """TDD Test for Issue #649: Polling task never sending."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,18 +27,21 @@ async def test_issue_649_discovery_cmds_populated() -> None:
         dev.discovery = DiscoveryService(dev, mock_gwy)
         return dev
 
-    registry = DeviceRegistry(
-        device_filter=MagicMock(),
-        config=mock_gwy.config,
-        device_factory_cb=mock_factory,
-    )
+    # Suppress the auto-starting poller (which would crash on the mock
+    # gateway and leave lingering tasks).
+    with patch.object(DiscoveryService, "start_poller", lambda self: None):
+        registry = DeviceRegistry(
+            device_filter=MagicMock(),
+            config=mock_gwy.config,
+            device_factory_cb=mock_factory,
+        )
 
-    # Act
-    dev = registry.get_device("32:111111")
+        # Act
+        dev = registry.get_device("32:111111")
 
-    # Assert
-    assert hasattr(dev, "discovery"), "Device missing discovery service"
-    assert dev.discovery.cmds, "Issue #649: Discovery cmds dictionary is empty"
+        # Assert
+        assert hasattr(dev, "discovery"), "Device missing discovery service"
+        assert dev.discovery.cmds, "Issue #649: Discovery cmds dictionary is empty"
 
-    scheduled_codes = [task["command"].code for task in dev.discovery.cmds.values()]
-    assert "10D0" in scheduled_codes, "10D0 filter poll not scheduled"
+        scheduled_codes = [task["command"].code for task in dev.discovery.cmds.values()]
+        assert "10D0" in scheduled_codes, "10D0 filter poll not scheduled"

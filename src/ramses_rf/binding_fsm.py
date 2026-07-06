@@ -181,6 +181,16 @@ class BindingManagerBase:
     def __str__(self) -> str:
         return f"{self._dev.id}: {self.state}"
 
+    def cancel(self) -> None:
+        """Cancel any pending wait timer on the current state.
+
+        This should be called during teardown (e.g. gateway.stop()) to ensure
+        no ``call_later`` timer handles outlive the binding manager.
+        """
+        timer = getattr(self._state, "_timer_handle", None) if self._state else None
+        if timer:
+            timer.cancel()
+
     def set_state(
         self, state: type[BindStateBase], result: asyncio.Future[Message] | None = None
     ) -> None:
@@ -197,6 +207,11 @@ class BindingManagerBase:
         #         self._fut.set_result(result.result())
         #     except exc.BindingError as err:
         #         self._fut.set_result(err)
+
+        # Cancel any pending timer from the previous state before transitioning
+        timer = getattr(prev_state, "_timer_handle", None) if prev_state else None
+        if timer:
+            timer.cancel()
 
         self._state = state(self)
         if not self.is_binding:

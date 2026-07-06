@@ -26,7 +26,7 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
 
     # Add required attributes
     gateway.config = MagicMock()
-    gateway.config.disable_discovery = False
+    gateway.config.disable_discovery = True
     gateway.config.enable_eavesdrop = False
 
     # Explicitly attach the nested engine mock to bypass the spec restriction

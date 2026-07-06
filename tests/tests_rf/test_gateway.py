@@ -177,6 +177,17 @@ async def test_gateway_start_initiates_periodic_flush(
         # Verify a task was added to the event loop for the periodic flush
         mock_add_task.assert_called()
 
+        # Cancel the periodic_flush task that was created but not tracked
+        # (because add_task is mocked) to avoid lingering task errors.
+        for call in mock_add_task.call_args_list:
+            task = call.args[0] if call.args else None
+            if task and hasattr(task, "cancel"):
+                task.cancel()
+
+    # Clean up the MessageStore housekeeper task that gwy.start() created.
+    if gwy._message_store:
+        gwy._message_store.stop()
+
 
 @pytest.mark.asyncio
 async def test_gateway_restore_cached_packets_dto() -> None:

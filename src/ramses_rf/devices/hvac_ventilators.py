@@ -87,6 +87,7 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             self.hvac_state = HvacState()
 
         self._poller: asyncio.Task[None] | None = None
+        self._start_handle: asyncio.Handle | None = None
         self._rq_cmd: Command = Command.from_attrs(
             RQ, self.id, Code._10D0, PayloadT("00")
         )
@@ -95,7 +96,9 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
             self._gwy.config, "disable_discovery", False
         ):  # discovery will poll for filter
             try:
-                asyncio.get_running_loop().call_soon(self.start_poller)
+                self._start_handle = asyncio.get_running_loop().call_soon(
+                    self.start_poller
+                )
             except RuntimeError:
                 # Fallback if instantiated outside of a running event loop context
                 _LOGGER.debug(
@@ -122,6 +125,8 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         Start polling the filter_remaining state of a fan.
         Messages are cleaned up every 12h, the 10D0 message must be RQd
         """
+        self._start_handle = None  # call_soon callback has now fired
+
         if not self._poller:
             task = asyncio.create_task(
                 self._gwy.async_send_cmd(
@@ -134,6 +139,11 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
 
     async def stop_poller(self) -> None:
         """Stop the discovery poller (only if it is running)."""
+        # Cancel any pending call_soon(start_poller) that hasn't fired yet.
+        if self._start_handle:
+            self._start_handle.cancel()
+            self._start_handle = None
+
         if not self._poller or self._poller.done():
             return
 

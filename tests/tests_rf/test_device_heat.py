@@ -17,6 +17,7 @@ from ramses_rf.devices import (
     Thermostat,
     TrvActuator,
 )
+from ramses_rf.discovery import DiscoveryService
 from ramses_rf.exceptions import DeviceNotFaked
 from ramses_rf.messages import Message
 from ramses_rf.protocol.opentherm import (
@@ -619,8 +620,10 @@ async def test_controller_discovers_system_mode(mock_gwy: MagicMock) -> None:
     mock_addr.id = "01:111111"
     mock_addr.type = "01"
 
-    # 3. Instantiate the Controller
-    device = Controller(mock_gwy, mock_addr)
+    # 3. Instantiate the Controller, but suppress the auto-starting poller
+    #    (which would crash on the mock gateway and leave lingering tasks).
+    with patch.object(DiscoveryService, "start_poller", lambda self: None):
+        device = Controller(mock_gwy, mock_addr)
 
     # Act
     # 4. Explicitly trigger the discovery setup phase (normally done by the Gateway)
