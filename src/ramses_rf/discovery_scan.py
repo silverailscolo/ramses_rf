@@ -86,6 +86,17 @@ _ZONE_BINDING_CODES: frozenset[str] = frozenset(
     {"3150", "30C9", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09"}
 )
 
+# HVAC codes sent by REMs/CO2s to their parent FAN (32:).  These are
+# NOT binding protocol codes (binding uses 1FC9, done once with FAN off).
+# They are operational commands.  A REM sending 22F1 to a FAN doesn't
+# prove binding — the REM could be a neighbour's remote broadcasting.
+# The real proof is when the FAN **answers** the REM (RP from 32: to
+# the REM).  See schema_architecture.md: "How HVAC topology COULD be
+# derived from traffic".
+_HVAC_PARENT_INFERENCE_CODES: frozenset[str] = frozenset(
+    {"22F1", "31E0", "31DA", "10D0"}  # fan_mode, vent_demand, fan_status, outside_temp
+)
+
 # 32: is unambiguous — always a FAN. A FAN sends 22F1 (which maps to REM in
 # HVAC_KLASS_BY_VC_PAIR) but is still a FAN, so the prefix must win.
 # 37: is ambiguous (REM, CO2, or HUM all use 37:) — needs the VC pair to
@@ -283,6 +294,7 @@ class DiscoveryScan:
                 zone_idx=zone_idx,
                 is_src=False,
                 dst=None,
+                src=src,  # who sent this packet (for HVAC reply inference)
             )
 
         # addr3: lowest-confidence (broadcast target or relay)
@@ -307,6 +319,7 @@ class DiscoveryScan:
         zone_idx: str | None,
         is_src: bool,
         dst: str | None,
+        src: str | None = None,
     ) -> None:
         """Update or create a discovery entry for a single device."""
         # Skip if already known to the gateway
@@ -336,6 +349,19 @@ class DiscoveryScan:
                 dev.zone_idx = zone_idx
                 dev.bound_to = dst
                 dev.confidence = "high"  # binding telemetry = high confidence
+            # HVAC topology inference: a FAN (32:) replying (RP) to this
+            # device confirms the binding — the FAN acknowledges the REM/CO2
+            # as a paired remote.  A REM just sending 22F1 to a FAN is NOT
+            # proof (could be a neighbour's remote broadcasting).
+            elif (
+                not is_src
+                and src
+                and _is_valid_address(src)
+                and src.startswith("32:")
+                and verb == "RP"
+                and code in _HVAC_PARENT_INFERENCE_CODES
+            ):
+                dev.bound_to = src
             self._devices[dev_id] = dev
             self._dirty = True
             _LOGGER.info(
@@ -381,6 +407,22 @@ class DiscoveryScan:
                 dev.bound_to = dst
                 dev.confidence = "high"
                 changed = True
+
+        # HVAC topology inference: a FAN (32:) replying (RP) to this
+        # device confirms the binding — the FAN acknowledges the REM/CO2
+        # as a paired remote.  Infer bound_to from the reply source if
+        # not already set (e.g. by zone binding telemetry).
+        if (
+            not dev.bound_to
+            and not is_src
+            and src
+            and _is_valid_address(src)
+            and src.startswith("32:")
+            and verb == "RP"
+            and code in _HVAC_PARENT_INFERENCE_CODES
+        ):
+            dev.bound_to = src
+            changed = True
 
         # Upgrade confidence based on accumulated evidence
         new_conf = _recompute_confidence(dev)
