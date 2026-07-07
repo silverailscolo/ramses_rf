@@ -181,21 +181,3 @@ def apply_hvac_quirks(
                 and not current_state.fan_info.startswith("-unknown")
             ):
                 mutated["fan_info"] = current_state.fan_info
-
-    # QUIRK: 31DA 'bypass_position' null-marker prevention
-    # Some devices (e.g. Orcon) report bypass_position via 22F7, not
-    # 31DA.  Their 31DA snapshot includes 0x00 for bypass_position, which
-    # parses as 0.0 (a seemingly valid value).
-    # We must not overwrite bypass_position from 22F7 with the 31DA null marker.
-    # We identify these devices by checking another 22F7 field, e.g. bypass_mode.
-
-    if msg_code == "31DA" and "bypass_position" in mutated:
-        if mutated["bypass_position"] == 0.0:
-            if (
-                current_state.bypass_position != 0.0
-                and current_state.bypass_mode is not None
-                # would be set from 22F7
-            ):
-                mutated["bypass_position"] = current_state.bypass_position
-
-    return mutated
