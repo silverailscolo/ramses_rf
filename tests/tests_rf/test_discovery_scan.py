@@ -1187,6 +1187,7 @@ class TestHvacParentInference:
             )
             scan._process_packet(dto1)
             dev = scan.get_device(REM_29)
+            assert dev is not None
             assert dev.bound_to == "32:999999"
 
             # Then: FAN replies RP to REM — should NOT overwrite
@@ -1199,6 +1200,7 @@ class TestHvacParentInference:
             )
             scan._process_packet(dto2)
             dev = scan.get_device(REM_29)
+            assert dev is not None
             assert dev.bound_to == "32:999999"  # zone binding wins
         finally:
             scan.stop()
@@ -1232,6 +1234,7 @@ class TestHvacParentInference:
             )
             scan._process_packet(dto2)
             dev = scan.get_device(REM_29)
+            assert dev is not None
             assert dev.bound_to == FAN_ID
         finally:
             scan.stop()
