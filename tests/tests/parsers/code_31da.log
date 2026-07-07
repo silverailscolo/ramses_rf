@@ -20,7 +20,8 @@
 2000-01-01T03:00:00.000000 ...  I --- 37:123456 --:------ 37:123456 31DA 030 00C8400518646427102AF82EE031FFFFFFC800C8C83FFFC8C80AFF0AFF00  # {'hvac_id': '00', 'fan_info': 'off', '_unknown_fan_info_flags': [0, 0, 0], 'air_quality': 1.0,  'air_quality_basis': 'rel_humidity', 'co2_level': 1304, 'indoor_humidity': 1.0,  'outdoor_humidity': 1.0,  'exhaust_temp': 100.0, 'supply_temp': 110.0, 'indoor_temp': 120.0, 'outdoor_temp': None,   'bypass_position': 1.0, 'exhaust_fan_speed': 1.0, 'supply_fan_speed': 1.0,    'remaining_mins': None, 'post_heat': 1.0,  'pre_heat': 1.0,  'supply_flow': 28.15, 'exhaust_flow': 28.15, 'speed_capabilities': ['off', 'low_med_high', 'timer', 'boost', 'auto', 'speed_4', 'speed_5', 'speed_6', 'speed_7', 'speed_8', 'speed_9', 'speed_10', 'auto_night', 'reserved', 'post_heater', 'pre_heater'], '_extra': '00'}
 
 # NB: the difference between these (_has_ctl, src, dst, -:-) and above (_has_ctl, src, -:-, src)
-# 32:134446 is an Orcon HRU HRC400
+# 32:134446 is an Orcon HRU HRC-400 via Kars-de-Jong: remote + RPs
+# Note HRC-400 also controlled via REM 22F7 RQ RP, containing same key 'bypass_position'
 2022-11-20T08:32:06.904058 063 RP --- 32:134446 37:171685 --:------ 31DA 030 00EF007FFF2F1B0226069A07EEFFE4F8000038988F0000EFEF1F2420FC00  # {'hvac_id': '00', 'air_quality': None, 'co2_level': None, 'indoor_humidity': 0.47, 'outdoor_humidity': 0.27, 'exhaust_temp':  5.5, 'supply_temp': 16.9, 'indoor_temp': 20.30, 'outdoor_temp': -0.28, 'speed_capabilities': ['off', 'low_med_high', 'timer', 'boost', 'auto'], 'bypass_position': 0.0, 'fan_info': 'auto', '_unknown_fan_info_flags': [0, 0, 1], 'exhaust_fan_speed': 0.760, 'supply_fan_speed': 0.715, 'remaining_mins': 0, 'post_heat': None, 'pre_heat': None, 'supply_flow': 79.72, 'exhaust_flow': 84.44, '_extra': '00'}
 # From: https://gathering.tweakers.net/forum/list_messages/2135834/3
 2023-01-09T19:04:53.429919 055 RQ --- 37:171685 32:134446 --:------ 31DA 001 00  # {}

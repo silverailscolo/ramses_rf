@@ -1,4 +1,5 @@
-# Orcon
+# Orcon HRC-400 via Kars-de-Jong: remote + RPs
+# Note HRC-400 also sends regular I 31DA containing key same 'bypass_position'
 2024-01-01T01:00:00.000001 ... RQ --- 37:171871 32:155617 --:------ 22F7 001 00  # {}
 2024-01-01T01:00:00.000002 ... RP --- 32:155617 37:171871 --:------ 22F7 003 00FF00  # {'bypass_mode': 'auto', 'bypass_state': 'off', 'bypass_position': 0.0}
 # also: 000000, 00C8C8
