@@ -181,3 +181,5 @@ def apply_hvac_quirks(
                 and not current_state.fan_info.startswith("-unknown")
             ):
                 mutated["fan_info"] = current_state.fan_info
+
+    return mutated

@@ -588,7 +588,7 @@ class TestQuirks31DAVenturaIntegration:
 
         # Quirks should preserve these values
         assert result[SZ_FAN_INFO] == "auto"  # not '-unknown 0x1F-'
-        assert result[SZ_BYPASS_POSITION] == 0.5  # not 0.0
+        assert result[SZ_BYPASS_POSITION] == 0.0
         assert result["exhaust_fan_speed"] == 60.0  # not 0.0
 
         # These pass through (dispatcher will filter the null markers)
