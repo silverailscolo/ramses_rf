@@ -182,4 +182,5 @@ def apply_hvac_quirks(
             ):
                 mutated["fan_info"] = current_state.fan_info
 
+    # finally, return mutated payloads dict
     return mutated
