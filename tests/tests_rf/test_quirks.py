@@ -491,7 +491,7 @@ class TestQuirks31DAVenturaIntegration:
       indoor_humidity[10:12] = 00 → 0.0  (filtered by dispatcher)
       outdoor_humidity[12:14] = EF → None (filtered by dispatcher)
       supply_temp[18:22] = 7FFF → None (filtered by dispatcher)
-      bypass_position[34:36] = 00 → 0.0 (filtered by quirks)
+      bypass_position[34:36] = 00 → 0.0 (not filtered)
       fan_info[36:38] = 1F → '-unknown 0x1F-' (filtered by quirks)
     """
 
