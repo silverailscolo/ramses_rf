@@ -206,7 +206,7 @@ class DiscoveryService:
             _SZ_COMMAND: cmd,
             _SZ_INTERVAL: td(seconds=max(interval, self.MAX_CYCLE_SECS)),
             _SZ_LAST_PKT: None,
-            _SZ_NEXT_DUE: dt.now() + td(seconds=delay),
+            _SZ_NEXT_DUE: dt.now().astimezone() + td(seconds=delay),
             _SZ_TIMEOUT: timeout,
             _SZ_FAILURES: 0,
         }
@@ -243,7 +243,10 @@ class DiscoveryService:
 
             if self.cmds:
                 next_due = min(t[_SZ_NEXT_DUE] for t in self.cmds.values())
-                delay = max((next_due - dt.now()).total_seconds(), self.MIN_CYCLE_SECS)
+                delay = max(
+                    (next_due - dt.now().astimezone()).total_seconds(),
+                    self.MIN_CYCLE_SECS,
+                )
             else:
                 delay = self.MAX_CYCLE_SECS
 
@@ -384,7 +387,7 @@ class DiscoveryService:
             return None
 
         for hdr, task in self.cmds.items():
-            dt_now = dt.now()
+            dt_now = dt.now().astimezone()
 
             msg = await find_latest_msg(hdr, task)
             if msg and (task[_SZ_NEXT_DUE] < msg.dtm + task[_SZ_INTERVAL]):
