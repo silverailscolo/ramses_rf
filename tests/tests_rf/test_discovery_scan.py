@@ -96,6 +96,9 @@ class TestIsValidAddress:
     def test_broadcast_address_rejected(self) -> None:
         assert _is_valid_address("18:73030") is False
 
+    def test_all_device_broadcast_rejected(self) -> None:
+        assert _is_valid_address("63:262142") is False
+
     def test_empty_rejected(self) -> None:
         assert _is_valid_address("") is False
 

@@ -479,13 +479,13 @@ class DiscoveryScan:
 def _is_valid_address(dev_id: str) -> bool:
     """Quick check if a device ID looks valid (N.N:NNNNNN or N:NNNNNN).
 
-    Filters out broadcast addresses (18:73030, 18:14803), placeholder
-    addresses (--:------), and corrupt IDs.
+    Filters out broadcast addresses (18:73030, 18:14803, 18:000730,
+    63:262142), placeholder addresses (--:------), and corrupt IDs.
     """
     if not dev_id or len(dev_id) < 8:
         return False
     # Skip broadcast/multicast addresses
-    if dev_id in ("18:73030", "18:14803", "18:000730"):
+    if dev_id in ("18:73030", "18:14803", "18:000730", "63:262142"):
         return False
     # Skip placeholder/empty addresses (e.g. "--:------")
     if dev_id.startswith("-") or dev_id.startswith("00:------"):
