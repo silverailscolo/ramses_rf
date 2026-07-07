@@ -408,11 +408,16 @@ class TestDiscoveryScanPacketHandling:
         scan._process_packet(make_dto(src="01:145038", code="2E04"))
         assert scan.get_device("01:145038") is None
 
-    def test_known_in_registry_skipped(self) -> None:
+    def test_known_in_registry_only_not_skipped(self) -> None:
+        """A device in the device_registry but NOT in known_list/schema
+        must be re-discoverable (Schema-as-Source-of-Truth, issue 767).
+        The registry is derived state; declared intent (schema/known_list)
+        wins."""
         gwy = make_mock_gateway(device_by_id={"04:056053": MagicMock()})
         scan = DiscoveryScan(gwy)
         scan._process_packet(make_dto(src="04:056053", code="3150"))
-        assert scan.get_device("04:056053") is None
+        # Registry-only device → NOT known → should be discovered
+        assert scan.get_device("04:056053") is not None
 
     def test_rssi_running_average(self) -> None:
         gwy = make_mock_gateway()

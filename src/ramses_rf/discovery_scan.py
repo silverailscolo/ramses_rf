@@ -194,7 +194,14 @@ class DiscoveryScan:
         """Check if a device is already known to the gateway.
 
         A device is "known" if it's the gateway itself, in the known_list,
-        schema, or already in the device registry.
+        or in the schema.  The device_registry is **not** consulted here:
+        under the Schema-as-Source-of-Truth architecture (ramses_cc issue
+        767, Invariant 1), the schema + derived known_list represent
+        declared intent, while the device_registry is derived state that
+        is populated from the schema at gateway creation and mutated at
+        runtime.  When they disagree, intent wins — a device removed from
+        the schema must be re-discoverable even if the running gateway's
+        registry still holds a stale entry.
         """
         # The gateway's own HGI is never a "discovered" device.
         # Check the active HGI ID from the transport directly — the device
@@ -212,15 +219,11 @@ class DiscoveryScan:
         if self._gwy.hgi and self._gwy.hgi.id == dev_id:
             return True
 
-        # Check device registry (already created devices)
-        if dev_id in self._gwy.device_registry.device_by_id:
-            return True
-
-        # Check known_list
+        # Check known_list (declared intent, derived from schema)
         if dev_id in self._gwy._gwy_config.known_list:
             return True
 
-        # Check schema keys (CTL IDs are top-level keys)
+        # Check schema keys (CTL IDs are top-level keys — declared intent)
         return dev_id in self._gwy._gwy_config.schema
 
     # -- packet handler ------------------------------------------------------
