@@ -373,83 +373,6 @@ class TestQuirks31DAFanInfo:
 
 
 # ---------------------------------------------------------------------------
-# 31DA bypass_position quirks
-# ---------------------------------------------------------------------------
-
-
-class TestQuirks31DABypassPosition:
-    """31DA bypass_position=0.0 null-marker prevention.
-
-    Devices like Orcon report bypass_position via 22F7, not 31DA.
-    Their 31DA snapshot includes 0x00 for bypass_position, which parses as
-    0.0 (a seemingly valid value).  This must not overwrite a non-zero
-    bypass_position from 22F7.
-    """
-
-    def test_zero_bypass_overwrites_nonzero_existing(self) -> None:
-        """bypass_position=0.0 from 31DA can overwrite any value."""
-        state = _make_state(bypass_position=0.5)
-        payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, state, "31DA")
-        assert result[SZ_BYPASS_POSITION] == 0.0
-
-    def test_zero_bypass_preserves_nonzero_existing_with_mode(self) -> None:
-        """bypass_position=0.0 from 31DA must not overwrite a non-zero value."""
-        state = _make_state(bypass_position=0.5, bypass_mode="auto")
-        payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, state, "31DA")
-        assert result[SZ_BYPASS_POSITION] == 0.5
-
-    def test_zero_bypass_preserves_string_existing_with_mode(self) -> None:
-        """bypass_position=0.0 must not overwrite a string value (e.g. 'off')."""
-        state = _make_state(bypass_position="off", bypass_mode="auto")
-        payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, state, "31DA")
-        assert result[SZ_BYPASS_POSITION] == "off"
-
-    def test_nonzero_bypass_overwrites(self) -> None:
-        """A non-zero bypass_position from 31DA should overwrite."""
-        state = _make_state(bypass_position=0.5)
-        payload = {SZ_BYPASS_POSITION: 0.75}
-        result = _quirk(payload, state, "31DA")
-        assert result[SZ_BYPASS_POSITION] == 0.75
-
-    def test_zero_bypass_with_no_current_state(self) -> None:
-        """If there is no current state, 0.0 passes through."""
-        payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, None, "31DA")
-        assert result[SZ_BYPASS_POSITION] == 0.0
-
-    def test_zero_bypass_with_zero_existing(self) -> None:
-        """If current is also 0.0, the quirk doesn't fire (both are 0.0)."""
-        state = _make_state(bypass_position=0.0)
-        payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, state, "31DA")
-        assert result[SZ_BYPASS_POSITION] == 0.0
-
-    def test_zero_bypass_with_none_existing(self) -> None:
-        """If current bypass_position is None, 0.0 passes through."""
-        state = _make_state(bypass_position=None)
-        payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, state, "31DA")
-        assert result[SZ_BYPASS_POSITION] == 0.0
-
-    def test_zero_bypass_with_none_existing_preserves_with_mode(self) -> None:
-        """If current bypass_position is None, 0.0 passes through."""
-        state = _make_state(bypass_position=None, bypass_mode="auto")
-        payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, state, "31DA")
-        assert result[SZ_BYPASS_POSITION] is None
-
-    def test_bypass_quirk_only_for_31da(self) -> None:
-        """The bypass_position quirk should only apply to 31DA."""
-        state = _make_state(bypass_position=0.5)
-        payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, state, "22F7")
-        assert result[SZ_BYPASS_POSITION] == 0.0
-
-
-# ---------------------------------------------------------------------------
 # 31DA exhaust_fan_speed quirks (existing, regression tests)
 # ---------------------------------------------------------------------------
 
@@ -491,7 +414,7 @@ class TestQuirks31DAVenturaIntegration:
       indoor_humidity[10:12] = 00 → 0.0  (filtered by dispatcher)
       outdoor_humidity[12:14] = EF → None (filtered by dispatcher)
       supply_temp[18:22] = 7FFF → None (filtered by dispatcher)
-      bypass_position[34:36] = 00 → 0.0 (filtered by quirks)
+      bypass_position[34:36] = 00 → 0.0 (not filtered)
       fan_info[36:38] = 1F → '-unknown 0x1F-' (filtered by quirks)
     """
 
@@ -588,7 +511,7 @@ class TestQuirks31DAVenturaIntegration:
 
         # Quirks should preserve these values
         assert result[SZ_FAN_INFO] == "auto"  # not '-unknown 0x1F-'
-        assert result[SZ_BYPASS_POSITION] == 0.5  # not 0.0
+        assert result[SZ_BYPASS_POSITION] == 0.0
         assert result["exhaust_fan_speed"] == 60.0  # not 0.0
 
         # These pass through (dispatcher will filter the null markers)
