@@ -48,6 +48,6 @@ async def test_battery_status_includes_key_when_level_is_known() -> None:
 
     # Assert
     assert BatteryState.BATTERY_STATE in status, (
-        "The battery_state key must be included if the level is known"
+        "The battery_level key must be included if the level is known"
     )
-    assert status[BatteryState.BATTERY_STATE]["battery_state"] == 0.85
+    assert status[BatteryState.BATTERY_STATE]["battery_level"] == 0.85
