@@ -8,7 +8,7 @@ import sys
 import time
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime as dt
-from typing import TYPE_CHECKING, Final, Literal, TypeAlias, cast
+from typing import TYPE_CHECKING, Final, Literal, TypeAlias
 
 from ramses_rf.protocol.ramses import _31DA_FAN_INFO
 
@@ -53,7 +53,7 @@ from .const import (
 )
 
 if TYPE_CHECKING:
-    from .typing import LogIdxT, PayDictT
+    from .typing import PayDictT
 
 # Sensor faults
 SZ_UNRELIABLE: Final = "unreliable"
@@ -429,7 +429,7 @@ def parse_fault_log_entry(
 
     # these are only useful for I_, not RP
     if (timestamp := hex_to_dts(payload[18:30])) is None:
-        return {"_log_idx": cast(LogIdxT, payload[4:6])}
+        return {f"_{SZ_LOG_IDX}": payload[4:6]}  # type: ignore[return-value]
 
     result: PayDictT.FAULT_LOG_ENTRY = {
         f"_{SZ_LOG_IDX}": payload[4:6],  # type: ignore[misc]
