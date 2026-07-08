@@ -18,6 +18,9 @@ from ramses_rf.const import (
     DEV_TYPE_MAP,
     GATEWAY_MESSAGE_TIMEOUT,
     HEARTBEAT_TIMEOUT_DEFAULT,
+    SZ_BATTERY_LEVEL,
+    SZ_BATTERY_LOW,
+    SZ_BATTERY_STATE,
     SZ_OEM_CODE,
     DevType,
 )
@@ -294,10 +297,12 @@ class DeviceBase(Entity):
 
 
 class BatteryState(DeviceBase):  # 1060
-    """The base state class for battery-powered devices."""
+    """The base state class for battery-powered devices.
 
-    BATTERY_LOW = "battery_low"  # boolean
-    BATTERY_STATE = "battery_state"  # percentage (0.0-1.0)
+    battery_low: boolean
+    battery_level: float percentage (0.0-1.0)
+    battery_state: dict containing is_low, level
+    """
 
     async def battery_low(self) -> None | bool:  # 1060
         """Return the current low battery warning state.
@@ -320,8 +325,8 @@ class BatteryState(DeviceBase):  # 1060
         if self.power_state.battery_level is None:
             return None
         return {
-            self.BATTERY_LOW: self.power_state.battery_low,
-            self.BATTERY_STATE: self.power_state.battery_level,
+            SZ_BATTERY_LOW: self.power_state.battery_low,
+            SZ_BATTERY_LEVEL: self.power_state.battery_level,
         }
 
     async def status(self) -> dict[str, Any]:
@@ -334,7 +339,7 @@ class BatteryState(DeviceBase):  # 1060
         if (bat_state := await self.battery_state()) is not None:
             return {
                 **base_status,
-                self.BATTERY_STATE: bat_state,
+                SZ_BATTERY_STATE: bat_state,
             }
         return base_status
 

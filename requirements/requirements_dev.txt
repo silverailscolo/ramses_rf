@@ -1,5 +1,5 @@
 # Requirements to dev/test the source code
-# - last checked/updated: 2026-07-06 (c.f. 0.57.10)
+# - last checked/updated: 2026-07-08
 # - HA core reqs: https://github.com/home-assistant/core/blob/dev/requirements.txt
 
 # for using the ramses_rf library with CLI
@@ -10,13 +10,13 @@
 # - pip list | grep -E 'pre-commit|ruff|mypy|types-|voluptuous|pytest|hatch'
 
 # used for development (linting)
-  prek == 0.4.5                                 # latest, same as ramses_cc
+  prek == 0.4.8                                 # latest, same as ramses_cc
   ruff >= 0.15.20                               # HA uses 0.15.5 ! also in: pre-commit-config.yaml
 
 # used for development (typing)
   mypy >= 2.1.0                                 # HA uses  1.19.0a4 !
   types-colorama >= 0.4.15.20260508
-  types-PyYAML >= 6.0.12.20260518                         # HA uses 6.0.12.20250516
+  types-PyYAML >= 6.0.12.20260518               # HA uses 6.0.12.20250516
   types-pyserial
   voluptuous >= 0.15.2                           # HA uses 0.15.2
 
@@ -27,7 +27,7 @@
   pytest-sugar >= 1.1.1                          # HA uses 1.0.0
   pytest-xdist >= 3.8.0                          # HA uses 3.8.0
   PyYAML                                         # required for tests/tests/test_vol_schema import
-  syrupy >= 5.3.4                                # HA uses 5.0.0 - 07/02/2026 - 2026.2.1
+  syrupy >= 5.5.1                                # HA uses 5.0.0 - 07/02/2026 - 2026.2.1
 
 # used for build/deploy
   hatch >= 1.17.0

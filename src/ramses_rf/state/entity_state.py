@@ -102,6 +102,7 @@ class EntityState:
 
         # Tracks DB tasks to maintain Message object immutability
         self._pending_deletes: set[StateHeader] = set()
+        self._delete_tasks: set[asyncio.Task[Any]] = set()
 
     def _sync_state(self) -> None:
         """Hybrid Push Model: Sync O(1) cache using cursor on global log."""
@@ -121,6 +122,10 @@ class EntityState:
             self._log_cursor = 0
             self._current_state.clear()
             self._pending_deletes.clear()
+            for task in self._delete_tasks:
+                if not task.done():
+                    task.cancel()
+            self._delete_tasks.clear()
 
         # Only process NEW packets appended since the last sync
         new_msgs = log_iterable[self._log_cursor :]
@@ -367,7 +372,10 @@ class EntityState:
                 # Protect against the Mock Trap during testing
                 if isinstance(loop, asyncio.AbstractEventLoop):
                     self._pending_deletes.add(hdr)
-                    loop.create_task(self._delete_msg(msg))
+                    task = loop.create_task(self._delete_msg(msg))
+                    if task is not None:
+                        self._delete_tasks.add(task)
+                        task.add_done_callback(self._delete_tasks.discard)
 
         payload = msg.payload
 

@@ -162,6 +162,21 @@ class GatewayLifecycle:
     async def stop(self) -> None:
         """Stop the Gateway and tidy up."""
         self.config.disable_discovery = True
+
+        # Cancel binding managers and discovery pollers before stopping engine
+        for dev in self.device_registry.devices:
+            bm = getattr(dev, "_binding_manager", None)
+            if bm:
+                with contextlib.suppress(Exception):
+                    bm.cancel()
+            if hasattr(dev, "stop_poller"):
+                with contextlib.suppress(Exception):
+                    await dev.stop_poller()
+            disc = getattr(dev, "discovery", None)
+            if disc:
+                with contextlib.suppress(Exception):
+                    await disc.stop_poller()
+
         await self._engine.stop()
 
         # The StateProjector background worker isn't running, but we call stop
