@@ -2,6 +2,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from ramses_rf.const import SZ_BATTERY_LEVEL, SZ_BATTERY_LOW, SZ_BATTERY_STATE
+
 # Assuming the standard module path for the ramses_rf package
 from ramses_rf.devices.dev_base import BatteryState
 from ramses_rf.models import PowerState
@@ -25,7 +27,7 @@ async def test_battery_status_omits_key_when_level_is_none() -> None:
 
     # Assert
     # Ensure we do not exhibit the bug behaviour where null crashes templates
-    assert BatteryState.BATTERY_STATE not in status, (
+    assert SZ_BATTERY_STATE not in status, (
         "The battery_state key must be completely omitted if the level is unknown"
     )
 
@@ -47,7 +49,8 @@ async def test_battery_status_includes_key_when_level_is_known() -> None:
     status = await device.status()
 
     # Assert
-    assert BatteryState.BATTERY_STATE in status, (
+    assert SZ_BATTERY_STATE in status, (
         "The battery_level key must be included if the level is known"
     )
-    assert status[BatteryState.BATTERY_STATE]["battery_level"] == 0.85
+    assert status[SZ_BATTERY_STATE][SZ_BATTERY_LOW] is False
+    assert status[SZ_BATTERY_STATE][SZ_BATTERY_LEVEL] == 0.85
