@@ -1,5 +1,5 @@
 # Requirements to dev/test the source code
-# - last checked/updated: 2026-07-06 (c.f. 0.57.10)
+# - last checked/updated: 2026-07-08
 # - HA core reqs: https://github.com/home-assistant/core/blob/dev/requirements.txt
 
 # for using the ramses_rf library with CLI
@@ -16,7 +16,7 @@
 # used for development (typing)
   mypy >= 2.1.0                                 # HA uses  1.19.0a4 !
   types-colorama >= 0.4.15.20260508
-  types-PyYAML >= 6.0.12.20260518                         # HA uses 6.0.12.20250516
+  types-PyYAML >= 6.0.12.20260518               # HA uses 6.0.12.20250516
   types-pyserial
   voluptuous >= 0.15.2                           # HA uses 0.15.2
 
