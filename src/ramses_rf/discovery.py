@@ -12,7 +12,7 @@ import asyncio
 import contextlib
 import logging
 import random
-from datetime import datetime as dt, timedelta as td
+from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, cast
 
 from ramses_rf.protocol.opentherm import OPENTHERM_MESSAGES
@@ -42,6 +42,13 @@ _SZ_INTERVAL: str = "interval"
 _SZ_COMMAND: str = "command"
 
 _DBG_ENABLE_DISCOVERY_BACKOFF: bool = False
+
+
+def _ensure_aware(dtm: dt) -> dt:
+    """Ensure datetime is timezone-aware, using UTC if naive."""
+    if dtm.tzinfo is None:
+        return dtm.replace(tzinfo=UTC)
+    return dtm
 
 
 class DiscoveryService:
@@ -390,10 +397,12 @@ class DiscoveryService:
             dt_now = dt.now().astimezone()
 
             msg = await find_latest_msg(hdr, task)
-            if msg and (task[_SZ_NEXT_DUE] < msg.dtm + task[_SZ_INTERVAL]):
+            if msg and (
+                task[_SZ_NEXT_DUE] < _ensure_aware(msg.dtm) + task[_SZ_INTERVAL]
+            ):
                 task[_SZ_FAILURES] = 0
                 task[_SZ_LAST_PKT] = msg._pkt
-                task[_SZ_NEXT_DUE] = msg.dtm + task[_SZ_INTERVAL]
+                task[_SZ_NEXT_DUE] = _ensure_aware(msg.dtm) + task[_SZ_INTERVAL]
 
             if task[_SZ_NEXT_DUE] > dt_now:
                 continue
@@ -413,7 +422,7 @@ class DiscoveryService:
             if pkt := await send_disc_cmd(hdr, task):
                 task[_SZ_FAILURES] = 0
                 task[_SZ_LAST_PKT] = pkt
-                task[_SZ_NEXT_DUE] = pkt.dtm + task[_SZ_INTERVAL]
+                task[_SZ_NEXT_DUE] = _ensure_aware(pkt.dtm) + task[_SZ_INTERVAL]
             else:
                 task[_SZ_FAILURES] += 1
                 task[_SZ_LAST_PKT] = None
