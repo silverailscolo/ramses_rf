@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
+from ramses_tx.const import VerbT
 from ramses_tx.dtos import PacketDTO
 
 from ..const import RQ, Code
@@ -75,7 +76,7 @@ class ApplicationMessage(Message):
             return td(minutes=60 * 24)
 
         if self.code == Code._1F09:
-            return td(seconds=360) if self.verb == " I" else td(seconds=0)
+            return td(seconds=360) if self.verb == VerbT.I_ else td(seconds=0)
 
         if self.code == Code._1FC9 and self.verb == "RP":
             return td(minutes=60 * 24)
