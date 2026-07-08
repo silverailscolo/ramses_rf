@@ -203,7 +203,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
             self._leak_sem(), name="PortTransport._leak_sem()"
         )
 
-        self._loop.create_task(
+        self._conn_task: asyncio.Task[None] | None = self._loop.create_task(
             self._create_connection(),
             name="PortTransport._create_connection()",
         )
@@ -350,6 +350,8 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
             self._init_task.cancel()
         if hasattr(self, "_leaker_task") and self._leaker_task:
             self._leaker_task.cancel()
+        if conn_task := getattr(self, "_conn_task", None):
+            conn_task.cancel()
 
     def _close(  # type: ignore[override]
         self, exc: exc.RamsesException | None = None
@@ -362,3 +364,6 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
 
         if leaker_task := getattr(self, "_leaker_task", None):
             leaker_task.cancel()
+
+        if conn_task := getattr(self, "_conn_task", None):
+            conn_task.cancel()

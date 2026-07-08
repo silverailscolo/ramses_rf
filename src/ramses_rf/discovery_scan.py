@@ -86,6 +86,17 @@ _ZONE_BINDING_CODES: frozenset[str] = frozenset(
     {"3150", "30C9", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09"}
 )
 
+# HVAC codes sent by REMs/CO2s to their parent FAN (32:).  These are
+# NOT binding protocol codes (binding uses 1FC9, done once with FAN off).
+# They are operational commands.  A REM sending 22F1 to a FAN doesn't
+# prove binding — the REM could be a neighbour's remote broadcasting.
+# The real proof is when the FAN **answers** the REM (RP from 32: to
+# the REM).  See schema_architecture.md: "How HVAC topology COULD be
+# derived from traffic".
+_HVAC_PARENT_INFERENCE_CODES: frozenset[str] = frozenset(
+    {"22F1", "31E0", "31DA", "10D0"}  # fan_mode, vent_demand, fan_status, outside_temp
+)
+
 # 32: is unambiguous — always a FAN. A FAN sends 22F1 (which maps to REM in
 # HVAC_KLASS_BY_VC_PAIR) but is still a FAN, so the prefix must win.
 # 37: is ambiguous (REM, CO2, or HUM all use 37:) — needs the VC pair to
@@ -194,7 +205,14 @@ class DiscoveryScan:
         """Check if a device is already known to the gateway.
 
         A device is "known" if it's the gateway itself, in the known_list,
-        schema, or already in the device registry.
+        or in the schema.  The device_registry is **not** consulted here:
+        under the Schema-as-Source-of-Truth architecture (ramses_cc issue
+        767, Invariant 1), the schema + derived known_list represent
+        declared intent, while the device_registry is derived state that
+        is populated from the schema at gateway creation and mutated at
+        runtime.  When they disagree, intent wins — a device removed from
+        the schema must be re-discoverable even if the running gateway's
+        registry still holds a stale entry.
         """
         # The gateway's own HGI is never a "discovered" device.
         # Check the active HGI ID from the transport directly — the device
@@ -212,15 +230,11 @@ class DiscoveryScan:
         if self._gwy.hgi and self._gwy.hgi.id == dev_id:
             return True
 
-        # Check device registry (already created devices)
-        if dev_id in self._gwy.device_registry.device_by_id:
-            return True
-
-        # Check known_list
+        # Check known_list (declared intent, derived from schema)
         if dev_id in self._gwy._gwy_config.known_list:
             return True
 
-        # Check schema keys (CTL IDs are top-level keys)
+        # Check schema keys (CTL IDs are top-level keys — declared intent)
         return dev_id in self._gwy._gwy_config.schema
 
     # -- packet handler ------------------------------------------------------
@@ -280,6 +294,7 @@ class DiscoveryScan:
                 zone_idx=zone_idx,
                 is_src=False,
                 dst=None,
+                src=src,  # who sent this packet (for HVAC reply inference)
             )
 
         # addr3: lowest-confidence (broadcast target or relay)
@@ -304,6 +319,7 @@ class DiscoveryScan:
         zone_idx: str | None,
         is_src: bool,
         dst: str | None,
+        src: str | None = None,
     ) -> None:
         """Update or create a discovery entry for a single device."""
         # Skip if already known to the gateway
@@ -333,6 +349,19 @@ class DiscoveryScan:
                 dev.zone_idx = zone_idx
                 dev.bound_to = dst
                 dev.confidence = "high"  # binding telemetry = high confidence
+            # HVAC topology inference: a FAN (32:) replying (RP) to this
+            # device confirms the binding — the FAN acknowledges the REM/CO2
+            # as a paired remote.  A REM just sending 22F1 to a FAN is NOT
+            # proof (could be a neighbour's remote broadcasting).
+            elif (
+                not is_src
+                and src
+                and _is_valid_address(src)
+                and src.startswith("32:")
+                and verb == "RP"
+                and code in _HVAC_PARENT_INFERENCE_CODES
+            ):
+                dev.bound_to = src
             self._devices[dev_id] = dev
             self._dirty = True
             _LOGGER.info(
@@ -378,6 +407,22 @@ class DiscoveryScan:
                 dev.bound_to = dst
                 dev.confidence = "high"
                 changed = True
+
+        # HVAC topology inference: a FAN (32:) replying (RP) to this
+        # device confirms the binding — the FAN acknowledges the REM/CO2
+        # as a paired remote.  Infer bound_to from the reply source if
+        # not already set (e.g. by zone binding telemetry).
+        if (
+            not dev.bound_to
+            and not is_src
+            and src
+            and _is_valid_address(src)
+            and src.startswith("32:")
+            and verb == "RP"
+            and code in _HVAC_PARENT_INFERENCE_CODES
+        ):
+            dev.bound_to = src
+            changed = True
 
         # Upgrade confidence based on accumulated evidence
         new_conf = _recompute_confidence(dev)
@@ -479,13 +524,13 @@ class DiscoveryScan:
 def _is_valid_address(dev_id: str) -> bool:
     """Quick check if a device ID looks valid (N.N:NNNNNN or N:NNNNNN).
 
-    Filters out broadcast addresses (18:73030, 18:14803), placeholder
-    addresses (--:------), and corrupt IDs.
+    Filters out broadcast addresses (18:73030, 18:14803, 18:000730,
+    63:262142), placeholder addresses (--:------), and corrupt IDs.
     """
     if not dev_id or len(dev_id) < 8:
         return False
     # Skip broadcast/multicast addresses
-    if dev_id in ("18:73030", "18:14803", "18:000730"):
+    if dev_id in ("18:73030", "18:14803", "18:000730", "63:262142"):
         return False
     # Skip placeholder/empty addresses (e.g. "--:------")
     if dev_id.startswith("-") or dev_id.startswith("00:------"):

@@ -96,6 +96,9 @@ class TestIsValidAddress:
     def test_broadcast_address_rejected(self) -> None:
         assert _is_valid_address("18:73030") is False
 
+    def test_all_device_broadcast_rejected(self) -> None:
+        assert _is_valid_address("63:262142") is False
+
     def test_empty_rejected(self) -> None:
         assert _is_valid_address("") is False
 
@@ -405,11 +408,16 @@ class TestDiscoveryScanPacketHandling:
         scan._process_packet(make_dto(src="01:145038", code="2E04"))
         assert scan.get_device("01:145038") is None
 
-    def test_known_in_registry_skipped(self) -> None:
+    def test_known_in_registry_only_not_skipped(self) -> None:
+        """A device in the device_registry but NOT in known_list/schema
+        must be re-discoverable (Schema-as-Source-of-Truth, issue 767).
+        The registry is derived state; declared intent (schema/known_list)
+        wins."""
         gwy = make_mock_gateway(device_by_id={"04:056053": MagicMock()})
         scan = DiscoveryScan(gwy)
         scan._process_packet(make_dto(src="04:056053", code="3150"))
-        assert scan.get_device("04:056053") is None
+        # Registry-only device → NOT known → should be discovered
+        assert scan.get_device("04:056053") is not None
 
     def test_rssi_running_average(self) -> None:
         gwy = make_mock_gateway()
@@ -1028,3 +1036,205 @@ class TestVirtualRfIntegration:
             await gwy.stop()
         finally:
             await rf.stop()
+
+
+# ---------------------------------------------------------------------------
+# HVAC topology inference — FAN reply (RP) to REM/CO2 confirms binding
+# ---------------------------------------------------------------------------
+
+FAN_ID = "32:153289"
+REM_29 = "29:176861"  # real REM (29: prefix)
+CO2_37 = "37:126776"  # CO2 sensor that also sends 31E0
+
+
+class TestHvacParentInference:
+    """Tests for inferring bound_to from HVAC operational traffic.
+
+    A REM sending 22F1 to a FAN is NOT proof of binding — the REM could
+    be a neighbour's remote broadcasting.  The real proof is when the
+    FAN **answers** the REM (RP from 32: to the REM).  This confirms
+    the FAN acknowledges the REM as a paired remote.
+
+    See schema_architecture.md: "How HVAC topology COULD be derived
+    from traffic".
+    """
+
+    async def test_fan_reply_infers_parent(self) -> None:
+        """A FAN (32:) replying RP to a REM should set bound_to on the
+        REM."""
+        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan.start()
+        try:
+            # REM sends RQ to FAN
+            dto1 = make_dto(
+                src=REM_29,
+                dst=FAN_ID,
+                code="31DA",
+                verb="RQ",
+                payload="00",
+            )
+            scan._process_packet(dto1)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to is None  # not yet confirmed
+
+            # FAN replies RP to REM — this confirms binding
+            dto2 = make_dto(
+                src=FAN_ID,
+                dst=REM_29,
+                code="31DA",
+                verb="RP",
+                payload="00EF007FFF424A084807A8082E075E6800C803C8C80000EFEF208A208A00",
+            )
+            scan._process_packet(dto2)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to == FAN_ID
+        finally:
+            scan.stop()
+
+    async def test_rem_sending_to_fan_does_not_infer(self) -> None:
+        """A REM sending I|22F1 to a FAN should NOT set bound_to — the
+        FAN hasn't confirmed the binding."""
+        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src=REM_29,
+                dst=FAN_ID,
+                code="22F1",
+                verb=" I",
+                payload="000404",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to is None  # NOT confirmed
+        finally:
+            scan.stop()
+
+    async def test_fan_reply_to_co2_infers_parent(self) -> None:
+        """A FAN (32:) replying RP to a CO2 should set bound_to."""
+        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan.start()
+        try:
+            # FAN replies RP to CO2
+            dto = make_dto(
+                src=FAN_ID,
+                dst=CO2_37,
+                code="31DA",
+                verb="RP",
+                payload="00EF007FFF424A084807A8082E075E6800C803C8C80000EFEF208A208A00",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(CO2_37)
+            assert dev is not None
+            assert dev.bound_to == FAN_ID
+        finally:
+            scan.stop()
+
+    async def test_non_rp_verb_does_not_infer(self) -> None:
+        """A FAN sending I (not RP) to a REM should NOT infer bound_to."""
+        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src=FAN_ID,
+                dst=REM_29,
+                code="31DA",
+                verb=" I",  # not RP
+                payload="00EF007FFF424A",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to is None
+        finally:
+            scan.stop()
+
+    async def test_non_32_src_does_not_infer(self) -> None:
+        """A non-FAN (not 32:) replying RP should NOT infer bound_to."""
+        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src="37:168270",  # not a FAN
+                dst=REM_29,
+                code="31DA",
+                verb="RP",
+                payload="00EF007FFF424A",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to is None
+        finally:
+            scan.stop()
+
+    async def test_zone_binding_takes_precedence(self) -> None:
+        """If zone binding sets bound_to first, HVAC inference must not
+        overwrite it."""
+        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan.start()
+        try:
+            # First: zone binding to a different FAN
+            dto1 = make_dto(
+                src=REM_29,
+                dst="32:999999",
+                code="000C",
+                verb=" I",
+                payload="00FFFF02C8",
+            )
+            scan._process_packet(dto1)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to == "32:999999"
+
+            # Then: FAN replies RP to REM — should NOT overwrite
+            dto2 = make_dto(
+                src=FAN_ID,
+                dst=REM_29,
+                code="31DA",
+                verb="RP",
+                payload="00EF007FFF424A",
+            )
+            scan._process_packet(dto2)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to == "32:999999"  # zone binding wins
+        finally:
+            scan.stop()
+
+    async def test_fan_reply_enriches_existing_device(self) -> None:
+        """If a REM is discovered without bound_to, a later FAN reply
+        should enrich it with bound_to."""
+        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan.start()
+        try:
+            # First: REM discovered via a non-HVAC code (no bound_to)
+            dto1 = make_dto(
+                src=REM_29,
+                dst="63:262142",
+                code="10E0",
+                verb=" I",
+                payload="00",
+            )
+            scan._process_packet(dto1)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to is None
+
+            # Then: FAN replies RP to REM — should set bound_to
+            dto2 = make_dto(
+                src=FAN_ID,
+                dst=REM_29,
+                code="31DA",
+                verb="RP",
+                payload="00EF007FFF424A",
+            )
+            scan._process_packet(dto2)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to == FAN_ID
+        finally:
+            scan.stop()

@@ -429,7 +429,7 @@ def parse_fault_log_entry(
 
     # these are only useful for I_, not RP
     if (timestamp := hex_to_dts(payload[18:30])) is None:
-        return {f"_{SZ_LOG_IDX}": payload[4:6]}  # type: ignore[misc,return-value]
+        return {f"_{SZ_LOG_IDX}": payload[4:6]}  # type: ignore[return-value]
 
     result: PayDictT.FAULT_LOG_ENTRY = {
         f"_{SZ_LOG_IDX}": payload[4:6],  # type: ignore[misc]
