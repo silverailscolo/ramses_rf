@@ -96,18 +96,28 @@ _ZONE_BINDING_CODES: frozenset[str] = frozenset(
 # NOT binding protocol codes (binding uses 1FC9, done once with FAN off).
 # They are operational commands.  A REM sending 22F1 to a FAN doesn't
 # prove binding — the REM could be a neighbour's remote broadcasting.
-# The real proof is when the FAN **answers** the REM (RP from 32: to
-# the REM).  See schema_architecture.md: "How HVAC topology COULD be
-# derived from traffic".
+# But a FAN sending a directed packet (I or RP) to a specific 37: device
+# IS strong evidence of binding — the FAN is the controller and it's
+# communicating with its paired remote.  See schema_architecture.md:
+# "How HVAC topology COULD be derived from traffic".
 _HVAC_PARENT_INFERENCE_CODES: frozenset[str] = frozenset(
     {"22F1", "31E0", "31DA", "10D0"}  # fan_mode, vent_demand, fan_status, outside_temp
 )
 
 # 32: is unambiguous — always a FAN. A FAN sends 22F1 (which maps to REM in
 # HVAC_KLASS_BY_VC_PAIR) but is still a FAN, so the prefix must win.
-# 37: is ambiguous (REM, CO2, or HUM all use 37:) — needs the VC pair to
+# 18: is unambiguous — always an HGI. The HGI relays packets from all device
+# types (22F1, 31DA, etc.) but is still a gateway, not a REM or FAN.
+# 37: is ambiguous (REM, CO2, HUM, or DIS all use 37:) — needs the VC pair to
 # distinguish, so it's NOT in this set.
-_UNAMBIGUOUS_HVAC_PREFIXES: frozenset[str] = frozenset({"32"})
+_UNAMBIGUOUS_HVAC_PREFIXES: frozenset[str] = frozenset({"18", "32"})
+
+# Valid HVAC types per prefix — constrains VC pair matching so a 37: device
+# sending 31D9 I (which maps to FAN) is NOT classified as FAN (FAN is 32: only).
+# Without this, the VC pair would override the prefix and misclassify devices.
+_AMBIGUOUS_HVAC_PREFIX_TYPES: dict[str, frozenset[DevType]] = {
+    "37": frozenset({DevType.REM, DevType.CO2, DevType.HUM, DevType.DIS}),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +346,53 @@ class DiscoveryScan:
         # don't process zone bindings or heating topology for them.
         is_hgi = dev_id.startswith("18:")
 
+        # For known HGI devices, create a minimal entry if not yet tracked,
+        # or just update last_seen if already tracked.  Don't re-classify
+        # or mark as dirty — the HGI is already known (in the known_list)
+        # and should not trigger discovery notifications.
+        if is_hgi and self._is_known(dev_id):
+            now = dt.now().isoformat(timespec="seconds")
+            dev = self._devices.get(dev_id)
+            if dev is None:
+                # First time seeing this known HGI — create a minimal entry
+                # so it appears in scan results, but don't mark dirty (no
+                # discovery notification needed for a known device).
+                dev = DiscoveredDevice(
+                    device_id=dev_id,
+                    first_seen=now,
+                    last_seen=now,
+                    likely_type=DevType.HGI,
+                    codes_seen=[code] if code else [],
+                    rssi=rssi,
+                    confidence="high",
+                    is_battery=False,
+                    src_count=1 if is_src else 0,
+                    dst_count=0 if is_src else 1,
+                )
+                self._devices[dev_id] = dev
+                self._dirty = True  # persist the new entry
+                _LOGGER.debug(
+                    "DiscoveryScan: tracking known HGI %s (not a new discovery)",
+                    dev_id,
+                )
+            else:
+                dev.last_seen = now
+                if is_src:
+                    dev.src_count += 1
+                else:
+                    dev.dst_count += 1
+                if code and code not in dev.codes_seen:
+                    dev.codes_seen.append(code)
+                    dev.codes_seen.sort()
+                    self._dirty = True  # persist updated codes
+                if rssi is not None and is_src:
+                    if dev.rssi is None:
+                        dev.rssi = rssi
+                    else:
+                        dev.rssi = (dev.rssi + rssi) / 2
+                    self._dirty = True  # persist updated RSSI
+            return
+
         # For known devices, still update zone bindings (they may have been
         # accepted before the scan engine captured zone_idx from broadcast
         # traffic).  Skip full processing (classification, confidence, etc.)
@@ -388,10 +445,9 @@ class DiscoveryScan:
                 if dst and _is_valid_address(dst) and dst != dev_id:
                     dev.bound_to = dst
                 dev.confidence = "high"  # binding telemetry = high confidence
-            # HVAC topology inference: a FAN (32:) replying (RP) to this
-            # device confirms the binding — the FAN acknowledges the REM/CO2
-            # as a paired remote.  A REM just sending 22F1 to a FAN is NOT
-            # proof (could be a neighbour's remote broadcasting).
+            # HVAC topology inference: a FAN (32:) sending a directed packet
+            # (I or RP) to this device confirms the binding — the FAN is the
+            # controller and it's communicating with its paired remote.
             # Skip for HGI gateways — they don't have HVAC parent bindings.
             elif (
                 not is_hgi
@@ -399,7 +455,7 @@ class DiscoveryScan:
                 and src
                 and _is_valid_address(src)
                 and src.startswith("32:")
-                and verb == "RP"
+                and verb in (" I", "RP")
                 and code in _HVAC_PARENT_INFERENCE_CODES
             ):
                 dev.bound_to = src
@@ -457,10 +513,10 @@ class DiscoveryScan:
                 dev.confidence = "high"
                 changed = True
 
-        # HVAC topology inference: a FAN (32:) replying (RP) to this
-        # device confirms the binding — the FAN acknowledges the REM/CO2
-        # as a paired remote.  Infer bound_to from the reply source if
-        # not already set (e.g. by zone binding telemetry).
+        # HVAC topology inference: a FAN (32:) sending a directed packet
+        # (I or RP) to this device confirms the binding — the FAN is the
+        # controller and it's communicating with its paired remote.
+        # Infer bound_to from the packet source if not already set.
         # Skip for HGI gateways — they don't have HVAC parent bindings.
         if (
             not is_hgi
@@ -469,7 +525,7 @@ class DiscoveryScan:
             and src
             and _is_valid_address(src)
             and src.startswith("32:")
-            and verb == "RP"
+            and verb in (" I", "RP")
             and code in _HVAC_PARENT_INFERENCE_CODES
         ):
             dev.bound_to = src
@@ -624,10 +680,16 @@ def _classify(
             if verb in ctl_verbs:
                 return DevType.CTL
 
-    # 3. Check verb+code pair (HVAC domain, for non-HVAC prefixes)
+    # 3. Check verb+code pair (HVAC domain)
+    #    For ambiguous HVAC prefixes (e.g. 37:), only accept VC pairs that
+    #    map to a type valid for that prefix (e.g. 31D9 I→FAN is rejected
+    #    for 37: because FAN is 32: only).
     vc_key = (verb, code)
     if vc_key in _VC_TO_TYPE:
-        return _VC_TO_TYPE[vc_key]
+        vc_type = _VC_TO_TYPE[vc_key]
+        valid_types = _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix)
+        if valid_types is None or vc_type in valid_types:
+            return vc_type
 
     # 4. Check accumulated codes if we have a dev
     if dev and is_src:
@@ -644,10 +706,13 @@ def _classify(
                 if verb in ctl_verbs:
                     return DevType.CTL
         # Check HVAC codes from accumulated data
+        valid_types = _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix)
         for c in dev.codes_seen:
             for v in (" I", "RP", "RQ", " W"):
                 if (v, c) in _VC_TO_TYPE:
-                    return _VC_TO_TYPE[(v, c)]
+                    vc_type = _VC_TO_TYPE[(v, c)]
+                    if valid_types is None or vc_type in valid_types:
+                        return vc_type
 
     # 5. CH prefix fallback
     if prefix in _PREFIX_TO_TYPE:
