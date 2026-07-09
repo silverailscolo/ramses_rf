@@ -458,10 +458,20 @@ class TestDiscoveryScanPacketHandling:
         assert dev.confidence == "low"  # only seen as dst
 
     def test_known_device_skipped(self) -> None:
+        """Known devices should be tracked for codes_seen but not re-discovered.
+
+        Known devices (in the known_list) are tracked in the scan engine so
+        that codes_seen is accumulated (needed for DHW valve inference via
+        1100 code, etc.), but they should not trigger discovery notifications.
+        """
         gwy = make_mock_gateway(known_list={"04:056053": {}})
         scan = DiscoveryScan(gwy)
         scan._process_packet(make_dto(src="04:056053", code="3150"))
-        assert scan.get_device("04:056053") is None
+        # Should be tracked (codes_seen accumulated)
+        dev = scan.get_device("04:056053")
+        assert dev is not None
+        assert dev.codes_seen == ["3150"]
+        assert dev.confidence == "high"  # known device, high confidence
 
     def test_known_hgi_not_rediscovered(self) -> None:
         """A known HGI (18:) should be tracked but not re-discovered.
@@ -504,10 +514,15 @@ class TestDiscoveryScanPacketHandling:
         assert dev2.src_count == 2
 
     def test_known_in_schema_skipped(self) -> None:
+        """Known devices in schema should be tracked for codes_seen but
+        not re-discovered (no discovery notification)."""
         gwy = make_mock_gateway(schema={"01:145038": {}})
         scan = DiscoveryScan(gwy)
         scan._process_packet(make_dto(src="01:145038", code="2E04"))
-        assert scan.get_device("01:145038") is None
+        # Should be tracked (codes_seen accumulated)
+        dev = scan.get_device("01:145038")
+        assert dev is not None
+        assert dev.codes_seen == ["2E04"]
 
     def test_known_in_registry_only_not_skipped(self) -> None:
         """A device in the device_registry but NOT in known_list/schema
