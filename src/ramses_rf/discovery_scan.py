@@ -75,7 +75,13 @@ _VC_TO_TYPE: dict[tuple[str, str], DevType] = {
 
 # Codes that only a CTL sends (from CODES_ONLY_FROM_CTL).
 # If a device sends one of these, it's definitely a CTL.
-_CTL_ONLY_CODES: frozenset[str] = frozenset({"1030", "1F09", "313F"})
+# NOTE: 313F (datetime) is only CTL-only when sent as I/RP (broadcasting
+# the time).  TRVs send 313F as RQ (requesting the time), so we track
+# the verb separately.
+_CTL_ONLY_CODES: frozenset[str] = frozenset({"1030", "1F09"})
+_CTL_ONLY_CODES_WITH_VERB: dict[str, frozenset[str]] = {
+    "313F": frozenset({" I", "RP"}),  # I/RP = CTL broadcasts time; RQ = TRV asks
+}
 
 # Codes that indicate battery-powered devices.
 _BATTERY_CODES: frozenset[str] = frozenset({"1060", "1FC9"})
@@ -609,8 +615,14 @@ def _classify(
         return _PREFIX_TO_TYPE[prefix]
 
     # 2. CTL-only codes (only if this device is the sender)
-    if is_src and code in _CTL_ONLY_CODES:
-        return DevType.CTL
+    #    Some codes are CTL-only depending on verb (e.g. 313F I=CTL, RQ=TRV)
+    if is_src:
+        if code in _CTL_ONLY_CODES:
+            return DevType.CTL
+        if code in _CTL_ONLY_CODES_WITH_VERB:
+            ctl_verbs = _CTL_ONLY_CODES_WITH_VERB[code]
+            if verb in ctl_verbs:
+                return DevType.CTL
 
     # 3. Check verb+code pair (HVAC domain, for non-HVAC prefixes)
     vc_key = (verb, code)
@@ -622,6 +634,15 @@ def _classify(
         for c in dev.codes_seen:
             if c in _CTL_ONLY_CODES:
                 return DevType.CTL
+        # Check verb-aware CTL codes from accumulated data
+        for c in dev.codes_seen:
+            if c in _CTL_ONLY_CODES_WITH_VERB:
+                ctl_verbs = _CTL_ONLY_CODES_WITH_VERB[c]
+                # Check if any verb in the accumulated data matches
+                # We don't track per-code verbs, so be conservative:
+                # only classify as CTL if the current verb matches
+                if verb in ctl_verbs:
+                    return DevType.CTL
         # Check HVAC codes from accumulated data
         for c in dev.codes_seen:
             for v in (" I", "RP", "RQ", " W"):
@@ -652,6 +673,9 @@ def _recompute_confidence(dev: DiscoveredDevice) -> str:
 
     # High: sends CTL-only codes
     if any(c in _CTL_ONLY_CODES for c in dev.codes_seen):
+        return "high"
+    # High: sends verb-aware CTL-only codes (e.g. 313F I/RP)
+    if any(c in _CTL_ONLY_CODES_WITH_VERB for c in dev.codes_seen):
         return "high"
 
     # Medium: seen as src multiple times

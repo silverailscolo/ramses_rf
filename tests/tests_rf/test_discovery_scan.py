@@ -200,6 +200,25 @@ class TestClassify:
         result = _classify("01:145038", "0001", " I", is_src=True, dev=dev)
         assert result == DevType.CTL
 
+    def test_313f_i_is_ctl(self) -> None:
+        """313F I (datetime broadcast) is CTL-only."""
+        assert _classify("01:145038", "313F", " I", is_src=True) == DevType.CTL
+
+    def test_313f_rp_is_ctl(self) -> None:
+        """313F RP (datetime reply) is CTL-only."""
+        assert _classify("01:145038", "313F", "RP", is_src=True) == DevType.CTL
+
+    def test_313f_rq_is_not_ctl(self) -> None:
+        """313F RQ (datetime request) is NOT CTL-only — TRVs send RQ too."""
+        # A 04: TRV sending 313F RQ should stay TRV, not become CTL
+        result = _classify("04:056053", "313F", "RQ", is_src=True)
+        assert result == DevType.TRV
+
+    def test_313f_rq_unknown_prefix_is_not_ctl(self) -> None:
+        """313F RQ from unknown prefix should not be classified as CTL."""
+        result = _classify("99:999999", "313F", "RQ", is_src=True)
+        assert result == DevType.DEV
+
 
 class TestConfidence:
     """Tests for confidence scoring."""
