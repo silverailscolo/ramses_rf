@@ -245,7 +245,10 @@ class DiscoveryScan:
         Delegates to the sync ``_process_packet`` so tests can call it
         directly without an event loop.
         """
-        self._process_packet(dto)
+        try:
+            self._process_packet(dto)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("DiscoveryScan: error processing packet %s: %s", dto, err)
 
     def _process_packet(self, dto: PacketDTO) -> None:
         """Classify packet, update in-memory dict. No disk I/O.
@@ -322,8 +325,34 @@ class DiscoveryScan:
         src: str | None = None,
     ) -> None:
         """Update or create a discovery entry for a single device."""
-        # Skip if already known to the gateway
-        if self._is_known(dev_id):
+        # 18: devices are HGI gateways — track them (so we know they're on
+        # the network and can include them in the schema as HGI type), but
+        # don't process zone bindings or heating topology for them.
+        is_hgi = dev_id.startswith("18:")
+
+        # For known devices, still update zone bindings (they may have been
+        # accepted before the scan engine captured zone_idx from broadcast
+        # traffic).  Skip full processing (classification, confidence, etc.)
+        # since the device is already known.
+        if self._is_known(dev_id) and not is_hgi:
+            dev = self._devices.get(dev_id)
+            if dev is not None and zone_idx and is_src:
+                bound_changed = dev.zone_idx != zone_idx
+                dev.zone_idx = zone_idx
+                if dst and _is_valid_address(dst) and dst != dev_id:
+                    if dev.bound_to != dst:
+                        dev.bound_to = dst
+                        bound_changed = True
+                if bound_changed:
+                    dev.confidence = "high"
+                    self._dirty = True
+                    _LOGGER.debug(
+                        "DiscoveryScan: updated zone binding for known "
+                        "device %s (zone=%s, bound_to=%s)",
+                        dev_id,
+                        zone_idx,
+                        dev.bound_to,
+                    )
             return
 
         now = dt.now().isoformat(timespec="seconds")
@@ -345,16 +374,22 @@ class DiscoveryScan:
                 dst_count=0 if is_src else 1,
             )
             # Set binding info if available
-            if zone_idx and dst and _is_valid_address(dst):
+            # zone_idx is extracted from the payload and is valid even for
+            # broadcasts (dst == --:------).  bound_to requires a valid dst.
+            # Skip for HGI gateways — they don't have zone bindings.
+            if zone_idx and is_src and not is_hgi:
                 dev.zone_idx = zone_idx
-                dev.bound_to = dst
+                if dst and _is_valid_address(dst) and dst != dev_id:
+                    dev.bound_to = dst
                 dev.confidence = "high"  # binding telemetry = high confidence
             # HVAC topology inference: a FAN (32:) replying (RP) to this
             # device confirms the binding — the FAN acknowledges the REM/CO2
             # as a paired remote.  A REM just sending 22F1 to a FAN is NOT
             # proof (could be a neighbour's remote broadcasting).
+            # Skip for HGI gateways — they don't have HVAC parent bindings.
             elif (
-                not is_src
+                not is_hgi
+                and not is_src
                 and src
                 and _is_valid_address(src)
                 and src.startswith("32:")
@@ -401,10 +436,18 @@ class DiscoveryScan:
             changed = True
 
         # Update zone binding (prefer src packets with zone_idx)
-        if zone_idx and is_src and dst and _is_valid_address(dst):
-            if dev.zone_idx != zone_idx or dev.bound_to != dst:
-                dev.zone_idx = zone_idx
-                dev.bound_to = dst
+        # zone_idx is extracted from the payload and is valid even for
+        # broadcasts (dst == --:------).  bound_to requires a valid dst
+        # that is different from the device itself.
+        # Skip for HGI gateways — they don't have zone bindings.
+        if zone_idx and is_src and not is_hgi:
+            bound_changed = dev.zone_idx != zone_idx
+            dev.zone_idx = zone_idx
+            if dst and _is_valid_address(dst) and dst != dev_id:
+                if dev.bound_to != dst:
+                    dev.bound_to = dst
+                    bound_changed = True
+            if bound_changed:
                 dev.confidence = "high"
                 changed = True
 
@@ -412,8 +455,10 @@ class DiscoveryScan:
         # device confirms the binding — the FAN acknowledges the REM/CO2
         # as a paired remote.  Infer bound_to from the reply source if
         # not already set (e.g. by zone binding telemetry).
+        # Skip for HGI gateways — they don't have HVAC parent bindings.
         if (
-            not dev.bound_to
+            not is_hgi
+            and not dev.bound_to
             and not is_src
             and src
             and _is_valid_address(src)
@@ -601,8 +646,8 @@ def _initial_confidence(is_src: bool, code: str, verb: str) -> str:
 
 def _recompute_confidence(dev: DiscoveredDevice) -> str:
     """Recompute confidence based on accumulated evidence."""
-    # High: has binding info (zone_idx + bound_to)
-    if dev.zone_idx and dev.bound_to:
+    # High: has zone binding info (zone_idx, with or without bound_to)
+    if dev.zone_idx:
         return "high"
 
     # High: sends CTL-only codes
