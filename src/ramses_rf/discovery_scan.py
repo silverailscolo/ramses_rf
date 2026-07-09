@@ -88,8 +88,11 @@ _BATTERY_CODES: frozenset[str] = frozenset({"1060", "1FC9"})
 
 # Codes that carry zone_idx in the payload (binding telemetry).
 # Used to extract zone assignment from traffic.
+# NOTE: 30C9 (Room Setpoint) is excluded - its payload is 00{setpoint}
+# where the first byte is always 00 (a constant), not a zone index.
+# 3150 (Actuator State) and 12B0 (Window Open) have the real zone_idx.
 _ZONE_BINDING_CODES: frozenset[str] = frozenset(
-    {"3150", "30C9", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09"}
+    {"3150", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09"}
 )
 
 # HVAC codes sent by REMs/CO2s to their parent FAN (32:).  These are
@@ -399,23 +402,63 @@ class DiscoveryScan:
         # since the device is already known.
         if self._is_known(dev_id) and not is_hgi:
             dev = self._devices.get(dev_id)
-            if dev is not None and zone_idx and is_src:
-                bound_changed = dev.zone_idx != zone_idx
-                dev.zone_idx = zone_idx
-                if dst and _is_valid_address(dst) and dst != dev_id:
-                    if dev.bound_to != dst:
-                        dev.bound_to = dst
-                        bound_changed = True
-                if bound_changed:
-                    dev.confidence = "high"
+            if dev is None:
+                # Known device not yet tracked in scan — create a minimal
+                # entry so codes_seen is accumulated (needed for DHW valve
+                # inference via 1100 code, etc.)
+                now = dt.now().isoformat(timespec="seconds")
+                likely_type = _classify(dev_id, code, verb, is_src=is_src)
+                dev = DiscoveredDevice(
+                    device_id=dev_id,
+                    first_seen=now,
+                    last_seen=now,
+                    likely_type=likely_type,
+                    codes_seen=[code] if code else [],
+                    rssi=rssi,
+                    confidence="high",
+                    is_battery=code in _BATTERY_CODES,
+                    src_count=1 if is_src else 0,
+                    dst_count=0 if is_src else 1,
+                )
+                self._devices[dev_id] = dev
+                self._dirty = True
+                _LOGGER.debug(
+                    "DiscoveryScan: tracking known device %s (not a new discovery)",
+                    dev_id,
+                )
+            else:
+                dev.last_seen = dt.now().isoformat(timespec="seconds")
+                if is_src:
+                    dev.src_count += 1
+                else:
+                    dev.dst_count += 1
+                if code and code not in dev.codes_seen:
+                    dev.codes_seen.append(code)
+                    dev.codes_seen.sort()
                     self._dirty = True
-                    _LOGGER.debug(
-                        "DiscoveryScan: updated zone binding for known "
-                        "device %s (zone=%s, bound_to=%s)",
-                        dev_id,
-                        zone_idx,
-                        dev.bound_to,
-                    )
+                if rssi is not None and is_src:
+                    if dev.rssi is None:
+                        dev.rssi = rssi
+                    else:
+                        dev.rssi = (dev.rssi + rssi) / 2
+                    self._dirty = True
+                if zone_idx and is_src:
+                    bound_changed = dev.zone_idx != zone_idx
+                    dev.zone_idx = zone_idx
+                    if dst and _is_valid_address(dst) and dst != dev_id:
+                        if dev.bound_to != dst:
+                            dev.bound_to = dst
+                            bound_changed = True
+                    if bound_changed:
+                        dev.confidence = "high"
+                        self._dirty = True
+                        _LOGGER.debug(
+                            "DiscoveryScan: updated zone binding for known "
+                            "device %s (zone=%s, bound_to=%s)",
+                            dev_id,
+                            zone_idx,
+                            dev.bound_to,
+                        )
             return
 
         now = dt.now().isoformat(timespec="seconds")
