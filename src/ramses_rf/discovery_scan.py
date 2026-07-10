@@ -802,14 +802,20 @@ def _extract_zone_idx(payload: str) -> str | None:
     """Extract zone_idx from a payload string.
 
     Zone index is typically the first 2 hex chars of the payload.
-    Returns None if payload is empty or too short.
+    Returns None if payload is empty, too short, or not a valid zone index.
+
+    Valid zone indices are 00-0B (12 zones max).  Values like FC (appliance
+    control domain), 7F (broadcast), or other non-zone domain IDs are rejected.
     """
     if not payload or len(payload) < 2:
         return None
-    idx = payload[:2]
-    # Validate: should be hex chars
+    idx = payload[:2].upper()
+    # Validate: must be hex chars
     try:
-        int(idx, 16)
+        val = int(idx, 16)
     except ValueError:
+        return None
+    # Validate: zone indices are 00-0B (12 zones max)
+    if val > 0x0B:
         return None
     return idx

@@ -131,6 +131,29 @@ class TestExtractZoneIdx:
     def test_short_payload(self) -> None:
         assert _extract_zone_idx("0") is None
 
+    def test_zone_fc_rejected(self) -> None:
+        # FC is the appliance_control domain, not a zone index
+        assert _extract_zone_idx("FC00") is None
+
+    def test_zone_7f_rejected(self) -> None:
+        # 7F is broadcast, not a zone index
+        assert _extract_zone_idx("7F00") is None
+
+    def test_zone_0c_rejected(self) -> None:
+        # 0C is above the 12-zone max (00-0B)
+        assert _extract_zone_idx("0C00") is None
+
+    def test_zone_0b_accepted(self) -> None:
+        # 0B is the highest valid zone index
+        assert _extract_zone_idx("0B00") == "0B"
+
+    def test_zone_00_accepted(self) -> None:
+        assert _extract_zone_idx("0000") == "00"
+
+    def test_zone_lowercase(self) -> None:
+        # Should normalise to uppercase
+        assert _extract_zone_idx("0a00") == "0A"
+
 
 class TestClassify:
     """Tests for _classify."""
