@@ -167,8 +167,11 @@ class TestClassify:
     def test_prefix_dhw(self) -> None:
         assert _classify("07:046947", "10A0", " I", is_src=True) == DevType.DHW
 
+    def test_prefix_otb(self) -> None:
+        assert _classify("10:067219", "0008", " I", is_src=True) == DevType.OTB
+
     def test_prefix_bdr(self) -> None:
-        assert _classify("10:067219", "0008", " I", is_src=True) == DevType.BDR
+        assert _classify("13:042605", "1100", " I", is_src=True) == DevType.BDR
 
     def test_prefix_fan(self) -> None:
         assert _classify("32:157747", "31DA", " I", is_src=True) == DevType.FAN
@@ -866,7 +869,7 @@ class TestVirtualRfIntegration:
         CTL_ID = "01:145038"
         TRV_ID = "04:056053"
         DHW_ID = "07:046947"
-        BDR_ID = "10:067219"
+        BDR_ID = "13:042605"
         FAN_ID = "32:157747"
         REM_ID = "37:179540"
 
@@ -885,7 +888,7 @@ class TestVirtualRfIntegration:
             # DHW sensor sends to CTL
             b" I --- 07:046947 01:145038 --:------ 10A0 006 01C800000000\r\n",
             # BDR sends state
-            b" I --- 10:067219 01:145038 --:------ 0008 002 00FF\r\n",
+            b" I --- 13:042605 01:145038 --:------ 0008 002 00FF\r\n",
             # FAN broadcasts fan state (31DA, 30 bytes payload)
             b" I --- 32:157747 --:------ 32:157747 31DA 030 00EF007FFF3A2F04C404E204A904BA68000003C8C80000EFEF20A91F0500\r\n",
             # FAN broadcasts fan info (31D9, 17 bytes payload)
