@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import logging
 from collections.abc import Callable
 from datetime import timedelta as td
@@ -45,7 +43,6 @@ from ramses_rf.const import (
     Code,
     DevType,
 )
-from ramses_rf.helpers import schedule_task
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Command, Packet, Priority
 from ramses_tx.typing import PayloadT
@@ -86,25 +83,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
 
-        self._poller: asyncio.Task[None] | None = None
-        self._start_handle: asyncio.Handle | None = None
-        self._rq_cmd: Command = Command.from_attrs(
-            RQ, self.id, Code._10D0, PayloadT("00")
-        )
-
-        if getattr(
-            self._gwy.config, "disable_discovery", False
-        ):  # discovery will poll for filter
-            try:
-                self._start_handle = asyncio.get_running_loop().call_soon(
-                    self.start_poller
-                )
-            except RuntimeError:
-                # Fallback if instantiated outside of a running event loop context
-                _LOGGER.debug(
-                    "No running event loop; filter_change poller not started."
-                )
-
     def _post_class_promote(self) -> None:
         """Initialize state when promoted from a generic HVAC device."""
         if not hasattr(self, "hvac_state"):
@@ -114,42 +92,13 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         """Set up the discovery commands for the filter change sensor."""
         super()._setup_discovery_cmds()
 
+        # Note: not all FANs will respond to RQ 10D0 ( they're orphans_hvac in Schema)
+        # Remove once we have discovery_service?
         self.discovery.add_cmd(
-            self._rq_cmd,
+            Command.from_attrs(RQ, self.id, Code._10D0, PayloadT("00")),
             60 * 60 * 24,
             delay=30,
         )
-
-    def start_poller(self) -> None:
-        """
-        Start polling the filter_remaining state of a fan.
-        Messages are cleaned up every 12h, the 10D0 message must be RQd
-        """
-        self._start_handle = None  # call_soon callback has now fired
-
-        if not self._poller:
-            task = asyncio.create_task(
-                self._gwy.async_send_cmd(
-                    self._rq_cmd, num_repeats=2, priority=Priority.HIGH
-                )
-            )
-            self._poller = schedule_task(task, 60 * 60 * 12, delay=120)
-            self._poller.set_name(f"{self.id}_10d0_poller")
-            self._gwy.add_task(self._poller)
-
-    async def stop_poller(self) -> None:
-        """Stop the discovery poller (only if it is running)."""
-        # Cancel any pending call_soon(start_poller) that hasn't fired yet.
-        if self._start_handle:
-            self._start_handle.cancel()
-            self._start_handle = None
-
-        if not self._poller or self._poller.done():
-            return
-
-        self._poller.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await self._poller
 
     async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.

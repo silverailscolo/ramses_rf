@@ -169,9 +169,6 @@ class GatewayLifecycle:
             if bm:
                 with contextlib.suppress(Exception):
                     bm.cancel()
-            if hasattr(dev, "stop_poller"):
-                with contextlib.suppress(Exception):
-                    await dev.stop_poller()
             disc = getattr(dev, "discovery", None)
             if disc:
                 with contextlib.suppress(Exception):
