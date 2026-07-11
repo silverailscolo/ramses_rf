@@ -255,16 +255,14 @@ class TestClassify:
         result = _classify("37:154519", "313F", "RQ", is_src=True)
         assert result == DevType.REM
 
-    def test_37_31d9_is_not_fan(self) -> None:
-        """37: sending 31D9 I should NOT be FAN — FAN is 32: only.
+    def test_37_31d9_is_fan(self) -> None:
+        """37: sending 31D9 I should be FAN — some FANs use 37: prefix.
 
-        31D9 I maps to FAN in HVAC_KLASS_BY_VC_PAIR, but 37: is ambiguous
-        (REM/CO2/HUM/DIS) and FAN is not a valid type for 37:.
+        31D9 I maps to FAN in HVAC_KLASS_BY_VC_PAIR, and 37: is ambiguous
+        (FAN/REM/CO2/HUM/DIS) so FAN is a valid type for 37:.
         """
         result = _classify("37:154519", "31D9", " I", is_src=True)
-        assert result != DevType.FAN
-        # Should fall back to prefix (REM)
-        assert result == DevType.REM
+        assert result == DevType.FAN
 
     def test_32_31d9_is_fan(self) -> None:
         """32: sending 31D9 I should be FAN (unambiguous prefix)."""
@@ -273,6 +271,23 @@ class TestClassify:
     def test_37_22f1_is_rem(self) -> None:
         """37: sending 22F1 I should be REM (VC pair matches valid type)."""
         assert _classify("37:168270", "22F1", " I", is_src=True) == DevType.REM
+
+    def test_29_31d9_is_fan(self) -> None:
+        """29: sending 31D9 I should be FAN (VC pair matches valid type)."""
+        assert _classify("29:146052", "31D9", " I", is_src=True) == DevType.FAN
+
+    def test_29_22f1_is_rem(self) -> None:
+        """29: sending 22F1 I should be REM (VC pair matches valid type)."""
+        assert _classify("29:181813", "22F1", " I", is_src=True) == DevType.REM
+
+    def test_29_1298_is_co2(self) -> None:
+        """29: sending 1298 I should be CO2 (VC pair matches valid type)."""
+        assert _classify("29:123456", "1298", " I", is_src=True) == DevType.CO2
+
+    def test_29_no_vc_falls_back_to_fan(self) -> None:
+        """29: with no matching VC pair should default to FAN (prefix fallback)."""
+        # 2411 is not in HVAC_KLASS_BY_VC_PAIR
+        assert _classify("29:123150", "2411", " I", is_src=True) == DevType.FAN
 
     def test_37_1298_is_co2(self) -> None:
         """37: sending 1298 I should be CO2 (VC pair matches valid type)."""
