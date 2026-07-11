@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.abspath("../../src"))
 from ramses_rf import VERSION  # noqa: E402
 
 version = VERSION
-authors = "D. Bonnes, E. Broerse"
+authors = "E. Broerse et al"
 
 # -- Project information -----------------------------------------------------
 # see https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information

@@ -60,6 +60,14 @@ ramses\_tx.transport.port module
    :show-inheritance:
    :undoc-members:
 
+ramses\_tx.transport.zigbee module
+--------------------------------
+
+.. automodule:: ramses_tx.transport.zigbee
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Module contents
 ---------------
 
