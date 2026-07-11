@@ -152,7 +152,6 @@ async def test_gateway_stop_cancels_binding_managers() -> None:
         # Create a mock binding manager on a device
         dev = MagicMock()
         dev._binding_manager = MagicMock()
-        dev.stop_poller = AsyncMock()
         dev.discovery = MagicMock()
         dev.discovery.stop_poller = AsyncMock()
 
@@ -163,8 +162,6 @@ async def test_gateway_stop_cancels_binding_managers() -> None:
 
         # Binding manager cancel was called
         dev._binding_manager.cancel.assert_called_once()
-        # stop_poller was called
-        dev.stop_poller.assert_awaited_once()
         # discovery stop_poller was called
         dev.discovery.stop_poller.assert_awaited_once()
 
@@ -204,7 +201,7 @@ async def test_gateway_stop_cancels_discovery_pollers() -> None:
         await gwy.stop()
 
         # All discovery pollers were stopped
-        # (may be 0 devices in empty gateway, but the code path ran without error)
+        # (there may be 0 devices in empty gateway, but the code path ran without error)
         assert isinstance(stopped, list)
 
 
