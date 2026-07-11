@@ -53,9 +53,9 @@ _PREFIX_TO_TYPE: dict[str, DevType] = {
     "04": DevType.TRV,
     "07": DevType.DHW,
     "08": DevType.JIM,
-    "10": DevType.BDR,
+    "10": DevType.OTB,
     "12": DevType.THM,
-    "13": DevType.OTB,
+    "13": DevType.BDR,
     "17": DevType.OUT,
     "18": DevType.HGI,
     "22": DevType.THM,
@@ -75,33 +75,52 @@ _VC_TO_TYPE: dict[tuple[str, str], DevType] = {
 
 # Codes that only a CTL sends (from CODES_ONLY_FROM_CTL).
 # If a device sends one of these, it's definitely a CTL.
-_CTL_ONLY_CODES: frozenset[str] = frozenset({"1030", "1F09", "313F"})
+# NOTE: 313F (datetime) is only CTL-only when sent as I/RP (broadcasting
+# the time).  TRVs send 313F as RQ (requesting the time), so we track
+# the verb separately.
+_CTL_ONLY_CODES: frozenset[str] = frozenset({"1030", "1F09"})
+_CTL_ONLY_CODES_WITH_VERB: dict[str, frozenset[str]] = {
+    "313F": frozenset({" I", "RP"}),  # I/RP = CTL broadcasts time; RQ = TRV asks
+}
 
 # Codes that indicate battery-powered devices.
 _BATTERY_CODES: frozenset[str] = frozenset({"1060", "1FC9"})
 
 # Codes that carry zone_idx in the payload (binding telemetry).
 # Used to extract zone assignment from traffic.
+# NOTE: 30C9 (Room Setpoint) is excluded - its payload is 00{setpoint}
+# where the first byte is always 00 (a constant), not a zone index.
+# 3150 (Actuator State) and 12B0 (Window Open) have the real zone_idx.
 _ZONE_BINDING_CODES: frozenset[str] = frozenset(
-    {"3150", "30C9", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09"}
+    {"3150", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09"}
 )
 
 # HVAC codes sent by REMs/CO2s to their parent FAN (32:).  These are
 # NOT binding protocol codes (binding uses 1FC9, done once with FAN off).
 # They are operational commands.  A REM sending 22F1 to a FAN doesn't
 # prove binding — the REM could be a neighbour's remote broadcasting.
-# The real proof is when the FAN **answers** the REM (RP from 32: to
-# the REM).  See schema_architecture.md: "How HVAC topology COULD be
-# derived from traffic".
+# But a FAN sending a directed packet (I or RP) to a specific 37: device
+# IS strong evidence of binding — the FAN is the controller and it's
+# communicating with its paired remote.  See schema_architecture.md:
+# "How HVAC topology COULD be derived from traffic".
 _HVAC_PARENT_INFERENCE_CODES: frozenset[str] = frozenset(
     {"22F1", "31E0", "31DA", "10D0"}  # fan_mode, vent_demand, fan_status, outside_temp
 )
 
 # 32: is unambiguous — always a FAN. A FAN sends 22F1 (which maps to REM in
 # HVAC_KLASS_BY_VC_PAIR) but is still a FAN, so the prefix must win.
-# 37: is ambiguous (REM, CO2, or HUM all use 37:) — needs the VC pair to
+# 18: is unambiguous — always an HGI. The HGI relays packets from all device
+# types (22F1, 31DA, etc.) but is still a gateway, not a REM or FAN.
+# 37: is ambiguous (REM, CO2, HUM, or DIS all use 37:) — needs the VC pair to
 # distinguish, so it's NOT in this set.
-_UNAMBIGUOUS_HVAC_PREFIXES: frozenset[str] = frozenset({"32"})
+_UNAMBIGUOUS_HVAC_PREFIXES: frozenset[str] = frozenset({"18", "32"})
+
+# Valid HVAC types per prefix — constrains VC pair matching so a 37: device
+# sending 31D9 I (which maps to FAN) is NOT classified as FAN (FAN is 32: only).
+# Without this, the VC pair would override the prefix and misclassify devices.
+_AMBIGUOUS_HVAC_PREFIX_TYPES: dict[str, frozenset[DevType]] = {
+    "37": frozenset({DevType.REM, DevType.CO2, DevType.HUM, DevType.DIS}),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +264,10 @@ class DiscoveryScan:
         Delegates to the sync ``_process_packet`` so tests can call it
         directly without an event loop.
         """
-        self._process_packet(dto)
+        try:
+            self._process_packet(dto)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("DiscoveryScan: error processing packet %s: %s", dto, err)
 
     def _process_packet(self, dto: PacketDTO) -> None:
         """Classify packet, update in-memory dict. No disk I/O.
@@ -322,8 +344,121 @@ class DiscoveryScan:
         src: str | None = None,
     ) -> None:
         """Update or create a discovery entry for a single device."""
-        # Skip if already known to the gateway
-        if self._is_known(dev_id):
+        # 18: devices are HGI gateways — track them (so we know they're on
+        # the network and can include them in the schema as HGI type), but
+        # don't process zone bindings or heating topology for them.
+        is_hgi = dev_id.startswith("18:")
+
+        # For known HGI devices, create a minimal entry if not yet tracked,
+        # or just update last_seen if already tracked.  Don't re-classify
+        # or mark as dirty — the HGI is already known (in the known_list)
+        # and should not trigger discovery notifications.
+        if is_hgi and self._is_known(dev_id):
+            now = dt.now().isoformat(timespec="seconds")
+            dev = self._devices.get(dev_id)
+            if dev is None:
+                # First time seeing this known HGI — create a minimal entry
+                # so it appears in scan results, but don't mark dirty (no
+                # discovery notification needed for a known device).
+                dev = DiscoveredDevice(
+                    device_id=dev_id,
+                    first_seen=now,
+                    last_seen=now,
+                    likely_type=DevType.HGI,
+                    codes_seen=[code] if code else [],
+                    rssi=rssi,
+                    confidence="high",
+                    is_battery=False,
+                    src_count=1 if is_src else 0,
+                    dst_count=0 if is_src else 1,
+                )
+                self._devices[dev_id] = dev
+                self._dirty = True  # persist the new entry
+                _LOGGER.debug(
+                    "DiscoveryScan: tracking known HGI %s (not a new discovery)",
+                    dev_id,
+                )
+            else:
+                dev.last_seen = now
+                if is_src:
+                    dev.src_count += 1
+                else:
+                    dev.dst_count += 1
+                if code and code not in dev.codes_seen:
+                    dev.codes_seen.append(code)
+                    dev.codes_seen.sort()
+                    self._dirty = True  # persist updated codes
+                if rssi is not None and is_src:
+                    if dev.rssi is None:
+                        dev.rssi = rssi
+                    else:
+                        dev.rssi = (dev.rssi + rssi) / 2
+                    self._dirty = True  # persist updated RSSI
+            return
+
+        # For known devices, still update zone bindings (they may have been
+        # accepted before the scan engine captured zone_idx from broadcast
+        # traffic).  Skip full processing (classification, confidence, etc.)
+        # since the device is already known.
+        if self._is_known(dev_id) and not is_hgi:
+            dev = self._devices.get(dev_id)
+            if dev is None:
+                # Known device not yet tracked in scan — create a minimal
+                # entry so codes_seen is accumulated (needed for DHW valve
+                # inference via 1100 code, etc.)
+                now = dt.now().isoformat(timespec="seconds")
+                likely_type = _classify(dev_id, code, verb, is_src=is_src)
+                dev = DiscoveredDevice(
+                    device_id=dev_id,
+                    first_seen=now,
+                    last_seen=now,
+                    likely_type=likely_type,
+                    codes_seen=[code] if code else [],
+                    rssi=rssi,
+                    confidence="high",
+                    is_battery=code in _BATTERY_CODES,
+                    src_count=1 if is_src else 0,
+                    dst_count=0 if is_src else 1,
+                )
+                self._devices[dev_id] = dev
+                self._dirty = True
+                _LOGGER.debug(
+                    "DiscoveryScan: tracking known device %s (not a new discovery)",
+                    dev_id,
+                )
+            else:
+                dev.last_seen = dt.now().isoformat(timespec="seconds")
+                if is_src:
+                    dev.src_count += 1
+                else:
+                    dev.dst_count += 1
+                if code and code not in dev.codes_seen:
+                    dev.codes_seen.append(code)
+                    dev.codes_seen.sort()
+                    self._dirty = True
+                if rssi is not None and is_src:
+                    if dev.rssi is None:
+                        dev.rssi = rssi
+                    else:
+                        dev.rssi = (dev.rssi + rssi) / 2
+                    self._dirty = True
+                if zone_idx and is_src:
+                    bound_changed = dev.zone_idx != zone_idx
+                    dev.zone_idx = zone_idx
+                    if dst and _is_valid_address(dst) and dst != dev_id:
+                        if dev.bound_to != dst:
+                            dev.bound_to = dst
+                            bound_changed = True
+                    if bound_changed:
+                        dev.confidence = "high"
+                        self._dirty = True
+                        _LOGGER.debug(
+                            "DiscoveryScan: updated zone binding for known "
+                            "device %s (zone=%s, bound_to=%s)",
+                            dev_id,
+                            zone_idx,
+                            dev.bound_to,
+                        )
             return
 
         now = dt.now().isoformat(timespec="seconds")
@@ -345,20 +480,25 @@ class DiscoveryScan:
                 dst_count=0 if is_src else 1,
             )
             # Set binding info if available
-            if zone_idx and dst and _is_valid_address(dst):
+            # zone_idx is extracted from the payload and is valid even for
+            # broadcasts (dst == --:------).  bound_to requires a valid dst.
+            # Skip for HGI gateways — they don't have zone bindings.
+            if zone_idx and is_src and not is_hgi:
                 dev.zone_idx = zone_idx
-                dev.bound_to = dst
+                if dst and _is_valid_address(dst) and dst != dev_id:
+                    dev.bound_to = dst
                 dev.confidence = "high"  # binding telemetry = high confidence
-            # HVAC topology inference: a FAN (32:) replying (RP) to this
-            # device confirms the binding — the FAN acknowledges the REM/CO2
-            # as a paired remote.  A REM just sending 22F1 to a FAN is NOT
-            # proof (could be a neighbour's remote broadcasting).
+            # HVAC topology inference: a FAN (32:) sending a directed packet
+            # (I or RP) to this device confirms the binding — the FAN is the
+            # controller and it's communicating with its paired remote.
+            # Skip for HGI gateways — they don't have HVAC parent bindings.
             elif (
-                not is_src
+                not is_hgi
+                and not is_src
                 and src
                 and _is_valid_address(src)
                 and src.startswith("32:")
-                and verb == "RP"
+                and verb in (" I", "RP")
                 and code in _HVAC_PARENT_INFERENCE_CODES
             ):
                 dev.bound_to = src
@@ -401,24 +541,34 @@ class DiscoveryScan:
             changed = True
 
         # Update zone binding (prefer src packets with zone_idx)
-        if zone_idx and is_src and dst and _is_valid_address(dst):
-            if dev.zone_idx != zone_idx or dev.bound_to != dst:
-                dev.zone_idx = zone_idx
-                dev.bound_to = dst
+        # zone_idx is extracted from the payload and is valid even for
+        # broadcasts (dst == --:------).  bound_to requires a valid dst
+        # that is different from the device itself.
+        # Skip for HGI gateways — they don't have zone bindings.
+        if zone_idx and is_src and not is_hgi:
+            bound_changed = dev.zone_idx != zone_idx
+            dev.zone_idx = zone_idx
+            if dst and _is_valid_address(dst) and dst != dev_id:
+                if dev.bound_to != dst:
+                    dev.bound_to = dst
+                    bound_changed = True
+            if bound_changed:
                 dev.confidence = "high"
                 changed = True
 
-        # HVAC topology inference: a FAN (32:) replying (RP) to this
-        # device confirms the binding — the FAN acknowledges the REM/CO2
-        # as a paired remote.  Infer bound_to from the reply source if
-        # not already set (e.g. by zone binding telemetry).
+        # HVAC topology inference: a FAN (32:) sending a directed packet
+        # (I or RP) to this device confirms the binding — the FAN is the
+        # controller and it's communicating with its paired remote.
+        # Infer bound_to from the packet source if not already set.
+        # Skip for HGI gateways — they don't have HVAC parent bindings.
         if (
-            not dev.bound_to
+            not is_hgi
+            and not dev.bound_to
             and not is_src
             and src
             and _is_valid_address(src)
             and src.startswith("32:")
-            and verb == "RP"
+            and verb in (" I", "RP")
             and code in _HVAC_PARENT_INFERENCE_CODES
         ):
             dev.bound_to = src
@@ -564,24 +714,48 @@ def _classify(
         return _PREFIX_TO_TYPE[prefix]
 
     # 2. CTL-only codes (only if this device is the sender)
-    if is_src and code in _CTL_ONLY_CODES:
-        return DevType.CTL
+    #    Some codes are CTL-only depending on verb (e.g. 313F I=CTL, RQ=TRV)
+    if is_src:
+        if code in _CTL_ONLY_CODES:
+            return DevType.CTL
+        if code in _CTL_ONLY_CODES_WITH_VERB:
+            ctl_verbs = _CTL_ONLY_CODES_WITH_VERB[code]
+            if verb in ctl_verbs:
+                return DevType.CTL
 
-    # 3. Check verb+code pair (HVAC domain, for non-HVAC prefixes)
+    # 3. Check verb+code pair (HVAC domain)
+    #    For ambiguous HVAC prefixes (e.g. 37:), only accept VC pairs that
+    #    map to a type valid for that prefix (e.g. 31D9 I→FAN is rejected
+    #    for 37: because FAN is 32: only).
     vc_key = (verb, code)
     if vc_key in _VC_TO_TYPE:
-        return _VC_TO_TYPE[vc_key]
+        vc_type = _VC_TO_TYPE[vc_key]
+        valid_types = _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix)
+        if valid_types is None or vc_type in valid_types:
+            return vc_type
 
     # 4. Check accumulated codes if we have a dev
     if dev and is_src:
         for c in dev.codes_seen:
             if c in _CTL_ONLY_CODES:
                 return DevType.CTL
+        # Check verb-aware CTL codes from accumulated data
+        for c in dev.codes_seen:
+            if c in _CTL_ONLY_CODES_WITH_VERB:
+                ctl_verbs = _CTL_ONLY_CODES_WITH_VERB[c]
+                # Check if any verb in the accumulated data matches
+                # We don't track per-code verbs, so be conservative:
+                # only classify as CTL if the current verb matches
+                if verb in ctl_verbs:
+                    return DevType.CTL
         # Check HVAC codes from accumulated data
+        valid_types = _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix)
         for c in dev.codes_seen:
             for v in (" I", "RP", "RQ", " W"):
                 if (v, c) in _VC_TO_TYPE:
-                    return _VC_TO_TYPE[(v, c)]
+                    vc_type = _VC_TO_TYPE[(v, c)]
+                    if valid_types is None or vc_type in valid_types:
+                        return vc_type
 
     # 5. CH prefix fallback
     if prefix in _PREFIX_TO_TYPE:
@@ -601,12 +775,15 @@ def _initial_confidence(is_src: bool, code: str, verb: str) -> str:
 
 def _recompute_confidence(dev: DiscoveredDevice) -> str:
     """Recompute confidence based on accumulated evidence."""
-    # High: has binding info (zone_idx + bound_to)
-    if dev.zone_idx and dev.bound_to:
+    # High: has zone binding info (zone_idx, with or without bound_to)
+    if dev.zone_idx:
         return "high"
 
     # High: sends CTL-only codes
     if any(c in _CTL_ONLY_CODES for c in dev.codes_seen):
+        return "high"
+    # High: sends verb-aware CTL-only codes (e.g. 313F I/RP)
+    if any(c in _CTL_ONLY_CODES_WITH_VERB for c in dev.codes_seen):
         return "high"
 
     # Medium: seen as src multiple times
@@ -625,14 +802,20 @@ def _extract_zone_idx(payload: str) -> str | None:
     """Extract zone_idx from a payload string.
 
     Zone index is typically the first 2 hex chars of the payload.
-    Returns None if payload is empty or too short.
+    Returns None if payload is empty, too short, or not a valid zone index.
+
+    Valid zone indices are 00-0B (12 zones max).  Values like FC (appliance
+    control domain), 7F (broadcast), or other non-zone domain IDs are rejected.
     """
     if not payload or len(payload) < 2:
         return None
-    idx = payload[:2]
-    # Validate: should be hex chars
+    idx = payload[:2].upper()
+    # Validate: must be hex chars
     try:
-        int(idx, 16)
+        val = int(idx, 16)
     except ValueError:
+        return None
+    # Validate: zone indices are 00-0B (12 zones max)
+    if val > 0x0B:
         return None
     return idx

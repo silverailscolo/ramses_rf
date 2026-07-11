@@ -582,14 +582,19 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             if sending and dev_id == HGI_DEV_ADDR.id:
                 continue
 
-            if self.enforce_include:
-                return False
-
-            if dev_id[:2] != "18":  # Hardcoded L2 filter for HGI class
+            # HGI devices (18:) are gateways, not sensors/actuators.
+            # Don't filter out specific foreign HGIs when enforce_include is
+            # True — doing so blocks legitimate traffic to/from foreign HGIs
+            # that appear in captured conversations but haven't been added to
+            # the known_list yet.  HGI_DEV_ADDR (18:000730, the generic
+            # broadcast address) is still filtered.
+            if dev_id[:2] == "18" and dev_id != HGI_DEV_ADDR.id:
+                if self._active_hgi:
+                    warn_foreign_hgi(dev_id)
                 continue
 
-            if self._active_hgi:
-                warn_foreign_hgi(dev_id)
+            if self.enforce_include:
+                return False
 
         return True
 

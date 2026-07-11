@@ -131,6 +131,29 @@ class TestExtractZoneIdx:
     def test_short_payload(self) -> None:
         assert _extract_zone_idx("0") is None
 
+    def test_zone_fc_rejected(self) -> None:
+        # FC is the appliance_control domain, not a zone index
+        assert _extract_zone_idx("FC00") is None
+
+    def test_zone_7f_rejected(self) -> None:
+        # 7F is broadcast, not a zone index
+        assert _extract_zone_idx("7F00") is None
+
+    def test_zone_0c_rejected(self) -> None:
+        # 0C is above the 12-zone max (00-0B)
+        assert _extract_zone_idx("0C00") is None
+
+    def test_zone_0b_accepted(self) -> None:
+        # 0B is the highest valid zone index
+        assert _extract_zone_idx("0B00") == "0B"
+
+    def test_zone_00_accepted(self) -> None:
+        assert _extract_zone_idx("0000") == "00"
+
+    def test_zone_lowercase(self) -> None:
+        # Should normalise to uppercase
+        assert _extract_zone_idx("0a00") == "0A"
+
 
 class TestClassify:
     """Tests for _classify."""
@@ -144,8 +167,11 @@ class TestClassify:
     def test_prefix_dhw(self) -> None:
         assert _classify("07:046947", "10A0", " I", is_src=True) == DevType.DHW
 
+    def test_prefix_otb(self) -> None:
+        assert _classify("10:067219", "0008", " I", is_src=True) == DevType.OTB
+
     def test_prefix_bdr(self) -> None:
-        assert _classify("10:067219", "0008", " I", is_src=True) == DevType.BDR
+        assert _classify("13:042605", "1100", " I", is_src=True) == DevType.BDR
 
     def test_prefix_fan(self) -> None:
         assert _classify("32:157747", "31DA", " I", is_src=True) == DevType.FAN
@@ -170,9 +196,14 @@ class TestClassify:
         assert _classify("32:157747", "22F1", " I", is_src=True) == DevType.FAN
 
     def test_vc_pair_for_non_hvac_prefix(self) -> None:
-        """A non-HVAC prefix sending an HVAC code should use the VC pair."""
-        # 18: is HGI, but if it sends I 31DA it's acting as FAN
-        assert _classify("18:123456", "31DA", " I", is_src=True) == DevType.FAN
+        """A non-HVAC prefix sending an HVAC code should use the VC pair.
+
+        Note: 18: (HGI) is now unambiguous — it's always HGI regardless of
+        codes sent (it relays packets from all device types).  Use a different
+        prefix to test VC pair override on non-HVAC prefixes.
+        """
+        # 30: is RFG, but if it sends I 31DA the VC pair should win → FAN
+        assert _classify("30:123456", "31DA", " I", is_src=True) == DevType.FAN
 
     def test_ctl_only_code(self) -> None:
         """A device sending 1030 (CTL-only code) is classified as CTL."""
@@ -199,6 +230,62 @@ class TestClassify:
         )
         result = _classify("01:145038", "0001", " I", is_src=True, dev=dev)
         assert result == DevType.CTL
+
+    def test_313f_i_is_ctl(self) -> None:
+        """313F I (datetime broadcast) is CTL-only."""
+        assert _classify("01:145038", "313F", " I", is_src=True) == DevType.CTL
+
+    def test_313f_rp_is_ctl(self) -> None:
+        """313F RP (datetime reply) is CTL-only."""
+        assert _classify("01:145038", "313F", "RP", is_src=True) == DevType.CTL
+
+    def test_313f_rq_is_not_ctl(self) -> None:
+        """313F RQ (datetime request) is NOT CTL-only — TRVs send RQ too."""
+        # A 04: TRV sending 313F RQ should stay TRV, not become CTL
+        result = _classify("04:056053", "313F", "RQ", is_src=True)
+        assert result == DevType.TRV
+
+    def test_313f_rq_unknown_prefix_is_not_ctl(self) -> None:
+        """313F RQ from unknown prefix should not be classified as CTL."""
+        result = _classify("99:999999", "313F", "RQ", is_src=True)
+        assert result == DevType.DEV
+
+    def test_37_313f_rq_is_not_ctl(self) -> None:
+        """313F RQ from 37: should not be CTL — falls back to REM (prefix)."""
+        result = _classify("37:154519", "313F", "RQ", is_src=True)
+        assert result == DevType.REM
+
+    def test_37_31d9_is_not_fan(self) -> None:
+        """37: sending 31D9 I should NOT be FAN — FAN is 32: only.
+
+        31D9 I maps to FAN in HVAC_KLASS_BY_VC_PAIR, but 37: is ambiguous
+        (REM/CO2/HUM/DIS) and FAN is not a valid type for 37:.
+        """
+        result = _classify("37:154519", "31D9", " I", is_src=True)
+        assert result != DevType.FAN
+        # Should fall back to prefix (REM)
+        assert result == DevType.REM
+
+    def test_32_31d9_is_fan(self) -> None:
+        """32: sending 31D9 I should be FAN (unambiguous prefix)."""
+        assert _classify("32:153289", "31D9", " I", is_src=True) == DevType.FAN
+
+    def test_37_22f1_is_rem(self) -> None:
+        """37: sending 22F1 I should be REM (VC pair matches valid type)."""
+        assert _classify("37:168270", "22F1", " I", is_src=True) == DevType.REM
+
+    def test_37_1298_is_co2(self) -> None:
+        """37: sending 1298 I should be CO2 (VC pair matches valid type)."""
+        assert _classify("37:123456", "1298", " I", is_src=True) == DevType.CO2
+
+    def test_18_is_hgi_regardless_of_codes(self) -> None:
+        """18: is always HGI — it relays packets from all device types."""
+        # 22F1 I maps to REM, but 18: is a gateway, not a REM
+        assert _classify("18:130236", "22F1", " I", is_src=True) == DevType.HGI
+        # 31DA I maps to FAN, but 18: is a gateway, not a FAN
+        assert _classify("18:130236", "31DA", " I", is_src=True) == DevType.HGI
+        # 31D9 I maps to FAN, but 18: is a gateway, not a FAN
+        assert _classify("18:130236", "31D9", " I", is_src=True) == DevType.HGI
 
 
 class TestConfidence:
@@ -397,16 +484,71 @@ class TestDiscoveryScanPacketHandling:
         assert dev.confidence == "low"  # only seen as dst
 
     def test_known_device_skipped(self) -> None:
+        """Known devices should be tracked for codes_seen but not re-discovered.
+
+        Known devices (in the known_list) are tracked in the scan engine so
+        that codes_seen is accumulated (needed for DHW valve inference via
+        1100 code, etc.), but they should not trigger discovery notifications.
+        """
         gwy = make_mock_gateway(known_list={"04:056053": {}})
         scan = DiscoveryScan(gwy)
         scan._process_packet(make_dto(src="04:056053", code="3150"))
-        assert scan.get_device("04:056053") is None
+        # Should be tracked (codes_seen accumulated)
+        dev = scan.get_device("04:056053")
+        assert dev is not None
+        assert dev.codes_seen == ["3150"]
+        assert dev.confidence == "high"  # known device, high confidence
+
+    def test_known_hgi_not_rediscovered(self) -> None:
+        """A known HGI (18:) should be tracked but not re-discovered.
+
+        HGIs are in the known_list but not in ramses_rf's schema (they're
+        stripped by _strip_schema_extensions).  The scan engine should
+        track them (so they appear in scan results) but not mark them as
+        new discoveries (no discovery notification).
+        """
+        gwy = make_mock_gateway(known_list={"18:130236": {"class": "HGI"}})
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(make_dto(src="18:130236", code="22F1"))
+        # Should be tracked (appears in scan results)
+        dev = scan.get_device("18:130236")
+        assert dev is not None
+        assert dev.likely_type == DevType.HGI
+        # Second packet — should update, not re-create
+        scan.clear_dirty()
+        scan._process_packet(make_dto(src="18:130236", code="10E0"))
+        assert scan.get_device("18:130236") is dev  # same object
+        assert dev.src_count == 2
+        assert "10E0" in dev.codes_seen
+
+    def test_unknown_hgi_tracked(self) -> None:
+        """An unknown HGI (e.g. neighbour's) should be tracked but not
+        re-discovered after the first sighting."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        # First packet — should create a discovery entry
+        scan._process_packet(make_dto(src="18:999999", code="22F1"))
+        dev = scan.get_device("18:999999")
+        assert dev is not None
+        assert dev.likely_type == DevType.HGI
+        first_seen = dev.first_seen
+        # Second packet — should update, not re-create
+        scan._process_packet(make_dto(src="18:999999", code="10E0"))
+        dev2 = scan.get_device("18:999999")
+        assert dev2 is not None
+        assert dev2.first_seen == first_seen  # same entry, not re-created
+        assert dev2.src_count == 2
 
     def test_known_in_schema_skipped(self) -> None:
+        """Known devices in schema should be tracked for codes_seen but
+        not re-discovered (no discovery notification)."""
         gwy = make_mock_gateway(schema={"01:145038": {}})
         scan = DiscoveryScan(gwy)
         scan._process_packet(make_dto(src="01:145038", code="2E04"))
-        assert scan.get_device("01:145038") is None
+        # Should be tracked (codes_seen accumulated)
+        dev = scan.get_device("01:145038")
+        assert dev is not None
+        assert dev.codes_seen == ["2E04"]
 
     def test_known_in_registry_only_not_skipped(self) -> None:
         """A device in the device_registry but NOT in known_list/schema
@@ -727,7 +869,7 @@ class TestVirtualRfIntegration:
         CTL_ID = "01:145038"
         TRV_ID = "04:056053"
         DHW_ID = "07:046947"
-        BDR_ID = "10:067219"
+        BDR_ID = "13:042605"
         FAN_ID = "32:157747"
         REM_ID = "37:179540"
 
@@ -746,7 +888,7 @@ class TestVirtualRfIntegration:
             # DHW sensor sends to CTL
             b" I --- 07:046947 01:145038 --:------ 10A0 006 01C800000000\r\n",
             # BDR sends state
-            b" I --- 10:067219 01:145038 --:------ 0008 002 00FF\r\n",
+            b" I --- 13:042605 01:145038 --:------ 0008 002 00FF\r\n",
             # FAN broadcasts fan state (31DA, 30 bytes payload)
             b" I --- 32:157747 --:------ 32:157747 31DA 030 00EF007FFF3A2F04C404E204A904BA68000003C8C80000EFEF20A91F0500\r\n",
             # FAN broadcasts fan info (31D9, 17 bytes payload)
@@ -1133,8 +1275,14 @@ class TestHvacParentInference:
         finally:
             scan.stop()
 
-    async def test_non_rp_verb_does_not_infer(self) -> None:
-        """A FAN sending I (not RP) to a REM should NOT infer bound_to."""
+    async def test_i_verb_from_fan_infers_binding(self) -> None:
+        """A FAN sending I (directed) to a REM should infer bound_to.
+
+        A directed I packet from the FAN to a specific REM is strong evidence
+        of binding — the FAN is the controller and it's communicating with
+        its paired remote.  This is different from a REM broadcasting to a
+        FAN (which doesn't prove binding).
+        """
         scan = DiscoveryScan(gwy=make_mock_gateway())
         scan.start()
         try:
@@ -1142,13 +1290,13 @@ class TestHvacParentInference:
                 src=FAN_ID,
                 dst=REM_29,
                 code="31DA",
-                verb=" I",  # not RP
+                verb=" I",  # directed I from FAN
                 payload="00EF007FFF424A",
             )
             scan._process_packet(dto)
             dev = scan.get_device(REM_29)
             assert dev is not None
-            assert dev.bound_to is None
+            assert dev.bound_to == FAN_ID
         finally:
             scan.stop()
 
