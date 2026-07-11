@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
+   ramses_tx.command
    ramses_tx.protocol
    ramses_tx.transport
 
@@ -21,10 +22,10 @@ ramses\_tx.address module
    :show-inheritance:
    :undoc-members:
 
-ramses\_tx.command module
+ramses\_tx.config module
 -------------------------
 
-.. automodule:: ramses_tx.command
+.. automodule:: ramses_tx.config
    :members:
    :show-inheritance:
    :undoc-members:
@@ -45,6 +46,22 @@ ramses\_tx.discovery module
    :show-inheritance:
    :undoc-members:
 
+ramses\_tx.dtos module
+---------------------------
+
+.. automodule:: ramses_tx.dtos
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_tx.engine module
+---------------------------
+
+.. automodule:: ramses_tx.engine
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_tx.exceptions module
 ----------------------------
 
@@ -53,26 +70,10 @@ ramses\_tx.exceptions module
    :show-inheritance:
    :undoc-members:
 
-ramses\_tx.fingerprints module
-------------------------------
-
-.. automodule:: ramses_tx.fingerprints
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 ramses\_tx.frame module
 -----------------------
 
 .. automodule:: ramses_tx.frame
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-ramses\_tx.gateway module
--------------------------
-
-.. automodule:: ramses_tx.gateway
    :members:
    :show-inheritance:
    :undoc-members:
@@ -101,18 +102,10 @@ ramses\_tx.logger module
    :show-inheritance:
    :undoc-members:
 
-ramses\_tx.message module
+ramses\_tx.models module
 -------------------------
 
-.. automodule:: ramses_tx.message
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-ramses\_tx.opentherm module
----------------------------
-
-.. automodule:: ramses_tx.opentherm
+.. automodule:: ramses_tx.models
    :members:
    :show-inheritance:
    :undoc-members:
@@ -125,34 +118,10 @@ ramses\_tx.packet module
    :show-inheritance:
    :undoc-members:
 
-ramses\_tx.parsers module
--------------------------
-
-.. automodule:: ramses_tx.parsers
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-ramses\_tx.ramses module
-------------------------
-
-.. automodule:: ramses_tx.ramses
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 ramses\_tx.schemas module
 -------------------------
 
 .. automodule:: ramses_tx.schemas
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-ramses\_tx.transport module
----------------------------
-
-.. automodule:: ramses_tx.transport
    :members:
    :show-inheritance:
    :undoc-members:
