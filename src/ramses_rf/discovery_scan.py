@@ -62,6 +62,7 @@ _PREFIX_TO_TYPE: dict[str, DevType] = {
     "23": DevType.PRG,
     "30": DevType.RFG,
     "31": DevType.JST,
+    "29": DevType.FAN,  # ambiguous: FAN/CO2/HUM/REM — VC pair resolves, FAN is default fallback
     "32": DevType.FAN,
     "34": DevType.RND,
     "37": DevType.REM,
@@ -116,10 +117,13 @@ _HVAC_PARENT_INFERENCE_CODES: frozenset[str] = frozenset(
 _UNAMBIGUOUS_HVAC_PREFIXES: frozenset[str] = frozenset({"18", "32"})
 
 # Valid HVAC types per prefix — constrains VC pair matching so a 37: device
-# sending 31D9 I (which maps to FAN) is NOT classified as FAN (FAN is 32: only).
-# Without this, the VC pair would override the prefix and misclassify devices.
+# sending 31D9 I (which maps to FAN) is only classified as FAN if FAN is in
+# the allowed set for that prefix.  29: and 37: are both ambiguous: they can
+# be FAN, REM, CO2, HUM, or DIS depending on the VC pair.  32: is unambiguous
+# (always FAN) and handled in _UNAMBIGUOUS_HVAC_PREFIXES above.
 _AMBIGUOUS_HVAC_PREFIX_TYPES: dict[str, frozenset[DevType]] = {
-    "37": frozenset({DevType.REM, DevType.CO2, DevType.HUM, DevType.DIS}),
+    "29": frozenset({DevType.FAN, DevType.CO2, DevType.HUM, DevType.REM, DevType.DIS}),
+    "37": frozenset({DevType.FAN, DevType.REM, DevType.CO2, DevType.HUM, DevType.DIS}),
 }
 
 
@@ -700,10 +704,11 @@ def _classify(
     """Classify a device based on prefix, verb/code, and accumulated evidence.
 
     Priority:
-    1. HVAC prefix (32:=FAN, 37:=REM) — unambiguous, takes precedence over
-       verb/code pairs (a FAN sends 22F1, but that doesn't make it a REM)
+    1. Unambiguous HVAC prefix (32:=FAN) — takes precedence over verb/code
+       pairs (a FAN sends 22F1, but that doesn't make it a REM)
     2. CTL-only codes — if device sends these, it's a CTL
-    3. Verb+code pair (HVAC) — for non-HVAC prefixes that send HVAC codes
+    3. Verb+code pair (HVAC) — for ambiguous HVAC prefixes (29:, 37:), only
+       accept VC pairs that map to a type valid for that prefix
     4. CH prefix — fallback for heating domain devices
     5. Accumulated codes — re-evaluate with full evidence
     """
