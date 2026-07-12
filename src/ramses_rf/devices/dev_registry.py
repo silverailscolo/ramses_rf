@@ -472,7 +472,11 @@ class DeviceRegistry:
             self._device_filter.check_filter_lists(device_id)
         except DeviceNotFoundError as err:
             if device_id != self._config.hgi_id:
-                _TRACE.error(
+                # This is expected when enforce_known_list is True and a
+                # foreign/unknown device (e.g. a 2nd HGI bridge) sends
+                # packets.  Log at WARNING, not ERROR — the discovery
+                # system in ramses_cc will handle it.
+                _TRACE.warning(
                     f"FILTER EXCEPTION: Device {device_id} failed filter checks: {err}"
                 )
                 raise
