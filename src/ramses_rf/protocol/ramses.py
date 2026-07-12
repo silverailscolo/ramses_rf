@@ -1427,6 +1427,39 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_DATA_TYPE: "0F",
         SZ_DATA_UNIT: "%",
     },
+    # ClimaRad Ventura-specific parameters (issue 740)
+    "07": {
+        SZ_DESCRIPTION: "Base ventilation enable",
+        SZ_MIN_VALUE: 0,
+        SZ_MAX_VALUE: 1,
+        SZ_PRECISION: 1,
+        SZ_DATA_TYPE: "00",
+        SZ_DATA_UNIT: "",
+    },
+    "4C": {
+        SZ_DESCRIPTION: "Unknown (ClimaRad Ventura)",
+        SZ_MIN_VALUE: 0,
+        SZ_MAX_VALUE: 0xFFFFFFFF,
+        SZ_PRECISION: 1,
+        SZ_DATA_TYPE: "10",
+        SZ_DATA_UNIT: "",
+    },
+    "88": {
+        SZ_DESCRIPTION: "Timer configuration (ClimaRad Ventura)",
+        SZ_MIN_VALUE: 0,
+        SZ_MAX_VALUE: 0xFFFFFFFF,
+        SZ_PRECISION: 1,
+        SZ_DATA_TYPE: "10",
+        SZ_DATA_UNIT: "",
+    },
+    "DA": {
+        SZ_DESCRIPTION: "Unknown (ClimaRad Ventura)",
+        SZ_MIN_VALUE: 0,
+        SZ_MAX_VALUE: 0xFFFFFFFF,
+        SZ_PRECISION: 1,
+        SZ_DATA_TYPE: "10",
+        SZ_DATA_UNIT: "",
+    },
 }
 
 # ventilation speed description
