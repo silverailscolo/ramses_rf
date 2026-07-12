@@ -13,6 +13,14 @@ Subpackages
 Submodules
 ----------
 
+ramses\_rf.address module
+------------------------------
+
+.. automodule:: ramses_rf.address
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_rf.binding\_fsm module
 ------------------------------
 
@@ -21,32 +29,34 @@ ramses\_rf.binding\_fsm module
    :show-inheritance:
    :undoc-members:
 
+ramses\_rf.config module
+----------------------------
+
+.. automodule:: ramses_rf.config
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_rf.const module
------------------------
+----------------------------
 
 .. automodule:: ramses_rf.const
    :members:
    :show-inheritance:
    :undoc-members:
 
-ramses\_rf.database module
---------------------------
+ramses\_rf.discovery module
+-------------------------
 
-.. mermaid::
-    erDiagram
-        msg_db ||--o{ device : query
+.. automodule:: ramses_rf.discovery
+   :members:
+   :show-inheritance:
+   :undoc-members:
 
-        msg_db {
-            TEXT(26)* dtm
-            TEXT(2) verb
-            TEXT(9) src
-            TEXT(9) dst
-            TEXT(4) code
-            TEXT() ctx
-            TEXT() hdr
-        }
+ramses\_rf.discovery\_scan module
+-------------------------
 
-.. automodule:: ramses_rf.database
+.. automodule:: ramses_rf.discovery_scan
    :members:
    :show-inheritance:
    :undoc-members:
@@ -59,10 +69,18 @@ ramses\_rf.dispatcher module
    :show-inheritance:
    :undoc-members:
 
-ramses\_rf.entity\_base module
+ramses\_rf.entity module
 ------------------------------
 
-.. automodule:: ramses_rf.entity_base
+.. automodule:: ramses_rf.entity
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_rf.enums module
+-------------------------
+
+.. automodule:: ramses_rf.enums
    :members:
    :show-inheritance:
    :undoc-members:
@@ -99,6 +117,38 @@ ramses\_rf.interfaces module
    :show-inheritance:
    :undoc-members:
 
+ramses\_rf.lifecycle module
+-------------------------
+
+.. automodule:: ramses_rf.lifecycle
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_rf.protocol_schema module
+-------------------------
+
+.. automodule:: ramses_rf.protocol_schema
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_rf.quirks module
+-------------------------
+
+.. automodule:: ramses_rf.quirks
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_rf.routing module
+-------------------------
+
+.. automodule:: ramses_rf.routing
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 ramses\_rf.schemas module
 -------------------------
 
@@ -107,10 +157,18 @@ ramses\_rf.schemas module
    :show-inheritance:
    :undoc-members:
 
-ramses\_rf.storage module
+ramses\_rf.sqlite_worker module
 -------------------------
 
-.. automodule:: ramses_rf.storage
+.. automodule:: ramses_rf.sqlite_worker
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+ramses\_rf.topology module
+-------------------------
+
+.. automodule:: ramses_rf.topology
    :members:
    :show-inheritance:
    :undoc-members:

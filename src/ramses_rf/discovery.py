@@ -286,8 +286,11 @@ class DiscoveryService:
                     if tcs:
                         tcs_id = getattr(tcs, "id", None)
                         if self._gwy.message_store and tcs_id:
+                            # Use state_cache (latest msg per StateHeader) instead of
+                            # log_by_dtm (all msgs) to avoid O(n) full-log scans on
+                            # every poll cycle. See issue 795.
                             found_msgs = []
-                            for m in self._gwy.message_store.log_by_dtm:
+                            for m in self._gwy.message_store.state_cache.values():
                                 if (
                                     m.code == cmd_code
                                     and m.verb in (I_, RP)
@@ -300,12 +303,6 @@ class DiscoveryService:
 
                             if found_msgs:
                                 msgs.append(max(found_msgs, key=lambda x: x.dtm))
-                            else:
-                                _LOGGER.debug(
-                                    "No msg found for hdr %s, task code %s",
-                                    hdr,
-                                    cmd_code,
-                                )
                         else:
                             tcs_msgs = await tcs.entity_state.get_all_messages()
                             found = [
@@ -396,6 +393,12 @@ class DiscoveryService:
         for hdr, task in self.cmds.items():
             dt_now = dt.now().astimezone()
 
+            # Skip the expensive message scan if the task isn't due yet.
+            # This avoids O(n) full-log scans on every poll cycle for every
+            # entity, which was the root cause of the CPU spikes in issue 795.
+            if task[_SZ_NEXT_DUE] > dt_now:
+                continue
+
             msg = await find_latest_msg(hdr, task)
             if msg and (
                 task[_SZ_NEXT_DUE] < _ensure_aware(msg.dtm) + task[_SZ_INTERVAL]
@@ -403,8 +406,6 @@ class DiscoveryService:
                 task[_SZ_FAILURES] = 0
                 task[_SZ_LAST_PKT] = msg._pkt
                 task[_SZ_NEXT_DUE] = _ensure_aware(msg.dtm) + task[_SZ_INTERVAL]
-
-            if task[_SZ_NEXT_DUE] > dt_now:
                 continue
 
             task[_SZ_NEXT_DUE] = dt_now + task[_SZ_INTERVAL]
