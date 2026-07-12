@@ -302,6 +302,39 @@ class TestClassify:
         # 31D9 I maps to FAN, but 18: is a gateway, not a FAN
         assert _classify("18:130236", "31D9", " I", is_src=True) == DevType.HGI
 
+    def test_37_rq_31da_is_not_fan(self) -> None:
+        """37: sending RQ 31DA should NOT be FAN — it's a DIS requesting status.
+
+        31DA maps to FAN for I (broadcast) and RP (response), but RQ is a
+        request.  A DIS (display remote) sends RQ 31DA to the FAN to ask
+        for fan status — it's not a FAN broadcasting its own status.
+        """
+        # Direct RQ 31DA — not in _VC_TO_TYPE (only I and RP are)
+        result = _classify("37:169161", "31DA", "RQ", is_src=True)
+        assert result != DevType.FAN
+
+    def test_37_rq_31da_with_accumulated_codes_not_fan(self) -> None:
+        """37: with 31DA in codes_seen, sending RQ 31DA, should NOT be FAN.
+
+        The accumulated-codes check must not try all verbs — only the
+        current verb.  RQ 31DA is not in _VC_TO_TYPE, so it should not
+        classify as FAN even though (I, 31DA) maps to FAN.
+        """
+        dev = DiscoveredDevice(
+            device_id="37:169161",
+            first_seen="2026-07-01T10:00:00",
+            last_seen="2026-07-01T10:00:00",
+            likely_type="DEV",
+            codes_seen=["31DA", "1470", "313F"],
+        )
+        result = _classify("37:169161", "31DA", "RQ", is_src=True, dev=dev)
+        assert result != DevType.FAN
+
+    def test_37_i_31da_is_fan(self) -> None:
+        """37: sending I 31DA (broadcast) IS FAN — it's broadcasting status."""
+        result = _classify("37:169161", "31DA", " I", is_src=True)
+        assert result == DevType.FAN
+
 
 class TestConfidence:
     """Tests for confidence scoring."""
