@@ -29,6 +29,7 @@ from .const import (
     SZ_BYPASS_POSITION,
     SZ_BYPASS_STATE,
     SZ_CO2_LEVEL,
+    SZ_DATETIME,
     SZ_DEVICES,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
@@ -41,6 +42,7 @@ from .const import (
     SZ_HAS_FAULT,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
+    SZ_LANGUAGE,
     SZ_MINUTES,
     SZ_OFFER,
     SZ_OUTDOOR_HUMIDITY,
@@ -55,13 +57,15 @@ from .const import (
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
     SZ_SUPPLY_TEMP,
+    SZ_SYSTEM_MODE,
     SZ_TEMPERATURE,
+    SZ_UNTIL,
     W_,
     Code,
     DevType,
 )
 from .messages import Message
-from .models import StateUpdatedEvent
+from .models import StateUpdatedEvent, SystemState
 from .protocol.ramses import (
     CODES_OF_HEAT_DOMAIN,
     CODES_OF_HEAT_DOMAIN_ONLY,
@@ -354,6 +358,17 @@ def _resolve_logical_targets(
             if src_dev.tcs.dhw not in targets:
                 targets.append(src_dev.tcs.dhw)
 
+    # 6. System-level opcodes (2E04/0100/313F) target the TCS directly.
+    #    These packets have no domain_id/zone_idx, so steps 4/5 miss them.
+    if (
+        msg.code in (Code._2E04, Code._0100, Code._313F)
+        and src_dev
+        and hasattr(src_dev, "tcs")
+        and src_dev.tcs
+        and src_dev.tcs not in targets
+    ):
+        targets.append(src_dev.tcs)
+
     return targets
 
 
@@ -464,6 +479,54 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
+        target.apply_state_update(event)
+
+
+def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+    """Translate system configuration opcodes into SystemState.
+
+    Handles 2E04 (system_mode), 0100 (language), and 313F (datetime).
+
+    :param target: The target entity (TCS/Evohome) to update.
+    :param p: The parsed message payload dictionary.
+    :param msg: The immutable Message L7 envelope.
+    """
+    if not hasattr(target, "system_state"):
+        return
+
+    updates: dict[str, Any] = {}
+    if msg.code == Code._0100:
+        if SZ_LANGUAGE in p:
+            updates["language"] = p[SZ_LANGUAGE]
+    elif msg.code == Code._2E04:
+        if SZ_SYSTEM_MODE in p:
+            updates["system_mode"] = p[SZ_SYSTEM_MODE]
+        if SZ_UNTIL in p:
+            updates["until"] = p[SZ_UNTIL]
+    elif msg.code == Code._313F:
+        if SZ_DATETIME in p:
+            updates["datetime"] = p[SZ_DATETIME]
+    else:
+        return
+
+    if not updates:
+        return
+
+    dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+    if dtm:
+        updates["last_updated"] = dtm
+
+    current_state = target.system_state or SystemState()
+    new_state = dataclasses.replace(current_state, **updates)
+    target.system_state = new_state
+
+    event = StateUpdatedEvent(
+        entity_id=getattr(target, "id", "unknown"),
+        state=new_state,
+        correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+        causation_id=getattr(msg, "message_id", uuid.uuid4()),
+    )
+    if hasattr(target, "apply_state_update"):
         target.apply_state_update(event)
 
 
@@ -594,6 +657,7 @@ def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
         targets = _resolve_logical_targets(gwy, msg, p)
         for target in targets:
             with contextlib.suppress(AttributeError, TypeError, ValueError):
+                _update_system_state(target, p, msg)
                 _update_hvac_state(target, p, msg)
                 _update_temperature_state(target, p, msg)
                 _update_demand_state(target, p, msg)
