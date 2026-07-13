@@ -135,6 +135,42 @@ def test_packet_dto_serialization() -> None:
     assert restored_pkt._frame == pkt._frame
 
 
+def test_from_dict_raw_packet_dict_format() -> None:
+    """Test from_dict with a RawPacket.__dict__ (as used by lifecycle.get_state).
+
+    Regression test for ramses_cc issue 812: cache restore produced
+    'Bad frame: Invalid structure: >>><<<' because RawPacket.__dict__ has
+    'raw_packet' (not 'frame') and rssi can be a non-numeric string like '...'.
+    """
+    dtm_str = DTM.isoformat()
+
+    # Simulate what lifecycle.get_state saves: msg.dto.source_packets[0].__dict__
+    raw_pkt_dict: dict[str, object] = {
+        "raw_packet": " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5",
+        "rssi": "045",
+        "verb": " I",
+        "seq": "---",
+        "device_id_1": "01:145038",
+        "device_id_2": "--:------",
+        "device_id_3": "01:145038",
+        "code": "1F09",
+        "payload_len": "003",
+        "payload": "0004B5",
+    }
+
+    pkt = Packet.from_dict(dtm_str, raw_pkt_dict)
+    assert pkt.rssi == "045"
+    assert pkt.verb == " I"
+    assert pkt.code == "1F09"
+    assert pkt._frame == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+
+    # Also test with non-numeric rssi (e.g. "..." from file-based packets)
+    raw_pkt_dict["rssi"] = "..."
+    pkt2 = Packet.from_dict(dtm_str, raw_pkt_dict)
+    assert pkt2.rssi == "..."
+    assert pkt2.code == "1F09"
+
+
 def test_pkt_lifespan(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test the packet lifespan calculation logic.
 
