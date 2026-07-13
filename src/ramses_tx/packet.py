@@ -250,9 +250,15 @@ class Packet(Frame):
 
         # Safely extract RSSI, fallback to "...", and guarantee exactly 3 chars
         rssi_val = state.get("rssi")
-        rssi = f"{int(rssi_val):03d}" if rssi_val is not None else "..."
+        try:
+            rssi = f"{int(rssi_val):03d}" if rssi_val is not None else "..."
+        except (ValueError, TypeError):
+            rssi = "..."
 
-        frame = f"{rssi[:3].ljust(3)} {state.get('frame', '')}"
+        # The frame body: prefer 'frame' (Packet.to_dict format), fall back to
+        # 'raw_packet' (RawPacket.__dict__ format used by lifecycle.get_state)
+        frame_body = state.get("frame") or state.get("raw_packet", "")
+        frame = f"{rssi[:3].ljust(3)} {frame_body}"
         return cls(
             dt.fromisoformat(dtm),
             frame,
