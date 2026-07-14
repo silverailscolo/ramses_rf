@@ -859,7 +859,7 @@ def parser_30c9(payload: str, msg: Message) -> dict[str, Any] | list[dict[str, A
             }
             for i in range(0, len(payload), 6)
         ]
-
+    # How to handle Fahrenheit temps? No known bit to tell the unit of measurement
     return {SZ_TEMPERATURE: hex_to_temp(payload[2:])}
 
 

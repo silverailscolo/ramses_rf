@@ -534,9 +534,9 @@ class StateProjector:
         updates: dict[str, Any] = {}
         if msg.code == Code._1060:
             if SZ_BATTERY_LOW in p:
-                updates["battery_low"] = p[SZ_BATTERY_LOW]
+                updates[SZ_BATTERY_LOW] = p[SZ_BATTERY_LOW]
             if SZ_BATTERY_LEVEL in p:
-                updates["battery_level"] = p[SZ_BATTERY_LEVEL]
+                updates[SZ_BATTERY_LEVEL] = p[SZ_BATTERY_LEVEL]
 
         if not updates:
             return
@@ -566,21 +566,21 @@ class StateProjector:
         updates: dict[str, Any] = {}
         if msg.code == Code._10A0:
             if SZ_SETPOINT in p:
-                updates["setpoint"] = p[SZ_SETPOINT]
+                updates[SZ_SETPOINT] = p[SZ_SETPOINT]
             if SZ_OVERRUN in p:
-                updates["overrun"] = p[SZ_OVERRUN]
+                updates[SZ_OVERRUN] = p[SZ_OVERRUN]
             if SZ_DIFFERENTIAL in p:
-                updates["differential"] = p[SZ_DIFFERENTIAL]
+                updates[SZ_DIFFERENTIAL] = p[SZ_DIFFERENTIAL]
         elif msg.code == Code._1260:
             if SZ_TEMPERATURE in p:
-                updates["temperature"] = p[SZ_TEMPERATURE]
+                updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
         elif msg.code == Code._1F41:
             if SZ_MODE in p:
-                updates["mode"] = p[SZ_MODE]
+                updates[SZ_MODE] = p[SZ_MODE]
             if SZ_ACTIVE in p:
-                updates["active"] = p[SZ_ACTIVE]
+                updates[SZ_ACTIVE] = p[SZ_ACTIVE]
             if SZ_UNTIL in p:
-                updates["until"] = p[SZ_UNTIL]
+                updates[SZ_UNTIL] = p[SZ_UNTIL]
 
         if not updates:
             return
@@ -612,15 +612,15 @@ class StateProjector:
         updates: dict[str, Any] = {}
         if msg.code == Code._0100:
             if SZ_LANGUAGE in p:
-                updates["language"] = p[SZ_LANGUAGE]
+                updates[SZ_LANGUAGE] = p[SZ_LANGUAGE]
         elif msg.code == Code._2E04:
             if SZ_SYSTEM_MODE in p:
-                updates["system_mode"] = p[SZ_SYSTEM_MODE]
+                updates[SZ_SYSTEM_MODE] = p[SZ_SYSTEM_MODE]
             if SZ_UNTIL in p:
-                updates["until"] = p[SZ_UNTIL]
+                updates[SZ_UNTIL] = p[SZ_UNTIL]
         elif msg.code == Code._313F:
             if SZ_DATETIME in p:
-                updates["datetime"] = p[SZ_DATETIME]
+                updates[SZ_DATETIME] = p[SZ_DATETIME]
 
         if not updates:
             return
@@ -668,12 +668,25 @@ class StateProjector:
             if hasattr(target, "apply_state_update"):
                 target.apply_state_update(event)
 
-        if msg.code in (Code._30C9, Code._1260, Code._0002):
+        if msg.code in (Code._30C9, Code._1260, Code._0002, Code._12C0):
             updates: dict[str, Any] = {}
             if SZ_TEMPERATURE in p:
-                updates["temperature"] = p[SZ_TEMPERATURE]
+                # Legacy Parity: Physical sensors only track their own local sensor readings.
+                # We must ignore Zone temperature syncs sent TO them by the Controller.
+                # Keep same as src/ramses_rf/dispatcher.py#_update_temperature_state
+                target_id = getattr(target, "id", str(target))
+                src_id = getattr(msg.src, "id", str(msg.src))
+
+                if (
+                    getattr(target, "_SLUG", "") in ("TRV", "THM")
+                    and src_id != target_id
+                ):
+                    pass
+                else:
+                    updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
+
             if SZ_SETPOINT in p:
-                updates["setpoint"] = p[SZ_SETPOINT]
+                updates[SZ_SETPOINT] = p[SZ_SETPOINT]
 
             if updates:
                 if dtm:
@@ -707,19 +720,19 @@ class StateProjector:
             # from overwriting the controller's aggregate FC heat demand.
             if slug in ("CTL", "UFC"):
                 if p.get(SZ_DOMAIN_ID) == "FC":
-                    updates["heat_demand"] = p[SZ_HEAT_DEMAND]
+                    updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
             elif SZ_UFH_IDX not in p and "ufx_idx" not in p:
-                updates["heat_demand"] = p[SZ_HEAT_DEMAND]
+                updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
         elif msg.code == Code._0008 and SZ_RELAY_DEMAND in p:
             # Prevent FA (UFH) relay demands from overwriting FC relay demand
             if slug == "UFC" and p.get(SZ_DOMAIN_ID) != "FC":
                 pass
             else:
-                updates["relay_demand"] = p[SZ_RELAY_DEMAND]
+                updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
 
         elif msg.code == Code._0009 and SZ_RELAY_FAILSAFE in p:
-            updates["relay_failsafe"] = p[SZ_RELAY_FAILSAFE]
+            updates[SZ_RELAY_FAILSAFE] = p[SZ_RELAY_FAILSAFE]
 
         if not updates:
             return
@@ -808,34 +821,34 @@ class StateProjector:
         updates: dict[str, Any] = {}
         if SZ_MODULATION_LEVEL in p:
             # NOTE: semantic parser custom keys
-            updates["modulation_level"] = p[SZ_MODULATION_LEVEL]
+            updates[SZ_MODULATION_LEVEL] = p[SZ_MODULATION_LEVEL]
         elif SZ_REL_MODULATION_LEVEL in p:
-            updates["modulation_level"] = p[SZ_REL_MODULATION_LEVEL]
+            updates[SZ_MODULATION_LEVEL] = p[SZ_REL_MODULATION_LEVEL]
 
         if SZ_ACTUATOR_ENABLED in p:
-            updates["actuator_enabled"] = p[SZ_ACTUATOR_ENABLED]
+            updates[SZ_ACTUATOR_ENABLED] = p[SZ_ACTUATOR_ENABLED]
         if SZ_CH_ACTIVE in p:
-            updates["ch_active"] = p[SZ_CH_ACTIVE]
+            updates[SZ_CH_ACTIVE] = p[SZ_CH_ACTIVE]
         if SZ_CH_ENABLED in p:
-            updates["ch_enabled"] = p[SZ_CH_ENABLED]
+            updates[SZ_CH_ENABLED] = p[SZ_CH_ENABLED]
         if SZ_DHW_ACTIVE in p:
-            updates["dhw_active"] = p[SZ_DHW_ACTIVE]
+            updates[SZ_DHW_ACTIVE] = p[SZ_DHW_ACTIVE]
         if SZ_FLAME_ON in p:
             # NOTE: semantic parser maps this specifically
             updates["flame_active"] = p[SZ_FLAME_ON]
-            updates["flame_on"] = p[SZ_FLAME_ON]
+            updates[SZ_FLAME_ON] = p[SZ_FLAME_ON]
 
         # Legacy diagnostic payloads restored for backwards compatibility
         if SZ_CH_SETPOINT in p:
-            updates["ch_setpoint"] = p[SZ_CH_SETPOINT]
+            updates[SZ_CH_SETPOINT] = p[SZ_CH_SETPOINT]
         if SZ_MAX_REL_MODULATION in p:
-            updates["max_rel_modulation"] = p[SZ_MAX_REL_MODULATION]
+            updates[SZ_MAX_REL_MODULATION] = p[SZ_MAX_REL_MODULATION]
         if SZ_COOL_ACTIVE in p:
-            updates["cool_active"] = p[SZ_COOL_ACTIVE]
+            updates[SZ_COOL_ACTIVE] = p[SZ_COOL_ACTIVE]
         if SZ_ACTUATOR_COUNTDOWN in p:
-            updates["actuator_countdown"] = p[SZ_ACTUATOR_COUNTDOWN]
+            updates[SZ_ACTUATOR_COUNTDOWN] = p[SZ_ACTUATOR_COUNTDOWN]
         if SZ_CYCLE_COUNTDOWN in p:
-            updates["cycle_countdown"] = p[SZ_CYCLE_COUNTDOWN]
+            updates[SZ_CYCLE_COUNTDOWN] = p[SZ_CYCLE_COUNTDOWN]
 
         if not updates:
             return
@@ -864,7 +877,7 @@ class StateProjector:
 
         updates: dict[str, Any] = {}
         if SZ_NAME in p:
-            updates["name"] = str(p[SZ_NAME])
+            updates[SZ_NAME] = str(p[SZ_NAME])
 
         if not updates:
             return
