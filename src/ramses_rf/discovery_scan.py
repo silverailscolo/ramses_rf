@@ -753,14 +753,23 @@ def _classify(
                 # only classify as CTL if the current verb matches
                 if verb in ctl_verbs:
                     return DevType.CTL
-        # Check HVAC codes from accumulated data
+        # Check HVAC codes from accumulated data — but only with the
+        # current verb.  Trying all verbs (I, RP, RQ, W) caused
+        # misclassification: a DIS sending RQ 31DA (requesting fan status
+        # from a FAN) was classified as FAN because (I, 31DA) maps to FAN
+        # in _VC_TO_TYPE.  The device never sent I 31DA — it only sent
+        # RQ 31DA — but the loop tried all verbs regardless.
+        #
+        # By only checking the current verb, we ensure:
+        # - RQ 31DA (DIS asking FAN for status) → not in _VC_TO_TYPE → skip
+        # - I 31DA (FAN broadcasting status) → FAN
+        # - RP 31DA (FAN responding to request) → FAN
         valid_types = _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix)
         for c in dev.codes_seen:
-            for v in (" I", "RP", "RQ", " W"):
-                if (v, c) in _VC_TO_TYPE:
-                    vc_type = _VC_TO_TYPE[(v, c)]
-                    if valid_types is None or vc_type in valid_types:
-                        return vc_type
+            if (verb, c) in _VC_TO_TYPE:
+                vc_type = _VC_TO_TYPE[(verb, c)]
+                if valid_types is None or vc_type in valid_types:
+                    return vc_type
 
     # 5. CH prefix fallback
     if prefix in _PREFIX_TO_TYPE:

@@ -14,6 +14,7 @@ import pytest
 
 from ramses_rf.const import SZ_SYSTEM_MODE
 from ramses_rf.devices import Controller
+from ramses_rf.dispatcher import _update_system_state
 from ramses_rf.systems.tcs import Evohome
 
 
@@ -95,3 +96,50 @@ async def test_system_mode_uses_hot_cqrs_state_when_available() -> None:
 
     # Verify we did NOT hit the network
     mock_gwy.async_send_cmd.assert_not_called()
+
+
+def test_update_system_state_hydrates_from_2e04_packet() -> None:
+    """Test that _update_system_state hydrates system_state from a 2E04 packet.
+
+    This is the critical ingestion path: when a 2E04 RP/I packet arrives from
+    the controller, the dispatcher's CQRS engine must update the TCS's
+    system_state so that the async system_mode() getter returns a value
+    instead of None.
+
+    Regression test for issue 800 (ramses_cc): system_mode/preset_mode stuck
+    at None because _cqrs_ingestion_engine did not call _update_system_state.
+    """
+
+    # Arrange — create an Evohome TCS with empty system_state
+    mock_gwy = MagicMock()
+    mock_gwy.config.enable_eavesdrop = False
+    mock_gwy.device_registry.system_by_id = {}
+    mock_gwy.async_send_cmd = AsyncMock()
+
+    mock_ctl = MagicMock(spec=Controller)
+    mock_ctl.id = "01:123456"
+    mock_ctl._gwy = mock_gwy
+
+    tcs = Evohome(mock_ctl)
+    # system_state.system_mode starts as None (the dataclass default)
+
+    # Simulate a parsed 2E04 RP packet payload (system_mode=heat_off)
+    mock_msg = MagicMock()
+    mock_msg.code = "2E04"
+    mock_msg.dtm = None
+    mock_msg.timestamp = None
+    payload = {SZ_SYSTEM_MODE: "heat_off", "until": None}
+
+    # Act — call the dispatcher's ingestion function directly
+    _update_system_state(tcs, payload, mock_msg)
+
+    # Assert — system_state is now hydrated
+    assert tcs.system_state.system_mode == "heat_off"
+    assert tcs.system_state.until is None
+
+    # The async getter should now return the hydrated value
+    import asyncio
+
+    result = asyncio.run(tcs.system_mode())
+    assert result is not None
+    assert result[SZ_SYSTEM_MODE] == "heat_off"

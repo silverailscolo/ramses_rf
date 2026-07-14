@@ -132,6 +132,54 @@ def test_2411_data_type_13_ventura_filter_time() -> None:
     assert "_unknown_data_type" not in result
 
 
+def test_2411_unknown_param_ids_ventura() -> None:
+    """2411 params 07, 4C, 88, DA (ClimaRad Ventura) must parse without warning.
+
+    These params are now in _2411_PARAMS_SCHEMA with placeholder descriptions.
+    The parser should use the data_type from the packet to decode the value.
+    See issue 740 (reopened).
+    """
+    # param 07, data_type 00 (2-byte counter)
+    msg = _make_22f1_msg(
+        "2026-07-11T17:17:52.000000 040 RP --- 32:022222 29:091138 --:------ 2411 022 "
+        "00000700000000010000000000000001000000018A00"
+    )
+    result = msg.payload
+    assert result["parameter"] == "07"
+    assert result["description"] == "Base ventilation enable"
+    assert "_unknown_data_type" not in result
+
+    # param 4C, data_type 10 (4-byte counter)
+    msg = _make_22f1_msg(
+        "2026-07-11T17:17:52.000000 040 RP --- 32:022222 29:091138 --:------ 2411 022 "
+        "00004C10000000640000000000007530000000016400"
+    )
+    result = msg.payload
+    assert result["parameter"] == "4C"
+    assert result["description"] == "Unknown (ClimaRad Ventura)"
+    assert "_unknown_data_type" not in result
+
+    # param 88, data_type 10 (4-byte counter)
+    msg = _make_22f1_msg(
+        "2026-07-11T17:17:52.000000 040 RP --- 32:022222 29:091138 --:------ 2411 023 "
+        "000088100000026400000001900000076C000000018A33"
+    )
+    result = msg.payload
+    assert result["parameter"] == "88"
+    assert result["description"] == "Timer configuration (ClimaRad Ventura)"
+    assert "_unknown_data_type" not in result
+
+    # param DA, data_type 10 (4-byte counter)
+    msg = _make_22f1_msg(
+        "2026-07-11T17:17:52.000000 040 RP --- 32:022222 29:091138 --:------ 2411 023 "
+        "0000DA1000000000000000000000000001000000018A00"
+    )
+    result = msg.payload
+    assert result["parameter"] == "DA"
+    assert result["description"] == "Unknown (ClimaRad Ventura)"
+    assert "_unknown_data_type" not in result
+
+
 def test_helper_demand_transform() -> None:
     assert [x[1] for x in TRANSFORMS] == [_transform(x[0]) for x in TRANSFORMS]
 

@@ -805,7 +805,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
     try:
         description = _2411_TABLE.get(param_id, "Unknown")
         if param_id not in _2411_TABLE:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 f"2411 message received with unknown parameter ID: {param_id}. "
                 f"This parameter is not in the known parameter schema. "
                 f"Message: {msg!r}"
