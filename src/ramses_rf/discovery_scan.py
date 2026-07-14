@@ -92,8 +92,12 @@ _BATTERY_CODES: frozenset[str] = frozenset({"1060", "1FC9"})
 # NOTE: 30C9 (Room Setpoint) is excluded - its payload is 00{setpoint}
 # where the first byte is always 00 (a constant), not a zone index.
 # 3150 (Actuator State) and 12B0 (Window Open) have the real zone_idx.
+# 000A (Zone Info) is sent by THMs (22:) with their zone_idx as payload —
+# e.g. RQ 000A 001 01 means the THM is asking about zone 01 (its zone).
+# The CTL and HGI also send 000A, but the HGI is excluded by is_hgi and
+# the CTL's zone_idx is unused (it gets main_tcs, not a zone placement).
 _ZONE_BINDING_CODES: frozenset[str] = frozenset(
-    {"3150", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09"}
+    {"3150", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09", "000A"}
 )
 
 # HVAC codes sent by REMs/CO2s to their parent FAN (32:).  These are
