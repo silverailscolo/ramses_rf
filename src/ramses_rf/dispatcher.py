@@ -14,7 +14,6 @@ from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final
 
 from ramses_tx import ALL_DEV_ADDR
-from ramses_tx.const import SZ_SETPOINT
 
 from . import exceptions as exc
 from .const import (
@@ -59,6 +58,7 @@ from .const import (
     SZ_REMAINING_PERCENT,
     SZ_REQ_REASON,
     SZ_REQ_SPEED,
+    SZ_SETPOINT,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
