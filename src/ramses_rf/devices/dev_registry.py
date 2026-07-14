@@ -291,7 +291,8 @@ class DeviceRegistry:
             # Instantiate the new strict device class via the factory
             traits = DeviceTraits.from_dict(traits_dict)
             new_dev = self._device_factory_cb(old_dev.addr, None, traits)
-            new_dev._post_class_promote()
+            if hasattr(new_dev, "_post_class_promote"):
+                new_dev._post_class_promote()
             new_dev._setup_discovery_cmds()
 
             # FORCE IT BACK IN: In case the factory doesn't auto-register
