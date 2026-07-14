@@ -14,6 +14,7 @@ from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final
 
 from ramses_tx import ALL_DEV_ADDR
+from ramses_tx.const import SZ_SETPOINT
 
 from . import exceptions as exc
 from .const import (
@@ -40,6 +41,7 @@ from .const import (
     SZ_FILTER_DIRTY,
     SZ_FROST_CYCLE,
     SZ_HAS_FAULT,
+    SZ_HEAT_DEMAND,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_LANGUAGE,
@@ -51,8 +53,12 @@ from .const import (
     SZ_POST_HEAT,
     SZ_PRE_HEAT,
     SZ_PRESENCE_DETECTED,
+    SZ_RELAY_DEMAND,
+    SZ_REMAINING_DAYS,
     SZ_REMAINING_MINS,
+    SZ_REMAINING_PERCENT,
     SZ_REQ_REASON,
+    SZ_REQ_SPEED,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
@@ -379,19 +385,20 @@ def _update_temperature_state(target: Any, p: dict[str, Any], msg: Message) -> N
 
     updates: dict[str, Any] = {}
 
-    if "temperature" in p:
+    if SZ_TEMPERATURE in p:
         # Legacy Parity: Physical sensors only track their own local sensor readings.
         # We must ignore Zone temperature syncs sent TO them by the Controller.
+        # Keep same as src/ramses_rf/pipeline/ingestion.py#_update_temperature_state
         target_id = getattr(target, "id", str(target))
         src_id = getattr(msg.src, "id", str(msg.src))
 
         if getattr(target, "_SLUG", "") in ("TRV", "THM") and src_id != target_id:
             pass
         else:
-            updates["temperature"] = p["temperature"]
+            updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
 
     if "setpoint" in p:
-        updates["setpoint"] = p["setpoint"]
+        updates[SZ_SETPOINT] = p[SZ_SETPOINT]
 
     if not updates:
         return
@@ -412,11 +419,11 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         return
 
     updates: dict[str, Any] = {}
-    if "heat_demand" in p:
-        updates["heat_demand"] = p["heat_demand"]
-    if "relay_demand" in p:
-        updates["heat_demand"] = p["relay_demand"]
-        updates["relay_active"] = float(p["relay_demand"]) > 0.0
+    if SZ_HEAT_DEMAND in p:
+        updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
+    if SZ_RELAY_DEMAND in p:
+        updates[SZ_HEAT_DEMAND] = p[SZ_RELAY_DEMAND]
+        updates["relay_active"] = float(p[SZ_RELAY_DEMAND]) > 0.0
 
     if not updates:
         return
@@ -497,15 +504,15 @@ def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     updates: dict[str, Any] = {}
     if msg.code == Code._0100:
         if SZ_LANGUAGE in p:
-            updates["language"] = p[SZ_LANGUAGE]
+            updates[SZ_LANGUAGE] = p[SZ_LANGUAGE]
     elif msg.code == Code._2E04:
         if SZ_SYSTEM_MODE in p:
-            updates["system_mode"] = p[SZ_SYSTEM_MODE]
+            updates[SZ_SYSTEM_MODE] = p[SZ_SYSTEM_MODE]
         if SZ_UNTIL in p:
-            updates["until"] = p[SZ_UNTIL]
+            updates[SZ_UNTIL] = p[SZ_UNTIL]
     elif msg.code == Code._313F:
         if SZ_DATETIME in p:
-            updates["datetime"] = p[SZ_DATETIME]
+            updates[SZ_DATETIME] = p[SZ_DATETIME]
     else:
         return
 
@@ -608,14 +615,14 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         updates[f] = val
 
     # Handle non-standard names passed by the semantic parsers
-    if "days_remaining" in p and p["days_remaining"] is not None:
-        updates["filter_remaining_days"] = p["days_remaining"]
-    if "percent_remaining" in p and p["percent_remaining"] is not None:
-        updates["filter_remaining_percent"] = p["percent_remaining"]
+    if SZ_REMAINING_DAYS in p and p[SZ_REMAINING_DAYS] is not None:
+        updates["filter_remaining_days"] = p[SZ_REMAINING_DAYS]
+    if SZ_REMAINING_PERCENT in p and p[SZ_REMAINING_PERCENT] is not None:
+        updates["filter_remaining_percent"] = p[SZ_REMAINING_PERCENT]
     if SZ_MINUTES in p and msg.code == Code._22F3 and p[SZ_MINUTES] is not None:
         updates["boost_timer_mins"] = p[SZ_MINUTES]
-    if "req_speed" in p and p["req_speed"] is not None:
-        updates["request_fan_speed"] = p["req_speed"]
+    if SZ_REQ_SPEED in p and p[SZ_REQ_SPEED] is not None:
+        updates["request_fan_speed"] = p[SZ_REQ_SPEED]
     if SZ_REQ_REASON in p and p[SZ_REQ_REASON] is not None:
         updates["request_reason"] = p[SZ_REQ_REASON]
 
