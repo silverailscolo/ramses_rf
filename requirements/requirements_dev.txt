@@ -30,5 +30,5 @@
   syrupy >= 5.5.1                                # HA uses 5.0.0 - 07/02/2026 - 2026.2.1
 
 # used for build/deploy
-  hatch >= 1.17.0
+  hatch >= 1.17.1
   hatchling >= 1.31.0
