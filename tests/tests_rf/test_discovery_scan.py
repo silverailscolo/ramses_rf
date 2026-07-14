@@ -644,6 +644,24 @@ class TestDiscoveryScanPacketHandling:
         assert dev.bound_to == "01:145038"
         assert dev.confidence == "high"
 
+    def test_thm_zone_binding_via_000a(self) -> None:
+        """THM (22:) sends RQ 000A with its zone_idx as payload (issue 813).
+
+        A room thermostat like 22:012299 sends ``RQ 000A 001 01`` to the CTL,
+        where ``01`` is the zone index.  The scan engine should extract this
+        and set zone_idx on the THM.
+        """
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(src="22:012299", dst="01:216136", code="000A", payload="01")
+        )
+        dev = scan.get_device("22:012299")
+        assert dev is not None
+        assert dev.zone_idx == "01"
+        assert dev.bound_to == "01:216136"
+        assert dev.confidence == "high"
+
     def test_codes_seen_deduplicated_and_sorted(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
