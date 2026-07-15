@@ -298,6 +298,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                     "addr3": msg._addrs[2].id,  # <-- Exact raw addr3
                     "code": str(msg.code),
                     "payload": msg.payload,
+                    # Frame string is required by _restore_cached_packets /
+                    # Packet.from_dict to reconstruct the Packet on warm restart.
+                    # Without it, from_dict gets an empty frame body and raises
+                    # "Bad frame: Invalid structure: >>><<<" (issue 812).
+                    "frame": getattr(msg._pkt, "_frame", ""),
                 }
 
         schema_dict = await self.schema()
