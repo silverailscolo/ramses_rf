@@ -132,6 +132,26 @@ def test_2411_data_type_13_ventura_filter_time() -> None:
     assert "_unknown_data_type" not in result
 
 
+def test_2411_data_type_11_ventura_param_da() -> None:
+    """2411 param DA with data_type 11 (Orcon/ClimaRad Ventura) must parse without warning.
+
+    The Orcon and ClimaRad Ventura send data_type 11 for param DA.
+    This is a 4-byte counter variant (same shape as data_type 10 and 13).
+    """
+    msg = _make_22f1_msg(
+        "2026-07-15T16:14:33.612000 040 RP --- 32:153289 37:168270 --:------ 2411 023 "
+        "0000DAC111000003E8000000000000138800000001CB52"
+    )
+    result = msg.payload
+    assert result["parameter"] == "DA"
+    assert result["description"] == "Unknown (ClimaRad Ventura)"
+    assert result["value"] == 1000  # 0x000003E8 = 1000
+    assert result["min_value"] == 0
+    assert result["max_value"] == 5000  # 0x00001388
+    assert result["precision"] == 1
+    assert "_unknown_data_type" not in result
+
+
 def test_2411_unknown_param_ids_ventura() -> None:
     """2411 params 07, 4C, 88, DA (ClimaRad Ventura) must parse without warning.
 
