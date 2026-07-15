@@ -36,6 +36,7 @@ async def test_get_state_parity() -> None:
     )
     msg_i.code = "1F09"
     msg_i.payload = {"temp": 21.0}
+    msg_i._pkt._frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
 
     msg_rp = MagicMock()
     msg_rp.verb = RP
@@ -49,6 +50,7 @@ async def test_get_state_parity() -> None:
     )
     msg_rp.code = "2309"
     msg_rp.payload = {"sync": True}
+    msg_rp._pkt._frame = "RP --- 04:111111 01:123456 04:111111 2309 003 0004B5"
 
     msg_rq = MagicMock()
     msg_rq.verb = RQ
@@ -91,6 +93,7 @@ async def test_get_state_parity() -> None:
         "addr3": "01:123456",
         "code": "1F09",
         "payload": {"temp": 21.0},
+        "frame": " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5",
     }
 
     assert state[dtm_rp] == {
@@ -102,4 +105,48 @@ async def test_get_state_parity() -> None:
         "addr3": "01:123456",
         "code": "2309",
         "payload": {"sync": True},
+        "frame": "RP --- 04:111111 01:123456 04:111111 2309 003 0004B5",
     }
+
+
+@pytest.mark.asyncio
+async def test_get_state_frame_key_enables_restore() -> None:
+    """Regression test for issue 812: get_state() must include a 'frame' key
+    so that Packet.from_dict can reconstruct the packet on warm restart.
+
+    Without the frame key, _restore_cached_packets gets an empty frame body
+    and raises "Bad frame: Invalid structure: >>><<<".
+    """
+    import json
+
+    from ramses_tx.packet import Packet
+
+    gwy = Gateway(port_name="/dev/null")
+    gwy.message_store = MagicMock()
+
+    msg = MagicMock()
+    msg.verb = I_
+    msg.dtm = dt(2023, 1, 1, 12, 0, 0)
+    msg.src.id = "01:123456"
+    msg.dst.id = "01:123456"
+    msg._addrs = (
+        _mock_addr("01:123456"),
+        _mock_addr("--:------"),
+        _mock_addr("01:123456"),
+    )
+    msg.code = "1F09"
+    msg.payload = {"temp": 21.0}
+    msg._pkt._frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+
+    gwy.message_store.state_cache = {"h1": msg}
+
+    _schema, state = await gwy.get_state()
+
+    dtm_str = msg.dtm.isoformat(timespec="microseconds")
+    assert "frame" in state[dtm_str], "get_state() must include 'frame' key"
+
+    # Simulate HA storage: JSON round-trip then Packet.from_dict
+    json_roundtrip = json.loads(json.dumps(state))
+    pkt = Packet.from_dict(dtm_str, json_roundtrip[dtm_str])
+    assert pkt.code == "1F09"
+    assert pkt._frame == " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
