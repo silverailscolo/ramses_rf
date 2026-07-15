@@ -450,7 +450,11 @@ class DiscoveryScan:
                     else:
                         dev.rssi = (dev.rssi + rssi) / 2
                     self._dirty = True
-                if zone_idx and is_src:
+                if zone_idx and is_src and not dev_id.startswith("01:"):
+                    # Skip CTL (01:) — it sends 000A with zone config for
+                    # multiple zones, not its own zone binding.  Setting
+                    # zone_idx on the CTL corrupts its comment and schema
+                    # entry (issue 813).
                     bound_changed = dev.zone_idx != zone_idx
                     dev.zone_idx = zone_idx
                     if dst and _is_valid_address(dst) and dst != dev_id:
@@ -491,7 +495,9 @@ class DiscoveryScan:
             # zone_idx is extracted from the payload and is valid even for
             # broadcasts (dst == --:------).  bound_to requires a valid dst.
             # Skip for HGI gateways — they don't have zone bindings.
-            if zone_idx and is_src and not is_hgi:
+            # Skip for CTL (01:) — it sends 000A with zone config for
+            # multiple zones, not its own zone binding (issue 813).
+            if zone_idx and is_src and not is_hgi and not dev_id.startswith("01:"):
                 dev.zone_idx = zone_idx
                 if dst and _is_valid_address(dst) and dst != dev_id:
                     dev.bound_to = dst
@@ -682,13 +688,20 @@ class DiscoveryScan:
 def _is_valid_address(dev_id: str) -> bool:
     """Quick check if a device ID looks valid (N.N:NNNNNN or N:NNNNNN).
 
-    Filters out broadcast addresses (18:73030, 18:14803, 18:000730,
-    63:262142), placeholder addresses (--:------), and corrupt IDs.
+    Filters out broadcast addresses (18:73030, 18:14803, 18:000730),
+    the null/broadcast device type 63: (NUL — e.g. 63:262142=0xFFFFFE,
+    63:262143=0xFFFFFF, the latter also used by the HGI80 to disguise its
+    own address), placeholder addresses (--:------), and corrupt IDs.
     """
     if not dev_id or len(dev_id) < 8:
         return False
     # Skip broadcast/multicast addresses
-    if dev_id in ("18:73030", "18:14803", "18:000730", "63:262142"):
+    if dev_id in ("18:73030", "18:14803", "18:000730"):
+        return False
+    # Skip the null/broadcast device type 63: (NUL) — no real device uses
+    # type 63; both 63:262142 (0xFFFFFE) and 63:262143 (0xFFFFFF) are
+    # sentinels, and the HGI80 emits 63:262143 as a self-disguise address
+    if dev_id.startswith("63:"):
         return False
     # Skip placeholder/empty addresses (e.g. "--:------")
     if dev_id.startswith("-") or dev_id.startswith("00:------"):
