@@ -662,6 +662,26 @@ class TestDiscoveryScanPacketHandling:
         assert dev.bound_to == "01:216136"
         assert dev.confidence == "high"
 
+    def test_ctl_no_zone_binding_from_000a(self) -> None:
+        """CTL (01:) must not get zone_idx from its own 000A packets (issue 813).
+
+        The CTL sends 000A with zone config for multiple zones.  The first
+        2 hex chars are the zone_idx of the zone being configured, NOT the
+        CTL's own zone.  Setting zone_idx on the CTL corrupts its comment
+        and schema entry.
+        """
+        gwy = make_mock_gateway(known_list={"01:216136": {}})
+        scan = DiscoveryScan(gwy)
+        # CTL sends 000A to HGI with zone 02 config
+        scan._process_packet(
+            make_dto(src="01:216136", dst="18:072981", code="000A", payload="02")
+        )
+        dev = scan.get_device("01:216136")
+        assert dev is not None
+        # CTL must NOT have zone_idx set
+        assert dev.zone_idx is None
+        assert dev.bound_to is None
+
     def test_codes_seen_deduplicated_and_sorted(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)

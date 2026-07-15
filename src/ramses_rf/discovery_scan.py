@@ -450,7 +450,11 @@ class DiscoveryScan:
                     else:
                         dev.rssi = (dev.rssi + rssi) / 2
                     self._dirty = True
-                if zone_idx and is_src:
+                if zone_idx and is_src and not dev_id.startswith("01:"):
+                    # Skip CTL (01:) — it sends 000A with zone config for
+                    # multiple zones, not its own zone binding.  Setting
+                    # zone_idx on the CTL corrupts its comment and schema
+                    # entry (issue 813).
                     bound_changed = dev.zone_idx != zone_idx
                     dev.zone_idx = zone_idx
                     if dst and _is_valid_address(dst) and dst != dev_id:
@@ -491,7 +495,9 @@ class DiscoveryScan:
             # zone_idx is extracted from the payload and is valid even for
             # broadcasts (dst == --:------).  bound_to requires a valid dst.
             # Skip for HGI gateways — they don't have zone bindings.
-            if zone_idx and is_src and not is_hgi:
+            # Skip for CTL (01:) — it sends 000A with zone config for
+            # multiple zones, not its own zone binding (issue 813).
+            if zone_idx and is_src and not is_hgi and not dev_id.startswith("01:"):
                 dev.zone_idx = zone_idx
                 if dst and _is_valid_address(dst) and dst != dev_id:
                     dev.bound_to = dst
