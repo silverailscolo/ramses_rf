@@ -688,13 +688,20 @@ class DiscoveryScan:
 def _is_valid_address(dev_id: str) -> bool:
     """Quick check if a device ID looks valid (N.N:NNNNNN or N:NNNNNN).
 
-    Filters out broadcast addresses (18:73030, 18:14803, 18:000730,
-    63:262142), placeholder addresses (--:------), and corrupt IDs.
+    Filters out broadcast addresses (18:73030, 18:14803, 18:000730),
+    the null/broadcast device type 63: (NUL — e.g. 63:262142=0xFFFFFE,
+    63:262143=0xFFFFFF, the latter also used by the HGI80 to disguise its
+    own address), placeholder addresses (--:------), and corrupt IDs.
     """
     if not dev_id or len(dev_id) < 8:
         return False
     # Skip broadcast/multicast addresses
-    if dev_id in ("18:73030", "18:14803", "18:000730", "63:262142"):
+    if dev_id in ("18:73030", "18:14803", "18:000730"):
+        return False
+    # Skip the null/broadcast device type 63: (NUL) — no real device uses
+    # type 63; both 63:262142 (0xFFFFFE) and 63:262143 (0xFFFFFF) are
+    # sentinels, and the HGI80 emits 63:262143 as a self-disguise address
+    if dev_id.startswith("63:"):
         return False
     # Skip placeholder/empty addresses (e.g. "--:------")
     if dev_id.startswith("-") or dev_id.startswith("00:------"):

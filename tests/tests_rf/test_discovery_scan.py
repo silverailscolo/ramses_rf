@@ -99,6 +99,15 @@ class TestIsValidAddress:
     def test_all_device_broadcast_rejected(self) -> None:
         assert _is_valid_address("63:262142") is False
 
+    def test_null_device_type_all_ones_rejected(self) -> None:
+        # 63:262143 = 0xFFFFFF, the all-ones sentinel (HGI80 self-disguise)
+        assert _is_valid_address("63:262143") is False
+
+    def test_all_null_device_type_rejected(self) -> None:
+        # No real device uses type 63 (NUL) — reject the whole prefix
+        assert _is_valid_address("63:000000") is False
+        assert _is_valid_address("63:999999") is False
+
     def test_empty_rejected(self) -> None:
         assert _is_valid_address("") is False
 
