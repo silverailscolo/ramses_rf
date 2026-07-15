@@ -294,7 +294,11 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if self._connected:
             _LOGGER.info("MQTT device came back online - resuming writing")
-            self._loop.call_soon_threadsafe(self._protocol.resume_writing)
+            if not self._loop.is_closed():
+                try:
+                    self._loop.call_soon_threadsafe(self._protocol.resume_writing)
+                except RuntimeError:
+                    _LOGGER.debug("Event loop closed, cannot resume writing")
             return
 
         _LOGGER.info("MQTT device is online - establishing connection")
@@ -408,7 +412,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         try:
             self._frame_read(dtm.isoformat(), _normalise(payload["msg"]))
         except exc.TransportError:
-            if not self._closing:
+            if not self._closing and not self.loop.is_closed():
                 raise
 
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
