@@ -115,9 +115,15 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             return
         self._closing = True
 
-        self.loop.call_soon_threadsafe(
-            functools.partial(self._protocol.connection_lost, exc)
-        )
+        if self.loop.is_closed():
+            _LOGGER.debug("Event loop already closed, cannot notify protocol")
+            return
+        try:
+            self.loop.call_soon_threadsafe(
+                functools.partial(self._protocol.connection_lost, exc)
+            )
+        except RuntimeError:
+            _LOGGER.debug("Event loop closed during _close(), cannot notify protocol")
 
     def close(self) -> None:
         """Close the transport gracefully."""
@@ -139,9 +145,15 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         """Register the connection with the protocol."""
         self._extra[SZ_ACTIVE_HGI] = gwy_id  # or HGI_DEV_ADDR.id
 
-        self.loop.call_soon_threadsafe(
-            functools.partial(self._protocol.connection_made, self, ramses=True)
-        )
+        if self.loop.is_closed():
+            _LOGGER.debug("Event loop closed, cannot make connection")
+            return
+        try:
+            self.loop.call_soon_threadsafe(
+                functools.partial(self._protocol.connection_made, self, ramses=True)
+            )
+        except RuntimeError:
+            _LOGGER.debug("Event loop closed during _make_connection()")
 
     def _frame_read(self, dtm_str: str, frame: str) -> None:
         """Make a Packet from the Frame and process it."""
@@ -166,8 +178,15 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         if self._closing is True:
             raise exc.TransportError("Transport is closing or has closed")
 
+        if self.loop.is_closed():
+            raise exc.TransportError("Event loop is closed")
+
         try:
             self.loop.call_soon_threadsafe(self._protocol.pkt_received, pkt)
+        except RuntimeError as err:
+            # Event loop may close between the is_closed() check and this
+            # call when the paho-mqtt thread races asyncio teardown (issue 802)
+            raise exc.TransportError(f"Event loop is closed: {err}") from err
         except AssertionError as err:
             _LOGGER.exception("%s < exception from msg layer: %s", pkt, err)
         except exc.ProtocolError as err:
