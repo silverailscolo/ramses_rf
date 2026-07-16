@@ -156,8 +156,12 @@ DONT_UPDATE_ENTITIES: Final[int] = 1
 
 SCHED_REFRESH_INTERVAL: Final[int] = 3  # minutes
 
+# 0004 (zone_name) is intentionally excluded: it is low-volume (sent
+# every ~6h) and carries semi-static state (zone names).  Classifying it
+# as high-volume caused cached 0004 packets older than 1h to be skipped
+# during _restore_cached_packets, so zone names were lost on restart.
+# See https://github.com/ramses-rf/ramses_cc/issues/822
 HIGH_VOLUME_STATUS_CODES: Final = (
-    Code._0004,
     Code._1060,
     Code._2309,
     Code._2349,
