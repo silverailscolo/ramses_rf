@@ -86,7 +86,11 @@ def sch_global_traits_dict_factory(
             vol.Optional(SZ_CLASS, default="HVC"): vol.Any(
                 None, *hvac_slugs, *(str(DEV_TYPE_MAP[s]) for s in hvac_slugs)
             ),
-            vol.Optional(SZ_BOUND_TO): vol.Any(None, vol.Match(DEVICE_ID_REGEX.ANY)),
+            vol.Optional(SZ_BOUND_TO): vol.Any(
+                None,
+                vol.Match(DEVICE_ID_REGEX.ANY),
+                [vol.Match(DEVICE_ID_REGEX.ANY)],
+            ),
         }
     )
     SCH_TRAITS_HVAC = SCH_TRAITS_HVAC.extend(
@@ -122,6 +126,79 @@ def sch_global_traits_dict_factory(
 
 
 SCH_GLOBAL_TRAITS_DICT, SCH_TRAITS = sch_global_traits_dict_factory()
+
+
+# Trait key mapping: ramses_cc _-prefixed → ramses_rf native trait.
+# Used by strip_and_map_traits() stage 2.
+# Keys not in this map are simply stripped (stage 1).
+_TRAIT_KEY_MAP: Final[dict[str, str]] = {
+    "_bound": SZ_BOUND_TO,
+    "_scheme": SZ_SCHEME,
+    "_alias": SZ_ALIAS,
+    "_faked": SZ_FAKED,
+    "_class": SZ_CLASS,
+}
+
+
+def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
+    """Strip ramses_cc-only ``_``-prefixed keys and map known ones to native traits.
+
+    This is the ramses_rf side of the schema transformation pipeline:
+    - **Stage 1 (strip):** remove ``_``-prefixed keys that ramses_rf
+      doesn't need (``_commands``, ``_disabled``, ``_name``, ``_note``,
+      ``_owner``, ``_comment``, ``_skipped``, …).
+    - **Stage 2 (map):** rename ``_``-prefixed keys that ramses_rf
+      *does* need to their native names (``_bound``→``bound``,
+      ``_scheme``→``scheme``, ``_alias``→``alias``, ``_faked``→``faked``,
+      ``_class``→``class``).
+
+    Both the HA integration (ramses_cc) and the CLI (ramses_cli) call
+    this function so that ``config.json`` schemas with ``_``-prefixed
+    keys work everywhere — no duplicate stripper needed.
+
+    Keys without a ``_`` prefix are passed through unchanged.
+
+    :param traits: A device's trait dict, possibly containing
+        ``_``-prefixed ramses_cc extension keys.
+    :return: A new dict with ``_`` keys stripped or mapped to native names.
+    """
+    result: dict[str, Any] = {}
+    for key, value in traits.items():
+        if not isinstance(key, str) or not key.startswith("_"):
+            # Non-_ key: pass through
+            result[key] = value
+            continue
+        # _-prefixed key: map or strip
+        native_key = _TRAIT_KEY_MAP.get(key)
+        if native_key is not None and native_key not in result:
+            result[native_key] = value
+        # else: strip (drop the key)
+    return result
+
+
+def strip_and_map_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Apply :func:`strip_and_map_traits` to every device entry in a schema.
+
+    Walks a schema dict and applies the strip+map pipeline to each
+    device's trait dict.  Top-level keys (``main_tcs``, ``orphans_heat``,
+    ``controller``, etc.) are passed through unchanged.
+
+    :param schema: A schema dict with device IDs as keys and trait
+        dicts as values.
+    :return: A new schema dict with ``_`` keys stripped/mapped per device.
+    """
+    result: dict[str, Any] = {}
+    for key, value in schema.items():
+        if isinstance(value, dict) and isinstance(key, str):
+            # Could be a device entry (key is a device ID) or a
+            # structural key (main_tcs, orphans_heat, etc.).
+            # Device entries have _-prefixed keys in their value dict;
+            # structural keys don't.  Apply strip+map either way —
+            # non-_ keys pass through unchanged.
+            result[key] = strip_and_map_traits(value)
+        else:
+            result[key] = value
+    return result
 
 
 @dataclass
