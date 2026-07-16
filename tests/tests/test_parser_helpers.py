@@ -200,6 +200,49 @@ def test_2411_unknown_param_ids_ventura() -> None:
     assert "_unknown_data_type" not in result
 
 
+def test_2411_data_type_80_minibox_param_07() -> None:
+    """2411 param 07 with data_type 80 (ClimaRad MiniBox) must parse without warning.
+
+    The MiniBox FAN does not support this parameter and signals this by
+    returning sentinel values (0x000000FF for value, 0xFFFFFFFF for min).
+    data_type 80 is a 4-byte boolean: 0=False, 1=True, anything else=None.
+    See issue 830.
+    """
+    msg = _make_22f1_msg(
+        "2026-07-16T07:51:23.626000 078 RP --- 29:099029 29:123150 --:------ 2411 022 "
+        "0000071F80000000FFFFFFFFFF000000010000000120"
+    )
+    result = msg.payload
+    assert result["parameter"] == "07"
+    assert result["description"] == "Base ventilation enable"
+    assert result["value"] is None  # 0x000000FF = not available
+    assert result["min_value"] is None  # 0xFFFFFFFF = not available
+    assert result["max_value"] == 1
+    assert result["precision"] == 1
+    assert "_unknown_data_type" not in result
+
+
+def test_2411_data_type_80_bool_values() -> None:
+    """2411 data_type 80 must decode 0=False, 1=True for supported devices."""
+    # value = 0x00000000 (False)
+    msg = _make_22f1_msg(
+        "2026-07-16T07:51:23.626000 078 RP --- 29:099029 29:123150 --:------ 2411 022 "
+        "0000071F8000000000FFFFFFFF000000010000000120"
+    )
+    result = msg.payload
+    assert result["value"] == 0
+    assert "_unknown_data_type" not in result
+
+    # value = 0x00000001 (True)
+    msg = _make_22f1_msg(
+        "2026-07-16T07:51:23.626000 078 RP --- 29:099029 29:123150 --:------ 2411 022 "
+        "0000071F8000000001FFFFFFFF000000010000000120"
+    )
+    result = msg.payload
+    assert result["value"] == 1
+    assert "_unknown_data_type" not in result
+
+
 def test_helper_demand_transform() -> None:
     assert [x[1] for x in TRANSFORMS] == [_transform(x[0]) for x in TRANSFORMS]
 
