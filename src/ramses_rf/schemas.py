@@ -55,6 +55,7 @@ from .config import (
     SZ_SCHEME as SZ_SCHEME,
     strip_and_map_schema as strip_and_map_schema,
     strip_and_map_traits as strip_and_map_traits,
+    strip_traits as strip_traits,
 )
 
 # TODO: deprecate re-exporting (via as) in favour of direct imports
