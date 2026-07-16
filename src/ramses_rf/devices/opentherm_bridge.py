@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from typing import TYPE_CHECKING, Any, Final, Literal
 
-from ramses_rf.const import FC, HEARTBEAT_TIMEOUT_OTB, I_, RP, RQ, Code, DevType
+from ramses_rf.const import FC, HEARTBEAT_TIMEOUT_OTB, RQ, Code, DevType
 from ramses_rf.models import DemandState, DeviceTraits, OpenThermState, TemperatureState
 from ramses_tx import Command, Priority
 from ramses_tx.const import (
@@ -54,17 +54,12 @@ from ..protocol.opentherm import (
     PARAMS_DATA_IDS,
     SCHEMA_DATA_IDS,
     STATUS_DATA_IDS,
-    SZ_MSG_ID,
-    SZ_MSG_NAME,
-    SZ_MSG_TYPE,
-    SZ_VALUE,
     OtDataId,
-    OtMsgType,
 )
 from .heat_actuators import Actuator, HeatDemand
 
 if TYPE_CHECKING:
-    from ..messages import Message
+    pass
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
 QOS_MID = {SZ_PRIORITY: Priority.HIGH}  # FIXME: deprecate QoS in kwargs
@@ -79,7 +74,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _to_msg_id(data_id: OtDataId) -> MsgId:
-    return cast(MsgId, f"{data_id:02X}")
+    return f"{data_id:02X}"  # type: ignore[return-value]
 
 
 # NOTE: config.use_native_ot should enforce sends, but not reads from _msgz DB
@@ -124,14 +119,10 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         self.opentherm_state = OpenThermState()
 
         self._child_id = FC  # NOTE: domain_id
-        # TODO[F4-PR2]: Purge legacy OpenTherm write-model tracking.
-        self._msgs_ot: dict[MsgId, Message] = {}
 
     def _post_class_promote(self) -> None:
         """Initialize OTB state when promoted in-place from a generic device."""
         self.__dict__.setdefault("_child_id", FC)
-        # TODO[F4-PR2]: Purge legacy OpenTherm write-model tracking.
-        self.__dict__.setdefault("_msgs_ot", {})
 
         if not hasattr(self, "temp_state"):
             self.temp_state = TemperatureState()
@@ -224,75 +215,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
                     Command.from_attrs(RQ, self.id, code, PayloadT("00")), 300
                 )
 
-    # TODO[F4-PR2]: Purge legacy OpenTherm write-model tracking.
-    def _handle_msg(self, msg: Message) -> None:
-        super()._handle_msg(msg)
-
-        if msg.verb not in (I_, RP):
-            return
-
-        if msg.code == Code._3220:
-            self._handle_3220(msg)
-        elif msg.code in self.RAMSES_TO_OT:
-            self._handle_code(msg)
-
-    def _handle_3220(self, msg: Message) -> None:
-        """Handle 3220-based messages."""
-
-        # NOTE: Reserved msgs have null data, but that msg_id may later be OK!
-        if msg.payload[SZ_MSG_TYPE] == OtMsgType.RESERVED:
-            return
-
-        # NOTE: Some msgs have invalid data, but that msg_id may later be OK!
-        if msg.payload.get(SZ_VALUE) is None:
-            return
-
-        # msg_id is int in msg payload/opentherm.py, but MsgId (str) in this module
-        msg_id = _to_msg_id(msg.payload[SZ_MSG_ID])
-        self._msgs_ot[msg_id] = msg
-
-        if not _DBG_ENABLE_DEPRECATION:  # FIXME: data gaps
-            return
-
-        reset = msg.payload[SZ_MSG_TYPE] not in (
-            OtMsgType.DATA_INVALID,
-            OtMsgType.UNKNOWN_DATAID,
-            OtMsgType.RESERVED,  # but some are ?always reserved
-        )
-        self.discovery.deprecate_code_ctx(msg._pkt, ctx=msg_id, reset=reset)
-
-    def _handle_code(self, msg: Message) -> None:
-        """Handle non-3220-based messages."""
-
-        if msg.code == Code._3EF0 and msg.verb == I_:
-            # NOTE: this is development/discovery code  # chasing flags
-            # self._send_cmd(
-            #     Command.get_opentherm_data(self.id, MsgId._00), **QOS_MID
-            # )  # FIXME: deprecate QoS in kwargs
-            return
-
-        if msg.code in (Code._10A0, Code._3EF1):
-            return
-
-        if not _DBG_ENABLE_DEPRECATION:  # FIXME: data gaps
-            return
-
-        # TODO: can be temporarily 7FFF?
-        if msg._pkt.payload[2:] == "7FFF" or (
-            msg.code == Code._1300 and msg._pkt.payload[2:] == "09F6"
-        ):  # latter is CH water pressure
-            self.discovery.deprecate_code_ctx(msg._pkt)
-        else:
-            self.discovery.deprecate_code_ctx(msg._pkt, reset=True)
-
-    @staticmethod
-    def _ot_msg_name(msg: Message) -> str:  # TODO: remove
-        return (
-            msg.payload[SZ_MSG_NAME]
-            if isinstance(msg.payload[SZ_MSG_NAME], str)
-            else f"{msg.payload[SZ_MSG_ID]:02X}"
-        )
-
     async def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
         return self.opentherm_state.temperatures.boiler_output
 
@@ -326,10 +248,6 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return self.opentherm_state.max_rel_modulation
 
     async def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
-        if (msg := self._msgs_ot.get(MsgId._73)) and not getattr(
-            msg, "_expired", False
-        ):
-            return cast(float | None, msg.payload.get(SZ_VALUE))
         return None
 
     async def outside_temp(self) -> float | None:  # 3220|1B, 1290
@@ -382,16 +300,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return self.opentherm_state.flags.summer_mode
 
     async def opentherm_schema(self) -> dict[str, Any]:
-        result: dict[str, Any] = {
-            self._ot_msg_name(v): v.payload
-            for k, v in self._msgs_ot.items()
-            if getattr(self.discovery, "_supported_cmds_ctx", {}).get(k)
-            and int(k, 16) in SCHEMA_DATA_IDS
-        }
-        return {
-            m: {k: v for k, v in p.items() if k.startswith(SZ_VALUE)}
-            for m, p in result.items()
-        }
+        return {}
 
     async def opentherm_counters(self) -> dict[str, Any]:  # all are U16
         return {
@@ -410,16 +319,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
     async def opentherm_params(
         self,
     ) -> dict[str, Any]:  # F8_8, U8, {"hb": S8, "lb": S8}
-        result = {
-            self._ot_msg_name(v): v.payload
-            for k, v in self._msgs_ot.items()
-            if getattr(self.discovery, "_supported_cmds_ctx", {}).get(k)
-            and int(k, 16) in PARAMS_DATA_IDS
-        }
-        return {
-            m: {k: v for k, v in p.items() if k.startswith(SZ_VALUE)}
-            for m, p in result.items()
-        }
+        return {}
 
     async def ramses_schema(self) -> PayDictT.EMPTY:
         return {}
