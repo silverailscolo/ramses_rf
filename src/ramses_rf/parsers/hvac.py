@@ -790,6 +790,14 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
     def centile(x: str) -> float:
         return int(x, 16) / 10
 
+    def bool32(x: str) -> int | None:
+        # 4-byte boolean: 0=False, 1=True, anything else (e.g. 000000FF,
+        # FFFFFFFF) is a sentinel meaning "not available" (issue 830).
+        val = int(x, 16)
+        if val in (0, 1):
+            return val
+        return None
+
     _2411_DATA_TYPES = {
         "00": (2, counter),  # 4E (0-1), 54 (15-60)
         "01": (2, centile),  # 52 (0.0-25.0) (%)
@@ -798,6 +806,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
         "11": (4, counter),  # DA - Orcon/ClimaRad Ventura (data_type variant)
         "13": (4, counter),  # 31 - ClimaRad Ventura filter time (variant)
         "20": (4, counter),  # 01 - Support parameter
+        "80": (4, bool32),  # 07 - ClimaRad MiniBox: 0/1, FFFFFFFF/000000FF = N/A
         "90": (4, counter),  # 3E - Away mode Exhaust fan rate (%)
         "92": (4, hex_to_temp),  # 75 (0-30) (C)
     }
