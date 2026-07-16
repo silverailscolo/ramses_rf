@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Any, Final, Literal
+from typing import Any, Final, Literal
 
 from ramses_rf.const import FC, HEARTBEAT_TIMEOUT_OTB, RQ, Code, DevType
 from ramses_rf.models import DemandState, DeviceTraits, OpenThermState, TemperatureState
@@ -57,9 +57,6 @@ from ..protocol.opentherm import (
     OtDataId,
 )
 from .heat_actuators import Actuator, HeatDemand
-
-if TYPE_CHECKING:
-    pass
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
 QOS_MID = {SZ_PRIORITY: Priority.HIGH}  # FIXME: deprecate QoS in kwargs
