@@ -9,7 +9,12 @@ These tests verify that ramses_rf's strip+map pipeline correctly:
 
 from __future__ import annotations
 
-from ramses_rf.config import SCH_TRAITS, strip_and_map_schema, strip_and_map_traits
+from ramses_rf.config import (
+    SCH_TRAITS,
+    strip_and_map_schema,
+    strip_and_map_traits,
+    strip_traits,
+)
 
 
 class TestStripAndMapTraits:
@@ -94,6 +99,39 @@ class TestStripAndMapTraits:
         assert result["class"] == "FAN"
         assert result["alias"] == "My Fan"
 
+    def test_recursive_nested_dict_strips_underscore(self) -> None:
+        """_name inside a nested dict (e.g. a zone) is stripped."""
+        traits = {
+            "class": "TCS",
+            "zones": {"01": {"_name": "Living Room", "setpoint": 20.0}},
+        }
+        result = strip_and_map_traits(traits)
+        assert result["zones"]["01"] == {"setpoint": 20.0}
+        assert "_name" not in result["zones"]["01"]
+
+    def test_recursive_nested_dict_maps_underscore(self) -> None:
+        """_bound inside a nested dict is mapped to bound."""
+        traits = {
+            "class": "TCS",
+            "zones": {"01": {"_bound": "32:153001", "setpoint": 20.0}},
+        }
+        result = strip_and_map_traits(traits)
+        assert result["zones"]["01"]["bound"] == "32:153001"
+        assert "_bound" not in result["zones"]["01"]
+
+    def test_recursive_deeply_nested(self) -> None:
+        """Recursion works at arbitrary depth."""
+        traits = {
+            "class": "TCS",
+            "zones": {
+                "01": {"_name": "Zone 1", "sub": {"_disabled": True, "ok": 1}},
+            },
+        }
+        result = strip_and_map_traits(traits)
+        assert "_name" not in result["zones"]["01"]
+        assert "_disabled" not in result["zones"]["01"]["sub"]
+        assert result["zones"]["01"]["sub"] == {"ok": 1}
+
 
 class TestStripAndMapSchema:
     """Unit tests for strip_and_map_schema()."""
@@ -147,3 +185,48 @@ class TestSchTraitsHvacBound:
         """No bound key at all."""
         result = SCH_TRAITS({"class": "FAN", "scheme": "vasco"})
         assert "bound" not in result or result.get("bound") is None
+
+
+class TestStripTraits:
+    """Unit tests for strip_traits() (stage 1 only — strip, no mapping)."""
+
+    def test_strips_underscore_keys(self) -> None:
+        """All _-prefixed keys are removed."""
+        traits = {"_commands": {"on": "22F1"}, "_name": "My REM", "class": "FAN"}
+        result = strip_traits(traits)
+        assert result == {"class": "FAN"}
+
+    def test_does_not_map(self) -> None:
+        """strip_traits does NOT map _bound -> bound (stage 1 only)."""
+        traits = {"_bound": "32:153001", "class": "FAN"}
+        result = strip_traits(traits)
+        assert result == {"class": "FAN"}
+        assert "bound" not in result
+
+    def test_passes_through_non_underscore(self) -> None:
+        """Non-_ keys pass through unchanged."""
+        traits = {"class": "FAN", "bound": "32:153001", "scheme": "vasco"}
+        result = strip_traits(traits)
+        assert result == traits
+
+    def test_empty_dict(self) -> None:
+        """Empty dict returns empty dict."""
+        assert strip_traits({}) == {}
+
+    def test_recursive_nested(self) -> None:
+        """_ keys inside nested dicts are also stripped."""
+        traits = {
+            "class": "TCS",
+            "zones": {"01": {"_name": "Living Room", "setpoint": 20.0}},
+        }
+        result = strip_traits(traits)
+        assert result == {"class": "TCS", "zones": {"01": {"setpoint": 20.0}}}
+
+    def test_recursive_deeply_nested(self) -> None:
+        """Recursion works at arbitrary depth."""
+        traits = {
+            "class": "TCS",
+            "zones": {"01": {"_name": "Z1", "sub": {"_disabled": True, "ok": 1}}},
+        }
+        result = strip_traits(traits)
+        assert result == {"class": "TCS", "zones": {"01": {"sub": {"ok": 1}}}}
