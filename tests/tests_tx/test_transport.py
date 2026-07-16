@@ -234,3 +234,119 @@ async def test_is_hgi80_async_file_check() -> None:
 
         # Assert: os.path.exists was called
         mock_exists.assert_called_once_with(test_port)
+
+
+# --- Event-loop-closed guards (issue 802) ---
+
+
+def _make_read_transport(loop: asyncio.AbstractEventLoop) -> Any:
+    """Create a minimal _ReadTransport for testing _pkt_read/_close."""
+    from ramses_tx.transport.base import _ReadTransport
+
+    transport = _ReadTransport.__new__(_ReadTransport)
+    transport._loop = loop
+    transport._protocol = Mock()
+    transport._closing = False
+    transport._reading = False
+    transport._this_pkt = None
+    transport._prev_pkt = None
+    transport._extra = {}
+    transport._evofw_flag = None
+    return transport
+
+
+async def test_pkt_read_raises_transport_error_when_loop_closed() -> None:
+    """_pkt_read raises TransportError (not RuntimeError) when loop is closed.
+
+    This is the fix for issue 802: the paho-mqtt thread receives a message
+    after the asyncio loop has been closed, and call_soon_threadsafe would
+    raise RuntimeError('Event loop is closed').
+    """
+    loop = asyncio.get_event_loop()
+    transport = _make_read_transport(loop)
+
+    # Simulate a closed loop
+    with patch.object(type(loop), "is_closed", return_value=True):
+        from ramses_tx import Packet
+
+        pkt = Packet.from_file(
+            "2026-07-13T04:40:36",
+            "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
+        )
+        with pytest.raises(exc.TransportError, match="Event loop is closed"):
+            transport._pkt_read(pkt)
+
+
+async def test_pkt_read_raises_transport_error_on_runtime_error() -> None:
+    """_pkt_read catches RuntimeError from call_soon_threadsafe and wraps it.
+
+    Even if is_closed() returns False, the loop may close between the check
+    and the call (race condition). The RuntimeError is caught and re-raised
+    as TransportError so the MQTT _on_message handler can suppress it.
+    """
+    loop = asyncio.get_event_loop()
+    transport = _make_read_transport(loop)
+
+    from ramses_tx import Packet
+
+    pkt = Packet.from_file(
+        "2026-07-13T04:40:36", "045  I --- 18:130140 32:022222 --:------ 22F2 001 00"
+    )
+
+    # is_closed() returns False, but call_soon_threadsafe raises RuntimeError
+    with (
+        patch.object(type(loop), "is_closed", return_value=False),
+        patch.object(
+            loop,
+            "call_soon_threadsafe",
+            side_effect=RuntimeError("Event loop is closed"),
+        ),
+        pytest.raises(exc.TransportError, match="Event loop is closed"),
+    ):
+        transport._pkt_read(pkt)
+
+
+async def test_close_does_not_crash_when_loop_closed() -> None:
+    """_close() does not raise when the event loop is already closed."""
+    loop = asyncio.get_event_loop()
+    transport = _make_read_transport(loop)
+
+    with patch.object(type(loop), "is_closed", return_value=True):
+        # Should not raise
+        transport._close(None)
+
+    assert transport._closing is True
+    # protocol.connection_lost should NOT have been called
+    transport._protocol.connection_lost.assert_not_called()
+
+
+async def test_close_catches_runtime_error_from_call_soon() -> None:
+    """_close() catches RuntimeError if loop closes between check and call."""
+    loop = asyncio.get_event_loop()
+    transport = _make_read_transport(loop)
+
+    with (
+        patch.object(type(loop), "is_closed", return_value=False),
+        patch.object(
+            loop,
+            "call_soon_threadsafe",
+            side_effect=RuntimeError("Event loop is closed"),
+        ),
+    ):
+        # Should not raise
+        transport._close(None)
+
+    assert transport._closing is True
+
+
+async def test_make_connection_does_not_crash_when_loop_closed() -> None:
+    """_make_connection() does not raise when the event loop is closed."""
+    loop = asyncio.get_event_loop()
+    transport = _make_read_transport(loop)
+
+    with patch.object(type(loop), "is_closed", return_value=True):
+        # Should not raise
+        transport._make_connection("18:130140")
+
+    # protocol.connection_made should NOT have been called
+    transport._protocol.connection_made.assert_not_called()
