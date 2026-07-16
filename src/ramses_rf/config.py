@@ -156,6 +156,9 @@ def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
     this function so that ``config.json`` schemas with ``_``-prefixed
     keys work everywhere — no duplicate stripper needed.
 
+    Recurses into nested dicts (e.g. zones within a TCS) so that
+    ``_name`` inside a zone is also stripped/mapped.
+
     Keys without a ``_`` prefix are passed through unchanged.
 
     :param traits: A device's trait dict, possibly containing
@@ -165,14 +168,46 @@ def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in traits.items():
         if not isinstance(key, str) or not key.startswith("_"):
-            # Non-_ key: pass through
-            result[key] = value
+            # Non-_ key: recurse if dict, pass through otherwise
+            if isinstance(value, dict):
+                result[key] = strip_and_map_traits(value)
+            else:
+                result[key] = value
             continue
         # _-prefixed key: map or strip
         native_key = _TRAIT_KEY_MAP.get(key)
         if native_key is not None and native_key not in result:
-            result[native_key] = value
+            # Recurse into mapped value if it's a dict
+            if isinstance(value, dict):
+                result[native_key] = strip_and_map_traits(value)
+            else:
+                result[native_key] = value
         # else: strip (drop the key)
+    return result
+
+
+def strip_traits(traits: dict[str, Any]) -> dict[str, Any]:
+    """Recursively strip all ``_``-prefixed keys from a dict.
+
+    Stage 1 only (no mapping).  Used by ramses_cc's
+    ``_strip_schema_extensions`` to remove all ``_`` keys before passing
+    the schema to ``SCH_GLOBAL_SCHEMAS`` (which does not accept mapped
+    trait names like ``bound`` or ``class`` — those go in the
+    ``known_list``, not the schema).
+
+    Recurses into nested dicts (e.g. zones within a TCS).
+
+    :param traits: A dict possibly containing ``_``-prefixed keys.
+    :return: A new dict with all ``_`` keys removed.
+    """
+    result: dict[str, Any] = {}
+    for key, value in traits.items():
+        if isinstance(key, str) and key.startswith("_"):
+            continue
+        if isinstance(value, dict):
+            result[key] = strip_traits(value)
+        else:
+            result[key] = value
     return result
 
 
