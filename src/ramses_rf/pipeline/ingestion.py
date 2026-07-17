@@ -296,6 +296,41 @@ class StateProjector:
                             err,
                         )
 
+        # --- CQRS Reactor Hooks ---
+        # Automate the legacy Actuator discovery query (3EF1) in response to 3EF0 (I)
+        if msg.code == Code._3EF0 and getattr(msg, "verb", "") == " I":
+            src_dev = registry.device_by_id.get(msg.src.id)
+            if src_dev and not getattr(src_dev, "is_faked", False):
+                from ramses_tx import Command, Priority
+                from ramses_tx.const import RQ
+                from ramses_tx.typing import PayloadT
+
+                try:
+                    cmd = Command.from_attrs(RQ, msg.src.id, Code._3EF1, PayloadT("00"))
+                    self._gwy.send_cmd(cmd, priority=Priority.LOW)
+                except Exception as err:
+                    _LOGGER.error(
+                        "Failed to trigger CQRS 3EF1 reactor for %s: %s",
+                        msg.src.id,
+                        err,
+                    )
+
+        # Automate the legacy DHW Sensor discovery query (1260) to keep CTL in sync
+        if msg.code == Code._1260:
+            src_dev = registry.device_by_id.get(msg.src.id)
+            if src_dev and getattr(src_dev, "ctl", None):
+                from ramses_tx import Command
+
+                try:
+                    cmd = Command.get_dhw_temp(src_dev.ctl.id)
+                    self._gwy.send_cmd(cmd)
+                except Exception as err:
+                    _LOGGER.error(
+                        "Failed to trigger CQRS 1260 reactor for %s: %s",
+                        src_dev.ctl.id,
+                        err,
+                    )
+
     def _update_opentherm_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
