@@ -13,10 +13,12 @@ from ramses_rf.const import (
     Code,
     DevType,
 )
+from ramses_rf.enums import Action
 from ramses_rf.models import DeviceTraits, HvacState
-from ramses_tx import Command, Packet, Priority
+from ramses_tx import Packet
 
 from .dev_base import BatteryState, DeviceHvac, Fakeable
+from .helpers import send_fake_intent
 
 if TYPE_CHECKING:
     from ..messages import Message
@@ -102,9 +104,11 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         # TODO: num_repeats=2, or wait_for_reply=True ?
 
         # NOTE: this is not completely understood (i.e. diffs between vendor schemes)
-        cmd = Command.set_fan_mode(self.id, int(4 * value), src_id=self.id)
-        return await self._gwy.async_send_cmd(
-            cmd, num_repeats=2, priority=Priority.HIGH
+        return await send_fake_intent(
+            self,
+            Action.SET_FAN_MODE,
+            {"fan_mode": int(4 * value), "scheme": self._scheme or "orcon"},
+            wait_for_reply=True,
         )
 
     async def fan_mode(self) -> str | None:
