@@ -43,6 +43,16 @@ class Action(StrEnum):
     GET_FAN_PARAM = "get_fan_param"
     GET_HVAC_FAN_31DA = "get_hvac_fan_31da"
 
+    GET_SCHEDULE_FRAGMENT = "get_schedule_fragment"
+    SET_SCHEDULE_FRAGMENT = "set_schedule_fragment"
+
+    GET_FAULTLOG_ENTRY = "get_faultlog_entry"
+    CLEAR_FAULTLOG = "clear_faultlog"
+
+    GET_OPENTHERM_DATA = "get_opentherm_data"
+    GET_OPENTHERM_CONFIG = "get_opentherm_config"
+    SET_OPENTHERM_CONFIG = "set_opentherm_config"
+
 
 class TopologyAction(StrEnum):
     """Structural graph mutation actions."""

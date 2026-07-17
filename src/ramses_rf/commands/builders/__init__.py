@@ -9,7 +9,7 @@ from ramses_rf.commands.core import Command
 from ramses_rf.enums import Action
 from ramses_tx.dtos import CommandDTO
 
-from . import dhw, heat, hvac, zones
+from . import dhw, faultlog, heat, hvac, opentherm, schedules, zones
 
 # Maps an Action intent to the appropriate payload constructor.
 BUILDERS: dict[Action, Callable[[Command], CommandDTO]] = {
@@ -34,6 +34,13 @@ BUILDERS: dict[Action, Callable[[Command], CommandDTO]] = {
     Action.PUT_SENSOR_TEMP: heat.build_put_sensor_temp,
     # Zone Commands
     Action.SET_TEMPERATURE: zones.build_set_temperature,
+    # Schedule Commands
+    Action.GET_SCHEDULE_FRAGMENT: schedules.build_get_schedule_fragment,
+    Action.SET_SCHEDULE_FRAGMENT: schedules.build_set_schedule_fragment,
+    # FaultLog Commands
+    Action.GET_FAULTLOG_ENTRY: faultlog.build_get_faultlog_entry,
+    # OpenTherm Commands
+    Action.GET_OPENTHERM_DATA: opentherm.build_get_opentherm_data,
     Action.SET_MODE: zones.build_set_mode,
     Action.SET_ZONE_NAME: zones.build_set_name,
     Action.SET_ZONE_CONFIG: zones.build_set_config,

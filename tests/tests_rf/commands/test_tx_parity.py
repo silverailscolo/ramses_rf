@@ -286,3 +286,71 @@ def test_build_set_fan_param() -> None:
     assert dto.addr1 == legacy_cmd._addrs[0].id
     assert dto.addr2 == legacy_cmd._addrs[1].id
     assert dto.addr3 == legacy_cmd._addrs[2].id
+
+
+def test_build_get_schedule_fragment() -> None:
+    legacy_cmd = LegacyCommand.get_schedule_fragment("01:111111", 0, 1, 0)
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.GET_SCHEDULE_FRAGMENT,
+        data={"zone_idx": 0, "frag_number": 1, "total_frags": 0},
+    )
+    dto = build_dto(intent)
+    assert dto.verb == legacy_cmd.verb
+    assert dto.code == legacy_cmd.code
+    assert dto.payload == legacy_cmd.payload
+    assert dto.addr1 == legacy_cmd._addrs[0].id
+    assert dto.addr2 == legacy_cmd._addrs[1].id
+    assert dto.addr3 == legacy_cmd._addrs[2].id
+
+
+def test_build_set_schedule_fragment() -> None:
+    legacy_cmd = LegacyCommand.set_schedule_fragment("01:111111", 0, 1, 3, "0011223344")
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_SCHEDULE_FRAGMENT,
+        data={"zone_idx": 0, "frag_num": 1, "frag_cnt": 3, "fragment": "0011223344"},
+    )
+    dto = build_dto(intent)
+    assert dto.verb == legacy_cmd.verb
+    assert dto.code == legacy_cmd.code
+    assert dto.payload == legacy_cmd.payload
+    assert dto.addr1 == legacy_cmd._addrs[0].id
+    assert dto.addr2 == legacy_cmd._addrs[1].id
+    assert dto.addr3 == legacy_cmd._addrs[2].id
+
+
+def test_build_get_faultlog_entry() -> None:
+    legacy_cmd = LegacyCommand.get_system_log_entry("01:111111", 5)
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.GET_FAULTLOG_ENTRY,
+        data={"log_idx": 5},
+    )
+    dto = build_dto(intent)
+    assert dto.verb == legacy_cmd.verb
+    assert dto.code == legacy_cmd.code
+    assert dto.payload == legacy_cmd.payload
+    assert dto.addr1 == legacy_cmd._addrs[0].id
+    assert dto.addr2 == legacy_cmd._addrs[1].id
+    assert dto.addr3 == legacy_cmd._addrs[2].id
+
+
+def test_build_get_opentherm_data() -> None:
+    legacy_cmd = LegacyCommand.get_opentherm_data("10:111111", 14)
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("10:111111"),
+        action=Action.GET_OPENTHERM_DATA,
+        data={"msg_id": 14},
+    )
+    dto = build_dto(intent)
+    assert dto.verb == legacy_cmd.verb
+    assert dto.code == legacy_cmd.code
+    assert dto.payload == legacy_cmd.payload
+    assert dto.addr1 == legacy_cmd._addrs[0].id
+    assert dto.addr2 == legacy_cmd._addrs[1].id
+    assert dto.addr3 == legacy_cmd._addrs[2].id
