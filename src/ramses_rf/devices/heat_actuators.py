@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import Any, Final, cast
 
 from ramses_rf.const import (
     DOMAIN_TYPE_MAP,
@@ -21,9 +21,6 @@ from ramses_tx.const import SZ_PRIORITY
 from ramses_tx.typing import PayDictT, PayloadT
 
 from .dev_base import DeviceHeat
-
-if TYPE_CHECKING:
-    pass
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
 
