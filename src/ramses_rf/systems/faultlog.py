@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, NewType, TypeAlias
 
 from ramses_rf import exceptions as exc
 from ramses_rf.models import FaultLogState, StateUpdatedEvent
-from ramses_tx import Command, Packet
+from ramses_tx import Packet
 from ramses_tx.const import (
     SZ_LOG_ENTRY,
     SZ_LOG_IDX,
@@ -22,7 +22,9 @@ from ramses_tx.const import (
 from ramses_tx.helpers import parse_fault_log_entry
 from ramses_tx.typing import DeviceIdT, PayloadT
 
+from ..enums import Action
 from ..messages import Message
+from .helpers import send_system_intent
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -242,39 +244,27 @@ class FaultLog:  # 0418
         # if idx != 0:  # there's other (new/changed) entries above this one?
         #     pass
 
-    def _hack_pkt_idx(self, pkt: Packet, cmd: Command) -> Message:
-        """Modify the Packet so that it has the log index of its corresponding Command.
+    def _hack_pkt_idx(self, pkt: Packet, idx: str) -> Message:
+        """Modify the Packet so that it has the expected log index.
 
         If there is no log entry for log_idx=<idx>, then the headers won't match:
-        - cmd rx_hdr is 0418|RP|<ctl_id>|<idx> (expected)
+        - expected rx_hdr is 0418|RP|<ctl_id>|<idx>
         - pkt hdr will  0418|RP|<ctl_id>|00    (response from controller)
-
-        We can only assume that the Pkt is the reply to the Cmd, which is why using
-        QoS with wait_for_reply=True is vital when getting fault log entries.
-
-        We can assume 0418| I|<ctl_id>|00 is only for log_idx=00 (I|0418s are stateless)
         """
 
         assert pkt.verb == RP and pkt.code == Code._0418 and pkt._idx == "00"
         assert pkt.payload == "000000B0000000000000000000007FFFFF7000000000"
 
-        assert cmd.verb == RQ and pkt.code == Code._0418
-        assert cmd.rx_header and cmd.rx_header[:-2] == pkt._hdr[:-2]  # reply to this RQ
-
-        if cmd._idx == "00":  # no need to hack
+        if idx == "00":  # no need to hack
             return Message._from_pkt(pkt)
 
-        idx = cmd.rx_header[-2:]  # cmd._idx could be bool/None?
+        # idx is already available from the function argument
+
         pkt.payload = PayloadT(f"0000{idx}B0000000000000000000007FFFFF7000000000")
 
         # NOTE: must now reset pkt payload, and its header
         pkt._repr = pkt._hdr_ = pkt._ctx_ = pkt._idx_ = None  # type: ignore[assignment]
         pkt._frame = pkt._frame[:50] + idx + pkt._frame[52:]
-
-        assert pkt._hdr == cmd.rx_header, f"{self}: Coding error"
-        assert str(pkt) == pkt._frame[:50] + idx + pkt._frame[52:], (
-            f"{self}: Coding error"
-        )
 
         msg = Message._from_pkt(pkt)
         msg._payload = {SZ_LOG_IDX: idx, SZ_LOG_ENTRY: None}  # PayDictT._0418_NULL
@@ -305,12 +295,14 @@ class FaultLog:  # 0418
                 return self.faultlog
 
             error_occurred = False
-
             for idx in range(start, min(start + limit, self._MAX_LOG_IDX + 1)):
-                cmd = Command.get_system_log_entry(self.id, idx)
-
                 try:
-                    pkt = await self._gwy.async_send_cmd(cmd, wait_for_reply=True)
+                    pkt = await send_system_intent(
+                        self._tcs,
+                        Action.GET_FAULTLOG_ENTRY,
+                        data={"log_idx": idx},
+                        wait_for_reply=True,
+                    )
                 except exc.RamsesException as err:
                     _LOGGER.warning(f"Failed to retrieve fault log entry {idx}: {err}")
                     error_occurred = True
@@ -319,7 +311,7 @@ class FaultLog:  # 0418
 
                 if pkt.payload == "000000B0000000000000000000007FFFFF7000000000":
                     msg = self._hack_pkt_idx(
-                        pkt, cmd
+                        pkt, f"{idx:02X}"
                     )  # RPs for null entries have idx==00
                     self._process_msg(msg)  # since pkt via dispatcher aint got idx
                     break

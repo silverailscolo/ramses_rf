@@ -55,6 +55,7 @@ from ..protocol.opentherm import (
     SCHEMA_DATA_IDS,
     STATUS_DATA_IDS,
     OtDataId,
+    parity,
 )
 from .heat_actuators import Actuator, HeatDemand
 
@@ -138,6 +139,12 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return HEARTBEAT_TIMEOUT_OTB
 
     def _setup_discovery_cmds(self) -> None:
+        def _ot_cmd(msg_id: str) -> Command:
+            payload = (
+                f"0080{msg_id}0000" if parity(int(msg_id, 16)) else f"0000{msg_id}0000"
+            )
+            return Command.from_attrs(RQ, self.id, Code._3220, PayloadT(payload))
+
         def which_cmd(
             use_native_ot: Literal["always", "prefer", "avoid", "never"] | str | None,
             msg_id: MsgId,
@@ -145,20 +152,20 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
             """Create a OT cmd, or its RAMSES equivalent, depending."""
             # we know RQ|3220 is an option, question is: use that, or RAMSES or nothing?
             if use_native_ot in ("always", "prefer"):
-                return Command.get_opentherm_data(self.id, msg_id)
+                return _ot_cmd(msg_id)
             if msg_id in self.OT_TO_RAMSES:  # is: in ("avoid", "never")
                 return Command.from_attrs(
                     RQ, self.id, self.OT_TO_RAMSES[msg_id], PayloadT("00")
                 )
             if use_native_ot == "avoid":
-                return Command.get_opentherm_data(self.id, msg_id)
+                return _ot_cmd(msg_id)
             return None  # use_native_ot == "never"
 
         super()._setup_discovery_cmds()
 
         # always send at least one of RQ|3EF0 or RQ|3220|00 (status)
         if getattr(self._gwy.config, "use_native_ot", "avoid") != "never":
-            self.discovery.add_cmd(Command.get_opentherm_data(self.id, MsgId._00), 60)
+            self.discovery.add_cmd(_ot_cmd(MsgId._00), 60)
 
         if getattr(self._gwy.config, "use_native_ot", "avoid") != "always":
             self.discovery.add_cmd(

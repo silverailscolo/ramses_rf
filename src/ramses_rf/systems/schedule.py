@@ -24,10 +24,11 @@ from ramses_rf.const import (
     SZ_ZONE_IDX,
 )
 from ramses_rf.messages import Message
-from ramses_tx.command import Command
-from ramses_tx.const import Priority
 from ramses_tx.exceptions import ProtocolSendFailed
 from ramses_tx.packet import Packet
+
+from ..enums import Action
+from .helpers import send_system_intent
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -308,11 +309,15 @@ class Schedule:  # 0404
             :return: The dictionary payload of the fragment.
             """
             frag_set_size = 0 if frag_num == 1 else _len(self._payload_set)
-            cmd = Command.get_schedule_fragment(
-                self.ctl.id, self.idx, frag_num, frag_set_size
-            )
-            pkt: Packet = await self._gwy.async_send_cmd(
-                cmd, wait_for_reply=True, priority=Priority.HIGH
+            pkt: Packet = await send_system_intent(
+                self,
+                Action.GET_SCHEDULE_FRAGMENT,
+                data={
+                    "zone_idx": self.idx,
+                    "frag_number": frag_num,
+                    "total_frags": frag_set_size,
+                },
+                wait_for_reply=True,
             )
             msg = Message._from_pkt(pkt)
             assert isinstance(msg.payload, dict)  # mypy check
@@ -452,11 +457,16 @@ class Schedule:  # 0404
 
         async def put_fragment(frag_num: int, frag_cnt: int, fragment: str) -> None:
             """Send a schedule fragment to the controller."""
-            cmd = Command.set_schedule_fragment(
-                self.ctl.id, self.idx, frag_num, frag_cnt, fragment
-            )
-            await self._gwy.async_send_cmd(
-                cmd, wait_for_reply=True, priority=Priority.HIGH
+            await send_system_intent(
+                self,
+                Action.SET_SCHEDULE_FRAGMENT,
+                data={
+                    "zone_idx": self.idx,
+                    "frag_num": frag_num,
+                    "frag_cnt": _len(self._payload_set),
+                    "fragment": self._payload_set[frag_num - 1],
+                },
+                wait_for_reply=True,
             )
 
         def normalise_validate(schedule: InnerScheduleT) -> _OuterSchedule:

@@ -7,6 +7,26 @@ from ramses_tx.const import DEFAULT_NUM_REPEATS, FA, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 
 
+def build_get_schedule_version(intent: Command) -> CommandDTO:
+    """Translate a GET_SCHEDULE_VERSION intent into a CommandDTO.
+
+    :param intent: The GET_SCHEDULE_VERSION intent.
+    :return: A populated CommandDTO.
+    """
+    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
+
+    return CommandDTO(
+        verb=RQ,
+        addr1=addr1,
+        addr2=addr2,
+        addr3=addr3,
+        code=Code._0006,
+        payload="00",
+        priority=Priority.DEFAULT,
+        num_repeats=DEFAULT_NUM_REPEATS,
+    )
+
+
 def build_get_schedule_fragment(intent: Command) -> CommandDTO:
     """Translate a GET_SCHEDULE_FRAGMENT intent into a CommandDTO.
 
