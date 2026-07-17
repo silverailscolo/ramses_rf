@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import Any, Final, cast
 
 from ramses_rf.const import (
     DOMAIN_TYPE_MAP,
     F9,
     FA,
     FC,
-    I_,
     RQ,
     SZ_HEAT_DEMAND,
     SZ_RELAY_DEMAND,
@@ -22,9 +21,6 @@ from ramses_tx.const import SZ_PRIORITY
 from ramses_tx.typing import PayDictT, PayloadT
 
 from .dev_base import DeviceHeat
-
-if TYPE_CHECKING:
-    from ..messages import Message
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
 
@@ -45,22 +41,6 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
     ACTUATOR_ENABLED: Final = "actuator_enabled"  # boolean
     ACTUATOR_STATE: Final = "actuator_state"
     MODULATION_LEVEL: Final = "modulation_level"  # percentage (0.0-1.0)
-
-    def _handle_msg(self, msg: Message) -> None:  # NOTE: active
-        super()._handle_msg(msg)
-
-        if getattr(self, "_SLUG", None) == DevType.OTB:
-            return
-
-        if getattr(self._gwy.config, "disable_discovery", False):
-            return
-
-        # TODO: why are we doing this here? Should simply use discovery poller!
-        if msg.code == Code._3EF0 and msg.verb == I_ and not self.is_faked:
-            # lf._send_cmd(Command.get_relay_demand(self.id), qos=QOS_LOW)
-            self._send_cmd(
-                Command.from_attrs(RQ, self.id, Code._3EF1, PayloadT("00")), **QOS_LOW
-            )  # actuator cycle
 
     async def actuator_cycle(self) -> dict[str, Any] | None:  # 3EF1
         """Return the actuator cycle state.

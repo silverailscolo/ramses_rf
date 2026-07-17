@@ -25,7 +25,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.messages import Message
 from ramses_tx.command import Command
-from ramses_tx.const import SZ_CHANGE_COUNTER, Priority
+from ramses_tx.const import Priority
 from ramses_tx.exceptions import ProtocolSendFailed
 from ramses_tx.packet import Packet
 
@@ -212,37 +212,6 @@ class Schedule:  # 0404
     def __str__(self) -> str:
         """Return a string representation of the schedule object."""
         return f"{self._zone} (schedule)"
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Process a schedule packet: if possible, create the corresponding schedule.
-
-        :param msg: The incoming message to parse.
-        """
-        if msg.code == Code._0006:  # keep up, in cause is useful to know in future
-            self._global_ver = msg.payload.get(SZ_CHANGE_COUNTER, 0)
-            return
-
-        if msg.code != Code._0404:
-            return
-
-        if msg.verb == RQ:
-            return
-
-        # can do via here, or via gwy.async_send_cmd(cmd)
-        # next line also in self._get_schedule(), so protected here with a lock
-        if (
-            msg.payload.get(SZ_TOTAL_FRAGS) != 0xFF
-            and self.tcs.zone_lock_idx != self.idx
-        ):
-            try:
-                self._payload_set = self._update_payload_set(
-                    self._payload_set, msg.payload
-                )
-            except exc.ScheduleError as err:
-                _LOGGER.warning(
-                    "%s: Dropped corrupted schedule fragments: %s", self, err
-                )
-                self._payload_set = list(EMPTY_PAYLOAD_SET)
 
     async def _is_dated(self, *, force_io: bool = False) -> tuple[bool, bool]:
         """Indicate if a more recent schedule might be available.

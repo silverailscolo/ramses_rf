@@ -149,6 +149,7 @@ class TopologyBuilder:
                 zone_idx = p.get("zone_idx")
                 domain_id = p.get("domain_id")
                 device_role = p.get("device_role")
+                zone_type = p.get("zone_type")
                 devices = p.get("devices", [])
 
                 if not devices:
@@ -157,11 +158,31 @@ class TopologyBuilder:
                 # Prepare the base metadata dict, correctly flagging
                 # all types of sensors (e.g., 'sensor', 'dhw_sensor')
                 metadata: dict[str, Any] = {}
+                device_role_str = str(device_role) if device_role is not None else ""
+
                 if device_role is not None:
-                    metadata["is_sensor"] = "sensor" in str(device_role)
-                    metadata["device_role"] = str(
-                        device_role
-                    )  # Explicit DHW preservation
+                    # 04 is sensor, 08 is actuator, dhw_valve, etc.
+                    metadata["is_sensor"] = (
+                        "sensor" in device_role_str or device_role_str == "04"
+                    )
+                    metadata["device_role"] = (
+                        device_role_str  # Explicit DHW preservation
+                    )
+
+                if zone_type is not None and zone_type in ZON_ROLE_MAP.HEAT_ZONES:
+                    metadata["class"] = ZON_ROLE_MAP[zone_type]
+
+                # Implicit Zone Class Inference: If we bind an actuator, its type implies the zone class
+                if device_role_str in ("08", "rad_actuator") and not metadata.get(
+                    "class"
+                ):
+                    for d in devices:
+                        if d.startswith("04:"):
+                            metadata["class"] = ZON_ROLE_MAP["08"]  # radiator_valve
+                        elif d.startswith("02:"):
+                            metadata["class"] = ZON_ROLE_MAP["09"]  # underfloor_heating
+                        elif d.startswith("13:"):
+                            metadata["class"] = ZON_ROLE_MAP["0A"]  # zone_valve
 
                 if zone_idx is not None:
                     # Clone metadata to avoid cross-iteration pollution
@@ -586,30 +607,31 @@ class TopologyBuilder:
             if msg.header.code in (Code._0008, Code._0009):
                 zone_class = ZON_ROLE_MAP["ELE"]
 
-            # 3150 Demand mappings denote specific actuator types
-            elif msg.header.code == Code._3150:
-                src_type = getattr(msg.src, "type", None)
-                if src_type == "04":
-                    zone_class = ZON_ROLE_MAP["RAD"]
-                elif src_type == "13":
-                    zone_class = ZON_ROLE_MAP["VAL"]
-                elif src_type == "02":
-                    zone_class = ZON_ROLE_MAP["UFH"]
+            # The following Implicit Zone Class Inference block for 3150 was removed to maintain parity with legacy code
 
             if zone_class is not None:
-                # We emit a BIND_DEVICE action targeting the controller,
+                # We emit an UPDATE_TRAITS action targeting the controller,
                 # passing the deduced zone_class as metadata for the projection.
-                event = TopologyChangedEvent(
-                    action=TopologyAction.BIND_DEVICE,
-                    parent_id=msg.src.id,  # Typically the Controller
-                    child_id=msg.src.id,  # Self-referential to update the zone metadata
-                    metadata={
-                        "zone_idx": str(zone_idx),
-                        "zone_class": zone_class,
-                    },
-                    causation="Rule_Legacy_Zone_Type_Eavesdrop",
-                )
-                self._emit(event)
+                # 3150/0008 are directed to the Controller (01).
+                ctl_id = None
+                if getattr(msg.dst, "type", None) == "01":
+                    ctl_id = msg.dst.id
+                elif getattr(msg.src, "type", None) == "01":
+                    ctl_id = msg.src.id
+                elif getattr(msg.addr3, "type", None) == "01":
+                    ctl_id = msg.addr3.id
+
+                if ctl_id is not None:
+                    event = TopologyChangedEvent(
+                        action=TopologyAction.UPDATE_TRAITS,
+                        device_id=ctl_id,  # The Controller
+                        metadata={
+                            "zone_idx": str(zone_idx),
+                            "class": zone_class,
+                        },
+                        causation="Rule_Legacy_Zone_Type_Eavesdrop",
+                    )
+                    self._emit(event)
 
     def _evaluate_eavesdrop_rules(self, msg: Message) -> None:
         """Evaluate broadcast telemetry for heuristic sensor correlation.

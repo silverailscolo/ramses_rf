@@ -417,35 +417,6 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         # call the 2411 parameter update callback
         self._handle_param_update(param_id, param_value)
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle a message from this device.
-
-        This method processes incoming messages for the device, with special
-        handling for 2411 parameter messages. It updates the device state and
-        triggers any necessary callbacks.
-
-        After handling the messages, it calls the initialized callback - if set
-        - to notify that the device was fully initialized.
-
-        :param msg: The incoming message to process
-        :type msg: Message
-        """
-        super()._handle_msg(msg)
-
-        # Handle 2411 parameter messages
-        if msg.code == Code._2411:
-            _LOGGER.debug(
-                "Received 2411 message from %s: verb=%s, payload=%s, src=%s, dst=%s",
-                self.id,
-                msg.verb,
-                msg.payload,
-                msg.src,
-                msg.dst,
-            )
-            self._handle_2411_message(msg)
-
-        self._handle_initialized_callback()
-
     def _setup_discovery_cmds(self) -> None:
         """Set up discovery commands for the RFS gateway.
 

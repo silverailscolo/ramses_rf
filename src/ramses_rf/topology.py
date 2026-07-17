@@ -107,7 +107,10 @@ class Parent:
 
         try:
             if is_sensor and child_id == FA:
-                if self._dhw_sensor and self._dhw_sensor is not child:
+                if (
+                    self._dhw_sensor
+                    and getattr(self._dhw_sensor, "id", None) != child.id
+                ):
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed dhw_sensor (from {self._dhw_sensor} to {child})"
                     )
@@ -116,7 +119,7 @@ class Parent:
             elif is_sensor and hasattr(self, SZ_SENSOR):
                 if (
                     getattr(self, SZ_SENSOR, None)
-                    and getattr(self, SZ_SENSOR) is not child
+                    and getattr(getattr(self, SZ_SENSOR), "id", None) != child.id
                 ):
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed zone sensor (from {getattr(self, SZ_SENSOR)} to {child})"
@@ -129,23 +132,26 @@ class Parent:
                 )
 
             elif hasattr(self, SZ_CIRCUITS):
-                if child not in self.circuit_by_id:
+                if (
+                    child not in self.circuit_by_id
+                    and child.id not in self.circuit_by_id
+                ):
                     self.circuit_by_id[child.id] = child
 
             elif hasattr(self, SZ_ACTUATORS):
-                if child not in self.actuators:
+                if child not in self.actuators and child.id not in self.actuator_by_id:
                     self.actuators.append(child)
                     self.actuator_by_id[child.id] = child
 
             elif child_id == F9:
-                if self._htg_valve and self._htg_valve is not child:
+                if self._htg_valve and getattr(self._htg_valve, "id", None) != child.id:
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed htg_valve (from {self._htg_valve} to {child})"
                     )
                 self._htg_valve = child
 
             elif child_id == FA:
-                if self._dhw_valve and self._dhw_valve is not child:
+                if self._dhw_valve and getattr(self._dhw_valve, "id", None) != child.id:
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed dhw_valve (from {self._dhw_valve} to {child})"
                     )

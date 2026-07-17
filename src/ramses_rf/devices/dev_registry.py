@@ -164,6 +164,16 @@ class DeviceRegistry:
             if hasattr(tcs, "dhw") and tcs.dhw:
                 parent = tcs.dhw
 
+        # If we have class metadata for a zone, apply it to the zone via the parent TCS
+        child_domain_id = metadata.get("zone_idx") or metadata.get("child_id")
+        if child_domain_id and "class" in metadata and hasattr(tcs, "get_htg_zone"):
+            zone = tcs.get_htg_zone(str(child_domain_id))
+            if not zone and hasattr(tcs, "_update_schema"):
+                tcs._update_schema(**{"zones": {str(child_domain_id): {}}})
+                zone = tcs.get_htg_zone(str(child_domain_id))
+            if zone and hasattr(zone, "_update_schema"):
+                zone._update_schema(**{"class": metadata["class"]})
+
         if parent:
             # Safely extract is_sensor without coercing None to False,
             # allowing legacy code to correctly deduce actuators.
@@ -301,7 +311,16 @@ class DeviceRegistry:
 
             # Migrate essential topological state ONLY if a parent existed
             if old_parent := getattr(old_dev, "_parent", None):
-                new_dev._apply_topology_link(old_parent)
+                old_child_id = getattr(old_dev, "_child_id", None)
+                was_sensor = False
+                if old_parent:
+                    was_sensor = (
+                        getattr(old_parent, "_sensor", None) == old_dev
+                        or getattr(old_parent, "_dhw_sensor", None) == old_dev
+                    )
+                new_dev._apply_topology_link(
+                    old_parent, child_id=old_child_id, is_sensor=was_sensor
+                )
 
             if hasattr(old_dev, "temp_state") and hasattr(new_dev, "temp_state"):
                 new_dev.temp_state = old_dev.temp_state
@@ -413,7 +432,6 @@ class DeviceRegistry:
                         f"Zone {zone_idx}!"
                     )
 
-                    # Trigger the BIND_DEVICE action natively
                     bind_event = TopologyChangedEvent(
                         action=TopologyAction.BIND_DEVICE,
                         parent_id=event.device_id,
@@ -430,6 +448,14 @@ class DeviceRegistry:
 
                     # Clear from cache so we do not double-bind
                     del self._orphan_telemetry[matched_orphan]
+
+        # Handle zone class metadata updates from eavesdropping
+        if "class" in event.metadata and "zone_idx" in event.metadata:
+            ctl = self.device_by_id.get(event.device_id)
+            if ctl and getattr(ctl, "tcs", None):
+                zone = ctl.tcs.get_htg_zone(str(event.metadata["zone_idx"]))  # type: ignore[union-attr]
+                if zone:
+                    zone._update_schema(**{"class": event.metadata["class"]})
 
     def _add_device(self, dev: Device) -> None:
         """Add a device to the registry.
@@ -695,52 +721,6 @@ class DeviceRegistry:
 
         # 4. Swap the reference in the registry
         self.device_by_id[event.device_id] = new_dev
-
-    def _bind_device(self, event: TopologyChangedEvent) -> None:
-        """Bind a child device to a parent domain or zone.
-
-        :param event: The binding event containing parent_id & child_id.
-        :type event: TopologyChangedEvent
-        """
-        if not event.parent_id or not event.child_id:
-            return
-
-        parent = self.device_by_id.get(event.parent_id)
-        child = self.device_by_id.get(event.child_id)
-
-        if not parent or not child:
-            return
-
-        metadata = event.metadata or {}
-        is_sensor = bool(metadata.get("is_sensor", False))
-
-        child_domain_id_raw = metadata.get("child_id")
-        child_domain_id = (
-            str(child_domain_id_raw) if child_domain_id_raw is not None else None
-        )
-
-        _LOGGER.debug(
-            "Binding %s to parent %s (sensor=%s, domain=%s)",
-            event.child_id,
-            event.parent_id,
-            is_sensor,
-            child_domain_id,
-        )
-
-        # Safely apply the topology link, bypassing legacy mutable logic
-        if hasattr(child, "_apply_topology_link"):
-            try:
-                child._apply_topology_link(
-                    cast("Parent", parent),
-                    is_sensor=is_sensor,
-                    child_id=child_domain_id,
-                )
-            except (DeviceNotFoundError, SchemaInconsistentError) as err:
-                _TRACE.error(
-                    f"BIND EXCEPTION: Failed applying topology link for "
-                    f"{event.child_id}: {err}"
-                )
-                raise
 
     async def generate_schema(self) -> dict[str, Any]:
         """Generate the complete topology schema natively from the CQRS

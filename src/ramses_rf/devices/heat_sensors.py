@@ -140,18 +140,6 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
         """Initialize DHW state when promoted in-place from a generic device."""
         self.__dict__.setdefault("_child_id", FA)
 
-    def _handle_msg(self, msg: Message) -> None:  # NOTE: active
-        super()._handle_msg(msg)
-
-        if getattr(self._gwy.config, "disable_discovery", False):
-            return
-
-        # TODO: why are we doing this here? Should simply use dscovery poller!
-        # The following is required, as CTLs don't send spontaneously
-        if msg.code == Code._1260 and getattr(self, "ctl", None):
-            # update the controller DHW temp
-            self._send_cmd(Command.get_dhw_temp(self.ctl.id))  # type: ignore[union-attr]
-
     async def initiate_binding_process(
         self,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
