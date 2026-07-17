@@ -77,12 +77,15 @@ def parser_0004(payload: str, msg: Message) -> PayDictT._0004:
     :type payload: str
     :param msg: The message object
     :type msg: Message
-    :return: A dictionary containing the zone name
+    :return: A dictionary containing the zone index and zone name
     :rtype: PayDictT._0004
     """
     # RQ payload is zz00; limited to 12 chars in evohome UI? if "7F"*20: not a zone
+    # payload[:2] is the zone_idx (zz), payload[2:4] is always "00"
+    if payload[4:] == "7F" * 20:
+        return {}
 
-    return {} if payload[4:] == "7F" * 20 else {SZ_NAME: hex_to_str(payload[4:])}
+    return {SZ_ZONE_IDX: payload[:2], SZ_NAME: hex_to_str(payload[4:])}
 
 
 # system_zones (add/del a zone?)
