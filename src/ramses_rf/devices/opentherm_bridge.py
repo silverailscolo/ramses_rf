@@ -245,6 +245,13 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return self.opentherm_state.max_rel_modulation
 
     async def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
+        """Fetch the OEM diagnostic code directly from the CQRS read-model.
+
+        :return: The OEM code if available in the state, otherwise None.
+        :rtype: float | None
+        """
+        if self.opentherm_state and self.opentherm_state.oem_code is not None:
+            return float(self.opentherm_state.oem_code)
         return None
 
     async def outside_temp(self) -> float | None:  # 3220|1B, 1290
