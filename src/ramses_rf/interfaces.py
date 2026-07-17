@@ -9,6 +9,7 @@ from .messages import Message
 from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
+    from .commands.dispatcher import CommandDispatcher as CQRSDispatcher
     from .models import TopologyChangedEvent
     from .topology import Parent
 
@@ -202,6 +203,11 @@ class GatewayInterface(Protocol):
     @property
     def device_registry(self) -> DeviceRegistryInterface:
         """Return the Device Registry."""
+        ...
+
+    @property
+    def dispatcher(self) -> "CQRSDispatcher":
+        """Return the CommandDispatcher for outbound command translation."""
         ...
 
     @property

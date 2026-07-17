@@ -7,13 +7,13 @@ import logging
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from ramses_rf.const import FA, SZ_TEMPERATURE, Code, DevType
-from ramses_rf.exceptions import DeviceNotFaked
+from ramses_rf.enums import Action
 from ramses_rf.models import DeviceTraits
-from ramses_tx import Command, Packet, Priority
-from ramses_tx.exceptions import ProtocolSendFailed
+from ramses_tx import Packet
 from ramses_tx.typing import PayDictT
 
 from .dev_base import BatteryState, DeviceHeat, Fakeable
+from .helpers import send_fake_intent
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,22 +29,12 @@ class Weather(DeviceHeat):  # 0002
 
     async def set_temperature(self, value: float | None) -> Packet | None:
         """Fake the outdoor temperature of the sensor."""
-
-        if not self.is_faked:
-            raise DeviceNotFaked(f"{self}: Faking is not enabled")
-
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
         self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
-
-        cmd = Command.put_outdoor_temp(self.id, value)
-        try:
-            return await self._gwy.async_send_cmd(
-                cmd, num_repeats=2, priority=Priority.HIGH
-            )
-        except ProtocolSendFailed:  # noqa: PERF203
-            _LOGGER.warning("%s: send failed (timeout), state already updated", self)
-            return None
+        return await send_fake_intent(
+            self, Action.PUT_OUTDOOR_TEMP, {"temperature": value}
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -62,22 +52,10 @@ class DhwTemperature(DeviceHeat):  # 1260
 
     async def set_temperature(self, value: float | None) -> Packet | None:
         """Fake the DHW temperature of the sensor."""
-
-        if not self.is_faked:
-            raise DeviceNotFaked(f"{self}: Faking is not enabled")
-
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
         self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
-
-        cmd = Command.put_dhw_temp(self.id, value)
-        try:
-            return await self._gwy.async_send_cmd(
-                cmd, num_repeats=2, priority=Priority.HIGH
-            )
-        except ProtocolSendFailed:  # noqa: PERF203
-            _LOGGER.warning("%s: send failed (timeout), state already updated", self)
-            return None
+        return await send_fake_intent(self, Action.PUT_DHW_TEMP, {"temperature": value})
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -96,22 +74,12 @@ class Temperature(DeviceHeat):  # 30C9
 
     async def set_temperature(self, value: float | None) -> Packet | None:
         """Fake the indoor temperature of the sensor."""
-
-        if not self.is_faked:
-            raise DeviceNotFaked(f"{self}: Faking is not enabled")
-
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
         self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
-
-        cmd = Command.put_sensor_temp(self.id, value)
-        try:
-            return await self._gwy.async_send_cmd(
-                cmd, num_repeats=2, priority=Priority.HIGH
-            )
-        except ProtocolSendFailed:  # noqa: PERF203
-            _LOGGER.warning("%s: send failed (timeout), state already updated", self)
-            return None
+        return await send_fake_intent(
+            self, Action.PUT_SENSOR_TEMP, {"temperature": value}
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()

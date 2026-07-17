@@ -35,6 +35,8 @@ class Action(StrEnum):
 
     PUT_CO2_LEVEL = "put_co2_level"
     PUT_INDOOR_HUMIDITY = "put_indoor_humidity"
+    PUT_OUTDOOR_TEMP = "put_outdoor_temp"
+    PUT_SENSOR_TEMP = "put_sensor_temp"
     SET_FAN_MODE = "set_fan_mode"
     SET_BYPASS_POSITION = "set_bypass_position"
     SET_FAN_PARAM = "set_fan_param"

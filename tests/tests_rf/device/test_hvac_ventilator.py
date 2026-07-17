@@ -16,7 +16,7 @@ from ramses_rf.models.state_base import DeviceTraits
 from ramses_rf.models.state_hvac import HvacState
 from ramses_rf.state import MessageStore
 from ramses_tx import Address
-from ramses_tx.const import Code, Priority
+from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
 
 # Test data
@@ -574,28 +574,25 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     dev.get_bound_rem.return_value = "37:654321"
 
     dev._gwy = MagicMock()
-    dev._gwy.async_send_cmd = AsyncMock(return_value="mock_packet")
+    dev._gwy.dispatcher.send = AsyncMock(return_value="mock_packet")
 
-    # Patch the command builder so we can verify what gets passed to it
-    with patch("ramses_tx.command.Command.set_fan_mode") as mock_cmd:
-        mock_cmd.return_value = "mock_command"
+    # Call the unbound method passing our mock as 'self'
+    result = await HvacVentilator.set_fan_mode(dev, "low")
 
-        # Call the unbound method passing our mock as 'self'
-        result = await HvacVentilator.set_fan_mode(dev, "low")
+    # 1. Verify it checked for a bound remote
+    dev.get_bound_rem.assert_called_once()
 
-        # 1. Verify it checked for a bound remote
-        dev.get_bound_rem.assert_called_once()
+    # 2. Verify the intent was transmitted with the correct QoS
+    dev._gwy.dispatcher.send.assert_awaited_once()
+    intent = dev._gwy.dispatcher.send.await_args[0][0]
 
-        # 2. Verify the packet was built using the REM's ID ("37:654321")
-        mock_cmd.assert_called_once_with(
-            "32:123456", "low", scheme="orcon", src_id="37:654321"
-        )
+    from ramses_rf.enums import Action
 
-        # 3. Verify it was transmitted with the correct QoS
-        dev._gwy.async_send_cmd.assert_awaited_once_with(
-            "mock_command", num_repeats=2, priority=Priority.HIGH
-        )
-        assert result == "mock_packet"
+    assert intent.action == Action.SET_FAN_MODE
+    assert intent.src.id == "37:654321"
+    assert intent.dst.id == "32:123456"
+    assert intent.data == {"fan_mode": "low", "scheme": "orcon"}
+    assert result == "mock_packet"
 
 
 async def test_set_fan_mode_with_hgi_fallback() -> None:
@@ -610,18 +607,20 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     dev.hgi.id = "18:000730"
 
     dev._gwy = MagicMock()
-    dev._gwy.async_send_cmd = AsyncMock(return_value="mock_packet")
+    dev._gwy.dispatcher.send = AsyncMock(return_value="mock_packet")
 
-    with patch("ramses_tx.command.Command.set_fan_mode") as mock_cmd:
-        mock_cmd.return_value = "mock_command"
+    await HvacVentilator.set_fan_mode(dev, "high")
 
-        await HvacVentilator.set_fan_mode(dev, "high")
+    # Verify the intent was built using the HGI's ID ("18:000730")
+    dev._gwy.dispatcher.send.assert_awaited_once()
+    intent = dev._gwy.dispatcher.send.await_args[0][0]
 
-        # Verify the packet was built using the HGI's ID ("18:000730")
-        mock_cmd.assert_called_once_with(
-            "32:123456", "high", scheme="orcon", src_id="18:000730"
-        )
-        dev._gwy.async_send_cmd.assert_awaited_once()
+    from ramses_rf.enums import Action
+
+    assert intent.action == Action.SET_FAN_MODE
+    assert intent.src.id == "18:000730"
+    assert intent.dst.id == "32:123456"
+    assert intent.data == {"fan_mode": "high", "scheme": "orcon"}
 
 
 async def test_set_fan_mode_no_src_id_raises() -> None:

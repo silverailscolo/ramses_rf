@@ -4,6 +4,7 @@ from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command
 from ramses_rf.interfaces import GatewayInterface
 from ramses_tx import Command as LegacyCommand, Packet, Priority
+from ramses_tx.const import DEFAULT_WAIT_FOR_REPLY
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.typing import PayloadT
 
@@ -22,7 +23,13 @@ class CommandDispatcher:
         """
         self._gwy = gwy
 
-    async def send(self, intent: Command) -> Packet:
+    async def send(
+        self,
+        intent: Command,
+        *,
+        priority: Priority | None = None,
+        wait_for_reply: bool | None = DEFAULT_WAIT_FOR_REPLY,
+    ) -> Packet:
         """Translate and send a high-level intent over the RF network.
 
         :param intent: The high-level intent to execute.
@@ -45,5 +52,6 @@ class CommandDispatcher:
 
         return await self._gwy.async_send_cmd(
             legacy_cmd,
-            priority=Priority(dto.priority),
+            priority=priority if priority is not None else Priority(dto.priority),
+            wait_for_reply=wait_for_reply,
         )

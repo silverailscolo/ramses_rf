@@ -28,7 +28,7 @@ from ramses_rf.protocol.opentherm import (
     OtMsgType,
 )
 from ramses_tx.address import Address
-from ramses_tx.const import I_, RP, Code, Priority
+from ramses_tx.const import I_, RP, Code
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def mock_gwy() -> MagicMock:
     gwy = MagicMock()
     # Mock the persistent SQLite message database
     gwy.message_store = AsyncMock()
-    gwy.async_send_cmd = AsyncMock()
+    gwy.dispatcher.send = AsyncMock()
     gwy.config = MagicMock()
     gwy.config.disable_discovery = True
     gwy.config.use_native_ot = "prefer"
@@ -188,21 +188,18 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
         await device.set_temperature(22.0)
 
     # 2. Test success when faked
-    with (
-        patch.object(
-            Thermostat, "is_faked", new_callable=PropertyMock, return_value=True
-        ),
-        patch("ramses_tx.command.Command.put_sensor_temp") as mock_cmd_gen,
+    with patch.object(
+        Thermostat, "is_faked", new_callable=PropertyMock, return_value=True
     ):
-        mock_cmd = MagicMock()
-        mock_cmd_gen.return_value = mock_cmd
-
         await device.set_temperature(22.0)
 
-        mock_cmd_gen.assert_called_once_with(device.id, 22.0)
-        mock_gwy.async_send_cmd.assert_awaited_once_with(
-            mock_cmd, num_repeats=2, priority=Priority.HIGH
-        )
+        mock_gwy.dispatcher.send.assert_awaited_once()
+        intent = mock_gwy.dispatcher.send.await_args[0][0]
+
+        from ramses_rf.enums import Action
+
+        assert intent.action == Action.PUT_SENSOR_TEMP
+        assert intent.data == {"temperature": 22.0}
 
 
 @pytest.mark.asyncio
@@ -242,19 +239,18 @@ async def test_dhw_temperature_set_faked(
     device = DhwSensor(mock_gwy, mock_addr)
 
     # Act / Assert
-    with (
-        patch.object(
-            DhwSensor, "is_faked", new_callable=PropertyMock, return_value=True
-        ),
-        patch("ramses_tx.command.Command.put_dhw_temp") as mock_cmd_gen,
+    with patch.object(
+        DhwSensor, "is_faked", new_callable=PropertyMock, return_value=True
     ):
-        mock_cmd = MagicMock()
-        mock_cmd_gen.return_value = mock_cmd
-
         await device.set_temperature(45.0)
 
-        mock_cmd_gen.assert_called_once_with(device.id, 45.0)
-        mock_gwy.async_send_cmd.assert_awaited_once()
+        mock_gwy.dispatcher.send.assert_awaited_once()
+        intent = mock_gwy.dispatcher.send.await_args[0][0]
+
+        from ramses_rf.enums import Action
+
+        assert intent.action == Action.PUT_DHW_TEMP
+        assert intent.data == {"temperature": 45.0}
 
 
 @pytest.mark.asyncio
@@ -294,19 +290,18 @@ async def test_weather_temperature_set_faked(
     device = OutSensor(mock_gwy, mock_addr)
 
     # Act / Assert
-    with (
-        patch.object(
-            OutSensor, "is_faked", new_callable=PropertyMock, return_value=True
-        ),
-        patch("ramses_tx.command.Command.put_outdoor_temp") as mock_cmd_gen,
+    with patch.object(
+        OutSensor, "is_faked", new_callable=PropertyMock, return_value=True
     ):
-        mock_cmd = MagicMock()
-        mock_cmd_gen.return_value = mock_cmd
-
         await device.set_temperature(8.0)
 
-        mock_cmd_gen.assert_called_once_with(device.id, 8.0)
-        mock_gwy.async_send_cmd.assert_awaited_once()
+        mock_gwy.dispatcher.send.assert_awaited_once()
+        intent = mock_gwy.dispatcher.send.await_args[0][0]
+
+        from ramses_rf.enums import Action
+
+        assert intent.action == Action.PUT_OUTDOOR_TEMP
+        assert intent.data == {"temperature": 8.0}
 
 
 @pytest.mark.asyncio

@@ -26,6 +26,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.devices import BdrSwitch, Controller, Device, DhwSensor, TrvActuator
 from ramses_rf.entity import Entity, class_by_attr
+from ramses_rf.enums import Action
 from ramses_rf.helpers import shrink
 from ramses_rf.models import (
     DemandState,
@@ -45,7 +46,7 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
 )
 from ramses_rf.topology import Child, Parent
-from ramses_tx import Command, Priority
+from ramses_tx import Command, Packet
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import HeaderT, PayDictT, PayloadT
 
@@ -72,6 +73,8 @@ from ramses_rf.const import (  # noqa: F401, isort: skip
     W_,
     Code,
 )
+
+from .helpers import send_system_intent
 
 _LOGGER = logging.getLogger(__name__)
 _TRACE = logging.getLogger("ramses_rf.legacy_trace")
@@ -348,9 +351,11 @@ class DhwZone(ZoneSchedule):  # CS92A
     ) -> Packet:
         """Set the DHW mode (mode, active, until)."""
 
-        cmd = Command.set_dhw_mode(self.ctl.id, mode=mode, active=active, until=until)
-        return await self._gwy.async_send_cmd(
-            cmd, priority=Priority.HIGH, wait_for_reply=True
+        return await send_system_intent(
+            self,
+            Action.SET_DHW_MODE,
+            {"mode": mode, "active": active, "until": until},
+            wait_for_reply=True,
         )
 
     async def set_boost_mode(self) -> Packet:
@@ -382,13 +387,15 @@ class DhwZone(ZoneSchedule):  # CS92A
         # if differential is None:
         #     setpoint = dhw_params["differential"]
 
-        cmd = Command.set_dhw_params(
-            self.ctl.id,
-            setpoint=setpoint,
-            overrun=overrun,
-            differential=differential,
+        return await send_system_intent(
+            self,
+            Action.SET_DHW_PARAMS,
+            {
+                "setpoint": setpoint,
+                "overrun": overrun,
+                "differential": differential,
+            },
         )
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
     async def reset_config(self) -> Packet:  # 10A0
         """Reset the DHW parameters to their default values."""
@@ -668,8 +675,11 @@ class Zone(ZoneSchedule):
         if value is None:
             return await self.reset_mode()
 
-        cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, value)
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
+        return await send_system_intent(
+            self,
+            Action.SET_TEMPERATURE,
+            {"zone_idx": self.idx, "setpoint": value},
+        )
 
     async def temperature(self) -> float | None:  # 30C9
         return self.temp_state.temperature
@@ -733,16 +743,18 @@ class Zone(ZoneSchedule):
     ) -> Packet:
         """Set the zone's parameters (min_temp, max_temp, etc.)."""
 
-        cmd = Command.set_zone_config(
-            self.ctl.id,
-            self.idx,
-            min_temp=min_temp,
-            max_temp=max_temp,
-            local_override=local_override,
-            openwindow_function=openwindow_function,
-            multiroom_mode=multiroom_mode,
+        return await send_system_intent(
+            self,
+            Action.SET_ZONE_CONFIG,
+            {
+                "zone_idx": self.idx,
+                "min_temp": min_temp,
+                "max_temp": max_temp,
+                "local_override": local_override,
+                "openwindow_function": openwindow_function,
+                "multiroom_mode": multiroom_mode,
+            },
         )
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
     async def reset_mode(self) -> Packet:  # 2349
         """Revert the zone to following its schedule."""
@@ -763,28 +775,44 @@ class Zone(ZoneSchedule):
         indefinitely.
         """
 
+        from ramses_rf.enums import Action
+
         # Hometronics doesn't support 2349
         if mode is not None or until is not None:
-            cmd = Command.set_zone_mode(
-                self.ctl.id,
-                self.idx,
-                mode=mode,
-                setpoint=setpoint,
-                until=until,
+            return await send_system_intent(
+                self,
+                Action.SET_MODE,
+                {
+                    "zone_idx": self.idx,
+                    "mode": mode,
+                    "setpoint": setpoint,
+                    "until": until,
+                },
             )
         # unsure if Hometronics supports setpoint of None
         elif setpoint is not None:
-            cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, setpoint)
+            return await send_system_intent(
+                self,
+                Action.SET_TEMPERATURE,
+                {
+                    "zone_idx": self.idx,
+                    "setpoint": setpoint,
+                },
+            )
         else:
             raise exc.CommandInvalid("Invalid mode/setpoint")
-
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
     async def set_name(self, name: str) -> Packet:
         """Set the zone's name in the CTL."""
 
-        cmd = Command.set_zone_name(self.ctl.id, self.idx, name)
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
+        return await send_system_intent(
+            self,
+            Action.SET_ZONE_NAME,
+            {
+                "zone_idx": self.idx,
+                "name": name,
+            },
+        )
 
     async def schema(self) -> dict[str, Any]:
         """Return the schema of the zone (type, devices)."""

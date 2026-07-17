@@ -43,8 +43,8 @@ async def run_and_trace(log_content: str, tmp_path: Path, test_name: str) -> dic
     gwy = Gateway(config=config)
 
     # Disable the new CQRS Dispatcher temporarily so we ONLY see legacy behavior
-    if hasattr(gwy, "dispatcher"):
-        gwy.dispatcher = None
+    if hasattr(gwy, "_dispatcher"):
+        gwy._dispatcher = None  # type: ignore[assignment]
 
     await gwy.start(start_discovery=False)
 
