@@ -293,17 +293,20 @@ async def test_pkt_read_raises_transport_error_on_runtime_error() -> None:
         "2026-07-13T04:40:36", "045  I --- 18:130140 32:022222 --:------ 22F2 001 00"
     )
 
-    # is_closed() returns False, but call_soon_threadsafe raises RuntimeError
-    with (
-        patch.object(type(loop), "is_closed", return_value=False),
-        patch.object(
-            loop,
-            "call_soon_threadsafe",
-            side_effect=RuntimeError("Event loop is closed"),
-        ),
-        pytest.raises(exc.TransportError, match="Event loop is closed"),
-    ):
-        transport._pkt_read(pkt)
+    try:
+        # is_closed() returns False, but call_soon_threadsafe raises RuntimeError
+        with (
+            patch.object(type(loop), "is_closed", return_value=False),
+            patch.object(
+                loop,
+                "call_soon_threadsafe",
+                side_effect=RuntimeError("Event loop is closed"),
+            ),
+            pytest.raises(exc.TransportError, match="Event loop is closed"),
+        ):
+            transport._pkt_read(pkt)
+    finally:
+        await asyncio.sleep(0.01)
 
 
 async def test_close_does_not_crash_when_loop_closed() -> None:
