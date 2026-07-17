@@ -1,135 +1,75 @@
-"""Test suite isolating the OSI decoupling legacy routing fault."""
+"""Test suite validating explicit L7 payload routing in the new architecture."""
 
 import logging
-from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from ramses_rf.const import Code
-from ramses_rf.systems.tcs import MultiZone
 from ramses_rf.systems.zones import Zone
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class MockTrvActuator:
-    """A minimal mock of the legacy device bubbling behaviour."""
+@pytest.mark.asyncio
+async def test_l7_routing_avoids_stranglers_knot() -> None:
+    """Test that a mismatched topological binding does not crash routing.
 
-    def __init__(self, device_id: str, parent_zone: Zone) -> None:
-        """Initialise the mock TRV bound to a specific topological parent."""
-        self.id = device_id
-        self.type = "04"
-        self._parent = parent_zone
+    In the legacy architecture, an orphan TRV bound to the wrong zone would bubble
+    a 3150 packet up to the wrong zone parent, causing an AssertionError crash.
+    In the new CQRS architecture, state updates are pulled from the MessageStore
+    by querying the L7 `zone_idx` explicitly, avoiding topological bubbling.
+    """
+    # Arrange: Set up a mocked TCS with two zones
+    gwy_mock = MagicMock()
+    gwy_mock.config.enable_eavesdrop = False
+    gwy_mock.config.reduce_processing = 0
+    gwy_mock.async_send_cmd = AsyncMock()
 
-    def _handle_msg(self, msg: MagicMock) -> None:
-        """Legacy topological bubbling to the parent zone."""
-        _LOGGER.debug(
-            "MockTrvActuator(%s): Bubbling msg up to parent Zone(%s)",
-            self.id,
-            self._parent.idx,
-        )
-        self._parent._handle_msg(msg)
-
-
-class MockTcs:
-    """A minimal mock of the new explicit L7 routing behaviour."""
-
-    def __init__(self) -> None:
-        """Initialise the mock TCS."""
-        self.zone_by_idx: dict[str, Zone] = {}
-        self.id = "01:145038"
-        self.ctl = MagicMock()
-        self.ctl.id = "01:145038"
-        self._gwy = MagicMock()
-        self._gwy.config.enable_eavesdrop = False
-        self._max_zones = 12
-
-    def _handle_msg(self, msg: MagicMock) -> None:
-        """New explicit downward routing based on L7 payload."""
-        _LOGGER.debug("MockTcs: Routing downward using L7 payload.")
-        if isinstance(msg.payload, dict):
-            if zone_idx := msg.payload.get("zone_idx"):
-                if zone := self.zone_by_idx.get(zone_idx):
-                    zone._handle_msg(msg)
-
-
-def test_stranglers_knot_routing_fault(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Test the collision when legacy bubbling relies on a mismatched schema."""
-    caplog.set_level(logging.DEBUG)
-
-    # Arrange: Set up the topology with a TRV bound to the WRONG zone.
-    tcs_mock = MockTcs()
-    # Cast the mock to satisfy Mypy's strict _MultiZoneT bound variable requirement
-    tcs = cast(MultiZone, tcs_mock)
+    tcs = MagicMock()
+    tcs.id = "01:145038"
+    tcs._gwy = gwy_mock
+    tcs.ctl = MagicMock()
+    tcs.ctl.id = "01:145038"
+    tcs.zone_by_idx = {}
+    tcs._max_zones = 12
 
     zone_02 = Zone(tcs, "02")
     zone_02._SLUG = "RAD"
-    tcs_mock.zone_by_idx["02"] = zone_02
+    tcs.zone_by_idx["02"] = zone_02
 
     zone_0a = Zone(tcs, "0A")
     zone_0a._SLUG = "RAD"
-    tcs_mock.zone_by_idx["0A"] = zone_0a
+    tcs.zone_by_idx["0A"] = zone_0a
 
-    # TRV incorrectly bound to Zone 0A
-    trv_0a = MockTrvActuator("04:056053", zone_0a)
-
-    msg = MagicMock()
-    msg.src = trv_0a
-    msg.dst = tcs_mock.ctl
-    msg.code = Code._3150
-    msg.payload = {"zone_idx": "02", "heat_demand": 0.44}
-    msg._has_array = False
-
-    # Act & Assert: Trigger the legacy upward bubbling
-    _LOGGER.debug("--- START: Legacy Bubbling Path (Mismatched Schema) ---")
-
-    with pytest.raises(AssertionError) as exc_info:
-        trv_0a._handle_msg(msg)
-
-    # Assert: Verify the exact crash from zones.py:702 is triggered
-    assert "msg inappropriately routed to" in str(exc_info.value)
-    assert "0A" in str(exc_info.value)
-
-    _LOGGER.debug("--- END: Assertion Triggered Successfully ---")
-
-
-def test_legacy_bubbling_with_correct_schema(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Test that legacy bubbling succeeds if the topological schema is correct."""
-    caplog.set_level(logging.DEBUG)
-
-    # Arrange: Set up the topology with a TRV bound to the CORRECT zone.
-    tcs_mock = MockTcs()
-    # Cast the mock to satisfy Mypy's strict _MultiZoneT bound variable requirement
-    tcs = cast(MultiZone, tcs_mock)
-
-    zone_02 = Zone(tcs, "02")
-    zone_02._SLUG = "RAD"
-    tcs_mock.zone_by_idx["02"] = zone_02
-
-    # TRV correctly bound to Zone 02
-    trv_02 = MockTrvActuator("04:056053", zone_02)
+    # Create a 3150 message intended for Zone 02, but coming from a TRV
+    # that is (hypothetically) improperly bound in the real world to Zone 0A.
+    from ramses_rf.const import I_
 
     msg = MagicMock()
-    msg.src = trv_02
-    msg.dst = tcs_mock.ctl
     msg.code = Code._3150
+    msg.verb = I_
     msg.payload = {"zone_idx": "02", "heat_demand": 0.44}
     msg._has_array = False
+    msg.src = MagicMock()
+    msg.src.id = "04:056053"
+    msg.dst = MagicMock()
+    msg.dst.id = "01:145038"
 
-    # Act & Assert: Trigger the legacy upward bubbling
-    _LOGGER.debug("--- START: Legacy Bubbling Path (Correct Schema) ---")
+    # Mock the device registry to return a TRV
+    mock_dev = MagicMock()
+    mock_dev._SLUG = "TRV"
+    mock_dev.tcs = tcs
+    gwy_mock.device_by_id = {"04:056053": mock_dev}
+    gwy_mock.system_by_id = {"01:145038": tcs}
+    gwy_mock.device_registry = MagicMock()
+    gwy_mock.device_registry.device_by_id = {"04:056053": mock_dev}
 
-    try:
-        trv_02._handle_msg(msg)
-    except AssertionError as err:
-        pytest.fail(f"AssertionError raised unexpectedly: {err}")
+    # Act: Process the message through the dispatcher pipeline
+    from ramses_rf.dispatcher import process_msg
 
-    # Assert: The zone successfully processes the message without crashing
-    assert zone_02.demand_state is not None  # Ensure the object is healthy
+    await process_msg(gwy_mock, msg)
 
-    _LOGGER.debug("--- END: Legacy Bubbling Succeeded ---")
+    # Assert: Zone 02 successfully processes the payload and returns the correct demand
+    demand = await zone_02.heat_demand()
+    assert demand == 0.44

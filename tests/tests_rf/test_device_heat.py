@@ -28,7 +28,7 @@ from ramses_rf.protocol.opentherm import (
     OtMsgType,
 )
 from ramses_tx.address import Address
-from ramses_tx.const import I_, RP, Code, MsgId, Priority
+from ramses_tx.const import I_, RP, Code, Priority
 
 
 @pytest.fixture
@@ -352,10 +352,6 @@ async def test_otb_gateway_modulation_quarantine_fallback(
     # forcing the fallback to RAMSES.
     # [CQRS Update: The getters no longer process fallbacks; they read directly
     # from CQRS state. We hydrate the state directly here.]
-    mock_msg = MagicMock()
-    mock_msg.payload = {"value": 0.60}  # SZ_VALUE
-    mock_msg._expired = False
-    device._msgs_ot[MsgId._11] = mock_msg
     device.opentherm_state = replace(device.opentherm_state, rel_modulation_level=0.45)
 
     # Act

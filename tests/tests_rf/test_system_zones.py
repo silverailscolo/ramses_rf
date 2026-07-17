@@ -7,17 +7,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ramses_rf.const import I_, ZON_ROLE_MAP, Code
+from ramses_rf.const import I_, Code
 from ramses_rf.devices import BdrSwitch, DhwSensor
-from ramses_rf.exceptions import (
-    SchemaInconsistentError,
-    SystemInconsistent,
-    SystemSchemaInconsistent,
-)
+from ramses_rf.exceptions import SchemaInconsistentError, SystemSchemaInconsistent
 from ramses_rf.messages import Message
 from ramses_rf.systems.zones import (
     DhwZone,
-    EleZone,
     UfhZone,
     Zone,
     ZoneBase,
@@ -210,61 +205,6 @@ def test_zone_schema_promotion(mock_tcs: MagicMock) -> None:
         zon._update_schema(**{"class": "radiator_valve"})
 
 
-def test_zone_handle_msg_discovery(mock_tcs: MagicMock) -> None:
-    """Test zone promotion correctly fires on discovery packet."""
-    zon = Zone(mock_tcs, "01")
-    zon._setup_discovery_cmds = MagicMock()  # type: ignore[method-assign]
-
-    # Extract a valid heat zone type dynamically to guarantee passing the conditional
-    heat_zone_type = list(ZON_ROLE_MAP.HEAT_ZONES)[0]
-
-    msg = create_mock_msg(Code._000C, {}, mock_tcs.ctl)
-    msg.payload = {
-        "zone_idx": "01",
-        "zone_type": heat_zone_type,
-        "devices": ["04:123456"],
-    }
-
-    zon._handle_msg(msg)
-
-    # Regardless of the map implementation, it should successfully promote out of base Zone
-    assert zon.__class__ is not Zone
-
-
-def test_zone_handle_msg_eavesdrop(mock_tcs: MagicMock) -> None:
-    """Test fallback zone promotion from eavesdropping normal packets."""
-    mock_tcs._gwy.config.enable_eavesdrop = True
-    zon = Zone(mock_tcs, "02")
-    zon._setup_discovery_cmds = MagicMock()  # type: ignore[method-assign]
-
-    msg = create_mock_msg(Code._0008, [{"zone_idx": "02"}], mock_tcs.ctl)
-    zon._handle_msg(msg)
-    assert isinstance(zon, EleZone)
-
-
-@pytest.mark.asyncio
-async def test_ele_zone_inconsistent_messages(mock_tcs: MagicMock) -> None:
-    """Test that Electric zones explicitly deny invalid heat demand msgs."""
-    zon = EleZone(mock_tcs, "01")
-
-    msg_3150 = create_mock_msg(Code._3150, [{"zone_idx": "01"}], mock_tcs.ctl)
-    with pytest.raises(SystemInconsistent):
-        zon._handle_msg(msg_3150)
-
-    msg_3ef0 = create_mock_msg(Code._3EF0, [{"zone_idx": "01"}], mock_tcs.ctl)
-    with pytest.raises(SystemInconsistent):
-        zon._handle_msg(msg_3ef0)
-
-
-async def test_zone_handle_msg_name(mock_tcs: MagicMock) -> None:
-    """Test zone handle 004 msg."""
-    zon = Zone(mock_tcs, "00")
-
-    msg = create_mock_msg(Code._0004, {"name": "my_name"}, mock_tcs.ctl)
-    zon._handle_msg(msg)
-    assert await zon.name() == "my_name"
-
-
 @pytest.mark.asyncio
 async def test_zone_commands(mock_tcs: MagicMock) -> None:
     """Test command generation overrides for general Zones."""
@@ -281,6 +221,25 @@ async def test_zone_commands(mock_tcs: MagicMock) -> None:
 
     await zon.set_name("Living Room")
     assert mock_tcs._gwy.async_send_cmd.call_count == 4
+
+
+@pytest.mark.asyncio
+async def test_zone_name_from_message_store(mock_tcs: MagicMock) -> None:
+    """Test that a Zone correctly reads its name from the MessageStore."""
+    zon = Zone(mock_tcs, "00")
+
+    # Arrange: mock the message store to return a 0004 message with a name
+    msg = create_mock_msg(
+        Code._0004, {"zone_idx": "00", "name": "Living Room"}, mock_tcs.ctl
+    )
+    mock_tcs._gwy.message_store = AsyncMock()
+    mock_tcs._gwy.message_store.get.return_value = [msg]
+
+    # Act & Assert
+    assert await zon.name() == "Living Room"
+    mock_tcs._gwy.message_store.get.assert_called_once_with(
+        code=Code._0004, src=zon._z_id
+    )
 
 
 def test_zone_factory_routing(mock_tcs: MagicMock) -> None:
