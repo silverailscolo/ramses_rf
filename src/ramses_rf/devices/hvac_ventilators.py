@@ -8,6 +8,8 @@ from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any
 
 from ramses_rf import exceptions as exc
+from ramses_rf.address import Address
+from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import (
     HEARTBEAT_TIMEOUT_FILTER,
     RQ,
@@ -43,9 +45,10 @@ from ramses_rf.const import (
     Code,
     DevType,
 )
+from ramses_rf.enums import Action
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Command, Packet, Priority
-from ramses_tx.typing import PayloadT
+from ramses_tx.typing import DeviceIdT, PayloadT
 
 from .dev_base import DeviceHvac
 
@@ -580,11 +583,16 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             src_id,
         )
 
-        cmd = Command.set_fan_mode(
-            self.id, fan_mode, scheme=self._scheme or "orcon", src_id=src_id
+        from typing import cast
+
+        intent = Intent(
+            src=Address(cast(DeviceIdT, src_id)),
+            dst=Address(self.id),
+            action=Action.SET_FAN_MODE,
+            data={"fan_mode": fan_mode, "scheme": self._scheme or "orcon"},
         )
-        return await self._gwy.async_send_cmd(
-            cmd, num_repeats=2, priority=Priority.HIGH
+        return await self._gwy.dispatcher.send(
+            intent, priority=Priority.HIGH, wait_for_reply=True
         )
 
     async def air_quality(self) -> float | None:

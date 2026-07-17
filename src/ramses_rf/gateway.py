@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any, cast
 
+from ramses_rf.commands.dispatcher import CommandDispatcher
 from ramses_tx import I_, RP, Command, Engine, Packet
 from ramses_tx.const import (
     DEFAULT_GAP_DURATION,
@@ -184,6 +185,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         rf_msg._IS_CONTROLLER_CB = is_controller
 
+        # 2. Instantiate L7 Command Dispatcher
+        self._dispatcher = CommandDispatcher(self)
+
     def __repr__(self) -> str:
         if not self._engine.ser_name:
             return f"Gateway(input_file={self._engine._input_file})"
@@ -195,6 +199,10 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     @property
     def device_registry(self) -> DeviceRegistryInterface:
         return self._device_registry
+
+    @property
+    def dispatcher(self) -> CommandDispatcher:
+        return self._dispatcher
 
     @property
     def config(self) -> GatewayConfig:

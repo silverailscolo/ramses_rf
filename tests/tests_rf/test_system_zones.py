@@ -30,7 +30,9 @@ def mock_gwy() -> MagicMock:
     gwy = MagicMock()
     gwy.config.enable_eavesdrop = False
     gwy.device_registry.get_device.return_value = MagicMock()
-    gwy.async_send_cmd = AsyncMock(return_value="mocked_packet")
+    gwy.dispatcher.send = AsyncMock(return_value="mocked_packet")
+    gwy.hgi = MagicMock()
+    gwy.hgi.id = "18:000730"
     gwy.message_store = None
     return gwy
 
@@ -166,16 +168,16 @@ async def test_dhw_commands(mock_tcs: MagicMock) -> None:
     dhw = DhwZone(mock_tcs, "HW")
 
     await dhw.set_setpoint(55.0)
-    mock_tcs._gwy.async_send_cmd.assert_called()
+    mock_tcs._gwy.dispatcher.send.assert_called()
 
     await dhw.set_boost_mode()
-    assert mock_tcs._gwy.async_send_cmd.call_count == 2
+    assert mock_tcs._gwy.dispatcher.send.call_count == 2
 
     await dhw.reset_mode()
-    assert mock_tcs._gwy.async_send_cmd.call_count == 3
+    assert mock_tcs._gwy.dispatcher.send.call_count == 3
 
     await dhw.reset_config()
-    assert mock_tcs._gwy.async_send_cmd.call_count == 4
+    assert mock_tcs._gwy.dispatcher.send.call_count == 4
 
 
 @pytest.mark.asyncio
@@ -211,16 +213,16 @@ async def test_zone_commands(mock_tcs: MagicMock) -> None:
     zon = Zone(mock_tcs, "01")
 
     await zon.set_setpoint(21.0)
-    mock_tcs._gwy.async_send_cmd.assert_called_once()
+    mock_tcs._gwy.dispatcher.send.assert_called_once()
 
     await zon.set_setpoint(None)  # Invokes reset_mode under the hood
-    assert mock_tcs._gwy.async_send_cmd.call_count == 2
+    assert mock_tcs._gwy.dispatcher.send.call_count == 2
 
     await zon.set_config(min_temp=10.0, max_temp=30.0)
-    assert mock_tcs._gwy.async_send_cmd.call_count == 3
+    assert mock_tcs._gwy.dispatcher.send.call_count == 3
 
     await zon.set_name("Living Room")
-    assert mock_tcs._gwy.async_send_cmd.call_count == 4
+    assert mock_tcs._gwy.dispatcher.send.call_count == 4
 
 
 @pytest.mark.asyncio
