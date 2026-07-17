@@ -35,6 +35,7 @@ BUILDERS: dict[Action, Callable[[Command], CommandDTO]] = {
     # Zone Commands
     Action.SET_TEMPERATURE: zones.build_set_temperature,
     # Schedule Commands
+    Action.GET_SCHEDULE_VERSION: schedules.build_get_schedule_version,
     Action.GET_SCHEDULE_FRAGMENT: schedules.build_get_schedule_fragment,
     Action.SET_SCHEDULE_FRAGMENT: schedules.build_set_schedule_fragment,
     # FaultLog Commands

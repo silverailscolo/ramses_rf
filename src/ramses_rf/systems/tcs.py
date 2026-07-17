@@ -36,6 +36,7 @@ from ramses_rf.devices import (
     UfhController,
 )
 from ramses_rf.entity import Entity, class_by_attr
+from ramses_rf.enums import Action
 from ramses_rf.exceptions import (
     DeviceNotFoundError,
     ScheduleFlowError,
@@ -70,6 +71,7 @@ from ramses_tx.typing import PayDictT, PayloadT
 
 from ..messages import Message
 from .faultlog import FaultLog
+from .helpers import send_system_intent
 from .zones import zone_factory
 
 if TYPE_CHECKING:
@@ -813,7 +815,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         """Configure discovery commands for schedules."""
         super()._setup_discovery_cmds()
 
-        cmd = Command.get_schedule_version(self.id)
+        cmd = Command.from_attrs(RQ, self.id, Code._0006, PayloadT("00"))
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
@@ -856,9 +858,8 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
                 False,
             )  # global_ver, did_io
 
-        cmd = Command.get_schedule_version(self.ctl.id)
-        pkt = await self._gwy.async_send_cmd(
-            cmd, wait_for_reply=True, priority=Priority.HIGH
+        pkt = await send_system_intent(
+            self, Action.GET_SCHEDULE_VERSION, data={}, wait_for_reply=True
         )
         if pkt:
             self._msg_0006 = Message._from_pkt(pkt)
@@ -980,7 +981,7 @@ class Logbook(SystemBase):  # 0418
         """Configure discovery for the fault log."""
         super()._setup_discovery_cmds()
 
-        cmd = Command.get_system_log_entry(self.id, 0)
+        cmd = Command.from_attrs(RQ, self.id, Code._0418, PayloadT("000000"))
         self.discovery.add_cmd(cmd, 60 * 5, delay=5)
         task = asyncio.create_task(self.get_faultlog())
         self._gwy.add_task(task)
