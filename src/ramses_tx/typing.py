@@ -348,6 +348,7 @@ class _empty(TypedDict):
 
 
 class _0004(TypedDict):
+    zone_idx: NotRequired[str | None]
     name: NotRequired[str | None]
 
 
