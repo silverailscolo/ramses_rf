@@ -62,8 +62,9 @@ async def test_polling_manager_live_dispatch_cutover(
     assert mock_gateway.async_send_cmd.call_count == processed_count
 
     # Verify first dispatched CommandDTO structure
+    # build_rq_cmd uses the HGI-as-src convention: addr1=HGI, addr2=device
     call_args = mock_gateway.async_send_cmd.call_args_list[0][0]
     sent_dto: CommandDTO = call_args[0]
     assert sent_dto.verb == "RQ"
-    assert sent_dto.addr1 == "01:111111"
-    assert sent_dto.addr2 == "01:111111"
+    assert sent_dto.addr1 == "18:000730"  # HGI (src)
+    assert sent_dto.addr2 == "01:111111"  # CTL (dst)
