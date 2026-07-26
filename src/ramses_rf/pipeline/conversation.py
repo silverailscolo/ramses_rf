@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Final
 
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command
-from ramses_tx import RP, Packet
+from ramses_tx import I_, RP, W_, Packet
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 
@@ -229,9 +229,6 @@ class ConversationManager:
         :returns: True if matched, False otherwise.
         :rtype: bool
         """
-        if msg.verb != RP:
-            return False
-
         matched_key: str | None = None
         matched_pending: PendingConversation | None = None
 
@@ -242,6 +239,12 @@ class ConversationManager:
 
             # Check code matching
             if str(msg.code) != pending.dto.code:
+                continue
+
+            # Check verb matching: RP is always valid; I is valid for W commands
+            # (e.g. Evohome DHW acknowledges W 1F41 with I 1F41, not RP 1F41).
+            # See issue 873.
+            if msg.verb != RP and not (msg.verb == I_ and pending.dto.verb == W_):
                 continue
 
             matched_key = key
