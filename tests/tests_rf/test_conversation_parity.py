@@ -109,3 +109,43 @@ async def test_conversation_manager_timeout_and_retries() -> None:
     assert manager.pending_count == 0
     with pytest.raises(ProtocolTimeoutError):
         fut.result()
+
+
+def test_conversation_manager_accepts_i_for_w_commands() -> None:
+    """ConversationManager must accept I responses for W commands (issue 873).
+
+    Evohome DHW controllers acknowledge W 1F41 writes with I 1F41, not RP 1F41.
+    """
+    import asyncio
+    from unittest.mock import MagicMock
+
+    from ramses_rf.address import Address
+    from ramses_rf.commands.core import Command
+    from ramses_rf.enums import Action
+    from ramses_rf.pipeline.conversation import ConversationManager
+    from ramses_tx import I_
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    cm = ConversationManager(loop=loop, default_timeout=0.5, max_retries=2)
+
+    intent = Command(
+        src=Address("18:191664"),
+        dst=Address("01:216136"),
+        action=Action.SET_DHW_MODE,
+        data={"mode": "permanent_override", "active": False},
+        needs_reply=True,
+        timeout=0.5,
+    )
+    fut = loop.run_until_complete(cm.track_intent(intent, timeout=0.5, max_retries=2))
+
+    # Simulate the I 1F41 response from the CTL (broadcast dst)
+    mock_msg = MagicMock()
+    mock_msg.verb = I_
+    mock_msg.src.id = "01:216136"  # from the device we sent to
+    mock_msg.code.__str__ = lambda self: "1F41"
+    mock_msg._pkt = MagicMock()
+
+    matched = cm.process_msg(mock_msg)
+    assert matched is True
+    assert fut.done() and not fut.cancelled()
