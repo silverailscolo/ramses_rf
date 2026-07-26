@@ -233,6 +233,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             self._reconnect_task = None
 
         self.client.subscribe(self._topic_base)
+        _LOGGER.info("Subscribed to status topic: %s", self._topic_base)
 
         if self._topic_base.endswith("/+") and not (
             hasattr(self, "_topic_sub") and self._topic_sub
@@ -240,7 +241,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             data_wildcard = self._topic_base.replace("/+", "/+/rx")
             self.client.subscribe(data_wildcard, qos=self._mqtt_qos)
             self._data_wildcard_topic = data_wildcard
-            _LOGGER.debug("Subscribed to data wildcard: %s", data_wildcard)
+            _LOGGER.info("Subscribed to data wildcard: %s", data_wildcard)
 
         if hasattr(self, "_topic_sub") and self._topic_sub:
             self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
@@ -257,6 +258,29 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                 finally:
                     self._data_wildcard_topic = ""
 
+        # Establish the protocol connection immediately upon broker connect.
+        #
+        # Previously, connection_made was only called when:
+        #   a) an "online" status message was received from the ramses_esp, or
+        #   b) a data packet arrived on a /rx topic (data topic fallback)
+        #
+        # If the ramses_esp was already connected (no retained "online" message)
+        # or published on an unexpected topic, connection_made was never called
+        # and the 60s timeout fired (issue 871).
+        #
+        # Now we call connection_made as soon as the broker connection is
+        # established and subscriptions are in place.  The HGI device ID is
+        # extracted from the URL path if available, or left as None and
+        # updated later when the first data packet arrives.
+        if not self._connection_established:
+            gwy_id: DeviceIdT | None = None
+            # Try to extract device ID from the topic_base if it's specific
+            if not self._topic_base.endswith("/+"):
+                parts = self._topic_base.split("/")
+                if len(parts) == 3:
+                    gwy_id = DeviceIdT(parts[-1])
+            self._establish_connection(gwy_id)
+
     def _on_connect_fail(
         self,
         client: mqtt.Client,
@@ -270,6 +294,31 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if not self._closing:
             self._schedule_reconnect()
+
+    def _establish_connection(self, gwy_id: DeviceIdT | None) -> None:
+        """Establish the protocol connection (call connection_made).
+
+        Called from _on_connect (broker connected) or _create_connection
+        (ramses_esp online status received).  Idempotent — subsequent
+        calls update the active HGI ID but do not call connection_made
+        again.
+        """
+        if self._connection_established:
+            # Already connected — just update the HGI ID if we now have one
+            if gwy_id is not None:
+                self._extra[SZ_ACTIVE_HGI] = gwy_id
+            return
+
+        self._connected = True
+        self._connection_established = True
+
+        if not self._loop.is_closed():
+            try:
+                self._loop.call_soon_threadsafe(self._make_connection, gwy_id)
+            except RuntimeError:
+                _LOGGER.debug("Event loop closed, cannot establish connection")
+        else:
+            _LOGGER.debug("Event loop closed, cannot establish connection")
 
     def _on_disconnect(
         self,
@@ -340,16 +389,11 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                 self._data_wildcard_topic = ""
 
         if not self._connection_established:
-            self._connection_established = True
-            if not self._loop.is_closed():
-                try:
-                    self._loop.call_soon_threadsafe(
-                        self._make_connection, DeviceIdT(msg.topic[-9:])
-                    )
-                except RuntimeError:
-                    _LOGGER.debug("Event loop closed, cannot make connection")
+            self._establish_connection(DeviceIdT(msg.topic[-9:]))
         else:
             _LOGGER.info("MQTT reconnected - protocol connection already established")
+            # Update HGI ID now that we know it from the online message
+            self._extra[SZ_ACTIVE_HGI] = msg.topic[-9:]
 
     def _on_message(
         self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage
@@ -388,44 +432,37 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
             return
 
-        if not self._connection_established and msg.topic.endswith("/rx"):
+        if msg.topic.endswith("/rx"):
             topic_parts = msg.topic.split("/")
             if len(topic_parts) >= 3 and topic_parts[-2] not in ("+", "*"):
                 gateway_id = topic_parts[-2]
-                _LOGGER.info(
-                    "Inferring gateway connection from data topic: %s",
-                    gateway_id,
-                )
 
-                self._topic_pub = f"{'/'.join(topic_parts[:-1])}/tx"
-                self._topic_sub = msg.topic
-                self._extra[SZ_ACTIVE_HGI] = gateway_id
-
-                self._connected = True
-                self._connection_established = True
-                if not self._loop.is_closed():
+                # Update topic tracking (may already be set from _on_connect)
+                if not self._topic_sub:
+                    self._topic_pub = f"{'/'.join(topic_parts[:-1])}/tx"
+                    self._topic_sub = msg.topic
+                    _LOGGER.info(
+                        "Inferring gateway connection from data topic: %s",
+                        gateway_id,
+                    )
                     try:
-                        self._loop.call_soon_threadsafe(
-                            self._make_connection, DeviceIdT(gateway_id)
-                        )
-                    except RuntimeError:
-                        _LOGGER.debug("Event loop closed, cannot make connection")
-
-                try:
-                    self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
-                except (ValueError, MQTTException) as err:
-                    _LOGGER.exception("Error subscribing specific topic: %s", err)
-                if getattr(self, "_data_wildcard_topic", ""):
-                    try:
-                        self.client.unsubscribe(self._data_wildcard_topic)
-                        _LOGGER.debug(
-                            "Unsubscribed data wildcard after inferring device: %s",
-                            self._data_wildcard_topic,
-                        )
+                        self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
                     except (ValueError, MQTTException) as err:
-                        _LOGGER.exception("Error unsubscribing wildcard: %s", err)
-                    finally:
-                        self._data_wildcard_topic = ""
+                        _LOGGER.exception("Error subscribing specific topic: %s", err)
+                    if getattr(self, "_data_wildcard_topic", ""):
+                        try:
+                            self.client.unsubscribe(self._data_wildcard_topic)
+                            _LOGGER.debug(
+                                "Unsubscribed data wildcard after inferring device: %s",
+                                self._data_wildcard_topic,
+                            )
+                        except (ValueError, MQTTException) as err:
+                            _LOGGER.exception("Error unsubscribing wildcard: %s", err)
+                        finally:
+                            self._data_wildcard_topic = ""
+
+                # Establish or update the connection with the real device ID
+                self._establish_connection(DeviceIdT(gateway_id))
 
         try:
             payload = json.loads(msg.payload)
