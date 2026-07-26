@@ -244,6 +244,27 @@ def test_2411_data_type_80_bool_values() -> None:
     assert "_unknown_data_type" not in result
 
 
+def test_2411_data_type_91_bypass_valve_signed() -> None:
+    """2411 param 4B with data_type 91 (signed int32) must parse without warning.
+
+    The device sends data_type 91 for the bypass valve test position, with a
+    negative min_value (0xFFFFFF38 = -200 as two's complement). data_type 91
+    is a 4-byte signed integer. See issue 740.
+    """
+    msg = _make_22f1_msg(
+        "2026-07-26T15:55:42.000000 040 RP --- 32:022222 29:091138 --:------ 2411 022 "
+        "00004B5891000000E6FFFFFF38000001F40000000164"
+    )
+    result = msg.payload
+    assert result["parameter"] == "4B"
+    assert result["description"] == "(Test) Bypass Valve (0=auto, 1=open, 2=closed)"
+    assert result["value"] == 230  # 0x000000E6
+    assert result["min_value"] == -200  # 0xFFFFFF38 (two's complement)
+    assert result["max_value"] == 500  # 0x000001F4
+    assert result["precision"] == 1
+    assert "_unknown_data_type" not in result
+
+
 def test_helper_demand_transform() -> None:
     assert [x[1] for x in TRANSFORMS] == [_transform(x[0]) for x in TRANSFORMS]
 

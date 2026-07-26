@@ -796,6 +796,13 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
             return val
         return None
 
+    def signed32(x: str) -> int:
+        # 4-byte signed integer (two's complement), used by params whose
+        # min_value can be negative (e.g. 4B bypass valve test position,
+        # which reports min 0xFFFFFF38 = -200). See issue 740.
+        val = int(x, 16)
+        return val - 0x100000000 if val >= 0x80000000 else val
+
     _2411_DATA_TYPES = {
         "00": (2, counter),  # 4E (0-1), 54 (15-60)
         "01": (2, centile),  # 52 (0.0-25.0) (%)
@@ -806,6 +813,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
         "20": (4, counter),  # 01 - Support parameter
         "80": (4, bool32),  # 07 - ClimaRad MiniBox: 0/1, FFFFFFFF/000000FF = N/A
         "90": (4, counter),  # 3E - Away mode Exhaust fan rate (%)
+        "91": (8, signed32),  # 4B - Bypass Valve test position (signed int32)
         "92": (4, hex_to_temp),  # 75 (0-30) (C)
     }
 
