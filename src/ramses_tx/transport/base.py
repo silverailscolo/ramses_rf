@@ -169,7 +169,11 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             _LOGGER.warning("%s < PacketInvalid(%s)", frame, err)
             return
 
-        self._pkt_read(pkt)
+        try:
+            self._pkt_read(pkt)
+        except exc.TransportError as err:
+            _LOGGER.debug("%s < Transport Error(%s)", pkt, err)
+            return
 
     def _pkt_read(self, pkt: Packet) -> None:
         """Pass any valid Packets to the protocol's callback."""

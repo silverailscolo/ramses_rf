@@ -567,7 +567,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self._connected = False
 
         try:
-            self.client.unsubscribe(self._topic_sub)
+            if hasattr(self, "_topic_sub") and self._topic_sub:
+                self.client.unsubscribe(self._topic_sub)
             self.client.disconnect()
             self.client.loop_stop()
         except (ValueError, MQTTException) as err:
