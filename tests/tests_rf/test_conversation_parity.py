@@ -17,7 +17,7 @@ from ramses_rf.commands.core import Command
 from ramses_rf.enums import Action
 from ramses_rf.pipeline.conversation import ConversationManager
 from ramses_tx import RP
-from ramses_tx.exceptions import ProtocolTimeoutError
+from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 
 
 def _create_mock_message(
@@ -149,3 +149,75 @@ def test_conversation_manager_accepts_i_for_w_commands() -> None:
     matched = cm.process_msg(mock_msg)
     assert matched is True
     assert fut.done() and not fut.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_conversation_manager_idx_matching_prevents_cross_matching() -> None:
+    # Arrange
+    loop = asyncio.get_running_loop()
+    manager = ConversationManager(loop=loop, default_timeout=1.0, max_retries=2)
+    intent1 = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.SET_TEMPERATURE,
+        data={"zone_idx": "00", "setpoint": 21.0},
+    )
+    dto1 = build_dto(intent1)
+
+    intent2 = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.SET_TEMPERATURE,
+        data={"zone_idx": "01", "setpoint": 19.0},
+    )
+    dto2 = build_dto(intent2)
+
+    # Act
+    fut1 = await manager.track_intent(intent1, dto1)
+    fut2 = await manager.track_intent(intent2, dto2)
+
+    reply_msg2 = _create_mock_message(verb=RP, code=dto2.code, src_id="01:078710")
+    reply_msg2.context.value = "01"
+
+    matched2 = manager.process_msg(reply_msg2)
+
+    # Assert
+    assert matched2 is True
+    assert fut2.done()
+    assert fut2.result() == reply_msg2
+    assert not fut1.done()
+    assert manager.pending_count == 1
+
+    manager.cancel_all()
+
+
+@pytest.mark.asyncio
+async def test_conversation_manager_superseded_intent_cancels_old_timer() -> None:
+    # Arrange
+    loop = asyncio.get_running_loop()
+    manager = ConversationManager(loop=loop, default_timeout=1.0, max_retries=2)
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.SET_TEMPERATURE,
+        data={"zone_idx": "00", "setpoint": 21.0},
+    )
+    dto = build_dto(intent)
+
+    # Act
+    fut1 = await manager.track_intent(intent, dto)
+    pending1 = manager._pending[manager._conversation_key(intent, dto)]
+    timer1 = pending1.timer_task
+
+    fut2 = await manager.track_intent(intent, dto)
+    await asyncio.sleep(0)
+
+    # Assert
+    assert timer1 is not None and timer1.cancelled()
+    assert fut1.done()
+    with pytest.raises(ProtocolSendFailed):
+        fut1.result()
+    assert manager.pending_count == 1
+    assert not fut2.done()
+
+    manager.cancel_all()
