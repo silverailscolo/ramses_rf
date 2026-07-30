@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from .commands.dispatcher import CommandDispatcher as CQRSDispatcher
     from .devices.dev_base import Device
     from .models import TopologyChangedEvent
+    from .routing import StateHeader
     from .topology import Parent
 
 # Generic type variable for downcasting returned Device instances to subclasses
@@ -66,8 +67,8 @@ class MessageStoreInterface(Protocol):
         verb: str | None = None,
         code: str | None = None,
         ctx: Any | None = None,
-        hdr: str | None = None,
-    ) -> tuple[Any, ...]: ...
+        hdr: str | StateHeader | None = None,
+    ) -> tuple[Message, ...] | list[Message]: ...
     async def rem(
         self,
         msg: Any | None = None,

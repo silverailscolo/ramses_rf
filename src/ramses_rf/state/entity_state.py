@@ -12,7 +12,7 @@ import asyncio
 import contextlib
 import logging
 from datetime import UTC, datetime as dt
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from ramses_tx.address import ALL_DEVICE_ID
 
@@ -29,7 +29,6 @@ if TYPE_CHECKING:
     from ramses_tx.typing import HeaderT
 
     from ..interfaces import DeviceInterface, EntityInterface, GatewayInterface
-    from .store import MessageStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -218,8 +217,7 @@ class EntityState:
     async def _delete_msg(self, msg: ApplicationMessage) -> None:
         """Remove the msg from the central state databases."""
         if self._gwy.message_store:
-            store = cast("MessageStore", self._gwy.message_store)
-            await store.rem(msg)
+            await self._gwy.message_store.rem(msg)
         self._pending_deletes.discard(msg.state_header)
 
     async def _get_msg_by_hdr(
@@ -238,7 +236,7 @@ class EntityState:
             header = hdr
 
         if self._gwy.message_store:
-            store = cast("MessageStore", self._gwy.message_store)
+            store = self._gwy.message_store
             msgs = await store.get(hdr=header)
             if msgs:
                 if (
@@ -248,7 +246,8 @@ class EntityState:
                     raise exc.DatabaseQueryError(
                         f"Header mismatch: {msgs[0].state_header.legacy_hdr} != {hdr}"
                     )
-                return cast("ApplicationMessage", msgs[0])
+                if isinstance(msgs[0], ApplicationMessage):
+                    return msgs[0]
             return None
 
         cache = await self._build_state_cache()

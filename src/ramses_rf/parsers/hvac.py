@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
+from ramses_rf.typing import HvacPayloadT
 from ramses_tx.address import NON_DEV_ADDR, hex_id_to_dev_id
 from ramses_tx.const import (
     I_,
@@ -222,7 +223,7 @@ def parser_12a0(payload: str, msg: Message) -> dict[str, Any] | list[dict[str, A
     Structural unpacking occurs in the CQRS quirks pipeline.
     """
     if len(payload) <= 14:
-        return cast("dict[str, Any]", parse_indoor_humidity(payload[2:12]))
+        return dict(parse_indoor_humidity(payload[2:12]))
 
     return [
         {
@@ -442,7 +443,7 @@ def parser_22b0(payload: str, msg: Message) -> dict[str, Any]:
 
 # WIP: unknown, HVAC
 @register_parser("22E0")
-def parser_22e0(payload: str, msg: Message) -> Mapping[str, float | None]:
+def parser_22e0(payload: str, msg: Message) -> HvacPayloadT:
     """Parse the 22e0 packet.
 
     :param payload: The raw hex payload
@@ -450,7 +451,7 @@ def parser_22e0(payload: str, msg: Message) -> Mapping[str, float | None]:
     :param msg: The message object
     :type msg: Message
     :return: A mapping of percentage values extracted from the payload
-    :rtype: Mapping[str, float | None]
+    :rtype: HvacPayloadT
     :raises AssertionError: If a value exceeds the expected 200 threshold.
     :raises ValueError: If the payload cannot be parsed as percentages.
     """
@@ -476,7 +477,7 @@ def parser_22e0(payload: str, msg: Message) -> Mapping[str, float | None]:
 
 # WIP: unknown, HVAC
 @register_parser("22E5")
-def parser_22e5(payload: str, msg: Message) -> Mapping[str, float | None]:
+def parser_22e5(payload: str, msg: Message) -> HvacPayloadT:
     """Parse the 22e5 packet.
 
     :param payload: The raw hex payload
@@ -484,17 +485,17 @@ def parser_22e5(payload: str, msg: Message) -> Mapping[str, float | None]:
     :param msg: The message object
     :type msg: Message
     :return: A mapping of percentage values extracted from the payload
-    :rtype: Mapping[str, float | None]
+    :rtype: HvacPayloadT
     """
     # RP --- 32:153258 18:005904 --:------ 22E5 004 00-96-C8-14
     # RP --- 32:155617 18:005904 --:------ 22E5 004 00-72-C8-14
 
-    return cast("Mapping[str, float | None]", parser_22e0(payload, msg))
+    return parser_22e0(payload, msg)
 
 
 # WIP: unknown, HVAC
 @register_parser("22E9")
-def parser_22e9(payload: str, msg: Message) -> Mapping[str, float | str | None]:
+def parser_22e9(payload: str, msg: Message) -> HvacPayloadT:
     """Parse the 22e9 packet.
 
     :param payload: The raw hex payload
@@ -502,14 +503,14 @@ def parser_22e9(payload: str, msg: Message) -> Mapping[str, float | str | None]:
     :param msg: The message object
     :type msg: Message
     :return: A mapping of unknown identifiers or percentage values
-    :rtype: Mapping[str, float | str | None]
+    :rtype: HvacPayloadT
     """
     if payload[2:4] == "01":
         return {
             "unknown_4": payload[4:6],
             "unknown_6": payload[6:8],
         }
-    return cast("Mapping[str, float | str | None]", parser_22e0(payload, msg))
+    return parser_22e0(payload, msg)
 
 
 # fan_speed (switch_mode), HVAC

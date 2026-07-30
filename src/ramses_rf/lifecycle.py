@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .config import GatewayConfig
     from .gateway import Gateway
     from .interfaces import DeviceRegistryInterface, MessageStoreInterface
+    from .systems.tcs import Evohome
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class GatewayLifecycle:
         _message_store: MessageStoreInterface | None
         _pkt_log_listener: QueueListener | None
         _schema: dict[str, Any]
+        _tcs: Evohome | None
         state_projector: StateProjector | None
 
         def add_task(self, task: asyncio.Task[Any]) -> None: ...
@@ -74,7 +76,7 @@ class GatewayLifecycle:
         if self._pkt_log_listener:
             self._pkt_log_listener.start()
 
-            pkt_log_config = cast("dict[str, Any]", self._engine._packet_log)
+            pkt_log_config: dict[str, Any] = dict(self._engine._packet_log)
             if flush_interval := pkt_log_config.get("flush_interval", 0):
 
                 async def _periodic_flush() -> None:
@@ -252,7 +254,7 @@ class GatewayLifecycle:
 
         def clear_state() -> None:
             _LOGGER.info("Gateway: Clearing existing schema/state...")
-            cast("Gateway", self)._tcs = None
+            self._tcs = None
             self.device_registry.devices.clear()
             self.device_registry.device_by_id.clear()
             self.clear_message_history()
