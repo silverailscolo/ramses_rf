@@ -555,7 +555,7 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
 
     from ramses_rf.systems.faultlog import FaultLogEntry
 
-    with contextlib.suppress(Exception):
+    try:
         entry = FaultLogEntry.from_msg(msg)
 
         # Append to the immutable tuple, safely removing stale matching timestamps
@@ -578,6 +578,8 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
         target.apply_state_update(event)
+    except (AttributeError, KeyError, TypeError, ValueError) as err:
+        _LOGGER.warning("Failed to process fault log entry from msg %s: %s", msg, err)
 
 
 def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:

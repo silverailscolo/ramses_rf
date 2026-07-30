@@ -6,6 +6,7 @@ import pytest
 
 from ramses_rf.config import GatewayConfig
 from ramses_rf.devices.dev_base import BatteryState, DeviceBase
+from ramses_rf.exceptions import RamsesException
 from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import DEFAULT_POLLING_SCHEDULES, PollingManager
 
@@ -153,3 +154,80 @@ async def test_polling_manager_disabled_config_parity(
     # ASSERT
     assert processed_count == 0
     mock_gateway.async_send_cmd.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_stale_task_pruning(
+    mock_gateway: MagicMock,
+) -> None:
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    mock_gateway.device_registry.devices = [ctl_dev]
+
+    # ACT
+    await poller.poll_due_commands()
+    initial_count = len(poller.get_scheduled_cmds())
+
+    mock_gateway.device_registry.devices = []
+    await poller.poll_due_commands()
+    pruned_count = len(poller.get_scheduled_cmds())
+
+    # ASSERT
+    assert initial_count > 0
+    assert pruned_count == 0
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_send_cmd_exception_handling(
+    mock_gateway: MagicMock,
+) -> None:
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    bdr_dev = MockDevice(mock_gateway, "13:222222", slug="BDR")
+    mock_gateway.device_registry.devices = [bdr_dev]
+    mock_gateway.async_send_cmd.side_effect = RamsesException("Transmission failure")
+
+    poller.update_device_tasks(bdr_dev)
+    past = dt.now(UTC) - td(seconds=10)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+
+    # ACT
+    processed_count = await poller.poll_due_commands()
+
+    # ASSERT
+    assert processed_count == 1
+    mock_gateway.async_send_cmd.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_rate_limiting(
+    mock_gateway: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    mock_gateway.device_registry.devices = [ctl_dev]
+
+    poller.update_device_tasks(ctl_dev)
+    past = dt.now(UTC) - td(seconds=10)
+    tasks = poller.get_scheduled_cmds()
+    for task in tasks:
+        task.next_due = past
+
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+
+    monkeypatch.setattr("asyncio.sleep", fake_sleep)
+
+    # ACT
+    processed_count = await poller.poll_due_commands()
+
+    # ASSERT
+    assert processed_count == len(tasks)
+    assert len(sleep_calls) == len(tasks) - 1
+    assert all(s == 0.5 for s in sleep_calls)

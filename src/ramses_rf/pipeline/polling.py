@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Final
 
 from ramses_rf.const import DevType
 from ramses_rf.devices.helpers import build_rq_cmd
+from ramses_rf.exceptions import RamsesException
 from ramses_rf.helpers import schedule_task
 from ramses_rf.typing import DeviceIdT, PollingIntervalsT
 
@@ -70,6 +71,7 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[str, int | None]]] = {
     },
 }
 
+POLL_INTER_CMD_GAP: Final[float] = 0.5  # Rate limit gap between consecutive TX commands
 DEFAULT_POLL_CYCLE_SECS: Final[float] = 300.0  # 5 minutes maximum idle sleep
 
 
@@ -191,17 +193,21 @@ class PollingManager:
             if interval is not None and interval > 0
         }
 
-    def update_device_tasks(self, device: DeviceBase) -> None:
+    def update_device_tasks(self, device: DeviceBase) -> set[tuple[DeviceIdT, str]]:
         """Update or register scheduled polling tasks for a device entity.
 
         :param device: The device entity to register or refresh.
         :type device: DeviceBase
+        :returns: Set of active task keys (device_id, code) for the device.
+        :rtype: set[tuple[DeviceIdT, str]]
         """
         schedule = self.resolve_schedule_for_device(device)
         now = dt.now(UTC)
+        active_keys: set[tuple[DeviceIdT, str]] = set()
 
         for code, interval in schedule.items():
             key = (device.id, code)
+            active_keys.add(key)
             if key not in self._tasks:
                 self._tasks[key] = PollingTask(
                     device_id=device.id,
@@ -211,6 +217,8 @@ class PollingManager:
                 )
             else:
                 self._tasks[key].interval = interval
+
+        return active_keys
 
     def get_scheduled_cmds(self) -> list[PollingTask]:
         """Return a list of all currently tracked polling tasks.
@@ -264,7 +272,7 @@ class PollingManager:
         while self._running:
             try:
                 await self.poll_due_commands()
-            except Exception as err:  # noqa: BLE001
+            except (RamsesException, TimeoutError) as err:
                 _LOGGER.error("Error in PollingManager loop: %s", err)
 
             sleep_secs = self._calculate_next_sleep_interval()
@@ -279,16 +287,24 @@ class PollingManager:
         if getattr(self._gwy.config, "disable_polling", False):
             return 0
 
-        # Refresh tasks for all devices currently in registry
+        # Refresh tasks for all devices currently in registry and prune stale tasks
+        active_keys: set[tuple[DeviceIdT, str]] = set()
         for dev in list(self._gwy.device_registry.devices):
-            self.update_device_tasks(dev)
+            active_keys.update(self.update_device_tasks(dev))
+
+        for key in list(self._tasks):
+            if key not in active_keys:
+                del self._tasks[key]
 
         now = dt.now(UTC)
         processed_count = 0
 
-        for task in self._tasks.values():
+        for task in list(self._tasks.values()):
             if task.next_due > now:
                 continue
+
+            if processed_count > 0 and not self.shadow_mode:
+                await asyncio.sleep(POLL_INTER_CMD_GAP)
 
             processed_count += 1
             if self.shadow_mode:
@@ -305,7 +321,14 @@ class PollingManager:
                 task.last_polled = now
                 task.next_due = now + td(seconds=task.interval)
                 cmd_dto = build_rq_cmd(task.device_id, task.code)
-                with contextlib.suppress(Exception):
+                try:
                     await self._gwy.async_send_cmd(cmd_dto)
+                except (RamsesException, TimeoutError) as err:
+                    _LOGGER.warning(
+                        "PollingManager failed to send command %s to %s: %s",
+                        task.code,
+                        task.device_id,
+                        err,
+                    )
 
         return processed_count

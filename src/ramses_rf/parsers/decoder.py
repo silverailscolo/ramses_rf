@@ -488,8 +488,18 @@ class HeartbeatDecoder(PayloadDecoder):
                 res = parser(payload_str, msg)
                 if res == {}:
                     return None
-            except Exception:
-                pass
+            except (
+                exc.ParserBaseError,
+                IndexError,
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as err:
+                _LOGGER.debug(
+                    "Parser for code %s failed, falling back to heartbeat: %s",
+                    dto.code,
+                    err,
+                )
             return parser_heartbeat(payload_str, msg)
 
         if self._next_decoder:
