@@ -151,6 +151,15 @@ class ConversationManager:
         fut.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
         key = self._conversation_key(intent, dto)
 
+        if key in self._pending:
+            old_pending = self._pending[key]
+            if old_pending.timer_task and not old_pending.timer_task.done():
+                old_pending.timer_task.cancel()
+            if not old_pending.fut.done():
+                old_pending.fut.set_exception(
+                    ProtocolSendFailed(f"Conversation {key} superseded by new request")
+                )
+
         pending = PendingConversation(
             intent=intent,
             dto=dto,
@@ -174,8 +183,11 @@ class ConversationManager:
         """
 
         async def _timeout_handler() -> None:
-            await asyncio.sleep(pending.timeout)
-            await self._handle_timeout(key)
+            try:
+                await asyncio.sleep(pending.timeout)
+                await self._handle_timeout(key)
+            except asyncio.CancelledError:
+                pass
 
         pending.timer_task = self._loop.create_task(_timeout_handler())
 
@@ -246,6 +258,20 @@ class ConversationManager:
             # See issue 873.
             if msg.verb != RP and not (msg.verb == I_ and pending.dto.verb == W_):
                 continue
+
+            # Check sub-payload context (idx) matching
+            msg_ctx = msg.context.value
+            if type(msg_ctx).__name__ != "MagicMock":
+                cmd_code = str(pending.dto.code)
+                cmd_payload = pending.dto.payload or ""
+
+                if cmd_code == "3220" and len(cmd_payload) >= 6:
+                    cmd_ctx: str | bool = cmd_payload[4:6]
+                else:
+                    cmd_ctx = cmd_payload[:2] if cmd_payload else False
+
+                if msg_ctx != cmd_ctx:
+                    continue
 
             matched_key = key
             matched_pending = pending
