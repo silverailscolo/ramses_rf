@@ -6,7 +6,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime as dt, timedelta as td
-from threading import Lock
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
@@ -41,7 +40,6 @@ from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.enums import Action
 from ramses_rf.exceptions import (
     DeviceNotFoundError,
-    ScheduleFlowError,
     SchemaInconsistentError,
     SystemSchemaInconsistent,
 )
@@ -769,10 +767,6 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
 
         self._msg_0006: Message = None  # type: ignore[assignment]
 
-        # used to stop concurrent get_schedules
-        self.zone_lock = Lock()  # FIXME: threading lock, or asyncio lock?
-        self.zone_lock_idx: str | None = None
-
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
         """Periodically retrieve the latest global change counter."""
 
@@ -834,30 +828,6 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         if isinstance(self, StoredHw) and self.dhw:
             task = asyncio.create_task(self.dhw.get_schedule(force_io=True))
             self._gwy.add_task(task)
-
-    async def _obtain_lock(self, zone_idx: str) -> None:
-        """Obtain the asyncio lock for zone schedule operations."""
-        timeout_dtm = dt.now() + td(minutes=3)
-        while dt.now() < timeout_dtm:
-            self.zone_lock.acquire()
-            if self.zone_lock_idx is None:
-                self.zone_lock_idx = zone_idx
-            self.zone_lock.release()
-
-            if self.zone_lock_idx == zone_idx:
-                break
-            await asyncio.sleep(0.005)  # gives the other zone enough time
-
-        else:
-            raise ScheduleFlowError(
-                f"Unable to obtain lock for {zone_idx} (used by {self.zone_lock_idx})"
-            )
-
-    def _release_lock(self) -> None:
-        """Release the asyncio lock for zone schedule operations."""
-        self.zone_lock.acquire()
-        self.zone_lock_idx = None
-        self.zone_lock.release()
 
     async def schedule_version(self) -> int | None:
         """Return the current global schedule version.
@@ -1217,7 +1187,7 @@ class Datetime(SystemBase):  # 313F
                 - self._gwy._engine._dt_now()
             )
             if diff > td(minutes=5):
-                _LOGGER.warning(f"{msg!r} < excessive datetime difference: {diff}")
+                _LOGGER.warning("%r < excessive datetime difference: %s", msg, diff)
 
     async def get_datetime(self) -> dt | None:
         """Retrieve the current system datetime.
@@ -1525,7 +1495,9 @@ def system_factory(
             return cls
 
         # otherwise, use the default system class...
-        _LOGGER.debug(f"Using a generic system class for: {ctl_addr} ({Device._SLUG})")
+        _LOGGER.debug(
+            "Using a generic system class for: %s (%s)", ctl_addr, Device._SLUG
+        )
         return Evohome
 
     return best_tcs_class(
