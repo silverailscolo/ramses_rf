@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import Any, Final, cast
+from typing import Any, Final
 
 from ramses_rf.const import FA, SZ_TEMPERATURE, Code, DevType
 from ramses_rf.enums import Action
@@ -116,9 +116,7 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
         return await super()._initiate_binding_process(Code._1260)
 
     async def dhw_params(self) -> PayDictT._10A0 | None:
-        return cast(
-            PayDictT._10A0 | None, await self.entity_state.get_value(Code._10A0)
-        )
+        return await self.entity_state.get_value(Code._10A0)
 
     async def params(self) -> dict[str, Any]:
         base_params = await super().params()

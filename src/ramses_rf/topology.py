@@ -24,7 +24,7 @@ entities, such as the association between a Zone and its Actuators.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from . import exceptions as exc
 from .const import F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR
@@ -269,7 +269,7 @@ class Child:
         self._parent = parent
         self._is_sensor = is_sensor
         self._child_id: str | None = None
-        self.ctl: Controller | None = None
+        self.ctl: Controller | Any = None
         self.tcs: Evohome | None = None
 
     def _get_parent(
@@ -455,7 +455,7 @@ class Child:
         self._child_id = child_id
         self._parent = parent
 
-        self.ctl = cast("Controller", ctl)
-        self.tcs = cast("Evohome", getattr(ctl, "tcs", None))
+        self.ctl = ctl
+        self.tcs = getattr(ctl, "tcs", None)
 
         return parent

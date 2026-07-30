@@ -10,7 +10,7 @@ import asyncio
 import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Self
 
 from ramses_rf.address import Address
 from ramses_rf.binding_fsm import BindingManager
@@ -176,7 +176,7 @@ class DeviceBase(Entity):
     @classmethod
     def create_from_schema(
         cls, gwy: Gateway, dev_addr: Address, *, traits: DeviceTraits | None = None
-    ) -> DeviceBase:
+    ) -> Self:
         """Create a device (for a GWY) and set its schema attrs (aka traits).
 
         All devices have traits, but also controllers (CTL, UFC) have a
@@ -380,9 +380,8 @@ class DeviceInfo(DeviceBase):  # 10E0
         :return: A dictionary of device information.
         :rtype: dict[str, Any] | None
         """
-        return cast(
-            dict[str, Any] | None, await self.entity_state.get_value(Code._10E0)
-        )
+        res = await self.entity_state.get_value(Code._10E0)
+        return res if isinstance(res, dict) else None
 
     async def traits(self) -> dict[str, Any]:
         """Return the traits of the device.
@@ -595,11 +594,10 @@ class Fakeable(DeviceBase):
         """
         traits = await self.traits()
         if not traits.get(SZ_OEM_CODE):
-            return cast(
-                str | None,
-                await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE),
-            )
-        return cast(str | None, traits.get(SZ_OEM_CODE))
+            res = await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE)
+            return str(res) if res is not None else None
+        oem = traits.get(SZ_OEM_CODE)
+        return str(oem) if oem is not None else None
 
 
 class Device(Child, DeviceBase):
@@ -752,7 +750,11 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         :return: The parent zone instance, or None if unassigned.
         :rtype: Zone | None
         """
-        return cast("Zone | None", self._parent)
+        # Deferred import to prevent circular dependency at module load time
+        # DO NOT MOVE to module level.
+        from ramses_rf.systems.zones import ZoneBase
+
+        return self._parent if isinstance(self._parent, ZoneBase) else None  # type: ignore[return-value]
 
 
 class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR

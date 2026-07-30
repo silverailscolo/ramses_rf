@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Final, cast
+from typing import Any, Final
 
 from ramses_rf.const import (
     DOMAIN_TYPE_MAP,
@@ -193,10 +193,8 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
         return None
 
-    async def tpi_params(self) -> PayDictT._10A0 | None:
-        return cast(
-            PayDictT._10A0 | None, await self.entity_state.get_value(Code._1100)
-        )
+    async def tpi_params(self) -> PayDictT._1100 | None:
+        return await self.entity_state.get_value(Code._1100)
 
     async def schema(self) -> dict[str, Any]:
         base_schema = await super().schema()

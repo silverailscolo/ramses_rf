@@ -8,7 +8,7 @@ import logging
 from datetime import datetime as dt, timedelta as td
 from threading import Lock
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
@@ -294,11 +294,8 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         """The TCS relay, aka 'appliance control' (BDR or OTB)."""
         if self._app_cntrl:
             return self._app_cntrl
-        app_cntrl = [d for d in self.childs if d._child_id == FC]
-        return cast(
-            BdrSwitch | OtbGateway | None,
-            app_cntrl[0] if len(app_cntrl) == 1 else None,
-        )
+        app_cntrl = [d for d in self.childs if isinstance(d, (BdrSwitch, OtbGateway))]
+        return app_cntrl[0] if len(app_cntrl) == 1 else None
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
         """Return the TPI parameters for the system.
@@ -306,10 +303,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         :returns: The TPI parameters dictionary, if available.
         :rtype: PayDictT._1100 | None
         """
-        return cast(
-            PayDictT._1100 | None,
-            await self.entity_state.get_value(Code._1100),
-        )
+        return await self.entity_state.get_value(Code._1100)
 
     async def heat_demand(self) -> float | None:  # 3150/FC
         """Return the current heat demand for the system.
@@ -460,11 +454,10 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             return
 
         # TODO: use msgz/I, not RP
-        secs = cast(
-            int | None,
-            await self.entity_state.get_value(Code._1F09, key="remaining_seconds"),
-        )
-        if secs is None or msg.dtm > prev.dtm + td(seconds=secs + 5):
+        secs = await self.entity_state.get_value(Code._1F09, key="remaining_seconds")
+        if not isinstance(secs, (int, float)) or msg.dtm > prev.dtm + td(
+            seconds=secs + 5
+        ):
             # can only compare against 30C9 pkt from the last cycle
             return
 
@@ -872,10 +865,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         :returns: The current schedule version, or None if unknown.
         :rtype: int | None
         """
-        return cast(
-            int | None,
-            await self.entity_state.get_value(Code._0006, key=SZ_CHANGE_COUNTER),
-        )
+        return await self.entity_state.get_value(Code._0006, key=SZ_CHANGE_COUNTER)
 
     async def status(self) -> dict[str, Any]:
         """Return the schedule status.

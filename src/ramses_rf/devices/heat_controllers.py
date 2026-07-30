@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final
 
 from ramses_rf.const import (
     FA,
@@ -73,18 +73,23 @@ class Controller(DeviceHeat):  # CTL (01):
             If a TCS is created, attach it to this device (which should be a CTL).
             """
 
-            from ramses_rf.systems import system_factory
+            # Deferred import to prevent circular dependency at module load time
+            # DO NOT MOVE to module level.
+            from ramses_rf.systems import Evohome, system_factory
 
             schema = shrink(SCH_TCS(schema))
 
             if not self.tcs:
-                self.tcs = cast("Evohome", system_factory(self, msg=msg, **schema))
+                tcs = system_factory(self, msg=msg, **schema)
+                if isinstance(tcs, Evohome):
+                    self.tcs = tcs
 
             elif schema and self.tcs:
                 self.tcs._update_schema(**schema)
 
             if msg and self.tcs:
                 self.tcs._handle_msg(msg)
+            assert self.tcs is not None
             return self.tcs
 
         super()._make_tcs_controller(msg=None, **schema)
@@ -217,7 +222,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
         schema = {}  # shrink(SCH_CCT(schema))
 
-        cct = cast("UfhCircuit | None", self.child_by_id.get(cct_idx))
+        child = self.child_by_id.get(cct_idx)
+        cct = child if isinstance(child, UfhCircuit) else None
         if not cct:
             cct = UfhCircuit(self, cct_idx)
             self.child_by_id[cct_idx] = cct
@@ -270,8 +276,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         if state is None:
             return None
 
-        # Return the dictionary exactly as is (even if empty `{}`, to match legacy)
-        return cast(dict[str, Any], state.setpoints)
+        res = state.setpoints
+        return res if isinstance(res, dict) else None
 
     async def schema(self) -> dict[str, Any]:
         base_schema = await super().schema()

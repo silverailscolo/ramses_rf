@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final
 
 import voluptuous as vol
 
@@ -367,11 +367,12 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
 
     check_filter_lists(dev_id)
 
-    return cast("Device", gwy.device_registry.get_device(dev_id, **kwargs))
+    dev: Device = gwy.device_registry.get_device(dev_id, **kwargs)
+    return dev
 
 
 def load_schema(
-    gwy: Gateway,
+    gwy: Any,
     known_list: DeviceListT | dict[str, Any] | None = None,
     **schema: Any,
 ) -> None:

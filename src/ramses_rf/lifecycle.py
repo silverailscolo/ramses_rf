@@ -8,7 +8,7 @@ import contextlib
 import logging
 from datetime import UTC, datetime as dt, timedelta as td
 from logging.handlers import QueueListener
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from ramses_tx import Packet, protocol_factory, set_pkt_logging_config
 from ramses_tx.const import SZ_ACTIVE_HGI
@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from ramses_tx.dtos import PacketDTO
 
     from .config import GatewayConfig
-    from .gateway import Gateway
     from .interfaces import DeviceRegistryInterface, MessageStoreInterface
     from .systems.tcs import Evohome
 
@@ -106,7 +105,7 @@ class GatewayLifecycle:
         )
 
         load_schema(
-            cast("Gateway", self),
+            self,
             known_list=self.config.known_list,
             **self._schema,
         )

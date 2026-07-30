@@ -7,7 +7,7 @@ import dataclasses
 import logging
 import math
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
@@ -591,12 +591,10 @@ class Zone(ZoneSchedule):
         """Return the zone's local setpoint bounds if defined by
         thermostat.
         """
-        return cast(
-            dict[str, Any] | None,
-            await self.entity_state.get_value(
-                (Code._22C9, Code._2209), zone_idx=self.idx
-            ),
+        res = await self.entity_state.get_value(
+            (Code._22C9, Code._2209), zone_idx=self.idx
         )
+        return res if isinstance(res, dict) else None
 
     async def set_setpoint(self, value: float | None) -> Message | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""
@@ -813,8 +811,8 @@ class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
     _SLUG: str | None = ZoneRole.MIX
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.MIX
 
-    async def mix_config(self) -> PayDictT._1030:
-        return cast(PayDictT._1030, await self.entity_state.get_value(Code._1030))
+    async def mix_config(self) -> PayDictT._1030 | None:
+        return await self.entity_state.get_value(Code._1030)
 
     async def params(self) -> dict[str, Any]:
         return {

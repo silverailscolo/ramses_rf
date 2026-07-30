@@ -12,12 +12,13 @@ import asyncio
 import contextlib
 import logging
 from datetime import UTC, datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
 from ramses_tx.const import I_, RP, RQ, Code, VerbT
+from ramses_tx.typing import PayDictT
 
 from .. import exceptions as exc
 from ..const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
@@ -280,6 +281,63 @@ class EntityState:
 
     _msg_flag = get_flag
 
+    @overload
+    async def get_value(
+        self,
+        code: Literal[Code._3150] | Literal[Code._0008],
+        *args: Any,
+        **kwargs: Any,
+    ) -> float | None: ...
+    @overload
+    async def get_value(
+        self,
+        code: Literal[Code._1030],
+        *args: Any,
+        **kwargs: Any,
+    ) -> PayDictT._1030 | None: ...
+    @overload
+    async def get_value(
+        self,
+        code: Literal[Code._10E0] | Literal[Code._1060],
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any: ...
+    @overload
+    async def get_value(
+        self,
+        code: Literal[Code._0006],
+        *args: Any,
+        **kwargs: Any,
+    ) -> int | None: ...
+    @overload
+    async def get_value(
+        self,
+        code: Literal[Code._1100],
+        *args: Any,
+        **kwargs: Any,
+    ) -> PayDictT._1100 | None: ...
+    @overload
+    async def get_value(
+        self,
+        code: Literal[Code._10A0],
+        *args: Any,
+        **kwargs: Any,
+    ) -> PayDictT._10A0 | None: ...
+    @overload
+    async def get_value(
+        self,
+        code: Literal[Code._1F09],
+        *args: Any,
+        key: str | None = None,
+        **kwargs: Any,
+    ) -> PayDictT._1F09 | int | float | None: ...
+    @overload
+    async def get_value(
+        self,
+        code: Code | str | tuple[Code | str, ...] | ApplicationMessage,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any: ...
     async def get_value(
         self,
         code: Code | str | tuple[Code | str, ...] | ApplicationMessage,

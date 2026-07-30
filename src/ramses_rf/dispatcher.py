@@ -554,6 +554,8 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
     if "log_idx" not in p:
         return
 
+    # Deferred import to prevent circular dependency at module load time
+    # DO NOT MOVE to module level.
     from ramses_rf.systems.faultlog import FaultLogEntry
 
     try:
@@ -646,6 +648,8 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if hvac_state is None:
         return
 
+    # Deferred import to prevent circular dependency at module load time
+    # DO NOT MOVE to module level.
     from ramses_rf import quirks
 
     p = quirks.apply_hvac_quirks(p, target.hvac_state, msg.code)

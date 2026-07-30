@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import DEV_TYPE_MAP
@@ -236,8 +236,8 @@ def device_factory(
             f"Faked devices from the HVAC domain must have an explicit class: {dev_addr}"
         )
 
-    # Cast strictly resolves Mypy reporting base class returns instead of Device
-    return cast(Device, cls.create_from_schema(gwy, dev_addr, traits=traits))
+    dev: Device = cls.create_from_schema(gwy, dev_addr, traits=traits)
+    return dev
 
 
 def class_dev_heat(
