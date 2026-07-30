@@ -150,11 +150,15 @@ class DeviceRegistry:
 
             # ROUTING INTERCEPT: Target the correct sub-domain
             if hasattr(tcs, "_get_zone"):
-                with contextlib.suppress(Exception):
+                try:
                     tcs._get_zone(zone_idx)
+                except (IndexError, KeyError, TypeError, ValueError) as err:
+                    _LOGGER.debug("Failed to resolve zone %s: %s", zone_idx, err)
             elif hasattr(tcs, "_get_htg_zone"):
-                with contextlib.suppress(Exception):
+                try:
                     tcs._get_htg_zone(zone_idx)
+                except (IndexError, KeyError, TypeError, ValueError) as err:
+                    _LOGGER.debug("Failed to resolve htg zone %s: %s", zone_idx, err)
 
             if hasattr(tcs, "get_htg_zone"):
                 parent = tcs.get_htg_zone(zone_idx)

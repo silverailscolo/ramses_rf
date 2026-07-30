@@ -158,8 +158,14 @@ class GatewayLifecycle:
         for dev in self.device_registry.devices:
             bm = getattr(dev, "_binding_manager", None)
             if bm:
-                with contextlib.suppress(Exception):
+                try:
                     bm.cancel()
+                except (AttributeError, RuntimeError) as err:
+                    _LOGGER.debug(
+                        "Error cancelling binding manager for device %s: %s",
+                        getattr(dev, "id", dev),
+                        err,
+                    )
 
         await self._engine.stop()
 
