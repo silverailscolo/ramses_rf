@@ -401,6 +401,7 @@ def _resolve_logical_targets(
     src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
     dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
     tcs = getattr(src_dev, "tcs", None) if src_dev else None
+    tcs = tcs or gwy.tcs
 
     # 1. Fault logs strictly target the TCS (if it exists) or the source device
     if msg.code == "0418":
