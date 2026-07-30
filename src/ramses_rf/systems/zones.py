@@ -47,7 +47,6 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Child, Parent
 from ramses_rf.typing import InnerScheduleT, OuterScheduleT
-from ramses_tx import Packet
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import PayDictT
 
@@ -55,7 +54,6 @@ from ..messages import Message
 from .schedule import Schedule
 
 if TYPE_CHECKING:
-    from ramses_tx import Packet
     from ramses_tx.typing import DeviceIdT, DevIndexT
 
     from .tcs import Evohome, _MultiZoneT, _StoredHwT
@@ -313,7 +311,7 @@ class DhwZone(ZoneSchedule):  # CS92A
     async def setpoint(self) -> float | None:  # 10A0
         return self.dhw_state.setpoint
 
-    async def set_setpoint(self, value: float) -> Packet:  # 10A0
+    async def set_setpoint(self, value: float) -> Message:  # 10A0
         """Set the target temperature for the DHW zone."""
         return await self.set_config(setpoint=value)
 
@@ -335,7 +333,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         mode: int | str | None = None,
         active: bool | None = None,
         until: dt | str | None = None,
-    ) -> Packet:
+    ) -> Message:
         """Set the DHW mode (mode, active, until)."""
 
         return await send_system_intent(
@@ -345,7 +343,7 @@ class DhwZone(ZoneSchedule):  # CS92A
             wait_for_reply=True,
         )
 
-    async def set_boost_mode(self) -> Packet:
+    async def set_boost_mode(self) -> Message:
         """Enable DHW for an hour, despite any schedule."""
         return await self.set_mode(
             mode=ZON_MODE_MAP.TEMPORARY,
@@ -353,7 +351,7 @@ class DhwZone(ZoneSchedule):  # CS92A
             until=dt.now() + td(hours=1),
         )
 
-    async def reset_mode(self) -> Packet:  # 1F41
+    async def reset_mode(self) -> Message:  # 1F41
         """Revert the DHW to following its schedule."""
         return await self.set_mode(mode=ZON_MODE_MAP.FOLLOW)
 
@@ -363,7 +361,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         setpoint: float | None = None,
         overrun: int | None = None,
         differential: float | None = None,
-    ) -> Packet:
+    ) -> Message:
         """Set the DHW parameters (setpoint, overrun, differential)."""
 
         # dhw_params = self.entity_state.get_value(Code._10A0)
@@ -384,7 +382,7 @@ class DhwZone(ZoneSchedule):  # CS92A
             },
         )
 
-    async def reset_config(self) -> Packet:  # 10A0
+    async def reset_config(self) -> Message:  # 10A0
         """Reset the DHW parameters to their default values."""
         return await self.set_config(setpoint=50, overrun=5, differential=1)
 
@@ -602,7 +600,7 @@ class Zone(ZoneSchedule):
             ),
         )
 
-    async def set_setpoint(self, value: float | None) -> Packet | None:  # 000A/2309
+    async def set_setpoint(self, value: float | None) -> Message | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""
         if value is None:
             return await self.reset_mode()
@@ -643,7 +641,7 @@ class Zone(ZoneSchedule):
 
         return False
 
-    async def _get_temp(self) -> Packet | None:
+    async def _get_temp(self) -> Message | None:
         """Get the zone's latest temp from the Controller."""
         try:
             return await send_system_intent(
@@ -662,7 +660,7 @@ class Zone(ZoneSchedule):
             )
             return None
 
-    async def reset_config(self) -> Packet:  # 000A
+    async def reset_config(self) -> Message:  # 000A
         """Reset the zone's parameters to their default values."""
         return await self.set_config()
 
@@ -674,7 +672,7 @@ class Zone(ZoneSchedule):
         local_override: bool = False,
         openwindow_function: bool = False,
         multiroom_mode: bool = False,
-    ) -> Packet:
+    ) -> Message:
         """Set the zone's parameters (min_temp, max_temp, etc.)."""
 
         return await send_system_intent(
@@ -690,11 +688,11 @@ class Zone(ZoneSchedule):
             },
         )
 
-    async def reset_mode(self) -> Packet:  # 2349
+    async def reset_mode(self) -> Message:  # 2349
         """Revert the zone to following its schedule."""
         return await self.set_mode(mode=ZON_MODE_MAP.FOLLOW)
 
-    async def set_frost_mode(self) -> Packet:  # 2349
+    async def set_frost_mode(self) -> Message:  # 2349
         """Set the zone to the lowest possible setpoint, indefinitely."""
         return await self.set_mode(mode=ZON_MODE_MAP.PERMANENT, setpoint=5)  # TODO
 
@@ -704,7 +702,7 @@ class Zone(ZoneSchedule):
         mode: str | None = None,
         setpoint: float | None = None,
         until: dt | str | None = None,
-    ) -> Packet:  # 2309/2349
+    ) -> Message:  # 2309/2349
         """Override the zone's setpoint for a specified duration, or
         indefinitely.
         """
@@ -736,7 +734,7 @@ class Zone(ZoneSchedule):
         else:
             raise exc.CommandInvalid("Invalid mode/setpoint")
 
-    async def set_name(self, name: str) -> Packet:
+    async def set_name(self, name: str) -> Message:
         """Set the zone's name in the CTL."""
 
         return await send_system_intent(

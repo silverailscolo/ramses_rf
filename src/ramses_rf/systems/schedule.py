@@ -40,7 +40,6 @@ from ramses_rf.typing import (
     SwitchPointZon,
 )
 from ramses_tx.exceptions import ProtocolSendFailed
-from ramses_tx.packet import Packet
 
 from ..enums import Action
 from .helpers import send_system_intent
@@ -413,7 +412,7 @@ class Schedule:  # 0404
         :rtype: PayloadT
         """
         frag_set_size = 0 if frag_num == 1 else len(self._payload_set)
-        pkt: Packet = await send_system_intent(
+        msg: Message = await send_system_intent(
             self,
             Action.GET_SCHEDULE_FRAGMENT,
             data={
@@ -423,7 +422,6 @@ class Schedule:  # 0404
             },
             wait_for_reply=True,
         )
-        msg = Message._from_pkt(pkt)
         assert isinstance(msg.payload, dict)  # mypy check
         return msg.payload  # may: TimeoutError?
 

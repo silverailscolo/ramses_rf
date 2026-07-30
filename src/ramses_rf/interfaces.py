@@ -34,6 +34,19 @@ class CommandDispatcher(Protocol):
         ...
 
 
+class ConversationManagerInterface(Protocol):
+    """Protocol for the L7 Conversation Manager."""
+
+    async def track_intent(
+        self,
+        intent: Any,
+        dto: CommandDTO | None = None,
+        *,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+    ) -> asyncio.Future[Message]: ...
+
+
 class MessageStoreInterface(Protocol):
     def add(self, msg: Any) -> Any: ...
     def add_record(
@@ -232,6 +245,11 @@ class GatewayInterface(Protocol):
     """Interface for the core Gateway orchestrator."""
 
     @property
+    def hgi(self) -> DeviceInterface | None:
+        """Return the HGI device if attached."""
+        ...
+
+    @property
     def device_registry(self) -> DeviceRegistryInterface:
         """Return the Device Registry."""
         ...
@@ -253,7 +271,7 @@ class GatewayInterface(Protocol):
         ...
 
     @property
-    def conversation_manager(self) -> Any:
+    def conversation_manager(self) -> ConversationManagerInterface | None:
         """Return the ConversationManager instance."""
         ...
 

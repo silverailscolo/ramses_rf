@@ -11,7 +11,6 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
-from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent_
 from ramses_rf.const import (
     SYS_MODE_MAP,
@@ -72,7 +71,6 @@ from .zones import zone_factory
 
 if TYPE_CHECKING:
     from ramses_rf.address import Address
-    from ramses_tx import Packet
 
     from .faultlog import FaultIdxT, FaultLogEntry
     from .zones import DhwZone, Zone
@@ -1170,39 +1168,37 @@ class SystemMode(SystemBase):  # 2E04
 
     async def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
-    ) -> Packet:
+    ) -> Message:
         """Set a system mode for a specified duration, or indefinitely.
 
         :param system_mode: 2-digit item from SYS_MODE_MAP, positional.
         :type system_mode: int | str | None
         :param until: End of the set period, defaults to None.
         :type until: dt | str | None, optional
-        :returns: The packet containing the command payload.
-        :rtype: Packet
+        :returns: The resulting message.
+        :rtype: Message
         """
-        cmd = build_dto(
-            Intent_(
-                src=HGI_DEV_ADDR,
-                dst=Address(self.id),
-                action=Action.SET_SYSTEM_MODE,
-                data={"system_mode": system_mode, "until": until},
-            )
+        intent = Intent_(
+            src=HGI_DEV_ADDR,
+            dst=Address(self.id),
+            action=Action.SET_SYSTEM_MODE,
+            data={"system_mode": system_mode, "until": until},
         )
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
+        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
 
-    async def set_auto(self) -> Packet:
+    async def set_auto(self) -> Message:
         """Revert system to Auto, setting zones to FollowSchedule.
 
-        :returns: The packet containing the command payload.
-        :rtype: Packet
+        :returns: The resulting message.
+        :rtype: Message
         """
         return await self.set_mode(SYS_MODE_MAP.AUTO)
 
-    async def reset_mode(self) -> Packet:
+    async def reset_mode(self) -> Message:
         """Revert system to Auto, force all zones to FollowSchedule.
 
-        :returns: The packet containing the command payload.
-        :rtype: Packet
+        :returns: The resulting message.
+        :rtype: Message
         """
         return await self.set_mode(SYS_MODE_MAP.AUTO_WITH_RESET)
 
@@ -1239,35 +1235,30 @@ class Datetime(SystemBase):  # 313F
         :returns: The system datetime, or None if unavailable.
         :rtype: dt | None
         """
-        cmd = build_dto(
-            Intent_(
-                src=HGI_DEV_ADDR,
-                dst=Address(self.id),
-                action=Action.GET_SYSTEM_TIME,
-                data={},
-            )
+        intent = Intent_(
+            src=HGI_DEV_ADDR,
+            dst=Address(self.id),
+            action=Action.GET_SYSTEM_TIME,
+            data={},
         )
-        pkt = await self._gwy.async_send_cmd(cmd)
-        msg = Message._from_pkt(pkt)
+        msg = await self._gwy.dispatcher.send(intent)
         return dt.fromisoformat(msg.payload[SZ_DATETIME])
 
-    async def set_datetime(self, dtm: dt) -> Packet:
+    async def set_datetime(self, dtm: dt) -> Message:
         """Set the date and time of the system.
 
         :param dtm: The datetime object to set.
         :type dtm: dt
-        :returns: The packet containing the command payload.
-        :rtype: Packet
+        :returns: The resulting message.
+        :rtype: Message
         """
-        cmd = build_dto(
-            Intent_(
-                src=HGI_DEV_ADDR,
-                dst=Address(self.id),
-                action=Action.SET_SYSTEM_TIME,
-                data={"datetime": dtm},
-            )
+        intent = Intent_(
+            src=HGI_DEV_ADDR,
+            dst=Address(self.id),
+            action=Action.SET_SYSTEM_TIME,
+            data={"datetime": dtm},
         )
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
+        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
 
 
 class UfHeating(SystemBase):

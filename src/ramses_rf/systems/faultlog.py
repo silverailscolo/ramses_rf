@@ -297,7 +297,7 @@ class FaultLog:  # 0418
             error_occurred = False
             for idx in range(start, min(start + limit, self._MAX_LOG_IDX + 1)):
                 try:
-                    pkt = await send_system_intent(
+                    msg = await send_system_intent(
                         self._tcs,
                         Action.GET_FAULTLOG_ENTRY,
                         data={"log_idx": idx},
@@ -309,16 +309,14 @@ class FaultLog:  # 0418
                     self._is_current = False
                     break
 
-                if pkt.payload == "000000B0000000000000000000007FFFFF7000000000":
+                if msg._pkt.payload == "000000B0000000000000000000007FFFFF7000000000":
                     msg = self._hack_pkt_idx(
-                        pkt, f"{idx:02X}"
+                        msg._pkt, f"{idx:02X}"
                     )  # RPs for null entries have idx==00
                     self._process_msg(msg)  # since pkt via dispatcher aint got idx
                     break
 
-                self._process_msg(
-                    Message._from_pkt(pkt)
-                )  # JIC dispatcher doesn't do this for us
+                self._process_msg(msg)  # JIC dispatcher doesn't do this for us
 
             # Only mark as current if the entire requested fetch completed without timing out
             if not error_occurred:

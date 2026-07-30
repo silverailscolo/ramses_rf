@@ -595,3 +595,80 @@ class TestResolveLogicalTargets:
         assert mock_zone in targets, (
             "Zone target was not resolved using fallback gwy.tcs"
         )
+
+
+class TestCommandDispatcherSend:
+    """Test CommandDispatcher.send returns Message instances consistently."""
+
+    @pytest.mark.asyncio
+    async def test_send_with_wait_for_reply_returns_message(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify send(wait_for_reply=True) returns a Message from ConversationManager."""
+        # Arrange
+        import asyncio
+
+        from ramses_rf.commands.core import Command
+        from ramses_rf.commands.dispatcher import CommandDispatcher
+        from ramses_rf.enums import Action
+
+        cmd_dispatcher = CommandDispatcher(mock_gateway)
+        intent = Command(
+            src=Address("18:000730"),
+            dst=Address("01:078710"),
+            action=Action.GET_SYSTEM_TIME,
+            data={},
+        )
+
+        pkt = Packet.from_port(
+            dt.now(),
+            "000 RP --- 01:078710 18:000730 --:------ 313F 009 00000400041C0A07E3",
+        )
+        expected_msg = Message._from_pkt(pkt)
+
+        fut: asyncio.Future[Message] = asyncio.Future()
+        fut.set_result(expected_msg)
+
+        mock_conv_mgr = MagicMock()
+        mock_conv_mgr.track_intent = AsyncMock(return_value=fut)
+        mock_gateway.conversation_manager = mock_conv_mgr
+        mock_gateway.async_send_cmd = AsyncMock(return_value=pkt)
+
+        # Act
+        result = await cmd_dispatcher.send(intent, wait_for_reply=True)
+
+        # Assert
+        assert isinstance(result, Message)
+        assert result == expected_msg
+
+    @pytest.mark.asyncio
+    async def test_send_without_wait_for_reply_returns_message(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify send(wait_for_reply=False) converts echo Packet to Message."""
+        # Arrange
+        from ramses_rf.commands.core import Command
+        from ramses_rf.commands.dispatcher import CommandDispatcher
+        from ramses_rf.enums import Action
+
+        cmd_dispatcher = CommandDispatcher(mock_gateway)
+        intent = Command(
+            src=Address("18:000730"),
+            dst=Address("01:078710"),
+            action=Action.GET_SYSTEM_TIME,
+            data={},
+        )
+
+        pkt = Packet.from_port(
+            dt.now(),
+            "000  I --- 18:000730 01:078710 --:------ 313F 009 00000400041C0A07E3",
+        )
+        mock_gateway.conversation_manager = None
+        mock_gateway.async_send_cmd = AsyncMock(return_value=pkt)
+
+        # Act
+        result = await cmd_dispatcher.send(intent, wait_for_reply=False)
+
+        # Assert
+        assert isinstance(result, Message)
+        assert result.code == Code._313F
