@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
-from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import (
     HEARTBEAT_TIMEOUT_SENSOR,
@@ -19,18 +18,16 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.enums import Action
+from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Packet, Priority
 
 from .dev_base import BatteryState, DeviceHvac, Fakeable
 
-if TYPE_CHECKING:
-    from ..messages import Message
-
 
 async def _send_hvac_sensor_intent(
     device: HvacSensorBase, action: Action, data: dict[str, Any]
-) -> Packet | None:
+) -> Message | None:
     """Fake the sensor reading by sending an intent."""
     if not device.is_faked:
         raise exc.DeviceNotFaked(f"{device}: Faking is not enabled")
@@ -85,14 +82,14 @@ class CarbonDioxide(HvacSensorBase):  # 1298
         """
         return self.hvac_state.co2_level
 
-    async def set_co2_level(self, value: int | None) -> Packet | None:
+    async def set_co2_level(self, value: int | None) -> Message | None:
         """Set a fake CO2 level for the sensor.
 
         :param value: The CO2 level in ppm to set, or None to clear the fake value
         :type value: int | None
         :raises TypeError: If the sensor is not in faked mode
-        :return: The sent packet
-        :rtype: Packet | None
+        :return: The sent message, or None if no response was returned
+        :rtype: Message | None
         """
         return await _send_hvac_sensor_intent(
             self, Action.PUT_CO2_LEVEL, {"co2_level": value}
@@ -122,14 +119,14 @@ class IndoorHumidity(HvacSensorBase):  # 12A0
         """
         return self.hvac_state.indoor_humidity
 
-    async def set_indoor_humidity(self, value: float | None) -> Packet | None:
+    async def set_indoor_humidity(self, value: float | None) -> Message | None:
         """Set a fake indoor humidity value for the sensor.
 
         :param value: The humidity percentage to set (0-100), or None to clear the fake value
         :type value: float | None
         :raises TypeError: If the sensor is not in faked mode
-        :return: The sent packet
-        :rtype: Packet | None
+        :return: The sent message, or None if no response was returned
+        :rtype: Message | None
         """
         return await _send_hvac_sensor_intent(
             self, Action.PUT_INDOOR_HUMIDITY, {"indoor_humidity": value}
@@ -163,30 +160,26 @@ class PresenceDetect(HvacSensorBase):  # 2E10
         """
         return self.hvac_state.presence_detected
 
-    async def set_presence_detected(self, value: bool | None) -> Packet | None:
+    async def set_presence_detected(self, value: bool | None) -> Message | None:
         """Set a fake presence detection state for the sensor.
 
         :param value: The presence state to set (True/False), or None to clear the fake value
         :type value: bool | None
         :raises TypeError: If the sensor is not in faked mode
-        :return: The sent packet
-        :rtype: Packet | None
+        :return: The sent message, or None if no response was returned
+        :rtype: Message | None
         """
 
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
-        cmd = build_dto(
-            Intent(
-                src=Address(self.id),
-                dst=Address(self.id),
-                action=Action.PUT_PRESENCE_DETECTED,
-                data={"presence_detected": value},
-            )
+        intent = Intent(
+            src=Address(self.id),
+            dst=Address(self.id),
+            action=Action.PUT_PRESENCE_DETECTED,
+            data={"presence_detected": value},
         )
-        return await self._gwy.async_send_cmd(
-            cmd, num_repeats=2, priority=Priority.HIGH
-        )
+        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
 
     async def status(self) -> dict[str, Any]:
         """Return the status of the presence sensor.

@@ -262,9 +262,9 @@ async def test_live_gateway_conversation_manager_integration(
     reply_msg = Message._from_pkt(rp_pkt)
 
     gwy.conversation_manager.process_msg(reply_msg)
-    pkt = await send_task
+    msg = await send_task
 
-    assert pkt == reply_msg._pkt
+    assert msg == reply_msg
     assert gwy.conversation_manager.pending_count == 0
 
     await gwy.stop()

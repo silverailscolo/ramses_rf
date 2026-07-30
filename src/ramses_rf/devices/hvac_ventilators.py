@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
@@ -44,14 +44,12 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.enums import Action
+from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
-from ramses_tx import Packet, Priority
+from ramses_tx import Priority
 from ramses_tx.typing import DeviceIdT
 
 from .dev_base import DeviceHvac
-
-if TYPE_CHECKING:
-    from ..messages import Message
 
 # TODO: Switch this module to utilise the (run-time) decorator design pattern...
 # - https://refactoring.guru/design-patterns/decorator/python/example
@@ -480,12 +478,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         _LOGGER.debug("No bound REM or DIS devices found for FAN %s", self.id)
         return None
 
-    async def set_fan_mode(self, fan_mode: str | int) -> Packet | None:
+    async def set_fan_mode(self, fan_mode: str | int) -> Message | None:
         """Set the operating mode/speed of the ventilator.
 
         :param fan_mode: The desired fan mode (e.g., 'low', 'medium', 'high',
                          'boost').
-        :return: The sent packet.
+        :return: The sent message, or None if not sent.
         :raises CommandInvalid: If unable to determine a valid source ID.
         """
         # 22F1 commands to a FAN typically must originate from a bound Remote

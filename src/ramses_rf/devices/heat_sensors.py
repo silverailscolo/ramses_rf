@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import Any, Final, cast
 
 from ramses_rf.const import FA, SZ_TEMPERATURE, Code, DevType
 from ramses_rf.enums import Action
+from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
 from ramses_tx import Packet
 from ramses_tx.typing import PayDictT
@@ -17,9 +18,6 @@ from .helpers import send_fake_intent
 
 _LOGGER = logging.getLogger(__name__)
 
-if TYPE_CHECKING:
-    from ..messages import Message
-
 
 class Weather(DeviceHeat):  # 0002
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
@@ -27,7 +25,7 @@ class Weather(DeviceHeat):  # 0002
     async def temperature(self) -> float | None:  # 0002
         return self.temp_state.temperature
 
-    async def set_temperature(self, value: float | None) -> Packet | None:
+    async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the outdoor temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
@@ -50,7 +48,7 @@ class DhwTemperature(DeviceHeat):  # 1260
     async def temperature(self) -> float | None:  # 1260
         return self.temp_state.temperature
 
-    async def set_temperature(self, value: float | None) -> Packet | None:
+    async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the DHW temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
@@ -72,7 +70,7 @@ class Temperature(DeviceHeat):  # 30C9
     async def temperature(self) -> float | None:  # 30C9
         return self.temp_state.temperature
 
-    async def set_temperature(self, value: float | None) -> Packet | None:
+    async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the indoor temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
