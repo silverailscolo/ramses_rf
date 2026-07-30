@@ -4,20 +4,30 @@ Exempt from formal docstrings under repository rules.
 Applies AAA (Arrange, Act, Assert) pattern strictly.
 """
 
-from __future__ import annotations
-
 import asyncio
-from unittest.mock import MagicMock
+from pathlib import Path
+from typing import Final
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from ramses_rf.address import Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command
+from ramses_rf.dispatcher import process_msg
 from ramses_rf.enums import Action
+from ramses_rf.gateway import Gateway
+from ramses_rf.messages import Message
 from ramses_rf.pipeline.conversation import ConversationManager
-from ramses_tx import RP
+from ramses_tx import RP, Packet
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
+from ramses_tx.helpers import dt_now
+
+LOG_OPENTHERM: Final[Path] = (
+    Path(__file__).parent
+    / "logs"
+    / "test_phase2_95_topology_parity_packet_log_OpenTherm.log"
+)
 
 
 def _create_mock_message(
@@ -221,3 +231,72 @@ async def test_conversation_manager_superseded_intent_cancels_old_timer() -> Non
     assert not fut2.done()
 
     manager.cancel_all()
+
+
+# --- Live Pipeline Conversation Parity Tests ---
+
+
+@pytest.mark.asyncio
+async def test_live_gateway_conversation_manager_integration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify live Gateway integration with ConversationManager."""
+    gwy = Gateway("/dev/null")
+    mock_packet = MagicMock(spec=Packet)
+    monkeypatch.setattr(gwy, "async_send_cmd", AsyncMock(return_value=mock_packet))
+
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.SET_TEMPERATURE,
+        data={"zone_idx": "00", "setpoint": 21.0},
+    )
+
+    send_task = asyncio.create_task(gwy.dispatcher.send(intent, wait_for_reply=True))
+    await asyncio.sleep(0.01)
+
+    assert gwy.conversation_manager.pending_count == 1
+
+    rp_frame = "000 RP --- 01:078710 18:000730 --:------ 2309 003 000834"
+    rp_pkt = Packet.from_port(dt_now(), rp_frame)
+    reply_msg = Message._from_pkt(rp_pkt)
+
+    gwy.conversation_manager.process_msg(reply_msg)
+    pkt = await send_task
+
+    assert pkt == reply_msg._pkt
+    assert gwy.conversation_manager.pending_count == 0
+
+    await gwy.stop()
+
+
+@pytest.mark.asyncio
+async def test_live_dispatcher_process_msg_routes_to_conversation_manager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify dispatcher process_msg routes to ConversationManager."""
+    gwy = Gateway("/dev/null")
+    mock_packet = MagicMock(spec=Packet)
+    monkeypatch.setattr(gwy, "async_send_cmd", AsyncMock(return_value=mock_packet))
+
+    intent = Command(
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        action=Action.SET_TEMPERATURE,
+        data={"zone_idx": "00", "setpoint": 21.0},
+    )
+
+    send_task = asyncio.create_task(gwy.dispatcher.send(intent, wait_for_reply=True))
+    await asyncio.sleep(0.01)
+    assert gwy.conversation_manager.pending_count == 1
+
+    rp_frame = "000 RP --- 01:078710 18:000730 --:------ 2309 003 000834"
+    rp_pkt = Packet.from_port(dt_now(), rp_frame)
+    reply_msg = Message._from_pkt(rp_pkt)
+
+    await process_msg(gwy, reply_msg)
+    await send_task
+
+    assert gwy.conversation_manager.pending_count == 0
+
+    await gwy.stop()

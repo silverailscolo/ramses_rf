@@ -7,14 +7,21 @@ These tests verify that ramses_rf's strip+map pipeline correctly:
 - Accepts ``str | list[str]`` for the ``bound`` trait in SCH_TRAITS_HVAC
 """
 
-from __future__ import annotations
+import asyncio
+import contextlib
+from typing import Any
+
+import pytest
 
 from ramses_rf.config import (
     SCH_TRAITS,
+    GatewayConfig,
     strip_and_map_schema,
     strip_and_map_traits,
     strip_traits,
 )
+from ramses_rf.gateway import Gateway
+from ramses_rf.typing import DeviceIdT
 
 
 class TestStripAndMapTraits:
@@ -230,3 +237,56 @@ class TestStripTraits:
         }
         result = strip_traits(traits)
         assert result == {"class": "TCS", "zones": {"01": {"sub": {"ok": 1}}}}
+
+
+# --- Known List Pipeline Boundary Tests ---
+
+
+@pytest.mark.asyncio
+async def test_known_list_data_pipeline_boundary() -> None:
+    """Verify the known_list pipeline strips L7 traits before L3."""
+    raw_known_list: dict[str, dict[str, Any]] = {
+        "18:123456": {"class": "HGI", "alias": "MyGateway"},
+        "01:111111": {"class": "CTL"},
+        "04:222222": {"faked": True, "alias": "FakedSensor"},
+    }
+
+    config = GatewayConfig(known_list=raw_known_list)
+    loop = asyncio.get_running_loop()
+    gateway = Gateway(port_name="/dev/null", config=config, loop=loop)
+
+    assert isinstance(gateway.config.known_list, dict)
+    assert gateway.config.known_list["18:123456"]["alias"] == "MyGateway"
+    assert gateway.config.hgi_id == "18:123456"
+
+    assert isinstance(gateway.config.mac_filter_list, list)
+    assert len(gateway.config.mac_filter_list) == 3
+    assert "01:111111" in gateway.config.mac_filter_list
+
+    engine_config = gateway._gwy_config.engine
+    assert isinstance(engine_config.known_list, list)
+    assert "04:222222" in engine_config.known_list
+
+    for mac in engine_config.known_list:
+        assert isinstance(mac, str)
+
+    registry_known_list = await gateway.device_registry.known_list()
+    assert isinstance(registry_known_list, dict)
+
+    dev_id = DeviceIdT("04:222222")
+    assert registry_known_list[dev_id]["faked"] is True
+
+    with contextlib.suppress(asyncio.CancelledError):
+        await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_implicit_hgi_discovery_fallback() -> None:
+    """Verify GatewayConfig can deduce an HGI without explicit traits."""
+    raw_known_list: dict[str, dict[str, Any]] = {
+        "18:006402": {},
+        "01:145038": {"class": "CTL"},
+    }
+
+    config = GatewayConfig(known_list=raw_known_list)
+    assert config.hgi_id == "18:006402"

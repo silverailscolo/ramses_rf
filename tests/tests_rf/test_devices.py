@@ -1,13 +1,15 @@
-"""Test the ramses_rf.devices module."""
-
-from __future__ import annotations
-
+import asyncio
+import contextlib
+import tempfile
 from dataclasses import replace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
+from ramses_rf import Gateway
+from ramses_rf.config import GatewayConfig
+from ramses_rf.const import FA, FC, SZ_BATTERY_LEVEL, SZ_BATTERY_LOW, SZ_BATTERY_STATE
 from ramses_rf.devices import (
     BdrSwitch,
     Controller,
@@ -17,8 +19,11 @@ from ramses_rf.devices import (
     Thermostat,
     TrvActuator,
 )
+from ramses_rf.devices.dev_base import BatteryState
 from ramses_rf.exceptions import DeviceNotFaked
 from ramses_rf.messages import Message
+from ramses_rf.models import PowerState
+from ramses_rf.parsers.hvac import parser_31d9
 from ramses_rf.pipeline.polling import PollingManager
 from ramses_rf.protocol.opentherm import (
     SZ_MSG_ID,
@@ -28,6 +33,7 @@ from ramses_rf.protocol.opentherm import (
     OtMsgType,
 )
 from ramses_tx.address import Address
+from ramses_tx.config import EngineConfig
 from ramses_tx.const import I_, RP, Code
 
 
@@ -624,3 +630,190 @@ async def test_controller_discovers_system_mode(mock_gwy: MagicMock) -> None:
         "Diagnosis Failed: Controller did not resolve a 2E04 (System Mode) "
         "polling schedule."
     )
+
+
+# --- BDR Re-parenting Tests (Fixes issue #834) ---
+
+_CTL_ID = "01:145038"
+_BDR_ID = "13:121025"
+_DHW_SENSOR_ID = "07:046947"
+
+
+def _make_bdr_test_gateway(
+    known_list: dict[str, dict[str, str]] | None = None,
+) -> Gateway:
+    if known_list is None:
+        known_list = {
+            _CTL_ID: {"class": "CTL"},
+            _BDR_ID: {"class": "BDR"},
+        }
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".log") as tmp:
+        tmp_path = tmp.name
+    config = GatewayConfig(
+        disable_discovery=True,
+        known_list=known_list,
+        engine=EngineConfig(
+            disable_sending=True,
+            enforce_known_list=True,
+            input_file=tmp_path,
+        ),
+    )
+    return Gateway(None, config=config)
+
+
+async def _drain_queues(gwy: Gateway) -> None:
+    for _ in range(50):
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_bdr_reparent_from_hotwater_valve_to_appliance_control() -> None:
+    """A BDR bound as hotwater_valve (FA) must be re-parented to FC."""
+    gwy = _make_bdr_test_gateway()
+    await gwy.start(start_discovery=False)
+    await _drain_queues(gwy)
+
+    try:
+        ctl = gwy.device_registry.get_device(_CTL_ID)
+        assert isinstance(ctl, Controller)
+        ctl._make_tcs_controller()
+        tcs = ctl.tcs
+        assert tcs is not None
+
+        bdr = gwy.device_registry.get_device(_BDR_ID, parent=tcs, child_id=FA)
+        assert isinstance(bdr, BdrSwitch)
+        assert tcs.dhw is not None
+        assert tcs.dhw.hotwater_valve is not None
+        assert tcs.dhw.hotwater_valve.id == _BDR_ID
+        assert tcs.appliance_control is None
+
+        bdr2 = gwy.device_registry.get_device(_BDR_ID, parent=tcs, child_id=FC)
+        assert bdr2 is bdr
+
+        app_cntrl: BdrSwitch | OtbGateway | None = tcs.appliance_control
+        assert app_cntrl is not None
+        assert app_cntrl.id == _BDR_ID
+
+        assert tcs.dhw is None or tcs.dhw.hotwater_valve is None
+    finally:
+        await gwy.stop()
+
+
+@pytest.mark.asyncio
+async def test_bdr_reparent_even_when_dhw_sensor_exists() -> None:
+    """A BDR must be re-parented to FC even when a DHW sensor exists."""
+    known_list = {
+        _CTL_ID: {"class": "CTL"},
+        _BDR_ID: {"class": "BDR"},
+        _DHW_SENSOR_ID: {"class": "DHW"},
+    }
+    gwy = _make_bdr_test_gateway(known_list=known_list)
+    await gwy.start(start_discovery=False)
+    await _drain_queues(gwy)
+
+    try:
+        ctl = gwy.device_registry.get_device(_CTL_ID)
+        assert isinstance(ctl, Controller)
+        ctl._make_tcs_controller()
+        tcs = ctl.tcs
+        assert tcs is not None
+
+        sensor = gwy.device_registry.get_device(
+            _DHW_SENSOR_ID, parent=tcs, child_id=FA, is_sensor=True
+        )
+        assert isinstance(sensor, DhwSensor)
+        assert tcs.dhw is not None
+        assert tcs.dhw.sensor is not None
+
+        bdr = gwy.device_registry.get_device(_BDR_ID, parent=tcs, child_id=FA)
+        assert isinstance(bdr, BdrSwitch)
+        assert tcs.dhw.hotwater_valve is not None
+        assert tcs.dhw.hotwater_valve.id == _BDR_ID
+
+        with contextlib.suppress(Exception):
+            gwy.device_registry.get_device(_BDR_ID, parent=tcs, child_id=FC)
+
+        assert tcs.appliance_control is not None
+        assert tcs.appliance_control.id == _BDR_ID
+        assert tcs.dhw is None or tcs.dhw.hotwater_valve is None
+    finally:
+        await gwy.stop()
+
+
+@pytest.mark.asyncio
+async def test_bdr_appliance_control_first_no_dhw_zone() -> None:
+    """When BDR bound as FC first, no DhwZone should be created."""
+    gwy = _make_bdr_test_gateway()
+    await gwy.start(start_discovery=False)
+    await _drain_queues(gwy)
+
+    try:
+        ctl = gwy.device_registry.get_device(_CTL_ID)
+        assert isinstance(ctl, Controller)
+        ctl._make_tcs_controller()
+        tcs = ctl.tcs
+        assert tcs is not None
+
+        bdr = gwy.device_registry.get_device(_BDR_ID, parent=tcs, child_id=FC)
+        assert isinstance(bdr, BdrSwitch)
+        assert tcs.appliance_control is not None
+        assert tcs.appliance_control.id == _BDR_ID
+        assert tcs.dhw is None
+    finally:
+        await gwy.stop()
+
+
+# --- Battery Null Handling Tests ---
+
+
+@pytest.mark.asyncio
+async def test_battery_status_omits_key_when_level_is_none() -> None:
+    """Verify battery_state key is omitted when level is unknown."""
+    gwy = MagicMock()
+    gwy.config.known_list = {}
+
+    addr = MagicMock()
+    addr.id = "04:123456"
+    addr.type = "04"
+
+    device = BatteryState(gwy, addr)
+    device.power_state = PowerState(battery_level=None)
+
+    status = await device.status()
+    assert SZ_BATTERY_STATE not in status
+
+
+@pytest.mark.asyncio
+async def test_battery_status_includes_key_when_level_is_known() -> None:
+    """Verify battery_state key is included when level is known."""
+    gwy = MagicMock()
+    gwy.config.known_list = {}
+
+    addr = MagicMock()
+    addr.id = "04:123456"
+    addr.type = "04"
+
+    device = BatteryState(gwy, addr)
+    device.power_state = PowerState(battery_low=False, battery_level=0.85)
+
+    status = await device.status()
+    assert SZ_BATTERY_STATE in status
+    assert status[SZ_BATTERY_STATE][SZ_BATTERY_LOW] is False
+    assert status[SZ_BATTERY_STATE][SZ_BATTERY_LEVEL] == 0.85
+
+
+# --- HVAC 31D9 Parser Tests ---
+
+
+def test_parser_31d9_orcon_prevents_speed_collision() -> None:
+    """Verify Orcon 31D9 parser prevents speed collision with 31DA."""
+    payload = "001A040020202020202020202020202008"
+    msg = MagicMock(spec=Message)
+    msg.len = 17
+    msg._addrs = ["32:123456", "32:123456", "32:123456"]
+
+    result = parser_31d9(payload, msg)
+
+    assert "exhaust_fan_speed" not in result
+    assert result.get("fan_mode") == "04"
+    assert result.get("unknown_16") == "08"
