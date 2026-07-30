@@ -7,7 +7,7 @@ import dataclasses
 import logging
 import math
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar, cast
 
 from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
@@ -114,7 +114,7 @@ class ZoneBase(Child, Parent, Entity):
     @classmethod
     def create_from_schema(
         cls, tcs: _MultiZoneT | _StoredHwT, zone_idx: str, **schema: Any
-    ) -> ZoneBase:
+    ) -> Self:
         """Create a CH/DHW zone for a TCS and set its schema attrs.
 
         The appropriate Zone class should have been determined by a
@@ -488,7 +488,9 @@ class Zone(ZoneSchedule):
 
             self._heating_type = klass
             if self._SLUG is None and klass in ZONE_CLASS_BY_SLUG:
-                self.__class__ = cast("type[Zone]", ZONE_CLASS_BY_SLUG[klass])
+                target_cls = ZONE_CLASS_BY_SLUG[klass]
+                if issubclass(target_cls, Zone):
+                    self.__class__ = target_cls
 
         # if schema.get(SZ_CLASS) == ZON_ROLE_MAP[ZON_ROLE.ACT]:
         #     schema.pop(SZ_CLASS)
@@ -941,18 +943,14 @@ def zone_factory(
         )
         return Zone
 
-    zon = cast(
-        "DhwZone | Zone",
-        best_zon_class(
-            tcs.ctl.addr,
-            idx,
-            msg=msg,
-            eavesdrop=tcs._gwy.config.enable_eavesdrop,
-            **schema,
-        ).create_from_schema(tcs, idx, **schema),
-    )
+    zon = best_zon_class(
+        tcs.ctl.addr,
+        idx,
+        msg=msg,
+        eavesdrop=tcs._gwy.config.enable_eavesdrop,
+        **schema,
+    ).create_from_schema(tcs, idx, **schema)
 
-    # assert isinstance(zon, DhwZone | Zone)  # mypy
     return zon
 
 

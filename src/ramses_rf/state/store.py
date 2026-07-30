@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, NewType
 
 import orjson
 
+from ramses_rf.interfaces import MessageStoreInterface
 from ramses_tx import RP, RQ, Code, Packet
 
 from ..exceptions import DatabaseQueryError
@@ -89,7 +90,7 @@ def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
     return _keys
 
 
-class MessageStore:
+class MessageStore(MessageStoreInterface):
     """A central in-memory SQLite3 database for indexing RF messages.
     Index holds all the latest messages to & from all devices by `dtm`
     (timestamp) and strictly-typed `StateHeader` DTOs."""

@@ -7,7 +7,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
 from ramses_rf.address import Address, id_to_address
 from ramses_tx import CommandDTO, PacketDTO
@@ -245,10 +245,11 @@ class Message:
         :return: The generated message.
         :rtype: Message
         """
-        if isinstance(pkt, Message):
-            return cast(_MessageT, pkt)
-        if hasattr(pkt, "_msg") and isinstance(pkt._msg, Message):
-            return cast(_MessageT, pkt._msg)
+        if isinstance(pkt, cls):
+            return pkt
+        msg = getattr(pkt, "_msg", None)
+        if isinstance(msg, cls):
+            return msg
         return cls(pkt.to_dto())
 
     @classmethod

@@ -13,6 +13,11 @@ DeviceTraitsT: TypeAlias = dict[str, Any]
 DeviceListT: TypeAlias = dict[str, DeviceTraitsT]
 PollingIntervalsT: TypeAlias = dict[str, int]
 
+# Domain Payload Type Aliases
+HvacPayloadT: TypeAlias = dict[str, Any]
+OpenThermPayloadT: TypeAlias = dict[str, Any]
+HeatingPayloadT: TypeAlias = dict[str, Any]
+
 
 # For fingerprints.py
 class DeviceFingerprint(TypedDict):
