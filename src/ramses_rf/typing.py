@@ -6,10 +6,11 @@ from typing import Any, NotRequired, TypeAlias, TypedDict
 from ramses_tx.typing import DeviceIdT as TxDeviceIdT, DevIndexT as TxIndexT
 
 DeviceIdT: TypeAlias = TxDeviceIdT
+DevIndexT: TypeAlias = TxIndexT
 IndexT: TypeAlias = TxIndexT
 
 DeviceTraitsT: TypeAlias = dict[str, Any]
-DeviceListT: TypeAlias = dict[DeviceIdT, DeviceTraitsT]
+DeviceListT: TypeAlias = dict[str, DeviceTraitsT]
 PollingIntervalsT: TypeAlias = dict[str, int]
 
 

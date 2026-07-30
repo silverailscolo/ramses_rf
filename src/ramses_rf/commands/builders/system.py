@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from collections.abc import Iterable
 
 from ramses_rf.commands.builders.helpers import _check_idx, resolve_addrs
 from ramses_rf.commands.core import Command
@@ -215,12 +215,17 @@ def build_put_bind(intent: Command) -> CommandDTO:
     oem_code = intent.get("oem_code")
     idx = intent.get("idx")
 
+    kodes: list[str] = []
     if not codes:
         kodes = []
-    elif len(list(codes)[0]) == len(Code._1FC9):
-        kodes = list(codes)
-    elif len(list(codes)[0]) == len(Code._1FC9[0]):
-        kodes = [cast(Code, codes)]
+    elif isinstance(codes, str):
+        if len(codes) != 4:
+            raise ValueError(f"Invalid code for a bind command: {codes}")
+        kodes = [codes]
+    elif isinstance(codes, Iterable):
+        kodes = [str(c) for c in codes]
+        if any(len(c) != 4 for c in kodes):
+            raise ValueError(f"Invalid codes for a bind command: {codes}")
     else:
         raise ValueError(f"Invalid codes for a bind command: {codes}")
 

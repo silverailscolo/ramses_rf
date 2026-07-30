@@ -7,7 +7,7 @@ import asyncio
 import logging
 from inspect import getmembers, isclass
 from sys import modules
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from ramses_tx import Priority, QosParams
 
@@ -29,7 +29,6 @@ if TYPE_CHECKING:
 
     from .devices import Controller
     from .gateway import Gateway
-    from .interfaces import DeviceInterface
     from .messages import Message
     from .systems.tcs import Evohome
 
@@ -77,9 +76,7 @@ class _Entity:
         self._qos_tx_count = 0
 
         # Specialized components via Composition
-        self.entity_state: EntityState = EntityState(
-            cast("DeviceInterface", self), self._gwy
-        )
+        self.entity_state: EntityState = EntityState(self, self._gwy)
 
         # Context required by children (Zones/Devices)
         self._z_id: DeviceIdT = None  # type: ignore[assignment]

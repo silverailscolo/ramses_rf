@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from ramses_tx.typing import DeviceIdT
 
     from .devices import Controller
-    from .entity import Entity
     from .systems.tcs import Evohome
 
 
@@ -210,7 +209,7 @@ class Parent:
         """
         # Clear the slot based on identity (not child_id, which may have
         # been mutated since the child was added)
-        child_id_ = cast("DeviceIdT", getattr(child, "id", None))
+        child_id_: DeviceIdT | None = getattr(child, "id", None)
 
         if getattr(self, "_dhw_sensor", None) is child:
             self._dhw_sensor = None
@@ -224,16 +223,20 @@ class Parent:
             self._sensor = None
         elif hasattr(self, SZ_ACTUATORS) and child in getattr(self, "actuators", []):
             self.actuators.remove(child)
-            self.actuator_by_id.pop(child_id_, None)
-        elif hasattr(self, SZ_CIRCUITS) and child_id_ in getattr(
-            self, "circuit_by_id", {}
+            if child_id_ is not None:
+                self.actuator_by_id.pop(child_id_, None)
+        elif (
+            child_id_ is not None
+            and hasattr(self, SZ_CIRCUITS)
+            and child_id_ in getattr(self, "circuit_by_id", {})
         ):
             self.circuit_by_id.pop(child_id_, None)
 
         # Remove from child registries
         if child in self.childs:
             self.childs.remove(child)
-        self.child_by_id.pop(child_id_, None)
+        if child_id_ is not None:
+            self.child_by_id.pop(child_id_, None)
 
         # Clear the child's back-references
         child._parent = None
@@ -266,6 +269,8 @@ class Child:
         self._parent = parent
         self._is_sensor = is_sensor
         self._child_id: str | None = None
+        self.ctl: Controller | None = None
+        self.tcs: Evohome | None = None
 
     def _get_parent(
         self,
@@ -436,11 +441,9 @@ class Child:
                 else getattr(parent, "ctl", None)
             )
 
-            this_entity = cast("Entity", self)
-
-            if this_entity.ctl and this_entity.ctl is not ctl:
+            if self.ctl and self.ctl is not ctl:
                 raise exc.SystemSchemaInconsistent(
-                    f"{self} can't change controller: {this_entity.ctl} to {ctl}"
+                    f"{self} can't change controller: {self.ctl} to {ctl}"
                 )
 
             parent._add_child(self, child_id=child_id, is_sensor=is_sensor)
@@ -452,7 +455,7 @@ class Child:
         self._child_id = child_id
         self._parent = parent
 
-        this_entity.ctl = cast("Controller", ctl)
-        this_entity.tcs = cast("Evohome", getattr(ctl, "tcs", None))
+        self.ctl = cast("Controller", ctl)
+        self.tcs = cast("Evohome", getattr(ctl, "tcs", None))
 
         return parent

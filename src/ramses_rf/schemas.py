@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 import voluptuous as vol
 
+from ramses_rf.typing import DeviceIdT, DeviceListT
+
 # TODO: deprecate re-exporting (via as) in favour of direct imports
 from ramses_tx.const import (
     SZ_ACTUATORS as SZ_ACTUATORS,
@@ -33,7 +35,6 @@ from ramses_tx.schemas import (  # noqa: F401
     sch_packet_log_dict_factory,
     select_device_filter_mode,
 )
-from ramses_tx.typing import DeviceIdT
 
 from . import exceptions as exc
 
@@ -370,7 +371,7 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
 
 
 def load_schema(
-    gwy: Gateway, known_list: dict[DeviceIdT, Any] | None = None, **schema: Any
+    gwy: Gateway, known_list: DeviceListT | dict[str, Any] | None = None, **schema: Any
 ) -> None:
     """Instantiate all entities in the schema, and faked devices in the known_list.
 
@@ -409,7 +410,7 @@ def load_schema(
     # create any devices in the known list that are faked, or fake those already created
     for device_id, traits in known_list.items():
         if traits.get(SZ_FAKED):
-            dev = _get_device(gwy, device_id)  # , **traits)
+            dev = _get_device(gwy, DeviceIdT(device_id))  # , **traits)
             if not isinstance(dev, Fakeable):
                 raise exc.DeviceNotFaked(f"Device is not fakeable: {dev}")
             if not dev.is_faked:
