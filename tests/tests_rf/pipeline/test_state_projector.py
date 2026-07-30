@@ -1,8 +1,8 @@
-"""Phase 2.95 State Ingestion Worker Pure Unit Tests.
+"""Pure unit tests for the StateProjector worker in the pipeline.
 
-This suite tests the StateIngestionWorker in absolute isolation from the
-monolithic Gateway or live file streaming, verifying the hexagonal data
-conversion logic using pure mock entities.
+This suite tests the StateProjector in absolute isolation from the Gateway
+or live file streaming, verifying the hexagonal data conversion logic
+using pure mock entities.
 """
 
 from __future__ import annotations
@@ -106,12 +106,8 @@ class FakeGatewayAdapter:
 
 
 def test_worker_opentherm_modulation_parsing() -> None:
-    """Verify that the worker translates modulation messages into OpenThermStates.
-
-    :return: None
-    :rtype: None
-    """
-    # 1. Arrange: Instantiate pure isolated test actors and adapters
+    """Verify that the worker translates modulation messages into OpenThermStates."""
+    # Arrange
     device = FakeDevice()
     registry = FakeRegistry(device)
     gwy_adapter = FakeGatewayAdapter(registry)
@@ -119,7 +115,6 @@ def test_worker_opentherm_modulation_parsing() -> None:
 
     worker = StateProjector(gwy_adapter, queue)
 
-    # 2. Construct an isolated mock Message envelope for modulation
     mock_msg = MockMessage(
         code=Code._3220,
         verb="RP",
@@ -127,21 +122,18 @@ def test_worker_opentherm_modulation_parsing() -> None:
         src_id=device.id,
     )
 
-    # 3. Act: Trigger the state conversion extraction logic directly
+    # Act
     worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
 
-    # 4. Assert: Verify the target read-model box updated safely
+    # Assert
     assert device.opentherm_state.rel_modulation_level == 42.5
     assert len(device.events) == 1
     assert device.events[0].entity_id == device.id
 
 
 def test_worker_opentherm_status_flag_parsing() -> None:
-    """Verify that the worker translates status arrays into flag booleans.
-
-    :return: None
-    :rtype: None
-    """
+    """Verify that the worker translates status arrays into flag booleans."""
+    # Arrange
     device = FakeDevice()
     registry = FakeRegistry(device)
     gwy_adapter = FakeGatewayAdapter(registry)
@@ -149,8 +141,6 @@ def test_worker_opentherm_status_flag_parsing() -> None:
 
     worker = StateProjector(gwy_adapter, queue)
 
-    # Construct an array payload matching standard OpenTherm status flags
-    # index 9 is ch_active, index 11 is flame_active
     status_array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0]
     mock_msg = MockMessage(
         code=Code._3220,
@@ -159,21 +149,19 @@ def test_worker_opentherm_status_flag_parsing() -> None:
         src_id=device.id,
     )
 
+    # Act
     worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
 
+    # Assert
     assert device.opentherm_state.flags.ch_active is True
     assert device.opentherm_state.flags.flame_active is True
     assert device.opentherm_state.flags.ch_enabled is False
 
 
 def test_worker_hvac_state_parsing() -> None:
-    """Verify that the worker extracts multi-property HVAC data into HvacState.
-
-    :return: None
-    :rtype: None
-    """
+    """Verify that the worker extracts multi-property HVAC data into HvacState."""
+    # Arrange
     device = FakeDevice()
-    # Spoof an HVAC device identity
     device.id = "32:123456"
     device._SLUG = DevType.HVC
 
@@ -183,7 +171,6 @@ def test_worker_hvac_state_parsing() -> None:
 
     worker = StateProjector(gwy_adapter, queue)
 
-    # Construct a spoofed HVAC packet payload (e.g., Code._31D9 or Code._22F1)
     hvac_payload = {
         "co2_level": 850,
         "indoor_humidity": 45.2,
@@ -199,15 +186,15 @@ def test_worker_hvac_state_parsing() -> None:
         src_id=device.id,
     )
 
+    # Act
     worker._update_hvac_state(device, mock_msg.payload, mock_msg)
 
-    # Assert that the extracted payload safely mapped onto the frozen HvacState dataclass
+    # Assert
     assert device.hvac_state.co2_level == 850
     assert device.hvac_state.indoor_humidity == 45.2
     assert device.hvac_state.fan_mode == "auto"
     assert device.hvac_state.presence_detected is True
     assert device.hvac_state.filter_remaining_days == 120
 
-    # Assert the event lineage was preserved
     assert len(device.events) == 1
     assert isinstance(device.events[0].state, HvacState)
