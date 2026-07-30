@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -7,8 +9,12 @@ import pytest
 from ramses_rf.config import GatewayConfig
 from ramses_rf.devices.dev_base import BatteryState, DeviceBase
 from ramses_rf.exceptions import RamsesException
+from ramses_rf.gateway import Gateway
 from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import DEFAULT_POLLING_SCHEDULES, PollingManager
+from ramses_rf.schemas import SCH_GLOBAL_CONFIG, strip_and_map_traits
+from ramses_rf.typing import DeviceIdT
+from ramses_tx import CommandDTO
 
 
 class MockDevice(DeviceBase):
@@ -231,3 +237,92 @@ async def test_polling_manager_rate_limiting(
     assert processed_count == len(tasks)
     assert len(sleep_calls) == len(tasks) - 1
     assert all(s == 0.5 for s in sleep_calls)
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_live_dispatch_cutover(
+    mock_gateway: MagicMock,
+) -> None:
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    mock_gateway.device_registry.devices = [ctl_dev]
+
+    poller.update_device_tasks(ctl_dev)
+    past = dt.now(UTC) - td(seconds=10)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+
+    # ACT
+    processed_count = await poller.poll_due_commands()
+
+    # ASSERT
+    assert processed_count == len(DEFAULT_POLLING_SCHEDULES["CTL"])
+    assert mock_gateway.async_send_cmd.call_count == processed_count
+
+    call_args = mock_gateway.async_send_cmd.call_args_list[0][0]
+    sent_dto: CommandDTO = call_args[0]
+    assert sent_dto.verb == "RQ"
+    assert sent_dto.addr1 == "18:000730"
+    assert sent_dto.addr2 == "01:111111"
+
+
+@pytest.mark.asyncio
+async def test_polling_schema_traits_parsing() -> None:
+    # ARRANGE
+    raw_known_list: dict[str, dict[str, Any]] = {
+        "01:111111": {
+            "class": "CTL",
+            "_polling_interval": {"1F41": 3600, "10E0": 600},
+            "_is_battery": False,
+        },
+        "04:222222": {
+            "class": "TRV",
+            "_polling_interval": None,
+            "_is_battery": True,
+        },
+    }
+
+    mapped_traits = {
+        dev_id: strip_and_map_traits(traits)
+        for dev_id, traits in raw_known_list.items()
+    }
+
+    config = GatewayConfig(known_list=mapped_traits)
+    loop = asyncio.get_running_loop()
+    gateway = Gateway(port_name="/dev/null", config=config, loop=loop)
+
+    # ACT
+    ctl_dev = gateway.device_registry.get_device(DeviceIdT("01:111111"))
+    trv_dev = gateway.device_registry.get_device(DeviceIdT("04:222222"))
+
+    # ASSERT
+    assert ctl_dev.polling_interval == {"1F41": 3600, "10E0": 600}
+    assert ctl_dev.is_battery is False
+
+    assert trv_dev.polling_interval is None
+    assert trv_dev.is_battery is True
+
+    with contextlib.suppress(asyncio.CancelledError):
+        await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_disable_polling_config_alias() -> None:
+    # ARRANGE
+    config_dict = {
+        "config": {
+            "disable_polling": True,
+        }
+    }
+
+    # ACT
+    parsed = SCH_GLOBAL_CONFIG(config_dict)
+    config = GatewayConfig(disable_polling=parsed["config"]["disable_polling"])
+
+    # ASSERT
+    assert config.disable_polling is True
+    assert config.disable_discovery is True
+
+    config.disable_discovery = False
+    assert config.disable_polling is False

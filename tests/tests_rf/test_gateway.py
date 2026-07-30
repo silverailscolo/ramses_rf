@@ -1,6 +1,3 @@
-# tests/tests_rf/test_gateway.py
-"""Tests for the Gateway backward compatibility, deprecation shims, and lifecycle."""
-
 import json
 import warnings
 from datetime import datetime as dt
@@ -9,11 +6,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ramses_rf.address import Address
+from ramses_rf.devices.dev_registry import DeviceRegistry
+from ramses_rf.devices.hvac_ventilators import FilterChange
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.messages import Message
+from ramses_rf.models import DeviceTraits
+from ramses_rf.pipeline.polling import PollingManager
 from ramses_tx import I_, RP, RQ
 from ramses_tx.config import EngineConfig
+from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.packet import Packet
+from ramses_tx.protocol import RamsesProtocolT, create_stack
+from ramses_tx.transport import RamsesTransportT, TransportConfig
+from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import PktLogConfigT
+from tests_rf.virtual_rf import HgiFwTypes, VirtualRf
 
 
 @pytest.mark.asyncio
@@ -467,3 +475,97 @@ async def test_get_state_frame_key_enables_restore() -> None:
     pkt = Packet.from_dict(dtm_str, json_roundtrip[dtm_str])
     assert pkt.code == "1F09"
     assert pkt._frame == " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+
+
+@pytest.mark.asyncio
+async def test_issue_649_polling_schedule_populated() -> None:
+    """Verify polling task schedule resolution for FAN devices (Fixes #649)."""
+    # Arrange
+    mock_gwy = MagicMock()
+    mock_gwy.config = MagicMock()
+    mock_gwy.config.disable_discovery = False
+    mock_gwy.config.known_list = {}
+    mock_gwy.config.hgi_id = "18:000000"
+
+    def mock_factory(
+        addr: Address, msg: MagicMock, traits: DeviceTraits
+    ) -> FilterChange:
+        return FilterChange(mock_gwy, addr, traits=traits)
+
+    registry = DeviceRegistry(
+        device_filter=MagicMock(),
+        config=mock_gwy.config,
+        device_factory_cb=mock_factory,
+    )
+
+    # Act
+    dev = registry.get_device("32:111111")
+
+    # Assert
+    schedule = PollingManager.resolve_schedule_for_device(dev)
+    assert "10D0" in schedule, "10D0 filter poll not scheduled in PollingManager"
+
+
+# --- Stack & Transport Integration Tests ---
+
+_STACK_GWY_ID = "18:111111"
+_STACK_OTH_ID = "18:123456"
+
+_TEST_SUITE_GOOD = {
+    "00": {"include_list": {}},
+    "01": {
+        "enforce_include_list": True,
+        "include_list": {_STACK_GWY_ID: {"class": "HGI"}},
+    },
+    "02": {
+        "enforce_include_list": True,
+        "include_list": {
+            _STACK_GWY_ID: {"class": "HGI"},
+            _STACK_OTH_ID: {"class": "HGI"},
+        },
+    },
+}
+
+
+async def _assert_stack_state(
+    protocol: RamsesProtocolT, transport: RamsesTransportT
+) -> None:
+    port_transport = cast(PortTransport, transport)
+    assert port_transport._this_pkt and port_transport._this_pkt.code == Code._PUZZ
+    if hasattr(port_transport._this_pkt, "addr1"):
+        assert port_transport._this_pkt.addr1.id == _STACK_GWY_ID
+    else:
+        assert port_transport._this_pkt.src.id == _STACK_GWY_ID
+    assert port_transport._prev_pkt is None
+    assert port_transport.get_extra_info(SZ_ACTIVE_HGI) == _STACK_GWY_ID
+    assert port_transport.get_extra_info(SZ_IS_EVOFW3) is True
+
+
+def _noop_msg_handler(msg: Message) -> None:
+    pass
+
+
+@pytest.mark.xdist_group(name="virt_serial")
+@pytest.mark.parametrize("idx", _TEST_SUITE_GOOD)
+async def test_create_stack_integration(idx: str) -> None:
+    """Check that Transport calls Protocol.connection_made() correctly."""
+    rf = VirtualRf(2, start=True)
+    rf.set_gateway(rf.ports[0], _STACK_GWY_ID, fw_type=HgiFwTypes.EVOFW3)
+
+    kwargs = {
+        "port_name": rf.ports[0],
+        "port_config": {},
+        "extra": {"virtual_rf": rf},
+    }
+
+    try:
+        protocol, transport = await create_stack(
+            _noop_msg_handler,
+            transport_config=TransportConfig(disable_sending=False),
+            **_TEST_SUITE_GOOD[idx],
+            **kwargs,
+        )
+        await _assert_stack_state(protocol, transport)
+        transport.close()
+    finally:
+        await rf.stop()
