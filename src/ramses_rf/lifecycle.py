@@ -105,7 +105,7 @@ class GatewayLifecycle:
 
         load_schema(
             cast("Gateway", self),
-            known_list=self.config.known_list,  # type: ignore[arg-type]
+            known_list=self.config.known_list,
             **self._schema,
         )
 

@@ -46,7 +46,7 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
 )
 from ramses_rf.topology import Child, Parent
-from ramses_rf.typing import InnerScheduleT, OuterScheduleT
+from ramses_rf.typing import DeviceIdT, DevIndexT, InnerScheduleT, OuterScheduleT
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import PayDictT
 
@@ -54,8 +54,6 @@ from ..messages import Message
 from .schedule import Schedule
 
 if TYPE_CHECKING:
-    from ramses_tx.typing import DeviceIdT, DevIndexT
-
     from .tcs import Evohome, _MultiZoneT, _StoredHwT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip
@@ -88,7 +86,7 @@ class ZoneBase(Child, Parent, Entity):
     _ROLE_ACTUATORS: str | None = None
     _ROLE_SENSORS: str | None = None
 
-    def __init__(self, tcs: _MultiZoneT | _StoredHwT, zone_idx: str) -> None:
+    def __init__(self, tcs: Evohome, zone_idx: str) -> None:
         super().__init__(tcs._gwy)
 
         # Parallel CQRS States
@@ -102,11 +100,11 @@ class ZoneBase(Child, Parent, Entity):
         # own idx
         self._z_id = tcs.id  # the responsible device is the controller
         # the zone idx (ctx), 00-0B (or 0F), HW (FA)
-        self._z_idx: DevIndexT = cast("DevIndexT", zone_idx)
+        self._z_idx: DevIndexT = DevIndexT(zone_idx)
 
-        self.id: DeviceIdT = cast("DeviceIdT", f"{tcs.id}_{zone_idx}")
+        self.id: DeviceIdT = DeviceIdT(f"{tcs.id}_{zone_idx}")
 
-        self.tcs: Evohome = cast("Evohome", tcs)
+        self.tcs: Evohome = tcs
         self.ctl: Controller = tcs.ctl
         self._child_id: str = zone_idx
 
@@ -229,7 +227,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         if dev_id := schema.get(SZ_SENSOR):
             try:
                 dhw_sensor = self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", dev_id),
+                    dev_id,
                     parent=self,
                     child_id=FA,
                     is_sensor=True,
@@ -246,7 +244,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
             try:
                 dhw_valve = self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", dev_id), parent=self, child_id=FA
+                    dev_id, parent=self, child_id=FA
                 )
                 assert isinstance(dhw_valve, BdrSwitch)  # mypy
                 self._dhw_valve = dhw_valve
@@ -262,7 +260,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HT1]):
             try:
                 htg_valve = self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", dev_id), parent=self, child_id=F9
+                    dev_id, parent=self, child_id=F9
                 )
                 assert isinstance(htg_valve, BdrSwitch)  # mypy
                 self._htg_valve = htg_valve
@@ -502,7 +500,7 @@ class Zone(ZoneSchedule):
         if sensor_id := schema.get(SZ_SENSOR):
             try:
                 self._sensor = self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", sensor_id), parent=self, is_sensor=True
+                    sensor_id, parent=self, is_sensor=True
                 )
             except (
                 exc.DeviceNotFoundError,
@@ -513,9 +511,7 @@ class Zone(ZoneSchedule):
 
         for act_id in schema.get(SZ_ACTUATORS, []):
             try:
-                self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", act_id), parent=self
-                )
+                self._gwy.device_registry.get_device(act_id, parent=self)
             except (
                 exc.DeviceNotFoundError,
                 exc.SchemaInconsistentError,
@@ -533,7 +529,7 @@ class Zone(ZoneSchedule):
         slug = self._SLUG or self._heating_type
         if slug is None:
             return None
-        return cast(str, ZON_ROLE_MAP[slug])
+        return str(ZON_ROLE_MAP[slug])
 
     async def name(self) -> str | None:  # 0004
         """Get the name of the zone."""

@@ -107,6 +107,15 @@ class MessageStoreInterface(Protocol):
     def stop(self) -> None: ...
 
 
+class EntityInterface(Protocol):
+    """Interface for base RAMSES entities."""
+
+    @property
+    def id(self) -> DeviceIdT:
+        """Return the entity ID."""
+        ...
+
+
 class DeviceInterface(Protocol):
     """Interface for a standard RF Device."""
 

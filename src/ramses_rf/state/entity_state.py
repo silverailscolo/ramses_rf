@@ -28,7 +28,7 @@ from ..routing import RoutingContext, StateHeader
 if TYPE_CHECKING:
     from ramses_tx.typing import HeaderT
 
-    from ..interfaces import DeviceInterface, GatewayInterface
+    from ..interfaces import DeviceInterface, EntityInterface, GatewayInterface
     from .store import MessageStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,7 +92,9 @@ class EntityState:
     point.
     """
 
-    def __init__(self, entity: DeviceInterface, gwy: GatewayInterface) -> None:
+    def __init__(
+        self, entity: EntityInterface | DeviceInterface, gwy: GatewayInterface
+    ) -> None:
         """Initialize the EntityState."""
         self._entity = entity
         self._gwy = gwy

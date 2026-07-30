@@ -15,6 +15,7 @@ from ramses_tx.const import DEV_TYPE_MAP, DEVICE_ID_REGEX, DevType
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_KNOWN_LIST
 
 from .const import SZ_IS_BATTERY, SZ_POLLING_INTERVAL
+from .typing import DeviceListT
 
 _T = TypeVar("_T")
 
@@ -310,8 +311,8 @@ class GatewayConfig:
     gateway_timeout: int | None = None
     database_path: str | None = "ramses.db"
 
-    known_list: dict[str, Any] = field(default_factory=dict)
-    block_list: dict[str, Any] = field(default_factory=dict)
+    known_list: DeviceListT = field(default_factory=dict)
+    block_list: DeviceListT = field(default_factory=dict)
 
     # Transport layer configuration encapsulated perfectly
     engine: EngineConfig = field(default_factory=EngineConfig)
