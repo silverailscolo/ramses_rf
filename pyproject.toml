@@ -52,6 +52,7 @@
   "Homepage" = "https://github.com/ramses-rf/ramses_rf"
   "Bug Tracker" = "https://github.com/ramses-rf/ramses_rf/issues"
   "Wiki" = "https://github.com/ramses-rf/ramses_rf/wiki"
+  "Contributing" = "https://github.com/ramses-rf/ramses_rf/blob/master/CONTRIBUTING.md"
 
 #
 [project.scripts]
