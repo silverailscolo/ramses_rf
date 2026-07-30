@@ -23,7 +23,8 @@ from ramses_rf.exceptions import (
 from ramses_rf.interfaces import DeviceFilterInterface
 from ramses_rf.models import DeviceTraits, TopologyChangedEvent
 from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
-from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
+from ramses_rf.topology import Parent
+from ramses_rf.typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
     from ramses_rf.devices.dev_base import Device
@@ -562,8 +563,8 @@ class DeviceRegistry:
         if old_parent is None or old_parent is parent:
             return
 
-        # Deferred import to avoid a circular dependency (zones.py imports
-        # from ramses_rf.devices, which imports this module)
+        # Deferred import to prevent circular dependency at module load time
+        # DO NOT MOVE to module level.
         from ramses_rf.systems.zones import DhwZone
 
         if not isinstance(old_parent, DhwZone):
@@ -626,7 +627,7 @@ class DeviceRegistry:
 
         if (dev := self.get_device(device_id)) and isinstance(dev, Fakeable):
             dev._make_fake()
-            return cast("Device | Fakeable", dev)
+            return dev
 
         raise DeviceNotFaked(f"The device is not fakeable: {device_id}")
 
@@ -637,7 +638,7 @@ class DeviceRegistry:
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
         """
-        result: dict[str, Any] = {k: v for k, v in self._config.known_list.items()}
+        result: DeviceListT = {k: v for k, v in self._config.known_list.items()}
         for d in self.devices:
             if (
                 not self._config.engine.enforce_known_list
@@ -647,8 +648,8 @@ class DeviceRegistry:
                 dev_traits = {k: traits.get(k) for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)}
                 if ssot_class := self._config.known_list.get(d.id, {}).get("class"):
                     dev_traits[SZ_CLASS] = ssot_class
-                result[d.id] = cast(DeviceTraitsT, dev_traits)
-        return cast(DeviceListT, result)
+                result[d.id] = dev_traits
+        return result
 
     async def params(self) -> dict[str, Any]:
         """Return the parameters for all devices.
@@ -673,12 +674,16 @@ class DeviceRegistry:
         :returns: Dictionary mapping device ID to Evohome system.
         :rtype: dict[DeviceIdT, Evohome]
         """
-        return {
-            d.id: cast("Evohome", d.tcs)
-            for d in self.devices
-            if hasattr(d, "tcs")
-            and getattr(getattr(d, "tcs", None), "id", None) == d.id
-        }
+        # Deferred import to prevent circular dependency at module load time
+        # DO NOT MOVE to module level.
+        from ramses_rf.systems import Evohome
+
+        res: dict[DeviceIdT, Evohome] = {}
+        for d in self.devices:
+            tcs = getattr(d, "tcs", None)
+            if isinstance(tcs, Evohome) and tcs.id == d.id:
+                res[d.id] = tcs
+        return res
 
     @property
     def systems(self) -> list[Evohome]:

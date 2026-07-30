@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
 from ramses_rf.const import (
     I_,
@@ -131,7 +131,8 @@ class TopologyBuilder:
         """
         raw: Any = msg.data
         if isinstance(raw, dict):
-            return cast("list[Any]", raw.get("_array", [raw]))
+            res = raw.get("_array", [raw])
+            return res if isinstance(res, list) else [res]
         if isinstance(raw, list):
             return raw
         return []
