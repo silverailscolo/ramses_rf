@@ -555,3 +555,43 @@ class TestForeignHgiDispatcher:
             for call in mock_gateway.device_registry.get_device.call_args_list
         ]
         assert self._FOREIGN_HGI in called_ids
+
+
+class TestResolveLogicalTargets:
+    """Test resolution of logical targets from messages."""
+
+    def test_zone_temp_fallback_to_main_tcs(self, mock_gateway: MagicMock) -> None:
+        """Test _resolve_logical_targets falls back to gwy.tcs for zone targets.
+
+        Regression test for #942: zone temp packets from a secondary CTL
+        (where src_dev.tcs is None) must still route to the main TCS zones.
+        """
+        # 1. Setup the Gateway with a main TCS and one zone
+        mock_tcs = MagicMock()
+        mock_zone = MagicMock()
+        mock_tcs.zone_by_idx = {"00": mock_zone}
+        mock_gateway.tcs = mock_tcs
+
+        # 2. Setup the source device (CTL) which has no TCS property set
+        src_id = "01:150003"
+        mock_src_dev = MagicMock()
+        mock_src_dev.tcs = None
+        mock_src_dev.type = "01"
+        mock_gateway.device_registry.device_by_id = {src_id: mock_src_dev}
+
+        # 3. Setup the message and payload (a typical 30C9 zone temp broadcast)
+        msg = MagicMock()
+        msg.src.id = src_id
+        msg.dst.id = src_id
+        msg.code = "30C9"
+        msg._has_array = False
+
+        payload = {"zone_idx": "00", "temperature": 21.0}
+
+        # 4. Resolve the targets
+        targets = dispatcher._resolve_logical_targets(mock_gateway, msg, payload)
+
+        # 5. Assert that the zone from the main TCS was included in the targets
+        assert mock_zone in targets, (
+            "Zone target was not resolved using fallback gwy.tcs"
+        )
