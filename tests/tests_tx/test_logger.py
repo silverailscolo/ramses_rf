@@ -11,7 +11,58 @@ import pytest
 from ramses_rf import Gateway, GatewayConfig
 from ramses_tx.config import EngineConfig
 from ramses_tx.logger import flush_packet_log
-from ramses_tx.packet import PKT_LOGGER
+from ramses_tx.packet import PKT_LOGGER, Packet
+
+
+@pytest.mark.asyncio
+async def test_packet_logging_outputs_formatted_frame(tmp_path: Path) -> None:
+    # Arrange
+    log_file = tmp_path / "packet_frame.log"
+    input_file = tmp_path / "empty_input.log"
+    input_file.touch()
+
+    logging.disable(logging.NOTSET)
+    for h in list(PKT_LOGGER.handlers):
+        PKT_LOGGER.removeHandler(h)
+    PKT_LOGGER.handlers.clear()
+    PKT_LOGGER.filters.clear()
+    PKT_LOGGER.setLevel(logging.DEBUG)
+    PKT_LOGGER.disabled = False
+    PKT_LOGGER.propagate = False
+
+    gwy = Gateway(
+        None,
+        config=GatewayConfig(
+            engine=EngineConfig(
+                input_file=str(input_file),
+                packet_log={
+                    "packet_log_path": str(tmp_path),
+                    "packet_log_prefix": "packet_frame",
+                },
+            ),
+        ),
+    )
+    await gwy.start()
+
+    raw_packet_line = "...  I --- 01:161591 --:------ 01:161591 3150 002 0000"
+    pkt = Packet.from_file("2026-07-31T10:00:00.000000", raw_packet_line)
+
+    try:
+        # Act
+        PKT_LOGGER.info("", extra=pkt._pkt_extra())
+
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if log_file.exists() and raw_packet_line in log_file.read_text():
+                break
+
+        # Assert
+        content = log_file.read_text()
+        assert "2026-07-31T10:00:00.000000" in content
+        assert raw_packet_line in content
+
+    finally:
+        await gwy.stop()
 
 
 @pytest.mark.asyncio
