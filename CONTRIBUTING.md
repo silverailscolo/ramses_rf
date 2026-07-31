@@ -49,6 +49,7 @@ All contributions (whether written by human contributors or generated via AI cod
 * **Line Constraints**: PEP 8 compliance (code ≤ 79 characters, docstrings/comments ≤ 72 characters).
 * **EXEMPTION (Raw Data)**: Raw RF packets, hex strings, routing dictionaries, and timestamped packet logs are strictly exempt from line limits to preserve readability and grep-ability.
 * **String Literals**: Prefer double quotes (`"`) for all string literals.
+* **Deferred Logging**: Always use standard deferred `%`-formatting in logger calls (e.g., `_LOGGER.debug("Recv'd: %s %s", pkt.rssi, pkt)`) instead of `f-strings` to prevent string evaluation and interpolation overhead when debug logging is disabled.
 
 ### 2. Typing & Type Safety
 * **Strict Type Safety**: 100% compliance with `mypy --strict`. Do not introduce untyped definitions (`Any`) without strong technical justification.
