@@ -527,16 +527,18 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             self._active_hgi = dev_id
 
         if dev_id in self._exclude:
-            _LOGGER.error(f"{msg} MUST NOT be in the {SZ_BLOCK_LIST}{TIP}")
+            _LOGGER.error("%s MUST NOT be in the %s%s", msg, SZ_BLOCK_LIST, TIP)
 
         elif dev_id not in self._include:
-            _LOGGER.warning(f"{msg} SHOULD be in the (enforced) {SZ_KNOWN_LIST}")
+            _LOGGER.warning("%s SHOULD be in the (enforced) %s", msg, SZ_KNOWN_LIST)
 
         elif not self.enforce_include:
-            _LOGGER.info(f"{msg} is in the {SZ_KNOWN_LIST}, which SHOULD be enforced")
+            _LOGGER.info(
+                "%s is in the %s, which SHOULD be enforced", msg, SZ_KNOWN_LIST
+            )
 
         else:
-            _LOGGER.debug(f"{msg} is in the {SZ_KNOWN_LIST}")
+            _LOGGER.debug("%s is in the %s", msg, SZ_KNOWN_LIST)
 
     def _is_wanted_addrs(
         self, src_id: DeviceIdT, dst_id: DeviceIdT, sending: bool = False
@@ -597,21 +599,29 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         return True
 
     def _pkt_received(self, pkt: Packet) -> None:
+        # Fast early-exit: check device filter before invoking to_dto() if no raw handlers
+        if not self._raw_pkt_handlers and not self._is_wanted_addrs(
+            pkt.src.id, pkt.dst.id
+        ):
+            _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
+            return
+
         # Fire raw handlers before the device ID filter (for the scan engine)
         if self._raw_pkt_handlers:
             try:
                 dto = pkt.to_dto()
             except PacketInvalid as err:
-                _LOGGER.debug(f"Dropped invalid packet for raw handlers: {err}")
+                _LOGGER.debug("Dropped invalid packet for raw handlers: %s", err)
             else:
                 for handler in self._raw_pkt_handlers:
                     res = handler(dto)
                     if asyncio.iscoroutine(res):
                         self._create_handler_task(res)
 
-        if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
-            _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
-            return
+            if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
+                _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
+                return
+
         super()._pkt_received(pkt)
 
     async def send_cmd(

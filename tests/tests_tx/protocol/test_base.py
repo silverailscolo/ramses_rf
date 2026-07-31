@@ -230,6 +230,21 @@ async def test_pkt_received_excluded(
     assert "Packet excluded by device_id filter" in caplog.text
 
 
+async def test_pkt_received_excluded_bypasses_to_dto(protocol: DummyProtocol) -> None:
+
+    # Arrange
+    protocol._exclude = [DeviceIdT("01:111111")]
+    mock_pkt = MagicMock()
+    mock_pkt.src.id = "01:111111"
+    mock_pkt.dst.id = "01:222222"
+
+    # Act
+    protocol._pkt_received(mock_pkt)
+
+    # Assert
+    mock_pkt.to_dto.assert_not_called()
+
+
 # --- OUTBOUND COMMAND TESTS (send_cmd) ---
 
 
