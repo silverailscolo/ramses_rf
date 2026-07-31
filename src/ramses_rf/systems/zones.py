@@ -239,7 +239,7 @@ class DhwZone(ZoneSchedule):  # CS92A
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in DhwZone._update_schema (sensor): {err}")
+                _TRACE.warning("SUPPRESSED in DhwZone._update_schema (sensor): %s", err)
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
             try:
@@ -509,7 +509,7 @@ class Zone(ZoneSchedule):
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in Zone._update_schema (sensor): {err}")
+                _TRACE.warning("SUPPRESSED in Zone._update_schema (sensor): %s", err)
 
         for act_id in schema.get(SZ_ACTUATORS, []):
             try:
@@ -519,7 +519,7 @@ class Zone(ZoneSchedule):
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in Zone._update_schema (actuator): {err}")
+                _TRACE.warning("SUPPRESSED in Zone._update_schema (actuator): %s", err)
 
     @property
     def sensor(self) -> Device | None:

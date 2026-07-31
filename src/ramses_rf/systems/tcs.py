@@ -523,7 +523,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 SchemaInconsistentError,
                 SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in correlation matching: {err}")
+                _TRACE.warning("SUPPRESSED in correlation matching: %s", err)
 
         # _LOGGER.warning("System state (after): %s", self.schema)
 
@@ -549,7 +549,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 SchemaInconsistentError,
                 SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in ctl correlation matching: {err}")
+                _TRACE.warning("SUPPRESSED in ctl correlation matching: %s", err)
 
         # _LOGGER.warning("System state (finally): %s", self.schema)
 
@@ -584,7 +584,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 SchemaInconsistentError,
                 SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in trv correlation matching: {err}")
+                _TRACE.warning("SUPPRESSED in trv correlation matching: %s", err)
 
     def _handle_msg(self, msg: Message) -> None:
         """Process any relevant message.

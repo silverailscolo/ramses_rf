@@ -107,12 +107,15 @@ class DeviceRegistry:
             SystemSchemaInconsistent,
         ) as err:
             # Safely reject the mutation if it violates the static schema constraints
-            _TRACE.debug(f"Topology mutation safely rejected ({event.action}): {err}")
+            _TRACE.debug(
+                "Topology mutation safely rejected (%s): %s", event.action, err
+            )
         except Exception as err:
             # Exception Shield: Catch-all to absolutely guarantee the asyncio
             # background task does not silently die.
             _TRACE.exception(
-                f"CRITICAL: Registry event router caught unhandled exception: {err}"
+                "CRITICAL: Registry event router caught unhandled exception: %s",
+                err,
             )
 
     def _handle_bind_device(self, event: TopologyChangedEvent) -> None:
@@ -216,7 +219,9 @@ class DeviceRegistry:
                     is_sensor=is_sensor,
                 )
             except DeviceNotFoundError as err:
-                _TRACE.error(f"BIND EXCEPTION: Failed fetching {event.child_id}: {err}")
+                _TRACE.error(
+                    "BIND EXCEPTION: Failed fetching %s: %s", event.child_id, err
+                )
 
             # 2. REVERSE BINDING (Native CQRS Shadow State)
             if child_dev:
@@ -501,7 +506,9 @@ class DeviceRegistry:
             try:
                 dev = self._device_factory_cb(Address(device_id), msg, traits)
             except Exception as err:
-                _TRACE.error(f"FACTORY EXCEPTION: Failed creating {device_id}: {err}")
+                _TRACE.error(
+                    "FACTORY EXCEPTION: Failed creating %s: %s", device_id, err
+                )
                 raise
 
             if traits.faked:
