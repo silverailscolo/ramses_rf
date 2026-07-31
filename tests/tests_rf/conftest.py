@@ -154,7 +154,7 @@ async def real_evofw3_port() -> PortStrT | NoReturn:
     if port_names := [
         p.device for p in comports() if p.name[:6] == "ttyACM"
     ]:  # HACK: evofw3-esp
-        _LOGGER.warning(f"Assuming {port_names[0]} is evofw3-compatible")
+        _LOGGER.warning("Assuming %s is evofw3-compatible", port_names[0])
         return port_names[0]
 
     pytest.skip("No evofw3-based gateway device found")
