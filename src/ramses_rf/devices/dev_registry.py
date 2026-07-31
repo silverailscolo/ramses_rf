@@ -96,7 +96,7 @@ class DeviceRegistry:
         """
         handler = self._event_routers.get(event.action)
         if not handler:
-            _LOGGER.warning(f"No registry handler defined for action: {event.action}")
+            _LOGGER.warning("No registry handler defined for action: %s", event.action)
             return
 
         try:
@@ -295,7 +295,7 @@ class DeviceRegistry:
         dev = self.device_by_id.get(event.device_id)
         if dev and hasattr(dev, "_make_tcs_controller"):
             dev._make_tcs_controller()
-            _LOGGER.debug(f"Created Controller on {dev.id} via {event.causation}")
+            _LOGGER.debug("Created Controller on %s via %s", dev.id, event.causation)
 
     def _handle_create_circuit(self, event: TopologyChangedEvent) -> None:
         """Instruct a UFH controller to initialize a circuit."""
@@ -508,7 +508,7 @@ class DeviceRegistry:
                 if isinstance(dev, Fakeable):
                     dev._make_fake()
                 else:
-                    _LOGGER.warning(f"The device is not fakeable: {dev}")
+                    _LOGGER.warning("The device is not fakeable: %s", dev)
 
         if parent or child_id:
             self._maybe_reparent_bdr(dev, parent, child_id)

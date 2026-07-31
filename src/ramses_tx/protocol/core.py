@@ -214,7 +214,7 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         msg = f"{self}: Impersonating device: {cmd.addr1}, for pkt: {str(cmd)}"
         if self._is_evofw3 is False:
-            _LOGGER.error(f"{msg}, NB: non-evofw3 gateways can't impersonate!")
+            _LOGGER.error("%s, NB: non-evofw3 gateways can't impersonate!", msg)
         else:
             _LOGGER.info(msg)
 
@@ -252,10 +252,12 @@ class PortProtocol(_DeviceIdFilterMixin):
         try:
             return await self._context.send_cmd(send_cmd, cmd, priority, qos)
         except ProtocolTimeoutError as err:
-            _LOGGER.warning(f"{self}: Send timed out for {cmd.verb}|{cmd.code}: {err}")
+            _LOGGER.warning(
+                "%s: Send timed out for %s|%s: %s", self, cmd.verb, cmd.code, err
+            )
             raise
         except ProtocolError as err:
-            _LOGGER.info(f"{self}: Failed to send {cmd.verb}|{cmd.code}: {err}")
+            _LOGGER.info("%s: Failed to send %s|%s: %s", self, cmd.verb, cmd.code, err)
             raise
 
     async def send_cmd(
@@ -287,7 +289,7 @@ class PortProtocol(_DeviceIdFilterMixin):
         assert 0 <= num_repeats <= MAX_NUM_REPEATS, "Out of range: num_repeats"
 
         if qos and not self._context:
-            _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
+            _LOGGER.warning("%s < QoS is currently disabled by this Protocol", cmd)
 
         # Patch command with actual HGI ID if it uses the default placeholder.
         # PortProtocol.send_cmd overrides _BaseProtocol.send_cmd (which does this

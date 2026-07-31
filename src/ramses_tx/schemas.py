@@ -221,37 +221,42 @@ def select_device_filter_mode(
 
     if enforce_known_list and not known_list:
         _LOGGER.warning(
-            f"Best practice is to enforce a {SZ_KNOWN_LIST} (an allow list), "
-            f"but it is empty, so it can't be used. "
+            "Best practice is to enforce a %s (an allow list), but it is empty, so it can't be used.",
+            SZ_KNOWN_LIST,
         )
         enforce_known_list = False
 
     if enforce_known_list:
         _LOGGER.info(
-            f"A valid {SZ_KNOWN_LIST} was provided, "
-            f"and will be enforced as a allow list: length = {len(known_list)}"
+            "A valid %s was provided, and will be enforced as a allow list: length = %s",
+            SZ_KNOWN_LIST,
+            len(known_list),
         )
-        _LOGGER.debug(f"known_list = {known_list}")
+        _LOGGER.debug("known_list = %s", known_list)
 
     elif block_list:
         _LOGGER.info(
-            f"A valid {SZ_BLOCK_LIST} was provided, "
-            f"and will be used as a deny list: length = {len(block_list)}"
+            "A valid %s was provided, and will be used as a deny list: length = %s",
+            SZ_BLOCK_LIST,
+            len(block_list),
         )
-        _LOGGER.debug(f"block_list = {block_list}")
+        _LOGGER.debug("block_list = %s", block_list)
 
     elif known_list:
         _LOGGER.warning(
-            f"Best practice is to enforce the {SZ_KNOWN_LIST} as an allow "
-            "list, " + known_warn_line2 + known_warn_line3
+            "Best practice is to enforce the %s as an allow list, "
+            + known_warn_line2
+            + known_warn_line3,
+            SZ_KNOWN_LIST,
         )
-        _LOGGER.debug(f"known_list = {known_list}")
+        _LOGGER.debug("known_list = %s", known_list)
 
     else:
         _LOGGER.warning(
-            f"Best practice is to provide a {SZ_KNOWN_LIST} and enforce it, "
+            "Best practice is to provide a %s and enforce it, "
             + known_warn_line2
-            + known_warn_line3
+            + known_warn_line3,
+            SZ_KNOWN_LIST,
         )
 
     return enforce_known_list

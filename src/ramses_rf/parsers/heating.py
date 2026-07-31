@@ -560,7 +560,7 @@ def parser_12c0(payload: str, msg: Message) -> PayDictT._12C0:
     if payload[2:4] == "80":
         temp: float | None = None
     elif payload[4:6] == "00":  # units are 1.0 F
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} (Fahrenheit TRV detected)")
+        _LOGGER.warning("%r < %s (Fahrenheit TRV detected)", msg, _INFORM_DEV_MSG)
         temp = round((int(payload[2:4], 16) - 32) * 5 / 9, 2)
     else:  # if payload[4:] == "01":  # units are 0.5 C
         temp = int(payload[2:4], 16) / 2

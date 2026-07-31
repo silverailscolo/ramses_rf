@@ -646,13 +646,14 @@ class Zone(ZoneSchedule):
                 {"zone_idx": self.idx},
             )
         except ProtocolTimeoutError as err:
-            _LOGGER.warning(f"{self}: _get_temp timed out: {err}")
+            _LOGGER.warning("%s: _get_temp timed out: %s", self, err)
             return None
         except ProtocolSendFailed:
             # Silently drop the request if the transport is inactive
             # (e.g., during cache restoration prior to gateway startup).
             _LOGGER.debug(
-                f"{self}: Dropped request: gateway transport is inactive.",
+                "%s: Dropped request: gateway transport is inactive.",
+                self,
             )
             return None
 

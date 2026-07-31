@@ -152,7 +152,7 @@ class _Entity:
         :rtype: asyncio.Task[Any] | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.info(f"{cmd} < Sending was deprecated for {self}")
+            _LOGGER.info("%s < Sending was deprecated for %s", cmd, self)
             return None
 
         return self._gwy.send_cmd(cmd, **kwargs)
@@ -175,7 +175,7 @@ class _Entity:
         :rtype: Packet | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.warning(f"{cmd} < Sending was deprecated for {self}")
+            _LOGGER.warning("%s < Sending was deprecated for %s", cmd, self)
             return None
 
         # Build kwargs dynamically to prevent passing `None` to strict Gateway args

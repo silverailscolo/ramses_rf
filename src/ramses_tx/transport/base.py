@@ -247,7 +247,7 @@ class _FullTransport(_ReadTransport):
     def _track_transmit_rate(self) -> None:
         """Track the Tx rate as period of seconds per x transmits."""
         self._transmit_times.append(dt.now())
-        _LOGGER.debug(f"Current Tx rate: {self._report_transmit_rate():.2f} pkts/min")
+        _LOGGER.debug("Current Tx rate: %.2f pkts/min", self._report_transmit_rate())
 
     def write(self, data: bytes) -> None:
         """Write the data to the underlying handler."""
