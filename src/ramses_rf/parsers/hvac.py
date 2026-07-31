@@ -575,7 +575,7 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
     else:
         from ramses_rf.protocol.ramses import _22F1_MODE_ORCON as _22F1_FAN_MODE
 
-        _22f1_mode_set = ("", "07", "0B")  # 0B?
+        _22f1_mode_set = ("", "04", "07", "0B")  # 0B?
         _22f1_scheme = "orcon"
 
     try:

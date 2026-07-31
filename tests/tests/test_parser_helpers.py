@@ -3,7 +3,10 @@
 
 # TODO: add test for ramses_tx.frame.pkt_header()
 
+import logging
 from datetime import datetime as dt
+
+import pytest
 
 from ramses_rf.messages import Message
 from ramses_rf.systems.zones import _transform
@@ -108,6 +111,29 @@ def test_22f1_vasco_directed_mode_max_06_still_vasco() -> None:
     result = msg.payload
     assert result["_scheme"] == "vasco"
     assert result["fan_mode"] == "low"
+
+
+def test_22f3_orcon_mode_set_04_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+    # Arrange
+    pkt_str = (
+        "2026-07-28T23:49:38.000000 045  I --- 29:162275 32:139370 --:------"
+        " 22F3 007 00120F02040404"
+    )
+
+    # Act
+    with caplog.at_level(logging.WARNING):
+        msg = _make_22f1_msg(pkt_str)
+        result = msg.payload
+
+    # Assert
+    assert result["_scheme"] == "orcon"
+    assert result["fan_mode"] == "medium"
+    assert result["fallback_fan_mode"] == "auto"
+
+    warning_records = [
+        rec for rec in caplog.records if "unknown mode_set: 04" in rec.message
+    ]
+    assert not warning_records
 
 
 # --- 2411 parser data_type tests (issue #740) ---
