@@ -353,3 +353,30 @@ async def test_make_connection_does_not_crash_when_loop_closed() -> None:
 
     # protocol.connection_made should NOT have been called
     transport._protocol.connection_made.assert_not_called()
+
+
+async def test_write_frame_dispatches_outbound_dto_with_is_tx_true() -> None:
+    # Arrange
+    from ramses_tx.dtos import PacketDTO
+    from ramses_tx.transport.base import _FullTransport
+
+    class DummyTransport(_FullTransport):
+        def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            self._protocol = Mock()
+
+        async def _write_frame(self, frame: str) -> None:
+            pass
+
+    loop = asyncio.get_event_loop()
+    transport = DummyTransport(loop)
+    frame = "RQ --- 18:071939 32:123456 --:------ 2210 001 00"
+
+    # Act: Transmit frame
+    await transport.write_frame(frame)
+
+    # Assert: Protocol _msg_received received PacketDTO with is_tx=True
+    assert transport._protocol._msg_received.called
+    dto: PacketDTO = transport._protocol._msg_received.call_args[0][0]
+    assert dto.is_tx is True
+    assert dto.verb == "RQ"

@@ -34,6 +34,8 @@ class PacketDTO:
     :type length: str
     :param payload: Raw hex payload string (e.g., "0001C8").
     :type payload: str
+    :param is_tx: True if outbound transmission, False if inbound.
+    :type is_tx: bool
     """
 
     timestamp: dt
@@ -46,6 +48,7 @@ class PacketDTO:
     code: str
     length: str
     payload: str
+    is_tx: bool = False
 
 
 @dataclass(frozen=True, slots=True)
