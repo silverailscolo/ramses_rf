@@ -31,6 +31,30 @@ class Packet:
     provides positional address access and DTO conversion.
     """
 
+    # Limit instance memory overhead and accelerate attribute access for
+    # high-volume objects
+    __slots__ = (
+        "_dto",
+        "_src",
+        "_dst",
+        "addr1",
+        "addr2",
+        "addr3",
+        "_addrs",
+        "comment",
+        "error_text",
+        "raw_line",
+        "raw_frame",
+        "_raw_line",
+        "_ctx_",
+        "_hdr_",
+        "_idx_",
+        "_repr",
+        "_lifespan",
+        "_is_echo",
+        "_is_tx",
+    )
+
     _dto: PacketDTO
     _src: Address
     _dst: Address
@@ -282,13 +306,15 @@ class Packet:
         pkt._validate(strict_checking=False)
         return pkt
 
+    @property
     def _pkt_extra(self) -> dict[str, Any]:
-        """Return dictionary containing packet attributes for logging."""
+        """Return extra dictionary attributes for PKT_LOGGER logging."""
         return {
-            **self.__dict__,
-            "_frame": self._frame,
-            "_rssi": self.rssi,
-            "dtm": self.dtm,
+            "_frame": getattr(self, "_frame", ""),
+            "_rssi": getattr(self, "rssi", "..."),
+            "error_text": getattr(self, "error_text", ""),
+            "comment": getattr(self, "comment", ""),
+            "dtm": getattr(self, "dtm", None),
         }
 
     def _validate(self, *, strict_checking: bool = False) -> None:
@@ -308,8 +334,8 @@ class Packet:
                 return
 
             if not strict_checking:
-                if len(self.__dict__) > 0:
-                    PKT_LOGGER.info("", extra=self._pkt_extra())
+                if getattr(self, "_frame", "") or self.error_text:
+                    PKT_LOGGER.info("", extra=self._pkt_extra)
                 return
 
             if self.addr1 == NON_DEV_ADDR:
@@ -323,14 +349,14 @@ class Packet:
             else:
                 assert self.verb in (I_, W_), "wrong verb or dst addr should be src"
 
-            if len(self.__dict__) > 0:
-                PKT_LOGGER.info("", extra=self._pkt_extra())
+            if getattr(self, "_frame", "") or self.error_text:
+                PKT_LOGGER.info("", extra=self._pkt_extra)
 
         except AssertionError as err:
             raise exc.PacketInvalid(f"Bad frame: Invalid address set: {err}") from err
         except exc.PacketInvalid as err:
             if getattr(self, "_frame", "") or self.error_text:
-                PKT_LOGGER.warning("%s", err, extra=self._pkt_extra())
+                PKT_LOGGER.warning("%s", err, extra=self._pkt_extra)
             raise err
 
     def __repr__(self) -> str:
