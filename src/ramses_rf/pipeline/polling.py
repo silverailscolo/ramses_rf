@@ -30,8 +30,8 @@ INTERVAL_EVERY_12_HOURS: Final[int] = 43200  # 12 hours in seconds
 INTERVAL_DAILY: Final[int] = 86400  # 24 hours in seconds
 
 # Master default polling schedules table for all device classes.
-# Battery-powered devices (TRV, THM, DHW) set intervals to None to explicitly
-# indicate that polling is disabled for those command codes.
+# Battery-powered devices (TRV, THM, DHW, REM, HUM) set intervals to None
+# to explicitly indicate that polling is disabled for those command codes.
 DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[str, int | None]]] = {
     # Evohome Controller
     DevType.CTL: {
@@ -61,10 +61,16 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[str, int | None]]] = {
         "10D0": INTERVAL_DAILY,  # Filter Change Sensor Status
         "3150": INTERVAL_HOURLY,  # Fan Speed / Airflow Status
     },
+    # HVAC Carbon Dioxide Sensor (mains-powered)
+    DevType.CO2: {
+        "10E0": INTERVAL_DAILY,  # Device Specification / Info
+    },
     # Battery-Powered Devices - Polling disabled to preserve battery life
     DevType.TRV: {"10E0": None, "1060": None},
     DevType.THM: {"10E0": None, "1060": None},
     DevType.DHW: {"10E0": None, "1060": None},
+    DevType.REM: {"10E0": None, "1060": None},
+    DevType.HUM: {"10E0": None, "1060": None},
     # Fallback Default
     "DEFAULT": {
         "10E0": INTERVAL_DAILY,  # Device Specification / Info
