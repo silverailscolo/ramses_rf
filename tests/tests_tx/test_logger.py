@@ -297,3 +297,49 @@ async def test_flight_recorder_time_flush(tmp_path: Path) -> None:
 
     finally:
         await gwy.stop()
+
+
+@pytest.mark.asyncio
+async def test_hardware_echo_logging_suppressed() -> None:
+    # Arrange
+    from datetime import datetime as dt
+    from unittest.mock import MagicMock
+
+    from ramses_tx.transport.base import TransportConfig, _FullTransport
+
+    class DummyTransport(_FullTransport):
+        def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            self._protocol = MagicMock()
+
+        async def _write_frame(self, frame: str) -> None:
+            pass
+
+    class LogCollector(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.records: list[logging.LogRecord] = []
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self.records.append(record)
+
+    loop = asyncio.get_running_loop()
+    handler = LogCollector()
+    PKT_LOGGER.addHandler(handler)
+    PKT_LOGGER.setLevel(logging.INFO)
+
+    transport = DummyTransport(loop)
+    frame = "RQ --- 18:071939 32:123456 --:------ 2210 001 00"
+    rx_echo = "000 RQ --- 18:071939 32:123456 --:------ 2210 001 00"
+
+    try:
+        # Act: Write frame once, then simulate hardware serial echo read
+        await transport.write_frame(frame)
+        transport._frame_read(dt.now().isoformat(), rx_echo)
+        await asyncio.sleep(0.01)
+
+        # Assert: Only 1 log entry created (Tx), duplicate echo suppressed
+        assert len(handler.records) == 1
+        assert transport._protocol.pkt_received.called
+    finally:
+        PKT_LOGGER.removeHandler(handler)

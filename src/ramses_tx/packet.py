@@ -50,6 +50,8 @@ class Packet:
     _idx_: str | bool | None
     _repr: str | None
     _lifespan: bool | td
+    _is_echo: bool
+    _is_tx: bool
 
     def __init__(
         self,
@@ -60,6 +62,8 @@ class Packet:
         comment: str = "",
         err_msg: str = "",
         raw_frame: bytes | str = b"",
+        is_echo: bool = False,
+        is_tx: bool = False,
     ) -> None:
         """Create a packet from a PacketDTO or timestamp + raw_line string.
 
@@ -73,6 +77,10 @@ class Packet:
         :type err_msg: str
         :param raw_frame: Raw physical bytes sequence from hardware interface
         :type raw_frame: bytes | str
+        :param is_echo: True if packet is a serial hardware echo
+        :type is_echo: bool
+        :param is_tx: True if packet is an outbound transmission
+        :type is_tx: bool
         :returns: None
         :rtype: None
         :raises PacketInvalid: If raw_line content is malformed
@@ -84,6 +92,8 @@ class Packet:
                 comment=comment,
                 err_msg=err_msg,
                 raw_frame=raw_frame,
+                is_echo=is_echo,
+                is_tx=is_tx,
             )
             self._dto = constructed._dto
             self._src = constructed._src
@@ -150,6 +160,8 @@ class Packet:
         comment: str = "",
         err_msg: str = "",
         raw_frame: bytes | str = b"",
+        is_echo: bool = False,
+        is_tx: bool = False,
     ) -> Packet:
         """Canonical factory for ingesting unparsed raw ASCII line sequences.
 
@@ -163,6 +175,10 @@ class Packet:
         :type err_msg: str
         :param raw_frame: Raw physical bytes sequence from hardware interface
         :type raw_frame: bytes | str
+        :param is_echo: True if packet is a serial hardware echo
+        :type is_echo: bool
+        :param is_tx: True if packet is an outbound transmission
+        :type is_tx: bool
         :returns: Instantiated Packet object
         :rtype: Packet
         :raises ValueError: If raw_line string is empty
@@ -226,10 +242,13 @@ class Packet:
             code=code,
             length=len_,
             payload=payload,
+            is_tx=is_tx,
         )
 
         pkt = cls.__new__(cls)
         pkt._dto = dto
+        pkt._is_echo = is_echo
+        pkt._is_tx = is_tx
         pkt.comment = comment or extracted_comment
         pkt.error_text = err_msg or extracted_err
         pkt.raw_line = raw_line
@@ -275,6 +294,9 @@ class Packet:
         try:
             if self.error_text:
                 raise exc.PacketInvalid(self.error_text)
+
+            if getattr(self, "_is_echo", False) is True:
+                return
 
             if not strict_checking:
                 if len(self.__dict__) > 0:
@@ -608,6 +630,7 @@ class Packet:
                 code=self._dto.code,
                 length=self._dto.length,
                 payload=self._dto.payload,
+                is_tx=self._dto.is_tx,
             )
         return self._dto
 
@@ -714,20 +737,39 @@ class Packet:
         return cls.from_dict(dtm, raw)
 
     @classmethod
-    def from_file(cls, dtm: str, raw_line: str) -> Packet:
+    def from_file(
+        cls,
+        dtm: str,
+        raw_line: str,
+        *,
+        is_echo: bool = False,
+        is_tx: bool = False,
+    ) -> Packet:
         """Create a packet from a log file line (delegates to from_raw_line).
 
         :param dtm: ISO timestamp string
         :type dtm: str
         :param raw_line: Log line string
         :type raw_line: str
+        :param is_echo: True if packet is a serial hardware echo
+        :type is_echo: bool
+        :param is_tx: True if packet is an outbound transmission
+        :type is_tx: bool
         :returns: Instantiated Packet object
         :rtype: Packet
         """
-        return cls.from_raw_line(dtm, raw_line)
+        return cls.from_raw_line(dtm, raw_line, is_echo=is_echo, is_tx=is_tx)
 
     @classmethod
-    def from_port(cls, dtm: dt, raw_line: str, raw_frame: bytes | str = b"") -> Packet:
+    def from_port(
+        cls,
+        dtm: dt,
+        raw_line: str,
+        raw_frame: bytes | str = b"",
+        *,
+        is_echo: bool = False,
+        is_tx: bool = False,
+    ) -> Packet:
         """Create a packet from a hardware port ingestion line (delegates to from_raw_line).
 
         :param dtm: Packet arrival timestamp
@@ -736,10 +778,16 @@ class Packet:
         :type raw_line: str
         :param raw_frame: Original raw bytes or string from modem
         :type raw_frame: bytes | str
+        :param is_echo: True if packet is a serial hardware echo
+        :type is_echo: bool
+        :param is_tx: True if packet is an outbound transmission
+        :type is_tx: bool
         :returns: Instantiated Packet object
         :rtype: Packet
         """
-        return cls.from_raw_line(dtm, raw_line, raw_frame=raw_frame)
+        return cls.from_raw_line(
+            dtm, raw_line, raw_frame=raw_frame, is_echo=is_echo, is_tx=is_tx
+        )
 
 
 def pkt_header(pkt: Packet, /) -> HeaderT | None:

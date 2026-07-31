@@ -233,15 +233,18 @@ class PortProtocol(_DeviceIdFilterMixin):
         priority: Priority = Priority.DEFAULT,
         qos: QosParams = DEFAULT_QOS,
     ) -> Packet:
-        """Wrapper to send a Command with QoS (retries, until success or exception)."""
+        """Send a Command with QoS (retries, until success or exception)."""
 
         async def send_cmd(kmd: CommandDTO) -> None:
-            """Wrapper for self._send_frame(cmd)."""
+            """Send the Command via self._send_frame(cmd)."""
             await self._send_frame(
                 str(kmd), gap_duration=gap_duration, num_repeats=num_repeats
             )
 
         qos = qos or DEFAULT_QOS
+
+        if cmd.verb.strip() == "RQ" or (qos is not None and qos.max_retries > 0):
+            num_repeats = 0
 
         if _DBG_DISABLE_QOS:
             await send_cmd(cmd)
