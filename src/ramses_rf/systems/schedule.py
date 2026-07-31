@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """RAMSES RF - Expose an 0404 schedule (is a stateful process)."""
 
-# TODO: use schemas from evohome_async
-
 from __future__ import annotations
 
 import asyncio
@@ -11,6 +9,7 @@ import struct
 import zlib
 from collections.abc import Iterable
 from datetime import timedelta as td
+from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
 import voluptuous as vol
@@ -24,6 +23,7 @@ from ramses_rf.const import (
     SZ_ZONE_IDX,
 )
 from ramses_rf.messages import Message
+from ramses_rf.models import ScheduleState, StateUpdatedEvent
 from ramses_rf.typing import (
     DayOfWeekT,
     EmptyDictT,
@@ -80,12 +80,80 @@ FRAGMENT_HEX_LENGTH: Final = 82
 #   Payload hex      : 00000000010000000100000068010000D0070000
 CODE_0404_SCHEDULE_SWITCHPOINT_STRUCT: Final[str] = "<xxxxBxxxBxxxHxxHH"
 
-
 _LOGGER = logging.getLogger(__name__)
+
+# Base retry constants for exponential backoff
+BASE_FETCH_RETRY_DELAY_SECS: Final[float] = 0.5
+MAX_FETCH_ATTEMPTS: Final[int] = 5
+
+
+class ScheduleStateEnum(StrEnum):
+    """Enumeration of schedule finite state machine states."""
+
+    IDLE = "idle"
+    FETCHING = "fetching"
+    UPDATING = "updating"
+    SYNCHRONISED = "synchronised"
+    STALE = "stale"
+    FAULTED = "faulted"
+
+
+class ScheduleStateBase:
+    """Base class for schedule finite state machine phases."""
+
+    state_enum: ScheduleStateEnum = ScheduleStateEnum.IDLE
+
+    def __init__(self, schedule: Schedule) -> None:
+        """Initialise the schedule state phase.
+
+        :param schedule: The parent Schedule state manager.
+        :type schedule: Schedule
+        """
+        self._schedule = schedule
+
+    def __str__(self) -> str:
+        """Return the string representation of the state phase."""
+        return self.state_enum.value
+
+
+class ScheduleIsIdle(ScheduleStateBase):
+    """Schedule is idle and not interacting with the network."""
+
+    state_enum = ScheduleStateEnum.IDLE
+
+
+class ScheduleIsFetching(ScheduleStateBase):
+    """Schedule is actively fetching missing fragments from network."""
+
+    state_enum = ScheduleStateEnum.FETCHING
+
+
+class ScheduleIsUpdating(ScheduleStateBase):
+    """Schedule is actively writing fragments to the controller."""
+
+    state_enum = ScheduleStateEnum.UPDATING
+
+
+class ScheduleIsSynchronised(ScheduleStateBase):
+    """Schedule is fully cached and synchronised with controller."""
+
+    state_enum = ScheduleStateEnum.SYNCHRONISED
+
+
+class ScheduleIsStale(ScheduleStateBase):
+    """Schedule cache is stale following a version change."""
+
+    state_enum = ScheduleStateEnum.STALE
+
+
+class ScheduleIsFaulted(ScheduleStateBase):
+    """Schedule subsystem encountered a timeout or fetch error."""
+
+    state_enum = ScheduleStateEnum.FAULTED
 
 
 # Voluptuous Schemas
-def schema_sched(schema_switchpoint: vol.Schema) -> vol.Schema:
+def schema_schedule(schema_switchpoint: vol.Schema) -> vol.Schema:
     """Generate a voluptuous schema for a weekly schedule array.
 
     :param schema_switchpoint: The schema describing an individual
@@ -94,7 +162,7 @@ def schema_sched(schema_switchpoint: vol.Schema) -> vol.Schema:
     :returns: A voluptuous Schema object for the 7-day schedule array.
     :rtype: vol.Schema
     """
-    schema_sched_day = vol.Schema(
+    schema_schedule_day = vol.Schema(
         {
             vol.Required(SZ_DAY_OF_WEEK): int,
             vol.Required(SZ_SWITCHPOINTS): vol.All(
@@ -104,12 +172,12 @@ def schema_sched(schema_switchpoint: vol.Schema) -> vol.Schema:
         extra=vol.PREVENT_EXTRA,
     )
     return vol.Schema(
-        vol.All([schema_sched_day], vol.Length(min=0, max=7)),
+        vol.All([schema_schedule_day], vol.Length(min=0, max=7)),
         extra=vol.PREVENT_EXTRA,
     )
 
 
-SCH_SWITCHPOINT_DHW = vol.Schema(
+SCHEMA_SWITCHPOINT_DHW = vol.Schema(
     {
         vol.Required(SZ_TIME_OF_DAY): vol.Match(REGEX_TIME_OF_DAY),
         vol.Required(SZ_ENABLED): bool,
@@ -117,7 +185,7 @@ SCH_SWITCHPOINT_DHW = vol.Schema(
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_SWITCHPOINT_ZON = vol.Schema(
+SCHEMA_SWITCHPOINT_ZONE = vol.Schema(
     {
         vol.Required(SZ_TIME_OF_DAY): vol.Match(REGEX_TIME_OF_DAY),
         vol.Required(SZ_HEAT_SETPOINT): vol.All(
@@ -127,26 +195,26 @@ SCH_SWITCHPOINT_ZON = vol.Schema(
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_SCHEDULE_DHW = schema_sched(SCH_SWITCHPOINT_DHW)
-SCH_SCHEDULE_DHW_OUTER = vol.Schema(
+SCHEMA_SCHEDULE_DHW = schema_schedule(SCHEMA_SWITCHPOINT_DHW)
+SCHEMA_SCHEDULE_DHW_OUTER = vol.Schema(
     {
         vol.Required(SZ_ZONE_IDX): "HW",
-        vol.Required(SZ_SCHEDULE): SCH_SCHEDULE_DHW,
+        vol.Required(SZ_SCHEDULE): SCHEMA_SCHEDULE_DHW,
     },
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_SCHEDULE_ZON = schema_sched(SCH_SWITCHPOINT_ZON)
-SCH_SCHEDULE_ZON_OUTER = vol.Schema(
+SCHEMA_SCHEDULE_ZONE = schema_schedule(SCHEMA_SWITCHPOINT_ZONE)
+SCHEMA_SCHEDULE_ZONE_OUTER = vol.Schema(
     {
         vol.Required(SZ_ZONE_IDX): vol.Match(r"0[0-F]"),
-        vol.Required(SZ_SCHEDULE): SCH_SCHEDULE_ZON,
+        vol.Required(SZ_SCHEDULE): SCHEMA_SCHEDULE_ZONE,
     },
     extra=vol.PREVENT_EXTRA,
 )
 
-SCH_FULL_SCHEDULE = vol.Schema(
-    vol.Any(SCH_SCHEDULE_DHW_OUTER, SCH_SCHEDULE_ZON_OUTER),
+SCHEMA_FULL_SCHEDULE = vol.Schema(
+    vol.Any(SCHEMA_SCHEDULE_DHW_OUTER, SCHEMA_SCHEDULE_ZONE_OUTER),
     extra=vol.PREVENT_EXTRA,
 )
 
@@ -168,25 +236,25 @@ def _struct_pack(
     :returns: A packed 20-byte struct representing this switchpoint.
     :rtype: bytes
     """
-    dow: int = week_day[SZ_DAY_OF_WEEK]
-    tod_str: str = switchpoint[SZ_TIME_OF_DAY]
+    day_of_week: int = week_day[SZ_DAY_OF_WEEK]
+    time_of_day_str: str = switchpoint[SZ_TIME_OF_DAY]
 
-    idx: int = int(zone_idx, 16)
-    tod: int = int(tod_str[:2]) * 60 + int(tod_str[3:])
+    zone_index: int = int(zone_idx, 16)
+    time_of_day: int = int(time_of_day_str[:2]) * 60 + int(time_of_day_str[3:])
 
     if (enabled := switchpoint.get("enabled")) is not None:
-        val = int(bool(enabled))
-    elif isinstance(sp_val := switchpoint.get("heat_setpoint"), (int, float)):
-        val = int(sp_val * 100)
+        value = int(bool(enabled))
+    elif isinstance(setpoint_val := switchpoint.get("heat_setpoint"), (int, float)):
+        value = int(setpoint_val * 100)
     else:
-        val = 0
+        value = 0
 
     return struct.pack(
         CODE_0404_SCHEDULE_SWITCHPOINT_STRUCT,
-        idx,
-        dow,
-        tod,
-        val,
+        zone_index,
+        day_of_week,
+        time_of_day,
+        value,
         0,  # Reserved trailer field (0x0000)
     )
 
@@ -199,14 +267,14 @@ def _struct_unpack(raw_schedule: bytes) -> tuple[int, int, int, int]:
     :returns: A tuple of (zone_idx, day_of_week, time_of_day, value).
     :rtype: tuple[int, int, int, int]
     """
-    idx, dow, tod, val, _ = struct.unpack(
+    zone_index, day_of_week, time_of_day, value, _ = struct.unpack(
         CODE_0404_SCHEDULE_SWITCHPOINT_STRUCT,
         raw_schedule,
     )
-    return idx, dow, tod, val
+    return zone_index, day_of_week, time_of_day, value
 
 
-def fragz_to_full_sched(fragments: Iterable[FragmentT]) -> OuterSchedule:
+def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> OuterSchedule:
     """Convert a tuple of fragments strs (a blob) into a schedule.
 
     :param fragments: An iterable of hexadecimal string fragments.
@@ -222,33 +290,33 @@ def fragz_to_full_sched(fragments: Iterable[FragmentT]) -> OuterSchedule:
     switchpoints: list[SwitchPointT] = []
 
     for i in range(0, len(raw_schedule), SWITCHPOINT_STRUCT_SIZE):
-        idx, dow, tod, val = _struct_unpack(
+        zone_index, day_of_week, time_of_day, value = _struct_unpack(
             raw_schedule[i : i + SWITCHPOINT_STRUCT_SIZE]
         )
 
-        if dow > old_day:
+        if day_of_week > old_day:
             schedule.append({SZ_DAY_OF_WEEK: old_day, SZ_SWITCHPOINTS: switchpoints})
-            old_day, switchpoints = dow, []
+            old_day, switchpoints = day_of_week, []
 
-        time_str = f"{tod // 60:02d}:{tod % 60:02d}"
-        if val in (0, 1):
-            sp_dhw: SwitchPointDhw = {
+        time_str = f"{time_of_day // 60:02d}:{time_of_day % 60:02d}"
+        if value in (0, 1):
+            switchpoint_dhw: SwitchPointDhw = {
                 SZ_TIME_OF_DAY: time_str,
-                SZ_ENABLED: bool(val),
+                SZ_ENABLED: bool(value),
             }
-            switchpoints.append(sp_dhw)
+            switchpoints.append(switchpoint_dhw)
         else:
-            sp_zon: SwitchPointZon = {
+            switchpoint_zone: SwitchPointZon = {
                 SZ_TIME_OF_DAY: time_str,
-                SZ_HEAT_SETPOINT: val / 100,
+                SZ_HEAT_SETPOINT: value / 100,
             }
-            switchpoints.append(sp_zon)
+            switchpoints.append(switchpoint_zone)
 
     schedule.append({SZ_DAY_OF_WEEK: old_day, SZ_SWITCHPOINTS: switchpoints})
-    return {SZ_ZONE_IDX: f"{idx:02X}", SZ_SCHEDULE: schedule}
+    return {SZ_ZONE_IDX: f"{zone_index:02X}", SZ_SCHEDULE: schedule}
 
 
-def full_sched_to_fragz(full_schedule: OuterSchedule) -> list[FragmentT]:
+def full_schedule_to_fragments(full_schedule: OuterSchedule) -> list[FragmentT]:
     """Convert a schedule into a set of fragments (a blob).
 
     :param full_schedule: The OuterSchedule dictionary representation.
@@ -258,16 +326,16 @@ def full_sched_to_fragz(full_schedule: OuterSchedule) -> list[FragmentT]:
     :raises KeyError: If expected keys are missing from the structure.
     """
     cobj = zlib.compressobj(level=9, wbits=14)
-    frags: list[bytes] = []
+    fragments: list[bytes] = []
 
     zone_idx: str = full_schedule[SZ_ZONE_IDX]
     days_of_week: InnerScheduleT = full_schedule[SZ_SCHEDULE]
     for week_day in days_of_week:
         switchpoints: SwitchPointsT = week_day[SZ_SWITCHPOINTS]
         for switchpoint in switchpoints:
-            frags.append(_struct_pack(zone_idx, week_day, switchpoint))
+            fragments.append(_struct_pack(zone_idx, week_day, switchpoint))
 
-    blob = (b"".join(cobj.compress(f) for f in frags) + cobj.flush()).hex().upper()
+    blob = (b"".join(cobj.compress(f) for f in fragments) + cobj.flush()).hex().upper()
 
     return [
         blob[i : i + FRAGMENT_HEX_LENGTH]
@@ -288,7 +356,6 @@ def _to_protocol_zone_idx(zone_idx: str) -> str:
     return "00" if zone_idx == "HW" else zone_idx
 
 
-# TODO: make stateful (a la binding)
 class Schedule:  # 0404
     """The schedule state manager for a heating or DHW zone."""
 
@@ -316,9 +383,85 @@ class Schedule:  # 0404
         self._global_ver = 0  # None is a sentinel for 'dont know'
         self._sched_ver = 0  # the global_ver when this schedule was retrieved
 
+        self._state: ScheduleStateBase = ScheduleIsIdle(self)
+        self._sync_event: asyncio.Event = asyncio.Event()
+
     def __str__(self) -> str:
         """Return a human-readable representation of the schedule."""
         return f"{self._zone} (schedule)"
+
+    @property
+    def state(self) -> ScheduleStateEnum:
+        """Return the current FSM state phase.
+
+        :returns: Current state phase enum value.
+        :rtype: ScheduleStateEnum
+        """
+        return self._state.state_enum
+
+    def _set_state(self, state_cls: type[ScheduleStateBase]) -> None:
+        """Transition the schedule state machine to a new phase.
+
+        :param state_cls: State class to instantiate and transition to.
+        :type state_cls: type[ScheduleStateBase]
+        """
+        old_state = self._state
+        self._state = state_cls(self)
+        _LOGGER.debug("%s: FSM transition %s -> %s", self, old_state, self._state)
+
+        if isinstance(self._state, ScheduleIsSynchronised):
+            self._sync_event.set()
+        else:
+            self._sync_event.clear()
+
+    def _handle_msg(self, msg: Message) -> None:
+        """Handle incoming 0404/0006 schedule packets reactively.
+
+        :param msg: Incoming protocol message object.
+        :type msg: Message
+        """
+        if msg.code == "0006":
+            if isinstance(msg.payload, dict):
+                change_counter = msg.payload.get("change_counter")
+                if isinstance(change_counter, int) and change_counter > self._sched_ver:
+                    self._global_ver = change_counter
+                    if isinstance(self._state, ScheduleIsSynchronised):
+                        self._set_state(ScheduleIsStale)
+            return
+
+        if msg.code != "0404":
+            return
+
+        payload = msg.payload
+        if not isinstance(payload, dict):
+            return
+
+        pkt_zone_idx = payload.get(SZ_ZONE_IDX)
+        if pkt_zone_idx is not None:
+            translated_idx = _to_protocol_zone_idx(self.idx)
+            if pkt_zone_idx != translated_idx and pkt_zone_idx != self.idx:
+                return
+
+        try:
+            self._payload_set = self._update_payload_set(self._payload_set, payload)
+        except exc.ScheduleError as err:
+            _LOGGER.warning(
+                "%s: Dropped corrupted schedule fragments: %s",
+                self,
+                err,
+            )
+            self._payload_set = [None]
+            self._set_state(ScheduleIsFaulted)
+
+    def apply_state_update(self, event: StateUpdatedEvent) -> None:
+        """Incorporate a state update event into the read-model.
+
+        :param event: State updated event carrying new ScheduleState.
+        :type event: StateUpdatedEvent
+        """
+        if isinstance(event.state, ScheduleState):
+            if hasattr(self._zone, "schedule_state"):
+                self._zone.schedule_state = event.state
 
     async def _is_dated(self, *, force_io: bool = False) -> tuple[bool, bool]:
         """Indicate if a more recent schedule might be available.
@@ -391,6 +534,7 @@ class Schedule:  # 0404
                 self._get_schedule(force_io=force_io), timeout=timeout
             )
         except TimeoutError as err:
+            self._set_state(ScheduleIsFaulted)
             raise exc.ScheduleFlowError(
                 f"Failed to obtain schedule within {timeout} secs"
             ) from err
@@ -398,7 +542,7 @@ class Schedule:  # 0404
             # Silently drop the background request if the transport is
             # inactive (e.g., during cache restoration prior to gateway
             # startup).
-            _LOGGER.debug(f"{self}: Dropped request: gateway transport is inactive.")
+            _LOGGER.debug("%s: Dropped request: gateway transport is inactive.", self)
             return None
 
         return self.schedule
@@ -425,6 +569,48 @@ class Schedule:  # 0404
         assert isinstance(msg.payload, dict)  # mypy check
         return msg.payload  # may: TimeoutError?
 
+    async def _fetch_schedule(self) -> None:
+        """Fetch missing schedule fragments using exponential backoff retries.
+
+        :raises exc.ScheduleFlowError: If max fetch attempts are exceeded.
+        """
+        self._set_state(ScheduleIsFetching)
+        attempts = 0
+        backoff = BASE_FETCH_RETRY_DELAY_SECS
+
+        while None in self._payload_set:
+            attempts += 1
+            if attempts > MAX_FETCH_ATTEMPTS:
+                self._set_state(ScheduleIsFaulted)
+                raise exc.ScheduleFlowError(
+                    f"Exceeded max fragment fetch attempts for zone {self.idx}"
+                )
+
+            frag_num = next(
+                (i for i, f in enumerate(self._payload_set, 1) if f is None),
+                1,
+            )
+
+            try:
+                fragment = await self._fetch_fragment(frag_num)
+                # next line also in self._handle_msg(), so protected there
+                self._payload_set = self._update_payload_set(
+                    self._payload_set, fragment
+                )
+            except (TimeoutError, exc.ScheduleError, ProtocolSendFailed) as err:
+                _LOGGER.warning(
+                    "%s: Fragment %s fetch retry %s failed: %s",
+                    self,
+                    frag_num,
+                    attempts,
+                    err,
+                )
+                await asyncio.sleep(backoff)
+                backoff *= 2
+
+        self._sched_ver = self._global_ver
+        self._set_state(ScheduleIsSynchronised)
+
     async def _get_schedule(self, *, force_io: bool = False) -> None:
         """Retrieve/return the schedule of a zone and sets `self._full_schedule`.
 
@@ -434,59 +620,16 @@ class Schedule:  # 0404
         is_dated, did_io = await self._is_dated(force_io=force_io)
         if is_dated:
             self._full_schedule = {}  # keep frags, maybe only other scheds have changed
-        if self._full_schedule:
+
+        if self._full_schedule and isinstance(self._state, ScheduleIsSynchronised):
             return
 
-        await self.tcs._obtain_lock(self.idx)  # maybe raise TimeOutError
+        if not did_io:  # must know the version of the schedule about to be RQ'd
+            self._global_ver, _ = await self.tcs._schedule_version(force_io=True)
 
-        try:
-            if not did_io:  # must know the version of the schedule about to be RQ'd
-                self._global_ver, _ = await self.tcs._schedule_version(force_io=True)
+        self._payload_set[0] = None  # if 1st frag valid: schedule very likely unchanged
 
-            self._payload_set[0] = (
-                None  # if 1st frag valid: schedule very likely unchanged
-            )
-            attempts = 0
-            max_attempts = max(len(self._payload_set) * 2, 10)
-            while True:
-                attempts += 1
-                if attempts > max_attempts:
-                    _LOGGER.warning(
-                        "%s: Exceeded max fragment fetch attempts (%s)",
-                        self,
-                        max_attempts,
-                    )
-                    raise exc.ScheduleFlowError(
-                        f"Exceeded max fragment fetch attempts for zone {self.idx}"
-                    )
-
-                frag_num = next(
-                    (i for i, f in enumerate(self._payload_set, 1) if f is None),
-                    0,
-                )
-                if frag_num == 0:
-                    break
-
-                fragment = await self._fetch_fragment(frag_num)
-                # next line also in self._handle_msg(), so protected there with a lock
-                try:
-                    self._payload_set = self._update_payload_set(
-                        self._payload_set, fragment
-                    )
-                except exc.ScheduleError as err:
-                    _LOGGER.warning(
-                        "%s: Dropped corrupted schedule fragments during fetch: %s",
-                        self,
-                        err,
-                    )
-                    self._payload_set = [None]
-                    break
-
-                if None not in self._payload_set:
-                    self._sched_ver = self._global_ver
-                    break
-        finally:
-            self.tcs._release_lock()
+        await self._fetch_schedule()
 
     def _proc_payload_set(self, payload_set: PayloadSetT) -> OuterScheduleT | None:
         """Process a payload set and return the full schedule.
@@ -511,7 +654,7 @@ class Schedule:  # 0404
             )
 
         try:
-            schedule = fragz_to_full_sched(
+            schedule = fragments_to_full_schedule(
                 str(payload[SZ_FRAGMENT])
                 for payload in payload_set
                 if payload and SZ_FRAGMENT in payload
@@ -522,6 +665,7 @@ class Schedule:  # 0404
         if self.idx == "HW":
             schedule[SZ_ZONE_IDX] = "HW"
         self._full_schedule = schedule
+        self._set_state(ScheduleIsSynchronised)
 
         return self._full_schedule  # NOTE: not self.schedule
 
@@ -616,13 +760,13 @@ class Schedule:  # 0404
                 SZ_ZONE_IDX: "HW",
                 SZ_SCHEDULE: schedule,
             }
-            schema = SCH_SCHEDULE_DHW_OUTER
+            schema = SCHEMA_SCHEDULE_DHW_OUTER
         else:
             full_schedule = {
                 SZ_ZONE_IDX: self.idx,
                 SZ_SCHEDULE: schedule,
             }
-            schema = SCH_SCHEDULE_ZON_OUTER
+            schema = SCHEMA_SCHEDULE_ZONE_OUTER
 
         try:
             validated: OuterSchedule = schema(full_schedule)
@@ -652,22 +796,22 @@ class Schedule:  # 0404
         :raises exc.ScheduleFlowError: On transmission timeout.
         """
         full_schedule = self._normalise_and_validate(schedule)
-        self._fragments = full_sched_to_fragz(full_schedule)
+        self._fragments = full_schedule_to_fragments(full_schedule)
 
-        await self.tcs._obtain_lock(self.idx)  # maybe raise TimeOutError
+        self._set_state(ScheduleIsUpdating)
 
         try:
             frag_cnt = len(self._fragments)
             for num, frag in enumerate(self._fragments, 1):
                 await self._send_fragment(num, frag_cnt, frag)
         except TimeoutError as err:
+            self._set_state(ScheduleIsFaulted)
             raise exc.ScheduleFlowError(f"failed to set schedule: {err}") from err
         else:
             if not force_refresh:
                 self._global_ver, _ = await self.tcs._schedule_version(force_io=True)
                 self._sched_ver = self._global_ver
-        finally:
-            self.tcs._release_lock()
+                self._set_state(ScheduleIsSynchronised)
 
         if force_refresh:
             await self.get_schedule(force_io=True)  # sets self._full_schedule
