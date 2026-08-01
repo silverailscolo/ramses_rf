@@ -193,6 +193,21 @@ class TestSchTraitsHvacBound:
         result = SCH_TRAITS({"class": "FAN", "scheme": "vasco"})
         assert "bound" not in result or result.get("bound") is None
 
+    def test_bound_without_class_uses_default_hvc(self) -> None:
+        """bound is valid even without an explicit class (regression).
+
+        SCH_TRAITS_HVAC defaults ``class`` to ``DevType.HVC`` when absent,
+        but that default value must itself pass the class validator, or
+        voluptuous falls through to SCH_TRAITS_HEAT (which rejects
+        ``bound``) and raises a generic, hard-to-diagnose "not a valid
+        value @ data['bound']" error for any HVAC device that has a
+        ``bound`` trait but no ``class`` (e.g. a REM/FAN discovered from
+        traffic before its class trait was learned).
+        """
+        result = SCH_TRAITS({"bound": "37:168270"})
+        assert result["bound"] == "37:168270"
+        assert result["class"] == "HVC"
+
 
 class TestStripTraits:
     """Unit tests for strip_traits() (stage 1 only — strip, no mapping)."""

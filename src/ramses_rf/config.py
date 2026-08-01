@@ -106,8 +106,15 @@ def sch_global_traits_dict_factory(
     SCH_TRAITS_HVAC = SCH_TRAITS_BASE.extend(
         {
             vol.Optional("_domain", default="hvac"): "hvac",
-            vol.Optional(SZ_CLASS, default="HVC"): vol.Any(
-                None, *hvac_slugs, *(str(DEV_TYPE_MAP[s]) for s in hvac_slugs)
+            # "HVC" (generic/promotable HVAC device) is the default class
+            # but is not itself one of DEV_TYPE_MAP.HVAC_SLUGS, so it must
+            # be listed explicitly or the default value fails its own
+            # validator whenever a device has no explicit _class.
+            vol.Optional(SZ_CLASS, default=DevType.HVC): vol.Any(
+                None,
+                str(DevType.HVC),
+                *hvac_slugs,
+                *(str(DEV_TYPE_MAP[s]) for s in hvac_slugs),
             ),
             vol.Optional(SZ_BOUND_TO): vol.Any(
                 None,
