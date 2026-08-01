@@ -286,3 +286,66 @@ async def test_patch_cmd_if_needed_evofw3(protocol: DummyProtocol) -> None:
     assert patched_cmd.addr1 == "18:123456"
     assert patched_cmd.addr2 == "01:222222"
     assert original_cmd.addr1 == "18:000730"  # Enforces immutability
+
+
+async def test_patch_cmd_if_needed_hgi80_reverse(protocol: DummyProtocol) -> None:
+    """Test that _patch_cmd_if_needed swaps the real HGI ID back to the
+    placeholder for HGI80 (TI 3410).
+
+    HGI80 firmware requires 18:000730 as the source address for frames it
+    transmits.  Using the actual gateway ID causes a silent drop and WantEcho
+    timeout (issue 835, cc 864).
+    """
+    from ramses_tx.dtos import CommandDTO as Command
+
+    protocol._is_evofw3 = False  # HGI80
+    protocol._known_hgi = DeviceIdT("18:123456")
+
+    original_cmd = Command.from_cli(" W --- 18:123456 01:222222 --:------ 12B0 001 00")
+
+    patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
+
+    assert patched_cmd is not original_cmd
+    assert patched_cmd.addr1 == "18:000730"  # swapped back to placeholder
+    assert patched_cmd.addr2 == "01:222222"
+    assert original_cmd.addr1 == "18:123456"  # Enforces immutability
+
+
+async def test_patch_cmd_if_needed_hgi80_no_change_when_placeholder(
+    protocol: DummyProtocol,
+) -> None:
+    """Test that _patch_cmd_if_needed does not alter a command that already
+    uses the placeholder for HGI80."""
+    from ramses_tx.dtos import CommandDTO as Command
+
+    protocol._is_evofw3 = False  # HGI80
+    protocol._known_hgi = DeviceIdT("18:123456")
+
+    original_cmd = Command.from_cli(" W --- 18:000730 01:222222 --:------ 12B0 001 00")
+
+    patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
+
+    assert patched_cmd is original_cmd  # no change needed
+    assert patched_cmd.addr1 == "18:000730"
+
+
+async def test_patch_cmd_if_needed_hgi80_no_change_when_impersonating(
+    protocol: DummyProtocol,
+) -> None:
+    """Test that _patch_cmd_if_needed does not alter a command that
+    impersonates a non-gateway device (e.g. a thermostat) on HGI80.
+
+    The HGI80 cannot impersonate, but the patching logic should not silently
+    rewrite the source — the impersonation alert handles that case.
+    """
+    from ramses_tx.dtos import CommandDTO as Command
+
+    protocol._is_evofw3 = False  # HGI80
+    protocol._known_hgi = DeviceIdT("18:123456")
+
+    original_cmd = Command.from_cli(" W --- 21:057310 01:222222 --:------ 12B0 001 00")
+
+    patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
+
+    assert patched_cmd is original_cmd  # no change — not the HGI ID
+    assert patched_cmd.addr1 == "21:057310"

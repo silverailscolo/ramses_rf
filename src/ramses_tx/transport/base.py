@@ -12,6 +12,7 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .. import exceptions as exc
+from ..address import HGI_DEV_ADDR
 from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, SZ_SIGNATURE
 from ..helpers import dt_now
 from ..interfaces import TransportInterface
@@ -183,14 +184,18 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             _LOGGER.debug("Event loop closed during _make_connection()")
 
     def _is_recent_tx(self, frame: str) -> bool:
-        """Check if frame matches a recent Tx packet within 3.0 seconds.
+        """Check if frame matches a recent Tx packet within 3.0s.
 
-        Prunes expired entries from the queue and lookup map, then performs
-        an O(1) dictionary hash lookup for the incoming packet key.
+        Prunes expired entries, then does an O(1) dict lookup for
+        the incoming packet key.
 
-        :param frame: Raw ASCII frame string received from transport.
+        HGI80 echoes arrive with the real HGI ID as addr1, but the
+        TX frame used the placeholder 18:000730.  Both variants are
+        checked (issue 835).
+
+        :param frame: Raw ASCII frame string from transport.
         :type frame: str
-        :returns: True if frame is a hardware echo of recent transmission.
+        :returns: True if frame is a hardware echo of recent Tx.
         :rtype: bool
         """
         now = self._dt_now()
@@ -211,15 +216,25 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         except Exception:
             return False
 
-        rx_key: _TxKeyT = (
-            rx_dto.verb,
-            rx_dto.code,
-            rx_dto.addr1,
-            rx_dto.addr2,
-            rx_dto.addr3,
-            rx_dto.payload,
+        # HGI80 echoes arrive with the real HGI ID as addr1,
+        # but the TX frame used the placeholder 18:000730.
+        addr1_variants = (
+            (rx_dto.addr1, HGI_DEV_ADDR.id)
+            if rx_dto.addr1 != HGI_DEV_ADDR.id
+            else (rx_dto.addr1,)
         )
-        return rx_key in self._recent_tx_counts
+        for addr1 in addr1_variants:
+            rx_key: _TxKeyT = (
+                rx_dto.verb,
+                rx_dto.code,
+                addr1,
+                rx_dto.addr2,
+                rx_dto.addr3,
+                rx_dto.payload,
+            )
+            if rx_key in self._recent_tx_counts:
+                return True
+        return False
 
     def _frame_read(self, dtm_str: str, frame: str) -> None:
         """Make a Packet from the Frame and process it."""
@@ -353,7 +368,10 @@ class _FullTransport(_ReadTransport):
         :returns: None
         :rtype: None
         """
-        frame_clean = frame.strip()
+        # rstrip only — preserve leading space in verbs
+        # like " W", " I" which strip() would remove, making
+        # the frame unparsable (issue 835).
+        frame_clean = frame.rstrip()
         if not frame_clean:
             return
 

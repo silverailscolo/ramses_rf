@@ -394,3 +394,55 @@ async def test_hardware_echo_logging_suppressed() -> None:
         assert transport._protocol.pkt_received.called
     finally:
         PKT_LOGGER.removeHandler(handler)
+
+
+@pytest.mark.asyncio
+async def test_hardware_echo_logging_suppressed_hgi80_addr_substitution() -> None:
+    """HGI80 echoes arrive with the real HGI ID as addr1, but the TX frame
+    used the placeholder 18:000730.  _is_recent_tx must still recognise the
+    echo as a recent transmission (issue 835, cc 864).
+    """
+    from datetime import datetime as dt
+    from unittest.mock import MagicMock
+
+    from ramses_tx.transport.base import TransportConfig, _FullTransport
+
+    class DummyTransport(_FullTransport):
+        def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            self._protocol = MagicMock()
+
+        async def _write_frame(self, frame: str) -> None:
+            pass
+
+    class LogCollector(logging.Handler):
+        def __init__(self) -> None:
+            super().__init__()
+            self.records: list[logging.LogRecord] = []
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self.records.append(record)
+
+    loop = asyncio.get_running_loop()
+    handler = LogCollector()
+    PKT_LOGGER.addHandler(handler)
+    PKT_LOGGER.setLevel(logging.INFO)
+
+    transport = DummyTransport(loop)
+    # TX frame uses the placeholder 18:000730 (as _patch_cmd_if_needed
+    # ensures for HGI80).  01FF payload from issue 835.
+    _payload = "008026262AD0008000143C28320000C10280800280FF80040020"
+    frame = f" W --- 18:000730 21:057310 --:------ 01FF 026 {_payload}"
+    # HGI80 echo arrives with the real HGI ID (18:002965) as addr1.
+    rx_echo = f"000  W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
+
+    try:
+        await transport.write_frame(frame)
+        transport._frame_read(dt.now().isoformat(), rx_echo)
+        await asyncio.sleep(0.01)
+
+        # Assert: Only 1 log entry (Tx), echo suppressed despite addr1 mismatch
+        assert len(handler.records) == 1
+        assert transport._protocol.pkt_received.called
+    finally:
+        PKT_LOGGER.removeHandler(handler)
