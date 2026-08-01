@@ -282,6 +282,15 @@ class Packet:
         pkt._validate(strict_checking=False)
         return pkt
 
+    def _pkt_extra(self) -> dict[str, Any]:
+        """Return dictionary containing packet attributes for logging."""
+        return {
+            **self.__dict__,
+            "_frame": self._frame,
+            "_rssi": self.rssi,
+            "dtm": self.dtm,
+        }
+
     def _validate(self, *, strict_checking: bool = False) -> None:
         """Validate the packet and emit packet log entries.
 
@@ -300,7 +309,7 @@ class Packet:
 
             if not strict_checking:
                 if len(self.__dict__) > 0:
-                    PKT_LOGGER.info("", extra=self.__dict__)
+                    PKT_LOGGER.info("", extra=self._pkt_extra())
                 return
 
             if self.addr1 == NON_DEV_ADDR:
@@ -315,13 +324,13 @@ class Packet:
                 assert self.verb in (I_, W_), "wrong verb or dst addr should be src"
 
             if len(self.__dict__) > 0:
-                PKT_LOGGER.info("", extra=self.__dict__)
+                PKT_LOGGER.info("", extra=self._pkt_extra())
 
         except AssertionError as err:
             raise exc.PacketInvalid(f"Bad frame: Invalid address set: {err}") from err
         except exc.PacketInvalid as err:
             if getattr(self, "_frame", "") or self.error_text:
-                PKT_LOGGER.warning("%s", err, extra=self.__dict__)
+                PKT_LOGGER.warning("%s", err, extra=self._pkt_extra())
             raise err
 
     def __repr__(self) -> str:
