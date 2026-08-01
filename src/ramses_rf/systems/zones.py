@@ -239,7 +239,7 @@ class DhwZone(ZoneSchedule):  # CS92A
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in DhwZone._update_schema (sensor): {err}")
+                _TRACE.warning("SUPPRESSED in DhwZone._update_schema (sensor): %s", err)
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
             try:
@@ -509,7 +509,7 @@ class Zone(ZoneSchedule):
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in Zone._update_schema (sensor): {err}")
+                _TRACE.warning("SUPPRESSED in Zone._update_schema (sensor): %s", err)
 
         for act_id in schema.get(SZ_ACTUATORS, []):
             try:
@@ -519,7 +519,7 @@ class Zone(ZoneSchedule):
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in Zone._update_schema (actuator): {err}")
+                _TRACE.warning("SUPPRESSED in Zone._update_schema (actuator): %s", err)
 
     @property
     def sensor(self) -> Device | None:
@@ -646,13 +646,14 @@ class Zone(ZoneSchedule):
                 {"zone_idx": self.idx},
             )
         except ProtocolTimeoutError as err:
-            _LOGGER.warning(f"{self}: _get_temp timed out: {err}")
+            _LOGGER.warning("%s: _get_temp timed out: %s", self, err)
             return None
         except ProtocolSendFailed:
             # Silently drop the request if the transport is inactive
             # (e.g., during cache restoration prior to gateway startup).
             _LOGGER.debug(
-                f"{self}: Dropped request: gateway transport is inactive.",
+                "%s: Dropped request: gateway transport is inactive.",
+                self,
             )
             return None
 

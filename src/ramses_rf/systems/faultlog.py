@@ -304,7 +304,9 @@ class FaultLog:  # 0418
                         wait_for_reply=True,
                     )
                 except exc.RamsesException as err:
-                    _LOGGER.warning(f"Failed to retrieve fault log entry {idx}: {err}")
+                    _LOGGER.warning(
+                        "Failed to retrieve fault log entry %s: %s", idx, err
+                    )
                     error_occurred = True
                     self._is_current = False
                     break

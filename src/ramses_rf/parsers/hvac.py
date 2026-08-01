@@ -321,7 +321,7 @@ def parser_1f70(payload: str, msg: Message) -> dict[str, Any]:
         assert msg.verb != RP or payload[26:] == "008000"
 
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         "day_idx": payload[16:18],  # depends upon 1470[3:4]?
@@ -397,7 +397,7 @@ def parser_2210(payload: str, msg: Message) -> dict[str, Any]:
         ), f"expected byte 41- (00|40), not {payload[82:]}"
 
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     _req = "IDL"
     if payload[20:22] == "02":
@@ -532,7 +532,7 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
             "mode_idx > mode_max"
         )
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     # Scheme detection: the mode_max byte (payload[4:6]) is the primary
     # indicator.  mode_max=04 → itho (5 modes: 00-04), mode_max=0A → nuaire,
@@ -582,7 +582,7 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
         assert payload[2:4] in _22F1_FAN_MODE, f"unknown fan_mode: {payload[2:4]}"
         assert payload[4:6] in _22f1_mode_set, f"unknown mode_set: {payload[4:6]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         SZ_FAN_MODE: _22F1_FAN_MODE.get(payload[2:4], f"unknown_{payload[2:4]}"),
@@ -634,7 +634,7 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
     try:
         assert msg.len <= 7 or payload[14:] == "0000", f"byte 7: {payload[14:]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     new_speed = {  # from now, until timer expiry
         0x00: "fan_boost",  # set fan off, or 'boost' mode?
@@ -828,7 +828,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
                 f"Message: {msg!r}"
             )
     except Exception as err:
-        _LOGGER.warning(f"Error looking up 2411 parameter {param_id}: {err}")
+        _LOGGER.warning("Error looking up 2411 parameter %s: %s", param_id, err)
         description = "Unknown"
 
     result = {
@@ -861,7 +861,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
                     "precision": f"0x{payload[34:42]}",
                     "_value_42": payload[42:],
                 }
-            _LOGGER.warning(f"{warningmsg} Found values: {result}")
+            _LOGGER.warning("%s Found values: %s", warningmsg, result)
             return result
 
         length, parser = _2411_DATA_TYPES[payload[8:10]]
@@ -883,7 +883,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
             }
         )
     except Exception as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} (Error parsing 2411: {err})")
+        _LOGGER.warning("%r < %s (Error parsing 2411: %s)", msg, _INFORM_DEV_MSG, err)
         result["value"] = f"0x{payload[10:18]}"
         result["_parse_error"] = f"Parser error: {err}"
         return result
@@ -918,7 +918,7 @@ def parser_3110(payload: str, msg: Message) -> PayDictT._3110:
             f"byte 3: {payload[6:]}"
         )
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     mode = {
         0x00: SZ_DISABLE,
@@ -958,7 +958,7 @@ def parser_3120(payload: str, msg: Message) -> dict[str, Any]:
         assert payload[10:12] in ("00", "03", "0A", "9C"), f"byte 5: {payload[10:12]}"
         assert payload[12:] == "FF", f"byte 6: {payload[12:]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         "unknown_0": payload[2:10],
@@ -1014,7 +1014,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
             f"byte 2: {payload[4:6]}"
         )
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     bitmap = int(payload[2:4], 16)
 
@@ -1051,7 +1051,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
                     f"unknown 31D9 fan_mode lookup key: {payload[4:6]}"
                 )
             except AssertionError as err:
-                _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+                _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
             fan_mode = _31D9_FAN_INFO_VASCO.get(
                 int(payload[4:6], 16) & 0xFF, f"unknown_{payload[4:6]}"
             )
@@ -1061,7 +1061,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
     try:
         assert payload[6:8] in ("00", "07", "0A", "FE"), f"byte 3: {payload[6:8]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     result.update({"_unknown_3": payload[6:8]})
 
@@ -1072,7 +1072,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
         assert payload[8:32] in ("00" * 12, "20" * 12), f"byte 4: {payload[8:32]}"
         assert payload[32:] in ("00", "04", "08"), f"byte 16: {payload[32:]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         **result,

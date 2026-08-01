@@ -206,7 +206,9 @@ class DeviceBase(Entity):
             and not self.is_faked
             and cmd.addr2 == self.id
         ):
-            _LOGGER.info(f"{cmd} < Sending inadvisable for {self} (it has a battery)")
+            _LOGGER.info(
+                "%s < Sending inadvisable for %s (it has a battery)", cmd, self
+            )
 
         return super()._send_cmd(cmd, **kwargs)
 
@@ -452,7 +454,7 @@ class Fakeable(DeviceBase):
         if self.id not in self._gwy.config.known_list:
             self._gwy.config.known_list[self.id] = {}
         self._gwy.config.known_list[self.id][SZ_FAKED] = True  # TODO: remove this
-        _LOGGER.info(f"Faking now enabled for: {self}")
+        _LOGGER.info("Faking now enabled for: %s", self)
 
     async def _async_send_cmd(
         self,

@@ -568,7 +568,9 @@ class BindStateBase:
 
         # Strong typing on Future ensures .result() correctly returns a Message
         self._fut: asyncio.Future[Message] = self._loop.create_future()
-        _LOGGER.debug(f"{self}: Changing state from: {self._context.state} to: {self}")
+        _LOGGER.debug(
+            "%s: Changing state from: %s to: %s", self, self._context.state, self
+        )
 
         if self._has_wait_timer:
             self._timer_handle = self._loop.call_later(
@@ -843,7 +845,7 @@ class RespHasBoundAsRespondent(BindStateBase):
 
     def __init__(self, context: BindingManagerBase) -> None:
         super().__init__(context)
-        _LOGGER.info(f"{context._dev.id}: Binding completed as respondent")
+        _LOGGER.info("%s: Binding completed as respondent", context._dev.id)
 
 
 class RespIsWaitingForAddenda(_DevIsWaitingForMsg, BindStateBase):
@@ -899,7 +901,7 @@ class SuppHasBoundAsSupplicant(BindStateBase):
 
     def __init__(self, context: BindingManagerBase) -> None:
         super().__init__(context)
-        _LOGGER.info(f"{context._dev.id}: Binding completed as supplicant")
+        _LOGGER.info("%s: Binding completed as supplicant", context._dev.id)
 
 
 class SuppIsReadyToSendAddenda(

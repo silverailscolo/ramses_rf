@@ -99,7 +99,9 @@ async def test_blocking_io_handling(virtual_rf: VirtualRf) -> None:
         ):
             virtual_rf._handle_data_ready(fd_0_master)
 
-        mock_log.assert_called_with(f"Buffer full writing to {port_1}, dropping packet")
+        mock_log.assert_called_with(
+            "Buffer full writing to %s, dropping packet", port_1
+        )
 
     virtual_rf._port_to_object[port_1] = original_io
 

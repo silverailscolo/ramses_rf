@@ -109,9 +109,9 @@ def spawn_scripts(gwy: Gateway, **kwargs: Any) -> list[asyncio.Task[None]]:
     elif kwargs.get(EXEC_SCR):
         script = SCRIPTS.get(f"{kwargs[EXEC_SCR][0]}")
         if script is None:
-            _LOGGER.warning(f"Script: {kwargs[EXEC_SCR][0]}() - unknown script")
+            _LOGGER.warning("Script: %s() - unknown script", kwargs[EXEC_SCR][0])
         else:
-            _LOGGER.info(f"Script: {kwargs[EXEC_SCR][0]}().- starts...")
+            _LOGGER.info("Script: %s().- starts...", kwargs[EXEC_SCR][0])
             # script_poll_device returns a list of tasks, others return a coroutine
             result = script(gwy, kwargs[EXEC_SCR][1])
             if isinstance(result, list):

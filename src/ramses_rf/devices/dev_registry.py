@@ -96,7 +96,7 @@ class DeviceRegistry:
         """
         handler = self._event_routers.get(event.action)
         if not handler:
-            _LOGGER.warning(f"No registry handler defined for action: {event.action}")
+            _LOGGER.warning("No registry handler defined for action: %s", event.action)
             return
 
         try:
@@ -107,12 +107,15 @@ class DeviceRegistry:
             SystemSchemaInconsistent,
         ) as err:
             # Safely reject the mutation if it violates the static schema constraints
-            _TRACE.debug(f"Topology mutation safely rejected ({event.action}): {err}")
+            _TRACE.debug(
+                "Topology mutation safely rejected (%s): %s", event.action, err
+            )
         except Exception as err:
             # Exception Shield: Catch-all to absolutely guarantee the asyncio
             # background task does not silently die.
             _TRACE.exception(
-                f"CRITICAL: Registry event router caught unhandled exception: {err}"
+                "CRITICAL: Registry event router caught unhandled exception: %s",
+                err,
             )
 
     def _handle_bind_device(self, event: TopologyChangedEvent) -> None:
@@ -216,7 +219,9 @@ class DeviceRegistry:
                     is_sensor=is_sensor,
                 )
             except DeviceNotFoundError as err:
-                _TRACE.error(f"BIND EXCEPTION: Failed fetching {event.child_id}: {err}")
+                _TRACE.error(
+                    "BIND EXCEPTION: Failed fetching %s: %s", event.child_id, err
+                )
 
             # 2. REVERSE BINDING (Native CQRS Shadow State)
             if child_dev:
@@ -295,7 +300,7 @@ class DeviceRegistry:
         dev = self.device_by_id.get(event.device_id)
         if dev and hasattr(dev, "_make_tcs_controller"):
             dev._make_tcs_controller()
-            _LOGGER.debug(f"Created Controller on {dev.id} via {event.causation}")
+            _LOGGER.debug("Created Controller on %s via %s", dev.id, event.causation)
 
     def _handle_create_circuit(self, event: TopologyChangedEvent) -> None:
         """Instruct a UFH controller to initialize a circuit."""
@@ -501,14 +506,16 @@ class DeviceRegistry:
             try:
                 dev = self._device_factory_cb(Address(device_id), msg, traits)
             except Exception as err:
-                _TRACE.error(f"FACTORY EXCEPTION: Failed creating {device_id}: {err}")
+                _TRACE.error(
+                    "FACTORY EXCEPTION: Failed creating %s: %s", device_id, err
+                )
                 raise
 
             if traits.faked:
                 if isinstance(dev, Fakeable):
                     dev._make_fake()
                 else:
-                    _LOGGER.warning(f"The device is not fakeable: {dev}")
+                    _LOGGER.warning("The device is not fakeable: %s", dev)
 
         if parent or child_id:
             self._maybe_reparent_bdr(dev, parent, child_id)

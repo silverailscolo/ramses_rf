@@ -173,12 +173,14 @@ def best_dev_role(
     if slug and slug in _CLASS_BY_SLUG:
         cls = _CLASS_BY_SLUG[slug]
         _LOGGER.debug(
-            f"Using an explicitly-defined class for: {dev_addr!r} ({cls._SLUG})"
+            "Using an explicitly-defined class for: %r (%s)", dev_addr, cls._SLUG
         )
         return cls
 
     if dev_addr.type == DEV_TYPE_MAP.HGI:
-        _LOGGER.debug(f"Using the default class for: {dev_addr!r} ({HgiGateway._SLUG})")
+        _LOGGER.debug(
+            "Using the default class for: %r (%s)", dev_addr, HgiGateway._SLUG
+        )
         return HgiGateway
 
     try:  # or, is it a well-known CH/DHW class, derived from the device type...

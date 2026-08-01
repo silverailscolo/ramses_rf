@@ -123,7 +123,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             try:
                 result = re.sub(k, v, result)
             except re.error as err:
-                _LOGGER.warning(f"{frame} < issue with regex ({k}, {v}): {err}")
+                _LOGGER.warning("%s < issue with regex (%s, %s): %s", frame, k, v, err)
         return result
 
     def add_handler(
@@ -343,7 +343,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         cmd = self._patch_cmd_if_needed(cmd)
 
         if qos and not self._context:
-            _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
+            _LOGGER.warning("%s < QoS is currently disabled by this Protocol", cmd)
 
         if cmd.addr1 != self.hgi_id:  # Was HGI_DEV_ADDR.id
             await self._send_impersonation_alert(cmd)
@@ -403,7 +403,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
                 # + space prefix
                 pkt = Packet.from_port(pkt.dtm, f"{pkt.rssi} {hacked_frame}")
             except (ValueError, PacketInvalid) as err:
-                _LOGGER.debug(f"Regex modified frame is invalid, reverting: {err}")
+                _LOGGER.debug("Regex modified frame is invalid, reverting: %s", err)
                 # Fallback to original packet if regex broke it (pkt
                 # remains unchanged)
 
@@ -432,11 +432,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             self._tracked_sync_cycles.append(pkt)
 
         if _DBG_FORCE_LOG_PACKETS:
-            _LOGGER.warning(f"Recv'd: {pkt.rssi} {pkt}")
+            _LOGGER.warning("Recv'd: %s %s", pkt.rssi, pkt)
         elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
-            _LOGGER.info(f"Recv'd: {pkt.rssi} {pkt}")
+            _LOGGER.info("Recv'd: %s %s", pkt.rssi, pkt)
         else:
-            _LOGGER.debug(f"Recv'd: {pkt.rssi} {pkt}")
+            _LOGGER.debug("Recv'd: %s %s", pkt.rssi, pkt)
 
         self._pkt_received(pkt)
 
@@ -448,7 +448,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             # We explicitly catch specific validation failures. Unhandled
             # internal errors like TypeError or AttributeError will
             # correctly bubble up and fail loudly.
-            _LOGGER.debug(f"Dropped invalid packet during parsing: {err}")
+            _LOGGER.debug("Dropped invalid packet during parsing: %s", err)
             return
 
         self._this_msg, self._prev_msg = msg, self._this_msg
@@ -460,7 +460,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         Also maintain _prev_msg, _this_msg attrs.
         """
         if self._msg_handler is not None:
-            _LOGGER.debug(f"Dispatching valid message to handler: {msg}")
+            _LOGGER.debug("Dispatching valid message to handler: %s", msg)
             # Ensure safe dispatch to either coroutine or standard handler
             res = self._msg_handler(msg)
             if asyncio.iscoroutine(res):
@@ -527,16 +527,18 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             self._active_hgi = dev_id
 
         if dev_id in self._exclude:
-            _LOGGER.error(f"{msg} MUST NOT be in the {SZ_BLOCK_LIST}{TIP}")
+            _LOGGER.error("%s MUST NOT be in the %s%s", msg, SZ_BLOCK_LIST, TIP)
 
         elif dev_id not in self._include:
-            _LOGGER.warning(f"{msg} SHOULD be in the (enforced) {SZ_KNOWN_LIST}")
+            _LOGGER.warning("%s SHOULD be in the (enforced) %s", msg, SZ_KNOWN_LIST)
 
         elif not self.enforce_include:
-            _LOGGER.info(f"{msg} is in the {SZ_KNOWN_LIST}, which SHOULD be enforced")
+            _LOGGER.info(
+                "%s is in the %s, which SHOULD be enforced", msg, SZ_KNOWN_LIST
+            )
 
         else:
-            _LOGGER.debug(f"{msg} is in the {SZ_KNOWN_LIST}")
+            _LOGGER.debug("%s is in the %s", msg, SZ_KNOWN_LIST)
 
     def _is_wanted_addrs(
         self, src_id: DeviceIdT, dst_id: DeviceIdT, sending: bool = False
@@ -602,7 +604,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             try:
                 dto = pkt.to_dto()
             except PacketInvalid as err:
-                _LOGGER.debug(f"Dropped invalid packet for raw handlers: {err}")
+                _LOGGER.debug("Dropped invalid packet for raw handlers: %s", err)
             else:
                 for handler in self._raw_pkt_handlers:
                     res = handler(dto)

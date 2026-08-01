@@ -304,7 +304,9 @@ class Child:
             if isinstance(parent, _HasTcs) and parent.tcs is not None:
                 parent = parent.tcs
                 parent_class = parent.__class__.__name__
-                _TRACE.info(f"SUB-CONTROLLER: {self} shifted parent to {parent_class}")
+                _TRACE.info(
+                    "SUB-CONTROLLER: %s shifted parent to %s", self, parent_class
+                )
             else:
                 raise exc.SchemaInconsistentError(
                     f"{self}: controller parent tcs cannot be None"
@@ -315,13 +317,15 @@ class Child:
                 if isinstance(parent, _HasZones):
                     parent = parent.get_dhw_zone()
                     parent_class = parent.__class__.__name__
-                    _TRACE.info(f"DHW SHIFT: {self} shifted parent to {parent_class}")
+                    _TRACE.info(
+                        "DHW SHIFT: %s shifted parent to %s", self, parent_class
+                    )
             elif (
                 isinstance(parent, _HasZones) and int(child_id, 16) < parent._max_zones
             ):
                 parent = parent.get_htg_zone(child_id)
                 parent_class = parent.__class__.__name__
-                _TRACE.info(f"ZONE SHIFT: {self} shifted parent to {parent_class}")
+                _TRACE.info("ZONE SHIFT: %s shifted parent to %s", self, parent_class)
 
         elif (
             parent_class
@@ -343,7 +347,7 @@ class Child:
                 f"{self} can't change parent "
                 f"({self._parent}_{self._child_id} to {parent}_{child_id})"
             )
-            _TRACE.error(f"PARENT CHANGE EXCEPTION: {err_msg}")
+            _TRACE.error("PARENT CHANGE EXCEPTION: %s", err_msg)
             raise exc.SystemSchemaInconsistent(err_msg)
 
         PARENT_RULES: dict[str, dict[str, tuple[str, ...]]] = {
@@ -385,23 +389,27 @@ class Child:
 
         rules = PARENT_RULES.get(parent_class)
         if not rules:
-            _TRACE.error(f"PARENT RULES EXCEPTION: {parent} is not a valid parent.")
+            _TRACE.error("PARENT RULES EXCEPTION: %s is not a valid parent.", parent)
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: not a valid parent"
             )
 
         if is_sensor and self_class not in rules[SZ_SENSOR]:
             _TRACE.error(
-                f"RULES EXCEPTION: Sensor {self} must be {rules[SZ_SENSOR]} "
-                f"for parent {parent}"
+                "RULES EXCEPTION: Sensor %s must be %s for parent %s",
+                self,
+                rules[SZ_SENSOR],
+                parent,
             )
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: Sensor {self} must be {rules[SZ_SENSOR]}"
             )
         if not is_sensor and self_class not in rules[SZ_ACTUATORS]:
             _TRACE.error(
-                f"RULES EXCEPTION: Actuator {self} must be {rules[SZ_ACTUATORS]} "
-                f"for parent {parent}"
+                "RULES EXCEPTION: Actuator %s must be %s for parent %s",
+                self,
+                rules[SZ_ACTUATORS],
+                parent,
             )
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: Actuator {self} must be {rules[SZ_ACTUATORS]}"
@@ -449,7 +457,7 @@ class Child:
             parent._add_child(self, child_id=child_id, is_sensor=is_sensor)
 
         except (exc.SchemaInconsistentError, exc.SystemSchemaInconsistent) as err:
-            _TRACE.error(f"LINK EXCEPTION: Failed applying link for {self}: {err}")
+            _TRACE.error("LINK EXCEPTION: Failed applying link for %s: %s", self, err)
             raise
 
         self._child_id = child_id

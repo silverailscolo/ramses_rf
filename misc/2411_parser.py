@@ -61,7 +61,7 @@ def parser_2411(payload: str, msg: Any) -> dict[str, Any]:
     else:
         result["parameter_name"] = f"unknown_{param_id}"
         result["description"] = "Unknown"
-        _LOGGER.warning(f"Unknown parameter ID: {param_id}. Payload: {payload}")
+        _LOGGER.warning("Unknown parameter ID: %s. Payload: %s", param_id, payload)
 
     # For RQ (request) messages, just return parameter info
     if hasattr(msg, "verb") and msg.verb == "RQ":
@@ -85,7 +85,7 @@ def parser_2411(payload: str, msg: Any) -> dict[str, Any]:
             result["status_flag ?(19)"] = payload[38:40]  # Byte 19
 
     except (ValueError, IndexError) as err:
-        _LOGGER.error(f"Error parsing 2411 payload for param {param_id}: {err}")
+        _LOGGER.error("Error parsing 2411 payload for param %s: %s", param_id, err)
         result["error"] = str(err)
         result["raw_data"] = payload[6:]
     return result

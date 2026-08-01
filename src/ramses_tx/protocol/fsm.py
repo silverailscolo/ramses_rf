@@ -231,18 +231,23 @@ class ProtocolContext(StateMachineInterface):
                 self._qos_mgr.fut.set_exception(exception)
         elif result:
             _LOGGER.debug(
-                f"FSM state changed {transition}: result received (result={result._hdr}, ctx={self})"
+                "FSM state changed %s: result received (result=%s, ctx=%s)",
+                transition,
+                result._hdr,
+                self,
             )
             if not self._qos_mgr.fut.done():
                 self._qos_mgr.fut.set_result(result)
         elif expired:
-            _LOGGER.debug(f"FSM state changed {transition}: timer expired (ctx={self})")
+            _LOGGER.debug(
+                "FSM state changed %s: timer expired (ctx=%s)", transition, self
+            )
             if not self._qos_mgr.fut.done():
                 self._qos_mgr.fut.set_exception(
                     ProtocolSendFailed(f"{self}: Exceeded maximum retries")
                 )
         else:
-            _LOGGER.debug(f"FSM state changed {transition}: successful (ctx={self})")
+            _LOGGER.debug("FSM state changed %s: successful (ctx=%s)", transition, self)
 
         prev_state = self._state
         self._state = state_class(self)

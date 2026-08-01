@@ -175,7 +175,7 @@ def parser_2401(payload: str, msg: Message) -> dict[str, Any]:
         )
         assert int(payload[6:], 0x10) <= 200, f"byte 3: {payload[6:]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         "_flags_2": hex_to_flag8(payload[4:6]),
@@ -215,7 +215,7 @@ def parser_2410(payload: str, msg: Message) -> dict[str, Any]:
         assert payload[18:26] in ("00000001", "FFFFFFFF"), _INFORM_DEV_MSG
         assert payload[26:34] in ("00000001", "00000000"), _INFORM_DEV_MSG
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         "tail": payload[34:],
