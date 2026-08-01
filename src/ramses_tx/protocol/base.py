@@ -599,6 +599,13 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         return True
 
     def _pkt_received(self, pkt: Packet) -> None:
+        # Fast early-exit: check device filter before invoking to_dto() if no raw handlers
+        if not self._raw_pkt_handlers and not self._is_wanted_addrs(
+            pkt.src.id, pkt.dst.id
+        ):
+            _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
+            return
+
         # Fire raw handlers before the device ID filter (for the scan engine)
         if self._raw_pkt_handlers:
             try:
@@ -611,9 +618,10 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                     if asyncio.iscoroutine(res):
                         self._create_handler_task(res)
 
-        if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
-            _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
-            return
+            if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
+                _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
+                return
+
         super()._pkt_received(pkt)
 
     async def send_cmd(
