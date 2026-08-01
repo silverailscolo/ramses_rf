@@ -380,3 +380,82 @@ async def test_write_frame_dispatches_outbound_dto_with_is_tx_true() -> None:
     dto: PacketDTO = transport._protocol._msg_received.call_args[0][0]
     assert dto.is_tx is True
     assert dto.verb == "RQ"
+
+
+async def test_is_recent_tx_matches_hgi80_echo_with_addr_substitution() -> None:
+    """_is_recent_tx must match HGI80 echoes where addr1 has been substituted.
+
+    The HGI80 hardware replaces the placeholder 18:000730 with its real ID in
+    the echo.  The TX frame was recorded with 18:000730, so the echo's addr1
+    (e.g. 18:002965) won't match directly — _is_recent_tx must check both
+    variants (issue 835, cc 864).
+    """
+    from ramses_tx.transport.base import TransportConfig, _FullTransport
+
+    class DummyTransport(_FullTransport):
+        def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            self._protocol = Mock()
+
+        async def _write_frame(self, frame: str) -> None:
+            pass
+
+    loop = asyncio.get_event_loop()
+    transport = DummyTransport(loop)
+
+    # TX frame uses the placeholder 18:000730 (as _patch_cmd_if_needed
+    # ensures for HGI80).  01FF payload from issue 835.
+    _payload = "008026262AD0008000143C28320000C10280800280FF80040020"
+    tx_frame = f" W --- 18:000730 21:057310 --:------ 01FF 026 {_payload}"
+    await transport.write_frame(tx_frame)
+
+    # HGI80 echo arrives with the real HGI ID (18:002965) as addr1.
+    echo_frame = f"000  W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
+    assert transport._is_recent_tx(echo_frame) is True
+
+
+async def test_is_recent_tx_matches_evofw3_echo_directly() -> None:
+    """_is_recent_tx still matches evofw3 echoes where addr1 is unchanged."""
+    from ramses_tx.transport.base import TransportConfig, _FullTransport
+
+    class DummyTransport(_FullTransport):
+        def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            self._protocol = Mock()
+
+        async def _write_frame(self, frame: str) -> None:
+            pass
+
+    loop = asyncio.get_event_loop()
+    transport = DummyTransport(loop)
+
+    _payload = "008026262AD0008000143C28320000C10280800280FF80040020"
+    tx_frame = f" W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
+    await transport.write_frame(tx_frame)
+
+    echo_frame = f"000  W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
+    assert transport._is_recent_tx(echo_frame) is True
+
+
+async def test_is_recent_tx_rejects_unrelated_frame() -> None:
+    """_is_recent_tx returns False for a frame that was not recently sent."""
+    from ramses_tx.transport.base import TransportConfig, _FullTransport
+
+    class DummyTransport(_FullTransport):
+        def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            self._protocol = Mock()
+
+        async def _write_frame(self, frame: str) -> None:
+            pass
+
+    loop = asyncio.get_event_loop()
+    transport = DummyTransport(loop)
+
+    _payload = "008026262AD0008000143C28320000C10280800280FF80040020"
+    tx_frame = f" W --- 18:000730 21:057310 --:------ 01FF 026 {_payload}"
+    await transport.write_frame(tx_frame)
+
+    # Completely different frame
+    other_frame = "000  I --- 21:057310 18:002965 --:------ 22C9 006 00086608CA02"
+    assert transport._is_recent_tx(other_frame) is False

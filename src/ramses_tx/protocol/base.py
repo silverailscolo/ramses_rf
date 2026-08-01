@@ -9,6 +9,7 @@ logging and device ID filtering mechanisms.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import re
 from collections import deque
@@ -285,12 +286,14 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         return
 
     def _patch_cmd_if_needed(self, cmd: CommandDTO) -> CommandDTO:
-        """Patch the command with the actual HGI ID if it uses the
-        default placeholder.
+        """Patch the command source address to match the gateway.
 
-        Legacy HGI80s (TI 3410) require the default ID (18:000730), or
-        they will silent-fail. However, evofw3 devices prefer the real
-        ID.
+        evofw3: swap placeholder 18:000730 for the real HGI ID.
+
+        HGI80 (TI 3410): reverse — swap the real HGI ID back to
+        18:000730, as the HGI80 firmware requires the placeholder as
+        source for its own transmissions.  Using the real ID causes a
+        silent drop and WantEcho timeout (issue 835).
         """
         if (
             self.hgi_id
@@ -299,12 +302,32 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             and self.hgi_id != HGI_DEV_ADDR.id
         ):
             _LOGGER.debug(
-                f"Patching command with active HGI ID: swapped "
-                f"{HGI_DEV_ADDR.id} -> {self.hgi_id} for {cmd.verb}|{cmd.code}"
+                "Patching command with active HGI ID: swapped %s -> %s for %s|%s",
+                HGI_DEV_ADDR.id,
+                self.hgi_id,
+                cmd.verb,
+                cmd.code,
             )
-            import dataclasses
-
             return dataclasses.replace(cmd, addr1=self.hgi_id)
+
+        # HGI80: reverse-patch real HGI ID back to the placeholder.
+        # The HGI80 firmware requires 18:000730 as the source for
+        # frames it transmits; using the actual gateway ID causes a
+        # silent drop and WantEcho timeout (issue 835, cc 864).
+        if (
+            self.hgi_id
+            and not self._is_evofw3  # HGI80
+            and cmd.addr1 == self.hgi_id
+            and self.hgi_id != HGI_DEV_ADDR.id
+        ):
+            _LOGGER.debug(
+                "Patching command for HGI80: swapped %s -> %s for %s|%s",
+                self.hgi_id,
+                HGI_DEV_ADDR.id,
+                cmd.verb,
+                cmd.code,
+            )
+            return dataclasses.replace(cmd, addr1=HGI_DEV_ADDR.id)
 
         return cmd
 
