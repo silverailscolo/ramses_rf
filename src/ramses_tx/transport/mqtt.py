@@ -399,6 +399,13 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage
     ) -> None:
         """Make a Frame from the MQTT message and process it."""
+        # Guard against the paho-mqtt network thread delivering messages
+        # after _close() has been called (race during gateway reload).
+        # Without this, stale callbacks log "Transport Error" for every
+        # inbound packet until the thread fully exits.
+        if self._closing:
+            return
+
         if _DBG_FORCE_FRAME_LOGGING:
             _LOGGER.warning("Rx: %s", msg.payload)
         elif self._log_all and _LOGGER.getEffectiveLevel() == logging.INFO:
@@ -562,14 +569,17 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             self._reconnect_task.cancel()
             self._reconnect_task = None
 
-        if not self._connected:
-            return
-        self._connected = False
-
+        # Always stop the paho-mqtt network loop, even if already disconnected.
+        # Without this, the network thread auto-reconnects and re-subscribes,
+        # stealing messages from the new transport (the _closing guard in
+        # _on_message silently drops them).
         try:
-            if hasattr(self, "_topic_sub") and self._topic_sub:
+            if hasattr(self, "_topic_sub") and self._topic_sub and self._connected:
                 self.client.unsubscribe(self._topic_sub)
-            self.client.disconnect()
+            if self._connected:
+                self.client.disconnect()
             self.client.loop_stop()
         except (ValueError, MQTTException) as err:
             _LOGGER.exception("Error during MQTT cleanup: %s", err)
+
+        self._connected = False
