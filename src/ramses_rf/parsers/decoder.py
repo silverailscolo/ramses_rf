@@ -9,7 +9,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ramses_rf.protocol_schema import (
+from ramses_rf.protocol.ramses import (
     CODE_IDX_ARE_COMPLEX,
     CODE_IDX_ARE_NONE,
     CODE_IDX_ARE_SIMPLE,
@@ -210,7 +210,7 @@ class _LegacyMessage:
         return self._idx_
 
     def _pkt_idx(self) -> bool | str | None:
-        """Extract the exact index leveraging protocol_schema definitions.
+        """Extract the exact index leveraging protocol.ramses definitions.
 
         :return: String or boolean representation if index parsing passes constraints.
         :raises exc.PacketPayloadInvalid: If structural legacy checks fail validations.
@@ -488,8 +488,18 @@ class HeartbeatDecoder(PayloadDecoder):
                 res = parser(payload_str, msg)
                 if res == {}:
                     return None
-            except Exception:
-                pass
+            except (
+                exc.ParserBaseError,
+                IndexError,
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as err:
+                _LOGGER.debug(
+                    "Parser for code %s failed, falling back to heartbeat: %s",
+                    dto.code,
+                    err,
+                )
             return parser_heartbeat(payload_str, msg)
 
         if self._next_decoder:

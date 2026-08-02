@@ -14,6 +14,9 @@ import uuid
 from typing import Any, Final
 
 from ramses_rf import quirks
+from ramses_rf.address import HGI_DEV_ADDR, Address
+from ramses_rf.commands.builders import build_dto
+from ramses_rf.commands.core import Command as Intent_
 from ramses_rf.const import (
     SZ_ACTIVE,
     SZ_ACTUATOR_COUNTDOWN,
@@ -82,6 +85,8 @@ from ramses_rf.const import (
     SZ_ZONE_IDX,
     Code,
 )
+from ramses_rf.dispatcher import _get_dhw_zone_from_msg, _route_2411_to_fan
+from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import (
     ActuatorState,
@@ -195,6 +200,13 @@ class StateProjector:
             finally:
                 self._queue.task_done()
 
+    def _route_2411_to_fan(self, msg: Message) -> None:
+        """Route a 2411 parameter message to its FAN aggregate root.
+
+        Delegates to the shared helper in ``dispatcher.py``.
+        """
+        _route_2411_to_fan(self._gwy, msg)
+
     def process_message_state(self, msg: Message) -> None:
         """Route valid inbound message envelopes to their respective
         engines.
@@ -208,6 +220,15 @@ class StateProjector:
             msg.payload, (dict, list)
         ):
             return
+
+        # 2411 parameter messages are owned by the FAN aggregate root: they
+        # set _supports_2411 and fire the initialized callback that ramses_cc
+        # uses to create the ~15 parameter number entities.  Phase 2.95 moved
+        # this out of HvacVentilator._handle_msg; it must be routed here for
+        # the StateProjector path to keep parity with the dispatcher path.
+        # See ramses_cc issue 851.
+        if msg.code == Code._2411:
+            _route_2411_to_fan(self._gwy, msg)
 
         payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
 
@@ -289,12 +310,104 @@ class StateProjector:
                 if zone:
                     try:
                         self._update_zone_state(zone, p, msg)
+                        # 2309/2349 also carry a setpoint that the Zone's
+                        # `setpoint` property reads from temp_state.  Without
+                        # this, the zone climate entity's target_temperature
+                        # stays None (issue 843).
+                        if msg.code in (Code._2309, Code._2349):
+                            self._update_temperature_state(zone, p, msg)
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS extraction failed for zone %s: %s",
                             zone.id,
                             err,
                         )
+
+            # Route domain-id opcodes (0008/0009/3150) to the DhwZone (F9/FA)
+            # or TCS (FC).  The ingestion path above only routes to src_dev
+            # and dst_dev, but the DhwZone/TCS are virtual twins that are
+            # neither src nor dst.  Without this, demand_state on the DhwZone
+            # is never hydrated (relay_demand, relay_failsafe, heat_demand).
+            # See: https://github.com/ramses-rf/ramses_cc/issues/843
+            if SZ_DOMAIN_ID in p and src_dev and msg.src.id in system_by_id:
+                tcs = system_by_id[msg.src.id]
+                domain_id = p[SZ_DOMAIN_ID]
+                if domain_id == "FC" and tcs is not None:
+                    try:
+                        self._update_demand_state(tcs, p, msg)
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for TCS %s: %s",
+                            tcs.id,
+                            err,
+                        )
+                elif (
+                    domain_id in ("FA", "F9") and getattr(tcs, "dhw", None) is not None
+                ):
+                    try:
+                        self._update_demand_state(tcs.dhw, p, msg)
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for DHW %s: %s",
+                            tcs.dhw.id,
+                            err,
+                        )
+
+            # Route DHW opcodes (1260/10A0/1F41) to the DhwZone.
+            # These payloads carry no zone_idx/domain_id, so the block above
+            # misses the DhwZone.  The shared helper in dispatcher.py
+            # encapsulates the routing logic (src_slug check, OTB exclusion).
+            # See: https://github.com/ramses-rf/ramses_cc/issues/843
+            dhw = _get_dhw_zone_from_msg(msg, src_dev)
+            if dhw is not None:
+                try:
+                    self._update_dhw_state(dhw, p, msg)
+                    self._update_temperature_state(dhw, p, msg)
+                except Exception as err:
+                    _LOGGER.error(
+                        "CQRS extraction failed for DHW %s: %s",
+                        dhw.id,
+                        err,
+                    )
+
+        # --- CQRS Reactor Hooks ---
+        # Automate the legacy Actuator discovery query (3EF1) in response to 3EF0 (I)
+        if msg.code == Code._3EF0 and getattr(msg, "verb", "") == " I":
+            src_dev = registry.device_by_id.get(msg.src.id)
+            if src_dev and not getattr(src_dev, "is_faked", False):
+                from ramses_rf.devices.helpers import build_rq_cmd
+                from ramses_tx import Priority
+
+                try:
+                    cmd = build_rq_cmd(msg.src.id, Code._3EF1, "00")
+                    self._gwy.send_cmd(cmd, priority=Priority.LOW)
+                except Exception as err:
+                    _LOGGER.error(
+                        "Failed to trigger CQRS 3EF1 reactor for %s: %s",
+                        msg.src.id,
+                        err,
+                    )
+
+        # Automate the legacy DHW Sensor discovery query (1260) to keep CTL in sync
+        if msg.code == Code._1260:
+            src_dev = registry.device_by_id.get(msg.src.id)
+            if src_dev and getattr(src_dev, "ctl", None):
+                try:
+                    dto = build_dto(
+                        Intent_(
+                            src=HGI_DEV_ADDR,
+                            dst=Address(src_dev.ctl.id),
+                            action=Action.GET_DHW_TEMP,
+                            data={"dhw_idx": 0},
+                        )
+                    )
+                    self._gwy.send_cmd(dto)
+                except Exception as err:
+                    _LOGGER.error(
+                        "Failed to trigger CQRS 1260 reactor for %s: %s",
+                        src_dev.ctl.id,
+                        err,
+                    )
 
     def _update_opentherm_state(
         self, target: Any, p: dict[str, Any], msg: Message
@@ -668,7 +781,14 @@ class StateProjector:
             if hasattr(target, "apply_state_update"):
                 target.apply_state_update(event)
 
-        if msg.code in (Code._30C9, Code._1260, Code._0002, Code._12C0):
+        if msg.code in (
+            Code._30C9,
+            Code._1260,
+            Code._0002,
+            Code._12C0,
+            Code._2309,
+            Code._2349,
+        ):
             updates: dict[str, Any] = {}
             if SZ_TEMPERATURE in p:
                 # Legacy Parity: Physical sensors only track their own local sensor readings.
@@ -731,8 +851,8 @@ class StateProjector:
             else:
                 updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
 
-        elif msg.code == Code._0009 and SZ_RELAY_FAILSAFE in p:
-            updates[SZ_RELAY_FAILSAFE] = p[SZ_RELAY_FAILSAFE]
+        elif msg.code == Code._0009 and "failsafe_enabled" in p:
+            updates[SZ_RELAY_FAILSAFE] = p["failsafe_enabled"]
 
         if not updates:
             return
@@ -871,13 +991,33 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_zone_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
-        """Translate zone configuration opcodes into ZoneState."""
-        if msg.code != Code._0004:
-            return
+        """Translate zone configuration opcodes into ZoneState.
 
+        Handles:
+        - 0004 (zone_name): updates zone_state.name
+        - 2349 (zone_mode): updates zone_state.mode, setpoint, until
+        - 2309 (setpoint): updates zone_state.setpoint
+        """
         updates: dict[str, Any] = {}
-        if SZ_NAME in p:
-            updates[SZ_NAME] = str(p[SZ_NAME])
+
+        if msg.code == Code._0004:
+            if SZ_NAME in p:
+                updates[SZ_NAME] = str(p[SZ_NAME])
+
+        elif msg.code == Code._2349:
+            if SZ_MODE in p:
+                updates[SZ_MODE] = p[SZ_MODE]
+            if SZ_SETPOINT in p:
+                updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+            if SZ_UNTIL in p:
+                updates[SZ_UNTIL] = p[SZ_UNTIL]
+
+        elif msg.code == Code._2309:
+            if SZ_SETPOINT in p:
+                updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+
+        else:
+            return
 
         if not updates:
             return
@@ -888,7 +1028,6 @@ class StateProjector:
 
         current_state = getattr(target, "zone_state", None) or ZoneState()
         new_state = dataclasses.replace(current_state, **updates)
-        target.zone_state = new_state
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
@@ -898,3 +1037,5 @@ class StateProjector:
         )
         if hasattr(target, "apply_state_update"):
             target.apply_state_update(event)
+        else:
+            target.zone_state = new_state  # noqa: B010

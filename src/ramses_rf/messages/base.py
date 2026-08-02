@@ -9,9 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
-from ramses_rf.address import Address
-from ramses_tx.command import Command
-from ramses_tx.dtos import PacketDTO
+from ramses_rf.address import Address, id_to_address
+from ramses_tx import CommandDTO, PacketDTO
 from ramses_tx.models import DeviceId, RawPacket, TransportMessage
 from ramses_tx.typing import DeviceIdT
 
@@ -74,6 +73,11 @@ class _LegacyPktShim:
         self._msg = msg
         self._dto = msg._dto
 
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, _LegacyPktShim):
+            return self._msg == other._msg
+        return False
+
     @property
     def _ctx(self) -> Any:
         """Legacy context bridge."""
@@ -90,6 +94,8 @@ class _LegacyPktShim:
 
         Calculates the frame string dynamically from the L7 properties.
         """
+        if hasattr(self, "_override_frame"):
+            return self._override_frame
         seqn = self._msg.seqn if self._msg.seqn else "---"
         addr1 = self._msg._addrs[0].id
         addr2 = self._msg._addrs[1].id
@@ -98,6 +104,29 @@ class _LegacyPktShim:
             f"{self._msg.verb} {seqn} {addr1} {addr2} {addr3} "
             f"{self._msg.code} {self._msg.len:03d} {self._dto.payload}"
         )
+
+    @_frame.setter
+    def _frame(self, value: str) -> None:
+        self._override_frame = value
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Delegate attribute setting to underlying DTO if not on shim."""
+        if name in ("_msg", "_dto", "_override_frame"):
+            object.__setattr__(self, name, value)
+        else:
+            try:
+                setattr(self._dto, name, value)
+            except (AttributeError, TypeError):
+                object.__setattr__(self, name, value)
+
+    @property
+    def _idx(self) -> str | bool:
+        """Legacy payload index bridge."""
+        return self._dto.payload[:2] if self._dto.payload else "00"
+
+    def to_dto(self) -> PacketDTO:
+        """Legacy DTO bridge."""
+        return self._dto
 
     def __getattr__(self, name: str) -> Any:
         """Delegate all other attributes to the underlying DTO.
@@ -152,13 +181,13 @@ class Message:
         addr3 = dto.addr3 if dto.addr3 else "--:------"
 
         self._addrs: tuple[Address, Address, Address] = (
-            Address(DeviceIdT(addr1)),
-            Address(DeviceIdT(addr2)),
-            Address(DeviceIdT(addr3)),
+            id_to_address(DeviceIdT(addr1)),
+            id_to_address(DeviceIdT(addr2)),
+            id_to_address(DeviceIdT(addr3)),
         )
 
         valid = [a for a in self._addrs if a.id != "--:------"]
-        self.src: Address = valid[0] if valid else Address(DeviceIdT("--:------"))
+        self.src: Address = valid[0] if valid else id_to_address(DeviceIdT("--:------"))
         self.dst: Address = valid[1] if len(valid) > 1 else self.src
 
         # Initialize attributes before parsing to prevent AttributeError
@@ -216,16 +245,21 @@ class Message:
         :return: The generated message.
         :rtype: Message
         """
+        if isinstance(pkt, cls):
+            return pkt
+        msg = getattr(pkt, "_msg", None)
+        if isinstance(msg, cls):
+            return msg
         return cls(pkt.to_dto())
 
     @classmethod
     def _from_cmd(
-        cls: type[_MessageT], cmd: Command, dtm: dt | None = None
+        cls: type[_MessageT], cmd: CommandDTO, dtm: dt | None = None
     ) -> _MessageT:
         """Create a Message (or subclass) from a Command.
 
         :param cmd: The command.
-        :type cmd: Command
+        :type cmd: CommandDTO
         :param dtm: Datetime overrides.
         :type dtm: dt | None
         :return: The generated message.
@@ -442,7 +476,11 @@ class Message:
             # Fallback for legacy tests until they are updated
             is_controller = getattr(self.src, "_is_controller", True)
 
-        if self.src.type == self.dst.type and not is_controller:
+        if (
+            self.src.type == self.dst.type
+            and not is_controller
+            and self.src.type != DEV_TYPE_MAP.UFC
+        ):
             assert self._idx_val == "00", "What!! (BC)"
             return {}
 

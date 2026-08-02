@@ -12,19 +12,20 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, Never
 
 from .address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
-from .command import Command
 from .const import (
     DEFAULT_DISABLE_QOS,
     DEFAULT_GAP_DURATION,
     DEFAULT_MAX_RETRIES,
     DEFAULT_NUM_REPEATS,
     DEFAULT_SEND_TIMEOUT,
-    DEFAULT_WAIT_FOR_REPLY,
+    I_,
     SZ_ACTIVE_HGI,
+    W_,
     Code,
     Priority,
+    VerbT,
 )
-from .dtos import PacketDTO
+from .dtos import CommandDTO, PacketDTO
 from .packet import Packet
 from .protocol import protocol_factory
 from .schemas import (
@@ -332,19 +333,34 @@ class Engine:
         *,
         from_id: str | None = None,
         seqn: str | None = None,
-    ) -> Command:
-        """Make a command addressed to device_id."""
-        kwargs = {}
-        if from_id is not None:
-            kwargs["from_id"] = from_id
-        if seqn is not None:
-            kwargs["seqn"] = seqn
+    ) -> CommandDTO:
+        # Normalise plain-string verbs to VerbT so that the frame is formatted
+        # correctly (e.g. "W" → " W").  The old Command._from_attrs did this;
+        # the migration to CommandDTO dropped it, causing malformed frames
+        # that the HGI80 silently drops (issue 835).
+        verb = I_ if verb == "I" else W_ if verb == "W" else verb
 
-        return Command.from_attrs(verb, device_id, code, payload, **kwargs)
+        addr1 = from_id or HGI_DEV_ADDR.id
+
+        if device_id == addr1:
+            addr2 = NON_DEV_ADDR.id
+            addr3 = device_id
+        else:
+            addr2 = device_id
+            addr3 = NON_DEV_ADDR.id
+
+        return CommandDTO(
+            verb=verb,
+            addr1=addr1,
+            addr2=addr2,
+            addr3=addr3,
+            code=code,
+            payload=payload,
+        )
 
     async def async_send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -352,13 +368,11 @@ class Engine:
         priority: Priority = Priority.DEFAULT,
         max_retries: int = DEFAULT_MAX_RETRIES,
         timeout: float = DEFAULT_SEND_TIMEOUT,
-        wait_for_reply: bool | None = DEFAULT_WAIT_FOR_REPLY,
     ) -> Packet:
         """Send a Command and return the corresponding Packet."""
         qos = QosParams(
             max_retries=max_retries,
             timeout=timeout,
-            wait_for_reply=wait_for_reply,
         )
 
         return await self._protocol.send_cmd(

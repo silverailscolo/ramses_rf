@@ -1,16 +1,24 @@
 """RAMSES RF - Abstract Base Classes and Interfaces."""
 
-import asyncio
-from typing import TYPE_CHECKING, Any, Protocol
+from __future__ import annotations
 
-from ramses_tx import Command, Packet, Priority, QosParams
+import asyncio
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, overload
+
+from ramses_tx import CommandDTO, Packet, Priority, QosParams
 
 from .messages import Message
 from .typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
+    from .commands.dispatcher import CommandDispatcher as CQRSDispatcher
+    from .devices.dev_base import Device
     from .models import TopologyChangedEvent
+    from .routing import StateHeader
     from .topology import Parent
+
+# Generic type variable for downcasting returned Device instances to subclasses
+_DeviceT = TypeVar("_DeviceT", bound="Device")
 
 
 class CommandDispatcher(Protocol):
@@ -18,13 +26,26 @@ class CommandDispatcher(Protocol):
 
     async def __call__(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         *,
         priority: Priority | None = None,
         qos: QosParams | None = None,
     ) -> Packet | None:
         """Dispatch a command asynchronously."""
         ...
+
+
+class ConversationManagerInterface(Protocol):
+    """Protocol for the L7 Conversation Manager."""
+
+    async def track_intent(
+        self,
+        intent: Any,
+        dto: CommandDTO | None = None,
+        *,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+    ) -> asyncio.Future[Message]: ...
 
 
 class MessageStoreInterface(Protocol):
@@ -46,8 +67,8 @@ class MessageStoreInterface(Protocol):
         verb: str | None = None,
         code: str | None = None,
         ctx: Any | None = None,
-        hdr: str | None = None,
-    ) -> tuple[Any, ...]: ...
+        hdr: str | StateHeader | None = None,
+    ) -> tuple[Message, ...] | list[Message]: ...
     async def rem(
         self,
         msg: Any | None = None,
@@ -85,6 +106,15 @@ class MessageStoreInterface(Protocol):
     def state_cache(self) -> Any: ...
     def flush(self) -> None: ...
     def stop(self) -> None: ...
+
+
+class EntityInterface(Protocol):
+    """Interface for base RAMSES entities."""
+
+    @property
+    def id(self) -> DeviceIdT:
+        """Return the entity ID."""
+        ...
 
 
 class DeviceInterface(Protocol):
@@ -151,15 +181,40 @@ class DeviceRegistryInterface(Protocol):
         """Add a device to the registry."""
         ...
 
+    @overload
     def get_device(
         self,
-        device_id: DeviceIdT,
+        device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: "Parent | None" = None,
+        parent: Parent | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
-    ) -> Any:
+        cls: None = None,
+    ) -> Device: ...
+
+    @overload
+    def get_device(
+        self,
+        device_id: DeviceIdT | str,
+        *,
+        msg: Message | None = None,
+        parent: Parent | None = None,
+        child_id: str | None = None,
+        is_sensor: bool | None = None,
+        cls: type[_DeviceT],
+    ) -> _DeviceT: ...
+
+    def get_device(
+        self,
+        device_id: DeviceIdT | str,
+        *,
+        msg: Message | None = None,
+        parent: Parent | None = None,
+        child_id: str | None = None,
+        is_sensor: bool | None = None,
+        cls: type[_DeviceT] | None = None,
+    ) -> Device | _DeviceT:
         """Return a device, creating it if it does not already exist."""
         ...
 
@@ -191,7 +246,7 @@ class DeviceRegistryInterface(Protocol):
         """Return the status for all devices."""
         ...
 
-    def handle_topology_event(self, event: "TopologyChangedEvent") -> None:
+    def handle_topology_event(self, event: TopologyChangedEvent) -> None:
         """Process an immutable structural graph mutation event."""
         ...
 
@@ -200,8 +255,18 @@ class GatewayInterface(Protocol):
     """Interface for the core Gateway orchestrator."""
 
     @property
+    def hgi(self) -> DeviceInterface | None:
+        """Return the HGI device if attached."""
+        ...
+
+    @property
     def device_registry(self) -> DeviceRegistryInterface:
         """Return the Device Registry."""
+        ...
+
+    @property
+    def dispatcher(self) -> CQRSDispatcher:
+        """Return the CommandDispatcher for outbound command translation."""
         ...
 
     @property
@@ -215,13 +280,17 @@ class GatewayInterface(Protocol):
         """Return the gateway configuration."""
         ...
 
+    @property
+    def conversation_manager(self) -> ConversationManagerInterface | None:
+        """Return the ConversationManager instance."""
+        ...
+
     async def async_send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         /,
         *,
         priority: Priority = Priority.DEFAULT,
-        wait_for_reply: bool | None = True,
         max_retries: int = 3,
         timeout: float = 3.0,
     ) -> Packet:

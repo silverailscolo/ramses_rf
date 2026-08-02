@@ -4,21 +4,19 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import Any, Final
 
 from ramses_rf.const import FA, SZ_TEMPERATURE, Code, DevType
-from ramses_rf.exceptions import DeviceNotFaked
+from ramses_rf.enums import Action
+from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
-from ramses_tx import Command, Packet, Priority
-from ramses_tx.exceptions import ProtocolSendFailed
+from ramses_tx import Packet
 from ramses_tx.typing import PayDictT
 
 from .dev_base import BatteryState, DeviceHeat, Fakeable
+from .helpers import send_fake_intent
 
 _LOGGER = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    from ..messages import Message
 
 
 class Weather(DeviceHeat):  # 0002
@@ -27,24 +25,14 @@ class Weather(DeviceHeat):  # 0002
     async def temperature(self) -> float | None:  # 0002
         return self.temp_state.temperature
 
-    async def set_temperature(self, value: float | None) -> Packet | None:
+    async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the outdoor temperature of the sensor."""
-
-        if not self.is_faked:
-            raise DeviceNotFaked(f"{self}: Faking is not enabled")
-
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
         self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
-
-        cmd = Command.put_outdoor_temp(self.id, value)
-        try:
-            return await self._gwy.async_send_cmd(
-                cmd, num_repeats=2, priority=Priority.HIGH
-            )
-        except ProtocolSendFailed:  # noqa: PERF203
-            _LOGGER.warning("%s: send failed (timeout), state already updated", self)
-            return None
+        return await send_fake_intent(
+            self, Action.PUT_OUTDOOR_TEMP, {"temperature": value}
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -60,24 +48,12 @@ class DhwTemperature(DeviceHeat):  # 1260
     async def temperature(self) -> float | None:  # 1260
         return self.temp_state.temperature
 
-    async def set_temperature(self, value: float | None) -> Packet | None:
+    async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the DHW temperature of the sensor."""
-
-        if not self.is_faked:
-            raise DeviceNotFaked(f"{self}: Faking is not enabled")
-
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
         self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
-
-        cmd = Command.put_dhw_temp(self.id, value)
-        try:
-            return await self._gwy.async_send_cmd(
-                cmd, num_repeats=2, priority=Priority.HIGH
-            )
-        except ProtocolSendFailed:  # noqa: PERF203
-            _LOGGER.warning("%s: send failed (timeout), state already updated", self)
-            return None
+        return await send_fake_intent(self, Action.PUT_DHW_TEMP, {"temperature": value})
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -94,24 +70,22 @@ class Temperature(DeviceHeat):  # 30C9
     async def temperature(self) -> float | None:  # 30C9
         return self.temp_state.temperature
 
-    async def set_temperature(self, value: float | None) -> Packet | None:
+    async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the indoor temperature of the sensor."""
-
-        if not self.is_faked:
-            raise DeviceNotFaked(f"{self}: Faking is not enabled")
-
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
         self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
-
-        cmd = Command.put_sensor_temp(self.id, value)
-        try:
-            return await self._gwy.async_send_cmd(
-                cmd, num_repeats=2, priority=Priority.HIGH
-            )
-        except ProtocolSendFailed:  # noqa: PERF203
-            _LOGGER.warning("%s: send failed (timeout), state already updated", self)
-            return None
+        # Determine the zone_idx from the parent zone (if bound) so that
+        # UFH zone sensors emit 30C9 with the correct zone_idx.  Without
+        # this, the fake always sends idx 00 and the UFC ignores it.
+        zone_idx = "00"
+        if self._parent is not None and hasattr(self._parent, "idx"):
+            zone_idx = self._parent.idx
+        return await send_fake_intent(
+            self,
+            Action.PUT_SENSOR_TEMP,
+            {"temperature": value, "zone_idx": zone_idx},
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()
@@ -136,31 +110,13 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
 
         self._child_id = FA  # NOTE: domain_id
 
-    def _post_class_promote(self) -> None:
-        """Initialize DHW state when promoted in-place from a generic device."""
-        self.__dict__.setdefault("_child_id", FA)
-
-    def _handle_msg(self, msg: Message) -> None:  # NOTE: active
-        super()._handle_msg(msg)
-
-        if getattr(self._gwy.config, "disable_discovery", False):
-            return
-
-        # TODO: why are we doing this here? Should simply use dscovery poller!
-        # The following is required, as CTLs don't send spontaneously
-        if msg.code == Code._1260 and getattr(self, "ctl", None):
-            # update the controller DHW temp
-            self._send_cmd(Command.get_dhw_temp(self.ctl.id))  # type: ignore[union-attr]
-
     async def initiate_binding_process(
         self,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
         return await super()._initiate_binding_process(Code._1260)
 
     async def dhw_params(self) -> PayDictT._10A0 | None:
-        return cast(
-            PayDictT._10A0 | None, await self.entity_state.get_value(Code._10A0)
-        )
+        return await self.entity_state.get_value(Code._10A0)
 
     async def params(self) -> dict[str, Any]:
         base_params = await super().params()

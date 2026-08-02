@@ -9,15 +9,19 @@ import json
 import logging
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final
 
 from ramses_rf import exceptions as exc
+from ramses_rf.address import HGI_DEV_ADDR, Address
+from ramses_rf.commands.builders import build_dto
+from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
-from ramses_rf.devices import Fakeable
+from ramses_rf.devices import Controller, Fakeable
+from ramses_rf.enums import Action
 from ramses_rf.protocol.opentherm import OTB_DATA_IDS
-from ramses_rf.protocol_schema import CODES_SCHEMA
-from ramses_tx import Command, DeviceIdT, Priority
-from ramses_tx.typing import PayloadT
+from ramses_rf.protocol.ramses import CODES_SCHEMA
+from ramses_tx import CommandDTO, DeviceIdT, Priority
+from ramses_tx.address import NON_DEV_ADDR
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -56,19 +60,27 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
 
     @functools.wraps(fnc)
     async def wrapper(gwy: Gateway, *args: Any, **kwargs: Any) -> None:
-        gwy.send_cmd(
-            Command._puzzle(message="Script begins:"),
-            priority=Priority.HIGHEST,
-            num_repeats=3,
+        cmd = build_dto(
+            Intent(
+                src=HGI_DEV_ADDR,
+                dst=HGI_DEV_ADDR,
+                action=Action.SEND_PUZZLE,
+                data={"message": "Script begins:"},
+            )
         )
+        gwy.send_cmd(cmd, priority=Priority.HIGHEST, num_repeats=3)
 
         await fnc(gwy, *args, **kwargs)
 
-        gwy.send_cmd(
-            Command._puzzle(message="Script done."),
-            priority=Priority.LOWEST,
-            num_repeats=3,
+        cmd2 = build_dto(
+            Intent(
+                src=HGI_DEV_ADDR,
+                dst=HGI_DEV_ADDR,
+                action=Action.SEND_PUZZLE,
+                data={"message": "Script done."},
+            )
         )
+        gwy.send_cmd(cmd2, priority=Priority.LOWEST, num_repeats=3)
 
     return wrapper
 
@@ -97,9 +109,9 @@ def spawn_scripts(gwy: Gateway, **kwargs: Any) -> list[asyncio.Task[None]]:
     elif kwargs.get(EXEC_SCR):
         script = SCRIPTS.get(f"{kwargs[EXEC_SCR][0]}")
         if script is None:
-            _LOGGER.warning(f"Script: {kwargs[EXEC_SCR][0]}() - unknown script")
+            _LOGGER.warning("Script: %s() - unknown script", kwargs[EXEC_SCR][0])
         else:
-            _LOGGER.info(f"Script: {kwargs[EXEC_SCR][0]}().- starts...")
+            _LOGGER.info("Script: %s().- starts...", kwargs[EXEC_SCR][0])
             # script_poll_device returns a list of tasks, others return a coroutine
             result = script(gwy, kwargs[EXEC_SCR][1])
             if isinstance(result, list):
@@ -117,8 +129,8 @@ async def exec_cmd(gwy: Gateway, **kwargs: Any) -> None:
     :param gwy: The gateway instance.
     :param kwargs: CLI parameters containing the 'EXEC_CMD' string.
     """
-    cmd = Command.from_cli(kwargs[EXEC_CMD])
-    await gwy.async_send_cmd(cmd, priority=Priority.HIGH, wait_for_reply=True)
+    cmd = CommandDTO.from_cli(kwargs[EXEC_CMD])
+    await gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
 
 async def get_faults(
@@ -131,7 +143,7 @@ async def get_faults(
     :param start: The index to start querying from.
     :param limit: The maximum number of fault entries to return.
     """
-    ctl = cast("Controller", gwy.device_registry.get_device(ctl_id))
+    ctl = gwy.device_registry.get_device(ctl_id, cls=Controller)
 
     try:
         if ctl.tcs:
@@ -147,7 +159,7 @@ async def get_schedule(gwy: Gateway, ctl_id: DeviceIdT, zone_idx: str) -> None:
     :param ctl_id: The device ID of the controller.
     :param zone_idx: The zone index string (e.g. "00" or "HW").
     """
-    ctl = cast("Controller", gwy.device_registry.get_device(ctl_id))
+    ctl = gwy.device_registry.get_device(ctl_id, cls=Controller)
     if not ctl.tcs:
         _LOGGER.error("get_schedule(): Controller has no TCS active.")
         return
@@ -170,7 +182,7 @@ async def set_schedule(gwy: Gateway, ctl_id: DeviceIdT, schedule: str) -> None:
     schedule_ = json.loads(schedule)
     zone_idx = schedule_[SZ_ZONE_IDX]
 
-    ctl = cast("Controller", gwy.device_registry.get_device(ctl_id))
+    ctl = gwy.device_registry.get_device(ctl_id, cls=Controller)
     if not ctl.tcs:
         _LOGGER.error("set_schedule(): Controller has no TCS active.")
         return
@@ -224,7 +236,7 @@ def script_poll_device(gwy: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task[Non
 
     async def periodic_send(
         gwy: Gateway,
-        cmd: Command,
+        cmd: CommandDTO,
         count: int = 1,
         interval: float | None = None,
     ) -> None:
@@ -247,7 +259,14 @@ def script_poll_device(gwy: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task[Non
     tasks = []
 
     for code in (Code._0016, Code._1FC9):
-        cmd = Command.from_attrs(RQ, dev_id, code, PayloadT("00"))
+        cmd = CommandDTO(
+            verb=RQ,
+            addr1=HGI_DEV_ADDR.id,
+            addr2=dev_id,
+            addr3=NON_DEV_ADDR.id,
+            code=code,
+            payload="00",
+        )
         tasks.append(asyncio.create_task(periodic_send(gwy, cmd, count=0)))
 
     gwy._engine._tasks.extend(tasks)
@@ -263,7 +282,8 @@ async def script_scan_disc(gwy: Gateway, dev_id: DeviceIdT) -> None:
     """
     _LOGGER.warning("scan_disc() invoked...")
 
-    await gwy.device_registry.get_device(dev_id).discovery.discover()
+    dev = gwy.device_registry.get_device(dev_id)
+    gwy.polling_manager.update_device_tasks(dev)
 
 
 @script_decorator
@@ -276,20 +296,44 @@ async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
     _LOGGER.warning("scan_full() invoked - expect a lot of Warnings")
 
     gwy.send_cmd(
-        Command.from_attrs(RQ, dev_id, Code._0016, PayloadT("0000")), num_repeats=3
+        (
+            CommandDTO(
+                verb=RQ,
+                addr1=HGI_DEV_ADDR.id,
+                addr2=dev_id,
+                addr3=NON_DEV_ADDR.id,
+                code=Code._0016,
+                payload="0000",
+            )
+        ),
+        num_repeats=3,
     )
 
     for code in sorted(CODES_SCHEMA):
         if code == Code._0005:
             for zone_type in range(20):  # known up to 18
                 gwy.send_cmd(
-                    Command.from_attrs(RQ, dev_id, code, PayloadT(f"00{zone_type:02X}"))
+                    CommandDTO(
+                        verb=RQ,
+                        addr1=HGI_DEV_ADDR.id,
+                        addr2=dev_id,
+                        addr3=NON_DEV_ADDR.id,
+                        code=code,
+                        payload=f"00{zone_type:02X}",
+                    )
                 )
 
         elif code == Code._000C:
             for zone_idx in range(16):  # also: FA-FF?
                 gwy.send_cmd(
-                    Command.from_attrs(RQ, dev_id, code, PayloadT(f"{zone_idx:02X}00"))
+                    CommandDTO(
+                        verb=RQ,
+                        addr1=HGI_DEV_ADDR.id,
+                        addr2=dev_id,
+                        addr3=NON_DEV_ADDR.id,
+                        code=code,
+                        payload=f"{zone_idx:02X}00",
+                    )
                 )
 
         elif code == Code._0016:
@@ -298,29 +342,91 @@ async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
         elif code in (Code._01D0, Code._01E9):
             for str_zone_idx in ("00", "01", "FC"):
                 gwy.send_cmd(
-                    Command.from_attrs(W_, dev_id, code, PayloadT(f"{str_zone_idx}00"))
+                    CommandDTO(
+                        verb=W_,
+                        addr1=HGI_DEV_ADDR.id,
+                        addr2=dev_id,
+                        addr3=NON_DEV_ADDR.id,
+                        code=code,
+                        payload=f"{str_zone_idx}00",
+                    )
                 )
                 gwy.send_cmd(
-                    Command.from_attrs(W_, dev_id, code, PayloadT(f"{str_zone_idx}03"))
+                    CommandDTO(
+                        verb=W_,
+                        addr1=HGI_DEV_ADDR.id,
+                        addr2=dev_id,
+                        addr3=NON_DEV_ADDR.id,
+                        code=code,
+                        payload=f"{str_zone_idx}03",
+                    )
                 )
 
         elif code == Code._0404:  # FIXME
-            gwy.send_cmd(Command.get_schedule_fragment(dev_id, "HW", 1, 0))
-            gwy.send_cmd(Command.get_schedule_fragment(dev_id, "00", 1, 0))
+            cmd1 = build_dto(
+                Intent(
+                    src=HGI_DEV_ADDR,
+                    dst=Address(dev_id),
+                    action=Action.GET_SCHEDULE_FRAGMENT,
+                    data={"zone_idx": "HW", "frag_number": 1, "total_frags": 0},
+                )
+            )
+            gwy.send_cmd(cmd1)
+            cmd2 = build_dto(
+                Intent(
+                    src=HGI_DEV_ADDR,
+                    dst=Address(dev_id),
+                    action=Action.GET_SCHEDULE_FRAGMENT,
+                    data={"zone_idx": "00", "frag_number": 1, "total_frags": 0},
+                )
+            )
+            gwy.send_cmd(cmd2)
 
         elif code == Code._0418:
             for log_idx in range(2):
-                gwy.send_cmd(Command.get_system_log_entry(dev_id, log_idx))
+                cmd3 = build_dto(
+                    Intent(
+                        src=HGI_DEV_ADDR,
+                        dst=Address(dev_id),
+                        action=Action.GET_FAULTLOG_ENTRY,
+                        data={"log_idx": log_idx},
+                    )
+                )
+                gwy.send_cmd(cmd3)
 
         elif code == Code._1100:
-            gwy.send_cmd(Command.get_tpi_params(dev_id))
+            cmd4 = build_dto(
+                Intent(
+                    src=HGI_DEV_ADDR,
+                    dst=Address(dev_id),
+                    action=Action.GET_TPI_PARAMS,
+                    data={},
+                )
+            )
+            gwy.send_cmd(cmd4)
 
         elif code == Code._2E04:
-            gwy.send_cmd(Command.get_system_mode(dev_id))
+            cmd = build_dto(
+                Intent(
+                    src=HGI_DEV_ADDR,
+                    dst=Address(dev_id),
+                    action=Action.GET_SYSTEM_MODE,
+                    data={},
+                )
+            )
+            gwy.send_cmd(cmd)
 
         elif code == Code._3220:
             for data_id in (0, 3):  # these are mandatory READ_DATA data_ids
-                gwy.send_cmd(Command.get_opentherm_data(dev_id, data_id))
+                cmd = build_dto(
+                    Intent(
+                        src=HGI_DEV_ADDR,
+                        dst=Address(dev_id),
+                        action=Action.GET_OPENTHERM_DATA,
+                        data={"msg_id": data_id},
+                    )
+                )
+                gwy.send_cmd(cmd)
 
         elif code == Code._PUZZ:
             continue
@@ -330,14 +436,41 @@ async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
             and RQ in CODES_SCHEMA[code]
             and re.match(CODES_SCHEMA[code][RQ], "00")
         ):
-            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("00")))
+            gwy.send_cmd(
+                CommandDTO(
+                    verb=RQ,
+                    addr1=HGI_DEV_ADDR.id,
+                    addr2=dev_id,
+                    addr3=NON_DEV_ADDR.id,
+                    code=code,
+                    payload="00",
+                )
+            )
 
         else:
-            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("0000")))
+            gwy.send_cmd(
+                CommandDTO(
+                    verb=RQ,
+                    addr1=HGI_DEV_ADDR.id,
+                    addr2=dev_id,
+                    addr3=NON_DEV_ADDR.id,
+                    code=code,
+                    payload="0000",
+                )
+            )
 
     # these are possible/difficult codes
     for code in (Code._0150, Code._2389):
-        gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("0000")))
+        gwy.send_cmd(
+            CommandDTO(
+                verb=RQ,
+                addr1=HGI_DEV_ADDR.id,
+                addr2=dev_id,
+                addr3=NON_DEV_ADDR.id,
+                code=code,
+                payload="0000",
+            )
+        )
 
 
 @script_decorator
@@ -356,7 +489,16 @@ async def script_scan_hard(
 
     for code in range(start_code, 0x5000):
         await gwy.async_send_cmd(
-            Command.from_attrs(RQ, dev_id, f"{code:04X}", "0000"),  # type:ignore[arg-type]
+            (
+                CommandDTO(
+                    verb=RQ,
+                    addr1=HGI_DEV_ADDR.id,
+                    addr2=dev_id,
+                    addr3=NON_DEV_ADDR.id,
+                    code=f"{code:04X}",
+                    payload="0000",
+                )
+            ),
             priority=Priority.LOW,
         )
 
@@ -381,7 +523,16 @@ async def script_scan_fan(gwy: Gateway, dev_id: DeviceIdT) -> None:
         c for k in _DEV_KLASSES_HVAC.values() for c in k if c not in OUT_CODES
     )
     for code in OLD_CODES:
-        gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("00")))
+        gwy.send_cmd(
+            CommandDTO(
+                verb=RQ,
+                addr1=HGI_DEV_ADDR.id,
+                addr2=dev_id,
+                addr3=NON_DEV_ADDR.id,
+                code=code,
+                payload="00",
+            )
+        )
 
     NEW_CODES = (
         Code._0150,
@@ -410,7 +561,16 @@ async def script_scan_fan(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
     for code in NEW_CODES:
         if code not in OLD_CODES and code not in OUT_CODES:
-            gwy.send_cmd(Command.from_attrs(RQ, dev_id, code, PayloadT("00")))
+            gwy.send_cmd(
+                CommandDTO(
+                    verb=RQ,
+                    addr1=HGI_DEV_ADDR.id,
+                    addr2=dev_id,
+                    addr3=NON_DEV_ADDR.id,
+                    code=code,
+                    payload="00",
+                )
+            )
 
 
 @script_decorator
@@ -423,7 +583,15 @@ async def script_scan_otb(gwy: Gateway, dev_id: DeviceIdT) -> None:
     _LOGGER.warning("script_scan_otb_full invoked - expect a lot of nonsense")
 
     for msg_id in OTB_DATA_IDS:
-        gwy.send_cmd(Command.get_opentherm_data(dev_id, msg_id))
+        cmd = build_dto(
+            Intent(
+                src=HGI_DEV_ADDR,
+                dst=Address(dev_id),
+                action=Action.GET_OPENTHERM_DATA,
+                data={"msg_id": msg_id},
+            )
+        )
+        gwy.send_cmd(cmd)
 
 
 @script_decorator
@@ -436,7 +604,15 @@ async def script_scan_otb_hard(gwy: Gateway, dev_id: DeviceIdT) -> None:
     _LOGGER.warning("script_scan_otb_hard invoked - expect a lot of nonsense")
 
     for msg_id in range(0x80):
-        gwy.send_cmd(Command.get_opentherm_data(dev_id, msg_id), priority=Priority.LOW)
+        cmd = build_dto(
+            Intent(
+                src=HGI_DEV_ADDR,
+                dst=Address(dev_id),
+                action=Action.GET_OPENTHERM_DATA,
+                data={"msg_id": msg_id},
+            )
+        )
+        gwy.send_cmd(cmd, priority=Priority.LOW)
 
 
 @script_decorator
@@ -463,9 +639,27 @@ async def script_scan_otb_map(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
     for code, msg_id in RAMSES_TO_OPENTHERM.items():
         gwy.send_cmd(
-            Command.from_attrs(RQ, dev_id, code, PayloadT("00")), priority=Priority.LOW
+            (
+                CommandDTO(
+                    verb=RQ,
+                    addr1=HGI_DEV_ADDR.id,
+                    addr2=dev_id,
+                    addr3=NON_DEV_ADDR.id,
+                    code=code,
+                    payload="00",
+                )
+            ),
+            priority=Priority.LOW,
         )
-        gwy.send_cmd(Command.get_opentherm_data(dev_id, msg_id), priority=Priority.LOW)
+        cmd = build_dto(
+            Intent(
+                src=HGI_DEV_ADDR,
+                dst=Address(dev_id),
+                action=Action.GET_OPENTHERM_DATA,
+                data={"msg_id": msg_id},
+            )
+        )
+        gwy.send_cmd(cmd, priority=Priority.LOW)
 
 
 @script_decorator
@@ -506,7 +700,17 @@ async def script_scan_otb_ramses(gwy: Gateway, dev_id: DeviceIdT) -> None:
 
     for c in _CODES:
         gwy.send_cmd(
-            Command.from_attrs(RQ, dev_id, c, PayloadT("00")), priority=Priority.LOW
+            (
+                CommandDTO(
+                    verb=RQ,
+                    addr1=HGI_DEV_ADDR.id,
+                    addr2=dev_id,
+                    addr3=NON_DEV_ADDR.id,
+                    code=c,
+                    payload="00",
+                )
+            ),
+            priority=Priority.LOW,
         )
 
 

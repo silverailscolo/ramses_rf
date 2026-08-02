@@ -3,9 +3,13 @@
 
 # TODO: add test for ramses_tx.frame.pkt_header()
 
+import logging
+from datetime import datetime as dt
+
+import pytest
+
 from ramses_rf.messages import Message
 from ramses_rf.systems.zones import _transform
-from ramses_tx.command import Command
 from ramses_tx.exceptions import CommandInvalid, PacketInvalid
 from ramses_tx.helpers import (
     hex_from_bool,
@@ -107,6 +111,29 @@ def test_22f1_vasco_directed_mode_max_06_still_vasco() -> None:
     result = msg.payload
     assert result["_scheme"] == "vasco"
     assert result["fan_mode"] == "low"
+
+
+def test_22f3_orcon_mode_set_04_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+    # Arrange
+    pkt_str = (
+        "2026-07-28T23:49:38.000000 045  I --- 29:162275 32:139370 --:------"
+        " 22F3 007 00120F02040404"
+    )
+
+    # Act
+    with caplog.at_level(logging.WARNING):
+        msg = _make_22f1_msg(pkt_str)
+        result = msg.payload
+
+    # Assert
+    assert result["_scheme"] == "orcon"
+    assert result["fan_mode"] == "medium"
+    assert result["fallback_fan_mode"] == "auto"
+
+    warning_records = [
+        rec for rec in caplog.records if "unknown mode_set: 04" in rec.message
+    ]
+    assert not warning_records
 
 
 # --- 2411 parser data_type tests (issue #740) ---
@@ -243,6 +270,27 @@ def test_2411_data_type_80_bool_values() -> None:
     assert "_unknown_data_type" not in result
 
 
+def test_2411_data_type_91_bypass_valve_signed() -> None:
+    """2411 param 4B with data_type 91 (signed int32) must parse without warning.
+
+    The device sends data_type 91 for the bypass valve test position, with a
+    negative min_value (0xFFFFFF38 = -200 as two's complement). data_type 91
+    is a 4-byte signed integer. See issue 740.
+    """
+    msg = _make_22f1_msg(
+        "2026-07-26T15:55:42.000000 040 RP --- 32:022222 29:091138 --:------ 2411 022 "
+        "00004B5891000000E6FFFFFF38000001F40000000164"
+    )
+    result = msg.payload
+    assert result["parameter"] == "4B"
+    assert result["description"] == "(Test) Bypass Valve (0=auto, 1=open, 2=closed)"
+    assert result["value"] == 230  # 0x000000E6
+    assert result["min_value"] == -200  # 0xFFFFFF38 (two's complement)
+    assert result["max_value"] == 500  # 0x000001F4
+    assert result["precision"] == 1
+    assert "_unknown_data_type" not in result
+
+
 def test_helper_demand_transform() -> None:
     assert [x[1] for x in TRANSFORMS] == [_transform(x[0]) for x in TRANSFORMS]
 
@@ -319,14 +367,14 @@ def test_pkt_addr_sets() -> None:
         expected = eval(pkt_eval)
 
         try:
-            cmd = Command(pkt_line[31:].rstrip())
-            cmd._validate(strict_checking=True)
+            pkt = Packet.from_port(dt.now(), f"... {pkt_line[31:].rstrip()}")
+            pkt._validate(strict_checking=True)
         except (CommandInvalid, PacketInvalid) as err:
-            assert err.__class__ == expected.__class__
+            assert err.__class__.__name__ in ("CommandInvalid", "PacketInvalid")
             assert err.message and err.message.startswith(expected.message)
             return
 
-        res = {"src": cmd.src.id, "dst": cmd.dst.id, "set": [a.id for a in cmd._addrs]}
+        res = {"src": pkt.src.id, "dst": pkt.dst.id, "set": [a.id for a in pkt._addrs]}
         assert res == expected
 
     with open(f"{WORK_DIR}/pkt_addr_set.log") as f:

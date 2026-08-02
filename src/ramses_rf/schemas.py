@@ -9,9 +9,11 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final
 
 import voluptuous as vol
+
+from ramses_rf.typing import DeviceIdT, DeviceListT
 
 # TODO: deprecate re-exporting (via as) in favour of direct imports
 from ramses_tx.const import (
@@ -33,7 +35,6 @@ from ramses_tx.schemas import (  # noqa: F401
     sch_packet_log_dict_factory,
     select_device_filter_mode,
 )
-from ramses_tx.typing import DeviceIdT
 
 from . import exceptions as exc
 
@@ -65,6 +66,10 @@ from .const import (
     DEV_TYPE_MAP,
     DEVICE_ID_REGEX,
     DONT_CREATE_MESSAGES,
+    SZ_DISABLE_DISCOVERY as SZ_DISABLE_DISCOVERY,
+    SZ_DISABLE_POLLING as SZ_DISABLE_POLLING,
+    SZ_IS_BATTERY as SZ_IS_BATTERY,
+    SZ_POLLING_INTERVAL as SZ_POLLING_INTERVAL,
     SZ_ZONE_IDX,
     ZON_ROLE_MAP,
     DevRole,
@@ -112,6 +117,14 @@ SCH_ZON_IDX = vol.Match(r"^0[0-9AB]$")  # TODO: what if > 12 zones? (e.g. hometr
 
 
 def ErrorRenamedKey(new_key: str) -> Callable[[Any], None]:
+    """Return a voluptuous validator function that raises an invalid key error.
+
+    :param new_key: The new key name to instruct the user to rename to.
+    :type new_key: str
+    :returns: A voluptuous validator function.
+    :rtype: Callable[[Any], None]
+    """
+
     def renamed_key(node_value: Any) -> None:
         raise vol.Invalid(f"the key name has changed: rename it to '{new_key}'")
 
@@ -247,7 +260,6 @@ SCH_GLOBAL_SCHEMAS = vol.Schema(SCH_GLOBAL_SCHEMAS_DICT, extra=vol.PREVENT_EXTRA
 
 #
 # 4/7: Gateway (parser/state) configuration
-SZ_DISABLE_DISCOVERY: Final = "disable_discovery"
 SZ_ENABLE_EAVESDROP: Final = "enable_eavesdrop"
 SZ_ENFORCE_STRICT_HANDLING: Final = "enforce_strict_handling"
 SZ_MAX_ZONES: Final = "max_zones"  # TODO: move to TCS-attr from GWY-layer
@@ -256,7 +268,8 @@ SZ_USE_ALIASES: Final = "use_aliases"  # use friendly device names from known_li
 SZ_USE_NATIVE_OT: Final = "use_native_ot"  # favour OT (3220s) over RAMSES
 
 SCH_GATEWAY_DICT = {
-    vol.Optional(SZ_DISABLE_DISCOVERY, default=False): bool,
+    vol.Optional(SZ_DISABLE_POLLING, default=False): bool,
+    vol.Optional(SZ_DISABLE_DISCOVERY): bool,
     vol.Optional(SZ_ENABLE_EAVESDROP, default=False): bool,
     vol.Optional(SZ_ENFORCE_STRICT_HANDLING, default=False): bool,
     vol.Optional(SZ_MAX_ZONES, default=DEFAULT_MAX_ZONES): vol.All(
@@ -297,6 +310,9 @@ def NormaliseRestoreCache() -> Callable[[bool | dict[str, bool]], dict[str, bool
     restore_cache: bool ->  restore_cache:
                               restore_schema: bool
                               restore_state: bool
+
+    :returns: A callable validator function converting boolean to dict.
+    :rtype: Callable[[bool | dict[str, bool]], dict[str, bool]]
     """
 
     def normalise_restore_cache(node_value: bool | dict[str, bool]) -> dict[str, bool]:
@@ -336,7 +352,6 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
 
     def check_filter_lists(dev_id: DeviceIdT) -> None:
         """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
-
         err_msg = None
         if gwy._engine._enforce_known_list and dev_id not in gwy._engine._include:
             err_msg = f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"
@@ -352,14 +367,25 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
 
     check_filter_lists(dev_id)
 
-    return cast("Device", gwy.device_registry.get_device(dev_id, **kwargs))
+    dev: Device = gwy.device_registry.get_device(dev_id, **kwargs)
+    return dev
 
 
 def load_schema(
-    gwy: Gateway, known_list: dict[DeviceIdT, Any] | None = None, **schema: Any
+    gwy: Any,
+    known_list: DeviceListT | dict[str, Any] | None = None,
+    **schema: Any,
 ) -> None:
-    """Instantiate all entities in the schema, and faked devices in the known_list."""
+    """Instantiate all entities in the schema, and faked devices in the known_list.
 
+    :param gwy: The Gateway instance to attach devices and systems to.
+    :type gwy: Gateway
+    :param known_list: Optional dictionary of known device IDs and traits.
+    :type known_list: dict[DeviceIdT, Any] | None
+    :param schema: Keyword arguments representing the global schema.
+    :type schema: Any
+    :rtype: None
+    """
     from .devices import Fakeable  # circular import
 
     known_list = known_list or {}
@@ -387,7 +413,7 @@ def load_schema(
     # create any devices in the known list that are faked, or fake those already created
     for device_id, traits in known_list.items():
         if traits.get(SZ_FAKED):
-            dev = _get_device(gwy, device_id)  # , **traits)
+            dev = _get_device(gwy, DeviceIdT(device_id))  # , **traits)
             if not isinstance(dev, Fakeable):
                 raise exc.DeviceNotFaked(f"Device is not fakeable: {dev}")
             if not dev.is_faked:
@@ -395,8 +421,17 @@ def load_schema(
 
 
 def load_fan(gwy: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
-    """Create a FAN using its schema (i.e. with remotes, sensors)."""
+    """Create a FAN using its schema (i.e. with remotes, sensors).
 
+    :param gwy: The Gateway instance managing the device.
+    :type gwy: Gateway
+    :param fan_id: The device ID of the FAN entity.
+    :type fan_id: DeviceIdT
+    :param schema: The schema dictionary for the FAN entity.
+    :type schema: dict[str, Any]
+    :returns: The created or retrieved FAN device instance.
+    :rtype: Device
+    """
     fan = _get_device(gwy, fan_id)
     # fan._update_schema(**schema)  # TODO
 
@@ -404,7 +439,17 @@ def load_fan(gwy: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
 
 
 def load_tcs(gwy: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evohome:
-    """Create a TCS using its schema."""
+    """Create a TCS using its schema.
+
+    :param gwy: The Gateway instance managing the TCS.
+    :type gwy: Gateway
+    :param ctl_id: The controller device ID for the TCS.
+    :type ctl_id: DeviceIdT
+    :param schema: The schema dictionary for the TCS.
+    :type schema: dict[str, Any]
+    :returns: The created or retrieved Evohome TCS instance.
+    :rtype: Evohome
+    """
     # print(schema)
     # schema = SCH_TCS_ZONES_ZON(schema)
 

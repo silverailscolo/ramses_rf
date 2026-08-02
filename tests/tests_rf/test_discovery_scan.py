@@ -27,10 +27,13 @@ from ramses_rf.discovery_scan import (
     DiscoveredDevice,
     DiscoveryScan,
     _classify,
+    _extract_domain_id_from_000c,
     _extract_zone_idx,
     _initial_confidence,
+    _is_appliance_control_signal,
     _is_valid_address,
     _recompute_confidence,
+    _should_update_domain_id,
 )
 from ramses_tx.dtos import PacketDTO
 
@@ -162,6 +165,188 @@ class TestExtractZoneIdx:
     def test_zone_lowercase(self) -> None:
         # Should normalise to uppercase
         assert _extract_zone_idx("0a00") == "0A"
+
+
+class TestIsApplianceControlSignal:
+    """Tests for _is_appliance_control_signal (issue 834)."""
+
+    def test_bdr_3b00_i_is_appliance(self) -> None:
+        # BDR broadcasting 3B00 as I — classic TPI loop signature
+        assert _is_appliance_control_signal("13:121025", "3B00", " I", True) is True
+
+    def test_bdr_3ef0_i_is_appliance(self) -> None:
+        assert _is_appliance_control_signal("13:121025", "3EF0", " I", True) is True
+
+    def test_otb_3b00_i_is_appliance(self) -> None:
+        # OTB (10:) also broadcasts 3B00 as the boiler relay
+        assert _is_appliance_control_signal("10:067219", "3B00", " I", True) is True
+
+    def test_bdr_3b00_rp_not_appliance(self) -> None:
+        # RP is a directed reply, not the broadcast TPI signature
+        assert _is_appliance_control_signal("13:121025", "3B00", "RP", True) is False
+
+    def test_bdr_3b00_rq_not_appliance(self) -> None:
+        assert _is_appliance_control_signal("13:121025", "3B00", "RQ", True) is False
+
+    def test_bdr_3ef1_not_appliance(self) -> None:
+        # 3EF1 is a directed RP from the relay to the HGI, not the TPI broadcast
+        assert _is_appliance_control_signal("13:121025", "3EF1", "RP", True) is False
+
+    def test_trv_3b00_not_appliance(self) -> None:
+        # Only 13: and 10: can be appliance controls
+        assert _is_appliance_control_signal("04:056053", "3B00", " I", True) is False
+
+    def test_bdr_3b00_as_dst_not_appliance(self) -> None:
+        # Must be the src (sender), not dst
+        assert _is_appliance_control_signal("13:121025", "3B00", " I", False) is False
+
+    def test_bdr_other_code_not_appliance(self) -> None:
+        assert _is_appliance_control_signal("13:121025", "1100", " I", True) is False
+
+
+class TestExtractDomainIdFrom000C:
+    """Tests for _extract_domain_id_from_000c (issue 834 regression)."""
+
+    def test_app_role_returns_fc(self) -> None:
+        # 000C payload: 00 (idx) + 0F (APP) + 00 (pad) + hex_id
+        # → domain FC (appliance_control)
+        assert _extract_domain_id_from_000c("000F003545C8") == "FC"
+
+    def test_htg_role_idx_00_returns_fa(self) -> None:
+        # 000C payload: 00 (idx) + 0E (HTG) + 00 (pad) + hex_id
+        # → domain FA (hotwater_valve)
+        assert _extract_domain_id_from_000c("000E003545C8") == "FA"
+
+    def test_htg_role_idx_01_returns_f9(self) -> None:
+        # 000C payload: 01 (idx) + 0E (HTG) + 00 (pad) + hex_id
+        # → domain F9 (heating_valve)
+        assert _extract_domain_id_from_000c("010E003545C8") == "F9"
+
+    def test_dhw_role_idx_00_returns_fa(self) -> None:
+        # 000C payload: 00 (idx) + 0D (DHW) + 00 (pad) + hex_id
+        # → domain FA (dhw_sensor)
+        assert _extract_domain_id_from_000c("000D003545C8") == "FA"
+
+    def test_zone_role_returns_none(self) -> None:
+        # 000C payload with a zone role (08 = rad_actuator) → no domain_id
+        assert _extract_domain_id_from_000c("0008003545C8") is None
+
+    def test_empty_payload_returns_none(self) -> None:
+        assert _extract_domain_id_from_000c("") is None
+
+    def test_short_payload_returns_none(self) -> None:
+        assert _extract_domain_id_from_000c("00") is None
+
+
+class TestShouldUpdateDomainId:
+    """Tests for _should_update_domain_id (issue 834 regression)."""
+
+    def test_authoritative_overrides_existing(self) -> None:
+        # 000C FA binding must override a previous 3B00/3EF0 FC hint
+        assert _should_update_domain_id("FC", "FA", is_authoritative=True) is True
+
+    def test_authoritative_same_value_no_update(self) -> None:
+        assert _should_update_domain_id("FC", "FC", is_authoritative=True) is False
+
+    def test_authoritative_overrides_none(self) -> None:
+        assert _should_update_domain_id(None, "FA", is_authoritative=True) is True
+
+    def test_hint_does_not_override_existing(self) -> None:
+        # 3B00/3EF0 hint must NOT override an existing 000C domain_id
+        assert _should_update_domain_id("FA", "FC", is_authoritative=False) is False
+
+    def test_hint_sets_none(self) -> None:
+        # 3B00/3EF0 hint can set domain_id if none exists yet
+        assert _should_update_domain_id(None, "FC", is_authoritative=False) is True
+
+    def test_hint_same_as_existing_no_update(self) -> None:
+        assert _should_update_domain_id("FC", "FC", is_authoritative=False) is False
+
+    def test_none_new_returns_false(self) -> None:
+        assert _should_update_domain_id("FC", None, is_authoritative=True) is False
+
+
+class TestDiscoveryScanDomainId:
+    """Integration tests for domain_id from 000C vs 3B00/3EF0 (issue 834)."""
+
+    def test_000c_fc_binding_sets_domain_on_src(self) -> None:
+        """A 000C APP binding (FC) sets domain_id on the CTL (src)."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        ctl_id = "01:216136"
+
+        scan._process_packet(
+            make_dto(
+                src=ctl_id,
+                dst="18:001234",
+                code="000C",
+                verb="RP",
+                payload="000F003545C8",
+            )
+        )
+        dev = scan.get_device(ctl_id)
+        assert dev is not None
+        # The CTL is the src of the 000C, so domain_id is set
+        assert dev.domain_id == "FC"
+
+    def test_000c_fa_binding_sets_domain_on_src(self) -> None:
+        """A 000C HTG binding (FA) sets domain_id on the CTL (src)."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        ctl_id = "01:216136"
+
+        scan._process_packet(
+            make_dto(
+                src=ctl_id,
+                dst="18:001234",
+                code="000C",
+                verb="RP",
+                payload="000E003545C8",
+            )
+        )
+        dev = scan.get_device(ctl_id)
+        assert dev is not None
+        assert dev.domain_id == "FA"
+
+    def test_3b00_hint_does_not_override_000c_fa(self) -> None:
+        """3B00/3EF0 FC hint must NOT override an existing 000C FA domain_id.
+
+        Issue 834 comment 5044906835: the CTL has a 000C HTG binding (FA),
+        then the BDR broadcasts 3B00 (FC hint).  The CTL's domain_id must
+        stay FA (authoritative), not be overwritten by the hint.
+        """
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        ctl_id = "01:216136"
+
+        # Step 1: 000C HTG binding → FA (authoritative)
+        scan._process_packet(
+            make_dto(
+                src=ctl_id,
+                dst="18:001234",
+                code="000C",
+                verb="RP",
+                payload="000E003545C8",
+            )
+        )
+        dev = scan.get_device(ctl_id)
+        assert dev is not None
+        assert dev.domain_id == "FA"
+
+        # Step 2: BDR broadcasts 3B00 I → FC hint (should NOT override FA)
+        scan._process_packet(
+            make_dto(
+                src="13:042605",
+                dst="--:------",
+                code="3B00",
+                verb=" I",
+                payload="00C8",
+            )
+        )
+        # CTL's domain_id must still be FA
+        dev = scan.get_device(ctl_id)
+        assert dev is not None
+        assert dev.domain_id == "FA"
 
 
 class TestClassify:
@@ -690,6 +875,103 @@ class TestDiscoveryScanPacketHandling:
         # CTL must NOT have zone_idx set
         assert dev.zone_idx is None
         assert dev.bound_to is None
+
+    def test_bdr_3b00_sets_domain_id_fc(self) -> None:
+        """BDR broadcasting 3B00 as I sets domain_id=FC (issue 834).
+
+        A BDR acting as the boiler relay broadcasts 3B00 (TPI state) as I.
+        The scan engine must capture domain_id=FC so ramses_cc can classify
+        it as appliance_control rather than hotwater_valve.
+        """
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(src="13:121025", dst="--:------", code="3B00", payload="00C8")
+        )
+        dev = scan.get_device("13:121025")
+        assert dev is not None
+        assert dev.likely_type == "BDR"
+        assert dev.domain_id == "FC"
+        assert dev.confidence == "high"
+
+    def test_bdr_3ef0_sets_domain_id_fc(self) -> None:
+        """BDR broadcasting 3EF0 as I also sets domain_id=FC (issue 834)."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(src="13:121025", dst="--:------", code="3EF0", payload="0000FF")
+        )
+        dev = scan.get_device("13:121025")
+        assert dev is not None
+        assert dev.domain_id == "FC"
+
+    def test_bdr_3ef1_rp_no_domain_id(self) -> None:
+        """BDR sending 3EF1 RP (directed reply to HGI) is NOT appliance signal."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="13:121025",
+                dst="18:203273",
+                code="3EF1",
+                verb="RP",
+                payload="00011D011D00FF",
+            )
+        )
+        dev = scan.get_device("13:121025")
+        assert dev is not None
+        assert dev.domain_id is None
+
+    def test_bdr_1100_no_domain_id(self) -> None:
+        """BDR sending 1100 (boiler params) does NOT set domain_id.
+
+        1100 is sent by both appliance controls and DHW valve relays, so it
+        is not a reliable appliance_control signal on its own.
+        """
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="13:121025",
+                dst="--:------",
+                code="1100",
+                payload="00180400007FFF01",
+            )
+        )
+        dev = scan.get_device("13:121025")
+        assert dev is not None
+        assert dev.domain_id is None
+
+    def test_known_bdr_3b00_sets_domain_id(self) -> None:
+        """A known BDR (in known_list) broadcasting 3B00 gets domain_id=FC.
+
+        This is the issue 834 scenario: the BDR was already in the schema
+        but had no domain_id.  When it broadcasts 3B00, the scan engine
+        must capture the FC domain so the comment and schema entry can be
+        rebuilt correctly.
+        """
+        gwy = make_mock_gateway(known_list={"13:121025": {}})
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(src="13:121025", dst="--:------", code="3B00", payload="00C8")
+        )
+        dev = scan.get_device("13:121025")
+        assert dev is not None
+        assert dev.domain_id == "FC"
+
+    def test_domain_id_in_to_dict_round_trip(self) -> None:
+        """domain_id survives to_dict/from_dict round-trip."""
+        dev = DiscoveredDevice(
+            device_id="13:121025",
+            first_seen="2026-07-18T14:36:23",
+            last_seen="2026-07-18T14:36:23",
+            likely_type="BDR",
+            domain_id="FC",
+        )
+        d = dev.to_dict()
+        assert d["domain_id"] == "FC"
+        dev2 = DiscoveredDevice.from_dict(d)
+        assert dev2.domain_id == "FC"
 
     def test_codes_seen_deduplicated_and_sorted(self) -> None:
         gwy = make_mock_gateway()

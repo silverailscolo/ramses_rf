@@ -1,6 +1,6 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2026-07-16
+# last checked/updated: 2026-07-25
 #
 
 [project]
@@ -52,6 +52,7 @@
   "Homepage" = "https://github.com/ramses-rf/ramses_rf"
   "Bug Tracker" = "https://github.com/ramses-rf/ramses_rf/issues"
   "Wiki" = "https://github.com/ramses-rf/ramses_rf/wiki"
+  "Contributing" = "https://github.com/ramses-rf/ramses_rf/blob/master/CONTRIBUTING.md"
 
 #
 [project.scripts]
@@ -325,7 +326,7 @@
 
 
 [tool.ruff.lint.per-file-ignores]
-  "tests/*" = ["ASYNC"]
+  "tests/*" = ["ASYNC", "D"]
 
 [tool.importlinter]
 root_packages = [

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import DEV_TYPE_MAP
@@ -118,7 +118,22 @@ _HVAC_CLASSES = (
 )
 _HVAC_CLASS_BY_SLUG = {cls._SLUG: cls for cls in _HVAC_CLASSES if hasattr(cls, "_SLUG")}
 
-_CLASS_BY_SLUG = _BASE_CLASS_BY_SLUG | _HEAT_CLASS_BY_SLUG | _HVAC_CLASS_BY_SLUG
+# Aliases for DevType slugs that have no dedicated device class.  The
+# discovery scan engine labels devices with these slugs (e.g. 34: → RND),
+# but _CLASS_BY_SLUG only contains slugs that have a _SLUG attribute on a
+# Device subclass.  Without these aliases, ramses_cc logs a warning every
+# 5 minutes for schema entries with these slugs (issue 854).
+_SLUG_ALIASES: dict[str, type[Device]] = {
+    DevType.RND: _HEAT_CLASS_BY_SLUG[DevType.THM],  # 34: round thermostat
+    DevType.DT2: _HEAT_CLASS_BY_SLUG[DevType.THM],  # 22: digital thermostat
+    DevType.DTS: _HEAT_CLASS_BY_SLUG[DevType.THM],  # 12: digital thermostat
+    DevType.HCW: _HEAT_CLASS_BY_SLUG[DevType.THM],  # 03: thermostat (not STA)
+    DevType.TR0: _HEAT_CLASS_BY_SLUG[DevType.TRV],  # 00: radiator valve
+}
+
+_CLASS_BY_SLUG = (
+    _BASE_CLASS_BY_SLUG | _HEAT_CLASS_BY_SLUG | _HVAC_CLASS_BY_SLUG | _SLUG_ALIASES
+)
 
 HEAT_DEV_CLASS_BY_SLUG = {
     k: v for k, v in _HEAT_CLASS_BY_SLUG.items() if k is not DevType.HEA
@@ -158,12 +173,14 @@ def best_dev_role(
     if slug and slug in _CLASS_BY_SLUG:
         cls = _CLASS_BY_SLUG[slug]
         _LOGGER.debug(
-            f"Using an explicitly-defined class for: {dev_addr!r} ({cls._SLUG})"
+            "Using an explicitly-defined class for: %r (%s)", dev_addr, cls._SLUG
         )
         return cls
 
     if dev_addr.type == DEV_TYPE_MAP.HGI:
-        _LOGGER.debug(f"Using the default class for: {dev_addr!r} ({HgiGateway._SLUG})")
+        _LOGGER.debug(
+            "Using the default class for: %r (%s)", dev_addr, HgiGateway._SLUG
+        )
         return HgiGateway
 
     try:  # or, is it a well-known CH/DHW class, derived from the device type...
@@ -221,8 +238,8 @@ def device_factory(
             f"Faked devices from the HVAC domain must have an explicit class: {dev_addr}"
         )
 
-    # Cast strictly resolves Mypy reporting base class returns instead of Device
-    return cast(Device, cls.create_from_schema(gwy, dev_addr, traits=traits))
+    dev: Device = cls.create_from_schema(gwy, dev_addr, traits=traits)
+    return dev
 
 
 def class_dev_heat(

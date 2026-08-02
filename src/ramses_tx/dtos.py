@@ -34,6 +34,8 @@ class PacketDTO:
     :type length: str
     :param payload: Raw hex payload string (e.g., "0001C8").
     :type payload: str
+    :param is_tx: True if outbound transmission, False if inbound.
+    :type is_tx: bool
     """
 
     timestamp: dt
@@ -46,6 +48,7 @@ class PacketDTO:
     code: str
     length: str
     payload: str
+    is_tx: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,5 +80,53 @@ class CommandDTO:
     addr3: str
     code: str
     payload: str
-    priority: int
-    num_repeats: int
+    priority: int = 1
+    num_repeats: int = 1
+
+    def __str__(self) -> str:
+        """Return the string representation of the frame to be transmitted.
+
+        The verb is stripped and right-justified to 2 characters to match the
+        RF protocol format expected by the HGI80 (e.g. ``" W"`` not ``"W"``).
+        Without this normalisation, verbs passed as plain strings (e.g. from
+        the ramses_cc send_packet service) produce malformed frames that the
+        HGI80 silently drops — no echo, causing a 20s QoS timeout.
+        """
+        verb = f"{str(self.verb).strip():>2}"
+        return (
+            f"{verb} --- {self.addr1} {self.addr2} {self.addr3} {self.code} "
+            f"{int(len(self.payload) / 2):03d} {self.payload}"
+        )
+
+    @classmethod
+    def from_cli(cls, cli_str: str) -> "CommandDTO":
+        """Parse a CLI string into a CommandDTO."""
+        verb = cli_str[:2]
+        parts = cli_str[2:].split()
+        if len(parts) > 0 and parts[0] == "---":
+            parts.pop(0)
+
+        addr1, addr2, addr3, code = parts[:4]
+        if len(parts) == 5:
+            payload = parts[4]
+        elif len(parts) >= 6:
+            payload = parts[5]
+        else:
+            payload = ""
+
+        return cls(
+            verb=verb,
+            addr1=addr1,
+            addr2=addr2,
+            addr3=addr3,
+            code=code,
+            payload=payload,
+        )
+
+    @property
+    def tx_header(self) -> str:
+        """Return the QoS header of this (request) packet."""
+        from .packet import Packet, pkt_header
+
+        pkt = Packet._from_cmd(self)
+        return str(pkt_header(pkt))

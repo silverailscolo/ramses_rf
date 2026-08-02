@@ -55,10 +55,10 @@ from ramses_tx.helpers import (
     hex_to_percent,
     hex_to_str,
     hex_to_temp,
-    parse_valve_demand,
 )
 from ramses_tx.typing import PayDictT
 
+from .helpers import parse_valve_demand
 from .registry import register_parser
 
 if TYPE_CHECKING:
@@ -77,12 +77,15 @@ def parser_0004(payload: str, msg: Message) -> PayDictT._0004:
     :type payload: str
     :param msg: The message object
     :type msg: Message
-    :return: A dictionary containing the zone name
+    :return: A dictionary containing the zone index and zone name
     :rtype: PayDictT._0004
     """
     # RQ payload is zz00; limited to 12 chars in evohome UI? if "7F"*20: not a zone
+    # payload[:2] is the zone_idx (zz), payload[2:4] is always "00"
+    if payload[4:] == "7F" * 20:
+        return {}
 
-    return {} if payload[4:] == "7F" * 20 else {SZ_NAME: hex_to_str(payload[4:])}
+    return {SZ_ZONE_IDX: payload[:2], SZ_NAME: hex_to_str(payload[4:])}
 
 
 # system_zones (add/del a zone?)
@@ -557,7 +560,7 @@ def parser_12c0(payload: str, msg: Message) -> PayDictT._12C0:
     if payload[2:4] == "80":
         temp: float | None = None
     elif payload[4:6] == "00":  # units are 1.0 F
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} (Fahrenheit TRV detected)")
+        _LOGGER.warning("%r < %s (Fahrenheit TRV detected)", msg, _INFORM_DEV_MSG)
         temp = round((int(payload[2:4], 16) - 32) * 5 / 9, 2)
     else:  # if payload[4:] == "01":  # units are 0.5 C
         temp = int(payload[2:4], 16) / 2
@@ -648,10 +651,14 @@ def parser_22c9(payload: str, msg: Message) -> dict[str, Any] | list[dict[str, A
     # Notes on 008|suffix: only seen as I, only when no array, only as 7FFF(0101|0202)03$
 
     def _parser(seqx: str) -> dict[str, Any]:
-        assert seqx[10:] in ("01", "02"), f"is {seqx[10:]}, expecting 01 or 02"
+        assert seqx[10:] in ("00", "01", "02"), (
+            f"is {seqx[10:]}, expecting 00, 01 or 02"
+        )
 
         return {
-            SZ_MODE: {"01": "heat", "02": "cool"}[seqx[10:]],  # TODO: or action?
+            SZ_MODE: {"00": "off", "01": "heat", "02": "cool"}[
+                seqx[10:]
+            ],  # TODO: or action?
             SZ_SETPOINT_BOUNDS: (hex_to_temp(seqx[2:6]), hex_to_temp(seqx[6:10])),
         }  # lower, upper setpoints
 
@@ -664,7 +671,9 @@ def parser_22c9(payload: str, msg: Message) -> dict[str, Any] | list[dict[str, A
             for i in range(0, len(payload), 12)
         ]
 
-    assert msg.len != 8 or payload[10:] in ("010103", "020203"), _INFORM_DEV_MSG
+    assert msg.len != 8 or payload[10:] in ("000003", "010103", "020203"), (
+        _INFORM_DEV_MSG
+    )
 
     return _parser(payload[:12])
 
@@ -749,7 +758,8 @@ def parser_2309(
     if msg.verb == RQ and msg.len == 1:  # some RQs have a payload (why?)
         return {}
 
-    return {SZ_SETPOINT: hex_to_temp(payload[2:])}
+    # payload[:2] is the zone_idx (zz), payload[2:] is the setpoint
+    return {SZ_ZONE_IDX: payload[:2], SZ_SETPOINT: hex_to_temp(payload[2:])}
 
 
 # zone_mode  # TODO: messy
@@ -777,6 +787,7 @@ def parser_2349(payload: str, msg: Message) -> PayDictT._2349 | PayDictT.EMPTY:
 
     assert payload[6:8] in ZON_MODE_MAP, f"unknown zone_mode: {payload[6:8]}"
     result: PayDictT._2349 = {
+        SZ_ZONE_IDX: payload[:2],  # zz — zone_idx
         SZ_MODE: ZON_MODE_MAP.get(payload[6:8]),  # type: ignore[typeddict-item]
         SZ_SETPOINT: hex_to_temp(payload[2:6]),
     }

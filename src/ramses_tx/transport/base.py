@@ -8,10 +8,11 @@ import functools
 import logging
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime as dt, timedelta as td
+from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from .. import exceptions as exc
+from ..address import HGI_DEV_ADDR
 from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, SZ_SIGNATURE
 from ..helpers import dt_now
 from ..interfaces import TransportInterface
@@ -27,18 +28,39 @@ _MAX_TRACKED_TRANSMITS = 99
 _MAX_TRACKED_DURATION = 300
 _DBG_DISABLE_REGEX_WARNINGS = False
 
+_TxKeyT: TypeAlias = tuple[str, str, str, str, str, str]
+
 
 @dataclass
 class TransportConfig:
     """Configuration parameters for Ramses transports.
 
-    Replaces kwargs payload previously passed to transport and factories.
+    :param disable_sending: Disable packet transmission on transport.
+    :type disable_sending: bool
+    :param disable_qos: Disable QoS retries.
+    :type disable_qos: bool
+    :param enforce_min_gap: Enforce minimum gap between frame transmissions.
+    :type enforce_min_gap: bool
+    :param evofw_flag: Optional evofw3 flag.
+    :type evofw_flag: str | None
+    :param autostart: Autostart transport loop.
+    :type autostart: bool
+    :param log_all: Log all packets including malformed ones.
+    :type log_all: bool
+    :param use_regex: Regex filter rules.
+    :type use_regex: dict[str, dict[str, str]]
+    :param timeout: Optional timeout override.
+    :type timeout: float | None
+    :param app_context: Optional application context.
+    :type app_context: Any | None
     """
 
     disable_sending: bool = False
+    disable_qos: bool = False
+    enforce_min_gap: bool = False
+    evofw_flag: str | None = None
     autostart: bool = False
     log_all: bool = False
-    evofw_flag: str | None = None
     use_regex: dict[str, dict[str, str]] = field(default_factory=dict)
     timeout: float | None = None
     app_context: Any | None = None
@@ -48,7 +70,13 @@ class _BaseTransport:
     """Base class for all transports."""
 
     def __init__(self) -> None:
-        pass
+        """Initialize the base transport instance."""
+        self._recent_tx_queue: deque[tuple[dt, _TxKeyT]] = deque(maxlen=20)
+        self._recent_tx_counts: dict[_TxKeyT, int] = {}
+
+    def _dt_now(self) -> dt:
+        """Return current datetime using transport clock if available."""
+        return dt_now()
 
 
 class _ReadTransport(_BaseTransport, TransportInterface):
@@ -92,7 +120,7 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         try:
             return self._this_pkt.dtm  # type: ignore[union-attr]
         except AttributeError:
-            return dt(1970, 1, 1, 1, 0)
+            return dt_now()
 
     @property
     def loop(self) -> asyncio.AbstractEventLoop:
@@ -155,13 +183,68 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         except RuntimeError:
             _LOGGER.debug("Event loop closed during _make_connection()")
 
+    def _is_recent_tx(self, frame: str) -> bool:
+        """Check if frame matches a recent Tx packet within 3.0s.
+
+        Prunes expired entries, then does an O(1) dict lookup for
+        the incoming packet key.
+
+        HGI80 echoes arrive with the real HGI ID as addr1, but the
+        TX frame used the placeholder 18:000730.  Both variants are
+        checked (issue 835).
+
+        :param frame: Raw ASCII frame string from transport.
+        :type frame: str
+        :returns: True if frame is a hardware echo of recent Tx.
+        :rtype: bool
+        """
+        now = self._dt_now()
+        while (
+            self._recent_tx_queue
+            and (now - self._recent_tx_queue[0][0]).total_seconds() > 3.0
+        ):
+            _, old_key = self._recent_tx_queue.popleft()
+            if old_key in self._recent_tx_counts:
+                if self._recent_tx_counts[old_key] <= 1:
+                    del self._recent_tx_counts[old_key]
+                else:
+                    self._recent_tx_counts[old_key] -= 1
+
+        try:
+            rx_pkt = Packet.from_port(now, frame, is_echo=True)
+            rx_dto = rx_pkt.to_dto()
+        except Exception:
+            return False
+
+        # HGI80 echoes arrive with the real HGI ID as addr1,
+        # but the TX frame used the placeholder 18:000730.
+        addr1_variants = (
+            (rx_dto.addr1, HGI_DEV_ADDR.id)
+            if rx_dto.addr1 != HGI_DEV_ADDR.id
+            else (rx_dto.addr1,)
+        )
+        for addr1 in addr1_variants:
+            rx_key: _TxKeyT = (
+                rx_dto.verb,
+                rx_dto.code,
+                addr1,
+                rx_dto.addr2,
+                rx_dto.addr3,
+                rx_dto.payload,
+            )
+            if rx_key in self._recent_tx_counts:
+                return True
+        return False
+
     def _frame_read(self, dtm_str: str, frame: str) -> None:
         """Make a Packet from the Frame and process it."""
         if not frame.strip():
             return
 
+        is_echo = self._is_recent_tx(frame)
+
         try:
-            pkt = Packet.from_file(dtm_str, frame)
+            pkt = Packet.from_file(dtm_str, frame, is_echo=is_echo)
         except ValueError as err:
             _LOGGER.debug("%s < PacketInvalid(%s)", frame, err)
             return
@@ -169,7 +252,11 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             _LOGGER.warning("%s < PacketInvalid(%s)", frame, err)
             return
 
-        self._pkt_read(pkt)
+        try:
+            self._pkt_read(pkt)
+        except exc.TransportError as err:
+            _LOGGER.debug("%s < Transport Error(%s)", pkt, err)
+            return
 
     def _pkt_read(self, pkt: Packet) -> None:
         """Pass any valid Packets to the protocol's callback."""
@@ -212,11 +299,12 @@ class _FullTransport(_ReadTransport):
         extra: dict[str, Any] | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
-        """Initialize the full transport."""
+        """Initialize the bidirectional transport."""
         _ReadTransport.__init__(self, config=config, extra=extra, loop=loop)
-
-        self._disable_sending = config.disable_sending
-        self._transmit_times: deque[dt] = deque(maxlen=_MAX_TRACKED_TRANSMITS)
+        self._transmit_times: deque[dt] = deque(
+            maxlen=int(config.timeout) if config.timeout else _MAX_TRACKED_TRANSMITS
+        )
+        self._disable_sending: bool = config.disable_sending
 
     def _dt_now(self) -> dt:
         """Get a precise datetime, using the current dtm."""
@@ -229,21 +317,29 @@ class _FullTransport(_ReadTransport):
         return super().get_extra_info(name, default=default)
 
     def _report_transmit_rate(self) -> float:
-        """Return the transmit rate in transmits per minute."""
-        now_dt = dt.now()
-        dtm = now_dt - td(seconds=_MAX_TRACKED_DURATION)
-        transmit_times = tuple(t for t in self._transmit_times if t > dtm)
+        """Return transmit rate as packets per minute."""
+        if not self._transmit_times:
+            return 0.0
 
-        if len(transmit_times) <= 1:
-            return float(len(transmit_times))
+        now = dt.now()
+        transmit_times = [
+            t
+            for t in self._transmit_times
+            if (now - t).total_seconds() <= _MAX_TRACKED_DURATION
+        ]
+        if not transmit_times:
+            return 0.0
 
-        duration: float = (transmit_times[-1] - transmit_times[0]) / td(seconds=1)
+        duration = (now - transmit_times[0]).total_seconds()
+        if duration == 0:
+            return 0.0
+
         return int(len(transmit_times) / duration * 6000) / 100
 
     def _track_transmit_rate(self) -> None:
         """Track the Tx rate as period of seconds per x transmits."""
         self._transmit_times.append(dt.now())
-        _LOGGER.debug(f"Current Tx rate: {self._report_transmit_rate():.2f} pkts/min")
+        _LOGGER.debug("Current Tx rate: %.2f pkts/min", self._report_transmit_rate())
 
     def write(self, data: bytes) -> None:
         """Write the data to the underlying handler."""
@@ -265,8 +361,17 @@ class _FullTransport(_ReadTransport):
         raise NotImplementedError("_write_frame() not implemented here")
 
     def _log_tx_packet(self, frame: str) -> None:
-        """Emit outbound frames to the packet log for symmetry with inbound logs."""
-        frame_clean = frame.strip()
+        """Emit outbound frames to packet log and record key for echo detection.
+
+        :param frame: Outbound raw ASCII frame string to transmit.
+        :type frame: str
+        :returns: None
+        :rtype: None
+        """
+        # rstrip only — preserve leading space in verbs
+        # like " W", " I" which strip() would remove, making
+        # the frame unparsable (issue 835).
+        frame_clean = frame.rstrip()
         if not frame_clean:
             return
 
@@ -274,7 +379,25 @@ class _FullTransport(_ReadTransport):
             frame_clean = f"000 {frame_clean}"
 
         try:
-            Packet(dt_now(), frame_clean)
+            now = self._dt_now()
+            pkt = Packet(now, frame_clean, is_tx=True)
+            dto = pkt.to_dto()
+            tx_key: _TxKeyT = (
+                dto.verb,
+                dto.code,
+                dto.addr1,
+                dto.addr2,
+                dto.addr3,
+                dto.payload,
+            )
+            self._recent_tx_queue.append((now, tx_key))
+            self._recent_tx_counts[tx_key] = self._recent_tx_counts.get(tx_key, 0) + 1
+
+            if self._protocol and hasattr(self._protocol, "_msg_received"):
+                try:
+                    self._protocol._msg_received(dto)
+                except Exception as err:
+                    _LOGGER.debug("Failed to dispatch Tx DTO: %s", err)
         except Exception as err:  # pragma: no cover - defensive
             _LOGGER.debug("Failed to log Tx frame: %s", err)
 

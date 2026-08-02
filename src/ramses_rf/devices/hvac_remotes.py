@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
@@ -13,13 +13,13 @@ from ramses_rf.const import (
     Code,
     DevType,
 )
+from ramses_rf.enums import Action
+from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
-from ramses_tx import Command, Packet, Priority
+from ramses_tx import Packet
 
 from .dev_base import BatteryState, DeviceHvac, Fakeable
-
-if TYPE_CHECKING:
-    from ..messages import Message
+from .helpers import send_fake_intent
 
 
 class HvacRemoteBase(DeviceHvac):
@@ -39,11 +39,6 @@ class HvacRemoteBase(DeviceHvac):
         :param kwargs: Keyword arguments passed to the parent class
         """
         super().__init__(*args, traits=traits, **kwargs)
-        if not hasattr(self, "hvac_state"):
-            self.hvac_state = HvacState()
-
-    def _post_class_promote(self) -> None:
-        """Initialize state when promoted from a generic HVAC device."""
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
 
@@ -85,14 +80,14 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         """
         return self.hvac_state.fan_rate
 
-    async def set_fan_rate(self, value: int) -> Packet | None:
+    async def set_fan_rate(self, value: int) -> Message | None:
         """Set a fake fan rate for the remote control.
 
         :param value: The fan rate to set (can be int or str, but not None)
         :type value: int
         :raises TypeError: If the remote is not in faked mode
-        :return: The sent packet
-        :rtype: Packet
+        :return: The sent message
+        :rtype: Message
         :note: This is a work in progress
         """
 
@@ -102,9 +97,11 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         # TODO: num_repeats=2, or wait_for_reply=True ?
 
         # NOTE: this is not completely understood (i.e. diffs between vendor schemes)
-        cmd = Command.set_fan_mode(self.id, int(4 * value), src_id=self.id)
-        return await self._gwy.async_send_cmd(
-            cmd, num_repeats=2, priority=Priority.HIGH
+        return await send_fake_intent(
+            self,
+            Action.SET_FAN_MODE,
+            {"fan_mode": int(4 * value), "scheme": self._scheme or "orcon"},
+            wait_for_reply=True,
         )
 
     async def fan_mode(self) -> str | None:

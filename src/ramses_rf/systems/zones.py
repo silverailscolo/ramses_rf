@@ -7,36 +7,26 @@ import dataclasses
 import logging
 import math
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
 from ramses_rf.const import (
     DEV_ROLE_MAP,
-    DEV_TYPE_MAP,
-    SZ_DHW_IDX,
-    SZ_DOMAIN_ID,
     SZ_HEAT_DEMAND,
     SZ_NAME,
     SZ_RELAY_DEMAND,
     SZ_SETPOINT,
     SZ_TEMPERATURE,
     SZ_ZONE_IDX,
-    SZ_ZONE_TYPE,
     ZON_MODE_MAP,
     ZON_ROLE_MAP,
     DevRole,
     ZoneRole,
 )
-from ramses_rf.devices import (
-    BdrSwitch,
-    Controller,
-    Device,
-    DhwSensor,
-    TrvActuator,
-    UfhController,
-)
+from ramses_rf.devices import BdrSwitch, Controller, Device, DhwSensor, TrvActuator
 from ramses_rf.entity import Entity, class_by_attr
+from ramses_rf.enums import Action
 from ramses_rf.helpers import shrink
 from ramses_rf.models import (
     DemandState,
@@ -51,23 +41,19 @@ from ramses_rf.schemas import (
     SCH_TCS_ZONES_ZON,
     SZ_ACTUATORS,
     SZ_CLASS,
-    SZ_DEVICES,
     SZ_DHW_VALVE,
     SZ_HTG_VALVE,
     SZ_SENSOR,
 )
 from ramses_rf.topology import Child, Parent
-from ramses_tx import Command, Priority
+from ramses_rf.typing import DeviceIdT, DevIndexT, InnerScheduleT, OuterScheduleT
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
-from ramses_tx.typing import HeaderT, PayDictT, PayloadT
+from ramses_tx.typing import PayDictT
 
 from ..messages import Message
-from .schedule import InnerScheduleT, OuterScheduleT, Schedule
+from .schedule import Schedule
 
 if TYPE_CHECKING:
-    from ramses_tx import Packet
-    from ramses_tx.typing import DeviceIdT, DevIndexT
-
     from .tcs import Evohome, _MultiZoneT, _StoredHwT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip
@@ -85,6 +71,9 @@ from ramses_rf.const import (  # noqa: F401, isort: skip
     Code,
 )
 
+
+from .helpers import send_system_intent
+
 _LOGGER = logging.getLogger(__name__)
 _TRACE = logging.getLogger("ramses_rf.legacy_trace")
 
@@ -97,7 +86,7 @@ class ZoneBase(Child, Parent, Entity):
     _ROLE_ACTUATORS: str | None = None
     _ROLE_SENSORS: str | None = None
 
-    def __init__(self, tcs: _MultiZoneT | _StoredHwT, zone_idx: str) -> None:
+    def __init__(self, tcs: Evohome, zone_idx: str) -> None:
         super().__init__(tcs._gwy)
 
         # Parallel CQRS States
@@ -111,11 +100,11 @@ class ZoneBase(Child, Parent, Entity):
         # own idx
         self._z_id = tcs.id  # the responsible device is the controller
         # the zone idx (ctx), 00-0B (or 0F), HW (FA)
-        self._z_idx: DevIndexT = cast("DevIndexT", zone_idx)
+        self._z_idx: DevIndexT = DevIndexT(zone_idx)
 
-        self.id: DeviceIdT = cast("DeviceIdT", f"{tcs.id}_{zone_idx}")
+        self.id: DeviceIdT = DeviceIdT(f"{tcs.id}_{zone_idx}")
 
-        self.tcs: Evohome = cast("Evohome", tcs)
+        self.tcs: Evohome = tcs
         self.ctl: Controller = tcs.ctl
         self._child_id: str = zone_idx
 
@@ -125,7 +114,7 @@ class ZoneBase(Child, Parent, Entity):
     @classmethod
     def create_from_schema(
         cls, tcs: _MultiZoneT | _StoredHwT, zone_idx: str, **schema: Any
-    ) -> ZoneBase:
+    ) -> Self:
         """Create a CH/DHW zone for a TCS and set its schema attrs.
 
         The appropriate Zone class should have been determined by a
@@ -172,12 +161,6 @@ class ZoneSchedule(ZoneBase):  # 0404
         super().__init__(*args, **kwargs)
 
         self._schedule = Schedule(self)  # type: ignore[arg-type]
-
-    def _handle_msg(self, msg: Message) -> None:
-        super()._handle_msg(msg)
-
-        if msg.code in (Code._0006, Code._0404):
-            self._schedule._handle_msg(msg)
 
     async def get_schedule(self, *, force_io: bool = False) -> InnerScheduleT | None:
         await self._schedule.get_schedule(force_io=force_io)
@@ -233,141 +216,18 @@ class DhwZone(ZoneSchedule):  # CS92A
         self._dhw_valve: BdrSwitch | None = None
         self._htg_valve: BdrSwitch | None = None
 
-    def _setup_discovery_cmds(self) -> None:
-        for payload in (
-            f"00{DEV_ROLE_MAP.DHW}",  # sensor
-            f"00{DEV_ROLE_MAP.HTG}",  # hotwater_valve
-            f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
-        ):
-            self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.ctl.id, Code._000C, PayloadT(payload)),
-                60 * 60 * 24,
-            )
-
-        self.discovery.add_cmd(Command.get_dhw_params(self.ctl.id), 60 * 60 * 6)
-        self.discovery.add_cmd(Command.get_dhw_mode(self.ctl.id), 60 * 5)
-        self.discovery.add_cmd(Command.get_dhw_temp(self.ctl.id), 60 * 15)
-
-    def _handle_msg(self, msg: Message) -> None:
-        # def eavesdrop_dhw_sensor(
-        #     this: Message, *, prev: Message | None = None
-        # ) -> None:
-        # """Eavesdrop packets, or pairs of packets, to maintain the
-        # system state.
-        #
-        # There are only 2 ways to find a controller's DHW sensor:
-        # 1. The 10A0 RQ/RP *from/to a 07:* (1x/4h) - reliable
-        # 2. Use sensor temp matching - non-deterministic
-        #
-        # Data from the CTL is considered more authoritative. The RQ is
-        # initiated by the DHW, so is not authoritative. The I/1260 is
-        # not to/from a controller, so is not useful.
-        # """
-
-        # # 10A0: RQ/07/01, RP/01/07: can get both parent controller &
-        # DHW sensor
-        # # 047 RQ --- 07:030741 01:102458 --:------ 10A0 006 00181F0003E4
-        # # 062 RP --- 01:102458 07:030741 --:------ 10A0 006 0018380003E8
-
-        # # 1260: I/07: can't get parent controller - would need match
-        # # temps
-        # # 045  I --- 07:045960 --:------ 07:045960 1260 003 000911
-
-        # # 1F41: I/01: get parent controller, but not DHW sensor
-        # # 045  I --- 01:145038 --:------ 01:145038 1F41 012 000004FFFFFF1E060E0507E4
-        # # 045  I --- 01:145038 --:------ 01:145038 1F41 006 000002FFFFFF
-
-        # assert self._gwy.config.enable_eavesdrop, "Coding error"
-
-        # if all(
-        #     (
-        #         this.code == Code._10A0,
-        #         this.verb == RP,
-        #         this.src is self.ctl,
-        #         isinstance(this.dst, DhwSensor),
-        #     )
-        # ):
-        #     self._get_dhw(sensor=this.dst)
-
-        assert (
-            msg.src == self.ctl
-            and msg.code
-            in (
-                Code._0005,
-                Code._000C,
-                Code._10A0,
-                Code._1260,
-                Code._1F41,
-            )
-            or msg.payload.get(SZ_DOMAIN_ID) in (F9, FA)
-            or msg.payload.get(SZ_ZONE_IDX) == "HW"
-            or msg.payload.get(SZ_DHW_IDX) is not None
-        ), f"msg inappropriately routed to {self}"
-
-        super()._handle_msg(msg)
-
-        if (
-            msg.code != Code._000C
-            or msg.payload.get(SZ_ZONE_TYPE) not in (DEV_ROLE_MAP.DHW, DEV_ROLE_MAP.HTG)
-            or not msg.payload.get(SZ_DEVICES)
-        ):
-            return
-
-        devices = msg.payload.get(SZ_DEVICES, [])
-        if not devices:
-            return
-
-        assert len(devices) == 1
-
-        try:
-            self._gwy.device_registry.get_device(
-                devices[0],
-                parent=self,
-                child_id=msg.payload.get(SZ_DOMAIN_ID),
-                is_sensor=(msg.payload.get(SZ_ZONE_TYPE) == DEV_ROLE_MAP.DHW),
-            )  # sets self._dhw_sensor/_dhw_valve/_htg_valve
-        except (
-            exc.DeviceNotFoundError,
-            exc.SchemaInconsistentError,
-            exc.SystemSchemaInconsistent,
-        ) as err:
-            _TRACE.warning(
-                f"SUPPRESSED in DhwZone 000C handler: {err}. Packet dropped."
-            )
-
-        # TODO: may need to move earlier in method
-        # # If still don't have a sensor, can eavesdrop 10A0
-        # if self._gwy.config.enable_eavesdrop and not self.dhw_sensor:
-        #     eavesdrop_dhw_sensor(msg)
-
     def _update_schema(self, **schema: Any) -> None:
         """Update a DHW zone with new schema attrs.
 
         Raise an exception if the new schema is not a superset of the
         existing schema.
         """
-
-        """Set the temp sensor for this DHW zone (07: only)."""
-        """Set the heating valve relay for this DHW zone (13: only)."""
-        """Set the hotwater valve relay for this DHW zone (13: only).
-
-        Check and ??? the DHW sensor (07:) of this system/CTL (if there
-        is one).
-
-        There is only 1 way to eavesdrop a controller's DHW sensor:
-        1.  The 10A0 RQ/RP *from/to a 07:* (1x/4h)
-
-        The RQ is initiated by the DHW, so is not authoritative (the CTL
-        will RP any RQ). The I/1260 is not to/from a controller, so is
-        not useful.
-        """
-
         schema = shrink(SCH_TCS_DHW(schema))
 
         if dev_id := schema.get(SZ_SENSOR):
             try:
                 dhw_sensor = self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", dev_id),
+                    dev_id,
                     parent=self,
                     child_id=FA,
                     is_sensor=True,
@@ -379,12 +239,12 @@ class DhwZone(ZoneSchedule):  # CS92A
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in DhwZone._update_schema (sensor): {err}")
+                _TRACE.warning("SUPPRESSED in DhwZone._update_schema (sensor): %s", err)
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
             try:
                 dhw_valve = self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", dev_id), parent=self, child_id=FA
+                    dev_id, parent=self, child_id=FA
                 )
                 assert isinstance(dhw_valve, BdrSwitch)  # mypy
                 self._dhw_valve = dhw_valve
@@ -400,7 +260,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HT1]):
             try:
                 htg_valve = self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", dev_id), parent=self, child_id=F9
+                    dev_id, parent=self, child_id=F9
                 )
                 assert isinstance(htg_valve, BdrSwitch)  # mypy
                 self._htg_valve = htg_valve
@@ -449,7 +309,7 @@ class DhwZone(ZoneSchedule):  # CS92A
     async def setpoint(self) -> float | None:  # 10A0
         return self.dhw_state.setpoint
 
-    async def set_setpoint(self, value: float) -> Packet:  # 10A0
+    async def set_setpoint(self, value: float) -> Message:  # 10A0
         """Set the target temperature for the DHW zone."""
         return await self.set_config(setpoint=value)
 
@@ -471,15 +331,17 @@ class DhwZone(ZoneSchedule):  # CS92A
         mode: int | str | None = None,
         active: bool | None = None,
         until: dt | str | None = None,
-    ) -> Packet:
+    ) -> Message:
         """Set the DHW mode (mode, active, until)."""
 
-        cmd = Command.set_dhw_mode(self.ctl.id, mode=mode, active=active, until=until)
-        return await self._gwy.async_send_cmd(
-            cmd, priority=Priority.HIGH, wait_for_reply=True
+        return await send_system_intent(
+            self,
+            Action.SET_DHW_MODE,
+            {"mode": mode, "active": active, "until": until},
+            wait_for_reply=True,
         )
 
-    async def set_boost_mode(self) -> Packet:
+    async def set_boost_mode(self) -> Message:
         """Enable DHW for an hour, despite any schedule."""
         return await self.set_mode(
             mode=ZON_MODE_MAP.TEMPORARY,
@@ -487,7 +349,7 @@ class DhwZone(ZoneSchedule):  # CS92A
             until=dt.now() + td(hours=1),
         )
 
-    async def reset_mode(self) -> Packet:  # 1F41
+    async def reset_mode(self) -> Message:  # 1F41
         """Revert the DHW to following its schedule."""
         return await self.set_mode(mode=ZON_MODE_MAP.FOLLOW)
 
@@ -497,7 +359,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         setpoint: float | None = None,
         overrun: int | None = None,
         differential: float | None = None,
-    ) -> Packet:
+    ) -> Message:
         """Set the DHW parameters (setpoint, overrun, differential)."""
 
         # dhw_params = self.entity_state.get_value(Code._10A0)
@@ -508,15 +370,17 @@ class DhwZone(ZoneSchedule):  # CS92A
         # if differential is None:
         #     setpoint = dhw_params["differential"]
 
-        cmd = Command.set_dhw_params(
-            self.ctl.id,
-            setpoint=setpoint,
-            overrun=overrun,
-            differential=differential,
+        return await send_system_intent(
+            self,
+            Action.SET_DHW_PARAMS,
+            {
+                "setpoint": setpoint,
+                "overrun": overrun,
+                "differential": differential,
+            },
         )
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
-    async def reset_config(self) -> Packet:  # 10A0
+    async def reset_config(self) -> Message:  # 10A0
         """Reset the DHW parameters to their default values."""
         return await self.set_config(setpoint=50, overrun=5, differential=1)
 
@@ -576,6 +440,7 @@ class Zone(ZoneSchedule):
         self._sensor: Device | None = None
         self.actuators: list[Device] = []
         self.actuator_by_id: dict[DeviceIdT, Device] = {}
+        self._heating_type: str | None = None
 
     def _update_schema(self, **schema: Any) -> None:
         """Update a heating zone with new schema attrs.
@@ -615,15 +480,17 @@ class Zone(ZoneSchedule):
                     f"Not a known zone class (for {self}): {zone_type}"
                 )
 
-            if self._SLUG is not None:
+            current_slug = self._SLUG or self._heating_type
+            if current_slug is not None and klass != current_slug:
                 raise exc.SystemSchemaInconsistent(
-                    f"{self} changed zone class: from {self._SLUG} to {klass}"
+                    f"{self} changed zone class: from {current_slug} to {klass}"
                 )
 
-            self.__class__ = cast("type[Zone]", ZONE_CLASS_BY_SLUG[klass])
-            _LOGGER.debug("Promoted a Zone: %s (%s)", self.id, self.__class__)
-
-            self._setup_discovery_cmds()
+            self._heating_type = klass
+            if self._SLUG is None and klass in ZONE_CLASS_BY_SLUG:
+                target_cls = ZONE_CLASS_BY_SLUG[klass]
+                if issubclass(target_cls, Zone):
+                    self.__class__ = target_cls
 
         # if schema.get(SZ_CLASS) == ZON_ROLE_MAP[ZON_ROLE.ACT]:
         #     schema.pop(SZ_CLASS)
@@ -635,225 +502,24 @@ class Zone(ZoneSchedule):
         if sensor_id := schema.get(SZ_SENSOR):
             try:
                 self._sensor = self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", sensor_id), parent=self, is_sensor=True
+                    sensor_id, parent=self, is_sensor=True
                 )
             except (
                 exc.DeviceNotFoundError,
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in Zone._update_schema (sensor): {err}")
+                _TRACE.warning("SUPPRESSED in Zone._update_schema (sensor): %s", err)
 
         for act_id in schema.get(SZ_ACTUATORS, []):
             try:
-                self._gwy.device_registry.get_device(
-                    cast("DeviceIdT", act_id), parent=self
-                )
+                self._gwy.device_registry.get_device(act_id, parent=self)
             except (
                 exc.DeviceNotFoundError,
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in Zone._update_schema (actuator): {err}")
-
-    def _setup_discovery_cmds(self) -> None:
-        # super()._setup_discovery_cmds()
-
-        for dev_role in (self._ROLE_ACTUATORS, DEV_ROLE_MAP.SEN):
-            cmd = Command.from_attrs(
-                RQ,
-                self.ctl.id,
-                Code._000C,
-                PayloadT(f"{self.idx}{dev_role}"),
-            )
-            self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0.5)
-
-        # td should be > long sync_cycle duration (> 1hr)
-        self.discovery.add_cmd(
-            Command.get_zone_config(self.ctl.id, self.idx),
-            60 * 60 * 6,
-            delay=30,
-        )
-        self.discovery.add_cmd(
-            Command.get_zone_name(self.ctl.id, self.idx),
-            60 * 60 * 6,
-            delay=30,
-        )
-
-        # 2349 instead of 2309
-        self.discovery.add_cmd(
-            Command.get_zone_mode(self.ctl.id, self.idx),
-            60 * 5,
-            delay=30,
-        )
-        # td should be > sync_cycle duration,?delay in hope of
-        # picking up cycle
-        self.discovery.add_cmd(  # 30C9
-            Command.get_zone_temp(self.ctl.id, self.idx),
-            60 * 5,
-            delay=0,
-        )
-        # longer dt as low yield (factory duration is 30 min): prefer
-        # eavesdropping
-        self.discovery.add_cmd(
-            Command.get_zone_window_state(self.ctl.id, self.idx),
-            60 * 15,
-            delay=60 * 5,
-        )
-
-        # Cleanup inferior headers after registering all of them
-        if [t for t in self.discovery.cmds if t[-2:] in ZON_ROLE_MAP.HEAT_ZONES] and (
-            self.discovery.cmds.pop(HeaderT(f"{self.idx}{ZON_ROLE_MAP.ACT}"), [])
-        ):
-            _LOGGER.warning("inferior header removed from discovery")
-
-        if self.discovery.cmds.get(HeaderT(f"{self.idx}{ZON_ROLE_MAP.VAL}")) and (
-            self.discovery.cmds.get(HeaderT(f"{self.idx}{ZON_ROLE_MAP.ELE}"))
-        ):
-            self.discovery.cmds.pop(HeaderT(f"{self.idx}{ZON_ROLE_MAP.ELE}"), [])
-            _LOGGER.warning("inferior header removed from discovery")
-
-    def _handle_msg(self, msg: Message) -> None:
-        def eavesdrop_zone_type(this: Message, *, prev: Message | None = None) -> None:
-            """Determine the type of a zone by eavesdropping.
-            There are three ways to determine the type of a zone:
-            1. Use a 0005 packet (deterministic)
-            2. Eavesdrop (non-deterministic, slow to converge)
-            3. via a config file (a schema)
-            """
-            # ELE/VAL, but not UFH (it seems)
-            if this.code in (Code._0008, Code._0009):
-                assert self._SLUG in (
-                    None,
-                    ZoneRole.ELE,
-                    ZoneRole.VAL,
-                    ZoneRole.MIX,
-                ), self._SLUG
-
-                if self._SLUG is None:
-                    # this might eventually be: ZON_ROLE.VAL
-                    self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.ELE]})
-
-            elif this.code == Code._3150:  # TODO: and this.verb in (I_, RP)?
-                # MIX/ELE don't 3150
-                assert self._SLUG in (
-                    None,
-                    ZoneRole.RAD,
-                    ZoneRole.UFH,
-                    ZoneRole.VAL,
-                ), self._SLUG
-
-                src = cast("Any", this.src)
-                if isinstance(src, TrvActuator):
-                    self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.RAD]})
-                elif isinstance(src, BdrSwitch):
-                    self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.VAL]})
-                elif isinstance(src, UfhController):
-                    self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.UFH]})
-
-            # DEX
-            assert (
-                msg.src == self.ctl
-                or getattr(msg.src, "type", None) in (DEV_TYPE_MAP.UFC, "04")
-            ) and (
-                isinstance(msg.payload, dict)
-                or [d for d in msg.payload if d.get(SZ_ZONE_IDX) == self.idx]
-            ), f"msg inappropriately routed to {self}"
-
-        # DEX
-        assert (
-            msg.src == self.ctl
-            or getattr(msg.src, "type", None)
-            in ("02", "03", "04", "08", "12", "13", "18", "22", "30", "34")
-        ) and (
-            isinstance(msg.payload, list)
-            or msg.code == Code._0005
-            or (
-                isinstance(msg.payload, dict)
-                and msg.payload.get(SZ_ZONE_IDX, self.idx) == self.idx
-            )
-        ), f"msg inappropriately routed to {self}"
-
-        super()._handle_msg(msg)
-
-        if msg.code == Code._0004:
-            if isinstance(msg.payload, dict):
-                if SZ_NAME in msg.payload:
-                    self._name = str(msg.payload[SZ_NAME])
-            elif isinstance(msg.payload, list):
-                for d in msg.payload:
-                    if (
-                        isinstance(d, dict)
-                        and d.get(SZ_ZONE_IDX) == self.idx
-                        and SZ_NAME in d
-                    ):
-                        self._name = str(d[SZ_NAME])
-
-        if msg.code == Code._000C:
-            devices = msg.payload.get(SZ_DEVICES, [])
-            if not devices:
-                return
-
-            zone_type = msg.payload.get(SZ_ZONE_TYPE)
-
-            if zone_type == DEV_ROLE_MAP.SEN:
-                dev_id = devices[0]
-                try:
-                    self._sensor = self._gwy.device_registry.get_device(
-                        dev_id, parent=self, is_sensor=True
-                    )
-                except (
-                    exc.DeviceNotFoundError,
-                    exc.SchemaInconsistentError,
-                    exc.SystemSchemaInconsistent,
-                ) as err:
-                    _TRACE.warning(
-                        f"SUPPRESSED in Zone 000C handler (sensor): {err}. "
-                        f"Packet dropped."
-                    )
-
-            elif zone_type == DEV_ROLE_MAP.ACT:
-                for dev_id in devices:
-                    try:
-                        self._gwy.device_registry.get_device(dev_id, parent=self)
-                    except (
-                        exc.DeviceNotFoundError,
-                        exc.SchemaInconsistentError,
-                        exc.SystemSchemaInconsistent,
-                    ) as err:
-                        _TRACE.warning(
-                            f"SUPPRESSED in Zone 000C handler (actuator): {err}. "
-                            f"Packet dropped."
-                        )
-
-            elif zone_type in ZON_ROLE_MAP.HEAT_ZONES:
-                for dev_id in devices:
-                    try:
-                        self._gwy.device_registry.get_device(dev_id, parent=self)
-                    except (
-                        exc.DeviceNotFoundError,
-                        exc.SchemaInconsistentError,
-                        exc.SystemSchemaInconsistent,
-                    ) as err:
-                        _TRACE.warning(
-                            f"SUPPRESSED in Zone 000C handler (heat_actuator): {err}. "
-                            f"Packet dropped."
-                        )
-                self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[zone_type]})
-
-            # TODO: testing this concept, hoping to learn device_id of UFC
-            # if msg.payload[SZ_ZONE_TYPE] == DEV_ROLE_MAP.UFH:
-            #     cmd = Command.from_attrs(
-            #         RQ, self.ctl.id, Code._000C, f"{self.idx}{DEV_ROLE_MAP.UFH}"
-            #     )
-            #     self._send_cmd(cmd)
-
-        # If zone still doesn't have a zone class, maybe eavesdrop?
-        if self._gwy.config.enable_eavesdrop and self._SLUG in (
-            None,
-            ZoneRole.ELE,
-        ):
-            eavesdrop_zone_type(msg)
+                _TRACE.warning("SUPPRESSED in Zone._update_schema (actuator): %s", err)
 
     @property
     def sensor(self) -> Device | None:
@@ -862,9 +528,10 @@ class Zone(ZoneSchedule):
     @property
     def heating_type(self) -> str | None:
         """Get the type of the zone/DHW (e.g. electric_zone, stored_dhw)."""
-        if self._SLUG is None:
+        slug = self._SLUG or self._heating_type
+        if slug is None:
             return None
-        return cast(str, ZON_ROLE_MAP[self._SLUG])
+        return str(ZON_ROLE_MAP[slug])
 
     async def name(self) -> str | None:  # 0004
         """Get the name of the zone."""
@@ -924,20 +591,21 @@ class Zone(ZoneSchedule):
         """Return the zone's local setpoint bounds if defined by
         thermostat.
         """
-        return cast(
-            dict[str, Any] | None,
-            await self.entity_state.get_value(
-                (Code._22C9, Code._2209), zone_idx=self.idx
-            ),
+        res = await self.entity_state.get_value(
+            (Code._22C9, Code._2209), zone_idx=self.idx
         )
+        return res if isinstance(res, dict) else None
 
-    async def set_setpoint(self, value: float | None) -> Packet | None:  # 000A/2309
+    async def set_setpoint(self, value: float | None) -> Message | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""
         if value is None:
             return await self.reset_mode()
 
-        cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, value)
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
+        return await send_system_intent(
+            self,
+            Action.SET_TEMPERATURE,
+            {"zone_idx": self.idx, "setpoint": value},
+        )
 
     async def temperature(self) -> float | None:  # 30C9
         return self.temp_state.temperature
@@ -969,24 +637,27 @@ class Zone(ZoneSchedule):
 
         return False
 
-    async def _get_temp(self) -> Packet | None:
+    async def _get_temp(self) -> Message | None:
         """Get the zone's latest temp from the Controller."""
         try:
-            return await self._gwy.async_send_cmd(
-                Command.get_zone_temp(self.ctl.id, self.idx)
+            return await send_system_intent(
+                self,
+                Action.GET_ZONE_TEMP,
+                {"zone_idx": self.idx},
             )
         except ProtocolTimeoutError as err:
-            _LOGGER.warning(f"{self}: _get_temp timed out: {err}")
+            _LOGGER.warning("%s: _get_temp timed out: %s", self, err)
             return None
         except ProtocolSendFailed:
             # Silently drop the request if the transport is inactive
             # (e.g., during cache restoration prior to gateway startup).
             _LOGGER.debug(
-                f"{self}: Dropped request: gateway transport is inactive.",
+                "%s: Dropped request: gateway transport is inactive.",
+                self,
             )
             return None
 
-    async def reset_config(self) -> Packet:  # 000A
+    async def reset_config(self) -> Message:  # 000A
         """Reset the zone's parameters to their default values."""
         return await self.set_config()
 
@@ -998,25 +669,27 @@ class Zone(ZoneSchedule):
         local_override: bool = False,
         openwindow_function: bool = False,
         multiroom_mode: bool = False,
-    ) -> Packet:
+    ) -> Message:
         """Set the zone's parameters (min_temp, max_temp, etc.)."""
 
-        cmd = Command.set_zone_config(
-            self.ctl.id,
-            self.idx,
-            min_temp=min_temp,
-            max_temp=max_temp,
-            local_override=local_override,
-            openwindow_function=openwindow_function,
-            multiroom_mode=multiroom_mode,
+        return await send_system_intent(
+            self,
+            Action.SET_ZONE_CONFIG,
+            {
+                "zone_idx": self.idx,
+                "min_temp": min_temp,
+                "max_temp": max_temp,
+                "local_override": local_override,
+                "openwindow_function": openwindow_function,
+                "multiroom_mode": multiroom_mode,
+            },
         )
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
 
-    async def reset_mode(self) -> Packet:  # 2349
+    async def reset_mode(self) -> Message:  # 2349
         """Revert the zone to following its schedule."""
         return await self.set_mode(mode=ZON_MODE_MAP.FOLLOW)
 
-    async def set_frost_mode(self) -> Packet:  # 2349
+    async def set_frost_mode(self) -> Message:  # 2349
         """Set the zone to the lowest possible setpoint, indefinitely."""
         return await self.set_mode(mode=ZON_MODE_MAP.PERMANENT, setpoint=5)  # TODO
 
@@ -1026,33 +699,49 @@ class Zone(ZoneSchedule):
         mode: str | None = None,
         setpoint: float | None = None,
         until: dt | str | None = None,
-    ) -> Packet:  # 2309/2349
+    ) -> Message:  # 2309/2349
         """Override the zone's setpoint for a specified duration, or
         indefinitely.
         """
 
+        from ramses_rf.enums import Action
+
         # Hometronics doesn't support 2349
         if mode is not None or until is not None:
-            cmd = Command.set_zone_mode(
-                self.ctl.id,
-                self.idx,
-                mode=mode,
-                setpoint=setpoint,
-                until=until,
+            return await send_system_intent(
+                self,
+                Action.SET_MODE,
+                {
+                    "zone_idx": self.idx,
+                    "mode": mode,
+                    "setpoint": setpoint,
+                    "until": until,
+                },
             )
         # unsure if Hometronics supports setpoint of None
         elif setpoint is not None:
-            cmd = Command.set_zone_setpoint(self.ctl.id, self.idx, setpoint)
+            return await send_system_intent(
+                self,
+                Action.SET_TEMPERATURE,
+                {
+                    "zone_idx": self.idx,
+                    "setpoint": setpoint,
+                },
+            )
         else:
             raise exc.CommandInvalid("Invalid mode/setpoint")
 
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
-
-    async def set_name(self, name: str) -> Packet:
+    async def set_name(self, name: str) -> Message:
         """Set the zone's name in the CTL."""
 
-        cmd = Command.set_zone_name(self.ctl.id, self.idx, name)
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
+        return await send_system_intent(
+            self,
+            Action.SET_ZONE_NAME,
+            {
+                "zone_idx": self.idx,
+                "name": name,
+            },
+        )
 
     async def schema(self) -> dict[str, Any]:
         """Return the schema of the zone (type, devices)."""
@@ -1093,17 +782,6 @@ class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
     _SLUG: str | None = ZoneRole.ELE
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.ELE
 
-    def _handle_msg(self, msg: Message) -> None:
-        super()._handle_msg(msg)
-
-        # ZON zones are ELE zones that also call for heat
-        # if msg.code == Code._0008:
-        #     self._update_schema(**{SZ_CLASS: ZON_ROLE_MAP[ZoneRole.VAL]})
-        if msg.code == Code._3150:
-            raise exc.SystemInconsistent("EleZone cannot process 3150 (heat demand)")
-        elif msg.code == Code._3EF0:
-            raise exc.SystemInconsistent("EleZone cannot process 3EF0")
-
     async def heat_demand(self) -> float | None:
         """Return 0 as the zone's heat demand, as electric zones don't
         call for heat.
@@ -1134,15 +812,8 @@ class MixZone(Zone):  # HM80  # TODO: 0008/0009/3150
     _SLUG: str | None = ZoneRole.MIX
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.MIX
 
-    def _setup_discovery_cmds(self) -> None:
-        super()._setup_discovery_cmds()
-
-        self.discovery.add_cmd(
-            Command.get_mix_valve_params(self.ctl.id, self.idx), 60 * 60 * 6
-        )
-
-    async def mix_config(self) -> PayDictT._1030:
-        return cast(PayDictT._1030, await self.entity_state.get_value(Code._1030))
+    async def mix_config(self) -> PayDictT._1030 | None:
+        return await self.entity_state.get_value(Code._1030)
 
     async def params(self) -> dict[str, Any]:
         return {
@@ -1238,12 +909,13 @@ def zone_factory(
 
         # a specified zone class always takes precedence (even if it
         # is wrong)...
-        # if cls := ZONE_CLASS_BY_SLUG.get(schema.get(SZ_CLASS)):
-        #     _LOGGER.debug(
-        #         f"Using an explicitly-defined zone class for: "
-        #         f"{ctl_addr}_{idx} ({cls})"
-        #     )
-        #     return cls
+        if (sz_cls := schema.get(SZ_CLASS)) and (
+            cls := ZONE_CLASS_BY_SLUG.get(str(sz_cls))
+        ):
+            _LOGGER.debug(
+                f"Using an explicitly-defined zone class for: {ctl_addr}_{idx} ({cls})"
+            )
+            return cls
 
         # or, is it a DHW zone, derived from the zone idx...
         if idx == "HW":
@@ -1270,18 +942,14 @@ def zone_factory(
         )
         return Zone
 
-    zon = cast(
-        "DhwZone | Zone",
-        best_zon_class(
-            tcs.ctl.addr,
-            idx,
-            msg=msg,
-            eavesdrop=tcs._gwy.config.enable_eavesdrop,
-            **schema,
-        ).create_from_schema(tcs, idx, **schema),
-    )
+    zon = best_zon_class(
+        tcs.ctl.addr,
+        idx,
+        msg=msg,
+        eavesdrop=tcs._gwy.config.enable_eavesdrop,
+        **schema,
+    ).create_from_schema(tcs, idx, **schema)
 
-    # assert isinstance(zon, DhwZone | Zone)  # mypy
     return zon
 
 

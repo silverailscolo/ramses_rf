@@ -9,15 +9,15 @@ logging and device ID filtering mechanisms.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import re
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final
 
 from ..address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
-from ..command import Command
 from ..const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_NUM_REPEATS,
@@ -28,7 +28,7 @@ from ..const import (
     Code,
     Priority,
 )
-from ..dtos import PacketDTO
+from ..dtos import CommandDTO, PacketDTO
 from ..exceptions import (
     PacketInvalid,
     ProtocolError,
@@ -124,7 +124,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             try:
                 result = re.sub(k, v, result)
             except re.error as err:
-                _LOGGER.warning(f"{frame} < issue with regex ({k}, {v}): {err}")
+                _LOGGER.warning("%s < issue with regex (%s, %s): %s", frame, k, v, err)
         return result
 
     def add_handler(
@@ -281,35 +281,59 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         """
         self._pause_writing = False
 
-    async def _send_impersonation_alert(self, cmd: Command) -> None:
+    async def _send_impersonation_alert(self, cmd: CommandDTO) -> None:
         """Allow the Protocol to send an impersonation alert (stub)."""
         return
 
-    def _patch_cmd_if_needed(self, cmd: Command) -> Command:
-        """Patch the command with the actual HGI ID if it uses the
-        default placeholder.
+    def _patch_cmd_if_needed(self, cmd: CommandDTO) -> CommandDTO:
+        """Patch the command source address to match the gateway.
 
-        Legacy HGI80s (TI 3410) require the default ID (18:000730), or
-        they will silent-fail. However, evofw3 devices prefer the real
-        ID.
+        evofw3: swap placeholder 18:000730 for the real HGI ID.
+
+        HGI80 (TI 3410): reverse — swap the real HGI ID back to
+        18:000730, as the HGI80 firmware requires the placeholder as
+        source for its own transmissions.  Using the real ID causes a
+        silent drop and WantEcho timeout (issue 835).
         """
         if (
             self.hgi_id
             and self._is_evofw3  # Only patch if using evofw3 (not HGI80)
-            and cmd.src.id == HGI_DEV_ADDR.id
+            and cmd.addr1 == HGI_DEV_ADDR.id
             and self.hgi_id != HGI_DEV_ADDR.id
         ):
             _LOGGER.debug(
-                f"Patching command with active HGI ID: swapped "
-                f"{HGI_DEV_ADDR.id} -> {self.hgi_id} for {cmd._hdr}"
+                "Patching command with active HGI ID: swapped %s -> %s for %s|%s",
+                HGI_DEV_ADDR.id,
+                self.hgi_id,
+                cmd.verb,
+                cmd.code,
             )
-            return cmd.clone_with_source(self.hgi_id)
+            return dataclasses.replace(cmd, addr1=self.hgi_id)
+
+        # HGI80: reverse-patch real HGI ID back to the placeholder.
+        # The HGI80 firmware requires 18:000730 as the source for
+        # frames it transmits; using the actual gateway ID causes a
+        # silent drop and WantEcho timeout (issue 835, cc 864).
+        if (
+            self.hgi_id
+            and not self._is_evofw3  # HGI80
+            and cmd.addr1 == self.hgi_id
+            and self.hgi_id != HGI_DEV_ADDR.id
+        ):
+            _LOGGER.debug(
+                "Patching command for HGI80: swapped %s -> %s for %s|%s",
+                self.hgi_id,
+                HGI_DEV_ADDR.id,
+                cmd.verb,
+                cmd.code,
+            )
+            return dataclasses.replace(cmd, addr1=HGI_DEV_ADDR.id)
 
         return cmd
 
     async def send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -320,18 +344,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         """Send a Command with Qos (with retries, until success or
         ProtocolError).
 
-        Returns the Command's response Packet or the Command echo if a
-        response is not expected (e.g. sending an RP).
-
-        If wait_for_reply is True, return the RQ's RP (or W's I), or
-        raise an exception if one doesn't arrive. If it is False, return
-        the echo of the Command only. If it is None (the default), act
-        as True for RQs, and False for all other Commands.
+        Returns the Command's response Packet or the Command echo.
 
         num_repeats is # of times to send the Command, in addition to
-        the fist transmit, with gap_duration seconds between each
-        transmission. If wait_for_reply is True, then num_repeats is
-        ignored.
+        the first transmit, with gap_duration seconds between each
+        transmission.
 
         Commands are queued and sent FIFO, except higher-priority
         Commands are always sent first.
@@ -349,14 +366,10 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         cmd = self._patch_cmd_if_needed(cmd)
 
         if qos and not self._context:
-            _LOGGER.warning(f"{cmd} < QoS is currently disabled by this Protocol")
+            _LOGGER.warning("%s < QoS is currently disabled by this Protocol", cmd)
 
-        if cmd.src.id != self.hgi_id:  # Was HGI_DEV_ADDR.id
+        if cmd.addr1 != self.hgi_id:  # Was HGI_DEV_ADDR.id
             await self._send_impersonation_alert(cmd)
-
-        if qos and qos.wait_for_reply and num_repeats:
-            _LOGGER.warning(f"{cmd} < num_repeats set to 0, as wait_for_reply is True")
-            num_repeats = 0  # the lesser crime over wait_for_reply=False
 
         pkt = await self._send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
             cmd,
@@ -370,7 +383,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
     async def _send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -413,7 +426,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
                 # + space prefix
                 pkt = Packet.from_port(pkt.dtm, f"{pkt.rssi} {hacked_frame}")
             except (ValueError, PacketInvalid) as err:
-                _LOGGER.debug(f"Regex modified frame is invalid, reverting: {err}")
+                _LOGGER.debug("Regex modified frame is invalid, reverting: %s", err)
                 # Fallback to original packet if regex broke it (pkt
                 # remains unchanged)
 
@@ -427,7 +440,12 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
                 :return: True if the packet is within the pending
                     window.
                 """
-                return bool(p.dtm + td(seconds=int(p.payload[2:6], 16) / 10) > dt_now())
+                p_dtm = (
+                    p.dtm.replace(tzinfo=None) if p.dtm.tzinfo is not None else p.dtm
+                )
+                now = dt_now()
+                now_dtm = now.replace(tzinfo=None) if now.tzinfo is not None else now
+                return bool(p_dtm + td(seconds=int(p.payload[2:6], 16) / 10) > now_dtm)
 
             self._tracked_sync_cycles = deque(
                 p
@@ -437,11 +455,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             self._tracked_sync_cycles.append(pkt)
 
         if _DBG_FORCE_LOG_PACKETS:
-            _LOGGER.warning(f"Recv'd: {pkt._rssi} {pkt}")
+            _LOGGER.warning("Recv'd: %s %s", pkt.rssi, pkt)
         elif _LOGGER.getEffectiveLevel() > logging.DEBUG:
-            _LOGGER.info(f"Recv'd: {pkt._rssi} {pkt}")
+            _LOGGER.info("Recv'd: %s %s", pkt.rssi, pkt)
         else:
-            _LOGGER.debug(f"Recv'd: {pkt._rssi} {pkt}")
+            _LOGGER.debug("Recv'd: %s %s", pkt.rssi, pkt)
 
         self._pkt_received(pkt)
 
@@ -453,7 +471,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             # We explicitly catch specific validation failures. Unhandled
             # internal errors like TypeError or AttributeError will
             # correctly bubble up and fail loudly.
-            _LOGGER.debug(f"Dropped invalid packet during parsing: {err}")
+            _LOGGER.debug("Dropped invalid packet during parsing: %s", err)
             return
 
         self._this_msg, self._prev_msg = msg, self._this_msg
@@ -465,7 +483,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         Also maintain _prev_msg, _this_msg attrs.
         """
         if self._msg_handler is not None:
-            _LOGGER.debug(f"Dispatching valid message to handler: {msg}")
+            _LOGGER.debug("Dispatching valid message to handler: %s", msg)
             # Ensure safe dispatch to either coroutine or standard handler
             res = self._msg_handler(msg)
             if asyncio.iscoroutine(res):
@@ -514,9 +532,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
     def hgi_id(self) -> DeviceIdT:
         """Get the ID of the HGI handling the comms."""
         if not self._transport:
-            return cast("DeviceIdT", self._known_hgi or HGI_DEV_ADDR.id)
+            return DeviceIdT(self._known_hgi or HGI_DEV_ADDR.id)
         hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
-        return cast("DeviceIdT", hgi or self._known_hgi or HGI_DEV_ADDR.id)
+        return DeviceIdT(hgi or self._known_hgi or HGI_DEV_ADDR.id)
 
     def _set_active_hgi(self, dev_id: DeviceIdT, by_signature: bool = False) -> None:
         """Set the Active Gateway (HGI) device_id.
@@ -532,16 +550,18 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             self._active_hgi = dev_id
 
         if dev_id in self._exclude:
-            _LOGGER.error(f"{msg} MUST NOT be in the {SZ_BLOCK_LIST}{TIP}")
+            _LOGGER.error("%s MUST NOT be in the %s%s", msg, SZ_BLOCK_LIST, TIP)
 
         elif dev_id not in self._include:
-            _LOGGER.warning(f"{msg} SHOULD be in the (enforced) {SZ_KNOWN_LIST}")
+            _LOGGER.warning("%s SHOULD be in the (enforced) %s", msg, SZ_KNOWN_LIST)
 
         elif not self.enforce_include:
-            _LOGGER.info(f"{msg} is in the {SZ_KNOWN_LIST}, which SHOULD be enforced")
+            _LOGGER.info(
+                "%s is in the %s, which SHOULD be enforced", msg, SZ_KNOWN_LIST
+            )
 
         else:
-            _LOGGER.debug(f"{msg} is in the {SZ_KNOWN_LIST}")
+            _LOGGER.debug("%s is in the %s", msg, SZ_KNOWN_LIST)
 
     def _is_wanted_addrs(
         self, src_id: DeviceIdT, dst_id: DeviceIdT, sending: bool = False
@@ -570,27 +590,30 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             self._foreign_gwys_lst.append(dev_id)
 
         for dev_id in dict.fromkeys((src_id, dst_id)):  # removes duplicates
+            # HGI devices (18:) are gateways, not sensors/actuators.
+            # Foreign HGIs communicate with our controller and the controller's
+            # responses (e.g. 0004 zone names, 2349 zone modes) are addressed
+            # to them.  Blocking a foreign HGI would prevent the active gateway
+            # from eavesdropping on those responses (issue 822).
+            #
+            # This check is BEFORE the exclude (block_list) check so that
+            # foreign HGIs are never blocked, even if a caller mistakenly
+            # adds them to the block_list.  HGI_DEV_ADDR (18:000730, the
+            # generic broadcast address) is still subject to the block_list.
+            if dev_id[:2] == "18" and dev_id != HGI_DEV_ADDR.id:
+                if dev_id == self._active_hgi:
+                    continue
+                if self._active_hgi:
+                    warn_foreign_hgi(dev_id)
+                continue
+
             if dev_id in self._exclude:
                 return False
-
-            if dev_id == self._active_hgi:
-                continue
 
             if dev_id in self._include:
                 continue
 
             if sending and dev_id == HGI_DEV_ADDR.id:
-                continue
-
-            # HGI devices (18:) are gateways, not sensors/actuators.
-            # Don't filter out specific foreign HGIs when enforce_include is
-            # True — doing so blocks legitimate traffic to/from foreign HGIs
-            # that appear in captured conversations but haven't been added to
-            # the known_list yet.  HGI_DEV_ADDR (18:000730, the generic
-            # broadcast address) is still filtered.
-            if dev_id[:2] == "18" and dev_id != HGI_DEV_ADDR.id:
-                if self._active_hgi:
-                    warn_foreign_hgi(dev_id)
                 continue
 
             if self.enforce_include:
@@ -599,26 +622,34 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         return True
 
     def _pkt_received(self, pkt: Packet) -> None:
+        # Fast early-exit: check device filter before invoking to_dto() if no raw handlers
+        if not self._raw_pkt_handlers and not self._is_wanted_addrs(
+            pkt.src.id, pkt.dst.id
+        ):
+            _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
+            return
+
         # Fire raw handlers before the device ID filter (for the scan engine)
         if self._raw_pkt_handlers:
             try:
                 dto = pkt.to_dto()
             except PacketInvalid as err:
-                _LOGGER.debug(f"Dropped invalid packet for raw handlers: {err}")
+                _LOGGER.debug("Dropped invalid packet for raw handlers: %s", err)
             else:
                 for handler in self._raw_pkt_handlers:
                     res = handler(dto)
                     if asyncio.iscoroutine(res):
                         self._create_handler_task(res)
 
-        if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
-            _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
-            return
+            if not self._is_wanted_addrs(pkt.src.id, pkt.dst.id):
+                _LOGGER.debug("%s < Packet excluded by device_id filter", pkt)
+                return
+
         super()._pkt_received(pkt)
 
     async def send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -626,7 +657,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         priority: Priority = Priority.DEFAULT,
         qos: QosParams | None = None,
     ) -> Packet:
-        if not self._is_wanted_addrs(cmd.src.id, cmd.dst.id, sending=True):
+        if not self._is_wanted_addrs(
+            DeviceIdT(cmd.addr1), DeviceIdT(cmd.addr2), sending=True
+        ):
             raise ProtocolError(f"Command excluded by device_id filter: {cmd}")
         return await super().send_cmd(
             cmd,

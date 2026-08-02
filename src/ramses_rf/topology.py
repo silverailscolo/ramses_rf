@@ -24,17 +24,31 @@ entities, such as the association between a Zone and its Actuators.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from . import exceptions as exc
 from .const import F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR
 from .schemas import SZ_CIRCUITS
 
+
+@runtime_checkable
+class _HasTcs(Protocol):
+    tcs: Parent | None
+
+
+@runtime_checkable
+class _HasZones(Protocol):
+    _max_zones: int
+
+    def get_dhw_zone(self) -> Parent: ...
+
+    def get_htg_zone(self, zone_idx: str) -> Parent: ...
+
+
 if TYPE_CHECKING:
     from ramses_tx.typing import DeviceIdT
 
     from .devices import Controller
-    from .entity import Entity
     from .systems.tcs import Evohome
 
 
@@ -107,7 +121,10 @@ class Parent:
 
         try:
             if is_sensor and child_id == FA:
-                if self._dhw_sensor and self._dhw_sensor is not child:
+                if (
+                    self._dhw_sensor
+                    and getattr(self._dhw_sensor, "id", None) != child.id
+                ):
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed dhw_sensor (from {self._dhw_sensor} to {child})"
                     )
@@ -116,7 +133,7 @@ class Parent:
             elif is_sensor and hasattr(self, SZ_SENSOR):
                 if (
                     getattr(self, SZ_SENSOR, None)
-                    and getattr(self, SZ_SENSOR) is not child
+                    and getattr(getattr(self, SZ_SENSOR), "id", None) != child.id
                 ):
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed zone sensor (from {getattr(self, SZ_SENSOR)} to {child})"
@@ -129,23 +146,26 @@ class Parent:
                 )
 
             elif hasattr(self, SZ_CIRCUITS):
-                if child not in self.circuit_by_id:
+                if (
+                    child not in self.circuit_by_id
+                    and child.id not in self.circuit_by_id
+                ):
                     self.circuit_by_id[child.id] = child
 
             elif hasattr(self, SZ_ACTUATORS):
-                if child not in self.actuators:
+                if child not in self.actuators and child.id not in self.actuator_by_id:
                     self.actuators.append(child)
                     self.actuator_by_id[child.id] = child
 
             elif child_id == F9:
-                if self._htg_valve and self._htg_valve is not child:
+                if self._htg_valve and getattr(self._htg_valve, "id", None) != child.id:
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed htg_valve (from {self._htg_valve} to {child})"
                     )
                 self._htg_valve = child
 
             elif child_id == FA:
-                if self._dhw_valve and self._dhw_valve is not child:
+                if self._dhw_valve and getattr(self._dhw_valve, "id", None) != child.id:
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed dhw_valve (from {self._dhw_valve} to {child})"
                     )
@@ -176,6 +196,52 @@ class Parent:
         self.childs.append(child)
         self.child_by_id[child.id] = child
 
+    def _detach_child(self, child: Child) -> None:
+        """Detach a child device from this Parent, maintaining referential integrity.
+
+        This is the inverse of :meth:`_add_child`. It clears the slot the
+        child occupied (sensor, valve, actuator, circuit, or appliance
+        control), removes the child from the ``childs`` list and
+        ``child_by_id`` registry, and clears the child's back-references.
+
+        :param child: The child entity to detach.
+        :type child: Child
+        """
+        # Clear the slot based on identity (not child_id, which may have
+        # been mutated since the child was added)
+        child_id_: DeviceIdT | None = getattr(child, "id", None)
+
+        if getattr(self, "_dhw_sensor", None) is child:
+            self._dhw_sensor = None
+        elif getattr(self, "_dhw_valve", None) is child:
+            self._dhw_valve = None
+        elif getattr(self, "_htg_valve", None) is child:
+            self._htg_valve = None
+        elif getattr(self, "_app_cntrl", None) is child:
+            self._app_cntrl = None
+        elif hasattr(self, SZ_SENSOR) and getattr(self, "_sensor", None) is child:
+            self._sensor = None
+        elif hasattr(self, SZ_ACTUATORS) and child in getattr(self, "actuators", []):
+            self.actuators.remove(child)
+            if child_id_ is not None:
+                self.actuator_by_id.pop(child_id_, None)
+        elif (
+            child_id_ is not None
+            and hasattr(self, SZ_CIRCUITS)
+            and child_id_ in getattr(self, "circuit_by_id", {})
+        ):
+            self.circuit_by_id.pop(child_id_, None)
+
+        # Remove from child registries
+        if child in self.childs:
+            self.childs.remove(child)
+        if child_id_ is not None:
+            self.child_by_id.pop(child_id_, None)
+
+        # Clear the child's back-references
+        child._parent = None
+        child._child_id = None
+
 
 class Child:
     """A Device can be the Child of a Parent (System, Zone, or UFH Controller).
@@ -203,6 +269,8 @@ class Child:
         self._parent = parent
         self._is_sensor = is_sensor
         self._child_id: str | None = None
+        self.ctl: Controller | Any = None
+        self.tcs: Evohome | None = None
 
     def _get_parent(
         self,
@@ -233,22 +301,31 @@ class Child:
             child_id = FF
 
         if parent_class == "Controller":
-            parent = cast(Any, parent).tcs
-            parent_class = parent.__class__.__name__
-            _TRACE.info(f"SUB-CONTROLLER: {self} shifted parent to {parent_class}")
+            if isinstance(parent, _HasTcs) and parent.tcs is not None:
+                parent = parent.tcs
+                parent_class = parent.__class__.__name__
+                _TRACE.info(
+                    "SUB-CONTROLLER: %s shifted parent to %s", self, parent_class
+                )
+            else:
+                raise exc.SchemaInconsistentError(
+                    f"{self}: controller parent tcs cannot be None"
+                )
 
         if parent_class in ("Evohome", "System") and child_id:
             if child_id in (F9, FA):
-                parent = cast(Any, parent).get_dhw_zone()
-                parent_class = parent.__class__.__name__
-                _TRACE.info(f"DHW SHIFT: {self} shifted parent to {parent_class}")
+                if isinstance(parent, _HasZones):
+                    parent = parent.get_dhw_zone()
+                    parent_class = parent.__class__.__name__
+                    _TRACE.info(
+                        "DHW SHIFT: %s shifted parent to %s", self, parent_class
+                    )
             elif (
-                hasattr(parent, "_max_zones")
-                and int(child_id, 16) < cast(Any, parent)._max_zones
+                isinstance(parent, _HasZones) and int(child_id, 16) < parent._max_zones
             ):
-                parent = cast(Any, parent).get_htg_zone(child_id)
+                parent = parent.get_htg_zone(child_id)
                 parent_class = parent.__class__.__name__
-                _TRACE.info(f"ZONE SHIFT: {self} shifted parent to {parent_class}")
+                _TRACE.info("ZONE SHIFT: %s shifted parent to %s", self, parent_class)
 
         elif (
             parent_class
@@ -270,7 +347,7 @@ class Child:
                 f"{self} can't change parent "
                 f"({self._parent}_{self._child_id} to {parent}_{child_id})"
             )
-            _TRACE.error(f"PARENT CHANGE EXCEPTION: {err_msg}")
+            _TRACE.error("PARENT CHANGE EXCEPTION: %s", err_msg)
             raise exc.SystemSchemaInconsistent(err_msg)
 
         PARENT_RULES: dict[str, dict[str, tuple[str, ...]]] = {
@@ -312,23 +389,27 @@ class Child:
 
         rules = PARENT_RULES.get(parent_class)
         if not rules:
-            _TRACE.error(f"PARENT RULES EXCEPTION: {parent} is not a valid parent.")
+            _TRACE.error("PARENT RULES EXCEPTION: %s is not a valid parent.", parent)
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: not a valid parent"
             )
 
         if is_sensor and self_class not in rules[SZ_SENSOR]:
             _TRACE.error(
-                f"RULES EXCEPTION: Sensor {self} must be {rules[SZ_SENSOR]} "
-                f"for parent {parent}"
+                "RULES EXCEPTION: Sensor %s must be %s for parent %s",
+                self,
+                rules[SZ_SENSOR],
+                parent,
             )
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: Sensor {self} must be {rules[SZ_SENSOR]}"
             )
         if not is_sensor and self_class not in rules[SZ_ACTUATORS]:
             _TRACE.error(
-                f"RULES EXCEPTION: Actuator {self} must be {rules[SZ_ACTUATORS]} "
-                f"for parent {parent}"
+                "RULES EXCEPTION: Actuator %s must be %s for parent %s",
+                self,
+                rules[SZ_ACTUATORS],
+                parent,
             )
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: Actuator {self} must be {rules[SZ_ACTUATORS]}"
@@ -368,23 +449,21 @@ class Child:
                 else getattr(parent, "ctl", None)
             )
 
-            this_entity = cast("Entity", self)
-
-            if this_entity.ctl and this_entity.ctl is not ctl:
+            if self.ctl and self.ctl is not ctl:
                 raise exc.SystemSchemaInconsistent(
-                    f"{self} can't change controller: {this_entity.ctl} to {ctl}"
+                    f"{self} can't change controller: {self.ctl} to {ctl}"
                 )
 
             parent._add_child(self, child_id=child_id, is_sensor=is_sensor)
 
         except (exc.SchemaInconsistentError, exc.SystemSchemaInconsistent) as err:
-            _TRACE.error(f"LINK EXCEPTION: Failed applying link for {self}: {err}")
+            _TRACE.error("LINK EXCEPTION: Failed applying link for %s: %s", self, err)
             raise
 
         self._child_id = child_id
         self._parent = parent
 
-        this_entity.ctl = cast("Controller", ctl)
-        this_entity.tcs = cast("Evohome", getattr(ctl, "tcs", None))
+        self.ctl = ctl
+        self.tcs = getattr(ctl, "tcs", None)
 
         return parent

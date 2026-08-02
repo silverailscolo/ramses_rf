@@ -104,11 +104,14 @@ class ApplicationMessage(Message):
         # Safest fallback for unit tests without an engine
         now = self._engine._dt_now() if self._engine else dt.now(tz=UTC)
         if now.tzinfo is None:
-            now = now.replace(tzinfo=UTC)
+            # Naive datetimes from the engine are local time (e.g. from packet
+            # log replay or dt_now()), not UTC — astimezone() assigns the local
+            # timezone so subtraction against tz-aware msg_dtm is correct.
+            now = now.astimezone()
 
         msg_dtm = self.dtm
         if msg_dtm.tzinfo is None:
-            msg_dtm = msg_dtm.replace(tzinfo=UTC)
+            msg_dtm = msg_dtm.astimezone()
 
         # 1. Enforce the hard 7-day expiration limit
         if now - msg_dtm > td(days=7):

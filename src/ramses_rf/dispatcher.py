@@ -14,6 +14,7 @@ from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final
 
 from ramses_tx import ALL_DEV_ADDR
+from ramses_tx.address import HGI_DEV_ADDR
 
 from . import exceptions as exc
 from .const import (
@@ -23,6 +24,7 @@ from .const import (
     I_,
     RP,
     RQ,
+    SZ_ACTIVE,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BYPASS_MODE,
@@ -31,6 +33,7 @@ from .const import (
     SZ_CO2_LEVEL,
     SZ_DATETIME,
     SZ_DEVICES,
+    SZ_DIFFERENTIAL,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
     SZ_EXHAUST_TEMP,
@@ -45,9 +48,11 @@ from .const import (
     SZ_INDOOR_TEMP,
     SZ_LANGUAGE,
     SZ_MINUTES,
+    SZ_MODE,
     SZ_OFFER,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
+    SZ_OVERRUN,
     SZ_PHASE,
     SZ_POST_HEAT,
     SZ_PRE_HEAT,
@@ -70,14 +75,16 @@ from .const import (
     Code,
     DevType,
 )
+from .devices.hvac_ventilators import HvacVentilator
 from .messages import Message
 from .models import StateUpdatedEvent, SystemState
 from .protocol.ramses import (
+    CODES_BY_DEV_SLUG,
     CODES_OF_HEAT_DOMAIN,
     CODES_OF_HEAT_DOMAIN_ONLY,
     CODES_OF_HVAC_DOMAIN_ONLY,
 )
-from .protocol_schema import CODES_BY_DEV_SLUG
+from .systems.zones import DhwZone
 
 if TYPE_CHECKING:
     from .gateway import Gateway
@@ -205,24 +212,56 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
         #  - discovery: from packet fingerprint, excl. payloads (only for 10:)
         #  - eavesdrop: from packet fingerprint, incl. payloads
 
+        hgi_id = gwy.hgi.id if gwy.hgi else None
+
         if src_dev is None:
-            # may: DeviceNotFoundError, but don't suppress
-            src_dev = gwy.device_registry.get_device(msg.src.id)
-            if msg.dst.id == msg.src.id:
-                return True
+            # Foreign HGIs (18: devices that are not the active gateway and
+            # not the generic HGI_DEV_ADDR 18:000730) communicate with our
+            # controller — the controller's RPs are addressed to them, and
+            # they send RQs to the controller.  The active gateway eavesdrops
+            # on both directions (issue 822).
+            #
+            # The protocol-level filter (_is_wanted_addrs in ramses_tx) lets
+            # foreign HGIs through, but when enforce_known_list is True the
+            # device-registry filter (check_filter_lists in dev_filter.py)
+            # rejects them because they are not in the known_list.  This
+            # get_device call is NOT suppressed (the src device is needed for
+            # payload routing), so a DeviceNotFoundError here drops the entire
+            # packet and adds the foreign HGI to the _unwanted list — causing
+            # repeating FILTER EXCEPTION warnings on every subsequent packet
+            # from the foreign HGI (issue 822, comment 5017168119).
+            #
+            # Skip device creation for foreign HGI sources only when
+            # enforce_known_list is active (the filter would reject them).
+            # When enforce_known_list is False, the foreign HGI is created
+            # normally (as an HgiGateway) — this preserves existing behaviour
+            # for systems that don't enforce the known_list.
+            if (
+                gwy.config.engine.enforce_known_list
+                and msg.src.id[:2] == "18"
+                and msg.src.id != HGI_DEV_ADDR.id
+                and msg.src.id != hgi_id
+            ):
+                # Foreign HGI as source — skip device creation, continue
+                # processing (the dst device will be created below)
+                pass
+            else:
+                # may: DeviceNotFoundError, but don't suppress
+                src_dev = gwy.device_registry.get_device(msg.src.id)
+                if msg.dst.id == msg.src.id:
+                    return True
 
         if not gwy.config.enable_eavesdrop:
             return True
 
-        hgi_id = gwy.hgi.id if gwy.hgi else None
         if dst_dev is None and msg.src.id != hgi_id:
             with contextlib.suppress(exc.DeviceNotFoundError):
                 gwy.device_registry.get_device(msg.dst.id)
 
         # Eavesdrop: Instantiate implicitly referenced devices (e.g., parent
         # controller in addr2)
-        if hasattr(msg._pkt, "_addrs"):
-            for addr in msg._pkt._addrs:
+        if (addrs := getattr(msg._pkt, "_addrs", None)) is not None:
+            for addr in addrs:
                 if addr.id not in (msg.src.id, getattr(msg.dst, "id", None)):
                     with contextlib.suppress(exc.DeviceNotFoundError):
                         gwy.device_registry.get_device(addr.id)
@@ -309,6 +348,51 @@ def validate_slugs(gwy: Gateway, msg: Message) -> bool:
     return gwy.config.reduce_processing < DONT_UPDATE_ENTITIES
 
 
+# DHW opcodes that carry no zone_idx/domain_id and need special routing.
+_DHW_OPCODES: Final[frozenset[Code]] = frozenset({Code._1260, Code._10A0, Code._1F41})
+
+
+def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
+    """Resolve the DhwZone that should ingest a DHW opcode (1260/10A0/1F41).
+
+    These payloads carry no ``zone_idx``/``domain_id``, so the standard
+    routing in ``_resolve_logical_targets`` (and the equivalent block in
+    ``StateProjector.process_message_state``) misses the DhwZone.
+
+    ``1260`` is sent by the DhwSensor (or relayed by the Controller as an
+    RP); ``10A0``/``1F41`` are sent by the Controller.  The
+    appliance_control (OTB) also emits ``10A0``/``1260`` with different
+    semantics (CH setpoint / null temp) and is excluded to avoid
+    clobbering the DHW read-models.
+
+    See: https://github.com/ramses-rf/ramses_cc/issues/843
+
+    :param msg: The inbound message.
+    :type msg: Message
+    :param src_dev: The source device (DhwSensor or Controller).
+    :return: The DhwZone to route to, or ``None`` if the message is not
+        a DHW opcode or the source is not a DHW sender.
+    :rtype: DhwZone | None
+    """
+    if msg.code not in _DHW_OPCODES or src_dev is None:
+        return None
+
+    src_slug = getattr(src_dev, "_SLUG", "")
+    if msg.code == Code._1260:
+        is_dhw_src = src_slug in ("DHW", "CTL")
+    else:  # 10A0 / 1F41 are owned by the Controller
+        is_dhw_src = src_slug == "CTL"
+
+    if not is_dhw_src:
+        return None
+
+    tcs = getattr(src_dev, "tcs", None)
+    if tcs is None:
+        return None
+
+    return getattr(tcs, "dhw", None)
+
+
 def _resolve_logical_targets(
     gwy: Gateway, msg: Message, p: dict[str, Any]
 ) -> list[Any]:
@@ -316,11 +400,13 @@ def _resolve_logical_targets(
     targets = []
     src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
     dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
+    tcs = getattr(src_dev, "tcs", None) if src_dev else None
+    tcs = tcs or gwy.tcs
 
     # 1. Fault logs strictly target the TCS (if it exists) or the source device
     if msg.code == "0418":
-        if src_dev and hasattr(src_dev, "tcs") and src_dev.tcs:
-            targets.append(getattr(src_dev.tcs, "faultlog", src_dev))
+        if tcs:
+            targets.append(getattr(tcs, "faultlog", src_dev))
         elif src_dev:
             targets.append(src_dev)
         return targets
@@ -343,44 +429,47 @@ def _resolve_logical_targets(
         if (
             dst_dev
             and (
-                hasattr(dst_dev, "apply_state_update") or hasattr(dst_dev, "hvac_state")
+                getattr(dst_dev, "apply_state_update", None) is not None
+                or getattr(dst_dev, "hvac_state", None) is not None
             )
             and dst_dev not in targets
         ):
             targets.append(dst_dev)
 
     # 4. Virtual twins (Zones) get updates if explicitly addressed by idx.
-    if "zone_idx" in p and src_dev and hasattr(src_dev, "tcs") and src_dev.tcs:
-        if zone := src_dev.tcs.zone_by_idx.get(p["zone_idx"]):
+    if "zone_idx" in p and tcs:
+        if zone := tcs.zone_by_idx.get(p["zone_idx"]):
             if zone not in targets:
                 targets.append(zone)
 
     # 5. Domain twins (TCS, DHW) get updates.
-    if "domain_id" in p and src_dev and hasattr(src_dev, "tcs") and src_dev.tcs:
+    if "domain_id" in p and tcs:
         domain_id = p["domain_id"]
-        if domain_id == "FC" and src_dev.tcs not in targets:
-            targets.append(src_dev.tcs)
-        elif domain_id in ("FA", "F9") and hasattr(src_dev.tcs, "dhw"):
-            if src_dev.tcs.dhw not in targets:
-                targets.append(src_dev.tcs.dhw)
+        if domain_id == "FC" and tcs not in targets:
+            targets.append(tcs)
+        elif domain_id in ("FA", "F9") and getattr(tcs, "dhw", None) is not None:
+            if tcs.dhw not in targets:
+                targets.append(tcs.dhw)
 
     # 6. System-level opcodes (2E04/0100/313F) target the TCS directly.
     #    These packets have no domain_id/zone_idx, so steps 4/5 miss them.
-    if (
-        msg.code in (Code._2E04, Code._0100, Code._313F)
-        and src_dev
-        and hasattr(src_dev, "tcs")
-        and src_dev.tcs
-        and src_dev.tcs not in targets
-    ):
-        targets.append(src_dev.tcs)
+    if msg.code in (Code._2E04, Code._0100, Code._313F) and tcs and tcs not in targets:
+        targets.append(tcs)
+
+    # 7. DHW opcodes (1260/10A0/1F41) carry no domain_id/zone_idx, so steps
+    #    4/5 miss the DhwZone.  Route them via the shared helper.
+    #    See: https://github.com/ramses-rf/ramses_cc/issues/843
+    dhw = _get_dhw_zone_from_msg(msg, src_dev)
+    if dhw is not None and dhw not in targets:
+        targets.append(dhw)
 
     return targets
 
 
 def _update_temperature_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     """Translate temperature data into a frozen StateUpdatedEvent."""
-    if not hasattr(target, "temp_state"):
+    temp_state = getattr(target, "temp_state", None)
+    if temp_state is None:
         return
 
     updates: dict[str, Any] = {}
@@ -415,15 +504,18 @@ def _update_temperature_state(target: Any, p: dict[str, Any], msg: Message) -> N
 
 def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     """Translate demand data into a frozen StateUpdatedEvent."""
-    if not hasattr(target, "demand_state"):
+    demand_state = getattr(target, "demand_state", None)
+    if demand_state is None:
         return
 
     updates: dict[str, Any] = {}
     if SZ_HEAT_DEMAND in p:
         updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
     if SZ_RELAY_DEMAND in p:
-        updates[SZ_HEAT_DEMAND] = p[SZ_RELAY_DEMAND]
+        updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
         updates["relay_active"] = float(p[SZ_RELAY_DEMAND]) > 0.0
+    if msg.code == Code._0009 and "failsafe_enabled" in p:
+        updates["relay_failsafe"] = p["failsafe_enabled"]
 
     if not updates:
         return
@@ -453,7 +545,7 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
     :return: None
     :rtype: None
     """
-    if msg.code != "0418" or not hasattr(target, "state"):
+    if msg.code != "0418" or getattr(target, "state", None) is None:
         return
     if type(target.state).__name__ != "FaultLogState":
         return
@@ -462,9 +554,11 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
     if "log_idx" not in p:
         return
 
+    # Deferred import to prevent circular dependency at module load time
+    # DO NOT MOVE to module level.
     from ramses_rf.systems.faultlog import FaultLogEntry
 
-    with contextlib.suppress(Exception):
+    try:
         entry = FaultLogEntry.from_msg(msg)
 
         # Append to the immutable tuple, safely removing stale matching timestamps
@@ -487,6 +581,8 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
         )
         target.apply_state_update(event)
+    except (AttributeError, KeyError, TypeError, ValueError) as err:
+        _LOGGER.warning("Failed to process fault log entry from msg %s: %s", msg, err)
 
 
 def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
@@ -498,7 +594,8 @@ def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     :param p: The parsed message payload dictionary.
     :param msg: The immutable Message L7 envelope.
     """
-    if not hasattr(target, "system_state"):
+    system_state = getattr(target, "system_state", None)
+    if system_state is None:
         return
 
     updates: dict[str, Any] = {}
@@ -547,9 +644,12 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if getattr(target, "_SLUG", "") in ("CTL", "BDR", "TRV", "OTB", "UFC", "DHW"):
         return
 
-    if not hasattr(target, "hvac_state"):
+    hvac_state = getattr(target, "hvac_state", None)
+    if hvac_state is None:
         return
 
+    # Deferred import to prevent circular dependency at module load time
+    # DO NOT MOVE to module level.
     from ramses_rf import quirks
 
     p = quirks.apply_hvac_quirks(p, target.hvac_state, msg.code)
@@ -642,6 +742,96 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         target.apply_state_update(event)
 
 
+def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+    """Translate DHW opcodes (10A0/1260/1F41) into the frozen DhwState.
+
+    Mirrors ``pipeline.ingestion.StateProjector._update_dhw_state`` so that
+    the legacy dispatcher hydrates the DhwZone's ``dhw_state`` read-model
+    (setpoint/overrun/differential from 10A0, mode/active/until from 1F41)
+    in addition to ``temp_state``.
+    """
+    if not isinstance(target, DhwZone):
+        return
+
+    updates: dict[str, Any] = {}
+    if msg.code == Code._10A0:
+        if SZ_SETPOINT in p:
+            updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+        if SZ_OVERRUN in p:
+            updates[SZ_OVERRUN] = p[SZ_OVERRUN]
+        if SZ_DIFFERENTIAL in p:
+            updates[SZ_DIFFERENTIAL] = p[SZ_DIFFERENTIAL]
+    elif msg.code == Code._1F41:
+        if SZ_MODE in p:
+            updates[SZ_MODE] = p[SZ_MODE]
+        if SZ_ACTIVE in p:
+            updates[SZ_ACTIVE] = p[SZ_ACTIVE]
+        if SZ_UNTIL in p:
+            updates[SZ_UNTIL] = p[SZ_UNTIL]
+
+    if not updates:
+        return
+
+    new_state = dataclasses.replace(target.dhw_state, **updates)
+    target.dhw_state = new_state
+
+    event = StateUpdatedEvent(
+        entity_id=target.id,
+        state=new_state,
+        correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+        causation_id=getattr(msg, "message_id", uuid.uuid4()),
+    )
+    target.apply_state_update(event)
+
+
+def _route_2411_to_fan(gwy: Gateway, msg: Message) -> None:
+    """Route a 2411 parameter message to its HvacVentilator aggregate root.
+
+    Phase 2.95 removed the ``HvacVentilator._handle_msg`` override that
+    previously invoked ``_handle_2411_message`` (which sets
+    ``_supports_2411`` and stores the parameter) and
+    ``_handle_initialized_callback`` (which fires the ramses_cc entity
+    creation callback).  Without this routing, FAN devices never advertise
+    2411 support, so ramses_cc never creates the ~15 parameter ``number``
+    entities (comfort temperature, etc.) — see ramses_cc issue 851.
+
+    This re-wires the 2411 handling into the CQRS ingestion pipeline (where
+    issue 639 wants domain logic to live) instead of restoring the leaky
+    ``_handle_msg`` override.  ``_handle_2411_message`` reads
+    ``msg.payload`` directly, so it is invoked once per FAN target, outside
+    the per-payload loop in ``_cqrs_ingestion_engine``.
+    """
+    if getattr(msg, "verb", "") == "RQ":
+        return
+
+    registry = getattr(gwy, "device_registry", None)
+    if registry is None:
+        return
+
+    candidates: list[Any] = []
+    if msg.src is not None:
+        src_dev = registry.device_by_id.get(msg.src.id)
+        if src_dev is not None:
+            candidates.append(src_dev)
+    if msg.dst is not None:
+        dst_dev = registry.device_by_id.get(msg.dst.id)
+        if dst_dev is not None and dst_dev not in candidates:
+            candidates.append(dst_dev)
+
+    for dev in candidates:
+        if not isinstance(dev, HvacVentilator):
+            continue
+        try:
+            dev._handle_2411_message(msg)
+            dev._handle_initialized_callback()
+        except Exception as err:
+            _LOGGER.error(
+                "Failed to route 2411 message to ventilator %s: %s",
+                dev.id,
+                err,
+            )
+
+
 def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
     """Parallel ingestion engine to populate immutable CQRS read-models.
 
@@ -655,6 +845,13 @@ def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
     if not isinstance(msg.payload, (dict, list)):
         return
 
+    # 2411 parameter messages are handled by the FAN aggregate root directly
+    # (they set _supports_2411 and fire the initialized callback).  This runs
+    # before the per-payload loop because _handle_2411_message reads
+    # msg.payload as a whole.  See ramses_cc issue 851.
+    if msg.code == Code._2411:
+        _route_2411_to_fan(gwy, msg)
+
     payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
 
     for p in payloads:
@@ -666,6 +863,7 @@ def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
             with contextlib.suppress(AttributeError, TypeError, ValueError):
                 _update_system_state(target, p, msg)
                 _update_hvac_state(target, p, msg)
+                _update_dhw_state(target, p, msg)
                 _update_temperature_state(target, p, msg)
                 _update_demand_state(target, p, msg)
                 _update_faultlog_state(target, p, msg)
@@ -714,14 +912,18 @@ def route_payload(gwy: Gateway, msg: Message) -> None:
         if msg.dst.id != msg.src.id and dst_dev is not None:
             devices.append(dst_dev)
 
-        if src_dev and hasattr(src_dev, SZ_DEVICES) and src_dev.devices:
-            for d in src_dev.devices:
+        src_dev_devices = getattr(src_dev, SZ_DEVICES, None) if src_dev else None
+        if src_dev_devices:
+            for d in src_dev_devices:
                 if d.id != msg.src.id and d not in devices:
                     devices.append(d)
 
     # Add Eavesdropping Correlation Routing
-    if gwy.config.enable_eavesdrop and hasattr(msg._pkt, "_addrs"):
-        for addr in msg._pkt._addrs:
+    if (
+        gwy.config.enable_eavesdrop
+        and (addrs := getattr(msg._pkt, "_addrs", None)) is not None
+    ):
+        for addr in addrs:
             if addr.id != msg.src.id and addr.id != getattr(msg.dst, "id", None):
                 if dev := gwy.device_registry.device_by_id.get(addr.id):
                     if dev not in devices:
@@ -746,6 +948,9 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
     # All methods require msg with a valid payload, except instantiate_devices(),
     # which requires a valid payload only for 000C.
     try:
+        if cm := getattr(gwy, "conversation_manager", None):
+            cm.process_msg(msg)
+
         if not validate_addresses(gwy, msg):
             _log_message(gwy, msg)
             return

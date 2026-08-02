@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
+from ramses_rf.typing import HvacPayloadT
 from ramses_tx.address import NON_DEV_ADDR, hex_id_to_dev_id
 from ramses_tx.const import (
     I_,
@@ -35,10 +36,11 @@ from ramses_tx.const import (
     W_,
     Code,
 )
-from ramses_tx.helpers import (
-    hex_to_flag8,
-    hex_to_percent,
-    hex_to_temp,
+from ramses_tx.helpers import hex_to_flag8, hex_to_percent, hex_to_temp
+from ramses_tx.typing import PayDictT
+
+from ..protocol.ramses import _31D9_FAN_INFO_VASCO, _2411_PARAMS_SCHEMA
+from .helpers import (
     parse_air_quality,
     parse_bypass_position,
     parse_capabilities,
@@ -59,9 +61,6 @@ from ramses_tx.helpers import (
     parse_supply_flow,
     parse_supply_temp,
 )
-from ramses_tx.typing import PayDictT
-
-from ..protocol.ramses import _31D9_FAN_INFO_VASCO, _2411_PARAMS_SCHEMA
 from .registry import register_parser
 
 if TYPE_CHECKING:
@@ -224,7 +223,7 @@ def parser_12a0(payload: str, msg: Message) -> dict[str, Any] | list[dict[str, A
     Structural unpacking occurs in the CQRS quirks pipeline.
     """
     if len(payload) <= 14:
-        return cast("dict[str, Any]", parse_indoor_humidity(payload[2:12]))
+        return dict(parse_indoor_humidity(payload[2:12]))
 
     return [
         {
@@ -322,7 +321,7 @@ def parser_1f70(payload: str, msg: Message) -> dict[str, Any]:
         assert msg.verb != RP or payload[26:] == "008000"
 
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         "day_idx": payload[16:18],  # depends upon 1470[3:4]?
@@ -398,7 +397,7 @@ def parser_2210(payload: str, msg: Message) -> dict[str, Any]:
         ), f"expected byte 41- (00|40), not {payload[82:]}"
 
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     _req = "IDL"
     if payload[20:22] == "02":
@@ -444,7 +443,7 @@ def parser_22b0(payload: str, msg: Message) -> dict[str, Any]:
 
 # WIP: unknown, HVAC
 @register_parser("22E0")
-def parser_22e0(payload: str, msg: Message) -> Mapping[str, float | None]:
+def parser_22e0(payload: str, msg: Message) -> HvacPayloadT:
     """Parse the 22e0 packet.
 
     :param payload: The raw hex payload
@@ -452,7 +451,7 @@ def parser_22e0(payload: str, msg: Message) -> Mapping[str, float | None]:
     :param msg: The message object
     :type msg: Message
     :return: A mapping of percentage values extracted from the payload
-    :rtype: Mapping[str, float | None]
+    :rtype: HvacPayloadT
     :raises AssertionError: If a value exceeds the expected 200 threshold.
     :raises ValueError: If the payload cannot be parsed as percentages.
     """
@@ -478,7 +477,7 @@ def parser_22e0(payload: str, msg: Message) -> Mapping[str, float | None]:
 
 # WIP: unknown, HVAC
 @register_parser("22E5")
-def parser_22e5(payload: str, msg: Message) -> Mapping[str, float | None]:
+def parser_22e5(payload: str, msg: Message) -> HvacPayloadT:
     """Parse the 22e5 packet.
 
     :param payload: The raw hex payload
@@ -486,17 +485,17 @@ def parser_22e5(payload: str, msg: Message) -> Mapping[str, float | None]:
     :param msg: The message object
     :type msg: Message
     :return: A mapping of percentage values extracted from the payload
-    :rtype: Mapping[str, float | None]
+    :rtype: HvacPayloadT
     """
     # RP --- 32:153258 18:005904 --:------ 22E5 004 00-96-C8-14
     # RP --- 32:155617 18:005904 --:------ 22E5 004 00-72-C8-14
 
-    return cast("Mapping[str, float | None]", parser_22e0(payload, msg))
+    return parser_22e0(payload, msg)
 
 
 # WIP: unknown, HVAC
 @register_parser("22E9")
-def parser_22e9(payload: str, msg: Message) -> Mapping[str, float | str | None]:
+def parser_22e9(payload: str, msg: Message) -> HvacPayloadT:
     """Parse the 22e9 packet.
 
     :param payload: The raw hex payload
@@ -504,14 +503,14 @@ def parser_22e9(payload: str, msg: Message) -> Mapping[str, float | str | None]:
     :param msg: The message object
     :type msg: Message
     :return: A mapping of unknown identifiers or percentage values
-    :rtype: Mapping[str, float | str | None]
+    :rtype: HvacPayloadT
     """
     if payload[2:4] == "01":
         return {
             "unknown_4": payload[4:6],
             "unknown_6": payload[6:8],
         }
-    return cast("Mapping[str, float | str | None]", parser_22e0(payload, msg))
+    return parser_22e0(payload, msg)
 
 
 # fan_speed (switch_mode), HVAC
@@ -533,7 +532,7 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
             "mode_idx > mode_max"
         )
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     # Scheme detection: the mode_max byte (payload[4:6]) is the primary
     # indicator.  mode_max=04 → itho (5 modes: 00-04), mode_max=0A → nuaire,
@@ -576,14 +575,14 @@ def parser_22f1(payload: str, msg: Message) -> dict[str, Any]:
     else:
         from ramses_rf.protocol.ramses import _22F1_MODE_ORCON as _22F1_FAN_MODE
 
-        _22f1_mode_set = ("", "07", "0B")  # 0B?
+        _22f1_mode_set = ("", "04", "07", "0B")  # 0B?
         _22f1_scheme = "orcon"
 
     try:
         assert payload[2:4] in _22F1_FAN_MODE, f"unknown fan_mode: {payload[2:4]}"
         assert payload[4:6] in _22f1_mode_set, f"unknown mode_set: {payload[4:6]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         SZ_FAN_MODE: _22F1_FAN_MODE.get(payload[2:4], f"unknown_{payload[2:4]}"),
@@ -635,7 +634,7 @@ def parser_22f3(payload: str, msg: Message) -> dict[str, Any]:
     try:
         assert msg.len <= 7 or payload[14:] == "0000", f"byte 7: {payload[14:]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     new_speed = {  # from now, until timer expiry
         0x00: "fan_boost",  # set fan off, or 'boost' mode?
@@ -798,6 +797,13 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
             return val
         return None
 
+    def signed32(x: str) -> int:
+        # 4-byte signed integer (two's complement), used by params whose
+        # min_value can be negative (e.g. 4B bypass valve test position,
+        # which reports min 0xFFFFFF38 = -200). See issue 740.
+        val = int(x, 16)
+        return val - 0x100000000 if val >= 0x80000000 else val
+
     _2411_DATA_TYPES = {
         "00": (2, counter),  # 4E (0-1), 54 (15-60)
         "01": (2, centile),  # 52 (0.0-25.0) (%)
@@ -808,6 +814,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
         "20": (4, counter),  # 01 - Support parameter
         "80": (4, bool32),  # 07 - ClimaRad MiniBox: 0/1, FFFFFFFF/000000FF = N/A
         "90": (4, counter),  # 3E - Away mode Exhaust fan rate (%)
+        "91": (8, signed32),  # 4B - Bypass Valve test position (signed int32)
         "92": (4, hex_to_temp),  # 75 (0-30) (C)
     }
 
@@ -821,7 +828,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
                 f"Message: {msg!r}"
             )
     except Exception as err:
-        _LOGGER.warning(f"Error looking up 2411 parameter {param_id}: {err}")
+        _LOGGER.warning("Error looking up 2411 parameter %s: %s", param_id, err)
         description = "Unknown"
 
     result = {
@@ -854,7 +861,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
                     "precision": f"0x{payload[34:42]}",
                     "_value_42": payload[42:],
                 }
-            _LOGGER.warning(f"{warningmsg} Found values: {result}")
+            _LOGGER.warning("%s Found values: %s", warningmsg, result)
             return result
 
         length, parser = _2411_DATA_TYPES[payload[8:10]]
@@ -876,7 +883,7 @@ def parser_2411(payload: str, msg: Message) -> dict[str, Any]:
             }
         )
     except Exception as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} (Error parsing 2411: {err})")
+        _LOGGER.warning("%r < %s (Error parsing 2411: %s)", msg, _INFORM_DEV_MSG, err)
         result["value"] = f"0x{payload[10:18]}"
         result["_parse_error"] = f"Parser error: {err}"
         return result
@@ -911,7 +918,7 @@ def parser_3110(payload: str, msg: Message) -> PayDictT._3110:
             f"byte 3: {payload[6:]}"
         )
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     mode = {
         0x00: SZ_DISABLE,
@@ -951,7 +958,7 @@ def parser_3120(payload: str, msg: Message) -> dict[str, Any]:
         assert payload[10:12] in ("00", "03", "0A", "9C"), f"byte 5: {payload[10:12]}"
         assert payload[12:] == "FF", f"byte 6: {payload[12:]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         "unknown_0": payload[2:10],
@@ -1007,7 +1014,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
             f"byte 2: {payload[4:6]}"
         )
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     bitmap = int(payload[2:4], 16)
 
@@ -1044,7 +1051,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
                     f"unknown 31D9 fan_mode lookup key: {payload[4:6]}"
                 )
             except AssertionError as err:
-                _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+                _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
             fan_mode = _31D9_FAN_INFO_VASCO.get(
                 int(payload[4:6], 16) & 0xFF, f"unknown_{payload[4:6]}"
             )
@@ -1054,7 +1061,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
     try:
         assert payload[6:8] in ("00", "07", "0A", "FE"), f"byte 3: {payload[6:8]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     result.update({"_unknown_3": payload[6:8]})
 
@@ -1065,7 +1072,7 @@ def parser_31d9(payload: str, msg: Message) -> dict[str, Any]:
         assert payload[8:32] in ("00" * 12, "20" * 12), f"byte 4: {payload[8:32]}"
         assert payload[32:] in ("00", "04", "08"), f"byte 16: {payload[32:]}"
     except AssertionError as err:
-        _LOGGER.warning(f"{msg!r} < {_INFORM_DEV_MSG} ({err})")
+        _LOGGER.warning("%r < %s (%s)", msg, _INFORM_DEV_MSG, err)
 
     return {
         **result,

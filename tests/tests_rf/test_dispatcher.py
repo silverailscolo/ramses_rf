@@ -21,6 +21,7 @@ from ramses_rf.messages import Message
 from ramses_rf.models import HvacState
 from ramses_rf.state import MessageStore
 from ramses_tx import Address, DeviceIdT, Packet
+from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_REQ_REASON
 
 
@@ -451,3 +452,223 @@ class TestHvacStateNullMarkerFiltering:
         # Must not raise
         dispatcher._update_hvac_state(dev, payload, msg)
         assert dev.hvac_state.request_reason == "HUM"
+
+
+class TestForeignHgiDispatcher:
+    """Test that foreign HGI sources are not rejected by instantiate_devices.
+
+    See https://github.com/ramses-rf/ramses_cc/issues/822 (comment 5017168119):
+    a foreign HGI (18:072981) sends RQs to the controller, but the
+    device-registry filter rejects it (not in known_list) when
+    enforce_known_list is True.  The un-suppressed get_device(src) call
+    drops the entire packet and adds the foreign HGI to the _unwanted list,
+    causing repeating FILTER EXCEPTION warnings.
+    """
+
+    _FOREIGN_HGI = "18:072981"
+    _CTL_ID = "01:216136"
+    _ACTIVE_HGI = "18:000730"
+    _NOW = dt.now().replace(microsecond=0)
+
+    def _make_msg(self) -> Message:
+        """Create a message from a foreign HGI to the controller."""
+        return Message._from_pkt(
+            Packet(
+                self._NOW,
+                f"... RQ --- {self._FOREIGN_HGI} {self._CTL_ID} --:------ 0004 001 00",
+            )
+        )
+
+    def test_foreign_hgi_src_skipped_with_enforce_known_list(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """With enforce_known_list=True, foreign HGI src is not created
+        (the filter would reject it) but the packet is NOT dropped.
+        """
+        # Configure: enforce_known_list=True, eavesdrop on
+        mock_gateway.config = GatewayConfig(
+            disable_discovery=True,
+            enable_eavesdrop=True,
+            reduce_processing=0,
+            engine=EngineConfig(enforce_known_list=True),
+        )
+        mock_gateway.hgi.id = self._ACTIVE_HGI
+
+        # Registry is empty — both src and dst are unknown
+        mock_gateway.device_registry.device_by_id = {}
+
+        # get_device would raise for the foreign HGI (it's not known),
+        # but return a mock for the CTL (dst, via eavesdrop path)
+        def _get_device(dev_id: str) -> MagicMock:
+            from ramses_rf import exceptions as exc
+
+            if dev_id == self._FOREIGN_HGI:
+                raise exc.DeviceNotFoundError(f"Can't create {dev_id}")
+            mock_dev = MagicMock(spec=Device)
+            mock_dev.id = dev_id
+            mock_dev._SLUG = DevType.CTL
+            return mock_dev
+
+        mock_gateway.device_registry.get_device = MagicMock(side_effect=_get_device)
+
+        msg = self._make_msg()
+        result = dispatcher.instantiate_devices(mock_gateway, msg)
+
+        # Packet must NOT be dropped
+        assert result is True
+        # get_device must NOT have been called for the foreign HGI src
+        called_ids = [
+            call.args[0]
+            for call in mock_gateway.device_registry.get_device.call_args_list
+        ]
+        assert self._FOREIGN_HGI not in called_ids
+
+    def test_foreign_hgi_src_created_without_enforce_known_list(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """With enforce_known_list=False, the foreign HGI src IS created
+        normally (as an HgiGateway) — existing behaviour is preserved.
+        """
+        mock_gateway.config = GatewayConfig(
+            disable_discovery=True,
+            enable_eavesdrop=True,
+            reduce_processing=0,
+            engine=EngineConfig(enforce_known_list=False),
+        )
+        mock_gateway.hgi.id = self._ACTIVE_HGI
+
+        mock_gateway.device_registry.device_by_id = {}
+
+        mock_dev = MagicMock(spec=Device)
+        mock_dev.id = self._FOREIGN_HGI
+        mock_dev._SLUG = DevType.HGI
+        mock_gateway.device_registry.get_device = MagicMock(return_value=mock_dev)
+
+        msg = self._make_msg()
+        result = dispatcher.instantiate_devices(mock_gateway, msg)
+
+        # Packet must NOT be dropped
+        assert result is True
+        # get_device MUST have been called for the foreign HGI src
+        called_ids = [
+            call.args[0]
+            for call in mock_gateway.device_registry.get_device.call_args_list
+        ]
+        assert self._FOREIGN_HGI in called_ids
+
+
+class TestResolveLogicalTargets:
+    """Test resolution of logical targets from messages."""
+
+    def test_zone_temp_fallback_to_main_tcs(self, mock_gateway: MagicMock) -> None:
+        """Test _resolve_logical_targets falls back to gwy.tcs for zone targets.
+
+        Regression test for #942: zone temp packets from a secondary CTL
+        (where src_dev.tcs is None) must still route to the main TCS zones.
+        """
+        # 1. Setup the Gateway with a main TCS and one zone
+        mock_tcs = MagicMock()
+        mock_zone = MagicMock()
+        mock_tcs.zone_by_idx = {"00": mock_zone}
+        mock_gateway.tcs = mock_tcs
+
+        # 2. Setup the source device (CTL) which has no TCS property set
+        src_id = "01:150003"
+        mock_src_dev = MagicMock()
+        mock_src_dev.tcs = None
+        mock_src_dev.type = "01"
+        mock_gateway.device_registry.device_by_id = {src_id: mock_src_dev}
+
+        # 3. Setup the message and payload (a typical 30C9 zone temp broadcast)
+        msg = MagicMock()
+        msg.src.id = src_id
+        msg.dst.id = src_id
+        msg.code = "30C9"
+        msg._has_array = False
+
+        payload = {"zone_idx": "00", "temperature": 21.0}
+
+        # 4. Resolve the targets
+        targets = dispatcher._resolve_logical_targets(mock_gateway, msg, payload)
+
+        # 5. Assert that the zone from the main TCS was included in the targets
+        assert mock_zone in targets, (
+            "Zone target was not resolved using fallback gwy.tcs"
+        )
+
+
+class TestCommandDispatcherSend:
+    """Test CommandDispatcher.send returns Message instances consistently."""
+
+    @pytest.mark.asyncio
+    async def test_send_with_wait_for_reply_returns_message(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify send(wait_for_reply=True) returns a Message from ConversationManager."""
+        # Arrange
+        import asyncio
+
+        from ramses_rf.commands.core import Command
+        from ramses_rf.commands.dispatcher import CommandDispatcher
+        from ramses_rf.enums import Action
+
+        cmd_dispatcher = CommandDispatcher(mock_gateway)
+        intent = Command(
+            src=Address("18:000730"),
+            dst=Address("01:078710"),
+            action=Action.GET_SYSTEM_TIME,
+            data={},
+        )
+
+        pkt = Packet.from_port(
+            dt.now(),
+            "000 RP --- 01:078710 18:000730 --:------ 313F 009 00000400041C0A07E3",
+        )
+        expected_msg = Message._from_pkt(pkt)
+
+        fut: asyncio.Future[Message] = asyncio.Future()
+        fut.set_result(expected_msg)
+
+        mock_conv_mgr = MagicMock()
+        mock_conv_mgr.track_intent = AsyncMock(return_value=fut)
+        mock_gateway.conversation_manager = mock_conv_mgr
+        mock_gateway.async_send_cmd = AsyncMock(return_value=pkt)
+
+        # Act
+        result = await cmd_dispatcher.send(intent, wait_for_reply=True)
+
+        # Assert
+        assert isinstance(result, Message)
+        assert result == expected_msg
+
+    @pytest.mark.asyncio
+    async def test_send_without_wait_for_reply_returns_message(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify send(wait_for_reply=False) converts echo Packet to Message."""
+        # Arrange
+        from ramses_rf.commands.core import Command
+        from ramses_rf.commands.dispatcher import CommandDispatcher
+        from ramses_rf.enums import Action
+
+        cmd_dispatcher = CommandDispatcher(mock_gateway)
+        intent = Command(
+            src=Address("18:000730"),
+            dst=Address("01:078710"),
+            action=Action.GET_SYSTEM_TIME,
+            data={},
+        )
+
+        pkt = Packet.from_port(
+            dt.now(),
+            "000  I --- 18:000730 01:078710 --:------ 313F 009 00000400041C0A07E3",
+        )
+        mock_gateway.conversation_manager = None
+        mock_gateway.async_send_cmd = AsyncMock(return_value=pkt)
+
+        # Act
+        result = await cmd_dispatcher.send(intent, wait_for_reply=False)
+
+        # Assert
+        assert isinstance(result, Message)
+        assert result.code == Code._313F

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final
 
 from ramses_rf.const import (
-    DEV_ROLE_MAP,
     FA,
     FC,
-    RQ,
     SZ_DOMAIN_ID,
     SZ_HEAT_DEMAND,
     SZ_RELAY_DEMAND,
@@ -26,8 +24,7 @@ from ramses_rf.helpers import shrink
 from ramses_rf.models import DeviceTraits
 from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
-from ramses_tx import Command
-from ramses_tx.typing import DeviceIdT, DevIndexT, PayloadT
+from ramses_tx.typing import DeviceIdT, DevIndexT
 
 from .dev_base import DeviceHeat
 
@@ -56,21 +53,6 @@ class Controller(DeviceHeat):  # CTL (01):
         self.tcs: Evohome | None = None  # TODO: = self?
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
 
-    def _post_class_promote(self) -> None:
-        """Initialize CTL state when promoted in-place from a generic device."""
-        self.__dict__.setdefault("tcs", None)
-        if not self.tcs:
-            self._make_tcs_controller()
-
-    def _setup_discovery_cmds(self) -> None:
-        super()._setup_discovery_cmds()
-
-        if not self.is_faked:
-            self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, Code._2E04, PayloadT("00")),
-                60 * 60,  # Poll every 60 minutes after initial startup query
-            )
-
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
@@ -91,18 +73,23 @@ class Controller(DeviceHeat):  # CTL (01):
             If a TCS is created, attach it to this device (which should be a CTL).
             """
 
-            from ramses_rf.systems import system_factory
+            # Deferred import to prevent circular dependency at module load time
+            # DO NOT MOVE to module level.
+            from ramses_rf.systems import Evohome, system_factory
 
             schema = shrink(SCH_TCS(schema))
 
             if not self.tcs:
-                self.tcs = cast("Evohome", system_factory(self, msg=msg, **schema))
+                tcs = system_factory(self, msg=msg, **schema)
+                if isinstance(tcs, Evohome):
+                    self.tcs = tcs
 
             elif schema and self.tcs:
                 self.tcs._update_schema(**schema)
 
             if msg and self.tcs:
                 self.tcs._handle_msg(msg)
+            assert self.tcs is not None
             return self.tcs
 
         super()._make_tcs_controller(msg=None, **schema)
@@ -114,20 +101,6 @@ class Programmer(Controller):  # PRG (23):
     """The Controller base class."""
 
     _SLUG = DevType.PRG
-
-    def _setup_discovery_cmds(self) -> None:
-        super()._setup_discovery_cmds()
-
-        if not self.is_faked:
-            # PRGs respond to RP for 1090, 10A0, 3EF1
-            self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, Code._1090, PayloadT("00")),
-                60 * 60 * 6,  # every 6 hours
-            )
-            self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, Code._10A0, PayloadT("00")),
-                60 * 60 * 6,
-            )
 
 
 class RfgGateway(DeviceHeat):  # RFG (30:)
@@ -167,34 +140,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         """Initialize UFH-specific instance attributes (idempotent)."""
         self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
 
-    def _post_class_promote(self) -> None:
-        """Initialize UFH state when promoted in-place from a generic device."""
-        self._init_ufh_state()
-
-    def _setup_discovery_cmds(self) -> None:
-        super()._setup_discovery_cmds()
-
-        # Only RPs are: 0001, 0005/000C, 10E0, 000A/2309 & 22D0
-
-        cmd = Command.from_attrs(
-            RQ, self.id, Code._0005, PayloadT(f"00{DEV_ROLE_MAP.UFH}")
-        )
-        self.discovery.add_cmd(cmd, 60 * 60 * 24)
-
-        # TODO: this needs work
-        # if discover_flag & Discover.PARAMS:  # only 2309 has any potential?
-        for ufc_idx in getattr(self, "circuit_by_id", {}):
-            cmd = Command.get_zone_config(self.id, ufc_idx)
-            self.discovery.add_cmd(cmd, 60 * 60 * 6)
-
-            cmd = Command.get_zone_setpoint(self.id, ufc_idx)
-            self.discovery.add_cmd(cmd, 60 * 60 * 6)
-
-        for ufc_idx in range(8):
-            payload = PayloadT(f"{ufc_idx:02X}{DEV_ROLE_MAP.UFH}")
-            cmd = Command.from_attrs(RQ, self.id, Code._000C, payload)
-            self.discovery.add_cmd(cmd, 60 * 60 * 24)
-
     def _handle_msg(self, msg: Message) -> None:
         super()._handle_msg(msg)
 
@@ -217,9 +162,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
                     self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: None}
                 # FIXME: this causing tests to fail when read-only protocol
                 # elif SZ_ZONE_IDX not in self.circuit_by_id[ufh_idx]:
-                #     cmd = Command.from_attrs(
-                #         RQ, self.ctl.id, Code._000C, f"{ufh_idx}{DEV_ROLE_MAP.UFH}"
-                #     )
+                #     cmd = build_rq_cmd(self.ctl.id, Code._000C, f"{ufh_idx}{DEV_ROLE_MAP.UFH}")
                 #     self._send_cmd(cmd)
 
         elif msg.code == Code._0008:  # relay_demand
@@ -279,7 +222,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
         schema = {}  # shrink(SCH_CCT(schema))
 
-        cct = cast("UfhCircuit | None", self.child_by_id.get(cct_idx))
+        child = self.child_by_id.get(cct_idx)
+        cct = child if isinstance(child, UfhCircuit) else None
         if not cct:
             cct = UfhCircuit(self, cct_idx)
             self.child_by_id[cct_idx] = cct
@@ -332,8 +276,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         if state is None:
             return None
 
-        # Return the dictionary exactly as is (even if empty `{}`, to match legacy)
-        return cast(dict[str, Any], state.setpoints)
+        res = state.setpoints
+        return res if isinstance(res, dict) else None
 
     async def schema(self) -> dict[str, Any]:
         base_schema = await super().schema()
@@ -376,9 +320,9 @@ class UfhCircuit(Child, Entity):  # FIXME
         # FIXME: gwy.message_store entities must know their parent device ID
         # and their own idx
         self._z_id = ufc.id
-        self._z_idx = cast("DevIndexT", ufh_idx)
+        self._z_idx = DevIndexT(ufh_idx)
 
-        self.id: DeviceIdT = cast("DeviceIdT", f"{ufc.id}_{ufh_idx}")
+        self.id: DeviceIdT = DeviceIdT(f"{ufc.id}_{ufh_idx}")
 
         self.ufc: UfhController = ufc
         self._child_id = ufh_idx

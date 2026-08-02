@@ -44,15 +44,16 @@ import logging
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime as dt
 from functools import wraps
-from time import perf_counter
-from typing import TYPE_CHECKING, Any, Final, cast
+from time import perf_counter, time
+from typing import TYPE_CHECKING, Any, Final
 
 from serial import Serial, SerialException
 
 from .. import exceptions as exc
-from ..command import Command
+from ..address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
 from ..const import (
     DUTY_CYCLE_DURATION,
+    I_,
     MAX_DUTY_CYCLE_RATE,
     MIN_INTER_WRITE_GAP,
     SZ_ACTIVE_HGI,
@@ -60,8 +61,11 @@ from ..const import (
     Code,
 )
 from ..discovery import is_hgi80
+from ..dtos import CommandDTO
+from ..helpers import hex_from_str
 from ..packet import Packet
-from ..typing import ExceptionT, SerPortNameT
+from ..typing import SerPortNameT
+from ..version import VERSION
 from .base import TransportConfig, _FullTransport
 from .helpers import _normalise, _str
 
@@ -210,7 +214,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
 
     async def _create_connection(self) -> None:
         """Invoke connection_made() callback after HGI80 discovery."""
-        self._is_hgi80 = await is_hgi80(cast(SerPortNameT, self.serial.name or ""))
+        self._is_hgi80 = await is_hgi80(SerPortNameT(self.serial.name or ""))
 
         async def connect_sans_signature() -> None:
             """Call connection_made() without sending/waiting for a
@@ -223,7 +227,16 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
             """Poll port with signatures, call connection_made() after
             first echo.
             """
-            sig = Command._puzzle()
+
+            payload = f"0010{int(time() * 1000):012X}{hex_from_str(f'v{VERSION}')}"[:48]
+            sig = CommandDTO(
+                verb=I_,
+                addr1=HGI_DEV_ADDR.id,
+                addr2=ALL_DEV_ADDR.id,
+                addr3=NON_DEV_ADDR.id,
+                code=Code._PUZZ,
+                payload=payload,
+            )
             self._extra[SZ_SIGNATURE] = sig.payload
 
             num_sends = 0
@@ -335,14 +348,14 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         try:
             self._write(data)
         except SerialException as err:
-            self._abort(cast(Any, exc.TransportSerialError(err)))
+            self._abort(exc.TransportSerialError(err))
             return
 
     def _write(self, data: bytes) -> None:
         """Perform the actual write to the serial port."""
         self.serial.write(data)
 
-    def _abort(self, exc: ExceptionT) -> None:  # type: ignore[override]
+    def _abort(self, exc: Exception) -> None:  # type: ignore[override]
         """Abort the transport."""
         super()._abort(exc)
 

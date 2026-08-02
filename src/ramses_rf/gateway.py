@@ -9,15 +9,15 @@ import threading
 import warnings
 from collections.abc import Awaitable, Callable
 from logging.handlers import QueueListener
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
-from ramses_tx import I_, RP, Command, Engine, Packet
+from ramses_rf.commands.dispatcher import CommandDispatcher
+from ramses_tx import I_, RP, CommandDTO, Engine, Packet
 from ramses_tx.const import (
     DEFAULT_GAP_DURATION,
     DEFAULT_MAX_RETRIES,
     DEFAULT_NUM_REPEATS,
     DEFAULT_SEND_TIMEOUT,
-    DEFAULT_WAIT_FOR_REPLY,
     SZ_ACTIVE_HGI,
     Priority,
 )
@@ -26,7 +26,7 @@ from ramses_tx.exceptions import PacketInvalid, ProtocolSendFailed
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
 from ramses_tx.typing import PayloadT
 
-from .config import GatewayConfig as GatewayConfig
+from .config import GatewayConfig as GatewayConfig, strip_and_map_schema
 from .const import Code, VerbT
 from .devices import DeviceFilter, DeviceRegistry, HgiGateway, device_factory
 from .dispatcher import detect_array_fragment, process_msg
@@ -38,6 +38,8 @@ from .interfaces import (
 )
 from .lifecycle import GatewayLifecycle
 from .messages import ApplicationMessage, Message as rf_msg
+from .pipeline.conversation import ConversationManager
+from .pipeline.polling import PollingManager
 from .pipeline.topology_builder import TopologyBuilder
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
@@ -137,13 +139,16 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 "for routine use (there be dragons here)"
             )
 
-        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(self._gwy_config.schema or {})
+        schema_in = self._gwy_config.schema or {}
+        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(
+            strip_and_map_schema(schema_in)
+        )
 
         self._tcs: Evohome | None = None
 
         self._device_filter: DeviceFilterInterface = DeviceFilter(
-            include=cast(list[DeviceIdT], list(self._gwy_config.known_list.keys())),
-            exclude=cast(list[DeviceIdT], list(self._gwy_config.block_list.keys())),
+            include=[DeviceIdT(k) for k in self._gwy_config.known_list],
+            exclude=[DeviceIdT(k) for k in self._gwy_config.block_list],
             unwanted=self._engine._unwanted,
             enforce_known_list=self._gwy_config.engine.enforce_known_list,
             hgi_id_provider=lambda: getattr(self.hgi, "id", None),
@@ -175,14 +180,20 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         # 1. Controller Knowledge Bridge
         def is_controller(device_id: str) -> bool:
-            if device_id.startswith("02:"):
-                return True
-            dev = self._device_registry.device_by_id.get(cast(DeviceIdT, device_id))
+            dev = self._device_registry.device_by_id.get(DeviceIdT(device_id))
             if dev:
                 return getattr(dev, "_is_controller", True)
             return True
 
         rf_msg._IS_CONTROLLER_CB = is_controller
+
+        # 2. Instantiate L7 Command Dispatcher, ConversationManager, and PollingManager
+        self._dispatcher = CommandDispatcher(self)
+        self._conversation_manager = ConversationManager(
+            loop=loop,
+            send_func=lambda dto: self.async_send_cmd(dto),
+        )
+        self._polling_manager = PollingManager(self, shadow_mode=False)
 
     def __repr__(self) -> str:
         if not self._engine.ser_name:
@@ -195,6 +206,20 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     @property
     def device_registry(self) -> DeviceRegistryInterface:
         return self._device_registry
+
+    @property
+    def conversation_manager(self) -> ConversationManager:
+        """Return the L7 ConversationManager instance."""
+        return self._conversation_manager
+
+    @property
+    def polling_manager(self) -> PollingManager:
+        """Return the L7 PollingManager instance."""
+        return self._polling_manager
+
+    @property
+    def dispatcher(self) -> CommandDispatcher:
+        return self._dispatcher
 
     @property
     def config(self) -> GatewayConfig:
@@ -397,7 +422,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         code: Code,
         payload: PayloadT,
         **kwargs: Any,
-    ) -> Command:
+    ) -> CommandDTO:
         return Engine.create_cmd(
             verb,
             device_id,
@@ -408,14 +433,13 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     def send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
         num_repeats: int = DEFAULT_NUM_REPEATS,
         priority: Priority = Priority.DEFAULT,
         timeout: float = DEFAULT_SEND_TIMEOUT,
-        wait_for_reply: bool | None = DEFAULT_WAIT_FOR_REPLY,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> asyncio.Task[Packet]:
         coro = self.async_send_cmd(
@@ -424,7 +448,6 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             num_repeats=num_repeats,
             priority=priority,
             timeout=timeout,
-            wait_for_reply=wait_for_reply,
             max_retries=max_retries,
         )
         task = self._engine._loop.create_task(coro)
@@ -439,14 +462,13 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     async def async_send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
         num_repeats: int = DEFAULT_NUM_REPEATS,
         priority: Priority = Priority.DEFAULT,
         timeout: float = DEFAULT_SEND_TIMEOUT,
-        wait_for_reply: bool | None = DEFAULT_WAIT_FOR_REPLY,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> Packet:
         try:
@@ -457,7 +479,6 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 priority=priority,
                 max_retries=max_retries,
                 timeout=timeout,
-                wait_for_reply=wait_for_reply,
             )
         except (ProtocolSendFailed, NotImplementedError) as err:
             if (

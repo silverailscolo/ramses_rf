@@ -4,7 +4,7 @@
 from collections.abc import Generator
 from enum import Enum
 from typing import cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -16,7 +16,7 @@ from ramses_rf.models.state_base import DeviceTraits
 from ramses_rf.models.state_hvac import HvacState
 from ramses_rf.state import MessageStore
 from ramses_tx import Address
-from ramses_tx.const import Code, Priority
+from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
 
 # Test data
@@ -183,96 +183,18 @@ class TestHvacVentilator:
         if hvac_ventilator._gwy.message_store:
             hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
 
-    @patch("ramses_tx.command.Command.get_fan_param")
-    async def test_setup_discovery_cmds(
-        self, mock_cmd: MagicMock, hvac_ventilator: HvacVentilator
-    ) -> None:
+    async def test_setup_discovery_cmds(self, hvac_ventilator: HvacVentilator) -> None:
         """Test that discovery commands are set up correctly.
 
-        :param mock_cmd: The patched command class method.
-        :type mock_cmd: MagicMock
         :param hvac_ventilator: The HvacVentilator fixture.
         :type hvac_ventilator: HvacVentilator
         """
-        # Mock the command creation
-        mock_cmd.return_value = "MOCK_CMD"
 
-        # Use patch.object to properly mock the discovery service component directly
-        # Phase 4 Update: we now call self.discovery.add_cmd instead of the bridge method
-        with patch.object(hvac_ventilator.discovery, "add_cmd") as mock_add_cmd:
-            hvac_ventilator._setup_discovery_cmds()
+        from ramses_rf.pipeline.polling import PollingManager
 
-            # Check that add_cmd was called at least once
-            assert mock_add_cmd.called
-
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
-
-    async def test_handle_msg_parameter_message(
-        self, hvac_ventilator: HvacVentilator
-    ) -> None:
-        """Test that parameter messages are handled correctly.
-
-        :param hvac_ventilator: The HvacVentilator fixture.
-        :type hvac_ventilator: HvacVentilator
-        """
-        # Create a mock message with all required attributes
-        msg = MagicMock()
-        msg.code = Code._2411
-        # Create proper mock objects for src and dst with id attribute
-        msg.src = MagicMock()
-        msg.src.id = TEST_DEVICE_ID
-        msg.dst = MagicMock()
-        msg.dst.id = TEST_DEVICE_ID
-        msg.verb = " I"
-        msg.payload = {
-            "parameter": TEST_PARAM_ID,
-            "value": TEST_PARAM_VALUE,
-            "_hgi": MagicMock(),
-        }
-
-        # Patch the _handle_2411_message method
-        with patch.object(hvac_ventilator, "_handle_2411_message") as mock_handle:
-            # Call the method
-            hvac_ventilator._handle_msg(msg)
-
-            # Check that _handle_2411_message was called
-            mock_handle.assert_called_once_with(msg)
-
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
-
-    async def test_handle_msg_non_parameter_message(
-        self, hvac_ventilator: HvacVentilator
-    ) -> None:
-        """Test that non-parameter messages are passed to the parent class.
-
-        :param hvac_ventilator: The HvacVentilator fixture.
-        :type hvac_ventilator: HvacVentilator
-        """
-        # Create a mock message with a non-parameter code and required attributes
-        msg = MagicMock()
-        msg.code = Code._31DA  # Standard FAN status code
-        # Create proper mock objects for src and dst with id attribute
-        msg.src = MagicMock()
-        msg.src.id = TEST_DEVICE_ID
-        msg.dst = MagicMock()
-        msg.dst.id = TEST_DEVICE_ID
-        msg.verb = " I"
-        msg.payload = {"some_key": "some_value"}
-
-        # Patch the parent class's _handle_msg method with updated module path
-        with patch(
-            "ramses_rf.devices.hvac_ventilators.FilterChange._handle_msg"
-        ) as mock_parent_handle:
-            # Call the method
-            hvac_ventilator._handle_msg(msg)
-
-            # Check that the parent's _handle_msg was called
-            mock_parent_handle.assert_called_once_with(msg)
-
-            # The parameter handler should not have been called
-            assert not hasattr(hvac_ventilator, "_handle_parameter_msg")
+        schedule = PollingManager.resolve_schedule_for_device(hvac_ventilator)
+        assert "10D0" in schedule, "Filter change (10D0) not scheduled for FAN"
+        assert "3150" in schedule, "Fan speed status (3150) not scheduled for FAN"
 
         if hvac_ventilator._gwy.message_store:
             hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
@@ -640,28 +562,25 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     dev.get_bound_rem.return_value = "37:654321"
 
     dev._gwy = MagicMock()
-    dev._gwy.async_send_cmd = AsyncMock(return_value="mock_packet")
+    dev._gwy.dispatcher.send = AsyncMock(return_value="mock_packet")
 
-    # Patch the command builder so we can verify what gets passed to it
-    with patch("ramses_tx.command.Command.set_fan_mode") as mock_cmd:
-        mock_cmd.return_value = "mock_command"
+    # Call the unbound method passing our mock as 'self'
+    result = await HvacVentilator.set_fan_mode(dev, "low")
 
-        # Call the unbound method passing our mock as 'self'
-        result = await HvacVentilator.set_fan_mode(dev, "low")
+    # 1. Verify it checked for a bound remote
+    dev.get_bound_rem.assert_called_once()
 
-        # 1. Verify it checked for a bound remote
-        dev.get_bound_rem.assert_called_once()
+    # 2. Verify the intent was transmitted with the correct QoS
+    dev._gwy.dispatcher.send.assert_awaited_once()
+    intent = dev._gwy.dispatcher.send.await_args[0][0]
 
-        # 2. Verify the packet was built using the REM's ID ("37:654321")
-        mock_cmd.assert_called_once_with(
-            "32:123456", "low", scheme="orcon", src_id="37:654321"
-        )
+    from ramses_rf.enums import Action
 
-        # 3. Verify it was transmitted with the correct QoS
-        dev._gwy.async_send_cmd.assert_awaited_once_with(
-            "mock_command", num_repeats=2, priority=Priority.HIGH
-        )
-        assert result == "mock_packet"
+    assert intent.action == Action.SET_FAN_MODE
+    assert intent.src.id == "37:654321"
+    assert intent.dst.id == "32:123456"
+    assert intent.data == {"fan_mode": "low", "scheme": "orcon"}
+    assert result == "mock_packet"
 
 
 async def test_set_fan_mode_with_hgi_fallback() -> None:
@@ -676,18 +595,20 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     dev.hgi.id = "18:000730"
 
     dev._gwy = MagicMock()
-    dev._gwy.async_send_cmd = AsyncMock(return_value="mock_packet")
+    dev._gwy.dispatcher.send = AsyncMock(return_value="mock_packet")
 
-    with patch("ramses_tx.command.Command.set_fan_mode") as mock_cmd:
-        mock_cmd.return_value = "mock_command"
+    await HvacVentilator.set_fan_mode(dev, "high")
 
-        await HvacVentilator.set_fan_mode(dev, "high")
+    # Verify the intent was built using the HGI's ID ("18:000730")
+    dev._gwy.dispatcher.send.assert_awaited_once()
+    intent = dev._gwy.dispatcher.send.await_args[0][0]
 
-        # Verify the packet was built using the HGI's ID ("18:000730")
-        mock_cmd.assert_called_once_with(
-            "32:123456", "high", scheme="orcon", src_id="18:000730"
-        )
-        dev._gwy.async_send_cmd.assert_awaited_once()
+    from ramses_rf.enums import Action
+
+    assert intent.action == Action.SET_FAN_MODE
+    assert intent.src.id == "18:000730"
+    assert intent.dst.id == "32:123456"
+    assert intent.data == {"fan_mode": "high", "scheme": "orcon"}
 
 
 async def test_set_fan_mode_no_src_id_raises() -> None:

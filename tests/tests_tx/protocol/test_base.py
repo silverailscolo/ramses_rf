@@ -160,6 +160,42 @@ async def test_is_wanted_addrs_sending_to_hgi(protocol: DummyProtocol) -> None:
     )
 
 
+async def test_is_wanted_addrs_foreign_hgi_not_blocked(protocol: DummyProtocol) -> None:
+    """Foreign HGIs (18:) must not be blocked even if in the exclude list.
+
+    A foreign HGI communicates with our controller and the controller's
+    responses (e.g. 0004 zone names) are addressed to the foreign HGI.
+    Blocking the foreign HGI would prevent the active gateway from
+    eavesdropping on those responses (issue 822).
+    """
+    protocol._active_hgi = DeviceIdT("18:191664")
+    protocol._exclude = [DeviceIdT("18:072981")]  # foreign HGI in block_list
+
+    # Packet from controller to foreign HGI (e.g. 0004 RP zone name)
+    assert (
+        protocol._is_wanted_addrs(DeviceIdT("01:216136"), DeviceIdT("18:072981"))
+        is True
+    )
+    # Packet from foreign HGI to controller (e.g. 0004 RQ)
+    assert (
+        protocol._is_wanted_addrs(DeviceIdT("18:072981"), DeviceIdT("01:216136"))
+        is True
+    )
+
+
+async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
+    protocol: DummyProtocol,
+) -> None:
+    """HGI_DEV_ADDR (18:000730) is the generic broadcast, not a specific HGI.
+
+    It must still be subject to the block_list — only specific foreign HGIs
+    (18:XXXXXX where XXXXXX != 000730) are exempt.
+    """
+    protocol._exclude = [HGI_DEV_ADDR.id]
+
+    assert protocol._is_wanted_addrs(DeviceIdT("01:216136"), HGI_DEV_ADDR.id) is False
+
+
 # --- INBOUND PACKET TESTS (_pkt_received) ---
 
 
@@ -194,6 +230,21 @@ async def test_pkt_received_excluded(
     assert "Packet excluded by device_id filter" in caplog.text
 
 
+async def test_pkt_received_excluded_bypasses_to_dto(protocol: DummyProtocol) -> None:
+
+    # Arrange
+    protocol._exclude = [DeviceIdT("01:111111")]
+    mock_pkt = MagicMock()
+    mock_pkt.src.id = "01:111111"
+    mock_pkt.dst.id = "01:222222"
+
+    # Act
+    protocol._pkt_received(mock_pkt)
+
+    # Assert
+    mock_pkt.to_dto.assert_not_called()
+
+
 # --- OUTBOUND COMMAND TESTS (send_cmd) ---
 
 
@@ -213,8 +264,8 @@ async def test_send_cmd_excluded(protocol: DummyProtocol) -> None:
     """Test that sending unwanted commands raises a ProtocolError."""
     protocol._exclude = [DeviceIdT("01:111111")]
     mock_cmd = MagicMock()
-    mock_cmd.src.id = "01:111111"
-    mock_cmd.dst.id = "01:222222"
+    mock_cmd.addr1 = "01:111111"
+    mock_cmd.addr2 = "01:222222"
 
     with pytest.raises(ProtocolError, match="Command excluded by device_id filter"):
         await protocol.send_cmd(mock_cmd)
@@ -222,16 +273,79 @@ async def test_send_cmd_excluded(protocol: DummyProtocol) -> None:
 
 async def test_patch_cmd_if_needed_evofw3(protocol: DummyProtocol) -> None:
     """Test that _patch_cmd_if_needed swaps the default HGI address for evofw3."""
-    from ramses_tx.command import Command
+    from ramses_tx.dtos import CommandDTO as Command
 
     protocol._is_evofw3 = True
     protocol._known_hgi = DeviceIdT("18:123456")  # Safely sets the hgi_id property
 
-    original_cmd = Command("RQ --- 18:000730 01:222222 --:------ 12B0 001 00")
+    original_cmd = Command.from_cli("RQ --- 18:000730 01:222222 --:------ 12B0 001 00")
 
     patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
 
     assert patched_cmd is not original_cmd
-    assert patched_cmd.src.id == "18:123456"
-    assert patched_cmd.dst.id == "01:222222"
-    assert original_cmd.src.id == "18:000730"  # Enforces immutability
+    assert patched_cmd.addr1 == "18:123456"
+    assert patched_cmd.addr2 == "01:222222"
+    assert original_cmd.addr1 == "18:000730"  # Enforces immutability
+
+
+async def test_patch_cmd_if_needed_hgi80_reverse(protocol: DummyProtocol) -> None:
+    """Test that _patch_cmd_if_needed swaps the real HGI ID back to the
+    placeholder for HGI80 (TI 3410).
+
+    HGI80 firmware requires 18:000730 as the source address for frames it
+    transmits.  Using the actual gateway ID causes a silent drop and WantEcho
+    timeout (issue 835, cc 864).
+    """
+    from ramses_tx.dtos import CommandDTO as Command
+
+    protocol._is_evofw3 = False  # HGI80
+    protocol._known_hgi = DeviceIdT("18:123456")
+
+    original_cmd = Command.from_cli(" W --- 18:123456 01:222222 --:------ 12B0 001 00")
+
+    patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
+
+    assert patched_cmd is not original_cmd
+    assert patched_cmd.addr1 == "18:000730"  # swapped back to placeholder
+    assert patched_cmd.addr2 == "01:222222"
+    assert original_cmd.addr1 == "18:123456"  # Enforces immutability
+
+
+async def test_patch_cmd_if_needed_hgi80_no_change_when_placeholder(
+    protocol: DummyProtocol,
+) -> None:
+    """Test that _patch_cmd_if_needed does not alter a command that already
+    uses the placeholder for HGI80."""
+    from ramses_tx.dtos import CommandDTO as Command
+
+    protocol._is_evofw3 = False  # HGI80
+    protocol._known_hgi = DeviceIdT("18:123456")
+
+    original_cmd = Command.from_cli(" W --- 18:000730 01:222222 --:------ 12B0 001 00")
+
+    patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
+
+    assert patched_cmd is original_cmd  # no change needed
+    assert patched_cmd.addr1 == "18:000730"
+
+
+async def test_patch_cmd_if_needed_hgi80_no_change_when_impersonating(
+    protocol: DummyProtocol,
+) -> None:
+    """Test that _patch_cmd_if_needed does not alter a command that
+    impersonates a non-gateway device (e.g. a thermostat) on HGI80.
+
+    The HGI80 cannot impersonate, but the patching logic should not silently
+    rewrite the source — the impersonation alert handles that case.
+    """
+    from ramses_tx.dtos import CommandDTO as Command
+
+    protocol._is_evofw3 = False  # HGI80
+    protocol._known_hgi = DeviceIdT("18:123456")
+
+    original_cmd = Command.from_cli(" W --- 21:057310 01:222222 --:------ 12B0 001 00")
+
+    patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
+
+    assert patched_cmd is original_cmd  # no change — not the HGI ID
+    assert patched_cmd.addr1 == "21:057310"

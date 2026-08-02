@@ -10,7 +10,7 @@ from ramses_rf import Gateway
 from ramses_rf.devices import Controller
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.systems import Evohome, Zone
-from ramses_rf.systems.schedule import InnerScheduleT
+from ramses_rf.typing import InnerScheduleT
 from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.protocol import PortProtocol
 from ramses_tx.typing import DeviceIdT
@@ -53,7 +53,7 @@ async def _test_get_schedule(gwy: Gateway, ctl_id: DeviceIdT, idx: str) -> None:
     assert isinstance(gwy._engine._protocol, PortProtocol)  # mypy
     assert gwy._engine._protocol._disable_qos is False  # QoS is required for this test
 
-    _: Controller = gwy.device_registry.get_device(ctl_id)
+    _: Controller = gwy.device_registry.get_device(ctl_id, cls=Controller)
 
     tcs: Evohome | None = gwy.tcs
     assert isinstance(tcs, Evohome)  # mypy

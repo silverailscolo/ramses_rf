@@ -111,7 +111,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
                     async for dtm_pkt_line in file:
                         await self._process_line_from_raw(dtm_pkt_line)
             except FileNotFoundError as err:
-                _LOGGER.warning(f"Correct the packet file name; {err}")
+                _LOGGER.warning("Correct the packet file name; %s", err)
 
         elif isinstance(self._pkt_source, TextIOWrapper):
             # Wrap the synchronous TextIOWrapper for asynchronous iteration

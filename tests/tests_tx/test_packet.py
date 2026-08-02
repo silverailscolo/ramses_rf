@@ -5,8 +5,9 @@ from datetime import datetime as dt, timedelta as td
 
 import pytest
 
+from ramses_rf.pipeline.lifespan import pkt_lifespan
 from ramses_tx.exceptions import PacketInvalid
-from ramses_tx.packet import Packet, pkt_lifespan
+from ramses_tx.packet import Packet
 
 # Constants for testing frames
 DTM = dt(2023, 1, 1, 12, 0, 0)
@@ -19,6 +20,12 @@ class MockCommand:
 
     def __init__(self) -> None:
         """Initialize the mock command."""
+        self.verb = " I"
+        self.addr1 = "01:145038"
+        self.addr2 = "--:------"
+        self.addr3 = "01:145038"
+        self.code = "1F09"
+        self.payload = "0004B5"
         self._frame = " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
 
 
@@ -82,12 +89,17 @@ def test_packet_constructors() -> None:
     assert pkt_dict.rssi == "045"
     assert pkt_dict.comment == "my comment"
 
-    # Test from_file
+    # Test canonical from_raw_line factory
+    pkt_line = Packet.from_raw_line(DTM, VALID_FRAME_I)
+    assert pkt_line.rssi == "045"
+    assert pkt_line.verb == " I"
+
+    # Test from_file (delegates to from_raw_line)
     pkt_file_valid = Packet.from_file(dtm_str, VALID_FRAME_I)
     assert pkt_file_valid.rssi == "045"
     assert pkt_file_valid.verb == " I"
 
-    # Test from_port
+    # Test from_port (delegates to from_raw_line)
     pkt_port = Packet.from_port(DTM, VALID_FRAME_I)
     assert pkt_port.rssi == "045"
 
@@ -131,6 +143,22 @@ def test_packet_dto_serialization() -> None:
 
     assert restored_pkt.dtm == DTM.astimezone()
     assert restored_pkt.rssi == "045"  # Automatically padded back to 3 chars
+    assert restored_pkt.verb == " I"
+    assert restored_pkt._frame == pkt._frame
+
+
+def test_to_json_from_json_parity() -> None:
+    """Test serializing a Packet to JSON via orjson and deserializing it back."""
+    pkt = Packet.from_raw_line(DTM, VALID_FRAME_I)
+
+    # 1. Test to_json (Serialization to bytes)
+    json_bytes = pkt.to_json()
+    assert isinstance(json_bytes, bytes)
+
+    # 2. Test from_json (Deserialization back to Packet)
+    restored_pkt = Packet.from_json(json_bytes)
+    assert restored_pkt.dtm == DTM.astimezone()
+    assert restored_pkt.rssi == "045"
     assert restored_pkt.verb == " I"
     assert restored_pkt._frame == pkt._frame
 
@@ -189,8 +217,7 @@ def test_pkt_lifespan(monkeypatch: pytest.MonkeyPatch) -> None:
     valid_000a = "045  I --- 01:145038 --:------ 01:145038 000A 006 001122334455"
     pkt_000a = Packet(DTM, valid_000a)
 
-    # Set the internal property cache to safely bypass deeper array schema detection
-    monkeypatch.setattr(pkt_000a, "_has_array_", True)
+    # The internal property cache was removed in Phase 3.1; length logic applies natively
     assert pkt_lifespan(pkt_000a) == td(minutes=60)
 
 

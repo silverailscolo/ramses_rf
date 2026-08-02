@@ -8,7 +8,7 @@ import contextlib
 import logging
 from datetime import UTC, datetime as dt, timedelta as td
 from logging.handlers import QueueListener
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from ramses_tx import Packet, protocol_factory, set_pkt_logging_config
 from ramses_tx.const import SZ_ACTIVE_HGI
@@ -27,10 +27,8 @@ if TYPE_CHECKING:
     from ramses_tx.dtos import PacketDTO
 
     from .config import GatewayConfig
-    from .devices import Device
-    from .gateway import Gateway
     from .interfaces import DeviceRegistryInterface, MessageStoreInterface
-    from .systems import Evohome
+    from .systems.tcs import Evohome
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +47,7 @@ class GatewayLifecycle:
         _message_store: MessageStoreInterface | None
         _pkt_log_listener: QueueListener | None
         _schema: dict[str, Any]
+        _tcs: Evohome | None
         state_projector: StateProjector | None
 
         def add_task(self, task: asyncio.Task[Any]) -> None: ...
@@ -67,19 +66,7 @@ class GatewayLifecycle:
         start_discovery: bool = True,
         cached_packets: dict[str, dict[str, Any] | str] | None = None,
     ) -> None:
-        """Start the Gateway and Initiate discovery as required."""
-
-        def initiate_discovery(dev_list: list[Device], sys_list: list[Evohome]) -> None:
-            _LOGGER.debug("Engine: Initiating/enabling discovery...")
-            for device in dev_list:
-                device.discovery.start_poller()
-            for system in sys_list:
-                system.discovery.start_poller()
-                for zone in system.zones:
-                    zone.discovery.start_poller()
-                if system.dhw:
-                    system.dhw.discovery.start_poller()
-
+        """Start the Gateway."""
         _, self._pkt_log_listener = await set_pkt_logging_config(
             cc_console=(self.config.reduce_processing >= DONT_CREATE_MESSAGES),
             **self._engine._packet_log,
@@ -88,7 +75,7 @@ class GatewayLifecycle:
         if self._pkt_log_listener:
             self._pkt_log_listener.start()
 
-            pkt_log_config = cast("dict[str, Any]", self._engine._packet_log)
+            pkt_log_config: dict[str, Any] = dict(self._engine._packet_log)
             if flush_interval := pkt_log_config.get("flush_interval", 0):
 
                 async def _periodic_flush() -> None:
@@ -118,8 +105,8 @@ class GatewayLifecycle:
         )
 
         load_schema(
-            cast("Gateway", self),
-            known_list=self.config.known_list,  # type: ignore[arg-type]
+            self,
+            known_list=self.config.known_list,
             **self._schema,
         )
 
@@ -128,7 +115,7 @@ class GatewayLifecycle:
         # the TopologyBuilder pipeline will never emit a BIND_DEVICE event for it.
         if self.config.hgi_id:
             with contextlib.suppress(DeviceNotFoundError):
-                self.device_registry.get_device(cast(DeviceIdT, self.config.hgi_id))
+                self.device_registry.get_device(DeviceIdT(self.config.hgi_id))
 
         if cached_packets:
             await self._restore_cached_packets(cached_packets)
@@ -146,7 +133,7 @@ class GatewayLifecycle:
                     if hasattr(self.config.engine, "hgi_id"):
                         self.config.engine.hgi_id = hgi_str
                 with contextlib.suppress(DeviceNotFoundError):
-                    self.device_registry.get_device(cast(DeviceIdT, hgi_str))
+                    self.device_registry.get_device(DeviceIdT(hgi_str))
 
         self.config.disable_discovery = disable_discovery
 
@@ -155,24 +142,31 @@ class GatewayLifecycle:
             and not self.config.disable_discovery
             and start_discovery
         ):
-            initiate_discovery(
-                self.device_registry.devices, self.device_registry.systems
-            )
+            if pm := getattr(self, "polling_manager", None):
+                pm.start()
 
     async def stop(self) -> None:
         """Stop the Gateway and tidy up."""
         self.config.disable_discovery = True
 
-        # Cancel binding managers and discovery pollers before stopping engine
+        if pm := getattr(self, "polling_manager", None):
+            await pm.stop()
+
+        if cm := getattr(self, "conversation_manager", None):
+            cm.cancel_all()
+
+        # Cancel binding managers before stopping engine
         for dev in self.device_registry.devices:
             bm = getattr(dev, "_binding_manager", None)
             if bm:
-                with contextlib.suppress(Exception):
+                try:
                     bm.cancel()
-            disc = getattr(dev, "discovery", None)
-            if disc:
-                with contextlib.suppress(Exception):
-                    await disc.stop_poller()
+                except (AttributeError, RuntimeError) as err:
+                    _LOGGER.debug(
+                        "Error cancelling binding manager for device %s: %s",
+                        getattr(dev, "id", dev),
+                        err,
+                    )
 
         await self._engine.stop()
 
@@ -259,7 +253,7 @@ class GatewayLifecycle:
 
         def clear_state() -> None:
             _LOGGER.info("Gateway: Clearing existing schema/state...")
-            cast("Gateway", self)._tcs = None
+            self._tcs = None
             self.device_registry.devices.clear()
             self.device_registry.device_by_id.clear()
             self.clear_message_history()

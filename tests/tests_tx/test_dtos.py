@@ -48,3 +48,39 @@ def test_packet_to_dto_enforces_strict_verb_padding() -> None:
     assert dto.addr2 == "--:------"
     assert dto.addr3 == "01:145038"
     assert dto.code == "30C9"
+
+
+def test_packet_dto_is_tx_default_and_custom() -> None:
+    # Arrange
+    test_dtm = dt(2026, 7, 31, 12, 0, 0, tzinfo=UTC)
+
+    # Act: Construct default inbound DTO and custom outbound DTO
+    inbound_dto = PacketDTO(
+        timestamp=test_dtm,
+        rssi="045",
+        verb="RQ",
+        seq="",
+        addr1="18:000730",
+        addr2="01:145038",
+        addr3="--:------",
+        code="000A",
+        length="002",
+        payload="0800",
+    )
+    outbound_dto = PacketDTO(
+        timestamp=test_dtm,
+        rssi="045",
+        verb="RQ",
+        seq="",
+        addr1="18:000730",
+        addr2="01:145038",
+        addr3="--:------",
+        code="000A",
+        length="002",
+        payload="0800",
+        is_tx=True,
+    )
+
+    # Assert
+    assert inbound_dto.is_tx is False
+    assert outbound_dto.is_tx is True

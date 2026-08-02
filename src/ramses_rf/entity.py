@@ -7,11 +7,10 @@ import asyncio
 import logging
 from inspect import getmembers, isclass
 from sys import modules
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from ramses_tx import Priority, QosParams
 
-from .discovery import DiscoveryService
 from .models import (
     DemandState,
     FaultLogState,
@@ -20,16 +19,16 @@ from .models import (
     ScheduleState,
     StateUpdatedEvent,
     TemperatureState,
+    ZoneState,
 )
 from .state import EntityState
 
 if TYPE_CHECKING:
-    from ramses_tx import Command, Packet
+    from ramses_tx import CommandDTO, Packet
     from ramses_tx.typing import DeviceIdT, DevIndexT
 
     from .devices import Controller
     from .gateway import Gateway
-    from .interfaces import DeviceInterface
     from .messages import Message
     from .systems.tcs import Evohome
 
@@ -77,10 +76,7 @@ class _Entity:
         self._qos_tx_count = 0
 
         # Specialized components via Composition
-        self.entity_state: EntityState = EntityState(
-            cast("DeviceInterface", self), self._gwy
-        )
-        self.discovery: DiscoveryService = DiscoveryService(self, self._gwy)
+        self.entity_state: EntityState = EntityState(self, self._gwy)
 
         # Context required by children (Zones/Devices)
         self._z_id: DeviceIdT = None  # type: ignore[assignment]
@@ -142,33 +138,35 @@ class _Entity:
             setattr(self, "opentherm_state", event.state)  # noqa: B010
         elif isinstance(event.state, HvacState) and hasattr(self, "hvac_state"):
             setattr(self, "hvac_state", event.state)  # noqa: B010
+        elif isinstance(event.state, ZoneState) and hasattr(self, "zone_state"):
+            setattr(self, "zone_state", event.state)  # noqa: B010
 
-    def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task[Any] | None:
+    def _send_cmd(self, cmd: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
         """Proxy command sending to the Gateway.
 
         :param cmd: The command to send.
-        :type cmd: Command
+        :type cmd: CommandDTO
         :param kwargs: Optional sending parameters (e.g., priority).
         :type kwargs: Any
         :returns: The corresponding asyncio Task or None.
         :rtype: asyncio.Task[Any] | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.info(f"{cmd} < Sending was deprecated for {self}")
+            _LOGGER.info("%s < Sending was deprecated for %s", cmd, self)
             return None
 
-        return self._gwy.send_cmd(cmd, wait_for_reply=False, **kwargs)
+        return self._gwy.send_cmd(cmd, **kwargs)
 
     async def _async_send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         priority: Priority | None = None,
         qos: QosParams | None = None,
     ) -> Packet | None:
         """Proxy asynchronous command sending to the Gateway.
 
         :param cmd: The command to send.
-        :type cmd: Command
+        :type cmd: CommandDTO
         :param priority: Transmission priority, defaults to None.
         :type priority: Priority | None, optional
         :param qos: Quality of Service parameters, defaults to None.
@@ -177,7 +175,7 @@ class _Entity:
         :rtype: Packet | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.warning(f"{cmd} < Sending was deprecated for {self}")
+            _LOGGER.warning("%s < Sending was deprecated for %s", cmd, self)
             return None
 
         # Build kwargs dynamically to prevent passing `None` to strict Gateway args
@@ -190,8 +188,6 @@ class _Entity:
                 kwargs["max_retries"] = qos.max_retries
             if hasattr(qos, "timeout") and qos.timeout is not None:
                 kwargs["timeout"] = qos.timeout
-            if hasattr(qos, "wait_for_reply") and qos.wait_for_reply is not None:
-                kwargs["wait_for_reply"] = qos.wait_for_reply
 
         return await self._gwy.async_send_cmd(cmd, **kwargs)
 

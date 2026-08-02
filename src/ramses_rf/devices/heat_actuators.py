@@ -2,29 +2,21 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import Any, Final
 
 from ramses_rf.const import (
     DOMAIN_TYPE_MAP,
-    F9,
-    FA,
-    FC,
-    I_,
-    RQ,
     SZ_HEAT_DEMAND,
     SZ_RELAY_DEMAND,
     Code,
     DevType,
 )
 from ramses_rf.models import DeviceTraits
-from ramses_tx import Command, Priority
+from ramses_tx import Priority
 from ramses_tx.const import SZ_PRIORITY
-from ramses_tx.typing import PayDictT, PayloadT
+from ramses_tx.typing import PayDictT
 
 from .dev_base import DeviceHeat
-
-if TYPE_CHECKING:
-    from ..messages import Message
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
 
@@ -45,22 +37,6 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
     ACTUATOR_ENABLED: Final = "actuator_enabled"  # boolean
     ACTUATOR_STATE: Final = "actuator_state"
     MODULATION_LEVEL: Final = "modulation_level"  # percentage (0.0-1.0)
-
-    def _handle_msg(self, msg: Message) -> None:  # NOTE: active
-        super()._handle_msg(msg)
-
-        if getattr(self, "_SLUG", None) == DevType.OTB:
-            return
-
-        if getattr(self._gwy.config, "disable_discovery", False):
-            return
-
-        # TODO: why are we doing this here? Should simply use discovery poller!
-        if msg.code == Code._3EF0 and msg.verb == I_ and not self.is_faked:
-            # lf._send_cmd(Command.get_relay_demand(self.id), qos=QOS_LOW)
-            self._send_cmd(
-                Command.from_attrs(RQ, self.id, Code._3EF1, PayloadT("00")), **QOS_LOW
-            )  # actuator cycle
 
     async def actuator_cycle(self) -> dict[str, Any] | None:  # 3EF1
         """Return the actuator cycle state.
@@ -151,12 +127,6 @@ class RelayDemand(DeviceHeat):  # 0008
 
     RELAY_DEMAND: Final = SZ_RELAY_DEMAND  # percentage (0.0-1.0)
 
-    def _setup_discovery_cmds(self) -> None:
-        super()._setup_discovery_cmds()
-
-        if not self.is_faked:  # discover_flag & Discover.STATUS and
-            self.discovery.add_cmd(Command.get_relay_demand(self.id), 60 * 15)
-
     async def relay_demand(self) -> float | None:  # 0008
         return self.demand_state.relay_demand
 
@@ -189,32 +159,6 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
         super().__init__(*args, traits=traits, **kwargs)
-
-    def _setup_discovery_cmds(self) -> None:
-        """Discover BDRs.
-
-        The BDRs have one of six roles:
-         - heater relay *or* a heat pump relay (alternative to an OTB)
-         - DHW hot water valve *or* DHW heating valve
-         - Zones: Electric relay *or* Zone valve relay
-
-        They all seem to respond thus (TODO: heat pump/zone valve relay):
-         - all BDR91As will (erractically) RP to these RQs
-             0016, 1FC9 & 0008, 1100, 3EF1
-         - all BDR91As will *not* RP to these RQs
-             0009, 10E0, 3B00, 3EF0
-         - a BDR91A will *periodically* send an I/3B00/00C8 if it is the heater relay
-        """
-        super()._setup_discovery_cmds()
-
-        if self.is_faked:
-            return
-
-        self.discovery.add_cmd(Command.get_tpi_params(self.id), 6 * 3600)  # params
-        self.discovery.add_cmd(
-            Command.from_attrs(RQ, self.id, Code._3EF1, PayloadT("00")),
-            60 if getattr(self, "_child_id", None) in (F9, FA, FC) else 300,
-        )  # status
 
     async def active(self) -> bool | None:  # 3EF0, 3EF1
         """Return the actuator's current state."""
@@ -249,10 +193,8 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
         return None
 
-    async def tpi_params(self) -> PayDictT._10A0 | None:
-        return cast(
-            PayDictT._10A0 | None, await self.entity_state.get_value(Code._1100)
-        )
+    async def tpi_params(self) -> PayDictT._1100 | None:
+        return await self.entity_state.get_value(Code._1100)
 
     async def schema(self) -> dict[str, Any]:
         base_schema = await super().schema()

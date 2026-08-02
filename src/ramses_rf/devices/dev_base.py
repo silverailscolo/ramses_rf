@@ -10,7 +10,7 @@ import asyncio
 import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Self
 
 from ramses_rf.address import Address
 from ramses_rf.binding_fsm import BindingManager
@@ -27,10 +27,15 @@ from ramses_rf.const import (
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
 from ramses_rf.models import DemandState, PowerState, TemperatureState
-from ramses_rf.schemas import SZ_ALIAS, SZ_CLASS, SZ_FAKED
+from ramses_rf.schemas import (
+    SZ_ALIAS,
+    SZ_CLASS,
+    SZ_FAKED,
+    SZ_IS_BATTERY,
+    SZ_POLLING_INTERVAL,
+)
 from ramses_rf.topology import Child
-from ramses_tx import Command, Packet, Priority, QosParams
-from ramses_tx.typing import PayloadT
+from ramses_tx import CommandDTO, Packet, Priority, QosParams
 
 from ..messages import Message
 from ..protocol.ramses import CODES_BY_DEV_SLUG
@@ -47,6 +52,7 @@ if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.models import DeviceTraits
     from ramses_rf.systems import Zone
+    from ramses_rf.typing import PollingIntervalsT
     from ramses_tx.const import IndexT
     from ramses_tx.dtos import PacketDTO
     from ramses_tx.typing import DeviceIdT
@@ -100,6 +106,10 @@ class DeviceBase(Entity):
         self.type = dev_addr.type  # DEX  # TODO: remove this attr? use SLUG?
 
         self._scheme: str | None = traits.scheme if traits else None
+        self._polling_interval: PollingIntervalsT | None = (
+            traits.polling_interval if traits else None
+        )
+        self._is_battery: bool | None = traits.is_battery if traits else None
         self._last_msg_dtm: dt | None = None
 
         self.power_state = PowerState()
@@ -152,7 +162,6 @@ class DeviceBase(Entity):
             'faked' is set.
         :rtype: None
         """
-
         if traits.faked:  # class & alias are done elsewhere
             if not isinstance(self, Fakeable):
                 raise DeviceNotFaked(
@@ -161,11 +170,13 @@ class DeviceBase(Entity):
             self._make_fake()
 
         self._scheme = traits.scheme
+        self._polling_interval = traits.polling_interval
+        self._is_battery = traits.is_battery
 
     @classmethod
     def create_from_schema(
         cls, gwy: Gateway, dev_addr: Address, *, traits: DeviceTraits | None = None
-    ) -> DeviceBase:
+    ) -> Self:
         """Create a device (for a GWY) and set its schema attrs (aka traits).
 
         All devices have traits, but also controllers (CTL, UFC) have a
@@ -183,24 +194,21 @@ class DeviceBase(Entity):
         :return: The fully initialised device instance.
         :rtype: DeviceBase
         """
-
         dev = cls(gwy, dev_addr, traits=traits)
         if traits:
             dev._update_traits(traits)
         return dev
 
-    def _setup_discovery_cmds(self) -> None:
-        """Configure initial discovery commands for the device."""
-        pass
-
-    def _send_cmd(self, cmd: Command, **kwargs: Any) -> asyncio.Task[Any] | None:
+    def _send_cmd(self, cmd: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
         """Send a command from this device."""
         if (
             isinstance(self, BatteryState)
             and not self.is_faked
-            and cmd.dst.id == self.id
+            and cmd.addr2 == self.id
         ):
-            _LOGGER.info(f"{cmd} < Sending inadvisable for {self} (it has a battery)")
+            _LOGGER.info(
+                "%s < Sending inadvisable for %s (it has a battery)", cmd, self
+            )
 
         return super()._send_cmd(cmd, **kwargs)
 
@@ -225,19 +233,39 @@ class DeviceBase(Entity):
         return isinstance(self, BatteryState) or Code._1060 in msgs
 
     @property
+    def polling_interval(self) -> PollingIntervalsT | None:
+        """Return the polling interval dictionary for this device.
+
+        :return: A dictionary mapping command code to interval in seconds, or None.
+        :rtype: PollingIntervalsT | None
+        """
+        return self._polling_interval
+
+    @property
+    def is_battery(self) -> bool | None:
+        """Return True if the device is explicitly configured as battery-powered.
+
+        :return: True if marked as battery-powered in traits, False if mains-powered, or None.
+        :rtype: bool | None
+        """
+        if self._is_battery is not None:
+            return self._is_battery
+        if isinstance(self, BatteryState):
+            return True
+        return None
+
+    @property
     def is_faked(self) -> bool:
         """Return True if the device is faked.
 
         :return: True if the device is actively faked.
         :rtype: bool
         """
-
         return bool(self._binding_manager)  # isinstance(self, Fakeable) and...
 
     @property
     def _is_binding(self) -> bool:
         """Return True if the (faked) device is actively binding."""
-
         return bool(self._binding_manager and self._binding_manager.is_binding is True)
 
     async def _is_present(self) -> bool:
@@ -279,7 +307,6 @@ class DeviceBase(Entity):
         :return: A dictionary detailing the device's traits.
         :rtype: dict[str, Any]
         """
-
         result = await self.entity_state.traits()
 
         known_dev = self._gwy.config.known_list.get(self.id)
@@ -289,6 +316,8 @@ class DeviceBase(Entity):
                 SZ_CLASS: DEV_TYPE_MAP[self._SLUG],
                 SZ_ALIAS: known_dev.get(SZ_ALIAS) if known_dev else None,
                 SZ_FAKED: self.is_faked,
+                SZ_POLLING_INTERVAL: self.polling_interval,
+                SZ_IS_BATTERY: self.is_battery,
             }
         )
 
@@ -347,25 +376,14 @@ class BatteryState(DeviceBase):  # 1060
 class DeviceInfo(DeviceBase):  # 10E0
     """The base state class for device information (10E0) payloads."""
 
-    def _setup_discovery_cmds(self) -> None:
-        """Enqueue a 10E0 device info request during discovery."""
-        super()._setup_discovery_cmds()
-
-        if self._SLUG not in CODES_BY_DEV_SLUG or RP in CODES_BY_DEV_SLUG[
-            self._SLUG
-        ].get(Code._10E0, {}):
-            cmd = Command.from_attrs(RQ, self.id, Code._10E0, PayloadT("00"))
-            self.discovery.add_cmd(cmd, 60 * 60 * 24)
-
     async def device_info(self) -> dict[str, Any] | None:  # 10E0
         """Return the device specification and manufacturing data.
 
         :return: A dictionary of device information.
         :rtype: dict[str, Any] | None
         """
-        return cast(
-            dict[str, Any] | None, await self.entity_state.get_value(Code._10E0)
-        )
+        res = await self.entity_state.get_value(Code._10E0)
+        return res if isinstance(res, dict) else None
 
     async def traits(self) -> dict[str, Any]:
         """Return the traits of the device.
@@ -373,7 +391,6 @@ class DeviceInfo(DeviceBase):  # 10E0
         :return: A dictionary detailing the device's traits.
         :rtype: dict[str, Any]
         """
-
         result = await super().traits()
         msgs = await self.entity_state.get_message_log_flat()
 
@@ -384,7 +401,9 @@ class DeviceInfo(DeviceBase):  # 10E0
 
 
 class Fakeable(DeviceBase):
-    """There are two types of Faking: impersonation (of real devices) and
+    """Base class for faked or impersonated devices.
+
+    There are two types of Faking: impersonation (of real devices) and
     full-faking.
 
     Impersonation of physical devices simply means sending packets on
@@ -435,16 +454,15 @@ class Fakeable(DeviceBase):
         if self.id not in self._gwy.config.known_list:
             self._gwy.config.known_list[self.id] = {}
         self._gwy.config.known_list[self.id][SZ_FAKED] = True  # TODO: remove this
-        _LOGGER.info(f"Faking now enabled for: {self}")
+        _LOGGER.info("Faking now enabled for: %s", self)
 
     async def _async_send_cmd(
         self,
-        cmd: Command,
+        cmd: CommandDTO,
         priority: Priority | None = None,
         qos: QosParams | None = None,
     ) -> Packet | None:
-        """Wrapper to CC: any relevant Commands to the binding Context."""
-
+        """Send a command and forward to the binding context if binding."""
         if self._binding_manager and self._binding_manager.is_binding:
             # cmd.code in (Code._1FC9, Code._10E0)
             self._binding_manager.sent_cmd(cmd)  # other codes needed for edge cases
@@ -452,8 +470,7 @@ class Fakeable(DeviceBase):
         return await super()._async_send_cmd(cmd, priority=priority, qos=qos)
 
     def _handle_msg(self, msg: Message) -> None:
-        """Wrapper to CC: any relevant Packets to the binding Context."""
-
+        """Handle an incoming message and forward to the binding context."""
         super()._handle_msg(msg)
 
         if self._binding_manager and self._binding_manager.is_binding:
@@ -481,14 +498,12 @@ class Fakeable(DeviceBase):
         :return: A tuple of the four binding transaction packets.
         :rtype: tuple[Message, Packet, Message, Message | None]
         """
-
         if not self._binding_manager:
-            raise DeviceNotFaked(f"{self}: Faking not enabled")
+            raise DeviceNotFaked(f"Device is not fakeable: {self}")
 
-        msgs = await self._binding_manager.wait_for_binding_request(
+        return await self._binding_manager.wait_for_binding_request(
             accept_codes, idx=idx, require_ratify=require_ratify
         )
-        return msgs
 
     async def wait_for_binding_request(
         self,
@@ -518,7 +533,7 @@ class Fakeable(DeviceBase):
         /,
         *,
         confirm_code: Code | None = None,
-        ratify_cmd: Command | None = None,
+        ratify_cmd: CommandDTO | None = None,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
         """Start a binding and return the Accept, or raise an exception.
 
@@ -527,7 +542,7 @@ class Fakeable(DeviceBase):
         :param confirm_code: The code required to confirm the bind.
         :type confirm_code: Code | None
         :param ratify_cmd: An optional ratification command to send.
-        :type ratify_cmd: Command | None
+        :type ratify_cmd: CommandDTO | None
         :return: A tuple of the binding transaction packets.
         :rtype: tuple[Packet, Message, Packet, Packet | None]
         :raises DeviceNotFaked: If faking is not enabled.
@@ -535,23 +550,37 @@ class Fakeable(DeviceBase):
         # confirm_code can be FFFF.
 
         if not self._binding_manager:
-            raise DeviceNotFaked(f"{self}: Faking not enabled")
+            raise DeviceNotFaked(f"Device is not fakeable: {self}")
 
         if isinstance(offer_codes, str):
             codes: tuple[Code, ...] = (offer_codes,)
         else:
             codes = tuple(offer_codes)
 
-        msgs = await self._binding_manager.initiate_binding_process(
+        return await self._binding_manager.initiate_binding_process(
             codes, confirm_code=confirm_code, ratify_cmd=ratify_cmd
         )
-        return msgs
 
     async def initiate_binding_process(
         self,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
         """Start a binding and return the Accept, or raise an exception.
 
+        :return: A tuple of the binding transaction packets.
+        :rtype: tuple[Packet, Message, Packet, Packet | None]
+        :raises NotImplementedError: Subclasses must implement this.
+        """
+        raise NotImplementedError
+
+    async def _wait_for_binding_accept(
+        self, offer: Message, /, *, idx: IndexT = "00"
+    ) -> tuple[Packet, Message, Packet, Packet | None]:
+        """Listen for a binding accept packet.
+
+        :param offer: The binding offer message.
+        :type offer: Message
+        :param idx: The index to bind to, defaults to "00".
+        :type idx: IndexT
         :return: A tuple of the binding transaction packets.
         :rtype: tuple[Packet, Message, Packet, Packet | None]
         :raises NotImplementedError: Subclasses must implement this.
@@ -567,11 +596,10 @@ class Fakeable(DeviceBase):
         """
         traits = await self.traits()
         if not traits.get(SZ_OEM_CODE):
-            return cast(
-                str | None,
-                await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE),
-            )
-        return cast(str | None, traits.get(SZ_OEM_CODE))
+            res = await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE)
+            return str(res) if res is not None else None
+        oem = traits.get(SZ_OEM_CODE)
+        return str(oem) if oem is not None else None
 
 
 class Device(Child, DeviceBase):
@@ -699,7 +727,6 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         self, *, msg: Message | None = None, **schema: Any
     ) -> None:  # CH/DHW
         """Attach a TCS (create/update as required) after passing it any msg."""
-
         if self.type not in DEV_TYPE_MAP.CONTROLLERS:  # potentially can be controllers
             raise SchemaInconsistentError(
                 f"Invalid device type to be a controller: {self}"
@@ -725,8 +752,11 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         :return: The parent zone instance, or None if unassigned.
         :rtype: Zone | None
         """
+        # Deferred import to prevent circular dependency at module load time
+        # DO NOT MOVE to module level.
+        from ramses_rf.systems.zones import ZoneBase
 
-        return cast("Zone | None", self._parent)
+        return self._parent if isinstance(self._parent, ZoneBase) else None  # type: ignore[return-value]
 
 
 class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR

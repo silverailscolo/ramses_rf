@@ -1,0 +1,278 @@
+# serializer version: 1
+# name: test_topology_builder_snapshot[opentherm]
+  dict({
+    '01:216136': dict({
+      'orphans': list([
+      ]),
+      'stored_hotwater': dict({
+        'heating_valve': None,
+        'hotwater_valve': '13:042605',
+        'sensor': '07:050121',
+      }),
+      'system': dict({
+        'appliance_control': '10:064873',
+      }),
+      'underfloor_heating': dict({
+      }),
+      'zones': dict({
+        '00': dict({
+          '_name': None,
+          'actuators': list([
+            '04:034720',
+            '04:056673',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:056673',
+        }),
+        '01': dict({
+          '_name': 'Kitchen',
+          'actuators': list([
+            '04:034682',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '22:012299',
+        }),
+        '02': dict({
+          '_name': 'Hall',
+          'actuators': list([
+            '04:034716',
+            '04:034726',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:034716',
+        }),
+        '03': dict({
+          '_name': 'Lounge',
+          'actuators': list([
+            '04:056679',
+            '04:219929',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '34:058721',
+        }),
+        '04': dict({
+          '_name': 'Dining room',
+          'actuators': list([
+            '04:056677',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:056677',
+        }),
+        '05': dict({
+          '_name': 'Office',
+          'actuators': list([
+            '04:106557',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:106557',
+        }),
+        '06': dict({
+          '_name': 'Master bed',
+          'actuators': list([
+            '04:056675',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:056675',
+        }),
+        '07': dict({
+          '_name': 'Bathrooms',
+          'actuators': list([
+            '04:034690',
+            '04:034722',
+            '04:036066',
+            '04:036068',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:036066',
+        }),
+        '08': dict({
+          '_name': 'Bedroom 2',
+          'actuators': list([
+            '04:208998',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:208998',
+        }),
+        '09': dict({
+          '_name': 'Bedroom 3',
+          'actuators': list([
+            '04:208990',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:208990',
+        }),
+        '0A': dict({
+          '_name': 'Bedroom 4',
+          'actuators': list([
+            '04:208994',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:208994',
+        }),
+        '0B': dict({
+          '_name': 'Bedroom 5',
+          'actuators': list([
+            '04:034684',
+            '04:034692',
+            '04:208992',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:208992',
+        }),
+      }),
+    }),
+    'main_tcs': '01:216136',
+    'orphans_heat': list([
+    ]),
+    'orphans_hvac': list([
+    ]),
+  })
+# ---
+# name: test_topology_builder_snapshot[standard]
+  dict({
+    '01:195932': dict({
+      'orphans': list([
+      ]),
+      'stored_hotwater': dict({
+        'heating_valve': None,
+        'hotwater_valve': '13:203402',
+        'sensor': '07:048080',
+      }),
+      'system': dict({
+        'appliance_control': None,
+      }),
+      'underfloor_heating': dict({
+        '02:007533': dict({
+          'circuits': dict({
+            '00': dict({
+              'zone_idx': '00',
+            }),
+            '01': dict({
+              'zone_idx': '01',
+            }),
+            '02': dict({
+              'zone_idx': '0B',
+            }),
+            '03': dict({
+              'zone_idx': None,
+            }),
+            '04': dict({
+              'zone_idx': None,
+            }),
+            '05': dict({
+              'zone_idx': None,
+            }),
+            '06': dict({
+              'zone_idx': None,
+            }),
+            '07': dict({
+              'zone_idx': None,
+            }),
+          }),
+        }),
+      }),
+      'zones': dict({
+        '00': dict({
+          '_name': 'Kitchen & Util',
+          'actuators': list([
+          ]),
+          'class': 'underfloor_heating',
+          'sensor': '34:194645',
+        }),
+        '01': dict({
+          '_name': 'Hall & WC',
+          'actuators': list([
+          ]),
+          'class': 'underfloor_heating',
+          'sensor': '34:182991',
+        }),
+        '02': dict({
+          '_name': 'Office',
+          'actuators': list([
+            '04:017806',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:017806',
+        }),
+        '03': dict({
+          '_name': 'Living room',
+          'actuators': list([
+            '04:017984',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '34:002877',
+        }),
+        '04': dict({
+          '_name': 'Landing',
+          'actuators': list([
+            '04:017980',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:017980',
+        }),
+        '05': dict({
+          '_name': 'Bedroom 1',
+          'actuators': list([
+            '04:017986',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '34:006985',
+        }),
+        '06': dict({
+          '_name': 'Bedroom 2',
+          'actuators': list([
+            '04:017804',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:017804',
+        }),
+        '07': dict({
+          '_name': 'Bedroom 3',
+          'actuators': list([
+            '04:017982',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:017982',
+        }),
+        '08': dict({
+          '_name': 'Bedroom 4',
+          'actuators': list([
+            '04:017808',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:017808',
+        }),
+        '09': dict({
+          '_name': 'Bathroom',
+          'actuators': list([
+            '04:018756',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:018756',
+        }),
+        '0A': dict({
+          '_name': 'Ensuite',
+          'actuators': list([
+            '04:018744',
+          ]),
+          'class': 'radiator_valve',
+          'sensor': '04:018744',
+        }),
+        '0B': dict({
+          '_name': 'Old Shop',
+          'actuators': list([
+            '04:017810',
+          ]),
+          'class': 'underfloor_heating',
+          'sensor': '34:124201',
+        }),
+      }),
+    }),
+    'main_tcs': '01:195932',
+    'orphans_heat': list([
+      '13:027756',
+    ]),
+    'orphans_hvac': list([
+    ]),
+  })
+# ---

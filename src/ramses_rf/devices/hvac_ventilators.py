@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ramses_rf import exceptions as exc
+from ramses_rf.address import Address
+from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import (
     HEARTBEAT_TIMEOUT_FILTER,
-    RQ,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BYPASS_MODE,
@@ -40,17 +41,15 @@ from ramses_rf.const import (
     SZ_SUPPLY_FLOW,
     SZ_SUPPLY_TEMP,
     SZ_TEMPERATURE,
-    Code,
     DevType,
 )
+from ramses_rf.enums import Action
+from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
-from ramses_tx import Command, Packet, Priority
-from ramses_tx.typing import PayloadT
+from ramses_tx import Priority
+from ramses_tx.typing import DeviceIdT
 
 from .dev_base import DeviceHvac
-
-if TYPE_CHECKING:
-    from ..messages import Message
 
 # TODO: Switch this module to utilise the (run-time) decorator design pattern...
 # - https://refactoring.guru/design-patterns/decorator/python/example
@@ -70,6 +69,8 @@ _LOGGER = logging.getLogger(__name__)
 class FilterChange(DeviceHvac):  # FAN: 10D0
     """The filter state sensor (10D0)."""
 
+    _SLUG: str = DevType.FAN
+
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
@@ -82,23 +83,6 @@ class FilterChange(DeviceHvac):  # FAN: 10D0
         super().__init__(*args, traits=traits, **kwargs)
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
-
-    def _post_class_promote(self) -> None:
-        """Initialize state when promoted from a generic HVAC device."""
-        if not hasattr(self, "hvac_state"):
-            self.hvac_state = HvacState()
-
-    def _setup_discovery_cmds(self) -> None:
-        """Set up the discovery commands for the filter change sensor."""
-        super()._setup_discovery_cmds()
-
-        # Note: not all FANs will respond to RQ 10D0 ( they're orphans_hvac in Schema)
-        # Remove once we have discovery_service?
-        self.discovery.add_cmd(
-            Command.from_attrs(RQ, self.id, Code._10D0, PayloadT("00")),
-            60 * 60 * 24,
-            delay=30,
-        )
 
     async def filter_remaining(self) -> int | None:
         """Return the remaining days until filter change is needed.
@@ -147,11 +131,6 @@ class RfsGateway(DeviceHvac):  # RFS: (spIDer gateway)
             self.hvac_state = HvacState()
 
         self._child_id = "hv"  # NOTE: domain_id
-
-    def _post_class_promote(self) -> None:
-        """Initialize state when promoted from a generic HVAC device."""
-        if not hasattr(self, "hvac_state"):
-            self.hvac_state = HvacState()
 
 
 class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
@@ -205,11 +184,6 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         self.__dict__.setdefault("_bound_devices", {})
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
-
-    def _post_class_promote(self) -> None:
-        """Initialize FAN state when promoted from a generic HVAC device."""
-        super()._post_class_promote()
-        self._init_fan_state()
 
     def set_initialized_callback(self, callback: Callable[[], None] | None) -> None:
         """Set a callback to be executed when the next message (any) is
@@ -417,83 +391,6 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         # call the 2411 parameter update callback
         self._handle_param_update(param_id, param_value)
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle a message from this device.
-
-        This method processes incoming messages for the device, with special
-        handling for 2411 parameter messages. It updates the device state and
-        triggers any necessary callbacks.
-
-        After handling the messages, it calls the initialized callback - if set
-        - to notify that the device was fully initialized.
-
-        :param msg: The incoming message to process
-        :type msg: Message
-        """
-        super()._handle_msg(msg)
-
-        # Handle 2411 parameter messages
-        if msg.code == Code._2411:
-            _LOGGER.debug(
-                "Received 2411 message from %s: verb=%s, payload=%s, src=%s, dst=%s",
-                self.id,
-                msg.verb,
-                msg.payload,
-                msg.src,
-                msg.dst,
-            )
-            self._handle_2411_message(msg)
-
-        self._handle_initialized_callback()
-
-    def _setup_discovery_cmds(self) -> None:
-        """Set up discovery commands for the RFS gateway.
-
-        This method initializes the discovery commands needed to identify and
-        communicate with the RFS gateway device.
-        """
-        super()._setup_discovery_cmds()
-
-        # RP --- 32:155617 18:005904 --:------ 22F1 003 000207
-        self.discovery.add_cmd(
-            Command.from_attrs(RQ, self.id, Code._22F1, PayloadT("00")),
-            60 * 60 * 24,
-            delay=15,
-        )  # to learn scheme: orcon/itho/other (04/07/0?)
-
-        # Add a single discovery command for all parameters (3F likely to be
-        # supported if any). The handler will process the response and update
-        # the appropriate parameter and also set the supports_2411 flag.
-        _LOGGER.debug("Adding single discovery command for all 2411 parameters")
-        self.discovery.add_cmd(
-            Command.from_attrs(RQ, self.id, Code._2411, PayloadT("00003F")),
-            interval=60 * 60 * 24,  # Check daily
-            delay=40,  # Initial delay before first discovery
-        )
-
-        # Standard discovery commands for other codes
-        for code in (
-            Code._2210,  # Air quality
-            Code._22E0,  # Bypass position
-            Code._22E5,  # Remaining minutes
-            Code._22E9,  # Speed cap
-            Code._22F2,  # Post heat
-            Code._22F4,  # Pre heat
-            Code._22F8,  # Air quality base
-        ):
-            self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, code, PayloadT("00")),
-                60 * 30,
-                delay=15,
-            )
-
-        for code in (Code._313E, Code._3222):
-            self.discovery.add_cmd(
-                Command.from_attrs(RQ, self.id, code, PayloadT("00")),
-                60 * 30,
-                delay=30,
-            )
-
     def add_bound_device(self, device_id: str, device_type: str) -> None:
         """Add a bound device to this FAN.
 
@@ -581,12 +478,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         _LOGGER.debug("No bound REM or DIS devices found for FAN %s", self.id)
         return None
 
-    async def set_fan_mode(self, fan_mode: str | int) -> Packet | None:
+    async def set_fan_mode(self, fan_mode: str | int) -> Message | None:
         """Set the operating mode/speed of the ventilator.
 
         :param fan_mode: The desired fan mode (e.g., 'low', 'medium', 'high',
                          'boost').
-        :return: The sent packet.
+        :return: The sent message, or None if not sent.
         :raises CommandInvalid: If unable to determine a valid source ID.
         """
         # 22F1 commands to a FAN typically must originate from a bound Remote
@@ -609,11 +506,14 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             src_id,
         )
 
-        cmd = Command.set_fan_mode(
-            self.id, fan_mode, scheme=self._scheme or "orcon", src_id=src_id
+        intent = Intent(
+            src=Address(DeviceIdT(src_id)),
+            dst=Address(self.id),
+            action=Action.SET_FAN_MODE,
+            data={"fan_mode": fan_mode, "scheme": self._scheme or "orcon"},
         )
-        return await self._gwy.async_send_cmd(
-            cmd, num_repeats=2, priority=Priority.HIGH
+        return await self._gwy.dispatcher.send(
+            intent, priority=Priority.HIGH, wait_for_reply=True
         )
 
     async def air_quality(self) -> float | None:

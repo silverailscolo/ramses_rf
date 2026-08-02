@@ -1,5 +1,4 @@
 # Requirements to build the code documentation from the source code
-# - last checked/updated: 2026-07-16
 
 # libraries required to build with sphinx
 # - pip list | grep -E 'sphinx'
@@ -10,6 +9,6 @@
     markdown-it-py==4.2.0
     myst-parser==5.1.0
     Sphinx==9.1.0
-    sphinxcontrib-mermaid==2.0.3
+    sphinxcontrib-mermaid==2.1.0
     sphinx-basic-ng==1.0.0b2
     sphinx_design==0.7.0

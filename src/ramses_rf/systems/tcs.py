@@ -6,10 +6,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime as dt, timedelta as td
-from threading import Lock
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
+from ramses_rf.address import HGI_DEV_ADDR, Address
+from ramses_rf.commands.core import Command as Intent_
 from ramses_rf.const import (
     SYS_MODE_MAP,
     SZ_ACTUATORS,
@@ -36,9 +37,9 @@ from ramses_rf.devices import (
     UfhController,
 )
 from ramses_rf.entity import Entity, class_by_attr
+from ramses_rf.enums import Action
 from ramses_rf.exceptions import (
     DeviceNotFoundError,
-    ScheduleFlowError,
     SchemaInconsistentError,
     SystemSchemaInconsistent,
 )
@@ -58,23 +59,16 @@ from ramses_rf.schemas import (
     SZ_UFH_SYSTEM,
 )
 from ramses_rf.topology import Parent
-from ramses_tx import (
-    DEV_ROLE_MAP,
-    DEV_TYPE_MAP,
-    ZON_ROLE_MAP,
-    Command,
-    DeviceIdT,
-    Priority,
-)
-from ramses_tx.typing import PayDictT, PayloadT
+from ramses_tx import DEV_ROLE_MAP, DEV_TYPE_MAP, ZON_ROLE_MAP, DeviceIdT, Priority
+from ramses_tx.typing import PayDictT
 
 from ..messages import Message
 from .faultlog import FaultLog
+from .helpers import send_system_intent
 from .zones import zone_factory
 
 if TYPE_CHECKING:
     from ramses_rf.address import Address
-    from ramses_tx import Packet
 
     from .faultlog import FaultIdxT, FaultLogEntry
     from .zones import DhwZone, Zone
@@ -166,21 +160,6 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
     def __repr__(self) -> str:
         return f"{self.ctl.id} ({self._SLUG})"
-
-    def _setup_discovery_cmds(self) -> None:
-        """Configure the system-level discovery commands."""
-        # super()._setup_discovery_cmds()
-
-        for payload in (
-            f"00{DEV_ROLE_MAP.APP}",  # appliance_control
-            f"00{DEV_ROLE_MAP.HTG}",  # hotwater_valve
-            f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
-        ):
-            cmd = Command.from_attrs(RQ, self.ctl.id, Code._000C, PayloadT(payload))
-            self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0)
-
-        cmd = Command.get_tpi_params(self.id)
-        self.discovery.add_cmd(cmd, 60 * 60 * 6, delay=5)
 
     def _handle_msg(self, msg: Message) -> None:
         """Handle incoming messages routed to the base system."""
@@ -313,11 +292,8 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         """The TCS relay, aka 'appliance control' (BDR or OTB)."""
         if self._app_cntrl:
             return self._app_cntrl
-        app_cntrl = [d for d in self.childs if d._child_id == FC]
-        return cast(
-            BdrSwitch | OtbGateway | None,
-            app_cntrl[0] if len(app_cntrl) == 1 else None,
-        )
+        app_cntrl = [d for d in self.childs if isinstance(d, (BdrSwitch, OtbGateway))]
+        return app_cntrl[0] if len(app_cntrl) == 1 else None
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
         """Return the TPI parameters for the system.
@@ -325,10 +301,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         :returns: The TPI parameters dictionary, if available.
         :rtype: PayDictT._1100 | None
         """
-        return cast(
-            PayDictT._1100 | None,
-            await self.entity_state.get_value(Code._1100),
-        )
+        return await self.entity_state.get_value(Code._1100)
 
     async def heat_demand(self) -> float | None:  # 3150/FC
         """Return the current heat demand for the system.
@@ -448,16 +421,6 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
 
         self._prev_30c9: Message | None = None  # used to eavesdrop zone sensors
 
-    def _setup_discovery_cmds(self) -> None:
-        """Configure discovery commands for zone types."""
-        super()._setup_discovery_cmds()
-
-        for zone_type in list(ZON_ROLE_MAP.HEAT_ZONES) + [ZON_ROLE_MAP.SEN]:
-            cmd = Command.from_attrs(
-                RQ, self.id, Code._0005, PayloadT(f"00{zone_type}")
-            )
-            self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0)
-
     async def _eavesdrop_zone_sensors(self, msg: Message, prev: Message | None) -> None:
         """Discover zone sensors by correlating 30C9 temperature broadcasts.
 
@@ -489,11 +452,10 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             return
 
         # TODO: use msgz/I, not RP
-        secs = cast(
-            int | None,
-            await self.entity_state.get_value(Code._1F09, key="remaining_seconds"),
-        )
-        if secs is None or msg.dtm > prev.dtm + td(seconds=secs + 5):
+        secs = await self.entity_state.get_value(Code._1F09, key="remaining_seconds")
+        if not isinstance(secs, (int, float)) or msg.dtm > prev.dtm + td(
+            seconds=secs + 5
+        ):
             # can only compare against 30C9 pkt from the last cycle
             return
 
@@ -561,7 +523,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 SchemaInconsistentError,
                 SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in correlation matching: {err}")
+                _TRACE.warning("SUPPRESSED in correlation matching: %s", err)
 
         # _LOGGER.warning("System state (after): %s", self.schema)
 
@@ -587,7 +549,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 SchemaInconsistentError,
                 SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in ctl correlation matching: {err}")
+                _TRACE.warning("SUPPRESSED in ctl correlation matching: %s", err)
 
         # _LOGGER.warning("System state (finally): %s", self.schema)
 
@@ -622,7 +584,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
                 SchemaInconsistentError,
                 SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning(f"SUPPRESSED in trv correlation matching: {err}")
+                _TRACE.warning("SUPPRESSED in trv correlation matching: %s", err)
 
     def _handle_msg(self, msg: Message) -> None:
         """Process any relevant message.
@@ -805,17 +767,6 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
 
         self._msg_0006: Message = None  # type: ignore[assignment]
 
-        # used to stop concurrent get_schedules
-        self.zone_lock = Lock()  # FIXME: threading lock, or asyncio lock?
-        self.zone_lock_idx: str | None = None
-
-    def _setup_discovery_cmds(self) -> None:
-        """Configure discovery commands for schedules."""
-        super()._setup_discovery_cmds()
-
-        cmd = Command.get_schedule_version(self.id)
-        self.discovery.add_cmd(cmd, 60 * 5, delay=5)
-
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
         """Periodically retrieve the latest global change counter."""
 
@@ -856,9 +807,8 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
                 False,
             )  # global_ver, did_io
 
-        cmd = Command.get_schedule_version(self.ctl.id)
-        pkt = await self._gwy.async_send_cmd(
-            cmd, wait_for_reply=True, priority=Priority.HIGH
+        pkt = await send_system_intent(
+            self, Action.GET_SCHEDULE_VERSION, data={}, wait_for_reply=True
         )
         if pkt:
             self._msg_0006 = Message._from_pkt(pkt)
@@ -879,40 +829,13 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
             task = asyncio.create_task(self.dhw.get_schedule(force_io=True))
             self._gwy.add_task(task)
 
-    async def _obtain_lock(self, zone_idx: str) -> None:
-        """Obtain the asyncio lock for zone schedule operations."""
-        timeout_dtm = dt.now() + td(minutes=3)
-        while dt.now() < timeout_dtm:
-            self.zone_lock.acquire()
-            if self.zone_lock_idx is None:
-                self.zone_lock_idx = zone_idx
-            self.zone_lock.release()
-
-            if self.zone_lock_idx == zone_idx:
-                break
-            await asyncio.sleep(0.005)  # gives the other zone enough time
-
-        else:
-            raise ScheduleFlowError(
-                f"Unable to obtain lock for {zone_idx} (used by {self.zone_lock_idx})"
-            )
-
-    def _release_lock(self) -> None:
-        """Release the asyncio lock for zone schedule operations."""
-        self.zone_lock.acquire()
-        self.zone_lock_idx = None
-        self.zone_lock.release()
-
     async def schedule_version(self) -> int | None:
         """Return the current global schedule version.
 
         :returns: The current schedule version, or None if unknown.
         :rtype: int | None
         """
-        return cast(
-            int | None,
-            await self.entity_state.get_value(Code._0006, key=SZ_CHANGE_COUNTER),
-        )
+        return await self.entity_state.get_value(Code._0006, key=SZ_CHANGE_COUNTER)
 
     async def status(self) -> dict[str, Any]:
         """Return the schedule status.
@@ -929,13 +852,6 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
 
 class Language(SystemBase):  # 0100
     """A system variant supporting language configuration."""
-
-    def _setup_discovery_cmds(self) -> None:
-        """Configure discovery for system language."""
-        super()._setup_discovery_cmds()
-
-        cmd = Command.get_system_language(self.id)
-        self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=60 * 15)
 
     async def language(self) -> str | None:
         """Return the current language configuration.
@@ -975,15 +891,6 @@ class Logbook(SystemBase):  # 0418
     def faultlog(self) -> FaultLog:
         """Return the system's fault log."""
         return self._faultlog
-
-    def _setup_discovery_cmds(self) -> None:
-        """Configure discovery for the fault log."""
-        super()._setup_discovery_cmds()
-
-        cmd = Command.get_system_log_entry(self.id, 0)
-        self.discovery.add_cmd(cmd, 60 * 5, delay=5)
-        task = asyncio.create_task(self.get_faultlog())
-        self._gwy.add_task(task)
 
     def _handle_msg(self, msg: Message) -> None:  # NOTE: active
         """Handle logbook-specific incoming messages."""
@@ -1069,34 +976,6 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         super().__init__(*args, **kwargs)
         self._dhw: DhwZone = None  # type: ignore[assignment]
 
-    def _setup_discovery_cmds(self) -> None:
-        """Configure discovery commands for DHW sensors and valves."""
-        super()._setup_discovery_cmds()
-
-        for payload in (
-            f"00{DEV_ROLE_MAP.DHW}",  # dhw_sensor
-            # f"00{DEV_ROLE_MAP.HTG}",  # hotwater_valve
-            # f"01{DEV_ROLE_MAP.HTG}",  # heating_valve
-        ):
-            cmd = Command.from_attrs(RQ, self.id, Code._000C, PayloadT(payload))
-            self.discovery.add_cmd(cmd, 60 * 60 * 24, delay=0)
-
-        self.discovery.add_cmd(
-            Command.get_dhw_params(self.id),
-            DHW_POLLING_INTERVAL_SECS,
-            delay=5,
-        )
-        self.discovery.add_cmd(
-            Command.get_dhw_temp(self.id),
-            DHW_POLLING_INTERVAL_SECS,
-            delay=10,
-        )
-        self.discovery.add_cmd(
-            Command.get_dhw_mode(self.id),
-            DHW_POLLING_INTERVAL_SECS,
-            delay=15,
-        )
-
     def _handle_msg(self, msg: Message) -> None:
         """Handle incoming messages related to DHW."""
         super()._handle_msg(msg)
@@ -1154,6 +1033,32 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
             self._dhw._handle_msg(msg)
         return self._dhw
 
+    def _remove_dhw_zone(self) -> bool:
+        """Remove the DhwZone from this system if it is empty.
+
+        A DhwZone is considered empty when it has no hotwater valve, no
+        heating valve, and no remaining children.  The sensor is not
+        checked — a 07: DHW sensor may have been auto-assigned from
+        traffic even though the system has no DHW (see issue 834 where
+        a spurious DhwZone was created by a lower-confidence 000C HTG
+        binding).
+
+        :returns: ``True`` if the DhwZone was removed, ``False`` if it
+            was retained because it still has children.
+        :rtype: bool
+        """
+        if not self._dhw:
+            return False
+
+        if (
+            self._dhw.hotwater_valve is None
+            and self._dhw.heating_valve is None
+            and not self._dhw.childs
+        ):
+            self._dhw = None  # type: ignore[assignment]
+            return True
+        return False
+
     @property
     def dhw(self) -> DhwZone | None:
         """Return the DHW zone instance."""
@@ -1199,15 +1104,8 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         }
 
 
-class SysMode(SystemBase):  # 2E04
+class SystemMode(SystemBase):  # 2E04
     """A system variant managing the overall system mode."""
-
-    def _setup_discovery_cmds(self) -> None:
-        """Configure discovery for the system mode."""
-        super()._setup_discovery_cmds()
-
-        cmd = Command.get_system_mode(self.id)
-        self.discovery.add_cmd(cmd, 60 * 5, delay=5)
 
     async def system_mode(self) -> dict[str, Any] | None:  # 2E04
         """Return the system mode from Hot State RAM.
@@ -1230,34 +1128,37 @@ class SysMode(SystemBase):  # 2E04
 
     async def set_mode(
         self, system_mode: int | str | None, *, until: dt | str | None = None
-    ) -> Packet:
+    ) -> Message:
         """Set a system mode for a specified duration, or indefinitely.
 
         :param system_mode: 2-digit item from SYS_MODE_MAP, positional.
         :type system_mode: int | str | None
         :param until: End of the set period, defaults to None.
         :type until: dt | str | None, optional
-        :returns: The packet containing the command payload.
-        :rtype: Packet
+        :returns: The resulting message.
+        :rtype: Message
         """
-        cmd = Command.set_system_mode(self.id, system_mode, until=until)
-        return await self._gwy.async_send_cmd(
-            cmd, priority=Priority.HIGH, wait_for_reply=True
+        intent = Intent_(
+            src=HGI_DEV_ADDR,
+            dst=Address(self.id),
+            action=Action.SET_SYSTEM_MODE,
+            data={"system_mode": system_mode, "until": until},
         )
+        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
 
-    async def set_auto(self) -> Packet:
+    async def set_auto(self) -> Message:
         """Revert system to Auto, setting zones to FollowSchedule.
 
-        :returns: The packet containing the command payload.
-        :rtype: Packet
+        :returns: The resulting message.
+        :rtype: Message
         """
         return await self.set_mode(SYS_MODE_MAP.AUTO)
 
-    async def reset_mode(self) -> Packet:
+    async def reset_mode(self) -> Message:
         """Revert system to Auto, force all zones to FollowSchedule.
 
-        :returns: The packet containing the command payload.
-        :rtype: Packet
+        :returns: The resulting message.
+        :rtype: Message
         """
         return await self.set_mode(SYS_MODE_MAP.AUTO_WITH_RESET)
 
@@ -1270,13 +1171,6 @@ class SysMode(SystemBase):  # 2E04
 
 class Datetime(SystemBase):  # 313F
     """A system variant managing system date and time."""
-
-    def _setup_discovery_cmds(self) -> None:
-        """Configure discovery for system time."""
-        super()._setup_discovery_cmds()
-
-        cmd = Command.get_system_time(self.id)
-        self.discovery.add_cmd(cmd, 60 * 60, delay=0)
 
     def _handle_msg(self, msg: Message) -> None:
         """Handle incoming datetime synchronisation messages."""
@@ -1293,7 +1187,7 @@ class Datetime(SystemBase):  # 313F
                 - self._gwy._engine._dt_now()
             )
             if diff > td(minutes=5):
-                _LOGGER.warning(f"{msg!r} < excessive datetime difference: {diff}")
+                _LOGGER.warning("%r < excessive datetime difference: %s", msg, diff)
 
     async def get_datetime(self) -> dt | None:
         """Retrieve the current system datetime.
@@ -1301,21 +1195,30 @@ class Datetime(SystemBase):  # 313F
         :returns: The system datetime, or None if unavailable.
         :rtype: dt | None
         """
-        cmd = Command.get_system_time(self.id)
-        pkt = await self._gwy.async_send_cmd(cmd, wait_for_reply=True)
-        msg = Message._from_pkt(pkt)
+        intent = Intent_(
+            src=HGI_DEV_ADDR,
+            dst=Address(self.id),
+            action=Action.GET_SYSTEM_TIME,
+            data={},
+        )
+        msg = await self._gwy.dispatcher.send(intent)
         return dt.fromisoformat(msg.payload[SZ_DATETIME])
 
-    async def set_datetime(self, dtm: dt) -> Packet:
+    async def set_datetime(self, dtm: dt) -> Message:
         """Set the date and time of the system.
 
         :param dtm: The datetime object to set.
         :type dtm: dt
-        :returns: The packet containing the command payload.
-        :rtype: Packet
+        :returns: The resulting message.
+        :rtype: Message
         """
-        cmd = Command.set_system_time(self.id, dtm)
-        return await self._gwy.async_send_cmd(cmd, priority=Priority.HIGH)
+        intent = Intent_(
+            src=HGI_DEV_ADDR,
+            dst=Address(self.id),
+            action=Action.SET_SYSTEM_TIME,
+            data={"datetime": dtm},
+        )
+        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
 
 
 class UfHeating(SystemBase):
@@ -1383,9 +1286,11 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
             dev_id := schema[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL)
         ):
             try:
-                self._app_cntrl = self._gwy.device_registry.get_device(
+                dev = self._gwy.device_registry.get_device(
                     dev_id, parent=self, child_id=FC
                 )
+                assert isinstance(dev, (BdrSwitch, OtbGateway))
+                self._app_cntrl = dev
             except (
                 DeviceNotFoundError,
                 SchemaInconsistentError,
@@ -1489,7 +1394,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         return status
 
 
-class Evohome(ScheduleSync, Language, SysMode, MultiZone, UfHeating, System):
+class Evohome(ScheduleSync, Language, SystemMode, MultiZone, UfHeating, System):
     """The Evohome system class."""
 
     _SLUG: str = SYS_KLASS.TCS  # evohome
@@ -1590,7 +1495,9 @@ def system_factory(
             return cls
 
         # otherwise, use the default system class...
-        _LOGGER.debug(f"Using a generic system class for: {ctl_addr} ({Device._SLUG})")
+        _LOGGER.debug(
+            "Using a generic system class for: %s (%s)", ctl_addr, Device._SLUG
+        )
         return Evohome
 
     return best_tcs_class(

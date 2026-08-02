@@ -1,15 +1,27 @@
-# tests/tests_rf/test_gateway.py
-"""Tests for the Gateway backward compatibility, deprecation shims, and lifecycle."""
-
+import json
 import warnings
+from datetime import datetime as dt
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from ramses_rf.address import Address
+from ramses_rf.devices.dev_registry import DeviceRegistry
+from ramses_rf.devices.hvac_ventilators import FilterChange
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.messages import Message
+from ramses_rf.models import DeviceTraits
+from ramses_rf.pipeline.polling import PollingManager
+from ramses_tx import I_, RP, RQ
 from ramses_tx.config import EngineConfig
+from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
+from ramses_tx.packet import Packet
+from ramses_tx.protocol import RamsesProtocolT, create_stack
+from ramses_tx.transport import RamsesTransportT, TransportConfig
+from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import PktLogConfigT
+from tests_rf.virtual_rf import HgiFwTypes, VirtualRf
 
 
 @pytest.mark.asyncio
@@ -329,3 +341,231 @@ async def test_gateway_nested_kwargs_unpacking() -> None:
     # 3. Verify nesting logic did not create phantom attributes
     assert not hasattr(gwy.config, "ramses_rf")
     assert not hasattr(gwy.config.engine, "nested_unsupported")
+
+
+def _mock_addr(addr_id: str) -> MagicMock:
+    """Helper to create a mocked Address object."""
+    mock = MagicMock()
+    mock.id = addr_id
+    return mock
+
+
+@pytest.mark.asyncio
+async def test_get_state_parity() -> None:
+    """Test get_state returns expected structure and filters verbs."""
+    # Arrange
+    gwy = Gateway(port_name="/dev/null")
+    gwy.message_store = MagicMock()
+
+    msg_i = MagicMock()
+    msg_i.verb = I_
+    msg_i.dtm = dt(2023, 1, 1, 12, 0, 0)
+    msg_i.src.id = "01:123456"
+    msg_i.dst.id = "01:123456"
+    msg_i._addrs = (
+        _mock_addr("01:123456"),
+        _mock_addr("--:------"),
+        _mock_addr("01:123456"),
+    )
+    msg_i.code = "1F09"
+    msg_i.payload = {"temp": 21.0}
+    msg_i._pkt._frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+
+    msg_rp = MagicMock()
+    msg_rp.verb = RP
+    msg_rp.dtm = dt(2023, 1, 1, 12, 1, 0)
+    msg_rp.src.id = "04:111111"
+    msg_rp.dst.id = "01:123456"
+    msg_rp._addrs = (
+        _mock_addr("04:111111"),
+        _mock_addr("01:123456"),
+        _mock_addr("01:123456"),
+    )
+    msg_rp.code = "2309"
+    msg_rp.payload = {"sync": True}
+    msg_rp._pkt._frame = "RP --- 04:111111 01:123456 04:111111 2309 003 0004B5"
+
+    msg_rq = MagicMock()
+    msg_rq.verb = RQ
+    msg_rq.dtm = dt(2023, 1, 1, 12, 2, 0)
+    msg_rq.src.id = "01:123456"
+    msg_rq.dst.id = "04:111111"
+    msg_rq._addrs = (
+        _mock_addr("01:123456"),
+        _mock_addr("04:111111"),
+        _mock_addr("04:111111"),
+    )
+    msg_rq.code = "2309"
+    msg_rq.payload = {}
+
+    gwy.message_store.state_cache = {
+        "h1": msg_i,
+        "h2": msg_rp,
+        "h3": msg_rq,
+    }
+
+    # Act
+    schema, state = await gwy.get_state()
+
+    # Assert
+    assert len(state) == 2
+
+    dtm_i = msg_i.dtm.isoformat(timespec="microseconds")
+    dtm_rp = msg_rp.dtm.isoformat(timespec="microseconds")
+
+    assert dtm_i in state
+    assert dtm_rp in state
+
+    assert state[dtm_i] == {
+        "verb": I_,
+        "src": "01:123456",
+        "dst": "01:123456",
+        "addr1": "01:123456",
+        "addr2": "--:------",
+        "addr3": "01:123456",
+        "code": "1F09",
+        "payload": {"temp": 21.0},
+        "frame": " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5",
+    }
+
+    assert state[dtm_rp] == {
+        "verb": RP,
+        "src": "04:111111",
+        "dst": "01:123456",
+        "addr1": "04:111111",
+        "addr2": "01:123456",
+        "addr3": "01:123456",
+        "code": "2309",
+        "payload": {"sync": True},
+        "frame": "RP --- 04:111111 01:123456 04:111111 2309 003 0004B5",
+    }
+
+
+@pytest.mark.asyncio
+async def test_get_state_frame_key_enables_restore() -> None:
+    """Test get_state includes frame key required by Packet.from_dict for warm restart."""
+    # Arrange
+    gwy = Gateway(port_name="/dev/null")
+    gwy.message_store = MagicMock()
+
+    msg = MagicMock()
+    msg.verb = I_
+    msg.dtm = dt(2023, 1, 1, 12, 0, 0)
+    msg.src.id = "01:123456"
+    msg.dst.id = "01:123456"
+    msg._addrs = (
+        _mock_addr("01:123456"),
+        _mock_addr("--:------"),
+        _mock_addr("01:123456"),
+    )
+    msg.code = "1F09"
+    msg.payload = {"temp": 21.0}
+    msg._pkt._frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+
+    gwy.message_store.state_cache = {"h1": msg}
+
+    # Act
+    _schema, state = await gwy.get_state()
+
+    dtm_str = msg.dtm.isoformat(timespec="microseconds")
+    assert "frame" in state[dtm_str]
+
+    # Assert
+    json_roundtrip = json.loads(json.dumps(state))
+    pkt = Packet.from_dict(dtm_str, json_roundtrip[dtm_str])
+    assert pkt.code == "1F09"
+    assert pkt._frame == " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+
+
+@pytest.mark.asyncio
+async def test_issue_649_polling_schedule_populated() -> None:
+    """Verify polling task schedule resolution for FAN devices (Fixes #649)."""
+    # Arrange
+    mock_gwy = MagicMock()
+    mock_gwy.config = MagicMock()
+    mock_gwy.config.disable_discovery = False
+    mock_gwy.config.known_list = {}
+    mock_gwy.config.hgi_id = "18:000000"
+
+    def mock_factory(
+        addr: Address, msg: MagicMock, traits: DeviceTraits
+    ) -> FilterChange:
+        return FilterChange(mock_gwy, addr, traits=traits)
+
+    registry = DeviceRegistry(
+        device_filter=MagicMock(),
+        config=mock_gwy.config,
+        device_factory_cb=mock_factory,
+    )
+
+    # Act
+    dev = registry.get_device("32:111111")
+
+    # Assert
+    schedule = PollingManager.resolve_schedule_for_device(dev)
+    assert "10D0" in schedule, "10D0 filter poll not scheduled in PollingManager"
+
+
+# --- Stack & Transport Integration Tests ---
+
+_STACK_GWY_ID = "18:111111"
+_STACK_OTH_ID = "18:123456"
+
+_TEST_SUITE_GOOD = {
+    "00": {"include_list": {}},
+    "01": {
+        "enforce_include_list": True,
+        "include_list": {_STACK_GWY_ID: {"class": "HGI"}},
+    },
+    "02": {
+        "enforce_include_list": True,
+        "include_list": {
+            _STACK_GWY_ID: {"class": "HGI"},
+            _STACK_OTH_ID: {"class": "HGI"},
+        },
+    },
+}
+
+
+async def _assert_stack_state(
+    protocol: RamsesProtocolT, transport: RamsesTransportT
+) -> None:
+    port_transport = cast(PortTransport, transport)
+    assert port_transport._this_pkt and port_transport._this_pkt.code == Code._PUZZ
+    if hasattr(port_transport._this_pkt, "addr1"):
+        assert port_transport._this_pkt.addr1.id == _STACK_GWY_ID
+    else:
+        assert port_transport._this_pkt.src.id == _STACK_GWY_ID
+    assert port_transport._prev_pkt is None
+    assert port_transport.get_extra_info(SZ_ACTIVE_HGI) == _STACK_GWY_ID
+    assert port_transport.get_extra_info(SZ_IS_EVOFW3) is True
+
+
+def _noop_msg_handler(msg: Message) -> None:
+    pass
+
+
+@pytest.mark.xdist_group(name="virt_serial")
+@pytest.mark.parametrize("idx", _TEST_SUITE_GOOD)
+async def test_create_stack_integration(idx: str) -> None:
+    """Check that Transport calls Protocol.connection_made() correctly."""
+    rf = VirtualRf(2, start=True)
+    rf.set_gateway(rf.ports[0], _STACK_GWY_ID, fw_type=HgiFwTypes.EVOFW3)
+
+    kwargs = {
+        "port_name": rf.ports[0],
+        "port_config": {},
+        "extra": {"virtual_rf": rf},
+    }
+
+    try:
+        protocol, transport = await create_stack(
+            _noop_msg_handler,
+            transport_config=TransportConfig(disable_sending=False),
+            **_TEST_SUITE_GOOD[idx],
+            **kwargs,
+        )
+        await _assert_stack_state(protocol, transport)
+        transport.close()
+    finally:
+        await rf.stop()

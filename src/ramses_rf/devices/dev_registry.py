@@ -7,11 +7,11 @@ import contextlib
 import inspect
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import SZ_DEVICES
+from ramses_rf.const import DEV_TYPE_MAP, FA, FC, SZ_DEVICES
 from ramses_rf.devices.dev_base import DeviceHeat, DeviceHvac, Fakeable
 from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
@@ -23,13 +23,17 @@ from ramses_rf.exceptions import (
 from ramses_rf.interfaces import DeviceFilterInterface
 from ramses_rf.models import DeviceTraits, TopologyChangedEvent
 from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
-from ramses_rf.typing import DeviceIdT, DeviceListT, DeviceTraitsT
+from ramses_rf.topology import Parent
+from ramses_rf.typing import DeviceIdT, DeviceListT
 
 if TYPE_CHECKING:
     from ramses_rf.devices.dev_base import Device
     from ramses_rf.messages import Message
     from ramses_rf.systems import Evohome
     from ramses_rf.topology import Parent
+
+# Generic type variable for downcasting returned Device instances to subclasses
+_DeviceT = TypeVar("_DeviceT", bound="Device")
 
 _LOGGER = logging.getLogger(__name__)
 _TRACE = logging.getLogger("ramses_rf.legacy_trace")
@@ -77,7 +81,7 @@ class DeviceRegistry:
             TopologyAction, Callable[[TopologyChangedEvent], None]
         ] = {
             TopologyAction.BIND_DEVICE: self._handle_bind_device,
-            TopologyAction.PROMOTE_CLASS: self._handle_promote_class,
+            TopologyAction.UPDATE_DEVICE_CLASS: self._handle_update_device_traits,
             TopologyAction.CREATE_CONTROLLER: self._handle_create_controller,
             TopologyAction.CREATE_CIRCUIT: self._handle_create_circuit,
             TopologyAction.UPDATE_TRAITS: self._handle_update_traits,
@@ -92,7 +96,7 @@ class DeviceRegistry:
         """
         handler = self._event_routers.get(event.action)
         if not handler:
-            _LOGGER.warning(f"No registry handler defined for action: {event.action}")
+            _LOGGER.warning("No registry handler defined for action: %s", event.action)
             return
 
         try:
@@ -103,12 +107,15 @@ class DeviceRegistry:
             SystemSchemaInconsistent,
         ) as err:
             # Safely reject the mutation if it violates the static schema constraints
-            _TRACE.debug(f"Topology mutation safely rejected ({event.action}): {err}")
+            _TRACE.debug(
+                "Topology mutation safely rejected (%s): %s", event.action, err
+            )
         except Exception as err:
             # Exception Shield: Catch-all to absolutely guarantee the asyncio
             # background task does not silently die.
             _TRACE.exception(
-                f"CRITICAL: Registry event router caught unhandled exception: {err}"
+                "CRITICAL: Registry event router caught unhandled exception: %s",
+                err,
             )
 
     def _handle_bind_device(self, event: TopologyChangedEvent) -> None:
@@ -147,11 +154,15 @@ class DeviceRegistry:
 
             # ROUTING INTERCEPT: Target the correct sub-domain
             if hasattr(tcs, "_get_zone"):
-                with contextlib.suppress(Exception):
+                try:
                     tcs._get_zone(zone_idx)
+                except (IndexError, KeyError, TypeError, ValueError) as err:
+                    _LOGGER.debug("Failed to resolve zone %s: %s", zone_idx, err)
             elif hasattr(tcs, "_get_htg_zone"):
-                with contextlib.suppress(Exception):
+                try:
                     tcs._get_htg_zone(zone_idx)
+                except (IndexError, KeyError, TypeError, ValueError) as err:
+                    _LOGGER.debug("Failed to resolve htg zone %s: %s", zone_idx, err)
 
             if hasattr(tcs, "get_htg_zone"):
                 parent = tcs.get_htg_zone(zone_idx)
@@ -163,6 +174,16 @@ class DeviceRegistry:
         elif parent and metadata.get("domain_id") in ("FA", "F9"):
             if hasattr(tcs, "dhw") and tcs.dhw:
                 parent = tcs.dhw
+
+        # If we have class metadata for a zone, apply it to the zone via the parent TCS
+        child_domain_id = metadata.get("zone_idx") or metadata.get("child_id")
+        if child_domain_id and "class" in metadata and hasattr(tcs, "get_htg_zone"):
+            zone = tcs.get_htg_zone(str(child_domain_id))
+            if not zone and hasattr(tcs, "_update_schema"):
+                tcs._update_schema(**{"zones": {str(child_domain_id): {}}})
+                zone = tcs.get_htg_zone(str(child_domain_id))
+            if zone and hasattr(zone, "_update_schema"):
+                zone._update_schema(**{"class": metadata["class"]})
 
         if parent:
             # Safely extract is_sensor without coercing None to False,
@@ -186,6 +207,11 @@ class DeviceRegistry:
                 # 1. FORWARD BINDING (Delegating down to legacy graph mutation
                 # to allow the Old Brain to hydrate itself)
                 child_id_raw = metadata.get("child_id")
+                # Fallback: if domain_id is FC (appliance_control) but
+                # child_id was not explicitly set in the metadata, use FC
+                # so the binding targets the System's appliance_control slot.
+                if child_id_raw is None and metadata.get("domain_id") == FC:
+                    child_id_raw = FC
                 child_dev = self.get_device(
                     event.child_id,
                     parent=cast("Parent", parent),
@@ -193,7 +219,9 @@ class DeviceRegistry:
                     is_sensor=is_sensor,
                 )
             except DeviceNotFoundError as err:
-                _TRACE.error(f"BIND EXCEPTION: Failed fetching {event.child_id}: {err}")
+                _TRACE.error(
+                    "BIND EXCEPTION: Failed fetching %s: %s", event.child_id, err
+                )
 
             # 2. REVERSE BINDING (Native CQRS Shadow State)
             if child_dev:
@@ -237,90 +265,33 @@ class DeviceRegistry:
                     f"Bound {event.child_id} to {parent.id} via {event.causation}"
                 )
 
-    def _handle_promote_class(self, event: TopologyChangedEvent) -> None:
-        """Safely instantiate a promoted class and migrate state."""
+    def _handle_update_device_traits(self, event: TopologyChangedEvent) -> None:
+        """Update SSOT configuration known_list when new device class traits are discovered."""
         if not event.device_id or not event.metadata:
             return
 
         new_class_slug_raw = str(event.metadata.get("device_class"))
-        slug_map = {
-            "HUM": "rh_sensor",
-            "REM": "switch",
-            "CO2": "co2_sensor",
-            "FAN": "ventilator",
-        }
         dict_key = new_class_slug_raw.split(".")[-1]
-        new_class_slug = slug_map.get(dict_key, new_class_slug_raw)
+        try:
+            new_class_slug = DEV_TYPE_MAP[dict_key]
+            if new_class_slug in DEV_TYPE_MAP:  # e.g. "04"
+                new_class_slug = DEV_TYPE_MAP[new_class_slug]
+        except (KeyError, TypeError):
+            new_class_slug = new_class_slug_raw
 
         if not new_class_slug:
             return
 
-        # 1. ALWAYS update the configuration known_list first
+        # 1. ALWAYS update the configuration traits in the SSOT first
         # This structurally resolves early-packet race conditions via the SSOT.
-        # Keep a backup of old traits for rollback.
         old_traits_dict = dict(self._config.known_list.get(event.device_id, {}))
-
-        # Update the configuration traits safely
         traits_dict = dict(old_traits_dict)
         if old_traits_dict.get("class") != new_class_slug:
             traits_dict["class"] = new_class_slug
             self._config.known_list[event.device_id] = traits_dict
-
-        old_dev = self.device_by_id.get(event.device_id)
-        if not old_dev:
-            # Device doesn't exist yet, but the SSOT is updated. get_device()
-            # will naturally instantiate it with the correct class shortly.
-            return
-
-        if getattr(old_dev, "_SLUG", None) == new_class_slug:
-            return
-
-        _TRACE.info(
-            f"PROMOTING CLASS: {event.device_id} from "
-            f"{getattr(old_dev, '_SLUG', 'None')} to {new_class_slug}"
-        )
-
-        # 2. Proceed with dynamic substitution ONLY if the device already exists in
-        # memory. Pop the old device from the tracking dictionaries to allow the
-        # factory to safely call _add_device during __init__ without raising a
-        # SchemaInconsistentError
-        self.device_by_id.pop(event.device_id, None)
-        self.devices = [d for d in self.devices if d.id != event.device_id]
-
-        try:
-            # Instantiate the new strict device class via the factory
-            traits = DeviceTraits.from_dict(traits_dict)
-            new_dev = self._device_factory_cb(old_dev.addr, None, traits)
-            if hasattr(new_dev, "_post_class_promote"):
-                new_dev._post_class_promote()
-            new_dev._setup_discovery_cmds()
-
-            # FORCE IT BACK IN: In case the factory doesn't auto-register
-            if new_dev.id not in self.device_by_id:
-                self._add_device(new_dev)
-
-            # Migrate essential topological state ONLY if a parent existed
-            if old_parent := getattr(old_dev, "_parent", None):
-                new_dev._apply_topology_link(old_parent)
-
-            if hasattr(old_dev, "temp_state") and hasattr(new_dev, "temp_state"):
-                new_dev.temp_state = old_dev.temp_state
-            if hasattr(old_dev, "demand_state") and hasattr(new_dev, "demand_state"):
-                new_dev.demand_state = old_dev.demand_state
-
-            _LOGGER.info(
-                f"Promoted {event.device_id} to {new_class_slug} via {event.causation}"
+            _TRACE.info(
+                f"UPDATED SSOT TRAITS: {event.device_id} class -> {new_class_slug} via {event.causation}"
             )
-        except Exception as err:
-            _TRACE.error(f"PROMOTE EXCEPTION: Rollback on {event.device_id}: {err}")
-            # Rollback on failure: pop the failed new_dev out first
-            self.device_by_id.pop(event.device_id, None)
-            self.devices = [d for d in self.devices if d.id != event.device_id]
-            self._add_device(old_dev)
-
-            # Revert the traits dictionary
-            self._config.known_list[event.device_id] = old_traits_dict
-            raise
 
     def _handle_create_controller(self, event: TopologyChangedEvent) -> None:
         """Instruct a device to initialize its Evohome TCS."""
@@ -329,7 +300,7 @@ class DeviceRegistry:
         dev = self.device_by_id.get(event.device_id)
         if dev and hasattr(dev, "_make_tcs_controller"):
             dev._make_tcs_controller()
-            _LOGGER.debug(f"Created Controller on {dev.id} via {event.causation}")
+            _LOGGER.debug("Created Controller on %s via %s", dev.id, event.causation)
 
     def _handle_create_circuit(self, event: TopologyChangedEvent) -> None:
         """Instruct a UFH controller to initialize a circuit."""
@@ -413,11 +384,10 @@ class DeviceRegistry:
                         f"Zone {zone_idx}!"
                     )
 
-                    # Trigger the BIND_DEVICE action natively
                     bind_event = TopologyChangedEvent(
                         action=TopologyAction.BIND_DEVICE,
                         parent_id=event.device_id,
-                        child_id=cast(DeviceIdT, matched_orphan),
+                        child_id=DeviceIdT(matched_orphan),
                         metadata={
                             "zone_idx": str(zone_idx),
                             "child_id": str(zone_idx),
@@ -430,6 +400,14 @@ class DeviceRegistry:
 
                     # Clear from cache so we do not double-bind
                     del self._orphan_telemetry[matched_orphan]
+
+        # Handle zone class metadata updates from eavesdropping
+        if "class" in event.metadata and "zone_idx" in event.metadata:
+            ctl = self.device_by_id.get(event.device_id)
+            if ctl and getattr(ctl, "tcs", None):
+                zone = ctl.tcs.get_htg_zone(str(event.metadata["zone_idx"]))  # type: ignore[union-attr]
+                if zone:
+                    zone._update_schema(**{"class": event.metadata["class"]})
 
     def _add_device(self, dev: Device) -> None:
         """Add a device to the registry.
@@ -445,15 +423,40 @@ class DeviceRegistry:
         self.devices.append(dev)
         self.device_by_id[dev.id] = dev
 
+    @overload
     def get_device(
         self,
-        device_id: DeviceIdT,
+        device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
         parent: Parent | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
-    ) -> Device:
+        cls: None = None,
+    ) -> Device: ...
+
+    @overload
+    def get_device(
+        self,
+        device_id: DeviceIdT | str,
+        *,
+        msg: Message | None = None,
+        parent: Parent | None = None,
+        child_id: str | None = None,
+        is_sensor: bool | None = None,
+        cls: type[_DeviceT],
+    ) -> _DeviceT: ...
+
+    def get_device(
+        self,
+        device_id: DeviceIdT | str,
+        *,
+        msg: Message | None = None,
+        parent: Parent | None = None,
+        child_id: str | None = None,
+        is_sensor: bool | None = None,
+        cls: type[_DeviceT] | None = None,
+    ) -> Device | _DeviceT:
         """Return a device, creating it if it does not already exist.
 
         :param device_id: The unique identifier for the device.
@@ -470,6 +473,8 @@ class DeviceRegistry:
         :rtype: Device
         :raises DeviceNotFoundError: If device ID is blocked or unknown.
         """
+        device_id = DeviceIdT(device_id)
+
         try:
             self._device_filter.check_filter_lists(device_id)
         except DeviceNotFoundError as err:
@@ -500,18 +505,21 @@ class DeviceRegistry:
 
             try:
                 dev = self._device_factory_cb(Address(device_id), msg, traits)
-                dev._setup_discovery_cmds()
             except Exception as err:
-                _TRACE.error(f"FACTORY EXCEPTION: Failed creating {device_id}: {err}")
+                _TRACE.error(
+                    "FACTORY EXCEPTION: Failed creating %s: %s", device_id, err
+                )
                 raise
 
             if traits.faked:
                 if isinstance(dev, Fakeable):
                     dev._make_fake()
                 else:
-                    _LOGGER.warning(f"The device is not fakeable: {dev}")
+                    _LOGGER.warning("The device is not fakeable: %s", dev)
 
         if parent or child_id:
+            self._maybe_reparent_bdr(dev, parent, child_id)
+
             try:
                 dev._apply_topology_link(parent, child_id=child_id, is_sensor=is_sensor)
             except (DeviceNotFoundError, SchemaInconsistentError) as err:
@@ -521,7 +529,79 @@ class DeviceRegistry:
                 )
                 raise
 
+        if cls is not None and not isinstance(dev, cls):
+            raise TypeError(
+                f"Device {device_id} is of type {type(dev).__name__}, "
+                f"but {cls.__name__} was expected."
+            )
+
         return dev
+
+    @staticmethod
+    def _maybe_reparent_bdr(
+        dev: Device | None,
+        parent: Parent | None,
+        child_id: str | None,
+    ) -> None:
+        """Re-parent a BDR from hotwater_valve (FA) to appliance_control (FC).
+
+        When the controller's 000C binding table has a BDR in the HTG slot
+        (domain FA = hotwater_valve) but the BDR is actually the
+        appliance_control (domain FC), the 000C HTG binding wins the race
+        and incorrectly binds the BDR as hotwater_valve to a
+        spuriously-created DhwZone.  This method allows re-parenting the
+        BDR from DhwZone.hotwater_valve (FA) to System.appliance_control
+        (FC) when a higher-confidence binding arrives later.
+
+        Re-parenting is suppressed when the DhwZone has a DHW sensor — if
+        a sensor exists, the system genuinely has DHW and the BDR may
+        truly be the hotwater_valve.
+
+        See: https://github.com/ramses-rf/ramses_cc/issues/834
+
+        :param dev: The device being bound (expected to be a BDR).
+        :param parent: The new parent to bind to (expected to be the TCS).
+        :param child_id: The new child_id (must be FC for re-parenting).
+        """
+        if not dev or not parent or child_id != FC:
+            return
+
+        old_parent = dev._parent
+        if old_parent is None or old_parent is parent:
+            return
+
+        # Deferred import to prevent circular dependency at module load time
+        # DO NOT MOVE to module level.
+        from ramses_rf.systems.zones import DhwZone
+
+        if not isinstance(old_parent, DhwZone):
+            return
+
+        if getattr(dev, "_child_id", None) != FA:
+            return
+
+        # Re-parent even if the DhwZone has a sensor — the FC binding
+        # (appliance_control) is a higher-confidence signal than the FA
+        # binding (hotwater_valve).  In issue 834, the DhwZone was created
+        # spuriously from the 000C HTG binding, and a 07: DHW sensor may
+        # have been auto-assigned even though the system has no DHW.
+        # See: https://github.com/ramses-rf/ramses_cc/issues/834
+        _LOGGER.info(
+            "RE-PARENTING: %s from DhwZone (hotwater_valve) to "
+            "System (appliance_control)",
+            dev.id,
+        )
+
+        # Detach from the DhwZone (encapsulated referential integrity)
+        old_parent._detach_child(dev)
+
+        # Clean up the DhwZone if it is now empty
+        tcs = getattr(old_parent, "tcs", None)
+        if tcs is not None and tcs._remove_dhw_zone():
+            _LOGGER.info(
+                "RE-PARENTING: removed empty DhwZone from %s",
+                getattr(tcs, "id", None),
+            )
 
     async def fake_device(
         self,
@@ -554,7 +634,7 @@ class DeviceRegistry:
 
         if (dev := self.get_device(device_id)) and isinstance(dev, Fakeable):
             dev._make_fake()
-            return cast("Device | Fakeable", dev)
+            return dev
 
         raise DeviceNotFaked(f"The device is not fakeable: {device_id}")
 
@@ -565,18 +645,18 @@ class DeviceRegistry:
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
         """
-        result: dict[str, Any] = {k: v for k, v in self._config.known_list.items()}
+        result: DeviceListT = {k: v for k, v in self._config.known_list.items()}
         for d in self.devices:
             if (
                 not self._config.engine.enforce_known_list
                 or d.id in self._config.mac_filter_list
             ):
                 traits = await d.traits()
-                result[d.id] = cast(
-                    DeviceTraitsT,
-                    {k: traits.get(k) for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)},
-                )
-        return cast(DeviceListT, result)
+                dev_traits = {k: traits.get(k) for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)}
+                if ssot_class := self._config.known_list.get(d.id, {}).get("class"):
+                    dev_traits[SZ_CLASS] = ssot_class
+                result[d.id] = dev_traits
+        return result
 
     async def params(self) -> dict[str, Any]:
         """Return the parameters for all devices.
@@ -601,12 +681,16 @@ class DeviceRegistry:
         :returns: Dictionary mapping device ID to Evohome system.
         :rtype: dict[DeviceIdT, Evohome]
         """
-        return {
-            d.id: cast("Evohome", d.tcs)
-            for d in self.devices
-            if hasattr(d, "tcs")
-            and getattr(getattr(d, "tcs", None), "id", None) == d.id
-        }
+        # Deferred import to prevent circular dependency at module load time
+        # DO NOT MOVE to module level.
+        from ramses_rf.systems import Evohome
+
+        res: dict[DeviceIdT, Evohome] = {}
+        for d in self.devices:
+            tcs = getattr(d, "tcs", None)
+            if isinstance(tcs, Evohome) and tcs.id == d.id:
+                res[d.id] = tcs
+        return res
 
     @property
     def systems(self) -> list[Evohome]:
@@ -684,7 +768,6 @@ class DeviceRegistry:
 
         # 2. Instantiate using the completely decoupled factory
         new_dev = self._device_factory_cb(old_dev.addr, None, traits)
-        new_dev._setup_discovery_cmds()
 
         # 3. Migrate CQRS Read-Model State
         if hasattr(old_dev, "temp_state") and hasattr(new_dev, "temp_state"):
@@ -695,52 +778,6 @@ class DeviceRegistry:
 
         # 4. Swap the reference in the registry
         self.device_by_id[event.device_id] = new_dev
-
-    def _bind_device(self, event: TopologyChangedEvent) -> None:
-        """Bind a child device to a parent domain or zone.
-
-        :param event: The binding event containing parent_id & child_id.
-        :type event: TopologyChangedEvent
-        """
-        if not event.parent_id or not event.child_id:
-            return
-
-        parent = self.device_by_id.get(event.parent_id)
-        child = self.device_by_id.get(event.child_id)
-
-        if not parent or not child:
-            return
-
-        metadata = event.metadata or {}
-        is_sensor = bool(metadata.get("is_sensor", False))
-
-        child_domain_id_raw = metadata.get("child_id")
-        child_domain_id = (
-            str(child_domain_id_raw) if child_domain_id_raw is not None else None
-        )
-
-        _LOGGER.debug(
-            "Binding %s to parent %s (sensor=%s, domain=%s)",
-            event.child_id,
-            event.parent_id,
-            is_sensor,
-            child_domain_id,
-        )
-
-        # Safely apply the topology link, bypassing legacy mutable logic
-        if hasattr(child, "_apply_topology_link"):
-            try:
-                child._apply_topology_link(
-                    cast("Parent", parent),
-                    is_sensor=is_sensor,
-                    child_id=child_domain_id,
-                )
-            except (DeviceNotFoundError, SchemaInconsistentError) as err:
-                _TRACE.error(
-                    f"BIND EXCEPTION: Failed applying topology link for "
-                    f"{event.child_id}: {err}"
-                )
-                raise
 
     async def generate_schema(self) -> dict[str, Any]:
         """Generate the complete topology schema natively from the CQRS
