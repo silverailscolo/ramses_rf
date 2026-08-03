@@ -164,11 +164,12 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
 
         # Keep a reference to the original frame string for validation
         original_msg = idx.log_by_dtm[0]
-        original_frame = getattr(original_msg._pkt, "_frame", None)
+        original_frame = original_msg.raw_frame
 
         # 6. Hydration Verification
-        idx2 = MessageStore(db_path=":memory:", disk_path=str(disk_path))
-        await asyncio.sleep(0.5)
+        idx2 = MessageStore(db_path=":memory:", disk_path=str(disk_path), maintain=True)
+        if idx2._hydration_task:
+            await idx2._hydration_task
 
         assert len(idx2.log_by_dtm) == MSG_COUNT, (
             f"Hydration failed! Expected {MSG_COUNT} cached items, "
@@ -178,7 +179,7 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         # Ensure the frame was retained properly, meaning DTO conversion
         # won't fail
         hydrated_msg = idx2.log_by_dtm[0]
-        hydrated_frame = getattr(hydrated_msg._pkt, "_frame", None)
+        hydrated_frame = hydrated_msg.raw_frame
         assert hydrated_frame == original_frame, "Lossless frame hydration failed!"
 
         # 7. Cleanup

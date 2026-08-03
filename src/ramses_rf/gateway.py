@@ -327,7 +327,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                     # Packet.from_dict to reconstruct the Packet on warm restart.
                     # Without it, from_dict gets an empty frame body and raises
                     # "Bad frame: Invalid structure: >>><<<" (issue 812).
-                    "frame": getattr(msg._pkt, "_frame", ""),
+                    "frame": getattr(msg, "raw_frame", ""),
                 }
 
         schema_dict = await self.schema()

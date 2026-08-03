@@ -133,14 +133,6 @@ class DeviceInterface(Protocol):
 
         :return: A dictionary of device traits.
         """
-        ...
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Process an incoming message.
-
-        :param msg: The message to process.
-        """
-        ...
 
 
 class DeviceFilterInterface(Protocol):

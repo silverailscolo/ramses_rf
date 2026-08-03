@@ -49,6 +49,7 @@ class PacketDTO:
     length: str
     payload: str
     is_tx: bool = False
+    comment: str = ""
 
 
 @dataclass(frozen=True, slots=True)

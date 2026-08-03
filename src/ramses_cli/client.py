@@ -645,9 +645,9 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         ]:
             if gwy.message_store:
                 for msg in await gwy.message_store.get(src=device.id, code=Code._0005):
-                    print(f"{msg._pkt}")
+                    print(f"{msg}")
                 for msg in await gwy.message_store.get(src=device.id, code=Code._000C):
-                    print(f"{msg._pkt}")
+                    print(f"{msg}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
                 for msg_code, verbs in (
@@ -663,7 +663,7 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         ]:
             if gwy.message_store:
                 for msg in await gwy.message_store.get(src=device.id):
-                    print(f"{msg._pkt}")
+                    print(f"{msg}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
                 for cd in (await device.entity_state.get_state_cache_nested()).values():

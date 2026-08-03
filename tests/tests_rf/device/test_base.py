@@ -83,10 +83,7 @@ class TestDeviceBase:
         # Explicitly set slug to ensure it's not in PROMOTABLE_SLUGS
         dev._SLUG = "NON_PROMOTABLE_SLUG"
 
-        msg = MagicMock()
-        msg.dtm = dt.now(UTC)
-
-        dev._handle_msg(msg)
+        dev._last_msg_dtm = dt.now(UTC)
 
         # Verify the class was not promoted using __class__ to satisfy Mypy
         assert dev.__class__ is DeviceBase
