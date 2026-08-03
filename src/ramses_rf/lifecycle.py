@@ -314,5 +314,15 @@ class GatewayLifecycle:
             except Exception as err:
                 _LOGGER.debug("Gateway: Failed to restore packet %s: %s", dtm, err)
 
+        # Drain all pending handler tasks so that restored packets are fully
+        # processed (including CQRS state projection, e.g. power_state updates
+        # from 1060 battery packets) before we resume and entities are created.
+        # Without this, entity properties may query power_state before the
+        # async handler tasks have completed, causing flaky 'unknown' states.
+        if hasattr(tmp_protocol, "_handler_tasks"):
+            pending = list(tmp_protocol._handler_tasks)
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+
         _LOGGER.debug("Gateway: Restored, resuming")
         await self._resume()
