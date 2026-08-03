@@ -305,13 +305,7 @@ class TopologyBuilder:
                 if device_role_str in ("08", "rad_actuator") and not metadata.get(
                     "class"
                 ):
-                    for d in devices:
-                        if d.startswith("04:"):
-                            metadata["class"] = ZON_ROLE_MAP["08"]  # radiator_valve
-                        elif d.startswith("02:"):
-                            metadata["class"] = ZON_ROLE_MAP["09"]  # underfloor_heating
-                        elif d.startswith("13:"):
-                            metadata["class"] = ZON_ROLE_MAP["0A"]  # zone_valve
+                    metadata["class"] = ZON_ROLE_MAP["08"]  # radiator_valve
 
                 if zone_idx is not None:
                     # Clone metadata to avoid cross-iteration pollution
@@ -320,6 +314,13 @@ class TopologyBuilder:
                     # Bridging quirk: DeviceRegistry expects domain index under child_id
                     event_meta["child_id"] = str(zone_idx)
                     for child_id in devices:
+                        if (
+                            child_id.startswith("01:")
+                            or child_id.startswith("02:")
+                            or child_id.startswith("18:")
+                            or child_id.startswith("63:")
+                        ):
+                            continue
                         event = TopologyChangedEvent(
                             action=TopologyAction.BIND_DEVICE,
                             parent_id=msg.src.id,  # The Controller
@@ -369,8 +370,6 @@ class TopologyBuilder:
             ctl_id = msg.addr3.id
 
         if msg.header.verb == I_ and ctl_id and msg.src.id != ctl_id:
-            # Bypass hardcoded Code limitations. If the parsed payload contains
-            # a zone_idx, and is routed to the controller, it implies a binding.
             for p in self._get_payloads(msg):
                 if not isinstance(p, dict):
                     continue
@@ -812,8 +811,7 @@ class TopologyBuilder:
         elif (
             msg.header.verb == I_
             and msg.header.code == Code._30C9
-            and msg.dst.id != "--:------"
-            and msg.dst.id == msg.src.id
+            and (msg.dst.id == "--:------" or msg.dst.id == msg.src.id)
         ):
             event = TopologyChangedEvent(
                 action=TopologyAction.UPDATE_TRAITS,

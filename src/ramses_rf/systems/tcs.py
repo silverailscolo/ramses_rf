@@ -12,30 +12,23 @@ from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
 from ramses_rf.const import (
+    DEV_ROLE_MAP,
     SYS_MODE_MAP,
     SZ_ACTUATORS,
     SZ_CHANGE_COUNTER,
     SZ_DATETIME,
     SZ_DEVICES,
-    SZ_DHW_IDX,
     SZ_DOMAIN_ID,
     SZ_LANGUAGE,
     SZ_SENSOR,
     SZ_SYSTEM_MODE,
-    SZ_TEMPERATURE,
     SZ_ZONE_IDX,
     SZ_ZONE_MASK,
     SZ_ZONE_TYPE,
     SZ_ZONES,
+    ZON_ROLE_MAP,
 )
-from ramses_rf.devices import (
-    BdrSwitch,
-    Controller,
-    Device,
-    OtbGateway,
-    Temperature,
-    UfhController,
-)
+from ramses_rf.devices import BdrSwitch, Controller, Device, OtbGateway, UfhController
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.enums import Action
 from ramses_rf.exceptions import (
@@ -59,7 +52,7 @@ from ramses_rf.schemas import (
     SZ_UFH_SYSTEM,
 )
 from ramses_rf.topology import Parent
-from ramses_tx import DEV_ROLE_MAP, DEV_TYPE_MAP, ZON_ROLE_MAP, DeviceIdT, Priority
+from ramses_tx import DEV_TYPE_MAP, DeviceIdT, Priority
 from ramses_tx.typing import PayDictT
 
 from ..messages import Message
@@ -161,132 +154,6 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
     def __repr__(self) -> str:
         return f"{self.ctl.id} ({self._SLUG})"
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle incoming messages routed to the base system."""
-
-        def eavesdrop_appliance_control(
-            this: Message, *, prev: Message | None = None
-        ) -> None:
-            """Discover the heat relay (10: or 13:) for this system.
-
-            There are 3 ways to find a controller's heat relay (by
-            reliability):
-            1.  The 3220 RQ/RP *to/from a 10:* (1x/5min)
-            2a. The 3EF0 RQ/RP *to/from a 10:* (1x/1min)
-            2b. The 3EF0 RQ (no RP) *to a 13:* (3x/60min)
-            3.  The 3B00 I/I exchange between a CTL & a 13: (TPI cycle,
-                usu. 6x/hr)
-
-            Data from the CTL is considered 'authoritative'. The 1FC9
-            RQ/RP exchange to/from a CTL is too rare to be useful.
-            """
-
-            # 18:14:14.025 066 RQ --- 01:078710 10:067219 --:------ 3220 005 0000050000
-            # 18:14:14.446 065 RP --- 10:067219 01:078710 --:------ 3220 005 00C00500FF
-            # 14:41:46.599 064 RQ --- 01:078710 10:067219 --:------ 3EF0 001 00
-            # 14:41:46.631 063 RP --- 10:067219 01:078710 --:------ 3EF0 006 0000100000FF
-
-            # 06:49:03.465 045 RQ --- 01:145038 13:237335 --:------ 3EF0 001 00
-            # 06:49:05.467 045 RQ --- 01:145038 13:237335 --:------ 3EF0 001 00
-            # 06:49:07.468 045 RQ --- 01:145038 13:237335 --:------ 3EF0 001 00
-            # 09:03:59.693 051  I --- 13:237335 --:------ 13:237335 3B00 002 00C8
-            # 09:04:02.667 045  I --- 01:145038 --:------ 01:145038 3B00 002 FCC8
-
-            if this.code not in (
-                Code._22D9,
-                Code._3220,
-                Code._3B00,
-                Code._3EF0,
-            ):
-                return
-
-            # note the order: most to least reliable
-            app_cntrl: BdrSwitch | OtbGateway | None = None
-
-            if (
-                this.code in (Code._22D9, Code._3220) and this.verb == RQ
-            ):  # TODO: RPs too?
-                dst_dev = self._gwy.device_registry.device_by_id.get(this.dst.id)
-                if this.src.id == self.ctl.id and isinstance(dst_dev, OtbGateway):
-                    app_cntrl = dst_dev
-
-            elif this.code == Code._3EF0 and this.verb == RQ:
-                dst_dev = self._gwy.device_registry.device_by_id.get(this.dst.id)
-                if this.src.id == self.ctl.id and isinstance(
-                    dst_dev,
-                    (BdrSwitch, OtbGateway),
-                ):
-                    app_cntrl = dst_dev
-
-            elif this.code == Code._3B00 and this.verb == I_ and prev is not None:
-                prev_src_dev = self._gwy.device_registry.device_by_id.get(prev.src.id)
-                if this.src.id == self.ctl.id and isinstance(prev_src_dev, BdrSwitch):
-                    if prev.code == this.code and prev.verb == this.verb:
-                        app_cntrl = prev_src_dev
-
-            if app_cntrl is not None:
-                try:
-                    self._gwy.device_registry.get_device(
-                        app_cntrl.id, parent=self, child_id=FC
-                    )
-                except (
-                    DeviceNotFoundError,
-                    SchemaInconsistentError,
-                    SystemSchemaInconsistent,
-                ) as err:
-                    _TRACE.warning(
-                        f"SUPPRESSED in eavesdrop_appliance_control: {err}. "
-                        f"Packet dropped."
-                    )
-
-        super()._handle_msg(msg)
-
-        if msg.code == Code._000C:
-            if isinstance(msg.payload, dict):
-                if msg.payload.get(
-                    SZ_ZONE_TYPE
-                ) == DEV_ROLE_MAP.APP and msg.payload.get(SZ_DEVICES):
-                    try:
-                        self._gwy.device_registry.get_device(
-                            msg.payload.get(SZ_DEVICES, [])[0],
-                            parent=self,
-                            child_id=FC,
-                        )  # sets self._app_cntrl
-                    except (
-                        DeviceNotFoundError,
-                        SchemaInconsistentError,
-                        SystemSchemaInconsistent,
-                    ) as err:
-                        _TRACE.warning(
-                            f"SUPPRESSED in SystemBase 000C handler: {err}. "
-                            f"Retaining configured device."
-                        )
-            else:
-                _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: "
-                    f"{type(msg.payload)} (expected dict)"
-                )
-            return
-
-        if msg.code == Code._3150 and msg.verb in (I_, RP):
-            # 3150 payload can be a dict (old) or list (new, multi-zone)
-            if isinstance(msg.payload, list):
-                if payload := next(
-                    (d for d in msg.payload if d.get(SZ_DOMAIN_ID) == FC), None
-                ):
-                    self._heat_demand = payload
-            elif isinstance(msg.payload, dict):
-                if msg.payload.get(SZ_DOMAIN_ID) == FC:
-                    self._heat_demand = msg.payload
-            else:
-                _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: "
-                    f"{type(msg.payload)} (expected list/dict)"
-                )
-
-        if self._gwy.config.enable_eavesdrop and not self.appliance_control:
-            eavesdrop_appliance_control(msg)
-
     @property
     def appliance_control(self) -> BdrSwitch | OtbGateway | None:
         """The TCS relay, aka 'appliance control' (BDR or OTB)."""
@@ -380,6 +247,27 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
         return result  # TODO: check against vol schema
 
+    def _handle_msg(self, msg: Message) -> None:
+        """Handle incoming messages routed to the base system."""
+
+        super()._handle_msg(msg)
+
+        if msg.code == Code._3150 and msg.verb in (I_, RP):
+            # 3150 payload can be a dict (old) or list (new, multi-zone)
+            if isinstance(msg.payload, list):
+                if payload := next(
+                    (d for d in msg.payload if d.get(SZ_DOMAIN_ID) == FC), None
+                ):
+                    self._heat_demand = payload
+            elif isinstance(msg.payload, dict):
+                if msg.payload.get(SZ_DOMAIN_ID) == FC:
+                    self._heat_demand = msg.payload
+            else:
+                _LOGGER.warning(
+                    f"{msg!r} < Unexpected payload type for {msg.code}: "
+                    f"{type(msg.payload)} (expected list/dict)"
+                )
+
     async def params(self) -> dict[str, Any]:
         """Return the system's configuration.
 
@@ -419,282 +307,13 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
             self._gwy.config, SZ_MAX_ZONES, DEFAULT_MAX_ZONES
         )
 
-        self._prev_30c9: Message | None = None  # used to eavesdrop zone sensors
-
-    async def _eavesdrop_zone_sensors(self, msg: Message, prev: Message | None) -> None:
-        """Discover zone sensors by correlating 30C9 temperature broadcasts.
-
-        This implements a bi-directional correlation strategy to handle
-        out-of-order packet logs, matching TRVs to zones regardless of
-        which broadcasts first.
-
-        :param msg: The incoming 30C9 message.
-        :type msg: Message
-        :param prev: The previously cached 30C9 message for temporal context.
-        :type prev: Message | None
-        """
-        if msg._has_array:
-            await self._eavesdrop_from_controller_broadcast(msg, prev)
-        elif getattr(msg.src, "type", None) == "04":
-            await self._eavesdrop_from_trv_broadcast(msg)
-
-    async def _eavesdrop_from_controller_broadcast(
-        self, msg: Message, prev: Message | None
-    ) -> None:
-        """Correlate recently heard TRV temperatures against a new zone array.
-
-        :param msg: The incoming 30C9 array message from the controller.
-        :type msg: Message
-        :param prev: The previous 30C9 array message to check changes.
-        :type prev: Message | None
-        """
-        if prev is None:
-            return
-
-        # TODO: use msgz/I, not RP
-        secs = await self.entity_state.get_value(Code._1F09, key="remaining_seconds")
-        if not isinstance(secs, (int, float)) or msg.dtm > prev.dtm + td(
-            seconds=secs + 5
-        ):
-            # can only compare against 30C9 pkt from the last cycle
-            return
-
-        # _LOGGER.warning("System state (before): %s", self.schema)
-
-        # zones with changed temps
-        changed_zones: dict[str, float] = {
-            z.get(SZ_ZONE_IDX): z.get(SZ_TEMPERATURE)
-            for z in msg.payload
-            if z not in prev.payload and z.get(SZ_TEMPERATURE) is not None
-        }
-        if not changed_zones:
-            # ctl's 30C9 says no zones have changed temps during this cycle
-            return
-
-        def _testable_zones(changed_zones: dict[str, float]) -> dict[float, str]:
-            return {
-                t1: i1
-                for i1, t1 in changed_zones.items()
-                if self.zone_by_idx[i1].sensor is None
-                and t1 not in [t2 for i2, t2 in changed_zones.items() if i2 != i1]
-            }
-
-        testable_zones = _testable_zones(changed_zones)
-        if not testable_zones:
-            return  # no testable zones
-
-        testable_sensors_map: dict[float, list[Device]] = {}
-        for d in self._gwy.device_registry.devices:
-            if isinstance(d, Temperature) and d.ctl in (self.ctl, None):
-                d_temp = await d.temperature()
-                d_msgs = await d.entity_state.get_message_log_flat()
-                if (
-                    d_temp is not None
-                    and Code._30C9 in d_msgs
-                    and d_msgs[Code._30C9].dtm > prev.dtm
-                ):
-                    if d_temp not in testable_sensors_map:
-                        testable_sensors_map[d_temp] = []
-                    testable_sensors_map[d_temp].append(d)
-
-        # COLLISION ABSTENTION: Drop temperatures reported by multiple sensors
-        unique_sensors = {
-            t: devs[0] for t, devs in testable_sensors_map.items() if len(devs) == 1
-        }
-
-        if not unique_sensors:
-            return  # no unique testable sensors available, must abstain
-
-        matched_pairs = {
-            sensor: zone_idx
-            for temp_z, zone_idx in testable_zones.items()
-            for temp_s, sensor in unique_sensors.items()
-            if temp_z == temp_s
-        }
-
-        for sensor, zone_idx in matched_pairs.items():
-            zone = self.zone_by_idx[zone_idx]
-            try:
-                self._gwy.device_registry.get_device(
-                    sensor.id, parent=zone, is_sensor=True
-                )
-            except (
-                DeviceNotFoundError,
-                SchemaInconsistentError,
-                SystemSchemaInconsistent,
-            ) as err:
-                _TRACE.warning("SUPPRESSED in correlation matching: %s", err)
-
-        # _LOGGER.warning("System state (after): %s", self.schema)
-
-        # now see if we can allocate the controller as a sensor...
-        if any(z for z in self.zones if z.sensor is self.ctl):
-            return  # the controller is already a sensor
-
-        remaining_zones = _testable_zones(changed_zones)
-        if len(remaining_zones) != 1:
-            return  # no testable zones
-
-        temp, zone_idx = tuple(remaining_zones.items())[0]
-
-        # can safely(?) assume this zone is using the CTL as a sensor...
-        if not [s for s in unique_sensors if s == temp]:
-            zone = self.zone_by_idx[zone_idx]
-            try:
-                self._gwy.device_registry.get_device(
-                    self.ctl.id, parent=zone, is_sensor=True
-                )
-            except (
-                DeviceNotFoundError,
-                SchemaInconsistentError,
-                SystemSchemaInconsistent,
-            ) as err:
-                _TRACE.warning("SUPPRESSED in ctl correlation matching: %s", err)
-
-        # _LOGGER.warning("System state (finally): %s", self.schema)
-
-    async def _eavesdrop_from_trv_broadcast(self, msg: Message) -> None:
-        """Correlate a new TRV temperature broadcast against known zones.
-
-        :param msg: The incoming 30C9 message from a TRV.
-        :type msg: Message
-        """
-        if not isinstance(msg.payload, dict):
-            return
-
-        trv_temp = msg.payload.get(SZ_TEMPERATURE)
-        if trv_temp is None:
-            return
-
-        matching_zones = []
-        for zone in self.zones:
-            if zone.sensor is None:
-                zone_temp = await zone.temperature()
-                if zone_temp == trv_temp:
-                    matching_zones.append(zone)
-
-        # COLLISION ABSTENTION: Bind only if exactly one zone matches this temp
-        if len(matching_zones) == 1:
-            try:
-                self._gwy.device_registry.get_device(
-                    msg.src.id, parent=matching_zones[0], is_sensor=True
-                )
-            except (
-                DeviceNotFoundError,
-                SchemaInconsistentError,
-                SystemSchemaInconsistent,
-            ) as err:
-                _TRACE.warning("SUPPRESSED in trv correlation matching: %s", err)
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Process any relevant message.
-
-        If `zone_idx` in payload, route any messages to the corresponding zone.
-        """
-
-        def eavesdrop_zones(this: Message, *, prev: Message | None = None) -> None:
-            [
-                self.get_htg_zone(v)
-                for d in msg.payload
-                for k, v in d.items()
-                if k == SZ_ZONE_IDX
-            ]
-
-        def handle_msg_by_zone_idx(zone_idx: str, msg: Message) -> None:
-            if zone := self.zone_by_idx.get(zone_idx):
-                zone._handle_msg(msg)
-            # elif self._gwy.config.enable_eavesdrop:
-            #     self.get_htg_zone(zone_idx)._handle_msg(msg)
-
-        super()._handle_msg(msg)
-
-        if msg.code not in (
-            Code._0005,
-            Code._000A,
-            Code._2309,
-            Code._30C9,
-        ) and (
-            SZ_ZONE_IDX not in msg.payload
-        ):  # 0004,0008,0009,000C,0404,12B0,2349,3150
-            return
-
-        # TODO: a I/0005 may have changed: del or add zones
-        if msg.code == Code._0005:
-            if (zone_type := msg.payload.get(SZ_ZONE_TYPE)) in ZON_ROLE_MAP.HEAT_ZONES:
-                [
-                    self.get_htg_zone(
-                        f"{idx:02X}", **{SZ_CLASS: ZON_ROLE_MAP[zone_type]}
-                    )
-                    for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, []))
-                    if flag == 1
-                ]
-            elif zone_type in DEV_ROLE_MAP.HEAT_DEVICES:
-                [
-                    self.get_htg_zone(f"{idx:02X}", msg=msg)
-                    for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, []))
-                    if flag == 1
-                ]
-            return
-
-        # TODO: a I/000C may have changed: del or add devices
-        if msg.code == Code._000C:
-            if msg.payload.get(SZ_ZONE_TYPE) not in DEV_ROLE_MAP.HEAT_DEVICES:
-                return
-            zone_idx = msg.payload.get(SZ_ZONE_IDX)
-            if msg.payload.get(SZ_DEVICES):
-                self.get_htg_zone(zone_idx, msg=msg)
-            elif zon := self.zone_by_idx.get(zone_idx):
-                zon._handle_msg(msg)  # tell existing zone: no device
-            return
-
-        # the CTL knows, but does not announce temps for multiroom_mode zones
-        if msg.code == Code._30C9 and getattr(msg, "_has_array", False):
-            for z in self.zones:
-                if z.idx not in (x.get(SZ_ZONE_IDX) for x in msg.payload):
-                    task = asyncio.create_task(z._get_temp())
-                    self._gwy.add_task(task)
-
-        # If some zones still don't have a sensor, maybe eavesdrop?
-        if self._gwy.config.enable_eavesdrop and (
-            msg.code in (Code._000A, Code._2309, Code._30C9)
-            and getattr(msg, "_has_array", False)
-        ):  # could do Code._000A, but only 1/hr
-            eavesdrop_zones(msg)
-
-        # Route all messages to their zones, incl. 000C, 0404, others
-        if isinstance(msg.payload, dict):
-            if zone_idx := msg.payload.get(SZ_ZONE_IDX):
-                handle_msg_by_zone_idx(zone_idx, msg)
-            # TODO: elif msg.payload.get(SZ_DOMAIN_ID) == FA:  # DHW
-
-        elif isinstance(msg.payload, list) and len(msg.payload):
-            # TODO: elif msg.payload.get(SZ_DOMAIN_ID) == FA:  # DHW
-            if isinstance(msg.payload[0], dict):  # e.g. 1FC9 is a list of lists:
-                for z_dict in msg.payload:
-                    handle_msg_by_zone_idx(z_dict.get(SZ_ZONE_IDX), msg)
-
-        # If some zones still don't have a sensor, maybe eavesdrop?
-        if (  # TODO: edge case: 1 zone with CTL as SEN
-            self._gwy.config.enable_eavesdrop
-            and msg.code == Code._30C9
-            and any(z for z in self.zones if not z.sensor)
-        ):
-            prev = self._prev_30c9
-            if getattr(msg, "_has_array", False):
-                self._prev_30c9 = msg
-
-            task = asyncio.create_task(self._eavesdrop_zone_sensors(msg, prev))
-            self._gwy.add_task(task)
-
-    # TODO: should be a private method
     def get_htg_zone(
         self, zone_idx: str, *, msg: Message | None = None, **schema: Any
     ) -> Zone:
         """Return a heating zone, create it if required.
 
-        First, use the schema to create/update it, then pass it any msg
-        to handle. Heating zones are uniquely identified by a tcs_id
-        and zone_idx pair. If created, attach it to this TCS.
+        Heating zones are uniquely identified by a tcs_id and zone_idx pair.
+        If created, attach it to this TCS.
 
         :param zone_idx: The hexadecimal string identifier for the zone.
         :type zone_idx: str
@@ -705,7 +324,6 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         :returns: The created or retrieved heating zone.
         :rtype: Zone
         """
-
         schema = shrink(SCH_TCS_ZONES_ZON(schema))
 
         zon: Zone = self.zone_by_idx.get(zone_idx)  # type: ignore[assignment]
@@ -717,8 +335,6 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         elif schema:
             zon._update_schema(**schema)
 
-        if msg:
-            zon._handle_msg(msg)
         return zon
 
     async def schema(self) -> dict[str, Any]:
@@ -766,20 +382,6 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         super().__init__(*args, **kwargs)
 
         self._msg_0006: Message = None  # type: ignore[assignment]
-
-    def _handle_msg(self, msg: Message) -> None:  # NOTE: active
-        """Periodically retrieve the latest global change counter."""
-
-        super()._handle_msg(msg)
-
-        if msg.code == Code._0006:
-            if isinstance(msg.payload, dict):
-                self._msg_0006 = msg
-            else:
-                _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: "
-                    f"{type(msg.payload)} (expected dict)"
-                )
 
     async def _schedule_version(self, *, force_io: bool = False) -> tuple[int, bool]:
         """Return the global schedule version number and an I/O boolean.
@@ -892,19 +494,6 @@ class Logbook(SystemBase):  # 0418
         """Return the system's fault log."""
         return self._faultlog
 
-    def _handle_msg(self, msg: Message) -> None:  # NOTE: active
-        """Handle logbook-specific incoming messages."""
-        super()._handle_msg(msg)
-
-        if msg.code == Code._0418 and msg.verb in (I_, RP):
-            if isinstance(msg.payload, dict):
-                self._faultlog.handle_msg(msg)
-            else:
-                _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: "
-                    f"{type(msg.payload)} (expected dict)"
-                )
-
     async def get_faultlog(
         self,
         /,
@@ -976,35 +565,6 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         super().__init__(*args, **kwargs)
         self._dhw: DhwZone = None  # type: ignore[assignment]
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle incoming messages related to DHW."""
-        super()._handle_msg(msg)
-
-        if (
-            not isinstance(msg.payload, dict)
-            or msg.payload.get(SZ_DHW_IDX) is None
-            and msg.payload.get(SZ_DOMAIN_ID) not in (F9, FA)
-            and msg.payload.get(SZ_ZONE_IDX) != "HW"
-        ):  # Code._0008, Code._000C, Code._0404, Code._10A0, Code._1260, Code._1F41
-            return
-
-        # TODO: a I/0005 may have changed zones & may need a restart (del) or not (add)
-        if (
-            msg.code == Code._000C
-            and msg.payload.get(SZ_ZONE_TYPE) in DEV_ROLE_MAP.DHW_DEVICES
-        ):
-            if msg.payload.get(SZ_DEVICES):
-                self.get_dhw_zone(msg=msg)  # create DHW zone if required
-            elif self._dhw:
-                self._dhw._handle_msg(msg)  # tell existing DHW zone: no device
-            return
-
-        # RQ --- 18:002563 01:078710 --:------ 10A0 001 00  # every 4h
-        # RP --- 01:078710 18:002563 --:------ 10A0 006 00157C0003E8
-
-        # Route all messages to their zones, incl. 000C, 0404, others
-        self.get_dhw_zone(msg=msg)
-
     # TODO: should be a private method
     def get_dhw_zone(self, *, msg: Message | None = None, **schema: Any) -> DhwZone:
         """Return a DHW zone, create it if required.
@@ -1029,8 +589,6 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         elif schema:
             self._dhw._update_schema(**schema)
 
-        if msg:
-            self._dhw._handle_msg(msg)
         return self._dhw
 
     def _remove_dhw_zone(self) -> bool:
@@ -1172,23 +730,6 @@ class SystemMode(SystemBase):  # 2E04
 class Datetime(SystemBase):  # 313F
     """A system variant managing system date and time."""
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle incoming datetime synchronisation messages."""
-        super()._handle_msg(msg)
-
-        # FIXME: refactoring protocol stack
-        if (
-            msg.code == Code._313F
-            and msg.verb in (I_, RP)
-            and self._gwy._engine._transport
-        ):
-            diff = abs(
-                dt.fromisoformat(msg.payload.get(SZ_DATETIME, ""))
-                - self._gwy._engine._dt_now()
-            )
-            if diff > td(minutes=5):
-                _LOGGER.warning("%r < excessive datetime difference: %s", msg, diff)
-
     async def get_datetime(self) -> dt | None:
         """Retrieve the current system datetime.
 
@@ -1328,31 +869,6 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         tcs._update_schema(**schema)
         return tcs
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle general incoming messages for the system."""
-        super()._handle_msg(msg)
-
-        if not isinstance(msg.payload, dict):
-            return
-
-        if (idx := msg.payload.get(SZ_DOMAIN_ID)) and msg.verb in (I_, RP):
-            idx = msg.payload[SZ_DOMAIN_ID]
-            if msg.code == Code._0008:
-                self._relay_demands[idx] = msg
-            elif msg.code == Code._0009:
-                self._relay_failsafes[idx] = msg
-            elif msg.code == Code._3150:
-                self._heat_demands[idx] = msg
-            elif msg.code not in (
-                Code._0001,
-                Code._000C,
-                Code._0404,
-                Code._0418,
-                Code._1100,
-                Code._3B00,
-            ):
-                assert False, f"Unexpected code with a domain_id: {msg.code}"
-
     @property
     def heat_demands(self) -> dict[str, Any] | None:  # 3150
         """Return the current heat demands per domain."""
@@ -1400,6 +916,64 @@ class Evohome(ScheduleSync, Language, SystemMode, MultiZone, UfHeating, System):
     _SLUG: str = SYS_KLASS.TCS  # evohome
 
     # older evohome don't have zone_type=ELE
+
+    def _handle_msg(self, msg: Message) -> None:
+        """Process any relevant message and route to system zones."""
+
+        def handle_msg_by_zone_idx(zone_idx: str, msg: Message) -> None:
+            if zone := self.zone_by_idx.get(zone_idx):
+                zone._handle_msg(msg)
+
+        super()._handle_msg(msg)
+
+        if msg.code not in (
+            Code._0005,
+            Code._000A,
+            Code._2309,
+            Code._30C9,
+        ) and (
+            SZ_ZONE_IDX not in msg.payload
+        ):  # 0004,0008,0009,000C,0404,12B0,2349,3150
+            return
+
+        # TODO: a I/0005 may have changed: del or add zones
+        if msg.code == Code._0005:
+            if (zone_type := msg.payload.get(SZ_ZONE_TYPE)) in ZON_ROLE_MAP.HEAT_ZONES:
+                [
+                    self.get_htg_zone(
+                        f"{idx:02X}", **{SZ_CLASS: ZON_ROLE_MAP[zone_type]}
+                    )
+                    for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, []))
+                    if flag == 1
+                ]
+            elif zone_type in DEV_ROLE_MAP.HEAT_DEVICES:
+                [
+                    self.get_htg_zone(f"{idx:02X}", msg=msg)
+                    for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, []))
+                    if flag == 1
+                ]
+            return
+
+        # TODO: a I/000C may have changed: del or add devices
+        if msg.code == Code._000C:
+            if msg.payload.get(SZ_ZONE_TYPE) not in DEV_ROLE_MAP.HEAT_DEVICES:
+                return
+            zone_idx = msg.payload.get(SZ_ZONE_IDX)
+            if msg.payload.get(SZ_DEVICES):
+                self.get_htg_zone(zone_idx, msg=msg)
+            elif zon := self.zone_by_idx.get(zone_idx):
+                zon._handle_msg(msg)  # tell existing zone: no device
+            return
+
+        # Route all messages to their zones, incl. 000C, 0404, others
+        if isinstance(msg.payload, dict):
+            if zone_idx := msg.payload.get(SZ_ZONE_IDX):
+                handle_msg_by_zone_idx(zone_idx, msg)
+
+        elif isinstance(msg.payload, list) and len(msg.payload):
+            if isinstance(msg.payload[0], dict):  # e.g. 1FC9 is a list of lists:
+                for z_dict in msg.payload:
+                    handle_msg_by_zone_idx(z_dict.get(SZ_ZONE_IDX), msg)
 
 
 class Chronotherm(Evohome):

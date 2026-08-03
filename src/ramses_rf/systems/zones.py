@@ -500,18 +500,31 @@ class Zone(ZoneSchedule):
             set_zone_type(ZON_ROLE_MAP[klass])
 
         if sensor_id := schema.get(SZ_SENSOR):
-            try:
-                self._sensor = self._gwy.device_registry.get_device(
-                    sensor_id, parent=self, is_sensor=True
-                )
-            except (
-                exc.DeviceNotFoundError,
-                exc.SchemaInconsistentError,
-                exc.SystemSchemaInconsistent,
-            ) as err:
-                _TRACE.warning("SUPPRESSED in Zone._update_schema (sensor): %s", err)
+            if (
+                not str(sensor_id).startswith("01:")
+                and not str(sensor_id).startswith("02:")
+                and not str(sensor_id).startswith("18:")
+            ):
+                try:
+                    self._sensor = self._gwy.device_registry.get_device(
+                        sensor_id, parent=self, is_sensor=True
+                    )
+                except (
+                    exc.DeviceNotFoundError,
+                    exc.SchemaInconsistentError,
+                    exc.SystemSchemaInconsistent,
+                ) as err:
+                    _TRACE.warning(
+                        "SUPPRESSED in Zone._update_schema (sensor): %s", err
+                    )
 
         for act_id in schema.get(SZ_ACTUATORS, []):
+            if (
+                str(act_id).startswith("01:")
+                or str(act_id).startswith("02:")
+                or str(act_id).startswith("18:")
+            ):
+                continue
             try:
                 self._gwy.device_registry.get_device(act_id, parent=self)
             except (

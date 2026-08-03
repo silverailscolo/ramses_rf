@@ -258,6 +258,7 @@ class TestDispatcherHeartbeats:
         mock_dev._SLUG = dev_type
         mock_dev._is_binding = False
         mock_dev.is_faked = False
+        mock_dev._last_msg_dtm = None
 
         # Inject the mock device into the registry so instantiate_devices
         # maps to it
@@ -270,12 +271,8 @@ class TestDispatcherHeartbeats:
         # 3. Process the message through the dispatcher
         await dispatcher.process_msg(mock_gateway, msg)
 
-        # 4. Assert the message was explicitly dispatched to the device
-        # The dispatcher queues the update via
-        # gwy._engine._loop.call_soon()
-        # which triggers mock_dev._handle_msg(msg) containing the
-        # timestamp updates
-        mock_gateway._engine._loop.call_soon.assert_any_call(mock_dev._handle_msg, msg)
+        # 4. Assert the message was explicitly processed and timestamp updated
+        assert mock_dev._last_msg_dtm == msg.dtm
 
 
 class TestHvacStateNullMarkerFiltering:

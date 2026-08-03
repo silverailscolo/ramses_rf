@@ -145,6 +145,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         )
 
         self._tcs: Evohome | None = None
+        self._eavesdrop_engine: Any = None
 
         self._device_filter: DeviceFilterInterface = DeviceFilter(
             include=[DeviceIdT(k) for k in self._gwy_config.known_list],

@@ -131,12 +131,14 @@ class Parent:
                 self._dhw_sensor = child
 
             elif is_sensor and hasattr(self, SZ_SENSOR):
+                existing_sensor = getattr(self, SZ_SENSOR, None)
                 if (
-                    getattr(self, SZ_SENSOR, None)
-                    and getattr(getattr(self, SZ_SENSOR), "id", None) != child.id
+                    existing_sensor
+                    and getattr(existing_sensor, "id", None) != child.id
+                    and not str(getattr(existing_sensor, "id", "")).startswith("01:")
                 ):
                     raise exc.SystemSchemaInconsistent(
-                        f"{self} changed zone sensor (from {getattr(self, SZ_SENSOR)} to {child})"
+                        f"{self} changed zone sensor (from {existing_sensor} to {child})"
                     )
                 self._sensor = child
 
