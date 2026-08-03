@@ -182,7 +182,11 @@ class DeviceRegistry:
             if not zone and hasattr(tcs, "_update_schema"):
                 tcs._update_schema(**{"zones": {str(child_domain_id): {}}})
                 zone = tcs.get_htg_zone(str(child_domain_id))
-            if zone and hasattr(zone, "_update_schema"):
+            if (
+                zone
+                and hasattr(zone, "_update_schema")
+                and getattr(zone, "_heating_type", None) is None
+            ):
                 zone._update_schema(**{"class": metadata["class"]})
 
         if parent:

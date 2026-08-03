@@ -13,8 +13,7 @@ import uuid
 from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_tx import ALL_DEV_ADDR
-from ramses_tx.address import HGI_DEV_ADDR
+from ramses_tx.address import ALL_DEV_ADDR, HGI_DEV_ADDR
 
 from . import exceptions as exc
 from .const import (
@@ -72,10 +71,12 @@ from .const import (
     SZ_TEMPERATURE,
     SZ_UNTIL,
     W_,
+    ZON_ROLE_MAP,
     Code,
     DevType,
 )
 from .devices.hvac_ventilators import HvacVentilator
+from .eavesdropper import EavesdropEngine
 from .messages import Message
 from .models import StateUpdatedEvent, SystemState
 from .protocol.ramses import (
@@ -103,7 +104,6 @@ __all__ = [
     "detect_array_fragment",
     "instantiate_devices",
     "process_msg",
-    "route_payload",
     "validate_addresses",
     "validate_slugs",
 ]
@@ -196,7 +196,6 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
         # FIXME: changing Address to Devices is messy: ? Protocol for same
         # method signatures. prefer Devices but can continue with Addresses...
         src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
-        dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
 
         # Devices need to know their controller, ?and their location ('parent' domain)
         # NB: only addrs processed here, packet metadata is processed elsewhere
@@ -248,23 +247,23 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
             else:
                 # may: DeviceNotFoundError, but don't suppress
                 src_dev = gwy.device_registry.get_device(msg.src.id)
-                if msg.dst.id == msg.src.id:
-                    return True
+                if (
+                    str(msg.src.id).startswith("01:")
+                    and hasattr(src_dev, "tcs")
+                    and src_dev.tcs is None
+                    and hasattr(src_dev, "_make_tcs_controller")
+                ):
+                    src_dev._make_tcs_controller(msg=msg)
+        if getattr(gwy.config, "enable_eavesdrop", False):
+            engine = getattr(gwy, "_eavesdrop_engine", None)
+            if engine is None:
+                engine = EavesdropEngine(gwy)
+                with contextlib.suppress(AttributeError):
+                    gwy._eavesdrop_engine = engine
+            engine.eavesdrop_referenced_devices(msg)
 
-        if not gwy.config.enable_eavesdrop:
+        if msg.dst.id == msg.src.id:
             return True
-
-        if dst_dev is None and msg.src.id != hgi_id:
-            with contextlib.suppress(exc.DeviceNotFoundError):
-                gwy.device_registry.get_device(msg.dst.id)
-
-        # Eavesdrop: Instantiate implicitly referenced devices (e.g., parent
-        # controller in addr2)
-        if (addrs := getattr(msg, "_addrs", None)) is not None:
-            for addr in addrs:
-                if addr.id not in (msg.src.id, getattr(msg.dst, "id", None)):
-                    with contextlib.suppress(exc.DeviceNotFoundError):
-                        gwy.device_registry.get_device(addr.id)
 
     except exc.DeviceNotFoundError as err:
         (_LOGGER.error if _DBG_INCREASE_LOG_LEVELS else _LOGGER.warning)(
@@ -401,7 +400,12 @@ def _resolve_logical_targets(
     src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
     dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
     tcs = getattr(src_dev, "tcs", None) if src_dev else None
-    tcs = tcs or gwy.tcs
+    tcs = tcs or getattr(gwy, "tcs", None)
+    if tcs is None and (registry := getattr(gwy, "device_registry", None)):
+        for dev in registry.device_by_id.values():
+            if str(dev.id).startswith("01:"):
+                tcs = getattr(dev, "tcs", None) or dev
+                break
 
     # 1. Fault logs strictly target the TCS (if it exists) or the source device
     if msg.code == "0418":
@@ -566,13 +570,7 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
         filtered = [e for e in current_entries if e.timestamp != entry.timestamp]
         new_entries = tuple(filtered) + (entry,)
 
-        latest = getattr(target.state, "latest_fault", None)
-        if getattr(entry.fault_state, "value", str(entry.fault_state)) == "fault":
-            latest = entry
-
-        new_state = dataclasses.replace(
-            target.state, entries=new_entries, latest_fault=latest
-        )
+        new_state = dataclasses.replace(target.state, entries=new_entries)
 
         event = StateUpdatedEvent(
             entity_id=getattr(target, "id", "unknown"),
@@ -832,15 +830,294 @@ def _route_2411_to_fan(gwy: Gateway, msg: Message) -> None:
             )
 
 
-def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
+def _update_schedule_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+    """Route 0006 version and 0404 fragment packets to Schedule read-models."""
+    if msg.code not in (Code._0006, Code._0404):
+        return
+
+    sched = getattr(target, "schedule", None)
+    if sched is not None and hasattr(sched, "process_schedule_msg"):
+        sched.process_schedule_msg(msg)
+
+
+async def _update_topology_schema_state(
+    gwy: Gateway, p: dict[str, Any], msg: Message
+) -> None:
+    """Ingest topology and telemetry payloads into models."""
+    registry = getattr(gwy, "device_registry", None)
+    tcs = None
+    if registry:
+        if hasattr(msg.src, "id") and str(msg.src.id).startswith("01:"):
+            ctl_id = str(msg.src.id)
+            if ctl_dev := registry.device_by_id.get(ctl_id):
+                tcs = getattr(ctl_dev, "tcs", None)
+        elif hasattr(msg.dst, "id") and str(msg.dst.id).startswith("01:"):
+            ctl_id = str(msg.dst.id)
+            if ctl_dev := registry.device_by_id.get(ctl_id):
+                tcs = getattr(ctl_dev, "tcs", None)
+        else:
+            if (devices := p.get("devices")) and isinstance(devices, list):
+                for d in devices:
+                    if str(d).startswith("01:"):
+                        ctl_id = str(d)
+                        if ctl_dev := registry.device_by_id.get(ctl_id):
+                            tcs = getattr(ctl_dev, "tcs", None)
+                        break
+
+            if tcs is None and hasattr(msg.src, "id"):
+                if src_dev := registry.device_by_id.get(str(msg.src.id)):
+                    tcs = getattr(src_dev, "tcs", None)
+            if tcs is None and hasattr(msg.dst, "id"):
+                if dst_dev := registry.device_by_id.get(str(msg.dst.id)):
+                    tcs = getattr(dst_dev, "tcs", None)
+
+    if tcs is None and registry:
+        controllers = [
+            d
+            for d in list(registry.device_by_id.values())
+            if (getattr(d, "_SLUG", "") == "CTL" or getattr(d, "type", None) == "01")
+            and hasattr(d, "tcs")
+            and d.tcs is not None
+        ]
+        if len(controllers) == 1:
+            tcs = controllers[0].tcs
+
+    # 1. Code 0005: System Zone Structure Discovery & Initialization
+    if msg.code == Code._0005 and getattr(msg.src, "type", None) == "01":
+        if tcs and hasattr(tcs, "get_htg_zone"):
+            z_type = p.get("zone_type")
+            if isinstance(z_type, str) and z_type in ZON_ROLE_MAP.HEAT_ZONES:
+                schema: dict[str, Any] = {"class": ZON_ROLE_MAP[z_type]}
+                if zone_mask := p.get("zone_mask"):
+                    for idx, active in enumerate(zone_mask):
+                        if active:
+                            with contextlib.suppress(
+                                exc.DeviceNotFoundError, exc.SchemaInconsistentError
+                            ):
+                                z_str = f"{idx:02X}"
+                                ez = getattr(tcs, "zone_by_idx", {}).get(z_str)
+                                if (
+                                    ez is not None
+                                    and getattr(ez, "_heating_type", None) is not None
+                                ):
+                                    tcs.get_htg_zone(z_str)
+                                else:
+                                    tcs.get_htg_zone(z_str, **schema)
+                elif (zone_idx := (p.get("zone_idx") or p.get("child_id"))) is not None:
+                    with contextlib.suppress(
+                        exc.DeviceNotFoundError, exc.SchemaInconsistentError
+                    ):
+                        z_str = str(zone_idx)
+                        ez = getattr(tcs, "zone_by_idx", {}).get(z_str)
+                        if (
+                            ez is not None
+                            and getattr(ez, "_heating_type", None) is not None
+                        ):
+                            tcs.get_htg_zone(z_str)
+                        else:
+                            tcs.get_htg_zone(z_str, **schema)
+
+    # 2. Code 000C: Device Role Bindings, Zone Types & UFH Circuit Mappings
+    elif msg.code == Code._000C:
+        zone_idx = p.get("zone_idx")
+        domain_id = p.get("domain_id")
+        devices = p.get("devices", [])
+        if "device_id" in p and not devices:
+            devices = [p["device_id"]]
+
+        zone_type = p.get("zone_type")
+        ufh_idx = p.get("ufh_idx") or p.get("circuit_idx") or p.get("cct_idx")
+
+        # 1. Instantiate any 02: UFH Controller devices and link as children of TCS
+        ufc_devs: list[Any] = []
+        if registry and tcs:
+            for d_id in devices:
+                if str(d_id).startswith("02:"):
+                    with contextlib.suppress(exc.DeviceNotFoundError):
+                        ufc = registry.get_device(str(d_id), parent=tcs)
+                        if ufc not in ufc_devs:
+                            ufc_devs.append(ufc)
+
+        if not ufc_devs and registry:
+            if hasattr(msg.src, "id") and str(msg.src.id).startswith("02:"):
+                with contextlib.suppress(exc.DeviceNotFoundError):
+                    ufc_devs.append(registry.get_device(str(msg.src.id)))
+            elif hasattr(msg.dst, "id") and str(msg.dst.id).startswith("02:"):
+                with contextlib.suppress(exc.DeviceNotFoundError):
+                    ufc_devs.append(registry.get_device(str(msg.dst.id)))
+
+        if not ufc_devs and tcs:
+            ufc_devs = [
+                d
+                for d in getattr(tcs, "childs", [])
+                if getattr(d, "_SLUG", "") == "UFC" or getattr(d, "type", None) == "02"
+            ]
+
+        # Route UFH circuit mappings to UFH controllers
+        if ufc_devs and ufh_idx is not None:
+            ufh_z_str: str | None = str(zone_idx) if zone_idx is not None else None
+            ufh_str = (
+                f"{int(str(ufh_idx), 16):02X}"
+                if isinstance(ufh_idx, (int, str)) and str(ufh_idx).isalnum()
+                else str(ufh_idx)
+            )
+            for ufc in ufc_devs:
+                if hasattr(ufc, "circuit_by_id"):
+                    ufc.circuit_by_id[ufh_str] = {"zone_idx": ufh_z_str}
+
+        # Map Zone Bindings & Classes
+        if (
+            zone_idx is not None
+            and tcs
+            and hasattr(tcs, "get_htg_zone")
+            and not str(getattr(msg.src, "id", "")).startswith("02:")
+        ):
+            valid_devs = [
+                d
+                for d in devices
+                if not str(d).startswith("01:")
+                and not str(d).startswith("02:")
+                and not str(d).startswith("18:")
+                and not str(d).startswith("7F:")
+                and str(d) != "7FFFFFFF"
+            ]
+            zone_cls: str | None = None
+            if valid_devs and zone_type is not None and zone_type in ZON_ROLE_MAP:
+                candidate_cls = ZON_ROLE_MAP[zone_type]
+                if candidate_cls in (
+                    "radiator_valve",
+                    "underfloor_heating",
+                    "zone_valve",
+                    "electric_zone",
+                    "mix_valve",
+                ):
+                    zone_cls = candidate_cls
+
+            existing_zone = tcs.zone_by_idx.get(str(zone_idx))
+            if existing_zone and existing_zone.heating_type is not None:
+                schema = {}
+            else:
+                schema = {"class": zone_cls} if zone_cls else {}
+
+            zone = tcs.get_htg_zone(str(zone_idx), **schema)
+            if zone and valid_devs and registry:
+                dev_role = p.get("device_role")
+                z_type_code = p.get("zone_type")
+                is_sen = dev_role in ("zone_sensor", "dhw_sensor") or z_type_code in (
+                    "04",
+                    "07",
+                    "0D",
+                )
+                for d_id in valid_devs:
+                    d_str = str(d_id)
+                    if (
+                        d_str.startswith("01:")
+                        or d_str.startswith("02:")
+                        or d_str.startswith("18:")
+                        or d_str.startswith("63:")
+                    ):
+                        continue
+                    with contextlib.suppress(
+                        exc.DeviceNotFoundError, exc.SchemaInconsistentError
+                    ):
+                        if is_sen:
+                            registry.device_by_id.get(d_str)
+                        else:
+                            registry.device_by_id.get(d_str)
+
+        # Map Domain Bindings (Appliance Control / DHW)
+        elif domain_id == "FC" and devices and tcs and registry:
+            for d_id in devices:
+                with contextlib.suppress(
+                    exc.DeviceNotFoundError, exc.SchemaInconsistentError
+                ):
+                    registry.device_by_id.get(str(d_id))
+
+        elif (
+            domain_id in ("FA", "F9")
+            and devices
+            and tcs
+            and hasattr(tcs, "get_dhw_zone")
+        ):
+            dhw = tcs.get_dhw_zone()
+            if dhw and registry:
+                for d_id in devices:
+                    is_sen = (
+                        str(d_id).startswith("07:")
+                        or p.get("device_role") == "dhw_sensor"
+                    )
+                    with contextlib.suppress(
+                        exc.DeviceNotFoundError, exc.SchemaInconsistentError
+                    ):
+                        registry.get_device(
+                            str(d_id), parent=dhw, child_id=domain_id, is_sensor=is_sen
+                        )
+
+    # 3. Code 0004: Zone Naming & Creation
+    elif msg.code == Code._0004 and tcs:
+        zone_idx = p.get("zone_idx")
+        name = p.get("name")
+        if zone_idx is not None and name:
+            zone = getattr(tcs, "zone_by_idx", {}).get(str(zone_idx))
+            if zone:
+                zone.zone_state = dataclasses.replace(zone.zone_state, name=name)
+
+    # 4. Code 0204: Underfloor Heating (UFH) Controller Circuits
+    elif str(msg.code) == "0204":
+        ufc_list: list[Any] = []
+        if registry:
+            if hasattr(msg.src, "id") and str(msg.src.id).startswith("02:"):
+                with contextlib.suppress(exc.DeviceNotFoundError):
+                    ufc_list.append(registry.get_device(str(msg.src.id)))
+            elif hasattr(msg.dst, "id") and str(msg.dst.id).startswith("02:"):
+                with contextlib.suppress(exc.DeviceNotFoundError):
+                    ufc_list.append(registry.get_device(str(msg.dst.id)))
+        if not ufc_list and tcs and hasattr(tcs, "ufh_controllers"):
+            ufc_list = list(getattr(tcs, "ufh_controllers", {}).values())
+
+        cct_idx = p.get("circuit_idx") or p.get("cct_idx") or p.get("ufx_idx")
+        z_idx = p.get("zone_idx")
+        if cct_idx is not None and ufc_list:
+            cct_str = (
+                f"{int(str(cct_idx), 16):02X}"
+                if isinstance(cct_idx, (int, str)) and str(cct_idx).isalnum()
+                else str(cct_idx)
+            )
+            for ufc in ufc_list:
+                if hasattr(ufc, "circuit_by_id"):
+                    ufc.circuit_by_id[cct_str] = {
+                        "zone_idx": str(z_idx) if z_idx is not None else None
+                    }
+
+    # 5. Code 000A: Zone Parameters & Configuration
+    elif msg.code == Code._000A and tcs and hasattr(tcs, "get_htg_zone"):
+        zone_idx = p.get("zone_idx")
+
+    if getattr(gwy.config, "enable_eavesdrop", False):
+        engine = getattr(gwy, "_eavesdrop_engine", None)
+        if engine is None:
+            engine = EavesdropEngine(gwy)
+            with contextlib.suppress(AttributeError):
+                gwy._eavesdrop_engine = engine
+        await engine.process_eavesdrop(msg)
+
+
+async def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
     """Parallel ingestion engine to populate immutable CQRS read-models.
 
     This acts as a Strangler Fig, intercepting decoded payloads and mapping
     them directly into the new `StateUpdatedEvent` structures.
     """
-    # Legacy Parity: Request packets do not contain authoritative telemetry.
-    if getattr(msg, "verb", "") == "RQ":
-        return
+    # Notify candidate devices of _last_msg_dtm and all binding devices of rcvd_msg
+    if registry := getattr(gwy, "device_registry", None):
+        for dev in list(registry.device_by_id.values()):
+            if dev.id in (getattr(msg.src, "id", None), getattr(msg.dst, "id", None)):
+                if hasattr(dev, "_last_msg_dtm"):
+                    dev._last_msg_dtm = msg.dtm
+            if (bm := getattr(dev, "_binding_manager", None)) and getattr(
+                bm, "is_binding", False
+            ):
+                bm.rcvd_msg(msg)
 
     if not isinstance(msg.payload, (dict, list)):
         return
@@ -853,11 +1130,18 @@ def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
         _route_2411_to_fan(gwy, msg)
 
     payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
+    with contextlib.suppress(exc.DeviceNotFoundError, exc.SchemaInconsistentError):
+        for p in payloads:
+            if isinstance(p, dict):
+                await _update_topology_schema_state(gwy, p, msg)
+
+    # Legacy Parity: Request packets (RQ) do not contain state update telemetry.
+    if getattr(msg, "verb", "") == "RQ":
+        return
 
     for p in payloads:
         if not isinstance(p, dict):
             continue
-
         targets = _resolve_logical_targets(gwy, msg, p)
         for target in targets:
             with contextlib.suppress(AttributeError, TypeError, ValueError):
@@ -882,19 +1166,17 @@ def route_payload(gwy: Gateway, msg: Message) -> None:
     :param msg: The fully validated message to be dispatched.
     :type msg: Message
     """
-    # NOTE: here, msgs are routed only to devices: routing to other entities (i.e.
-    # systems, zones, circuits) is done by those devices (e.g. UFC to UfhCircuit)
-
     src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
     if src_dev is not None:
-        gwy._engine._loop.call_soon(src_dev._handle_msg, msg)
+        with contextlib.suppress(Exception):
+            src_dev._handle_msg(msg)
 
     devices: list[Any] = []
 
     if (
         msg.code == Code._1FC9
-        and isinstance(msg.payload, dict)  # 1. Ensure it's a dict (not bytes)
-        and msg.payload.get(SZ_PHASE) == SZ_OFFER  # 2. Safely check for key
+        and isinstance(msg.payload, dict)
+        and msg.payload.get(SZ_PHASE) == SZ_OFFER
     ):
         devices = [
             d
@@ -902,7 +1184,7 @@ def route_payload(gwy: Gateway, msg: Message) -> None:
             if d.id != msg.src.id and d._is_binding
         ]
 
-    elif msg.dst.id == ALL_DEV_ADDR.id:  # some offers use dst=63:, so after 1FC9
+    elif msg.dst.id == ALL_DEV_ADDR.id:
         devices = [
             d for d in gwy.device_registry.devices if d.id != msg.src.id and d.is_faked
         ]
@@ -931,7 +1213,8 @@ def route_payload(gwy: Gateway, msg: Message) -> None:
 
     for d in devices:
         if d.id != msg.src.id:
-            gwy._engine._loop.call_soon(d._handle_msg, msg)
+            with contextlib.suppress(Exception):
+                d._handle_msg(msg)
 
 
 async def process_msg(gwy: Gateway, msg: Message) -> None:
@@ -962,7 +1245,7 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
             _log_message(gwy, msg)
             return
 
-        _cqrs_ingestion_engine(gwy, msg)
+        await _cqrs_ingestion_engine(gwy, msg)
 
         route_payload(gwy, msg)
 
