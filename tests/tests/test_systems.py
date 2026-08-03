@@ -66,29 +66,6 @@ class AwareDatetime(dt):
         )
 
 
-class PacketShim:
-    def __init__(self, dto: Any) -> None:
-        self._dto = dto
-        self._hdr = getattr(dto, "code", "0000")
-        self._frame = getattr(dto, "payload", "")
-
-    @property
-    def _ctx(self) -> Any:
-        """Mock the native L3 context extraction."""
-        code = getattr(self._dto, "code", "")
-        payload = getattr(self._dto, "payload", "")
-        if code == "3220" and len(payload) >= 6:
-            return payload[4:6]
-        return None
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._dto, name)
-
-
-def mocked_pkt_prop(self: Any) -> Any:
-    return PacketShim(self._dto)
-
-
 @pytest.fixture(autouse=True)
 def global_test_patches() -> Generator[None, None, None]:
     original_async_send_cmd = Gateway.async_send_cmd
@@ -105,7 +82,6 @@ def global_test_patches() -> Generator[None, None, None]:
         patch("ramses_rf.lifecycle.dt", AwareDatetime),
         patch("ramses_tx.engine.dt", AwareDatetime),
         patch("ramses_tx.packet.dt", AwareDatetime),
-        patch("ramses_rf.messages.Message._pkt", property(mocked_pkt_prop)),
         patch(
             "ramses_rf.gateway.Gateway.async_send_cmd",
             patched_async_send_cmd,

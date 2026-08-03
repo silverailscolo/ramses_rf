@@ -49,7 +49,7 @@ async def test_packet_logging_outputs_formatted_frame(tmp_path: Path) -> None:
 
     try:
         # Act
-        PKT_LOGGER.info("", extra=pkt._pkt_extra())
+        PKT_LOGGER.info("", extra=pkt._pkt_extra)
 
         for _ in range(100):
             await asyncio.sleep(0.01)

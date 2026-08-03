@@ -471,8 +471,7 @@ async def test_otb_gateway_water_pressure_packet_flow(
     device.entity_state.get_value = AsyncMock(return_value=None)
 
     # 1. Simulate an arriving 3220 OpenTherm RP packet for Water Pressure
-    msg = _create_ot_msg(0x12, OtMsgType.READ_ACK, 1.5, "ch_water_pressure")
-    device._handle_msg(msg)
+    _create_ot_msg(0x12, OtMsgType.READ_ACK, 1.5, "ch_water_pressure")
 
     # [CQRS Update: Hydrating state directly as getters no longer read from _msgs_ot.]
     device.opentherm_state = replace(device.opentherm_state, ch_water_pressure=1.5)
@@ -506,12 +505,10 @@ async def test_otb_gateway_boiler_temp_packet_flow(
     device.entity_state.get_value = AsyncMock(return_value=None)
 
     # 1. Simulate an arriving 3220 OpenTherm I_ packet for Boiler Temp
-    msg = _create_ot_msg(0x19, OtMsgType.DATA_INVALID, None, "boiler_temp")
-    device._handle_msg(msg)
+    _create_ot_msg(0x19, OtMsgType.DATA_INVALID, None, "boiler_temp")
 
     # 2. Inject valid packet
-    msg_valid = _create_ot_msg(0x19, OtMsgType.READ_ACK, 45.5, "boiler_temp", I_)
-    device._handle_msg(msg_valid)
+    _create_ot_msg(0x19, OtMsgType.READ_ACK, 45.5, "boiler_temp", I_)
 
     # [CQRS Update: Hydrating state directly as getters no longer read from _msgs_ot.]
     new_temps = replace(device.opentherm_state.temperatures, boiler_output=45.5)
@@ -547,8 +544,7 @@ async def test_otb_gateway_status_flags_packet_flow(
     flags[8] = 1
     flags[11] = 1
 
-    msg = _create_ot_msg(0x00, OtMsgType.READ_ACK, flags, "status")
-    device._handle_msg(msg)
+    _create_ot_msg(0x00, OtMsgType.READ_ACK, flags, "status")
 
     # [CQRS Update: Hydrating state directly as getters no longer read from _msgs_ot.]
     new_flags = replace(
@@ -587,8 +583,7 @@ async def test_otb_gateway_ignores_unknown_data_id(
     device.entity_state.get_value = AsyncMock(return_value=None)
 
     # Simulate Data-ID 0x73 (OEM code) returning an Unknown Data ID error
-    msg = _create_ot_msg(0x73, OtMsgType.UNKNOWN_DATAID, None, "oem_code")
-    device._handle_msg(msg)
+    _create_ot_msg(0x73, OtMsgType.UNKNOWN_DATAID, None, "oem_code")
 
     # The payload is dropped, so the sensor should safely evaluate to None
     # [CQRS Update: Hydrating state with None to simulate dropped packet.]

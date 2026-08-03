@@ -181,7 +181,7 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
         topology_msg.header = mock_header
         topology_msg.src = Address(src_id)
         topology_msg.dst = Address(dst_id)
-        topology_msg._pkt = mock_pkt
+        topology_msg._dto = mock_pkt
 
         builder._evaluate_rf_bind_rules(topology_msg)
 
@@ -244,9 +244,9 @@ async def test_regex_inbound_parsing() -> None:
             expected = Packet.from_port(dt.now(), pkt)
             for _ in range(100):
                 await asyncio.sleep(0.001)
-                if gwy_0._this_msg and gwy_0._this_msg._pkt._frame == expected._frame:
+                if gwy_0._this_msg and gwy_0._this_msg.raw_frame == expected._frame:
                     break
-            assert gwy_0._this_msg and gwy_0._this_msg._pkt._frame == expected._frame
+            assert gwy_0._this_msg and gwy_0._this_msg.raw_frame == expected._frame
 
     finally:
         await gwy_0.stop()

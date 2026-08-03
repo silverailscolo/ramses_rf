@@ -31,6 +31,10 @@ _DBG_DISABLE_DEV_HVAC = False
 class Address:
     """The device Address class."""
 
+    # Limit instance memory overhead and accelerate attribute access for
+    # high-volume objects
+    __slots__ = ("id", "type", "_hex_id")
+
     _SLUG = None
 
     def __init__(self, device_id: DeviceIdT) -> None:
@@ -84,6 +88,7 @@ class Address:
         return f"{DEV_TYPE_MAP.get(_type, f'{_type:>3}')}:{_tmp}"
 
     @classmethod
+    @lru_cache(maxsize=256)
     def convert_from_hex(cls, device_hex: str, friendly_id: bool = False) -> str:
         """Convert a 6-character hex string to a device ID.
 
@@ -107,6 +112,7 @@ class Address:
         return cls._friendly(device_id) if friendly_id else device_id
 
     @classmethod
+    @lru_cache(maxsize=256)
     def convert_to_hex(cls, device_id: DeviceIdT) -> str:
         """Convert (say) '01:145038' (or 'CTL:145038') to '06368E'."""
 

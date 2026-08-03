@@ -61,84 +61,6 @@ PayloadT: TypeAlias = Any
 _MessageT = TypeVar("_MessageT", bound="Message")
 
 
-class _LegacyPktShim:
-    """A temporary shim bridging PacketDTO to legacy L3 attributes."""
-
-    def __init__(self, msg: Message) -> None:
-        """Initialize the shim with the parent Message.
-
-        :param msg: The parent Message instance.
-        :type msg: Message
-        """
-        self._msg = msg
-        self._dto = msg._dto
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, _LegacyPktShim):
-            return self._msg == other._msg
-        return False
-
-    @property
-    def _ctx(self) -> Any:
-        """Legacy context bridge."""
-        return self._msg.context.value
-
-    @property
-    def _hdr(self) -> str:
-        """Legacy header bridge."""
-        return self._msg.state_header.legacy_hdr
-
-    @property
-    def _frame(self) -> str:
-        """Legacy frame bridge for backwards compatibility in tests.
-
-        Calculates the frame string dynamically from the L7 properties.
-        """
-        if hasattr(self, "_override_frame"):
-            return self._override_frame
-        seqn = self._msg.seqn if self._msg.seqn else "---"
-        addr1 = self._msg._addrs[0].id
-        addr2 = self._msg._addrs[1].id
-        addr3 = self._msg._addrs[2].id
-        return (
-            f"{self._msg.verb} {seqn} {addr1} {addr2} {addr3} "
-            f"{self._msg.code} {self._msg.len:03d} {self._dto.payload}"
-        )
-
-    @_frame.setter
-    def _frame(self, value: str) -> None:
-        self._override_frame = value
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        """Delegate attribute setting to underlying DTO if not on shim."""
-        if name in ("_msg", "_dto", "_override_frame"):
-            object.__setattr__(self, name, value)
-        else:
-            try:
-                setattr(self._dto, name, value)
-            except (AttributeError, TypeError):
-                object.__setattr__(self, name, value)
-
-    @property
-    def _idx(self) -> str | bool:
-        """Legacy payload index bridge."""
-        return self._dto.payload[:2] if self._dto.payload else "00"
-
-    def to_dto(self) -> PacketDTO:
-        """Legacy DTO bridge."""
-        return self._dto
-
-    def __getattr__(self, name: str) -> Any:
-        """Delegate all other attributes to the underlying DTO.
-
-        :param name: The attribute name.
-        :type name: str
-        :return: The attribute value.
-        :rtype: Any
-        """
-        return getattr(self._dto, name)
-
-
 class Message:
     """The Message class; will trap/log invalid msgs."""
 
@@ -227,14 +149,35 @@ class Message:
             context_val=self.context.value,
         )
 
-    @property
-    def _pkt(self) -> Any:
-        """Legacy shim for downstream parsers and tests.
+    def _format_frame(self, seqn: str | None = None) -> str:
+        """Format the message into a standard ASCII RAMSES RF packet frame.
 
-        Returns the DTO so legacy tests accessing msg._pkt.payload
-        continue to function during the boundary migration.
+        :param seqn: Optional sequence number string. Defaults to "---".
+        :type seqn: str | None
+        :returns: The formatted ASCII frame string.
+        :rtype: str
         """
-        return _LegacyPktShim(self)
+        seq_str = seqn if seqn else "---"
+        dto = self._dto
+        return f"{dto.verb} {seq_str} {dto.addr1} {dto.addr2} {dto.addr3} {dto.code} {dto.length} {dto.payload}"
+
+    @property
+    def raw_frame(self) -> str:
+        """Return the raw packet frame string.
+
+        :returns: The raw ASCII frame.
+        :rtype: str
+        """
+        return self._format_frame("---")
+
+    @property
+    def raw_frame_snapshot(self) -> str:
+        """Return the raw frame string formatted for snapshot serialization.
+
+        :returns: The frame string with sequence number included if present.
+        :rtype: str
+        """
+        return self._format_frame(getattr(self, "seqn", None))
 
     @classmethod
     def _from_pkt(cls: type[_MessageT], pkt: Any) -> _MessageT:

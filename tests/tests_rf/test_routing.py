@@ -128,7 +128,7 @@ def _make_2411_msg(verb: str = " I") -> MagicMock:
 class TestDispatcher2411Routing:
     """Verify dispatcher._cqrs_ingestion_engine routes 2411 to the FAN."""
 
-    def test_2411_info_flips_supports_and_fires_callback(
+    def test_2411_updates_fan_state_and_invokes_callback(
         self, mock_gateway: MagicMock
     ) -> None:
         """A 2411 `` I`` packet must set supports_2411 and fire the callback."""
