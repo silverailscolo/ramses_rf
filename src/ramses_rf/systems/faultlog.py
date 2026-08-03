@@ -20,7 +20,7 @@ from ramses_tx.const import (
     FaultState,
     FaultType,
 )
-from ramses_tx.typing import DeviceIdT, PayloadT
+from ramses_tx.typing import DeviceIdT
 
 from ..enums import Action
 from ..messages import Message
@@ -109,8 +109,11 @@ class FaultLogEntry:
 
     @classmethod
     def from_msg(cls, msg: Message) -> FaultLogEntry:
-        """Create a fault log entry from a message's packet."""
-        return cls.from_pkt(msg._pkt)
+        """Create a fault log entry from a message's payload."""
+        log_entry = parse_fault_log_entry(msg._dto.payload)
+        if log_entry is None:
+            raise exc.PacketPayloadInvalid("Invalid fault log entry payload")
+        return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
 
     @classmethod
     def from_pkt(cls, pkt: Packet) -> FaultLogEntry:
@@ -244,31 +247,26 @@ class FaultLog:  # 0418
         # if idx != 0:  # there's other (new/changed) entries above this one?
         #     pass
 
-    def _hack_pkt_idx(self, pkt: Packet, idx: str) -> Message:
-        """Modify the Packet so that it has the expected log index.
+    def _hack_pkt_idx(self, orig_msg: Message, idx: str) -> Message:
+        """Modify the Message so that it has the expected log index.
 
         If there is no log entry for log_idx=<idx>, then the headers won't match:
         - expected rx_hdr is 0418|RP|<ctl_id>|<idx>
         - pkt hdr will  0418|RP|<ctl_id>|00    (response from controller)
         """
-
-        assert pkt.verb == RP and pkt.code == Code._0418 and pkt._idx == "00"
-        assert pkt.payload == "000000B0000000000000000000007FFFFF7000000000"
+        assert orig_msg.verb == RP and orig_msg.code == Code._0418
+        assert orig_msg._dto.payload == "000000B0000000000000000000007FFFFF7000000000"
 
         if idx == "00":  # no need to hack
-            return Message._from_pkt(pkt)
+            return orig_msg
 
-        # idx is already available from the function argument
-
-        pkt.payload = PayloadT(f"0000{idx}B0000000000000000000007FFFFF7000000000")
-
-        # NOTE: must now reset pkt payload, and its header
-        pkt._repr = pkt._hdr_ = pkt._ctx_ = pkt._idx_ = None
-        pkt._frame = pkt._frame[:50] + idx + pkt._frame[52:]
-
-        msg = Message._from_pkt(pkt)
+        # Replace payload in an immutable PacketDTO copy rather than mutating raw Packet state
+        new_dto = dataclasses.replace(
+            orig_msg._dto,
+            payload=f"0000{idx}B0000000000000000000007FFFFF7000000000",
+        )
+        msg = Message(new_dto)
         msg._payload = {SZ_LOG_IDX: idx, SZ_LOG_ENTRY: None}  # PayDictT._0418_NULL
-
         return msg
 
     async def get_faultlog(
@@ -311,9 +309,9 @@ class FaultLog:  # 0418
                     self._is_current = False
                     break
 
-                if msg._pkt.payload == "000000B0000000000000000000007FFFFF7000000000":
+                if msg._dto.payload == "000000B0000000000000000000007FFFFF7000000000":
                     msg = self._hack_pkt_idx(
-                        msg._pkt, f"{idx:02X}"
+                        msg, f"{idx:02X}"
                     )  # RPs for null entries have idx==00
                     self._process_msg(msg)  # since pkt via dispatcher aint got idx
                     break

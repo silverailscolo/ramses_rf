@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING, Any, Final
 
 from ramses_rf.const import (
     FA,
-    FC,
-    SZ_DOMAIN_ID,
     SZ_HEAT_DEMAND,
     SZ_RELAY_DEMAND,
     SZ_UFH_IDX,
@@ -54,6 +52,7 @@ class Controller(DeviceHeat):  # CTL (01):
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
 
     def _handle_msg(self, msg: Message) -> None:
+        """Process incoming message and delegate to TCS read-model."""
         super()._handle_msg(msg)
 
         if self.tcs:
@@ -87,8 +86,6 @@ class Controller(DeviceHeat):  # CTL (01):
             elif schema and self.tcs:
                 self.tcs._update_schema(**schema)
 
-            if msg and self.tcs:
-                self.tcs._handle_msg(msg)
             assert self.tcs is not None
             return self.tcs
 
@@ -141,9 +138,20 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
 
     def _handle_msg(self, msg: Message) -> None:
+        """Handle incoming UFH circuit and zone mapping messages.
+
+        Reverse-engineered packet protocols for UFH controllers:
+        - 0005 (system_zones): Zone masks (e.g. {'zone_type': '09', 'zone_mask': [1,1,1,1,1,0,0,0]})
+        - 0008 (relay_demand): Domain FC (boiler) or FA (UFH demand), ingested by entity_state.
+        - 000C (zone_devices): Circuit-to-zone mappings. Active RQ polling is offloaded to
+          discovery_scan.py to preserve read-only log replay compatibility.
+        - 22C9 (setpoint_bounds): Min/max temp bounds, decoded by payload pipeline into zone_state.
+        - 3150 (heat_demands): Circuit array, FC, or zone demands, routed by Central Dispatcher
+          directly to Zone / TCS read-models.
+        """
         super()._handle_msg(msg)
 
-        # Several assumptions are made, regarding 000C pkts:
+        # Several assumptions are made regarding 000C pkts:
         # - UFC bound only to CTL (not, e.g. SEN)
         # - all circuits bound to the same controller
 
@@ -160,16 +168,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
                 ufh_idx = f"{idx:02X}"
                 if not flag:
                     self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: None}
-                # FIXME: this causing tests to fail when read-only protocol
-                # elif SZ_ZONE_IDX not in self.circuit_by_id[ufh_idx]:
-                #     cmd = build_rq_cmd(self.ctl.id, Code._000C, f"{ufh_idx}{DEV_ROLE_MAP.UFH}")
-                #     self._send_cmd(cmd)
-
-        elif msg.code == Code._0008:  # relay_demand
-            if msg.payload.get(SZ_DOMAIN_ID) == FC:
-                pass
-            else:  # FA
-                pass
 
         elif msg.code == Code._000C:  # zone_devices
             # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices':['01:095421']}
@@ -186,27 +184,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
                 return
             # Read-Model Update ONLY. No `self.set_parent()` graph mutation here.
             self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: msg.payload.get(SZ_ZONE_IDX)}
-
-        elif msg.code == Code._22C9:  # setpoint_bounds
-            # .I --- 02:017205 --:------ 02:017205 22C9 024 00076C0A280101076C0A28010...
-            # .I --- 02:017205 --:------ 02:017205 22C9 006 04076C0A2801
-            pass
-
-        elif msg.code == Code._3150:  # heat_demands
-            if isinstance(msg.payload, list):  # the circuit demands
-                pass
-            elif msg.payload.get(SZ_DOMAIN_ID) == FC:
-                pass
-            else:
-                zone_idx = msg.payload.get(SZ_ZONE_IDX)
-                msg_dst_tcs = getattr(msg.dst, "tcs", None)
-                if zone_idx and msg_dst_tcs and hasattr(msg_dst_tcs, "zone_by_idx"):
-                    if zone := msg_dst_tcs.zone_by_idx.get(zone_idx):
-                        zone._handle_msg(msg)
-
-        # elif msg.code not in (Code._10E0, Code._22D0):
-        #     print("xxx")
-        # "0008|FA/FC", "22C9|array", "22D0|none", "3150|ZZ/array(/FC?)"
 
     # TODO: should be a private method
     def get_circuit(
@@ -232,8 +209,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         elif schema:
             cct._update_schema(**schema)
 
-        if msg:
-            cct._handle_msg(msg)
         return cct
 
     # @property

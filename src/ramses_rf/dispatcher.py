@@ -260,7 +260,7 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
 
         # Eavesdrop: Instantiate implicitly referenced devices (e.g., parent
         # controller in addr2)
-        if (addrs := getattr(msg._pkt, "_addrs", None)) is not None:
+        if (addrs := getattr(msg, "_addrs", None)) is not None:
             for addr in addrs:
                 if addr.id not in (msg.src.id, getattr(msg.dst, "id", None)):
                     with contextlib.suppress(exc.DeviceNotFoundError):
@@ -268,7 +268,7 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
 
     except exc.DeviceNotFoundError as err:
         (_LOGGER.error if _DBG_INCREASE_LOG_LEVELS else _LOGGER.warning)(
-            "%s < %s(%s)", msg._pkt, err.__class__.__name__, err
+            "%s < %s(%s)", msg, err.__class__.__name__, err
         )
         return False
 
@@ -921,7 +921,7 @@ def route_payload(gwy: Gateway, msg: Message) -> None:
     # Add Eavesdropping Correlation Routing
     if (
         gwy.config.enable_eavesdrop
-        and (addrs := getattr(msg._pkt, "_addrs", None)) is not None
+        and (addrs := getattr(msg, "_addrs", None)) is not None
     ):
         for addr in addrs:
             if addr.id != msg.src.id and addr.id != getattr(msg.dst, "id", None):
@@ -968,15 +968,13 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
 
     except (AssertionError, exc.RamsesException, NotImplementedError) as err:
         (_LOGGER.error if _DBG_INCREASE_LOG_LEVELS else _LOGGER.warning)(
-            "%s < %s(%s)", msg._pkt, err.__class__.__name__, err
+            "%s < %s(%s)", msg, err.__class__.__name__, err
         )
 
     except (AttributeError, LookupError, TypeError, ValueError) as err:
         if getattr(gwy.config, "enforce_strict_handling", False):
             raise
-        _LOGGER.warning(
-            "%s < %s(%s)", msg._pkt, err.__class__.__name__, err, exc_info=True
-        )
+        _LOGGER.warning("%s < %s(%s)", msg, err.__class__.__name__, err, exc_info=True)
 
     else:
         _log_message(gwy, msg)

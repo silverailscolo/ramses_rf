@@ -175,8 +175,8 @@ class TopologyBuilder:
         if msg.header.code != Code._1FC9:
             return
 
-        pkt = getattr(msg, "_pkt", None)
-        payload_hex: str = getattr(pkt, "payload", "") if pkt else ""
+        dto = getattr(msg, "_dto", None)
+        payload_hex: str = getattr(dto, "payload", "") if dto else ""
         if not payload_hex or len(payload_hex) in (2, 4) or len(payload_hex) % 12 != 0:
             return
 

@@ -46,7 +46,7 @@ async def test_packets_from_log_file(dir_name: Path) -> None:
     """Check eavesdropping of a src device _SLUG (from each packet line)."""
 
     def proc_log_line(msg: Message) -> None:
-        assert msg.src._SLUG in eval(msg._pkt.comment)
+        assert msg.src._SLUG in eval(msg._dto.comment)
 
     path = f"{dir_name}/packet.log"
 
