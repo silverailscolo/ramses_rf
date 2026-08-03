@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from datetime import datetime as dt, timedelta as td
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Final
@@ -358,12 +359,39 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         assert msg.payload == b"online", "Coding error"
 
         if self._connected:
-            _LOGGER.info("MQTT device came back online - resuming writing")
-            if not self._loop.is_closed():
-                try:
-                    self._loop.call_soon_threadsafe(self._protocol.resume_writing)
-                except RuntimeError:
-                    _LOGGER.debug("Event loop closed, cannot resume writing")
+            # Broker is connected and protocol connection was already
+            # established (via _on_connect's _establish_connection call).
+            # But if _topic_sub is not yet set, the /rx subscription was
+            # never made — subscribe now so we actually receive data packets.
+            # This happens when the broker connects and establishes the
+            # protocol connection before the ramses_esp sends its "online"
+            # LWT message (issue 871 fix introduced this race).
+            if not getattr(self, "_topic_sub", "") or not self._topic_sub:
+                _LOGGER.info(
+                    "MQTT device online — subscribing to /rx (deferred from broker connect)"
+                )
+                self._extra[SZ_ACTIVE_HGI] = msg.topic[-9:]
+                self._topic_pub = msg.topic + "/tx"
+                self._topic_sub = msg.topic + "/rx"
+                self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
+                if getattr(self, "_data_wildcard_topic", ""):
+                    try:
+                        self.client.unsubscribe(self._data_wildcard_topic)
+                        _LOGGER.debug(
+                            "Unsubscribed data wildcard after deferred /rx subscribe: %s",
+                            self._data_wildcard_topic,
+                        )
+                    except (ValueError, MQTTException) as err:
+                        _LOGGER.exception("Error unsubscribing data wildcard: %s", err)
+                    finally:
+                        self._data_wildcard_topic = ""
+            else:
+                _LOGGER.info("MQTT device came back online - resuming writing")
+                if not self._loop.is_closed():
+                    try:
+                        self._loop.call_soon_threadsafe(self._protocol.resume_writing)
+                    except RuntimeError:
+                        _LOGGER.debug("Event loop closed, cannot resume writing")
             return
 
         _LOGGER.info("MQTT device is online - establishing connection")
@@ -573,12 +601,23 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         # Without this, the network thread auto-reconnects and re-subscribes,
         # stealing messages from the new transport (the _closing guard in
         # _on_message silently drops them).
+        #
+        # Always call disconnect() even when _connected is False: the broker
+        # may have dropped the connection, but the paho-mqtt network thread
+        # may still be alive and auto-reconnecting with the same client ID,
+        # which would kick the new transport off the broker.  disconnect()
+        # signals the thread to stop the auto-reconnect loop.
+        #
+        # loop_stop() joins the network thread, which can block for up to 1s
+        # (the thread's select() timeout).  Run it in a daemon thread to avoid
+        # blocking the HA event loop during ramses_cc reloads.  The _closing
+        # guard in _on_message ensures the old transport won't process messages
+        # even if the thread hasn't fully exited when the new transport starts.
         try:
             if hasattr(self, "_topic_sub") and self._topic_sub and self._connected:
                 self.client.unsubscribe(self._topic_sub)
-            if self._connected:
-                self.client.disconnect()
-            self.client.loop_stop()
+            self.client.disconnect()
+            threading.Thread(target=self.client.loop_stop, daemon=True).start()
         except (ValueError, MQTTException) as err:
             _LOGGER.exception("Error during MQTT cleanup: %s", err)
 
