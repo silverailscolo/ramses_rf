@@ -10,7 +10,7 @@
         'sensor': '07:050121',
       }),
       'system': dict({
-        'appliance_control': '10:064873',
+        'appliance_control': None,
       }),
       'underfloor_heating': dict({
       }),
@@ -35,8 +35,6 @@
         '02': dict({
           '_name': 'Hall',
           'actuators': list([
-            '04:034716',
-            '04:034726',
           ]),
           'class': 'radiator_valve',
           'sensor': '04:034716',
@@ -123,6 +121,8 @@
     }),
     'main_tcs': '01:216136',
     'orphans_heat': list([
+      '04:034726',
+      '10:064873',
     ]),
     'orphans_hvac': list([
     ]),
@@ -261,7 +261,6 @@
         '0B': dict({
           '_name': 'Old Shop',
           'actuators': list([
-            '04:017810',
           ]),
           'class': 'underfloor_heating',
           'sensor': '34:124201',
@@ -270,6 +269,7 @@
     }),
     'main_tcs': '01:195932',
     'orphans_heat': list([
+      '04:017810',
       '13:027756',
     ]),
     'orphans_hvac': list([

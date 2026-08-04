@@ -58,7 +58,7 @@ async def test_topology_builder_snapshot(log_file_path: Path, snapshot: Any) -> 
     # Arrange
     from ramses_rf.gateway import GatewayConfig
 
-    async_config = GatewayConfig(enable_eavesdrop=True)
+    async_config = GatewayConfig(enable_eavesdrop=False)
     async_config.engine.input_file = str(log_file_path)
 
     async_gwy = Gateway(None, config=async_config)
