@@ -183,7 +183,7 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
         topology_msg.dst = Address(dst_id)
         topology_msg._dto = mock_pkt
 
-        builder._evaluate_rf_bind_rules(topology_msg)
+        asyncio.run(builder.consume(topology_msg))
 
         # Assert
         assert legacy_result[SZ_PHASE] == expected_phase
