@@ -515,7 +515,11 @@ class Zone(ZoneSchedule):
                 DevType.HGI,
             }
         )
-        _controller_prefixes = ("01:", "02:", "18:")
+        _controller_prefixes = (
+            f"{DevType.CTL}:",
+            f"{DevType.UFC}:",
+            f"{DevType.HGI}:",
+        )
 
         if sensor_id := schema.get(SZ_SENSOR):
             sensor_kl = self._gwy.config.known_list.get(str(sensor_id), {})

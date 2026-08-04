@@ -35,8 +35,8 @@ class UfhTopologyHandler(TopologyHandler):
         :returns: None
         :rtype: None
         """
-        is_ufc_src = getattr(msg.src, "type", None) == "02"
-        is_ufc_dst = getattr(msg.dst, "type", None) == "02"
+        is_ufc_src = getattr(msg.src, "type", None) in ("02", DevType.UFC)
+        is_ufc_dst = getattr(msg.dst, "type", None) in ("02", DevType.UFC)
 
         if not (is_ufc_src or is_ufc_dst):
             return
@@ -45,11 +45,11 @@ class UfhTopologyHandler(TopologyHandler):
 
         # Identify the Controller ID if present in the conversation
         ctl_id = None
-        if getattr(msg.src, "type", None) == "01":
+        if getattr(msg.src, "type", None) in ("01", DevType.CTL):
             ctl_id = msg.src.id
-        elif getattr(msg.dst, "type", None) == "01":
+        elif getattr(msg.dst, "type", None) in ("01", DevType.CTL):
             ctl_id = msg.dst.id
-        elif getattr(msg.addr3, "type", None) == "01":
+        elif getattr(msg.addr3, "type", None) in ("01", DevType.CTL):
             ctl_id = msg.addr3.id
 
         # 1. Conversational Binding: Promote and bind if communicating with a Controller

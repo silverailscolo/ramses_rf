@@ -15,6 +15,7 @@ from ramses_tx.const import (
     W_,
     ZON_MODE_MAP,
     Code,
+    DevType,
     Priority,
 )
 from ramses_tx.dtos import CommandDTO
@@ -96,7 +97,7 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
     dhw_idx = _check_idx(intent.get(SZ_DHW_IDX, 0))
     temperature = intent.get("temperature")
 
-    if intent.src.id[:2] != DEV_TYPE_MAP.DHW:
+    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.DHW, DevType.DHW):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.DHW}:xxxxxx"

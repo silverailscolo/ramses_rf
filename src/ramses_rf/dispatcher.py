@@ -248,7 +248,7 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
                 # may: DeviceNotFoundError, but don't suppress
                 src_dev = gwy.device_registry.get_device(msg.src.id)
                 if (
-                    str(msg.src.id).startswith("01:")
+                    getattr(msg.src, "type", None) in ("01", DevType.CTL)
                     and hasattr(src_dev, "tcs")
                     and src_dev.tcs is None
                     and hasattr(src_dev, "_make_tcs_controller")
@@ -970,16 +970,18 @@ async def _update_topology_schema_state(
             zone_idx is not None
             and tcs
             and hasattr(tcs, "get_htg_zone")
-            and not str(getattr(msg.src, "id", "")).startswith("02:")
+            and getattr(msg.src, "type", None) not in ("02", DevType.UFC)
         ):
+            _non_zone_prefixes = (
+                f"{DevType.CTL}:",
+                f"{DevType.UFC}:",
+                f"{DevType.HGI}:",
+                "7F:",
+            )
             valid_devs = [
                 d
                 for d in devices
-                if not str(d).startswith("01:")
-                and not str(d).startswith("02:")
-                and not str(d).startswith("18:")
-                and not str(d).startswith("7F:")
-                and str(d) != "7FFFFFFF"
+                if not str(d).startswith(_non_zone_prefixes) and str(d) != "7FFFFFFF"
             ]
             zone_cls: str | None = None
             if valid_devs and zone_type is not None and zone_type in ZON_ROLE_MAP:
@@ -1008,14 +1010,15 @@ async def _update_topology_schema_state(
                     "07",
                     "0D",
                 )
+                _non_actuator_prefixes = (
+                    f"{DevType.CTL}:",
+                    f"{DevType.UFC}:",
+                    f"{DevType.HGI}:",
+                    "63:",
+                )
                 for d_id in valid_devs:
                     d_str = str(d_id)
-                    if (
-                        d_str.startswith("01:")
-                        or d_str.startswith("02:")
-                        or d_str.startswith("18:")
-                        or d_str.startswith("63:")
-                    ):
+                    if d_str.startswith(_non_actuator_prefixes):
                         continue
                     with contextlib.suppress(
                         exc.DeviceNotFoundError, exc.SchemaInconsistentError

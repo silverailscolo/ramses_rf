@@ -117,7 +117,12 @@ class RadTopologyHandler(TopologyHandler):
             return
 
         prefix_map = {
-            # REMOVED: "02": DevType.UFC, - This greedy assumption breaks HVAC validation
+            # REMOVED: DevType.UFC / "02" - This greedy assumption
+            # breaks HVAC validation
+            DevType.HCW: DevType.HCW,
+            DevType.TRV: DevType.TRV,
+            DevType.BDR: DevType.BDR,
+            DevType.THM: DevType.THM,
             "03": DevType.HCW,
             "04": DevType.TRV,
             "12": DevType.THM,
