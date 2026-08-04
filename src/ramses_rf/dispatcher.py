@@ -13,7 +13,7 @@ import uuid
 from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_tx.address import ALL_DEV_ADDR, HGI_DEV_ADDR
+from ramses_tx.address import HGI_DEV_ADDR
 
 from . import exceptions as exc
 from .const import (
@@ -31,7 +31,6 @@ from .const import (
     SZ_BYPASS_STATE,
     SZ_CO2_LEVEL,
     SZ_DATETIME,
-    SZ_DEVICES,
     SZ_DIFFERENTIAL,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
@@ -48,11 +47,9 @@ from .const import (
     SZ_LANGUAGE,
     SZ_MINUTES,
     SZ_MODE,
-    SZ_OFFER,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
     SZ_OVERRUN,
-    SZ_PHASE,
     SZ_POST_HEAT,
     SZ_PRE_HEAT,
     SZ_PRESENCE_DETECTED,
@@ -70,6 +67,7 @@ from .const import (
     SZ_SYSTEM_MODE,
     SZ_TEMPERATURE,
     SZ_UNTIL,
+    SZ_ZONE_MASK,
     W_,
     ZON_ROLE_MAP,
     Code,
@@ -85,6 +83,7 @@ from .protocol.ramses import (
     CODES_OF_HEAT_DOMAIN_ONLY,
     CODES_OF_HVAC_DOMAIN_ONLY,
 )
+from .schemas import SZ_CLASS
 from .systems.zones import DhwZone
 
 if TYPE_CHECKING:
@@ -996,12 +995,22 @@ async def _update_topology_schema_state(
                     zone_cls = candidate_cls
 
             existing_zone = tcs.zone_by_idx.get(str(zone_idx))
-            if existing_zone and existing_zone.heating_type is not None:
+            if (
+                existing_zone
+                and getattr(existing_zone, "_heating_type", None) is not None
+            ):
                 schema = {}
             else:
                 schema = {"class": zone_cls} if zone_cls else {}
 
             zone = tcs.get_htg_zone(str(zone_idx), **schema)
+            if zone and valid_devs:
+                # If a TRV (04: device) is bound to the zone, ensure the zone class is radiator_valve
+                has_trv = any(str(d).startswith(f"{DevType.TRV}:") for d in valid_devs)
+                if has_trv and getattr(zone, "_heating_type", None) != "radiator_valve":
+                    with contextlib.suppress(exc.RamsesException):
+                        zone._update_schema(**{SZ_CLASS: "radiator_valve"})
+
             if zone and valid_devs and registry:
                 dev_role = p.get("device_role")
                 z_type_code = p.get("zone_type")
@@ -1061,9 +1070,17 @@ async def _update_topology_schema_state(
         zone_idx = p.get("zone_idx")
         name = p.get("name")
         if zone_idx is not None and name:
-            zone = getattr(tcs, "zone_by_idx", {}).get(str(zone_idx))
+            zone = tcs.get_htg_zone(str(zone_idx))
             if zone:
                 zone.zone_state = dataclasses.replace(zone.zone_state, name=name)
+
+    # Code 0005: System Zones (Zone Mask)
+    elif msg.code == Code._0005 and tcs:
+        for idx, flag in enumerate(p.get(SZ_ZONE_MASK, [])):
+            if flag == 1:
+                z_id = f"{idx:02X}"
+                if z_id not in tcs.zone_by_idx:
+                    tcs.get_htg_zone(z_id)
 
     # 4. Code 0204: Underfloor Heating (UFH) Controller Circuits
     elif str(msg.code) == "0204":
@@ -1156,70 +1173,6 @@ async def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
                 _update_faultlog_state(target, p, msg)
 
 
-def route_payload(gwy: Gateway, msg: Message) -> None:
-    """Determine target entities and deliver the payload to them.
-
-    This is the final stage (Stage 4) of the pipeline. It routes messages to
-    the source device (for internal state updates) and constructs a list of
-    destination devices based on binding offers, eavesdropping rules, and
-    faked device states.
-
-    :param gwy: The gateway handling the message routing.
-    :type gwy: Gateway
-    :param msg: The fully validated message to be dispatched.
-    :type msg: Message
-    """
-    src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
-    if src_dev is not None:
-        with contextlib.suppress(Exception):
-            src_dev._handle_msg(msg)
-
-    devices: list[Any] = []
-
-    if (
-        msg.code == Code._1FC9
-        and isinstance(msg.payload, dict)
-        and msg.payload.get(SZ_PHASE) == SZ_OFFER
-    ):
-        devices = [
-            d
-            for d in gwy.device_registry.devices
-            if d.id != msg.src.id and d._is_binding
-        ]
-
-    elif msg.dst.id == ALL_DEV_ADDR.id:
-        devices = [
-            d for d in gwy.device_registry.devices if d.id != msg.src.id and d.is_faked
-        ]
-
-    else:
-        dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
-        if msg.dst.id != msg.src.id and dst_dev is not None:
-            devices.append(dst_dev)
-
-        src_dev_devices = getattr(src_dev, SZ_DEVICES, None) if src_dev else None
-        if src_dev_devices:
-            for d in src_dev_devices:
-                if d.id != msg.src.id and d not in devices:
-                    devices.append(d)
-
-    # Add Eavesdropping Correlation Routing
-    if (
-        gwy.config.enable_eavesdrop
-        and (addrs := getattr(msg, "_addrs", None)) is not None
-    ):
-        for addr in addrs:
-            if addr.id != msg.src.id and addr.id != getattr(msg.dst, "id", None):
-                if dev := gwy.device_registry.device_by_id.get(addr.id):
-                    if dev not in devices:
-                        devices.append(dev)
-
-    for d in devices:
-        if d.id != msg.src.id:
-            with contextlib.suppress(Exception):
-                d._handle_msg(msg)
-
-
 async def process_msg(gwy: Gateway, msg: Message) -> None:
     """Decode the packet payload and route it through the message pipeline.
 
@@ -1249,8 +1202,6 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
             return
 
         await _cqrs_ingestion_engine(gwy, msg)
-
-        route_payload(gwy, msg)
 
     except (AssertionError, exc.RamsesException, NotImplementedError) as err:
         (_LOGGER.error if _DBG_INCREASE_LOG_LEVELS else _LOGGER.warning)(

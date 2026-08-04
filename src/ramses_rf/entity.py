@@ -30,7 +30,6 @@ if TYPE_CHECKING:
 
     from .devices import Controller
     from .gateway import Gateway
-    from .messages import Message
     from .systems.tcs import Evohome
 
 
@@ -106,13 +105,6 @@ class _Entity:
                 f"{pkt} < Sending now deprecated for {self} "
                 "(consider adjusting device_id filters)"
             )
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Deprecated in Phase 2.5: Entities no longer cache their own packets.
-
-        Routing is handled directly by the Gateway into the central MessageStore.
-        """
-        pass
 
     def apply_state_update(self, event: StateUpdatedEvent) -> None:
         """Replace the internal CQRS read-model state with a new immutable object.

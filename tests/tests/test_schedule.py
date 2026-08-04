@@ -232,7 +232,7 @@ async def test_schedule_handle_msg_version_change() -> None:
     mock_msg.payload = {"change_counter": 2}
 
     # Act
-    sched._handle_msg(mock_msg)
+    sched.process_schedule_msg(mock_msg)
 
     # Assert
     assert sched.state == ScheduleStateEnum.STALE

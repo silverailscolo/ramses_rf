@@ -56,6 +56,8 @@ class RadTopologyHandler(TopologyHandler):
                     continue
 
                 metadata: dict[str, Any] = {}
+                if getattr(msg.src, "type", None) in ("04", "08", DevType.TRV):
+                    metadata["class"] = "radiator_valve"
 
                 # Determine Device Role (Fallback to hardware prefix inference)
                 is_actuator = getattr(msg.src, "type", None) in ("04", "08", "13", "02")

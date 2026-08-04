@@ -1,6 +1,5 @@
 import asyncio
 import dataclasses
-import logging
 from dataclasses import replace
 from datetime import datetime as dt
 from typing import Any, Final
@@ -11,7 +10,11 @@ import pytest
 from ramses_rf import Gateway
 from ramses_rf.const import FC, I_, SZ_DOMAIN_ID, SZ_SYSTEM_MODE, Code
 from ramses_rf.devices import BdrSwitch, Controller, DhwSensor, TrvActuator
-from ramses_rf.dispatcher import _update_system_state
+from ramses_rf.dispatcher import (
+    _resolve_logical_targets,
+    _update_demand_state,
+    _update_system_state,
+)
 from ramses_rf.exceptions import SchemaInconsistentError, SystemSchemaInconsistent
 from ramses_rf.messages import Message
 from ramses_rf.pipeline.polling import DEFAULT_POLLING_SCHEDULES
@@ -65,12 +68,12 @@ def create_mock_message(tcs: SystemBase, payload: Any) -> MagicMock:
     mock_msg.verb = I_
     mock_msg.src = MagicMock()
     mock_msg.src.id = tcs.id  # Match TCS ID so it is accepted
+    mock_msg.dst = MagicMock()
+    mock_msg.dst.id = tcs.id
     mock_msg.payload = payload
 
-    # Mock the internal packet structure required by Entity._handle_msg logging
+    # Mock the internal packet structure required by Entity logging
     mock_msg._pkt = MagicMock()
-    # Unique context key for caching: (timestamp, addr, ...)
-    # Just needs to be hashable
     mock_msg._pkt._ctx = f"{dt.now().isoformat()}_{tcs.id}"
 
     return mock_msg
@@ -112,17 +115,16 @@ async def test_system_handle_msg_3150_force_list(fake_evofw3: Gateway) -> None:
     assert tcs is not None  # Ensure TCS exists for Mypy
 
     # Construct a List-based payload (New/Hybrid Style)
-    # The parser might return[ {domain: FC, demand: 0.5}, ... ]
     payload = [{SZ_DOMAIN_ID: FC, "heat_demand": 0.5}]
 
     if not isinstance(tcs, SystemBase):
         pytest.fail("TCS is not an instance of SystemBase")
 
-    msg = create_mock_message(tcs, payload)
-    tcs._handle_msg(msg)
+    msg = create_mock_message(tcs, payload[0])
+    _update_demand_state(tcs, payload[0], msg)
 
-    # We verify if it actually extracted the value
-    assert tcs._heat_demand == payload[0]
+    # We verify if it actually extracted the value into demand_state
+    assert tcs.demand_state.heat_demand == 0.5
 
 
 @pytest.mark.asyncio
@@ -147,9 +149,9 @@ async def test_system_handle_msg_3150_force_dict(fake_evofw3: Gateway) -> None:
         pytest.fail("TCS is not an instance of SystemBase")
 
     msg = create_mock_message(tcs, payload)
-    tcs._handle_msg(msg)
+    _update_demand_state(tcs, payload, msg)
 
-    assert tcs._heat_demand == payload
+    assert tcs.demand_state.heat_demand == 0.5
 
 
 @pytest.mark.asyncio
@@ -164,12 +166,11 @@ async def test_system_handle_msg_3150_list_no_match(
     tcs = gwy.tcs
     assert tcs is not None
 
-    tcs._heat_demand = None
     payload = [{"domain_id": "FA", "heat_demand": 0.5}]
-    msg = create_mock_message(tcs, payload)
+    msg = create_mock_message(tcs, payload[0])
 
-    tcs._handle_msg(msg)
-    assert tcs._heat_demand is None
+    targets = _resolve_logical_targets(gwy, msg, payload[0])
+    assert tcs not in targets
 
 
 @pytest.mark.asyncio
@@ -184,33 +185,11 @@ async def test_system_handle_msg_3150_dict_no_match(
     tcs = gwy.tcs
     assert tcs is not None
 
-    tcs._heat_demand = None
     payload = {"domain_id": "F9", "heat_demand": 0.5}
     msg = create_mock_message(tcs, payload)
 
-    tcs._handle_msg(msg)
-    assert tcs._heat_demand is None
-
-
-@pytest.mark.asyncio
-async def test_system_handle_msg_3150_invalid_type(
-    fake_evofw3: Gateway, caplog: pytest.LogCaptureFixture
-) -> None:
-    """Verify unexpected payload types are logged as warnings."""
-    gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
-    await asyncio.sleep(0)
-    tcs = gwy.tcs
-    assert tcs is not None
-
-    payload = "unexpected_string"
-    msg = create_mock_message(tcs, payload)
-
-    with caplog.at_level(logging.WARNING):
-        tcs._handle_msg(msg)
-
-    assert "Unexpected payload type" in caplog.text
+    targets = _resolve_logical_targets(gwy, msg, payload)
+    assert tcs not in targets
 
 
 @pytest.mark.asyncio

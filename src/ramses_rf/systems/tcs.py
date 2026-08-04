@@ -12,21 +12,15 @@ from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
 from ramses_rf.const import (
-    DEV_ROLE_MAP,
     SYS_MODE_MAP,
     SZ_ACTUATORS,
     SZ_CHANGE_COUNTER,
     SZ_DATETIME,
     SZ_DEVICES,
-    SZ_DOMAIN_ID,
     SZ_LANGUAGE,
     SZ_SENSOR,
     SZ_SYSTEM_MODE,
-    SZ_ZONE_IDX,
-    SZ_ZONE_MASK,
-    SZ_ZONE_TYPE,
     SZ_ZONES,
-    ZON_ROLE_MAP,
     DevType,
 )
 from ramses_rf.devices import BdrSwitch, Controller, Device, OtbGateway, UfhController
@@ -147,12 +141,12 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         self._child_id = FF  # NOTE: domain_id
 
         self._app_cntrl: BdrSwitch | OtbGateway | None = None
-        self._heat_demand: dict[str, Any] | None = None
 
         self.system_state = SystemState()
         self.demand_state = DemandState()
 
     def __repr__(self) -> str:
+        """Return the string representation of the system."""
         return f"{self.ctl.id} ({self._SLUG})"
 
     @property
@@ -254,27 +248,6 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         }
 
         return result  # TODO: check against vol schema
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle incoming messages routed to the base system."""
-
-        super()._handle_msg(msg)
-
-        if msg.code == Code._3150 and msg.verb in (I_, RP):
-            # 3150 payload can be a dict (old) or list (new, multi-zone)
-            if isinstance(msg.payload, list):
-                if payload := next(
-                    (d for d in msg.payload if d.get(SZ_DOMAIN_ID) == FC), None
-                ):
-                    self._heat_demand = payload
-            elif isinstance(msg.payload, dict):
-                if msg.payload.get(SZ_DOMAIN_ID) == FC:
-                    self._heat_demand = msg.payload
-            else:
-                _LOGGER.warning(
-                    f"{msg!r} < Unexpected payload type for {msg.code}: "
-                    f"{type(msg.payload)} (expected list/dict)"
-                )
 
     async def params(self) -> dict[str, Any]:
         """Return the system's configuration.
@@ -924,64 +897,6 @@ class Evohome(ScheduleSync, Language, SystemMode, MultiZone, UfHeating, System):
     _SLUG: str = SYS_KLASS.TCS  # evohome
 
     # older evohome don't have zone_type=ELE
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Process any relevant message and route to system zones."""
-
-        def handle_msg_by_zone_idx(zone_idx: str, msg: Message) -> None:
-            if zone := self.zone_by_idx.get(zone_idx):
-                zone._handle_msg(msg)
-
-        super()._handle_msg(msg)
-
-        if msg.code not in (
-            Code._0005,
-            Code._000A,
-            Code._2309,
-            Code._30C9,
-        ) and (
-            SZ_ZONE_IDX not in msg.payload
-        ):  # 0004,0008,0009,000C,0404,12B0,2349,3150
-            return
-
-        # TODO: a I/0005 may have changed: del or add zones
-        if msg.code == Code._0005:
-            if (zone_type := msg.payload.get(SZ_ZONE_TYPE)) in ZON_ROLE_MAP.HEAT_ZONES:
-                [
-                    self.get_htg_zone(
-                        f"{idx:02X}", **{SZ_CLASS: ZON_ROLE_MAP[zone_type]}
-                    )
-                    for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, []))
-                    if flag == 1
-                ]
-            elif zone_type in DEV_ROLE_MAP.HEAT_DEVICES:
-                [
-                    self.get_htg_zone(f"{idx:02X}", msg=msg)
-                    for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, []))
-                    if flag == 1
-                ]
-            return
-
-        # TODO: a I/000C may have changed: del or add devices
-        if msg.code == Code._000C:
-            if msg.payload.get(SZ_ZONE_TYPE) not in DEV_ROLE_MAP.HEAT_DEVICES:
-                return
-            zone_idx = msg.payload.get(SZ_ZONE_IDX)
-            if msg.payload.get(SZ_DEVICES):
-                self.get_htg_zone(zone_idx, msg=msg)
-            elif zon := self.zone_by_idx.get(zone_idx):
-                zon._handle_msg(msg)  # tell existing zone: no device
-            return
-
-        # Route all messages to their zones, incl. 000C, 0404, others
-        if isinstance(msg.payload, dict):
-            if zone_idx := msg.payload.get(SZ_ZONE_IDX):
-                handle_msg_by_zone_idx(zone_idx, msg)
-
-        elif isinstance(msg.payload, list) and len(msg.payload):
-            if isinstance(msg.payload[0], dict):  # e.g. 1FC9 is a list of lists:
-                for z_dict in msg.payload:
-                    handle_msg_by_zone_idx(z_dict.get(SZ_ZONE_IDX), msg)
 
 
 class Chronotherm(Evohome):

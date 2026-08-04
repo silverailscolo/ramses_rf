@@ -481,7 +481,7 @@ class Zone(ZoneSchedule):
                     f"Not a known zone class (for {self}): {zone_type}"
                 )
 
-            current_slug = self._SLUG or self._heating_type
+            current_slug = self._SLUG
             if current_slug is not None and klass != current_slug:
                 raise exc.SystemSchemaInconsistent(
                     f"{self} changed zone class: from {current_slug} to {klass}"
