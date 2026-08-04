@@ -47,6 +47,7 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Child, Parent
 from ramses_rf.typing import DeviceIdT, DevIndexT, InnerScheduleT, OuterScheduleT
+from ramses_tx.const import DevType
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import PayDictT
 
@@ -499,12 +500,32 @@ class Zone(ZoneSchedule):
         if klass := schema.get(SZ_CLASS):
             set_zone_type(ZON_ROLE_MAP[klass])
 
+        # Controller devices (CTL=01:, UFC=02:, HGI=18:) should not be
+        # bound as zone sensors or actuators.  However, a faked device
+        # may have a controller-class address prefix (e.g. 01:150003)
+        # while being explicitly classed as a sensor (e.g. THM) in the
+        # known_list.  Check the known_list class first; if the device
+        # is not in the known_list, fall back to the address prefix
+        # check so that eavesdropped CTL/UFC/HGI devices are still
+        # filtered out.
+        _controller_classes = frozenset(
+            {
+                DevType.CTL,
+                DevType.UFC,
+                DevType.HGI,
+            }
+        )
+        _controller_prefixes = ("01:", "02:", "18:")
+
         if sensor_id := schema.get(SZ_SENSOR):
-            if (
-                not str(sensor_id).startswith("01:")
-                and not str(sensor_id).startswith("02:")
-                and not str(sensor_id).startswith("18:")
-            ):
+            sensor_kl = self._gwy.config.known_list.get(str(sensor_id), {})
+            sensor_cls = sensor_kl.get(SZ_CLASS)
+            is_ctrl = (
+                sensor_cls in _controller_classes
+                if sensor_cls is not None
+                else str(sensor_id).startswith(_controller_prefixes)
+            )
+            if not is_ctrl:
                 try:
                     self._sensor = self._gwy.device_registry.get_device(
                         sensor_id, parent=self, is_sensor=True
@@ -519,11 +540,14 @@ class Zone(ZoneSchedule):
                     )
 
         for act_id in schema.get(SZ_ACTUATORS, []):
-            if (
-                str(act_id).startswith("01:")
-                or str(act_id).startswith("02:")
-                or str(act_id).startswith("18:")
-            ):
+            act_kl = self._gwy.config.known_list.get(str(act_id), {})
+            act_cls = act_kl.get(SZ_CLASS)
+            is_ctrl = (
+                act_cls in _controller_classes
+                if act_cls is not None
+                else str(act_id).startswith(_controller_prefixes)
+            )
+            if is_ctrl:
                 continue
             try:
                 self._gwy.device_registry.get_device(act_id, parent=self)
