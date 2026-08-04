@@ -27,7 +27,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from . import exceptions as exc
-from .const import F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR
+from .const import F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR, DevType
 from .schemas import SZ_CIRCUITS
 
 
@@ -135,7 +135,8 @@ class Parent:
                 if (
                     existing_sensor
                     and getattr(existing_sensor, "id", None) != child.id
-                    and not str(getattr(existing_sensor, "id", "")).startswith("01:")
+                    and getattr(existing_sensor, "type", None)
+                    not in ("01", DevType.CTL)
                 ):
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed zone sensor (from {existing_sensor} to {child})"

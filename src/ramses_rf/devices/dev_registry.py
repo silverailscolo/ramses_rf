@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import DEV_TYPE_MAP, FA, FC, SZ_DEVICES
+from ramses_rf.const import DEV_TYPE_MAP, FA, FC, SZ_DEVICES, DevType
 from ramses_rf.devices.dev_base import DeviceHeat, DeviceHvac, Fakeable
 from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
@@ -200,8 +200,16 @@ class DeviceRegistry:
             # If the event lacks a sensor flag, we must flag dedicated hardware
             # sensors before passing to the legacy graph so it doesn't crash.
             if is_sensor is None and event.child_id:
-                child_type = event.child_id[:2]
-                if child_type in ("00", "03", "12", "22", "34"):
+                child_type = Address(event.child_id).type
+                if child_type in (
+                    "00",
+                    "03",
+                    "12",
+                    "22",
+                    "34",
+                    DevType.THM,
+                    DevType.HCW,
+                ):
                     is_sensor = True
 
             # Route the binding back through get_device to ensure full
@@ -235,8 +243,15 @@ class DeviceRegistry:
                 cqrs_ufcs: set[str] = getattr(self, "_cqrs_ufcs", set())
                 cqrs_sensors: dict[str, str] = getattr(self, "_cqrs_sensors", {})
 
-                dev_type = child_dev.id[:2] if hasattr(child_dev, "id") else None
-                is_actuator_hw = dev_type in ("04", "13", "02")
+                dev_type = getattr(child_dev, "type", None)
+                is_actuator_hw = dev_type in (
+                    "04",
+                    "13",
+                    "02",
+                    DevType.TRV,
+                    DevType.BDR,
+                    DevType.UFC,
+                )
 
                 is_explicit_sensor = device_role == "sensor" or is_sensor is True
                 is_explicit_actuator = device_role == "actuator"

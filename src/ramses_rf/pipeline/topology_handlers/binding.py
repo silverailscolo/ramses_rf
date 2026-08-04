@@ -14,6 +14,7 @@ from ramses_rf.const import (
     W_,
     ZON_ROLE_MAP,
     Code,
+    DevType,
 )
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
@@ -89,7 +90,7 @@ class BindTopologyHandler(TopologyHandler):
             return
 
         # Always trigger controller creation if source or destination is a controller
-        if msg.src.id.startswith("01:"):
+        if getattr(msg.src, "type", None) in ("01", DevType.CTL):
             self._emit(
                 TopologyChangedEvent(
                     action=TopologyAction.CREATE_CONTROLLER,
@@ -98,7 +99,7 @@ class BindTopologyHandler(TopologyHandler):
                 )
             )
 
-        if msg.dst.id.startswith("01:"):
+        if getattr(msg.dst, "type", None) in ("01", DevType.CTL):
             self._emit(
                 TopologyChangedEvent(
                     action=TopologyAction.CREATE_CONTROLLER,
@@ -113,7 +114,9 @@ class BindTopologyHandler(TopologyHandler):
             opcode_hex = chunk[2:6]
             bound_dev_id = hex_id_to_dev_id(chunk[6:12])
 
-            if bound_dev_id.startswith("01:"):
+            if bound_dev_id.startswith(f"{DevType.CTL}:") or bound_dev_id.startswith(
+                "01:"
+            ):
                 self._emit(
                     TopologyChangedEvent(
                         action=TopologyAction.CREATE_CONTROLLER,
@@ -206,9 +209,9 @@ class BindTopologyHandler(TopologyHandler):
                     event_meta["child_id"] = str(zone_idx)
                     for child_id in devices:
                         if (
-                            child_id.startswith("01:")
-                            or child_id.startswith("02:")
-                            or child_id.startswith("18:")
+                            child_id.startswith(f"{DevType.CTL}:")
+                            or child_id.startswith(f"{DevType.UFC}:")
+                            or child_id.startswith(f"{DevType.HGI}:")
                             or child_id.startswith("63:")
                         ):
                             continue

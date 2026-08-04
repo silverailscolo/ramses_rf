@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ramses_rf.const import DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -33,7 +34,10 @@ class HvacTopologyHandler(TopologyHandler):
                 break
 
         if dev_class:
-            if msg.src.id != "--:------" and getattr(msg.src, "type", None) != "01":
+            if msg.src.id != "--:------" and getattr(msg.src, "type", None) not in (
+                "01",
+                DevType.CTL,
+            ):
                 self._emit(
                     TopologyChangedEvent(
                         action=TopologyAction.UPDATE_DEVICE_CLASS,
@@ -46,7 +50,7 @@ class HvacTopologyHandler(TopologyHandler):
             if (
                 msg.dst.id != "--:------"
                 and msg.dst.id != msg.src.id
-                and getattr(msg.dst, "type", None) != "01"
+                and getattr(msg.dst, "type", None) not in ("01", DevType.CTL)
             ):
                 self._emit(
                     TopologyChangedEvent(

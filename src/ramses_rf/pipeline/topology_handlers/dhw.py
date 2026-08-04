@@ -21,10 +21,9 @@ class DhwTopologyHandler(TopologyHandler):
         if not self._enable_eavesdrop:
             return
 
-        if (
-            msg.header.code in (Code._1260, Code._10A0)
-            and getattr(msg.src, "type", None) == "07"
-        ):
+        if msg.header.code in (Code._1260, Code._10A0) and getattr(
+            msg.src, "type", None
+        ) in ("07", DevType.DHW):
             event = TopologyChangedEvent(
                 action=TopologyAction.UPDATE_DEVICE_CLASS,
                 device_id=msg.src.id,

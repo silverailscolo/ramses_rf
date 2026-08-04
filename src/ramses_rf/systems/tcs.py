@@ -27,6 +27,7 @@ from ramses_rf.const import (
     SZ_ZONE_TYPE,
     SZ_ZONES,
     ZON_ROLE_MAP,
+    DevType,
 )
 from ramses_rf.devices import BdrSwitch, Controller, Device, OtbGateway, UfhController
 from ramses_rf.entity import Entity, class_by_attr
@@ -218,20 +219,27 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         result: dict[str, Any] = {}
 
         try:
-            if schema[SZ_SYSTEM][SZ_APPLIANCE_CONTROL][:2] == DEV_TYPE_MAP.OTB:  # DEX
-                result[SZ_SYSTEM] = {
-                    SZ_APPLIANCE_CONTROL: schema[SZ_SYSTEM][SZ_APPLIANCE_CONTROL]
-                }
+            app_cntrl = schema[SZ_SYSTEM][SZ_APPLIANCE_CONTROL]
+            if app_cntrl and Address(app_cntrl).type in (
+                DEV_TYPE_MAP.OTB,
+                DevType.OTB,
+            ):  # DEX
+                result[SZ_SYSTEM] = {SZ_APPLIANCE_CONTROL: app_cntrl}
         except (IndexError, TypeError):
             result[SZ_SYSTEM] = {SZ_APPLIANCE_CONTROL: None}
 
         zones = {}
         for idx, zone in schema[SZ_ZONES].items():
             _zone = {}
-            if zone[SZ_SENSOR] and zone[SZ_SENSOR][:2] == DEV_TYPE_MAP.CTL:  # DEX
+            if zone[SZ_SENSOR] and Address(zone[SZ_SENSOR]).type in (
+                DEV_TYPE_MAP.CTL,
+                DevType.CTL,
+            ):  # DEX
                 _zone = {SZ_SENSOR: zone[SZ_SENSOR]}
             if devices := [
-                d for d in zone[SZ_ACTUATORS] if d[:2] == DEV_TYPE_MAP.TRV
+                d
+                for d in zone[SZ_ACTUATORS]
+                if Address(d).type in (DEV_TYPE_MAP.TRV, DevType.TRV)
             ]:  # DEX
                 _zone.update({SZ_ACTUATORS: devices})
             if _zone:
