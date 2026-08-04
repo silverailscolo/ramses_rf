@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ramses_rf.const import I_, SZ_DOMAIN_ID, SZ_ZONE_IDX, ZON_ROLE_MAP, Code, DevType
+from ramses_rf.const import I_, SZ_DOMAIN_ID, SZ_ZONE_IDX, Code, DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -22,7 +22,6 @@ class RadTopologyHandler(TopologyHandler):
         """
         self._evaluate_directed_telemetry_rules(msg)
         self._evaluate_heating_prefix_rules(msg)
-        self._evaluate_zone_type_eavesdrop_rules(msg)
         self._evaluate_eavesdrop_rules(msg)
 
     def _evaluate_directed_telemetry_rules(self, msg: Message) -> None:
@@ -142,55 +141,6 @@ class RadTopologyHandler(TopologyHandler):
                         causation="Rule_Heating_Prefix_Heuristic",
                     )
                 )
-
-    def _evaluate_zone_type_eavesdrop_rules(self, msg: Message) -> None:
-        """Evaluate legacy passive promotion of zone classes.
-
-        # TODO: PARITY FLAW - This replicates `eavesdrop_zone_type` from `zones.py`.
-        """
-        if not self._enable_eavesdrop:
-            return
-
-        for p in self._get_payloads(msg):
-            if not isinstance(p, dict):
-                continue
-
-            zone_idx = p.get(SZ_ZONE_IDX)
-            if zone_idx is None:
-                continue
-
-            zone_class: str | None = None
-
-            # 0008/0009 packets denote Electric or Valve configurations
-            if msg.header.code in (Code._0008, Code._0009):
-                zone_class = ZON_ROLE_MAP["ELE"]
-
-            # The following Implicit Zone Class Inference block for 3150 was removed to maintain parity with legacy code
-
-            if zone_class is not None:
-                # We emit an UPDATE_TRAITS action targeting the controller,
-                # passing the deduced zone_class as metadata for the projection.
-                # 3150/0008 are directed to the Controller (01).
-                ctl_id = None
-                if getattr(msg.dst, "type", None) == "01":
-                    ctl_id = msg.dst.id
-                elif getattr(msg.src, "type", None) == "01":
-                    ctl_id = msg.src.id
-                elif getattr(msg.addr3, "type", None) == "01":
-                    ctl_id = msg.addr3.id
-
-                if ctl_id is not None:
-                    self._emit(
-                        TopologyChangedEvent(
-                            action=TopologyAction.UPDATE_TRAITS,
-                            device_id=ctl_id,  # The Controller
-                            metadata={
-                                "zone_idx": str(zone_idx),
-                                "class": zone_class,
-                            },
-                            causation="Rule_Legacy_Zone_Type_Eavesdrop",
-                        )
-                    )
 
     def _evaluate_eavesdrop_rules(self, msg: Message) -> None:
         """Evaluate broadcast telemetry for heuristic sensor correlation."""

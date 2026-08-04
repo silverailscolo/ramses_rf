@@ -39,7 +39,6 @@ class BindTopologyHandler(TopologyHandler):
         self._evaluate_rf_bind_rules(msg)
         self._evaluate_zone_binding_rules(msg)
         self._evaluate_appliance_control_sync_rules(msg)
-        self._evaluate_appliance_eavesdrop_rules(msg)
         self._evaluate_implicit_binding_rules(msg)
         self._evaluate_third_address_broadcast_rules(msg)
 
@@ -264,50 +263,6 @@ class BindTopologyHandler(TopologyHandler):
                         causation="Rule_Direct_Relay_Sync",
                     )
                 )
-
-    def _evaluate_appliance_eavesdrop_rules(self, msg: Message) -> None:
-        """Evaluate legacy passive eavesdropping of System Relay.
-
-        # TODO: PARITY FLAW - This replicates legacy `eavesdrop_appliance_control`.
-        """
-        if not self._enable_eavesdrop:
-            return
-
-        if msg.header.code not in (Code._3220, Code._3B00, Code._3EF0):
-            return
-
-        app_cntrl_id: DeviceIdT | None = None
-
-        if msg.header.code == Code._3220 and msg.header.verb == RQ:
-            if (
-                getattr(msg.src, "type", None) == "01"
-                and msg.dst.id != "--:------"
-                and getattr(msg.dst, "type", None) == "10"
-            ):
-                app_cntrl_id = msg.dst.id
-
-        elif msg.header.code == Code._3EF0 and msg.header.verb == RQ:
-            if (
-                getattr(msg.src, "type", None) == "01"
-                and msg.dst.id != "--:------"
-                and getattr(msg.dst, "type", None) in ("10", "13")
-            ):
-                app_cntrl_id = msg.dst.id
-
-        if app_cntrl_id is not None:
-            self._emit(
-                TopologyChangedEvent(
-                    action=TopologyAction.BIND_DEVICE,
-                    parent_id=msg.src.id,  # Assume src is the Controller
-                    child_id=app_cntrl_id,
-                    metadata={
-                        "domain_id": "FC",
-                        "child_id": "FC",
-                        "device_role": "appliance_control",
-                    },
-                    causation="Rule_Legacy_Appliance_Eavesdrop",
-                )
-            )
 
     def _evaluate_implicit_binding_rules(self, msg: Message) -> None:
         """Evaluate implicit bindings from directed controller polls.
