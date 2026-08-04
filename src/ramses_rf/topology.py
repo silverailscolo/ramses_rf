@@ -345,12 +345,36 @@ class Child:
             child_id = child_id or getattr(parent, "idx", None)
 
         if self._parent and self._parent != parent:
-            err_msg = (
-                f"{self} can't change parent "
-                f"({self._parent}_{self._child_id} to {parent}_{child_id})"
-            )
-            _TRACE.error("PARENT CHANGE EXCEPTION: %s", err_msg)
-            raise exc.SystemSchemaInconsistent(err_msg)
+            prev_parent_class = self._parent.__class__.__name__
+            if prev_parent_class in ("System", "Evohome") and parent_class not in (
+                "System",
+                "Evohome",
+            ):
+                _TRACE.info(
+                    "PARENT PROMOTION: %s promoted parent from %s to %s",
+                    self,
+                    prev_parent_class,
+                    parent_class,
+                )
+                dev_id = getattr(self, "id", None)
+                if (
+                    hasattr(self._parent, "actuators")
+                    and self in self._parent.actuators
+                ):
+                    self._parent.actuators.remove(self)
+                if (
+                    hasattr(self._parent, "actuator_by_id")
+                    and dev_id is not None
+                    and dev_id in self._parent.actuator_by_id
+                ):
+                    del self._parent.actuator_by_id[dev_id]
+            else:
+                err_msg = (
+                    f"{self} can't change parent "
+                    f"({self._parent}_{self._child_id} to {parent}_{child_id})"
+                )
+                _TRACE.error("PARENT CHANGE EXCEPTION: %s", err_msg)
+                raise exc.SystemSchemaInconsistent(err_msg)
 
         PARENT_RULES: dict[str, dict[str, tuple[str, ...]]] = {
             "DhwZone": {SZ_ACTUATORS: ("BdrSwitch",), SZ_SENSOR: ("DhwSensor",)},
