@@ -17,6 +17,7 @@ from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
     DeviceNotFaked,
     DeviceNotFoundError,
+    RamsesException,
     SchemaInconsistentError,
     SystemSchemaInconsistent,
 )
@@ -185,9 +186,13 @@ class DeviceRegistry:
             if (
                 zone
                 and hasattr(zone, "_update_schema")
-                and getattr(zone, "_heating_type", None) is None
+                and (
+                    getattr(zone, "_heating_type", None) is None
+                    or getattr(zone, "_SLUG", None) is None
+                )
             ):
-                zone._update_schema(**{"class": metadata["class"]})
+                with contextlib.suppress(RamsesException):
+                    zone._update_schema(**{"class": metadata["class"]})
 
         if parent:
             # Safely extract is_sensor without coercing None to False,

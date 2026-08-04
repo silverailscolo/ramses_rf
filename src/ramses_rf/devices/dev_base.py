@@ -213,11 +213,6 @@ class DeviceBase(Entity):
 
         return super()._send_cmd(cmd, **kwargs)
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle an incoming message and update the last seen timestamp."""
-        super()._handle_msg(msg)
-        self._last_msg_dtm = getattr(msg, "dtm", None)
-
     async def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered (excludes
         battery-backup).
@@ -469,16 +464,6 @@ class Fakeable(DeviceBase):
             self._binding_manager.sent_cmd(cmd)  # other codes needed for edge cases
 
         return await super()._async_send_cmd(cmd, priority=priority, qos=qos)
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle an incoming message and forward to the binding context."""
-        super()._handle_msg(msg)
-
-        if self._binding_manager and self._binding_manager.is_binding:
-            # msg.code in (Code._1FC9, Code._10E0)
-            self._binding_manager.rcvd_msg(
-                msg
-            )  # maybe other codes needed for edge cases
 
     async def _wait_for_binding_request(
         self,

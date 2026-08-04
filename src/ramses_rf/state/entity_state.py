@@ -643,10 +643,6 @@ class EntityState:
 
         return cache
 
-    def _handle_msg(self, msg: ApplicationMessage) -> None:
-        """Deprecated: The proxy no longer caches its own packets."""
-        pass
-
     async def traits(self) -> dict[str, Any]:
         """Get the codes seen by the entity."""
         msgs_dict = await self.get_message_log_flat()

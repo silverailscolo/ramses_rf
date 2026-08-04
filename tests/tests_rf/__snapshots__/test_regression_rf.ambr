@@ -6773,13 +6773,6 @@
             'class': None,
             'sensor': None,
           }),
-          '09': dict({
-            '_name': None,
-            'actuators': list([
-            ]),
-            'class': None,
-            'sensor': None,
-          }),
           '0A': dict({
             '_name': 'Office',
             'actuators': list([
@@ -7139,6 +7132,13 @@
         'underfloor_heating': dict({
         }),
         'zones': dict({
+          '06': dict({
+            '_name': 'Hall',
+            'actuators': list([
+            ]),
+            'class': None,
+            'sensor': None,
+          }),
         }),
       }),
       '01:223036': dict({
@@ -7324,13 +7324,6 @@
           'actuators': list([
           ]),
           'name': 'Test Rad Valve',
-          'sensor': None,
-          'type': 'Zone',
-        }),
-        '09': dict({
-          'actuators': list([
-          ]),
-          'name': None,
           'sensor': None,
           'type': 'Zone',
         }),

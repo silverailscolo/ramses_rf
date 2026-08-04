@@ -5,18 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_rf.const import (
-    FA,
-    SZ_HEAT_DEMAND,
-    SZ_RELAY_DEMAND,
-    SZ_UFH_IDX,
-    SZ_ZONE_IDX,
-    SZ_ZONE_MASK,
-    SZ_ZONE_TYPE,
-    ZON_ROLE_MAP,
-    Code,
-    DevType,
-)
+from ramses_rf.const import FA, SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
 from ramses_rf.entity import Entity
 from ramses_rf.helpers import shrink
 from ramses_rf.models import DeviceTraits
@@ -50,13 +39,6 @@ class Controller(DeviceHeat):  # CTL (01):
 
         self.tcs: Evohome | None = None  # TODO: = self?
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Process incoming message and delegate to TCS read-model."""
-        super()._handle_msg(msg)
-
-        if self.tcs:
-            self.tcs._handle_msg(msg)
 
     def _make_tcs_controller(
         self, *, msg: Message | None = None, **schema: Any
@@ -136,54 +118,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     def _init_ufh_state(self) -> None:
         """Initialize UFH-specific instance attributes (idempotent)."""
         self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle incoming UFH circuit and zone mapping messages.
-
-        Reverse-engineered packet protocols for UFH controllers:
-        - 0005 (system_zones): Zone masks (e.g. {'zone_type': '09', 'zone_mask': [1,1,1,1,1,0,0,0]})
-        - 0008 (relay_demand): Domain FC (boiler) or FA (UFH demand), ingested by entity_state.
-        - 000C (zone_devices): Circuit-to-zone mappings. Active RQ polling is offloaded to
-          discovery_scan.py to preserve read-only log replay compatibility.
-        - 22C9 (setpoint_bounds): Min/max temp bounds, decoded by payload pipeline into zone_state.
-        - 3150 (heat_demands): Circuit array, FC, or zone demands, routed by Central Dispatcher
-          directly to Zone / TCS read-models.
-        """
-        super()._handle_msg(msg)
-
-        # Several assumptions are made regarding 000C pkts:
-        # - UFC bound only to CTL (not, e.g. SEN)
-        # - all circuits bound to the same controller
-
-        if msg.code == Code._0005:  # system_zones
-            # {'zone_type': '09', 'zone_mask':[1, 1, 1, 1, 1, 0, 0, 0], 'zone_class': 'underfloor_heating'}
-
-            if msg.payload.get(SZ_ZONE_TYPE) not in (
-                ZON_ROLE_MAP.ACT,
-                ZON_ROLE_MAP.UFH,
-            ):
-                return  # ignoring ZON_ROLE_MAP.SEN for now
-
-            for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, [])):
-                ufh_idx = f"{idx:02X}"
-                if not flag:
-                    self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: None}
-
-        elif msg.code == Code._000C:  # zone_devices
-            # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices':['01:095421']}
-            # {'zone_type': '09', 'ufh_idx': '07', 'zone_idx': None, 'device_role': 'ufh_actuator', 'devices':[]}
-
-            if msg.payload.get(SZ_ZONE_TYPE) not in (
-                ZON_ROLE_MAP.ACT,
-                ZON_ROLE_MAP.UFH,
-            ):
-                return  # ignoring ZON_ROLE_MAP.SEN for now
-
-            ufh_idx = msg.payload.get(SZ_UFH_IDX)  # circuit idx
-            if ufh_idx is None:
-                return
-            # Read-Model Update ONLY. No `self.set_parent()` graph mutation here.
-            self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: msg.payload.get(SZ_ZONE_IDX)}
 
     # TODO: should be a private method
     def get_circuit(
