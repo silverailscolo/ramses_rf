@@ -166,7 +166,6 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         # Instantiate the new asynchronous Topology Builder engine
         self._topology_builder = TopologyBuilder(
             emit_event_cb=self._device_registry.handle_topology_event,
-            enable_eavesdrop=self._gwy_config.enable_eavesdrop,
         )
 
         self._message_store: MessageStoreInterface | None = None
