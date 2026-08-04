@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from ramses_tx.address import HGI_DEV_ADDR
 
-from . import exceptions as exc
+from . import exceptions as exc, quirks
 from .const import (
     DEV_TYPE_MAP,
     DONT_CREATE_ENTITIES,
@@ -84,6 +84,7 @@ from .protocol.ramses import (
     CODES_OF_HVAC_DOMAIN_ONLY,
 )
 from .schemas import SZ_CLASS
+from .systems.faultlog import FaultLogEntry
 from .systems.zones import DhwZone
 
 if TYPE_CHECKING:
@@ -236,7 +237,7 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
             # for systems that don't enforce the known_list.
             if (
                 gwy.config.engine.enforce_known_list
-                and msg.src.id[:2] == "18"
+                and getattr(msg.src, "type", None) in ("18", DevType.HGI)
                 and msg.src.id != HGI_DEV_ADDR.id
                 and msg.src.id != hgi_id
             ):
@@ -407,7 +408,7 @@ def _resolve_logical_targets(
                 break
 
     # 1. Fault logs strictly target the TCS (if it exists) or the source device
-    if msg.code == "0418":
+    if msg.code == Code._0418:
         if tcs:
             targets.append(getattr(tcs, "faultlog", src_dev))
         elif src_dev:
@@ -472,7 +473,7 @@ def _resolve_logical_targets(
 def _update_temperature_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     """Translate temperature data into a frozen StateUpdatedEvent."""
     temp_state = getattr(target, "temp_state", None)
-    if temp_state is None:
+    if temp_state is None or not dataclasses.is_dataclass(temp_state):
         return
 
     updates: dict[str, Any] = {}
@@ -508,7 +509,7 @@ def _update_temperature_state(target: Any, p: dict[str, Any], msg: Message) -> N
 def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     """Translate demand data into a frozen StateUpdatedEvent."""
     demand_state = getattr(target, "demand_state", None)
-    if demand_state is None:
+    if demand_state is None or not dataclasses.is_dataclass(demand_state):
         return
 
     updates: dict[str, Any] = {}
@@ -548,7 +549,7 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
     :return: None
     :rtype: None
     """
-    if msg.code != "0418" or getattr(target, "state", None) is None:
+    if msg.code != Code._0418 or getattr(target, "state", None) is None:
         return
     if type(target.state).__name__ != "FaultLogState":
         return
@@ -556,10 +557,6 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
     # Guard: Ensure the entry index exists in the parsed payload
     if "log_idx" not in p:
         return
-
-    # Deferred import to prevent circular dependency at module load time
-    # DO NOT MOVE to module level.
-    from ramses_rf.systems.faultlog import FaultLogEntry
 
     try:
         entry = FaultLogEntry.from_msg(msg)
@@ -592,7 +589,7 @@ def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     :param msg: The immutable Message L7 envelope.
     """
     system_state = getattr(target, "system_state", None)
-    if system_state is None:
+    if system_state is None or not dataclasses.is_dataclass(system_state):
         return
 
     updates: dict[str, Any] = {}
@@ -642,12 +639,8 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         return
 
     hvac_state = getattr(target, "hvac_state", None)
-    if hvac_state is None:
+    if hvac_state is None or not dataclasses.is_dataclass(hvac_state):
         return
-
-    # Deferred import to prevent circular dependency at module load time
-    # DO NOT MOVE to module level.
-    from ramses_rf import quirks
 
     p = quirks.apply_hvac_quirks(p, target.hvac_state, msg.code)
 
@@ -749,6 +742,9 @@ def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     """
     if not isinstance(target, DhwZone):
         return
+    dhw_state = getattr(target, "dhw_state", None)
+    if dhw_state is None or not dataclasses.is_dataclass(dhw_state):
+        return
 
     updates: dict[str, Any] = {}
     if msg.code == Code._10A0:
@@ -821,7 +817,7 @@ def _route_2411_to_fan(gwy: Gateway, msg: Message) -> None:
         try:
             dev._handle_2411_message(msg)
             dev._handle_initialized_callback()
-        except Exception as err:
+        except (exc.RamsesException, AttributeError, TypeError, ValueError) as err:
             _LOGGER.error(
                 "Failed to route 2411 message to ventilator %s: %s",
                 dev.id,
@@ -846,18 +842,18 @@ async def _update_topology_schema_state(
     registry = getattr(gwy, "device_registry", None)
     tcs = None
     if registry:
-        if hasattr(msg.src, "id") and str(msg.src.id).startswith("01:"):
+        if getattr(msg.src, "type", None) in ("01", DevType.CTL):
             ctl_id = str(msg.src.id)
             if ctl_dev := registry.device_by_id.get(ctl_id):
                 tcs = getattr(ctl_dev, "tcs", None)
-        elif hasattr(msg.dst, "id") and str(msg.dst.id).startswith("01:"):
+        elif getattr(msg.dst, "type", None) in ("01", DevType.CTL):
             ctl_id = str(msg.dst.id)
             if ctl_dev := registry.device_by_id.get(ctl_id):
                 tcs = getattr(ctl_dev, "tcs", None)
         else:
             if (devices := p.get("devices")) and isinstance(devices, list):
                 for d in devices:
-                    if str(d).startswith("01:"):
+                    if getattr(d, "type", str(d)[:2]) == "01":
                         ctl_id = str(d)
                         if ctl_dev := registry.device_by_id.get(ctl_id):
                             tcs = getattr(ctl_dev, "tcs", None)
@@ -931,17 +927,17 @@ async def _update_topology_schema_state(
         ufc_devs: list[Any] = []
         if registry and tcs:
             for d_id in devices:
-                if str(d_id).startswith("02:"):
+                if getattr(d_id, "type", str(d_id)[:2]) in ("02", DevType.UFC):
                     with contextlib.suppress(exc.DeviceNotFoundError):
                         ufc = registry.get_device(str(d_id), parent=tcs)
                         if ufc not in ufc_devs:
                             ufc_devs.append(ufc)
 
         if not ufc_devs and registry:
-            if hasattr(msg.src, "id") and str(msg.src.id).startswith("02:"):
+            if getattr(msg.src, "type", None) in ("02", DevType.UFC):
                 with contextlib.suppress(exc.DeviceNotFoundError):
                     ufc_devs.append(registry.get_device(str(msg.src.id)))
-            elif hasattr(msg.dst, "id") and str(msg.dst.id).startswith("02:"):
+            elif getattr(msg.dst, "type", None) in ("02", DevType.UFC):
                 with contextlib.suppress(exc.DeviceNotFoundError):
                     ufc_devs.append(registry.get_device(str(msg.dst.id)))
 
@@ -1055,7 +1051,7 @@ async def _update_topology_schema_state(
             if dhw and registry:
                 for d_id in devices:
                     is_sen = (
-                        str(d_id).startswith("07:")
+                        getattr(d_id, "type", str(d_id)[:2]) == "07"
                         or p.get("device_role") == "dhw_sensor"
                     )
                     with contextlib.suppress(
@@ -1083,13 +1079,13 @@ async def _update_topology_schema_state(
                     tcs.get_htg_zone(z_id)
 
     # 4. Code 0204: Underfloor Heating (UFH) Controller Circuits
-    elif str(msg.code) == "0204":
+    elif msg.code == Code._0204:
         ufc_list: list[Any] = []
         if registry:
-            if hasattr(msg.src, "id") and str(msg.src.id).startswith("02:"):
+            if getattr(msg.src, "type", None) in ("02", DevType.UFC):
                 with contextlib.suppress(exc.DeviceNotFoundError):
                     ufc_list.append(registry.get_device(str(msg.src.id)))
-            elif hasattr(msg.dst, "id") and str(msg.dst.id).startswith("02:"):
+            elif getattr(msg.dst, "type", None) in ("02", DevType.UFC):
                 with contextlib.suppress(exc.DeviceNotFoundError):
                     ufc_list.append(registry.get_device(str(msg.dst.id)))
         if not ufc_list and tcs and hasattr(tcs, "ufh_controllers"):
@@ -1164,13 +1160,12 @@ async def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
             continue
         targets = _resolve_logical_targets(gwy, msg, p)
         for target in targets:
-            with contextlib.suppress(AttributeError, TypeError, ValueError):
-                _update_system_state(target, p, msg)
-                _update_hvac_state(target, p, msg)
-                _update_dhw_state(target, p, msg)
-                _update_temperature_state(target, p, msg)
-                _update_demand_state(target, p, msg)
-                _update_faultlog_state(target, p, msg)
+            _update_system_state(target, p, msg)
+            _update_hvac_state(target, p, msg)
+            _update_dhw_state(target, p, msg)
+            _update_temperature_state(target, p, msg)
+            _update_demand_state(target, p, msg)
+            _update_faultlog_state(target, p, msg)
 
 
 async def process_msg(gwy: Gateway, msg: Message) -> None:
