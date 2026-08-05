@@ -27,7 +27,7 @@ from ramses_tx.helpers import (
     hex_to_dts,
     hex_to_flag8,
     hex_to_percent,
-    # hex_to_str,
+    hex_to_str,
     hex_to_temp,
 )
 from ramses_tx.packet import Packet
@@ -312,8 +312,18 @@ def test_helper_field_parsers() -> None:
     ):
         assert val == hex_from_dtm(hex_to_dtm(val), incl_seconds=(len(val) == 14))
 
-    for val in ("00000000007F",):
+    for val in ("00000000007F", "00870853C000"):
         assert val == hex_from_dts(hex_to_dts(val))
+
+    # Test hex_from_dts with datetime and isoformat string
+    sample_dt = dt(2024, 8, 12, 10, 30, 0)
+    assert hex_from_dts(sample_dt) == "00861853C000"
+    assert hex_from_dts("24-08-12T10:30:00") == "00861853C000"
+
+    # Test hex_to_str printable ASCII decoding
+    assert hex_to_str("48656C6C6F") == "Hello"
+    assert hex_to_str("48656C6C6F7F") == "Hello"
+    assert hex_to_str("0048656C6C6F7F00") == "Hello"
 
     for val in ("00", "01", "08", "10", "E0", "CC", "FF"):
         assert val == hex_from_flag8(hex_to_flag8(val))
