@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ramses_rf.const import SZ_DHW_FLOW_RATE
 from ramses_tx.const import (
     RQ,
     SZ_ACTIVE,
-    SZ_DHW_FLOW_RATE,
     SZ_MODE,
     SZ_SETPOINT,
     SZ_TEMPERATURE,

@@ -13,6 +13,7 @@ from ramses_rf.const import (
     SZ_BYPASS_POSITION,
     SZ_FAN_MODE,
     SZ_INDOOR_HUMIDITY,
+    SZ_REQ_REASON,
     Code,
     DevType,
 )
@@ -22,7 +23,6 @@ from ramses_rf.models import HvacState
 from ramses_rf.state import MessageStore
 from ramses_tx import Address, DeviceIdT, Packet
 from ramses_tx.config import EngineConfig
-from ramses_tx.const import SZ_REQ_REASON
 
 
 @pytest.fixture
