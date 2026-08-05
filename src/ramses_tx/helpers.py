@@ -8,7 +8,44 @@ import sys
 import time
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime as dt
-from typing import Literal, TypeAlias
+from typing import Any, Literal, TypeAlias, TypeGuard
+
+
+def is_hex_byte(val: Any) -> TypeGuard[HexByte]:
+    """Return True if val is a 2-character hex string (1 byte)."""
+    return (
+        isinstance(val, str)
+        and len(val) == 2
+        and all(c in "0123456789abcdefABCDEF" for c in val)
+    )
+
+
+def is_hex_str4(val: Any) -> TypeGuard[HexStr4]:
+    """Return True if val is a 4-character hex string (2 bytes)."""
+    return (
+        isinstance(val, str)
+        and len(val) == 4
+        and all(c in "0123456789abcdefABCDEF" for c in val)
+    )
+
+
+def is_hex_str8(val: Any) -> TypeGuard[HexStr8]:
+    """Return True if val is an 8-character hex string (4 bytes)."""
+    return (
+        isinstance(val, str)
+        and len(val) == 8
+        and all(c in "0123456789abcdefABCDEF" for c in val)
+    )
+
+
+def is_hex_str12(val: Any) -> TypeGuard[HexStr12]:
+    """Return True if val is a 12-character hex string (6 bytes)."""
+    return (
+        isinstance(val, str)
+        and len(val) == 12
+        and all(c in "0123456789abcdefABCDEF" for c in val)
+    )
+
 
 # TODO: consider returning from helpers as TypeGuard[HexByte]
 # fmt: off
