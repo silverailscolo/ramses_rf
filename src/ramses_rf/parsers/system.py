@@ -31,6 +31,13 @@ from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
+from ramses_rf.const import (
+    SZ_CHANGE_COUNTER,
+    SZ_FRAG_LENGTH,
+    SZ_FRAG_NUMBER,
+    SZ_FRAGMENT,
+    SZ_TOTAL_FRAGS,
+)
 from ramses_tx import exceptions as exc
 from ramses_tx.address import ALL_DEV_ADDR, hex_id_to_dev_id
 from ramses_tx.const import (
@@ -53,7 +60,6 @@ from ramses_tx.const import (
     SYS_MODE_MAP,
     SZ_ACCEPT,
     SZ_BINDINGS,
-    SZ_CHANGE_COUNTER,
     SZ_CONFIRM,
     SZ_DATETIME,
     SZ_DEVICE_CLASS,
@@ -61,9 +67,6 @@ from ramses_tx.const import (
     SZ_DOMAIN_IDX,
     SZ_FAULT_STATE,
     SZ_FAULT_TYPE,
-    SZ_FRAG_LENGTH,
-    SZ_FRAG_NUMBER,
-    SZ_FRAGMENT,
     SZ_IS_DST,
     SZ_LANGUAGE,
     SZ_LOG_ENTRY,
@@ -75,7 +78,6 @@ from ramses_tx.const import (
     SZ_SYSTEM_MODE,
     SZ_TEMPERATURE,
     SZ_TIMESTAMP,
-    SZ_TOTAL_FRAGS,
     SZ_UNTIL,
     W_,
     DevRole,
