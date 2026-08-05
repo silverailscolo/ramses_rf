@@ -383,6 +383,6 @@ type = "layers"
 layers = [
     "ramses_tx.engine",
     "ramses_tx.protocol",
-    "ramses_tx.frame",
     "ramses_tx.transport",
+    "ramses_tx.packet",
 ]
