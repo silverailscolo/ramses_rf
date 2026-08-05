@@ -9,18 +9,15 @@ import logging
 import math
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 from urllib.parse import parse_qs, urlparse
 
 from .. import exceptions as exc
 from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3
 from ..helpers import dt_now
-from ..typing import DeviceIdT
+from ..typing import DeviceIdT, RamsesProtocolT
 from .base import TransportConfig, _FullTransport
 from .helpers import _normalise
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 

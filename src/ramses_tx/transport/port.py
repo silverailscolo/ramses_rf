@@ -45,7 +45,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime as dt
 from functools import wraps
 from time import perf_counter, time
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 
 from serial import Serial, SerialException
 
@@ -64,13 +64,10 @@ from ..discovery import is_hgi80
 from ..dtos import CommandDTO
 from ..helpers import hex_from_str
 from ..packet import Packet
-from ..typing import SerPortNameT
+from ..typing import RamsesProtocolT, SerPortNameT
 from ..version import VERSION
 from .base import TransportConfig, _FullTransport
 from .helpers import _normalise, _str
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 

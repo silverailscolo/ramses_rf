@@ -9,7 +9,7 @@ import logging
 import threading
 from datetime import datetime as dt, timedelta as td
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
@@ -28,12 +28,9 @@ from ..const import (
     SZ_IS_EVOFW3,
     SZ_RAMSES_GATEWAY,
 )
-from ..typing import DeviceIdT
+from ..typing import DeviceIdT, RamsesProtocolT
 from .base import TransportConfig, _FullTransport
 from .helpers import _normalise
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 

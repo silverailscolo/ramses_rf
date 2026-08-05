@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """RAMSES RF - a RAMSES-II protocol decoder & analyser.
+
 `ramses_tx` takes care of the RF protocol (lower) layer.
 """
 
@@ -38,7 +39,7 @@ from .dtos import CommandDTO, PacketDTO
 from .engine import Engine
 from .logger import set_pkt_logging
 from .packet import PKT_LOGGER, Packet
-from .protocol import PortProtocol, ReadProtocol, protocol_factory
+from .protocol import PortProtocol, RamsesProtocolT, ReadProtocol, protocol_factory
 from .schemas import SZ_SERIAL_PORT
 from .transport import RamsesTransportT, ZigbeeTransport, transport_factory
 from .typing import DeviceIdT, QosParams
@@ -121,8 +122,8 @@ if TYPE_CHECKING:
 
 
 async def set_pkt_logging_config(**config: Any) -> tuple[Logger, QueueListener | None]:
-    """
-    Set up ramses packet logging to a file or port.
+    """Set up ramses packet logging to a file or port.
+
     Must run async in executor to prevent HA blocking call opening packet log file.
 
     :param config: if file_name is included, opens packet_log file
