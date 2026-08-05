@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """RAMSES RF - Decode/process a message (payload into JSON)."""
 
+from __future__ import annotations
+
 # TODO:
 # - fix dispatching - what devices (some are Addr) are sent packets, esp. 1FC9s
-
 import logging
 from datetime import timedelta as td
 from typing import TYPE_CHECKING, Final
