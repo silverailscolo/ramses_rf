@@ -337,16 +337,16 @@ def hex_from_str(value: str) -> str:
     return "".join(f"{ord(x):02X}" for x in value)  # or: value.encode().hex()
 
 
-def hex_to_temp(value: HexStr4) -> bool | float | None:  # TODO: remove bool
+def hex_to_temp(value: HexStr4) -> float | Literal[False] | None:
     """Convert a 4-byte 2's complement hex string to a float temperature ('C).
 
     :param value: The 4-character hex string (e.g., '07D0')
     :type value: HexStr4
-    :return: The temperature in Celsius, or None if N/A
-    :rtype: float | None
+    :return: The temperature in Celsius, False if disabled (0x7EFF), or None if N/A.
+    :rtype: float | Literal[False] | None
     :raises ValueError: If input is not a 4-char hex string or temperature is invalid.
     """
-    if not isinstance(value, str) or len(value) != 4:
+    if not is_hex_str4(value):
         raise ValueError(f"Invalid value: {value}, is not a 4-char hex string")
     if value == "31FF":  # means: N/A (== 127.99, 2s complement), signed?
         return None
@@ -361,16 +361,14 @@ def hex_to_temp(value: HexStr4) -> bool | float | None:  # TODO: remove bool
     return temp
 
 
-def hex_from_temp(value: bool | float | None) -> HexStr4:
+def hex_from_temp(value: bool | float | int | None) -> HexStr4:
     """Convert a float to a 2's complement 4-byte hex string."""
     if value is None:
         return "7FFF"  # or: "31FF"?
     if value is False:
         return "7EFF"
-    if not isinstance(value, float | int):
-        raise TypeError(f"Invalid temp: {value} is not a float")
-    # if not -(2**7) <= value < 2**7:  # TODO: tighten range
-    #     raise ValueError(f"Invalid temp: {value} is out of range")
+    if isinstance(value, bool) or not isinstance(value, float | int):
+        raise TypeError(f"Invalid temp: {value} is not a float or int")
     temp = int(value * 100)
     return f"{temp if temp >= 0 else temp + 2**16:04X}"
 
