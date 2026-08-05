@@ -7,17 +7,8 @@ from functools import lru_cache
 from typing import Final
 
 from . import exceptions as exc
-from .const import DEV_TYPE_MAP as _DEV_TYPE_MAP, DEVICE_ID_REGEX, DevType
+from .const import DEVICE_ID_REGEX
 from .typing import DeviceIdT
-
-DEVICE_LOOKUP: dict[str, str] = {
-    k: _DEV_TYPE_MAP._hex(k)
-    for k in _DEV_TYPE_MAP.SLUGS
-    if k not in (DevType.JIM, DevType.JST)
-}
-DEVICE_LOOKUP |= {"NUL": "63", "---": "--"}
-DEV_TYPE_MAP: dict[str, str] = {v: k for k, v in DEVICE_LOOKUP.items()}
-
 
 HGI_DEVICE_ID: DeviceIdT = "18:000730"  # type: ignore[assignment]
 NON_DEVICE_ID: DeviceIdT = "--:------"  # type: ignore[assignment]
@@ -56,7 +47,7 @@ class Address:
         return str(self.id)
 
     def __str__(self) -> str:
-        return self._friendly(self.id).strip()
+        return self.id
 
     def __eq__(self, other: object) -> bool:
         if not hasattr(other, "id"):  # can compare Address with Device
@@ -73,58 +64,38 @@ class Address:
     @staticmethod
     def is_valid(value: str) -> bool:
         return isinstance(value, str) and (
-            value == NON_DEVICE_ID or DEVICE_ID_REGEX.ANY.match(value)
+            value == NON_DEVICE_ID or DEVICE_ID_REGEX.ANY.match(value) is not None
         )
 
     @classmethod
-    def _friendly(cls, device_id: DeviceIdT) -> str:
-        """Convert (say) '01:145038' to 'CTL:145038'."""
-
-        if not cls.is_valid(device_id):
-            raise TypeError
-
-        _type, _tmp = device_id.split(":")
-
-        return f"{DEV_TYPE_MAP.get(_type, f'{_type:>3}')}:{_tmp}"
-
-    @classmethod
     @lru_cache(maxsize=256)
-    def convert_from_hex(cls, device_hex: str, friendly_id: bool = False) -> str:
+    def convert_from_hex(cls, device_hex: str) -> str:
         """Convert a 6-character hex string to a device ID.
 
         :param device_hex: The hex string to convert (e.g., '06368E')
         :type device_hex: str
-        :param friendly_id: If True, returns a named ID, defaults to False
-        :type friendly_id: bool
         :return: The formatted device ID string
         :rtype: str
         """
 
         if device_hex == "FFFFFE":  # aka '63:262142'
-            return ">null dev<" if friendly_id else ALL_DEVICE_ID
+            return ALL_DEVICE_ID
 
         if not device_hex.strip():  # aka '--:------'
-            return f"{'':10}" if friendly_id else NON_DEVICE_ID
+            return NON_DEVICE_ID
 
         _tmp = int(device_hex, 16)
-        device_id = DeviceIdT(f"{(_tmp & 0xFC0000) >> 18:02d}:{_tmp & 0x03FFFF:06d}")
-
-        return cls._friendly(device_id) if friendly_id else device_id
+        return DeviceIdT(f"{(_tmp & 0xFC0000) >> 18:02d}:{_tmp & 0x03FFFF:06d}")
 
     @classmethod
     @lru_cache(maxsize=256)
     def convert_to_hex(cls, device_id: DeviceIdT) -> str:
-        """Convert (say) '01:145038' (or 'CTL:145038') to '06368E'."""
+        """Convert '01:145038' to '06368E'."""
 
         if not cls.is_valid(device_id):
             raise TypeError
 
-        if len(device_id) == 9:  # e.g. '01:123456'
-            dev_type = device_id[:2]
-
-        else:  # len(device_id) == 10, e.g. 'CTL:123456', or ' 63:262142'
-            dev_type = DEVICE_LOOKUP.get(device_id[:3], device_id[1:3])
-
+        dev_type = device_id[:2]
         return f"{(int(dev_type) << 18) + int(device_id[-6:]):0>6X}"
 
 
@@ -140,45 +111,28 @@ ALL_DEV_ADDR = Address(ALL_DEVICE_ID)  # 63:262142
 
 
 def dev_id_to_hex_id(device_id: DeviceIdT) -> str:
-    """Convert (say) '01:145038' (or 'CTL:145038') to '06368E'."""
-
-    if len(device_id) == 9:  # e.g. '01:123456'
-        dev_type = device_id[:2]
-
-    elif len(device_id) == 10:  # e.g. '01:123456'
-        dev_type = DEVICE_LOOKUP.get(device_id[:3], device_id[1:3])
-
-    else:  # len(device_id) == 10, e.g. 'CTL:123456', or ' 63:262142'
-        raise ValueError(f"Invalid value: {device_id}, is not 9-10 characters long")
-
+    """Convert '01:145038' to '06368E'."""
+    dev_type = device_id[:2]
     return f"{(int(dev_type) << 18) + int(device_id[-6:]):0>6X}"
 
 
-def hex_id_to_dev_id(device_hex: str, friendly_id: bool = False) -> DeviceIdT:
-    """Convert (say) '06368E' to '01:145038' (or 'CTL:145038')."""
+def hex_id_to_dev_id(device_hex: str) -> DeviceIdT:
+    """Convert '06368E' to '01:145038'."""
     if device_hex == "FFFFFE":  # aka '63:262142'
-        return DeviceIdT("NUL:262142" if friendly_id else ALL_DEVICE_ID)
+        return ALL_DEVICE_ID
 
     if not device_hex.strip():  # aka '--:------'
-        return DeviceIdT(f"{'':10}" if friendly_id else NON_DEVICE_ID)
+        return NON_DEVICE_ID
 
     _tmp = int(device_hex, 16)
     dev_type = f"{(_tmp & 0xFC0000) >> 18:02d}"
-
-    if friendly_id:
-        dev_type = DEV_TYPE_MAP.get(dev_type, f"{dev_type:<3}")
-
     return DeviceIdT(f"{dev_type}:{_tmp & 0x03FFFF:06d}")
 
 
 @lru_cache(maxsize=2048)
 def is_valid_dev_id(value: str, dev_class: None | str = None) -> bool:
     """Return True if a device_id is valid."""
-
-    if not isinstance(value, str) or not DEVICE_ID_REGEX.ANY.match(value):
-        return False
-
-    return not _DBG_DISABLE_DEV_HVAC or value.split(":", 1)[0] in DEV_TYPE_MAP
+    return isinstance(value, str) and DEVICE_ID_REGEX.ANY.match(value) is not None
 
 
 @lru_cache(maxsize=2048)

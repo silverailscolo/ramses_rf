@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ramses_rf.const import SZ_DHW_FLOW_RATE
+from ramses_rf.const import SZ_DHW_FLOW_RATE, ZON_MODE_MAP
 from ramses_tx.const import (
     RQ,
     SZ_ACTIVE,
@@ -12,7 +12,6 @@ from ramses_tx.const import (
     SZ_SETPOINT,
     SZ_TEMPERATURE,
     SZ_UNTIL,
-    ZON_MODE_MAP,
 )
 from ramses_tx.helpers import hex_to_dtm, hex_to_temp
 from ramses_tx.typing import PayDictT

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from ramses_rf.const import Code, DevType
+from ramses_rf.const import DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
+from ramses_tx.const import Code
 
 
 class OtbTopologyHandler(TopologyHandler):

@@ -29,8 +29,9 @@ from ramses_cli.discovery import (
     set_schedule,
     spawn_scripts,
 )
-from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
+from ramses_rf.const import SZ_SCHEDULE
 from ramses_rf.gateway import Gateway
+from ramses_tx.const import SZ_ZONE_IDX
 
 # Constants for testing
 DEV_ID = "01:123456"

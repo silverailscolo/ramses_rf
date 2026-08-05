@@ -5,16 +5,10 @@ from __future__ import annotations
 from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_rf.const import (
-    HEARTBEAT_TIMEOUT_TRV,
-    SZ_HEAT_DEMAND,
-    SZ_SETPOINT,
-    SZ_WINDOW_OPEN,
-    Code,
-    DevType,
-)
+from ramses_rf.const import HEARTBEAT_TIMEOUT_TRV, DevType
 from ramses_rf.models import DeviceTraits, TrvState
 from ramses_tx import Packet
+from ramses_tx.const import SZ_HEAT_DEMAND, SZ_SETPOINT, SZ_WINDOW_OPEN, Code
 
 from .dev_base import BatteryState, Fakeable
 from .heat_actuators import HeatDemand
