@@ -8,7 +8,7 @@ import sys
 import time
 from collections.abc import Iterable, Mapping
 from datetime import date, datetime as dt
-from typing import Any, Literal, TypeAlias, TypeGuard
+from typing import Any, Literal, TypeAlias, TypeGuard, overload
 
 
 def is_hex_byte(val: Any) -> TypeGuard[HexByte]:
@@ -47,7 +47,6 @@ def is_hex_str12(val: Any) -> TypeGuard[HexStr12]:
     )
 
 
-# TODO: consider returning from helpers as TypeGuard[HexByte]
 # fmt: off
 HexByteAlt = Literal[
     '00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '0A', '0B', '0C', '0D', '0E', '0F',
@@ -97,7 +96,6 @@ def timestamp() -> float:
     :return: The current timestamp in seconds.
     :rtype: float
     """
-
     # see: https://www.python.org/dev/peps/pep-0564/
     if sys.platform == "win32":
         # Windows uses a different epoch (1601-01-01)
@@ -163,14 +161,20 @@ def hex_to_date(value: HexStr8) -> str | None:  # YY-MM-DD
     ).strftime("%Y-%m-%d")
 
 
-# FIXME: factor=1 should return an int
-def hex_to_double(value: HexStr4, factor: int = 1) -> float | None:
+@overload
+def hex_to_double(value: HexStr4, factor: int) -> float | None: ...
+@overload
+def hex_to_double(value: HexStr4, factor: Literal[1] = 1) -> int | None: ...
+def hex_to_double(value: HexStr4, factor: int = 1) -> int | float | None:
     """Convert a 4-char hex string into a double."""
     if not isinstance(value, str) or len(value) != 4:
         raise ValueError(f"Invalid value: {value}, is not a 4-char hex string")
     if value == "7FFF":
         return None
-    return int(value, 16) / factor
+    raw_val = int(value, 16)
+    if factor == 1:
+        return raw_val
+    return raw_val / factor
 
 
 def hex_from_double(value: float | None, factor: int = 1) -> HexStr4:
@@ -263,7 +267,7 @@ def hex_from_dts(dtm: dt | str | None) -> HexStr12:  # TODO: WIP
     return f"{result:012X}"
 
 
-def hex_to_flag8(byte: HexByte, lsb: bool = False) -> list[int]:  # TODO: use tuple
+def hex_to_flag8(byte: HexByte, lsb: bool = False) -> list[int]:
     """Split a hex str (a byte) into a list of 8 bits, MSB as first bit by default.
 
     If lsb==True, then the LSB is first.
@@ -277,12 +281,12 @@ def hex_to_flag8(byte: HexByte, lsb: bool = False) -> list[int]:  # TODO: use tu
 
 
 def hex_from_flag8(flags: Iterable[int], lsb: bool = False) -> HexByte:
-    """Convert list of 8 bits, MSB bit 1 by default, to a two-char ASCII hex string.
+    """Convert sequence of 8 bits, MSB bit 1 by default, to a two-char ASCII hex string.
 
     The `lsb` boolean is used so that flag[0] is `zone_idx["00"]`, etc.
     """
-    if not isinstance(flags, list) or len(flags) != 8:
-        raise ValueError(f"Invalid value: '{flags}', is not a list of 8 bits")
+    if not isinstance(flags, list | tuple) or len(flags) != 8:
+        raise ValueError(f"Invalid value: '{flags}', is not a list/tuple of 8 bits")
     if lsb:  # LSB is first bit
         return f"{sum(x << idx for idx, x in enumerate(flags)):02X}"
     return f"{sum(x << idx for idx, x in enumerate(reversed(flags))):02X}"
