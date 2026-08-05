@@ -85,7 +85,6 @@ from ramses_rf.const import (
     SZ_ZONE_IDX,
     Code,
 )
-from ramses_rf.dispatcher import _get_dhw_zone_from_msg, _route_2411_to_fan
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import (
@@ -103,6 +102,7 @@ from ramses_rf.models import (
     ZoneState,
 )
 from ramses_rf.protocol.opentherm import OtDataId
+from ramses_rf.state_projector import _get_dhw_zone_from_msg, _route_2411_to_fan
 
 # --- Translation Maps (Static Constant Blocks) ---
 
