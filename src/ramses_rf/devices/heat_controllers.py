@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_rf.const import DevType
+from ramses_rf.const import SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
 from ramses_rf.entity import Entity
 from ramses_rf.helpers import shrink
 from ramses_rf.models import DeviceTraits, UfhCircuitDemandDTO
 from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
-from ramses_tx.const import FA, SZ_HEAT_DEMAND, SZ_RELAY_DEMAND
+from ramses_tx.const import FA
 from ramses_tx.typing import DeviceIdT, DevIndexT
 
 from .dev_base import DeviceHeat

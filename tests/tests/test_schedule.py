@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import SZ_SCHEDULE
+from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
 from ramses_rf.systems.schedule import (
@@ -30,7 +30,6 @@ from ramses_rf.systems.schedule import (
     full_schedule_to_fragments,
 )
 from ramses_rf.typing import OuterSchedule
-from ramses_tx.const import SZ_ZONE_IDX
 
 from .helpers import TEST_DIR
 

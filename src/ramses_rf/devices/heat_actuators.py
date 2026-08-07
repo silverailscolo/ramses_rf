@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Final
 
-from ramses_rf.const import DOMAIN_TYPE_MAP, DevType
+from ramses_rf.const import DOMAIN_TYPE_MAP, SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
 from ramses_rf.models import ActuatorCycleDTO, ActuatorStateDTO, DeviceTraits
 from ramses_tx import Priority
-from ramses_tx.const import SZ_HEAT_DEMAND, SZ_PRIORITY, SZ_RELAY_DEMAND, Code
+from ramses_tx.const import SZ_PRIORITY, Code
 from ramses_tx.typing import PayDictT
 
 from .dev_base import DeviceHeat

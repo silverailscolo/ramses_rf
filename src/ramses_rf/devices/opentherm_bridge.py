@@ -37,6 +37,7 @@ from ramses_rf.const import (
     SZ_FLAME_ACTIVE,
     SZ_FLAME_SIGNAL_LOW,
     SZ_MAX_REL_MODULATION,
+    SZ_OEM_CODE,
     SZ_OTC_ACTIVE,
     SZ_OUTSIDE_TEMP,
     SZ_REL_MODULATION_LEVEL,
@@ -45,7 +46,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.models import DeviceTraits, OpenThermState
 from ramses_tx import Priority
-from ramses_tx.const import FC, SZ_NUM_REPEATS, SZ_OEM_CODE, SZ_PRIORITY, Code, MsgId
+from ramses_tx.const import FC, SZ_NUM_REPEATS, SZ_PRIORITY, Code, MsgId
 from ramses_tx.typing import PayDictT
 
 from ..protocol.opentherm import OtDataId

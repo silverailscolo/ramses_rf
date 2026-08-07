@@ -6,12 +6,12 @@ import dataclasses
 import logging
 from typing import Any, Final
 
-from ramses_rf.const import DevType
+from ramses_rf.const import SZ_TEMPERATURE, DevType
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
 from ramses_tx import Packet
-from ramses_tx.const import FA, SZ_TEMPERATURE, Code
+from ramses_tx.const import FA, Code
 from ramses_tx.typing import PayDictT
 
 from .dev_base import BatteryState, DeviceHeat, Fakeable

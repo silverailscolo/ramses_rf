@@ -24,11 +24,6 @@ from ramses_tx.const import (
     LOOKUP_PUZZ as LOOKUP_PUZZ,
     RP as RP,
     RQ as RQ,
-    SZ_ACCEPT as SZ_ACCEPT,
-    SZ_HEAT_DEMAND as SZ_HEAT_DEMAND,
-    SZ_RELAY_DEMAND as SZ_RELAY_DEMAND,
-    SZ_SETPOINT as SZ_SETPOINT,
-    SZ_TEMPERATURE as SZ_TEMPERATURE,
     W_ as W_,
     AttrDict as AttrDict,
     Code as Code,
@@ -43,6 +38,82 @@ from ramses_tx.const import (
 )
 
 from .enums import DevRole as DevRole, DevType as DevType, ZoneRole as ZoneRole
+
+SZ_ACTIVE: Final = "active"
+SZ_ACTUATOR: Final = "actuator"
+SZ_ACTUATOR_ENABLED: Final = "actuator_enabled"
+SZ_ACTUATORS: Final = "actuators"
+SZ_BATTERY_LEVEL: Final = "battery_level"
+SZ_BATTERY_LOW: Final = "battery_low"
+SZ_BATTERY_STATE: Final = "battery_state"
+SZ_BINDINGS: Final = "bindings"
+SZ_CONFIG: Final = "config"
+SZ_DATETIME: Final = "datetime"
+SZ_BYPASS_POSITION: Final = "bypass_position"
+SZ_CH_ACTIVE: Final = "ch_active"
+SZ_CH_ENABLED: Final = "ch_enabled"
+SZ_COOLING_ACTIVE: Final = "cooling_active"
+SZ_COOLING_ENABLED: Final = "cooling_enabled"
+SZ_DHW_ACTIVE: Final = "dhw_active"
+SZ_DHW_BLOCKING: Final = "dhw_blocking"
+SZ_DHW_ENABLED: Final = "dhw_enabled"
+SZ_FAULT_PRESENT: Final = "fault_present"
+SZ_FLAME_ACTIVE: Final = "flame_active"
+SZ_OTC_ACTIVE: Final = "otc_active"
+SZ_DEMAND: Final = "demand"
+SZ_DEVICE_ID: Final = "device_id"
+SZ_DEVICE_ROLE: Final = "device_role"
+SZ_DEVICES: Final = "devices"
+SZ_DHW_IDX: Final = "dhw_idx"
+SZ_DIFFERENTIAL: Final = "differential"
+SZ_DOMAIN_ID: Final = "domain_id"
+SZ_DURATION: Final = "duration"
+SZ_FLAME_ON: Final = "flame_on"
+SZ_HEAT_DEMAND: Final = "heat_demand"
+SZ_IS_DST: Final = "is_dst"
+SZ_LANGUAGE: Final = "language"
+SZ_LOCAL_OVERRIDE: Final = "local_override"
+SZ_MAX_TEMP: Final = "max_temp"
+SZ_MIN_TEMP: Final = "min_temp"
+SZ_MODE: Final = "mode"
+SZ_MODULATION_LEVEL: Final = "modulation_level"
+SZ_MULTIROOM_MODE: Final = "multiroom_mode"
+SZ_NAME: Final = "name"
+SZ_OEM_CODE: Final = "oem_code"
+SZ_OPENWINDOW_FUNCTION: Final = "openwindow_function"
+SZ_OVERRUN: Final = "overrun"
+SZ_PAYLOAD: Final = "payload"
+SZ_PRESSURE: Final = "pressure"
+SZ_RELAY_DEMAND: Final = "relay_demand"
+SZ_RELAY_FAILSAFE: Final = "relay_failsafe"
+SZ_SENSOR: Final = "sensor"
+SZ_SETPOINT: Final = "setpoint"
+SZ_SETPOINT_BOUNDS: Final = "setpoint_bounds"
+SZ_SYSTEM_MODE: Final = "system_mode"
+SZ_TEMPERATURE: Final = "temperature"
+SZ_UFH_IDX: Final = "ufh_idx"
+SZ_UNKNOWN: Final = "unknown"
+SZ_UNTIL: Final = "until"
+SZ_VALUE: Final = "value"
+SZ_WINDOW_OPEN: Final = "window_open"
+SZ_ZONE_CLASS: Final = "zone_class"
+SZ_ZONE_IDX: Final = "zone_idx"
+SZ_ZONE_MASK: Final = "zone_mask"
+SZ_ZONE_TYPE: Final = "zone_type"
+SZ_ZONES: Final = "zones"
+
+SZ_DEVICE_CLASS: Final = "device_class"
+SZ_DOMAIN_IDX: Final = "domain_idx"
+SZ_FAULT_STATE: Final = "fault_state"
+SZ_FAULT_TYPE: Final = "fault_type"
+SZ_LOG_ENTRY: Final = "log_entry"
+SZ_LOG_IDX: Final = "log_idx"
+SZ_TIMESTAMP: Final = "timestamp"
+
+SZ_OFFER: Final = "offer"
+SZ_ACCEPT: Final = "accept"
+SZ_CONFIRM: Final = "confirm"
+SZ_PHASE: Final = "phase"
 
 # used by schedule.py...
 SZ_FRAGMENT: Final = "fragment"
@@ -61,7 +132,6 @@ SZ_AIR_QUALITY: Final = "air_quality"
 SZ_AIR_QUALITY_BASIS: Final = "air_quality_basis"
 SZ_BOOST_TIMER: Final = "boost_timer"
 SZ_BYPASS_MODE: Final = "bypass_mode"
-SZ_BYPASS_POSITION: Final = "bypass_position"
 SZ_BYPASS_STATE: Final = "bypass_state"
 SZ_CO2_LEVEL: Final = "co2_level"
 SZ_DEWPOINT_TEMP: Final = "dewpoint_temp"
@@ -121,18 +191,7 @@ SZ_MAX_REL_MODULATION: Final = "max_rel_modulation"
 # SZ_OEM_CODE:Final[str] = "oem_code"
 SZ_OUTSIDE_TEMP: Final = "outside_temp"
 SZ_REL_MODULATION_LEVEL: Final = "rel_modulation_level"
-
-SZ_CH_ACTIVE: Final = "ch_active"
-SZ_CH_ENABLED: Final = "ch_enabled"
-SZ_COOLING_ACTIVE: Final = "cooling_active"
-SZ_COOLING_ENABLED: Final = "cooling_enabled"
-SZ_DHW_ACTIVE: Final = "dhw_active"
-SZ_DHW_BLOCKING: Final = "dhw_blocking"
-SZ_DHW_ENABLED: Final = "dhw_enabled"
-SZ_FAULT_PRESENT: Final = "fault_present"
-SZ_FLAME_ACTIVE: Final = "flame_active"
 SZ_SUMMER_MODE: Final = "summer_mode"
-SZ_OTC_ACTIVE: Final = "otc_active"
 
 
 # used by heat actuators / cycling
