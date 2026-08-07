@@ -7,6 +7,7 @@ import serial
 
 from ramses_rf import Gateway
 from ramses_rf.config import GatewayConfig
+from ramses_rf.const import SZ_BINDINGS, SZ_NAME, SZ_PHASE, SZ_TEMPERATURE, SZ_ZONE_IDX
 from ramses_rf.messages import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.parsers.heating import parser_0004, parser_12c0
@@ -15,16 +16,7 @@ from ramses_rf.pipeline.topology_builder import TopologyBuilder
 from ramses_tx import Packet
 from ramses_tx.address import Address
 from ramses_tx.config import EngineConfig
-from ramses_tx.const import (
-    I_,
-    SZ_BINDINGS,
-    SZ_NAME,
-    SZ_PHASE,
-    SZ_TEMPERATURE,
-    SZ_ZONE_IDX,
-    W_,
-    Code,
-)
+from ramses_tx.const import I_, W_, Code
 from ramses_tx.schemas import SZ_INBOUND
 from tests_rf.virtual_rf import VirtualRf
 

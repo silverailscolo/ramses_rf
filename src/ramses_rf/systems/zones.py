@@ -11,7 +11,19 @@ from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
-from ramses_rf.const import DEV_ROLE_MAP, ZON_MODE_MAP, ZON_ROLE_MAP, DevRole, ZoneRole
+from ramses_rf.const import (
+    DEV_ROLE_MAP,
+    SZ_HEAT_DEMAND,
+    SZ_NAME,
+    SZ_RELAY_DEMAND,
+    SZ_SETPOINT,
+    SZ_TEMPERATURE,
+    SZ_ZONE_IDX,
+    ZON_MODE_MAP,
+    ZON_ROLE_MAP,
+    DevRole,
+    ZoneRole,
+)
 from ramses_rf.devices import BdrSwitch, Controller, Device, DhwSensor, TrvActuator
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.enums import Action, DevType
@@ -36,14 +48,6 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Child, Parent
 from ramses_rf.typing import DeviceIdT, DevIndexT, InnerScheduleT, OuterScheduleT
-from ramses_tx.const import (
-    SZ_HEAT_DEMAND,
-    SZ_NAME,
-    SZ_RELAY_DEMAND,
-    SZ_SETPOINT,
-    SZ_TEMPERATURE,
-    SZ_ZONE_IDX,
-)
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import PayDictT
 

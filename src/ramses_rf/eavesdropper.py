@@ -11,14 +11,20 @@ from datetime import timedelta as td
 from typing import TYPE_CHECKING, Any
 
 import ramses_rf.exceptions as exc
-from ramses_rf.const import ZON_ROLE_MAP, DevType
+from ramses_rf.const import (
+    SZ_DOMAIN_ID,
+    SZ_TEMPERATURE,
+    SZ_ZONE_IDX,
+    ZON_ROLE_MAP,
+    DevType,
+)
 from ramses_rf.devices import Device, Temperature
 from ramses_rf.enums import TopologyAction
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.protocol.ramses import CODES_ONLY_FROM_CTL, HVAC_KLASS_BY_VC_PAIR
 from ramses_tx import Code
 from ramses_tx.address import HGI_DEV_ADDR
-from ramses_tx.const import I_, RQ, SZ_DOMAIN_ID, SZ_TEMPERATURE, SZ_ZONE_IDX
+from ramses_tx.const import I_, RQ
 from ramses_tx.typing import DeviceIdT
 
 if TYPE_CHECKING:

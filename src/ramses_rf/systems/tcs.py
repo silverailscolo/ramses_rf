@@ -11,7 +11,19 @@ from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
-from ramses_rf.const import DEV_TYPE_MAP, SYS_MODE_MAP, SZ_CHANGE_COUNTER, DevType
+from ramses_rf.const import (
+    DEV_TYPE_MAP,
+    SYS_MODE_MAP,
+    SZ_ACTUATORS,
+    SZ_CHANGE_COUNTER,
+    SZ_DATETIME,
+    SZ_DEVICES,
+    SZ_LANGUAGE,
+    SZ_SENSOR,
+    SZ_SYSTEM_MODE,
+    SZ_ZONES,
+    DevType,
+)
 from ramses_rf.devices import BdrSwitch, Controller, Device, OtbGateway, UfhController
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.enums import Action
@@ -37,15 +49,6 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Parent
 from ramses_tx import DeviceIdT, Priority
-from ramses_tx.const import (
-    SZ_ACTUATORS,
-    SZ_DATETIME,
-    SZ_DEVICES,
-    SZ_LANGUAGE,
-    SZ_SENSOR,
-    SZ_SYSTEM_MODE,
-    SZ_ZONES,
-)
 from ramses_tx.typing import PayDictT
 
 from ..messages import Message

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from ramses_rf.const import ZON_ROLE_MAP, DevType
+from ramses_rf.const import SZ_UFH_IDX, SZ_ZONE_IDX, SZ_ZONE_TYPE, ZON_ROLE_MAP, DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
-from ramses_tx.const import SZ_UFH_IDX, SZ_ZONE_IDX, SZ_ZONE_TYPE, Code
+from ramses_tx.const import Code
 
 
 class UfhTopologyHandler(TopologyHandler):

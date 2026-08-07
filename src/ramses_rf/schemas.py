@@ -13,13 +13,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 import voluptuous as vol
 
-from ramses_rf.typing import DeviceIdT, DeviceListT
-
-# TODO: deprecate re-exporting (via as) in favour of direct imports
-# TODO: deprecate re-exporting (via as) in favour of direct imports
-from ramses_tx.const import (
-    DEFAULT_MAX_ZONES as DEFAULT_MAX_ZONES,
-    DEVICE_ID_REGEX as DEVICE_ID_REGEX,
+from ramses_rf.const import (
     SZ_ACTUATORS as SZ_ACTUATORS,
     SZ_CONFIG as SZ_CONFIG,
     SZ_DEVICES as SZ_DEVICES,
@@ -28,6 +22,14 @@ from ramses_tx.const import (
     SZ_ZONE_IDX as SZ_ZONE_IDX,
     SZ_ZONE_TYPE,
     SZ_ZONES,
+)
+from ramses_rf.typing import DeviceIdT, DeviceListT
+
+# TODO: deprecate re-exporting (via as) in favour of direct imports
+# TODO: deprecate re-exporting (via as) in favour of direct imports
+from ramses_tx.const import (
+    DEFAULT_MAX_ZONES as DEFAULT_MAX_ZONES,
+    DEVICE_ID_REGEX as DEVICE_ID_REGEX,
 )
 from ramses_tx.schemas import (  # noqa: F401
     SCH_ENGINE_DICT,

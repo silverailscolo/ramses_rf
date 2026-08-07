@@ -24,7 +24,6 @@ from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     W_,
     Code,
     VerbT,
-    SZ_NAME,
 )
 
 from ..enums import DevType

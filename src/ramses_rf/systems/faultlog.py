@@ -10,16 +10,11 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, NewType, TypeAlias
 
 from ramses_rf import exceptions as exc
+from ramses_rf.const import SZ_LOG_ENTRY, SZ_LOG_IDX
 from ramses_rf.models import FaultLogState, StateUpdatedEvent
 from ramses_rf.parsers.helpers import parse_fault_log_entry
 from ramses_tx import Packet
-from ramses_tx.const import (
-    SZ_LOG_ENTRY,
-    SZ_LOG_IDX,
-    FaultDeviceClass,
-    FaultState,
-    FaultType,
-)
+from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.typing import DeviceIdT
 
 from ..enums import Action

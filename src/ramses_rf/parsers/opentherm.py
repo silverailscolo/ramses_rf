@@ -9,8 +9,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from ramses_rf.const import SZ_PAYLOAD, SZ_VALUE
 from ramses_tx import exceptions as exc
-from ramses_tx.const import RQ, SZ_PAYLOAD, SZ_VALUE
+from ramses_tx.const import RQ
 from ramses_tx.helpers import hex_to_flag8, hex_to_percent
 from ramses_tx.typing import PayDictT
 
