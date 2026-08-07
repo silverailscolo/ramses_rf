@@ -233,6 +233,40 @@ class DeviceBase(Entity):
         return self._polling_interval
 
     @property
+    def effective_polling_interval(self) -> PollingIntervalsT | None:
+        """Return the active effective polling schedule for this device.
+
+        :returns: A dictionary mapping active command codes to interval seconds.
+        :rtype: PollingIntervalsT | None
+        """
+        if getattr(self._gwy, "polling_manager", None):
+            return self._gwy.polling_manager.resolve_schedule_for_device(self)
+        return self._polling_interval
+
+    def set_polling_interval(self, code: str, interval: int) -> None:
+        """Set or update the polling interval for a specific packet code.
+
+        :param code: The hex code string for the packet type.
+        :type code: str
+        :param interval: The polling interval in seconds (0 to disable).
+        :type interval: int
+        :raises ValueError: If interval is negative or if setting a battery device below 300s.
+        """
+        if interval < 0:
+            raise ValueError(f"Polling interval cannot be negative: {interval}")
+        if self.is_battery and 0 < interval < 300:
+            raise ValueError(
+                f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
+            )
+
+        if self._polling_interval is None:
+            self._polling_interval = {}
+        self._polling_interval[code] = interval
+
+        if getattr(self._gwy, "polling_manager", None):
+            self._gwy.polling_manager.update_device_tasks(self)
+
+    @property
     def is_battery(self) -> bool | None:
         """Return True if the device is explicitly configured as battery-powered.
 
