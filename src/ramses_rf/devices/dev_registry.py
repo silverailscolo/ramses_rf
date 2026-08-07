@@ -49,6 +49,7 @@ class DeviceRegistry:
         device_filter: DeviceFilterInterface,
         config: GatewayConfig,
         device_factory_cb: Callable[[Address, Message | None, DeviceTraits], Device],
+        on_topology_changed_cb: Callable[[], None] | None = None,
     ) -> None:
         """Initialize the DeviceRegistry.
 
@@ -58,10 +59,13 @@ class DeviceRegistry:
         :type config: GatewayConfig
         :param device_factory_cb: A callback to instantiate domain devices.
         :type device_factory_cb: Callable
+        :param on_topology_changed_cb: Callback invoked when topology mutates.
+        :type on_topology_changed_cb: Callable | None
         """
         self._device_filter = device_filter
         self._config = config
         self._device_factory_cb = device_factory_cb
+        self._on_topology_changed_cb = on_topology_changed_cb
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
@@ -103,6 +107,8 @@ class DeviceRegistry:
 
         try:
             handler(event)
+            if self._on_topology_changed_cb:
+                self._on_topology_changed_cb()
         except (
             DeviceNotFoundError,
             SchemaInconsistentError,
