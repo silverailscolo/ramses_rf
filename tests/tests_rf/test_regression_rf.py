@@ -28,7 +28,7 @@ FIXTURE_FILE = Path(__file__).parents[1] / "fixtures" / "regression_packets_sort
 
 def _normalize_val(val: Any) -> Any:
     if isinstance(val, dt_type):
-        return val.astimezone(UTC)
+        return val.replace(tzinfo=UTC)
     if dataclasses.is_dataclass(val):
         return {
             k: _normalize_val(v)
