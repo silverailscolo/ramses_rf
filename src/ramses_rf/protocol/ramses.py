@@ -25,9 +25,9 @@ from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     Code,
     VerbT,
     SZ_NAME,
-    DevType,
 )
 
+from ..enums import DevType
 from ..typing import CodeSchemaEntry
 
 SZ_LIFESPAN: Final = "lifespan"  # WIP

@@ -13,8 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from .address import ALL_DEV_ADDR, ALL_DEVICE_ID, NON_DEV_ADDR, NON_DEVICE_ID, Address
 from .const import (
-    DEV_ROLE_MAP,
-    DEV_TYPE_MAP,
     F9,
     FA,
     FC,
@@ -26,13 +24,9 @@ from .const import (
     SZ_ZONE_IDX,
     SZ_ZONE_MASK,
     SZ_ZONE_TYPE,
-    ZON_ROLE_MAP,
-    DevRole,
-    DevType,
     IndexT,
     Priority,
     VerbT,
-    ZoneRole,
 )
 from .discovery import is_hgi80
 from .dtos import CommandDTO, PacketDTO
@@ -72,10 +66,6 @@ __all__ = [
     "NON_DEV_ADDR",
     "NON_DEVICE_ID",
     #
-    "DEV_ROLE_MAP",
-    "DEV_TYPE_MAP",
-    "ZON_ROLE_MAP",
-    #
     "I_",
     "RP",
     "RQ",
@@ -86,11 +76,8 @@ __all__ = [
     "FF",
     #
     "DeviceIdT",
-    "DevRole",
-    "DevType",
     "IndexT",
     "VerbT",
-    "ZoneRole",
     #
     "Address",
     "Code",

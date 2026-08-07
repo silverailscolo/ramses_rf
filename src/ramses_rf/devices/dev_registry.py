@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import DEV_TYPE_MAP, FA, FC, SZ_DEVICES, DevType
+from ramses_rf.const import DEV_TYPE_MAP, DevType
 from ramses_rf.devices.dev_base import DeviceHeat, DeviceHvac, Fakeable
 from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
@@ -26,6 +26,7 @@ from ramses_rf.models import DeviceTraits, TopologyChangedEvent
 from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.topology import Parent
 from ramses_rf.typing import DeviceIdT, DeviceListT
+from ramses_tx.const import FA, FC, SZ_DEVICES
 
 if TYPE_CHECKING:
     from ramses_rf.devices.dev_base import Device

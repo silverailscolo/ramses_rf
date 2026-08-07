@@ -18,10 +18,6 @@ from ramses_rf.const import (
     DEV_TYPE_MAP,
     GATEWAY_MESSAGE_TIMEOUT,
     HEARTBEAT_TIMEOUT_DEFAULT,
-    SZ_BATTERY_LEVEL,
-    SZ_BATTERY_LOW,
-    SZ_BATTERY_STATE,
-    SZ_OEM_CODE,
     DevType,
 )
 from ramses_rf.entity import Entity, class_by_attr
@@ -36,17 +32,16 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Child
 from ramses_tx import CommandDTO, Packet, Priority, QosParams
+from ramses_tx.const import (
+    SZ_BATTERY_LEVEL,
+    SZ_BATTERY_LOW,
+    SZ_BATTERY_STATE,
+    SZ_OEM_CODE,
+    Code,
+)
 
 from ..messages import Message
 from ..protocol.ramses import CODES_BY_DEV_SLUG
-
-from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    Code,
-)
 
 if TYPE_CHECKING:
     from ramses_rf import Gateway

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from ramses_rf.const import I_, SZ_DOMAIN_ID, SZ_ZONE_IDX, Code, DevType
+from ramses_rf.const import DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
+from ramses_tx.const import I_, SZ_DOMAIN_ID, SZ_ZONE_IDX, Code
 
 
 class RadTopologyHandler(TopologyHandler):

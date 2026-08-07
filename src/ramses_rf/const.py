@@ -9,77 +9,36 @@ from typing import Final
 
 from ramses_tx.const import (
     DEFAULT_MAX_ZONES as DEFAULT_MAX_ZONES,
-    DEV_ROLE_MAP as DEV_ROLE_MAP,
-    DEV_TYPE_MAP as DEV_TYPE_MAP,
+    DEV_MODE as DEV_MODE,
     DEVICE_ID_REGEX as DEVICE_ID_REGEX,
     DOMAIN_TYPE_MAP as DOMAIN_TYPE_MAP,
     F9 as F9,
     FA as FA,
     FAN_MODE as FAN_MODE,  # deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
+    FAULT_DEVICE_CLASS as FAULT_DEVICE_CLASS,
+    FAULT_STATE as FAULT_STATE,
+    FAULT_TYPE as FAULT_TYPE,
     FC as FC,
     FF as FF,
     I_ as I_,
+    LOOKUP_PUZZ as LOOKUP_PUZZ,
     RP as RP,
     RQ as RQ,
-    SYS_MODE_MAP as SYS_MODE_MAP,
     SZ_ACCEPT as SZ_ACCEPT,
-    SZ_ACTIVE as SZ_ACTIVE,
-    SZ_ACTUATOR_ENABLED as SZ_ACTUATOR_ENABLED,
-    SZ_ACTUATORS as SZ_ACTUATORS,
-    SZ_BATTERY_LEVEL as SZ_BATTERY_LEVEL,
-    SZ_BATTERY_LOW as SZ_BATTERY_LOW,
-    SZ_BATTERY_STATE as SZ_BATTERY_STATE,
-    SZ_CONFIRM as SZ_CONFIRM,
-    SZ_DATETIME as SZ_DATETIME,
-    SZ_DEVICE_ID as SZ_DEVICE_ID,
-    SZ_DEVICE_ROLE as SZ_DEVICE_ROLE,
-    SZ_DEVICES as SZ_DEVICES,
-    SZ_DHW_IDX as SZ_DHW_IDX,
-    SZ_DIFFERENTIAL as SZ_DIFFERENTIAL,
-    SZ_DOMAIN_ID as SZ_DOMAIN_ID,
-    SZ_DURATION as SZ_DURATION,
-    SZ_FLAME_ON as SZ_FLAME_ON,
-    SZ_HEAT_DEMAND as SZ_HEAT_DEMAND,
-    SZ_LANGUAGE as SZ_LANGUAGE,
-    SZ_MODE as SZ_MODE,
-    SZ_MODULATION_LEVEL as SZ_MODULATION_LEVEL,
-    SZ_NAME as SZ_NAME,
-    SZ_OEM_CODE as SZ_OEM_CODE,
-    SZ_OFFER as SZ_OFFER,
-    SZ_OVERRUN as SZ_OVERRUN,
-    SZ_PAYLOAD as SZ_PAYLOAD,
-    SZ_PHASE as SZ_PHASE,
-    SZ_PRESSURE as SZ_PRESSURE,
-    SZ_RELAY_DEMAND as SZ_RELAY_DEMAND,
-    SZ_RELAY_FAILSAFE as SZ_RELAY_FAILSAFE,
-    SZ_SENSOR as SZ_SENSOR,
-    SZ_SETPOINT as SZ_SETPOINT,
-    SZ_SETPOINT_BOUNDS as SZ_SETPOINT_BOUNDS,
-    SZ_SYSTEM_MODE as SZ_SYSTEM_MODE,
-    SZ_TEMP_HIGH as SZ_TEMP_HIGH,
-    SZ_TEMP_LOW as SZ_TEMP_LOW,
-    SZ_TEMPERATURE as SZ_TEMPERATURE,
-    SZ_UFH_IDX as SZ_UFH_IDX,
-    SZ_UNKNOWN as SZ_UNKNOWN,
-    SZ_UNTIL as SZ_UNTIL,
-    SZ_VALUE as SZ_VALUE,
-    SZ_WINDOW_OPEN as SZ_WINDOW_OPEN,
-    SZ_ZONE_CLASS as SZ_ZONE_CLASS,
-    SZ_ZONE_IDX as SZ_ZONE_IDX,
-    SZ_ZONE_MASK as SZ_ZONE_MASK,
-    SZ_ZONE_TYPE as SZ_ZONE_TYPE,
-    SZ_ZONES as SZ_ZONES,
     W_ as W_,
-    ZON_MODE_MAP as ZON_MODE_MAP,
-    ZON_ROLE_MAP as ZON_ROLE_MAP,
+    AttrDict as AttrDict,
     Code as Code,
-    DevRole as DevRole,
-    DevType as DevType,
+    FaultDeviceClass as FaultDeviceClass,
+    FaultState as FaultState,
+    FaultType as FaultType,
     IndexT as IndexT,
     SystemType as SystemType,
     VerbT as VerbT,
-    ZoneRole as ZoneRole,
+    __dev_mode__ as __dev_mode__,
+    attr_dict_factory as attr_dict_factory,
 )
+
+from .enums import DevRole as DevRole, DevType as DevType, ZoneRole as ZoneRole
 
 # used by schedule.py...
 SZ_FRAGMENT: Final = "fragment"
@@ -177,8 +136,6 @@ SZ_ACTUATOR_COUNTDOWN: Final = "actuator_countdown"
 SZ_COOL_ACTIVE: Final = "cool_active"
 SZ_CYCLE_COUNTDOWN: Final = "cycle_countdown"
 
-__dev_mode__ = False  # NOTE: this is const.py
-
 
 class Discover(IntEnum):
     """Flags for the discovery process."""
@@ -267,3 +224,147 @@ HEARTBEAT_TIMEOUT_TRV = td(hours=12)
 HEARTBEAT_TIMEOUT_REMOTE = td(hours=24)
 HEARTBEAT_TIMEOUT_SENSOR = td(hours=12)
 GATEWAY_MESSAGE_TIMEOUT: td = td(minutes=10)
+
+
+DEV_ROLE_MAP = attr_dict_factory(
+    {
+        DevRole.ACT: {"00": "zone_actuator"},
+        DevRole.SEN: {"04": "zone_sensor"},
+        DevRole.RAD: {"08": "rad_actuator"},
+        DevRole.UFH: {"09": "ufh_actuator"},
+        DevRole.VAL: {"0A": "val_actuator"},
+        DevRole.MIX: {"0B": "mix_actuator"},
+        DevRole.OUT: {"0C": "out_sensor"},
+        DevRole.DHW: {"0D": "dhw_sensor"},
+        DevRole.HTG: {"0E": "hotwater_valve"},  # payload[:4] == 000E
+        DevRole.HT1: {None: "heating_valve"},  # payload[:4] == 010E
+        DevRole.APP: {"0F": "appliance_control"},  # the heat/cool source
+        DevRole.RFG: {"10": "remote_gateway"},
+        DevRole.ELE: {"11": "ele_actuator"},  # ELE(VAL) - no RP from older evos
+    },
+    {
+        "HEAT_DEVICES": ("00", "04", "08", "09", "0A", "0B", "11"),
+        "DHW_DEVICES": ("0D", "0E"),
+        "SENSORS": ("04", "0C", "0D"),
+    },
+)
+
+
+DEV_TYPE_MAP = attr_dict_factory(
+    {
+        # Generic devices (would be promoted)
+        DevType.DEV: {None: "generic_device"},
+        DevType.HEA: {None: "heat_device"},
+        DevType.HVC: {None: "hvac_device"},
+        # HGI80
+        DevType.HGI: {"18": "gateway_interface"},
+        # Heat (CH/DHW) devices
+        DevType.TR0: {"00": "radiator_valve", AttrDict._SZ_AKA_SLUG: DevType.TRV},
+        DevType.CTL: {"01": "controller"},
+        DevType.UFC: {"02": "ufh_controller"},
+        DevType.HCW: {"03": "analog_thermostat"},
+        DevType.THM: {None: "thermostat"},
+        DevType.TRV: {"04": "radiator_valve"},
+        DevType.DHW: {"07": "dhw_sensor"},
+        DevType.OTB: {"10": "opentherm_bridge"},
+        DevType.DTS: {"12": "digital_thermostat"},
+        DevType.BDR: {"13": "electrical_relay"},
+        DevType.OUT: {"17": "outdoor_sensor"},
+        DevType.DT2: {"22": "digital_thermostat", AttrDict._SZ_AKA_SLUG: DevType.DTS},
+        DevType.PRG: {"23": "programmer"},
+        DevType.RFG: {"30": "rf_gateway"},
+        DevType.RND: {"34": "round_thermostat"},
+        # Other (jasper) devices
+        DevType.JIM: {"08": "jasper_interface"},
+        DevType.JST: {"31": "jasper_thermostat"},
+        # Ventilation devices
+        DevType.CO2: {None: "co2_sensor"},
+        DevType.DIS: {None: "switch_display"},
+        DevType.FAN: {None: "ventilator"},
+        DevType.HUM: {None: "rh_sensor"},
+        DevType.PIR: {None: "presence_sensor"},
+        DevType.RFS: {None: "hvac_gateway"},
+        DevType.REM: {None: "switch"},
+        DevType.SW2: {None: "switch_variant"},
+    },
+    {
+        "HEAT_DEVICES": (
+            "00",
+            "01",
+            "02",
+            "03",
+            "04",
+            "07",
+            "10",
+            "12",
+            "13",
+            "17",
+            "22",
+            "30",
+            "34",
+        ),
+        "HEAT_ZONE_SENSORS": ("00", "01", "03", "04", "12", "22", "34"),
+        "HEAT_ZONE_ACTUATORS": ("00", "02", "04", "13"),
+        "THM_DEVICES": ("03", "12", "21", "22", "34"),
+        "TRV_DEVICES": ("00", "04"),
+        "CONTROLLERS": (
+            "01",
+            "02",
+            "12",
+            "22",
+            "23",
+            "30",
+            "34",
+        ),
+        "PROMOTABLE_SLUGS": (DevType.DEV, DevType.HEA, DevType.HVC),
+        "HVAC_SLUGS": {
+            DevType.CO2: "co2_sensor",
+            DevType.FAN: "ventilator",
+            DevType.HUM: "rh_sensor",
+            DevType.RFS: "hvac_gateway",
+            DevType.REM: "switch",
+        },
+    },
+)
+
+
+ZON_ROLE_MAP = attr_dict_factory(
+    {
+        ZoneRole.ACT: {"00": "heating_zone"},
+        ZoneRole.SEN: {"04": "heating_zone"},
+        ZoneRole.RAD: {"08": "radiator_valve"},
+        ZoneRole.UFH: {"09": "underfloor_heating"},
+        ZoneRole.VAL: {"0A": "zone_valve"},
+        ZoneRole.MIX: {"0B": "mixing_valve"},
+        ZoneRole.DHW: {"0D": "stored_hotwater"},
+        ZoneRole.ELE: {"11": "electric_heat"},
+    },
+    {
+        "HEAT_ZONES": ("08", "09", "0A", "0B", "11"),
+    },
+)
+
+
+ZON_MODE_MAP = attr_dict_factory(
+    {
+        "FOLLOW": {"00": "follow_schedule"},
+        "ADVANCED": {"01": "advanced_override"},
+        "PERMANENT": {"02": "permanent_override"},
+        "COUNTDOWN": {"03": "countdown_override"},
+        "TEMPORARY": {"04": "temporary_override"},
+    }
+)
+
+
+SYS_MODE_MAP = attr_dict_factory(
+    {
+        "au_00": {"00": "auto"},
+        "ho_01": {"01": "heat_off"},
+        "eb_02": {"02": "eco_boost"},
+        "aw_03": {"03": "away"},
+        "do_04": {"04": "day_off"},
+        "de_05": {"05": "day_off_eco"},
+        "ar_06": {"06": "auto_with_reset"},
+        "cu_07": {"07": "custom"},
+    }
+)

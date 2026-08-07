@@ -16,12 +16,16 @@ import voluptuous as vol
 from ramses_rf.typing import DeviceIdT, DeviceListT
 
 # TODO: deprecate re-exporting (via as) in favour of direct imports
+# TODO: deprecate re-exporting (via as) in favour of direct imports
 from ramses_tx.const import (
+    DEFAULT_MAX_ZONES as DEFAULT_MAX_ZONES,
+    DEVICE_ID_REGEX as DEVICE_ID_REGEX,
     SZ_ACTUATORS as SZ_ACTUATORS,
     SZ_CONFIG as SZ_CONFIG,
     SZ_DEVICES as SZ_DEVICES,
     SZ_NAME,
     SZ_SENSOR as SZ_SENSOR,
+    SZ_ZONE_IDX as SZ_ZONE_IDX,
     SZ_ZONE_TYPE,
     SZ_ZONES,
 )
@@ -58,19 +62,14 @@ from .config import (
     strip_and_map_traits as strip_and_map_traits,
     strip_traits as strip_traits,
 )
-
-# TODO: deprecate re-exporting (via as) in favour of direct imports
 from .const import (
-    DEFAULT_MAX_ZONES as DEFAULT_MAX_ZONES,
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
-    DEVICE_ID_REGEX,
     DONT_CREATE_MESSAGES,
     SZ_DISABLE_DISCOVERY as SZ_DISABLE_DISCOVERY,
     SZ_DISABLE_POLLING as SZ_DISABLE_POLLING,
     SZ_IS_BATTERY as SZ_IS_BATTERY,
     SZ_POLLING_INTERVAL as SZ_POLLING_INTERVAL,
-    SZ_ZONE_IDX,
     ZON_ROLE_MAP,
     DevRole,
     DevType,

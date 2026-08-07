@@ -10,13 +10,13 @@ from ramses_rf.const import (
     HEARTBEAT_TIMEOUT_REMOTE,
     SZ_BOOST_TIMER,
     SZ_FAN_MODE,
-    Code,
     DevType,
 )
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Packet
+from ramses_tx.const import Code
 
 from .dev_base import BatteryState, DeviceHvac, Fakeable
 from .helpers import send_fake_intent

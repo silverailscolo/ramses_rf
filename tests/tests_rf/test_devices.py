@@ -9,7 +9,6 @@ import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import FA, FC, SZ_BATTERY_LEVEL, SZ_BATTERY_LOW, SZ_BATTERY_STATE
 from ramses_rf.devices import (
     BdrSwitch,
     Controller,
@@ -34,7 +33,16 @@ from ramses_rf.protocol.opentherm import (
 )
 from ramses_tx.address import Address
 from ramses_tx.config import EngineConfig
-from ramses_tx.const import I_, RP, Code
+from ramses_tx.const import (
+    FA,
+    FC,
+    I_,
+    RP,
+    SZ_BATTERY_LEVEL,
+    SZ_BATTERY_LOW,
+    SZ_BATTERY_STATE,
+    Code,
+)
 
 
 @pytest.fixture

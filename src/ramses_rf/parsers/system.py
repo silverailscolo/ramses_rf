@@ -32,17 +32,19 @@ from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
 from ramses_rf.const import (
+    DEV_ROLE_MAP,
+    DEV_TYPE_MAP,
+    SYS_MODE_MAP,
     SZ_CHANGE_COUNTER,
     SZ_FRAG_LENGTH,
     SZ_FRAG_NUMBER,
     SZ_FRAGMENT,
     SZ_TOTAL_FRAGS,
 )
+from ramses_rf.enums import DevRole
 from ramses_tx import exceptions as exc
 from ramses_tx.address import ALL_DEV_ADDR, hex_id_to_dev_id
 from ramses_tx.const import (
-    DEV_ROLE_MAP,
-    DEV_TYPE_MAP,
     F6,
     F8,
     F9,
@@ -57,7 +59,6 @@ from ramses_tx.const import (
     LOOKUP_PUZZ,
     RP,
     RQ,
-    SYS_MODE_MAP,
     SZ_ACCEPT,
     SZ_BINDINGS,
     SZ_CONFIRM,
@@ -80,7 +81,6 @@ from ramses_tx.const import (
     SZ_TIMESTAMP,
     SZ_UNTIL,
     W_,
-    DevRole,
     FaultDeviceClass,
 )
 from ramses_tx.helpers import (

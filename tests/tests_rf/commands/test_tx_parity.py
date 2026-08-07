@@ -7,8 +7,9 @@ import pytest
 from ramses_rf.address import Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
+from ramses_rf.const import ZON_MODE_MAP
 from ramses_rf.enums import Action
-from ramses_tx.const import ZON_MODE_MAP, FaultDeviceClass, FaultState, FaultType
+from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.packet import Packet
 
 

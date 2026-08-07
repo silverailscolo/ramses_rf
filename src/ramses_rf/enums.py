@@ -1,6 +1,80 @@
 """RAMSES RF - Cross-domain enumerations for the L7 event pipeline."""
 
-from enum import StrEnum
+from enum import EnumCheck, StrEnum, verify
+
+
+# slugs for device/zone entity klasses, used by 0005/000C
+@verify(EnumCheck.UNIQUE)
+class DevRole(StrEnum):
+    """Slugs for device/zone entity classes, used by commands 0005/000C."""
+
+    ACT = "ACT"  # Generic heating zone actuator group
+    SEN = "SEN"  # Generic heating zone sensor group
+    ELE = "ELE"  # BDRs (no heat demand)
+    MIX = "MIX"  # HM8s
+    RAD = "RAD"  # TRVs
+    UFH = "UFH"  # UFC (circuits)
+    VAL = "VAL"  # BDRs
+    DHW = "DHW"  # DHW sensor (a zone, but not a heating zone)
+    HTG = "HTG"  # BDR (DHW relay, HTG relay)
+    HT1 = "HT1"  # BDR (HTG relay)
+    OUT = "OUT"  # OUT (external weather sensor)
+    RFG = "RFG"  # RFG
+    APP = "APP"  # BDR/OTB (appliance relay)
+
+
+# slugs for device entity types, used in device_ids
+@verify(EnumCheck.UNIQUE)
+class DevType(StrEnum):
+    """Slugs for device entity types, used in device_ids."""
+
+    DEV = "DEV"  # xx: Promotable device
+    HEA = "HEA"  # xx: Promotable Heat device, aka CH/DHW device
+    HVC = "HVC"  # xx: Promotable HVAC device
+    THM = "THM"  # xx: Generic thermostat
+
+    BDR = "BDR"  # 13: Electrical relay
+    CTL = "CTL"  # 01: Controller (zoned)
+    DHW = "DHW"  # 07: DHW sensor
+    DTS = "DTS"  # 12: Thermostat, DTS92(E)
+    DT2 = "DT2"  # 22: Thermostat, DTS92(E)
+    HCW = "HCW"  # 03: Thermostat - don't use STA
+    HGI = "HGI"  # 18: Gateway interface (RF to USB), HGI80
+    OTB = "OTB"  # 10: OpenTherm bridge
+    OUT = "OUT"  # 17: External weather sensor
+    PRG = "PRG"  # 23: Programmer
+    RFG = "RFG"  # 30: RF gateway (RF to ethernet), RFG100
+    RND = "RND"  # 34: Thermostat, TR87RF
+    TRV = "TRV"  # 04: Thermostatic radiator valve
+    TR0 = "TR0"  # 00: Thermostatic radiator valve
+    UFC = "UFC"  # 02: UFH controller
+
+    JIM = "JIM"  # 08: Jasper Interface Module (EIM?)
+    JST = "JST"  # 31: Jasper Stat
+
+    RFS = "RFS"  # ??: HVAC spIDer gateway
+    FAN = "FAN"  # ??: HVAC fan
+    CO2 = "CO2"  # ??: HVAC CO2 sensor
+    HUM = "HUM"  # ??: HVAC humidity sensor
+    PIR = "PIR"  # ??: HVAC pesence sensor
+    REM = "REM"  # ??: HVAC switch
+    SW2 = "SW2"  # ??: HVAC switch, Orcon variant
+    DIS = "DIS"  # ??: HVAC switch with display
+
+
+# slugs for zone entity klasses, used by 0005/000C
+@verify(EnumCheck.UNIQUE)
+class ZoneRole(StrEnum):
+    """Slugs for zone entity classes, used by commands 0005/000C."""
+
+    ACT = "ACT"  # Generic heating zone actuator group
+    SEN = "SEN"  # Generic heating zone sensor group
+    ELE = "ELE"  # heating zone with BDRs (no heat demand)
+    MIX = "MIX"  # heating zone with HM8s
+    RAD = "RAD"  # heating zone with TRVs
+    UFH = "UFH"  # heating zone with UFC circuits
+    VAL = "VAL"  # heating zone with BDRs
+    DHW = "DHW"  # DHW zone with BDRs
 
 
 class Topic(StrEnum):

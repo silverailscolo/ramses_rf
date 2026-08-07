@@ -6,20 +6,10 @@ from collections.abc import Iterable
 
 from ramses_rf.commands.builders.helpers import _check_idx, resolve_addrs
 from ramses_rf.commands.core import Command
+from ramses_rf.const import DEV_TYPE_MAP, SYS_MODE_MAP
+from ramses_rf.enums import DevType
 from ramses_tx.address import ALL_DEV_ADDR, dev_id_to_hex_id
-from ramses_tx.const import (
-    DEFAULT_NUM_REPEATS,
-    DEV_TYPE_MAP,
-    FF,
-    I_,
-    RP,
-    RQ,
-    SYS_MODE_MAP,
-    W_,
-    Code,
-    DevType,
-    Priority,
-)
+from ramses_tx.const import DEFAULT_NUM_REPEATS, FF, I_, RP, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import (
     hex_from_bool,

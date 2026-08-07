@@ -17,16 +17,7 @@ from asyncclick.exceptions import ClickException, Exit
 from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
-from ramses_rf.const import (
-    DEV_TYPE_MAP,
-    DONT_CREATE_MESSAGES,
-    I_,
-    RP,
-    RQ,
-    SZ_ZONE_IDX,
-    W_,
-    Code,
-)
+from ramses_rf.const import DEV_TYPE_MAP, DONT_CREATE_MESSAGES
 from ramses_rf.discovery_scan import DiscoveryScan
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import deep_merge
@@ -39,6 +30,7 @@ from ramses_rf.schemas import (
 )
 from ramses_tx import is_valid_dev_id
 from ramses_tx.config import EngineConfig
+from ramses_tx.const import I_, RP, RQ, SZ_ZONE_IDX, W_, Code
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.logger import CONSOLE_COLS, DEFAULT_DATEFMT, DEFAULT_FMT
 from ramses_tx.schemas import (
