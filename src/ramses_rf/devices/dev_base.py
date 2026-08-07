@@ -243,25 +243,53 @@ class DeviceBase(Entity):
             return self._gwy.polling_manager.resolve_schedule_for_device(self)
         return self._polling_interval
 
-    def set_polling_interval(self, code: str, interval: int) -> None:
+    def set_polling_interval(self, interval: int | None) -> None:
+        """Set or update the overall polling interval override for this device.
+
+        :param interval: The polling interval in seconds, or None to reset to default.
+        :type interval: int | None
+        :raises ValueError: If interval is negative or if setting a battery device below 300s.
+        """
+        if interval is not None and interval < 0:
+            raise ValueError(f"Polling interval cannot be negative: {interval}")
+        if self.is_battery and interval is not None and 0 < interval < 300:
+            raise ValueError(
+                f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
+            )
+
+        if interval is None:
+            self._polling_interval = None
+        else:
+            eff_schedule = self.effective_polling_interval or {}
+            codes = list(eff_schedule.keys()) or ["10E0"]
+            self._polling_interval = {code: interval for code in codes}
+
+        if getattr(self._gwy, "polling_manager", None):
+            self._gwy.polling_manager.update_device_tasks(self)
+
+    def set_command_polling_interval(self, code: str, interval: int | None) -> None:
         """Set or update the polling interval for a specific packet code.
 
         :param code: The hex code string for the packet type.
         :type code: str
-        :param interval: The polling interval in seconds (0 to disable).
-        :type interval: int
+        :param interval: The polling interval in seconds (None or 0 to reset).
+        :type interval: int | None
         :raises ValueError: If interval is negative or if setting a battery device below 300s.
         """
-        if interval < 0:
+        if interval is not None and interval < 0:
             raise ValueError(f"Polling interval cannot be negative: {interval}")
-        if self.is_battery and 0 < interval < 300:
+        if self.is_battery and interval is not None and 0 < interval < 300:
             raise ValueError(
                 f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
             )
 
         if self._polling_interval is None:
             self._polling_interval = {}
-        self._polling_interval[code] = interval
+
+        if interval is None:
+            self._polling_interval.pop(code, None)
+        else:
+            self._polling_interval[code] = interval
 
         if getattr(self._gwy, "polling_manager", None):
             self._gwy.polling_manager.update_device_tasks(self)

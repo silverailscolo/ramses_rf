@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from .dto import ActuatorStateDTO, ThermalDemandDTO, UfhCircuitDemandDTO
+from .dto import (
+    ActuatorCycleDTO,
+    ActuatorStateDTO,
+    ThermalDemandDTO,
+    UfhCircuitDemandDTO,
+    ZoneScheduleDTO,
+)
 from .state_base import DeviceTraits, StateUpdatedEvent, TopologyChangedEvent, _now_utc
 from .state_climate import (
     ActuatorState,
@@ -21,6 +27,7 @@ from .state_opentherm import OpenThermState
 from .state_schedules import DailySchedule, ScheduleState, SwitchPoint
 
 __all__ = [
+    "ActuatorCycleDTO",
     "ActuatorState",
     "ActuatorStateDTO",
     "DailySchedule",
@@ -42,6 +49,7 @@ __all__ = [
     "TrvState",
     "UfhCircuitDemandDTO",
     "UfhState",
+    "ZoneScheduleDTO",
     "ZoneState",
     "_now_utc",
 ]
