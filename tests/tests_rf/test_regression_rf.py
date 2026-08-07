@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
-from datetime import datetime as dt_type, timezone as tz_type
+from datetime import UTC, datetime as dt_type
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
@@ -28,7 +28,7 @@ FIXTURE_FILE = Path(__file__).parents[1] / "fixtures" / "regression_packets_sort
 
 def _normalize_val(val: Any) -> Any:
     if isinstance(val, dt_type):
-        return val.astimezone(tz_type.UTC)
+        return val.astimezone(UTC)
     if dataclasses.is_dataclass(val):
         return {
             k: _normalize_val(v)
