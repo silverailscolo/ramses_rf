@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
@@ -50,6 +51,15 @@ async def _get_attr_value(obj: Any, attr: str) -> Any:
         val = val()
     if asyncio.iscoroutine(val):
         val = await val
+    if dataclasses.is_dataclass(val):
+        val = {k: v for k, v in dataclasses.asdict(val).items() if v is not None}
+    elif isinstance(val, list):
+        val = [
+            {k: v for k, v in dataclasses.asdict(item).items() if v is not None}
+            if dataclasses.is_dataclass(item)
+            else item
+            for item in val
+        ]
     return val
 
 
