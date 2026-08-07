@@ -11,7 +11,13 @@ from ramses_rf.payloads.heating import (
     TemperaturePayload,
     ZoneConfigPayload,
 )
-from ramses_rf.payloads.hvac import FanModePayload
+from ramses_rf.payloads.hvac import (
+    Co2Payload,
+    FanModePayload,
+    HvacFanParamPayload,
+    RelativeHumidityPayload,
+)
+from ramses_rf.payloads.opentherm import OpenThermMsgPayload
 from ramses_tx.dtos import PacketDTO
 
 
@@ -78,8 +84,8 @@ def test_schedule_switchpoint_payload_0404_parity() -> None:
     # Assert
     assert payload.zone_idx == 1
     assert payload.day_of_week == 1
-    assert payload.time_of_day_mins == 360  # 0168 hex -> 360 mins = 06:00
-    assert payload.setpoint_value == 2000  # 07D0 hex -> 2000
+    assert payload.time_of_day_mins == 360
+    assert payload.setpoint_value == 2000
     assert reencoded == raw_hex
     assert as_dict == {
         "zone_idx": 1,
@@ -182,6 +188,86 @@ def test_fan_mode_payload_22f1_parity() -> None:
     assert payload.mode_max == 4
     assert reencoded == raw_hex
     assert as_dict == {"header": 0, "mode_idx": 2, "mode_max": 4}
+
+
+def test_hvac_fan_param_payload_2411_parity() -> None:
+    # Arrange
+    raw_hex = "00000A0010000000050000000000000064000000010001"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacFanParamPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.param_id == 10
+    assert payload.data_type == 16
+    assert payload.value_scaled == 5
+    assert payload.min_val_scaled == 0
+    assert payload.max_val_scaled == 100
+    assert payload.precision_scaled == 1
+    assert payload.trailer_bytes == b"\x00\x01"
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "param_id": 10,
+        "data_type": 16,
+        "value_scaled": 5,
+        "min_val_scaled": 0,
+        "max_val_scaled": 100,
+        "precision_scaled": 1,
+        "trailer_bytes": b"\x00\x01",
+    }
+
+
+def test_co2_payload_1298_parity() -> None:
+    # Arrange
+    raw_hex = "02D0"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = Co2Payload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.co2_ppm == 720
+    assert reencoded == raw_hex
+    assert as_dict == {"co2_ppm": 720}
+
+
+def test_relative_humidity_payload_12a0_parity() -> None:
+    # Arrange
+    raw_hex = "64"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = RelativeHumidityPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.humidity_percent == 50.0
+    assert reencoded == raw_hex
+    assert as_dict == {"humidity_percent": 50.0}
+
+
+def test_opentherm_msg_payload_3220_parity() -> None:
+    # Arrange
+    raw_hex = "19001900"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenThermMsgPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.msg_id == 25
+    assert payload.msg_type == 0
+    assert payload.raw_value == b"\x19\x00"
+    assert reencoded == raw_hex
+    assert as_dict == {"msg_id": 25, "msg_type": 0, "raw_value": b"\x19\x00"}
 
 
 def test_pipeline_shadow_parity_execution() -> None:
