@@ -158,3 +158,12 @@ class TopologyAction(StrEnum):
     BIND_DEVICE = "bind_device"
     CREATE_CONTROLLER = "create_controller"
     CREATE_CIRCUIT = "create_circuit"
+
+
+@verify(EnumCheck.UNIQUE)
+class ThermalMode(StrEnum):
+    """Thermal operating mode for climate systems (driven by 2D49)."""
+
+    HEAT = "heat"
+    COOL = "cool"
+    OFF = "off"

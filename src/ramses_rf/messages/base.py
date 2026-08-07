@@ -10,8 +10,8 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
 from ramses_rf.address import Address, id_to_address
+from ramses_rf.const import SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
 from ramses_tx import CommandDTO, PacketDTO
-from ramses_tx.const import SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
 from ramses_tx.models import DeviceId, RawPacket, TransportMessage
 from ramses_tx.typing import DeviceIdT
 

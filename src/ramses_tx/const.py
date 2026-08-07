@@ -286,80 +286,6 @@ def attr_dict_factory(
     return SlottedAttrDict(main_table, attr_table=attr_table)
 
 
-SZ_ACTIVE: Final = "active"
-SZ_ACTUATOR: Final = "actuator"
-SZ_ACTUATOR_ENABLED: Final = "actuator_enabled"
-SZ_ACTUATORS: Final = "actuators"
-# used by 1060
-SZ_BATTERY_LEVEL: Final = "battery_level"
-SZ_BATTERY_LOW: Final = "battery_low"
-SZ_BATTERY_STATE: Final = "battery_state"
-SZ_BINDINGS: Final = "bindings"
-SZ_CONFIG: Final = "config"
-SZ_DATETIME: Final = "datetime"
-SZ_DEMAND: Final = "demand"
-SZ_DEVICE_ID: Final = "device_id"
-SZ_DEVICE_ROLE: Final = "device_role"
-SZ_DEVICES: Final = "devices"
-SZ_DHW_IDX: Final = "dhw_idx"
-SZ_DIFFERENTIAL: Final = "differential"
-SZ_DOMAIN_ID: Final = "domain_id"
-SZ_DURATION: Final = "duration"
-SZ_FLAME_ON: Final = "flame_on"
-SZ_HEAT_DEMAND: Final = "heat_demand"
-SZ_IS_DST: Final = "is_dst"
-SZ_LANGUAGE: Final = "language"
-SZ_LOCAL_OVERRIDE: Final = "local_override"
-SZ_MAX_TEMP: Final = "max_temp"
-SZ_MIN_TEMP: Final = "min_temp"
-# SZ_MIX_CONFIG: Final = "mix_config"  # obsolete?
-SZ_MODE: Final = "mode"
-SZ_MODULATION_LEVEL: Final = "modulation_level"
-SZ_MULTIROOM_MODE: Final = "multiroom_mode"
-SZ_NAME: Final = "name"
-SZ_OEM_CODE: Final = "oem_code"
-SZ_OPENWINDOW_FUNCTION: Final = "openwindow_function"
-SZ_OVERRUN: Final = "overrun"
-SZ_PAYLOAD: Final = "payload"
-# SZ_PERCENTAGE: Final = "percentage"  # obsolete?
-SZ_PRESSURE: Final = "pressure"
-SZ_RELAY_DEMAND: Final = "relay_demand"
-SZ_RELAY_FAILSAFE: Final = "relay_failsafe"
-SZ_SENSOR: Final = "sensor"
-SZ_SETPOINT: Final = "setpoint"
-SZ_SETPOINT_BOUNDS: Final = "setpoint_bounds"
-# SZ_SLUG: Final = "_SLUG"  # obsolete?
-SZ_SYSTEM_MODE: Final = "system_mode"
-SZ_TEMPERATURE: Final = "temperature"
-# SZ_TEMP_HIGH: Final = "temp_high"  # obsolete?
-# SZ_TEMP_LOW: Final = "temp_low"  # obsolete?
-SZ_UFH_IDX: Final = "ufh_idx"
-SZ_UNKNOWN: Final = "unknown"
-SZ_UNTIL: Final = "until"
-SZ_VALUE: Final = "value"
-SZ_WINDOW_OPEN: Final = "window_open"
-SZ_ZONE_CLASS: Final = "zone_class"
-SZ_ZONE_IDX: Final = "zone_idx"
-SZ_ZONE_MASK: Final = "zone_mask"
-SZ_ZONE_TYPE: Final = "zone_type"
-SZ_ZONES: Final = "zones"
-
-# used in 0418 only?
-SZ_DEVICE_CLASS: Final = "device_class"
-SZ_DOMAIN_IDX: Final = "domain_idx"
-SZ_FAULT_STATE: Final = "fault_state"
-SZ_FAULT_TYPE: Final = "fault_type"
-SZ_LOG_ENTRY: Final = "log_entry"
-SZ_LOG_IDX: Final = "log_idx"
-SZ_TIMESTAMP: Final = "timestamp"
-
-# used in 1FC9
-SZ_OFFER: Final = "offer"
-SZ_ACCEPT: Final = "accept"
-SZ_CONFIRM: Final = "confirm"
-SZ_PHASE: Final = "phase"
-
-
 DEFAULT_MAX_ZONES: Final = 16 if DEV_MODE else 12
 # Evohome: 12 (0-11), older/initial version was 8
 # Hometronics: 16 (0-15), or more?
@@ -421,7 +347,7 @@ l = r"\d{3}"  # length # noqa: E741
 p = r"([0-9A-F]{2}){1,48}"  # payload
 
 RAW_LINE_REGEX = re.compile(f"^{v} {r} {d} {d} {d} {c} {l} {p}$")
-# COMMAND_REGEX = RAW_LINE_REGEX  # Backward-compatibility alias  # obsolete?
+COMMAND_REGEX = RAW_LINE_REGEX  # Backward-compatibility alias
 
 
 # Used by 0418/system_fault parser

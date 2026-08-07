@@ -112,6 +112,33 @@ class TopologyChangedEvent:
 
     timestamp: dt = field(default_factory=_now_utc)
 
+    @property
+    def is_single_device(self) -> bool:
+        """Return True if this event target is a single device.
+
+        :returns: True if device_id is present.
+        :rtype: bool
+        """
+        return self.device_id is not None
+
+    @property
+    def is_relationship(self) -> bool:
+        """Return True if this event defines a parent-child relationship.
+
+        :returns: True if parent_id or child_id is present.
+        :rtype: bool
+        """
+        return self.parent_id is not None or self.child_id is not None
+
+    @property
+    def target_device_id(self) -> DeviceIdT | None:
+        """Return primary device ID associated with this topology event.
+
+        :returns: Primary device ID (device_id, child_id, or parent_id).
+        :rtype: DeviceIdT | None
+        """
+        return self.device_id or self.child_id or self.parent_id
+
 
 # --- Phase 2.95: CQRS Domain Read-Models and Events ---
 

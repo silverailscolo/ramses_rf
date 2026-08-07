@@ -40,13 +40,13 @@ from ramses_rf.const import (
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
     SZ_SUPPLY_TEMP,
+    SZ_TEMPERATURE,
     DevType,
 )
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Priority
-from ramses_tx.const import SZ_TEMPERATURE
 from ramses_tx.typing import DeviceIdT
 
 from .dev_base import DeviceHvac

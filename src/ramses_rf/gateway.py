@@ -35,6 +35,7 @@ from .interfaces import (
     DeviceRegistryInterface,
     GatewayInterface,
     MessageStoreInterface,
+    SchemaUpdatedCallback,
 )
 from .lifecycle import GatewayLifecycle
 from .messages import ApplicationMessage, Message as rf_msg
@@ -161,6 +162,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             device_factory_cb=lambda addr, msg, traits: device_factory(
                 gwy=self, dev_addr=addr, msg=msg, traits=traits
             ),
+            on_topology_changed_cb=self._on_topology_changed,
         )
 
         # Instantiate the new asynchronous Topology Builder engine
@@ -170,6 +172,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         self._message_store: MessageStoreInterface | None = None
         self._pkt_log_listener: QueueListener | None = None
+        self._schema_updated_callback: SchemaUpdatedCallback | None = None
 
         # Initialize placeholder for the CQRS StateProjector
         self.state_projector = None
@@ -266,6 +269,42 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             SZ_BLOCK_LIST: self.config.engine.block_list or [],
             "_unwanted": sorted(self._engine._unwanted),
         }
+
+    @property
+    def schema_updated_callback(self) -> SchemaUpdatedCallback | None:
+        """Return the async callback invoked when system topology/schema updates.
+
+        :returns: Registered callback or None.
+        :rtype: SchemaUpdatedCallback | None
+        """
+        return self._schema_updated_callback
+
+    def set_schema_updated_callback(
+        self, callback: SchemaUpdatedCallback | None
+    ) -> None:
+        """Set the async callback invoked when system topology/schema updates.
+
+        :param callback: Async or sync callback accepting schema dict.
+        :type callback: SchemaUpdatedCallback | None
+        """
+        self._schema_updated_callback = callback
+
+    def _on_topology_changed(self) -> None:
+        """Handle topology change notification from DeviceRegistry."""
+        asyncio.create_task(self._notify_schema_updated())
+
+    async def _notify_schema_updated(self) -> None:
+        """Invoke registered schema updated callback safely.
+
+        Dispatches the latest system schema dictionary to the registered
+        consumer callback (e.g., ramses_cc warm-restart ingestion).
+        """
+        if self._schema_updated_callback is None:
+            return
+        schema_dict = await self.schema()
+        res = self._schema_updated_callback(schema_dict)
+        if asyncio.iscoroutine(res):
+            await res
 
     async def schema(self) -> dict[str, Any]:
         schema: dict[str, Any] = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}

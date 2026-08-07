@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_rf.const import DevType
+from ramses_rf.const import SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
 from ramses_rf.entity import Entity
 from ramses_rf.helpers import shrink
-from ramses_rf.models import DeviceTraits
+from ramses_rf.models import DeviceTraits, UfhCircuitDemandDTO
 from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
-from ramses_tx.const import FA, SZ_HEAT_DEMAND, SZ_RELAY_DEMAND
+from ramses_tx.const import FA
 from ramses_tx.typing import DeviceIdT, DevIndexT
 
 from .dev_base import DeviceHeat
@@ -154,19 +154,27 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         state = getattr(self, "demand_state", None)
         return state.heat_demand if state else None
 
-    async def heat_demands(self) -> list[dict[str, Any]] | None:  # 3150|ufh_idx array
-        """Return the UFH heat demands.
+    async def thermal_demands(self) -> list[UfhCircuitDemandDTO] | None:
+        """Return the UFH circuit thermal demands as CQRS DTOs.
 
-        # TODO: Refactor for #714 (CQRS API Boundaries).
-        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        :returns: List of circuit demand DTOs or None.
+        :rtype: list[UfhCircuitDemandDTO] | None
         """
         state = getattr(self, "ufh_state", None)
         if state and state.heat_demands:
             return [
-                {"ufx_idx": str(k), "heat_demand": v}
+                UfhCircuitDemandDTO(ufx_idx=str(k), thermal_demand=v)
                 for k, v in state.heat_demands.items()
             ]
         return None
+
+    async def heat_demands(self) -> list[UfhCircuitDemandDTO] | None:
+        """Return the UFH heat demands (deprecated alias for thermal_demands).
+
+        :returns: List of circuit demand DTOs or None.
+        :rtype: list[UfhCircuitDemandDTO] | None
+        """
+        return await self.thermal_demands()
 
     async def relay_demand(self) -> float | None:  # 0008|FC
         state = getattr(self, "demand_state", None)

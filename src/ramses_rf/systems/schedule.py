@@ -15,7 +15,13 @@ from typing import TYPE_CHECKING, Final
 import voluptuous as vol
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import SZ_FRAG_NUMBER, SZ_FRAGMENT, SZ_SCHEDULE, SZ_TOTAL_FRAGS
+from ramses_rf.const import (
+    SZ_FRAG_NUMBER,
+    SZ_FRAGMENT,
+    SZ_SCHEDULE,
+    SZ_TOTAL_FRAGS,
+    SZ_ZONE_IDX,
+)
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
 from ramses_rf.typing import (
@@ -33,7 +39,6 @@ from ramses_rf.typing import (
     SwitchPointT,
     SwitchPointZon,
 )
-from ramses_tx.const import SZ_ZONE_IDX
 from ramses_tx.exceptions import ProtocolSendFailed
 
 from ..enums import Action

@@ -7,9 +7,9 @@ from ramses_rf.commands.builders.helpers import (
     resolve_addrs,
 )
 from ramses_rf.commands.core import Command
-from ramses_rf.const import ZON_MODE_MAP
+from ramses_rf.const import SZ_DHW_IDX, ZON_MODE_MAP
 from ramses_rf.enums import DevType
-from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, SZ_DHW_IDX, W_, Code, Priority
+from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import hex_from_dtm, hex_from_temp
 
