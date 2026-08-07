@@ -9,6 +9,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import Any
 
+from ramses_rf.payloads import get_payload_class
 from ramses_rf.protocol.ramses import (
     CODE_IDX_ARE_COMPLEX,
     CODE_IDX_ARE_NONE,
@@ -507,6 +508,36 @@ class HeartbeatDecoder(PayloadDecoder):
         return {}
 
 
+class ParityCheckerDecoder(PayloadDecoder):
+    """Decoder executing registered PayloadBase dataclasses in shadow mode."""
+
+    def decode(
+        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
+        """Execute dataclass payload decoding in shadow mode before legacy parsing."""
+        payload_cls = get_payload_class(dto.code)
+
+        if payload_cls is not None and payload_str:
+            try:
+                raw_bytes = bytes.fromhex(payload_str)
+                payload_obj = payload_cls.from_bytes(raw_bytes)
+                _LOGGER.debug(
+                    "Shadow Dataclass decoded opcode %s: %r",
+                    dto.code,
+                    payload_obj,
+                )
+            except Exception as err:
+                _LOGGER.warning(
+                    "Shadow Dataclass decoding failed for opcode %s: %s",
+                    dto.code,
+                    err,
+                )
+
+        if self._next_decoder:
+            return self._next_decoder.decode(dto, payload_str, payload_len, msg)
+        return {}
+
+
 class StandardParserDecoder(PayloadDecoder):
     """Decoder routing payload to the appropriate 4-digit code parser."""
 
@@ -543,7 +574,9 @@ class DtoPayloadDecoderPipeline:
     def __init__(self) -> None:
         """Initialize pipeline linking specific system validation decoders."""
         self.head = RegexValidatorDecoder()
-        self.head.set_next(HeartbeatDecoder()).set_next(StandardParserDecoder())
+        self.head.set_next(HeartbeatDecoder()).set_next(
+            ParityCheckerDecoder()
+        ).set_next(StandardParserDecoder())
 
     def decode(self, dto: PacketDTO) -> dict[str, Any] | list[dict[str, Any]] | None:
         """Route tracking models cleanly through downstream chain decoders.
