@@ -297,6 +297,17 @@ SZ_BATTERY_STATE: Final = "battery_state"
 SZ_BINDINGS: Final = "bindings"
 SZ_CONFIG: Final = "config"
 SZ_DATETIME: Final = "datetime"
+SZ_BYPASS_POSITION: Final = "bypass_position"
+SZ_CH_ACTIVE: Final = "ch_active"
+SZ_CH_ENABLED: Final = "ch_enabled"
+SZ_COOLING_ACTIVE: Final = "cooling_active"
+SZ_COOLING_ENABLED: Final = "cooling_enabled"
+SZ_DHW_ACTIVE: Final = "dhw_active"
+SZ_DHW_BLOCKING: Final = "dhw_blocking"
+SZ_DHW_ENABLED: Final = "dhw_enabled"
+SZ_FAULT_PRESENT: Final = "fault_present"
+SZ_FLAME_ACTIVE: Final = "flame_active"
+SZ_OTC_ACTIVE: Final = "otc_active"
 SZ_DEMAND: Final = "demand"
 SZ_DEVICE_ID: Final = "device_id"
 SZ_DEVICE_ROLE: Final = "device_role"
@@ -421,7 +432,7 @@ l = r"\d{3}"  # length # noqa: E741
 p = r"([0-9A-F]{2}){1,48}"  # payload
 
 RAW_LINE_REGEX = re.compile(f"^{v} {r} {d} {d} {d} {c} {l} {p}$")
-# COMMAND_REGEX = RAW_LINE_REGEX  # Backward-compatibility alias  # obsolete?
+COMMAND_REGEX = RAW_LINE_REGEX  # Backward-compatibility alias
 
 
 # Used by 0418/system_fault parser
