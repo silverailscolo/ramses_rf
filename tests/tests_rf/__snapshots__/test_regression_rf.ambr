@@ -2373,6 +2373,14 @@
         'actuator_cycle': dict({
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 7, 4, 16, 0, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'flame_active': False,
         'id': '10:004598',
@@ -2384,6 +2392,14 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': True,
+          'ch_enabled': True,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2021, 2, 25, 14, 43, 32, 9252, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2416,6 +2432,14 @@
         'actuator_cycle': dict({
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 9, 7, 22, 45, 45, 668000, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'flame_active': False,
         'id': '10:030051',
@@ -2445,6 +2469,13 @@
         'actuator_cycle': dict({
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2024, 2, 2, 8, 58, 53, 388244, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'flame_active': False,
         'id': '10:033995',
@@ -2455,6 +2486,14 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': True,
+          'ch_enabled': True,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 2, 4, 14, 16, 22, 818919, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2478,6 +2517,14 @@
         'actuator_cycle': dict({
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'ch_active': True,
+          'ch_enabled': True,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 9, 29, 15, 17, 45, 261818, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'flame_active': False,
         'heat_demand': 0.0,
@@ -2490,6 +2537,14 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 7, 4, 15, 53, 13, 493496, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2511,6 +2566,14 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': True,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 3, 13, 15, 34, 57, 762021, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2547,6 +2610,14 @@
           'actuator_countdown': 60,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 9, 8, 12, 52, 9, 675753, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'boiler_output_temp': 47.4,
         'boiler_return_temp': 44.7,
@@ -2568,6 +2639,14 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'ch_enabled': True,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2024, 12, 7, 16, 49, 18, 711000, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2618,6 +2697,13 @@
           'actuator_countdown': 60,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2021, 12, 23, 16, 23, 57, 9331, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'boiler_output_temp': 47.0,
         'boiler_setpoint': 90.0,
@@ -2634,6 +2720,13 @@
         'actuator_cycle': dict({
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'ch_active': True,
+          'dhw_active': True,
+          'flame_active': True,
+          'last_updated': datetime.datetime(2022, 7, 4, 16, 0, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'boiler_output_temp': 65.0,
         'flame_active': True,
@@ -2645,6 +2738,13 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2023, 2, 10, 8, 37, 11, 282846, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2680,6 +2780,13 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': True,
+          'dhw_active': False,
+          'flame_active': True,
+          'last_updated': datetime.datetime(2022, 2, 5, 11, 20, 1, 997460, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2730,6 +2837,13 @@
         'actuator_cycle': dict({
           'modulation_level': 0.135,
         }),
+        'actuator_state': dict({
+          'ch_active': True,
+          'dhw_active': False,
+          'flame_active': True,
+          'last_updated': datetime.datetime(2021, 10, 17, 6, 23, 48, 224879, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.135,
+        }),
         'battery_low': None,
         'boiler_output_temp': 62.59,
         'boiler_setpoint': 65.0,
@@ -2745,6 +2859,13 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 10, 10, 15, 35, 50, 35592, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2782,6 +2903,13 @@
       }),
       dict({
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'ch_active': False,
+          'dhw_active': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2024, 2, 2, 8, 56, 22, 923299, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2885,6 +3013,10 @@
           'cycle_countdown': 297,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2026, 2, 5, 23, 55, 17, 349777, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'id': '13:027756',
         'is_alive': None,
@@ -2900,6 +3032,10 @@
           'cycle_countdown': 493,
           'modulation_level': 1.0,
         }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 3, 14, 8, 5, 33, 398293, tzinfo=datetime.timezone.utc),
+          'modulation_level': 1.0,
+        }),
         'battery_low': None,
         'id': '13:031208',
         'is_alive': None,
@@ -2911,6 +3047,10 @@
       dict({
         'active': False,
         'actuator_cycle': dict({
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 9, 29, 14, 0, 30, 444736, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2937,6 +3077,10 @@
           'cycle_countdown': 529,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 5, 2, 9, 6, 31, 686173, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'id': '13:035462',
         'is_alive': None,
@@ -2958,6 +3102,10 @@
         'actuator_cycle': dict({
           'actuator_countdown': 584,
           'cycle_countdown': 584,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 5, 2, 9, 6, 27, 876235, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2999,6 +3147,10 @@
           'cycle_countdown': 581,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 5, 2, 9, 6, 13, 7965, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'id': '13:106039',
         'is_alive': None,
@@ -3022,6 +3174,10 @@
           'cycle_countdown': 513,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 3, 13, 15, 35, 20, 826760, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'id': '13:109598',
         'is_alive': None,
@@ -3041,6 +3197,10 @@
       dict({
         'active': True,
         'actuator_cycle': dict({
+          'modulation_level': 1.0,
+        }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2024, 1, 19, 5, 23, 36, 192077, tzinfo=datetime.timezone.utc),
           'modulation_level': 1.0,
         }),
         'battery_low': None,
@@ -3074,6 +3234,10 @@
           'cycle_countdown': 988,
           'modulation_level': 1.0,
         }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2024, 1, 19, 6, 52, 20, 374809, tzinfo=datetime.timezone.utc),
+          'modulation_level': 1.0,
+        }),
         'battery_low': None,
         'id': '13:202850',
         'is_alive': None,
@@ -3087,6 +3251,10 @@
         'actuator_cycle': dict({
           'actuator_countdown': 462,
           'cycle_countdown': 462,
+          'modulation_level': 0.0,
+        }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2026, 2, 5, 23, 59, 16, 785760, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3128,6 +3296,10 @@
           'cycle_countdown': 255,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 5, 2, 9, 6, 37, 366593, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'id': '13:237335',
         'is_alive': None,
@@ -3143,6 +3315,10 @@
           'cycle_countdown': 26,
           'modulation_level': 0.0,
         }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2021, 11, 14, 4, 3, 16, 997757, tzinfo=datetime.timezone.utc),
+          'modulation_level': 0.0,
+        }),
         'battery_low': None,
         'id': '13:246213',
         'is_alive': None,
@@ -3156,6 +3332,10 @@
         'actuator_cycle': dict({
           'actuator_countdown': 300,
           'cycle_countdown': 300,
+          'modulation_level': 1.0,
+        }),
+        'actuator_state': dict({
+          'last_updated': datetime.datetime(2023, 12, 11, 20, 13, 49, 57656, tzinfo=datetime.timezone.utc),
           'modulation_level': 1.0,
         }),
         'battery_low': None,
