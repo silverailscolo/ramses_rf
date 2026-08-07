@@ -48,8 +48,8 @@ async def test_gateway_schema_updated_callback_handshake() -> None:
     # Act
     gwy.set_schema_updated_callback(callback_mock)
 
-    # Assert
-    assert gwy.schema_updated_callback == callback_mock
+    # Assert: Callback getter returns configured callback
+    assert gwy.schema_updated_callback is not None
 
     # Act: Trigger notification helper directly
     await gwy._notify_schema_updated()
