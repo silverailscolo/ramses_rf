@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+from datetime import datetime as dt_type, timezone as tz_type
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
@@ -23,6 +24,22 @@ if TYPE_CHECKING:
 
 # Navigate up from tests/tests_rf/test_regression_rf.py to tests/fixtures/
 FIXTURE_FILE = Path(__file__).parents[1] / "fixtures" / "regression_packets_sorted.txt"
+
+
+def _normalize_val(val: Any) -> Any:
+    if isinstance(val, dt_type):
+        return val.astimezone(tz_type.UTC)
+    if dataclasses.is_dataclass(val):
+        return {
+            k: _normalize_val(v)
+            for k, v in dataclasses.asdict(val).items()
+            if v is not None
+        }
+    if isinstance(val, dict):
+        return {k: _normalize_val(v) for k, v in val.items() if v is not None}
+    if isinstance(val, list):
+        return [_normalize_val(item) for item in val]
+    return val
 
 
 async def drain_cqrs_queues(gwy: Gateway) -> None:
@@ -51,16 +68,7 @@ async def _get_attr_value(obj: Any, attr: str) -> Any:
         val = val()
     if asyncio.iscoroutine(val):
         val = await val
-    if dataclasses.is_dataclass(val):
-        val = {k: v for k, v in dataclasses.asdict(val).items() if v is not None}
-    elif isinstance(val, list):
-        val = [
-            {k: v for k, v in dataclasses.asdict(item).items() if v is not None}
-            if dataclasses.is_dataclass(item)
-            else item
-            for item in val
-        ]
-    return val
+    return _normalize_val(val)
 
 
 async def serialize_device(dev: Any) -> dict[str, Any]:
