@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Self
+from typing import Self, cast
 
 import pytest
 
@@ -98,4 +98,4 @@ def test_payload_to_dict_adapter() -> None:
 def test_payload_to_dict_invalid_type() -> None:
     # Arrange & Act & Assert
     with pytest.raises(TypeError, match="Expected dataclass instance"):
-        payload_to_dict("not_a_dataclass")  # type: ignore[arg-type]
+        payload_to_dict(cast(PayloadBase, "not_a_dataclass"))
