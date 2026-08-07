@@ -43,6 +43,7 @@ SZ_ACTIVE: Final = "active"
 SZ_ACTUATOR: Final = "actuator"
 SZ_ACTUATOR_ENABLED: Final = "actuator_enabled"
 SZ_ACTUATORS: Final = "actuators"
+# used by 1060
 SZ_BATTERY_LEVEL: Final = "battery_level"
 SZ_BATTERY_LOW: Final = "battery_low"
 SZ_BATTERY_STATE: Final = "battery_state"
@@ -75,6 +76,7 @@ SZ_LANGUAGE: Final = "language"
 SZ_LOCAL_OVERRIDE: Final = "local_override"
 SZ_MAX_TEMP: Final = "max_temp"
 SZ_MIN_TEMP: Final = "min_temp"
+# SZ_MIX_CONFIG: Final = "mix_config"  # obsolete?
 SZ_MODE: Final = "mode"
 SZ_MODULATION_LEVEL: Final = "modulation_level"
 SZ_MULTIROOM_MODE: Final = "multiroom_mode"
@@ -83,14 +85,18 @@ SZ_OEM_CODE: Final = "oem_code"
 SZ_OPENWINDOW_FUNCTION: Final = "openwindow_function"
 SZ_OVERRUN: Final = "overrun"
 SZ_PAYLOAD: Final = "payload"
+# SZ_PERCENTAGE: Final = "percentage"  # obsolete?
 SZ_PRESSURE: Final = "pressure"
 SZ_RELAY_DEMAND: Final = "relay_demand"
 SZ_RELAY_FAILSAFE: Final = "relay_failsafe"
 SZ_SENSOR: Final = "sensor"
 SZ_SETPOINT: Final = "setpoint"
 SZ_SETPOINT_BOUNDS: Final = "setpoint_bounds"
+# SZ_SLUG: Final = "_SLUG"  # obsolete?
 SZ_SYSTEM_MODE: Final = "system_mode"
 SZ_TEMPERATURE: Final = "temperature"
+# SZ_TEMP_HIGH: Final = "temp_high"  # obsolete?
+# SZ_TEMP_LOW: Final = "temp_low"  # obsolete?
 SZ_UFH_IDX: Final = "ufh_idx"
 SZ_UNKNOWN: Final = "unknown"
 SZ_UNTIL: Final = "until"
@@ -102,6 +108,7 @@ SZ_ZONE_MASK: Final = "zone_mask"
 SZ_ZONE_TYPE: Final = "zone_type"
 SZ_ZONES: Final = "zones"
 
+# used in 0418 only?
 SZ_DEVICE_CLASS: Final = "device_class"
 SZ_DOMAIN_IDX: Final = "domain_idx"
 SZ_FAULT_STATE: Final = "fault_state"
@@ -110,6 +117,7 @@ SZ_LOG_ENTRY: Final = "log_entry"
 SZ_LOG_IDX: Final = "log_idx"
 SZ_TIMESTAMP: Final = "timestamp"
 
+# used in 1FC9
 SZ_OFFER: Final = "offer"
 SZ_ACCEPT: Final = "accept"
 SZ_CONFIRM: Final = "confirm"
