@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Final
 
 from ramses_rf.const import DOMAIN_TYPE_MAP, DevType
-from ramses_rf.models import ActuatorStateDTO, DeviceTraits
+from ramses_rf.models import ActuatorCycleDTO, ActuatorStateDTO, DeviceTraits
 from ramses_tx import Priority
 from ramses_tx.const import SZ_HEAT_DEMAND, SZ_PRIORITY, SZ_RELAY_DEMAND, Code
 from ramses_tx.typing import PayDictT
@@ -32,26 +32,22 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
     ACTUATOR_STATE: Final = "actuator_state"
     MODULATION_LEVEL: Final = "modulation_level"  # percentage (0.0-1.0)
 
-    async def actuator_cycle(self) -> dict[str, Any] | None:  # 3EF1
-        """Return the actuator cycle state.
+    async def actuator_cycle(self) -> ActuatorCycleDTO | None:  # 3EF1
+        """Return the actuator cycle state as a CQRS DTO.
 
-        # TODO: Refactor for #714 (CQRS API Boundaries).
-        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        :returns: ActuatorCycleDTO or None.
+        :rtype: ActuatorCycleDTO | None
         """
         state = getattr(self, "act_state", None)
         if not state:
             return None
 
-        raw_dict = {
-            "actuator_countdown": state.actuator_countdown,
-            "cycle_countdown": state.cycle_countdown,
-            "actuator_enabled": state.actuator_enabled,
-            "modulation_level": state.modulation_level,
-        }
-
-        # Dynamically strip None values to mimic legacy optional keys
-        clean_dict = {k: v for k, v in raw_dict.items() if v is not None}
-        return clean_dict if clean_dict else None
+        return ActuatorCycleDTO(
+            actuator_countdown=state.actuator_countdown,
+            cycle_countdown=state.cycle_countdown,
+            actuator_enabled=state.actuator_enabled,
+            modulation_level=state.modulation_level,
+        )
 
     async def actuator_state(self) -> ActuatorStateDTO | None:  # 3EF0
         """Return the actuator modulation state as a CQRS DTO.

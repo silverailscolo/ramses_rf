@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime as dt
+from typing import Any
 
 from ramses_rf.enums import ThermalMode
 
@@ -134,3 +135,37 @@ class ActuatorStateDTO:
     dhw_active: bool | None = None
     flame_active: bool | None = None
     last_updated: dt | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ActuatorCycleDTO:
+    """DTO for heating actuator cycle parameters (command 3EF1).
+
+    :param actuator_countdown: Remaining actuator run countdown.
+    :type actuator_countdown: int | None
+    :param cycle_countdown: Remaining cycle countdown.
+    :type cycle_countdown: int | None
+    :param actuator_enabled: True if actuator state output is enabled.
+    :type actuator_enabled: bool | None
+    :param modulation_level: Active modulation level (0.0 to 1.0).
+    :type modulation_level: float | None
+    """
+
+    actuator_countdown: int | None = None
+    cycle_countdown: int | None = None
+    actuator_enabled: bool | None = None
+    modulation_level: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ZoneScheduleDTO:
+    """CQRS DTO wrapping zone or system weekly schedule payload.
+
+    :param zone_idx: Zone index string (e.g. '00', 'HW').
+    :type zone_idx: str
+    :param schedule: Weekly schedule list of daily switchpoint dicts.
+    :type schedule: list[dict[str, Any]]
+    """
+
+    zone_idx: str
+    schedule: list[dict[str, Any]]
