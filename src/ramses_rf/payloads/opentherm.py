@@ -26,6 +26,21 @@ class OpenThermMsgPayload(PayloadBase):
       Field-spaced hex : 19 00 1900
       Payload hex      : 19001900
 
+    OpenTherm Gateway Mapping (Data IDs):
+      #   01: boiler_setpoint (or 22D9)
+      #   0E: ch_setpoint (or 3EF0)
+      #   12: ch_water_pressure (or 1300)
+      #   13: dhw_flow_rate (or 12F0)
+      #   19: boiler_output_temp (or 3200)
+      #   1A: dhw_temp (or 1260)
+      #   1C: boiler_return_temp (or 3210)
+      #   38: dhw_setpoint (or 10A0)
+      #   39: ch_max_setpoint (or 1081)
+      # Sample Packet Logs:
+      # 2021-11-05T06:25:20.669382 066 RP --- 10:023327 18:131597 --:------ 3220 005 00C01307C0
+      # 2021-11-05T06:35:20.721228 066 RP --- 10:023327 18:131597 --:------ 3220 005 0040130059
+      # 2021-12-06T06:35:55.949502 071 RP --- 10:051349 18:135447 --:------ 3220 005 00C0130ECC
+
     :param msg_id: OpenTherm Data ID byte (0-255).
     :type msg_id: int
     :param msg_type: OpenTherm message type classification (0-7).
@@ -567,3 +582,48 @@ class OpenthermBridgeStatusPayload(PayloadBase):
         :rtype: bytes
         """
         return bytes([self.status_code, self.flags])
+
+
+@register_payload("3210")
+@dataclass(frozen=True, slots=True)
+class ReturnTempPayload(PayloadBase):
+    """OpenTherm boiler return water temperature payload (Opcode 3210).
+
+    3-byte Return Temperature binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Header / Index               : 00
+      +1       h      2B   Return Temp (int16*100)      : 13 88 (50.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 1388
+      Payload hex      : 001388
+
+    :param return_temp: Return water temperature in °C.
+    :type return_temp: float
+    """
+
+    return_temp: float
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack return temperature binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked ReturnTempPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 3 bytes.
+        """
+        if len(raw_data) < 3:
+            raise ValueError(f"Invalid payload length for 3210: {len(raw_data)}")
+        temp_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        return cls(return_temp=temp_raw / 100.0)
+
+    def to_bytes(self) -> bytes:
+        """Pack return temperature data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        temp_raw = int(round(self.return_temp * 100.0))
+        return b"\x00" + temp_raw.to_bytes(2, byteorder="big", signed=True)

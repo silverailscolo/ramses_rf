@@ -1,5 +1,6 @@
 from datetime import datetime as dt
 
+import ramses_tx.const as tx_const
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.dhw import DhwConfigPayload, DhwModePayload, DhwStatePayload
@@ -9,6 +10,7 @@ from ramses_rf.payloads.heating import (
     DhwTemperaturePayload,
     HeatDemandPayload,
     OutdoorTempPayload,
+    RelayDemandPayload,
     ScheduleSwitchpointPayload,
     SetPointInfoPayload,
     SystemSyncPayload,
@@ -31,7 +33,13 @@ from ramses_rf.payloads.opentherm import (
     OpenthermSetpointPayload,
     OpenthermStatusPayload,
 )
-from ramses_rf.payloads.system import SystemClockPayload, SystemDatePayload
+from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
+from ramses_rf.payloads.system import (
+    SystemClockPayload,
+    SystemConfigPayload,
+    SystemDatePayload,
+    SystemFaultLogPayload,
+)
 from ramses_tx.dtos import PacketDTO
 
 
@@ -139,7 +147,14 @@ def test_system_sync_payload_1030_parity() -> None:
     # Assert
     assert payload.sync_flag == 0
     assert reencoded == raw_hex
-    assert as_dict == {"sync_flag": 0}
+    assert as_dict == {
+        "sync_flag": 0,
+        "max_flow_setpoint": None,
+        "min_flow_setpoint": None,
+        "valve_run_time": None,
+        "pump_run_time": None,
+        "raw_extra": None,
+    }
 
 
 def test_binding_payload_1fc9_parity() -> None:
@@ -567,3 +582,188 @@ def test_pipeline_shadow_parity_execution() -> None:
     # Assert
     assert isinstance(result, dict)
     assert result.get("seqx_num") == "001"
+
+
+def test_relay_demand_payload_0008_parity() -> None:
+    # Arrange
+    raw_hex = "0064"
+    raw_bytes = bytes.fromhex(raw_hex)
+    from ramses_rf.payloads.heating import RelayDemandPayload
+
+    # Act
+    payload = RelayDemandPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.domain_or_zone_idx == 0
+    assert payload.demand_percent == 0.5
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "domain_or_zone_idx": 0,
+        "demand_percent": 0.5,
+        "raw_extra": None,
+    }
+
+
+def test_relay_failsafe_payload_0009_parity() -> None:
+    # Arrange
+    raw_hex = "0001"
+    raw_bytes = bytes.fromhex(raw_hex)
+    from ramses_rf.payloads.system import RelayFailsafePayload
+
+    # Act
+    payload = RelayFailsafePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.domain_or_zone_idx == 0
+    assert payload.failsafe_enabled is True
+    assert reencoded == raw_hex
+    assert as_dict == {"domain_or_zone_idx": 0, "failsafe_enabled": True}
+
+
+def test_window_state_payload_12b0_parity() -> None:
+    # Arrange
+    raw_hex = "000100"
+    raw_bytes = bytes.fromhex(raw_hex)
+    from ramses_rf.payloads.hvac import WindowStatePayload
+
+    # Act
+    payload = WindowStatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.zone_idx == 0
+    assert payload.window_open is True
+    assert reencoded == raw_hex
+    assert as_dict == {"zone_idx": 0, "window_open": True}
+
+
+def test_return_temp_payload_3210_parity() -> None:
+    # Arrange
+    raw_hex = "001388"
+    raw_bytes = bytes.fromhex(raw_hex)
+    from ramses_rf.payloads.opentherm import ReturnTempPayload
+
+    # Act
+    payload = ReturnTempPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.return_temp == 50.0
+    assert reencoded == raw_hex
+    assert as_dict == {"return_temp": 50.0}
+
+
+def test_relay_demand_payload_0008_jasper_13byte_parity() -> None:
+    # Arrange
+    raw_hex = "00640102030405060708090A0B"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = RelayDemandPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.domain_or_zone_idx == 0
+    assert payload.demand_percent == 0.5
+    assert payload.raw_extra == bytes.fromhex("0102030405060708090A0B")
+    assert reencoded == raw_hex
+    assert as_dict["raw_extra"] == bytes.fromhex("0102030405060708090A0B")
+
+
+def test_system_sync_payload_1030_mixvalve_parity() -> None:
+    # Arrange
+    raw_hex = "0AC80137C9010FCA0196CB0100"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = SystemSyncPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.sync_flag == 10
+    assert payload.max_flow_setpoint == 55
+    assert payload.min_flow_setpoint == 15
+    assert payload.valve_run_time == 150
+    assert payload.pump_run_time == 0
+    assert reencoded == raw_hex
+    assert as_dict["max_flow_setpoint"] == 55
+    assert as_dict["min_flow_setpoint"] == 15
+    assert as_dict["valve_run_time"] == 150
+    assert as_dict["pump_run_time"] == 0
+
+
+def test_spider_thermostat_payload_01ff_na_sentinel_parity() -> None:
+    # Arrange
+    raw_hex = "00807F8046"
+    raw_bytes = bytes.fromhex(raw_hex)
+    from ramses_rf.payloads.hvac import SpiderThermostatPayload
+
+    # Act
+    payload = SpiderThermostatPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.temp is None
+    assert payload.setpoint_min is None
+    assert payload.setpoint_max == 35.0
+    assert reencoded == "00807F7F46"
+    assert as_dict == {"temp": None, "setpoint_min": None, "setpoint_max": 35.0}
+
+
+def test_system_fault_log_payload_0418_parity() -> None:
+    # Arrange
+    raw_hex = "0000010000"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = SystemFaultLogPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.log_idx == 0
+    assert payload.log_data == bytes.fromhex("00010000")
+    assert reencoded == raw_hex
+    assert as_dict == {"log_idx": 0, "log_data": b"\x00\x01\x00\x00"}
+
+
+def test_system_config_payload_2e04_parity() -> None:
+    # Arrange
+    raw_hex = "0000"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = SystemConfigPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.config_idx == 0
+    assert payload.config_val == 0
+    assert reencoded == raw_hex
+    assert as_dict == {"config_idx": 0, "config_val": 0}
+
+
+def test_complete_payload_registry_coverage() -> None:
+    # Arrange & Act
+    known_codes = [
+        getattr(tx_const.Code, a)
+        for a in dir(tx_const.Code)
+        if a.startswith("_") and len(a) == 5
+    ]
+    aliases = ["2E10", "313E"]
+    all_expected = known_codes + aliases
+
+    # Assert
+    for code in all_expected:
+        assert code in PAYLOAD_REGISTRY, f"Opcode {code} missing from PAYLOAD_REGISTRY"
+    assert len(PAYLOAD_REGISTRY._registry) == 108

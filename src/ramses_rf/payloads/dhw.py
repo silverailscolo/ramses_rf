@@ -26,6 +26,12 @@ class DhwModePayload(PayloadBase):
       Field-spaced hex : 00 01 01
       Payload hex      : 000101
 
+    Sample Packet Logs:
+      # RQ --- 30:185469 01:037519 --:------ 1260 001 00
+      # RP --- 01:037519 30:185469 --:------ 1260 003 000837
+      # RQ --- 18:200202 10:067219 --:------ 1260 002 0000
+      # RP --- 10:067219 18:200202 --:------ 1260 003 007FFF
+
     :param dhw_idx: DHW index byte.
     :type dhw_idx: int
     :param mode: Mode or override flag byte.
@@ -74,6 +80,11 @@ class DhwConfigPayload(PayloadBase):
       --------------------------------------------------------------
       Field-spaced hex : 00 1388
       Payload hex      : 001388
+
+    Sample Packet Logs:
+      # RP --- 10:023327 18:131597 --:------ 12F0 003 000307
+      # RP --- 10:023327 18:131597 --:------ 12F0 003 000023
+      # RP --- 10:051349 18:135447 --:------ 12F0 003 00059F
 
     :param dhw_idx: DHW index byte.
     :type dhw_idx: int
@@ -126,6 +137,10 @@ class DhwStatePayload(PayloadBase):
       Field-spaced hex : 00 01
       Payload hex      : 0001
 
+    Sample Packet Logs:
+      # RP --- 01:145038 18:013393 --:------ 1F41 006 00FF00FFFFFF  # no stored DHW
+      # Note: Evohome DHW acknowledges W 1F41 with I 1F41 rather than RP 1F41.
+
     :param dhw_idx: DHW index byte.
     :type dhw_idx: int
     :param active_flag: DHW active status flag byte.
@@ -156,3 +171,42 @@ class DhwStatePayload(PayloadBase):
         :rtype: bytes
         """
         return bytes([self.dhw_idx, self.active_flag])
+
+
+@register_payload("11F0")
+@dataclass(frozen=True, slots=True)
+class DhwHeatpumpRelayPayload(PayloadBase):
+    """Heatpump relay status payload (Opcode 11F0).
+
+    9-byte Heatpump Relay Status binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       9B     9B   Raw Relay Status Byte Array  : 00 00 09 00 00 00 00 00 00
+      --------------------------------------------------------------
+      Field-spaced hex : 00 00 09 00 00 00 00 00 00
+      Payload hex      : 000009000000000000
+
+    :param raw_status_bytes: Raw status bytes sequence.
+    :type raw_status_bytes: bytes
+    """
+
+    raw_status_bytes: bytes
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack heatpump relay status binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked DhwHeatpumpRelayPayload instance.
+        :rtype: Self
+        """
+        return cls(raw_status_bytes=raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack heatpump relay status data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return self.raw_status_bytes
