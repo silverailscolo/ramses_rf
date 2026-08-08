@@ -6,7 +6,15 @@ packet payloads.
 
 from .adapters import payload_to_dict
 from .base import PayloadBase
-from .heating import HeatDemandPayload, TemperaturePayload
+from .heating import (
+    BindingPayload,
+    DhwTemperaturePayload,
+    HeatDemandPayload,
+    ScheduleSwitchpointPayload,
+    SystemSyncPayload,
+    TemperaturePayload,
+    ZoneConfigPayload,
+)
 from .hvac import FanModePayload
 from .registry import (
     PAYLOAD_REGISTRY,
@@ -17,11 +25,16 @@ from .registry import (
 
 __all__ = [
     "PAYLOAD_REGISTRY",
+    "BindingPayload",
+    "DhwTemperaturePayload",
     "FanModePayload",
     "HeatDemandPayload",
     "PayloadBase",
     "PayloadRegistry",
+    "ScheduleSwitchpointPayload",
+    "SystemSyncPayload",
     "TemperaturePayload",
+    "ZoneConfigPayload",
     "get_payload_class",
     "payload_to_dict",
     "register_payload",
