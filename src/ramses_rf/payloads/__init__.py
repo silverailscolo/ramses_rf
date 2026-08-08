@@ -15,7 +15,13 @@ from .heating import (
     TemperaturePayload,
     ZoneConfigPayload,
 )
-from .hvac import FanModePayload
+from .hvac import (
+    Co2Payload,
+    FanModePayload,
+    HvacFanParamPayload,
+    RelativeHumidityPayload,
+)
+from .opentherm import OpenThermMsgPayload
 from .registry import (
     PAYLOAD_REGISTRY,
     PayloadRegistry,
@@ -26,11 +32,15 @@ from .registry import (
 __all__ = [
     "PAYLOAD_REGISTRY",
     "BindingPayload",
+    "Co2Payload",
     "DhwTemperaturePayload",
     "FanModePayload",
     "HeatDemandPayload",
+    "HvacFanParamPayload",
+    "OpenThermMsgPayload",
     "PayloadBase",
     "PayloadRegistry",
+    "RelativeHumidityPayload",
     "ScheduleSwitchpointPayload",
     "SystemSyncPayload",
     "TemperaturePayload",
