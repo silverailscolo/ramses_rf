@@ -417,3 +417,195 @@ class ZoneConfigPayload(PayloadBase):
             min_raw,
             max_raw,
         )
+
+
+@register_payload("0004")
+@dataclass(frozen=True, slots=True)
+class ZoneSetpointPayload(PayloadBase):
+    """Zone target setpoint payload (Opcode 0004).
+
+    3-byte Zone Setpoint binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Zone Index (uint8)           : 01
+      +1       h      2B   Target Setpoint (int16*100)  : 07 D0 (20.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 01 07D0
+      Payload hex      : 0107D0
+
+    :param zone_idx: Zone index byte.
+    :type zone_idx: int
+    :param setpoint_temp: Target temperature in °C.
+    :type setpoint_temp: float
+    """
+
+    zone_idx: int
+    setpoint_temp: float
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack zone setpoint binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked ZoneSetpointPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 3 bytes.
+        """
+        if len(raw_data) < 3:
+            raise ValueError(f"Invalid payload length for 0004: {len(raw_data)}")
+        idx = raw_data[0]
+        sp_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        return cls(zone_idx=idx, setpoint_temp=sp_raw / 100.0)
+
+    def to_bytes(self) -> bytes:
+        """Pack zone setpoint data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        sp_raw = int(round(self.setpoint_temp * 100.0))
+        return bytes([self.zone_idx]) + sp_raw.to_bytes(2, byteorder="big", signed=True)
+
+
+@register_payload("12C0")
+@dataclass(frozen=True, slots=True)
+class OutdoorTempPayload(PayloadBase):
+    """Outdoor temperature reading payload (Opcode 12C0).
+
+    2-byte Outdoor Temp binary layout (Big-Endian):
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       h      2B   Outdoor Temperature (int16*100): 05 DC (15.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 05DC
+      Payload hex      : 05DC
+
+    :param temperature: Outdoor temperature reading in °C.
+    :type temperature: float
+    """
+
+    temperature: float
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack outdoor temperature binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked OutdoorTempPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 2 bytes.
+        """
+        if len(raw_data) < 2:
+            raise ValueError(f"Invalid payload length for 12C0: {len(raw_data)}")
+        temp_raw = int.from_bytes(raw_data[:2], byteorder="big", signed=True)
+        return cls(temperature=temp_raw / 100.0)
+
+    def to_bytes(self) -> bytes:
+        """Pack outdoor temperature data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        temp_raw = int(round(self.temperature * 100.0))
+        return temp_raw.to_bytes(2, byteorder="big", signed=True)
+
+
+@register_payload("2309")
+@dataclass(frozen=True, slots=True)
+class SetPointInfoPayload(PayloadBase):
+    """Set-point info payload (Opcode 2309).
+
+    3-byte Set-point Info binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Zone Index (uint8)           : 00
+      +1       h      2B   Setpoint Temp (int16*100)    : 08 34 (21.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 0834
+      Payload hex      : 000834
+
+    :param zone_idx: Zone index byte.
+    :type zone_idx: int
+    :param setpoint_temp: Setpoint temperature in °C.
+    :type setpoint_temp: float
+    """
+
+    zone_idx: int
+    setpoint_temp: float
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack setpoint info binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked SetPointInfoPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 3 bytes.
+        """
+        if len(raw_data) < 3:
+            raise ValueError(f"Invalid payload length for 2309: {len(raw_data)}")
+        idx = raw_data[0]
+        sp_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        return cls(zone_idx=idx, setpoint_temp=sp_raw / 100.0)
+
+    def to_bytes(self) -> bytes:
+        """Pack setpoint info data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        sp_raw = int(round(self.setpoint_temp * 100.0))
+        return bytes([self.zone_idx]) + sp_raw.to_bytes(2, byteorder="big", signed=True)
+
+
+@register_payload("3200")
+@dataclass(frozen=True, slots=True)
+class BoilerRelayDemandPayload(PayloadBase):
+    """Boiler relay heat demand payload (Opcode 3200).
+
+    3-byte Boiler Relay Demand binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Relay Domain / Index (uint8) : 00
+      +1       B      1B   Heat Demand Percentage       : C8 (200)
+      +2       B      1B   Relay Flags                  : 00
+      --------------------------------------------------------------
+      Field-spaced hex : 00 C8 00
+      Payload hex      : 00C800
+
+    :param domain: Relay domain byte.
+    :type domain: int
+    :param demand_percent: Demand percentage value (0-200).
+    :type demand_percent: int
+    :param flags: Relay flags byte.
+    :type flags: int
+    """
+
+    domain: int
+    demand_percent: int
+    flags: int
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack boiler relay demand binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked BoilerRelayDemandPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 3 bytes.
+        """
+        if len(raw_data) < 3:
+            raise ValueError(f"Invalid payload length for 3200: {len(raw_data)}")
+        return cls(domain=raw_data[0], demand_percent=raw_data[1], flags=raw_data[2])
+
+    def to_bytes(self) -> bytes:
+        """Pack boiler relay demand data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return bytes([self.domain, self.demand_percent, self.flags])
