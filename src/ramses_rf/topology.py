@@ -26,8 +26,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from ramses_tx.const import F9, FA, FC, FF
+
 from . import exceptions as exc
-from .const import F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR
+from .const import SZ_ACTUATORS, SZ_SENSOR
+from .enums import DevType
 from .schemas import SZ_CIRCUITS
 
 
@@ -131,12 +134,15 @@ class Parent:
                 self._dhw_sensor = child
 
             elif is_sensor and hasattr(self, SZ_SENSOR):
+                existing_sensor = getattr(self, SZ_SENSOR, None)
                 if (
-                    getattr(self, SZ_SENSOR, None)
-                    and getattr(getattr(self, SZ_SENSOR), "id", None) != child.id
+                    existing_sensor
+                    and getattr(existing_sensor, "id", None) != child.id
+                    and getattr(existing_sensor, "type", None)
+                    not in ("01", DevType.CTL)
                 ):
                     raise exc.SystemSchemaInconsistent(
-                        f"{self} changed zone sensor (from {getattr(self, SZ_SENSOR)} to {child})"
+                        f"{self} changed zone sensor (from {existing_sensor} to {child})"
                     )
                 self._sensor = child
 
@@ -343,12 +349,36 @@ class Child:
             child_id = child_id or getattr(parent, "idx", None)
 
         if self._parent and self._parent != parent:
-            err_msg = (
-                f"{self} can't change parent "
-                f"({self._parent}_{self._child_id} to {parent}_{child_id})"
-            )
-            _TRACE.error("PARENT CHANGE EXCEPTION: %s", err_msg)
-            raise exc.SystemSchemaInconsistent(err_msg)
+            prev_parent_class = self._parent.__class__.__name__
+            if prev_parent_class in ("System", "Evohome") and parent_class not in (
+                "System",
+                "Evohome",
+            ):
+                _TRACE.info(
+                    "PARENT PROMOTION: %s promoted parent from %s to %s",
+                    self,
+                    prev_parent_class,
+                    parent_class,
+                )
+                dev_id = getattr(self, "id", None)
+                if (
+                    hasattr(self._parent, "actuators")
+                    and self in self._parent.actuators
+                ):
+                    self._parent.actuators.remove(self)
+                if (
+                    hasattr(self._parent, "actuator_by_id")
+                    and dev_id is not None
+                    and dev_id in self._parent.actuator_by_id
+                ):
+                    del self._parent.actuator_by_id[dev_id]
+            else:
+                err_msg = (
+                    f"{self} can't change parent "
+                    f"({self._parent}_{self._child_id} to {parent}_{child_id})"
+                )
+                _TRACE.error("PARENT CHANGE EXCEPTION: %s", err_msg)
+                raise exc.SystemSchemaInconsistent(err_msg)
 
         PARENT_RULES: dict[str, dict[str, tuple[str, ...]]] = {
             "DhwZone": {SZ_ACTUATORS: ("BdrSwitch",), SZ_SENSOR: ("DhwSensor",)},

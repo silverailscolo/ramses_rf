@@ -11,12 +11,13 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import DEV_TYPE_MAP, FA, FC, SZ_DEVICES
+from ramses_rf.const import DEV_TYPE_MAP, SZ_DEVICES, DevType
 from ramses_rf.devices.dev_base import DeviceHeat, DeviceHvac, Fakeable
 from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
     DeviceNotFaked,
     DeviceNotFoundError,
+    RamsesException,
     SchemaInconsistentError,
     SystemSchemaInconsistent,
 )
@@ -25,6 +26,7 @@ from ramses_rf.models import DeviceTraits, TopologyChangedEvent
 from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.topology import Parent
 from ramses_rf.typing import DeviceIdT, DeviceListT
+from ramses_tx.const import FA, FC
 
 if TYPE_CHECKING:
     from ramses_rf.devices.dev_base import Device
@@ -47,6 +49,7 @@ class DeviceRegistry:
         device_filter: DeviceFilterInterface,
         config: GatewayConfig,
         device_factory_cb: Callable[[Address, Message | None, DeviceTraits], Device],
+        on_topology_changed_cb: Callable[[], None] | None = None,
     ) -> None:
         """Initialize the DeviceRegistry.
 
@@ -56,10 +59,13 @@ class DeviceRegistry:
         :type config: GatewayConfig
         :param device_factory_cb: A callback to instantiate domain devices.
         :type device_factory_cb: Callable
+        :param on_topology_changed_cb: Callback invoked when topology mutates.
+        :type on_topology_changed_cb: Callable | None
         """
         self._device_filter = device_filter
         self._config = config
         self._device_factory_cb = device_factory_cb
+        self._on_topology_changed_cb = on_topology_changed_cb
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
@@ -101,6 +107,8 @@ class DeviceRegistry:
 
         try:
             handler(event)
+            if self._on_topology_changed_cb:
+                self._on_topology_changed_cb()
         except (
             DeviceNotFoundError,
             SchemaInconsistentError,
@@ -182,8 +190,16 @@ class DeviceRegistry:
             if not zone and hasattr(tcs, "_update_schema"):
                 tcs._update_schema(**{"zones": {str(child_domain_id): {}}})
                 zone = tcs.get_htg_zone(str(child_domain_id))
-            if zone and hasattr(zone, "_update_schema"):
-                zone._update_schema(**{"class": metadata["class"]})
+            if (
+                zone
+                and hasattr(zone, "_update_schema")
+                and (
+                    getattr(zone, "_heating_type", None) is None
+                    or getattr(zone, "_SLUG", None) is None
+                )
+            ):
+                with contextlib.suppress(RamsesException):
+                    zone._update_schema(**{"class": metadata["class"]})
 
         if parent:
             # Safely extract is_sensor without coercing None to False,
@@ -196,8 +212,16 @@ class DeviceRegistry:
             # If the event lacks a sensor flag, we must flag dedicated hardware
             # sensors before passing to the legacy graph so it doesn't crash.
             if is_sensor is None and event.child_id:
-                child_type = event.child_id[:2]
-                if child_type in ("00", "03", "12", "22", "34"):
+                child_type = Address(event.child_id).type
+                if child_type in (
+                    "00",
+                    "03",
+                    "12",
+                    "22",
+                    "34",
+                    DevType.THM,
+                    DevType.HCW,
+                ):
                     is_sensor = True
 
             # Route the binding back through get_device to ensure full
@@ -231,8 +255,15 @@ class DeviceRegistry:
                 cqrs_ufcs: set[str] = getattr(self, "_cqrs_ufcs", set())
                 cqrs_sensors: dict[str, str] = getattr(self, "_cqrs_sensors", {})
 
-                dev_type = child_dev.id[:2] if hasattr(child_dev, "id") else None
-                is_actuator_hw = dev_type in ("04", "13", "02")
+                dev_type = getattr(child_dev, "type", None)
+                is_actuator_hw = dev_type in (
+                    "04",
+                    "13",
+                    "02",
+                    DevType.TRV,
+                    DevType.BDR,
+                    DevType.UFC,
+                )
 
                 is_explicit_sensor = device_role == "sensor" or is_sensor is True
                 is_explicit_actuator = device_role == "actuator"

@@ -428,7 +428,7 @@ class MessageStore(MessageStoreInterface):
                 "Overwrote dtm (%s) for %s: %s (contrived log?)",
                 msg.dtm,
                 msg.state_header.legacy_hdr,
-                dup[0]._pkt,
+                dup[0],
             )
 
         return old
@@ -494,7 +494,7 @@ class MessageStore(MessageStoreInterface):
                 hdr=msg.state_header.legacy_hdr,
                 plk=payload_keys(msg.payload),
                 payload_blob=payload_blob,
-                frame=getattr(msg._pkt, "_frame", ""),
+                frame=msg.raw_frame,
             )
 
             self._worker.submit_packet(data)

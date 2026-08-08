@@ -5,25 +5,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_rf.const import (
-    FA,
-    FC,
-    SZ_DOMAIN_ID,
-    SZ_HEAT_DEMAND,
-    SZ_RELAY_DEMAND,
-    SZ_UFH_IDX,
-    SZ_ZONE_IDX,
-    SZ_ZONE_MASK,
-    SZ_ZONE_TYPE,
-    ZON_ROLE_MAP,
-    Code,
-    DevType,
-)
+from ramses_rf.const import SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
 from ramses_rf.entity import Entity
 from ramses_rf.helpers import shrink
-from ramses_rf.models import DeviceTraits
+from ramses_rf.models import DeviceTraits, UfhCircuitDemandDTO
 from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
+from ramses_tx.const import FA
 from ramses_tx.typing import DeviceIdT, DevIndexT
 
 from .dev_base import DeviceHeat
@@ -53,12 +41,6 @@ class Controller(DeviceHeat):  # CTL (01):
         self.tcs: Evohome | None = None  # TODO: = self?
         self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
 
-    def _handle_msg(self, msg: Message) -> None:
-        super()._handle_msg(msg)
-
-        if self.tcs:
-            self.tcs._handle_msg(msg)
-
     def _make_tcs_controller(
         self, *, msg: Message | None = None, **schema: Any
     ) -> None:  # CH/DHW
@@ -87,8 +69,6 @@ class Controller(DeviceHeat):  # CTL (01):
             elif schema and self.tcs:
                 self.tcs._update_schema(**schema)
 
-            if msg and self.tcs:
-                self.tcs._handle_msg(msg)
             assert self.tcs is not None
             return self.tcs
 
@@ -140,74 +120,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         """Initialize UFH-specific instance attributes (idempotent)."""
         self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
 
-    def _handle_msg(self, msg: Message) -> None:
-        super()._handle_msg(msg)
-
-        # Several assumptions are made, regarding 000C pkts:
-        # - UFC bound only to CTL (not, e.g. SEN)
-        # - all circuits bound to the same controller
-
-        if msg.code == Code._0005:  # system_zones
-            # {'zone_type': '09', 'zone_mask':[1, 1, 1, 1, 1, 0, 0, 0], 'zone_class': 'underfloor_heating'}
-
-            if msg.payload.get(SZ_ZONE_TYPE) not in (
-                ZON_ROLE_MAP.ACT,
-                ZON_ROLE_MAP.UFH,
-            ):
-                return  # ignoring ZON_ROLE_MAP.SEN for now
-
-            for idx, flag in enumerate(msg.payload.get(SZ_ZONE_MASK, [])):
-                ufh_idx = f"{idx:02X}"
-                if not flag:
-                    self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: None}
-                # FIXME: this causing tests to fail when read-only protocol
-                # elif SZ_ZONE_IDX not in self.circuit_by_id[ufh_idx]:
-                #     cmd = build_rq_cmd(self.ctl.id, Code._000C, f"{ufh_idx}{DEV_ROLE_MAP.UFH}")
-                #     self._send_cmd(cmd)
-
-        elif msg.code == Code._0008:  # relay_demand
-            if msg.payload.get(SZ_DOMAIN_ID) == FC:
-                pass
-            else:  # FA
-                pass
-
-        elif msg.code == Code._000C:  # zone_devices
-            # {'zone_type': '09', 'ufh_idx': '00', 'zone_idx': '09', 'device_role': 'ufh_actuator', 'devices':['01:095421']}
-            # {'zone_type': '09', 'ufh_idx': '07', 'zone_idx': None, 'device_role': 'ufh_actuator', 'devices':[]}
-
-            if msg.payload.get(SZ_ZONE_TYPE) not in (
-                ZON_ROLE_MAP.ACT,
-                ZON_ROLE_MAP.UFH,
-            ):
-                return  # ignoring ZON_ROLE_MAP.SEN for now
-
-            ufh_idx = msg.payload.get(SZ_UFH_IDX)  # circuit idx
-            if ufh_idx is None:
-                return
-            # Read-Model Update ONLY. No `self.set_parent()` graph mutation here.
-            self.circuit_by_id[ufh_idx] = {SZ_ZONE_IDX: msg.payload.get(SZ_ZONE_IDX)}
-
-        elif msg.code == Code._22C9:  # setpoint_bounds
-            # .I --- 02:017205 --:------ 02:017205 22C9 024 00076C0A280101076C0A28010...
-            # .I --- 02:017205 --:------ 02:017205 22C9 006 04076C0A2801
-            pass
-
-        elif msg.code == Code._3150:  # heat_demands
-            if isinstance(msg.payload, list):  # the circuit demands
-                pass
-            elif msg.payload.get(SZ_DOMAIN_ID) == FC:
-                pass
-            else:
-                zone_idx = msg.payload.get(SZ_ZONE_IDX)
-                msg_dst_tcs = getattr(msg.dst, "tcs", None)
-                if zone_idx and msg_dst_tcs and hasattr(msg_dst_tcs, "zone_by_idx"):
-                    if zone := msg_dst_tcs.zone_by_idx.get(zone_idx):
-                        zone._handle_msg(msg)
-
-        # elif msg.code not in (Code._10E0, Code._22D0):
-        #     print("xxx")
-        # "0008|FA/FC", "22C9|array", "22D0|none", "3150|ZZ/array(/FC?)"
-
     # TODO: should be a private method
     def get_circuit(
         self, cct_idx: str, *, msg: Message | None = None, **schema: Any
@@ -232,8 +144,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         elif schema:
             cct._update_schema(**schema)
 
-        if msg:
-            cct._handle_msg(msg)
         return cct
 
     # @property
@@ -244,19 +154,27 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         state = getattr(self, "demand_state", None)
         return state.heat_demand if state else None
 
-    async def heat_demands(self) -> list[dict[str, Any]] | None:  # 3150|ufh_idx array
-        """Return the UFH heat demands.
+    async def thermal_demands(self) -> list[UfhCircuitDemandDTO] | None:
+        """Return the UFH circuit thermal demands as CQRS DTOs.
 
-        # TODO: Refactor for #714 (CQRS API Boundaries).
-        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        :returns: List of circuit demand DTOs or None.
+        :rtype: list[UfhCircuitDemandDTO] | None
         """
         state = getattr(self, "ufh_state", None)
         if state and state.heat_demands:
             return [
-                {"ufx_idx": str(k), "heat_demand": v}
+                UfhCircuitDemandDTO(ufx_idx=str(k), thermal_demand=v)
                 for k, v in state.heat_demands.items()
             ]
         return None
+
+    async def heat_demands(self) -> list[UfhCircuitDemandDTO] | None:
+        """Return the UFH heat demands (deprecated alias for thermal_demands).
+
+        :returns: List of circuit demand DTOs or None.
+        :rtype: list[UfhCircuitDemandDTO] | None
+        """
+        return await self.thermal_demands()
 
     async def relay_demand(self) -> float | None:  # 0008|FC
         state = getattr(self, "demand_state", None)

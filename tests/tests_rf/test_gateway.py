@@ -369,7 +369,7 @@ async def test_get_state_parity() -> None:
     )
     msg_i.code = "1F09"
     msg_i.payload = {"temp": 21.0}
-    msg_i._pkt._frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+    msg_i.raw_frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
 
     msg_rp = MagicMock()
     msg_rp.verb = RP
@@ -383,7 +383,7 @@ async def test_get_state_parity() -> None:
     )
     msg_rp.code = "2309"
     msg_rp.payload = {"sync": True}
-    msg_rp._pkt._frame = "RP --- 04:111111 01:123456 04:111111 2309 003 0004B5"
+    msg_rp.raw_frame = "RP --- 04:111111 01:123456 04:111111 2309 003 0004B5"
 
     msg_rq = MagicMock()
     msg_rq.verb = RQ
@@ -460,7 +460,7 @@ async def test_get_state_frame_key_enables_restore() -> None:
     )
     msg.code = "1F09"
     msg.payload = {"temp": 21.0}
-    msg._pkt._frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+    msg.raw_frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
 
     gwy.message_store.state_cache = {"h1": msg}
 

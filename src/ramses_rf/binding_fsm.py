@@ -17,15 +17,8 @@ import voluptuous as vol
 from ramses_rf.address import Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
-from ramses_rf.enums import Action
-from ramses_tx import (
-    ALL_DEVICE_ID,
-    NON_DEVICE_ID,
-    CommandDTO,
-    DevType,
-    Priority,
-    QosParams,
-)
+from ramses_rf.enums import Action, DevType
+from ramses_tx import ALL_DEVICE_ID, NON_DEVICE_ID, CommandDTO, Priority, QosParams
 from ramses_tx.typing import DeviceIdT
 
 from . import exceptions as exc
@@ -498,8 +491,8 @@ class BindingManagerSupplicant(BindingManagerBase):
         :param confirm_code: The code to confirm with.
         :return: The sent confirm packet.
         """
-
-        idx = accept._pkt.payload[:2]  # HACK assumes all idx same
+        # HACK assumes all idx same
+        idx = accept._dto.payload[:2] if accept._dto.payload else "00"
 
         cmd = build_dto(
             Intent(
@@ -661,10 +654,10 @@ class BindStateBase:
             return False
 
         if isinstance(cmd, Message):
-            dst, src = cmd.dst.id, cmd.src.id
-            if dst == "--:------":  # NON_DEVICE_ID
-                # For 1FC9, addr3 is often the actual destination or equal to src
-                dst = cmd._pkt._addrs[2].id
+            addr1, addr2, addr3 = cmd._addrs[0].id, cmd._addrs[1].id, cmd._addrs[2].id
+            src = addr1
+            # For 1FC9, addr3 is often the actual destination or equal to src
+            dst = addr2 if addr2 != NON_DEVICE_ID else addr3
         else:
             addrs = [a for a in (cmd.addr1, cmd.addr2, cmd.addr3) if a != NON_DEVICE_ID]
             src = DeviceIdT(addrs[0] if addrs else NON_DEVICE_ID)

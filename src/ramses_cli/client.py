@@ -17,16 +17,7 @@ from asyncclick.exceptions import ClickException, Exit
 from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
-from ramses_rf.const import (
-    DEV_TYPE_MAP,
-    DONT_CREATE_MESSAGES,
-    I_,
-    RP,
-    RQ,
-    SZ_ZONE_IDX,
-    W_,
-    Code,
-)
+from ramses_rf.const import DEV_TYPE_MAP, DONT_CREATE_MESSAGES, SZ_ZONE_IDX
 from ramses_rf.discovery_scan import DiscoveryScan
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import deep_merge
@@ -39,6 +30,7 @@ from ramses_rf.schemas import (
 )
 from ramses_tx import is_valid_dev_id
 from ramses_tx.config import EngineConfig
+from ramses_tx.const import I_, RP, RQ, W_, Code
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.logger import CONSOLE_COLS, DEFAULT_DATEFMT, DEFAULT_FMT
 from ramses_tx.schemas import (
@@ -645,9 +637,9 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         ]:
             if gwy.message_store:
                 for msg in await gwy.message_store.get(src=device.id, code=Code._0005):
-                    print(f"{msg._pkt}")
+                    print(f"{msg}")
                 for msg in await gwy.message_store.get(src=device.id, code=Code._000C):
-                    print(f"{msg._pkt}")
+                    print(f"{msg}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
                 for msg_code, verbs in (
@@ -663,7 +655,7 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
         ]:
             if gwy.message_store:
                 for msg in await gwy.message_store.get(src=device.id):
-                    print(f"{msg._pkt}")
+                    print(f"{msg}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
                 for cd in (await device.entity_state.get_state_cache_nested()).values():

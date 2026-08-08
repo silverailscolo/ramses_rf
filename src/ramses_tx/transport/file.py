@@ -7,16 +7,14 @@ import asyncio
 import functools
 import logging
 from io import TextIOWrapper
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import aiofiles  # type: ignore[import-untyped]
 
 from ..const import SZ_READER_TASK
 from ..exceptions import RamsesException, TransportSourceInvalid
+from ..typing import RamsesProtocolT
 from .base import TransportConfig, _ReadTransport
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 

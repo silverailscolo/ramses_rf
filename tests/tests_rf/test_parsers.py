@@ -7,7 +7,7 @@ import serial
 
 from ramses_rf import Gateway
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import I_, SZ_PHASE, W_, Code
+from ramses_rf.const import SZ_BINDINGS, SZ_NAME, SZ_PHASE, SZ_TEMPERATURE, SZ_ZONE_IDX
 from ramses_rf.messages import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.parsers.heating import parser_0004, parser_12c0
@@ -16,7 +16,7 @@ from ramses_rf.pipeline.topology_builder import TopologyBuilder
 from ramses_tx import Packet
 from ramses_tx.address import Address
 from ramses_tx.config import EngineConfig
-from ramses_tx.const import SZ_BINDINGS, SZ_NAME, SZ_TEMPERATURE, SZ_ZONE_IDX
+from ramses_tx.const import I_, W_, Code
 from ramses_tx.schemas import SZ_INBOUND
 from tests_rf.virtual_rf import VirtualRf
 
@@ -181,9 +181,9 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
         topology_msg.header = mock_header
         topology_msg.src = Address(src_id)
         topology_msg.dst = Address(dst_id)
-        topology_msg._pkt = mock_pkt
+        topology_msg._dto = mock_pkt
 
-        builder._evaluate_rf_bind_rules(topology_msg)
+        asyncio.run(builder.consume(topology_msg))
 
         # Assert
         assert legacy_result[SZ_PHASE] == expected_phase
@@ -244,9 +244,9 @@ async def test_regex_inbound_parsing() -> None:
             expected = Packet.from_port(dt.now(), pkt)
             for _ in range(100):
                 await asyncio.sleep(0.001)
-                if gwy_0._this_msg and gwy_0._this_msg._pkt._frame == expected._frame:
+                if gwy_0._this_msg and gwy_0._this_msg.raw_frame == expected._frame:
                     break
-            assert gwy_0._this_msg and gwy_0._this_msg._pkt._frame == expected._frame
+            assert gwy_0._this_msg and gwy_0._this_msg.raw_frame == expected._frame
 
     finally:
         await gwy_0.stop()

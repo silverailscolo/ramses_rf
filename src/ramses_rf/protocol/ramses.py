@@ -24,10 +24,9 @@ from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     W_,
     Code,
     VerbT,
-    SZ_NAME,
-    DevType,
 )
 
+from ..enums import DevType
 from ..typing import CodeSchemaEntry
 
 SZ_LIFESPAN: Final = "lifespan"  # WIP
@@ -151,6 +150,13 @@ CODES_SCHEMA: dict[Code, CodeSchemaEntry] = {  # rf_unknown
         " I": r"^(00|01)[0-9A-F]{50}$",
         "RQ": r"^(00|01)[0-9A-F]{50}$",
         " W": r"^00[0-9A-F]{50}$",
+    },
+    Code._0204: {  # ufh_circuit
+        "name": "ufh_circuit",
+        " I": r"^0[0-9A-F][0-9A-F]{2,}$",
+        "RQ": r"^0[0-9A-F]$",
+        "RP": r"^0[0-9A-F][0-9A-F]{2,}$",
+        " W": r"^0[0-9A-F][0-9A-F]{2,}$",
     },
     Code._0404: {  # zone_schedule
         "name": "zone_schedule",

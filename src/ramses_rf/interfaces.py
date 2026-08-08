@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, overload
 
 from ramses_tx import CommandDTO, Packet, Priority, QosParams
 
 from .messages import Message
 from .typing import DeviceIdT, DeviceListT
+
+# Callback type invoked when the system topology/schema is updated dynamically
+SchemaUpdatedCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 if TYPE_CHECKING:
     from .commands.dispatcher import CommandDispatcher as CQRSDispatcher
@@ -133,14 +137,6 @@ class DeviceInterface(Protocol):
 
         :return: A dictionary of device traits.
         """
-        ...
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Process an incoming message.
-
-        :param msg: The message to process.
-        """
-        ...
 
 
 class DeviceFilterInterface(Protocol):
@@ -283,6 +279,17 @@ class GatewayInterface(Protocol):
     @property
     def conversation_manager(self) -> ConversationManagerInterface | None:
         """Return the ConversationManager instance."""
+        ...
+
+    @property
+    def schema_updated_callback(self) -> SchemaUpdatedCallback | None:
+        """Return the async callback invoked when system topology/schema updates."""
+        ...
+
+    def set_schema_updated_callback(
+        self, callback: SchemaUpdatedCallback | None
+    ) -> None:
+        """Set the async callback invoked when system topology/schema updates."""
         ...
 
     async def async_send_cmd(

@@ -10,16 +10,9 @@ import logging
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
-from ramses_tx import exceptions as exc
-from ramses_tx.address import hex_id_to_dev_id
-from ramses_tx.const import (
+from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
-    F9,
-    FA,
-    FC,
-    I_,
-    RQ,
     SZ_DEVICE_ROLE,
     SZ_DEVICES,
     SZ_DOMAIN_ID,
@@ -46,8 +39,11 @@ from ramses_tx.const import (
     SZ_ZONE_TYPE,
     ZON_MODE_MAP,
     ZON_ROLE_MAP,
-    DevRole,
 )
+from ramses_rf.enums import DevRole
+from ramses_tx import exceptions as exc
+from ramses_tx.address import hex_id_to_dev_id
+from ramses_tx.const import F9, FA, FC, I_, RQ
 from ramses_tx.helpers import (
     hex_to_bool,
     hex_to_dtm,

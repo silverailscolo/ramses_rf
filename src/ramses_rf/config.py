@@ -11,10 +11,10 @@ from typing import Any, Final, Literal, Never, TypeVar
 import voluptuous as vol
 
 from ramses_tx.config import EngineConfig
-from ramses_tx.const import DEV_TYPE_MAP, DEVICE_ID_REGEX, DevType
+from ramses_tx.const import DEVICE_ID_REGEX
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_KNOWN_LIST
 
-from .const import SZ_IS_BATTERY, SZ_POLLING_INTERVAL
+from .const import DEV_TYPE_MAP, SZ_IS_BATTERY, SZ_POLLING_INTERVAL, DevType
 from .typing import DeviceListT
 
 _T = TypeVar("_T")

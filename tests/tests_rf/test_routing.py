@@ -128,7 +128,8 @@ def _make_2411_msg(verb: str = " I") -> MagicMock:
 class TestDispatcher2411Routing:
     """Verify dispatcher._cqrs_ingestion_engine routes 2411 to the FAN."""
 
-    def test_2411_info_flips_supports_and_fires_callback(
+    @pytest.mark.asyncio
+    async def test_2411_updates_fan_state_and_invokes_callback(
         self, mock_gateway: MagicMock
     ) -> None:
         """A 2411 `` I`` packet must set supports_2411 and fire the callback."""
@@ -138,7 +139,7 @@ class TestDispatcher2411Routing:
         fan.set_initialized_callback(callback)
 
         msg = _make_2411_msg(verb=" I")
-        dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
+        await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411, "supports_2411 was not flipped"
         assert TEST_PARAM_ID in fan._params_2411
@@ -149,22 +150,24 @@ class TestDispatcher2411Routing:
         if fan._gwy.message_store:
             fan._gwy.message_store.stop()
 
-    def test_2411_rp_also_routed(self, mock_gateway: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_2411_rp_also_routed(self, mock_gateway: MagicMock) -> None:
         """A 2411 ``RP`` reply must also be routed."""
         fan = _make_fan(mock_gateway)
         msg = _make_2411_msg(verb="RP")
-        dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
+        await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411
 
         if fan._gwy.message_store:
             fan._gwy.message_store.stop()
 
-    def test_2411_rq_not_routed(self, mock_gateway: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_2411_rq_not_routed(self, mock_gateway: MagicMock) -> None:
         """A 2411 ``RQ`` request carries no telemetry and must be skipped."""
         fan = _make_fan(mock_gateway)
         msg = _make_2411_msg(verb="RQ")
-        dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
+        await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert not fan._supports_2411, "RQ must not flip supports_2411"
         assert fan._params_2411 == {}
@@ -172,7 +175,8 @@ class TestDispatcher2411Routing:
         if fan._gwy.message_store:
             fan._gwy.message_store.stop()
 
-    def test_non_fan_target_not_affected(self, mock_gateway: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_non_fan_target_not_affected(self, mock_gateway: MagicMock) -> None:
         """A non-FAN device in registry must not be touched by 2411 routing."""
         fan = _make_fan(mock_gateway)
         other = MagicMock()
@@ -181,7 +185,7 @@ class TestDispatcher2411Routing:
         mock_gateway.device_registry.device_by_id["01:000001"] = other
 
         msg = _make_2411_msg(verb=" I")
-        dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
+        await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411
         other._handle_2411_message.assert_not_called()

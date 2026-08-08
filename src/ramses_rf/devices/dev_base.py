@@ -36,17 +36,10 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Child
 from ramses_tx import CommandDTO, Packet, Priority, QosParams
+from ramses_tx.const import Code
 
 from ..messages import Message
 from ..protocol.ramses import CODES_BY_DEV_SLUG
-
-from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    Code,
-)
 
 if TYPE_CHECKING:
     from ramses_rf import Gateway
@@ -117,8 +110,9 @@ class DeviceBase(Entity):
     def __str__(self) -> str:
         """Return a string representation of the device."""
         if self._STATE_ATTR and hasattr(self, self._STATE_ATTR):
-            state: float | None = getattr(self, self._STATE_ATTR)
-            return f"{self.id} ({self._SLUG}): {state}"
+            state = getattr(self, self._STATE_ATTR)
+            if not callable(state) and state is not None:
+                return f"{self.id} ({self._SLUG}): {state}"
         return f"{self.id} ({self._SLUG})"
 
     def __lt__(self, other: object) -> bool:
@@ -212,11 +206,6 @@ class DeviceBase(Entity):
 
         return super()._send_cmd(cmd, **kwargs)
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle an incoming message and update the last seen timestamp."""
-        super()._handle_msg(msg)
-        self._last_msg_dtm = getattr(msg, "dtm", None)
-
     async def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered (excludes
         battery-backup).
@@ -240,6 +229,68 @@ class DeviceBase(Entity):
         :rtype: PollingIntervalsT | None
         """
         return self._polling_interval
+
+    @property
+    def effective_polling_interval(self) -> PollingIntervalsT | None:
+        """Return the active effective polling schedule for this device.
+
+        :returns: A dictionary mapping active command codes to interval seconds.
+        :rtype: PollingIntervalsT | None
+        """
+        if getattr(self._gwy, "polling_manager", None):
+            return self._gwy.polling_manager.resolve_schedule_for_device(self)
+        return self._polling_interval
+
+    def set_polling_interval(self, interval: int | None) -> None:
+        """Set or update the overall polling interval override for this device.
+
+        :param interval: The polling interval in seconds, or None to reset to default.
+        :type interval: int | None
+        :raises ValueError: If interval is negative or if setting a battery device below 300s.
+        """
+        if interval is not None and interval < 0:
+            raise ValueError(f"Polling interval cannot be negative: {interval}")
+        if self.is_battery and interval is not None and 0 < interval < 300:
+            raise ValueError(
+                f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
+            )
+
+        if interval is None:
+            self._polling_interval = None
+        else:
+            eff_schedule = self.effective_polling_interval or {}
+            codes = list(eff_schedule.keys()) or ["10E0"]
+            self._polling_interval = {code: interval for code in codes}
+
+        if getattr(self._gwy, "polling_manager", None):
+            self._gwy.polling_manager.update_device_tasks(self)
+
+    def set_command_polling_interval(self, code: str, interval: int | None) -> None:
+        """Set or update the polling interval for a specific packet code.
+
+        :param code: The hex code string for the packet type.
+        :type code: str
+        :param interval: The polling interval in seconds (None or 0 to reset).
+        :type interval: int | None
+        :raises ValueError: If interval is negative or if setting a battery device below 300s.
+        """
+        if interval is not None and interval < 0:
+            raise ValueError(f"Polling interval cannot be negative: {interval}")
+        if self.is_battery and interval is not None and 0 < interval < 300:
+            raise ValueError(
+                f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
+            )
+
+        if self._polling_interval is None:
+            self._polling_interval = {}
+
+        if interval is None:
+            self._polling_interval.pop(code, None)
+        else:
+            self._polling_interval[code] = interval
+
+        if getattr(self._gwy, "polling_manager", None):
+            self._gwy.polling_manager.update_device_tasks(self)
 
     @property
     def is_battery(self) -> bool | None:
@@ -468,16 +519,6 @@ class Fakeable(DeviceBase):
             self._binding_manager.sent_cmd(cmd)  # other codes needed for edge cases
 
         return await super()._async_send_cmd(cmd, priority=priority, qos=qos)
-
-    def _handle_msg(self, msg: Message) -> None:
-        """Handle an incoming message and forward to the binding context."""
-        super()._handle_msg(msg)
-
-        if self._binding_manager and self._binding_manager.is_binding:
-            # msg.code in (Code._1FC9, Code._10E0)
-            self._binding_manager.rcvd_msg(
-                msg
-            )  # maybe other codes needed for edge cases
 
     async def _wait_for_binding_request(
         self,

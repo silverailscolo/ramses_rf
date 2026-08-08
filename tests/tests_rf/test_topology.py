@@ -15,7 +15,10 @@ from typing import Any
 
 import pytest
 
+import ramses_rf.exceptions as exc
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.topology import Child, Parent
+from ramses_tx import DeviceIdT
 from ramses_tx.config import EngineConfig
 
 
@@ -146,3 +149,90 @@ async def test_ramses_rf_isolated_topology() -> None:
 
     # Assert the Evohome system was instantiated
     assert len(systems) > 0, "CRITICAL: TopologyBuilder failed to create a System!"
+
+
+# --- Unit Tests for Topology Parent Promotion & Re-binding ---
+
+
+class System(Parent):
+    def __init__(self, sys_id: str) -> None:
+        super().__init__()
+        self.id = sys_id
+        self.actuators: list[Any] = []
+        self.actuator_by_id: dict[DeviceIdT, Any] = {}
+
+
+class Zone(Parent):
+    def __init__(self, idx: str) -> None:
+        super().__init__()
+        self.idx = idx
+        self.id = idx
+        self.actuators: list[Any] = []
+        self.actuator_by_id: dict[DeviceIdT, Any] = {}
+
+
+class BdrSwitch(Child):
+    def __init__(self, dev_id: str) -> None:
+        super().__init__()
+        self.id = dev_id
+
+
+def test_child_set_parent_initial_assignment() -> None:
+    # Arrange
+    child = BdrSwitch("13:123456")
+    parent_system = System("01:145038")
+
+    # Act
+    child._apply_topology_link(parent_system, child_id="FC")
+
+    # Assert
+    assert child._parent is parent_system
+    assert child._child_id == "FC"
+
+
+def test_child_set_parent_promotion_from_system_to_zone() -> None:
+    # Arrange
+    child = BdrSwitch("13:123456")
+    parent_system = System("01:145038")
+    parent_zone = Zone("00")
+
+    # Act 1: Initial System parent binding
+    child_dev_id = DeviceIdT(child.id)
+    child._apply_topology_link(parent_system, child_id="FC")
+
+    # Act 2: Promote parent to Zone
+    child._apply_topology_link(parent_zone, child_id="00")
+
+    # Assert
+    assert child._parent is parent_zone
+    assert child not in parent_system.actuators
+    assert child_dev_id not in parent_system.actuator_by_id
+
+
+def test_child_set_parent_rejects_invalid_cross_zone_change() -> None:
+    # Arrange
+    child = BdrSwitch("13:123456")
+    zone_00 = Zone("00")
+    zone_01 = Zone("01")
+
+    # Act
+    child._apply_topology_link(zone_00, child_id="00")
+
+    # Assert
+    with pytest.raises(exc.SystemSchemaInconsistent) as exc_info:
+        child._apply_topology_link(zone_01, child_id="01")
+
+    assert "can't change parent" in str(exc_info.value)
+
+
+def test_child_set_parent_idempotent() -> None:
+    # Arrange
+    child = BdrSwitch("13:123456")
+    zone_00 = Zone("00")
+
+    # Act
+    child._apply_topology_link(zone_00, child_id="00")
+    child._apply_topology_link(zone_00, child_id="00")
+
+    # Assert
+    assert child._parent is zone_00

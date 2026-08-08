@@ -16,6 +16,7 @@ from .models import (
     FaultLogState,
     HvacState,
     OpenThermState,
+    PowerState,
     ScheduleState,
     StateUpdatedEvent,
     TemperatureState,
@@ -29,7 +30,6 @@ if TYPE_CHECKING:
 
     from .devices import Controller
     from .gateway import Gateway
-    from .messages import Message
     from .systems.tcs import Evohome
 
 
@@ -106,13 +106,6 @@ class _Entity:
                 "(consider adjusting device_id filters)"
             )
 
-    def _handle_msg(self, msg: Message) -> None:
-        """Deprecated in Phase 2.5: Entities no longer cache their own packets.
-
-        Routing is handled directly by the Gateway into the central MessageStore.
-        """
-        pass
-
     def apply_state_update(self, event: StateUpdatedEvent) -> None:
         """Replace the internal CQRS read-model state with a new immutable object.
 
@@ -140,6 +133,8 @@ class _Entity:
             setattr(self, "hvac_state", event.state)  # noqa: B010
         elif isinstance(event.state, ZoneState) and hasattr(self, "zone_state"):
             setattr(self, "zone_state", event.state)  # noqa: B010
+        elif isinstance(event.state, PowerState) and hasattr(self, "power_state"):
+            setattr(self, "power_state", event.state)  # noqa: B010
 
     def _send_cmd(self, cmd: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
         """Proxy command sending to the Gateway.

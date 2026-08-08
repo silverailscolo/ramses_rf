@@ -6,19 +6,10 @@ from collections.abc import Iterable
 
 from ramses_rf.commands.builders.helpers import _check_idx, resolve_addrs
 from ramses_rf.commands.core import Command
+from ramses_rf.const import DEV_TYPE_MAP, SYS_MODE_MAP
+from ramses_rf.enums import DevType
 from ramses_tx.address import ALL_DEV_ADDR, dev_id_to_hex_id
-from ramses_tx.const import (
-    DEFAULT_NUM_REPEATS,
-    DEV_TYPE_MAP,
-    FF,
-    I_,
-    RP,
-    RQ,
-    SYS_MODE_MAP,
-    W_,
-    Code,
-    Priority,
-)
+from ramses_tx.const import DEFAULT_NUM_REPEATS, FF, I_, RP, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import (
     hex_from_bool,
@@ -34,7 +25,7 @@ def build_put_weather_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_WEATHER_TEMP intent into a CommandDTO."""
     temperature = intent.get("temperature")
 
-    if intent.src.id[:2] != DEV_TYPE_MAP.OUT:
+    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.OUT, DevType.OUT):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.OUT}:xxxxxx"
@@ -159,7 +150,11 @@ def build_get_tpi_params(intent: Command) -> CommandDTO:
     if domain_id is None:
         from ramses_tx.const import FC
 
-        domain_id = "00" if intent.dst.id[:2] == DEV_TYPE_MAP.BDR else FC
+        domain_id = (
+            "00"
+            if getattr(intent.dst, "type", None) in (DEV_TYPE_MAP.BDR, DevType.BDR)
+            else FC
+        )
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
@@ -406,7 +401,7 @@ def build_put_actuator_state(intent: Command) -> CommandDTO:
     """Translate a PUT_ACTUATOR_STATE intent into a CommandDTO."""
     modulation_level = intent.get("modulation_level")
 
-    if intent.src.id[:2] != DEV_TYPE_MAP.BDR:
+    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.BDR, DevType.BDR):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.BDR}:xxxxxx"
@@ -436,7 +431,7 @@ def build_put_actuator_cycle(intent: Command) -> CommandDTO:
     actuator_countdown = intent.get("actuator_countdown")
     cycle_countdown = intent.get("cycle_countdown")
 
-    if intent.src.id[:2] != DEV_TYPE_MAP.BDR:
+    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.BDR, DevType.BDR):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.BDR}:xxxxxx"

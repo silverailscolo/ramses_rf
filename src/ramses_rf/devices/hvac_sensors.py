@@ -14,13 +14,13 @@ from ramses_rf.const import (
     SZ_INDOOR_HUMIDITY,
     SZ_PRESENCE_DETECTED,
     SZ_TEMPERATURE,
-    Code,
     DevType,
 )
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Packet, Priority
+from ramses_tx.const import Code
 
 from .dev_base import BatteryState, DeviceHvac, Fakeable
 

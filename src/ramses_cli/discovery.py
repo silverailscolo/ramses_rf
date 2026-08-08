@@ -22,14 +22,7 @@ from ramses_rf.protocol.opentherm import OTB_DATA_IDS
 from ramses_rf.protocol.ramses import CODES_SCHEMA
 from ramses_tx import CommandDTO, DeviceIdT, Priority
 from ramses_tx.address import NON_DEV_ADDR
-
-from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
-    I_,
-    RP,
-    RQ,
-    W_,
-    Code,
-)
+from ramses_tx.const import RQ, W_, Code
 
 if TYPE_CHECKING:
     from ramses_rf import Gateway

@@ -7,9 +7,8 @@ import logging
 from typing import TYPE_CHECKING
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import DEV_TYPE_MAP
+from ramses_rf.const import DEV_TYPE_MAP, DevType
 from ramses_rf.models import DeviceTraits
-from ramses_tx.const import DevType
 
 from .dev_filter import DeviceFilter
 from .dev_registry import DeviceRegistry

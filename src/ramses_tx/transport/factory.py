@@ -8,21 +8,18 @@ import contextlib
 import logging
 import os
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Final, TypeAlias
+from typing import Any, Final, TypeAlias
 
 from serial import Serial, SerialException, serial_for_url
 
 from .. import exceptions as exc
 from ..interfaces import TransportInterface
 from ..schemas import SCH_SERIAL_PORT_CONFIG
-from ..typing import PortConfigT, SerPortNameT
+from ..typing import PortConfigT, RamsesProtocolT, SerPortNameT
 from .base import TransportConfig
 from .file import FileTransport
 from .mqtt import MqttTransport
 from .port import PortTransport
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 

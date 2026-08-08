@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import re
+import warnings
 from string import printable
 
 from ..const import I_, RP, RQ, W_
@@ -24,8 +25,13 @@ def _normalise(pkt_line: str) -> str:
     :return: The normalized packet string.
     :rtype: str
     """
-    # TODO: deprecate as only for ramses_esp <0.4.0
     # ramses_esp-specific bugs, see: https://github.com/IndaloTech/ramses_esp/issues/1
+    if "\r\r" in pkt_line or pkt_line.startswith(" 000"):
+        warnings.warn(
+            "Legacy ramses_esp <0.4.0 frame normalization is deprecated and will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     pkt_line = re.sub("\r\r", "\r", pkt_line)
     if pkt_line[:4] == " 000":
         pkt_line = pkt_line[1:]

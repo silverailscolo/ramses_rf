@@ -26,13 +26,14 @@ from ramses_rf.const import (
 )
 from ramses_rf.devices import BdrSwitch, Controller, Device, DhwSensor, TrvActuator
 from ramses_rf.entity import Entity, class_by_attr
-from ramses_rf.enums import Action
+from ramses_rf.enums import Action, DevType
 from ramses_rf.helpers import shrink
 from ramses_rf.models import (
     DemandState,
     DhwState,
     ScheduleState,
     TemperatureState,
+    ThermalDemandDTO,
     TrvState,
     ZoneState,
 )
@@ -316,6 +317,17 @@ class DhwZone(ZoneSchedule):  # CS92A
     async def temperature(self) -> float | None:  # 1260
         return self.temp_state.temperature
 
+    async def thermal_demand(self) -> ThermalDemandDTO | None:
+        """Return zone thermal demand as a CQRS DTO.
+
+        :returns: ThermalDemandDTO or None.
+        :rtype: ThermalDemandDTO | None
+        """
+        val = self.demand_state.heat_demand
+        if val is None:
+            return None
+        return ThermalDemandDTO(thermal_demand=val, ufx_idx=str(self.idx))
+
     async def heat_demand(self) -> float | None:  # 3150
         return self.demand_state.heat_demand
 
@@ -480,7 +492,7 @@ class Zone(ZoneSchedule):
                     f"Not a known zone class (for {self}): {zone_type}"
                 )
 
-            current_slug = self._SLUG or self._heating_type
+            current_slug = self._SLUG
             if current_slug is not None and klass != current_slug:
                 raise exc.SystemSchemaInconsistent(
                     f"{self} changed zone class: from {current_slug} to {klass}"
@@ -499,19 +511,59 @@ class Zone(ZoneSchedule):
         if klass := schema.get(SZ_CLASS):
             set_zone_type(ZON_ROLE_MAP[klass])
 
+        # Controller devices (CTL=01:, UFC=02:, HGI=18:) should not be
+        # bound as zone sensors or actuators.  However, a faked device
+        # may have a controller-class address prefix (e.g. 01:150003)
+        # while being explicitly classed as a sensor (e.g. THM) in the
+        # known_list.  Check the known_list class first; if the device
+        # is not in the known_list, fall back to the address prefix
+        # check so that eavesdropped CTL/UFC/HGI devices are still
+        # filtered out.
+        _controller_classes = frozenset(
+            {
+                DevType.CTL,
+                DevType.UFC,
+                DevType.HGI,
+            }
+        )
+        _controller_prefixes = (
+            f"{DevType.CTL}:",
+            f"{DevType.UFC}:",
+            f"{DevType.HGI}:",
+        )
+
         if sensor_id := schema.get(SZ_SENSOR):
-            try:
-                self._sensor = self._gwy.device_registry.get_device(
-                    sensor_id, parent=self, is_sensor=True
-                )
-            except (
-                exc.DeviceNotFoundError,
-                exc.SchemaInconsistentError,
-                exc.SystemSchemaInconsistent,
-            ) as err:
-                _TRACE.warning("SUPPRESSED in Zone._update_schema (sensor): %s", err)
+            sensor_kl = self._gwy.config.known_list.get(str(sensor_id), {})
+            sensor_cls = sensor_kl.get(SZ_CLASS)
+            is_ctrl = (
+                sensor_cls in _controller_classes
+                if sensor_cls is not None
+                else str(sensor_id).startswith(_controller_prefixes)
+            )
+            if not is_ctrl:
+                try:
+                    self._sensor = self._gwy.device_registry.get_device(
+                        sensor_id, parent=self, is_sensor=True
+                    )
+                except (
+                    exc.DeviceNotFoundError,
+                    exc.SchemaInconsistentError,
+                    exc.SystemSchemaInconsistent,
+                ) as err:
+                    _TRACE.warning(
+                        "SUPPRESSED in Zone._update_schema (sensor): %s", err
+                    )
 
         for act_id in schema.get(SZ_ACTUATORS, []):
+            act_kl = self._gwy.config.known_list.get(str(act_id), {})
+            act_cls = act_kl.get(SZ_CLASS)
+            is_ctrl = (
+                act_cls in _controller_classes
+                if act_cls is not None
+                else str(act_id).startswith(_controller_prefixes)
+            )
+            if is_ctrl:
+                continue
             try:
                 self._gwy.device_registry.get_device(act_id, parent=self)
             except (

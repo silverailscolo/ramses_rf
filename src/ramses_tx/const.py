@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RAMSES RF - a RAMSES-II protocol decoder & analyser.
+"""RAMSES TX - a RAMSES-II protocol transport & packet layer.
 
 This module contains constants, enums, and helper classes used throughout the
 library to decode and encode RAMSES-II protocol packets.
@@ -48,11 +48,11 @@ DEFAULT_NUM_REPEATS: Final[int] = 0
 MIN_NUM_REPEATS: Final[int] = 1  # used in ramses_cc Action schema
 MAX_NUM_REPEATS: Final[int] = 5  # used in ramses_cc Action schema
 
-SZ_QOS: Final = "qos"
+# SZ_QOS: Final = "qos"  # obsolete?
 
-SZ_CALLBACK: Final = "callback"
-SZ_GAP_DURATION: Final = "gap_duration"
-SZ_MAX_RETRIES: Final = "max_retries"
+# SZ_CALLBACK: Final = "callback"  # obsolete?
+# SZ_GAP_DURATION: Final = "gap_duration"  # obsolete?
+# SZ_MAX_RETRIES: Final = "max_retries"  # obsolete?
 SZ_NUM_REPEATS: Final = "num_repeats"
 SZ_PRIORITY: Final = "priority"
 SZ_TIMEOUT: Final = "timeout"
@@ -71,101 +71,6 @@ SZ_RAMSES_GATEWAY: Final[str] = "RAMSES/GATEWAY"
 DUTY_CYCLE_DURATION = 60  #      time window (seconds) where rate limiting occurs
 MAX_DUTY_CYCLE_RATE = 0.01  #    % bandwidth used per cycle
 MAX_TRANSMIT_RATE_TOKENS = 80  # transmits per cycle
-
-
-# used by schedule.py...
-SZ_FRAGMENT: Final = "fragment"
-SZ_FRAG_NUMBER: Final = "frag_number"
-SZ_FRAG_LENGTH: Final = "frag_length"
-SZ_TOTAL_FRAGS: Final = "total_frags"
-
-SZ_SCHEDULE: Final = "schedule"
-SZ_CHANGE_COUNTER: Final = "change_counter"
-
-SZ_SENSOR_FAULT: Final = "sensor_fault"
-
-
-# used by 31DA
-SZ_AIR_QUALITY: Final = "air_quality"
-SZ_AIR_QUALITY_BASIS: Final = "air_quality_basis"
-SZ_BOOST_TIMER: Final = "boost_timer"
-SZ_BYPASS_MODE: Final = "bypass_mode"
-SZ_BYPASS_POSITION: Final = "bypass_position"
-SZ_BYPASS_STATE: Final = "bypass_state"
-SZ_CO2_LEVEL: Final = "co2_level"
-SZ_DEWPOINT_TEMP: Final = "dewpoint_temp"
-SZ_EXHAUST_FAN_SPEED: Final = "exhaust_fan_speed"
-SZ_EXHAUST_FLOW: Final = "exhaust_flow"
-SZ_EXHAUST_TEMP: Final = "exhaust_temp"
-SZ_FAN_INFO: Final = "fan_info"
-SZ_FAN_MODE: Final = "fan_mode"
-SZ_FAN_RATE: Final = "fan_rate"
-SZ_FILTER_DIRTY: Final = "filter_dirty"
-SZ_FROST_CYCLE: Final = "frost_cycle"
-SZ_HAS_FAULT: Final = "has_fault"
-SZ_FILTER_REMAINING: Final = "filter_remaining"
-SZ_FILTER_REMAINING_PERCENT: Final = "filter_remaining_percent"
-SZ_INDOOR_HUMIDITY: Final = "indoor_humidity"
-SZ_INDOOR_TEMP: Final = "indoor_temp"
-SZ_MINUTES: Final = "minutes"
-SZ_OUTDOOR_HUMIDITY: Final = "outdoor_humidity"
-SZ_OUTDOOR_TEMP: Final = "outdoor_temp"
-SZ_POST_HEAT: Final = "post_heat"
-SZ_PRE_HEAT: Final = "pre_heat"
-SZ_PRESENCE_DETECTED: Final = "presence_detected"
-SZ_REL_HUMIDITY: Final = "rel_humidity"
-SZ_REMAINING_DAYS: Final = "days_remaining"
-SZ_REMAINING_MINS: Final = "remaining_mins"
-SZ_REMAINING_PERCENT: Final = "percent_remaining"
-SZ_REQ_REASON: Final = "req_reason"
-SZ_REQ_SPEED: Final = "req_speed"
-SZ_SUPPLY_FAN_SPEED: Final = "supply_fan_speed"
-SZ_SUPPLY_FLOW: Final = "supply_flow"
-SZ_SUPPLY_TEMP: Final = "supply_temp"
-SZ_SPEED_CAPABILITIES: Final = "speed_capabilities"
-
-
-# used by OTB
-SZ_BURNER_HOURS: Final = "burner_hours"
-SZ_BURNER_STARTS: Final = "burner_starts"
-SZ_BURNER_FAILED_STARTS: Final = "burner_failed_starts"
-SZ_CH_PUMP_HOURS: Final = "ch_pump_hours"
-SZ_CH_PUMP_STARTS: Final = "ch_pump_starts"
-SZ_DHW_BURNER_HOURS: Final = "dhw_burner_hours"
-SZ_DHW_BURNER_STARTS: Final = "dhw_burner_starts"
-SZ_DHW_PUMP_HOURS: Final = "dhw_pump_hours"
-SZ_DHW_PUMP_STARTS: Final = "dhw_pump_starts"
-SZ_FLAME_SIGNAL_LOW: Final = "flame_signal_low"
-
-SZ_BOILER_OUTPUT_TEMP: Final = "boiler_output_temp"
-SZ_BOILER_RETURN_TEMP: Final = "boiler_return_temp"
-SZ_BOILER_SETPOINT: Final = "boiler_setpoint"
-SZ_CH_MAX_SETPOINT: Final = "ch_max_setpoint"
-SZ_CH_SETPOINT: Final = "ch_setpoint"
-SZ_CH_WATER_PRESSURE: Final = "ch_water_pressure"
-SZ_DHW_FLOW_RATE: Final = "dhw_flow_rate"
-SZ_DHW_SETPOINT: Final = "dhw_setpoint"
-SZ_DHW_TEMP: Final = "dhw_temp"
-SZ_MAX_REL_MODULATION: Final = "max_rel_modulation"
-# SZ_OEM_CODE:Final[str] = "oem_code"
-SZ_OUTSIDE_TEMP: Final = "outside_temp"
-SZ_REL_MODULATION_LEVEL: Final = "rel_modulation_level"
-
-SZ_CH_ACTIVE: Final = "ch_active"
-SZ_CH_ENABLED: Final = "ch_enabled"
-SZ_COOLING_ACTIVE: Final = "cooling_active"
-SZ_COOLING_ENABLED: Final = "cooling_enabled"
-SZ_DHW_ACTIVE: Final = "dhw_active"
-SZ_DHW_BLOCKING: Final = "dhw_blocking"
-SZ_DHW_ENABLED: Final = "dhw_enabled"
-SZ_FAULT_PRESENT: Final = "fault_present"
-SZ_FLAME_ACTIVE: Final = "flame_active"
-SZ_SUMMER_MODE: Final = "summer_mode"
-SZ_OTC_ACTIVE: Final = "otc_active"
-
-SZ_ACTUATOR_COUNTDOWN: Final = "actuator_countdown"
-SZ_COOL_ACTIVE: Final = "cool_active"
-SZ_CYCLE_COUNTDOWN: Final = "cycle_countdown"
 
 
 @verify(EnumCheck.UNIQUE)
@@ -381,320 +286,6 @@ def attr_dict_factory(
     return SlottedAttrDict(main_table, attr_table=attr_table)
 
 
-# slugs for device/zone entity klasses, used by 0005/000C
-@verify(EnumCheck.UNIQUE)
-class DevRole(StrEnum):
-    """Slugs for device/zone entity classes, used by commands 0005/000C."""
-
-    #
-    # Generic device/zone classes
-    ACT = "ACT"  # Generic heating zone actuator group
-    SEN = "SEN"  # Generic heating zone sensor group
-    #
-    # Standard device/zone classes
-    ELE = "ELE"  # BDRs (no heat demand)
-    MIX = "MIX"  # HM8s
-    RAD = "RAD"  # TRVs
-    UFH = "UFH"  # UFC (circuits)
-    VAL = "VAL"  # BDRs
-    #
-    # DHW device/zone classes
-    DHW = "DHW"  # DHW sensor (a zone, but not a heating zone)
-    HTG = "HTG"  # BDR (DHW relay, HTG relay)
-    HT1 = "HT1"  # BDR (HTG relay)
-    #
-    # Other device/zone classes
-    OUT = "OUT"  # OUT (external weather sensor)
-    RFG = "RFG"  # RFG
-    APP = "APP"  # BDR/OTB (appliance relay)
-
-
-DEV_ROLE_MAP = attr_dict_factory(
-    {
-        DevRole.ACT: {"00": "zone_actuator"},
-        DevRole.SEN: {"04": "zone_sensor"},
-        DevRole.RAD: {"08": "rad_actuator"},
-        DevRole.UFH: {"09": "ufh_actuator"},
-        DevRole.VAL: {"0A": "val_actuator"},
-        DevRole.MIX: {"0B": "mix_actuator"},
-        DevRole.OUT: {"0C": "out_sensor"},
-        DevRole.DHW: {"0D": "dhw_sensor"},
-        DevRole.HTG: {"0E": "hotwater_valve"},  # payload[:4] == 000E
-        DevRole.HT1: {None: "heating_valve"},  # payload[:4] == 010E
-        DevRole.APP: {"0F": "appliance_control"},  # the heat/cool source
-        DevRole.RFG: {"10": "remote_gateway"},
-        DevRole.ELE: {"11": "ele_actuator"},  # ELE(VAL) - no RP from older evos
-    },  # 03, 05, 06, 07: & >11 - no response from an 01:
-    {
-        "HEAT_DEVICES": ("00", "04", "08", "09", "0A", "0B", "11"),
-        "DHW_DEVICES": ("0D", "0E"),
-        "SENSORS": ("04", "0C", "0D"),
-    },
-)
-
-
-# slugs for device entity types, used in device_ids
-@verify(EnumCheck.UNIQUE)
-class DevType(StrEnum):
-    """Slugs for device entity types, used in device_ids."""
-
-    #
-    # Promotable/Generic devices
-    DEV = "DEV"  # xx: Promotable device
-    HEA = "HEA"  # xx: Promotable Heat device, aka CH/DHW device
-    HVC = "HVC"  # xx: Promotable HVAC device
-    THM = "THM"  # xx: Generic thermostat
-    #
-    # Heat (CH/DHW) devices
-    BDR = "BDR"  # 13: Electrical relay
-    CTL = "CTL"  # 01: Controller (zoned)
-    DHW = "DHW"  # 07: DHW sensor
-    DTS = "DTS"  # 12: Thermostat, DTS92(E)
-    DT2 = "DT2"  # 22: Thermostat, DTS92(E)
-    HCW = "HCW"  # 03: Thermostat - don't use STA
-    HGI = "HGI"  # 18: Gateway interface (RF to USB), HGI80
-    # 8 = "HM8"  # xx: HM80 mixer valve (Rx-only, does not Tx)
-    OTB = "OTB"  # 10: OpenTherm bridge
-    OUT = "OUT"  # 17: External weather sensor
-    PRG = "PRG"  # 23: Programmer
-    RFG = "RFG"  # 30: RF gateway (RF to ethernet), RFG100
-    RND = "RND"  # 34: Thermostat, TR87RF
-    TRV = "TRV"  # 04: Thermostatic radiator valve
-    TR0 = "TR0"  # 00: Thermostatic radiator valve
-    UFC = "UFC"  # 02: UFH controller
-    #
-    # Honeywell Jasper, other Heat devices
-    JIM = "JIM"  # 08: Jasper Interface Module (EIM?)
-    JST = "JST"  # 31: Jasper Stat
-    #
-    # HVAC devices, these are more like classes (i.e. no reliable device type)
-    RFS = "RFS"  # ??: HVAC spIDer gateway
-    FAN = "FAN"  # ??: HVAC fan, 31D[9A]: 20|29|30|37 (some, e.g. 29: only 31D9)
-    CO2 = "CO2"  # ??: HVAC CO2 sensor
-    HUM = "HUM"  # ??: HVAC humidity sensor, 1260: 32
-    PIR = "PIR"  # ??: HVAC pesence sensor, 2E10
-    REM = "REM"  # ??: HVAC switch, 22F[13]: 02|06|20|32|39|42|49|59 (no 20: are both)
-    SW2 = "SW2"  # ??: HVAC switch, Orcon variant
-    DIS = "DIS"  # ??: HVAC switch with display
-
-
-DEV_TYPE_MAP = attr_dict_factory(
-    {
-        # Generic devices (would be promoted)
-        DevType.DEV: {None: "generic_device"},  # , AttrDict._SZ_DEFAULT: True},
-        DevType.HEA: {None: "heat_device"},
-        DevType.HVC: {None: "hvac_device"},
-        # HGI80
-        DevType.HGI: {"18": "gateway_interface"},  # HGI80
-        # Heat (CH/DHW) devices
-        DevType.TR0: {"00": "radiator_valve", AttrDict._SZ_AKA_SLUG: DevType.TRV},
-        DevType.CTL: {"01": "controller"},
-        DevType.UFC: {"02": "ufh_controller"},
-        DevType.HCW: {"03": "analog_thermostat"},
-        DevType.THM: {None: "thermostat"},
-        DevType.TRV: {"04": "radiator_valve"},
-        DevType.DHW: {"07": "dhw_sensor"},
-        DevType.OTB: {"10": "opentherm_bridge"},
-        DevType.DTS: {"12": "digital_thermostat"},
-        DevType.BDR: {"13": "electrical_relay"},
-        DevType.OUT: {"17": "outdoor_sensor"},
-        DevType.DT2: {"22": "digital_thermostat", AttrDict._SZ_AKA_SLUG: DevType.DTS},
-        DevType.PRG: {"23": "programmer"},
-        DevType.RFG: {
-            "30": "rf_gateway"
-        },  # 30: RFG100, but could also be Nuaire PIV-RM (=CTL)
-        DevType.RND: {"34": "round_thermostat"},
-        # Other (jasper) devices
-        DevType.JIM: {"08": "jasper_interface"},
-        DevType.JST: {"31": "jasper_thermostat"},
-        # Ventilation devices
-        DevType.CO2: {None: "co2_sensor"},
-        DevType.DIS: {None: "switch_display"},
-        DevType.FAN: {None: "ventilator"},  # Both Fans and HRUs
-        DevType.HUM: {None: "rh_sensor"},
-        DevType.PIR: {None: "presence_sensor"},
-        DevType.RFS: {None: "hvac_gateway"},  # Spider, 30: or 21:
-        DevType.REM: {None: "switch"},
-        DevType.SW2: {None: "switch_variant"},
-    },
-    {
-        "HEAT_DEVICES": (
-            "00",
-            "01",
-            "02",
-            "03",
-            "04",
-            "07",
-            "10",
-            "12",
-            "13",
-            "17",
-            "22",
-            "30",
-            "34",
-        ),  # CH/DHW devices instead of HVAC/other
-        "HEAT_ZONE_SENSORS": ("00", "01", "03", "04", "12", "22", "34"),
-        "HEAT_ZONE_ACTUATORS": ("00", "02", "04", "13"),
-        "THM_DEVICES": ("03", "12", "21", "22", "34"),
-        "TRV_DEVICES": ("00", "04"),
-        "CONTROLLERS": (
-            "01",
-            "02",
-            "12",
-            "22",
-            "23",
-            "30",
-            "34",
-        ),  # potentially controllers
-        "PROMOTABLE_SLUGS": (DevType.DEV, DevType.HEA, DevType.HVC),
-        "HVAC_SLUGS": {
-            DevType.CO2: "co2_sensor",
-            DevType.FAN: "ventilator",  # Both Fans and HRUs
-            DevType.HUM: "rh_sensor",
-            DevType.RFS: "hvac_gateway",  # Spider
-            DevType.REM: "switch",
-        },
-    },
-)
-
-
-# slugs for zone entity klasses, used by 0005/000C
-class ZoneRole(StrEnum):
-    """Slugs for zone entity classes, used by commands 0005/000C."""
-
-    #
-    # Generic device/zone classes
-    ACT = "ACT"  # Generic heating zone actuator group
-    SEN = "SEN"  # Generic heating zone sensor group
-    #
-    # Standard device/zone classes
-    ELE = "ELE"  # heating zone with BDRs (no heat demand)
-    MIX = "MIX"  # heating zone with HM8s
-    RAD = "RAD"  # heating zone with TRVs
-    UFH = "UFH"  # heating zone with UFC circuits
-    VAL = "VAL"  # heating zone with BDRs
-    # Standard device/zone classes *not a heating zone)
-    DHW = "DHW"  # DHW zone with BDRs
-
-
-ZON_ROLE_MAP = attr_dict_factory(
-    {
-        ZoneRole.ACT: {"00": "heating_zone"},  # any actuator
-        ZoneRole.SEN: {"04": "heating_zone"},  # any sensor
-        ZoneRole.RAD: {"08": "radiator_valve"},  # TRVs
-        ZoneRole.UFH: {"09": "underfloor_heating"},  # UFCs
-        ZoneRole.VAL: {"0A": "zone_valve"},  # BDRs
-        ZoneRole.MIX: {"0B": "mixing_valve"},  # HM8s
-        ZoneRole.DHW: {"0D": "stored_hotwater"},  # DHWs
-        # N_CLASS.HTG: {"0E": "stored_hotwater", AttrDict._SZ_AKA_SLUG: ZON_ROLE.DHW},
-        ZoneRole.ELE: {"11": "electric_heat"},  # BDRs
-    },
-    {
-        "HEAT_ZONES": ("08", "09", "0A", "0B", "11"),
-    },
-)
-
-# Zone modes
-ZON_MODE_MAP = attr_dict_factory(
-    {
-        "FOLLOW": {"00": "follow_schedule"},
-        "ADVANCED": {"01": "advanced_override"},  # . until the next scheduled setpoint
-        "PERMANENT": {"02": "permanent_override"},  # indefinitely, until auto_reset
-        "COUNTDOWN": {"03": "countdown_override"},  # for x mins (duration, max 1,215?)
-        "TEMPORARY": {"04": "temporary_override"},  # until a given date/time (until)
-    }
-)
-
-# System modes
-SYS_MODE_MAP = attr_dict_factory(
-    {
-        "au_00": {"00": "auto"},  # .          indef (only)
-        "ho_01": {"01": "heat_off"},  # .      indef (only)
-        "eb_02": {"02": "eco_boost"},  # .     indef/<=24h: is either Eco, *or* Boost
-        "aw_03": {"03": "away"},  # .          indef/<=99d (0d = end of today, 00:00)
-        "do_04": {"04": "day_off"},  # .       indef/<=99d: rounded down to 00:00 by CTL
-        "de_05": {"05": "day_off_eco"},  # .   indef/<=99d: set to Eco when DayOff ends
-        "ar_06": {"06": "auto_with_reset"},  # indef (only)
-        "cu_07": {"07": "custom"},  # .        indef/<=99d
-    }
-)
-
-
-SZ_ACTIVE: Final = "active"
-SZ_ACTUATOR: Final = "actuator"
-SZ_ACTUATOR_ENABLED: Final = "actuator_enabled"
-SZ_ACTUATORS: Final = "actuators"
-# used by 1060
-SZ_BATTERY_LEVEL: Final = "battery_level"
-SZ_BATTERY_LOW: Final = "battery_low"
-SZ_BATTERY_STATE: Final = "battery_state"
-SZ_BINDINGS: Final = "bindings"
-SZ_CONFIG: Final = "config"
-SZ_DATETIME: Final = "datetime"
-SZ_DEMAND: Final = "demand"
-SZ_DEVICE_ID: Final = "device_id"
-SZ_DEVICE_ROLE: Final = "device_role"
-SZ_DEVICES: Final = "devices"
-SZ_DHW_IDX: Final = "dhw_idx"
-SZ_DIFFERENTIAL: Final = "differential"
-SZ_DOMAIN_ID: Final = "domain_id"
-SZ_DURATION: Final = "duration"
-SZ_FLAME_ON: Final = "flame_on"
-SZ_HEAT_DEMAND: Final = "heat_demand"
-SZ_IS_DST: Final = "is_dst"
-SZ_LANGUAGE: Final = "language"
-SZ_LOCAL_OVERRIDE: Final = "local_override"
-SZ_MAX_TEMP: Final = "max_temp"
-SZ_MIN_TEMP: Final = "min_temp"
-SZ_MIX_CONFIG: Final = "mix_config"
-SZ_MODE: Final = "mode"
-SZ_MODULATION_LEVEL: Final = "modulation_level"
-SZ_MULTIROOM_MODE: Final = "multiroom_mode"
-SZ_NAME: Final = "name"
-SZ_OEM_CODE: Final = "oem_code"
-SZ_OPENWINDOW_FUNCTION: Final = "openwindow_function"
-SZ_OVERRUN: Final = "overrun"
-SZ_PAYLOAD: Final = "payload"
-SZ_PERCENTAGE: Final = "percentage"
-SZ_PRESSURE: Final = "pressure"
-SZ_RELAY_DEMAND: Final = "relay_demand"
-SZ_RELAY_FAILSAFE: Final = "relay_failsafe"
-SZ_SENSOR: Final = "sensor"
-SZ_SETPOINT: Final = "setpoint"
-SZ_SETPOINT_BOUNDS: Final = "setpoint_bounds"
-SZ_SLUG: Final = "_SLUG"
-SZ_SYSTEM_MODE: Final = "system_mode"
-SZ_TEMPERATURE: Final = "temperature"
-SZ_TEMP_HIGH: Final = "temp_high"
-SZ_TEMP_LOW: Final = "temp_low"
-SZ_UFH_IDX: Final = "ufh_idx"
-SZ_UNKNOWN: Final = "unknown"
-SZ_UNTIL: Final = "until"
-SZ_VALUE: Final = "value"
-SZ_WINDOW_OPEN: Final = "window_open"
-SZ_ZONE_CLASS: Final = "zone_class"
-SZ_ZONE_IDX: Final = "zone_idx"
-SZ_ZONE_MASK: Final = "zone_mask"
-SZ_ZONE_TYPE: Final = "zone_type"
-SZ_ZONES: Final = "zones"
-
-# used in 0418 only?
-SZ_DEVICE_CLASS: Final = "device_class"
-# _DEVICE_ID: Final = "device_id"
-SZ_DOMAIN_IDX: Final = "domain_idx"
-SZ_FAULT_STATE: Final = "fault_state"
-SZ_FAULT_TYPE: Final = "fault_type"
-SZ_LOG_ENTRY: Final = "log_entry"
-SZ_LOG_IDX: Final = "log_idx"
-SZ_TIMESTAMP: Final = "timestamp"
-
-# used in 1FC9
-SZ_OFFER: Final = "offer"
-SZ_ACCEPT: Final = "accept"
-SZ_CONFIRM: Final = "confirm"
-SZ_PHASE: Final = "phase"
-
-
 DEFAULT_MAX_ZONES: Final = 16 if DEV_MODE else 12
 # Evohome: 12 (0-11), older/initial version was 8
 # Hometronics: 16 (0-15), or more?
@@ -728,23 +319,24 @@ DOMAIN_TYPE_MAP: dict[str, str] = {
     F6: "cooling_valve",  # cooling
     F7: "domain_f7",
     F8: "domain_f8",
-    F9: DEV_ROLE_MAP[DevRole.HT1],  # Heating Valve
-    FA: DEV_ROLE_MAP[DevRole.HTG],  # HW Valve (or UFH loop if src.type == UFC?)
+    F9: "heating_valve",  # Heating Valve
+    FA: "hotwater_valve",  # HW Valve (or UFH loop if src.type == UFC?)
     FB: "domain_fb",  # also: cooling valve?
-    FC: DEV_ROLE_MAP[DevRole.APP],  # appliance_control
+    FC: "appliance_control",  # appliance_control
     FD: "domain_fd",  # seen with hometronics
     # "FE": ???
     # FF: "system",  # TODO: remove this, is not a domain
 }  # "21": "Ventilation", "88": ???
-DOMAIN_TYPE_LOOKUP = {v: k for k, v in DOMAIN_TYPE_MAP.items() if k != FF}
 
-DHW_STATE_MAP: dict[str, str] = {"00": "off", "01": "on"}
-DHW_STATE_LOOKUP = {v: k for k, v in DHW_STATE_MAP.items()}
+# DOMAIN_TYPE_LOOKUP = {v: k for k, v in DOMAIN_TYPE_MAP.items() if k != FF}  # obsolete?
 
-DTM_LONG_REGEX = re.compile(
-    r"\d{4}-[01]\d-[0-3]\d(T| )[0-2]\d:[0-5]\d:[0-5]\d\.\d{6} ?"
-)  # 2020-11-30T13:15:00.123456
-DTM_TIME_REGEX = re.compile(r"[0-2]\d:[0-5]\d:[0-5]\d\.\d{3} ?")  # 13:15:00.123
+# DHW_STATE_MAP: dict[str, str] = {"00": "off", "01": "on"}  # obsolete?
+# DHW_STATE_LOOKUP = {v: k for k, v in DHW_STATE_MAP.items()}  # obsolete?
+
+# DTM_LONG_REGEX = re.compile(
+#     r"\d{4}-[01]\d-[0-3]\d(T| )[0-2]\d:[0-5]\d:[0-5]\d\.\d{6} ?"
+# )  # 2020-11-30T13:15:00.123456  # obsolete?
+# DTM_TIME_REGEX = re.compile(r"[0-2]\d:[0-5]\d:[0-5]\d\.\d{3} ?")  # 13:15:00.123  # obsolete?
 
 # Used by Packet.from_raw_line to validate unparsed ASCII line structures
 r = r"(-{3}|\d{3}|\.{3})"  # RSSI, '...' was used by an older version of evofw3
@@ -836,7 +428,7 @@ class SystemType(StrEnum):
 
 # used by 22Fx parser, and FanSwitch devices
 # SZ_BOOST_TIMER:Final = "boost_timer"  # minutes, e.g. 10, 20, 30 minutes
-HEATER_MODE: Final = "heater_mode"  # e.g. auto, off
+# HEATER_MODE: Final = "heater_mode"  # e.g. auto, off  # obsolete?
 FAN_MODE: Final = "fan_mode"  # e.g. low. high   # .     deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
 FAN_RATE: Final = "fan_rate"  # percentage, 0.0 - 1.0  # deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
 
@@ -901,17 +493,17 @@ class MsgId(StrEnum):
     _31 = "31"
     _38 = "38"
     _39 = "39"
-    _71 = "71"  # unclear if is supported bt OTB
-    _72 = "72"  # unclear if is supported bt OTB
+    _71 = "71"  # unclear if supported by OTB
+    _72 = "72"  # unclear if supported by OTB
     _73 = "73"
-    _74 = "74"  # unclear if is supported bt OTB
-    _75 = "75"  # unclear if is supported bt OTB
-    _76 = "76"  # unclear if is supported bt OTB
-    _77 = "77"  # unclear if is supported bt OTB
-    _78 = "78"  # unclear if is supported bt OTB
-    _79 = "79"  # unclear if is supported bt OTB
-    _7A = "7A"  # unclear if is supported bt OTB
-    _7B = "7B"  # unclear if is supported bt OTB
+    _74 = "74"  # unclear if supported by OTB
+    _75 = "75"  # unclear if supported by OTB
+    _76 = "76"  # unclear if supported by OTB
+    _77 = "77"  # unclear if supported by OTB
+    _78 = "78"  # unclear if supported by OTB
+    _79 = "79"  # unclear if supported by OTB
+    _7A = "7A"  # unclear if supported by OTB
+    _7B = "7B"  # unclear if supported by OTB
     _7F = "7F"
 
 
@@ -936,6 +528,7 @@ class Code(StrEnum):
     _01D0 = "01D0"
     _01E9 = "01E9"
     _01FF = "01FF"
+    _0204 = "0204"
     _0404 = "0404"
     _0418 = "0418"
     _042F = "042F"

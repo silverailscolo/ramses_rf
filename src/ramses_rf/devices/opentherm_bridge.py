@@ -6,10 +6,8 @@ import logging
 from datetime import timedelta as td
 from typing import Any, Final
 
-from ramses_rf.const import FC, HEARTBEAT_TIMEOUT_OTB, Code, DevType
-from ramses_rf.models import DeviceTraits, OpenThermState
-from ramses_tx import Priority
-from ramses_tx.const import (
+from ramses_rf.const import (
+    HEARTBEAT_TIMEOUT_OTB,
     SZ_BOILER_OUTPUT_TEMP,
     SZ_BOILER_RETURN_TEMP,
     SZ_BOILER_SETPOINT,
@@ -39,15 +37,16 @@ from ramses_tx.const import (
     SZ_FLAME_ACTIVE,
     SZ_FLAME_SIGNAL_LOW,
     SZ_MAX_REL_MODULATION,
-    SZ_NUM_REPEATS,
     SZ_OEM_CODE,
     SZ_OTC_ACTIVE,
     SZ_OUTSIDE_TEMP,
-    SZ_PRIORITY,
     SZ_REL_MODULATION_LEVEL,
     SZ_SUMMER_MODE,
-    MsgId,
+    DevType,
 )
+from ramses_rf.models import DeviceTraits, OpenThermState
+from ramses_tx import Priority
+from ramses_tx.const import FC, SZ_NUM_REPEATS, SZ_PRIORITY, Code, MsgId
 from ramses_tx.typing import PayDictT
 
 from ..protocol.opentherm import OtDataId

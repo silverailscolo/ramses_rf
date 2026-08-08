@@ -414,7 +414,7 @@ class Schedule:  # 0404
         else:
             self._sync_event.clear()
 
-    def _handle_msg(self, msg: Message) -> None:
+    def process_schedule_msg(self, msg: Message) -> None:
         """Handle incoming 0404/0006 schedule packets reactively.
 
         :param msg: Incoming protocol message object.

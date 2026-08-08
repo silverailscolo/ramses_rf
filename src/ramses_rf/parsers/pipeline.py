@@ -124,11 +124,10 @@ class RegexValidatorDecoder(PayloadDecoder):
         :type payload_len: int
         :return: The decoded result or None to signal early exit
         :rtype: dict[str, Any] | list[dict[str, Any]] | None
-        :raises PacketPayloadInvalid: If the validation rules fail.
         """
         try:
             # Force packet evaluation via string representation
-            _ = repr(msg._pkt)
+            _ = repr(msg)
         except Exception as err:
             raise exc.PacketPayloadInvalid(
                 f"Packet formatting/evaluation failed: {err}"
@@ -247,18 +246,16 @@ class PayloadDecoderPipeline:
         self.head = RegexValidatorDecoder()
         self.head.set_next(HeartbeatDecoder()).set_next(StandardParserDecoder())
 
-    def decode(self, msg: Message) -> dict[str, Any] | list[dict[str, Any]] | None:
-        """Process a message through the payload decoding pipeline.
+    def decode_payload(self, msg: Message) -> Any:
+        """Decode the raw payload using the decoder chain.
 
         :param msg: A Message object containing packet data
         :type msg: Message
         :return: A dict of key:value pairs or a list of such dicts
         :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
-        payload_str: str = getattr(
-            msg._pkt, "payload", getattr(msg._pkt, "_payload", "")
-        )
-        payload_len: int = getattr(msg._pkt, "len", getattr(msg._pkt, "_len", 0))
+        payload_str: str = msg._dto.payload
+        payload_len: int = msg.len
 
         return self.head.decode(msg, payload_str, payload_len)
 
@@ -288,7 +285,7 @@ def _check_msg_payload(msg: Message, payload: str) -> None:
     """
     try:
         # Force packet evaluation via string representation
-        _ = repr(msg._pkt)
+        _ = repr(msg)
     except Exception as err:
         raise exc.PacketPayloadInvalid(
             f"Packet formatting/evaluation failed: {err}"

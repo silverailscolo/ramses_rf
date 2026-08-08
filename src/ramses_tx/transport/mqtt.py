@@ -6,9 +6,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from datetime import datetime as dt, timedelta as td
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
@@ -27,12 +28,9 @@ from ..const import (
     SZ_IS_EVOFW3,
     SZ_RAMSES_GATEWAY,
 )
-from ..typing import DeviceIdT
+from ..typing import DeviceIdT, RamsesProtocolT
 from .base import TransportConfig, _FullTransport
 from .helpers import _normalise
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -279,6 +277,20 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                 parts = self._topic_base.split("/")
                 if len(parts) == 3:
                     gwy_id = DeviceIdT(parts[-1])
+                    # Set _topic_pub/_topic_sub now so that _publish() has a
+                    # valid topic before the retained "online" message is
+                    # processed.  Without this, the FSM sends an RQ via
+                    # _publish("") which the broker rejects as a malformed
+                    # packet, causing a disconnect/reconnect cycle.
+                    if not self._topic_pub:
+                        self._topic_pub = self._topic_base + "/tx"
+                        self._topic_sub = self._topic_base + "/rx"
+                        self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
+                        _LOGGER.debug(
+                            "Pre-set topic_pub/sub from topic_base: %s, %s",
+                            self._topic_pub,
+                            self._topic_sub,
+                        )
             self._establish_connection(gwy_id)
 
     def _on_connect_fail(
@@ -358,12 +370,39 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         assert msg.payload == b"online", "Coding error"
 
         if self._connected:
-            _LOGGER.info("MQTT device came back online - resuming writing")
-            if not self._loop.is_closed():
-                try:
-                    self._loop.call_soon_threadsafe(self._protocol.resume_writing)
-                except RuntimeError:
-                    _LOGGER.debug("Event loop closed, cannot resume writing")
+            # Broker is connected and protocol connection was already
+            # established (via _on_connect's _establish_connection call).
+            # But if _topic_sub is not yet set, the /rx subscription was
+            # never made — subscribe now so we actually receive data packets.
+            # This happens when the broker connects and establishes the
+            # protocol connection before the ramses_esp sends its "online"
+            # LWT message (issue 871 fix introduced this race).
+            if not getattr(self, "_topic_sub", "") or not self._topic_sub:
+                _LOGGER.info(
+                    "MQTT device online — subscribing to /rx (deferred from broker connect)"
+                )
+                self._extra[SZ_ACTIVE_HGI] = msg.topic[-9:]
+                self._topic_pub = msg.topic + "/tx"
+                self._topic_sub = msg.topic + "/rx"
+                self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
+                if getattr(self, "_data_wildcard_topic", ""):
+                    try:
+                        self.client.unsubscribe(self._data_wildcard_topic)
+                        _LOGGER.debug(
+                            "Unsubscribed data wildcard after deferred /rx subscribe: %s",
+                            self._data_wildcard_topic,
+                        )
+                    except (ValueError, MQTTException) as err:
+                        _LOGGER.exception("Error unsubscribing data wildcard: %s", err)
+                    finally:
+                        self._data_wildcard_topic = ""
+            else:
+                _LOGGER.info("MQTT device came back online - resuming writing")
+                if not self._loop.is_closed():
+                    try:
+                        self._loop.call_soon_threadsafe(self._protocol.resume_writing)
+                    except RuntimeError:
+                        _LOGGER.debug("Event loop closed, cannot resume writing")
             return
 
         _LOGGER.info("MQTT device is online - establishing connection")
@@ -399,6 +438,13 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         self, client: mqtt.Client, userdata: Any, msg: mqtt.MQTTMessage
     ) -> None:
         """Make a Frame from the MQTT message and process it."""
+        # Guard against the paho-mqtt network thread delivering messages
+        # after _close() has been called (race during gateway reload).
+        # Without this, stale callbacks log "Transport Error" for every
+        # inbound packet until the thread fully exits.
+        if self._closing:
+            return
+
         if _DBG_FORCE_FRAME_LOGGING:
             _LOGGER.warning("Rx: %s", msg.payload)
         elif self._log_all and _LOGGER.getEffectiveLevel() == logging.INFO:
@@ -541,6 +587,10 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         if not self._connected:
             raise exc.TransportStateError("Cannot publish: MQTT not connected")
 
+        if not self._topic_pub:
+            _LOGGER.warning("Cannot publish: _topic_pub not yet set")
+            return
+
         info: mqtt.MQTTMessageInfo = self.client.publish(
             self._topic_pub, payload=payload, qos=self._mqtt_qos
         )
@@ -562,14 +612,28 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
             self._reconnect_task.cancel()
             self._reconnect_task = None
 
-        if not self._connected:
-            return
-        self._connected = False
-
+        # Always stop the paho-mqtt network loop, even if already disconnected.
+        # Without this, the network thread auto-reconnects and re-subscribes,
+        # stealing messages from the new transport (the _closing guard in
+        # _on_message silently drops them).
+        #
+        # Always call disconnect() even when _connected is False: the broker
+        # may have dropped the connection, but the paho-mqtt network thread
+        # may still be alive and auto-reconnecting with the same client ID,
+        # which would kick the new transport off the broker.  disconnect()
+        # signals the thread to stop the auto-reconnect loop.
+        #
+        # loop_stop() joins the network thread, which can block for up to 1s
+        # (the thread's select() timeout).  Run it in a daemon thread to avoid
+        # blocking the HA event loop during ramses_cc reloads.  The _closing
+        # guard in _on_message ensures the old transport won't process messages
+        # even if the thread hasn't fully exited when the new transport starts.
         try:
-            if hasattr(self, "_topic_sub") and self._topic_sub:
+            if hasattr(self, "_topic_sub") and self._topic_sub and self._connected:
                 self.client.unsubscribe(self._topic_sub)
             self.client.disconnect()
-            self.client.loop_stop()
+            threading.Thread(target=self.client.loop_stop, daemon=True).start()
         except (ValueError, MQTTException) as err:
             _LOGGER.exception("Error during MQTT cleanup: %s", err)
+
+        self._connected = False

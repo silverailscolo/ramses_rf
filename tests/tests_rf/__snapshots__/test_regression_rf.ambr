@@ -448,7 +448,8 @@
         'heat_demand': 0.98,
         'heat_demands': list([
           dict({
-            'heat_demand': 0.98,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.98,
             'ufx_idx': '06',
           }),
         ]),
@@ -498,11 +499,13 @@
         'battery_low': None,
         'heat_demands': list([
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '00',
           }),
           dict({
-            'heat_demand': 0.31,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.31,
             'ufx_idx': '01',
           }),
         ]),
@@ -527,19 +530,23 @@
         'heat_demand': 0.0,
         'heat_demands': list([
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '00',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '01',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '0B',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '02',
           }),
         ]),
@@ -577,7 +584,8 @@
         'heat_demand': 0.62,
         'heat_demands': list([
           dict({
-            'heat_demand': 0.59,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.59,
             'ufx_idx': '00',
           }),
         ]),
@@ -673,27 +681,33 @@
         'heat_demand': 0.74,
         'heat_demands': list([
           dict({
-            'heat_demand': 0.57,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.57,
             'ufx_idx': '00',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '01',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '02',
           }),
           dict({
-            'heat_demand': 0.74,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.74,
             'ufx_idx': '08',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '07',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '03',
           }),
         ]),
@@ -722,15 +736,18 @@
         'heat_demand': 0.9,
         'heat_demands': list([
           dict({
-            'heat_demand': 0.95,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.95,
             'ufx_idx': '00',
           }),
           dict({
-            'heat_demand': 0.85,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.85,
             'ufx_idx': '01',
           }),
           dict({
-            'heat_demand': 0.64,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.64,
             'ufx_idx': '02',
           }),
         ]),
@@ -760,31 +777,38 @@
         'heat_demand': 1.0,
         'heat_demands': list([
           dict({
-            'heat_demand': 0.82,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.82,
             'ufx_idx': '00',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '01',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '02',
           }),
           dict({
-            'heat_demand': 0.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.0,
             'ufx_idx': '03',
           }),
           dict({
-            'heat_demand': 0.23,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.23,
             'ufx_idx': '04',
           }),
           dict({
-            'heat_demand': 0.39,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.39,
             'ufx_idx': '05',
           }),
           dict({
-            'heat_demand': 1.0,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 1.0,
             'ufx_idx': '06',
           }),
         ]),
@@ -837,7 +861,8 @@
         'heat_demand': 0.22,
         'heat_demands': list([
           dict({
-            'heat_demand': 0.81,
+            'mode': <ThermalMode.HEAT: 'heat'>,
+            'thermal_demand': 0.81,
             'ufx_idx': '00',
           }),
         ]),
@@ -887,7 +912,6 @@
         'is_alive': None,
         'setpoints': dict({
           '05': dict({
-            'temp_high': None,
             'temp_low': 21.0,
           }),
         }),
@@ -981,7 +1005,6 @@
         'is_alive': None,
         'setpoints': dict({
           '03': dict({
-            'temp_high': None,
             'temp_low': 19.5,
           }),
         }),
@@ -995,7 +1018,6 @@
         'is_alive': None,
         'setpoints': dict({
           '03': dict({
-            'temp_high': None,
             'temp_low': 20.0,
           }),
         }),
@@ -1009,23 +1031,18 @@
         'is_alive': None,
         'setpoints': dict({
           '03': dict({
-            'temp_high': None,
             'temp_low': 19.0,
           }),
           '04': dict({
-            'temp_high': None,
             'temp_low': 19.0,
           }),
           '05': dict({
-            'temp_high': None,
             'temp_low': 19.0,
           }),
           '06': dict({
-            'temp_high': None,
             'temp_low': 19.0,
           }),
           '07': dict({
-            'temp_high': None,
             'temp_low': 19.0,
           }),
         }),
@@ -2359,11 +2376,9 @@
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': False,
-          'ch_setpoint': 10,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.5,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 7, 4, 17, 0, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2382,11 +2397,9 @@
         'actuator_state': dict({
           'ch_active': True,
           'ch_enabled': True,
-          'ch_setpoint': 26,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.5,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2021, 2, 25, 14, 43, 32, 9252, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2422,11 +2435,9 @@
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': False,
-          'ch_setpoint': 10,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.5,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 9, 7, 23, 45, 45, 668000, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2460,9 +2471,9 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2024, 2, 2, 8, 58, 53, 388244, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2480,11 +2491,9 @@
         'actuator_state': dict({
           'ch_active': True,
           'ch_enabled': True,
-          'ch_setpoint': 32,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.0,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 2, 4, 14, 16, 22, 818919, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2511,11 +2520,9 @@
         'actuator_state': dict({
           'ch_active': True,
           'ch_enabled': True,
-          'ch_setpoint': 23,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.0,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 9, 29, 16, 17, 45, 261818, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2535,11 +2542,9 @@
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': False,
-          'ch_setpoint': 10,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.5,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 7, 4, 16, 53, 13, 493496, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2566,11 +2571,9 @@
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': True,
-          'ch_setpoint': 27,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.0,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 3, 13, 15, 34, 57, 762021, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2610,11 +2613,9 @@
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': False,
-          'ch_setpoint': 10,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.5,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 9, 8, 13, 52, 9, 675753, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2643,11 +2644,9 @@
         'actuator_state': dict({
           'ch_active': False,
           'ch_enabled': True,
-          'ch_setpoint': 47,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
-          'max_rel_modulation': 0.5,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2024, 12, 7, 16, 49, 18, 711000, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2700,9 +2699,9 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2021, 12, 23, 16, 23, 57, 9331, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2723,9 +2722,9 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
-          'cool_active': True,
           'dhw_active': True,
-          'flame_on': True,
+          'flame_active': True,
+          'last_updated': datetime.datetime(2022, 7, 4, 17, 0, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2743,9 +2742,9 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2023, 2, 10, 8, 37, 11, 282846, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2785,9 +2784,9 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': True,
+          'flame_active': True,
+          'last_updated': datetime.datetime(2022, 2, 5, 11, 20, 1, 997460, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2840,9 +2839,9 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': True,
+          'flame_active': True,
+          'last_updated': datetime.datetime(2021, 10, 17, 7, 23, 48, 224879, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.135,
         }),
         'battery_low': None,
@@ -2864,9 +2863,9 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2022, 10, 10, 16, 35, 50, 35592, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -2908,9 +2907,9 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
-          'cool_active': False,
           'dhw_active': False,
-          'flame_on': False,
+          'flame_active': False,
+          'last_updated': datetime.datetime(2024, 2, 2, 8, 56, 22, 923299, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3015,6 +3014,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2026, 2, 5, 23, 55, 17, 349777, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3033,6 +3033,7 @@
           'modulation_level': 1.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 3, 14, 8, 5, 33, 398293, tzinfo=datetime.timezone.utc),
           'modulation_level': 1.0,
         }),
         'battery_low': None,
@@ -3049,6 +3050,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 9, 29, 15, 0, 30, 444736, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3076,6 +3078,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 5, 2, 10, 6, 31, 686173, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3102,6 +3105,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 5, 2, 10, 6, 27, 876235, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3144,6 +3148,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 5, 2, 10, 6, 13, 7965, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3170,6 +3175,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 3, 13, 15, 35, 20, 826760, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3194,6 +3200,7 @@
           'modulation_level': 1.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2024, 1, 19, 5, 23, 36, 192077, tzinfo=datetime.timezone.utc),
           'modulation_level': 1.0,
         }),
         'battery_low': None,
@@ -3228,6 +3235,7 @@
           'modulation_level': 1.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2024, 1, 19, 6, 52, 20, 374809, tzinfo=datetime.timezone.utc),
           'modulation_level': 1.0,
         }),
         'battery_low': None,
@@ -3246,6 +3254,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2026, 2, 5, 23, 59, 16, 785760, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3288,6 +3297,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2022, 5, 2, 10, 6, 37, 366593, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3306,6 +3316,7 @@
           'modulation_level': 0.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2021, 11, 14, 4, 3, 16, 997757, tzinfo=datetime.timezone.utc),
           'modulation_level': 0.0,
         }),
         'battery_low': None,
@@ -3324,6 +3335,7 @@
           'modulation_level': 1.0,
         }),
         'actuator_state': dict({
+          'last_updated': datetime.datetime(2023, 12, 11, 20, 13, 49, 57656, tzinfo=datetime.timezone.utc),
           'modulation_level': 1.0,
         }),
         'battery_low': None,
@@ -6773,13 +6785,6 @@
             'class': None,
             'sensor': None,
           }),
-          '09': dict({
-            '_name': None,
-            'actuators': list([
-            ]),
-            'class': None,
-            'sensor': None,
-          }),
           '0A': dict({
             '_name': 'Office',
             'actuators': list([
@@ -7139,6 +7144,13 @@
         'underfloor_heating': dict({
         }),
         'zones': dict({
+          '06': dict({
+            '_name': 'Hall',
+            'actuators': list([
+            ]),
+            'class': None,
+            'sensor': None,
+          }),
         }),
       }),
       '01:223036': dict({
@@ -7324,13 +7336,6 @@
           'actuators': list([
           ]),
           'name': 'Test Rad Valve',
-          'sensor': None,
-          'type': 'Zone',
-        }),
-        '09': dict({
-          'actuators': list([
-          ]),
-          'name': None,
           'sensor': None,
           'type': 'Zone',
         }),

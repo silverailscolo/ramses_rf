@@ -51,11 +51,15 @@ DeviceListT: TypeAlias = dict[DeviceIdT, DeviceTraitsT]
 
 
 if TYPE_CHECKING:
+    from .interfaces import ProtocolInterface
+
     MsgFilterT = Callable[["PacketDTO"], bool]
     MsgHandlerT = Callable[["PacketDTO"], Awaitable[None]]
+    RamsesProtocolT: TypeAlias = ProtocolInterface
 else:
     MsgFilterT = Callable[[Any], bool]
     MsgHandlerT = Callable[[Any], Awaitable[None]]
+    RamsesProtocolT = Any
 
 
 # QoS & Send Parameters
