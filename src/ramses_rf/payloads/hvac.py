@@ -29,17 +29,17 @@ class SpiderThermostatPayload(PayloadBase):
       Field-spaced hex : 00 80 28 0A 46
       Payload hex      : 0080280A46
 
-    :param temp: Temperature reading in °C.
-    :type temp: float
-    :param setpoint_min: Minimum setpoint bound in °C.
-    :type setpoint_min: float
-    :param setpoint_max: Maximum setpoint bound in °C.
-    :type setpoint_max: float
+    :param temp: Temperature reading in °C, or None if N/A.
+    :type temp: float | None
+    :param setpoint_min: Minimum setpoint bound in °C, or None if N/A.
+    :type setpoint_min: float | None
+    :param setpoint_max: Maximum setpoint bound in °C, or None if N/A.
+    :type setpoint_max: float | None
     """
 
-    temp: float
-    setpoint_min: float
-    setpoint_max: float
+    temp: float | None
+    setpoint_min: float | None
+    setpoint_max: float | None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -53,9 +53,9 @@ class SpiderThermostatPayload(PayloadBase):
         """
         if len(raw_data) < 5:
             raise ValueError(f"Invalid payload length for 01FF: {len(raw_data)}")
-        temp_val = raw_data[2] / 2.0
-        sp_min = raw_data[3] / 2.0
-        sp_max = raw_data[4] / 2.0
+        temp_val = None if raw_data[2] in (0x7F, 0x80) else raw_data[2] / 2.0
+        sp_min = None if raw_data[3] in (0x7F, 0x80) else raw_data[3] / 2.0
+        sp_max = None if raw_data[4] in (0x7F, 0x80) else raw_data[4] / 2.0
         return cls(temp=temp_val, setpoint_min=sp_min, setpoint_max=sp_max)
 
     def to_bytes(self) -> bytes:
@@ -64,9 +64,13 @@ class SpiderThermostatPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        t_raw = int(round(self.temp * 2.0))
-        sp_min_raw = int(round(self.setpoint_min * 2.0))
-        sp_max_raw = int(round(self.setpoint_max * 2.0))
+        t_raw = 0x7F if self.temp is None else int(round(self.temp * 2.0))
+        sp_min_raw = (
+            0x7F if self.setpoint_min is None else int(round(self.setpoint_min * 2.0))
+        )
+        sp_max_raw = (
+            0x7F if self.setpoint_max is None else int(round(self.setpoint_max * 2.0))
+        )
         return bytes([0, 128, t_raw, sp_min_raw, sp_max_raw])
 
 
@@ -707,7 +711,7 @@ class HvacFanParamPayload(PayloadBase):
     23-byte HVAC Fan Parameter binary layout (Big-Endian):
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
-      +0       >B     1B   Parameter Index (uint8)      : 00
+      +0       B      1B   Header / Flag byte           : 00
       +1       H      2B   Parameter ID (uint16)        : 00 0A (Param 10)
       +3       B      1B   Flags (uint8)                : 00
       +4       B      1B   Data Type (uint8)            : 10
@@ -719,6 +723,11 @@ class HvacFanParamPayload(PayloadBase):
       --------------------------------------------------------------
       Field-spaced hex : 00 000A 00 10 00000005 00000000 00000064 00000001 0001
       Payload hex      : 00000A0010000000050000000000000064000000010001
+
+    Protocol Notes:
+      # See: https://github.com/ramses-rf/ramses_rf/issues/830
+      # 4-byte boolean parameter values: 0 = False, 1 = True.
+      # Sentinel values (e.g. 0x000000FF, 0xFFFFFFFF) indicate parameter N/A.
 
     :param param_id: Fan parameter identifier integer.
     :type param_id: int
@@ -991,3 +1000,354 @@ class HvacFaultStatusPayload(PayloadBase):
         :rtype: bytes
         """
         return bytes([self.fault_code, self.flags])
+
+
+@register_payload("12B0")
+@dataclass(frozen=True, slots=True)
+class WindowStatePayload(PayloadBase):
+    """Window open state sensor payload (Opcode 12B0).
+
+    3-byte Window State binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Zone Index (uint8)           : 00
+      +1       B      1B   Window Open Flag (0=No,1=Yes): 00
+      +2       B      1B   Trailing Flag Byte           : 00
+      --------------------------------------------------------------
+      Field-spaced hex : 00 00 00
+      Payload hex      : 000000
+
+    :param zone_idx: Zone index byte.
+    :type zone_idx: int
+    :param window_open: Window open status boolean, or None if unknown.
+    :type window_open: bool | None
+    """
+
+    zone_idx: int
+    window_open: bool | None
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack window state binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked WindowStatePayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 2 bytes.
+        """
+        if len(raw_data) < 2:
+            raise ValueError(f"Invalid payload length for 12B0: {len(raw_data)}")
+        val = None if raw_data[1:] == b"\xff\xff" else bool(raw_data[1])
+        return cls(zone_idx=raw_data[0], window_open=val)
+
+    def to_bytes(self) -> bytes:
+        """Pack window state data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        if self.window_open is None:
+            return bytes([self.zone_idx]) + b"\xff\xff"
+        return bytes([self.zone_idx, int(self.window_open), 0x00])
+
+
+@register_payload("2209")
+@register_payload("22C9")
+@dataclass(frozen=True, slots=True)
+class SetpointBoundsPayload(PayloadBase):
+    """Temperature setpoint bounds payload (Opcode 2209, 22C9).
+
+    6-byte Setpoint Bounds binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   UFH / Zone Index             : 00
+      +1       h      2B   Min Temp (int16*100)         : 01 F4 (5.00°C)
+      +3       h      2B   Max Temp (int16*100)         : 0E 10 (36.00°C)
+      +5       B      1B   Mode Code (uint8)            : 01 (Heat)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 01F4 0E10 01
+      Payload hex      : 0001F40E1001
+
+    :param ufh_idx: UFH or zone index byte.
+    :type ufh_idx: int
+    :param min_temp: Minimum setpoint temperature bound in °C.
+    :type min_temp: float
+    :param max_temp: Maximum setpoint temperature bound in °C.
+    :type max_temp: float
+    :param mode_code: Mode code integer.
+    :type mode_code: int
+    """
+
+    ufh_idx: int
+    min_temp: float
+    max_temp: float
+    mode_code: int
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack setpoint bounds binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked SetpointBoundsPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 6 bytes.
+        """
+        if len(raw_data) < 6:
+            raise ValueError(f"Invalid payload length for 22C9: {len(raw_data)}")
+        min_t = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        max_t = int.from_bytes(raw_data[3:5], byteorder="big", signed=True)
+        return cls(
+            ufh_idx=raw_data[0],
+            min_temp=min_t / 100.0,
+            max_temp=max_t / 100.0,
+            mode_code=raw_data[5],
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack setpoint bounds data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        min_b = int(round(self.min_temp * 100.0)).to_bytes(
+            2, byteorder="big", signed=True
+        )
+        max_b = int(round(self.max_temp * 100.0)).to_bytes(
+            2, byteorder="big", signed=True
+        )
+        return bytes([self.ufh_idx]) + min_b + max_b + bytes([self.mode_code])
+
+
+@register_payload("2249")
+@dataclass(frozen=True, slots=True)
+class NowNextSetpointPayload(PayloadBase):
+    """Current and upcoming setpoint payload (Opcode 2249).
+
+    7-byte Now/Next Setpoint binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Zone Index (uint8)           : 00
+      +1       h      2B   Setpoint Now (int16*100)     : 08 34 (21.00°C)
+      +3       h      2B   Setpoint Next (int16*100)    : 07 D0 (20.00°C)
+      +5       H      2B   Minutes Remaining uint16     : 00 3C (60m)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 0834 07D0 003C
+      Payload hex      : 00083407D0003C
+
+    :param zone_idx: Zone index byte.
+    :type zone_idx: int
+    :param setpoint_now: Current target setpoint temperature in °C.
+    :type setpoint_now: float
+    :param setpoint_next: Upcoming scheduled setpoint temperature in °C.
+    :type setpoint_next: float
+    :param minutes_remaining: Minutes remaining until next switchpoint.
+    :type minutes_remaining: int
+    """
+
+    zone_idx: int
+    setpoint_now: float
+    setpoint_next: float
+    minutes_remaining: int
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack now/next setpoint binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked NowNextSetpointPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 7 bytes.
+        """
+        if len(raw_data) < 7:
+            raise ValueError(f"Invalid payload length for 2249: {len(raw_data)}")
+        sp_now = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        sp_next = int.from_bytes(raw_data[3:5], byteorder="big", signed=True)
+        mins = int.from_bytes(raw_data[5:7], byteorder="big")
+        return cls(
+            zone_idx=raw_data[0],
+            setpoint_now=sp_now / 100.0,
+            setpoint_next=sp_next / 100.0,
+            minutes_remaining=mins,
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack now/next setpoint data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        now_b = int(round(self.setpoint_now * 100.0)).to_bytes(
+            2, byteorder="big", signed=True
+        )
+        next_b = int(round(self.setpoint_next * 100.0)).to_bytes(
+            2, byteorder="big", signed=True
+        )
+        min_b = self.minutes_remaining.to_bytes(2, byteorder="big")
+        return bytes([self.zone_idx]) + now_b + next_b + min_b
+
+
+@register_payload("22D0")
+@dataclass(frozen=True, slots=True)
+class UfhSystemModePayload(PayloadBase):
+    """Underfloor heating system mode payload (Opcode 22D0).
+
+    2-byte UFH System Mode binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   UFH Index (uint8)            : 00
+      +1       B      1B   Mode Flags (uint8)           : 14
+      --------------------------------------------------------------
+      Field-spaced hex : 00 14
+      Payload hex      : 0014
+
+    :param idx: UFH index byte.
+    :type idx: int
+    :param flags: Raw mode flags byte.
+    :type flags: int
+    :param cool_mode: Cool mode enabled flag boolean.
+    :type cool_mode: bool
+    :param heat_mode: Heat mode enabled flag boolean.
+    :type heat_mode: bool
+    :param is_active: UFH active status flag boolean.
+    :type is_active: bool
+    """
+
+    idx: int
+    flags: int
+    cool_mode: bool
+    heat_mode: bool
+    is_active: bool
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack UFH system mode binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked UfhSystemModePayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 2 bytes.
+        """
+        if len(raw_data) < 2:
+            raise ValueError(f"Invalid payload length for 22D0: {len(raw_data)}")
+        flg = raw_data[1]
+        return cls(
+            idx=raw_data[0],
+            flags=flg,
+            cool_mode=bool(flg & 0x02),
+            heat_mode=bool(flg & 0x04),
+            is_active=bool(flg & 0x10),
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack UFH system mode data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return bytes([self.idx, self.flags])
+
+
+@register_payload("22D9")
+@dataclass(frozen=True, slots=True)
+class DesiredBoilerSetpointPayload(PayloadBase):
+    """Target boiler setpoint temperature payload (Opcode 22D9).
+
+    3-byte Desired Boiler Setpoint binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Domain / Zone Index (uint8)  : 00
+      +1       h      2B   Target Temp (int16*100)      : 19 64 (65.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 1964
+      Payload hex      : 001964
+
+    :param domain_or_zone_idx: Domain or zone index byte.
+    :type domain_or_zone_idx: int
+    :param target_temp: Target boiler temperature setpoint in °C.
+    :type target_temp: float
+    """
+
+    domain_or_zone_idx: int
+    target_temp: float
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack desired boiler setpoint binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked DesiredBoilerSetpointPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 3 bytes.
+        """
+        if len(raw_data) < 3:
+            raise ValueError(f"Invalid payload length for 22D9: {len(raw_data)}")
+        t_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        return cls(
+            domain_or_zone_idx=raw_data[0],
+            target_temp=t_raw / 100.0,
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack desired boiler setpoint data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        t_raw = int(round(self.target_temp * 100.0))
+        return bytes([self.domain_or_zone_idx]) + t_raw.to_bytes(
+            2, byteorder="big", signed=True
+        )
+
+
+@register_payload("2D49")
+@dataclass(frozen=True, slots=True)
+class CoolingStatePayload(PayloadBase):
+    """Cooling relay state payload (Opcode 2D49).
+
+    2-byte Cooling State binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Domain / Zone Index (uint8)  : 00
+      +1       B      1B   Cooling Active (0=No, 1=Yes) : 01
+      --------------------------------------------------------------
+      Field-spaced hex : 00 01
+      Payload hex      : 0001
+
+    :param domain_or_zone_idx: Domain or zone index byte.
+    :type domain_or_zone_idx: int
+    :param state: Cooling state boolean.
+    :type state: bool
+    """
+
+    domain_or_zone_idx: int
+    state: bool
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack cooling state binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked CoolingStatePayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 2 bytes.
+        """
+        if len(raw_data) < 2:
+            raise ValueError(f"Invalid payload length for 2D49: {len(raw_data)}")
+        return cls(
+            domain_or_zone_idx=raw_data[0],
+            state=bool(raw_data[1]),
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack cooling state data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return bytes([self.domain_or_zone_idx, 0xC8 if self.state else 0x00])

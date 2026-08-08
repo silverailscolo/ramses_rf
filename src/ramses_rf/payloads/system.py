@@ -28,6 +28,13 @@ class SystemClockPayload(PayloadBase):
       Field-spaced hex : 00 0C 1E 00 01
       Payload hex      : 000C1E0001
 
+    Sample Packet Logs & Protocol Notes:
+      # Sent by THM when in signal strength test mode (0505, except 1st pkt):
+      # 12:39:56.099 061  W --- 12:010740 --:------ 12:010740 0001 005 0000000501
+      # 13:48:45.518 074  W --- 12:010740 --:------ 12:010740 0001 005 0000000505
+      # Sent by CTL before rf_check:
+      # 15:12:47.769 053  W --- 01:145038 --:------ 01:145038 0001 005 FC00000505
+
     :param hour: Hour integer (0-23).
     :type hour: int
     :param minute: Minute integer (0-59).
@@ -400,6 +407,15 @@ class SystemFaultPayload(PayloadBase):
 class SystemFaultLogPayload(PayloadBase):
     """System fault log entry payload (Opcode 0418).
 
+    Variable-length System Fault Log binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Log Index (uint8)            : 00
+      +1       xB     vB   Fault Log Data Bytes         : 00 01 00 00
+      --------------------------------------------------------------
+      Field-spaced hex : 00 00010000
+      Payload hex      : 0000010000
+
     :param log_idx: Fault log index byte.
     :type log_idx: int
     :param log_data: Fault log raw byte sequence.
@@ -575,6 +591,15 @@ class SystemHeatCoolPayload(PayloadBase):
 @dataclass(frozen=True, slots=True)
 class SystemDeviceInfoPayload(PayloadBase):
     """System device information & firmware payload (Opcode 10E0, 10E1).
+
+    Variable-length System Device Info binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Info Type Code (uint8)       : 00
+      +1       xB     vB   Hardware/Firmware Info Bytes : 01 02 03
+      --------------------------------------------------------------
+      Field-spaced hex : 00 010203
+      Payload hex      : 00010203
 
     :param info_type: Device info type byte.
     :type info_type: int
@@ -838,6 +863,15 @@ class SystemOpenthermBridgePayload(PayloadBase):
 class PuzzlePayload(PayloadBase):
     """Special puzzle / diagnostic payload (Opcode 7FFF).
 
+    Variable-length Puzzle Diagnostic binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       2B     2B   Message Type Classification  : 00 01
+      +2       xB     vB   Diagnostic Payload Bytes     : 00 FF
+      --------------------------------------------------------------
+      Field-spaced hex : 0001 00FF
+      Payload hex      : 000100FF
+
     :param msg_type: Message type classification byte sequence.
     :type msg_type: bytes
     :param payload_data: Raw diagnostic payload byte sequence.
@@ -868,3 +902,98 @@ class PuzzlePayload(PayloadBase):
         :rtype: bytes
         """
         return self.msg_type + self.payload_data
+
+
+@register_payload("0009")
+@dataclass(frozen=True, slots=True)
+class RelayFailsafePayload(PayloadBase):
+    """Relay failsafe mode payload (Opcode 0009).
+
+    2-byte Relay Failsafe binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Domain / Zone Index (uint8)  : 00
+      +1       B      1B   Failsafe Enabled (0=No, 1=Yes): 01
+      --------------------------------------------------------------
+      Field-spaced hex : 00 01
+      Payload hex      : 0001
+
+    Sample Packet Logs:
+      # .I --- 01:145038 --:------ 01:145038 0009 006 FC01FFF901FF
+      # .I --- 01:145038 --:------ 01:145038 0009 003 0700FF
+      # .I --- 23:100224 --:------ 23:100224 0009 003 0100FF  # 2-zone ST9520C
+      # .I --- 10:040239 01:223036 --:------ 0009 003 000000
+      # .I --- --:------ --:------ 12:227486 0009 003 0000FF
+
+    :param domain_or_zone_idx: Domain or zone index byte.
+    :type domain_or_zone_idx: int
+    :param failsafe_enabled: Failsafe status flag boolean.
+    :type failsafe_enabled: bool
+    """
+
+    domain_or_zone_idx: int
+    failsafe_enabled: bool
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack relay failsafe binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked RelayFailsafePayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 2 bytes.
+        """
+        if len(raw_data) < 2:
+            raise ValueError(f"Invalid payload length for 0009: {len(raw_data)}")
+        return cls(
+            domain_or_zone_idx=raw_data[0],
+            failsafe_enabled=bool(raw_data[1]),
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack relay failsafe data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return bytes([self.domain_or_zone_idx, int(self.failsafe_enabled)])
+
+
+@register_payload("0204")
+@dataclass(frozen=True, slots=True)
+class SystemFrame0204Payload(PayloadBase):
+    """System frame payload (Opcode 0204).
+
+    Variable-length System Frame binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       xB     vB   Raw Payload Byte Sequence    : 00 01 02 03
+      --------------------------------------------------------------
+      Field-spaced hex : 00010203
+      Payload hex      : 00010203
+
+    :param raw_payload_bytes: Raw payload byte string.
+    :type raw_payload_bytes: bytes
+    """
+
+    raw_payload_bytes: bytes
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack system frame 0204 binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked SystemFrame0204Payload instance.
+        :rtype: Self
+        """
+        return cls(raw_payload_bytes=raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack system frame 0204 data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return self.raw_payload_bytes
