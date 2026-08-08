@@ -623,6 +623,13 @@ async def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
             if dev.id in (getattr(msg.src, "id", None), getattr(msg.dst, "id", None)):
                 if hasattr(dev, "_last_msg_dtm"):
                     dev._last_msg_dtm = msg.dtm
+                # Fire the initialized callback on the first message from/to
+                # a FAN device.  Phase 2.95 removed the _handle_msg override
+                # that used to do this; without it, ramses_cc never sends the
+                # initial 2411 RQs and all parameter entities stay
+                # unavailable.  See ramses_cc issue 851.
+                if isinstance(dev, HvacVentilator):
+                    dev._handle_initialized_callback()
             if (bm := getattr(dev, "_binding_manager", None)) and getattr(
                 bm, "is_binding", False
             ):
@@ -632,7 +639,7 @@ async def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
         return
 
     # 2411 parameter messages are handled by the FAN aggregate root directly
-    # (they set _supports_2411 and fire the initialized callback).  This runs
+    # (they set _supports_2411 and store the parameter value).  This runs
     # before the per-payload loop because _handle_2411_message reads
     # msg.payload as a whole.  See ramses_cc issue 851.
     if msg.code == Code._2411:
