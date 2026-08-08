@@ -19,7 +19,11 @@ from ramses_rf.payloads.heating import (
 from ramses_rf.payloads.hvac import (
     Co2Payload,
     FanModePayload,
+    HvacAirQualityPayload,
+    HvacBypassStatePayload,
     HvacFanParamPayload,
+    HvacFaultStatusPayload,
+    HvacVentilationStatusPayload,
     RelativeHumidityPayload,
 )
 from ramses_rf.payloads.opentherm import OpenThermMsgPayload
@@ -393,6 +397,73 @@ def test_boiler_relay_demand_payload_3200_parity() -> None:
     assert payload.flags == 0
     assert reencoded == raw_hex
     assert as_dict == {"domain": 0, "demand_percent": 200, "flags": 0}
+
+
+def test_hvac_ventilation_status_payload_22e0_parity() -> None:
+    # Arrange
+    raw_hex = "0100"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacVentilationStatusPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.flow_mode == 1
+    assert payload.status_flags == 0
+    assert reencoded == raw_hex
+    assert as_dict == {"flow_mode": 1, "status_flags": 0}
+
+
+def test_hvac_bypass_state_payload_31d9_parity() -> None:
+    # Arrange
+    raw_hex = "6400"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacBypassStatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.bypass_position == 100
+    assert payload.mode_flags == 0
+    assert reencoded == raw_hex
+    assert as_dict == {"bypass_position": 100, "mode_flags": 0}
+
+
+def test_hvac_air_quality_payload_3110_parity() -> None:
+    # Arrange
+    raw_hex = "00C8"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacAirQualityPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.air_quality_aqi == 200
+    assert reencoded == raw_hex
+    assert as_dict == {"air_quality_aqi": 200}
+
+
+def test_hvac_fault_status_payload_4e01_parity() -> None:
+    # Arrange
+    raw_hex = "0000"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacFaultStatusPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.fault_code == 0
+    assert payload.flags == 0
+    assert reencoded == raw_hex
+    assert as_dict == {"fault_code": 0, "flags": 0}
 
 
 def test_pipeline_shadow_parity_execution() -> None:
