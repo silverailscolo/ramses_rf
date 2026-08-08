@@ -5,17 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ramses_rf.const import (
-    I_,
-    RQ,
-    SZ_ACCEPT,
-    SZ_CONFIRM,
-    SZ_OFFER,
-    W_,
-    ZON_ROLE_MAP,
-    Code,
-    DevType,
-)
+from ramses_rf.const import SZ_ACCEPT, SZ_CONFIRM, SZ_OFFER, ZON_ROLE_MAP, DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -23,6 +13,7 @@ from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
 from ramses_rf.protocol.ramses import CODES_ONLY_FROM_CTL
 from ramses_tx import ALL_DEV_ADDR, DeviceIdT
 from ramses_tx.address import hex_id_to_dev_id
+from ramses_tx.const import I_, RQ, W_, Code
 
 _LOGGER = logging.getLogger(__name__)
 

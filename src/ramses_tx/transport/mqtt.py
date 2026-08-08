@@ -9,7 +9,7 @@ import logging
 import threading
 from datetime import datetime as dt, timedelta as td
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 from urllib.parse import parse_qs, unquote, urlparse
 
 from paho.mqtt import MQTTException, client as mqtt
@@ -28,12 +28,9 @@ from ..const import (
     SZ_IS_EVOFW3,
     SZ_RAMSES_GATEWAY,
 )
-from ..typing import DeviceIdT
+from ..typing import DeviceIdT, RamsesProtocolT
 from .base import TransportConfig, _FullTransport
 from .helpers import _normalise
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -280,6 +277,20 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                 parts = self._topic_base.split("/")
                 if len(parts) == 3:
                     gwy_id = DeviceIdT(parts[-1])
+                    # Set _topic_pub/_topic_sub now so that _publish() has a
+                    # valid topic before the retained "online" message is
+                    # processed.  Without this, the FSM sends an RQ via
+                    # _publish("") which the broker rejects as a malformed
+                    # packet, causing a disconnect/reconnect cycle.
+                    if not self._topic_pub:
+                        self._topic_pub = self._topic_base + "/tx"
+                        self._topic_sub = self._topic_base + "/rx"
+                        self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
+                        _LOGGER.debug(
+                            "Pre-set topic_pub/sub from topic_base: %s, %s",
+                            self._topic_pub,
+                            self._topic_sub,
+                        )
             self._establish_connection(gwy_id)
 
     def _on_connect_fail(
@@ -575,6 +586,10 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         """Publish the payload to the MQTT broker."""
         if not self._connected:
             raise exc.TransportStateError("Cannot publish: MQTT not connected")
+
+        if not self._topic_pub:
+            _LOGGER.warning("Cannot publish: _topic_pub not yet set")
+            return
 
         info: mqtt.MQTTMessageInfo = self.client.publish(
             self._topic_pub, payload=payload, qos=self._mqtt_qos

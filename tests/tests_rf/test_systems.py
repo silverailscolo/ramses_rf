@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.const import FC, I_, SZ_DOMAIN_ID, SZ_SYSTEM_MODE, Code
+from ramses_rf.const import SZ_DOMAIN_ID, SZ_SYSTEM_MODE
 from ramses_rf.devices import BdrSwitch, Controller, DhwSensor, TrvActuator
 from ramses_rf.dispatcher import (
     _resolve_logical_targets,
@@ -30,6 +30,7 @@ from ramses_rf.systems.zones import (
 )
 from ramses_tx import Packet
 from ramses_tx.address import HGI_DEVICE_ID
+from ramses_tx.const import FC, I_, Code
 from ramses_tx.exceptions import ProtocolTimeoutError
 
 # A standard 3150 I-packet (Heat Demand) from a Controller

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ramses_tx.const import (
-    RQ,
+from ramses_rf.const import (
     SZ_ACTIVE,
     SZ_DHW_FLOW_RATE,
     SZ_MODE,
@@ -14,6 +13,7 @@ from ramses_tx.const import (
     SZ_UNTIL,
     ZON_MODE_MAP,
 )
+from ramses_tx.const import RQ
 from ramses_tx.helpers import hex_to_dtm, hex_to_temp
 from ramses_tx.typing import PayDictT
 

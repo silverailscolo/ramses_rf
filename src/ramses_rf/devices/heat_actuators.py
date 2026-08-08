@@ -4,16 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Final
 
-from ramses_rf.const import (
-    DOMAIN_TYPE_MAP,
-    SZ_HEAT_DEMAND,
-    SZ_RELAY_DEMAND,
-    Code,
-    DevType,
-)
-from ramses_rf.models import DeviceTraits
+from ramses_rf.const import DOMAIN_TYPE_MAP, SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
+from ramses_rf.models import ActuatorCycleDTO, ActuatorStateDTO, DeviceTraits
 from ramses_tx import Priority
-from ramses_tx.const import SZ_PRIORITY
+from ramses_tx.const import SZ_PRIORITY, Code
 from ramses_tx.typing import PayDictT
 
 from .dev_base import DeviceHeat
@@ -38,32 +32,28 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
     ACTUATOR_STATE: Final = "actuator_state"
     MODULATION_LEVEL: Final = "modulation_level"  # percentage (0.0-1.0)
 
-    async def actuator_cycle(self) -> dict[str, Any] | None:  # 3EF1
-        """Return the actuator cycle state.
+    async def actuator_cycle(self) -> ActuatorCycleDTO | None:  # 3EF1
+        """Return the actuator cycle state as a CQRS DTO.
 
-        # TODO: Refactor for #714 (CQRS API Boundaries).
-        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        :returns: ActuatorCycleDTO or None.
+        :rtype: ActuatorCycleDTO | None
         """
         state = getattr(self, "act_state", None)
         if not state:
             return None
 
-        raw_dict = {
-            "actuator_countdown": state.actuator_countdown,
-            "cycle_countdown": state.cycle_countdown,
-            "actuator_enabled": state.actuator_enabled,
-            "modulation_level": state.modulation_level,
-        }
+        return ActuatorCycleDTO(
+            actuator_countdown=state.actuator_countdown,
+            cycle_countdown=state.cycle_countdown,
+            actuator_enabled=state.actuator_enabled,
+            modulation_level=state.modulation_level,
+        )
 
-        # Dynamically strip None values to mimic legacy optional keys
-        clean_dict = {k: v for k, v in raw_dict.items() if v is not None}
-        return clean_dict if clean_dict else None
+    async def actuator_state(self) -> ActuatorStateDTO | None:  # 3EF0
+        """Return the actuator modulation state as a CQRS DTO.
 
-    async def actuator_state(self) -> dict[str, Any] | None:  # 3EF0
-        """Return the actuator modulation state.
-
-        # TODO: Refactor for #714 (CQRS API Boundaries).
-        # This is a legacy shim to maintain backward compatibility with ramses_cc.
+        :returns: ActuatorStateDTO or None.
+        :rtype: ActuatorStateDTO | None
         """
         state = getattr(self, "act_state", None)
         if not state:
@@ -73,20 +63,15 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
             state.flame_on if state.flame_on is not None else state.flame_active
         )
 
-        raw_dict = {
-            "ch_active": state.ch_active,
-            "ch_enabled": state.ch_enabled,
-            "ch_setpoint": state.ch_setpoint,
-            "cool_active": state.cool_active,
-            "dhw_active": state.dhw_active,
-            "flame_on": flame_status,
-            "max_rel_modulation": state.max_rel_modulation,
-            "modulation_level": state.modulation_level,
-        }
-
-        # Dynamically strip None values to mimic legacy optional keys
-        clean_dict = {k: v for k, v in raw_dict.items() if v is not None}
-        return clean_dict if clean_dict else None
+        return ActuatorStateDTO(
+            modulation_level=state.modulation_level,
+            actuator_enabled=state.actuator_enabled,
+            ch_active=state.ch_active,
+            ch_enabled=state.ch_enabled,
+            dhw_active=state.dhw_active,
+            flame_active=flame_status,
+            last_updated=state.last_updated,
+        )
 
     async def status(self) -> dict[str, Any]:
         base_status = await super().status()

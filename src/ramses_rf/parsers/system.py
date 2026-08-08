@@ -31,25 +31,9 @@ from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
-from ramses_tx import exceptions as exc
-from ramses_tx.address import ALL_DEV_ADDR, hex_id_to_dev_id
-from ramses_tx.const import (
+from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
-    F6,
-    F8,
-    F9,
-    FA,
-    FAULT_DEVICE_CLASS,
-    FAULT_STATE,
-    FAULT_TYPE,
-    FB,
-    FC,
-    FF,
-    I_,
-    LOOKUP_PUZZ,
-    RP,
-    RQ,
     SYS_MODE_MAP,
     SZ_ACCEPT,
     SZ_BINDINGS,
@@ -77,8 +61,26 @@ from ramses_tx.const import (
     SZ_TIMESTAMP,
     SZ_TOTAL_FRAGS,
     SZ_UNTIL,
+)
+from ramses_rf.enums import DevRole
+from ramses_tx import exceptions as exc
+from ramses_tx.address import ALL_DEV_ADDR, hex_id_to_dev_id
+from ramses_tx.const import (
+    F6,
+    F8,
+    F9,
+    FA,
+    FAULT_DEVICE_CLASS,
+    FAULT_STATE,
+    FAULT_TYPE,
+    FB,
+    FC,
+    FF,
+    I_,
+    LOOKUP_PUZZ,
+    RP,
+    RQ,
     W_,
-    DevRole,
     FaultDeviceClass,
 )
 from ramses_tx.helpers import (

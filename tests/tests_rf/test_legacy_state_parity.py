@@ -23,7 +23,12 @@ import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.gateway import GatewayConfig
-from ramses_rf.models import ActuatorState, UfhState
+from ramses_rf.models import (
+    ActuatorState,
+    ActuatorStateDTO,
+    UfhCircuitDemandDTO,
+    UfhState,
+)
 from ramses_rf.pipeline.dispatcher import CentralDispatcher
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_tx.config import EngineConfig
@@ -332,7 +337,7 @@ async def test_cqrs_master_domain_parity(log_file_path: Path) -> None:
                     if cqrs_ufh.heat_demands:
                         cqrs_counts["Ufh"] += 1
                         expected_list = [
-                            {"ufx_idx": str(k), "heat_demand": v}
+                            UfhCircuitDemandDTO(ufx_idx=str(k), thermal_demand=v)
                             for k, v in cqrs_ufh.heat_demands.items()
                         ]
                         assert expected_list == legacy_demands
@@ -354,34 +359,56 @@ async def test_cqrs_master_domain_parity(log_file_path: Path) -> None:
                     if cqrs_act.modulation_level is not None:
                         cqrs_counts["Act"] += 1
 
-                    if "modulation_level" in legacy_act_state:
-                        assert (
-                            cqrs_act.modulation_level
-                            == legacy_act_state["modulation_level"]
-                        )
-                    elif "rel_modulation_level" in legacy_act_state:
-                        assert (
-                            cqrs_act.modulation_level
-                            == legacy_act_state["rel_modulation_level"]
-                        )
+                    if isinstance(legacy_act_state, ActuatorStateDTO):
+                        if legacy_act_state.modulation_level is not None:
+                            assert (
+                                cqrs_act.modulation_level
+                                == legacy_act_state.modulation_level
+                            )
+                        if legacy_act_state.actuator_enabled is not None:
+                            assert (
+                                cqrs_act.actuator_enabled
+                                == legacy_act_state.actuator_enabled
+                            )
+                        if legacy_act_state.ch_active is not None:
+                            assert cqrs_act.ch_active == legacy_act_state.ch_active
+                        if legacy_act_state.ch_enabled is not None:
+                            assert cqrs_act.ch_enabled == legacy_act_state.ch_enabled
+                        if legacy_act_state.dhw_active is not None:
+                            assert cqrs_act.dhw_active == legacy_act_state.dhw_active
+                        if legacy_act_state.flame_active is not None:
+                            assert (
+                                cqrs_act.flame_active == legacy_act_state.flame_active
+                            )
+                    else:
+                        if "modulation_level" in legacy_act_state:
+                            assert (
+                                cqrs_act.modulation_level
+                                == legacy_act_state["modulation_level"]
+                            )
+                        elif "rel_modulation_level" in legacy_act_state:
+                            assert (
+                                cqrs_act.modulation_level
+                                == legacy_act_state["rel_modulation_level"]
+                            )
 
-                    if "actuator_enabled" in legacy_act_state:
-                        assert (
-                            cqrs_act.actuator_enabled
-                            == legacy_act_state["actuator_enabled"]
-                        )
+                        if "actuator_enabled" in legacy_act_state:
+                            assert (
+                                cqrs_act.actuator_enabled
+                                == legacy_act_state["actuator_enabled"]
+                            )
 
-                    if "ch_active" in legacy_act_state:
-                        assert cqrs_act.ch_active == legacy_act_state["ch_active"]
+                        if "ch_active" in legacy_act_state:
+                            assert cqrs_act.ch_active == legacy_act_state["ch_active"]
 
-                    if "ch_enabled" in legacy_act_state:
-                        assert cqrs_act.ch_enabled == legacy_act_state["ch_enabled"]
+                        if "ch_enabled" in legacy_act_state:
+                            assert cqrs_act.ch_enabled == legacy_act_state["ch_enabled"]
 
-                    if "dhw_active" in legacy_act_state:
-                        assert cqrs_act.dhw_active == legacy_act_state["dhw_active"]
+                        if "dhw_active" in legacy_act_state:
+                            assert cqrs_act.dhw_active == legacy_act_state["dhw_active"]
 
-                    if "flame_on" in legacy_act_state:
-                        assert cqrs_act.flame_active == legacy_act_state["flame_on"]
+                        if "flame_on" in legacy_act_state:
+                            assert cqrs_act.flame_active == legacy_act_state["flame_on"]
 
         # Assert CQRS is strictly EQUAL TO or BETTER THAN Legacy
         for key in leg_counts:

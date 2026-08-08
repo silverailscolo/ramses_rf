@@ -31,12 +31,13 @@ from ramses_cli.client import (
     split_kwargs,
 )
 from ramses_rf import GracefulExit
-from ramses_rf.const import DEV_TYPE_MAP, I_, Code
+from ramses_rf.const import DEV_TYPE_MAP
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.messages import Message
 from ramses_rf.schemas import SZ_CONFIG, SZ_DISABLE_DISCOVERY
 from ramses_rf.state import MessageStore
 from ramses_tx import exceptions as exc
+from ramses_tx.const import I_, Code
 from ramses_tx.schemas import SZ_PACKET_LOG, SZ_SERIAL_PORT
 
 STDIN = io.StringIO("053  I --- 01:123456 --:------ 01:123456 3150 002 FC00\r\n")

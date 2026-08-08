@@ -26,13 +26,14 @@ from ramses_rf.const import (
 )
 from ramses_rf.devices import BdrSwitch, Controller, Device, DhwSensor, TrvActuator
 from ramses_rf.entity import Entity, class_by_attr
-from ramses_rf.enums import Action
+from ramses_rf.enums import Action, DevType
 from ramses_rf.helpers import shrink
 from ramses_rf.models import (
     DemandState,
     DhwState,
     ScheduleState,
     TemperatureState,
+    ThermalDemandDTO,
     TrvState,
     ZoneState,
 )
@@ -47,7 +48,6 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Child, Parent
 from ramses_rf.typing import DeviceIdT, DevIndexT, InnerScheduleT, OuterScheduleT
-from ramses_tx.const import DevType
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import PayDictT
 
@@ -316,6 +316,17 @@ class DhwZone(ZoneSchedule):  # CS92A
 
     async def temperature(self) -> float | None:  # 1260
         return self.temp_state.temperature
+
+    async def thermal_demand(self) -> ThermalDemandDTO | None:
+        """Return zone thermal demand as a CQRS DTO.
+
+        :returns: ThermalDemandDTO or None.
+        :rtype: ThermalDemandDTO | None
+        """
+        val = self.demand_state.heat_demand
+        if val is None:
+            return None
+        return ThermalDemandDTO(thermal_demand=val, ufx_idx=str(self.idx))
 
     async def heat_demand(self) -> float | None:  # 3150
         return self.demand_state.heat_demand

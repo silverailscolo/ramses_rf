@@ -7,14 +7,12 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .. import exceptions as exc
 from ..helpers import dt_now
+from ..typing import RamsesProtocolT
 from .base import TransportConfig, _FullTransport
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 

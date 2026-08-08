@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """RAMSES RF - Interfaces for the RAMSES-II protocol stack."""
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
@@ -31,11 +32,11 @@ class TransportInterface(ABC):
         """Write a frame (legacy alias for send_frame)."""
 
 
-class ProtocolInterface(ABC):
+class ProtocolInterface(ABC, asyncio.Protocol):
     """Interface for the RAMSES-II Protocol layer."""
 
     @abstractmethod
-    def connection_made(self, transport: TransportInterface) -> None:
+    def connection_made(self, transport: Any, /, *, ramses: bool = False) -> None:
         """Called when a connection is made."""
 
     @abstractmethod
@@ -63,6 +64,16 @@ class ProtocolInterface(ABC):
         qos: "QosParams | None" = None,
     ) -> "Packet | None":
         """Send a command."""
+
+    @abstractmethod
+    async def wait_for_connection_made(
+        self, timeout: float = 1.0
+    ) -> TransportInterface:
+        """Wait for connection_made to be called."""
+
+    @abstractmethod
+    def set_regex_rules(self, rules: Any) -> None:
+        """Set regex rules on the protocol."""
 
 
 class StateMachineInterface(ABC):

@@ -2,12 +2,13 @@
 
 from unittest.mock import MagicMock
 
-from ramses_rf.const import SZ_UFH_IDX, SZ_ZONE_IDX, Code
+from ramses_rf.const import SZ_UFH_IDX, SZ_ZONE_IDX
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.ufh import UfhTopologyHandler
 from ramses_tx import Address
+from ramses_tx.const import Code
 
 
 def test_ufh_handler_creates_circuit_event_on_000c() -> None:

@@ -14,6 +14,7 @@ import logging
 from datetime import UTC, datetime as dt
 from typing import TYPE_CHECKING, Any, Literal, overload
 
+from ramses_rf.const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
 from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -21,7 +22,6 @@ from ramses_tx.const import I_, RP, RQ, Code, VerbT
 from ramses_tx.typing import PayDictT
 
 from .. import exceptions as exc
-from ..const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
 from ..messages import ApplicationMessage, Message
 from ..protocol.ramses import CODES_SCHEMA
 from ..routing import RoutingContext, StateHeader

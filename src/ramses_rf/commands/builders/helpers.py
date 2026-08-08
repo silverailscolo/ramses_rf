@@ -4,8 +4,9 @@ from datetime import datetime as dt
 from typing import Any
 
 from ramses_rf.address import Address
+from ramses_rf.const import ZON_MODE_MAP
 from ramses_tx import exceptions as exc
-from ramses_tx.const import FA, ZON_MODE_MAP
+from ramses_tx.const import FA
 
 
 def resolve_addrs(src: Address | str, dst: Address | str) -> tuple[str, str, str]:

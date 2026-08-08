@@ -10,11 +10,11 @@ from ramses_rf.const import (
     SZ_HEAT_DEMAND,
     SZ_SETPOINT,
     SZ_WINDOW_OPEN,
-    Code,
     DevType,
 )
 from ramses_rf.models import DeviceTraits, TrvState
 from ramses_tx import Packet
+from ramses_tx.const import Code
 
 from .dev_base import BatteryState, Fakeable
 from .heat_actuators import HeatDemand

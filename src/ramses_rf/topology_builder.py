@@ -8,8 +8,10 @@ import dataclasses
 import logging
 from typing import TYPE_CHECKING, Any
 
+from ramses_tx.const import Code
+
 from . import exceptions as exc
-from .const import SZ_ZONE_MASK, ZON_ROLE_MAP, Code, DevType
+from .const import SZ_ZONE_MASK, ZON_ROLE_MAP, DevType
 from .eavesdropper import EavesdropEngine
 from .messages import Message
 from .schemas import SZ_CLASS

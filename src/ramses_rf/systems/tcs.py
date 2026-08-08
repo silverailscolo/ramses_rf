@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
 from ramses_rf.const import (
+    DEV_TYPE_MAP,
     SYS_MODE_MAP,
     SZ_ACTUATORS,
     SZ_CHANGE_COUNTER,
@@ -32,7 +33,7 @@ from ramses_rf.exceptions import (
     SystemSchemaInconsistent,
 )
 from ramses_rf.helpers import shrink
-from ramses_rf.models import DemandState, SystemState
+from ramses_rf.models import DemandState, SystemState, ThermalDemandDTO
 from ramses_rf.schemas import (
     DEFAULT_MAX_ZONES,
     SCH_TCS,
@@ -47,7 +48,7 @@ from ramses_rf.schemas import (
     SZ_UFH_SYSTEM,
 )
 from ramses_rf.topology import Parent
-from ramses_tx import DEV_TYPE_MAP, DeviceIdT, Priority
+from ramses_tx import DeviceIdT, Priority
 from ramses_tx.typing import PayDictT
 
 from ..messages import Message
@@ -851,12 +852,34 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         return tcs
 
     @property
-    def heat_demands(self) -> dict[str, Any] | None:  # 3150
-        """Return the current heat demands per domain."""
+    def thermal_demands(self) -> dict[str, ThermalDemandDTO] | None:
+        """Return current thermal demands per domain as CQRS DTOs.
+
+        Provides a dictionary mapping domain identifiers (e.g. FC) to their
+        corresponding active thermal demand DTOs.
+
+        :returns: Dictionary mapping domain ID to ThermalDemandDTO or None.
+        :rtype: dict[str, ThermalDemandDTO] | None
+        """
         # FC: 00-C8 (no F9, FA), TODO: deprecate as FC only?
         if not self._heat_demands:
             return None
-        return {k: v.payload.get("heat_demand") for k, v in self._heat_demands.items()}
+        return {
+            k: ThermalDemandDTO(
+                thermal_demand=v.payload.get("heat_demand"),
+                domain_id=k,
+            )
+            for k, v in self._heat_demands.items()
+        }
+
+    @property
+    def heat_demands(self) -> dict[str, ThermalDemandDTO] | None:
+        """Return the current heat demands per domain (deprecated alias for thermal_demands).
+
+        :returns: Dictionary mapping domain ID to ThermalDemandDTO or None.
+        :rtype: dict[str, ThermalDemandDTO] | None
+        """
+        return self.thermal_demands
 
     @property
     def relay_demands(self) -> dict[str, Any] | None:  # 0008

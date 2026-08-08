@@ -6,6 +6,7 @@ from typing import Final
 
 from ramses_rf.commands.builders.helpers import resolve_addrs
 from ramses_rf.commands.core import Command
+from ramses_rf.const import SZ_MINUTES
 from ramses_rf.models.hvac_schemas import (
     _22F1_MODE_MAX,
     _22F1_SCHEMES,
@@ -18,7 +19,7 @@ from ramses_rf.parsers.helpers import (
     fan_info_to_byte,
 )
 from ramses_tx.address import NON_DEV_ADDR
-from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, SZ_MINUTES, W_, Code, Priority
+from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import hex_from_double, hex_from_percent, hex_from_temp
 

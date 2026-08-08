@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import DEV_TYPE_MAP, FA, FC, SZ_DEVICES, DevType
+from ramses_rf.const import DEV_TYPE_MAP, SZ_DEVICES, DevType
 from ramses_rf.devices.dev_base import DeviceHeat, DeviceHvac, Fakeable
 from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
@@ -26,6 +26,7 @@ from ramses_rf.models import DeviceTraits, TopologyChangedEvent
 from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.topology import Parent
 from ramses_rf.typing import DeviceIdT, DeviceListT
+from ramses_tx.const import FA, FC
 
 if TYPE_CHECKING:
     from ramses_rf.devices.dev_base import Device
@@ -48,6 +49,7 @@ class DeviceRegistry:
         device_filter: DeviceFilterInterface,
         config: GatewayConfig,
         device_factory_cb: Callable[[Address, Message | None, DeviceTraits], Device],
+        on_topology_changed_cb: Callable[[], None] | None = None,
     ) -> None:
         """Initialize the DeviceRegistry.
 
@@ -57,10 +59,13 @@ class DeviceRegistry:
         :type config: GatewayConfig
         :param device_factory_cb: A callback to instantiate domain devices.
         :type device_factory_cb: Callable
+        :param on_topology_changed_cb: Callback invoked when topology mutates.
+        :type on_topology_changed_cb: Callable | None
         """
         self._device_filter = device_filter
         self._config = config
         self._device_factory_cb = device_factory_cb
+        self._on_topology_changed_cb = on_topology_changed_cb
         self.devices: list[Device] = []
         self.device_by_id: dict[DeviceIdT, Device] = {}
 
@@ -102,6 +107,8 @@ class DeviceRegistry:
 
         try:
             handler(event)
+            if self._on_topology_changed_cb:
+                self._on_topology_changed_cb()
         except (
             DeviceNotFoundError,
             SchemaInconsistentError,

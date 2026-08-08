@@ -26,8 +26,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from ramses_tx.const import F9, FA, FC, FF
+
 from . import exceptions as exc
-from .const import F9, FA, FC, FF, SZ_ACTUATORS, SZ_SENSOR, DevType
+from .const import SZ_ACTUATORS, SZ_SENSOR
+from .enums import DevType
 from .schemas import SZ_CIRCUITS
 
 

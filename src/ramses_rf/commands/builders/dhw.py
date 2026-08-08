@@ -7,17 +7,9 @@ from ramses_rf.commands.builders.helpers import (
     resolve_addrs,
 )
 from ramses_rf.commands.core import Command
-from ramses_tx.const import (
-    DEFAULT_NUM_REPEATS,
-    I_,
-    RQ,
-    SZ_DHW_IDX,
-    W_,
-    ZON_MODE_MAP,
-    Code,
-    DevType,
-    Priority,
-)
+from ramses_rf.const import SZ_DHW_IDX, ZON_MODE_MAP
+from ramses_rf.enums import DevType
+from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import hex_from_dtm, hex_from_temp
 
@@ -92,7 +84,7 @@ def build_get_dhw_temp(intent: Command) -> CommandDTO:
 
 def build_put_dhw_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_DHW_TEMP intent into a CommandDTO."""
-    from ramses_tx.const import DEV_TYPE_MAP
+    from ramses_rf.const import DEV_TYPE_MAP
 
     dhw_idx = _check_idx(intent.get(SZ_DHW_IDX, 0))
     temperature = intent.get("temperature")

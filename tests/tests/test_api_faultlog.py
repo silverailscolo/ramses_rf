@@ -8,10 +8,11 @@ from typing import Any
 from ramses_rf import Address, CommandDTO as Command, Message, Packet
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
+from ramses_rf.const import SZ_LOG_ENTRY
 from ramses_rf.enums import Action
 from ramses_rf.systems.faultlog import FaultLog, FaultLogEntry
 from ramses_tx.address import HGI_DEVICE_ID, NON_DEV_ADDR
-from ramses_tx.const import SZ_LOG_ENTRY, FaultDeviceClass, FaultState, FaultType
+from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.dtos import CommandDTO
 
 from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import

@@ -9,7 +9,7 @@ import logging
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import Any, TypeAlias
 
 from .. import exceptions as exc
 from ..address import HGI_DEV_ADDR
@@ -17,10 +17,7 @@ from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, SZ_SIGNATURE
 from ..helpers import dt_now
 from ..interfaces import TransportInterface
 from ..packet import Packet
-from ..typing import DeviceIdT
-
-if TYPE_CHECKING:
-    from ..protocol import RamsesProtocolT
+from ..typing import DeviceIdT, RamsesProtocolT
 
 _LOGGER = logging.getLogger(__name__)
 
