@@ -37,11 +37,13 @@ class HeatDemandPayload(PayloadBase):
     :type demand_percent: int
     """
 
+    domain_or_zone_idx: int | None
     demand_percent: int
+    raw_extra: bytes | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack a simple 1-byte heat demand payload.
+        """Unpack a 1-byte, 2-byte, or multi-byte heat demand payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
@@ -51,17 +53,28 @@ class HeatDemandPayload(PayloadBase):
         """
         if not raw_data:
             raise ValueError("Payload data cannot be empty")
+        if len(raw_data) == 1:
+            return cls(domain_or_zone_idx=None, demand_percent=raw_data[0])
+        extra = raw_data[2:] if len(raw_data) > 2 else None
         return cls(
-            demand_percent=int.from_bytes(raw_data, byteorder="little"),
+            domain_or_zone_idx=raw_data[0],
+            demand_percent=raw_data[1],
+            raw_extra=extra,
         )
 
     def to_bytes(self) -> bytes:
-        """Pack a simple 1-byte heat demand payload.
+        """Pack heat demand data into a binary payload.
 
-        :returns: Packed 1-byte binary payload.
+        :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return self.demand_percent.to_bytes(1, byteorder="little")
+        if self.domain_or_zone_idx is not None:
+            buf = bytes([self.domain_or_zone_idx, self.demand_percent & 0xFF])
+        else:
+            buf = bytes([self.demand_percent & 0xFF])
+        if self.raw_extra:
+            buf += self.raw_extra
+        return buf
 
 
 @register_payload("30C9")
@@ -135,6 +148,80 @@ class TemperaturePayload(PayloadBase):
         return temp_bytes
 
 
+@dataclass(frozen=True, slots=True)
+class ScheduleFragmentPayload(PayloadBase):
+    """Schedule fragment payload (Opcode 0404 fragment).
+
+    Multi-byte schedule fragment binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Zone Index / Domain (uint8)  : 01
+      +1       B      1B   Fragment Flags               : 20
+      +2       H      2B   Padding                      : 00 00
+      +4       B      1B   Fragment Length / Header     : 08
+      +5       B      1B   Fragment Number (uint8)      : 01
+      +6       B      1B   Total Fragments (uint8)      : 03
+      +7       bytes  var  Fragment switchpoint bytes   : 68 81 ...
+      --------------------------------------------------------------
+
+    :param zone_idx: Zone/domain index byte.
+    :type zone_idx: int
+    :param frag_number: Fragment index number (1-based).
+    :type frag_number: int
+    :param total_frags: Total fragment count for schedule transfer.
+    :type total_frags: int
+    :param fragment_bytes: Raw binary fragment data bytes.
+    :type fragment_bytes: bytes
+    """
+
+    zone_idx: int
+    frag_number: int
+    total_frags: int
+    fragment_bytes: bytes
+    _header_prefix: bytes = b"\x20\x00\x08"
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack schedule fragment binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked ScheduleFragmentPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 7 bytes.
+        """
+        if len(raw_data) < 7:
+            raise ValueError(
+                f"Invalid fragment payload length for 0404: {len(raw_data)}"
+            )
+        return cls(
+            zone_idx=raw_data[0],
+            frag_number=raw_data[5],
+            total_frags=raw_data[6],
+            fragment_bytes=raw_data[7:],
+            _header_prefix=raw_data[1:4],
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack schedule fragment data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        hdr = (
+            bytes([self.zone_idx])
+            + self._header_prefix
+            + bytes(
+                [
+                    len(self.fragment_bytes),
+                    self.frag_number,
+                    self.total_frags,
+                ]
+            )
+        )
+        return hdr + self.fragment_bytes
+
+
 @register_payload("0404")
 @dataclass(frozen=True, slots=True)
 class ScheduleSwitchpointPayload(PayloadBase):
@@ -174,14 +261,19 @@ class ScheduleSwitchpointPayload(PayloadBase):
     setpoint_value: int
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack a compressed 20-byte RAMSES binary schedule switchpoint.
+    def from_bytes(cls, raw_data: bytes) -> Self | ScheduleFragmentPayload:
+        """Unpack a compressed 20-byte schedule switchpoint or fragment.
 
-        :param raw_data: 20-byte schedule binary block.
+        :param raw_data: Raw schedule binary block.
         :type raw_data: bytes
-        :returns: Unpacked ScheduleSwitchpointPayload instance.
-        :rtype: Self
+        :returns: ScheduleSwitchpointPayload or ScheduleFragmentPayload instance.
+        :rtype: Self | ScheduleFragmentPayload
+        :raises ValueError: If raw_data length is invalid.
         """
+        if len(raw_data) > 20:
+            return ScheduleFragmentPayload.from_bytes(raw_data)
+        if len(raw_data) != 20:
+            raise ValueError(f"Invalid payload length for 0404: {len(raw_data)}")
         idx, dow, tod, val, _ = struct.unpack(cls._STRUCT_FMT, raw_data)
         return cls(
             zone_idx=idx,
@@ -477,10 +569,10 @@ class ZoneConfigPayload(PayloadBase):
     max_temp: float
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack zone config binary payload.
+    def _from_bytes_single(cls, raw_data: bytes) -> Self:
+        """Unpack a single 6-byte zone config binary payload.
 
-        :param raw_data: Raw binary byte string.
+        :param raw_data: 6-byte raw binary byte string.
         :type raw_data: bytes
         :returns: Unpacked ZoneConfigPayload instance.
         :rtype: Self
@@ -492,6 +584,26 @@ class ZoneConfigPayload(PayloadBase):
             min_temp=min_raw / 100.0,
             max_temp=max_raw / 100.0,
         )
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self | list[Self]:
+        """Unpack zone config binary payload (single or multi-zone array).
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Single ZoneConfigPayload instance or list of instances.
+        :rtype: Self | list[Self]
+        :raises ValueError: If raw_data length is invalid.
+        """
+        if len(raw_data) < 6 or len(raw_data) % 6 != 0:
+            raise ValueError(f"Invalid payload length for 000A: {len(raw_data)}")
+        if len(raw_data) > 6:
+            return [
+                cls._from_bytes_single(raw_data[i : i + 6])
+                for i in range(0, len(raw_data), 6)
+            ]
+
+        return cls._from_bytes_single(raw_data)
 
     def to_bytes(self) -> bytes:
         """Pack zone config data into binary payload.
