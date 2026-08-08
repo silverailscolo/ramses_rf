@@ -26,7 +26,12 @@ from ramses_rf.payloads.hvac import (
     HvacVentilationStatusPayload,
     RelativeHumidityPayload,
 )
-from ramses_rf.payloads.opentherm import OpenThermMsgPayload
+from ramses_rf.payloads.opentherm import (
+    OpenThermMsgPayload,
+    OpenthermSetpointPayload,
+    OpenthermStatusPayload,
+)
+from ramses_rf.payloads.system import SystemClockPayload, SystemDatePayload
 from ramses_tx.dtos import PacketDTO
 
 
@@ -263,7 +268,7 @@ def test_relative_humidity_payload_12a0_parity() -> None:
 
 def test_opentherm_msg_payload_3220_parity() -> None:
     # Arrange
-    raw_hex = "19001900"
+    raw_hex = "10001900"
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
@@ -272,11 +277,11 @@ def test_opentherm_msg_payload_3220_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.msg_id == 25
-    assert payload.msg_type == 0
+    assert payload.msg_id == 0
+    assert payload.msg_type == 1
     assert payload.raw_value == b"\x19\x00"
     assert reencoded == raw_hex
-    assert as_dict == {"msg_id": 25, "msg_type": 0, "raw_value": b"\x19\x00"}
+    assert as_dict == {"msg_id": 0, "msg_type": 1, "raw_value": b"\x19\x00"}
 
 
 def test_dhw_mode_payload_1260_parity() -> None:
@@ -464,6 +469,81 @@ def test_hvac_fault_status_payload_4e01_parity() -> None:
     assert payload.flags == 0
     assert reencoded == raw_hex
     assert as_dict == {"fault_code": 0, "flags": 0}
+
+
+def test_system_clock_payload_0001_parity() -> None:
+    # Arrange
+    raw_hex = "000C1E0001"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = SystemClockPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.hour == 12
+    assert payload.minute == 30
+    assert payload.second == 0
+    assert payload.day_of_week == 1
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "hour": 12,
+        "minute": 30,
+        "second": 0,
+        "day_of_week": 1,
+    }
+
+
+def test_system_date_payload_0002_parity() -> None:
+    # Arrange
+    raw_hex = "001A0807"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = SystemDatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.year == 26
+    assert payload.month == 8
+    assert payload.day == 7
+    assert reencoded == raw_hex
+    assert as_dict == {"year": 26, "month": 8, "day": 7}
+
+
+def test_opentherm_status_payload_0150_parity() -> None:
+    # Arrange
+    raw_hex = "0100"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenthermStatusPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.master_status == 1
+    assert payload.slave_status == 0
+    assert reencoded == raw_hex
+    assert as_dict == {"master_status": 1, "slave_status": 0}
+
+
+def test_opentherm_setpoint_payload_1098_parity() -> None:
+    # Arrange
+    raw_hex = "1388"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenthermSetpointPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.setpoint_temp == 50.0
+    assert reencoded == raw_hex
+    assert as_dict == {"setpoint_temp": 50.0}
 
 
 def test_pipeline_shadow_parity_execution() -> None:
