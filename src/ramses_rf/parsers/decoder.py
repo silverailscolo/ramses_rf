@@ -517,7 +517,7 @@ class ParityCheckerDecoder(PayloadDecoder):
         """Execute dataclass payload decoding in shadow mode before legacy parsing."""
         payload_cls = get_payload_class(dto.code)
 
-        if payload_cls is not None and payload_str:
+        if payload_cls is not None and payload_str and dto.verb != "RQ":
             try:
                 raw_bytes = bytes.fromhex(payload_str)
                 payload_obj = payload_cls.from_bytes(raw_bytes)

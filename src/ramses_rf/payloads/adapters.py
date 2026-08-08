@@ -21,4 +21,4 @@ def payload_to_dict(payload: PayloadBase) -> dict[str, Any]:
     """
     if not is_dataclass(payload):
         raise TypeError(f"Expected dataclass instance, got {type(payload).__name__}")
-    return asdict(payload)
+    return {k: v for k, v in asdict(payload).items() if not k.startswith("_")}
