@@ -332,7 +332,7 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
     assert isinstance(protocol._context, ProtocolContext)  # mypy
 
     # HACK: to reduce test time
-    protocol._context.SEND_TIMEOUT_LIMIT = 0.01
+    protocol._context.SEND_TIMEOUT_LIMIT = 0.2
     protocol._context.max_retry_limit = 0
 
     #

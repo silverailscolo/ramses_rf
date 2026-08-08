@@ -1,5 +1,6 @@
 from datetime import datetime as dt
 
+import ramses_tx.const as tx_const
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.dhw import DhwConfigPayload, DhwModePayload, DhwStatePayload
@@ -32,7 +33,13 @@ from ramses_rf.payloads.opentherm import (
     OpenthermSetpointPayload,
     OpenthermStatusPayload,
 )
-from ramses_rf.payloads.system import SystemClockPayload, SystemDatePayload
+from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
+from ramses_rf.payloads.system import (
+    SystemClockPayload,
+    SystemConfigPayload,
+    SystemDatePayload,
+    SystemFaultLogPayload,
+)
 from ramses_tx.dtos import PacketDTO
 
 
@@ -712,14 +719,51 @@ def test_spider_thermostat_payload_01ff_na_sentinel_parity() -> None:
     assert as_dict == {"temp": None, "setpoint_min": None, "setpoint_max": 35.0}
 
 
-def test_complete_payload_registry_coverage() -> None:
-    # Arrange & Act
-    from ramses_rf.payloads import get_payload_class
-    from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
+def test_system_fault_log_payload_0418_parity() -> None:
+    # Arrange
+    raw_hex = "0000010000"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = SystemFaultLogPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
 
     # Assert
-    assert len(PAYLOAD_REGISTRY._registry) == 109
-    assert get_payload_class("0008") is not None
-    assert get_payload_class("0009") is not None
-    assert get_payload_class("12B0") is not None
-    assert get_payload_class("3210") is not None
+    assert payload.log_idx == 0
+    assert payload.log_data == bytes.fromhex("00010000")
+    assert reencoded == raw_hex
+    assert as_dict == {"log_idx": 0, "log_data": b"\x00\x01\x00\x00"}
+
+
+def test_system_config_payload_2e04_parity() -> None:
+    # Arrange
+    raw_hex = "0000"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = SystemConfigPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.config_idx == 0
+    assert payload.config_val == 0
+    assert reencoded == raw_hex
+    assert as_dict == {"config_idx": 0, "config_val": 0}
+
+
+def test_complete_payload_registry_coverage() -> None:
+    # Arrange & Act
+    known_codes = [
+        getattr(tx_const.Code, a)
+        for a in dir(tx_const.Code)
+        if a.startswith("_") and len(a) == 5
+    ]
+    aliases = ["2E10", "313E"]
+    all_expected = known_codes + aliases
+
+    # Assert
+    for code in all_expected:
+        assert code in PAYLOAD_REGISTRY, f"Opcode {code} missing from PAYLOAD_REGISTRY"
+    assert len(PAYLOAD_REGISTRY._registry) == 108

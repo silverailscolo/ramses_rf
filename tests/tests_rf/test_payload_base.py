@@ -6,6 +6,7 @@ import pytest
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.base import PayloadBase
 from ramses_rf.payloads.registry import (
+    PAYLOAD_REGISTRY,
     PayloadRegistry,
     get_payload_class,
     register_payload,
@@ -55,20 +56,24 @@ def test_payload_registry_registration() -> None:
 
 def test_global_payload_registry_decorator() -> None:
     # Arrange & Act
-    @register_payload("1234")
-    @dataclass(frozen=True, slots=True)
-    class SamplePayload(PayloadBase):
-        data: int
+    try:
 
-        @classmethod
-        def from_bytes(cls, raw_data: bytes) -> Self:
-            return cls(data=0)
+        @register_payload("1234")
+        @dataclass(frozen=True, slots=True)
+        class SamplePayload(PayloadBase):
+            data: int
 
-        def to_bytes(self) -> bytes:
-            return b"\x00"
+            @classmethod
+            def from_bytes(cls, raw_data: bytes) -> Self:
+                return cls(data=0)
 
-    # Assert
-    assert get_payload_class("1234") is SamplePayload
+            def to_bytes(self) -> bytes:
+                return b"\x00"
+
+        # Assert
+        assert get_payload_class("1234") is SamplePayload
+    finally:
+        PAYLOAD_REGISTRY._registry.pop("1234", None)
 
 
 def test_payload_registry_clear() -> None:
