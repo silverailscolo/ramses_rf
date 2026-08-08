@@ -212,9 +212,14 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         This method is called when the device has been fully initialized and
         is ready to process commands. It triggers any registered initialization
         callbacks and performs necessary setup for 2411 parameter support.
+
+        The callback fires on the first message from the device, before 2411
+        support is confirmed.  This is intentional: the callback's job is to
+        trigger 2411 discovery (ramses_cc sends RQ 2411 packets), so it must
+        fire before ``supports_2411`` is set.  See ramses_cc issue 851.
         """
-        if self._initialized_callback is not None and self.supports_2411:
-            _LOGGER.debug("2411-Device initialized: %s", self.id)
+        if self._initialized_callback is not None:
+            _LOGGER.debug("FAN device initialized: %s", self.id)
             if callable(self._initialized_callback):
                 try:
                     self._initialized_callback()
