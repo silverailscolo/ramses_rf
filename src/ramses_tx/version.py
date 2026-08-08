@@ -1,4 +1,4 @@
 """RAMSES RF - a RAMSES-II protocol decoder & analyser (transport layer)."""
 
-__version__ = "0.59.3"
+__version__ = "0.59.4"
 VERSION = __version__
