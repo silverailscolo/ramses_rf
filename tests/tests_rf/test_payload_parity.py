@@ -11,6 +11,7 @@ from ramses_rf.payloads.heating import (
     HeatDemandPayload,
     OutdoorTempPayload,
     RelayDemandPayload,
+    ScheduleFragmentPayload,
     ScheduleSwitchpointPayload,
     SetPointInfoPayload,
     SystemSyncPayload,
@@ -25,6 +26,7 @@ from ramses_rf.payloads.hvac import (
     HvacBypassStatePayload,
     HvacFanParamPayload,
     HvacFaultStatusPayload,
+    HvacFilterChangePayload,
     HvacVentilationStatusPayload,
     RelativeHumidityPayload,
 )
@@ -56,7 +58,55 @@ def test_heat_demand_payload_3150_parity() -> None:
     # Assert
     assert payload.demand_percent == 200
     assert reencoded == raw_hex
-    assert as_dict == {"demand_percent": 200}
+    assert as_dict == {
+        "domain_or_zone_idx": None,
+        "demand_percent": 200,
+        "raw_extra": None,
+    }
+
+
+def test_heat_demand_payload_3150_2byte_parity() -> None:
+    # Arrange
+    raw_hex = "01CA"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HeatDemandPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.domain_or_zone_idx == 1
+    assert payload.demand_percent == 202
+    assert payload.raw_extra is None
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "domain_or_zone_idx": 1,
+        "demand_percent": 202,
+        "raw_extra": None,
+    }
+
+
+def test_heat_demand_payload_3150_multibyte_parity() -> None:
+    # Arrange
+    raw_hex = "01CA0011"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HeatDemandPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.domain_or_zone_idx == 1
+    assert payload.demand_percent == 202
+    assert payload.raw_extra == bytes.fromhex("0011")
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "domain_or_zone_idx": 1,
+        "demand_percent": 202,
+        "raw_extra": bytes.fromhex("0011"),
+    }
 
 
 def test_temperature_payload_30c9_simple_parity() -> None:
@@ -100,6 +150,7 @@ def test_schedule_switchpoint_payload_0404_parity() -> None:
 
     # Act
     payload = ScheduleSwitchpointPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, ScheduleSwitchpointPayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -184,6 +235,7 @@ def test_zone_config_payload_000a_parity() -> None:
 
     # Act
     payload = ZoneConfigPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, ZoneConfigPayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -751,6 +803,94 @@ def test_system_config_payload_2e04_parity() -> None:
     assert payload.config_val == 0
     assert reencoded == raw_hex
     assert as_dict == {"config_idx": 0, "config_val": 0}
+
+
+def test_zone_config_payload_000a_array_parity() -> None:
+    # Arrange
+    raw_hex = "081001F409C4091001F409C40A1001F409C40B1001F409C4"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payloads = ZoneConfigPayload.from_bytes(raw_bytes)
+    assert isinstance(payloads, list)
+    reencoded = b"".join(p.to_bytes() for p in payloads).hex().upper()
+    as_dicts = [payload_to_dict(p) for p in payloads]
+
+    # Assert
+    assert len(payloads) == 4
+    assert reencoded == raw_hex
+    assert as_dicts[0] == {
+        "zone_idx": 8,
+        "zone_flags": 16,
+        "min_temp": 5.0,
+        "max_temp": 25.0,
+    }
+
+
+def test_hvac_fan_param_payload_2411_22byte_parity() -> None:
+    # Arrange
+    raw_hex = "00000100000000003200000000000000FF0000000120"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacFanParamPayload.from_bytes(raw_bytes)
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.param_id == 1
+    assert payload.value_scaled == 50
+    assert as_dict["param_id"] == 1
+    assert as_dict["value_scaled"] == 50
+
+
+def test_schedule_fragment_payload_0404_parity() -> None:
+    # Arrange
+    raw_hex = (
+        "0120000829010368816DCCC91183301005D1D93428200E1C7D720C04402C0442640E8200"
+        "0C851701ADD3AFAED1131151"
+    )
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ScheduleSwitchpointPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, ScheduleFragmentPayload)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.zone_idx == 1
+    assert payload.frag_number == 1
+    assert payload.total_frags == 3
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "zone_idx": 1,
+        "frag_number": 1,
+        "total_frags": 3,
+        "fragment_bytes": bytes.fromhex(
+            "68816DCCC91183301005D1D93428200E1C7D720C04402C0442640E82000C851701ADD3AFAED1131151"
+        ),
+    }
+
+
+def test_hvac_filter_change_payload_10d0_reset_parity() -> None:
+    # Arrange
+    raw_hex = "00FF"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacFilterChangePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.reset_counter is True
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "remaining_days": None,
+        "days_lifetime": None,
+        "remaining_percent": None,
+        "reset_counter": True,
+    }
 
 
 def test_complete_payload_registry_coverage() -> None:

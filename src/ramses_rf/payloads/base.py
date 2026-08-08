@@ -4,6 +4,8 @@ This module defines the abstract base class and protocol contract for all RAMSES
 packet payload dataclasses.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Self
@@ -19,13 +21,15 @@ class PayloadBase(ABC):
 
     @classmethod
     @abstractmethod
-    def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack raw binary payload bytes into a typed dataclass instance.
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> Self | list[Self] | PayloadBase | list[PayloadBase]:
+        """Unpack raw binary payload bytes into typed dataclass instance(s).
 
         :param raw_data: Raw byte string representation of the payload.
         :type raw_data: bytes
-        :returns: A typed payload dataclass instance.
-        :rtype: Self
+        :returns: A typed payload dataclass instance or list of instances.
+        :rtype: Self | list[Self] | PayloadBase | list[PayloadBase]
         """
         ...
 

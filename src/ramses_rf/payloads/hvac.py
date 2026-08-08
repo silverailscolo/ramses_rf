@@ -91,17 +91,20 @@ class HvacFilterChangePayload(PayloadBase):
       Field-spaced hex : 00 B4 B4 C8 0000
       Payload hex      : 00B4B4C80000
 
-    :param remaining_days: Remaining filter days integer.
-    :type remaining_days: int
-    :param days_lifetime: Total filter lifetime days integer.
-    :type days_lifetime: int
-    :param remaining_percent: Remaining filter percentage.
-    :type remaining_percent: float
+    :param remaining_days: Remaining filter days integer, or None if reset command.
+    :type remaining_days: int | None
+    :param days_lifetime: Total filter lifetime days integer, or None if reset command.
+    :type days_lifetime: int | None
+    :param remaining_percent: Remaining filter percentage, or None if reset command.
+    :type remaining_percent: float | None
+    :param reset_counter: True if reset command payload (00FF).
+    :type reset_counter: bool
     """
 
-    remaining_days: int
-    days_lifetime: int
-    remaining_percent: float
+    remaining_days: int | None = None
+    days_lifetime: int | None = None
+    remaining_percent: float | None = None
+    reset_counter: bool = False
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -111,8 +114,10 @@ class HvacFilterChangePayload(PayloadBase):
         :type raw_data: bytes
         :returns: Unpacked HvacFilterChangePayload instance.
         :rtype: Self
-        :raises ValueError: If raw_data length is less than 4 bytes.
+        :raises ValueError: If raw_data length is less than 2 bytes.
         """
+        if len(raw_data) == 2 and raw_data == b"\x00\xff":
+            return cls(reset_counter=True)
         if len(raw_data) < 4:
             raise ValueError(f"Invalid payload length for 10D0: {len(raw_data)}")
         rem_days = raw_data[1]
@@ -130,8 +135,23 @@ class HvacFilterChangePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        rem_pct_raw = int(round(self.remaining_percent * 2.0))
-        return bytes([0, self.remaining_days, self.days_lifetime, rem_pct_raw, 0, 0])
+        if self.reset_counter:
+            return b"\x00\xff"
+        rem_pct_raw = (
+            int(round(self.remaining_percent * 2.0))
+            if self.remaining_percent is not None
+            else 0
+        )
+        return bytes(
+            [
+                0,
+                self.remaining_days or 0,
+                self.days_lifetime or 0,
+                rem_pct_raw,
+                0,
+                0,
+            ]
+        )
 
 
 @register_payload("10E2")
@@ -765,8 +785,9 @@ class HvacFanParamPayload(PayloadBase):
         :rtype: Self
         :raises ValueError: If raw_data length is less than 23 bytes.
         """
-        if len(raw_data) < 23:
+        if len(raw_data) < 22:
             raise ValueError(f"Invalid payload length for 2411: {len(raw_data)}")
+        parse_data = raw_data if len(raw_data) >= 23 else raw_data + b"\x20"
         (
             _,
             p_id,
@@ -777,7 +798,7 @@ class HvacFanParamPayload(PayloadBase):
             max_s,
             prec_s,
             trailer,
-        ) = struct.unpack(cls._STRUCT_FMT, raw_data[:23])
+        ) = struct.unpack(cls._STRUCT_FMT, parse_data[:23])
         return cls(
             param_id=p_id,
             data_type=d_type,
