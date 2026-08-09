@@ -17,6 +17,8 @@ from ramses_rf.payloads.heating import (
     SystemSyncPayload,
     TemperaturePayload,
     ZoneConfigPayload,
+    ZoneModePayload,
+    ZoneNamePayload,
     ZoneSetpointPayload,
 )
 from ramses_rf.payloads.hvac import (
@@ -179,8 +181,10 @@ def test_dhw_temperature_payload_10a0_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
+    assert isinstance(payload, DhwTemperaturePayload)
     assert payload.dhw_idx == 0
     assert payload.temperature == 38.0
+
     assert reencoded == raw_hex
     assert as_dict == {"dhw_idx": 0, "temperature": 38.0}
 
@@ -335,20 +339,26 @@ def test_relative_humidity_payload_12a0_parity() -> None:
 
 def test_opentherm_msg_payload_3220_parity() -> None:
     # Arrange
-    raw_hex = "10001900"
+    raw_hex = "0010001900"
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
     payload = OpenThermMsgPayload.from_bytes(raw_bytes)
-    reencoded = payload.to_bytes().hex().upper()
+    reencoded = payload.hex()
     as_dict = payload_to_dict(payload)
 
     # Assert
+    assert payload.ot_idx == 0
     assert payload.msg_id == 0
     assert payload.msg_type == 1
     assert payload.raw_value == b"\x19\x00"
     assert reencoded == raw_hex
-    assert as_dict == {"msg_id": 0, "msg_type": 1, "raw_value": b"\x19\x00"}
+    assert as_dict == {
+        "ot_idx": 0,
+        "msg_id": 0,
+        "msg_type": 1,
+        "raw_value": b"\x19\x00",
+    }
 
 
 def test_dhw_mode_payload_1260_parity() -> None:
@@ -414,8 +424,10 @@ def test_zone_setpoint_payload_0004_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
+    assert isinstance(payload, ZoneSetpointPayload)
     assert payload.zone_idx == 1
     assert payload.setpoint_temp == 20.0
+
     assert reencoded == raw_hex
     assert as_dict == {"zone_idx": 1, "setpoint_temp": 20.0}
 
@@ -893,7 +905,55 @@ def test_hvac_filter_change_payload_10d0_reset_parity() -> None:
     }
 
 
+def test_zone_mode_payload_2349_parity() -> None:
+    """Verify ZoneModePayload packs, unpacks, and serializes Opcode 2349 binary data."""
+    # Arrange
+    raw_hex = "00083400FFFFFF"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ZoneModePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.zone_idx == 0
+    assert payload.setpoint_temp == 21.0
+    assert payload.mode_code == 0
+    assert payload.duration_minutes is None
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "zone_idx": 0,
+        "setpoint_temp": 21.0,
+        "mode_code": 0,
+        "duration_minutes": None,
+        "until_dtm": None,
+    }
+
+
+def test_zone_name_payload_parity() -> None:
+    """Verify ZoneNamePayload packs, unpacks, and serializes Opcode 0004 name binary data."""
+    # Arrange
+    raw_hex = "00004C6F756E67650000000000000000000000000000"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ZoneNamePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.zone_idx == 0
+    assert payload.name == "Lounge"
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "zone_idx": 0,
+        "name": "Lounge",
+    }
+
+
 def test_complete_payload_registry_coverage() -> None:
+
     # Arrange & Act
     known_codes = [
         getattr(tx_const.Code, a)

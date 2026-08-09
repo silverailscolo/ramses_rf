@@ -1,8 +1,9 @@
 """RAMSES RF - Schedule command intent to L3 payload translation."""
 
-from ramses_rf.commands.builders.helpers import _check_idx, resolve_addrs
+from ramses_rf.commands.builders.helpers import resolve_addrs
 from ramses_rf.commands.core import Command
-from ramses_tx.const import DEFAULT_NUM_REPEATS, FA, RQ, W_, Code, Priority
+from ramses_rf.payloads.heating import ScheduleFragmentPayload
+from ramses_tx.const import DEFAULT_NUM_REPEATS, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 
 
@@ -41,8 +42,6 @@ def build_get_schedule_fragment(intent: Command) -> CommandDTO:
     if zone_idx is None:
         raise ValueError("Missing 'zone_idx' in intent data")
 
-    zon_idx = _check_idx(zone_idx)
-
     if frag_number == 0:
         raise ValueError(f"frag_number={frag_number}, but it is 1-indexed")
     elif frag_number == 1 and total_frags != 0:
@@ -52,10 +51,13 @@ def build_get_schedule_fragment(intent: Command) -> CommandDTO:
             f"frag_number={frag_number}, but must be <= total_frags={total_frags}"
         )
 
-    header = "00230008" if zon_idx == FA else f"{zon_idx}200008"
-    frag_length = "00"
+    payload = ScheduleFragmentPayload(
+        zone_idx=zone_idx,
+        frag_number=frag_number,
+        total_frags=total_frags,
+        fragment_bytes=b"",
+    ).hex()
 
-    payload = f"{header}{frag_length}{frag_number:02X}{total_frags:02X}"
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -86,17 +88,19 @@ def build_set_schedule_fragment(intent: Command) -> CommandDTO:
     if zone_idx is None or frag_num is None or frag_cnt is None or fragment is None:
         raise ValueError("Missing required arguments in intent data")
 
-    zon_idx = _check_idx(zone_idx)
-
     if frag_num == 0:
         raise ValueError(f"frag_num={frag_num}, but it is 1-indexed")
     elif frag_num > frag_cnt:
         raise ValueError(f"frag_num={frag_num}, but must be <= frag_cnt={frag_cnt}")
 
-    header = "00230008" if zon_idx == FA else f"{zon_idx}200008"
-    frag_length = int(len(fragment) / 2)
+    frag_bytes = bytes.fromhex(fragment)
+    payload = ScheduleFragmentPayload(
+        zone_idx=zone_idx,
+        frag_number=frag_num,
+        total_frags=frag_cnt,
+        fragment_bytes=frag_bytes,
+    ).hex()
 
-    payload = f"{header}{frag_length:02X}{frag_num:02X}{frag_cnt:02X}{fragment}"
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(

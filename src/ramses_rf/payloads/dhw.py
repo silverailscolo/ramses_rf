@@ -7,7 +7,7 @@ packet payloads.
 from dataclasses import dataclass
 from typing import Self
 
-from .base import PayloadBase
+from .base import PayloadBase, parse_idx
 from .registry import register_payload
 
 
@@ -120,6 +120,81 @@ class DhwConfigPayload(PayloadBase):
         setpoint_raw = int(round(self.setpoint_temp * 100.0))
         return bytes([self.dhw_idx]) + setpoint_raw.to_bytes(
             2, byteorder="big", signed=True
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DhwParamsPayload(PayloadBase):
+    """DHW parameters payload (Opcode 10A0 W payload).
+
+    6-byte DHW Parameters binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   DHW Index (uint8)            : 00
+      +1       h      2B   Target Setpoint (degC*100)   : 13 88 (50.00°C)
+      +3       B      1B   Overrun Time (minutes)       : 05
+      +4       h      2B   Differential (degC*100)      : 00 64 (1.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 1388 05 0064
+      Payload hex      : 001388050064
+
+    :param dhw_idx: DHW index byte.
+    :type dhw_idx: int
+    :param setpoint: Target setpoint temperature in °C.
+    :type setpoint: float
+    :param overrun: Overrun time in minutes.
+    :type overrun: int
+    :param differential: Temperature differential in °C.
+    :type differential: float
+    """
+
+    dhw_idx: int | str
+    setpoint: float
+    overrun: int
+    differential: float
+
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.dhw_idx, str):
+            object.__setattr__(self, "dhw_idx", parse_idx(self.dhw_idx))
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack DHW parameters binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked DhwParamsPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 6 bytes.
+        """
+        if len(raw_data) < 6:
+            raise ValueError(f"Invalid payload length for 10A0: {len(raw_data)}")
+        idx = raw_data[0]
+        sp_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        overrun = raw_data[3]
+        diff_raw = int.from_bytes(raw_data[4:6], byteorder="big", signed=True)
+        return cls(
+            dhw_idx=idx,
+            setpoint=sp_raw / 100.0,
+            overrun=overrun,
+            differential=diff_raw / 100.0,
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack DHW parameters data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        sp_raw = int(round(self.setpoint * 100.0))
+        diff_raw = int(round(self.differential * 100.0))
+        idx = parse_idx(self.dhw_idx)
+        return (
+            bytes([idx])
+            + sp_raw.to_bytes(2, byteorder="big", signed=True)
+            + bytes([self.overrun])
+            + diff_raw.to_bytes(2, byteorder="big", signed=True)
         )
 
 

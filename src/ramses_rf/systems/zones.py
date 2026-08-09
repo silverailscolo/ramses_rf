@@ -47,7 +47,7 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
 )
 from ramses_rf.topology import Child, Parent
-from ramses_rf.typing import DeviceIdT, DevIndexT, InnerScheduleT, OuterScheduleT
+from ramses_rf.typing import DeviceIdT, DevIndexT, WeeklySchedule
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import PayDictT
 
@@ -163,16 +163,15 @@ class ZoneSchedule(ZoneBase):  # 0404
 
         self._schedule = Schedule(self)  # type: ignore[arg-type]
 
-    async def get_schedule(self, *, force_io: bool = False) -> InnerScheduleT | None:
+    async def get_schedule(self, *, force_io: bool = False) -> WeeklySchedule | None:
         await self._schedule.get_schedule(force_io=force_io)
         return self.schedule
 
-    async def set_schedule(self, schedule: OuterScheduleT) -> InnerScheduleT | None:
-        await self._schedule.set_schedule(schedule)  # type: ignore[arg-type]
-        return self.schedule
+    async def set_schedule(self, schedule: WeeklySchedule) -> WeeklySchedule | None:
+        return await self._schedule.set_schedule(schedule)
 
     @property
-    def schedule(self) -> InnerScheduleT | None:
+    def schedule(self) -> WeeklySchedule | None:
         """Return the latest schedule (not guaranteed to be up to date)."""
         # inner: [{"day_of_week": 0, "switchpoints": [...],
         # {"day_of_week": 1, ...

@@ -5,14 +5,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import struct
 import zlib
-from collections.abc import Iterable
-from datetime import timedelta as td
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from datetime import time as dtm_time
 from enum import StrEnum
-from typing import TYPE_CHECKING, Final
-
-import voluptuous as vol
+from typing import TYPE_CHECKING, Any, Final, Self
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
@@ -24,20 +22,20 @@ from ramses_rf.const import (
 )
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
+from ramses_rf.payloads.heating import ScheduleSwitchpointPayload
 from ramses_rf.typing import (
-    DayOfWeekT,
+    DayOfWeek,
     EmptyDictT,
+    EmptySchedule,
     FragmentSetT,
     FragmentT,
-    InnerScheduleT,
-    OuterSchedule,
-    OuterScheduleT,
     PayloadSetT,
     PayloadT,
     SwitchPointDhw,
-    SwitchPointsT,
     SwitchPointT,
     SwitchPointZon,
+    WeeklySchedule,
+    WeeklyScheduleDict,
 )
 from ramses_tx.exceptions import ProtocolSendFailed
 
@@ -49,38 +47,19 @@ if TYPE_CHECKING:
 
 
 # Constants
-FIVE_MINS: Final = td(minutes=5)
-
-SZ_MSG: Final = "msg"
 SZ_DAY_OF_WEEK: Final = "day_of_week"
+
 SZ_HEAT_SETPOINT: Final = "heat_setpoint"
 SZ_SWITCHPOINTS: Final = "switchpoints"
 SZ_TIME_OF_DAY: Final = "time_of_day"
 SZ_ENABLED: Final = "enabled"
 
-REGEX_TIME_OF_DAY: Final = r"^([0-1][0-9]|2[0-3]):[0-5][05]$"
-
 SWITCHPOINT_STRUCT_SIZE: Final = 20
 FRAGMENT_HEX_LENGTH: Final = 82
 
-# 20-byte Schedule Switchpoint binary layout (Little-Endian):
-#   Offset  Format  Len  Description                    Sample Hex
-#   --------------------------------------------------------------
-#   +0       4x     4B   Padding / Header bytes       : 00 00 00 00
-#   +4       B      1B   Zone/Domain index (uint8)    : 01
-#   +5       3x     3B   Padding bytes                : 00 00 00
-#   +8       B      1B   Day of week (uint8, 1-7)     : 01
-#   +9       3x     3B   Padding bytes                : 00 00 00
-#   +12      H      2B   Time of day (uint16 mins)    : 68 01
-#   +14      2x     2B   Padding bytes                : 00 00
-#   +16      H      2B   Setpoint value / state (u16) : D0 07
-#   +18      H      2B   Reserved / Trailer bytes     : 00 00
-#   --------------------------------------------------------------
-#   Field-spaced hex : 00000000 01 000000 01 000000 6801 0000 D007 0000
-#   Payload hex      : 00000000010000000100000068010000D0070000
-CODE_0404_SCHEDULE_SWITCHPOINT_STRUCT: Final[str] = "<xxxxBxxxBxxxHxxHH"
 
 _LOGGER = logging.getLogger(__name__)
+
 
 # Base retry constants for exponential backoff
 BASE_FETCH_RETRY_DELAY_SECS: Final[float] = 0.5
@@ -152,153 +131,207 @@ class ScheduleIsFaulted(ScheduleStateBase):
     state_enum = ScheduleStateEnum.FAULTED
 
 
-# Voluptuous Schemas
-def schema_schedule(schema_switchpoint: vol.Schema) -> vol.Schema:
-    """Generate a voluptuous schema for a weekly schedule array.
+@dataclass(frozen=True, slots=True)
+class Switchpoint:
+    """Individual schedule switchpoint.
 
-    :param schema_switchpoint: The schema describing an individual
-        switchpoint.
-    :type schema_switchpoint: vol.Schema
-    :returns: A voluptuous Schema object for the 7-day schedule array.
-    :rtype: vol.Schema
+    :param time_of_day: 24-hour time string in 'HH:MM' format.
+    :type time_of_day: str
+    :param heat_setpoint: Target temperature in °C (for zone schedules).
+    :type heat_setpoint: float | None
+    :param enabled: DHW state flag (for DHW schedules).
+    :type enabled: bool | None
     """
-    schema_schedule_day = vol.Schema(
-        {
-            vol.Required(SZ_DAY_OF_WEEK): int,
-            vol.Required(SZ_SWITCHPOINTS): vol.All(
-                [schema_switchpoint], vol.Length(min=1)
-            ),
-        },
-        extra=vol.PREVENT_EXTRA,
-    )
-    return vol.Schema(
-        vol.All([schema_schedule_day], vol.Length(min=0, max=7)),
-        extra=vol.PREVENT_EXTRA,
-    )
+
+    time_of_day: str
+    heat_setpoint: float | None = None
+    enabled: bool | None = None
+
+    def __post_init__(self) -> None:
+        """Validate switchpoint attributes upon instantiation."""
+        try:
+            t = dtm_time.fromisoformat(self.time_of_day)
+        except (ValueError, TypeError) as err:
+            raise ValueError(
+                f"Invalid time format {self.time_of_day!r}, expected 'HH:MM'"
+            ) from err
+
+        if t.minute % 5 != 0 or t.second != 0 or t.microsecond != 0:
+            raise ValueError(f"Time {self.time_of_day!r} must be in 5-minute intervals")
+
+        if self.heat_setpoint is not None:
+            if not (5.0 <= self.heat_setpoint <= 35.0):
+                raise ValueError(f"Out of range heat_setpoint: {self.heat_setpoint}")
+        elif self.enabled is None:
+            raise ValueError("Switchpoint must define 'heat_setpoint' or 'enabled'")
 
 
-SCHEMA_SWITCHPOINT_DHW = vol.Schema(
-    {
-        vol.Required(SZ_TIME_OF_DAY): vol.Match(REGEX_TIME_OF_DAY),
-        vol.Required(SZ_ENABLED): bool,
-    },
-    extra=vol.PREVENT_EXTRA,
-)
+@dataclass(frozen=True, slots=True)
+class DaySchedule:
+    """Daily schedule containing switchpoints.
 
-SCHEMA_SWITCHPOINT_ZONE = vol.Schema(
-    {
-        vol.Required(SZ_TIME_OF_DAY): vol.Match(REGEX_TIME_OF_DAY),
-        vol.Required(SZ_HEAT_SETPOINT): vol.All(
-            vol.Coerce(float), vol.Range(min=5, max=35)
-        ),
-    },
-    extra=vol.PREVENT_EXTRA,
-)
+    :param day_of_week: Day of week integer (0-6).
+    :type day_of_week: int
+    :param switchpoints: Tuple of switchpoints for this day.
+    :type switchpoints: tuple[Switchpoint, ...]
+    """
 
-SCHEMA_SCHEDULE_DHW = schema_schedule(SCHEMA_SWITCHPOINT_DHW)
-SCHEMA_SCHEDULE_DHW_OUTER = vol.Schema(
-    {
-        vol.Required(SZ_ZONE_IDX): "HW",
-        vol.Required(SZ_SCHEDULE): SCHEMA_SCHEDULE_DHW,
-    },
-    extra=vol.PREVENT_EXTRA,
-)
+    day_of_week: int
+    switchpoints: tuple[Switchpoint, ...]
 
-SCHEMA_SCHEDULE_ZONE = schema_schedule(SCHEMA_SWITCHPOINT_ZONE)
-SCHEMA_SCHEDULE_ZONE_OUTER = vol.Schema(
-    {
-        vol.Required(SZ_ZONE_IDX): vol.Match(r"0[0-F]"),
-        vol.Required(SZ_SCHEDULE): SCHEMA_SCHEDULE_ZONE,
-    },
-    extra=vol.PREVENT_EXTRA,
-)
-
-SCHEMA_FULL_SCHEDULE = vol.Schema(
-    vol.Any(SCHEMA_SCHEDULE_DHW_OUTER, SCHEMA_SCHEDULE_ZONE_OUTER),
-    extra=vol.PREVENT_EXTRA,
-)
+    def __post_init__(self) -> None:
+        """Validate day of week and switchpoint array."""
+        if not (0 <= self.day_of_week <= 6):
+            raise ValueError(f"Invalid day_of_week: {self.day_of_week}")
+        if not self.switchpoints:
+            raise ValueError("DaySchedule switchpoints list cannot be empty")
 
 
-# Binary Packing & Serialization Helpers
-def _struct_pack(
-    zone_idx: str,
-    week_day: DayOfWeekT,
-    switchpoint: SwitchPointT,
-) -> bytes:
-    """Pack schedule information into bytes layout for transport.
+@dataclass(frozen=True, slots=True)
+class ScheduleData:
+    """Complete 7-day schedule for a zone or DHW.
 
-    :param zone_idx: The hexadecimal zone/domain index string.
+    :param zone_idx: Zone or domain index ('00'-'0F' or 'HW').
     :type zone_idx: str
-    :param week_day: The specific day dictionary object.
-    :type week_day: DayOfWeekT
-    :param switchpoint: The specific switchpoint dictionary object.
-    :type switchpoint: SwitchPointT
-    :returns: A packed 20-byte struct representing this switchpoint.
-    :rtype: bytes
+    :param days: Tuple of daily schedules.
+    :type days: tuple[DaySchedule, ...]
     """
-    day_of_week: int = week_day[SZ_DAY_OF_WEEK]
-    time_of_day_str: str = switchpoint[SZ_TIME_OF_DAY]
 
-    zone_index: int = int(zone_idx, 16)
-    time_of_day: int = int(time_of_day_str[:2]) * 60 + int(time_of_day_str[3:])
+    zone_idx: str
+    days: tuple[DaySchedule, ...]
 
-    if (enabled := switchpoint.get("enabled")) is not None:
-        value = int(bool(enabled))
-    elif isinstance(setpoint_val := switchpoint.get("heat_setpoint"), (int, float)):
-        value = int(setpoint_val * 100)
-    else:
-        value = 0
+    def __post_init__(self) -> None:
+        """Validate zone index and day array bounds."""
+        if self.zone_idx != "HW" and not (
+            len(self.zone_idx) == 2 and 0 <= int(self.zone_idx, 16) <= 15
+        ):
+            raise ValueError(f"Invalid zone_idx: {self.zone_idx!r}")
+        if len(self.days) > 7:
+            raise ValueError(f"Schedule cannot exceed 7 days: {len(self.days)}")
 
-    return struct.pack(
-        CODE_0404_SCHEDULE_SWITCHPOINT_STRUCT,
-        zone_index,
-        day_of_week,
-        time_of_day,
-        value,
-        0,  # Reserved trailer field (0x0000)
-    )
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Self:
+        """Parse raw dictionary into typed ScheduleData dataclass.
+
+        :param data: Raw schedule dictionary representation.
+        :type data: Mapping[str, Any]
+        :returns: Parsed ScheduleData dataclass instance.
+        :rtype: Self
+        :raises ValueError: If dictionary structures or values are invalid.
+        """
+        zone_idx = str(data[SZ_ZONE_IDX])
+        raw_schedule = data.get(SZ_SCHEDULE)
+        if not isinstance(raw_schedule, (list, tuple)):
+            raise ValueError(f"Invalid schedule structure: {raw_schedule}")
+
+        days: list[DaySchedule] = []
+        for day in raw_schedule:
+            if not isinstance(day, dict):
+                continue
+            day_of_week = int(day[SZ_DAY_OF_WEEK])
+            raw_switchpoints = day.get(SZ_SWITCHPOINTS)
+            if not isinstance(raw_switchpoints, (list, tuple)):
+                continue
+
+            switchpoints: list[Switchpoint] = []
+            for sp in raw_switchpoints:
+                if not isinstance(sp, dict):
+                    continue
+                time_of_day = str(sp[SZ_TIME_OF_DAY])
+                heat_setpoint = sp.get(SZ_HEAT_SETPOINT)
+                enabled = sp.get(SZ_ENABLED)
+                setpoint_val = (
+                    float(heat_setpoint)
+                    if isinstance(heat_setpoint, (int, float))
+                    else None
+                )
+                enabled_val = bool(enabled) if isinstance(enabled, bool) else None
+                switchpoints.append(
+                    Switchpoint(
+                        time_of_day=time_of_day,
+                        heat_setpoint=setpoint_val,
+                        enabled=enabled_val,
+                    )
+                )
+
+            days.append(
+                DaySchedule(day_of_week=day_of_week, switchpoints=tuple(switchpoints))
+            )
+
+        return cls(zone_idx=zone_idx, days=tuple(days))
+
+    def to_dict(self) -> WeeklyScheduleDict:
+        """Serialize ScheduleData dataclass back into dictionary layout.
+
+        :returns: Dictionary representation of full schedule.
+        :rtype: WeeklyScheduleDict
+        """
+        schedule: WeeklySchedule = []
+        for day in self.days:
+            switchpoints: list[SwitchPointDhw | SwitchPointZon] = []
+            for sp in day.switchpoints:
+                if sp.heat_setpoint is not None:
+                    sp_zon: SwitchPointZon = {
+                        SZ_TIME_OF_DAY: sp.time_of_day,
+                        SZ_HEAT_SETPOINT: sp.heat_setpoint,
+                    }
+                    switchpoints.append(sp_zon)
+                elif sp.enabled is not None:
+                    sp_dhw: SwitchPointDhw = {
+                        SZ_TIME_OF_DAY: sp.time_of_day,
+                        SZ_ENABLED: sp.enabled,
+                    }
+                    switchpoints.append(sp_dhw)
+            day_dict: DayOfWeek = {
+                SZ_DAY_OF_WEEK: day.day_of_week,
+                SZ_SWITCHPOINTS: switchpoints,
+            }
+            schedule.append(day_dict)
+
+        return {
+            SZ_ZONE_IDX: self.zone_idx,
+            SZ_SCHEDULE: schedule,
+        }
 
 
-def _struct_unpack(raw_schedule: bytes) -> tuple[int, int, int, int]:
-    """Unpack a compressed RAMSES binary schedule format.
-
-    :param raw_schedule: Uncompressed 20-byte block.
-    :type raw_schedule: bytes
-    :returns: A tuple of (zone_idx, day_of_week, time_of_day, value).
-    :rtype: tuple[int, int, int, int]
-    """
-    zone_index, day_of_week, time_of_day, value, _ = struct.unpack(
-        CODE_0404_SCHEDULE_SWITCHPOINT_STRUCT,
-        raw_schedule,
-    )
-    return zone_index, day_of_week, time_of_day, value
-
-
-def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> OuterSchedule:
+def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> WeeklyScheduleDict:
     """Convert a tuple of fragments strs (a blob) into a schedule.
 
     :param fragments: An iterable of hexadecimal string fragments.
     :type fragments: Iterable[FragmentT]
-    :returns: A parsed OuterSchedule dictionary representation.
-    :rtype: OuterSchedule
+    :returns: A parsed WeeklyScheduleDict dictionary representation.
+    :rtype: WeeklyScheduleDict
     :raises zlib.error: On invalid payload compression stream.
     """
     raw_schedule = zlib.decompress(bytearray.fromhex("".join(fragments)))
 
-    old_day = 0
-    schedule: InnerScheduleT = []
+    current_day_of_week = 0
+    zone_index = 0
+    schedule: WeeklySchedule = []
     switchpoints: list[SwitchPointT] = []
 
     for i in range(0, len(raw_schedule), SWITCHPOINT_STRUCT_SIZE):
-        zone_index, day_of_week, time_of_day, value = _struct_unpack(
+        switchpoint_payload = ScheduleSwitchpointPayload.from_bytes(
             raw_schedule[i : i + SWITCHPOINT_STRUCT_SIZE]
         )
+        if not isinstance(switchpoint_payload, ScheduleSwitchpointPayload):
+            raise ValueError(
+                f"Invalid schedule switchpoint binary block: {raw_schedule[i : i + SWITCHPOINT_STRUCT_SIZE]!r}"
+            )
 
-        if day_of_week > old_day:
-            schedule.append({SZ_DAY_OF_WEEK: old_day, SZ_SWITCHPOINTS: switchpoints})
-            old_day, switchpoints = day_of_week, []
+        zone_index = switchpoint_payload.zone_idx
+        day_of_week = switchpoint_payload.day_of_week
+        time_of_day = switchpoint_payload.time_of_day_mins
+        value = switchpoint_payload.setpoint_value
 
-        time_str = f"{time_of_day // 60:02d}:{time_of_day % 60:02d}"
+        if day_of_week > current_day_of_week:
+            schedule.append(
+                {SZ_DAY_OF_WEEK: current_day_of_week, SZ_SWITCHPOINTS: switchpoints}
+            )
+            current_day_of_week, switchpoints = day_of_week, []
+
+        hours, mins = divmod(time_of_day, 60)
+        time_str = dtm_time(hour=hours, minute=mins).isoformat(timespec="minutes")
         if value in (0, 1):
             switchpoint_dhw: SwitchPointDhw = {
                 SZ_TIME_OF_DAY: time_str,
@@ -312,30 +345,55 @@ def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> OuterSchedule:
             }
             switchpoints.append(switchpoint_zone)
 
-    schedule.append({SZ_DAY_OF_WEEK: old_day, SZ_SWITCHPOINTS: switchpoints})
+    schedule.append(
+        {SZ_DAY_OF_WEEK: current_day_of_week, SZ_SWITCHPOINTS: switchpoints}
+    )
     return {SZ_ZONE_IDX: f"{zone_index:02X}", SZ_SCHEDULE: schedule}
 
 
-def full_schedule_to_fragments(full_schedule: OuterSchedule) -> list[FragmentT]:
+def full_schedule_to_fragments(
+    full_schedule: WeeklyScheduleDict,
+) -> list[FragmentT]:
     """Convert a schedule into a set of fragments (a blob).
 
-    :param full_schedule: The OuterSchedule dictionary representation.
-    :type full_schedule: OuterSchedule
+    :param full_schedule: The WeeklyScheduleDict dictionary representation.
+    :type full_schedule: WeeklyScheduleDict
     :returns: A list of hexadecimal string fragments.
     :rtype: list[FragmentT]
     :raises KeyError: If expected keys are missing from the structure.
     """
-    cobj = zlib.compressobj(level=9, wbits=14)
+    compressor = zlib.compressobj(level=9, wbits=14)
     fragments: list[bytes] = []
 
-    zone_idx: str = full_schedule[SZ_ZONE_IDX]
-    days_of_week: InnerScheduleT = full_schedule[SZ_SCHEDULE]
-    for week_day in days_of_week:
-        switchpoints: SwitchPointsT = week_day[SZ_SWITCHPOINTS]
-        for switchpoint in switchpoints:
-            fragments.append(_struct_pack(zone_idx, week_day, switchpoint))
+    schedule_data = ScheduleData.from_dict(full_schedule)
+    zone_index = (
+        int(schedule_data.zone_idx, 16) if schedule_data.zone_idx != "HW" else 0xFA
+    )
+    for day in schedule_data.days:
+        for switchpoint in day.switchpoints:
+            parsed_time = dtm_time.fromisoformat(switchpoint.time_of_day)
+            time_of_day_mins = parsed_time.hour * 60 + parsed_time.minute
+            setpoint = (
+                switchpoint.heat_setpoint
+                if switchpoint.heat_setpoint is not None
+                else switchpoint.enabled
+            )
+            switchpoint_payload = ScheduleSwitchpointPayload.from_switchpoint(
+                zone_idx=zone_index,
+                day_of_week=day.day_of_week,
+                time_of_day_mins=time_of_day_mins,
+                setpoint=setpoint,
+            )
+            fragments.append(switchpoint_payload.to_bytes())
 
-    blob = (b"".join(cobj.compress(f) for f in fragments) + cobj.flush()).hex().upper()
+    blob = (
+        (
+            b"".join(compressor.compress(fragment) for fragment in fragments)
+            + compressor.flush()
+        )
+        .hex()
+        .upper()
+    )
 
     return [
         blob[i : i + FRAGMENT_HEX_LENGTH]
@@ -375,13 +433,15 @@ class Schedule:  # 0404
         self.tcs = zone.tcs
         self._gwy = zone._gwy
 
-        self._full_schedule: OuterScheduleT | EmptyDictT = {}
+        self._full_schedule: WeeklyScheduleDict | EmptySchedule | EmptyDictT = {}
 
         self._payload_set: PayloadSetT = [None]  # Rx'd
         self._fragments: FragmentSetT = []  # to Tx
 
-        self._global_ver = 0  # None is a sentinel for 'dont know'
-        self._sched_ver = 0  # the global_ver when this schedule was retrieved
+        self._global_version = 0  # None is a sentinel for 'dont know'
+        self._schedule_version = (
+            0  # the global_version when this schedule was retrieved
+        )
 
         self._state: ScheduleStateBase = ScheduleIsIdle(self)
         self._sync_event: asyncio.Event = asyncio.Event()
@@ -423,8 +483,11 @@ class Schedule:  # 0404
         if msg.code == "0006":
             if isinstance(msg.payload, dict):
                 change_counter = msg.payload.get("change_counter")
-                if isinstance(change_counter, int) and change_counter > self._sched_ver:
-                    self._global_ver = change_counter
+                if (
+                    isinstance(change_counter, int)
+                    and change_counter > self._schedule_version
+                ):
+                    self._global_version = change_counter
                     if isinstance(self._state, ScheduleIsSynchronised):
                         self._set_state(ScheduleIsStale)
             return
@@ -475,7 +538,7 @@ class Schedule:  # 0404
         and a cached global version was used.
 
         If `force_io`, then a true negative is guaranteed (it forces an
-        RQ|0006 unless self._global_ver > self._sched_ver).
+        RQ|0006 unless self._global_version > self._schedule_version).
 
         :param force_io: True to force an I/O request to check versions.
         :type force_io: bool
@@ -485,32 +548,32 @@ class Schedule:  # 0404
         # this will not cause an I/O...
         if (
             not force_io
-            and not self._sched_ver
-            or (self._global_ver and self._global_ver > self._sched_ver)
+            and not self._schedule_version
+            or (self._global_version and self._global_version > self._schedule_version)
         ):
             return True, False  # is_dated, did_io
 
         # this may cause an I/O...
-        self._global_ver, did_io = await self.tcs._schedule_version()
-        if did_io or self._global_ver > self._sched_ver:
+        self._global_version, did_io = await self.tcs._schedule_version()
+        if did_io or self._global_version > self._schedule_version:
             return (
-                self._global_ver > self._sched_ver,
+                self._global_version > self._schedule_version,
                 did_io,
             )  # is_dated, did_io
 
         if force_io:  # this will cause an I/O...
-            self._global_ver, did_io = await self.tcs._schedule_version(
+            self._global_version, did_io = await self.tcs._schedule_version(
                 force_io=force_io
             )
 
         return (
-            self._global_ver > self._sched_ver,
+            self._global_version > self._schedule_version,
             did_io,
         )  # is_dated, did_io
 
     async def get_schedule(
         self, *, force_io: bool = False, timeout: float = 15
-    ) -> InnerScheduleT | None:
+    ) -> WeeklySchedule | None:
         """Retrieve/return the brief schedule of a zone.
 
         Return the cached schedule (which may have been eavesdropped)
@@ -525,7 +588,7 @@ class Schedule:  # 0404
         :param timeout: Maximum time in seconds to wait for the schedule.
         :type timeout: float
         :returns: The schedule details or None if not available.
-        :rtype: InnerScheduleT | None
+        :rtype: WeeklySchedule | None
         :raises exc.ScheduleFlowError: If unable to obtain the schedule
             before timeout.
         """
@@ -608,7 +671,7 @@ class Schedule:  # 0404
                 await asyncio.sleep(backoff)
                 backoff *= 2
 
-        self._sched_ver = self._global_ver
+        self._schedule_version = self._global_version
         self._set_state(ScheduleIsSynchronised)
 
     async def _get_schedule(self, *, force_io: bool = False) -> None:
@@ -625,13 +688,15 @@ class Schedule:  # 0404
             return
 
         if not did_io:  # must know the version of the schedule about to be RQ'd
-            self._global_ver, _ = await self.tcs._schedule_version(force_io=True)
+            self._global_version, _ = await self.tcs._schedule_version(force_io=True)
 
         self._payload_set[0] = None  # if 1st frag valid: schedule very likely unchanged
 
         await self._fetch_schedule()
 
-    def _proc_payload_set(self, payload_set: PayloadSetT) -> OuterScheduleT | None:
+    def _proc_payload_set(
+        self, payload_set: PayloadSetT
+    ) -> WeeklyScheduleDict | EmptySchedule | None:
         """Process a payload set and return the full schedule.
 
         Sets `self._full_schedule`. If the schedule is for DHW, set the
@@ -640,7 +705,8 @@ class Schedule:  # 0404
         :param payload_set: The completed array of fragment payloads.
         :type payload_set: PayloadSetT
         :returns: The outer schedule dictionary (not `self.schedule`).
-        :rtype: OuterScheduleT | None
+        :rtype: WeeklyScheduleDict | EmptySchedule | None
+
         :raises exc.ScheduleError: On failure to decompress fragment string or
             if the fragment set is incomplete.
         """
@@ -746,31 +812,24 @@ class Schedule:  # 0404
             wait_for_reply=True,
         )
 
-    def _normalise_and_validate(self, schedule: InnerScheduleT) -> OuterSchedule:
+    def _normalise_and_validate(self, schedule: WeeklySchedule) -> WeeklyScheduleDict:
         """Normalise and validate schedule dictionary structure.
 
         :param schedule: 7-day schedule array to validate.
-        :type schedule: InnerScheduleT
-        :returns: Validated OuterSchedule payload.
-        :rtype: OuterSchedule
+        :type schedule: WeeklySchedule
+        :returns: Validated WeeklyScheduleDict payload.
+        :rtype: WeeklyScheduleDict
         :raises exc.ScheduleError: On validation failure.
         """
-        if self.idx == "HW":
-            full_schedule: OuterSchedule = {
-                SZ_ZONE_IDX: "HW",
-                SZ_SCHEDULE: schedule,
-            }
-            schema = SCHEMA_SCHEDULE_DHW_OUTER
-        else:
-            full_schedule = {
-                SZ_ZONE_IDX: self.idx,
-                SZ_SCHEDULE: schedule,
-            }
-            schema = SCHEMA_SCHEDULE_ZONE_OUTER
+        full_schedule: WeeklyScheduleDict = {
+            SZ_ZONE_IDX: self.idx,
+            SZ_SCHEDULE: schedule,
+        }
 
         try:
-            validated: OuterSchedule = schema(full_schedule)
-        except vol.MultipleInvalid as err:
+            schedule_obj = ScheduleData.from_dict(full_schedule)
+            validated = schedule_obj.to_dict()
+        except (ValueError, KeyError, TypeError) as err:
             raise exc.ScheduleError(f"failed to set schedule: {err}") from err
 
         if self.idx == "HW":
@@ -780,18 +839,18 @@ class Schedule:  # 0404
         return validated
 
     async def set_schedule(
-        self, schedule: InnerScheduleT, force_refresh: bool = False
-    ) -> InnerScheduleT | None:
+        self, schedule: WeeklySchedule, force_refresh: bool = False
+    ) -> WeeklySchedule | None:
         """Set the schedule of a zone.
 
         :param schedule: The array representing the days of the week
             schedule.
-        :type schedule: InnerScheduleT
+        :type schedule: WeeklySchedule
         :param force_refresh: True to query and retrieve the new
             schedule directly after setting.
         :type force_refresh: bool
-        :returns: The updated InnerSchedule array.
-        :rtype: InnerScheduleT | None
+        :returns: The updated WeeklySchedule array.
+        :rtype: WeeklySchedule | None
         :raises exc.ScheduleError: On validation or serialization failure.
         :raises exc.ScheduleFlowError: On transmission timeout.
         """
@@ -809,8 +868,10 @@ class Schedule:  # 0404
             raise exc.ScheduleFlowError(f"failed to set schedule: {err}") from err
         else:
             if not force_refresh:
-                self._global_ver, _ = await self.tcs._schedule_version(force_io=True)
-                self._sched_ver = self._global_ver
+                self._global_version, _ = await self.tcs._schedule_version(
+                    force_io=True
+                )
+                self._schedule_version = self._global_version
                 self._set_state(ScheduleIsSynchronised)
 
         if force_refresh:
@@ -821,18 +882,14 @@ class Schedule:  # 0404
         return self.schedule
 
     @property
-    def schedule(self) -> InnerScheduleT | None:
+    def schedule(self) -> WeeklySchedule | None:
         """Return the current (not full) schedule, if any.
 
         :returns: The 7-day schedule array or None.
-        :rtype: InnerScheduleT | None
+        :rtype: WeeklySchedule | None
         """
-        if not self._full_schedule:  # can be {}
-            return None
         sched = self._full_schedule.get(SZ_SCHEDULE)
-        if isinstance(sched, list):
-            return sched
-        return None
+        return sched if isinstance(sched, list) else None
 
     @property
     def version(self) -> int | None:
@@ -841,7 +898,7 @@ class Schedule:  # 0404
         :returns: The schedule version counter or None.
         :rtype: int | None
         """
-        return self._sched_ver if self._full_schedule else None
+        return self._schedule_version if self._full_schedule else None
 
 
 # 16:27:56.942 000 RQ --- 18:006402 01:145038 --:------ 0006 001 00
