@@ -8,3 +8,6 @@
 
 # evohome from cesar.florin HCC80 (UFC) controlled via round thermostat talking to a BDR91 relay
 2025-09-09T18:54:03.354496 061  I --- 02:033545 --:------ 02:033545 22D0 004 00000002          # {'zone_idx': '00', 'idx': '00', '_flags': [0, 0, 0, 0, 0, 0, 0, 0], 'cool_mode': False, 'heat_mode': False, 'is_active': False, '_unknown': '0002'}
+
+# issue 864: idx=00, flags=14 — the old W regex (^03[0-9]{4}...) rejected this
+2025-08-08T21:05:35.000000 064  W --- 21:057310 18:002965 --:------ 22D0 008 0014001E14030020  # {'idx': '00', '_flags': [0, 0, 0, 1, 0, 1, 0, 0], 'cool_mode': False, 'heat_mode': True, 'is_active': True, '_unknown': '001E14030020'}
