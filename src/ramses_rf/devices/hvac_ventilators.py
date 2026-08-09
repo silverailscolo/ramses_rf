@@ -44,6 +44,7 @@ from ramses_rf.const import (
     DevType,
 )
 from ramses_rf.enums import Action
+from ramses_rf.helpers import shrink
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Priority
@@ -161,6 +162,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
     _param_update_callback: Callable[[str, Any], None] | None
     _hgi: Any | None
     _bound_devices: dict[str, str]
+    _remote_ids: set[DeviceIdT]
+    _sensor_ids: set[DeviceIdT]
 
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
@@ -182,8 +185,57 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         self.__dict__.setdefault("_param_update_callback", None)
         self.__dict__.setdefault("_hgi", None)
         self.__dict__.setdefault("_bound_devices", {})
+        self.__dict__.setdefault("_remote_ids", set())
+        self.__dict__.setdefault("_sensor_ids", set())
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
+
+    def _update_schema(self, **schema: Any) -> None:
+        """Update this FAN with its remotes/sensors membership from schema.
+
+        Unlike heating Parent/Child, this does NOT use the shared
+        ``Parent``/``_apply_topology_link`` machinery — it's a
+        lightweight, HVAC-specific membership list that records which
+        REM/CO2 devices belong to this FAN.
+
+        Also sets ``_parent_fan`` on each child device (6d) so that
+        ramses_cc can use it for ``via_device`` grouping in the HA
+        device registry.
+
+        :param schema: Keyword arguments representing the FAN schema
+                       (expects ``remotes`` and/or ``sensors`` keys).
+        :type schema: Any
+        """
+        from ramses_rf.schemas import SCH_VCS, SZ_REMOTES, SZ_SENSORS
+
+        schema = shrink(SCH_VCS(schema))
+        for dev_id in schema.get(SZ_REMOTES, []):
+            child = self._gwy.device_registry.get_device(dev_id)  # ensure exists
+            self._remote_ids.add(DeviceIdT(dev_id))
+            # 6d: set bidirectional parent link on the child
+            if hasattr(child, "_parent_fan"):
+                child._parent_fan = self
+        for dev_id in schema.get(SZ_SENSORS, []):
+            child = self._gwy.device_registry.get_device(dev_id)  # ensure exists
+            self._sensor_ids.add(DeviceIdT(dev_id))
+            # 6d: set bidirectional parent link on the child
+            if hasattr(child, "_parent_fan"):
+                child._parent_fan = self
+
+    async def schema(self) -> dict[str, Any]:
+        """Return the FAN's schema (remotes/sensors membership).
+
+        :returns: A schema dictionary with remotes and sensors lists.
+        :rtype: dict[str, Any]
+        """
+        from ramses_rf.schemas import SZ_REMOTES, SZ_SENSORS
+
+        result: dict[str, Any] = {}
+        if self._remote_ids:
+            result[SZ_REMOTES] = sorted(self._remote_ids)
+        if self._sensor_ids:
+            result[SZ_SENSORS] = sorted(self._sensor_ids)
+        return result
 
     def set_initialized_callback(self, callback: Callable[[], None] | None) -> None:
         """Set a callback to be executed when the next message (any) is
