@@ -4,6 +4,7 @@ This module contains strongly-typed dataclass representations for Domestic Hot W
 packet payloads.
 """
 
+import struct
 from dataclasses import dataclass
 from typing import Self
 
@@ -107,8 +108,8 @@ class DhwConfigPayload(PayloadBase):
         """
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 12F0: {len(raw_data)}")
-        idx = raw_data[0]
-        setpoint_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        # Unpack dhw_idx (uint8) and setpoint_raw (int16) directly from offset 0
+        idx, setpoint_raw = struct.unpack_from(">Bh", raw_data, 0)
         return cls(dhw_idx=idx, setpoint_temp=setpoint_raw / 100.0)
 
     def to_bytes(self) -> bytes:
@@ -170,10 +171,8 @@ class DhwParamsPayload(PayloadBase):
         """
         if len(raw_data) < 6:
             raise ValueError(f"Invalid payload length for 10A0: {len(raw_data)}")
-        idx = raw_data[0]
-        sp_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
-        overrun = raw_data[3]
-        diff_raw = int.from_bytes(raw_data[4:6], byteorder="big", signed=True)
+        # Unpack dhw_idx, setpoint, overrun, and diff directly from offset 0
+        idx, sp_raw, overrun, diff_raw = struct.unpack_from(">BhBh", raw_data, 0)
         return cls(
             dhw_idx=idx,
             setpoint=sp_raw / 100.0,

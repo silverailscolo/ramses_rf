@@ -824,7 +824,8 @@ class HvacFanParamPayload(PayloadBase):
             max_s,
             prec_s,
             trailer,
-        ) = struct.unpack(cls._STRUCT_FMT, parse_data[:23])
+            # Unpack struct layout directly from offset 0 without buffer slicing
+        ) = struct.unpack_from(cls._STRUCT_FMT, parse_data, 0)
         # PROTOCOL QUIRK: Sentinel values (e.g. 0x000000FF, 0xFFFFFFFF, -1)
         # indicate parameter N/A or unconfigured hardware setting.
         # Normalise sentinel values to None to prevent invalid parameter
@@ -894,9 +895,9 @@ class HvacAirQualityPayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length: {len(raw_data)}")
-        return cls(
-            air_quality_aqi=int.from_bytes(raw_data[:2], byteorder="big", signed=False)
-        )
+        # Unpack 16-bit unsigned air quality AQI directly from offset 0
+        (aqi,) = struct.unpack_from(">H", raw_data, 0)
+        return cls(air_quality_aqi=aqi)
 
     def to_bytes(self) -> bytes:
         """Pack air quality data into binary payload.
@@ -1149,13 +1150,13 @@ class SetpointBoundsPayload(PayloadBase):
         """
         if len(raw_data) < 6:
             raise ValueError(f"Invalid payload length for 22C9: {len(raw_data)}")
-        min_t = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
-        max_t = int.from_bytes(raw_data[3:5], byteorder="big", signed=True)
+        # Unpack ufh_idx, min_temp, max_temp, mode_code directly from offset 0
+        idx, min_t, max_t, mode_code = struct.unpack_from(">BhhB", raw_data, 0)
         return cls(
-            ufh_idx=raw_data[0],
+            ufh_idx=idx,
             min_temp=min_t / 100.0,
             max_temp=max_t / 100.0,
-            mode_code=raw_data[5],
+            mode_code=mode_code,
         )
 
     def to_bytes(self) -> bytes:
@@ -1216,11 +1217,10 @@ class NowNextSetpointPayload(PayloadBase):
         """
         if len(raw_data) < 7:
             raise ValueError(f"Invalid payload length for 2249: {len(raw_data)}")
-        sp_now = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
-        sp_next = int.from_bytes(raw_data[3:5], byteorder="big", signed=True)
-        mins = int.from_bytes(raw_data[5:7], byteorder="big")
+        # Unpack zone_idx, setpoint_now, setpoint_next, mins directly from offset 0
+        idx, sp_now, sp_next, mins = struct.unpack_from(">BhhH", raw_data, 0)
         return cls(
-            zone_idx=raw_data[0],
+            zone_idx=idx,
             setpoint_now=sp_now / 100.0,
             setpoint_next=sp_next / 100.0,
             minutes_remaining=mins,
