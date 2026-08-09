@@ -59,6 +59,14 @@ class Controller(DeviceHeat):  # CTL (01):
             # DO NOT MOVE to module level.
             from ramses_rf.systems import Evohome, system_factory
 
+            # TODO: This code path is probably obsolete — load_tcs() calls
+            # ctl.tcs._update_schema(**schema) directly, bypassing this
+            # method.  The only callers (_handle_create_controller,
+            # JIT creation in dev_registry) invoke _make_tcs_controller()
+            # without schema kwargs.  Needs a check to confirm whether any
+            # code path passes zone schema through here.  If not, this
+            # method can be simplified to just the create/update logic
+            # without the schema processing.
             schema = shrink(SCH_TCS(schema))
 
             if not self.tcs:
