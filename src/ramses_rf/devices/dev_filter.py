@@ -48,7 +48,7 @@ class DeviceFilter:
         :rtype: None
         :raises DeviceNotFoundError: If the device is unwanted, strictly not known, or excluded.
         """
-        if dev_id in self._unwanted:
+        if dev_id in self._unwanted and dev_id != self._hgi_id_provider():
             raise DeviceNotFoundError(
                 f"Can't create {dev_id}: it is unwanted or invalid"
             )
