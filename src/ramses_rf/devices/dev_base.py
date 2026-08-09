@@ -43,6 +43,7 @@ from ..protocol.ramses import CODES_BY_DEV_SLUG
 
 if TYPE_CHECKING:
     from ramses_rf import Gateway
+    from ramses_rf.devices.hvac_ventilators import HvacVentilator
     from ramses_rf.models import DeviceTraits
     from ramses_rf.systems import Zone
     from ramses_rf.typing import PollingIntervalsT
@@ -827,6 +828,11 @@ class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
         super().__init__(gwy, dev_addr, traits=traits, **kwargs)
 
         self._child_id = "hv"  # TODO: domain_id/deprecate
+        # 6d: bidirectional parent link — set by HvacVentilator._update_schema()
+        # when this device is added to a FAN's remotes[]/sensors[] list.
+        # Used by ramses_cc's via_device logic to group REM/CO2 under their
+        # FAN in the HA device registry.
+        self._parent_fan: HvacVentilator | None = None
 
 
 # e.g. {"HGI": HgiGateway}

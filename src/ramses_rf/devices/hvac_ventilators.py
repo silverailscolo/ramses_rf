@@ -198,6 +198,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         lightweight, HVAC-specific membership list that records which
         REM/CO2 devices belong to this FAN.
 
+        Also sets ``_parent_fan`` on each child device (6d) so that
+        ramses_cc can use it for ``via_device`` grouping in the HA
+        device registry.
+
         :param schema: Keyword arguments representing the FAN schema
                        (expects ``remotes`` and/or ``sensors`` keys).
         :type schema: Any
@@ -206,11 +210,17 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
         schema = shrink(SCH_VCS(schema))
         for dev_id in schema.get(SZ_REMOTES, []):
-            self._gwy.device_registry.get_device(dev_id)  # ensure it exists
+            child = self._gwy.device_registry.get_device(dev_id)  # ensure exists
             self._remote_ids.add(DeviceIdT(dev_id))
+            # 6d: set bidirectional parent link on the child
+            if hasattr(child, "_parent_fan"):
+                child._parent_fan = self
         for dev_id in schema.get(SZ_SENSORS, []):
-            self._gwy.device_registry.get_device(dev_id)  # ensure it exists
+            child = self._gwy.device_registry.get_device(dev_id)  # ensure exists
             self._sensor_ids.add(DeviceIdT(dev_id))
+            # 6d: set bidirectional parent link on the child
+            if hasattr(child, "_parent_fan"):
+                child._parent_fan = self
 
     async def schema(self) -> dict[str, Any]:
         """Return the FAN's schema (remotes/sensors membership).
