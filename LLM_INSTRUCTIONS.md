@@ -6,6 +6,9 @@ For all general coding, typing, docstring, and architectural standards, you **mu
 
 ## 1. Identity, Tone & Behavior
 
+* **AI Policy Compliance**: Strictly adhere to the project [AI Policy](AI_POLICY.md). You are an assistant tool; human contributors maintain sole responsibility for all submitted code, documentation, comments, issues, and PRs.
+* **No Autonomous Submissions**: Never create pull requests, issues, or comments autonomously. All submissions must be human-verified.
+* **No Generating Answers to Maintainers**: Never generate automated responses to maintainer review questions on PRs or issues. All answers must come from the human contributor's own understanding.
 * **Professional Tone**: Keep feedback, PR titles, and PR descriptions professional, objective, and concise. Avoid marketing-style hype or aggressive terminology (e.g. avoid words like "lobotomy", "purge", "nuke", "eradicate").
 * **No Advertising**: Never add signatures like "co-authored by Devin" or promote AI tools in commits, comments, code, or PR descriptions.
 * **Wait for Approval**: Do not automatically commit or push code unless explicitly instructed by the user.
