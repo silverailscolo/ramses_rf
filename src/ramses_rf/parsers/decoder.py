@@ -84,7 +84,7 @@ class _LegacyMessage:
 
         self.code = dto.code
         self.code_enum = _get_code(self.code)
-        self.payload = dto.payload
+        self.payload = dto.raw_payload
         self._len = int(len(self.payload) / 2)
 
         # Instance interning cache to support Python 'is'/'is not' identity checks
@@ -520,11 +520,11 @@ class ParityCheckerDecoder(PayloadDecoder):
         if payload_cls is not None and payload_str and dto.verb != "RQ":
             try:
                 raw_bytes = bytes.fromhex(payload_str)
-                payload_obj = payload_cls.from_bytes(raw_bytes)
+                payload = payload_cls.from_bytes(raw_bytes)
                 _LOGGER.debug(
                     "Shadow Dataclass decoded opcode %s: %r",
                     dto.code,
-                    payload_obj,
+                    payload,
                 )
             except Exception as err:
                 _LOGGER.warning(
@@ -584,7 +584,7 @@ class DtoPayloadDecoderPipeline:
         :param dto: The network transfer packet state container model.
         :return: Fully structured mapping outputs or null evaluations.
         """
-        payload_str: str = dto.payload
+        payload_str: str = dto.raw_payload
         try:
             payload_len: int = int(dto.length)
         except ValueError:

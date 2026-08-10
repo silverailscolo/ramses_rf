@@ -361,7 +361,9 @@ class DiscoveryScan:
 
         # Extract zone_idx from payload if this is a binding code
         zone_idx = (
-            _extract_zone_idx(dto.payload) if code in _ZONE_BINDING_CODES else None
+            _extract_zone_idx_from_payload(dto.payload or dto.raw_payload)
+            if code in _ZONE_BINDING_CODES
+            else None
         )
 
         # Extract domain_id (FC/FA/F9) -- the authoritative source is
@@ -992,18 +994,40 @@ def _recompute_confidence(dev: DiscoveredDevice) -> str:
     return "low"
 
 
-def _extract_zone_idx(payload: str) -> str | None:
-    """Extract zone_idx from a payload string.
+def _extract_zone_idx_from_payload(payload: Any | str) -> str | None:
+    """Extract and validate the zone_idx from a packet payload.
 
-    Zone index is typically the first 2 hex chars of the payload.
-    Returns None if payload is empty, too short, or not a valid zone index.
+    Zone index is typically the first 2 hex chars of a raw payload string or
+    the zone_idx property of a typed PayloadBase object. Returns None if
+    payload is empty, too short, or not a valid zone index.
 
-    Valid zone indices are 00-0B (12 zones max).  Values like FC (appliance
-    control domain), 7F (broadcast), or other non-zone domain IDs are rejected.
+    Valid zone indices are 00-0B (12 zones max). Values like FC (appliance
+    control domain), 7F (broadcast), or other non-zone domain IDs are
+    rejected.
+
+    :param payload: Raw hex string, PayloadBase object, or list of payloads.
+    :type payload: Any | str
+    :returns: Validated uppercase zone index hex string ("00"-"0B"), or None.
+    :rtype: str | None
     """
-    if not payload or len(payload) < 2:
+    if isinstance(payload, list):
+        for item in payload:
+            res = _extract_zone_idx_from_payload(item)
+            if res is not None:
+                return res
         return None
-    idx = payload[:2].upper()
+    if hasattr(payload, "zone_idx"):
+        val = payload.zone_idx
+        if isinstance(val, int):
+            if val > 0x0B:
+                return None
+            return f"{val:02X}"
+        idx = str(val).upper()
+    elif isinstance(payload, str) and len(payload) >= 2:
+        idx = payload[:2].upper()
+    else:
+        return None
+
     # Validate: must be hex chars
     try:
         val = int(idx, 16)
@@ -1024,18 +1048,21 @@ def _should_update_domain_id(
 
     An authoritative 000C binding always wins -- it overrides any
     previous value (including a 3B00/3EF0 FC hint that was set before
-    the 000C binding arrived).  A non-authoritative 3B00/3EF0 hint
+    the 000C binding arrived). A non-authoritative 3B00/3EF0 hint
     only applies if the device has no domain_id yet (None).
 
     See issue 834 comment 5044906835: a BDR hotwater_valve broadcasting
     3B00/3EF0 gets domain_id=FC from the hint, but when the 000C HTG
     binding arrives (domain FA), it must override the hint.
 
-    :param current: The device's current domain_id (may be None).
-    :param new: The new domain_id from the current packet.
-    :param is_authoritative: True if from a 000C binding, False if
-        from 3B00/3EF0.
-    :return: True if the domain_id should be updated.
+    :param current: Current domain_id on the device.
+    :type current: str | None
+    :param new: New candidate domain_id to evaluate.
+    :type new: str | None
+    :param is_authoritative: True if from 000C binding, False if from hint.
+    :type is_authoritative: bool
+    :returns: True if domain_id should be updated, False otherwise.
+    :rtype: bool
     """
     if new is None:
         return False
@@ -1076,31 +1103,41 @@ def _is_appliance_control_signal(
     return verb.strip() == "I"
 
 
-def _extract_domain_id_from_000c(payload: str) -> str | None:
+def _extract_domain_id_from_000c(payload: Any | str) -> str | None:
     """Extract the domain_id (FC/FA/F9) from a 000C binding payload.
 
-    000C payloads encode the domain in the zone_type field
-    (payload[2:4]):
+    000C payloads encode the domain in the zone_type field (payload[2:4])
+    or on the typed ZoneDevicesPayload.domain_id property:
       - "0F" (APP) -> FC (appliance_control)
-      - "0E" (HTG) -> FA (hotwater_valve, index 00) or
-        F9 (heating_valve, index 01)
-      - "0D" (DHW) -> FA (dhw_sensor, index 00) or
-        F9 (index 01)
+      - "0E" (HTG) -> FA (hotwater_valve, index 00) or F9 (heating_valve,
+        index 01)
+      - "0D" (DHW) -> FA (dhw_sensor, index 00) or F9 (index 01)
 
     This is the authoritative source for domain_id -- the controller's
-    binding table explicitly declares which domain each relay belongs
-    to.  The 3B00/3EF0 TPI broadcast heuristic is ambiguous because
-    both appliance_control and hotwater_valve relays send these codes.
+    binding table explicitly declares which domain each relay belongs to.
+    The 3B00/3EF0 TPI broadcast heuristic is ambiguous because both
+    appliance_control and hotwater_valve relays send these codes.
 
     See issue 834 comment 5044906835: a BDR hotwater_valve broadcasting
-    3B00/3EF0 was misclassified as appliance_control because the scan
-    engine only used the TPI heuristic, not the 000C binding.
+    3B00/3EF0 was misclassified as appliance_control because the scan engine
+    only used the TPI heuristic, not the 000C binding.
 
-    :param payload: The raw hex payload string from a 000C packet.
-    :return: "FC", "FA", "F9", or None if the payload is not a
-        domain binding.
+    :param payload: Raw hex string, ZoneDevicesPayload, or list of payloads.
+    :type payload: Any | str
+    :returns: "FC", "FA", "F9", or None if payload is not a domain
+        binding.
+    :rtype: str | None
     """
-    if not payload or len(payload) < 4:
+    if isinstance(payload, list):
+        for item in payload:
+            res = _extract_domain_id_from_000c(item)
+            if res is not None:
+                return res
+        return None
+    if hasattr(payload, "domain_id"):
+        res = payload.domain_id
+        return str(res) if res is not None else None
+    if not payload or not isinstance(payload, str) or len(payload) < 4:
         return None
     role = payload[2:4].upper()
     if role not in _000C_DOMAIN_ROLES:

@@ -265,7 +265,7 @@ class Packet:
             addr3=addr3,
             code=code,
             length=len_,
-            payload=payload,
+            raw_payload=payload,
             is_tx=is_tx,
         )
 
@@ -382,7 +382,7 @@ class Packet:
                     *(repr(a) for a in self._addrs),
                     self.code,
                     self.len_,
-                    self.payload,
+                    self.raw_payload,
                 )
             )
             self._repr = f"{dtm_str} ... {line_str}{hdr}"
@@ -464,33 +464,67 @@ class Packet:
         return self._dto.length
 
     @property
-    def payload(self) -> PayloadT:
-        """Return the raw payload string.
+    def raw_payload(self) -> str:
+        """Return the raw hex payload string.
 
-        :returns: PayloadT hex string
-        :rtype: PayloadT
+        :returns: Raw ASCII hex payload string
+        :rtype: str
         """
-        return PayloadT(self._dto.payload)
+        return self._dto.raw_payload
+
+    @property
+    def payload(self) -> Any:
+        """Return the typed payload dataclass object or raw hex string.
+
+        TODO: Temporary fallback for PR 10 transition. In PR 12 of #1001,
+        this will exclusively return PayloadBase instances without raw
+        string fallbacks.
+
+        :returns: Strongly-typed payload object or raw hex string fallback
+        :rtype: Any
+        """
+        if self._dto.payload is not None:
+            return self._dto.payload
+        return PayloadT(self._dto.raw_payload)
 
     @payload.setter
-    def payload(self, value: PayloadT | str) -> None:
-        """Set the payload string (updates internal PacketDTO).
+    def payload(self, value: Any) -> None:
+        """Set the payload object or hex string (updates internal PacketDTO).
 
-        :param value: New payload hex string
-        :type value: PayloadT | str
+        TODO: Temporary fallback for PR 10 transition. In PR 12 of #1001,
+        this setter will accept only PayloadBase dataclass instances.
+
+        :param value: New payload object or hex string
+        :type value: Any
         """
-        self._dto = PacketDTO(
-            timestamp=self._dto.timestamp,
-            rssi=self._dto.rssi,
-            verb=self._dto.verb,
-            seq=self._dto.seq,
-            addr1=self._dto.addr1,
-            addr2=self._dto.addr2,
-            addr3=self._dto.addr3,
-            code=self._dto.code,
-            length=self._dto.length,
-            payload=str(value),
-        )
+        if isinstance(value, str):
+            self._dto = PacketDTO(
+                timestamp=self._dto.timestamp,
+                rssi=self._dto.rssi,
+                verb=self._dto.verb,
+                seq=self._dto.seq,
+                addr1=self._dto.addr1,
+                addr2=self._dto.addr2,
+                addr3=self._dto.addr3,
+                code=self._dto.code,
+                length=self._dto.length,
+                raw_payload=str(value),
+                payload=self._dto.payload,
+            )
+        else:
+            self._dto = PacketDTO(
+                timestamp=self._dto.timestamp,
+                rssi=self._dto.rssi,
+                verb=self._dto.verb,
+                seq=self._dto.seq,
+                addr1=self._dto.addr1,
+                addr2=self._dto.addr2,
+                addr3=self._dto.addr3,
+                code=self._dto.code,
+                length=self._dto.length,
+                raw_payload=self._dto.raw_payload,
+                payload=value,
+            )
         self._raw_line = None
 
     @property
@@ -500,7 +534,7 @@ class Packet:
         :returns: Integer byte count
         :rtype: int
         """
-        return int(len(self._dto.payload) / 2)
+        return int(len(self._dto.raw_payload) / 2)
 
     @property
     def _frame(self) -> str:
@@ -514,7 +548,7 @@ class Packet:
         return (
             f"{self._dto.verb} {self.seqn} {self._dto.addr1} "
             f"{self._dto.addr2} {self._dto.addr3} {self._dto.code} "
-            f"{self._dto.length} {self._dto.payload}"
+            f"{self._dto.length} {self._dto.raw_payload}"
         )
 
     @_frame.setter
@@ -555,17 +589,17 @@ class Packet:
             return self._ctx_
 
         if self.code in (Code._0005, Code._000C):
-            self._ctx_ = self.payload[:4]
+            self._ctx_ = self.raw_payload[:4]
         elif self.code == Code._0404:
             self._ctx_ = (
-                (self.payload[:2] + self.payload[10:12])
-                if len(self.payload) >= 12
-                else self.payload[:2]
+                (self.raw_payload[:2] + self.raw_payload[10:12])
+                if len(self.raw_payload) >= 12
+                else self.raw_payload[:2]
             )
         elif self.code in (Code._0418, Code._3220):
-            self._ctx_ = self.payload[4:6] if len(self.payload) >= 6 else False
-        elif len(self.payload) >= 2 and self.payload[:2] != "00":
-            self._ctx_ = self.payload[:2]
+            self._ctx_ = self.raw_payload[4:6] if len(self.raw_payload) >= 6 else False
+        elif len(self.raw_payload) >= 2 and self.raw_payload[:2] != "00":
+            self._ctx_ = self.raw_payload[:2]
         else:
             self._ctx_ = False
 
@@ -664,6 +698,7 @@ class Packet:
                 addr3=self._dto.addr3,
                 code=self._dto.code,
                 length=self._dto.length,
+                raw_payload=self._dto.raw_payload,
                 payload=self._dto.payload,
                 is_tx=self._dto.is_tx,
             )
@@ -702,7 +737,7 @@ class Packet:
             "addr3": dto.addr3,
             "code": dto.code,
             "length": dto.length,
-            "payload": dto.payload,
+            "payload": dto.raw_payload,
             "frame": self._frame,
         }
 
@@ -717,7 +752,7 @@ class Packet:
         :returns: UTF-8 encoded JSON byte stream
         :rtype: bytes
         """
-        return orjson.dumps(self.to_dto())
+        return orjson.dumps(self.to_dict())
 
     @classmethod
     def from_dict(cls, dtm: str, state: dict[str, Any] | str) -> Packet:
@@ -753,7 +788,12 @@ class Packet:
         :rtype: Packet
         """
         raw: dict[str, Any] = orjson.loads(json_data)
-        if "timestamp" in raw and "payload" in raw:
+        if "timestamp" in raw and ("raw_payload" in raw or "payload" in raw):
+            raw_payload_val = raw.get("raw_payload")
+            if not isinstance(raw_payload_val, str) or not raw_payload_val:
+                raw_payload_val = (
+                    raw["payload"] if isinstance(raw.get("payload"), str) else ""
+                )
             dto = PacketDTO(
                 timestamp=dt.fromisoformat(raw["timestamp"]),
                 rssi=raw.get("rssi", ""),
@@ -764,7 +804,7 @@ class Packet:
                 addr3=raw.get("addr3", ""),
                 code=raw.get("code", ""),
                 length=raw.get("length", ""),
-                payload=raw.get("payload", ""),
+                raw_payload=raw_payload_val,
             )
             return cls(dto)
 

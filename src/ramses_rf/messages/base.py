@@ -19,7 +19,7 @@ from .. import exceptions as exc
 from ..const import DEV_TYPE_MAP
 from ..parsers.decoder import decode_packet
 from ..protocol.ramses import CODE_IDX_ARE_COMPLEX
-from ..routing import RoutingContext, StateHeader
+from ..routing import RoutingContext, StateHeader, extract_context_value
 
 from ..const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     I_,
@@ -119,22 +119,30 @@ class Message:
         self._payload: PayloadT = {}
 
         self._has_array_: bool = False
-        self._idx_val: str | bool = dto.payload[:2] if dto.payload else False
+        context_value = extract_context_value(
+            dto.payload, raw_payload=dto.raw_payload, code=self.code
+        )
+        self._index_value: str | bool = (
+            context_value if context_value is not None else False
+        )
 
-        self._payload = self._validate(dto.payload)
+        self._payload = self._validate(dto.raw_payload)
 
     @property
     def context(self) -> RoutingContext:
-        """Calculate the sub-payload context natively.
+        """Calculate the context natively.
 
         :return: The context value.
         :rtype: RoutingContext
         """
-        code = str(getattr(self, "code", ""))
-        payload = getattr(self._dto, "payload", "")
-        if code == "3220" and len(payload) >= 6:
-            return RoutingContext(payload[4:6])
-        return RoutingContext(getattr(self, "_idx_val", None))
+        context_value = extract_context_value(
+            self._dto.payload, raw_payload=self._dto.raw_payload, code=self.code
+        )
+        return RoutingContext(
+            context_value
+            if context_value is not None
+            else (self._index_value if self._index_value is not False else None)
+        )
 
     @property
     def state_header(self) -> StateHeader:
@@ -161,6 +169,15 @@ class Message:
         seq_str = seqn if seqn else "---"
         dto = self._dto
         return f"{dto.verb} {seq_str} {dto.addr1} {dto.addr2} {dto.addr3} {dto.code} {dto.length} {dto.payload}"
+
+    @property
+    def raw_payload(self) -> str:
+        """Return the raw ASCII hex payload string.
+
+        :returns: The raw ASCII hex payload string.
+        :rtype: str
+        """
+        return self._dto.raw_payload
 
     @property
     def raw_frame(self) -> str:
@@ -222,24 +239,24 @@ class Message:
         :rtype: str
         """
 
-        def ctx(dto: PacketDTO) -> str:
+        def format_context(dto: PacketDTO) -> str:
             """Extract the context string from the packet safely."""
             val: str = ""
-            if self._idx_val is True:
+            if self._index_value is True:
                 val = "[..]"
-            elif self._idx_val is False:
+            elif self._index_value is False:
                 val = ""
-            elif self._idx_val is None:
+            elif self._index_value is None:
                 val = "??"  # type: ignore[unreachable]
             else:
-                val = str(self._idx_val)
+                val = str(self._index_value)
 
             if (
                 not val
-                and isinstance(dto.payload, str)
-                and dto.payload[:2] not in ("00", "FF")
+                and isinstance(dto.raw_payload, str)
+                and dto.raw_payload[:2] not in ("00", "FF")
             ):
-                return f"({dto.payload[:2]})"
+                return f"({dto.raw_payload[:2]})"
             return val
 
         if self._str is not None:
@@ -259,7 +276,12 @@ class Message:
             code_name = f"unknown_{self.code}"
 
         self._str = MSG_FORMAT_10.format(
-            name_0, name_1, self.verb, code_name, ctx(self._dto), self.payload
+            name_0,
+            name_1,
+            self.verb,
+            code_name,
+            format_context(self._dto),
+            self.raw_payload,
         )
         return self._str
 
@@ -269,7 +291,7 @@ class Message:
         :return: An unambiguous string representation of this object.
         :rtype: str
         """
-        raw_payload = self._dto.payload
+        raw_payload = self._dto.raw_payload
         addr1 = self._addrs[0].id
         addr2 = self._addrs[1].id
         addr3 = self._addrs[2].id
@@ -379,10 +401,10 @@ class Message:
         }  # ALSO: SZ_DOMAIN_ID, SZ_ZONE_IDX
 
         if self.code in (Code._31D9, Code._31DA):
-            assert isinstance(self._idx_val, str)  # mypy hint
-            return {"hvac_id": self._idx_val}
+            assert isinstance(self._index_value, str)  # mypy hint
+            return {"hvac_id": self._index_value}
 
-        if self._idx_val in (True, False) or self.code in CODE_IDX_ARE_COMPLEX:
+        if self._index_value in (True, False) or self.code in CODE_IDX_ARE_COMPLEX:
             return {}
 
         if self.code in (Code._3220,):  # FIXME: should be _SIMPLE
@@ -398,7 +420,7 @@ class Message:
             DEV_TYPE_MAP.PRG,
             # FIXME: DEX should be deprecated to use device type rather than class
         }:
-            assert self._idx_val == "00", "What!! (AA)"
+            assert self._index_value == "00", "What!! (AA)"
             return {}
 
         if self.src.type == self.dst.type and self.src.type not in (
@@ -408,7 +430,7 @@ class Message:
             DEV_TYPE_MAP.HGI,
             DEV_TYPE_MAP.PRG,
         ):
-            assert self._idx_val == "00", "What!! (AB)"
+            assert self._index_value == "00", "What!! (AB)"
             return {}
 
         # BRIDGED LOGIC:
@@ -425,20 +447,22 @@ class Message:
             and not is_controller
             and self.src.type != DEV_TYPE_MAP.UFC
         ):
-            assert self._idx_val == "00", "What!! (BC)"
+            assert self._index_value == "00", "What!! (BC)"
             return {}
 
         if self.code in (Code._000A, Code._2309) and (
             self.src.type == DEV_TYPE_MAP.UFC
         ):
-            assert isinstance(self._idx_val, str)  # mypy hint
-            return {IDX_NAMES[Code._22C9]: self._idx_val}
+            assert isinstance(self._index_value, str)  # mypy hint
+            return {IDX_NAMES[Code._22C9]: self._index_value}
 
-        assert isinstance(self._idx_val, str)  # mypy hint
-        idx_name = SZ_DOMAIN_ID if self._idx_val[:1] == "F" else SZ_ZONE_IDX
-        index_name = IDX_NAMES.get(self.code, idx_name)
+        assert isinstance(self._index_value, str)  # mypy hint
+        default_index_name = (
+            SZ_DOMAIN_ID if self._index_value[:1] == "F" else SZ_ZONE_IDX
+        )
+        index_name = IDX_NAMES.get(self.code, default_index_name)
 
-        return {index_name: self._idx_val}
+        return {index_name: self._index_value}
 
     @property
     def dto(self) -> TransportMessage:
@@ -449,7 +473,7 @@ class Message:
         Transfer Objects against the legacy snapshot tests before fully
         migrating the transport layer.
         """
-        raw_hex_payload = self._dto.payload
+        raw_hex_payload = self._dto.raw_payload
         payload_length = self.len
 
         addr1_str = self._addrs[0].id

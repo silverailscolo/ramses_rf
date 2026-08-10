@@ -215,7 +215,7 @@ class ReassemblyBuffer:
         :return: A new PacketDTO containing the combined payload.
         :rtype: PacketDTO
         """
-        combined_payload = f"{prev.payload}{this.payload}"
+        combined_payload = f"{prev.raw_payload}{this.raw_payload}"
         combined_length = f"{len(combined_payload) // 2:03d}"
 
         # DTO is frozen; instantiate a new one with the combined L3 state
@@ -229,5 +229,5 @@ class ReassemblyBuffer:
             addr3=prev.addr3,
             code=prev.code,
             length=combined_length,
-            payload=combined_payload,
+            raw_payload=combined_payload,
         )

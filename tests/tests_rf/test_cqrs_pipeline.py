@@ -29,7 +29,7 @@ PKT_3150: Final = PacketDTO(
     addr3="01:145038",
     code="3150",
     length="002",
-    payload="FCC8",
+    raw_payload="FCC8",
 )
 
 # 2. 30C9 Orphan TRV
@@ -43,7 +43,7 @@ PKT_30C9_TRV: Final = PacketDTO(
     addr3="04:023226",
     code="30C9",
     length="003",
-    payload="000834",
+    raw_payload="000834",
 )
 
 # 3. 3220 OpenTherm RP
@@ -57,7 +57,7 @@ PKT_3220_RP: Final = PacketDTO(
     addr3="--:------",
     code="3220",
     length="005",
-    payload="00C00500FF",
+    raw_payload="00C00500FF",
 )
 
 

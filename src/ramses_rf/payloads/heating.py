@@ -569,6 +569,8 @@ class BindingPayload(PayloadBase):
     :type binding_data: bytes
     """
 
+    _STRUCT_FMT_HDR: ClassVar[str] = ">B"
+
     binding_type: int
     binding_data: bytes
 
@@ -584,7 +586,7 @@ class BindingPayload(PayloadBase):
         """
         if not raw_data:
             raise ValueError("Payload data cannot be empty")
-        b_type = raw_data[0]
+        (b_type,) = struct.unpack_from(cls._STRUCT_FMT_HDR, raw_data, 0)
         b_data = raw_data[1:]
         return cls(binding_type=b_type, binding_data=b_data)
 
@@ -594,7 +596,27 @@ class BindingPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return bytes([self.binding_type]) + self.binding_data
+        return struct.pack(self._STRUCT_FMT_HDR, self.binding_type) + self.binding_data
+
+    @property
+    def idx(self) -> str:
+        """Return two-character hex index string for binding type.
+
+        :returns: Two-character uppercase hex index string.
+        :rtype: str
+        """
+        return f"{self.binding_type:02X}"
+
+    @property
+    def vendor_code(self) -> str | None:
+        """Extract vendor code from ratification addenda data if present.
+
+        :returns: Two-character uppercase hex vendor code string or None.
+        :rtype: str | None
+        """
+        if len(self.binding_data) >= 7:
+            return f"{self.binding_data[6]:02X}"
+        return None
 
 
 @register_payload("000A")
@@ -1129,7 +1151,10 @@ class ZoneDevicesPayload(PayloadBase):
     :type device_id_raw: int
     """
 
-    zone_idx: int
+    _STRUCT_FMT_6B: ClassVar[str] = ">BBB3s"
+    _STRUCT_FMT_5B: ClassVar[str] = ">BB3s"
+
+    zone_idx_raw: int
     device_role_id: int
     device_id_raw: int
 
@@ -1145,10 +1170,18 @@ class ZoneDevicesPayload(PayloadBase):
         """
         if len(raw_data) < 5:
             raise ValueError(f"Invalid payload length for 000C: {len(raw_data)}")
-        dev_id = int.from_bytes(raw_data[2:5], byteorder="big")
+        if len(raw_data) >= 6:
+            zone_idx_raw, role_id, _, dev_bytes = struct.unpack_from(
+                cls._STRUCT_FMT_6B, raw_data, 0
+            )
+        else:
+            zone_idx_raw, role_id, dev_bytes = struct.unpack_from(
+                cls._STRUCT_FMT_5B, raw_data, 0
+            )
+        dev_id = int.from_bytes(dev_bytes, byteorder="big")
         return cls(
-            zone_idx=raw_data[0],
-            device_role_id=raw_data[1],
+            zone_idx_raw=zone_idx_raw,
+            device_role_id=role_id,
             device_id_raw=dev_id,
         )
 
@@ -1159,7 +1192,48 @@ class ZoneDevicesPayload(PayloadBase):
         :rtype: bytes
         """
         dev_bytes = self.device_id_raw.to_bytes(3, byteorder="big")
-        return bytes([self.zone_idx, self.device_role_id]) + dev_bytes + b"\x00"
+        return struct.pack(
+            self._STRUCT_FMT_6B,
+            self.zone_idx_raw,
+            self.device_role_id,
+            0,
+            dev_bytes,
+        )
+
+    @property
+    def zone_idx(self) -> int | None:
+        """Return numeric zone index or None if domain-level binding.
+
+        :returns: Zone index integer or None.
+        :rtype: int | None
+        """
+        if self.device_role_id in (0x0F, 0x0E, 0x0D):
+            return None
+        return self.zone_idx_raw
+
+    @property
+    def domain_id(self) -> str | None:
+        """Derive authoritative binding domain ID (FC, FA, F9) from role & index.
+
+        :returns: Domain ID string ("FC", "FA", "F9") or None if not domain binding.
+        :rtype: str | None
+        """
+        if self.device_role_id == 0x0F:  # APP
+            return "FC"
+        if self.device_role_id in (0x0E, 0x0D):  # HTG / DHW
+            return "FA" if self.zone_idx_raw == 0 else "F9"
+        return None
+
+    @property
+    def device_id_str(self) -> str:
+        """Format raw 24-bit device ID to standard RAMSES device ID string.
+
+        :returns: Formatted device ID string (e.g., '13:120241').
+        :rtype: str
+        """
+        from ramses_tx.address import Address
+
+        return Address.convert_from_hex(f"{self.device_id_raw:06X}")
 
 
 @register_payload("1081")

@@ -23,7 +23,7 @@ def test_message_enrichment_and_lineage() -> None:
         addr3="04:222222",
         code="30C9",
         length="003",
-        payload="0001C8",
+        raw_payload="0001C8",
     )
 
     # 1. Create the base Message (RAW_EVENT)

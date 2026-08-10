@@ -254,7 +254,7 @@ class PayloadDecoderPipeline:
         :return: A dict of key:value pairs or a list of such dicts
         :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
-        payload_str: str = msg._dto.payload
+        payload_str: str = msg._dto.raw_payload
         payload_len: int = msg.len
 
         return self.head.decode(msg, payload_str, payload_len)

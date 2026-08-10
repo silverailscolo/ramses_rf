@@ -70,7 +70,7 @@ class MessageStoreInterface(Protocol):
         dst: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        ctx: Any | None = None,
+        context: Any | None = None,
         hdr: str | StateHeader | None = None,
     ) -> tuple[Message, ...] | list[Message]: ...
     async def rem(
@@ -82,7 +82,7 @@ class MessageStoreInterface(Protocol):
         dst: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        ctx: Any | None = None,
+        context: Any | None = None,
         hdr: str | None = None,
     ) -> tuple[Any, ...] | None: ...
     async def contains(
@@ -93,7 +93,7 @@ class MessageStoreInterface(Protocol):
         dst: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        ctx: Any | None = None,
+        context: Any | None = None,
         hdr: str | None = None,
     ) -> bool: ...
     async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Any]: ...

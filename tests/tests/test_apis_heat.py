@@ -208,7 +208,7 @@ def _test_api_good(
         msg = Message._from_pkt(pkt)
 
         cmd = _test_api_from_msg(api, msg, pkt)
-        assert cmd.payload == pkt.payload  # aka pkt.payload
+        assert cmd.payload == pkt.raw_payload  # aka pkt.raw_payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
@@ -228,7 +228,7 @@ def _test_api_fail(
         except (AssertionError, TypeError, ValueError):
             cmd = None
         else:
-            assert cmd and cmd.payload == pkt.payload  # aka pkt.payload
+            assert cmd and cmd.payload == pkt.raw_payload  # aka pkt.raw_payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
@@ -290,7 +290,7 @@ GET_0418_GOOD = {  # NOTE: this constructor is used only for testing
 def test_put_0418() -> None:
     for pkt_line in GET_0418_GOOD:
         pkt = _create_pkt_from_frame(pkt_line.split("#")[0].rstrip())
-        log_pkt = parse_fault_log_entry(pkt.payload)
+        log_pkt = parse_fault_log_entry(pkt.raw_payload)
 
         if SZ_TIMESTAMP not in log_pkt:  # ignore null log entries
             continue
@@ -348,7 +348,7 @@ def test_set_1100() -> None:  # NOTE: bespoke: see params
         msg.payload[SZ_DOMAIN_ID] = msg.payload.get(SZ_DOMAIN_ID, "00")
 
         cmd = _test_api_from_msg(_set_tpi_params, msg, pkt)
-        assert cmd.payload == pkt.payload
+        assert cmd.payload == pkt.raw_payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
@@ -384,7 +384,7 @@ def test_set_2e04() -> None:  # NOTE: bespoke: payload
         msg = Message._from_pkt(pkt)
 
         cmd = _test_api_from_msg(_set_system_mode, msg, pkt)
-        assert cmd.payload == pkt.payload
+        assert cmd.payload == pkt.raw_payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             actual = shrink(msg.payload, keep_falsys=True)
@@ -438,8 +438,8 @@ def test_set_313f() -> None:  # NOTE: bespoke: payload
         msg = Message._from_pkt(pkt)
 
         cmd = _test_api_from_msg(_set_system_time, msg, pkt)
-        assert cmd.payload[:4] == pkt.payload[:4]
-        assert cmd.payload[6:] == pkt.payload[6:]
+        assert cmd.payload[:4] == pkt.raw_payload[:4]
+        assert cmd.payload[6:] == pkt.raw_payload[6:]
 
 
 PUT_3EF0_FAIL = ("...  I --- 13:123456 --:------ 13:123456 3EF0 003 00AAFF",)
@@ -487,4 +487,4 @@ def test_put_3ef1() -> None:  # NOTE: bespoke: params, ?payload
         assert cmd.verb == pkt.verb
         assert cmd.code == pkt.code
 
-        assert cmd.payload[:-2] == pkt.payload[:-2]
+        assert cmd.payload[:-2] == pkt.raw_payload[:-2]

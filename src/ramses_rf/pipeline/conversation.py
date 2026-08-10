@@ -12,9 +12,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Final
+from unittest.mock import Mock
 
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command
+from ramses_rf.routing import extract_context_value
 from ramses_tx import I_, RP, W_, Packet
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
@@ -259,18 +261,14 @@ class ConversationManager:
             if msg.verb != RP and not (msg.verb == I_ and pending.dto.verb == W_):
                 continue
 
-            # Check sub-payload context (idx) matching
-            msg_ctx = msg.context.value
-            if type(msg_ctx).__name__ != "MagicMock":
-                cmd_code = str(pending.dto.code)
-                cmd_payload = pending.dto.payload or ""
-
-                if cmd_code == "3220" and len(cmd_payload) >= 6:
-                    cmd_ctx: str | bool = cmd_payload[4:6]
-                else:
-                    cmd_ctx = cmd_payload[:2] if cmd_payload else False
-
-                if msg_ctx != cmd_ctx:
+            # Check sub-payload context (idx/zone/domain/msg_id) matching
+            message_context = msg.context.value
+            if message_context is not None and not isinstance(message_context, Mock):
+                command_context = extract_context_value(
+                    pending.dto.payload,
+                    code=pending.dto.code,
+                )
+                if message_context != command_context:
                     continue
 
             matched_key = key
