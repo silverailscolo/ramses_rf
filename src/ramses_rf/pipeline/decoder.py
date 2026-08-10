@@ -9,7 +9,7 @@ from ramses_rf.address import Address
 from ramses_rf.enums import Topic
 from ramses_rf.messages.core import Message
 from ramses_rf.parsers.decoder import decode_packet
-from ramses_rf.routing import StateHeader
+from ramses_rf.routing import StateHeader, extract_context_value
 from ramses_tx import exceptions as exc
 from ramses_tx.const import Code
 from ramses_tx.dtos import PacketDTO
@@ -115,15 +115,15 @@ class DecoderEngine:
                 )
 
         # Native L7 Context & Header Generation
-        ctx_val: str | bool | None = dto.payload[:2] if dto.payload else False
-        if dto.code == "3220" and len(dto.payload) >= 6:
-            ctx_val = dto.payload[4:6]
+        context_val = extract_context_value(
+            dto.payload, raw_payload=dto.raw_payload, code=dto.code
+        )
 
         header = StateHeader.create(
             code=dto.code,
             verb=dto.verb,
             source_id=src_id,
-            context_val=ctx_val,
+            context_val=context_val,
         )
 
         # Instantiate the immutable historical fact at the pipeline's edge

@@ -250,7 +250,7 @@ def test_packet_heartbeat_payload_bypass() -> None:
     packet = Packet(DTM, heartbeat_frame)
 
     assert getattr(packet, "_len", 0) == 1
-    assert getattr(packet, "payload", "") == "00"
+    assert packet.raw_payload == "00"
 
     # As explicitly designed to preserve legacy test suite behavior, _has_payload remains
     # False (as it fails the strict regex), but the packet instantiation survives.

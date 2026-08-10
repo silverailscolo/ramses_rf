@@ -28,7 +28,7 @@ def test_packet_to_dto_populates_all_fields_accurately() -> None:
     assert dto.addr3 == "--:------"
     assert dto.code == "000A"
     assert dto.length == "002"
-    assert dto.payload == "0800"
+    assert dto.raw_payload == "0800"
 
 
 def test_packet_to_dto_enforces_strict_verb_padding() -> None:

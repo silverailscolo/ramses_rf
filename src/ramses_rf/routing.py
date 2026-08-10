@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 from ramses_tx.const import Code, VerbT
 from ramses_tx.typing import DeviceIdT
@@ -52,6 +53,54 @@ class RoutingContext:
         if self.value is False:
             return "False"
         return str(self.value)
+
+
+def extract_context_value(
+    payload: Any, raw_payload: str = "", code: str | Code | None = None
+) -> str | None:
+    """Extract the primary routing context discriminator from a payload or string.
+
+    Inspects typed PayloadBase objects or raw ASCII hex strings to derive the
+    2-character routing context discriminator (e.g. zone index, domain ID,
+    OpenTherm Data ID, or generic packet index) used to calculate
+    RoutingContext and StateHeader instances.
+
+    :param payload: Strongly-typed PayloadBase object, string, or None.
+    :type payload: Any
+    :param raw_payload: Unparsed wire ASCII hex string fallback, defaults to "".
+    :type raw_payload: str
+    :param code: Command opcode (e.g. '3220' or Code._3220), defaults to None.
+    :type code: str | Code | None
+    :returns: Uppercase 2-character context discriminator string, or None if
+        non-contextual.
+    :rtype: str | None
+    """
+    if payload is None:
+        return raw_payload[:2] if len(raw_payload) >= 2 else None
+
+    if isinstance(payload, str):
+        if code == Code._3220 and len(payload) >= 6:
+            return payload[4:6]
+        return payload[:2] if len(payload) >= 2 else None
+
+    if getattr(payload, "msg_id", None) is not None:
+        val = payload.msg_id
+        return f"{val:02X}" if isinstance(val, int) else str(val)
+
+    if getattr(payload, "data_id", None) is not None:
+        return str(payload.data_id)
+
+    if getattr(payload, "domain_id", None) is not None:
+        return str(payload.domain_id)
+
+    if getattr(payload, "idx", None) is not None:
+        return str(payload.idx)
+
+    if getattr(payload, "zone_idx", None) is not None:
+        val = payload.zone_idx
+        return f"{val:02X}" if isinstance(val, int) else str(val)
+
+    return None
 
 
 @dataclass(frozen=True, slots=True)

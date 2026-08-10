@@ -38,7 +38,7 @@ async def test_topology_builder_trv_implicit_binding() -> None:
         addr3="01:123456",
         code="1060",
         length="003",
-        payload="01FF01",
+        raw_payload="01FF01",
         timestamp=dt.now(),
     )
 

@@ -1,5 +1,4 @@
-"""
-Data Transfer Objects for ramses_tx.
+"""Data Transfer Objects for ramses_tx.
 
 This module defines the strict boundaries for OSI layer decoupling
 between the RF modem (L1-L3) and the Domain Model (L4-L7).
@@ -7,12 +6,15 @@ between the RF modem (L1-L3) and the Domain Model (L4-L7).
 
 from dataclasses import dataclass
 from datetime import datetime as dt
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ramses_rf.payloads.base import PayloadBase
 
 
 @dataclass(frozen=True, slots=True)
 class PacketDTO:
-    """
-    Pure data object bridging the ramses_tx modem and ramses_rf.
+    """Pure data object bridging the ramses_tx modem and ramses_rf.
 
     :param timestamp: Time the frame was received.
     :type timestamp: datetime
@@ -32,8 +34,10 @@ class PacketDTO:
     :type code: str
     :param length: The payload length.
     :type length: str
-    :param payload: Raw hex payload string (e.g., "0001C8").
-    :type payload: str
+    :param raw_payload: Raw ASCII hex payload string (e.g., "0001C8").
+    :type raw_payload: str
+    :param payload: Strongly-typed payload dataclass object.
+    :type payload: Any | None
     :param is_tx: True if outbound transmission, False if inbound.
     :type is_tx: bool
     """
@@ -47,9 +51,22 @@ class PacketDTO:
     addr3: str
     code: str
     length: str
-    payload: str
+    payload: "PayloadBase | list[PayloadBase] | str | None" = None
+    raw_payload: str = ""
     is_tx: bool = False
     comment: str = ""
+
+    def __post_init__(self) -> None:
+        """Auto-populate raw_payload and payload string fallback if needed.
+
+        TODO: Temporary fallback for PR 10 transition. To be removed in PR
+        12 of #1001 once all callers pass PayloadBase and raw_payload.
+        """
+        if isinstance(self.payload, str) and not self.raw_payload:
+            object.__setattr__(self, "raw_payload", self.payload)
+
+        if self.payload is None and self.raw_payload:
+            object.__setattr__(self, "payload", self.raw_payload)
 
 
 @dataclass(frozen=True, slots=True)

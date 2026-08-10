@@ -28,7 +28,7 @@ from ramses_rf.discovery_scan import (
     DiscoveryScan,
     _classify,
     _extract_domain_id_from_000c,
-    _extract_zone_idx,
+    _extract_zone_idx_from_payload,
     _initial_confidence,
     _is_appliance_control_signal,
     _is_valid_address,
@@ -62,7 +62,7 @@ def make_dto(
         addr3=addr3,
         code=code,
         length="006",
-        payload=payload,
+        raw_payload=payload,
     )
 
 
@@ -128,43 +128,43 @@ class TestIsValidAddress:
 
 
 class TestExtractZoneIdx:
-    """Tests for _extract_zone_idx."""
+    """Tests for _extract_zone_idx_from_payload."""
 
     def test_valid_zone_idx(self) -> None:
-        assert _extract_zone_idx("02C8") == "02"
+        assert _extract_zone_idx_from_payload("02C8") == "02"
 
     def test_hw_zone(self) -> None:
         # "HW" is not valid hex — should return None
-        assert _extract_zone_idx("HW...") is None
+        assert _extract_zone_idx_from_payload("HW...") is None
 
     def test_empty_payload(self) -> None:
-        assert _extract_zone_idx("") is None
+        assert _extract_zone_idx_from_payload("") is None
 
     def test_short_payload(self) -> None:
-        assert _extract_zone_idx("0") is None
+        assert _extract_zone_idx_from_payload("0") is None
 
     def test_zone_fc_rejected(self) -> None:
         # FC is the appliance_control domain, not a zone index
-        assert _extract_zone_idx("FC00") is None
+        assert _extract_zone_idx_from_payload("FC00") is None
 
     def test_zone_7f_rejected(self) -> None:
         # 7F is broadcast, not a zone index
-        assert _extract_zone_idx("7F00") is None
+        assert _extract_zone_idx_from_payload("7F00") is None
 
     def test_zone_0c_rejected(self) -> None:
         # 0C is above the 12-zone max (00-0B)
-        assert _extract_zone_idx("0C00") is None
+        assert _extract_zone_idx_from_payload("0C00") is None
 
     def test_zone_0b_accepted(self) -> None:
         # 0B is the highest valid zone index
-        assert _extract_zone_idx("0B00") == "0B"
+        assert _extract_zone_idx_from_payload("0B00") == "0B"
 
     def test_zone_00_accepted(self) -> None:
-        assert _extract_zone_idx("0000") == "00"
+        assert _extract_zone_idx_from_payload("0000") == "00"
 
     def test_zone_lowercase(self) -> None:
         # Should normalise to uppercase
-        assert _extract_zone_idx("0a00") == "0A"
+        assert _extract_zone_idx_from_payload("0a00") == "0A"
 
 
 class TestIsApplianceControlSignal:

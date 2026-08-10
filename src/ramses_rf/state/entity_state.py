@@ -56,15 +56,15 @@ class StateCache:
         return self._cache.get(header)
 
     def get_by_routing_key(
-        self, code: Code | str, verb: VerbT | str, ctx: Any
+        self, code: Code | str, verb: VerbT | str, context: Any
     ) -> ApplicationMessage | None:
         """Fallback O(N) lookup when source_id is unknown."""
-        ctx_str = RoutingContext(ctx).as_string
+        context_str = RoutingContext(context).as_string
         for hdr, msg in self._cache.items():
             if (
                 hdr.code == code
                 and hdr.verb == verb
-                and hdr.context.as_string == ctx_str
+                and hdr.context.as_string == context_str
             ):
                 return msg
         return None
@@ -152,14 +152,14 @@ class EntityState:
         entity_id = self._entity.id
         is_dhw = entity_id[_ID_SLICE:] == "_HW"
         is_zone = len(entity_id) > 9 and not is_dhw
-        ctx = msg.context.value
+        context_value = msg.context.value
 
         if is_zone:
             zone_idx = entity_id[_ID_SLICE + 1 :]
             in_dict = isinstance(msg.payload, dict)
             in_list = isinstance(msg.payload, list)
             if not (
-                ctx == zone_idx
+                context_value == zone_idx
                 or (in_dict and str(msg.payload.get(SZ_ZONE_IDX)) == zone_idx)
                 or (
                     in_list
@@ -175,7 +175,7 @@ class EntityState:
             in_dict = isinstance(msg.payload, dict)
             in_list = isinstance(msg.payload, list)
             if not (
-                ctx in ("FC", "FA", "F9", "FA")
+                context_value in ("FC", "FA", "F9", "FA")
                 or (in_dict and "dhw_idx" in msg.payload)
                 or (
                     in_list
@@ -382,14 +382,14 @@ class EntityState:
                     entity_id = self._entity.id
                     is_dhw = entity_id[_ID_SLICE:] == "_HW"
                     is_zone = len(entity_id) > 9 and not is_dhw
-                    ctx = kwargs.get(
+                    context_value = kwargs.get(
                         "zone_idx",
                         entity_id[_ID_SLICE + 1 :] if is_zone else None,
                     )
-                    if not ctx and is_dhw:
-                        ctx = kwargs.get("dhw_idx", "HW")
+                    if not context_value and is_dhw:
+                        context_value = kwargs.get("dhw_idx", "HW")
 
-                    msg = cache.get_by_routing_key(cd, verb, ctx)
+                    msg = cache.get_by_routing_key(cd, verb, context_value)
                     if msg is None:
                         # Fallbacks for base devices
                         msg = cache.get_by_routing_key(cd, verb, False)
@@ -484,14 +484,14 @@ class EntityState:
 
         cache = await self._build_state_cache()
 
-        for code, verb, ctx, msg in cache.get_records():
+        for code, verb, context_value, msg in cache.get_records():
             if verb not in (I_, RP):
                 continue
             if is_dhw:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
                 if (
-                    ctx in ("FC", "FA", "F9", "FA")
+                    context_value in ("FC", "FA", "F9", "FA")
                     or (in_dict and "dhw_idx" in msg.payload)
                     or (
                         in_list
@@ -505,7 +505,7 @@ class EntityState:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
                 if (
-                    ctx == zone_idx
+                    context_value == zone_idx
                     or (in_dict and str(msg.payload.get("zone_idx")) == zone_idx)
                     or (
                         in_list
@@ -546,7 +546,7 @@ class EntityState:
 
         cache = await self._build_state_cache()
 
-        for cd, verb, ctx, msg in cache.get_records():
+        for cd, verb, context_value, msg in cache.get_records():
             if code is not None:
                 if isinstance(code, tuple) and cd not in code:
                     continue
@@ -560,7 +560,7 @@ class EntityState:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
                 if not (
-                    str(ctx) == str(zone_idx)
+                    str(context_value) == str(zone_idx)
                     or (in_dict and str(msg.payload.get("zone_idx")) == str(zone_idx))
                     or (
                         in_list
@@ -577,8 +577,8 @@ class EntityState:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
                 if not (
-                    str(ctx) == str(dhw_idx)
-                    or ctx in ("FC", "FA", "F9", "FA")
+                    str(context_value) == str(dhw_idx)
+                    or context_value in ("FC", "FA", "F9", "FA")
                     or (in_dict and "dhw_idx" in msg.payload)
                     or (
                         in_list
