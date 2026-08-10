@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from ramses_rf.exceptions import DeviceNotFoundError
 from ramses_rf.typing import DeviceIdT
+from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_KNOWN_LIST
 
 
@@ -48,13 +49,23 @@ class DeviceFilter:
         :rtype: None
         :raises DeviceNotFoundError: If the device is unwanted, strictly not known, or excluded.
         """
-        if dev_id in self._unwanted and dev_id != self._hgi_id_provider():
+        # HGI_DEV_ADDR (18:000730) is the shared on-air placeholder that a
+        # real HGI80 transmits under (instead of its own real device ID).
+        # It must bypass the _unwanted permanent block and the
+        # enforce_known_list check, otherwise every self-originated RQ/W is
+        # rejected with a DeviceNotFoundError warning pair (issue 1015).
+        # The block_list check below is intentionally NOT exempted — the
+        # protocol-level filter (_is_wanted_addrs in ramses_tx) keeps
+        # HGI_DEV_ADDR subject to the block_list.
+        if dev_id in self._unwanted and dev_id != HGI_DEV_ADDR.id:
             raise DeviceNotFoundError(
                 f"Can't create {dev_id}: it is unwanted or invalid"
             )
 
         if self._enforce_known_list and (
-            dev_id not in self._include and dev_id != self._hgi_id_provider()
+            dev_id not in self._include
+            and dev_id != self._hgi_id_provider()
+            and dev_id != HGI_DEV_ADDR.id
         ):
             self._unwanted.append(dev_id)
             raise DeviceNotFoundError(

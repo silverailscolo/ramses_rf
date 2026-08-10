@@ -5,6 +5,12 @@ import pytest
 
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.base import PayloadBase
+from ramses_rf.payloads.hvac import (
+    FanModePayload,
+    HvacFanParamPayload,
+    OutdoorHumidityPayload,
+    RelativeHumidityPayload,
+)
 from ramses_rf.payloads.registry import (
     PAYLOAD_REGISTRY,
     PayloadRegistry,
@@ -104,3 +110,60 @@ def test_payload_to_dict_invalid_type() -> None:
     # Arrange & Act & Assert
     with pytest.raises(TypeError, match="Expected dataclass instance"):
         payload_to_dict(cast(PayloadBase, "not_a_dataclass"))
+
+
+def test_humidity_null_sentinel_mapping() -> None:
+    # Arrange & Act
+    out_valid = OutdoorHumidityPayload.from_bytes(b"\x00\x64")
+    out_null = OutdoorHumidityPayload.from_bytes(b"\x00\x00")
+    rel_valid = RelativeHumidityPayload.from_bytes(b"\x64")
+    rel_null = RelativeHumidityPayload.from_bytes(b"\x00")
+
+    # Assert
+    assert out_valid.humidity_percent == 50.0
+    assert out_null.humidity_percent is None
+    assert out_null.to_bytes() == b"\x00\x00"
+
+    assert rel_valid.humidity_percent == 50.0
+    assert rel_null.humidity_percent is None
+    assert rel_null.to_bytes() == b"\x00"
+
+
+def test_fan_mode_null_sentinel_mapping() -> None:
+    # Arrange & Act
+    mode_valid = FanModePayload.from_bytes(b"\x00\x02\x04")
+    mode_null = FanModePayload.from_bytes(b"\x00\xff\xff")
+
+    # Assert
+    assert mode_valid.header == 0
+    assert mode_valid.mode_idx == 2
+    assert mode_valid.mode_max == 4
+    assert mode_valid.to_bytes() == b"\x00\x02\x04"
+
+    assert mode_null.header == 0
+    assert mode_null.mode_idx is None
+    assert mode_null.mode_max is None
+    assert mode_null.to_bytes() == b"\x00\xff\xff"
+
+
+def test_hvac_fan_param_null_sentinel_mapping() -> None:
+    # Arrange & Act
+    param_valid = HvacFanParamPayload.from_bytes(
+        bytes.fromhex("00000A0010000000050000000000000064000000010001")
+    )
+    param_null = HvacFanParamPayload.from_bytes(
+        bytes.fromhex("00000A0010FFFFFFFF0000000000000064000000010001")
+    )
+
+    # Assert
+    assert param_valid.param_id == 10
+    assert param_valid.value_scaled == 5
+    assert param_valid.to_bytes() == bytes.fromhex(
+        "00000A0010000000050000000000000064000000010001"
+    )
+
+    assert param_null.param_id == 10
+    assert param_null.value_scaled is None
+    assert param_null.to_bytes() == bytes.fromhex(
+        "00000A0010FFFFFFFF0000000000000064000000010001"
+    )

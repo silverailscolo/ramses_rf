@@ -216,7 +216,7 @@ class OutdoorHumidityPayload(PayloadBase):
     :type humidity_percent: float
     """
 
-    humidity_percent: float
+    humidity_percent: float | None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -231,7 +231,13 @@ class OutdoorHumidityPayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 1280: {len(raw_data)}")
         raw_val = raw_data[1]
-        return cls(humidity_percent=raw_val / 2.0)
+        # PROTOCOL QUIRK: 0x00, 0xEF, and 0xFF are protocol sentinel
+        # null-markers indicating an uninstalled or absent humidity
+        # sensor. Zero atmospheric humidity (0.0%) is physically
+        # impossible. Normalise sentinel bytes to None to prevent
+        # invalid 0.0% domain states (see ramses-rf/ramses_cc#742).
+        hum = None if raw_val in (0x00, 0xEF, 0xFF) else raw_val / 2.0
+        return cls(humidity_percent=hum)
 
     def to_bytes(self) -> bytes:
         """Pack outdoor humidity data into binary payload.
@@ -239,6 +245,8 @@ class OutdoorHumidityPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        if self.humidity_percent is None:
+            return bytes([0, 0x00])
         raw_val = int(round(self.humidity_percent * 2.0))
         return bytes([0, raw_val])
 
@@ -303,7 +311,7 @@ class RelativeHumidityPayload(PayloadBase):
     :type humidity_percent: float
     """
 
-    humidity_percent: float
+    humidity_percent: float | None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -318,7 +326,13 @@ class RelativeHumidityPayload(PayloadBase):
         if not raw_data:
             raise ValueError("Payload data cannot be empty")
         raw_val = raw_data[0]
-        return cls(humidity_percent=raw_val / 2.0)
+        # PROTOCOL QUIRK: 0x00, 0xEF, and 0xFF are protocol sentinel
+        # null-markers indicating an uninstalled or absent humidity
+        # sensor. Zero atmospheric humidity (0.0%) is physically
+        # impossible. Normalise sentinel bytes to None to prevent
+        # invalid 0.0% domain states (see ramses-rf/ramses_cc#742).
+        hum = None if raw_val in (0x00, 0xEF, 0xFF) else raw_val / 2.0
+        return cls(humidity_percent=hum)
 
     def to_bytes(self) -> bytes:
         """Pack relative humidity data into binary payload.
@@ -326,6 +340,8 @@ class RelativeHumidityPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        if self.humidity_percent is None:
+            return bytes([0x00])
         raw_val = int(round(self.humidity_percent * 2.0))
         return bytes([raw_val])
 
@@ -690,15 +706,15 @@ class FanModePayload(PayloadBase):
 
     :param header: Domain or header index byte.
     :type header: int
-    :param mode_idx: Selected fan mode integer index.
-    :type mode_idx: int
-    :param mode_max: Maximum supported fan mode integer index.
-    :type mode_max: int
+    :param mode_idx: Selected fan mode integer index, or None if unconfigured.
+    :type mode_idx: int | None
+    :param mode_max: Maximum supported fan mode integer index, or None if unconfigured.
+    :type mode_max: int | None
     """
 
     header: int
-    mode_idx: int
-    mode_max: int
+    mode_idx: int | None
+    mode_max: int | None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -712,7 +728,15 @@ class FanModePayload(PayloadBase):
         """
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 22F1: {len(raw_data)}")
-        return cls(header=raw_data[0], mode_idx=raw_data[1], mode_max=raw_data[2])
+        raw_idx = raw_data[1]
+        raw_max = raw_data[2]
+        # PROTOCOL QUIRK: 0xFF, 0xFE, and 0xEF are protocol sentinel
+        # null-markers indicating unconfigured or unrecognised fan mode
+        # indices. Normalise sentinel bytes to None to preserve clean
+        # mode representations (see ramses-rf/ramses_cc#723).
+        mode_idx = None if raw_idx in (0xEF, 0xFE, 0xFF) else raw_idx
+        mode_max = None if raw_max in (0xEF, 0xFE, 0xFF) else raw_max
+        return cls(header=raw_data[0], mode_idx=mode_idx, mode_max=mode_max)
 
     def to_bytes(self) -> bytes:
         """Pack fan mode data into 3-byte binary payload.
@@ -720,7 +744,9 @@ class FanModePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return bytes([self.header, self.mode_idx, self.mode_max])
+        raw_idx = 0xFF if self.mode_idx is None else self.mode_idx
+        raw_max = 0xFF if self.mode_max is None else self.mode_max
+        return bytes([self.header, raw_idx, raw_max])
 
 
 @register_payload("2411")
@@ -745,7 +771,7 @@ class HvacFanParamPayload(PayloadBase):
       Payload hex      : 00000A0010000000050000000000000064000000010001
 
     Protocol Notes:
-      # See: https://github.com/ramses-rf/ramses_rf/issues/830
+      # See: ramses-rf/ramses_rf#830
       # 4-byte boolean parameter values: 0 = False, 1 = True.
       # Sentinel values (e.g. 0x000000FF, 0xFFFFFFFF) indicate parameter N/A.
 
@@ -753,8 +779,8 @@ class HvacFanParamPayload(PayloadBase):
     :type param_id: int
     :param data_type: Parameter data type integer.
     :type data_type: int
-    :param value_scaled: Current scaled parameter value integer.
-    :type value_scaled: int
+    :param value_scaled: Current scaled parameter value integer, or None if sentinel/N/A.
+    :type value_scaled: int | None
     :param min_val_scaled: Minimum allowed scaled parameter value integer.
     :type min_val_scaled: int
     :param max_val_scaled: Maximum allowed scaled parameter value integer.
@@ -769,7 +795,7 @@ class HvacFanParamPayload(PayloadBase):
 
     param_id: int
     data_type: int
-    value_scaled: int
+    value_scaled: int | None
     min_val_scaled: int
     max_val_scaled: int
     precision_scaled: int
@@ -799,10 +825,15 @@ class HvacFanParamPayload(PayloadBase):
             prec_s,
             trailer,
         ) = struct.unpack(cls._STRUCT_FMT, parse_data[:23])
+        # PROTOCOL QUIRK: Sentinel values (e.g. 0x000000FF, 0xFFFFFFFF, -1)
+        # indicate parameter N/A or unconfigured hardware setting.
+        # Normalise sentinel values to None to prevent invalid parameter
+        # states (see ramses-rf/ramses_rf#830).
+        val_scaled = None if val_s in (0x000000FF, 0xFFFFFFFF, -1) else val_s
         return cls(
             param_id=p_id,
             data_type=d_type,
-            value_scaled=val_s,
+            value_scaled=val_scaled,
             min_val_scaled=min_s,
             max_val_scaled=max_s,
             precision_scaled=prec_s,
@@ -815,13 +846,14 @@ class HvacFanParamPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        val_s = -1 if self.value_scaled is None else self.value_scaled
         return struct.pack(
             self._STRUCT_FMT,
             0,
             self.param_id,
             0,
             self.data_type,
-            self.value_scaled,
+            val_s,
             self.min_val_scaled,
             self.max_val_scaled,
             self.precision_scaled,

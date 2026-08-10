@@ -751,12 +751,21 @@ class DeviceRegistry:
     async def get_hvac_orphans(self) -> list[DeviceIdT]:
         """Return a list of IDs for orphaned HVAC devices.
 
+        Excludes any HVAC device that is a member of a FAN's
+        ``_remote_ids`` or ``_sensor_ids`` (i.e. owned by a FAN).
+
         :returns: A list of device IDs.
         :rtype: list[DeviceIdT]
         """
+        from .hvac_ventilators import HvacVentilator
+
+        owned: set[DeviceIdT] = set()
+        for d in self.devices:
+            if isinstance(d, HvacVentilator):
+                owned |= d._remote_ids | d._sensor_ids
         orphans = []
         for d in self.devices:
-            if isinstance(d, DeviceHvac):
+            if isinstance(d, DeviceHvac) and d.id not in owned:
                 is_present = (
                     await d._is_present() if hasattr(d, "_is_present") else False
                 )

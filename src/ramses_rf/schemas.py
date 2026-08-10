@@ -434,7 +434,8 @@ def load_fan(gwy: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
     :rtype: Device
     """
     fan = _get_device(gwy, fan_id)
-    # fan._update_schema(**schema)  # TODO
+    if hasattr(fan, "_update_schema"):
+        fan._update_schema(**schema)
 
     return fan
 
