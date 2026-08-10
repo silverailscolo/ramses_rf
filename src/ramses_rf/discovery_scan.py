@@ -109,7 +109,13 @@ _ZONE_BINDING_CODES: frozenset[str] = frozenset(
 # communicating with its paired remote.  See schema_architecture.md:
 # "How HVAC topology COULD be derived from traffic".
 _HVAC_PARENT_INFERENCE_CODES: frozenset[str] = frozenset(
-    {"22F1", "31E0", "31DA", "10D0"}  # fan_mode, vent_demand, fan_status, outside_temp
+    {
+        "22F1",  # fan_mode
+        "31E0",  # vent_demand
+        "31DA",  # fan_status
+        "10D0",  # outside_temp
+        "2411",  # fan_params — FAN RP to REM's RQ, most common directed exchange
+    }
 )
 
 # TPI loop codes broadcast by a BDR (13:) or OTB (10:) acting as the
@@ -573,6 +579,32 @@ class DiscoveryScan:
                     dev.domain_id = domain_id
                     dev.confidence = "high"
                     self._dirty = True
+
+                # HVAC topology inference for known devices: a FAN (32:)
+                # sending a directed I/RP to this device confirms binding.
+                # This is the same check as the unknown-device path below
+                # (line ~725), but the known-device path returns early at
+                # line ~582, so we need to run it here too.
+                if (
+                    not is_hgi
+                    and not dev.bound_to
+                    and not is_src
+                    and src
+                    and _is_valid_address(src)
+                    and src.startswith("32:")
+                    and verb in (" I", "RP")
+                    and code in _HVAC_PARENT_INFERENCE_CODES
+                ):
+                    dev.bound_to = src
+                    self._dirty = True
+                    _LOGGER.debug(
+                        "DiscoveryScan: HVAC bound_to %s -> %s (known device, "
+                        "code=%s, verb=%s)",
+                        dev_id,
+                        src,
+                        code,
+                        verb.strip(),
+                    )
             return
 
         now = dt.now().isoformat(timespec="seconds")

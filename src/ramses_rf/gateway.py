@@ -28,7 +28,13 @@ from ramses_tx.typing import PayloadT
 
 from .config import GatewayConfig as GatewayConfig, strip_and_map_schema
 from .const import Code, VerbT
-from .devices import DeviceFilter, DeviceRegistry, HgiGateway, device_factory
+from .devices import (
+    DeviceFilter,
+    DeviceRegistry,
+    HgiGateway,
+    HvacVentilator,
+    device_factory,
+)
 from .dispatcher import detect_array_fragment, process_msg
 from .interfaces import (
     DeviceFilterInterface,
@@ -153,7 +159,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             exclude=[DeviceIdT(k) for k in self._gwy_config.block_list],
             unwanted=self._engine._unwanted,
             enforce_known_list=self._gwy_config.engine.enforce_known_list,
-            hgi_id_provider=lambda: getattr(self.hgi, "id", None),
+            hgi_id_provider=lambda: (
+                getattr(self.hgi, "id", None) or self._gwy_config.hgi_id
+            ),
         )
 
         self._device_registry: DeviceRegistryInterface = DeviceRegistry(
@@ -310,6 +318,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         schema: dict[str, Any] = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}
         for tcs in self.device_registry.systems:
             schema[tcs.ctl.id] = await tcs.schema()
+        # Include FAN/VCS topology (remotes/sensors membership) so that
+        # HVAC structure round-trips across restarts via load_fan()
+        for dev in self.device_registry.devices:
+            if isinstance(dev, HvacVentilator) and (dev._remote_ids or dev._sensor_ids):
+                schema[dev.id] = await dev.schema()
         schema[f"{SZ_ORPHANS}_heat"] = await self.device_registry.get_heat_orphans()
         schema[f"{SZ_ORPHANS}_hvac"] = await self.device_registry.get_hvac_orphans()
         return schema

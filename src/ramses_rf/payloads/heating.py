@@ -6,9 +6,13 @@ packet payloads.
 
 import struct
 from dataclasses import dataclass
+from datetime import datetime as dt
 from typing import ClassVar, Self
 
-from .base import PayloadBase
+from ramses_tx.helpers import hex_from_dtm
+
+from .base import PayloadBase, parse_idx
+from .dhw import DhwParamsPayload
 from .registry import register_payload
 
 
@@ -97,8 +101,13 @@ class TemperaturePayload(PayloadBase):
     :type temperature: float | bool | None
     """
 
-    zone_idx: int | None
+    zone_idx: int | str | None
     temperature: float | bool | None
+
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.zone_idx, str):
+            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -144,7 +153,8 @@ class TemperaturePayload(PayloadBase):
 
         temp_bytes = temp_raw.to_bytes(2, byteorder="big", signed=True)
         if self.zone_idx is not None:
-            return bytes([self.zone_idx]) + temp_bytes
+            idx = parse_idx(self.zone_idx)
+            return bytes([idx]) + temp_bytes
         return temp_bytes
 
 
@@ -174,11 +184,16 @@ class ScheduleFragmentPayload(PayloadBase):
     :type fragment_bytes: bytes
     """
 
-    zone_idx: int
+    zone_idx: int | str
     frag_number: int
     total_frags: int
     fragment_bytes: bytes
-    _header_prefix: bytes = b"\x20\x00\x08"
+    _header_prefix: bytes | None = None
+
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.zone_idx, str):
+            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -194,12 +209,16 @@ class ScheduleFragmentPayload(PayloadBase):
             raise ValueError(
                 f"Invalid fragment payload length for 0404: {len(raw_data)}"
             )
+        prefix = raw_data[1:4]
+        zone_idx: int | str = (
+            "HW" if raw_data[0] == 0 and prefix == b"\x23\x00\x08" else raw_data[0]
+        )
         return cls(
-            zone_idx=raw_data[0],
+            zone_idx=zone_idx,
             frag_number=raw_data[5],
             total_frags=raw_data[6],
             fragment_bytes=raw_data[7:],
-            _header_prefix=raw_data[1:4],
+            _header_prefix=prefix,
         )
 
     def to_bytes(self) -> bytes:
@@ -208,9 +227,16 @@ class ScheduleFragmentPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        idx = parse_idx(self.zone_idx)
+        prefix = (
+            self._header_prefix
+            if self._header_prefix is not None
+            else (b"\x23\x00\x08" if idx == 0xFA else b"\x20\x00\x08")
+        )
+        byte_idx = 0x00 if prefix == b"\x23\x00\x08" and idx == 0xFA else idx
         hdr = (
-            bytes([self.zone_idx])
-            + self._header_prefix
+            bytes([byte_idx])
+            + prefix
             + bytes(
                 [
                     len(self.fragment_bytes),
@@ -282,6 +308,41 @@ class ScheduleSwitchpointPayload(PayloadBase):
             setpoint_value=val,
         )
 
+    @classmethod
+    def from_switchpoint(
+        cls,
+        zone_idx: int | str,
+        day_of_week: int,
+        time_of_day_mins: int,
+        setpoint: float | bool | None,
+    ) -> Self:
+        """Create a ScheduleSwitchpointPayload from switchpoint domain values.
+
+        :param zone_idx: Zone or domain index byte or string.
+        :type zone_idx: int | str
+        :param day_of_week: Day of week integer (0-6).
+        :type day_of_week: int
+        :param time_of_day_mins: Time of day in minutes.
+        :type time_of_day_mins: int
+        :param setpoint: Temperature setpoint float, boolean state, or None.
+        :type setpoint: float | bool | None
+        :returns: A populated ScheduleSwitchpointPayload instance.
+        :rtype: Self
+        """
+        idx = parse_idx(zone_idx)
+        if isinstance(setpoint, bool):
+            value = int(setpoint)
+        elif isinstance(setpoint, (int, float)):
+            value = int(setpoint * 100)
+        else:
+            value = 0
+        return cls(
+            zone_idx=idx,
+            day_of_week=day_of_week,
+            time_of_day_mins=time_of_day_mins,
+            setpoint_value=value,
+        )
+
     def to_bytes(self) -> bytes:
         """Pack schedule switchpoint information into bytes.
 
@@ -324,19 +385,26 @@ class DhwTemperaturePayload(PayloadBase):
     :type temperature: float | bool | None
     """
 
-    dhw_idx: int | None
+    dhw_idx: int | str | None
     temperature: float | bool | None
 
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.dhw_idx, str):
+            object.__setattr__(self, "dhw_idx", parse_idx(self.dhw_idx))
+
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack DHW temperature binary payload.
+    def from_bytes(cls, raw_data: bytes) -> Self | DhwParamsPayload:
+        """Unpack DHW temperature or parameters binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked DhwTemperaturePayload instance.
-        :rtype: Self
+        :returns: Unpacked DhwTemperaturePayload or DhwParamsPayload instance.
+        :rtype: Self | DhwParamsPayload
         :raises ValueError: If raw_data length is invalid.
         """
+        if len(raw_data) >= 6:
+            return DhwParamsPayload.from_bytes(raw_data)
         if len(raw_data) == 2:
             idx = None
             temp_bytes = raw_data
@@ -371,7 +439,8 @@ class DhwTemperaturePayload(PayloadBase):
 
         temp_bytes = temp_raw.to_bytes(2, byteorder="big", signed=True)
         if self.dhw_idx is not None:
-            return bytes([self.dhw_idx]) + temp_bytes
+            idx = parse_idx(self.dhw_idx)
+            return bytes([idx]) + temp_bytes
         return temp_bytes
 
 
@@ -563,21 +632,31 @@ class ZoneConfigPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BBhh"
 
-    zone_idx: int
+    zone_idx: int | str
     zone_flags: int
     min_temp: float
     max_temp: float
 
-    @classmethod
-    def _from_bytes_single(cls, raw_data: bytes) -> Self:
-        """Unpack a single 6-byte zone config binary payload.
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.zone_idx, str):
+            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
 
-        :param raw_data: 6-byte raw binary byte string.
+    @classmethod
+    def _from_bytes_single(cls, raw_data: bytes, offset: int = 0) -> Self:
+        """Unpack a single 6-byte zone config binary payload from offset.
+
+        :param raw_data: Raw binary byte string.
         :type raw_data: bytes
+        :param offset: Byte offset within raw_data to unpack from.
+        :type offset: int
         :returns: Unpacked ZoneConfigPayload instance.
         :rtype: Self
         """
-        idx, flags, min_raw, max_raw = struct.unpack(cls._STRUCT_FMT, raw_data)
+        # Unpack idx, flags, min_temp, max_temp directly from offset
+        idx, flags, min_raw, max_raw = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, offset
+        )
         return cls(
             zone_idx=idx,
             zone_flags=flags,
@@ -599,11 +678,10 @@ class ZoneConfigPayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 000A: {len(raw_data)}")
         if len(raw_data) > 6:
             return [
-                cls._from_bytes_single(raw_data[i : i + 6])
-                for i in range(0, len(raw_data), 6)
+                cls._from_bytes_single(raw_data, i) for i in range(0, len(raw_data), 6)
             ]
 
-        return cls._from_bytes_single(raw_data)
+        return cls._from_bytes_single(raw_data, 0)
 
     def to_bytes(self) -> bytes:
         """Pack zone config data into binary payload.
@@ -611,15 +689,72 @@ class ZoneConfigPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        idx = parse_idx(self.zone_idx)
         min_raw = int(round(self.min_temp * 100.0))
         max_raw = int(round(self.max_temp * 100.0))
         return struct.pack(
             self._STRUCT_FMT,
-            self.zone_idx,
+            idx,
             self.zone_flags,
             min_raw,
             max_raw,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ZoneNamePayload(PayloadBase):
+    """Zone name payload (Opcode 0004 W / 0004 RP name variant).
+
+    22-byte Zone Name binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Zone Index (uint8)           : 00
+      +1       B      1B   Flag Byte (uint8)            : 00
+      +2       20s    20B  ASCII Zone Name (20B null-pad): 4C 6F 75 6E 67 65 00... ("Lounge")
+      --------------------------------------------------------------
+
+    :param zone_idx: Zone index byte.
+    :type zone_idx: int | str
+    :param name: ASCII Zone Name string (max 20 chars).
+    :type name: str
+    """
+
+    zone_idx: int | str
+    name: str
+
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.zone_idx, str):
+            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack zone name binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked ZoneNamePayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 22 bytes.
+        """
+        if len(raw_data) < 22:
+            raise ValueError(
+                f"Invalid payload length for ZoneNamePayload: {len(raw_data)}"
+            )
+        # Unpack zone_idx (uint8), skip 1 pad byte, and extract 20-byte string
+        idx, name_raw = struct.unpack_from(">Bx20s", raw_data, 0)
+        name = name_raw.rstrip(b"\x00").decode("ascii", errors="replace")
+        return cls(zone_idx=idx, name=name)
+
+    def to_bytes(self) -> bytes:
+        """Pack zone name data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        idx = parse_idx(self.zone_idx)
+        name_bytes = self.name.encode("ascii", errors="replace")[:20].ljust(20, b"\x00")
+        return bytes([idx, 0x00]) + name_bytes
 
 
 @register_payload("0004")
@@ -637,28 +772,35 @@ class ZoneSetpointPayload(PayloadBase):
       Payload hex      : 0107D0
 
     :param zone_idx: Zone index byte.
-    :type zone_idx: int
+    :type zone_idx: int | str
     :param setpoint_temp: Target temperature in °C.
     :type setpoint_temp: float
     """
 
-    zone_idx: int
+    zone_idx: int | str
     setpoint_temp: float
 
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.zone_idx, str):
+            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> Self:
+    def from_bytes(cls, raw_data: bytes) -> Self | ZoneNamePayload:
         """Unpack zone setpoint binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked ZoneSetpointPayload instance.
-        :rtype: Self
+        :returns: Unpacked ZoneSetpointPayload or ZoneNamePayload instance.
+        :rtype: Self | ZoneNamePayload
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
+        if len(raw_data) >= 22:
+            return ZoneNamePayload.from_bytes(raw_data)
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 0004: {len(raw_data)}")
-        idx = raw_data[0]
-        sp_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        # Unpack zone_idx (uint8) and setpoint_raw (int16) directly from offset 0
+        idx, sp_raw = struct.unpack_from(">Bh", raw_data, 0)
         return cls(zone_idx=idx, setpoint_temp=sp_raw / 100.0)
 
     def to_bytes(self) -> bytes:
@@ -668,7 +810,8 @@ class ZoneSetpointPayload(PayloadBase):
         :rtype: bytes
         """
         sp_raw = int(round(self.setpoint_temp * 100.0))
-        return bytes([self.zone_idx]) + sp_raw.to_bytes(2, byteorder="big", signed=True)
+        idx = parse_idx(self.zone_idx)
+        return bytes([idx]) + sp_raw.to_bytes(2, byteorder="big", signed=True)
 
 
 @register_payload("12C0")
@@ -702,7 +845,8 @@ class OutdoorTempPayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 12C0: {len(raw_data)}")
-        temp_raw = int.from_bytes(raw_data[:2], byteorder="big", signed=True)
+        # Unpack 16-bit signed outdoor temperature directly from offset 0
+        (temp_raw,) = struct.unpack_from(">h", raw_data, 0)
         return cls(temperature=temp_raw / 100.0)
 
     def to_bytes(self) -> bytes:
@@ -1294,10 +1438,18 @@ class ZoneModePayload(PayloadBase):
     :type duration_minutes: int | None
     """
 
-    zone_idx: int
-    setpoint_temp: float
-    mode_code: int
-    duration_minutes: int | None
+    zone_idx: int | str
+    setpoint_temp: float | None
+    mode_code: int | str
+    duration_minutes: int | None = None
+    until_dtm: str | dt | bytes | None = None
+
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.zone_idx, str):
+            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.mode_code, str):
+            object.__setattr__(self, "mode_code", int(self.mode_code, 16))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1312,15 +1464,20 @@ class ZoneModePayload(PayloadBase):
         if len(raw_data) < 4:
             raise ValueError(f"Invalid payload length for 2349: {len(raw_data)}")
         sp_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        setpoint = None if sp_raw in (0x31FF, 0x7FFF) else sp_raw / 100.0
         mode = raw_data[3]
         dur = None
         if len(raw_data) >= 7 and raw_data[4:7] != b"\xff\xff\xff":
             dur = int.from_bytes(raw_data[4:7], byteorder="big")
+        until_raw = None
+        if len(raw_data) >= 13:
+            until_raw = raw_data[7:13].hex().upper()
         return cls(
             zone_idx=raw_data[0],
-            setpoint_temp=sp_raw / 100.0,
+            setpoint_temp=setpoint,
             mode_code=mode,
             duration_minutes=dur,
+            until_dtm=until_raw,
         )
 
     def to_bytes(self) -> bytes:
@@ -1329,13 +1486,36 @@ class ZoneModePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        sp_raw = int(round(self.setpoint_temp * 100.0))
-        res = bytes([self.zone_idx]) + sp_raw.to_bytes(2, byteorder="big", signed=True)
-        res += bytes([self.mode_code])
+        idx = parse_idx(self.zone_idx)
+        if self.setpoint_temp is None:
+            sp_raw = 0x7FFF
+        else:
+            sp_raw = int(round(self.setpoint_temp * 100.0))
+        mode = (
+            int(self.mode_code, 16)
+            if isinstance(self.mode_code, str)
+            else self.mode_code
+        )
+        res = (
+            bytes([idx])
+            + sp_raw.to_bytes(2, byteorder="big", signed=True)
+            + bytes([mode])
+        )
         if self.duration_minutes is not None:
             res += self.duration_minutes.to_bytes(3, byteorder="big")
         else:
             res += b"\xff\xff\xff"
+        if self.until_dtm is not None:
+            if isinstance(self.until_dtm, bytes):
+                res += self.until_dtm
+            elif (
+                isinstance(self.until_dtm, str)
+                and len(self.until_dtm) == 12
+                and all(c in "0123456789ABCDEFabcdef" for c in self.until_dtm)
+            ):
+                res += bytes.fromhex(self.until_dtm)
+            else:
+                res += bytes.fromhex(hex_from_dtm(self.until_dtm))
         return res
 
 

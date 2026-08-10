@@ -47,7 +47,7 @@ from ramses_rf.schemas import (
     SZ_SENSOR,
 )
 from ramses_rf.topology import Child, Parent
-from ramses_rf.typing import DeviceIdT, DevIndexT, InnerScheduleT, OuterScheduleT
+from ramses_rf.typing import DeviceIdT, DevIndexT, WeeklySchedule
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.typing import PayDictT
 
@@ -163,16 +163,15 @@ class ZoneSchedule(ZoneBase):  # 0404
 
         self._schedule = Schedule(self)  # type: ignore[arg-type]
 
-    async def get_schedule(self, *, force_io: bool = False) -> InnerScheduleT | None:
+    async def get_schedule(self, *, force_io: bool = False) -> WeeklySchedule | None:
         await self._schedule.get_schedule(force_io=force_io)
         return self.schedule
 
-    async def set_schedule(self, schedule: OuterScheduleT) -> InnerScheduleT | None:
-        await self._schedule.set_schedule(schedule)  # type: ignore[arg-type]
-        return self.schedule
+    async def set_schedule(self, schedule: WeeklySchedule) -> WeeklySchedule | None:
+        return await self._schedule.set_schedule(schedule)
 
     @property
-    def schedule(self) -> InnerScheduleT | None:
+    def schedule(self) -> WeeklySchedule | None:
         """Return the latest schedule (not guaranteed to be up to date)."""
         # inner: [{"day_of_week": 0, "switchpoints": [...],
         # {"day_of_week": 1, ...
@@ -506,7 +505,25 @@ class Zone(ZoneSchedule):
 
         # if schema.get(SZ_CLASS) == ZON_ROLE_MAP[ZON_ROLE.ACT]:
         #     schema.pop(SZ_CLASS)
-        schema = shrink(SCH_TCS_ZONES_ZON(schema))
+        validated = SCH_TCS_ZONES_ZON(schema)
+
+        # Hydrate zone_state.name from the schema's _name before shrink()
+        # strips it (ramses-rf/ramses_cc#919: zone names lost after 24h
+        # when the MessageStore prunes 0004 packets — the schema is the
+        # only persistent source of the name).
+        schema_name = validated.get(f"_{SZ_NAME}")
+        _LOGGER.debug(
+            "Zone %s _update_schema: _name=%r, zone_state.name=%r",
+            self.id,
+            schema_name,
+            self.zone_state.name,
+        )
+        if schema_name and self.zone_state.name is None:
+            self.zone_state = dataclasses.replace(
+                self.zone_state, name=str(schema_name)
+            )
+
+        schema = shrink(validated)
 
         if klass := schema.get(SZ_CLASS):
             set_zone_type(ZON_ROLE_MAP[klass])

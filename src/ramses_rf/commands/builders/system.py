@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from ramses_rf.commands.builders.helpers import _check_idx, resolve_addrs
+from ramses_rf.commands.builders.helpers import check_idx, resolve_addrs
 from ramses_rf.commands.core import Command
 from ramses_rf.const import DEV_TYPE_MAP, SYS_MODE_MAP
 from ramses_rf.enums import DevType
@@ -49,7 +49,7 @@ def build_put_weather_temp(intent: Command) -> CommandDTO:
 def build_get_relay_demand(intent: Command) -> CommandDTO:
     """Translate a GET_RELAY_DEMAND intent into a CommandDTO."""
     zone_idx = intent.get("zone_idx")
-    payload = "00" if zone_idx is None else _check_idx(zone_idx)
+    payload = "00" if zone_idx is None else check_idx(zone_idx)
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
@@ -84,7 +84,7 @@ def build_get_system_language(intent: Command) -> CommandDTO:
 def build_get_mix_valve_params(intent: Command) -> CommandDTO:
     """Translate a GET_MIX_VALVE_PARAMS intent into a CommandDTO."""
     zone_idx = intent.get("zone_idx")
-    zon_idx = _check_idx(zone_idx)
+    zon_idx = check_idx(zone_idx)
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -108,7 +108,7 @@ def build_set_mix_valve_params(intent: Command) -> CommandDTO:
     pump_run_time = intent.get("pump_run_time", 15)
     boolean_cc = intent.get("boolean_cc", 1)
 
-    zon_idx = _check_idx(zone_idx)
+    zon_idx = check_idx(zone_idx)
 
     if not (0 <= max_flow_setpoint <= 99):
         raise ValueError(f"Out of range, max_flow_setpoint: {max_flow_setpoint}")
@@ -163,7 +163,7 @@ def build_get_tpi_params(intent: Command) -> CommandDTO:
         addr2=addr2,
         addr3=addr3,
         code=Code._1100,
-        payload=_check_idx(domain_id),
+        payload=check_idx(domain_id),
         priority=Priority.DEFAULT,
         num_repeats=DEFAULT_NUM_REPEATS,
     )
@@ -182,7 +182,7 @@ def build_set_tpi_params(intent: Command) -> CommandDTO:
 
     payload = "".join(
         (
-            _check_idx(domain_id),
+            check_idx(domain_id),
             f"{cycle_rate * 4:02X}",
             f"{int(min_on_time * 4):02X}",
             f"{int(min_off_time * 4):02X}00",

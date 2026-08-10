@@ -306,7 +306,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         :returns: The created or retrieved heating zone.
         :rtype: Zone
         """
-        schema = shrink(SCH_TCS_ZONES_ZON(schema))
+        # Use keep_hints=True so _name survives shrink() and reaches
+        # Zone._update_schema for hydration (ramses-rf/ramses_cc#919).
+        schema = shrink(SCH_TCS_ZONES_ZON(schema), keep_hints=True)
 
         zon: Zone = self.zone_by_idx.get(zone_idx)  # type: ignore[assignment]
         if zon is None:  # not found in tcs, create it
@@ -803,7 +805,12 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         """
 
         _schema: dict[str, Any]
-        schema = shrink(SCH_TCS(schema))
+        # Use keep_hints=True so that _name in zone entries survives
+        # shrink() and reaches Zone._update_schema for hydration
+        # (ramses-rf/ramses_cc#919: zone names lost after 24h).
+        # SCH_TCS validation ensures only allowed _ keys (i.e. _name)
+        # are present, so keep_hints is safe here.
+        schema = shrink(SCH_TCS(schema), keep_hints=True)
 
         if schema.get(SZ_SYSTEM) and (
             dev_id := schema[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL)

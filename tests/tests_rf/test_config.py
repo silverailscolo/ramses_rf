@@ -35,11 +35,17 @@ class TestStripAndMapTraits:
         assert result["class"] == "FAN"
 
     def test_strip_disabled_name_owner(self) -> None:
-        """_disabled, _name, _owner are stripped (ramses_cc-only)."""
+        """_disabled, _owner are stripped (ramses_cc-only).
+
+        _name is preserved (not stripped) because ramses_rf's
+        SCH_TCS_ZONES_ZON accepts it for zone name hydration
+        (ramses-rf/ramses_cc#919: zone names lost after 24h).
+        """
         traits = {"_disabled": True, "_name": "My REM", "_owner": "me", "alias": "test"}
         result = strip_and_map_traits(traits)
         assert "_disabled" not in result
-        assert "_name" not in result
+        assert "_name" in result  # preserved for zone name hydration (issue 919)
+        assert result["_name"] == "My REM"
         assert "_owner" not in result
         assert result["alias"] == "test"
 
@@ -107,14 +113,19 @@ class TestStripAndMapTraits:
         assert result["alias"] == "My Fan"
 
     def test_recursive_nested_dict_strips_underscore(self) -> None:
-        """_name inside a nested dict (e.g. a zone) is stripped."""
+        """_name inside a nested dict (e.g. a zone) is preserved.
+
+        _name is preserved (not stripped) because ramses_rf's
+        SCH_TCS_ZONES_ZON accepts it for zone name hydration
+        (ramses-rf/ramses_cc#919: zone names lost after 24h).
+        """
         traits = {
             "class": "TCS",
             "zones": {"01": {"_name": "Living Room", "setpoint": 20.0}},
         }
         result = strip_and_map_traits(traits)
-        assert result["zones"]["01"] == {"setpoint": 20.0}
-        assert "_name" not in result["zones"]["01"]
+        assert result["zones"]["01"]["setpoint"] == 20.0
+        assert result["zones"]["01"]["_name"] == "Living Room"  # preserved (issue 919)
 
     def test_recursive_nested_dict_maps_underscore(self) -> None:
         """_bound inside a nested dict is mapped to bound."""
@@ -127,7 +138,10 @@ class TestStripAndMapTraits:
         assert "_bound" not in result["zones"]["01"]
 
     def test_recursive_deeply_nested(self) -> None:
-        """Recursion works at arbitrary depth."""
+        """Recursion works at arbitrary depth.
+
+        _name is preserved (issue 919), _disabled is stripped.
+        """
         traits = {
             "class": "TCS",
             "zones": {
@@ -135,7 +149,7 @@ class TestStripAndMapTraits:
             },
         }
         result = strip_and_map_traits(traits)
-        assert "_name" not in result["zones"]["01"]
+        assert result["zones"]["01"]["_name"] == "Zone 1"  # preserved (issue 919)
         assert "_disabled" not in result["zones"]["01"]["sub"]
         assert result["zones"]["01"]["sub"] == {"ok": 1}
 

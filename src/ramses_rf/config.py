@@ -171,6 +171,11 @@ _TRAIT_KEY_MAP: Final[dict[str, str]] = {
     "_is_battery": SZ_IS_BATTERY,
 }
 
+# _-prefixed keys that are preserved as-is (not stripped/mapped) because
+# ramses_rf schemas accept them directly (e.g. SCH_TCS_ZONES_ZON accepts
+# _name for zone name hydration — ramses-rf/ramses_cc#919).
+_TRAIT_PRESERVE_KEYS: Final[frozenset[str]] = frozenset({"_name"})
+
 
 def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
     """Strip ramses_cc-only ``_``-prefixed keys and map known ones to native traits.
@@ -206,7 +211,7 @@ def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
             else:
                 result[key] = value
             continue
-        # _-prefixed key: map or strip
+        # _-prefixed key: map, preserve, or strip
         native_key = _TRAIT_KEY_MAP.get(key)
         if native_key is not None and native_key not in result:
             # Recurse into mapped value if it's a dict
@@ -214,6 +219,12 @@ def strip_and_map_traits(traits: dict[str, Any]) -> dict[str, Any]:
                 result[native_key] = strip_and_map_traits(value)
             else:
                 result[native_key] = value
+        elif key in _TRAIT_PRESERVE_KEYS:
+            # Preserve as-is (ramses_rf schemas accept these _-prefixed keys)
+            if isinstance(value, dict):
+                result[key] = strip_and_map_traits(value)
+            else:
+                result[key] = value
         # else: strip (drop the key)
     return result
 

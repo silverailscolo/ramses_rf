@@ -1,23 +1,53 @@
 """RAMSES RF - Zone command intent to L3 payload translation."""
 
 from ramses_rf.commands.builders.helpers import (
-    _check_idx,
-    _normalise_mode,
-    _normalise_until,
+    check_idx,
+    normalise_mode,
+    normalise_until,
     resolve_addrs,
 )
 from ramses_rf.commands.core import Command
+from ramses_rf.payloads.heating import (
+    ZoneConfigPayload,
+    ZoneModePayload,
+    ZoneNamePayload,
+    ZoneSetpointPayload,
+)
 from ramses_tx.const import DEFAULT_NUM_REPEATS, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
-from ramses_tx.helpers import hex_from_dtm, hex_from_temp
+
+
+def _build_zone_rq(intent: Command, code: Code, payload_suffix: str = "") -> CommandDTO:
+    """Construct a standard single-zone RQ CommandDTO."""
+    zone_idx = intent.get("zone_idx")
+    if zone_idx is None:
+        raise ValueError("Missing 'zone_idx' in intent data")
+
+    payload = f"{check_idx(zone_idx)}{payload_suffix}"
+    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
+
+    return CommandDTO(
+        verb=RQ,
+        addr1=addr1,
+        addr2=addr2,
+        addr3=addr3,
+        code=code,
+        payload=payload,
+        priority=Priority.DEFAULT,
+        num_repeats=DEFAULT_NUM_REPEATS,
+    )
 
 
 def build_set_temperature(intent: Command) -> CommandDTO:
     """Translate an Action.SET_ZONE_SETPOINT intent into a CommandDTO.
 
-    :param intent: The intent containing 'zone_idx' (int|str) and 'setpoint'
-        (float).
-    :return: A CommandDTO representing the intent.
+    Constructs a 3-byte Opcode 2309 setpoint write command.
+
+    :param intent: The intent containing 'zone_idx' and 'setpoint'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' or 'setpoint' is missing.
     """
     zone_idx = intent.get("zone_idx")
     setpoint = intent.get("setpoint")
@@ -25,7 +55,8 @@ def build_set_temperature(intent: Command) -> CommandDTO:
     if zone_idx is None or setpoint is None:
         raise ValueError("Missing 'zone_idx' or 'setpoint' in intent data")
 
-    payload = f"{_check_idx(zone_idx)}{hex_from_temp(setpoint)}"
+    payload = ZoneSetpointPayload(zone_idx=zone_idx, setpoint_temp=setpoint).hex()
+
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -43,10 +74,14 @@ def build_set_temperature(intent: Command) -> CommandDTO:
 def build_set_mode(intent: Command) -> CommandDTO:
     """Translate an Action.SET_ZONE_MODE intent into a CommandDTO.
 
-    :param intent: The intent containing 'zone_idx' (int|str), 'mode'
-        (int|str|None), 'setpoint' (float|None), 'until' (str|datetime|None),
-        and 'duration' (int|None).
-    :return: A CommandDTO representing the intent.
+    Constructs a 7-byte or 13-byte Opcode 2349 mode override command.
+
+    :param intent: The intent containing 'zone_idx', 'mode', 'setpoint',
+        'until', and 'duration'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' is missing or parameters are invalid.
     """
     zone_idx = intent.get("zone_idx")
     if zone_idx is None:
@@ -57,22 +92,21 @@ def build_set_mode(intent: Command) -> CommandDTO:
     until = intent.get("until")
     duration = intent.get("duration")
 
-    mode = _normalise_mode(mode, setpoint, until, duration)
+    mode = normalise_mode(mode, setpoint, until, duration)
 
     if setpoint is not None and not isinstance(setpoint, (float, int)):
         raise ValueError(f"Invalid args: setpoint={setpoint}, but must be a float")
 
-    until, duration = _normalise_until(mode, setpoint, until, duration)
+    until, duration = normalise_until(mode, setpoint, until, duration)
 
-    payload = "".join(
-        (
-            _check_idx(zone_idx),
-            hex_from_temp(setpoint),
-            mode,
-            "FFFFFF" if duration is None else f"{duration:06X}",
-            "" if until is None else hex_from_dtm(until),
-        )
-    )
+    payload = ZoneModePayload(
+        zone_idx=zone_idx,
+        setpoint_temp=setpoint,
+        mode_code=mode,
+        duration_minutes=duration,
+        until_dtm=until,
+    ).hex()
+
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -90,8 +124,13 @@ def build_set_mode(intent: Command) -> CommandDTO:
 def build_set_name(intent: Command) -> CommandDTO:
     """Translate an Action.SET_ZONE_NAME intent into a CommandDTO.
 
-    :param intent: The intent containing 'zone_idx' (int|str) and 'name' (str).
-    :return: A CommandDTO representing the intent.
+    Constructs a 22-byte Opcode 0004 zone name write command.
+
+    :param intent: The intent containing 'zone_idx' and 'name'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' or 'name' is missing.
     """
     zone_idx = intent.get("zone_idx")
     name = intent.get("name")
@@ -99,9 +138,7 @@ def build_set_name(intent: Command) -> CommandDTO:
     if zone_idx is None or name is None:
         raise ValueError("Missing 'zone_idx' or 'name' in intent data")
 
-    from ramses_tx.helpers import hex_from_str
-
-    payload = f"{_check_idx(zone_idx)}00{hex_from_str(name)[:40]:0<40}"
+    payload = ZoneNamePayload(zone_idx=zone_idx, name=name).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -119,44 +156,54 @@ def build_set_name(intent: Command) -> CommandDTO:
 def build_set_config(intent: Command) -> CommandDTO:
     """Translate an Action.SET_ZONE_CONFIG intent into a CommandDTO.
 
-    :param intent: The intent containing 'zone_idx' (int|str), 'min_temp' (float),
-        'max_temp' (float), 'local_override' (bool), 'openwindow_function' (bool),
-        and 'multiroom_mode' (bool).
-    :return: A CommandDTO representing the intent.
+    Constructs a 6-byte Opcode 000A zone configuration write command.
+
+    :param intent: The intent containing 'zone_idx', 'min_temp',
+        'max_temp', 'local_override', 'openwindow_function', and
+        'multiroom_mode'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If required parameters are missing or out of range.
     """
     zone_idx = intent.get("zone_idx")
+    if zone_idx is None:
+        raise ValueError("Missing 'zone_idx' in intent data")
+
     min_temp = intent.get("min_temp", 5.0)
     max_temp = intent.get("max_temp", 35.0)
     local_override = intent.get("local_override", False)
     openwindow_function = intent.get("openwindow_function", False)
     multiroom_mode = intent.get("multiroom_mode", False)
 
-    if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
-
-    if not (5 <= min_temp <= 21):
+    if not (5.0 <= min_temp <= 21.0):
         raise ValueError(f"Out of range, min_temp: {min_temp}")
-    if not (21 <= max_temp <= 35):
+    if not (21.0 <= max_temp <= 35.0):
         raise ValueError(f"Out of range, max_temp: {max_temp}")
-    if not isinstance(local_override, bool):
-        raise ValueError(f"Invalid arg, local_override: {local_override}")
-    if not isinstance(openwindow_function, bool):
-        raise ValueError(f"Invalid arg, openwindow_function: {openwindow_function}")
-    if not isinstance(multiroom_mode, bool):
-        raise ValueError(f"Invalid arg, multiroom_mode: {multiroom_mode}")
 
-    bitmap = 0 if local_override else 1
-    bitmap |= 0 if openwindow_function else 2
-    bitmap |= 0 if multiroom_mode else 16
+    for flag_name, flag_val in (
+        ("local_override", local_override),
+        ("openwindow_function", openwindow_function),
+        ("multiroom_mode", multiroom_mode),
+    ):
+        if not isinstance(flag_val, bool):
+            raise ValueError(f"Invalid arg, {flag_name}: {flag_val}")
 
-    payload = "".join(
-        (
-            _check_idx(zone_idx),
-            f"{bitmap:02X}",
-            hex_from_temp(min_temp),
-            hex_from_temp(max_temp),
-        )
-    )
+    zone_flags = 0
+    if not local_override:
+        zone_flags |= 0x01
+    if not openwindow_function:
+        zone_flags |= 0x02
+    if not multiroom_mode:
+        zone_flags |= 0x10
+
+    payload = ZoneConfigPayload(
+        zone_idx=zone_idx,
+        zone_flags=zone_flags,
+        min_temp=min_temp,
+        max_temp=max_temp,
+    ).hex()
+
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -172,120 +219,72 @@ def build_set_config(intent: Command) -> CommandDTO:
 
 
 def build_get_name(intent: Command) -> CommandDTO:
-    zone_idx = intent.get("zone_idx")
-    if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+    """Translate a GET_ZONE_NAME intent into a CommandDTO.
 
-    payload = f"{_check_idx(zone_idx)}00"
-    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
-
-    return CommandDTO(
-        verb=RQ,
-        addr1=addr1,
-        addr2=addr2,
-        addr3=addr3,
-        code=Code._0004,
-        payload=payload,
-        priority=Priority.DEFAULT,
-        num_repeats=DEFAULT_NUM_REPEATS,
-    )
+    :param intent: The intent containing 'zone_idx'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' is missing in intent data.
+    """
+    return _build_zone_rq(intent, Code._0004, payload_suffix="00")
 
 
 def build_get_config(intent: Command) -> CommandDTO:
-    zone_idx = intent.get("zone_idx")
-    if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+    """Translate a GET_ZONE_CONFIG intent into a CommandDTO.
 
-    payload = f"{_check_idx(zone_idx)}"
-    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
-
-    return CommandDTO(
-        verb=RQ,
-        addr1=addr1,
-        addr2=addr2,
-        addr3=addr3,
-        code=Code._000A,
-        payload=payload,
-        priority=Priority.DEFAULT,
-        num_repeats=DEFAULT_NUM_REPEATS,
-    )
+    :param intent: The intent containing 'zone_idx'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' is missing in intent data.
+    """
+    return _build_zone_rq(intent, Code._000A)
 
 
 def build_get_window_state(intent: Command) -> CommandDTO:
-    zone_idx = intent.get("zone_idx")
-    if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+    """Translate a GET_ZONE_WINDOW_STATE intent into a CommandDTO.
 
-    payload = f"{_check_idx(zone_idx)}"
-    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
-
-    return CommandDTO(
-        verb=RQ,
-        addr1=addr1,
-        addr2=addr2,
-        addr3=addr3,
-        code=Code._12B0,
-        payload=payload,
-        priority=Priority.DEFAULT,
-        num_repeats=DEFAULT_NUM_REPEATS,
-    )
+    :param intent: The intent containing 'zone_idx'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' is missing in intent data.
+    """
+    return _build_zone_rq(intent, Code._12B0)
 
 
 def build_get_setpoint(intent: Command) -> CommandDTO:
-    zone_idx = intent.get("zone_idx")
-    if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+    """Translate a GET_ZONE_SETPOINT intent into a CommandDTO.
 
-    payload = f"{_check_idx(zone_idx)}"
-    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
-
-    return CommandDTO(
-        verb=RQ,
-        addr1=addr1,
-        addr2=addr2,
-        addr3=addr3,
-        code=Code._2309,
-        payload=payload,
-        priority=Priority.DEFAULT,
-        num_repeats=DEFAULT_NUM_REPEATS,
-    )
+    :param intent: The intent containing 'zone_idx'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' is missing in intent data.
+    """
+    return _build_zone_rq(intent, Code._2309)
 
 
 def build_get_mode(intent: Command) -> CommandDTO:
-    zone_idx = intent.get("zone_idx")
-    if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+    """Translate a GET_ZONE_MODE intent into a CommandDTO.
 
-    payload = f"{_check_idx(zone_idx)}"
-    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
-
-    return CommandDTO(
-        verb=RQ,
-        addr1=addr1,
-        addr2=addr2,
-        addr3=addr3,
-        code=Code._2349,
-        payload=payload,
-        priority=Priority.DEFAULT,
-        num_repeats=DEFAULT_NUM_REPEATS,
-    )
+    :param intent: The intent containing 'zone_idx'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' is missing in intent data.
+    """
+    return _build_zone_rq(intent, Code._2349)
 
 
 def build_get_temp(intent: Command) -> CommandDTO:
-    zone_idx = intent.get("zone_idx")
-    if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+    """Translate a GET_ZONE_TEMP intent into a CommandDTO.
 
-    payload = f"{_check_idx(zone_idx)}"
-    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
-
-    return CommandDTO(
-        verb=RQ,
-        addr1=addr1,
-        addr2=addr2,
-        addr3=addr3,
-        code=Code._30C9,
-        payload=payload,
-        priority=Priority.DEFAULT,
-        num_repeats=DEFAULT_NUM_REPEATS,
-    )
+    :param intent: The intent containing 'zone_idx'.
+    :type intent: Command
+    :returns: A CommandDTO representing the intent.
+    :rtype: CommandDTO
+    :raises ValueError: If 'zone_idx' is missing in intent data.
+    """
+    return _build_zone_rq(intent, Code._30C9)
