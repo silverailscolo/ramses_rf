@@ -159,7 +159,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             exclude=[DeviceIdT(k) for k in self._gwy_config.block_list],
             unwanted=self._engine._unwanted,
             enforce_known_list=self._gwy_config.engine.enforce_known_list,
-            hgi_id_provider=lambda: getattr(self.hgi, "id", None),
+            hgi_id_provider=lambda: (
+                getattr(self.hgi, "id", None) or self._gwy_config.hgi_id
+            ),
         )
 
         self._device_registry: DeviceRegistryInterface = DeviceRegistry(

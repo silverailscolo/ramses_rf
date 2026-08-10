@@ -163,6 +163,59 @@ def test_registry_enforces_filter_lists() -> None:
         registry.get_device(blocked_id)
 
 
+def test_filter_hgi_exempt_from_unwanted() -> None:
+    """The gateway's own ID must not be permanently blocked by _unwanted.
+
+    Regression guard for issue 864: when enforce_known_list is True and
+    the HGI device object has not yet been created, hgi_id_provider
+    returned None, causing the gateway's own ID to be rejected and
+    added to _unwanted.  The filter must exempt the HGI ID from the
+    _unwanted permanent block so it can be created later.
+
+    :returns: None
+    """
+    hgi_id = cast(DeviceIdT, "18:000730")
+
+    # Simulate the race: HGI ID is already in _unwanted (e.g. from an
+    # earlier rejection before the config.hgi_id was set), but the
+    # provider now returns the correct ID.
+    device_filter = DeviceFilter(
+        include=[hgi_id],
+        exclude=[],
+        unwanted=[hgi_id],
+        enforce_known_list=True,
+        hgi_id_provider=lambda: hgi_id,
+    )
+
+    # Must NOT raise — the HGI ID is exempted from the _unwanted check
+    device_filter.check_filter_lists(hgi_id)
+
+
+def test_filter_hgi_id_provider_fallback() -> None:
+    """hgi_id_provider should allow the HGI ID via config fallback.
+
+    When self.hgi is None (device not yet created), the provider
+    falls back to config.hgi_id.  The filter must accept the HGI ID
+    even when enforce_known_list is True and the ID is not in the
+    include list.
+
+    :returns: None
+    """
+    hgi_id = cast(DeviceIdT, "18:000730")
+
+    # HGI ID is not in include list, but provider returns it
+    device_filter = DeviceFilter(
+        include=[],
+        exclude=[],
+        unwanted=[],
+        enforce_known_list=True,
+        hgi_id_provider=lambda: hgi_id,
+    )
+
+    # Must NOT raise — the HGI ID is exempted via the provider
+    device_filter.check_filter_lists(hgi_id)
+
+
 @pytest.mark.asyncio
 async def test_fan_promotion_race_condition() -> None:
     """Test that early PROMOTE_CLASS events correctly apply via the SSOT.

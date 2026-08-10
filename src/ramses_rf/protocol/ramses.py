@@ -402,7 +402,7 @@ CODES_SCHEMA: dict[Code, CodeSchemaEntry] = {  # rf_unknown
     Code._22D0: {  # unknown_22d0, Spider thermostat, HVAC system switch?
         "name": "message_22d0",
         " I": r"^(00|03)[0-9]{6}$",
-        " W": r"^03[0-9]{4}1E14030020$",
+        " W": r"^[0-9A-F]{4}001E14030020$",
     },
     Code._22D9: {  # boiler_setpoint
         "name": "boiler_setpoint",
@@ -896,7 +896,7 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[VerbT, Any]]] = {
         },  # .W --- 30:253184 34:010943 --:------ 313F 009 006000070E0...
         Code._3220: {RP: {}},  # RND (using OT)
         Code._3B00: {I_: {}},
-        Code._3EF0: {RQ: {}},  # when bound direct to a 13:
+        Code._3EF0: {I_: {}, RQ: {}},  # when bound direct to a 13:
         Code._3EF1: {RQ: {}},  # when bound direct to a 13:
     },
     DevType.UFC: {  # e.g. HCE80/HCC80: Underfloor Heating Controller

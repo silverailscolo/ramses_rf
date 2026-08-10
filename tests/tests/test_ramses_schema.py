@@ -11,11 +11,12 @@ from ramses_rf.protocol.ramses import (
     CODE_IDX_ARE_COMPLEX,
     CODE_IDX_ARE_NONE,
     CODE_IDX_ARE_SIMPLE,
+    CODES_BY_DEV_SLUG,
     CODES_SCHEMA,
     HVAC_KLASS_BY_VC_PAIR,
     RQ_NO_PAYLOAD,
 )
-from ramses_tx.const import Code
+from ramses_tx.const import I_, Code
 
 
 def test_code_counts() -> None:
@@ -113,3 +114,18 @@ RQ_IDX_UNKNOWN = [
     for k, v in CODES_SCHEMA.items()
     if k not in RQ_NO_PAYLOAD + RQ_IDX_ONLY and RQ in v
 ]
+
+
+def test_thm_can_broadcast_3ef0_i() -> None:
+    """A THM bound direct to a BDR relay can broadcast 3EF0 with verb I.
+
+    Regression guard for issue 864: a thermostat (THM) sending a 3EF0
+    I_ broadcast (boiler relay state) was rejected with
+    PacketInvalid("Unexpected verb/code for src (THM) to Tx") because
+    CODES_BY_DEV_SLUG only listed RQ for THM/3EF0.
+
+    :returns: None
+    """
+    thm_codes = CODES_BY_DEV_SLUG[DevType.THM]
+    assert Code._3EF0 in thm_codes
+    assert I_ in thm_codes[Code._3EF0]
