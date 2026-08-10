@@ -2,15 +2,15 @@
 
 from ramses_rf.commands.builders.helpers import resolve_addrs
 from ramses_rf.commands.core import Command
+from ramses_rf.payloads.heating import DhwTemperaturePayload, TemperaturePayload
 from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, Code, Priority
 from ramses_tx.dtos import CommandDTO
-from ramses_tx.helpers import hex_from_temp
 
 
 def build_put_outdoor_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_OUTDOOR_TEMP intent into a CommandDTO."""
     temperature = intent.get("temperature")
-    payload = f"00{hex_from_temp(temperature)}"
+    payload = TemperaturePayload(zone_idx=0, temperature=temperature).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -28,7 +28,7 @@ def build_put_outdoor_temp(intent: Command) -> CommandDTO:
 def build_put_dhw_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_DHW_TEMP intent into a CommandDTO."""
     temperature = intent.get("temperature")
-    payload = f"00{hex_from_temp(temperature)}"
+    payload = DhwTemperaturePayload(dhw_idx=0, temperature=temperature).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -46,8 +46,9 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 def build_put_sensor_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_SENSOR_TEMP intent into a CommandDTO."""
     temperature = intent.get("temperature")
-    zone_idx = intent.get("zone_idx", "00")
-    payload = f"{zone_idx}{hex_from_temp(temperature)}"
+    zone_idx = intent.get("zone_idx", 0)
+    payload = TemperaturePayload(zone_idx=zone_idx, temperature=temperature).hex()
+
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(

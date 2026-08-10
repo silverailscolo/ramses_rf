@@ -1,22 +1,24 @@
 """RAMSES RF - DHW command intent to L3 payload translation."""
 
 from ramses_rf.commands.builders.helpers import (
-    _check_idx,
-    _normalise_mode,
-    _normalise_until,
+    check_idx,
+    normalise_mode,
+    normalise_until,
     resolve_addrs,
 )
 from ramses_rf.commands.core import Command
 from ramses_rf.const import SZ_DHW_IDX, ZON_MODE_MAP
 from ramses_rf.enums import DevType
+from ramses_rf.payloads.dhw import DhwParamsPayload
+from ramses_rf.payloads.heating import DhwTemperaturePayload
 from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
-from ramses_tx.helpers import hex_from_dtm, hex_from_temp
+from ramses_tx.helpers import hex_from_dtm
 
 
 def build_get_dhw_params(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_PARAMS intent into a CommandDTO."""
-    dhw_idx = _check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = check_idx(intent.get(SZ_DHW_IDX, 0))
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -32,7 +34,7 @@ def build_get_dhw_params(intent: Command) -> CommandDTO:
 
 def build_set_dhw_params(intent: Command) -> CommandDTO:
     """Translate a SET_DHW_PARAMS intent into a CommandDTO."""
-    dhw_idx = _check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = intent.get(SZ_DHW_IDX, 0)
     setpoint = intent.get("setpoint")
     if setpoint is None:
         setpoint = 50.0
@@ -51,9 +53,12 @@ def build_set_dhw_params(intent: Command) -> CommandDTO:
         raise ValueError(f"Out of range, differential: {differential}")
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
-    payload = (
-        f"{dhw_idx}{hex_from_temp(setpoint)}{overrun:02X}{hex_from_temp(differential)}"
-    )
+    payload = DhwParamsPayload(
+        dhw_idx=dhw_idx,
+        setpoint=setpoint,
+        overrun=overrun,
+        differential=differential,
+    ).hex()
     return CommandDTO(
         verb=W_,
         addr1=addr1,
@@ -68,7 +73,7 @@ def build_set_dhw_params(intent: Command) -> CommandDTO:
 
 def build_get_dhw_temp(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_TEMP intent into a CommandDTO."""
-    dhw_idx = _check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = check_idx(intent.get(SZ_DHW_IDX, 0))
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -86,7 +91,7 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_DHW_TEMP intent into a CommandDTO."""
     from ramses_rf.const import DEV_TYPE_MAP
 
-    dhw_idx = _check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = intent.get(SZ_DHW_IDX, 0)
     temperature = intent.get("temperature")
 
     if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.DHW, DevType.DHW):
@@ -97,7 +102,8 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 
     # I_ requires addr0=src, addr2=dst (which are the same for put_dhw_temp)
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.src)
-    payload = f"{dhw_idx}{hex_from_temp(temperature)}"
+    payload = DhwTemperaturePayload(dhw_idx=dhw_idx, temperature=temperature).hex()
+
     return CommandDTO(
         verb=I_,
         addr1=addr1,
@@ -112,7 +118,7 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 
 def build_get_dhw_mode(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_MODE intent into a CommandDTO."""
-    dhw_idx = _check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = check_idx(intent.get(SZ_DHW_IDX, 0))
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -128,20 +134,20 @@ def build_get_dhw_mode(intent: Command) -> CommandDTO:
 
 def build_set_dhw_mode(intent: Command) -> CommandDTO:
     """Translate a SET_DHW_MODE intent into a CommandDTO."""
-    dhw_idx = _check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = check_idx(intent.get(SZ_DHW_IDX, 0))
     mode = intent.get("mode")
     active = intent.get("active")
     until = intent.get("until")
     duration = intent.get("duration")
 
-    mode = _normalise_mode(mode, active, until, duration)
+    mode = normalise_mode(mode, active, until, duration)
 
     if mode == ZON_MODE_MAP.FOLLOW:
         active = None
     if active is not None and not isinstance(active, (bool, int)):
         raise ValueError(f"Invalid args: active={active}, but must be a bool")
 
-    until, duration = _normalise_until(mode, active, until, duration)
+    until, duration = normalise_until(mode, active, until, duration)
 
     payload = "".join(
         (

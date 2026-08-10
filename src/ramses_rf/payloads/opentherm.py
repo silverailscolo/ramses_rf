@@ -4,8 +4,9 @@ This module contains strongly-typed dataclass representations for OpenTherm brid
 and boiler gateway packet payloads.
 """
 
+import struct
 from dataclasses import dataclass
-from typing import Self
+from typing import ClassVar, Self
 
 from .base import PayloadBase
 from .registry import register_payload
@@ -16,15 +17,16 @@ from .registry import register_payload
 class OpenThermMsgPayload(PayloadBase):
     """OpenTherm message payload (Opcode 3220).
 
-    4-byte OpenTherm Message binary layout (Big-Endian):
+    5-byte RAMSES OpenTherm Message binary layout (Big-Endian):
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
-      +0       B      1B   OpenTherm Msg Type           : 19
-      +1       B      1B   OpenTherm Data ID            : 00
-      +2       2s     2B   OpenTherm Raw Data Value     : 19 00
+      +0       B      1B   RAMSES OpenTherm Gateway Index: 00
+      +1       B      1B   OpenTherm Msg Type           : 19
+      +2       B      1B   OpenTherm Data ID            : 00
+      +3       2s     2B   OpenTherm Raw Data Value     : 19 00
       --------------------------------------------------------------
-      Field-spaced hex : 19 00 1900
-      Payload hex      : 19001900
+      Field-spaced hex : 00 19 00 1900
+      Payload hex      : 0019001900
 
     OpenTherm Gateway Mapping (Data IDs):
       #   01: boiler_setpoint (or 22D9)
@@ -47,15 +49,21 @@ class OpenThermMsgPayload(PayloadBase):
     :type msg_type: int
     :param raw_value: Raw 2-byte OpenTherm data value.
     :type raw_value: bytes
+    :param ot_idx: RAMSES OpenTherm gateway index byte (default 0).
+    :type ot_idx: int
     """
+
+    _STRUCT_FMT_5B: ClassVar[str] = ">BBB2s"
+    _STRUCT_FMT_4B: ClassVar[str] = ">BB2s"
 
     msg_id: int
     msg_type: int
     raw_value: bytes
+    ot_idx: int = 0
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack 4-byte OpenTherm message binary payload.
+        """Unpack RAMSES OpenTherm message binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
@@ -66,20 +74,32 @@ class OpenThermMsgPayload(PayloadBase):
         if len(raw_data) < 4:
             raise ValueError(f"Invalid payload length for 3220: {len(raw_data)}")
 
-        m_type = (raw_data[0] >> 4) & 0x07
-        m_id = raw_data[1]
-        val = raw_data[2:4]
+        if len(raw_data) >= 5:
+            ot_idx, header_byte, m_id, val = struct.unpack(
+                cls._STRUCT_FMT_5B, raw_data[:5]
+            )
+        else:
+            ot_idx = 0
+            header_byte, m_id, val = struct.unpack(cls._STRUCT_FMT_4B, raw_data[:4])
 
-        return cls(msg_id=m_id, msg_type=m_type, raw_value=val)
+        m_type = (header_byte >> 4) & 0x07
+        return cls(ot_idx=ot_idx, msg_id=m_id, msg_type=m_type, raw_value=val)
 
     def to_bytes(self) -> bytes:
-        """Pack OpenTherm message data into 4-byte binary payload.
+        """Pack OpenTherm message data into 5-byte binary payload.
 
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        header_byte = (self.msg_type & 0x07) << 4
-        return bytes([header_byte, self.msg_id]) + self.raw_value[:2]
+        header_byte = (self.msg_type & 0x0F) << 4
+
+        return struct.pack(
+            self._STRUCT_FMT_5B,
+            self.ot_idx,
+            header_byte,
+            self.msg_id,
+            self.raw_value[:2],
+        )
 
 
 @register_payload("0150")

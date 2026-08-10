@@ -77,14 +77,15 @@ class DayOfWeek(TypedDict):
 
 
 DayOfWeekT: TypeAlias = DayOfWeek
-InnerScheduleT: TypeAlias = list[DayOfWeek]
+WeeklySchedule: TypeAlias = list[DayOfWeek]
+InnerScheduleT: TypeAlias = WeeklySchedule
 
 
-class OuterSchedule(TypedDict):
+class WeeklyScheduleDict(TypedDict):
     """A dictionary representing a full schedule payload."""
 
     zone_idx: str
-    schedule: InnerScheduleT
+    schedule: WeeklySchedule
 
 
 class EmptySchedule(TypedDict):
@@ -94,7 +95,10 @@ class EmptySchedule(TypedDict):
     schedule: NotRequired[EmptyDictT | None]
 
 
-OuterScheduleT: TypeAlias = OuterSchedule | EmptySchedule
+# Legacy aliases for backward compatibility
+OuterSchedule: TypeAlias = WeeklyScheduleDict
+OuterScheduleT: TypeAlias = WeeklyScheduleDict | EmptySchedule
+
 
 PayloadT: TypeAlias = dict[str, Any]
 PayloadSetT: TypeAlias = list[PayloadT | None]

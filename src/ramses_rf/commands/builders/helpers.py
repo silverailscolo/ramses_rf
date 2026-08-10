@@ -24,8 +24,15 @@ def resolve_addrs(src: Address | str, dst: Address | str) -> tuple[str, str, str
     return src_id, dst_id, "--:------"
 
 
-def _check_idx(zone_idx: int | str) -> str:
-    """Validate and normalize a zone index or DHW index."""
+def check_idx(zone_idx: int | str) -> str:
+    """Validate and normalise a zone index or DHW index byte.
+
+    :param zone_idx: Zone index integer or hex string representation.
+    :type zone_idx: int | str
+    :returns: Uppercase 2-character hex string index.
+    :rtype: str
+    :raises CommandInvalid: If zone_idx is invalid.
+    """
     if not isinstance(zone_idx, int | str):
         raise exc.CommandInvalid(f"Invalid value for zone_idx: {zone_idx}")
     if isinstance(zone_idx, str):
@@ -36,13 +43,26 @@ def _check_idx(zone_idx: int | str) -> str:
     return f"{result:02X}"
 
 
-def _normalise_mode(
+def normalise_mode(
     mode: int | str | None,
     target: bool | float | None,
     until: dt | str | None,
     duration: int | None,
 ) -> str:
-    """Validate and normalize a heating mode for zone or DHW control."""
+    """Validate and normalise a heating mode for zone or DHW control.
+
+    :param mode: Heating mode identifier or index.
+    :type mode: int | str | None
+    :param target: Target setpoint temperature or active boolean flag.
+    :type target: bool | float | None
+    :param until: Target expiration timestamp.
+    :type until: dt | str | None
+    :param duration: Override duration integer in minutes.
+    :type duration: int | None
+    :returns: Normalised 2-character hex mode string.
+    :rtype: str
+    :raises CommandInvalid: If mode options or parameters are invalid.
+    """
     if mode is None and target is None:
         raise exc.CommandInvalid(
             "Invalid args: One of mode or setpoint/active can't be None"
@@ -74,13 +94,26 @@ def _normalise_mode(
     return mode
 
 
-def _normalise_until(
+def normalise_until(
     mode: int | str | None,
     _: Any,
     until: dt | str | None,
     duration: int | None,
 ) -> tuple[Any, Any]:
-    """Validate and normalize timing parameters for zone/DHW mode changes."""
+    """Validate and normalise timing parameters for zone or DHW mode changes.
+
+    :param mode: Normalised heating mode string.
+    :type mode: int | str | None
+    :param _: Reserved parameter.
+    :type _: Any
+    :param until: Target expiration timestamp.
+    :type until: dt | str | None
+    :param duration: Override duration integer in minutes.
+    :type duration: int | None
+    :returns: Tuple of (until, duration) timing parameters.
+    :rtype: tuple[Any, Any]
+    :raises CommandInvalid: If timing parameters conflict with the specified mode.
+    """
     if mode == ZON_MODE_MAP.TEMPORARY:
         if duration is not None:
             raise exc.CommandInvalid(

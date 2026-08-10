@@ -41,3 +41,32 @@ class PayloadBase(ABC):
         :rtype: bytes
         """
         ...
+
+    def hex(self) -> str:
+        """Return uppercase ASCII hex representation of binary payload.
+
+        :returns: Uppercase hex string payload representation.
+        :rtype: str
+        """
+        return self.to_bytes().hex().upper()
+
+
+def parse_idx(idx: int | str) -> int:
+    """Parse integer or hex string zone/domain index into a byte integer.
+
+    :param idx: Zone/domain index integer or hex string (e.g. 1, "01", "HW", "FA").
+    :type idx: int | str
+    :returns: Index as an unsigned 8-bit integer.
+    :rtype: int
+    :raises ValueError: If idx is an invalid index value.
+    """
+    if isinstance(idx, int):
+        if not (0 <= idx <= 255):
+            raise ValueError(f"Invalid zone index: {idx}")
+        return idx
+    if idx == "HW":
+        return 0xFA
+    result = int(idx, 16)
+    if not (0 <= result <= 255):
+        raise ValueError(f"Invalid zone index: {idx}")
+    return result

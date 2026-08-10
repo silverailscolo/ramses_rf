@@ -13,29 +13,31 @@ from ramses_rf import exceptions as exc
 from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
+from ramses_rf.payloads.heating import ScheduleSwitchpointPayload
 from ramses_rf.systems.schedule import (
-    SCHEMA_SCHEDULE_DHW_OUTER,
-    SCHEMA_SCHEDULE_ZONE_OUTER,
     SZ_ENABLED,
     SZ_HEAT_SETPOINT,
     SZ_SWITCHPOINTS,
     SZ_TIME_OF_DAY,
+    DaySchedule,
     Schedule,
+    ScheduleData,
     ScheduleIsFaulted,
     ScheduleIsIdle,
     ScheduleIsStale,
     ScheduleIsSynchronised,
     ScheduleStateEnum,
+    Switchpoint,
     fragments_to_full_schedule,
     full_schedule_to_fragments,
 )
-from ramses_rf.typing import OuterSchedule
+from ramses_rf.typing import WeeklyScheduleDict
 
 from .helpers import TEST_DIR
 
 WORK_DIR = f"{TEST_DIR}/schedules"
 
-VALID_FULL_SCHEDULE: Final[OuterSchedule] = {
+VALID_FULL_SCHEDULE: Final[WeeklyScheduleDict] = {
     SZ_ZONE_IDX: "00",
     SZ_SCHEDULE: [
         {
@@ -68,11 +70,9 @@ async def test_schedule_helpers(dir_name: Path) -> None:
     new_schedule = deepcopy(schedule)
 
     # Act & Assert
+    ScheduleData.from_dict(schedule)
     if schedule[SZ_ZONE_IDX] == "HW":
-        SCHEMA_SCHEDULE_DHW_OUTER(schedule)
         schedule[SZ_ZONE_IDX] = "00"
-    else:
-        SCHEMA_SCHEDULE_ZONE_OUTER(schedule)
 
     assert schedule == fragments_to_full_schedule(full_schedule_to_fragments(schedule))
 
@@ -225,7 +225,7 @@ async def test_schedule_handle_msg_version_change() -> None:
 
     sched = Schedule(mock_zone)
     sched._set_state(ScheduleIsSynchronised)
-    sched._sched_ver = 1
+    sched._schedule_version = 1
 
     mock_msg = MagicMock(spec=Message)
     mock_msg.code = "0006"
@@ -259,3 +259,124 @@ async def test_schedule_apply_state_update_cqrs() -> None:
 
     # Assert
     assert mock_zone.schedule_state == mock_state
+
+
+def test_switchpoint_dataclass_valid() -> None:
+    """Verify valid Switchpoint dataclass creation and invariants."""
+    # Arrange & Act
+    sp1 = Switchpoint(time_of_day="06:00", heat_setpoint=21.0)
+    sp2 = Switchpoint(time_of_day="22:30", enabled=True)
+
+    # Assert
+    assert sp1.time_of_day == "06:00"
+    assert sp1.heat_setpoint == 21.0
+    assert sp1.enabled is None
+
+    assert sp2.time_of_day == "22:30"
+    assert sp2.heat_setpoint is None
+    assert sp2.enabled is True
+
+    # Immutability
+    with pytest.raises(AttributeError):
+        sp1.heat_setpoint = 22.0  # type: ignore[misc]
+
+
+def test_switchpoint_dataclass_invalid() -> None:
+    """Verify Switchpoint validation errors for invalid times and setpoints."""
+    # Invalid time formats
+    with pytest.raises(ValueError, match="Invalid time format"):
+        Switchpoint(time_of_day="25:00", heat_setpoint=21.0)
+
+    with pytest.raises(ValueError, match="Invalid time format"):
+        Switchpoint(time_of_day="6:00", heat_setpoint=21.0)
+
+    # 5-minute quantization constraint
+    with pytest.raises(ValueError, match="must be in 5-minute intervals"):
+        Switchpoint(time_of_day="06:03", heat_setpoint=21.0)
+
+    # Out of range setpoint
+    with pytest.raises(ValueError, match="Out of range heat_setpoint"):
+        Switchpoint(time_of_day="06:00", heat_setpoint=4.0)
+
+    with pytest.raises(ValueError, match="Out of range heat_setpoint"):
+        Switchpoint(time_of_day="06:00", heat_setpoint=36.0)
+
+
+def test_day_schedule_dataclass_validation() -> None:
+    """Verify DaySchedule validation for day of week and switchpoint array."""
+    sp = Switchpoint(time_of_day="06:00", heat_setpoint=21.0)
+
+    # Valid DaySchedule
+    day_sched = DaySchedule(day_of_week=0, switchpoints=(sp,))
+    assert day_sched.day_of_week == 0
+
+    # Invalid day of week (< 0 or > 6)
+    with pytest.raises(ValueError, match="Invalid day_of_week"):
+        DaySchedule(day_of_week=7, switchpoints=(sp,))
+
+    with pytest.raises(ValueError, match="Invalid day_of_week"):
+        DaySchedule(day_of_week=-1, switchpoints=(sp,))
+
+    # Empty switchpoints
+    with pytest.raises(ValueError, match="cannot be empty"):
+        DaySchedule(day_of_week=0, switchpoints=())
+
+
+def test_schedule_data_dataclass_validation_and_dict_conversion() -> None:
+    """Verify ScheduleData validation, from_dict parsing, and to_dict serialization."""
+    raw_schedule = {
+        SZ_ZONE_IDX: "HW",
+        SZ_SCHEDULE: [
+            {
+                "day_of_week": 0,
+                SZ_SWITCHPOINTS: [{SZ_TIME_OF_DAY: "06:00", SZ_ENABLED: True}],
+            }
+        ],
+    }
+
+    # Act
+    sched_data = ScheduleData.from_dict(raw_schedule)
+
+    # Assert
+    assert sched_data.zone_idx == "HW"
+    assert len(sched_data.days) == 1
+    assert sched_data.days[0].day_of_week == 0
+    assert sched_data.days[0].switchpoints[0].enabled is True
+
+    # Round-trip serialization
+    serialized = sched_data.to_dict()
+    assert serialized[SZ_ZONE_IDX] == "HW"
+    sp_dict = serialized[SZ_SCHEDULE][0][SZ_SWITCHPOINTS][0]
+    assert isinstance(sp_dict, dict)
+    assert sp_dict.get(SZ_ENABLED) is True
+
+    # Invalid zone index
+    with pytest.raises(ValueError, match="Invalid zone_idx"):
+        ScheduleData(zone_idx="INVALID", days=sched_data.days)
+
+
+def test_schedule_switchpoint_payload_from_switchpoint() -> None:
+    """Verify ScheduleSwitchpointPayload.from_switchpoint factory method."""
+    # Zone switchpoint
+    sp1 = ScheduleSwitchpointPayload.from_switchpoint(
+        zone_idx="01",
+        day_of_week=0,
+        time_of_day_mins=360,
+        setpoint=21.0,
+    )
+    assert sp1.zone_idx == 1
+    assert sp1.day_of_week == 0
+    assert sp1.time_of_day_mins == 360
+    assert sp1.setpoint_value == 2100
+
+    # DHW switchpoint
+    sp2 = ScheduleSwitchpointPayload.from_switchpoint(
+        zone_idx="HW",
+        day_of_week=1,
+        time_of_day_mins=480,
+        setpoint=True,
+    )
+    assert sp2.zone_idx == 0xFA
+    assert sp2.day_of_week == 1
+    assert sp2.time_of_day_mins == 480
+    assert sp2.setpoint_value == 1
