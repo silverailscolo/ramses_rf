@@ -643,15 +643,20 @@ class ZoneConfigPayload(PayloadBase):
             object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
 
     @classmethod
-    def _from_bytes_single(cls, raw_data: bytes) -> Self:
-        """Unpack a single 6-byte zone config binary payload.
+    def _from_bytes_single(cls, raw_data: bytes, offset: int = 0) -> Self:
+        """Unpack a single 6-byte zone config binary payload from offset.
 
-        :param raw_data: 6-byte raw binary byte string.
+        :param raw_data: Raw binary byte string.
         :type raw_data: bytes
+        :param offset: Byte offset within raw_data to unpack from.
+        :type offset: int
         :returns: Unpacked ZoneConfigPayload instance.
         :rtype: Self
         """
-        idx, flags, min_raw, max_raw = struct.unpack(cls._STRUCT_FMT, raw_data)
+        # Unpack idx, flags, min_temp, max_temp directly from offset
+        idx, flags, min_raw, max_raw = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, offset
+        )
         return cls(
             zone_idx=idx,
             zone_flags=flags,
@@ -673,11 +678,10 @@ class ZoneConfigPayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 000A: {len(raw_data)}")
         if len(raw_data) > 6:
             return [
-                cls._from_bytes_single(raw_data[i : i + 6])
-                for i in range(0, len(raw_data), 6)
+                cls._from_bytes_single(raw_data, i) for i in range(0, len(raw_data), 6)
             ]
 
-        return cls._from_bytes_single(raw_data)
+        return cls._from_bytes_single(raw_data, 0)
 
     def to_bytes(self) -> bytes:
         """Pack zone config data into binary payload.
@@ -737,9 +741,9 @@ class ZoneNamePayload(PayloadBase):
             raise ValueError(
                 f"Invalid payload length for ZoneNamePayload: {len(raw_data)}"
             )
-        idx = raw_data[0]
-        name_bytes = raw_data[2:22].rstrip(b"\x00")
-        name = name_bytes.decode("ascii", errors="replace")
+        # Unpack zone_idx (uint8), skip 1 pad byte, and extract 20-byte string
+        idx, name_raw = struct.unpack_from(">Bx20s", raw_data, 0)
+        name = name_raw.rstrip(b"\x00").decode("ascii", errors="replace")
         return cls(zone_idx=idx, name=name)
 
     def to_bytes(self) -> bytes:
@@ -795,8 +799,8 @@ class ZoneSetpointPayload(PayloadBase):
             return ZoneNamePayload.from_bytes(raw_data)
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 0004: {len(raw_data)}")
-        idx = raw_data[0]
-        sp_raw = int.from_bytes(raw_data[1:3], byteorder="big", signed=True)
+        # Unpack zone_idx (uint8) and setpoint_raw (int16) directly from offset 0
+        idx, sp_raw = struct.unpack_from(">Bh", raw_data, 0)
         return cls(zone_idx=idx, setpoint_temp=sp_raw / 100.0)
 
     def to_bytes(self) -> bytes:
@@ -841,7 +845,8 @@ class OutdoorTempPayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 12C0: {len(raw_data)}")
-        temp_raw = int.from_bytes(raw_data[:2], byteorder="big", signed=True)
+        # Unpack 16-bit signed outdoor temperature directly from offset 0
+        (temp_raw,) = struct.unpack_from(">h", raw_data, 0)
         return cls(temperature=temp_raw / 100.0)
 
     def to_bytes(self) -> bytes:

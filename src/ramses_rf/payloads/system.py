@@ -4,6 +4,7 @@ This module contains strongly-typed dataclass representations for system clock,
 device binding, fault log, and gateway heartbeat packet payloads.
 """
 
+import struct
 from dataclasses import dataclass
 from typing import Self
 
@@ -161,7 +162,8 @@ class SystemChangeCounterPayload(PayloadBase):
         """
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 0006: {len(raw_data)}")
-        val = int.from_bytes(raw_data[1:3], byteorder="big", signed=False)
+        # Unpack 16-bit unsigned change counter directly from byte offset 1
+        (val,) = struct.unpack_from(">H", raw_data, 1)
         return cls(change_counter=val)
 
     def to_bytes(self) -> bytes:
@@ -664,7 +666,8 @@ class SystemOutdoorTempPayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 1290: {len(raw_data)}")
-        temp_raw = int.from_bytes(raw_data[:2], byteorder="big", signed=True)
+        # Unpack 16-bit signed outdoor temperature directly from offset 0
+        (temp_raw,) = struct.unpack_from(">h", raw_data, 0)
         return cls(temperature=temp_raw / 100.0)
 
     def to_bytes(self) -> bytes:

@@ -74,13 +74,14 @@ class OpenThermMsgPayload(PayloadBase):
         if len(raw_data) < 4:
             raise ValueError(f"Invalid payload length for 3220: {len(raw_data)}")
 
+        # Unpack binary fields directly from offset 0 without buffer slicing
         if len(raw_data) >= 5:
-            ot_idx, header_byte, m_id, val = struct.unpack(
-                cls._STRUCT_FMT_5B, raw_data[:5]
+            ot_idx, header_byte, m_id, val = struct.unpack_from(
+                cls._STRUCT_FMT_5B, raw_data, 0
             )
         else:
             ot_idx = 0
-            header_byte, m_id, val = struct.unpack(cls._STRUCT_FMT_4B, raw_data[:4])
+            header_byte, m_id, val = struct.unpack_from(cls._STRUCT_FMT_4B, raw_data, 0)
 
         m_type = (header_byte >> 4) & 0x07
         return cls(ot_idx=ot_idx, msg_id=m_id, msg_type=m_type, raw_value=val)
