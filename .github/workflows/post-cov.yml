@@ -30,7 +30,13 @@ jobs:
       - name: Read PR number
         if: steps.download.outcome == 'success'
         id: pr-number
-        run: echo "PR_NUMBER=$(cat pr-number.txt)" >> $GITHUB_ENV
+        run: |
+          PR_NUMBER="$(head -n 1 pr-number.txt | tr -d '\r\n')"
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Invalid PR number in artifact"
+            exit 1
+          fi
+          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
 
       - name: Add Pytest Coverage comment
         if: steps.download.outcome == 'success'
