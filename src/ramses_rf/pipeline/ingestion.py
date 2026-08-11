@@ -314,12 +314,39 @@ class StateProjector:
                         # `setpoint` property reads from temp_state.  Without
                         # this, the zone climate entity's target_temperature
                         # stays None (issue 843).
-                        if msg.code in (Code._2309, Code._2349):
+                        # 30C9 carries the zone temperature that the Zone's
+                        # `temperature` property reads from temp_state.
+                        # Without this, the zone climate entity's
+                        # current_temperature stays None (issue 927).
+                        if msg.code in (Code._2309, Code._2349, Code._30C9):
                             self._update_temperature_state(zone, p, msg)
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS extraction failed for zone %s: %s",
                             zone.id,
+                            err,
+                        )
+
+            # Route 30C9 from a sensor to its parent zone.  Sensor-sourced
+            # 30C9 packets have no zone_idx in the decoded payload (the
+            # sensor is not a controller, so _build_idx_dict injects no
+            # zone_idx), so the zone routing path above is not reached.
+            # Without this, the zone's current_temperature stays None when
+            # only the sensor broadcasts 30C9 (issue 927).
+            if (
+                msg.code == Code._30C9
+                and src_dev
+                and SZ_TEMPERATURE in p
+                and getattr(src_dev, "_parent", None) is not None
+            ):
+                parent = src_dev._parent
+                if hasattr(parent, "temp_state") and hasattr(parent, "zone_state"):
+                    try:
+                        self._update_temperature_state(parent, p, msg)
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for parent zone %s: %s",
+                            getattr(parent, "id", "unknown"),
                             err,
                         )
 
