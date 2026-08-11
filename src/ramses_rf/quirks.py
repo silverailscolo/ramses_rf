@@ -123,7 +123,7 @@ def apply_hvac_quirks(
 
     # QUIRK: 31D9 raw-hex fan_mode → None (semantic-value preservation)
     # For long-payload devices (Orcon, Brofer, etc.), the 31D9 parser sets
-    # fan_mode = payload[4:6] — a raw hex byte like "04", "C8", "FF".  These
+    # fan_mode = raw_payload[4:6] — a raw hex byte like "04", "C8", "FF".  These
     # are NOT semantic names and conflict with the semantic fan_mode from
     # 22F4 ("off", "paused", "auto", "manual") or 22F1 (scheme-specific
     # names like "away", "low", "high", "boost").  The raw hex overwrites

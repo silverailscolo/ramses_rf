@@ -155,16 +155,44 @@ class BindTopologyHandler(TopologyHandler):
         specific zone indices or domain IDs.
         """
         # EXPLICIT BINDING: Controllers (01) broadcasting 000C device maps
-        if msg.header.code == Code._000C and getattr(msg.src, "type", None) == "01":
-            for p in self._get_payloads(msg):
-                if not isinstance(p, dict):
-                    continue
+        if (
+            getattr(msg, "code", None) == Code._000C
+            or getattr(msg.header, "code", None) == Code._000C
+        ) and (msg.src.id.startswith("01:") or getattr(msg.src, "type", None) == "01"):
+            for payload in self._get_payloads(msg):
+                zone_idx: str | None = None
+                domain_id: str | None = None
+                device_role: str | None = None
+                zone_type: str | None = None
+                devices: list[str] = []
 
-                zone_idx = p.get("zone_idx")
-                domain_id = p.get("domain_id")
-                device_role = p.get("device_role")
-                zone_type = p.get("zone_type")
-                devices = p.get("devices", [])
+                if hasattr(payload, "device_id_str"):
+                    zone_idx = (
+                        f"{payload.zone_idx:02X}"
+                        if isinstance(payload.zone_idx, int)
+                        else (
+                            str(payload.zone_idx)
+                            if payload.zone_idx is not None
+                            else None
+                        )
+                    )
+                    domain_id = payload.domain_id
+                    device_role = f"{payload.device_role_id:02X}"
+                    devices = [payload.device_id_str]
+                elif isinstance(payload, dict):
+                    val_zone = payload.get("zone_idx")
+                    zone_idx = str(val_zone) if val_zone is not None else None
+
+                    val_domain = payload.get("domain_id")
+                    domain_id = str(val_domain) if val_domain is not None else None
+
+                    val_role = payload.get("device_role")
+                    device_role = str(val_role) if val_role is not None else None
+
+                    val_type = payload.get("zone_type")
+                    zone_type = str(val_type) if val_type is not None else None
+
+                    devices = [str(d) for d in payload.get("devices", [])]
 
                 if not devices:
                     continue
@@ -192,7 +220,21 @@ class BindTopologyHandler(TopologyHandler):
                 ):
                     metadata["class"] = ZON_ROLE_MAP["08"]  # radiator_valve
 
-                if zone_idx is not None:
+                if domain_id is not None:
+                    event_meta = dict(metadata)
+                    event_meta["domain_id"] = str(domain_id)
+                    event_meta["child_id"] = str(domain_id)
+                    for child_id in devices:
+                        self._emit(
+                            TopologyChangedEvent(
+                                action=TopologyAction.BIND_DEVICE,
+                                parent_id=msg.src.id,  # The Controller
+                                child_id=DeviceIdT(child_id),  # The Device
+                                metadata=event_meta,
+                                causation="Rule_000C_Domain_Binding",
+                            )
+                        )
+                elif zone_idx is not None:
                     # Clone metadata to avoid cross-iteration pollution
                     event_meta = dict(metadata)
                     event_meta["zone_idx"] = str(zone_idx)
@@ -210,24 +252,9 @@ class BindTopologyHandler(TopologyHandler):
                             TopologyChangedEvent(
                                 action=TopologyAction.BIND_DEVICE,
                                 parent_id=msg.src.id,  # The Controller
-                                child_id=child_id,  # The Device
+                                child_id=DeviceIdT(child_id),  # The Device
                                 metadata=event_meta,
                                 causation="Rule_000C_Zone_Binding",
-                            )
-                        )
-
-                elif domain_id is not None:
-                    event_meta = dict(metadata)
-                    event_meta["domain_id"] = str(domain_id)
-                    event_meta["child_id"] = str(domain_id)
-                    for child_id in devices:
-                        self._emit(
-                            TopologyChangedEvent(
-                                action=TopologyAction.BIND_DEVICE,
-                                parent_id=msg.src.id,  # The Controller
-                                child_id=child_id,  # The Device
-                                metadata=event_meta,
-                                causation="Rule_000C_Domain_Binding",
                             )
                         )
 

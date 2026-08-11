@@ -39,6 +39,15 @@ Changes that are cosmetic in nature and do not add anything substantial to the s
 
 * Please read [The Ramses RF Dev Wiki](https://github.com/ramses-rf/ramses_rf/wiki).
 
+## AI & LLM Policy
+
+All contributors (human and AI-assisted) must strictly comply with our [AI Policy](AI_POLICY.md).
+
+* **Human Accountability**: AI tools are supported as assistance tools, but human contributors maintain 100% responsibility for all submitted code, documentation, issues, and pull requests.
+* **Autonomous Agents Prohibited**: Pull requests, issues, or comments created autonomously without human review will be closed immediately.
+* **No AI Answers to Maintainers**: Contributors must understand and be able to explain their changes in their own words. AI must **never** be used to generate answers to maintainer review questions.
+* **AI Instructions**: AI coding agents operating on this repository must follow the instructions in [LLM_INSTRUCTIONS.md](LLM_INSTRUCTIONS.md).
+
 ---
 
 ## Coding & Development Standards

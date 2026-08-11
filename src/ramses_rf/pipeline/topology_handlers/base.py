@@ -47,9 +47,13 @@ class TopologyHandler(abc.ABC):
         :rtype: list[Any]
         """
         raw: Any = msg.data
+        if not raw:
+            raw = getattr(msg, "payload", None)
         if isinstance(raw, dict):
             res = raw.get("_array", [raw])
             return res if isinstance(res, list) else [res]
         if isinstance(raw, list):
             return raw
+        if raw is not None:
+            return [raw]
         return []

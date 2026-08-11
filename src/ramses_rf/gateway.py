@@ -410,15 +410,18 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         # NEW: Feed the async TopologyBuilder so it can structurally map the
         # graph *before* the message state is ingested by the Read-Models.
-        raw_payload = getattr(app_msg, "payload", None)
+        payload_data = getattr(app_msg, "data", None) or getattr(
+            app_msg, "payload", None
+        )
 
-        if isinstance(raw_payload, (dict, list)):
+        if payload_data is not None:
             # Bridge the payload to satisfy core.Message strict dict typing
-            core_data = (
-                raw_payload
-                if isinstance(raw_payload, dict)
-                else {"_array": raw_payload}
-            )
+            if isinstance(payload_data, dict):
+                core_data = payload_data
+            elif isinstance(payload_data, list):
+                core_data = {"_array": payload_data}
+            else:
+                core_data = {"_payload": payload_data}
 
             # Temporary Phase 2.8 Strangler Fig Translation
             from ramses_rf.enums import Topic

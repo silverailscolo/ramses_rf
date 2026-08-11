@@ -417,17 +417,22 @@ class BindingManagerSupplicant(BindingManagerBase):
             )
         self.set_state(SuppSendOfferWaitForAccept)  # self._is_respondent = False
 
-        oem_code = ratify_cmd.payload[14:16] if ratify_cmd else None
+        vendor_code: str | None = None
+        if ratify_cmd:
+            if hasattr(ratify_cmd.payload, "vendor_code"):
+                vendor_code = str(ratify_cmd.payload.vendor_code)
+            elif isinstance(ratify_cmd.payload, str) and len(ratify_cmd.payload) >= 16:
+                vendor_code = ratify_cmd.payload[14:16]
 
         # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
-        tender = await self._make_offer(offer_codes, oem_code=oem_code)
+        tender = await self._make_offer(offer_codes, vendor_code=vendor_code)
         accept = await self._wait_for_accept(tender)
 
         # Step S2: Supplicant sends a Confirm (confirms Accept)
         affirm = await self._confirm_accept(accept, confirm_code=confirm_code)
 
         # Step S3: Supplicant sends an Addenda (optional)
-        if oem_code:
+        if vendor_code:
             self.set_state(SuppIsReadyToSendAddenda)  # HACK: easiest way
             ratify = await self._cast_addenda(accept, ratify_cmd)  # type: ignore[arg-type]
         else:
@@ -439,15 +444,15 @@ class BindingManagerSupplicant(BindingManagerBase):
     async def _make_offer(
         self,
         codes: Iterable[Code],
-        oem_code: str | None = None,
+        vendor_code: str | None = None,
     ) -> Packet:
         """Supp sends an Offer & returns the corresponding Packet.
 
         :param codes: Codes to offer.
-        :param oem_code: Optional OEM specific code block.
+        :param vendor_code: Optional vendor specific code block.
         :return: The sent offer packet.
         """
-        # if oem_code, send an 10E0
+        # if vendor_code, send an 10E0
 
         # state = self.state
         cmd = build_dto(
@@ -455,7 +460,12 @@ class BindingManagerSupplicant(BindingManagerBase):
                 src=Address(self._dev.id),
                 dst=Address(self._dev.id),
                 action=Action.PUT_BIND,
-                data={"verb": I_, "codes": codes, "oem_code": oem_code},
+                data={
+                    "verb": I_,
+                    "codes": codes,
+                    "vendor_code": vendor_code,
+                    "oem_code": vendor_code,
+                },
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
@@ -492,7 +502,12 @@ class BindingManagerSupplicant(BindingManagerBase):
         :return: The sent confirm packet.
         """
         # HACK assumes all idx same
-        idx = accept._dto.payload[:2] if accept._dto.payload else "00"
+        if accept.payload and hasattr(accept.payload, "idx"):
+            idx = str(accept.payload.idx)
+        elif accept._dto.raw_payload:
+            idx = accept._dto.raw_payload[:2]
+        else:
+            idx = "00"
 
         cmd = build_dto(
             Intent(

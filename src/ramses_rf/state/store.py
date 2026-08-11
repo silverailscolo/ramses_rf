@@ -510,7 +510,7 @@ class MessageStore(MessageStoreInterface):
         dst: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        ctx: Any | None = None,
+        context: Any | None = None,
         hdr: str | StateHeader | None = None,
     ) -> tuple[Message, ...] | None:
         """Remove a set of message(s) from the index."""
@@ -522,7 +522,7 @@ class MessageStore(MessageStoreInterface):
                 "dst": dst,
                 "verb": verb,
                 "code": code,
-                "ctx": ctx,
+                "ctx": context,
                 "hdr": hdr,
             }.items()
             if v is not None
@@ -543,7 +543,7 @@ class MessageStore(MessageStoreInterface):
                 dst=dst,
                 verb=verb,
                 code=code,
-                ctx=ctx,
+                context=context,
                 hdr=hdr,
             )
 
@@ -583,7 +583,7 @@ class MessageStore(MessageStoreInterface):
         dst: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        ctx: Any | None = None,
+        context: Any | None = None,
         hdr: str | StateHeader | None = None,
     ) -> tuple[Message, ...]:
         """Public method to get a set of message(s) from the index."""
@@ -595,7 +595,7 @@ class MessageStore(MessageStoreInterface):
                 "dst": dst,
                 "verb": verb,
                 "code": code,
-                "ctx": ctx,
+                "ctx": context,
                 "hdr": hdr,
             }.items()
             if v is not None
@@ -663,7 +663,7 @@ class MessageStore(MessageStoreInterface):
         dst: str | None = None,
         verb: str | None = None,
         code: str | None = None,
-        ctx: Any | None = None,
+        context: Any | None = None,
         hdr: str | StateHeader | None = None,
     ) -> bool:
         """Check if the MessageStore contains at least 1 record that
@@ -671,7 +671,13 @@ class MessageStore(MessageStoreInterface):
         return (
             len(
                 await self.get(
-                    dtm=dtm, src=src, dst=dst, verb=verb, code=code, ctx=ctx, hdr=hdr
+                    dtm=dtm,
+                    src=src,
+                    dst=dst,
+                    verb=verb,
+                    code=code,
+                    context=context,
+                    hdr=hdr,
                 )
             )
             > 0

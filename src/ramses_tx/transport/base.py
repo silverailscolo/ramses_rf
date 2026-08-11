@@ -227,7 +227,7 @@ class _ReadTransport(_BaseTransport, TransportInterface):
                 addr1,
                 rx_dto.addr2,
                 rx_dto.addr3,
-                rx_dto.payload,
+                rx_dto.raw_payload,
             )
             if rx_key in self._recent_tx_counts:
                 return True
@@ -385,7 +385,7 @@ class _FullTransport(_ReadTransport):
                 dto.addr1,
                 dto.addr2,
                 dto.addr3,
-                dto.payload,
+                dto.raw_payload,
             )
             self._recent_tx_queue.append((now, tx_key))
             self._recent_tx_counts[tx_key] = self._recent_tx_counts.get(tx_key, 0) + 1
