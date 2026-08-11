@@ -13,6 +13,14 @@
       }),
       dict({
         'battery_low': None,
+        'id': '00:004249',
+        'is_alive': None,
+        'tcs_id': '01:239700',
+        'type': 'TrvActuator',
+        'zone_idx': '07',
+      }),
+      dict({
+        'battery_low': None,
         'id': '01:024170',
         'is_alive': None,
         'tcs_id': '01:024170',
@@ -237,6 +245,14 @@
       }),
       dict({
         'battery_low': None,
+        'id': '01:133120',
+        'is_alive': None,
+        'tcs_id': '01:133120',
+        'type': 'Controller',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': None,
         'id': '01:133689',
         'is_alive': None,
         'tcs_id': '01:133689',
@@ -365,6 +381,14 @@
       }),
       dict({
         'battery_low': None,
+        'id': '01:198656',
+        'is_alive': None,
+        'tcs_id': '01:198656',
+        'type': 'Controller',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': None,
         'id': '01:201047',
         'is_alive': None,
         'tcs_id': '01:201047',
@@ -441,6 +465,14 @@
         'is_alive': None,
         'tcs_id': '01:555555',
         'type': 'Controller',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': None,
+        'id': '02:000016',
+        'is_alive': None,
+        'tcs_id': '01:239700',
+        'type': 'UfhController',
         'zone_idx': None,
       }),
       dict({
@@ -858,7 +890,7 @@
       }),
       dict({
         'battery_low': None,
-        'heat_demand': 0.22,
+        'heat_demand': 0.81,
         'heat_demands': list([
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
@@ -2406,7 +2438,7 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
-          'ch_enabled': True,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2021, 2, 25, 14, 43, 32, 9252, tzinfo=datetime.timezone.utc),
@@ -2481,6 +2513,7 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2024, 2, 2, 8, 58, 53, 388244, tzinfo=datetime.timezone.utc),
@@ -2490,6 +2523,7 @@
         'flame_active': False,
         'id': '10:033995',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
@@ -2500,7 +2534,7 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
-          'ch_enabled': True,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2022, 2, 4, 14, 16, 22, 818919, tzinfo=datetime.timezone.utc),
@@ -2510,7 +2544,7 @@
         'flame_active': False,
         'id': '10:037879',
         'is_alive': None,
-        'max_rel_modulation': 0.0,
+        'max_rel_modulation': 0.5,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
@@ -2529,7 +2563,7 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
-          'ch_enabled': True,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2022, 9, 29, 16, 17, 45, 261818, tzinfo=datetime.timezone.utc),
@@ -2540,7 +2574,7 @@
         'heat_demand': 0.0,
         'id': '10:040239',
         'is_alive': None,
-        'max_rel_modulation': 0.0,
+        'max_rel_modulation': 0.5,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
@@ -2580,7 +2614,7 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
-          'ch_enabled': True,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2022, 3, 13, 15, 34, 57, 762021, tzinfo=datetime.timezone.utc),
@@ -2594,10 +2628,10 @@
         'dhw_setpoint': 40.0,
         'fault_present': False,
         'flame_active': False,
-        'heat_demand': 0.1,
+        'heat_demand': 0.0,
         'id': '10:047707',
         'is_alive': None,
-        'max_rel_modulation': 0.0,
+        'max_rel_modulation': 0.5,
         'otc_active': False,
         'outside_temp': -80.0,
         'tcs_id': None,
@@ -2653,7 +2687,7 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
-          'ch_enabled': True,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2024, 12, 7, 16, 49, 18, 711000, tzinfo=datetime.timezone.utc),
@@ -2709,6 +2743,7 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2021, 12, 23, 16, 23, 57, 9331, tzinfo=datetime.timezone.utc),
@@ -2721,6 +2756,7 @@
         'flame_active': False,
         'id': '10:062498',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
         'outside_temp': -31.0,
         'tcs_id': None,
         'type': 'OtbGateway',
@@ -2732,6 +2768,7 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
+          'ch_enabled': False,
           'dhw_active': True,
           'flame_active': True,
           'last_updated': datetime.datetime(2022, 7, 4, 17, 0, tzinfo=datetime.timezone.utc),
@@ -2742,6 +2779,7 @@
         'flame_active': True,
         'id': '10:067219',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
@@ -2752,6 +2790,7 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2023, 2, 10, 8, 37, 11, 282846, tzinfo=datetime.timezone.utc),
@@ -2761,6 +2800,7 @@
         'flame_active': False,
         'id': '10:070473',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
@@ -2794,6 +2834,7 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': True,
           'last_updated': datetime.datetime(2022, 2, 5, 11, 20, 1, 997460, tzinfo=datetime.timezone.utc),
@@ -2810,6 +2851,7 @@
         'heat_demand': 0.0,
         'id': '10:078099',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
         'otc_active': False,
         'rel_modulation_level': 0.0,
         'tcs_id': None,
@@ -2849,6 +2891,7 @@
         }),
         'actuator_state': dict({
           'ch_active': True,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': True,
           'last_updated': datetime.datetime(2021, 10, 17, 7, 23, 48, 224879, tzinfo=datetime.timezone.utc),
@@ -2863,6 +2906,7 @@
         'flame_active': True,
         'id': '10:124973',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
@@ -2873,6 +2917,7 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2022, 10, 10, 16, 35, 50, 35592, tzinfo=datetime.timezone.utc),
@@ -2882,6 +2927,7 @@
         'flame_active': False,
         'id': '10:130890',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
@@ -2917,6 +2963,7 @@
         }),
         'actuator_state': dict({
           'ch_active': False,
+          'ch_enabled': False,
           'dhw_active': False,
           'flame_active': False,
           'last_updated': datetime.datetime(2024, 2, 2, 8, 56, 22, 923299, tzinfo=datetime.timezone.utc),
@@ -2926,6 +2973,7 @@
         'flame_active': False,
         'id': '10:162769',
         'is_alive': None,
+        'max_rel_modulation': 0.5,
         'tcs_id': None,
         'type': 'OtbGateway',
         'zone_idx': None,
@@ -5757,6 +5805,18 @@
       }),
       dict({
         'battery_low': None,
+        'id': '38:113926',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
+        'id': '38:115975',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
         'id': '39:159057',
         'is_alive': None,
         'type': 'DeviceHvac',
@@ -5799,7 +5859,19 @@
       }),
       dict({
         'battery_low': None,
+        'id': '47:132616',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
         'id': '47:777777',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
+        'id': '48:198408',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
@@ -6658,6 +6730,19 @@
         'zones': dict({
         }),
       }),
+      '01:133120': dict({
+        'orphans': list([
+        ]),
+        'stored_hotwater': dict({
+        }),
+        'system': dict({
+          'appliance_control': None,
+        }),
+        'underfloor_heating': dict({
+        }),
+        'zones': dict({
+        }),
+      }),
       '01:133689': dict({
         'orphans': list([
         ]),
@@ -7091,6 +7176,19 @@
         'zones': dict({
         }),
       }),
+      '01:198656': dict({
+        'orphans': list([
+        ]),
+        'stored_hotwater': dict({
+        }),
+        'system': dict({
+          'appliance_control': None,
+        }),
+        'underfloor_heating': dict({
+        }),
+        'zones': dict({
+        }),
+      }),
       '01:201047': dict({
         'orphans': list([
         ]),
@@ -7220,11 +7318,32 @@
           'appliance_control': None,
         }),
         'underfloor_heating': dict({
+          '02:000016': dict({
+            'circuits': dict({
+              '00': dict({
+              }),
+              '01': dict({
+              }),
+              '02': dict({
+              }),
+              '03': dict({
+              }),
+              '04': dict({
+              }),
+              '05': dict({
+              }),
+              '06': dict({
+              }),
+              '07': dict({
+              }),
+            }),
+          }),
         }),
         'zones': dict({
           '07': dict({
             '_name': None,
             'actuators': list([
+              '00:004249',
               '04:039359',
               '04:039363',
               '04:039365',

@@ -6,7 +6,7 @@ packet payloads.
 
 import struct
 from dataclasses import dataclass
-from typing import Self
+from typing import Any, ClassVar, Self
 
 from .base import PayloadBase, parse_idx
 from .registry import register_payload
@@ -14,18 +14,17 @@ from .registry import register_payload
 
 @register_payload("1260")
 @dataclass(frozen=True, slots=True)
-class DhwModePayload(PayloadBase):
-    """DHW mode and override payload (Opcode 1260).
+class DhwTempPayload(PayloadBase):
+    """DHW cylinder temperature payload (Opcode 1260).
 
-    3-byte DHW Mode binary layout:
+    3-byte DHW Temp binary layout:
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
       +0       B      1B   DHW Index (uint8)            : 00
-      +1       B      1B   DHW Mode / Override Flag     : 01
-      +2       B      1B   DHW State / Enabled          : 01
+      +1       h      2B   Temperature (int16*100)      : 08 37 (21.03°C)
       --------------------------------------------------------------
-      Field-spaced hex : 00 01 01
-      Payload hex      : 000101
+      Field-spaced hex : 00 0837
+      Payload hex      : 000837
 
     Sample Packet Logs:
       # RQ --- 30:185469 01:037519 --:------ 1260 001 00
@@ -35,49 +34,126 @@ class DhwModePayload(PayloadBase):
 
     :param dhw_idx: DHW index byte.
     :type dhw_idx: int
-    :param mode: Mode or override flag byte.
-    :type mode: int
-    :param state: DHW state byte (enabled/disabled).
-    :type state: int
+    :param temperature: DHW cylinder temperature in °C, or None if invalid.
+    :type temperature: float | None
     """
 
+    _STRUCT_FMT: ClassVar[str] = ">Bh"
+
     dhw_idx: int
-    mode: int
-    state: int
+    temperature: float | None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack DHW mode binary payload.
+        """Unpack DHW cylinder temperature binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked DhwModePayload instance.
+        :returns: Unpacked DhwTempPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 1260: {len(raw_data)}")
-        return cls(dhw_idx=raw_data[0], mode=raw_data[1], state=raw_data[2])
+        idx, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        temp_val = None if temp_raw in (0x31FF, 0x7FFF) else temp_raw / 100.0
+        return cls(dhw_idx=idx, temperature=temp_val)
 
     def to_bytes(self) -> bytes:
-        """Pack DHW mode data into binary payload.
+        """Pack DHW cylinder temperature data into binary payload.
 
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return bytes([self.dhw_idx, self.mode, self.state])
+        temp_raw = (
+            0x7FFF if self.temperature is None else int(round(self.temperature * 100.0))
+        )
+        return struct.pack(self._STRUCT_FMT, self.dhw_idx, temp_raw)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert DHW temperature payload to legacy dictionary layout.
+
+        :returns: Decoded DHW temperature dictionary.
+        :rtype: dict[str, Any]
+        """
+        return {"temperature": self.temperature}
 
 
 @register_payload("12F0")
 @dataclass(frozen=True, slots=True)
+class DhwFlowRatePayload(PayloadBase):
+    """DHW flow rate payload (Opcode 12F0).
+
+    3-byte DHW Flow Rate binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   DHW Index (uint8)            : 00
+      +1       h      2B   Flow Rate (int16*100)        : 03 07 (7.75 L/min)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 0307
+      Payload hex      : 000307
+
+    Sample Packet Logs:
+      # RP --- 10:048122 18:006402 --:------ 12F0 003 000307
+
+    :param dhw_idx: DHW index byte.
+    :type dhw_idx: int
+    :param dhw_flow_rate: DHW flow rate in L/min, or None if invalid.
+    :type dhw_flow_rate: float | None
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">Bh"
+
+    dhw_idx: int
+    dhw_flow_rate: float | None
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack DHW flow rate binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked DhwFlowRatePayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 3 bytes.
+        """
+        if len(raw_data) < 3:
+            raise ValueError(f"Invalid payload length for 12F0: {len(raw_data)}")
+        idx, flow_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        val = None if flow_raw in (0x31FF, 0x7FFF) else flow_raw / 100.0
+        return cls(dhw_idx=idx, dhw_flow_rate=val)
+
+    def to_bytes(self) -> bytes:
+        """Pack DHW flow rate data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        raw_val = (
+            0x7FFF
+            if self.dhw_flow_rate is None
+            else int(round(self.dhw_flow_rate * 100.0))
+        )
+        return struct.pack(self._STRUCT_FMT, self.dhw_idx, raw_val)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert DHW flow rate payload to legacy dictionary layout.
+
+        :returns: Decoded DHW flow rate dictionary.
+        :rtype: dict[str, Any]
+        """
+        return {"dhw_flow_rate": self.dhw_flow_rate}
+
+
+@dataclass(frozen=True, slots=True)
 class DhwConfigPayload(PayloadBase):
-    """DHW configuration payload (Opcode 12F0).
+    """DHW configuration payload.
 
     3-byte DHW Config binary layout:
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
       +0       B      1B   DHW Index (uint8)            : 00
-      +1       h      2B   Target Setpoint (int16*100)  : 13 88 (50.00°C)
+      +1       h      2B   Setpoint Temp (int16*100)    : 13 88 (50.00°C)
       --------------------------------------------------------------
       Field-spaced hex : 00 1388
       Payload hex      : 001388
@@ -93,6 +169,8 @@ class DhwConfigPayload(PayloadBase):
     :type setpoint_temp: float
     """
 
+    _STRUCT_FMT: ClassVar[str] = ">Bh"
+
     dhw_idx: int
     setpoint_temp: float
 
@@ -107,9 +185,10 @@ class DhwConfigPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 12F0: {len(raw_data)}")
-        # Unpack dhw_idx (uint8) and setpoint_raw (int16) directly from offset 0
-        idx, setpoint_raw = struct.unpack_from(">Bh", raw_data, 0)
+            raise ValueError(
+                f"Invalid payload length for DhwConfigPayload: {len(raw_data)}"
+            )
+        idx, setpoint_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(dhw_idx=idx, setpoint_temp=setpoint_raw / 100.0)
 
     def to_bytes(self) -> bytes:
@@ -118,46 +197,60 @@ class DhwConfigPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        setpoint_raw = int(round(self.setpoint_temp * 100.0))
-        return bytes([self.dhw_idx]) + setpoint_raw.to_bytes(
-            2, byteorder="big", signed=True
-        )
+        sp_raw = int(round(self.setpoint_temp * 100.0))
+        return struct.pack(self._STRUCT_FMT, self.dhw_idx, sp_raw)
 
 
+@register_payload("10A0")
 @dataclass(frozen=True, slots=True)
 class DhwParamsPayload(PayloadBase):
-    """DHW parameters payload (Opcode 10A0 W payload).
+    """DHW parameters payload (Opcode 10A0 W/RP payload).
 
-    6-byte DHW Parameters binary layout:
+    3-byte or 6-byte DHW Parameters binary layout:
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
       +0       B      1B   DHW Index (uint8)            : 00
-      +1       h      2B   Target Setpoint (degC*100)   : 13 88 (50.00°C)
-      +3       B      1B   Overrun Time (minutes)       : 05
-      +4       h      2B   Differential (degC*100)      : 00 64 (1.00°C)
+      +1       h      2B   Setpoint Temp (int16*100)    : 13 88 (50.00°C)
+      +3       B      1B   Overrun minutes (optional)   : 00
+      +4       h      2B   Differential °C (optional)   : 03 E4 (10.00°C)
       --------------------------------------------------------------
-      Field-spaced hex : 00 1388 05 0064
-      Payload hex      : 001388050064
+      Field-spaced hex : 00 1388 00 03E4
+      Payload hex      : 0013880003E4
+
+    Sample Packet Logs:
+      # RQ --- 07:045960 01:145038 --:------ 10A0 006 0013740003E4
+      # RP --- 01:145038 07:045960 --:------ 10A0 006 00109A0003E8
+      # RP --- 10:048122 18:006402 --:------ 10A0 003 001B58
 
     :param dhw_idx: DHW index byte.
-    :type dhw_idx: int
+    :type dhw_idx: int | str
     :param setpoint: Target setpoint temperature in °C.
     :type setpoint: float
-    :param overrun: Overrun time in minutes.
+    :param overrun: Overrun time in minutes (default 0).
     :type overrun: int
-    :param differential: Temperature differential in °C.
+    :param differential: Temperature differential in °C (default 0.0).
     :type differential: float
     """
 
+    _STRUCT_FMT_SHORT: ClassVar[str] = ">Bh"
+    _STRUCT_FMT_LONG: ClassVar[str] = ">BhBh"
+
     dhw_idx: int | str
-    setpoint: float
-    overrun: int
-    differential: float
+    setpoint: float | None
+    overrun: int = 0
+    differential: float = 0.0
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.dhw_idx, str):
             object.__setattr__(self, "dhw_idx", parse_idx(self.dhw_idx))
+
+    @classmethod
+    def _parse_sp(cls, sp_raw: int) -> float | None:
+        """Decode raw setpoint temperature."""
+        if sp_raw in (0x31FF, 0x7FFF, 0x639C):
+            return None
+        return sp_raw / 100.0
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -167,18 +260,22 @@ class DhwParamsPayload(PayloadBase):
         :type raw_data: bytes
         :returns: Unpacked DhwParamsPayload instance.
         :rtype: Self
-        :raises ValueError: If raw_data length is less than 6 bytes.
+        :raises ValueError: If raw_data length is less than 3 bytes.
         """
-        if len(raw_data) < 6:
+        if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 10A0: {len(raw_data)}")
-        # Unpack dhw_idx, setpoint, overrun, and diff directly from offset 0
-        idx, sp_raw, overrun, diff_raw = struct.unpack_from(">BhBh", raw_data, 0)
-        return cls(
-            dhw_idx=idx,
-            setpoint=sp_raw / 100.0,
-            overrun=overrun,
-            differential=diff_raw / 100.0,
-        )
+        if len(raw_data) >= 6:
+            idx, sp_raw, overrun, diff_raw = struct.unpack_from(
+                cls._STRUCT_FMT_LONG, raw_data, 0
+            )
+            return cls(
+                dhw_idx=idx,
+                setpoint=cls._parse_sp(sp_raw),
+                overrun=overrun,
+                differential=diff_raw / 100.0,
+            )
+        idx, sp_raw = struct.unpack_from(cls._STRUCT_FMT_SHORT, raw_data, 0)
+        return cls(dhw_idx=idx, setpoint=cls._parse_sp(sp_raw))
 
     def to_bytes(self) -> bytes:
         """Pack DHW parameters data into binary payload.
@@ -186,15 +283,26 @@ class DhwParamsPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        sp_raw = int(round(self.setpoint * 100.0))
-        diff_raw = int(round(self.differential * 100.0))
+        sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
         idx = parse_idx(self.dhw_idx)
-        return (
-            bytes([idx])
-            + sp_raw.to_bytes(2, byteorder="big", signed=True)
-            + bytes([self.overrun])
-            + diff_raw.to_bytes(2, byteorder="big", signed=True)
-        )
+        if self.overrun != 0 or self.differential != 0.0:
+            diff_raw = int(round(self.differential * 100.0))
+            return struct.pack(
+                self._STRUCT_FMT_LONG, idx, sp_raw, self.overrun, diff_raw
+            )
+        return struct.pack(self._STRUCT_FMT_SHORT, idx, sp_raw)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert DHW parameters payload to legacy dictionary layout.
+
+        :returns: Decoded DHW parameters dictionary.
+        :rtype: dict[str, Any]
+        """
+        res: dict[str, Any] = {"setpoint": self.setpoint}
+        if self.overrun != 0 or self.differential != 0.0:
+            res["overrun"] = self.overrun
+            res["differential"] = self.differential
+        return res
 
 
 @register_payload("1F41")
@@ -221,6 +329,8 @@ class DhwStatePayload(PayloadBase):
     :type active_flag: int
     """
 
+    _STRUCT_FMT: ClassVar[str] = ">BB"
+
     dhw_idx: int
     active_flag: int
 
@@ -236,7 +346,8 @@ class DhwStatePayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 1F41: {len(raw_data)}")
-        return cls(dhw_idx=raw_data[0], active_flag=raw_data[1])
+        idx, active = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(dhw_idx=idx, active_flag=active)
 
     def to_bytes(self) -> bytes:
         """Pack DHW state data into binary payload.
@@ -244,7 +355,7 @@ class DhwStatePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return bytes([self.dhw_idx, self.active_flag])
+        return struct.pack(self._STRUCT_FMT, self.dhw_idx, self.active_flag)
 
 
 @register_payload("11F0")

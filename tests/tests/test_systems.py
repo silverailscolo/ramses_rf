@@ -8,7 +8,7 @@ Includes gwy dicts (schema, traits, params, status).
 import asyncio
 import datetime as dt_module
 from collections.abc import Generator
-from dataclasses import asdict, is_dataclass
+from dataclasses import is_dataclass
 from datetime import datetime as dt
 from pathlib import Path, PurePath
 from typing import Any
@@ -133,13 +133,23 @@ def test_payload_from_log_file(dir_name: Path) -> None:
 
         expected_shrunk = safe_shrink(expected)
 
+        from ramses_rf.payloads.adapters import payload_to_dict
+
+        def _to_dict(obj: Any) -> Any:
+            if hasattr(obj, "to_dict"):
+                try:
+                    return obj.to_dict(msg=msg)
+                except TypeError:
+                    return obj.to_dict()
+            if is_dataclass(obj):
+                return payload_to_dict(obj)
+            return obj
+
         actual_payload = msg.payload
-        if is_dataclass(actual_payload):
-            actual_payload = asdict(actual_payload)
-        elif isinstance(actual_payload, list):
-            actual_payload = [
-                asdict(x) if is_dataclass(x) else x for x in actual_payload
-            ]
+        if isinstance(actual_payload, list):
+            actual_payload = [_to_dict(x) for x in actual_payload]
+        else:
+            actual_payload = _to_dict(actual_payload)
 
         actual_shrunk = safe_shrink(actual_payload)
 

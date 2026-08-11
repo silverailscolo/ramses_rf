@@ -2,6 +2,7 @@
 """RAMSES RF - Test the payload parsers."""
 
 from pathlib import Path, PurePath
+from typing import Any
 
 import pytest
 
@@ -66,7 +67,11 @@ def _proc_log_line(log_line: str) -> None:
         return
 
     if isinstance(pkt_dict, list) or not any(k for k in pkt_dict if k in META_KEYS):
-        payload = msg.payload
+        from ramses_rf.parsers.decoder import LegacyParserDecoder
+
+        payload = LegacyParserDecoder().decode(
+            msg._dto, msg._dto.payload, len(msg._dto.payload), msg
+        )
 
         keys_to_strip = (
             "zone_idx",
@@ -74,30 +79,64 @@ def _proc_log_line(log_line: str) -> None:
             "dhw_idx",
             "hvac_id",
             "ufh_idx",
+            "ufx_idx",
             "other_idx",
         )
 
+        # Safely align single-element lists with dicts
+        if (
+            isinstance(payload, dict)
+            and isinstance(pkt_dict, list)
+            and len(pkt_dict) == 1
+            and isinstance(pkt_dict[0], dict)
+        ):
+            pkt_dict = pkt_dict[0]
+        elif (
+            isinstance(payload, list)
+            and len(payload) == 1
+            and isinstance(payload[0], dict)
+            and isinstance(pkt_dict, dict)
+        ):
+            payload = payload[0]
+
         # Safely align the payload for comparison against legacy logs
         if isinstance(payload, dict) and isinstance(pkt_dict, dict):
-            payload = dict(payload)
-            for key in keys_to_strip:
-                if key in payload and key not in pkt_dict:
-                    del payload[key]
+            payload = {
+                k: v
+                for k, v in payload.items()
+                if k not in keys_to_strip and not k.startswith("_")
+            }
+            pkt_dict = {
+                k: v
+                for k, v in pkt_dict.items()
+                if k not in keys_to_strip and not k.startswith("_")
+            }
 
         # Apply the same stripping logic if the payload is an array of dicts
         elif isinstance(payload, list) and isinstance(pkt_dict, list):
-            payload = list(payload)
-            for i, item in enumerate(payload):
-                if (
-                    isinstance(item, dict)
-                    and i < len(pkt_dict)
-                    and isinstance(pkt_dict[i], dict)
-                ):
-                    item = dict(item)
-                    for key in keys_to_strip:
-                        if key in item and key not in pkt_dict[i]:
-                            del item[key]
-                    payload[i] = item
+            new_payload: list[Any] = []
+            new_pkt_dict: list[Any] = []
+            for item, pkt_item in zip(payload, pkt_dict, strict=False):
+                if isinstance(item, dict) and isinstance(pkt_item, dict):
+                    new_payload.append(
+                        {
+                            k: v
+                            for k, v in item.items()
+                            if k not in keys_to_strip and not k.startswith("_")
+                        }
+                    )
+                    new_pkt_dict.append(
+                        {
+                            k: v
+                            for k, v in pkt_item.items()
+                            if k not in keys_to_strip and not k.startswith("_")
+                        }
+                    )
+                else:
+                    new_payload.append(item)
+                    new_pkt_dict.append(pkt_item)
+            payload = new_payload
+            pkt_dict = new_pkt_dict
 
         # NOTE: For compatibility with legacy test logs where 1-byte "00"
         # was `{}`.

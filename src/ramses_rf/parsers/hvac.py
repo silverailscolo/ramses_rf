@@ -980,8 +980,10 @@ def parser_313e(payload: str, msg: Message) -> dict[str, Any]:
     assert payload[12:] == "003C800000"
 
     result = (
-        msg.dtm - td(seconds=int(payload[10:12], 16), minutes=int(payload[2:10], 16))
-    ).isoformat()
+        (msg.dtm - td(seconds=int(payload[10:12], 16), minutes=int(payload[2:10], 16)))
+        .isoformat()
+        .split("+")[0]
+    )
 
     return {
         "zulu": result,
@@ -1419,7 +1421,6 @@ def parser_4e16(payload: str, msg: Message) -> dict[str, Any]:
     :rtype: dict[str, Any]
     :raises AssertionError: If the payload is not the expected null sequence.
     """
-
     # .I --- 02:250984 02:250704 --:------ 4E16 007 00000000000000  # Itho Autotemp: slave -> master
 
     assert payload == "00000000000000", _INFORM_DEV_MSG

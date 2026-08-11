@@ -6,11 +6,11 @@ packet payloads.
 
 from .adapters import payload_to_dict
 from .base import PayloadBase
-from .dhw import DhwConfigPayload, DhwModePayload, DhwParamsPayload, DhwStatePayload
+from .dhw import DhwConfigPayload, DhwParamsPayload, DhwStatePayload
 from .heating import (
     BindingPayload,
-    BoilerRelayDemandPayload,
     DhwTemperaturePayload,
+    FlowTempPayload,
     HeatDemandPayload,
     OutdoorTempPayload,
     ScheduleSwitchpointPayload,
@@ -86,14 +86,13 @@ __all__ = [
     "PAYLOAD_REGISTRY",
     "AirQualityBasisPayload",
     "BindingPayload",
-    "BoilerRelayDemandPayload",
     "Co2Payload",
     "DhwConfigPayload",
-    "DhwModePayload",
     "DhwParamsPayload",
     "DhwStatePayload",
     "DhwTemperaturePayload",
     "FanModePayload",
+    "FlowTempPayload",
     "HeatDemandPayload",
     "HvacAirQualityPayload",
     "HvacAutoRequestPayload",

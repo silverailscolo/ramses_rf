@@ -84,6 +84,15 @@ All contributions (whether written by human contributors or generated via AI cod
 * **Snapshot Policy**: Regression snapshots (`.ambr` files) are treated as source code. Never run `--snapshot-update` blindly. If output changes, document in the PR whether it is a bug fix or feature improvement.
 * **Tooling**: Verify changes locally using `.venv/bin/prek run -a`, `.venv/bin/ruff check .`, `.venv/bin/mypy --strict`, and `.venv/bin/pytest`.
 
+### 6. Payload Dataclasses & Binary Parsing (Issue #837 Standard)
+* **Binary Struct Parsing Requirement**: All payload decoders and serialized objects must use Python's native `struct` module for multi-byte parsing (`struct.unpack_from`) and serialization (`struct.pack`). Legacy regex matching on hex strings and manual byte slicing are strictly deprecated. Simple 1-byte payloads (`len(raw_data) == 1`) are exempt and may use direct `raw_data[0]` byte indexing.
+* **Declarative Format Specs**: Payload dataclasses for multi-byte payloads MUST declare `_STRUCT_FMT: ClassVar[str]` constants specifying C-level struct format strings (e.g., `_STRUCT_FMT = ">Bh"`).
+* **Dataclass Decorators**: Payload dataclasses MUST be decorated with `@register_payload("<OPCODE>")` and `@dataclass(frozen=True, slots=True)`.
+* **Docstring BOFM Tables**: Public payload dataclasses MUST include Sphinx docstrings containing a Binary Offset Format Map (BOFM) table outlining byte offsets, struct formats, lengths, and sample hex data.
+* **Full Specification**: Refer to [docs/developer_guide/payload_registry_spec.md](docs/developer_guide/payload_registry_spec.md) for the complete architectural specification and candidate opcode reference.
+
+
+
 ---
 
 Ramses RF is a volunteer effort. We encourage you to pitch in and join us!
