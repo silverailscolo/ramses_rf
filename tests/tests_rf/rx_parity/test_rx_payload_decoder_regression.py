@@ -17,7 +17,7 @@ FIXTURE_PATH: Path = (
 # Baseline metrics for the static fixture file. If these change, a parser
 # has been altered and the regression requires manual review.
 EXPECTED_L2_SKIPS: int = 10
-EXPECTED_SCHEMA_SKIPS: int = 15
+EXPECTED_SCHEMA_SKIPS: int = 11
 
 
 def _load_regression_frames() -> list[tuple[int, str]]:
@@ -117,3 +117,46 @@ def test_rx_payload_decoder_regression() -> None:
         f"Schema Rejection baseline shifted! Expected {EXPECTED_SCHEMA_SKIPS}, "
         f"got {skipped_schema_count}."
     )
+
+
+# ---------------------------------------------------------------------------
+# Regression: ramses_cc issue 929 — faking Zone THM broken
+#
+# 30C9 packets from non-controller devices (03:/04:/12:) with a non-zero
+# zone_idx must be accepted by the decoder.  The 0xAB guard in _pkt_idx
+# was rejecting them because those device types are not in {01, 02, 23}.
+# Real THM sensors send 30C9 with their zone_idx, and faked THM sensors
+# (introduced in 0.59.2 via commit 5b9abbe4) do the same.
+# ---------------------------------------------------------------------------
+
+_DTM = "2026-08-09T19:09:23.000000"
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [
+        # 03: analog_thermostat, zone_idx 05 (the issue's faked sensor)
+        "000  I --- 03:055486 --:------ 03:055486 30C9 003 050AA0",
+        # 03: analog_thermostat, zone_idx 01 (real sensor from fixture)
+        "044  I 007 03:201565 --:------ 03:201565 30C9 003 01073A",
+        # 04: radiator_valve, zone_idx 03
+        "000  I --- 04:055480 --:------ 04:055480 30C9 003 030A28",
+    ],
+)
+def test_30c9_non_controller_with_zone_idx_accepted(frame: str) -> None:
+    """30C9 from a non-controller with a non-zero idx must not raise."""
+    pkt: Any = Packet.from_file(_DTM, frame)
+    dto: Any = pkt.to_dto()
+    result: Any = decode_packet(dto)  # must not raise PacketPayloadInvalid
+    assert isinstance(result, dict)
+    assert "temperature" in result
+
+
+def test_30c9_controller_still_injects_zone_idx() -> None:
+    """30C9 from a controller (01:) must still inject zone_idx into the result."""
+    pkt: Any = Packet.from_file(
+        _DTM, "000  I --- 01:050858 --:------ 01:050858 30C9 003 050AA0"
+    )
+    result: Any = decode_packet(pkt.to_dto())
+    assert result.get("zone_idx") == "05"
+    assert result.get("temperature") is not None

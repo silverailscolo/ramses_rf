@@ -267,14 +267,21 @@ class _LegacyMessage:
         if self.code in ("31D9", "31DA"):
             return self.payload[:2]
 
+        # CODE_IDX_ARE_SIMPLE codes have schemas that explicitly permit a
+        # non-zero idx (e.g. 30C9 from a 03:/04:/12: sensor uses its zone_idx).
+        # Accept the packet without raising — the idx simply won't be injected
+        # into the result dict by _build_idx_dict (which has its own _has_ctl
+        # gate).  This must be checked *before* the 0xAB guard below, which
+        # would otherwise reject valid non-controller packets with a non-zero
+        # idx (see issue ramses_cc#929 — faking Zone THM broken).
+        if self.code_enum in CODE_IDX_ARE_SIMPLE:
+            return None
+
         # Explicit legacy guard (0xAB block) - non-controllers cannot send non-zero indices here
         if self.payload[:2] != "00":
             raise exc.PacketPayloadInvalid(
                 f"Packet idx is {self.payload[:2]}, but expecting no idx (00) (0xAB)"
             )
-
-        if self.code_enum in CODE_IDX_ARE_SIMPLE:
-            return None
 
         return None
 
