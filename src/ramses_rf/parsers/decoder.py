@@ -6,6 +6,7 @@ L7 semantic dictionaries, strictly separating domain logic from transport.
 
 import logging
 import re
+import struct
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -27,7 +28,9 @@ from ramses_tx.dtos import PacketDTO
 from .registry import get_parser
 
 # Constants
-_INFORM_DEV_MSG = "Support the development of ramses_rf by reporting this packet"
+_UNKNOWN_PACKET_HELP_MSG: str = (
+    "Support the development of ramses_rf by reporting this packet"
+)
 
 # Variables
 _LOGGER = logging.getLogger(__name__)
@@ -304,7 +307,7 @@ class _LegacyMessage:
         return self._ctx_
 
 
-def _build_idx_dict(msg: _LegacyMessage) -> dict[str, str]:
+def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
     """Build the dictionary for index merging, matching message.py logic exactly.
 
     :param msg: The _LegacyMessage instance being processed.
@@ -368,43 +371,49 @@ def _build_idx_dict(msg: _LegacyMessage) -> dict[str, str]:
     return {index_name: idx_val}
 
 
-def parser_unknown(payload: str, msg: _LegacyMessage) -> dict[str, Any]:
+def parse_unknown_payload(raw_payload: str, msg: _LegacyMessage) -> dict[str, Any]:
     """Apply a generic parser for unrecognized packet codes.
 
-    :param payload: The raw hex string of the packet payload.
+    :param raw_payload: The raw hex string of the packet payload.
+    :type raw_payload: str
     :param msg: The legacy message abstraction layer object.
-    :return: Standard structural error dictionaries or generic value payloads.
+    :type msg: _LegacyMessage
+    :returns: Standard structural error dictionaries or generic payloads.
+    :rtype: dict[str, Any]
     """
-    if msg.len == 2 and payload[:2] == "00":
+    if msg.len == 2 and raw_payload[:2] == "00":
         return {
-            "_payload": payload,
+            "_payload": raw_payload,
             "_value": {"00": False, "C8": True}.get(
-                payload[2:], int(payload[2:] or "0", 16)
+                raw_payload[2:], int(raw_payload[2:] or "0", 16)
             ),
         }
 
-    if msg.len == 3 and payload[:2] == "00":
+    if msg.len == 3 and raw_payload[:2] == "00":
         # HACK: Using ramses_tx helper locally, replace with explicit logic if desired.
         from ramses_tx.helpers import hex_to_temp
 
         return {
-            "_payload": payload,
-            "_value": hex_to_temp(payload[2:]),
+            "_payload": raw_payload,
+            "_value": hex_to_temp(raw_payload[2:]),
         }
 
     return {
-        "_payload": payload,
+        "_payload": raw_payload,
         "_unknown_code": msg.code,
         "_parse_error": "No parser available for this packet type",
     }
 
 
-def parser_heartbeat(payload: str, msg: _LegacyMessage) -> dict[str, Any]:
+def parse_heartbeat_payload(raw_payload: str, msg: _LegacyMessage) -> dict[str, Any]:
     """Parse a 1-byte heartbeat packet (payload '00').
 
-    :param payload: The raw packet payload value string.
+    :param raw_payload: The raw packet payload value string.
+    :type raw_payload: str
     :param msg: The legacy structural envelope message object.
-    :return: Decoded validation flags.
+    :type msg: _LegacyMessage
+    :returns: Decoded validation flags.
+    :rtype: dict[str, Any]
     """
     return {"heartbeat": True}
 
@@ -420,25 +429,36 @@ class PayloadDecoder(ABC):
         """Set the next decoder in the chain.
 
         :param decoder: The next step implementation payload decoder instance.
-        :return: Fluid returned instance object.
+        :type decoder: PayloadDecoder
+        :returns: Fluid returned instance object.
+        :rtype: PayloadDecoder
         """
         self._next_decoder = decoder
         return decoder
 
     @abstractmethod
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
+        self,
+        dto: PacketDTO,
+        raw_payload: str,
+        payload_len: int,
+        msg: _LegacyMessage,
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
         """Decode the payload.
 
         :param dto: The packet raw serialization structure object.
-        :param payload_str: Raw configuration hex payload representation.
+        :type dto: PacketDTO
+        :param raw_payload: Raw configuration hex payload representation.
+        :type raw_payload: str
         :param payload_len: Clean length tracking metric.
+        :type payload_len: int
         :param msg: Internal compatibility envelope schema instance.
-        :return: Extracted parser structural outputs.
+        :type msg: _LegacyMessage
+        :returns: Extracted parser structural outputs.
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
         if self._next_decoder:
-            return self._next_decoder.decode(dto, payload_str, payload_len, msg)
+            return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
         return {}
 
 
@@ -446,9 +466,25 @@ class RegexValidatorDecoder(PayloadDecoder):
     """Decoder that evaluates empty payloads and validates constraints."""
 
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
+        self,
+        dto: PacketDTO,
+        raw_payload: str,
+        payload_len: int,
+        msg: _LegacyMessage,
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
-        """Validate expressions against schema and enforce strict execution conditions."""
+        """Validate expressions against schema and enforce execution conditions.
+
+        :param dto: The packet raw serialization structure object.
+        :type dto: PacketDTO
+        :param raw_payload: Raw configuration hex payload representation.
+        :type raw_payload: str
+        :param payload_len: Clean length tracking metric.
+        :type payload_len: int
+        :param msg: Internal compatibility envelope schema instance.
+        :type msg: _LegacyMessage
+        :returns: Extracted parser structural outputs.
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        """
         try:
             _ = repr(dto)
         except Exception as err:
@@ -461,16 +497,16 @@ class RegexValidatorDecoder(PayloadDecoder):
                 regex = CODES_SCHEMA[code].get(dto.verb)
                 if regex:
                     match = (
-                        bool(regex.match(payload_str))
+                        bool(regex.match(raw_payload))
                         if hasattr(regex, "match")
-                        else bool(re.match(str(regex), payload_str))
+                        else bool(re.match(str(regex), raw_payload))
                     )
 
                     if not match:
                         if not msg._has_payload:
                             return None
                         if dto.verb.strip() != "RQ":
-                            msg_str = f"Payload doesn't match {dto.verb}/{dto.code}: {payload_str} != {regex}"
+                            msg_str = f"Payload doesn't match {dto.verb}/{dto.code}: {raw_payload} != {regex}"
                             raise exc.PacketPayloadInvalid(msg_str)
 
         if not msg._has_payload and (
@@ -479,7 +515,7 @@ class RegexValidatorDecoder(PayloadDecoder):
             return None
 
         if self._next_decoder:
-            return self._next_decoder.decode(dto, payload_str, payload_len, msg)
+            return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
         return {}
 
 
@@ -487,13 +523,29 @@ class HeartbeatDecoder(PayloadDecoder):
     """Decoder that intercepts 1-byte '00' heartbeats."""
 
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
+        self,
+        dto: PacketDTO,
+        raw_payload: str,
+        payload_len: int,
+        msg: _LegacyMessage,
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
-        """Evaluate and intercept simple heartbeat packages."""
-        if payload_len == 1 and payload_str == "00" and dto.code != "1FC9":
+        """Evaluate and intercept simple heartbeat packages.
+
+        :param dto: The packet raw serialization structure object.
+        :type dto: PacketDTO
+        :param raw_payload: Raw configuration hex payload representation.
+        :type raw_payload: str
+        :param payload_len: Clean length tracking metric.
+        :type payload_len: int
+        :param msg: Internal compatibility envelope schema instance.
+        :type msg: _LegacyMessage
+        :returns: Extracted parser structural outputs.
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        """
+        if payload_len == 1 and raw_payload == "00" and dto.code != "1FC9":
             try:
-                parser = get_parser(dto.code) or parser_unknown
-                res = parser(payload_str, msg)
+                parser = get_parser(dto.code) or parse_unknown_payload
+                res = parser(raw_payload, msg)
                 if res == {}:
                     return None
             except (
@@ -508,53 +560,158 @@ class HeartbeatDecoder(PayloadDecoder):
                     dto.code,
                     err,
                 )
-            return parser_heartbeat(payload_str, msg)
+            return parse_heartbeat_payload(raw_payload, msg)
 
         if self._next_decoder:
-            return self._next_decoder.decode(dto, payload_str, payload_len, msg)
+            return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
         return {}
 
 
-class ParityCheckerDecoder(PayloadDecoder):
-    """Decoder executing registered PayloadBase dataclasses in shadow mode."""
+def _convert_to_dict(payload_obj: Any, msg: _LegacyMessage) -> Any:
+    """Invoke payload.to_dict safely passing msg context if supported."""
+    to_dict_fn = getattr(payload_obj, "to_dict", None)
+    if not callable(to_dict_fn):
+        return None
+    try:
+        return to_dict_fn(msg=msg)
+    except TypeError:
+        return to_dict_fn()
+
+
+def _inject_header_metadata(
+    res_dict: dict[str, Any], msg: _LegacyMessage, dto: PacketDTO
+) -> dict[str, Any]:
+    """Inject packet header index metadata and sequence number into dictionary."""
+    merged = _build_index_dict(msg)
+    merged.update(res_dict)
+    if dto.seq and dto.seq.isnumeric():
+        merged["seqx_num"] = dto.seq
+    return merged
+
+
+class DataclassPayloadDecoder(PayloadDecoder):
+    """Active decoder using registered PayloadBase dataclass parsers."""
+
+    def _aggregate_zone_devices(
+        self,
+        payload_list: list[Any],
+        msg: _LegacyMessage,
+        dto: PacketDTO,
+    ) -> dict[str, Any] | None:
+        """Combine multi-chunk 000C device binding items into a single dictionary."""
+        dev_ids: list[str] = []
+        base_dict: dict[str, Any] | None = None
+        for item in payload_list:
+            if isinstance(d := _convert_to_dict(item, msg), dict):
+                if base_dict is None:
+                    base_dict = dict(d)
+                dev_ids.extend(d.get("devices", []))
+        if base_dict is not None:
+            base_dict["devices"] = dev_ids
+            return _inject_header_metadata(base_dict, msg, dto)
+        return None
 
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
+        self,
+        dto: PacketDTO,
+        raw_payload: str,
+        payload_len: int,
+        msg: _LegacyMessage,
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
-        """Execute dataclass payload decoding in shadow mode before legacy parsing."""
+        """Decode raw payload bytes into typed dataclass instances.
+
+        :param dto: The packet raw serialization structure object.
+        :type dto: PacketDTO
+        :param raw_payload: Raw configuration hex payload representation.
+        :type raw_payload: str
+        :param payload_len: Clean length tracking metric.
+        :type payload_len: int
+        :param msg: Internal compatibility envelope schema instance.
+        :type msg: _LegacyMessage
+        :returns: Extracted parser structural outputs.
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        """
         payload_cls = get_payload_class(dto.code)
 
-        if payload_cls is not None and payload_str and dto.verb != "RQ":
+        if payload_cls is not None and raw_payload and dto.verb != "RQ":
             try:
-                raw_bytes = bytes.fromhex(payload_str)
-                payload = payload_cls.from_bytes(raw_bytes)
-                _LOGGER.debug(
-                    "Shadow Dataclass decoded opcode %s: %r",
-                    dto.code,
-                    payload,
-                )
-            except Exception as err:
+                raw_bytes = bytes.fromhex(raw_payload)
+                decoded_payload = payload_cls.from_bytes(raw_bytes)
+
+                if isinstance(decoded_payload, list):
+                    if dto.code == "000C":
+                        return self._aggregate_zone_devices(decoded_payload, msg, dto)
+
+                    converted_payloads: list[dict[str, Any]] = []
+                    for item in decoded_payload:
+                        if isinstance(
+                            converted_dict := _convert_to_dict(item, msg), dict
+                        ):
+                            converted_payloads.append(
+                                _inject_header_metadata(converted_dict, msg, dto)
+                            )
+                        elif converted_dict is not None:
+                            converted_payloads.append(converted_dict)
+                        else:
+                            if self._next_decoder is not None:
+                                return self._next_decoder.decode(
+                                    dto, raw_payload, payload_len, msg
+                                )
+                            return None
+                    return converted_payloads
+
+                if isinstance(
+                    converted_dict := _convert_to_dict(decoded_payload, msg),
+                    dict,
+                ):
+                    return _inject_header_metadata(converted_dict, msg, dto)
+                if isinstance(converted_dict, list):
+                    return converted_dict
+
+            except (ValueError, struct.error, TypeError, KeyError) as err:
+                if not msg._has_payload:
+                    return {}
                 _LOGGER.warning(
-                    "Shadow Dataclass decoding failed for opcode %s: %s",
+                    "Dataclass decoding failed for opcode %s: %s < %s",
                     dto.code,
                     err,
+                    _UNKNOWN_PACKET_HELP_MSG,
                 )
 
-        if self._next_decoder:
-            return self._next_decoder.decode(dto, payload_str, payload_len, msg)
-        return {}
+        if self._next_decoder is not None:
+            return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
+        return None
 
 
-class StandardParserDecoder(PayloadDecoder):
+class LegacyParserDecoder(PayloadDecoder):
     """Decoder routing payload to the appropriate 4-digit code parser."""
 
     def decode(
-        self, dto: PacketDTO, payload_str: str, payload_len: int, msg: _LegacyMessage
+        self,
+        dto: PacketDTO,
+        raw_payload: str,
+        payload_len: int,
+        msg: _LegacyMessage,
     ) -> dict[str, Any] | list[dict[str, Any]] | None:
-        """Parse structured metrics passing execution objects forward to specific system decoders."""
+        """Route payload to the appropriate 4-digit code parser.
+
+        :param dto: The packet raw serialization structure object.
+        :type dto: PacketDTO
+        :param raw_payload: Raw configuration hex payload representation.
+        :type raw_payload: str
+        :param payload_len: Clean length tracking metric.
+        :type payload_len: int
+        :param msg: Internal compatibility envelope schema instance.
+        :type msg: _LegacyMessage
+        :returns: Extracted parser structural outputs.
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
+        """
+        if not raw_payload:
+            return {}
+
         try:
-            parser = get_parser(dto.code) or parser_unknown
-            result = parser(payload_str, msg)
+            parser = get_parser(dto.code) or parse_unknown_payload
+            result = parser(raw_payload, msg)
 
             if isinstance(result, dict) and dto.seq and dto.seq.isnumeric():
                 result["seqx_num"] = dto.seq
@@ -564,34 +721,37 @@ class StandardParserDecoder(PayloadDecoder):
             if isinstance(result, dict):
                 return result
             return {}
-        except AssertionError as err:
+        except (AssertionError, ValueError) as err:
             err_result = {
-                "_payload": payload_str,
-                "_parse_error": f"AssertionError: {err}",
+                "_payload": raw_payload,
+                "_parse_error": f"{err.__class__.__name__}: {err}",
                 "_unknown_code": dto.code,
             }
+
             if dto.seq and dto.seq.isnumeric():
                 err_result["seqx_num"] = dto.seq
             return err_result
 
 
-class DtoPayloadDecoderPipeline:
+class PayloadDecoderPipeline:
     """The Chain of Responsibility pipeline for decoding DTO payloads."""
 
     def __init__(self) -> None:
         """Initialize pipeline linking specific system validation decoders."""
         self.head = RegexValidatorDecoder()
         self.head.set_next(HeartbeatDecoder()).set_next(
-            ParityCheckerDecoder()
-        ).set_next(StandardParserDecoder())
+            DataclassPayloadDecoder()
+        ).set_next(LegacyParserDecoder())
 
     def decode(self, dto: PacketDTO) -> dict[str, Any] | list[dict[str, Any]] | None:
         """Route tracking models cleanly through downstream chain decoders.
 
         :param dto: The network transfer packet state container model.
-        :return: Fully structured mapping outputs or null evaluations.
+        :type dto: PacketDTO
+        :returns: Fully structured mapping outputs or null evaluations.
+        :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
-        payload_str: str = dto.raw_payload
+        raw_payload: str = dto.raw_payload
         try:
             payload_len: int = int(dto.length)
         except ValueError:
@@ -601,7 +761,7 @@ class DtoPayloadDecoderPipeline:
 
         # 1. Parsing Phase (Catches and suppresses exceptions for null payloads)
         try:
-            result = self.head.decode(dto, payload_str, payload_len, msg)
+            result = self.head.decode(dto, raw_payload, payload_len, msg)
         except exc.PacketPayloadInvalid as err:
             if not msg._has_payload:
                 result = {}
@@ -624,7 +784,7 @@ class DtoPayloadDecoderPipeline:
 
         # 3. Index Injection Phase (Errors raised here will bypass the null-payload swallow)
         try:
-            idx_dict = _build_idx_dict(msg)
+            idx_dict = _build_index_dict(msg)
             return {**idx_dict, **result}
         except exc.PacketInvalid as err:
             raise err
@@ -634,9 +794,11 @@ def decode_packet(dto: PacketDTO) -> dict[str, Any] | list[dict[str, Any]]:
     """Entry point for the new DTO-based payload decoder.
 
     :param dto: The network protocol target transfer object packet frame.
-    :return: Processed semantic runtime dictionary details.
+    :type dto: PacketDTO
+    :returns: Processed semantic runtime dictionary details.
+    :rtype: dict[str, Any] | list[dict[str, Any]]
     """
-    pipeline = DtoPayloadDecoderPipeline()
+    pipeline = PayloadDecoderPipeline()
     result = pipeline.decode(dto)
 
     if result is None:

@@ -20,5 +20,14 @@ For all general coding, typing, docstring, and architectural standards, you **mu
 * **Surgical Precision**: Modify only lines strictly necessary to complete the task. Do not perform unrequested "general cleanup" on legacy code.
 * **Comment Preservation**: Treat existing inline comments, `#TODO`, `#FIXME`, and `#HACK` markers as sacred anchors. Git relies on line stability; preserving comments preserves history.
 * **Wrap, Don't Hack**: When wrapping long comments or docstrings, never truncate sentences or strip English determiners/words to force line limits. Use standard multi-line wrapping.
+
+## 3. Semantic Payload Registry & Binary Parsing (Issue #837 Standard)
+
+* **Use Binary Struct Parsing**: Never implement or use hex string regular expressions (`hex_regex`) or raw byte slicing (`raw_data[1:3]`) for multi-byte binary payload parsing. Use Python's native `struct.unpack_from` and `struct.pack`. Simple 1-byte payloads (`len(raw_data) == 1`) are exempt and may use direct `raw_data[0]` byte indexing.
+* **Declarative Format Constants**: Always declare explicit `_STRUCT_FMT: ClassVar[str]` constants on multi-byte payload dataclasses using Big-Endian (`>`) or Little-Endian (`<`) format strings.
+* **Sphinx Docstring BOFM Tables**: Always document payload dataclasses with a Binary Offset Format Map (BOFM) table detailing field offsets, struct formats, byte lengths, and sample hex representations.
+* **Architecture Spec Reference**: Consult [docs/developer_guide/payload_registry_spec.md](docs/developer_guide/payload_registry_spec.md) for detailed guidelines and opcode struct specifications.
+
+
 * **Tooling Execution**: Use project virtual environment binaries (e.g., `.venv/bin/pytest`, `.venv/bin/prek run -a`). Do not invent custom runner scripts or bypass existing quality checks.
 * **Cross-Repository References**: Fully qualify cross-repository issue and PR references (e.g., `ramses-rf/ramses_cc#123`).

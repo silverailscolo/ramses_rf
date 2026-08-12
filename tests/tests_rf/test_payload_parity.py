@@ -1,13 +1,15 @@
+from dataclasses import replace
 from datetime import datetime as dt
 
 import ramses_tx.const as tx_const
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
-from ramses_rf.payloads.dhw import DhwConfigPayload, DhwModePayload, DhwStatePayload
+from ramses_rf.payloads.dhw import DhwConfigPayload, DhwStatePayload, DhwTempPayload
 from ramses_rf.payloads.heating import (
+    ActuatorStatePayload,
     BindingPayload,
-    BoilerRelayDemandPayload,
     DhwTemperaturePayload,
+    FlowTempPayload,
     HeatDemandPayload,
     OutdoorTempPayload,
     RelayDemandPayload,
@@ -29,19 +31,21 @@ from ramses_rf.payloads.hvac import (
     HvacFanParamPayload,
     HvacFaultStatusPayload,
     HvacFilterChangePayload,
+    HvacTimeOffsetPayload,
     HvacVentilationStatusPayload,
     RelativeHumidityPayload,
 )
 from ramses_rf.payloads.opentherm import (
     OpenThermMsgPayload,
-    OpenthermSetpointPayload,
-    OpenthermStatusPayload,
+    OpenThermSetpointPayload,
+    OpenThermStatusPayload,
 )
 from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
 from ramses_rf.payloads.system import (
     SystemClockPayload,
     SystemConfigPayload,
     SystemDatePayload,
+    SystemDateTimePayload,
     SystemFaultLogPayload,
 )
 from ramses_tx.dtos import PacketDTO
@@ -54,6 +58,7 @@ def test_heat_demand_payload_3150_parity() -> None:
 
     # Act
     payload = HeatDemandPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, HeatDemandPayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -74,6 +79,7 @@ def test_heat_demand_payload_3150_2byte_parity() -> None:
 
     # Act
     payload = HeatDemandPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, HeatDemandPayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -96,19 +102,18 @@ def test_heat_demand_payload_3150_multibyte_parity() -> None:
 
     # Act
     payload = HeatDemandPayload.from_bytes(raw_bytes)
-    reencoded = payload.to_bytes().hex().upper()
-    as_dict = payload_to_dict(payload)
+    assert isinstance(payload, list)
+    reencoded = b"".join(x.to_bytes() for x in payload).hex().upper()
+    as_dict = [payload_to_dict(x) for x in payload]
 
     # Assert
-    assert payload.domain_or_zone_idx == 1
-    assert payload.demand_percent == 202
-    assert payload.raw_extra == bytes.fromhex("0011")
+    assert payload[0].domain_or_zone_idx == 1
+    assert payload[0].demand_percent == 202
     assert reencoded == raw_hex
-    assert as_dict == {
-        "domain_or_zone_idx": 1,
-        "demand_percent": 202,
-        "raw_extra": bytes.fromhex("0011"),
-    }
+    assert as_dict == [
+        {"domain_or_zone_idx": 1, "demand_percent": 202, "raw_extra": None},
+        {"domain_or_zone_idx": 0, "demand_percent": 17, "raw_extra": None},
+    ]
 
 
 def test_temperature_payload_30c9_simple_parity() -> None:
@@ -118,6 +123,7 @@ def test_temperature_payload_30c9_simple_parity() -> None:
 
     # Act
     payload = TemperaturePayload.from_bytes(raw_bytes)
+    assert isinstance(payload, TemperaturePayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -135,6 +141,7 @@ def test_temperature_payload_30c9_zone_parity() -> None:
 
     # Act
     payload = TemperaturePayload.from_bytes(raw_bytes)
+    assert isinstance(payload, TemperaturePayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -316,9 +323,9 @@ def test_co2_payload_1298_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.co2_ppm == 720
+    assert payload.co2_level == 720
     assert reencoded == raw_hex
-    assert as_dict == {"co2_ppm": 720}
+    assert as_dict == {"co2_level": 720}
 
 
 def test_relative_humidity_payload_12a0_parity() -> None:
@@ -361,22 +368,22 @@ def test_opentherm_msg_payload_3220_parity() -> None:
     }
 
 
-def test_dhw_mode_payload_1260_parity() -> None:
+def test_dhw_temp_payload_1260_parity() -> None:
     # Arrange
-    raw_hex = "000101"
+    raw_hex = "000837"
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
-    payload = DhwModePayload.from_bytes(raw_bytes)
+    payload = DhwTempPayload.from_bytes(raw_bytes)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
     # Assert
     assert payload.dhw_idx == 0
-    assert payload.mode == 1
-    assert payload.state == 1
+    assert payload.temperature == 21.03
     assert reencoded == raw_hex
-    assert as_dict == {"dhw_idx": 0, "mode": 1, "state": 1}
+    assert as_dict == {"dhw_idx": 0, "temperature": 21.03}
+    assert payload.to_dict() == {"temperature": 21.03}
 
 
 def test_dhw_config_payload_12f0_parity() -> None:
@@ -455,6 +462,7 @@ def test_setpoint_info_payload_2309_parity() -> None:
 
     # Act
     payload = SetPointInfoPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, SetPointInfoPayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -465,22 +473,22 @@ def test_setpoint_info_payload_2309_parity() -> None:
     assert as_dict == {"zone_idx": 0, "setpoint_temp": 21.0}
 
 
-def test_boiler_relay_demand_payload_3200_parity() -> None:
+def test_flow_temp_payload_3200_parity() -> None:
     # Arrange
-    raw_hex = "00C800"
+    raw_hex = "00131A"
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
-    payload = BoilerRelayDemandPayload.from_bytes(raw_bytes)
+    payload = FlowTempPayload.from_bytes(raw_bytes)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.domain == 0
-    assert payload.demand_percent == 200
-    assert payload.flags == 0
+    assert payload.domain_idx == 0
+    assert payload.temperature == 48.90
     assert reencoded == raw_hex
-    assert as_dict == {"domain": 0, "demand_percent": 200, "flags": 0}
+    assert as_dict == {"domain_idx": 0, "temperature": 48.90}
+    assert payload.to_dict() == {"temperature": 48.90}
 
 
 def test_hvac_ventilation_status_payload_22e0_parity() -> None:
@@ -598,7 +606,7 @@ def test_opentherm_status_payload_0150_parity() -> None:
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
-    payload = OpenthermStatusPayload.from_bytes(raw_bytes)
+    payload = OpenThermStatusPayload.from_bytes(raw_bytes)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -615,7 +623,7 @@ def test_opentherm_setpoint_payload_1098_parity() -> None:
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
-    payload = OpenthermSetpointPayload.from_bytes(raw_bytes)
+    payload = OpenThermSetpointPayload.from_bytes(raw_bytes)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -952,6 +960,110 @@ def test_zone_name_payload_parity() -> None:
     }
 
 
+def test_hvac_time_offset_payload_313e_parity() -> None:
+
+    # Arrange
+    raw_hex = "000000003C00003C800000"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacTimeOffsetPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.offset_mins == 60
+    assert payload.offset_secs == 0
+    assert reencoded == raw_hex
+    assert as_dict == {
+        "offset_mins": 60,
+        "offset_secs": 0,
+    }
+    assert payload.to_dict() == {
+        "value_02": "0000003C",
+        "value_10": "00",
+        "value_12": "003C800000",
+    }
+
+
+def test_actuator_state_payload_3ef0_3byte_parity() -> None:
+    # Arrange
+    raw_hex = "0064FF"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ActuatorStatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    legacy_dict = payload.to_dict()
+
+    # Assert
+    assert payload.domain_id == 0
+    assert payload.modulation_level == 0.5
+    assert payload.flags_2 == 255
+    assert payload.flags_3 is None
+    assert reencoded == raw_hex
+    assert legacy_dict == {"modulation_level": 0.5}
+
+
+def test_actuator_state_payload_3ef0_4byte_parity() -> None:
+    # Arrange
+    raw_hex = "0064FF10"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ActuatorStatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    legacy_dict = payload.to_dict()
+
+    # Assert
+    assert payload.domain_id == 0
+    assert payload.modulation_level == 0.5
+    assert payload.flags_2 == 255
+    assert payload.flags_3 == 0x10
+    assert payload.flags_6 is None
+    assert reencoded == raw_hex
+    assert legacy_dict == {
+        "modulation_level": 0.5,
+        "ch_active": False,
+        "dhw_active": False,
+        "flame_on": False,
+        "cool_active": True,
+    }
+
+
+def test_actuator_state_payload_3ef0_9byte_parity() -> None:
+    # Arrange
+    raw_hex = "0064FF1000FF0114C8"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ActuatorStatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    legacy_dict = payload.to_dict()
+
+    # Assert
+    assert payload.domain_id == 0
+    assert payload.modulation_level == 0.5
+    assert payload.flags_2 == 255
+    assert payload.flags_3 == 0x10
+    assert payload.unknown_4 == 0
+    assert payload.unknown_5 == 255
+    assert payload.flags_6 == 1
+    assert payload.ch_setpoint == 20
+    assert payload.max_rel_modulation == 1.0
+    assert reencoded == raw_hex
+    assert legacy_dict == {
+        "modulation_level": 0.5,
+        "ch_active": False,
+        "dhw_active": False,
+        "flame_on": False,
+        "cool_active": True,
+        "ch_enabled": True,
+        "ch_setpoint": 20,
+        "max_rel_modulation": 1.0,
+    }
+
+
 def test_complete_payload_registry_coverage() -> None:
 
     # Arrange & Act
@@ -960,10 +1072,70 @@ def test_complete_payload_registry_coverage() -> None:
         for a in dir(tx_const.Code)
         if a.startswith("_") and len(a) == 5
     ]
-    aliases = ["2E10", "313E"]
+
+    aliases = ["2E10"]
     all_expected = known_codes + aliases
 
     # Assert
     for code in all_expected:
         assert code in PAYLOAD_REGISTRY, f"Opcode {code} missing from PAYLOAD_REGISTRY"
     assert len(PAYLOAD_REGISTRY._registry) == 108
+
+
+def test_pipeline_3150_non_array_preserves_idx() -> None:
+    # Arrange
+    dto = PacketDTO(
+        timestamp=dt.now(),
+        rssi="-70",
+        verb=" I",
+        seq="001",
+        addr1="04:123456",
+        addr2="--:------",
+        addr3="01:555555",
+        code="3150",
+        length="002",
+        payload="00C8",
+    )
+
+    # Act
+    result = decode_packet(dto)
+
+    # Assert
+    assert isinstance(result, dict)
+    assert result.get("heat_demand") == 1.0
+    assert result.get("zone_idx") == "00"
+
+
+def test_opentherm_msg_payload_replace_recalculates_parity() -> None:
+    # Arrange
+    raw_hex = "00C01307C0"
+    raw_bytes = bytes.fromhex(raw_hex)
+    payload = OpenThermMsgPayload.from_bytes(raw_bytes)
+
+    # Act
+    modified_payload = replace(payload, msg_id=0x19)
+    reencoded = modified_payload.to_bytes().hex().upper()
+    modified_dict = payload_to_dict(modified_payload)
+
+    # Assert
+    assert modified_payload.msg_id == 0x19
+    assert reencoded != raw_hex
+    assert reencoded == "00C01907C0"
+    assert modified_dict.get("msg_id") == 25
+
+
+def test_system_datetime_payload_replace_recalculates_bytes() -> None:
+    # Arrange
+    raw_hex = "00F036020A020507E6"
+    raw_bytes = bytes.fromhex(raw_hex)
+    payload = SystemDateTimePayload.from_bytes(raw_bytes)
+
+    # Act
+    modified_payload = replace(payload, datetime_str="2023-06-15T12:00:00")
+    reencoded = modified_payload.to_bytes().hex().upper()
+    modified_dict = payload_to_dict(modified_payload)
+
+    # Assert
+    assert modified_payload.datetime_str == "2023-06-15T12:00:00"
+    assert reencoded != raw_hex
+    assert modified_dict.get("datetime_str") == "2023-06-15T12:00:00"

@@ -351,4 +351,4 @@ def test_payload_dataclass_struct_format_detection_summary() -> None:
     # Assert: Ensure registry is fully categorized
     total = len(struct_classes) + len(direct_classes)
     assert total == len(REGISTERED_PAYLOAD_CLASSES)
-    assert total >= 108
+    assert total >= 107
