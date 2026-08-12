@@ -350,14 +350,15 @@ def test_polling_manager_accepts_shadow_mode() -> None:
 
 def test_legacy_poller_deprecated_or_removed() -> None:
     """Legacy DiscoveryService.start_poller is deprecated/no-op or removed."""
+    import importlib
     import inspect
 
     try:
-        from ramses_rf.discovery import DiscoveryService
-    except ImportError:
+        discovery = importlib.import_module("ramses_rf.discovery")
+    except ModuleNotFoundError:
         return  # DiscoveryService fully removed — stronger than no-op
 
-    src = inspect.getsource(DiscoveryService.start_poller)
+    src = inspect.getsource(discovery.DiscoveryService.start_poller)
     assert "deprecated" in src.lower() or "disabled" in src.lower()
 
 
