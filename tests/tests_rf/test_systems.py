@@ -599,8 +599,7 @@ def test_update_system_state_hydrates_from_2e04_packet() -> None:
 
 def test_update_demand_state_ufc_ufh_circuit_demand_ignored() -> None:
     # Arrange
-    from ramses_rf.entity import StateUpdatedEvent
-    from ramses_rf.models import DemandState
+    from ramses_rf.models import DemandState, StateUpdatedEvent
     from ramses_tx.const import Code
 
     class MockTarget:
@@ -628,8 +627,7 @@ def test_update_demand_state_ufc_ufh_circuit_demand_ignored() -> None:
 
 def test_update_demand_state_ctl_fc_domain_demand_accepted() -> None:
     # Arrange
-    from ramses_rf.entity import StateUpdatedEvent
-    from ramses_rf.models import DemandState
+    from ramses_rf.models import DemandState, StateUpdatedEvent
     from ramses_tx.const import Code
 
     class MockTarget:
