@@ -2176,36 +2176,60 @@ class ActuatorSyncPayload(PayloadBase):
 class ActuatorStatePayload(PayloadBase):
     """Actuator modulation state payload (Opcode 3EF0).
 
-    3-byte Actuator State binary layout:
+    9-byte Actuator State binary layout (3-byte base + optional trailing fields):
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
       +0       B      1B   Domain / Zone Index          : 00
       +1       B      1B   Modulation Level (0-200)     : 64 (50%)
       +2       B      1B   Flags / Status Byte          : FF
+      +3       B      1B   Optional Flags 3 Byte        : 10
+      +4       B      1B   Optional Unknown Byte 4      : 00
+      +5       B      1B   Optional Unknown Byte 5      : FF
+      +6       B      1B   Optional OpenTherm Flags 6   : 01
+      +7       B      1B   Optional CH Setpoint uint8   : 14 (20°C)
+      +8       B      1B   Optional Max Mod uint8       : C8 (100%)
       --------------------------------------------------------------
-      Field-spaced hex : 00 64 FF
-      Payload hex      : 0064FF
+      Field-spaced hex : 00 64 FF 10 00 FF 01 14 C8
+      Payload hex      : 0064FF1000FF0114C8
 
     Protocol Notes:
       # Honeywell Jasper (JIM) devices emit 4-byte payload containing flags_3.
       # Header context payload[:2] is normally 00.
+      # R8820A OpenTherm Bridges emit 9-byte payload containing flags_6,
+      # ch_setpoint, and max_rel_modulation.
 
     :param domain_id: Domain or zone index byte.
     :type domain_id: int
-    :param modulation_level: Modulation level percentage (0.0 - 100.0).
+    :param modulation_level: Modulation level fraction (0.0 - 1.0).
     :type modulation_level: float
     :param flags_2: Secondary status flag byte.
     :type flags_2: int
     :param flags_3: Optional tertiary status flag byte.
     :type flags_3: int | None
+    :param unknown_4: Optional byte 4 status/header byte.
+    :type unknown_4: int | None
+    :param unknown_5: Optional byte 5 status/header byte.
+    :type unknown_5: int | None
+    :param flags_6: Optional byte 6 OpenTherm status flag byte.
+    :type flags_6: int | None
+    :param ch_setpoint: Optional central heating setpoint in °C.
+    :type ch_setpoint: int | None
+    :param max_rel_modulation: Optional max relative modulation fraction.
+    :type max_rel_modulation: float | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BBB"
+    _STRUCT_FMT_EXT: ClassVar[str] = ">BBBBB"
 
     domain_id: int
     modulation_level: float
     flags_2: int
-    flags_3: int | None
+    flags_3: int | None = None
+    unknown_4: int | None = None
+    unknown_5: int | None = None
+    flags_6: int | None = None
+    ch_setpoint: int | None = None
+    max_rel_modulation: float | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -2221,11 +2245,24 @@ class ActuatorStatePayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 3EF0: {len(raw_data)}")
         domain_id, mod_raw, f2 = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         f3 = raw_data[3] if len(raw_data) >= 4 else None
+
+        u4, u5, f6, ch_setpoint, max_rel_mod = None, None, None, None, None
+        if len(raw_data) >= 9:
+            u4, u5, f6, ch_setpoint, max_mod_raw = struct.unpack_from(
+                cls._STRUCT_FMT_EXT, raw_data, 4
+            )
+            max_rel_mod = max_mod_raw / 200.0
+
         return cls(
             domain_id=domain_id,
             modulation_level=mod_raw / 200.0,
             flags_2=f2,
             flags_3=f3,
+            unknown_4=u4,
+            unknown_5=u5,
+            flags_6=f6,
+            ch_setpoint=ch_setpoint,
+            max_rel_modulation=max_rel_mod,
         )
 
     def to_bytes(self) -> bytes:
@@ -2238,6 +2275,22 @@ class ActuatorStatePayload(PayloadBase):
         res = struct.pack(self._STRUCT_FMT, self.domain_id, mod_raw, self.flags_2)
         if self.flags_3 is not None:
             res += bytes([self.flags_3])
+        if (
+            self.unknown_4 is not None
+            and self.unknown_5 is not None
+            and self.flags_6 is not None
+            and self.ch_setpoint is not None
+            and self.max_rel_modulation is not None
+        ):
+            max_mod_raw = min(200, max(0, int(round(self.max_rel_modulation * 200.0))))
+            res += struct.pack(
+                self._STRUCT_FMT_EXT,
+                self.unknown_4,
+                self.unknown_5,
+                self.flags_6,
+                self.ch_setpoint,
+                max_mod_raw,
+            )
         return res
 
     def to_dict(self) -> dict[str, Any]:
@@ -2257,11 +2310,14 @@ class ActuatorStatePayload(PayloadBase):
                     "dhw_active": bool(f3 & (1 << 2)),
                     "flame_on": bool(f3 & (1 << 3)),
                     "cool_active": bool(f3 & (1 << 4)),
-                    "ch_enabled": False,
-                    "ch_setpoint": 10,
-                    "max_rel_modulation": 0.5,
                 }
             )
+        if self.flags_6 is not None:
+            res["ch_enabled"] = bool(self.flags_6 & (1 << 0))
+        if self.ch_setpoint is not None:
+            res["ch_setpoint"] = self.ch_setpoint
+        if self.max_rel_modulation is not None:
+            res["max_rel_modulation"] = self.max_rel_modulation
         return res
 
 

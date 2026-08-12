@@ -5,6 +5,7 @@ from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.dhw import DhwConfigPayload, DhwStatePayload, DhwTempPayload
 from ramses_rf.payloads.heating import (
+    ActuatorStatePayload,
     BindingPayload,
     DhwTemperaturePayload,
     FlowTempPayload,
@@ -980,6 +981,84 @@ def test_hvac_time_offset_payload_313e_parity() -> None:
         "value_02": "0000003C",
         "value_10": "00",
         "value_12": "003C800000",
+    }
+
+
+def test_actuator_state_payload_3ef0_3byte_parity() -> None:
+    # Arrange
+    raw_hex = "0064FF"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ActuatorStatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    legacy_dict = payload.to_dict()
+
+    # Assert
+    assert payload.domain_id == 0
+    assert payload.modulation_level == 0.5
+    assert payload.flags_2 == 255
+    assert payload.flags_3 is None
+    assert reencoded == raw_hex
+    assert legacy_dict == {"modulation_level": 0.5}
+
+
+def test_actuator_state_payload_3ef0_4byte_parity() -> None:
+    # Arrange
+    raw_hex = "0064FF10"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ActuatorStatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    legacy_dict = payload.to_dict()
+
+    # Assert
+    assert payload.domain_id == 0
+    assert payload.modulation_level == 0.5
+    assert payload.flags_2 == 255
+    assert payload.flags_3 == 0x10
+    assert payload.flags_6 is None
+    assert reencoded == raw_hex
+    assert legacy_dict == {
+        "modulation_level": 0.5,
+        "ch_active": False,
+        "dhw_active": False,
+        "flame_on": False,
+        "cool_active": True,
+    }
+
+
+def test_actuator_state_payload_3ef0_9byte_parity() -> None:
+    # Arrange
+    raw_hex = "0064FF1000FF0114C8"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = ActuatorStatePayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    legacy_dict = payload.to_dict()
+
+    # Assert
+    assert payload.domain_id == 0
+    assert payload.modulation_level == 0.5
+    assert payload.flags_2 == 255
+    assert payload.flags_3 == 0x10
+    assert payload.unknown_4 == 0
+    assert payload.unknown_5 == 255
+    assert payload.flags_6 == 1
+    assert payload.ch_setpoint == 20
+    assert payload.max_rel_modulation == 1.0
+    assert reencoded == raw_hex
+    assert legacy_dict == {
+        "modulation_level": 0.5,
+        "ch_active": False,
+        "dhw_active": False,
+        "flame_on": False,
+        "cool_active": True,
+        "ch_enabled": True,
+        "ch_setpoint": 20,
+        "max_rel_modulation": 1.0,
     }
 
 
