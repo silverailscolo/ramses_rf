@@ -192,6 +192,11 @@ class DiscoveredDevice:
     bound_to: str | None = None  # parent device ID (CTL for TRV, FAN for REM)
     zone_idx: str | None = None  # zone index if known from payload
     domain_id: str | None = None  # domain ID if known (FC=appliance_control)
+    # True if domain_id was set from an authoritative 000C binding table
+    # entry; False if from a 3B00/3EF0 fallback hint.  Consumers (ramses_cc)
+    # use this to distinguish confident classification from hedged hints.
+    # Issue 931.
+    is_authoritative_domain: bool = False
     rssi: float | None = None  # running average
     confidence: str = "low"  # high, medium, low
     is_battery: bool = False  # seen sending battery info
@@ -524,6 +529,9 @@ class DiscoveryScan:
                     src_count=1 if is_src else 0,
                     dst_count=0 if is_src else 1,
                     domain_id=domain_id if domain_id and is_src else None,
+                    is_authoritative_domain=(
+                        is_authoritative_domain and bool(domain_id) and is_src
+                    ),
                 )
                 self._devices[dev_id] = dev
                 self._dirty = True
@@ -579,6 +587,7 @@ class DiscoveryScan:
                     )
                 ):
                     dev.domain_id = domain_id
+                    dev.is_authoritative_domain = is_authoritative_domain
                     dev.confidence = "high"
                     self._dirty = True
 
@@ -651,6 +660,7 @@ class DiscoveryScan:
                 )
             ):
                 dev.domain_id = domain_id
+                dev.is_authoritative_domain = is_authoritative_domain
                 dev.confidence = "high"
             # HVAC topology inference: a FAN (32:) sending a directed packet
             # (I or RP) to this device confirms the binding — the FAN is the
@@ -732,6 +742,7 @@ class DiscoveryScan:
             )
         ):
             dev.domain_id = domain_id
+            dev.is_authoritative_domain = is_authoritative_domain
             dev.confidence = "high"
             changed = True
 
