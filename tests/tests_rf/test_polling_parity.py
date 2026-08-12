@@ -326,3 +326,66 @@ async def test_disable_polling_config_alias() -> None:
 
     config.disable_discovery = False
     assert config.disable_polling is False
+
+
+# ── Structural checks (from ha_sim_test R56 + R57) ────────────────────
+
+
+def test_polling_task_has_required_fields() -> None:
+    """PollingTask dataclass has device_id, code, interval, next_due."""
+    from ramses_rf.pipeline.polling import PollingTask
+
+    fields = set(PollingTask.__dataclass_fields__)
+    for required in ("device_id", "code", "interval", "next_due"):
+        assert required in fields, f"missing field: {required}"
+
+
+def test_polling_manager_accepts_shadow_mode() -> None:
+    """PollingManager.__init__ accepts shadow_mode parameter."""
+    import inspect
+
+    sig = inspect.signature(PollingManager.__init__)
+    assert "shadow_mode" in sig.parameters
+
+
+def test_legacy_poller_deprecated_or_removed() -> None:
+    """Legacy DiscoveryService.start_poller is deprecated/no-op or removed."""
+    import inspect
+
+    try:
+        from ramses_rf.discovery import DiscoveryService
+    except ImportError:
+        return  # DiscoveryService fully removed — stronger than no-op
+
+    src = inspect.getsource(DiscoveryService.start_poller)
+    assert "deprecated" in src.lower() or "disabled" in src.lower()
+
+
+def test_sz_polling_interval_constant() -> None:
+    """SZ_POLLING_INTERVAL constant is 'polling_interval'."""
+    from ramses_rf.const import SZ_POLLING_INTERVAL
+
+    assert SZ_POLLING_INTERVAL == "polling_interval"
+
+
+def test_sz_is_battery_constant() -> None:
+    """SZ_IS_BATTERY constant is 'is_battery'."""
+    from ramses_rf.const import SZ_IS_BATTERY
+
+    assert SZ_IS_BATTERY == "is_battery"
+
+
+def test_sch_polling_interval_validates_dict() -> None:
+    """SCH_POLLING_INTERVAL validates dict[str, int]."""
+    from ramses_rf.config import SCH_POLLING_INTERVAL
+
+    validated = SCH_POLLING_INTERVAL({"10E0": 3600, "1F41": 1800})
+    assert validated == {"10E0": 3600, "1F41": 1800}
+
+
+def test_sch_polling_interval_rejects_negative() -> None:
+    """SCH_POLLING_INTERVAL rejects negative intervals."""
+    from ramses_rf.config import SCH_POLLING_INTERVAL
+
+    with pytest.raises(Exception):  # noqa: B017
+        SCH_POLLING_INTERVAL({"10E0": -1})
