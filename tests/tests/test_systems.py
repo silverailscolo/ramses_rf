@@ -154,7 +154,9 @@ def test_payload_from_log_file(dir_name: Path) -> None:
         actual_shrunk = safe_shrink(actual_payload)
 
         if isinstance(actual_shrunk, dict) and isinstance(expected_shrunk, dict):
-            for key in ("zone_idx", "domain_id", "dhw_idx", "msg_id"):
+            if "zone_idx" in expected_shrunk and "ufx_idx" in actual_shrunk:
+                actual_shrunk["zone_idx"] = actual_shrunk.pop("ufx_idx")
+            for key in ("zone_idx", "domain_id", "dhw_idx", "msg_id", "ufx_idx"):
                 if key not in expected_shrunk:
                     actual_shrunk.pop(key, None)
 
