@@ -8,6 +8,8 @@ import struct
 from dataclasses import dataclass
 from typing import Any, ClassVar, Self, cast
 
+from ramses_tx.helpers import hex_from_dtm, hex_to_dtm
+
 from .base import PayloadBase
 from .registry import register_payload
 
@@ -1022,7 +1024,6 @@ class SystemDateTimePayload(PayloadBase):
     domain_idx: int
     datetime_str: str | None = None
     is_dst: bool | None = None
-    _raw_data: bytes | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1036,7 +1037,6 @@ class SystemDateTimePayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 313F: {len(raw_data)}")
-        from ramses_tx.helpers import hex_to_dtm
 
         (dom,) = struct.unpack_from(cls._STRUCT_FMT_HEADER, raw_data, 0)
         if len(raw_data) >= 9:
@@ -1047,9 +1047,8 @@ class SystemDateTimePayload(PayloadBase):
                 domain_idx=dom,
                 datetime_str=dt_str,
                 is_dst=dst_flag,
-                _raw_data=raw_data,
             )
-        return cls(domain_idx=dom, _raw_data=raw_data)
+        return cls(domain_idx=dom)
 
     def to_bytes(self) -> bytes:
         """Pack system date & time data into binary payload.
@@ -1057,8 +1056,15 @@ class SystemDateTimePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        if self._raw_data is not None:
-            return self._raw_data
+        if self.datetime_str is not None:
+            dt_hex = hex_from_dtm(
+                self.datetime_str, is_dst=self.is_dst or False, incl_seconds=True
+            )
+            return (
+                struct.pack(self._STRUCT_FMT_HEADER, self.domain_idx)
+                + b"\xf0"
+                + bytes.fromhex(dt_hex)
+            )
         return struct.pack(self._STRUCT_FMT_HEADER, self.domain_idx) + b"\x00"
 
     def to_dict(self) -> dict[str, Any]:
@@ -1116,7 +1122,7 @@ class SystemActuatorPayload(PayloadBase):
 
 @register_payload("3222")
 @dataclass(frozen=True, slots=True)
-class SystemOpenthermBridgePayload(PayloadBase):
+class SystemOpenThermBridgePayload(PayloadBase):
     """System OpenTherm bridge status payload (Opcode 3222).
 
     2-byte System OpenTherm Bridge binary layout:
@@ -1145,7 +1151,7 @@ class SystemOpenthermBridgePayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked SystemOpenthermBridgePayload instance.
+        :returns: Unpacked SystemOpenThermBridgePayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """

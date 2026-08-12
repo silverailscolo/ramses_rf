@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime as dt
 
 import ramses_tx.const as tx_const
@@ -36,14 +37,15 @@ from ramses_rf.payloads.hvac import (
 )
 from ramses_rf.payloads.opentherm import (
     OpenThermMsgPayload,
-    OpenthermSetpointPayload,
-    OpenthermStatusPayload,
+    OpenThermSetpointPayload,
+    OpenThermStatusPayload,
 )
 from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
 from ramses_rf.payloads.system import (
     SystemClockPayload,
     SystemConfigPayload,
     SystemDatePayload,
+    SystemDateTimePayload,
     SystemFaultLogPayload,
 )
 from ramses_tx.dtos import PacketDTO
@@ -604,7 +606,7 @@ def test_opentherm_status_payload_0150_parity() -> None:
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
-    payload = OpenthermStatusPayload.from_bytes(raw_bytes)
+    payload = OpenThermStatusPayload.from_bytes(raw_bytes)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -621,7 +623,7 @@ def test_opentherm_setpoint_payload_1098_parity() -> None:
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
-    payload = OpenthermSetpointPayload.from_bytes(raw_bytes)
+    payload = OpenThermSetpointPayload.from_bytes(raw_bytes)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -1102,3 +1104,38 @@ def test_pipeline_3150_non_array_preserves_idx() -> None:
     assert isinstance(result, dict)
     assert result.get("heat_demand") == 1.0
     assert result.get("zone_idx") == "00"
+
+
+def test_opentherm_msg_payload_replace_recalculates_parity() -> None:
+    # Arrange
+    raw_hex = "00C01307C0"
+    raw_bytes = bytes.fromhex(raw_hex)
+    payload = OpenThermMsgPayload.from_bytes(raw_bytes)
+
+    # Act
+    modified_payload = replace(payload, msg_id=0x19)
+    reencoded = modified_payload.to_bytes().hex().upper()
+    modified_dict = payload_to_dict(modified_payload)
+
+    # Assert
+    assert modified_payload.msg_id == 0x19
+    assert reencoded != raw_hex
+    assert reencoded == "00C01907C0"
+    assert modified_dict.get("msg_id") == 25
+
+
+def test_system_datetime_payload_replace_recalculates_bytes() -> None:
+    # Arrange
+    raw_hex = "00F036020A020507E6"
+    raw_bytes = bytes.fromhex(raw_hex)
+    payload = SystemDateTimePayload.from_bytes(raw_bytes)
+
+    # Act
+    modified_payload = replace(payload, datetime_str="2023-06-15T12:00:00")
+    reencoded = modified_payload.to_bytes().hex().upper()
+    modified_dict = payload_to_dict(modified_payload)
+
+    # Assert
+    assert modified_payload.datetime_str == "2023-06-15T12:00:00"
+    assert reencoded != raw_hex
+    assert modified_dict.get("datetime_str") == "2023-06-15T12:00:00"

@@ -8,6 +8,15 @@ import struct
 from dataclasses import dataclass
 from typing import Any, ClassVar, Self
 
+from ..protocol.opentherm import (
+    EN,
+    SZ_DESCRIPTION,
+    SZ_MSG_ID,
+    SZ_MSG_NAME,
+    SZ_MSG_TYPE,
+    decode_frame,
+    parity,
+)
 from .base import PayloadBase
 from .registry import register_payload
 
@@ -60,7 +69,6 @@ class OpenThermMsgPayload(PayloadBase):
     msg_type: int
     raw_value: bytes
     ot_idx: int = 0
-    _raw_frame: bytes = b""
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -79,16 +87,26 @@ class OpenThermMsgPayload(PayloadBase):
             ot_idx, header_byte, m_id, val = struct.unpack_from(
                 cls._STRUCT_FMT_5B, raw_data, 0
             )
-            frame = raw_data[1:5]
         else:
             ot_idx = 0
             header_byte, m_id, val = struct.unpack_from(cls._STRUCT_FMT_4B, raw_data, 0)
-            frame = raw_data[0:4]
 
         m_type = (header_byte >> 4) & 0x07
-        return cls(
-            ot_idx=ot_idx, msg_id=m_id, msg_type=m_type, raw_value=val, _raw_frame=frame
+        return cls(ot_idx=ot_idx, msg_id=m_id, msg_type=m_type, raw_value=val)
+
+    def _header_byte(self) -> int:
+        """Compute the 1-byte OpenTherm header with parity bit."""
+        header_byte = (self.msg_type & 0x07) << 4
+        frame_bytes = struct.pack(
+            self._STRUCT_FMT_4B,
+            header_byte & 0x7F,
+            self.msg_id,
+            self.raw_value[:2],
         )
+        (frame_val,) = struct.unpack(">I", frame_bytes)
+        if parity(frame_val) == 1:
+            header_byte |= 0x80
+        return header_byte
 
     def to_bytes(self) -> bytes:
         """Pack OpenTherm message data into 5-byte binary payload.
@@ -96,14 +114,10 @@ class OpenThermMsgPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        if self._raw_frame:
-            return bytes([self.ot_idx]) + self._raw_frame
-
-        header_byte = (self.msg_type & 0x0F) << 4
         return struct.pack(
             self._STRUCT_FMT_5B,
             self.ot_idx,
-            header_byte,
+            self._header_byte(),
             self.msg_id,
             self.raw_value[:2],
         )
@@ -116,20 +130,13 @@ class OpenThermMsgPayload(PayloadBase):
         :returns: Decoded OpenTherm message dictionary.
         :rtype: dict[str, Any]
         """
-        frame_hex = (
-            self._raw_frame.hex().upper()
-            if self._raw_frame
-            else f"{(self.msg_type & 0x07) << 4:02X}{self.msg_id:02X}{self.raw_value.hex().upper()}"
+        frame_bytes = struct.pack(
+            self._STRUCT_FMT_4B,
+            self._header_byte(),
+            self.msg_id,
+            self.raw_value[:2],
         )
-
-        from ..protocol.opentherm import (
-            EN,
-            SZ_DESCRIPTION,
-            SZ_MSG_ID,
-            SZ_MSG_NAME,
-            SZ_MSG_TYPE,
-            decode_frame,
-        )
+        frame_hex = frame_bytes.hex().upper()
 
         try:
             ot_type, ot_id, ot_val, ot_schema = decode_frame(frame_hex)
@@ -146,7 +153,7 @@ class OpenThermMsgPayload(PayloadBase):
                 res[SZ_DESCRIPTION] = ot_schema.get(EN)
             return res
 
-        except Exception:
+        except (ValueError, TypeError, KeyError):
             return {
                 "msg_id": self.msg_id,
                 "msg_type": self.msg_type,
@@ -156,7 +163,7 @@ class OpenThermMsgPayload(PayloadBase):
 
 @register_payload("0150")
 @dataclass(frozen=True, slots=True)
-class OpenthermStatusPayload(PayloadBase):
+class OpenThermStatusPayload(PayloadBase):
     """OpenTherm status payload (Opcode 0150).
 
     2-byte OpenTherm Status binary layout:
@@ -185,7 +192,7 @@ class OpenthermStatusPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermStatusPayload instance.
+        :returns: Unpacked OpenThermStatusPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -205,7 +212,7 @@ class OpenthermStatusPayload(PayloadBase):
 
 @register_payload("1098")
 @dataclass(frozen=True, slots=True)
-class OpenthermSetpointPayload(PayloadBase):
+class OpenThermSetpointPayload(PayloadBase):
     """OpenTherm control setpoint payload (Opcode 1098).
 
     2-byte OpenTherm Setpoint binary layout:
@@ -230,7 +237,7 @@ class OpenthermSetpointPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermSetpointPayload instance.
+        :returns: Unpacked OpenThermSetpointPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -251,7 +258,7 @@ class OpenthermSetpointPayload(PayloadBase):
 
 @register_payload("10B0")
 @dataclass(frozen=True, slots=True)
-class OpenthermTemperaturePayload(PayloadBase):
+class OpenThermTemperaturePayload(PayloadBase):
     """OpenTherm boiler water temperature payload (Opcode 10B0).
 
     2-byte OpenTherm Temperature binary layout:
@@ -276,7 +283,7 @@ class OpenthermTemperaturePayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermTemperaturePayload instance.
+        :returns: Unpacked OpenThermTemperaturePayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -297,7 +304,7 @@ class OpenthermTemperaturePayload(PayloadBase):
 
 @register_payload("1FD0")
 @dataclass(frozen=True, slots=True)
-class OpenthermDiagnosticsPayload(PayloadBase):
+class OpenThermDiagnosticsPayload(PayloadBase):
     """OpenTherm diagnostics payload (Opcode 1FD0).
 
     2-byte OpenTherm Diagnostics binary layout:
@@ -326,7 +333,7 @@ class OpenthermDiagnosticsPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermDiagnosticsPayload instance.
+        :returns: Unpacked OpenThermDiagnosticsPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -346,7 +353,7 @@ class OpenthermDiagnosticsPayload(PayloadBase):
 
 @register_payload("1FD4")
 @dataclass(frozen=True, slots=True)
-class OpenthermFaultFlagsPayload(PayloadBase):
+class OpenThermFaultFlagsPayload(PayloadBase):
     """OpenTherm fault flags payload (Opcode 1FD4).
 
     2-byte OpenTherm Fault Flags binary layout:
@@ -376,7 +383,7 @@ class OpenthermFaultFlagsPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermFaultFlagsPayload instance.
+        :returns: Unpacked OpenThermFaultFlagsPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -407,7 +414,7 @@ class OpenthermFaultFlagsPayload(PayloadBase):
 
 @register_payload("2400")
 @dataclass(frozen=True, slots=True)
-class OpenthermConfigPayload(PayloadBase):
+class OpenThermConfigPayload(PayloadBase):
     """OpenTherm configuration parameter payload (Opcode 2400).
 
     2-byte OpenTherm Configuration binary layout:
@@ -436,7 +443,7 @@ class OpenthermConfigPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermConfigPayload instance.
+        :returns: Unpacked OpenThermConfigPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -456,7 +463,7 @@ class OpenthermConfigPayload(PayloadBase):
 
 @register_payload("2401")
 @dataclass(frozen=True, slots=True)
-class OpenthermParamsPayload(PayloadBase):
+class OpenThermParamsPayload(PayloadBase):
     """OpenTherm operational parameters payload (Opcode 2401).
 
     2-byte OpenTherm Parameters binary layout:
@@ -485,7 +492,7 @@ class OpenthermParamsPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermParamsPayload instance.
+        :returns: Unpacked OpenThermParamsPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -509,6 +516,7 @@ class OpenthermParamsPayload(PayloadBase):
         :rtype: dict[str, Any]
         """
         val = self.param_val / 200.0
+        # 1.01 (raw uint8 202) represents 100% modulation in legacy OpenTherm packets
         if val == 1.01:
             val = 1.0
         return {"heat_demand": val}
@@ -516,7 +524,7 @@ class OpenthermParamsPayload(PayloadBase):
 
 @register_payload("2410")
 @dataclass(frozen=True, slots=True)
-class OpenthermCapacityPayload(PayloadBase):
+class OpenThermCapacityPayload(PayloadBase):
     """OpenTherm capacity payload (Opcode 2410).
 
     2-byte OpenTherm Capacity binary layout:
@@ -545,7 +553,7 @@ class OpenthermCapacityPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermCapacityPayload instance.
+        :returns: Unpacked OpenThermCapacityPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -565,7 +573,7 @@ class OpenthermCapacityPayload(PayloadBase):
 
 @register_payload("2420")
 @dataclass(frozen=True, slots=True)
-class OpenthermModulationPayload(PayloadBase):
+class OpenThermModulationPayload(PayloadBase):
     """OpenTherm modulation payload (Opcode 2420).
 
     2-byte OpenTherm Modulation binary layout:
@@ -594,7 +602,7 @@ class OpenthermModulationPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermModulationPayload instance.
+        :returns: Unpacked OpenThermModulationPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -614,7 +622,7 @@ class OpenthermModulationPayload(PayloadBase):
 
 @register_payload("3221")
 @dataclass(frozen=True, slots=True)
-class OpenthermFrameExPayload(PayloadBase):
+class OpenThermFrameExPayload(PayloadBase):
     """OpenTherm extended frame payload (Opcode 3221).
 
     2-byte OpenTherm Frame Ex binary layout:
@@ -643,7 +651,7 @@ class OpenthermFrameExPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermFrameExPayload instance.
+        :returns: Unpacked OpenThermFrameExPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
@@ -673,7 +681,7 @@ class OpenthermFrameExPayload(PayloadBase):
 
 @register_payload("3223")
 @dataclass(frozen=True, slots=True)
-class OpenthermBridgeStatusPayload(PayloadBase):
+class OpenThermBridgeStatusPayload(PayloadBase):
     """OpenTherm bridge operational status payload (Opcode 3223).
 
     2-byte OpenTherm Bridge Status binary layout:
@@ -702,7 +710,7 @@ class OpenthermBridgeStatusPayload(PayloadBase):
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked OpenthermBridgeStatusPayload instance.
+        :returns: Unpacked OpenThermBridgeStatusPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
