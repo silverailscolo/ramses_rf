@@ -300,3 +300,68 @@ async def test_live_dispatcher_process_msg_routes_to_conversation_manager(
     assert gwy.conversation_manager.pending_count == 0
 
     await gwy.stop()
+
+
+# ── Structural checks (from ha_sim_test R55) ──────────────────────────
+
+
+def test_pending_conversation_has_required_fields() -> None:
+    """PendingConversation dataclass has all expected fields."""
+    from ramses_rf.pipeline.conversation import PendingConversation
+
+    fields = set(PendingConversation.__dataclass_fields__)
+    for required in (
+        "intent",
+        "fut",
+        "timeout",
+        "max_retries",
+        "retry_count",
+        "timer_task",
+    ):
+        assert required in fields, f"missing field: {required}"
+
+
+def test_default_rply_timeout_is_one_second() -> None:
+    """DEFAULT_RPLY_TIMEOUT is 1.0s."""
+    from ramses_rf.pipeline.conversation import DEFAULT_RPLY_TIMEOUT
+
+    assert DEFAULT_RPLY_TIMEOUT == 1.0
+
+
+def test_max_retry_limit_is_three() -> None:
+    """MAX_RETRY_LIMIT is 3."""
+    from ramses_rf.pipeline.conversation import MAX_RETRY_LIMIT
+
+    assert MAX_RETRY_LIMIT == 3
+
+
+def test_dispatcher_send_uses_conversation_manager() -> None:
+    """CommandDispatcher.send references conversation_manager and track_intent."""
+    import inspect
+
+    from ramses_rf.commands.dispatcher import CommandDispatcher
+
+    src = inspect.getsource(CommandDispatcher.send)
+    assert "conversation_manager" in src
+    assert "track_intent" in src
+
+
+def test_dispatcher_process_msg_hooks_conversation_manager() -> None:
+    """dispatcher.process_msg references conversation_manager and calls .process_msg()."""
+    import inspect
+
+    from ramses_rf.dispatcher import process_msg
+
+    src = inspect.getsource(process_msg)
+    assert "conversation_manager" in src
+    assert ".process_msg(" in src
+
+
+def test_gateway_lifecycle_stop_calls_cancel_all() -> None:
+    """GatewayLifecycle.stop() calls cancel_all."""
+    import inspect
+
+    from ramses_rf.lifecycle import GatewayLifecycle
+
+    src = inspect.getsource(GatewayLifecycle.stop)
+    assert "cancel_all" in src
