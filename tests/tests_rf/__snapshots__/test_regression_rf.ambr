@@ -477,7 +477,6 @@
       }),
       dict({
         'battery_low': None,
-        'heat_demand': 0.98,
         'heat_demands': list([
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
@@ -890,7 +889,6 @@
       }),
       dict({
         'battery_low': None,
-        'heat_demand': 0.81,
         'heat_demands': list([
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,

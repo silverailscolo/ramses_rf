@@ -23,6 +23,7 @@ from .const import (
     SZ_CO2_LEVEL,
     SZ_DATETIME,
     SZ_DIFFERENTIAL,
+    SZ_DOMAIN_ID,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
     SZ_EXHAUST_TEMP,
@@ -57,6 +58,7 @@ from .const import (
     SZ_SUPPLY_TEMP,
     SZ_SYSTEM_MODE,
     SZ_TEMPERATURE,
+    SZ_UFH_IDX,
     SZ_UNTIL,
 )
 from .devices.hvac_ventilators import HvacVentilator
@@ -559,13 +561,24 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if demand_state is None or not dataclasses.is_dataclass(demand_state):
         return
 
+    slug = getattr(target, "_SLUG", "")
     updates: dict[str, Any] = {}
+
     if SZ_HEAT_DEMAND in p:
-        updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
+        if slug in ("CTL", "UFC"):
+            if p.get(SZ_DOMAIN_ID) == "FC":
+                updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
+        elif "ufx_idx" not in p and SZ_UFH_IDX not in p:
+            updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
+
     if SZ_RELAY_DEMAND in p:
-        updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
-        updates["relay_active"] = float(p[SZ_RELAY_DEMAND]) > 0.0
-    if msg.code == Code._0009 and "failsafe_enabled" in p:
+        if slug == "UFC" and p.get(SZ_DOMAIN_ID) != "FC":
+            pass
+        else:
+            updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
+            updates["relay_active"] = float(p[SZ_RELAY_DEMAND]) > 0.0
+
+    if getattr(msg, "code", None) == Code._0009 and "failsafe_enabled" in p:
         updates["relay_failsafe"] = p["failsafe_enabled"]
 
     if not updates:

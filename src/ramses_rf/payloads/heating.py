@@ -113,14 +113,11 @@ class HeatDemandPayload(PayloadBase):
         if val == 1.01:
             val = 1.0
         res: dict[str, Any] = {"heat_demand": val}
-        is_array = self._is_array_item or (
-            msg is not None and getattr(msg, "_has_array", False)
-        )
         if self.domain_or_zone_idx is not None:
             idx = self.domain_or_zone_idx
             if idx >= 0xF0:
                 res["domain_id"] = "FC" if idx == 0xFC else f"{idx:02X}"
-            elif is_array:
+            else:
                 is_ufc = False
                 if msg is not None and getattr(msg, "src", None) is not None:
                     src_str = str(getattr(msg.src, "id", msg.src))

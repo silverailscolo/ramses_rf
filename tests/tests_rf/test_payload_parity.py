@@ -1078,3 +1078,27 @@ def test_complete_payload_registry_coverage() -> None:
     for code in all_expected:
         assert code in PAYLOAD_REGISTRY, f"Opcode {code} missing from PAYLOAD_REGISTRY"
     assert len(PAYLOAD_REGISTRY._registry) == 108
+
+
+def test_pipeline_3150_non_array_preserves_idx() -> None:
+    # Arrange
+    dto = PacketDTO(
+        timestamp=dt.now(),
+        rssi="-70",
+        verb=" I",
+        seq="001",
+        addr1="04:123456",
+        addr2="--:------",
+        addr3="01:555555",
+        code="3150",
+        length="002",
+        payload="00C8",
+    )
+
+    # Act
+    result = decode_packet(dto)
+
+    # Assert
+    assert isinstance(result, dict)
+    assert result.get("heat_demand") == 1.0
+    assert result.get("zone_idx") == "00"
