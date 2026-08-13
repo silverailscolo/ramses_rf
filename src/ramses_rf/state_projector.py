@@ -303,6 +303,22 @@ def _resolve_logical_targets(
     if dhw is not None and dhw not in targets:
         targets.append(dhw)
 
+    # 8. Sensor-sourced 30C9 has no zone_idx (the sensor is not a controller,
+    #    so _build_idx_dict injects no zone_idx), so step 4 misses the parent
+    #    zone.  Route 30C9 from a sensor to its parent zone so the zone's
+    #    current_temperature is hydrated even when the controller doesn't
+    #    broadcast 30C9 for that zone.
+    #    See: https://github.com/ramses-rf/ramses_cc/issues/927
+    if msg.code == Code._30C9 and src_dev and "temperature" in p:
+        parent = getattr(src_dev, "_parent", None)
+        if (
+            parent is not None
+            and hasattr(parent, "temp_state")
+            and hasattr(parent, "zone_state")
+            and parent not in targets
+        ):
+            targets.append(parent)
+
     return targets
 
 
