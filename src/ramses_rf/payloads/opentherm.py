@@ -20,107 +20,67 @@ from ..protocol.opentherm import (
 from .base import PayloadBase
 from .registry import register_payload
 
+# ----------------------------------------------------------------------
+
 
 @register_payload("3220")
-@dataclass(frozen=True, slots=True)
 class OpenThermMsgPayload(PayloadBase):
-    """OpenTherm message payload (Opcode 3220).
+    """Master payload dispatcher for Opcode 3220.
 
-    5-byte RAMSES OpenTherm Message binary layout (Big-Endian):
-      Offset  Format  Len  Description                    Sample Hex
-      --------------------------------------------------------------
-      +0       B      1B   RAMSES OpenTherm Gateway Index: 00
-      +1       B      1B   OpenTherm Msg Type           : 19
-      +2       B      1B   OpenTherm Data ID            : 00
-      +3       2s     2B   OpenTherm Raw Data Value     : 19 00
-      --------------------------------------------------------------
-      Field-spaced hex : 00 19 00 1900
-      Payload hex      : 0019001900
+    Dispatches OpenTherm message binary payloads to 4-byte or 5-byte
+    variant sub-dataclasses based on payload length.
 
-    OpenTherm Gateway Mapping (Data IDs):
-      #   01: boiler_setpoint (or 22D9)
-      #   0E: ch_setpoint (or 3EF0)
-      #   12: ch_water_pressure (or 1300)
-      #   13: dhw_flow_rate (or 12F0)
-      #   19: boiler_output_temp (or 3200)
-      #   1A: dhw_temp (or 1260)
-      #   1C: boiler_return_temp (or 3210)
-      #   38: dhw_setpoint (or 10A0)
-      #   39: ch_max_setpoint (or 1081)
-      # Sample Packet Logs:
-      # 2021-11-05T06:25:20.669382 066 RP --- 10:023327 18:131597 --:------ 3220 005 00C01307C0
-      # 2021-11-05T06:35:20.721228 066 RP --- 10:023327 18:131597 --:------ 3220 005 0040130059
-      # 2021-12-06T06:35:55.949502 071 RP --- 10:051349 18:135447 --:------ 3220 005 00C0130ECC
-
-    :param msg_id: OpenTherm Data ID byte (0-255).
-    :type msg_id: int
-    :param msg_type: OpenTherm message type classification (0-7).
-    :type msg_type: int
-    :param raw_value: Raw 2-byte OpenTherm data value.
-    :type raw_value: bytes
-    :param ot_idx: RAMSES OpenTherm gateway index byte (default 0).
-    :type ot_idx: int
+    Domain Notes & Sample Packet Logs:
+    # NOTE: Unknown-DataId isn't an invalid payload & is useful to train the OTB device
+    # 2021-11-05T06:25:20.669382 066 RP --- 10:023327 18:131597 --:------ 3220 005 00C01307C0
+    # 2021-11-05T06:35:20.721228 066 RP --- 10:023327 18:131597 --:------ 3220 005 0040130059
+    # 2021-12-06T06:35:55.949502 071 RP --- 10:051349 18:135447 --:------ 3220 005 00C0130ECC
     """
 
-    _STRUCT_FMT_5B: ClassVar[str] = ">BBB2s"
-    _STRUCT_FMT_4B: ClassVar[str] = ">BB2s"
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
+    ot_idx: int
     msg_id: int
     msg_type: int
     raw_value: bytes
-    ot_idx: int = 0
 
-    @classmethod
-    def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack RAMSES OpenTherm message binary payload.
-
-        :param raw_data: Raw binary byte string.
-        :type raw_data: bytes
-        :returns: Unpacked OpenThermMsgPayload instance.
-        :rtype: Self
-        :raises ValueError: If raw_data length is less than 4 bytes.
-        """
-        if len(raw_data) < 4:
-            raise ValueError(f"Invalid payload length for 3220: {len(raw_data)}")
-
-        if len(raw_data) >= 5:
-            ot_idx, header_byte, m_id, val = struct.unpack_from(
-                cls._STRUCT_FMT_5B, raw_data, 0
+    def __new__(
+        cls,
+        msg_id: int = 0,
+        msg_type: int = 0,
+        raw_value: bytes = b"\x00\x00",
+        ot_idx: int | None = None,
+    ) -> Any:
+        """Construct OpenThermMsg payload variant dynamically from arguments."""
+        if cls is not OpenThermMsgPayload:
+            return super().__new__(cls)
+        if ot_idx is not None:
+            return OpenThermMsg5BPayload(
+                ot_idx=ot_idx,
+                msg_id=msg_id,
+                msg_type=msg_type,
+                raw_value=raw_value,
             )
-        else:
-            ot_idx = 0
-            header_byte, m_id, val = struct.unpack_from(cls._STRUCT_FMT_4B, raw_data, 0)
-
-        m_type = (header_byte >> 4) & 0x07
-        return cls(ot_idx=ot_idx, msg_id=m_id, msg_type=m_type, raw_value=val)
+        return OpenThermMsg4BPayload(
+            ot_idx=0, msg_id=msg_id, msg_type=msg_type, raw_value=raw_value
+        )
 
     def _header_byte(self) -> int:
         """Compute the 1-byte OpenTherm header with parity bit."""
-        header_byte = (self.msg_type & 0x07) << 4
+        m_type = getattr(self, "msg_type", 0)
+        m_id = getattr(self, "msg_id", 0)
+        r_val = getattr(self, "raw_value", b"\x00\x00")
+        header_byte = (m_type & 0x07) << 4
         frame_bytes = struct.pack(
-            self._STRUCT_FMT_4B,
+            ">BB2s",
             header_byte & 0x7F,
-            self.msg_id,
-            self.raw_value[:2],
+            m_id,
+            r_val[:2],
         )
         (frame_val,) = struct.unpack(">I", frame_bytes)
         if parity(frame_val) == 1:
             header_byte |= 0x80
         return header_byte
-
-    def to_bytes(self) -> bytes:
-        """Pack OpenTherm message data into 5-byte binary payload.
-
-        :returns: Packed binary payload bytes.
-        :rtype: bytes
-        """
-        return struct.pack(
-            self._STRUCT_FMT_5B,
-            self.ot_idx,
-            self._header_byte(),
-            self.msg_id,
-            self.raw_value[:2],
-        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert OpenTherm message payload to legacy dictionary layout.
@@ -130,11 +90,14 @@ class OpenThermMsgPayload(PayloadBase):
         :returns: Decoded OpenTherm message dictionary.
         :rtype: dict[str, Any]
         """
+        m_id = getattr(self, "msg_id", 0)
+        m_type = getattr(self, "msg_type", 0)
+        r_val = getattr(self, "raw_value", b"\x00\x00")
         frame_bytes = struct.pack(
-            self._STRUCT_FMT_4B,
+            ">BB2s",
             self._header_byte(),
-            self.msg_id,
-            self.raw_value[:2],
+            m_id,
+            r_val[:2],
         )
         frame_hex = frame_bytes.hex().upper()
 
@@ -156,10 +119,131 @@ class OpenThermMsgPayload(PayloadBase):
 
         except (ValueError, TypeError, KeyError):
             return {
-                "msg_id": self.msg_id,
-                "msg_type": self.msg_type,
-                "raw_value": self.raw_value.hex().upper(),
+                "msg_id": m_id,
+                "msg_type": m_type,
+                "raw_value": r_val.hex().upper(),
             }
+
+    @classmethod
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "OpenThermMsg4BPayload | OpenThermMsg5BPayload":
+        """Unpack binary payload, dispatching by length."""
+        if len(raw_data) < 4:
+            raise ValueError(f"Invalid payload length for 3220: {len(raw_data)}")
+        if len(raw_data) >= 5:
+            return OpenThermMsg5BPayload.from_bytes(raw_data)
+        return OpenThermMsg4BPayload.from_bytes(raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack payload base default method.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to
+            variant sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
+
+
+@dataclass(frozen=True, slots=True)
+class OpenThermMsg4BPayload(OpenThermMsgPayload):
+    """4-byte OpenTherm message payload (Opcode 3220).
+
+    4-byte OpenTherm binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Header / MsgType & Flags     : 00
+      +1       B      1B   Message ID (uint8)           : 00
+      +2       2s     2B   Raw Value bytes              : 00 00
+      --------------------------------------------------------------
+      Field-spaced hex : 00 00 0000
+      Payload hex      : 00000000
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BB2s"
+
+    msg_id: int
+    msg_type: int
+    raw_value: bytes
+    ot_idx: int = 0
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack 4-byte OpenTherm message payload."""
+        if len(raw_data) < 4:
+            raise ValueError(
+                f"Invalid payload length for OpenThermMsg4BPayload: {len(raw_data)}"
+            )
+        header_byte, m_id, val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        m_type = (header_byte >> 4) & 0x07
+        return cls(ot_idx=0, msg_id=m_id, msg_type=m_type, raw_value=val)
+
+    def to_bytes(self) -> bytes:
+        """Pack 4-byte OpenTherm message payload."""
+        return struct.pack(
+            self._STRUCT_FMT,
+            self._header_byte(),
+            self.msg_id,
+            self.raw_value[:2],
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OpenThermMsg5BPayload(OpenThermMsgPayload):
+    """5-byte OpenTherm message payload (Opcode 3220).
+
+    5-byte OpenTherm binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   OpenTherm Index (uint8)      : 00
+      +1       B      1B   Header / MsgType & Flags     : 00
+      +2       B      1B   Message ID (uint8)           : 00
+      +3       2s     2B   Raw Value bytes              : 00 00
+      --------------------------------------------------------------
+      Field-spaced hex : 00 00 00 0000
+      Payload hex      : 0000000000
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BBB2s"
+
+    ot_idx: int
+    msg_id: int
+    msg_type: int
+    raw_value: bytes
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack 5-byte OpenTherm message payload."""
+        if len(raw_data) < 5:
+            raise ValueError(
+                f"Invalid payload length for OpenThermMsg5BPayload: {len(raw_data)}"
+            )
+        ot_idx, header_byte, m_id, val = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
+        m_type = (header_byte >> 4) & 0x07
+        return cls(ot_idx=ot_idx, msg_id=m_id, msg_type=m_type, raw_value=val)
+
+    def to_bytes(self) -> bytes:
+        """Pack 5-byte OpenTherm message payload."""
+        return struct.pack(
+            self._STRUCT_FMT,
+            self.ot_idx,
+            self._header_byte(),
+            self.msg_id,
+            self.raw_value[:2],
+        )
+
+
+# Update VARIANTS property after variants are defined
+OpenThermMsgPayload.VARIANTS = (
+    OpenThermMsg4BPayload,
+    OpenThermMsg5BPayload,
+)
+
+
+# ----------------------------------------------------------------------
 
 
 @register_payload("0150")
@@ -211,6 +295,9 @@ class OpenThermStatusPayload(PayloadBase):
         return struct.pack(self._STRUCT_FMT, self.master_status, self.slave_status)
 
 
+# ----------------------------------------------------------------------
+
+
 @register_payload("1098")
 @dataclass(frozen=True, slots=True)
 class OpenThermSetpointPayload(PayloadBase):
@@ -257,6 +344,9 @@ class OpenThermSetpointPayload(PayloadBase):
         return struct.pack(self._STRUCT_FMT, sp_raw)
 
 
+# ----------------------------------------------------------------------
+
+
 @register_payload("10B0")
 @dataclass(frozen=True, slots=True)
 class OpenThermTemperaturePayload(PayloadBase):
@@ -301,6 +391,9 @@ class OpenThermTemperaturePayload(PayloadBase):
         """
         temp_raw = int(round(self.temperature * 100.0))
         return struct.pack(self._STRUCT_FMT, temp_raw)
+
+
+# ----------------------------------------------------------------------
 
 
 @register_payload("1FD0")
@@ -352,10 +445,58 @@ class OpenThermDiagnosticsPayload(PayloadBase):
         return struct.pack(self._STRUCT_FMT, self.diag_code, self.flags)
 
 
+# ----------------------------------------------------------------------
+
+
 @register_payload("1FD4")
-@dataclass(frozen=True, slots=True)
 class OpenThermFaultFlagsPayload(PayloadBase):
-    """OpenTherm fault flags payload (Opcode 1FD4).
+    """Master payload dispatcher and base class for Opcode 1FD4."""
+
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
+
+    def __new__(
+        cls,
+        fault_code: int = 0,
+        flags: int = 0,
+        hdr: int | None = None,
+    ) -> Any:
+        """Construct OpenThermFaultFlags payload variant dynamically from arguments."""
+        if cls is not OpenThermFaultFlagsPayload:
+            return super().__new__(cls)
+        if hdr is not None:
+            return OpenThermFaultFlags3BPayload(
+                hdr=hdr, fault_code=fault_code, flags=flags
+            )
+        return OpenThermFaultFlags2BPayload(fault_code=fault_code, flags=flags)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert OpenTherm fault flags payload to legacy dictionary layout."""
+        f_code = getattr(self, "fault_code", 0)
+        flg = getattr(self, "flags", 0)
+        return {"ticker": (f_code << 8) | flg}
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> PayloadBase:
+        """Unpack binary payload, dispatching by length."""
+        if len(raw_data) < 2:
+            raise ValueError(f"Invalid payload length for 1FD4: {len(raw_data)}")
+        if len(raw_data) >= 3:
+            return OpenThermFaultFlags3BPayload.from_bytes(raw_data)
+        return OpenThermFaultFlags2BPayload.from_bytes(raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack payload base default method.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
+
+
+@dataclass(frozen=True, slots=True)
+class OpenThermFaultFlags2BPayload(OpenThermFaultFlagsPayload):
+    """2-byte OpenTherm fault flags payload (Opcode 1FD4).
 
     2-byte OpenTherm Fault Flags binary layout:
       Offset  Format  Len  Description                    Sample Hex
@@ -365,52 +506,70 @@ class OpenThermFaultFlagsPayload(PayloadBase):
       --------------------------------------------------------------
       Field-spaced hex : 00 00
       Payload hex      : 0000
-
-    :param fault_code: Fault code byte.
-    :type fault_code: int
-    :param flags: Fault flags byte.
-    :type flags: int
     """
 
-    _STRUCT_FMT_3B: ClassVar[str] = ">BBB"
-    _STRUCT_FMT_2B: ClassVar[str] = ">BB"
+    _STRUCT_FMT: ClassVar[str] = ">BB"
 
     fault_code: int
     flags: int
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack OpenTherm fault flags binary payload.
-
-        :param raw_data: Raw binary byte string.
-        :type raw_data: bytes
-        :returns: Unpacked OpenThermFaultFlagsPayload instance.
-        :rtype: Self
-        :raises ValueError: If raw_data length is less than 2 bytes.
-        """
+        """Unpack 2-byte OpenTherm fault flags payload."""
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 1FD4: {len(raw_data)}")
-        if len(raw_data) >= 3:
-            _hdr, code, flg = struct.unpack_from(cls._STRUCT_FMT_3B, raw_data, 0)
-            return cls(fault_code=code, flags=flg)
-        code, flg = struct.unpack_from(cls._STRUCT_FMT_2B, raw_data, 0)
+            msg = f"Invalid payload length for OpenThermFaultFlags2BPayload: {len(raw_data)}"
+            raise ValueError(msg)
+        code, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(fault_code=code, flags=flg)
 
     def to_bytes(self) -> bytes:
-        """Pack OpenTherm fault flags data into binary payload.
+        """Pack 2-byte OpenTherm fault flags payload."""
+        return struct.pack(self._STRUCT_FMT, self.fault_code, self.flags)
 
-        :returns: Packed binary payload bytes.
-        :rtype: bytes
-        """
-        return struct.pack(self._STRUCT_FMT_3B, 0, self.fault_code, self.flags)
 
-    def to_dict(self) -> dict[str, Any]:
-        """Convert OpenTherm fault flags payload to legacy dictionary layout.
+@dataclass(frozen=True, slots=True)
+class OpenThermFaultFlags3BPayload(OpenThermFaultFlagsPayload):
+    """3-byte OpenTherm fault flags payload (Opcode 1FD4).
 
-        :returns: Decoded ticker dictionary.
-        :rtype: dict[str, Any]
-        """
-        return {"ticker": (self.fault_code << 8) | self.flags}
+    3-byte OpenTherm Fault Flags binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Header / Domain              : 00
+      +1       B      1B   Fault Code (uint8)           : 00
+      +2       B      1B   Fault Flags (uint8)          : 00
+      --------------------------------------------------------------
+      Field-spaced hex : 00 00 00
+      Payload hex      : 000000
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BBB"
+
+    hdr: int
+    fault_code: int
+    flags: int
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack 3-byte OpenTherm fault flags payload."""
+        if len(raw_data) < 3:
+            msg = f"Invalid payload length for OpenThermFaultFlags3BPayload: {len(raw_data)}"
+            raise ValueError(msg)
+        hdr, code, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(hdr=hdr, fault_code=code, flags=flg)
+
+    def to_bytes(self) -> bytes:
+        """Pack 3-byte OpenTherm fault flags payload."""
+        return struct.pack(self._STRUCT_FMT, self.hdr, self.fault_code, self.flags)
+
+
+# Update VARIANTS property after variants are defined
+OpenThermFaultFlagsPayload.VARIANTS = (
+    OpenThermFaultFlags2BPayload,
+    OpenThermFaultFlags3BPayload,
+)
+
+
+# ----------------------------------------------------------------------
 
 
 @register_payload("2400")
@@ -431,6 +590,10 @@ class OpenThermConfigPayload(PayloadBase):
     :type param_idx: int
     :param param_value: Parameter value byte.
     :type param_value: int
+
+    Sample Packet Logs:
+    # RP --- 32:155617 18:005904 --:------ 2400 045 00001111-1010929292921110101020110010000080100010100000009191111191910011119191111111111100  # Orcon FAN
+    # RP --- 10:048122 18:006402 --:------ 2400 004 0000000F
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
@@ -460,6 +623,9 @@ class OpenThermConfigPayload(PayloadBase):
         :rtype: bytes
         """
         return struct.pack(self._STRUCT_FMT, self.param_idx, self.param_value)
+
+
+# ----------------------------------------------------------------------
 
 
 @register_payload("2401")
@@ -523,6 +689,9 @@ class OpenThermParamsPayload(PayloadBase):
         return {"heat_demand": val}
 
 
+# ----------------------------------------------------------------------
+
+
 @register_payload("2410")
 @dataclass(frozen=True, slots=True)
 class OpenThermCapacityPayload(PayloadBase):
@@ -541,6 +710,10 @@ class OpenThermCapacityPayload(PayloadBase):
     :type capacity_idx: int
     :param capacity_val: Capacity value byte.
     :type capacity_val: int
+
+    Sample Packet Logs:
+    # RP --- 10:048122 18:006402 --:------ 2410 020 00-00000000-00000000-00000001-00000001-00000C  # OTB
+    # RP --- 32:155617 18:005904 --:------ 2410 020 00-00003EE8-00000000-FFFFFFFF-00000000-1002A6  # Orcon Fan
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
@@ -570,6 +743,9 @@ class OpenThermCapacityPayload(PayloadBase):
         :rtype: bytes
         """
         return struct.pack(self._STRUCT_FMT, self.capacity_idx, self.capacity_val)
+
+
+# ----------------------------------------------------------------------
 
 
 @register_payload("2420")
@@ -621,6 +797,9 @@ class OpenThermModulationPayload(PayloadBase):
         return struct.pack(self._STRUCT_FMT, self.mod_idx, self.mod_percent)
 
 
+# ----------------------------------------------------------------------
+
+
 @register_payload("3221")
 @dataclass(frozen=True, slots=True)
 class OpenThermFrameExPayload(PayloadBase):
@@ -639,6 +818,11 @@ class OpenThermFrameExPayload(PayloadBase):
     :type frame_code: int
     :param flags: Frame flags byte.
     :type flags: int
+
+    Sample Packet Logs:
+    # RP --- 10:052644 18:198151 --:------ 3221 002 000F
+    # RP --- 10:048122 18:006402 --:------ 3221 002 0000
+    # RP --- 32:155617 18:005904 --:------ 3221 002 000A
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
@@ -678,6 +862,9 @@ class OpenThermFrameExPayload(PayloadBase):
         if self.frame_code == 0 and self.flags == 0:
             return {"value": 0}
         return {"frame_code": self.frame_code, "flags": self.flags}
+
+
+# ----------------------------------------------------------------------
 
 
 @register_payload("3223")
@@ -739,6 +926,9 @@ class OpenThermBridgeStatusPayload(PayloadBase):
         return {"status_code": self.status_code, "flags": self.flags}
 
 
+# ----------------------------------------------------------------------
+
+
 @register_payload("3210")
 @dataclass(frozen=True, slots=True)
 class ReturnTempPayload(PayloadBase):
@@ -783,9 +973,10 @@ class ReturnTempPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        t_raw = (
-            0x7FFF if self.return_temp is None else int(round(self.return_temp * 100.0))
-        )
+        if self.return_temp is None:
+            t_raw = 0x7FFF
+        else:
+            t_raw = int(round(self.return_temp * 100.0))
         return struct.pack(self._STRUCT_FMT, 0, t_raw)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
