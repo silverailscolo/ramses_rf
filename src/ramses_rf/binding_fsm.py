@@ -509,10 +509,11 @@ class BindingManagerSupplicant(BindingManagerBase):
         else:
             idx = "00"
 
+        target_id = accept.dst.id if accept.src.id == self._dev.id else accept.src.id
         cmd = build_dto(
             Intent(
                 src=Address(self._dev.id),
-                dst=Address(accept.src.id),
+                dst=Address(target_id),
                 action=Action.PUT_BIND,
                 data={"verb": I_, "codes": confirm_code, "idx": idx},
             )

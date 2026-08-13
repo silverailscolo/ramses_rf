@@ -1081,7 +1081,7 @@ def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
 
     def f8_8(high_byte: str, low_byte: str) -> float | None:
         """Convert 2 bytes (as strs) into an OpenTherm f8_8 value."""
-        if high_byte == low_byte == "FF" or high_byte + low_byte == "47AB":
+        if high_byte == low_byte == "FF" or high_byte + low_byte in ("47AB", "1980"):
             return None
         return float(s16(high_byte, low_byte) / 256)
 

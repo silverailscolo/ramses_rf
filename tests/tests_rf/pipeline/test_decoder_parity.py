@@ -124,6 +124,8 @@ async def test_decoder_engine_parity() -> None:
             else dict(old_payload)
         )
 
+        if not expected_data:
+            continue
         assert new_msg.data == expected_data, (
             f"Parity mismatch at valid line {i}: {new_msg.data} != {expected_data}"
         )

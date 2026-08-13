@@ -43,12 +43,7 @@ WORK_DIR = f"{TEST_DIR}/parser_helpers"
 def _make_22f1_msg(pkt_str: str) -> Message:
     """Build a Message from a raw packet string for parser testing."""
     pkt = Packet.from_file(pkt_str[:26], pkt_str[27:])
-    msg = Message(pkt.to_dto())
-    from ramses_rf.parsers.decoder import LegacyParserDecoder
-
-    dto = msg._dto
-    msg._payload = LegacyParserDecoder().decode(dto, dto.payload, len(dto.payload), msg)
-    return msg
+    return Message(pkt.to_dto())
 
 
 def test_22f1_itho_directed_mode_max_04() -> None:

@@ -7,7 +7,6 @@ import asyncio
 import functools
 import json
 import logging
-import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Final
 
@@ -19,7 +18,7 @@ from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
 from ramses_rf.devices import Controller, Fakeable
 from ramses_rf.enums import Action
 from ramses_rf.protocol.opentherm import OTB_DATA_IDS
-from ramses_rf.protocol.ramses import CODES_SCHEMA
+from ramses_rf.protocol.ramses import CODE_NAME_LOOKUP, RQ_NO_PAYLOAD
 from ramses_tx import CommandDTO, DeviceIdT, Priority
 from ramses_tx.address import NON_DEV_ADDR
 from ramses_tx.const import RQ, W_, Code
@@ -302,7 +301,7 @@ async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
         num_repeats=3,
     )
 
-    for code in sorted(CODES_SCHEMA):
+    for code in sorted(CODE_NAME_LOOKUP):
         if code == Code._0005:
             for zone_type in range(20):  # known up to 18
                 gwy.send_cmd(
@@ -424,11 +423,7 @@ async def script_scan_full(gwy: Gateway, dev_id: DeviceIdT) -> None:
         elif code == Code._PUZZ:
             continue
 
-        elif (
-            code in CODES_SCHEMA
-            and RQ in CODES_SCHEMA[code]
-            and re.match(CODES_SCHEMA[code][RQ], "00")
-        ):
+        elif code in RQ_NO_PAYLOAD:
             gwy.send_cmd(
                 CommandDTO(
                     verb=RQ,

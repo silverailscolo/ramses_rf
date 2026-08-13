@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
 from ramses_rf.address import Address, id_to_address
 from ramses_rf.const import SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
+from ramses_rf.payloads.base import PayloadBase
 from ramses_tx import CommandDTO, PacketDTO
 from ramses_tx.models import DeviceId, RawPacket, TransportMessage
 from ramses_tx.typing import DeviceIdT
@@ -41,17 +41,6 @@ MSG_FORMAT_10: str = "|| {:10s} | {:10s} | {:2s} | {:16s} | {:^4s} || {}"
 
 
 _LOGGER = logging.getLogger(__name__)
-
-
-@dataclass
-class PayloadBase:
-    """Base Data Transfer Object for parsed payloads.
-
-    Acts as the foundation for the strict DTO migration, replacing raw
-    dicts.
-    """
-
-    pass
 
 
 # Transition alias for typing until full payload migration is complete
@@ -338,11 +327,29 @@ class Message:
 
     @property
     def payload(self) -> PayloadT:
-        """Return the parsed payload, preferably as a strongly-typed DTO.
+        """Return the parsed payload, preferably as legacy dictionary or list.
 
         :return: The payload.
         :rtype: PayloadT
         """
+        if not self._has_payload:
+            return {}
+        if isinstance(self._payload, PayloadBase):
+            try:
+                return self._payload.to_dict(msg=self)
+            except TypeError:
+                return self._payload.to_dict()
+        if isinstance(self._payload, list):
+            res = []
+            for item in self._payload:
+                if isinstance(item, PayloadBase):
+                    try:
+                        res.append(item.to_dict(msg=self))
+                    except TypeError:
+                        res.append(item.to_dict())
+                else:
+                    res.append(item)
+            return res
         return self._payload
 
     @property
@@ -354,6 +361,14 @@ class Message:
         :return: False if there is no payload (may falsely return True).
         :rtype: bool
         """
+        v_str = str(getattr(self.verb, "value", str(self.verb))).split(".")[-1].strip()
+        if v_str not in ("RQ", "RQ_") and self.code in (
+            Code._1FC9,
+            "1FC9",
+            Code._1F09,
+            "1F09",
+        ):
+            return True
         if self.len == 1:
             return False
         if str(self.verb).strip() == "RQ":

@@ -145,8 +145,9 @@ class OpenThermMsgPayload(PayloadBase):
                 SZ_MSG_TYPE: str(ot_type),
                 SZ_MSG_NAME: ot_val.pop(SZ_MSG_NAME, None),
             }
-            for k in [k for k, v in ot_val.items() if v is None]:
-                ot_val.pop(k, None)
+            if str(ot_type) not in ("Read-Ack", "Write-Ack", "Write-Data"):
+                for k in [k for k, v in ot_val.items() if v is None]:
+                    ot_val.pop(k, None)
             res.update(ot_val)
 
             if ot_schema:
@@ -758,7 +759,7 @@ class ReturnTempPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    return_temp: float
+    return_temp: float | None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -773,7 +774,8 @@ class ReturnTempPayload(PayloadBase):
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 3210: {len(raw_data)}")
         _hdr, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(return_temp=temp_raw / 100.0)
+        t_val = None if temp_raw in (0x31FF, 0x7FFF) else temp_raw / 100.0
+        return cls(return_temp=t_val)
 
     def to_bytes(self) -> bytes:
         """Pack return temperature data into binary payload.
@@ -781,13 +783,17 @@ class ReturnTempPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        temp_raw = int(round(self.return_temp * 100.0))
-        return struct.pack(self._STRUCT_FMT, 0, temp_raw)
+        t_raw = (
+            0x7FFF if self.return_temp is None else int(round(self.return_temp * 100.0))
+        )
+        return struct.pack(self._STRUCT_FMT, 0, t_raw)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert return temperature payload to legacy dictionary layout.
 
-        :returns: Decoded return temperature dictionary.
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded temperature dictionary.
         :rtype: dict[str, Any]
         """
         return {"temperature": self.return_temp}

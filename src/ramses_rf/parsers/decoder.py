@@ -5,7 +5,6 @@ L7 semantic dictionaries, strictly separating domain logic from transport.
 """
 
 import logging
-import re
 import struct
 from abc import ABC, abstractmethod
 from typing import Any
@@ -16,7 +15,6 @@ from ramses_rf.protocol.ramses import (
     CODE_IDX_ARE_NONE,
     CODE_IDX_ARE_SIMPLE,
     CODES_ONLY_FROM_CTL,
-    CODES_SCHEMA,
     CODES_WITH_ARRAYS,
     RQ_IDX_COMPLEX,
     RQ_NO_PAYLOAD,
@@ -246,16 +244,17 @@ class _LegacyMessage:
         if self.code == "3220":
             return self.payload[4:6]
 
+        if self.code == "0001" and self.payload[:2] != "00":
+            return self.payload[:2]
+
         if self.code_enum in CODE_IDX_ARE_COMPLEX:
             pass
 
         if self.code_enum in CODE_IDX_ARE_NONE:
-            if self.code_enum in CODES_SCHEMA:
-                regex_str = str(CODES_SCHEMA[self.code_enum].get(self.verb, ""))
-                if regex_str.startswith("^00") and self.payload[:2] != "00":
-                    raise exc.PacketPayloadInvalid(
-                        f"Packet idx is {self.payload[:2]}, but expecting no idx (00) (0xAA)"
-                    )
+            if self.payload[:2] != "00":
+                raise exc.PacketPayloadInvalid(
+                    f"Packet idx is {self.payload[:2]}, but expecting no idx (00) (0xAA)"
+                )
             return False
 
         if self._has_array:
@@ -462,63 +461,6 @@ class PayloadDecoder(ABC):
         return {}
 
 
-class RegexValidatorDecoder(PayloadDecoder):
-    """Decoder that evaluates empty payloads and validates constraints."""
-
-    def decode(
-        self,
-        dto: PacketDTO,
-        raw_payload: str,
-        payload_len: int,
-        msg: _LegacyMessage,
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
-        """Validate expressions against schema and enforce execution conditions.
-
-        :param dto: The packet raw serialization structure object.
-        :type dto: PacketDTO
-        :param raw_payload: Raw configuration hex payload representation.
-        :type raw_payload: str
-        :param payload_len: Clean length tracking metric.
-        :type payload_len: int
-        :param msg: Internal compatibility envelope schema instance.
-        :type msg: _LegacyMessage
-        :returns: Extracted parser structural outputs.
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
-        """
-        try:
-            _ = repr(dto)
-        except Exception as err:
-            raise exc.PacketPayloadInvalid(f"Packet formatting failed: {err}") from err
-
-        code = _get_code(dto.code)
-
-        if code is not None and code in CODES_SCHEMA:
-            if dto.verb in ("RQ", "RP", " I", " W"):
-                regex = CODES_SCHEMA[code].get(dto.verb)
-                if regex:
-                    match = (
-                        bool(regex.match(raw_payload))
-                        if hasattr(regex, "match")
-                        else bool(re.match(str(regex), raw_payload))
-                    )
-
-                    if not match:
-                        if not msg._has_payload:
-                            return None
-                        if dto.verb.strip() != "RQ":
-                            msg_str = f"Payload doesn't match {dto.verb}/{dto.code}: {raw_payload} != {regex}"
-                            raise exc.PacketPayloadInvalid(msg_str)
-
-        if not msg._has_payload and (
-            dto.verb.strip() == "RQ" and code not in RQ_IDX_COMPLEX
-        ):
-            return None
-
-        if self._next_decoder:
-            return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
-        return {}
-
-
 class HeartbeatDecoder(PayloadDecoder):
     """Decoder that intercepts 1-byte '00' heartbeats."""
 
@@ -542,6 +484,12 @@ class HeartbeatDecoder(PayloadDecoder):
         :returns: Extracted parser structural outputs.
         :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
+        code = _get_code(dto.code)
+        if not msg._has_payload and (
+            dto.verb.strip() == "RQ" and code not in RQ_IDX_COMPLEX
+        ):
+            return None
+
         if payload_len == 1 and raw_payload == "00" and dto.code != "1FC9":
             try:
                 parser = get_parser(dto.code) or parse_unknown_payload
@@ -633,7 +581,7 @@ class DataclassPayloadDecoder(PayloadDecoder):
         """
         payload_cls = get_payload_class(dto.code)
 
-        if payload_cls is not None and raw_payload and dto.verb != "RQ":
+        if payload_cls is not None and raw_payload:
             try:
                 raw_bytes = bytes.fromhex(raw_payload)
                 decoded_payload = payload_cls.from_bytes(raw_bytes)
@@ -665,7 +613,7 @@ class DataclassPayloadDecoder(PayloadDecoder):
                     dict,
                 ):
                     return _inject_header_metadata(converted_dict, msg, dto)
-                if isinstance(converted_dict, list):
+                elif isinstance(converted_dict, list) and converted_dict:
                     return converted_dict
 
             except (ValueError, struct.error, TypeError, KeyError) as err:
@@ -677,6 +625,9 @@ class DataclassPayloadDecoder(PayloadDecoder):
                     err,
                     _UNKNOWN_PACKET_HELP_MSG,
                 )
+                raise exc.PacketPayloadInvalid(
+                    f"Dataclass decoding failed for opcode {dto.code}: {err}"
+                ) from err
 
         if self._next_decoder is not None:
             return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
@@ -738,10 +689,8 @@ class PayloadDecoderPipeline:
 
     def __init__(self) -> None:
         """Initialize pipeline linking specific system validation decoders."""
-        self.head = RegexValidatorDecoder()
-        self.head.set_next(HeartbeatDecoder()).set_next(
-            DataclassPayloadDecoder()
-        ).set_next(LegacyParserDecoder())
+        self.head = HeartbeatDecoder()
+        self.head.set_next(DataclassPayloadDecoder()).set_next(LegacyParserDecoder())
 
     def decode(self, dto: PacketDTO) -> dict[str, Any] | list[dict[str, Any]] | None:
         """Route tracking models cleanly through downstream chain decoders.

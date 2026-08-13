@@ -21,7 +21,6 @@ from .const import I_, RP, RQ, W_, Code
 from .protocol.ramses import (
     _2411_PARAMS_SCHEMA,
     CODES_BY_DEV_SLUG,
-    CODES_SCHEMA,
     SZ_DATA_TYPE,
     SZ_DATA_UNIT,
     SZ_DESCRIPTION,
@@ -62,7 +61,6 @@ __all__ = [
     "SZ_PRECISION",
     "_2411_PARAMS_SCHEMA",
     "CODES_BY_DEV_SLUG",
-    "CODES_SCHEMA",
     #
     "I_",
     "RP",

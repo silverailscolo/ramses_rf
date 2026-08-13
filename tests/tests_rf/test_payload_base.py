@@ -124,6 +124,8 @@ def test_humidity_null_sentinel_mapping() -> None:
     assert out_null.humidity_percent is None
     assert out_null.to_bytes() == b"\x00\x00"
 
+    assert isinstance(rel_valid, RelativeHumidityPayload)
+    assert isinstance(rel_null, RelativeHumidityPayload)
     assert rel_valid.humidity_percent == 50.0
     assert rel_null.humidity_percent is None
     assert rel_null.to_bytes() == b"\x00"

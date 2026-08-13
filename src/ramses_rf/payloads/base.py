@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Self
+from typing import Any, Self
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +41,83 @@ class PayloadBase(ABC):
         :rtype: bytes
         """
         ...
+
+    def to_dict(self, *args: Any, **kwargs: Any) -> Any:
+        """Convert payload dataclass to legacy dictionary format for compatibility.
+
+        :param args: Optional positional arguments for legacy compatibility.
+        :param kwargs: Optional keyword arguments for legacy compatibility.
+        :returns: Dictionary or list representation of the payload.
+        :rtype: Any
+        """
+        from .adapters import payload_to_dict
+
+        return payload_to_dict(self)
+
+    def __getitem__(self, key: str) -> Any:
+        """Access payload field via dictionary lookup for legacy compatibility.
+
+        :param key: Field name key.
+        :type key: str
+        :returns: Decoded field value.
+        :rtype: Any
+        :raises KeyError: If key is not in dictionary.
+        """
+        d = self.to_dict()
+        if isinstance(d, dict):
+            return d[key]
+        raise KeyError(key)
+
+    def __contains__(self, key: object) -> bool:
+        """Check if key exists in payload dictionary.
+
+        :param key: Field name key.
+        :type key: object
+        :returns: True if key exists, False otherwise.
+        :rtype: bool
+        """
+        d = self.to_dict()
+        return key in d if isinstance(d, dict) else False
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get value for key with optional fallback default.
+
+        :param key: Field name key.
+        :type key: str
+        :param default: Fallback default value.
+        :type default: Any
+        :returns: Field value or default.
+        :rtype: Any
+        """
+        d = self.to_dict()
+        return d.get(key, default) if isinstance(d, dict) else default
+
+    def keys(self) -> Any:
+        """Return dictionary keys view for legacy compatibility.
+
+        :returns: Keys view.
+        :rtype: Any
+        """
+        d = self.to_dict()
+        return d.keys() if isinstance(d, dict) else {}.keys()
+
+    def values(self) -> Any:
+        """Return dictionary values view for legacy compatibility.
+
+        :returns: Values view.
+        :rtype: Any
+        """
+        d = self.to_dict()
+        return d.values() if isinstance(d, dict) else {}.values()
+
+    def items(self) -> Any:
+        """Return dictionary items view for legacy compatibility.
+
+        :returns: Items view.
+        :rtype: Any
+        """
+        d = self.to_dict()
+        return d.items() if isinstance(d, dict) else {}.items()
 
     def hex(self) -> str:
         """Return uppercase ASCII hex representation of binary payload.
