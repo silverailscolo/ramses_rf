@@ -10,7 +10,6 @@ from ramses_tx.const import VerbT
 from ramses_tx.dtos import PacketDTO
 
 from ..const import RQ, Code
-from ..protocol.ramses import CODES_SCHEMA, SZ_LIFESPAN
 from .base import Message
 
 if TYPE_CHECKING:
@@ -86,11 +85,6 @@ class ApplicationMessage(Message):
 
         if self.code == Code._3220:
             return td(minutes=5) * 2.1
-
-        if (code_schema := CODES_SCHEMA.get(self.code)) and SZ_LIFESPAN in code_schema:
-            result = code_schema[SZ_LIFESPAN]
-            if isinstance(result, td):
-                return result
 
         return td(minutes=60)
 

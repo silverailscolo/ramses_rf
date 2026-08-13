@@ -165,7 +165,7 @@ def test_message_valid_empty_payload(patch_parsers: Any) -> None:
     packet = Packet(dtm, "045  I --- 18:006402 13:049798 --:------ 1FC9 001 00")
     message = Message(packet.to_dto())
 
-    assert message._has_payload is False
+    assert message._has_payload is True
     assert message.payload.get("phase") == "confirm"
     assert "bindings" in message.payload
 

@@ -17,7 +17,7 @@ FIXTURE_PATH: Path = (
 # Baseline metrics for the static fixture file. If these change, a parser
 # has been altered and the regression requires manual review.
 EXPECTED_L2_SKIPS: int = 10
-EXPECTED_SCHEMA_SKIPS: int = 11
+EXPECTED_SCHEMA_SKIPS: int = 1
 
 
 def _load_regression_frames() -> list[tuple[int, str]]:

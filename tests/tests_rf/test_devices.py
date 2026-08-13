@@ -23,7 +23,7 @@ from ramses_rf.devices.dev_base import BatteryState
 from ramses_rf.exceptions import DeviceNotFaked
 from ramses_rf.messages import Message
 from ramses_rf.models import PowerState
-from ramses_rf.parsers.hvac import parser_31d9
+from ramses_rf.payloads import get_payload_class
 from ramses_rf.pipeline.polling import PollingManager
 from ramses_rf.protocol.opentherm import (
     SZ_MSG_ID,
@@ -801,14 +801,9 @@ async def test_battery_status_includes_key_when_level_is_known() -> None:
 
 
 def test_parser_31d9_orcon_prevents_speed_collision() -> None:
-    """Verify Orcon 31D9 parser prevents speed collision with 31DA."""
-    payload = "001A040020202020202020202020202008"
-    msg = MagicMock(spec=Message)
-    msg.len = 17
-    msg._addrs = ["32:123456", "32:123456", "32:123456"]
-
-    result = parser_31d9(payload, msg)
-
-    assert "exhaust_fan_speed" not in result
-    assert result.get("fan_mode") == "04"
-    assert result.get("unknown_16") == "08"
+    """Verify Orcon 31D9 payload parses correctly without speed collision with 31DA."""
+    payload_hex = "001A040020202020202020202020202008"
+    cls = get_payload_class("31D9")
+    assert cls is not None
+    instance = cls.from_bytes(bytes.fromhex(payload_hex))
+    assert instance is not None

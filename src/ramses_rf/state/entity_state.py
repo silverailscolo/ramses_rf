@@ -14,7 +14,7 @@ import logging
 from datetime import UTC, datetime as dt
 from typing import TYPE_CHECKING, Any, Literal, overload
 
-from ramses_rf.const import SZ_DOMAIN_ID, SZ_NAME, SZ_ZONE_IDX
+from ramses_rf.const import SZ_DOMAIN_ID, SZ_ZONE_IDX
 from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -23,7 +23,7 @@ from ramses_tx.typing import PayDictT
 
 from .. import exceptions as exc
 from ..messages import ApplicationMessage, Message
-from ..protocol.ramses import CODES_SCHEMA
+from ..protocol.ramses import CODE_NAME_LOOKUP
 from ..routing import RoutingContext, StateHeader
 
 if TYPE_CHECKING:
@@ -652,9 +652,8 @@ class EntityState:
         for code in sorted(msgs_dict, key=str):
             if msgs_dict[code].src.id == self._entity.id[:9]:
                 name = None
-                # Type-narrow to satisfy CODES_SCHEMA strict indexing requirements
-                if isinstance(code, Code) and code in CODES_SCHEMA:
-                    name = CODES_SCHEMA[code].get(SZ_NAME)
+                if isinstance(code, Code) and code in CODE_NAME_LOOKUP:
+                    name = CODE_NAME_LOOKUP[code]
                 codes[code] = name
 
         return {"_sent": list(codes.keys())}

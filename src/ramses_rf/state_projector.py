@@ -8,7 +8,7 @@ import dataclasses
 import logging
 import uuid
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from ramses_tx.const import Code
 
@@ -152,7 +152,9 @@ class StateProjector:
         await process_state_updates(self._gwy, msg)
 
 
-_DHW_OPCODES: Final[frozenset[Code]] = frozenset({Code._1260, Code._10A0, Code._1F41})
+_DHW_OPCODES: Final[frozenset[Code | str]] = frozenset(
+    {Code._1260, Code._10A0, Code._1F41, "1260", "10A0", "1F41"}
+)
 
 
 def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
@@ -177,23 +179,37 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
         a DHW opcode or the source is not a DHW sender.
     :rtype: DhwZone | None
     """
-    if msg.code not in _DHW_OPCODES or src_dev is None:
+    if msg.code not in _DHW_OPCODES:
         return None
 
-    src_slug = getattr(src_dev, "_SLUG", "")
-    if msg.code == Code._1260:
-        is_dhw_src = src_slug in ("DHW", "CTL")
+    src_type = getattr(src_dev, "type", None) or (
+        msg.src.id[:2] if hasattr(msg.src, "id") and msg.src.id else None
+    )
+    src_slug = str(getattr(src_dev, "_SLUG", ""))
+    if msg.code in (Code._1260, "1260"):
+        is_dhw_src = src_type in ("07", "01") or src_slug in ("DHW", "CTL")
     else:  # 10A0 / 1F41 are owned by the Controller
-        is_dhw_src = src_slug == "CTL"
+        is_dhw_src = src_type == "01" or "CTL" in src_slug or "PRG" in src_slug
 
     if not is_dhw_src:
         return None
 
-    tcs = getattr(src_dev, "tcs", None)
+    tcs = getattr(src_dev, "tcs", None) or getattr(src_dev, "_tcs", None)
+    if tcs is None and hasattr(src_dev, "dhw"):
+        tcs = src_dev
+    if tcs is None and hasattr(src_dev, "_gwy"):
+        tcs = getattr(src_dev._gwy, "tcs", None)
+    if tcs is None and getattr(msg, "_gwy", None) is not None:
+        tcs = getattr(msg._gwy, "tcs", None)
+
     if tcs is None:
         return None
 
-    return getattr(tcs, "dhw", None)
+    if getattr(tcs, "dhw", None) is not None:
+        return cast(DhwZone | None, tcs.dhw)
+    if hasattr(tcs, "get_dhw_zone"):
+        return cast(DhwZone | None, tcs.get_dhw_zone(msg=msg))
+    return None
 
 
 def _resolve_logical_targets(
@@ -483,21 +499,21 @@ def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     :param msg: Message envelope.
     :type msg: Message
     """
-    if not isinstance(target, DhwZone):
+    if not hasattr(target, "dhw_state"):
         return
     dhw_state = getattr(target, "dhw_state", None)
     if dhw_state is None or not dataclasses.is_dataclass(dhw_state):
         return
 
     updates: dict[str, Any] = {}
-    if msg.code == Code._10A0:
+    if msg.code in (Code._10A0, "10A0"):
         if SZ_SETPOINT in p:
             updates[SZ_SETPOINT] = p[SZ_SETPOINT]
         if SZ_OVERRUN in p:
             updates[SZ_OVERRUN] = p[SZ_OVERRUN]
         if SZ_DIFFERENTIAL in p:
             updates[SZ_DIFFERENTIAL] = p[SZ_DIFFERENTIAL]
-    elif msg.code == Code._1F41:
+    elif msg.code in (Code._1F41, "1F41"):
         if SZ_MODE in p:
             updates[SZ_MODE] = p[SZ_MODE]
         if SZ_ACTIVE in p:
@@ -762,7 +778,8 @@ async def process_state_updates(gwy: Gateway, msg: Message) -> None:
     if msg.code == Code._2411:
         _route_2411_to_fan(gwy, msg)
 
-    payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
+    raw_payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
+    payloads = [p.to_dict() if hasattr(p, "to_dict") else p for p in raw_payloads]
     with contextlib.suppress(exc.DeviceNotFoundError, exc.SchemaInconsistentError):
         for p in payloads:
             if isinstance(p, dict):

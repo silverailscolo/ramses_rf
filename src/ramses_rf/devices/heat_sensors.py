@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from datetime import timedelta as td
 from typing import Any, Final
 
-from ramses_rf.const import SZ_TEMPERATURE, DevType
+from ramses_rf.const import HEARTBEAT_TIMEOUT_DHW, SZ_TEMPERATURE, DevType
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
@@ -103,6 +104,18 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
 
     _SLUG: str = DevType.DHW
     _STATE_ATTR = DhwTemperature.TEMPERATURE
+
+    @property
+    def heartbeat_timeout(self) -> td:
+        """Return the timeout before the device is considered unavailable.
+
+        DHW sensors (e.g. CS92) are battery-powered and only transmit on
+        temperature changes, not on a regular heartbeat schedule.  The
+        CTL polls them for 10A0 (DHW params) every 24 hours, so the
+        default 1-hour timeout is far too short — use 24 hours to match
+        the CTL's polling interval (issue 925).
+        """
+        return HEARTBEAT_TIMEOUT_DHW
 
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any

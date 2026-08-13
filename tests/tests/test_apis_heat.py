@@ -13,7 +13,7 @@ from ramses_rf.const import SZ_DOMAIN_ID, SZ_TIMESTAMP
 from ramses_rf.enums import Action
 from ramses_rf.helpers import shrink
 from ramses_rf.messages import Message
-from ramses_rf.parsers.helpers import parse_fault_log_entry
+from ramses_rf.payloads.helpers import parse_fault_log_entry
 from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.dtos import CommandDTO as Command
 from ramses_tx.packet import Packet

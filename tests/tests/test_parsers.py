@@ -67,11 +67,7 @@ def _proc_log_line(log_line: str) -> None:
         return
 
     if isinstance(pkt_dict, list) or not any(k for k in pkt_dict if k in META_KEYS):
-        from ramses_rf.parsers.decoder import LegacyParserDecoder
-
-        payload = LegacyParserDecoder().decode(
-            msg._dto, msg._dto.payload, len(msg._dto.payload), msg
-        )
+        payload = msg.payload
 
         keys_to_strip = (
             "zone_idx",

@@ -8,6 +8,9 @@ import struct
 from dataclasses import dataclass
 from typing import Any, ClassVar, Self
 
+from ramses_rf.const import SZ_ACTIVE, SZ_DHW_IDX, SZ_MODE, SZ_UNTIL
+from ramses_tx.helpers import hex_to_dtm
+
 from .base import PayloadBase, parse_idx
 from .registry import register_payload
 
@@ -333,6 +336,8 @@ class DhwStatePayload(PayloadBase):
 
     dhw_idx: int
     active_flag: int
+    mode_val: int | None = None
+    _raw_bytes: bytes | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -347,15 +352,56 @@ class DhwStatePayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 1F41: {len(raw_data)}")
         idx, active = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(dhw_idx=idx, active_flag=active)
+        mode_val = raw_data[2] if len(raw_data) >= 3 else None
+        return cls(
+            dhw_idx=idx, active_flag=active, mode_val=mode_val, _raw_bytes=raw_data
+        )
 
     def to_bytes(self) -> bytes:
-        """Pack DHW state data into binary payload.
+        """Pack DHW state data dynamically into binary payload.
 
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.dhw_idx, self.active_flag)
+        if self.mode_val is not None:
+            header = bytes([self.dhw_idx, self.active_flag, self.mode_val])
+        else:
+            header = struct.pack(self._STRUCT_FMT, self.dhw_idx, self.active_flag)
+
+        if self._raw_bytes and len(self._raw_bytes) > len(header):
+            return header + self._raw_bytes[len(header) :]
+        return header
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert DHW state payload to legacy dictionary format.
+
+        :returns: Decoded DHW state dictionary.
+        :rtype: dict[str, Any]
+        """
+        res: dict[str, Any] = {SZ_DHW_IDX: f"{self.dhw_idx:02X}"}
+        res[SZ_ACTIVE] = (
+            None if self.active_flag == 0xFF else (self.active_flag == 0x01)
+        )
+        mode_map = {
+            0: "follow_schedule",
+            1: "advanced_override",
+            2: "permanent_override",
+            3: "countdown_override",
+            4: "temporary_override",
+        }
+        if self.mode_val is not None and self.mode_val in mode_map:
+            res[SZ_MODE] = mode_map[self.mode_val]
+        elif self.active_flag != 0xFF:
+            res[SZ_MODE] = "follow_schedule"
+
+        raw_hex = self.to_bytes().hex().upper()
+        if len(raw_hex) >= 24:
+            dtm_hex = raw_hex[12:24]
+            if dtm_hex != "FFFFFFFFFFFF":
+                res[SZ_UNTIL] = hex_to_dtm(dtm_hex)
+            else:
+                res[SZ_UNTIL] = None
+        return res
 
 
 @register_payload("11F0")
