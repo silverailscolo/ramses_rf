@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 INTERVAL_HOURLY: Final[int] = 3600  # 1 hour in seconds
+INTERVAL_EVERY_6_HOURS: Final[int] = 21600  # 6 hours in seconds
 INTERVAL_EVERY_12_HOURS: Final[int] = 43200  # 12 hours in seconds
 INTERVAL_DAILY: Final[int] = 86400  # 24 hours in seconds
 
@@ -39,6 +40,12 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[str, int | None]]] = {
         "1F41": INTERVAL_HOURLY,  # DHW System Mode / Operating State
         "2E04": INTERVAL_DAILY,  # Evohome System Mode
         "313F": INTERVAL_EVERY_12_HOURS,  # System Time & Date Sync
+        # 0004 (zone name) is polled per-zone, not per-device — see
+        # update_device_tasks for the zone-level expansion.  The interval
+        # here is a marker; actual tasks are keyed by (device_id, "0004",
+        # zone_idx).  Issue 947: zone names lost after cache clear because
+        # the CTL does not broadcast 0004 unless queried.
+        "0004": INTERVAL_EVERY_6_HOURS,  # Zone Name (per-zone, expanded below)
     },
     # Boiler Relay / Switch
     DevType.BDR: {
@@ -110,6 +117,8 @@ class PollingTask:
     :type last_polled: dt | None
     :param failures: Count of consecutive polling failures.
     :type failures: int
+    :param payload: Optional payload suffix (e.g., zone_idx for 0004).
+    :type payload: str | None
     """
 
     device_id: DeviceIdT
@@ -118,6 +127,7 @@ class PollingTask:
     next_due: dt
     last_polled: dt | None = None
     failures: int = 0
+    payload: str | None = None
 
 
 class PollingManager:
@@ -148,7 +158,9 @@ class PollingManager:
         self.shadow_mode: bool = shadow_mode
         self._cycle_interval: float = cycle_interval
 
-        self._tasks: dict[tuple[DeviceIdT, str], PollingTask] = {}
+        # Keys are (device_id, code) for device-level tasks, or
+        # (device_id, code, zone_idx) for zone-level tasks (e.g., 0004).
+        self._tasks: dict[tuple[str, ...], PollingTask] = {}
         self._poller_task: asyncio.Task[None] | None = None
         self._running: bool = False
 
@@ -199,30 +211,63 @@ class PollingManager:
             if interval is not None and interval > 0
         }
 
-    def update_device_tasks(self, device: DeviceBase) -> set[tuple[DeviceIdT, str]]:
+    def update_device_tasks(self, device: DeviceBase) -> set[tuple[str, ...]]:
         """Update or register scheduled polling tasks for a device entity.
+
+        For CTL devices with zones, the ``0004`` (zone name) code is
+        expanded into one task per zone, keyed by
+        ``(device_id, "0004", zone_idx)``.  This restores the per-zone
+        zone-name polling that was lost when the legacy DiscoveryService
+        was removed (issue 947 / ramses-rf/ramses_cc#947).
 
         :param device: The device entity to register or refresh.
         :type device: DeviceBase
-        :returns: Set of active task keys (device_id, code) for the device.
-        :rtype: set[tuple[DeviceIdT, str]]
+        :returns: Set of active task keys for the device.
+        :rtype: set[tuple[str, ...]]
         """
         schedule = self.resolve_schedule_for_device(device)
         now = dt.now(UTC)
-        active_keys: set[tuple[DeviceIdT, str]] = set()
+        active_keys: set[tuple[str, ...]] = set()
+
+        # Collect zone indices for per-zone code expansion (0004).
+        # CTL devices have a .tcs attribute with .zones list.
+        zone_idxs: list[str] = []
+        if "0004" in schedule:
+            tcs = getattr(device, "tcs", None)
+            if tcs is not None:
+                zones = getattr(tcs, "zones", [])
+                zone_idxs = [z.idx for z in zones if hasattr(z, "idx")]
 
         for code, interval in schedule.items():
-            key = (device.id, code)
-            active_keys.add(key)
-            if key not in self._tasks:
-                self._tasks[key] = PollingTask(
-                    device_id=device.id,
-                    code=code,
-                    interval=interval,
-                    next_due=now + td(seconds=interval),
-                )
+            if code == "0004" and zone_idxs:
+                # Expand into per-zone tasks
+                for zone_idx in zone_idxs:
+                    zkey = (device.id, code, zone_idx)
+                    active_keys.add(zkey)
+                    payload = f"{zone_idx}00"
+                    if zkey not in self._tasks:
+                        self._tasks[zkey] = PollingTask(
+                            device_id=device.id,
+                            code=code,
+                            interval=interval,
+                            next_due=now + td(seconds=interval),
+                            payload=payload,
+                        )
+                    else:
+                        self._tasks[zkey].interval = interval
+                        self._tasks[zkey].payload = payload
             else:
-                self._tasks[key].interval = interval
+                dkey = (device.id, code)
+                active_keys.add(dkey)
+                if dkey not in self._tasks:
+                    self._tasks[dkey] = PollingTask(
+                        device_id=device.id,
+                        code=code,
+                        interval=interval,
+                        next_due=now + td(seconds=interval),
+                    )
+                else:
+                    self._tasks[dkey].interval = interval
 
         return active_keys
 
@@ -294,7 +339,7 @@ class PollingManager:
             return 0
 
         # Refresh tasks for all devices currently in registry and prune stale tasks
-        active_keys: set[tuple[DeviceIdT, str]] = set()
+        active_keys: set[tuple[str, ...]] = set()
         for dev in list(self._gwy.device_registry.devices):
             active_keys.update(self.update_device_tasks(dev))
 
@@ -315,10 +360,11 @@ class PollingManager:
             processed_count += 1
             if self.shadow_mode:
                 _LOGGER.debug(
-                    "[SHADOW POLLING] Device %s command %s due (interval=%ss)",
+                    "[SHADOW POLLING] Device %s command %s due (interval=%ss, payload=%s)",
                     task.device_id,
                     task.code,
                     task.interval,
+                    task.payload or "00",
                 )
                 task.last_polled = now
                 task.next_due = now + td(seconds=task.interval)
@@ -326,7 +372,9 @@ class PollingManager:
                 _LOGGER.info("Polling device %s command %s", task.device_id, task.code)
                 task.last_polled = now
                 task.next_due = now + td(seconds=task.interval)
-                cmd_dto = build_rq_cmd(task.device_id, task.code)
+                cmd_dto = build_rq_cmd(
+                    task.device_id, task.code, payload=task.payload or "00"
+                )
                 try:
                     await self._gwy.async_send_cmd(cmd_dto)
                 except (RamsesException, TimeoutError) as err:
