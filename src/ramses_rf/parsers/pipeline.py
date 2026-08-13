@@ -11,7 +11,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from ramses_rf.protocol.ramses import CODES_SCHEMA, RQ_IDX_COMPLEX
+from ramses_rf.protocol.ramses import RQ_IDX_COMPLEX
 from ramses_tx import exceptions as exc
 from ramses_tx.const import RQ, Code
 from ramses_tx.helpers import hex_to_temp
@@ -108,51 +108,6 @@ class PayloadDecoder(ABC):
         return {}
 
 
-class RegexValidatorDecoder(PayloadDecoder):
-    """Decoder that evaluates empty payloads and validates constraints."""
-
-    def decode(
-        self, msg: Message, payload_str: str, payload_len: int
-    ) -> dict[str, Any] | list[dict[str, Any]] | None:
-        """Validate the payload string rules or execute early exit bypasses.
-
-        :param msg: The message context
-        :type msg: Message
-        :param payload_str: The raw payload string
-        :type payload_str: str
-        :param payload_len: The payload length
-        :type payload_len: int
-        :return: The decoded result or None to signal early exit
-        :rtype: dict[str, Any] | list[dict[str, Any]] | None
-        """
-        try:
-            # Force packet evaluation via string representation
-            _ = repr(msg)
-        except Exception as err:
-            raise exc.PacketPayloadInvalid(
-                f"Packet formatting/evaluation failed: {err}"
-            ) from err
-
-        if msg.code in CODES_SCHEMA:
-            if msg.verb in ("RQ", "RP", " I", " W"):
-                regex = CODES_SCHEMA[msg.code].get(msg.verb)
-                if regex and not bool(re.compile(str(regex)).match(payload_str)):
-                    if not msg._has_payload:
-                        return None  # Sentinel for fallback on nulls
-                    raise exc.PacketPayloadInvalid(
-                        f"Payload doesn't match {msg.verb}/{msg.code}: "
-                        f"{payload_str} != {regex}"
-                    )
-
-        # Standard bypass rule for requests with null payloads
-        if not msg._has_payload and (msg.verb == RQ and msg.code not in RQ_IDX_COMPLEX):
-            return None
-
-        if self._next_decoder:
-            return self._next_decoder.decode(msg, payload_str, payload_len)
-        return {}
-
-
 class HeartbeatDecoder(PayloadDecoder):
     """Decoder that intercepts 1-byte '00' heartbeats."""
 
@@ -170,6 +125,9 @@ class HeartbeatDecoder(PayloadDecoder):
         :return: The decoded result
         :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
+        if not msg._has_payload and (msg.verb == RQ and msg.code not in RQ_IDX_COMPLEX):
+            return None
+
         if payload_len == 1 and payload_str == "00" and msg.code != Code._1FC9:
             try:
                 parser = get_parser(msg.code) or parser_unknown
@@ -243,8 +201,8 @@ class PayloadDecoderPipeline:
 
     def __init__(self) -> None:
         """Initialize the decoder pipeline."""
-        self.head = RegexValidatorDecoder()
-        self.head.set_next(HeartbeatDecoder()).set_next(StandardParserDecoder())
+        self.head = HeartbeatDecoder()
+        self.head.set_next(StandardParserDecoder())
 
     def decode_payload(self, msg: Message) -> Any:
         """Decode the raw payload using the decoder chain.
@@ -291,18 +249,5 @@ def _check_msg_payload(msg: Message, payload: str) -> None:
             f"Packet formatting/evaluation failed: {err}"
         ) from err
 
-    if msg.code not in CODES_SCHEMA:
-        raise exc.PacketInvalid(f"Unknown code: {msg.code}")
-
     if msg.verb not in ("RQ", "RP", " I", " W"):
         raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
-
-    regex = CODES_SCHEMA[msg.code].get(msg.verb)
-
-    if not regex:
-        raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
-
-    if not re_compile_re_match(str(regex), payload):
-        raise exc.PacketPayloadInvalid(
-            f"Payload doesn't match {msg.verb}/{msg.code}: {payload} != {regex}"
-        )

@@ -4,11 +4,29 @@ This module contains strongly-typed dataclass representations for system clock,
 device binding, fault log, and gateway heartbeat packet payloads.
 """
 
+import re
 import struct
 from dataclasses import dataclass
-from typing import Any, ClassVar, Self, cast
+from typing import Any, ClassVar, Self
 
-from ramses_tx.helpers import hex_from_dtm, hex_to_dtm
+from ramses_rf.const import (
+    DEV_ROLE_MAP,
+    SYS_MODE_MAP,
+    SZ_DEVICE_CLASS,
+    SZ_DEVICE_ID,
+    SZ_DOMAIN_IDX,
+    SZ_FAULT_STATE,
+    SZ_FAULT_TYPE,
+    SZ_LOG_ENTRY,
+    SZ_LOG_IDX,
+    SZ_SYSTEM_MODE,
+    SZ_TIMESTAMP,
+    SZ_UNTIL,
+)
+from ramses_rf.enums import DevRole
+from ramses_rf.payloads.helpers import parse_fault_log_entry
+from ramses_tx.const import F9, FA, FC, FaultDeviceClass
+from ramses_tx.helpers import hex_from_dtm, hex_to_date, hex_to_dtm, hex_to_dts
 
 from .base import PayloadBase
 from .registry import register_payload
@@ -54,6 +72,7 @@ class SystemClockPayload(PayloadBase):
     minute: int
     second: int
     day_of_week: int
+    _raw_bytes: bytes | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -67,6 +86,8 @@ class SystemClockPayload(PayloadBase):
         """
         if len(raw_data) < 5:
             raise ValueError(f"Invalid payload length for 0001: {len(raw_data)}")
+        if len(raw_data) >= 8:
+            return cls(hour=0, minute=0, second=0, day_of_week=0, _raw_bytes=raw_data)
         _hdr, hr, mn, sc, dow = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
             hour=hr,
@@ -81,9 +102,35 @@ class SystemClockPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        if self._raw_bytes is not None:
+            return self._raw_bytes
         return struct.pack(
             self._STRUCT_FMT, 0, self.hour, self.minute, self.second, self.day_of_week
         )
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert system clock payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded system clock dictionary.
+        :rtype: dict[str, Any]
+        """
+        if self._raw_bytes is not None and len(self._raw_bytes) >= 8:
+            b = self._raw_bytes
+            return {
+                "slot_num": f"{b[3]:02X}",
+                "param_num": f"{b[5]:02X}",
+                "next_slot_num": f"{b[6]:02X}",
+                "boolean_14": bool(b[7] != 0),
+                "payload": b.hex().upper(),
+            }
+        return {
+            "hour": self.hour,
+            "minute": self.minute,
+            "second": self.second,
+            "day_of_week": self.day_of_week,
+        }
 
 
 @register_payload("0002")
@@ -215,8 +262,56 @@ class SystemChangeCounterPayload(PayloadBase):
 
 @register_payload("000E")
 @dataclass(frozen=True, slots=True)
+class OemCodePayload(PayloadBase):
+    """OEM code payload (Opcode 000E).
+
+    2-byte OEM Code binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       2s     2B   OEM Code Payload (bytes)     : 00 01
+      --------------------------------------------------------------
+      Field-spaced hex : 00 01
+      Payload hex      : 0001
+
+    :param payload_hex: Raw payload hex string representation.
+    :type payload_hex: str
+    """
+
+    payload_hex: str
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack OEM code binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked OemCodePayload instance.
+        :rtype: Self
+        """
+        return cls(payload_hex=raw_data.hex().upper())
+
+    def to_bytes(self) -> bytes:
+        """Pack OEM code data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return bytes.fromhex(self.payload_hex)
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert OEM code payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded OEM code dictionary.
+        :rtype: dict[str, Any]
+        """
+        return {"payload": self.payload_hex}
+
+
+@dataclass(frozen=True, slots=True)
 class SystemRolePayload(PayloadBase):
-    """System role assignment payload (Opcode 000E).
+    """System role assignment payload.
 
     2-byte System Role binary layout:
       Offset  Format  Len  Description                    Sample Hex
@@ -505,9 +600,8 @@ class SystemFaultLogPayload(PayloadBase):
         :raises ValueError: If raw_data is empty.
         """
         if not raw_data:
-            raise ValueError("Payload data cannot be empty")
-        (idx,) = struct.unpack_from(cls._STRUCT_FMT_HEADER, raw_data, 0)
-        return cls(log_idx=idx, log_data=raw_data[1:])
+            return cls(log_idx=0, log_data=b"")
+        return cls(log_idx=raw_data[0], log_data=raw_data[1:])
 
     def to_bytes(self) -> bytes:
         """Pack system fault log data into binary payload.
@@ -515,7 +609,7 @@ class SystemFaultLogPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT_HEADER, self.log_idx) + self.log_data
+        return bytes([self.log_idx]) + self.log_data
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert fault log payload to legacy dictionary layout.
@@ -525,23 +619,57 @@ class SystemFaultLogPayload(PayloadBase):
         :returns: Decoded fault log dictionary.
         :rtype: dict[str, Any]
         """
-        from ramses_rf.parsers.system import parser_0418
-
-        verb = getattr(msg, "verb", " I") if msg is not None else " I"
-        dummy_msg = type("DummyMsg", (), {"verb": verb})()
-
-        idx_str = f"{self.log_idx:02X}"
         raw_hex = (bytes([self.log_idx]) + self.log_data).hex().upper()
+        log_index_str = raw_hex[4:6] if len(raw_hex) >= 6 else f"{self.log_idx:02X}"
+
+        verb = getattr(msg, "verb", "I") if msg is not None else "I"
+        verb_str = getattr(verb, "value", str(verb)).split(".")[-1]
+        if verb_str == "RQ":
+            return {SZ_LOG_IDX: log_index_str}
+
+        if len(raw_hex) < 44 or hex_to_dts(raw_hex[18:30]) is None:
+            return {SZ_LOG_ENTRY: None}
+
         try:
-            parsed = parser_0418(raw_hex, dummy_msg)
-            if isinstance(parsed, dict):
-                res: dict[str, Any] = dict(parsed)
-                if "log_idx" not in res:
-                    res["log_idx"] = idx_str
-                return res
+            log_entry_dict = parse_fault_log_entry(raw_hex)
+            if (
+                not isinstance(log_entry_dict, dict)
+                or SZ_TIMESTAMP not in log_entry_dict
+            ):
+                return {SZ_LOG_ENTRY: None}
+
+            keys_to_include = (SZ_TIMESTAMP, SZ_FAULT_STATE, SZ_FAULT_TYPE)
+            entry = [v for k, v in log_entry_dict.items() if k in keys_to_include]
+
+            dev_class = log_entry_dict.get(SZ_DEVICE_CLASS)
+            domain_idx = log_entry_dict.get(SZ_DOMAIN_IDX)
+            dev_id = log_entry_dict.get(SZ_DEVICE_ID)
+
+            if dev_class != FaultDeviceClass.ACTUATOR:
+                entry.append(dev_class)
+            elif domain_idx == FC:
+                entry.append(DEV_ROLE_MAP[DevRole.APP])
+            elif domain_idx == FA:
+                entry.append(DEV_ROLE_MAP[DevRole.HTG])
+            elif domain_idx == F9:
+                entry.append(DEV_ROLE_MAP[DevRole.HT1])
+            else:
+                entry.append(FaultDeviceClass.ACTUATOR)
+
+            if dev_class != FaultDeviceClass.CONTROLLER:
+                entry.append(domain_idx)
+
+            if dev_id not in ("00:000000", "00:000001", "00:000002"):
+                entry.append(dev_id)
+
+            entry.extend((raw_hex[6:8], raw_hex[14:18], raw_hex[30:38]))
+
+            return {
+                SZ_LOG_IDX: log_index_str,
+                SZ_LOG_ENTRY: tuple([str(r) for r in entry]),
+            }
         except Exception:
-            pass
-        return {"log_idx": idx_str, "log_entry": None}
+            return {SZ_LOG_IDX: log_index_str, SZ_LOG_ENTRY: None}
 
 
 @register_payload("042F")
@@ -568,6 +696,7 @@ class SystemLogIndexPayload(PayloadBase):
 
     domain_idx: int
     log_pointer: int
+    raw_bytes: bytes | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -582,7 +711,7 @@ class SystemLogIndexPayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 042F: {len(raw_data)}")
         dom, ptr = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain_idx=dom, log_pointer=ptr)
+        return cls(domain_idx=dom, log_pointer=ptr, raw_bytes=raw_data)
 
     def to_bytes(self) -> bytes:
         """Pack system log index data into binary payload.
@@ -590,7 +719,27 @@ class SystemLogIndexPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        if self.raw_bytes is not None:
+            return self.raw_bytes
         return struct.pack(self._STRUCT_FMT, self.domain_idx, self.log_pointer)
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert system log index payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded log index dictionary.
+        :rtype: dict[str, Any]
+        """
+        if self.raw_bytes is not None and len(self.raw_bytes) == 9:
+            raw_hex = self.raw_bytes.hex().upper()
+            return {
+                "counter_1": f"0x{raw_hex[2:6]}",
+                "counter_3": f"0x{raw_hex[6:10]}",
+                "counter_5": f"0x{raw_hex[10:14]}",
+                "unknown_7": f"0x{raw_hex[14:18]}",
+            }
+        return {"domain_idx": self.domain_idx, "log_pointer": self.log_pointer}
 
 
 @register_payload("0B04")
@@ -644,51 +793,79 @@ class SystemStatusPayload(PayloadBase):
 
 @register_payload("1060")
 @dataclass(frozen=True, slots=True)
-class SystemHeatCoolPayload(PayloadBase):
-    """System heat/cool operating mode payload (Opcode 1060).
+class DeviceBatteryPayload(PayloadBase):
+    """Device battery status payload (Opcode 1060).
 
-    2-byte System Heat/Cool binary layout:
+    3-byte Battery Status binary layout:
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
-      +0       B      1B   Domain Index (uint8)         : 00
-      +1       B      1B   Mode (0=Heat, 1=Cool)        : 00
+      +0       B      1B   Header / Zone Index          : 00
+      +1       B      1B   Battery Level (uint8)        : 64 (50.0%)
+      +2       B      1B   Flags (0=Low, 1=OK)          : 01 (OK)
       --------------------------------------------------------------
-      Field-spaced hex : 00 00
-      Payload hex      : 0000
+      Field-spaced hex : 00 64 01
+      Payload hex      : 006401
 
-    :param domain_idx: System domain index byte.
-    :type domain_idx: int
-    :param mode: Operating mode (0 for heat, 1 for cool).
-    :type mode: int
+    :param header: Header or zone index byte.
+    :type header: int
+    :param battery_level: Battery level float (0.0 to 1.0) or None if absent/sentinel.
+    :type battery_level: float | None
+    :param battery_low: True if battery is low, False if OK.
+    :type battery_low: bool
     """
 
-    _STRUCT_FMT: ClassVar[str] = ">BB"
-
-    domain_idx: int
-    mode: int
+    header: int
+    battery_level: float | None
+    battery_low: bool
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack system heat/cool binary payload.
+        """Unpack 3-byte battery status binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked SystemHeatCoolPayload instance.
+        :returns: Unpacked DeviceBatteryPayload instance.
         :rtype: Self
-        :raises ValueError: If raw_data length is less than 2 bytes.
+        :raises ValueError: If raw_data length is less than 3 bytes.
         """
-        if len(raw_data) < 2:
+        if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 1060: {len(raw_data)}")
-        dom, md = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain_idx=dom, mode=md)
+        hdr = raw_data[0]
+        raw_level = raw_data[1]
+        raw_flags = raw_data[2]
+        level = None if raw_level in (0x00, 0xFF) else raw_level / 200.0
+        low = raw_flags == 0x00
+        return cls(header=hdr, battery_level=level, battery_low=low)
 
     def to_bytes(self) -> bytes:
-        """Pack system heat/cool data into binary payload.
+        """Pack battery status into binary payload.
 
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.domain_idx, self.mode)
+        raw_level = (
+            0xFF
+            if self.battery_level is None
+            else int(round(self.battery_level * 200.0))
+        )
+        raw_flags = 0x00 if self.battery_low else 0x01
+        return bytes([self.header, raw_level, raw_flags])
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert 1060 payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded battery dictionary.
+        :rtype: dict[str, Any]
+        """
+        res: dict[str, Any] = {
+            "battery_low": self.battery_low,
+            "battery_level": self.battery_level,
+        }
+        if self.header != 0:
+            res["zone_idx"] = f"{self.header:02X}"
+        return res
 
 
 @register_payload("10E0")
@@ -746,10 +923,6 @@ class SystemDeviceInfoPayload(PayloadBase):
         :returns: Decoded device info dictionary.
         :rtype: dict[str, Any]
         """
-        import re
-
-        from ramses_tx.helpers import hex_to_date
-
         raw_payload = bytes([self.info_type]) + self.info_bytes
         hex_str = raw_payload.hex().upper()
         if hex_str == "00":
@@ -962,29 +1135,25 @@ class SystemConfigPayload(PayloadBase):
         :returns: Decoded system config dictionary.
         :rtype: dict[str, Any]
         """
-        from ramses_rf.const import SYS_MODE_MAP
+        if msg and hasattr(msg, "src"):
+            dev_type = getattr(msg.src, "type", None) or getattr(msg.src, "id", "")[:2]
+            if dev_type in ("21", "37", "32"):
+                return {"presence_detected": bool(self.config_val != 0)}
 
         mode_code = f"{self.config_idx:02X}"
         if mode_code in SYS_MODE_MAP:
-            from ramses_rf.parsers.system import parser_2e04
-
-            full_bytes = self.to_bytes()
-            verb = getattr(msg, "verb", " I") if msg is not None else " I"
-            dummy_msg = type("DummyMsg", (), {"verb": verb, "len": len(full_bytes)})()
-            try:
-                parsed = parser_2e04(full_bytes.hex().upper(), dummy_msg)
-                if isinstance(parsed, dict):
-                    return cast(dict[str, Any], parsed)
-            except Exception:
-                pass
-
-            if mode_code in (
+            result: dict[str, Any] = {SZ_SYSTEM_MODE: SYS_MODE_MAP[mode_code]}
+            if mode_code not in (
                 SYS_MODE_MAP.AUTO,
                 SYS_MODE_MAP.HEAT_OFF,
                 SYS_MODE_MAP.AUTO_WITH_RESET,
             ):
-                return {"system_mode": SYS_MODE_MAP[mode_code]}
-            return {"system_mode": SYS_MODE_MAP[mode_code], "until": None}
+                full_bytes = self.to_bytes()
+                until_dtm = None
+                if len(full_bytes) >= 8 and full_bytes[7] != 0:
+                    until_dtm = hex_to_dtm(full_bytes[1:7].hex().upper())
+                result[SZ_UNTIL] = until_dtm
+            return result
 
         return {"config_idx": self.config_idx, "config_val": self.config_val}
 
@@ -1076,8 +1245,7 @@ class SystemDateTimePayload(PayloadBase):
         res: dict[str, Any] = {}
         if self.datetime_str is not None:
             res["datetime"] = self.datetime_str
-        if self.is_dst is not None:
-            res["is_dst"] = self.is_dst
+        res["is_dst"] = self.is_dst
         return res
 
 
@@ -1142,8 +1310,7 @@ class SystemOpenThermBridgePayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    mode: int
-    flags: int
+    raw_bytes: bytes
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1153,12 +1320,11 @@ class SystemOpenThermBridgePayload(PayloadBase):
         :type raw_data: bytes
         :returns: Unpacked SystemOpenThermBridgePayload instance.
         :rtype: Self
-        :raises ValueError: If raw_data length is less than 2 bytes.
+        :raises ValueError: If raw_data length is less than 3 bytes.
         """
-        if len(raw_data) < 2:
+        if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 3222: {len(raw_data)}")
-        md, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(mode=md, flags=flg)
+        return cls(raw_bytes=raw_data)
 
     def to_bytes(self) -> bytes:
         """Pack system OpenTherm bridge data into binary payload.
@@ -1166,7 +1332,25 @@ class SystemOpenThermBridgePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.mode, self.flags)
+        return self.raw_bytes
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert 3222 payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded 3222 dictionary.
+        :rtype: dict[str, Any]
+        """
+        b = self.raw_bytes
+        if len(b) >= 4:
+            off_hex = f"0x{b[1]:02X}"
+            len_hex = f"0x{b[2]:02X}"
+            data_hex = b[3:].hex().upper()
+            return {"offset": off_hex, "length": len_hex, "_data": data_hex}
+        if len(b) == 3:
+            return {"_value": f"0x{b[1]:02X}"}
+        return {"raw": b.hex()}
 
 
 @register_payload("7FFF")
@@ -1249,24 +1433,35 @@ class RelayFailsafePayload(PayloadBase):
 
     domain_or_zone_idx: int
     failsafe_enabled: bool
+    _unknown_0: str | None = None
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> Self:
+    def from_bytes(cls, raw_data: bytes) -> Self | list[Self]:
         """Unpack relay failsafe binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked RelayFailsafePayload instance.
-        :rtype: Self
+        :returns: Unpacked RelayFailsafePayload instance or list of instances.
+        :rtype: Self | list[Self]
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
+        if len(raw_data) >= 6 and len(raw_data) % 3 == 0:
+            return [
+                cls._from_3b(raw_data[i : i + 3]) for i in range(0, len(raw_data), 3)
+            ]
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 0009: {len(raw_data)}")
+        if len(raw_data) >= 3:
+            return cls._from_3b(raw_data[:3])
         idx, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(
-            domain_or_zone_idx=idx,
-            failsafe_enabled=bool(flg),
-        )
+        return cls(domain_or_zone_idx=idx, failsafe_enabled=bool(flg))
+
+    @classmethod
+    def _from_3b(cls, raw_data: bytes) -> Self:
+        idx = raw_data[0]
+        flg = raw_data[1]
+        u0 = f"{raw_data[2]:02X}"
+        return cls(domain_or_zone_idx=idx, failsafe_enabled=bool(flg), _unknown_0=u0)
 
     def to_bytes(self) -> bytes:
         """Pack relay failsafe data into binary payload.
@@ -1274,9 +1469,34 @@ class RelayFailsafePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        if self._unknown_0 is not None:
+            return bytes(
+                [
+                    self.domain_or_zone_idx,
+                    int(self.failsafe_enabled),
+                    int(self._unknown_0, 16),
+                ]
+            )
         return struct.pack(
             self._STRUCT_FMT, self.domain_or_zone_idx, int(self.failsafe_enabled)
         )
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert relay failsafe payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded relay failsafe dictionary.
+        :rtype: dict[str, Any]
+        """
+        idx_str = f"{self.domain_or_zone_idx:02X}"
+        res: dict[str, Any] = {
+            "domain_id": idx_str,
+            "failsafe_enabled": self.failsafe_enabled,
+        }
+        if self._unknown_0 is not None:
+            res["unknown_0"] = self._unknown_0
+        return res
 
 
 @register_payload("0204")

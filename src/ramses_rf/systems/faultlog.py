@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, NewType, TypeAlias
 from ramses_rf import exceptions as exc
 from ramses_rf.const import SZ_LOG_ENTRY, SZ_LOG_IDX
 from ramses_rf.models import FaultLogState, StateUpdatedEvent
-from ramses_rf.parsers.helpers import parse_fault_log_entry
+from ramses_rf.payloads.helpers import parse_fault_log_entry
 from ramses_tx import Packet
 from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.typing import DeviceIdT
@@ -106,7 +106,7 @@ class FaultLogEntry:
     def from_msg(cls, msg: Message) -> FaultLogEntry:
         """Create a fault log entry from a message's payload."""
         log_entry = parse_fault_log_entry(msg._dto.raw_payload)
-        if log_entry is None:
+        if log_entry is None or "timestamp" not in log_entry:
             raise exc.PacketPayloadInvalid("Invalid fault log entry payload")
         return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
 
@@ -115,7 +115,7 @@ class FaultLogEntry:
         """Create a fault log entry from a packet's payload."""
 
         log_entry = parse_fault_log_entry(pkt.raw_payload)
-        if log_entry is None:
+        if log_entry is None or "timestamp" not in log_entry:
             raise exc.SystemInconsistent("Null fault log entry")
 
         return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
@@ -218,10 +218,12 @@ class FaultLog:  # 0418
         if msg.verb == I_:
             self._is_current = False
 
-        if SZ_LOG_IDX not in msg.payload:
+        if SZ_LOG_IDX in msg.payload:
+            idx = FaultIdxT(int(msg.payload[SZ_LOG_IDX], 16))
+        elif msg.payload.get(SZ_LOG_ENTRY) is None:
+            idx = FaultIdxT(0)
+        else:
             return  # we can't do anything useful with this message
-
-        idx: FaultIdxT = int(msg.payload[SZ_LOG_IDX], 16)  # type: ignore[assignment]
 
         if msg.payload[SZ_LOG_ENTRY] is None:  # NOTE: Subsequent entries will be empty
             self._map = self._insert_into_map(idx, None)

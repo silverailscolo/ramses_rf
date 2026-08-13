@@ -78,6 +78,10 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
     _SLUG = DevType.OTB
     _STATE_ATTR = SZ_REL_MODULATION_LEVEL
 
+    # NOTE: MsgId._0E (max_rel_modulation) and MsgId._11 (rel_modulation)
+    # were historically quarantined via QUARANTINED_OT_MSG_IDS because
+    # real-world OTB hardware transmits unreliable telemetry for these IDs.
+    # See ramses_rf issue #556.
     OT_TO_RAMSES: dict[MsgId, Code] = {  # TODO: move to opentherm.py
         MsgId._00: Code._3EF0,  # master/slave status (actuator_state)
         MsgId._01: Code._22D9,  # boiler_setpoint

@@ -215,8 +215,11 @@ def test_system_sync_payload_1030_parity() -> None:
         "min_flow_setpoint": None,
         "valve_run_time": None,
         "pump_run_time": None,
-        "raw_extra": None,
     }
+
+    # Verify programmatic creation on the fly packs parameter bytes dynamically
+    on_fly_payload = SystemSyncPayload(sync_flag=10, max_flow_setpoint=55)
+    assert on_fly_payload.to_bytes().hex().upper() == "0AC80137"
 
 
 def test_binding_payload_1fc9_parity() -> None:
@@ -335,6 +338,7 @@ def test_relative_humidity_payload_12a0_parity() -> None:
 
     # Act
     payload = RelativeHumidityPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, RelativeHumidityPayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -417,7 +421,21 @@ def test_dhw_state_payload_1f41_parity() -> None:
     assert payload.dhw_idx == 0
     assert payload.active_flag == 1
     assert reencoded == raw_hex
-    assert as_dict == {"dhw_idx": 0, "active_flag": 1}
+    assert as_dict == {
+        "dhw_idx": 0,
+        "active_flag": 1,
+        "mode_val": None,
+    }
+
+    # Verify programmatic creation with mode_val does not drop mode_val
+    on_fly_payload = DhwStatePayload(dhw_idx=0, active_flag=1, mode_val=2)
+    assert on_fly_payload.to_bytes().hex().upper() == "000102"
+
+    # Verify field update on unpacked payload reflects new data dynamically
+    from dataclasses import replace
+
+    updated_payload = replace(payload, active_flag=0)
+    assert updated_payload.to_bytes().hex().upper() == "0000"
 
 
 def test_zone_setpoint_payload_0004_parity() -> None:
@@ -686,6 +704,7 @@ def test_relay_failsafe_payload_0009_parity() -> None:
 
     # Act
     payload = RelayFailsafePayload.from_bytes(raw_bytes)
+    assert isinstance(payload, RelayFailsafePayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
