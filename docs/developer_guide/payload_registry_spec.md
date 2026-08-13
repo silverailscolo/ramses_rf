@@ -1,16 +1,18 @@
-# Semantic Payload Registry Specification (Issue #837 V3 Standard)
+# Semantic Payload Registry Specification (Issue #837 V4 Standard)
 
 ## 1. Overview & Architectural Philosophy
 
 The **RAMSES RF Semantic Payload Registry** defines standard binary serialization and deserialization contracts for RAMSES RF protocol packet payloads.
 
-Historically, payload parsing relied on regular expressions over hexadecimal strings (`hex_regex`) or manual byte slicing (`raw_data[1:3]`). Under **GitHub Issue #837 (*Replace Hex-Regex with Binary Parsing*)**, all payload parsers are standardized to use Python's native `struct` module with declarative, C-level format specifications (`_STRUCT_FMT`).
+Under **GitHub Issue #837 (*Replace Hex-Regex with Binary Parsing*)** and **GitHub Issue #1001 / PR #12 (*Polymorphic Factory & Boundary Adapter Retention*)**, all payload parsers are standardized to use Python's native `struct` module with declarative, C-level format specifications (`_STRUCT_FMT`).
 
 ### Core Design Goals
-1. **Type Safety & Immutability**: All payload representations are defined as `@dataclass(frozen=True, slots=True)` subclasses inheriting from `PayloadBase`.
+1. **Type Safety & Immutability**: All payload representations are defined as `@dataclass(frozen=True, slots=True)` subclasses inheriting from `PayloadBase` (defined in `src/ramses_rf/payloads/base.py`).
 2. **Binary Performance**: Unpacking and packing operate directly on raw binary `bytes` using `struct.unpack_from` and `struct.pack`, eliminating string manipulation overhead.
-3. **Self-Documenting Binary Layouts**: Every dataclass docstring includes a **Binary Offset Format Map (BOFM)** table documenting byte offsets, C format specifiers, field lengths, and sample raw hex values.
-4. **Backwards Compatibility**: The `.to_dict()` method projects strongly-typed payload fields into legacy dictionary structures consumed by downstream Home Assistant and CQRS read-models.
+3. **Self-Documenting Binary Layouts**: Every concrete sub-dataclass docstring includes a **Binary Offset Format Map (BOFM)** table documenting byte offsets, C format specifiers, field lengths, and sample raw hex values.
+4. **Polymorphic Dispatching**: Opcodes supporting multiple payload lengths or structural variants use a **Master Dispatcher Class** acting as a polymorphic factory, delegating unpacking to dedicated variant sub-dataclasses.
+5. **Grouped Code Layout & Comment Separators**: Master Dispatcher classes and their associated variant sub-dataclasses MUST be grouped together in source files, delimited by 72-character comment separator lines (`# ` + 70 `-` characters).
+6. **Backwards Compatibility**: The `.to_dict()` boundary adapter projects strongly-typed payload fields into legacy dictionary structures consumed by downstream Home Assistant and CQRS read-models.
 
 ---
 
@@ -21,19 +23,54 @@ Historically, payload parsing relied on regular expressions over hexadecimal str
 | **Multi-byte fields (2+ bytes)** (int16, uint16, int32, ASCII string buffers) | **MANDATORY**: Must use `struct.unpack_from` and `struct.pack`. | `_STRUCT_FMT = ">h"` (int16), `_STRUCT_FMT = ">H"` (uint16) |
 | **Multi-field records** (index + multi-byte value) | **MANDATORY**: Must use `struct.unpack_from` and `struct.pack`. | `_STRUCT_FMT = ">Bh"` (uint8 + int16) |
 | **Repeated record arrays** (list of fixed-size binary chunks) | **MANDATORY**: Must use `struct.unpack_from` in list comprehensions. | `(struct.unpack_from(cls._STRUCT_FMT, raw_data, i) for i in range(0, len(raw_data), 3))` |
-| **Simple 1-byte payloads / Single-byte flags** | **EXEMPT / OPTIONAL**: Simple single-byte payloads (`len(raw_data) == 1`) MAY use direct `raw_data[0]` indexing and `bytes([val])` packing without requiring `struct`. | `_STRUCT_FMT = ">B"` (Optional for 1-byte payloads) |
+| **Simple 1-byte payloads / Single-byte flags** | **EXEMPT / OPTIONAL**: Simple single-byte payloads (`len(raw_data) == 1`) MAY use direct `raw_data[0]` indexing and `bytes([val])` packing. | `_STRUCT_FMT = ">B"` (Optional for 1-byte payloads) |
 
 ---
 
-## 3. Canonical Specification Examples
+## 3. Polymorphic Factory / Master Dispatcher Specification
+
+When an opcode supports variable byte lengths or structural variants (e.g. 3-byte short vs 6-byte long formats), payload classes MUST implement the **Polymorphic Factory / Length-Dispatched Sub-Dataclass Pattern**:
+
+### Architectural Rules for Variant Payloads:
+1. **Master Dispatcher Class**:
+   - Decorated with `@register_payload("<OPCODE>")`.
+   - Inherits from `PayloadBase` or an abstract opcode base class.
+   - `from_bytes(cls, raw_data: bytes)` inspects `len(raw_data)` or header flags and delegates unpacking to the matching concrete sub-dataclass.
+2. **Concrete Sub-Dataclasses (Variants)**:
+   - Inherit from the abstract opcode base class or `PayloadBase`.
+   - Decorated with `@dataclass(frozen=True, slots=True)`.
+   - Define an explicit `_STRUCT_FMT: ClassVar[str]` constant matching their exact byte layout.
+   - Contain ONLY fields present in that specific byte structure (no dummy/optional defaults).
+   - Contain a dedicated docstring with an exact BOFM layout table for that specific variant byte length.
+3. **Grouped Source Placement & 72-Character Separators**:
+   - In payload source modules (`dhw.py`, `heating.py`, `hvac.py`, `opentherm.py`, `system.py`), the Master Dispatcher class and all of its associated sub-dataclasses MUST be placed together as a single contiguous logical group.
+   - Logical payload groups MUST be separated from adjacent payload groups using 72-character comment lines formatted as `# ` followed by 70 `-` characters:
+     `# ----------------------------------------------------------------------`
+
+---
+
+## 4. Canonical Specification Examples
+
+### Standard Imports
+When implementing payload dataclasses, the following standard imports are required:
+```python
+from __future__ import annotations
+
+import struct
+from abc import ABC
+from dataclasses import dataclass
+from typing import Any, ClassVar, Self
+
+from ramses_rf.payloads.base import PayloadBase
+from ramses_rf.protocol.messages import register_payload
+```
+
+---
 
 ### Example 1: Fixed / Multi-Field Payload (e.g. `HeatDemandPayload` - Opcode `3150`)
 
 ```python
-from typing import ClassVar, Self, Any
-from dataclasses import dataclass
-import struct
-from ramses_rf.payloads._base import PayloadBase, register_payload
+# ----------------------------------------------------------------------
 
 
 @register_payload("3150")
@@ -84,109 +121,227 @@ class HeatDemandPayload(PayloadBase):
 
 ---
 
-### Example 2: Multi-Record / Array Payload (e.g. `TemperaturePayload` - Opcode `30C9`)
+### Example 2: Polymorphic Factory / Multi-Length Payload Grouping (e.g. `DhwParamsPayload` - Opcode `10A0`)
 
 ```python
-@register_payload("30C9")
-@dataclass(frozen=True, slots=True)
-class TemperaturePayload(PayloadBase):
-    """Temperature payload (Opcode 30C9).
+# ----------------------------------------------------------------------
 
-    3-byte Temperature binary layout:
+
+class DhwParamsBasePayload(PayloadBase, ABC):
+    """Abstract base class for DHW parameters (Opcode 10A0)."""
+
+
+@dataclass(frozen=True, slots=True)
+class DhwParams3BPayload(DhwParamsBasePayload):
+    """DHW 3-byte parameters layout (Opcode 10A0).
+
+    3-byte DHW Parameters binary layout:
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
-      +0       B      1B   Zone Index (uint8)           : 00
-      +1       h      2B   Temperature (int16, degC*100): 08 34 (21.00°C)
+      +0       B      1B   DHW Index (uint8)            : 00
+      +1       h      2B   Setpoint Temp (int16*100)    : 13 88 (50.00°C)
       --------------------------------------------------------------
+      Field-spaced hex : 00 1388
+      Payload hex      : 001388
+
+    :param dhw_idx: DHW index byte.
+    :type dhw_idx: int
+    :param setpoint: Target setpoint temperature in °C.
+    :type setpoint: float | None
     """
 
-    _STRUCT_FMT_3B: ClassVar[str] = ">Bh"
-    _STRUCT_FMT_2B: ClassVar[str] = ">h"
+    _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    zone_idx: int | str | None
-    temperature: float | bool | None
-
-    @classmethod
-    def from_bytes(cls, raw_data: bytes) -> Self | list[Self]:
-        """Unpack single or array temperature payload using struct offset iteration."""
-        if len(raw_data) > 3 and len(raw_data) % 3 == 0:
-            return [
-                cls(
-                    zone_idx=idx,
-                    temperature=cls._parse_temp_val(temp_raw),
-                )
-                for idx, temp_raw in (
-                    struct.unpack_from(cls._STRUCT_FMT_3B, raw_data, i)
-                    for i in range(0, len(raw_data), 3)
-                )
-            ]
-
-        if len(raw_data) == 2:
-            idx_val: int | None = None
-            (temp_raw,) = struct.unpack_from(cls._STRUCT_FMT_2B, raw_data, 0)
-        elif len(raw_data) >= 3:
-            idx_val, temp_raw = struct.unpack_from(cls._STRUCT_FMT_3B, raw_data, 0)
-        else:
-            raise ValueError(f"Invalid payload length for 30C9: {len(raw_data)}")
-
-        return cls(zone_idx=idx_val, temperature=cls._parse_temp_val(temp_raw))
-```
-
----
-
-### Example 3: Simple 1-Byte Payload Exemption (e.g. `RelayFailsafePayload` - Opcode `0009`)
-
-For simple 1-byte payloads (e.g., single uint8 flags or mode counters), using direct byte indexing (`raw_data[0]`) is simple and exempt from requiring `struct` calls, though `_STRUCT_FMT = ">B"` MAY be declared for completeness:
-
-```python
-@register_payload("0009")
-@dataclass(frozen=True, slots=True)
-class RelayFailsafePayload(PayloadBase):
-    """Relay failsafe status payload (Opcode 0009).
-
-    1-byte Failsafe binary layout:
-      Offset  Format  Len  Description                    Sample Hex
-      --------------------------------------------------------------
-      +0       B      1B   Failsafe Mode Flag uint8     : 00
-      --------------------------------------------------------------
-    """
-
-    failsafe_enabled: bool
+    dhw_idx: int
+    setpoint: float | None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack 1-byte failsafe payload directly."""
-        if not raw_data:
-            raise ValueError("Payload cannot be empty")
-        return cls(failsafe_enabled=bool(raw_data[0]))
+        if len(raw_data) < 3:
+            raise ValueError(
+                f"Invalid payload length for DhwParams3BPayload: {len(raw_data)}"
+            )
+        idx, sp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        sp_val = None if sp_raw in (0x31FF, 0x7FFF, 0x639C) else sp_raw / 100.0
+        return cls(dhw_idx=idx, setpoint=sp_val)
 
     def to_bytes(self) -> bytes:
-        """Pack 1-byte failsafe payload directly."""
-        return bytes([1 if self.failsafe_enabled else 0])
+        sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
+        return struct.pack(self._STRUCT_FMT, self.dhw_idx, sp_raw)
+
+
+@dataclass(frozen=True, slots=True)
+class DhwParams6BPayload(DhwParamsBasePayload):
+    """DHW 6-byte parameters layout (Opcode 10A0).
+
+    6-byte DHW Parameters binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   DHW Index (uint8)            : 00
+      +1       h      2B   Setpoint Temp (int16*100)    : 13 88 (50.00°C)
+      +3       B      1B   Overrun minutes (uint8)      : 00
+      +4       h      2B   Differential °C (int16*100)  : 03 E4 (10.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 1388 00 03E4
+      Payload hex      : 0013880003E4
+
+    :param dhw_idx: DHW index byte.
+    :type dhw_idx: int
+    :param setpoint: Target setpoint temperature in °C.
+    :type setpoint: float | None
+    :param overrun: Overrun time in minutes.
+    :type overrun: int
+    :param differential: Temperature differential in °C.
+    :type differential: float
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BhBh"
+
+    dhw_idx: int
+    setpoint: float | None
+    overrun: int
+    differential: float
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        if len(raw_data) < 6:
+            raise ValueError(
+                f"Invalid payload length for DhwParams6BPayload: {len(raw_data)}"
+            )
+        idx, sp_raw, overrun, diff_raw = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
+        sp_val = None if sp_raw in (0x31FF, 0x7FFF, 0x639C) else sp_raw / 100.0
+        return cls(
+            dhw_idx=idx,
+            setpoint=sp_val,
+            overrun=overrun,
+            differential=diff_raw / 100.0,
+        )
+
+    def to_bytes(self) -> bytes:
+        sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
+        diff_raw = int(round(self.differential * 100.0))
+        return struct.pack(
+            self._STRUCT_FMT, self.dhw_idx, sp_raw, self.overrun, diff_raw
+        )
+
+
+@register_payload("10A0")
+class DhwParamsPayload:
+    """Master payload dispatcher for Opcode 10A0."""
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> DhwParams3BPayload | DhwParams6BPayload:
+        """Unpack DHW parameters payload, dispatching by length."""
+        if len(raw_data) >= 6:
+            return DhwParams6BPayload.from_bytes(raw_data)
+        return DhwParams3BPayload.from_bytes(raw_data)
+
+
+# ----------------------------------------------------------------------
 ```
 
 ---
 
-## 4. Mandatory Requirements Checklist
+### Example 3: Repeated Record Arrays (e.g. `ZoneConfigPayload` - Opcode `000A`)
 
-1. **Class Decorators**:
-   * `@register_payload("<OPCODE>")` MUST decorate the payload dataclass.
-   * `@dataclass(frozen=True, slots=True)` MUST be applied for immutability and memory optimization.
+```python
+# ----------------------------------------------------------------------
 
-2. **Declarative Format String Constants**:
-   * `_STRUCT_FMT: ClassVar[str]` (or suffix variants `_STRUCT_FMT_2B`, `_STRUCT_FMT_HEADER`) MUST declare explicit Big-Endian (`>`) or Little-Endian (`<`) format strings for multi-byte payloads.
 
-3. **Method Implementation**:
-   * `@classmethod from_bytes(cls, raw_data: bytes)`: Must validate length and return single or list of payload instances using `struct.unpack_from` (or `raw_data[0]` for 1-byte payloads).
-   * `to_bytes(self) -> bytes`: Must serialize attributes back to exact binary payload using `struct.pack` (or `bytes([val])` for 1-byte payloads).
-   * `to_dict(self) -> dict[str, Any]`: Must return the canonical dictionary projection.
+@register_payload("000A")
+@dataclass(frozen=True, slots=True)
+class ZoneConfigPayload(PayloadBase):
+    """Zone config payload (Opcode 000A).
 
-4. **Docstring BOFM Table**:
-   * All public payload dataclasses MUST include a Sphinx docstring with a formatted **Binary Layout Table** specifying `Offset`, `Format`, `Len`, `Description`, and `Sample Hex`.
+    6-byte Zone Config binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Zone Index (uint8)           : 00
+      +1       B      1B   Zone Flags (uint8)           : 0A
+      +2       h      2B   Min Temp °C (int16*100)      : 01 F4 (5.00°C)
+      +4       h      2B   Max Temp °C (int16*100)      : 0D AC (35.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 0A 01F4 0DAC
+      Payload hex      : 000A01F40DAC
+
+    :param zone_idx: Zone index byte.
+    :type zone_idx: int
+    :param zone_flags: Zone flags byte.
+    :type zone_flags: int
+    :param min_temp: Minimum zone temperature setting in °C.
+    :type min_temp: float | None
+    :param max_temp: Maximum zone temperature setting in °C.
+    :type max_temp: float | None
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BBhh"
+
+    zone_idx: int
+    zone_flags: int
+    min_temp: float | None
+    max_temp: float | None
+
+    @classmethod
+    def _from_bytes_single(cls, raw_data: bytes, offset: int = 0) -> Self:
+        """Unpack a single 6-byte zone config from offset."""
+        idx, flags, min_raw, max_raw = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, offset
+        )
+        return cls(
+            zone_idx=idx,
+            zone_flags=flags,
+            min_temp=None if min_raw in (0x7FFF, 0x31FF) else min_raw / 100.0,
+            max_temp=None if max_raw in (0x7FFF, 0x31FF) else max_raw / 100.0,
+        )
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self | list[Self]:
+        """Unpack single or multi-zone array payload."""
+        if len(raw_data) < 6 or len(raw_data) % 6 != 0:
+            raise ValueError(f"Invalid payload length for 000A: {len(raw_data)}")
+        if len(raw_data) > 6:
+            return [
+                cls._from_bytes_single(raw_data, i) for i in range(0, len(raw_data), 6)
+            ]
+        return cls._from_bytes_single(raw_data, 0)
+
+    def to_bytes(self) -> bytes:
+        min_raw = 0x7FFF if self.min_temp is None else int(round(self.min_temp * 100.0))
+        max_raw = 0x7FFF if self.max_temp is None else int(round(self.max_temp * 100.0))
+        return struct.pack(
+            self._STRUCT_FMT, self.zone_idx, self.zone_flags, min_raw, max_raw
+        )
+
+
+# ----------------------------------------------------------------------
+```
 
 ---
 
-## 5. C Struct Format Conventions
+## 5. Mandatory Requirements Checklist
+
+1. **Class Decorators**:
+   - Master Dispatchers decoration: `@register_payload("<OPCODE>")`.
+   - All concrete payload sub-dataclasses MUST be decorated with `@dataclass(frozen=True, slots=True)`.
+
+2. **Declarative Format String Constants**:
+   - Concrete sub-dataclasses MUST declare explicit `_STRUCT_FMT: ClassVar[str]` specifiers for multi-byte layouts (Big-Endian `>` or Little-Endian `<`).
+
+3. **Method Implementation & Boundary Adapter**:
+   - `@classmethod from_bytes(cls, raw_data: bytes)`: Must unpack raw binary data.
+   - `to_bytes(self) -> bytes`: Must serialize attributes back into exact raw binary payload bytes.
+   - `to_dict(self) -> dict[str, Any]`: The `PayloadBase.to_dict()` adapter automatically calls `dataclasses.asdict()`. You MUST NOT override `to_dict()` unless the legacy downstream parity tests strictly require converting specific integer fields into zero-padded hex strings (e.g. `f"{self.zone_idx:02X}"`). In all other cases, rely on the base class adapter.
+
+4. **Docstring BOFM Table & Group Comment Separators**:
+   - All concrete payload dataclasses MUST include a Sphinx docstring with a formatted **Binary Offset Format Map (BOFM)** table specifying `Offset`, `Format`, `Len`, `Description`, and `Sample Hex`.
+   - Docstring lines MUST comply with PEP 8 standards (<= 72 characters).
+   - Master Dispatcher classes and associated sub-dataclasses MUST be grouped together and separated using `# ` + 70 `-` characters (`# ----------------------------------------------------------------------`).
+
+   ---
+
+## 6. C Struct Format Conventions
 
 | Struct Format Code | C Type | Bytes | Python Equivalent | Protocol Usage |
 | :--- | :--- | :--- | :--- | :--- |
@@ -200,7 +355,7 @@ class RelayFailsafePayload(PayloadBase):
 
 ---
 
-## 6. Code Quality & Pre-commit Guidelines
+## 7. Code Quality & Pre-commit Guidelines
 
 All payload dataclass implementations must pass strict code verification:
 * **Format & Linting**: `.venv/bin/prek run -a` and `.venv/bin/ruff check --select D <file.py>` (Sphinx docstring checks).

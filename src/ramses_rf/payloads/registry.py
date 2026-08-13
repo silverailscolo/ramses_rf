@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class PayloadRegistry:
-    """Registry managing mapping between RAMSES opcodes and PayloadBase classes."""
+    """Registry mapping RAMSES opcodes to PayloadBase classes."""
 
     def __init__(self) -> None:
         """Initialize an empty payload registry."""
