@@ -74,6 +74,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 )
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+    HEARTBEAT_TIMEOUT_DHW,
     I_,
     RP,
     RQ,
@@ -91,7 +92,9 @@ _TRACE = logging.getLogger("ramses_rf.legacy_trace")
 # explicitly poll their state to hydrate the system. To preserve the
 # battery life of wireless sensors, this interval defaults to 24 hours.
 # Users can decrease this value if more frequent updates are desired.
-DHW_POLLING_INTERVAL_SECS: int = 60 * 60 * 24
+# Kept as seconds (int) for backward compat; HEARTBEAT_TIMEOUT_DHW is the
+# timedelta equivalent used by DhwSensor.heartbeat_timeout.
+DHW_POLLING_INTERVAL_SECS: int = int(HEARTBEAT_TIMEOUT_DHW.total_seconds())
 
 
 _SystemT = TypeVar("_SystemT", bound="Evohome")
