@@ -34,7 +34,6 @@ from ramses_tx import RP, RQ, Code, Packet
 from ..exceptions import DatabaseQueryError
 from ..messages.base import Message
 from ..messages.core import Message as CoreMessage
-from ..protocol.ramses import CODES_SCHEMA
 from ..routing import StateHeader
 from ..sqlite_worker import PacketLogEntry, SQLiteWorker
 
@@ -693,13 +692,7 @@ class MessageStore(MessageStoreInterface):
             if m.verb == RP and (m.src.id == src_id or m.dst.id == dst_id):
                 codes.add(m.code)
 
-        def get_code(c: str) -> Code:
-            for Cd in CODES_SCHEMA:
-                if c == Cd:
-                    return Cd
-            return Code(c)
-
-        return [get_code(str(c)) for c in codes]
+        return [Code(str(c)) for c in codes]
 
     async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
         """Deprecated: Returns empty for legacy callers."""

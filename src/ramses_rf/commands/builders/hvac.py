@@ -12,16 +12,97 @@ from ramses_rf.models.hvac_schemas import (
     _22F1_SCHEMES,
     _2411_PARAMS_SCHEMA,
 )
-from ramses_rf.parsers.helpers import (
-    air_quality_code,
-    capability_bits,
-    fan_info_flags,
-    fan_info_to_byte,
-)
+from ramses_rf.protocol.ramses import _31DA_FAN_INFO
 from ramses_tx.address import NON_DEV_ADDR
 from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import hex_from_double, hex_from_percent, hex_from_temp
+
+AIR_QUALITY_BASIS: dict[str, str] = {
+    "10": "voc",  # volatile compounds
+    "20": "co2",  # carbon dioxide
+    "40": "rel_humidity",  # relative humidity
+}
+
+ABILITIES: dict[int, str] = {
+    15: "off",
+    14: "low_med_high",  # 3,2,1 = high,med,low?
+    13: "timer",
+    12: "boost",
+    11: "auto",
+    10: "speed_4",
+    9: "speed_5",
+    8: "speed_6",
+    7: "speed_7",
+    6: "speed_8",
+    5: "speed_9",
+    4: "speed_10",
+    3: "auto_night",
+    2: "reserved",
+    1: "post_heater",
+    0: "pre_heater",
+}
+
+
+def air_quality_code(description: str) -> str:
+    """Return 2-character hex code for given air quality basis description.
+
+    :param description: Description of air quality basis (e.g. voc, co2).
+    :type description: str
+    :return: 2-character hex string representing the basis.
+    :rtype: str
+    """
+    for key, value in AIR_QUALITY_BASIS.items():
+        if value == description:
+            return key
+    return "00"
+
+
+def capability_bits(capability_list: list[str]) -> int:
+    """Convert capability string list into bitmask integer representation.
+
+    :param capability_list: List of capability names.
+    :type capability_list: list[str]
+    :return: Bitmask integer representing speed capabilities.
+    :rtype: int
+    """
+    # 0xF800 = 0b1111100000000000
+    capability_result: int = 0
+    for capability in capability_list:
+        for bit_offset, name in ABILITIES.items():
+            if name == capability:
+                capability_result |= 2**bit_offset  # set bit
+    return capability_result
+
+
+def fan_info_to_byte(info: str) -> int:
+    """Return fan_info byte value matching the descriptive fan_info string.
+
+    :param info: Description string of fan info state.
+    :type info: str
+    :return: Integer byte value (masked to 0x1F).
+    :rtype: int
+    """
+    for key, value in _31DA_FAN_INFO.items():
+        if value == info:
+            return int(key) & 0x1F
+    return 0x0000
+
+
+def fan_info_flags(flags_list: list[int]) -> int:
+    """Convert list of 3 flag values into bit-shifted integer flags.
+
+    :param flags_list: List of flag values for bits 7, 6, and 5.
+    :type flags_list: list[int]
+    :return: Bit-shifted flag integer.
+    :rtype: int
+    """
+    flag_result: int = 0
+    for index, shift in enumerate(range(7, 4, -1)):  # index = 7, 6 and 5
+        if flags_list[index] == 1:
+            flag_result |= 1 << shift  # set bits
+    return flag_result
+
 
 # Command 2411 payload binary layout (Big-Endian):
 #   Offset  Format  Len  Description                    Sample Hex
