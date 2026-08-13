@@ -267,6 +267,128 @@ async def test_polling_manager_live_dispatch_cutover(
     assert sent_dto.addr2 == "01:111111"
 
 
+def test_polling_manager_ctl_without_tcs_creates_device_level_0004(
+    mock_gateway: MagicMock,
+) -> None:
+    """CTL without a TCS (no zones) gets a single device-level 0004 task.
+
+    The MockDevice has no .tcs attribute, so 0004 is not expanded into
+    per-zone tasks.  This verifies the fallback path.
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+
+    # ACT
+    active_keys = poller.update_device_tasks(ctl_dev)
+
+    # ASSERT
+    # 5 device-level tasks: 10E0, 1F41, 2E04, 313F, 0004
+    assert len(active_keys) == 5
+    assert ("01:111111", "0004") in active_keys
+    # No zone-level keys (3-tuples)
+    assert all(len(k) == 2 for k in active_keys)
+
+
+def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
+    mock_gateway: MagicMock,
+) -> None:
+    """CTL with a TCS and zones gets per-zone 0004 polling tasks.
+
+    This restores the per-zone zone-name polling that was lost when the
+    legacy DiscoveryService was removed (issue 947 /
+    ramses-rf/ramses_cc#947).  Each zone gets its own 0004 task with
+    the zone_idx in the payload.
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+
+    # Mock a TCS with zones
+    zone_03 = MagicMock()
+    zone_03.idx = "03"
+    zone_07 = MagicMock()
+    zone_07.idx = "07"
+    mock_tcs = MagicMock()
+    mock_tcs.zones = [zone_03, zone_07]
+    ctl_dev.tcs = mock_tcs
+
+    # ACT
+    active_keys = poller.update_device_tasks(ctl_dev)
+
+    # ASSERT
+    # 4 device-level tasks (10E0, 1F41, 2E04, 313F) + 2 zone-level 0004 tasks
+    device_level = {k for k in active_keys if len(k) == 2}
+    zone_level = {k for k in active_keys if len(k) == 3}
+    assert len(device_level) == 4
+    assert len(zone_level) == 2
+
+    # Zone-level keys are (device_id, "0004", zone_idx)
+    assert ("01:111111", "0004", "03") in zone_level
+    assert ("01:111111", "0004", "07") in zone_level
+
+    # Verify the 0004 tasks have the correct payload (zone_idx + "00")
+    task_03 = poller._tasks[("01:111111", "0004", "03")]
+    assert task_03.payload == "0300"
+    assert task_03.code == "0004"
+
+    task_07 = poller._tasks[("01:111111", "0004", "07")]
+    assert task_07.payload == "0700"
+    assert task_07.code == "0004"
+
+    # Device-level tasks have no payload (default "00" in build_rq_cmd)
+    task_10e0 = poller._tasks[("01:111111", "10E0")]
+    assert task_10e0.payload is None
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_0004_zone_uses_payload_in_cmd(
+    mock_gateway: MagicMock,
+) -> None:
+    """When polling 0004 for a zone, the RQ payload includes the zone_idx.
+
+    The old DiscoveryService sent GET_ZONE_NAME with the zone_idx in the
+    payload.  The PollingManager must do the same — payload "00" would
+    only query zone 00, not the target zone.
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+
+    # Mock a TCS with one zone
+    zone_05 = MagicMock()
+    zone_05.idx = "05"
+    mock_tcs = MagicMock()
+    mock_tcs.zones = [zone_05]
+    ctl_dev.tcs = mock_tcs
+
+    mock_gateway.device_registry.devices = [ctl_dev]
+    poller.update_device_tasks(ctl_dev)
+
+    # Fast-forward all tasks to trigger due commands
+    past = dt.now(UTC) - td(seconds=10)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+
+    # ACT
+    await poller.poll_due_commands()
+
+    # ASSERT: find the 0004 call and check its payload
+    sent_codes = [
+        call.args[0].code for call in mock_gateway.async_send_cmd.call_args_list
+    ]
+    assert "0004" in sent_codes
+
+    # Find the 0004 call and verify payload contains zone_idx
+    for call in mock_gateway.async_send_cmd.call_args_list:
+        dto: CommandDTO = call.args[0]
+        if dto.code == "0004":
+            assert dto.payload == "0500", (
+                f"Expected 0004 payload '0500' for zone 05, got '{dto.payload}'"
+            )
+            break
+
+
 @pytest.mark.asyncio
 async def test_polling_schema_traits_parsing() -> None:
     # ARRANGE
@@ -326,3 +448,67 @@ async def test_disable_polling_config_alias() -> None:
 
     config.disable_discovery = False
     assert config.disable_polling is False
+
+
+# ── Structural checks (from ha_sim_test R56 + R57) ────────────────────
+
+
+def test_polling_task_has_required_fields() -> None:
+    """PollingTask dataclass has device_id, code, interval, next_due."""
+    from ramses_rf.pipeline.polling import PollingTask
+
+    fields = set(PollingTask.__dataclass_fields__)
+    for required in ("device_id", "code", "interval", "next_due"):
+        assert required in fields, f"missing field: {required}"
+
+
+def test_polling_manager_accepts_shadow_mode() -> None:
+    """PollingManager.__init__ accepts shadow_mode parameter."""
+    import inspect
+
+    sig = inspect.signature(PollingManager.__init__)
+    assert "shadow_mode" in sig.parameters
+
+
+def test_legacy_poller_deprecated_or_removed() -> None:
+    """Legacy DiscoveryService.start_poller is deprecated/no-op or removed."""
+    import importlib
+    import inspect
+
+    try:
+        discovery = importlib.import_module("ramses_rf.discovery")
+    except ModuleNotFoundError:
+        return  # DiscoveryService fully removed — stronger than no-op
+
+    src = inspect.getsource(discovery.DiscoveryService.start_poller)
+    assert "deprecated" in src.lower() or "disabled" in src.lower()
+
+
+def test_sz_polling_interval_constant() -> None:
+    """SZ_POLLING_INTERVAL constant is 'polling_interval'."""
+    from ramses_rf.const import SZ_POLLING_INTERVAL
+
+    assert SZ_POLLING_INTERVAL == "polling_interval"
+
+
+def test_sz_is_battery_constant() -> None:
+    """SZ_IS_BATTERY constant is 'is_battery'."""
+    from ramses_rf.const import SZ_IS_BATTERY
+
+    assert SZ_IS_BATTERY == "is_battery"
+
+
+def test_sch_polling_interval_validates_dict() -> None:
+    """SCH_POLLING_INTERVAL validates dict[str, int]."""
+    from ramses_rf.config import SCH_POLLING_INTERVAL
+
+    validated = SCH_POLLING_INTERVAL({"10E0": 3600, "1F41": 1800})
+    assert validated == {"10E0": 3600, "1F41": 1800}
+
+
+def test_sch_polling_interval_rejects_negative() -> None:
+    """SCH_POLLING_INTERVAL rejects negative intervals."""
+    from ramses_rf.config import SCH_POLLING_INTERVAL
+
+    with pytest.raises(Exception):  # noqa: B017
+        SCH_POLLING_INTERVAL({"10E0": -1})

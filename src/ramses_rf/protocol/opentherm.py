@@ -18,7 +18,9 @@ _FlagsSchemaT: TypeAlias = dict[int, dict[str, str]]
 _OtMsgSchemaT: TypeAlias = dict[str, Any]
 
 
-class OtDataId(IntEnum):  # the subset of data-ids used by the OTB
+class OtDataId(IntEnum):
+    """OpenTherm Data-ID identifiers used by the OTB."""
+
     STATUS = 0x00
     CONTROL_SETPOINT = 0x01
     MASTER_CONFIG = 0x02
@@ -249,7 +251,9 @@ SZ_VALUE_LB: Final[str] = f"{SZ_VALUE}_{LB}"
 
 
 @verify(EnumCheck.UNIQUE)
-class Sensor(StrEnum):  # all are F8_8, except COUNTER, CO2_LEVEL
+class Sensor(StrEnum):
+    """OpenTherm sensor measurement unit categories."""
+
     COUNTER = "counter"
     RATIO = "ratio"
     HUMIDITY = "relative humidity (%)"
@@ -263,6 +267,8 @@ class Sensor(StrEnum):  # all are F8_8, except COUNTER, CO2_LEVEL
 
 @verify(EnumCheck.UNIQUE)
 class OtMsgType(StrEnum):
+    """OpenTherm message header command type descriptions."""
+
     READ_DATA = "Read-Data"
     WRITE_DATA = "Write-Data"
     INVALID_DATA = "Invalid-Data"
@@ -831,6 +837,13 @@ _OPENTHERM_MESSAGES: Final[dict[int, _OtMsgSchemaT]] = {
         VAL: S8,
         VAR: {HB: "OTCUpperBound", LB: "OTCLowerBound"},
     },
+    0x38: {  # 56, DHW Setpoint
+        EN: "DHW setpoint",
+        DIR: READ_WRITE,
+        VAL: F8_8,
+        VAR: "DHWSetpoint",
+        SENSOR: Sensor.TEMPERATURE,
+    },
     0x3A: {  # 58, OTC Heat Curve Ratio
         EN: "OTC heat curve ratio",
         DIR: READ_WRITE,
@@ -1042,7 +1055,6 @@ def parity(x: int) -> int:
 
 def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
     """Make this the docstring."""
-
     assert len(val_seqx) in (2, 4), f"Invalid value sequence: {val_seqx}"
 
     # based upon: https://github.com/mvn23/pyotgw/blob/master/pyotgw/protocol.py
@@ -1067,10 +1079,10 @@ def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
         assert len(args) == 0 or (len(args) == 1 and args[0] == "")
         return int.from_bytes(bytes.fromhex(byte), "big", signed=True)
 
-    def f8_8(high_byte: str, low_byte: str) -> float:
+    def f8_8(high_byte: str, low_byte: str) -> float | None:
         """Convert 2 bytes (as strs) into an OpenTherm f8_8 value."""
-        if high_byte == low_byte == "FF":  # TODO: move up to parser?
-            raise ValueError()
+        if high_byte == low_byte == "FF" or high_byte + low_byte == "47AB":
+            return None
         return float(s16(high_byte, low_byte) / 256)
 
     def u16(high_byte: str, low_byte: str) -> int:
@@ -1130,7 +1142,6 @@ def decode_frame(
     frame: _FrameT,
 ) -> tuple[OtMsgType, OtDataId, dict[str, Any], _OtMsgSchemaT]:
     """Decode a 3220 payload."""
-
     if not isinstance(frame, str) or len(frame) != 8:
         raise TypeError(f"Invalid frame (type or length): {frame}")
 

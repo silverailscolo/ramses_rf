@@ -595,3 +595,59 @@ def test_update_system_state_hydrates_from_2e04_packet() -> None:
     result = asyncio.run(tcs.system_mode())
     assert result is not None
     assert result[SZ_SYSTEM_MODE] == "heat_off"
+
+
+def test_update_demand_state_ufc_ufh_circuit_demand_ignored() -> None:
+    # Arrange
+    from ramses_rf.models import DemandState, StateUpdatedEvent
+    from ramses_tx.const import Code
+
+    class MockTarget:
+        _SLUG = "UFC"
+        id = "02:123456"
+
+        def __init__(self) -> None:
+            self.demand_state = DemandState()
+
+        def apply_state_update(self, event: StateUpdatedEvent) -> None:
+            if isinstance(event.state, DemandState):
+                self.demand_state = event.state
+
+    target = MockTarget()
+    msg = MagicMock()
+    msg.code = Code._3150
+    payload = {"heat_demand": 0.81, "ufx_idx": "00"}
+
+    # Act
+    _update_demand_state(target, payload, msg)
+
+    # Assert
+    assert target.demand_state.heat_demand is None
+
+
+def test_update_demand_state_ctl_fc_domain_demand_accepted() -> None:
+    # Arrange
+    from ramses_rf.models import DemandState, StateUpdatedEvent
+    from ramses_tx.const import Code
+
+    class MockTarget:
+        _SLUG = "CTL"
+        id = "01:123456"
+
+        def __init__(self) -> None:
+            self.demand_state = DemandState()
+
+        def apply_state_update(self, event: StateUpdatedEvent) -> None:
+            if isinstance(event.state, DemandState):
+                self.demand_state = event.state
+
+    target = MockTarget()
+    msg = MagicMock()
+    msg.code = Code._3150
+    payload = {"heat_demand": 0.81, "domain_id": "FC"}
+
+    # Act
+    _update_demand_state(target, payload, msg)
+
+    # Assert
+    assert target.demand_state.heat_demand == 0.81

@@ -13,6 +13,14 @@
       }),
       dict({
         'battery_low': None,
+        'id': '00:004249',
+        'is_alive': None,
+        'tcs_id': '01:239700',
+        'type': 'TrvActuator',
+        'zone_idx': '07',
+      }),
+      dict({
+        'battery_low': None,
         'id': '01:024170',
         'is_alive': None,
         'tcs_id': '01:024170',
@@ -237,6 +245,14 @@
       }),
       dict({
         'battery_low': None,
+        'id': '01:133120',
+        'is_alive': None,
+        'tcs_id': '01:133120',
+        'type': 'Controller',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': None,
         'id': '01:133689',
         'is_alive': None,
         'tcs_id': '01:133689',
@@ -365,6 +381,14 @@
       }),
       dict({
         'battery_low': None,
+        'id': '01:198656',
+        'is_alive': None,
+        'tcs_id': '01:198656',
+        'type': 'Controller',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': None,
         'id': '01:201047',
         'is_alive': None,
         'tcs_id': '01:201047',
@@ -445,7 +469,14 @@
       }),
       dict({
         'battery_low': None,
-        'heat_demand': 0.98,
+        'id': '02:000016',
+        'is_alive': None,
+        'tcs_id': '01:239700',
+        'type': 'UfhController',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': None,
         'heat_demands': list([
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
@@ -858,7 +889,6 @@
       }),
       dict({
         'battery_low': None,
-        'heat_demand': 0.22,
         'heat_demands': list([
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
@@ -2594,7 +2624,7 @@
         'dhw_setpoint': 40.0,
         'fault_present': False,
         'flame_active': False,
-        'heat_demand': 0.1,
+        'heat_demand': 0.0,
         'id': '10:047707',
         'is_alive': None,
         'max_rel_modulation': 0.0,
@@ -5757,6 +5787,18 @@
       }),
       dict({
         'battery_low': None,
+        'id': '38:113926',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
+        'id': '38:115975',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
         'id': '39:159057',
         'is_alive': None,
         'type': 'DeviceHvac',
@@ -5799,7 +5841,19 @@
       }),
       dict({
         'battery_low': None,
+        'id': '47:132616',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
         'id': '47:777777',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
+        'id': '48:198408',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
@@ -6658,6 +6712,19 @@
         'zones': dict({
         }),
       }),
+      '01:133120': dict({
+        'orphans': list([
+        ]),
+        'stored_hotwater': dict({
+        }),
+        'system': dict({
+          'appliance_control': None,
+        }),
+        'underfloor_heating': dict({
+        }),
+        'zones': dict({
+        }),
+      }),
       '01:133689': dict({
         'orphans': list([
         ]),
@@ -7091,6 +7158,19 @@
         'zones': dict({
         }),
       }),
+      '01:198656': dict({
+        'orphans': list([
+        ]),
+        'stored_hotwater': dict({
+        }),
+        'system': dict({
+          'appliance_control': None,
+        }),
+        'underfloor_heating': dict({
+        }),
+        'zones': dict({
+        }),
+      }),
       '01:201047': dict({
         'orphans': list([
         ]),
@@ -7220,11 +7300,32 @@
           'appliance_control': None,
         }),
         'underfloor_heating': dict({
+          '02:000016': dict({
+            'circuits': dict({
+              '00': dict({
+              }),
+              '01': dict({
+              }),
+              '02': dict({
+              }),
+              '03': dict({
+              }),
+              '04': dict({
+              }),
+              '05': dict({
+              }),
+              '06': dict({
+              }),
+              '07': dict({
+              }),
+            }),
+          }),
         }),
         'zones': dict({
           '07': dict({
             '_name': None,
             'actuators': list([
+              '00:004249',
               '04:039359',
               '04:039363',
               '04:039365',

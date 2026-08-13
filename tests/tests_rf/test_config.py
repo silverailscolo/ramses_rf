@@ -153,6 +153,34 @@ class TestStripAndMapTraits:
         assert "_disabled" not in result["zones"]["01"]["sub"]
         assert result["zones"]["01"]["sub"] == {"ok": 1}
 
+    def test_ctl_topology_preserved(self) -> None:
+        """CTL zones and DHW topology are preserved after stripping.
+
+        strip_and_map_traits must not remove structural keys like
+        ``zones`` or ``stored_hotwater`` — only ``_``-prefixed keys.
+        """
+        traits = {
+            "_class": "CTL",
+            "_alias": "Main Controller",
+            "zones": {
+                "03": {
+                    "sensor": "01:150003",
+                    "actuators": ["04:150003"],
+                    "_name": "Lounge",
+                },
+            },
+            "stored_hotwater": {"sensor": "07:150000"},
+        }
+        result = strip_and_map_traits(traits)
+        assert result["class"] == "CTL"
+        assert result["alias"] == "Main Controller"
+        assert "zones" in result
+        assert result["zones"]["03"]["sensor"] == "01:150003"
+        assert result["zones"]["03"]["actuators"] == ["04:150003"]
+        assert result["zones"]["03"]["_name"] == "Lounge"  # preserved (issue 919)
+        assert "stored_hotwater" in result
+        assert result["stored_hotwater"]["sensor"] == "07:150000"
+
 
 class TestStripAndMapSchema:
     """Unit tests for strip_and_map_schema()."""

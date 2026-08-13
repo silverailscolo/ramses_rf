@@ -80,3 +80,47 @@ async def test_device_registry_topology_event_triggers_schema_callback() -> None
 
     # Assert: Callback received schema update
     callback_mock.assert_called_once()
+
+
+# ── TopologyChangedEvent structural checks (from ha_sim_test R54) ──────
+
+
+def test_topology_event_is_frozen() -> None:
+    """TopologyChangedEvent is immutable (frozen dataclass)."""
+    event = TopologyChangedEvent(
+        action=TopologyAction.BIND_DEVICE,
+        parent_id=DeviceIdT("01:111111"),
+        child_id=DeviceIdT("04:222222"),
+    )
+    with pytest.raises((AttributeError, Exception)):
+        event.action = TopologyAction.CREATE_CONTROLLER  # type: ignore[misc]
+
+
+def test_topology_event_has_metadata() -> None:
+    """TopologyChangedEvent carries metadata dict."""
+    event = TopologyChangedEvent(
+        action=TopologyAction.BIND_DEVICE,
+        parent_id=DeviceIdT("01:111111"),
+        child_id=DeviceIdT("04:222222"),
+        metadata={"zone_idx": "01"},
+    )
+    assert "zone_idx" in event.metadata
+
+
+def test_topology_event_has_event_id() -> None:
+    """TopologyChangedEvent has a UUID event_id."""
+    event = TopologyChangedEvent(
+        action=TopologyAction.BIND_DEVICE,
+        parent_id=DeviceIdT("01:111111"),
+        child_id=DeviceIdT("04:222222"),
+    )
+    assert hasattr(event, "event_id")
+
+
+def test_topology_action_has_all_values() -> None:
+    """TopologyAction enum has all expected values."""
+    expected = {"update_traits", "bind_device", "create_controller", "create_circuit"}
+    actual = {str(a) for a in TopologyAction}
+    assert expected.issubset(actual), f"missing: {expected - actual}"
+    # PR 914 renamed PROMOTE_CLASS to UPDATE_DEVICE_CLASS
+    assert "promote_class" in actual or "update_device_class" in actual
