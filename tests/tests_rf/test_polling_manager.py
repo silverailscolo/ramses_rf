@@ -242,8 +242,10 @@ async def test_polling_manager_rate_limiting(
 @pytest.mark.asyncio
 async def test_polling_manager_live_dispatch_cutover(
     mock_gateway: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # ARRANGE
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
     poller = PollingManager(mock_gateway, shadow_mode=False)
     ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
     mock_gateway.device_registry.devices = [ctl_dev]
@@ -344,6 +346,7 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
 @pytest.mark.asyncio
 async def test_polling_manager_0004_zone_uses_payload_in_cmd(
     mock_gateway: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When polling 0004 for a zone, the RQ payload includes the zone_idx.
 
@@ -352,6 +355,7 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
     only query zone 00, not the target zone.
     """
     # ARRANGE
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
     poller = PollingManager(mock_gateway, shadow_mode=False)
     ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
 

@@ -59,7 +59,7 @@ class Message:
     _GET_CODE_NAME_CB: Callable[[Code | str], str] | None = None
     _GET_MSG_IDX_CB: Callable[[Any], dict[str, str]] | None = None
 
-    _gwy: Any | None = None
+    _gateway: Any | None = None
 
     def __init__(self, dto: PacketDTO) -> None:
         """Create a message from a valid packet.
@@ -391,8 +391,8 @@ class Message:
 
     @property
     def _idx(self) -> dict[str, str]:
-        """Get the domain_id/zone_idx/other_idx of a message payload,
-        if any.
+        """Get the domain_id/zone_idx/other_idx of a message payload.
+
         Used to identify the zone/domain that a message applies to.
 
         :return: an empty dict if there is none such, or None if
@@ -481,8 +481,7 @@ class Message:
 
     @property
     def dto(self) -> TransportMessage:
-        """Generate a strictly-typed TransportMessage DTO from this
-        legacy Message.
+        """Generate a TransportMessage DTO from this legacy Message.
 
         This acts as a safe, passive bridge to validate the new Data
         Transfer Objects against the legacy snapshot tests before fully

@@ -216,3 +216,33 @@ async def test_handler_tasks_auto_cleanup_on_completion() -> None:
         assert len(protocol._handler_tasks) == 0
 
         await gwy.stop()
+
+
+async def test_gateway_stop_zero_task_leak() -> None:
+    """Verify that Gateway.stop() cleanly cancels and terminates all internal tasks."""
+    import tempfile
+
+    with tempfile.NamedTemporaryFile() as tmp:
+        # Arrange
+        config = GatewayConfig()
+        config.disable_discovery = True
+        config.engine.input_file = tmp.name
+
+        gwy = Gateway(config=config)
+        with contextlib.suppress(Exception):
+            await gwy.start(start_discovery=False)
+
+        # Register a background task in the engine
+        async def _background_worker() -> None:
+            await asyncio.sleep(100)
+
+        task = gwy._engine._loop.create_task(_background_worker())
+        gwy._engine.add_task(task)
+        assert not task.done()
+
+        # Act
+        await gwy.stop()
+
+        # Assert
+        assert task.cancelled() or task.done()
+        assert gwy.conversation_manager.pending_count == 0

@@ -41,7 +41,6 @@ def deep_merge(src: _SchemaT, dst: _SchemaT, _dc: bool = False) -> _SchemaT:
     >>> merge(s, d) == {'data': {'rows': {'pass': 'dog', 'fail': 'cat', 'num': '1'}}}
     True
     """
-
     new_dst = dst if _dc else deepcopy(dst)  # start with copy of dst, merge src into it
     for key, value in src.items():  # values are only: dict, list, value or None
         if isinstance(value, dict):  # is dict

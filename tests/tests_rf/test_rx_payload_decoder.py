@@ -11,7 +11,7 @@ from ramses_tx.packet import Packet
 
 # Constants
 FIXTURE_PATH: Path = (
-    Path(__file__).parent.parent.parent / "fixtures" / "regression_packets_sorted.txt"
+    Path(__file__).parent.parent / "fixtures" / "regression_packets_sorted.txt"
 )
 
 # Baseline metrics for the static fixture file. If these change, a parser

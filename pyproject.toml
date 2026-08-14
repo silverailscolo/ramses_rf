@@ -95,15 +95,9 @@
   # the entire session.
   timeout_method = "thread"
 
-  # pytest-cov slows down our tests to 10 mins, so leave off.
-  # We run coverage in a separate workflow on python 3.13 only (fastest)
-  # pytest-cov coverage reporting. open htmlcov/index.html in a browser for details
-  # addopts = ["--cov=src", "--cov-fail-under=50", "--cov-report=xml", "--cov-report=term"]
-  # to create an interactive local HTML report, add: --cov-report=html
-  # to report missed lines during test writing, add: --cov-report=term-missing
+  # pytest-cov slows down our tests on GitHub Actions to 10 mins, so use coverage.py instead.
   # PyCharm might not hit a breakpoint. For debugging, disable -cov by adding:
   # –no-cov"
-  # cov_report_term = "term-missing:skip-covered"
 
 #
 ### coverage #########################################################################
@@ -196,11 +190,6 @@
   disallow_incomplete_defs = true
   disallow_untyped_defs = true
 
-  # disallow-untyped-decorators = true  # added by zxdavb
-
-  # This one isn't too hard to get passing, but return on investment is lower
-  # no_implicit_reexport = true  # 242  # from: Miscellaneous strictness flags
-
   # # Configuring warnings
   #  - https://mypy.readthedocs.io/en/stable/command_line.html#configuring-warnings
 
@@ -248,14 +237,6 @@
   ]
 
 [[tool.mypy.overrides]]
-  module = "tests.*"
-
-  disable_error_code = [
-    "arg-type",  #     30
-    "type-arg",  #     22
-  ]
-
-[[tool.mypy.overrides]]
   module = "tests_rf.*"
 
   disable_error_code = [
@@ -281,7 +262,6 @@
   module = [
     "ramses_cli.*",
     "ramses_rf.*",
-    "tests",
   ]
 
   disallow_any_explicit = false
@@ -298,30 +278,71 @@
 
 [tool.ruff.lint]
   select = [
-    "ASYNC",  # flake8-async
-    "B",  #     flake8-bugbear
-    "E",  #     pycodestyle
-    "F",  #     Pyflakes
-    "I",  #     isort
-    "SIM",  #   flake8-simplify
-    "UP",  #    pyupgrade
+    "ASYNC",   # flake8-async
+    "B",       # flake8-bugbear
+    "D",       # pydocstyle
+    "E",       # pycodestyle
+    "F",       # Pyflakes
+    "I",       # isort
+    "Q",       # flake8-quotes
+    "SIM",     # flake8-simplify
+    "TID251",  # flake8-tidy-imports (banned-api)
+    "UP",      # pyupgrade
   ]
-  ignore = ["ASYNC109", "ASYNC110", "B011", "E501", "SIM102", "SIM114", "UP040"]
+  ignore = [
+    "ASYNC109",
+    "ASYNC110",
+    "B011",
+    "D105",
+    "D107",
+    "D203",
+    "D213",
+    "D400",
+    "D401",
+    "D415",
+    "E501",
+    "SIM102",
+    "SIM114",
+    "UP040",
+  ]
 
-  # B011   - Do not call assert False since python -O removes these calls
-  # E501   - Line too long
-  # SIM102 - Use a single `if` statement instead of nested `if` statements
-  # SIM114 - Combine `if` branches using logical `or` operator
-  # UP040  - Type alias uses `TypeAlias` annotation instead of the `type` keyword
+  # ASYNC109 - Async function with a timeout parameter
+  # ASYNC110 - Use `asyncio.Event` instead of awaiting `asyncio.sleep` in a `while` loop
+  # B011     - Do not call assert False since python -O removes these calls
+  # D105     - Missing docstring in magic method
+  # D107     - Missing docstring in `__init__`
+  # D203     - 1 blank line required before class docstring (conflicts with D211)
+  # D213     - Multi-line docstring summary should start at the second line (conflicts with D212)
+  # D400     - First line should end with a period
+  # D401     - First line of docstring should be in imperative mood
+  # D415     - First line should end with a period, question mark, or exclamation point
+  # E501     - Line too long
+  # SIM102   - Use a single `if` statement instead of nested `if` statements
+  # SIM114   - Combine `if` branches using logical `or` operator
+  # UP040    - Type alias uses `TypeAlias` annotation instead of the `type` keyword
 
 
 [tool.ruff.lint.flake8-import-conventions.extend-aliases]
   voluptuous = "vol"
 
 
+[tool.ruff.lint.flake8-pytest-style]
+  fixture-parentheses = false
+
+
+[tool.ruff.lint.flake8-quotes]
+  inline-quotes = "double"
+
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+  "async_timeout".msg = "use asyncio.timeout instead"
+  "pytz".msg = "use zoneinfo instead"
+
+
 [tool.ruff.lint.isort]
   combine-as-imports = true
   force-sort-within-sections = false
+  known-first-party = ["ramses_cli", "ramses_rf", "ramses_tx"]
   split-on-trailing-comma = false
 
 

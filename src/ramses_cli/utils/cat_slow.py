@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""CLI utility to stream packet logs with controlled delay."""
+
 import argparse
 from time import sleep
 

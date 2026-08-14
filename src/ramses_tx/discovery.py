@@ -41,6 +41,7 @@ if os.name == "nt":
         include_links: bool = False,
         _hide_subsystems: list[str] | None = None,
     ) -> list[_PortInfo]:
+        """Return a list of available serial comports on Windows."""
         # Windows ignores the Linux-only keyword arguments, but keeping them in
         # the signature keeps type-checkers happy because all branches now look
         # identical.
@@ -59,6 +60,7 @@ elif sys.platform.lower()[:5] != "linux":
         include_links: bool = False,
         _hide_subsystems: list[str] | None = None,
     ) -> list[_PortInfo]:
+        """Return a list of available serial comports on POSIX/macOS."""
         # Same reasoning as the Windows branch: pyserial does not take these
         # kwargs on macOS/Unix, but exposing them suppresses "definition differs"
         # errors when mypy analyses this file on other platforms.
@@ -105,9 +107,7 @@ else:
 
 
 async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
-    """Return True if the device attached to the port has the
-    attributes of a Honeywell HGI80.
-    """
+    """Return True if device has attributes of a Honeywell HGI80."""
     if serial_port[:7] == "mqtt://":
         return False  # ramses_esp
 

@@ -180,7 +180,7 @@ async def read_schedule(zone: DhwZone | Zone) -> list:  # uses: flow_marker
 
     schedule = assert_schedule_dict(zone)
 
-    zone._gwy._engine._disable_sending = True
+    zone._gateway._engine._disable_sending = True
 
     _global_flow_marker = RQ_0006_EXPECTED
     assert schedule == await zone.get_schedule(force_io=False)
@@ -215,7 +215,7 @@ async def read_schedule_ver(tcs: System) -> list:  # uses: flow_marker
     ver = (await tcs._schedule_version(force_io=True))[0]  # RQ|0006, may: TimeoutError
     assert _global_flow_marker == RP_0006_RECEIVED
 
-    tcs._gwy._engine._disable_sending = True  # TODO: must speak directly to lower layer?
+    tcs._gateway._engine._disable_sending = True  # TODO: must speak directly to lower layer?
 
     _global_flow_marker = RQ_0006_EXPECTED  # actually, is not expected
     ver = (await tcs._schedule_version())[0]  # RQ|0006, may: TimeoutError
@@ -246,7 +246,7 @@ async def write_schedule(zone: DhwZone | Zone) -> None:  # uses: flow_marker
 
     sch_new = deepcopy(sch_old)
 
-    # if zone._gwy.pkt_transport.serial.port == MOCKED_PORT:
+    # if zone._gateway.pkt_transport.serial.port == MOCKED_PORT:
     #     # change the schedule (doesn't matter to what)
     #     if zone.idx == "HW":
     #         sch_new[0][SWITCHPOINTS][0][ENABLED] = not (
@@ -274,7 +274,7 @@ async def write_schedule(zone: DhwZone | Zone) -> None:  # uses: flow_marker
     assert _global_flow_marker == RP_0006_RECEIVED
 
     assert sch_tst == sch_new
-    # if zone._gwy.pkt_transport.serial.port == MOCKED_PORT:
+    # if zone._gateway.pkt_transport.serial.port == MOCKED_PORT:
     #     assert sch_tst != sch_old
     #    sch_end = await zone.set_schedule(sch_old)  # put things back
 

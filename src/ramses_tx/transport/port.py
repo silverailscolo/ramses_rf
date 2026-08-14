@@ -214,17 +214,12 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         self._is_hgi80 = await is_hgi80(SerPortNameT(self.serial.name or ""))
 
         async def connect_sans_signature() -> None:
-            """Call connection_made() without sending/waiting for a
-            signature.
-            """
+            """Call connection_made() without waiting for signature."""
             self._init_fut.set_result(None)
             self._make_connection(gwy_id=None)
 
         async def connect_with_signature() -> None:
-            """Poll port with signatures, call connection_made() after
-            first echo.
-            """
-
+            """Poll with signatures; connect after first echo."""
             payload = f"0010{int(time() * 1000):012X}{hex_from_str(f'v{VERSION}')}"[:48]
             sig = CommandDTO(
                 verb=I_,
@@ -324,9 +319,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
 
     @limit_duty_cycle(MAX_DUTY_CYCLE_RATE)
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
-        """Transmit a frame via the underlying handler (e.g. serial port,
-        MQTT).
-        """
+        """Transmit a frame via the underlying transport handler."""
         await self._leaker_sem.acquire()
         await super().write_frame(frame)
 

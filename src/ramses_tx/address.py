@@ -35,7 +35,6 @@ class Address:
         :type device_id: DeviceIdT
         :raises ValueError: If the device_id is not a valid format.
         """
-
         self.id = device_id
         self.type = device_id[:2]  # dex, drops 2nd part, incl. ":"
         self._hex_id: str = None  # type: ignore[assignment]
@@ -56,6 +55,7 @@ class Address:
 
     @property
     def hex_id(self) -> str:
+        """Return 6-character hex representation of device ID."""
         if self._hex_id is not None:
             return self._hex_id
         self._hex_id = self.convert_to_hex(self.id)  # type: ignore[unreachable]
@@ -63,6 +63,13 @@ class Address:
 
     @staticmethod
     def is_valid(value: str) -> bool:
+        """Return True if value is a valid device ID string.
+
+        :param value: The device ID string to validate.
+        :type value: str
+        :returns: True if valid, False otherwise.
+        :rtype: bool
+        """
         return isinstance(value, str) and (
             value == NON_DEVICE_ID or DEVICE_ID_REGEX.ANY.match(value) is not None
         )
@@ -77,7 +84,6 @@ class Address:
         :return: The formatted device ID string
         :rtype: str
         """
-
         if device_hex == "FFFFFE":  # aka '63:262142'
             return ALL_DEVICE_ID
 
@@ -91,7 +97,6 @@ class Address:
     @lru_cache(maxsize=256)
     def convert_to_hex(cls, device_id: DeviceIdT) -> str:
         """Convert '01:145038' to '06368E'."""
-
         if not cls.is_valid(device_id):
             raise TypeError
 

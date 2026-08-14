@@ -119,13 +119,13 @@ class StateProjectorRegistry:
 class StateProjector:
     """CQRS State Projector for translating raw payloads into read-models."""
 
-    def __init__(self, gwy: Gateway) -> None:
+    def __init__(self, gateway: Gateway) -> None:
         """Initialize the state projector with a gateway instance.
 
-        :param gwy: The gateway handling device entities.
-        :type gwy: Gateway
+        :param gateway: The gateway handling device entities.
+        :type gateway: Gateway
         """
-        self._gwy = gwy
+        self._gateway = gateway
         self._registry = StateProjectorRegistry()
         self._setup_registry()
 
@@ -149,7 +149,7 @@ class StateProjector:
         :param msg: The message containing payload telemetry.
         :type msg: Message
         """
-        await process_state_updates(self._gwy, msg)
+        await process_state_updates(self._gateway, msg)
 
 
 _DHW_OPCODES: Final[frozenset[Code | str]] = frozenset(
@@ -197,10 +197,10 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
     tcs = getattr(src_dev, "tcs", None) or getattr(src_dev, "_tcs", None)
     if tcs is None and hasattr(src_dev, "dhw"):
         tcs = src_dev
-    if tcs is None and hasattr(src_dev, "_gwy"):
-        tcs = getattr(src_dev._gwy, "tcs", None)
-    if tcs is None and getattr(msg, "_gwy", None) is not None:
-        tcs = getattr(msg._gwy, "tcs", None)
+    if tcs is None and hasattr(src_dev, "_gateway"):
+        tcs = getattr(src_dev._gateway, "tcs", None)
+    if tcs is None and getattr(msg, "_gateway", None) is not None:
+        tcs = getattr(msg._gateway, "tcs", None)
 
     if tcs is None:
         return None
@@ -213,12 +213,12 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
 
 
 def _resolve_logical_targets(
-    gwy: Gateway, msg: Message, p: dict[str, Any]
+    gateway: Gateway, msg: Message, p: dict[str, Any]
 ) -> list[Any]:
     """Resolve software twin entities targeted by a payload.
 
-    :param gwy: Gateway instance with device registry.
-    :type gwy: Gateway
+    :param gateway: Gateway instance with device registry.
+    :type gateway: Gateway
     :param msg: L7 Message envelope.
     :type msg: Message
     :param p: Parsed payload dictionary.
@@ -227,7 +227,7 @@ def _resolve_logical_targets(
     :rtype: list[Any]
     """
     targets: list[Any] = []
-    registry = getattr(gwy, "device_registry", None)
+    registry = getattr(gateway, "device_registry", None)
     src_dev = registry.device_by_id.get(msg.src.id) if registry else None
     dst_dev = (
         registry.device_by_id.get(msg.dst.id)
@@ -236,7 +236,7 @@ def _resolve_logical_targets(
     )
 
     tcs = getattr(src_dev, "tcs", None) if src_dev else None
-    tcs = tcs or getattr(gwy, "tcs", None)
+    tcs = tcs or getattr(gateway, "tcs", None)
     if tcs is None and registry:
         for dev in registry.device_by_id.values():
             if str(dev.id).startswith("01:"):
@@ -668,7 +668,7 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
         _LOGGER.warning("Failed to process fault log entry from msg %s: %s", msg, err)
 
 
-def _route_2411_to_fan(gwy: Gateway, msg: Message) -> None:
+def _route_2411_to_fan(gateway: Gateway, msg: Message) -> None:
     """Route a 2411 parameter message to its HvacVentilator aggregate root.
 
     Phase 2.95 removed the ``HvacVentilator._handle_msg`` override that
@@ -693,7 +693,7 @@ def _route_2411_to_fan(gwy: Gateway, msg: Message) -> None:
     if getattr(msg, "verb", "") == "RQ":
         return
 
-    registry = getattr(gwy, "device_registry", None)
+    registry = getattr(gateway, "device_registry", None)
     if registry is None:
         return
 
@@ -739,19 +739,19 @@ def _update_schedule_state(target: Any, p: dict[str, Any], msg: Message) -> None
         sched.process_schedule_msg(msg)
 
 
-async def process_state_updates(gwy: Gateway, msg: Message) -> None:
+async def process_state_updates(gateway: Gateway, msg: Message) -> None:
     """Ingest message payloads into entity state read-models.
 
     Acts as a Strangler Fig, intercepting decoded payloads and mapping
     them directly into the new `StateUpdatedEvent` structures.
 
-    :param gwy: Gateway handling device registry and state.
-    :type gwy: Gateway
+    :param gateway: Gateway handling device registry and state.
+    :type gateway: Gateway
     :param msg: Message envelope containing payload.
     :type msg: Message
     """
     # Notify candidate devices of _last_msg_dtm and all binding devices of rcvd_msg
-    if registry := getattr(gwy, "device_registry", None):
+    if registry := getattr(gateway, "device_registry", None):
         for dev in list(registry.device_by_id.values()):
             if dev.id in (getattr(msg.src, "id", None), getattr(msg.dst, "id", None)):
                 if hasattr(dev, "_last_msg_dtm"):
@@ -776,14 +776,14 @@ async def process_state_updates(gwy: Gateway, msg: Message) -> None:
     # before the per-payload loop because _handle_2411_message reads
     # msg.payload as a whole.  See ramses_cc issue 851.
     if msg.code == Code._2411:
-        _route_2411_to_fan(gwy, msg)
+        _route_2411_to_fan(gateway, msg)
 
     raw_payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
     payloads = [p.to_dict() if hasattr(p, "to_dict") else p for p in raw_payloads]
     with contextlib.suppress(exc.DeviceNotFoundError, exc.SchemaInconsistentError):
         for p in payloads:
             if isinstance(p, dict):
-                await update_topology_schema_state(gwy, p, msg)
+                await update_topology_schema_state(gateway, p, msg)
 
     # Legacy Parity: Request packets (RQ) do not contain state update telemetry.
     if getattr(msg, "verb", "") == "RQ":
@@ -792,7 +792,7 @@ async def process_state_updates(gwy: Gateway, msg: Message) -> None:
     for p in payloads:
         if not isinstance(p, dict):
             continue
-        targets = _resolve_logical_targets(gwy, msg, p)
+        targets = _resolve_logical_targets(gateway, msg, p)
         for target in targets:
             _update_system_state(target, p, msg)
             _update_hvac_state(target, p, msg)

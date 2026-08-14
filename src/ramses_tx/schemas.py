@@ -70,10 +70,7 @@ def sch_packet_log_dict_factory(
     default_backups: int | None = None,
     default_retention_days: int = 7,
 ) -> dict[vol.Required, vol.Any]:
-    """
-    :return: a packet log dict with a configurable default rotation policy.
-    """
-
+    """Return packet log dict with default rotation policy."""
     if default_backups is not None:
         default_retention_days = default_backups
 
@@ -159,7 +156,6 @@ SCH_SERIAL_PORT_CONFIG = vol.Schema(
 
 def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     """Return a serial port dict."""
-
     SCH_SERIAL_PORT_NAME = str
 
     def NormaliseSerialPort() -> Callable[[str | PortConfigT], PortConfigT]:
@@ -189,8 +185,7 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
 
 
 def extract_serial_port(ser_port_dict: dict[str, Any]) -> tuple[str, PortConfigT]:
-    """Extract a serial port, port_config_dict tuple from a
-    sch_serial_port_dict."""
+    """Extract serial port and port config tuple from schema."""
     port_name = str(ser_port_dict.get(SZ_PORT_NAME, ""))
     port_config = cast(
         "PortConfigT", {k: v for k, v in ser_port_dict.items() if k != SZ_PORT_NAME}
@@ -211,7 +206,6 @@ def select_device_filter_mode(
     block_list: list[str],
 ) -> bool:
     """Determine which device filter to use, if any."""
-
     known_warn_line2: Final = (
         "In Ramses RF Config, turn On 'Accept packets from known device IDs only'. "
     )

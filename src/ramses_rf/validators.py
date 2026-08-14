@@ -44,15 +44,15 @@ __all__ = [
 ]
 
 
-def validate_addresses(gwy: Gateway, msg: Message) -> bool:
+def validate_addresses(gateway: Gateway, msg: Message) -> bool:
     """Validate the packet's address set for basic structural rules.
 
     This is Stage 1 of the processing pipeline. It evaluates the raw addressing
     metadata. If the addresses violate domain-specific rules, an exception is
     raised and caught by the pipeline executor.
 
-    :param gwy: The gateway handling the message.
-    :type gwy: Gateway
+    :param gateway: The gateway handling the message.
+    :type gateway: Gateway
     :param msg: The message containing source/destination addresses.
     :type msg: Message
     :raises exc.PacketAddrSetInvalid: If the address pair is invalid.
@@ -87,18 +87,18 @@ def validate_addresses(gwy: Gateway, msg: Message) -> bool:
             )
 
     # TODO: any use in creating a device only if the payload is valid?
-    return gwy.config.reduce_processing < DONT_CREATE_ENTITIES
+    return gateway.config.reduce_processing < DONT_CREATE_ENTITIES
 
 
-def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
+def instantiate_devices(gateway: Gateway, msg: Message) -> bool:
     """Ensure the source and destination devices exist in the registry.
 
     This is Stage 2 of the processing pipeline. It attempts to discover or
     map the addresses to actual Device objects. If a required device cannot be
     found, it logs a warning and halts the pipeline.
 
-    :param gwy: The gateway containing the device registry.
-    :type gwy: Gateway
+    :param gateway: The gateway containing the device registry.
+    :type gateway: Gateway
     :param msg: The message to inject discovered devices into.
     :type msg: Message
     :return: True if devices were mapped/created successfully, False otherwise.
@@ -107,7 +107,7 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
     try:
         # FIXME: changing Address to Devices is messy: ? Protocol for same
         # method signatures. prefer Devices but can continue with Addresses...
-        src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
+        src_dev = gateway.device_registry.device_by_id.get(msg.src.id)
 
         # Devices need to know their controller, ?and their location ('parent' domain)
         # NB: only addrs processed here, packet metadata is processed elsewhere
@@ -123,7 +123,7 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
         #  - discovery: from packet fingerprint, excl. payloads (only for 10:)
         #  - eavesdrop: from packet fingerprint, incl. payloads
 
-        hgi_id = gwy.hgi.id if gwy.hgi else None
+        hgi_id = gateway.hgi.id if gateway.hgi else None
 
         if src_dev is None:
             # Foreign HGIs (18: devices that are not the active gateway and
@@ -148,7 +148,7 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
             # normally (as an HgiGateway) — this preserves existing behaviour
             # for systems that don't enforce the known_list.
             if (
-                gwy.config.engine.enforce_known_list
+                gateway.config.engine.enforce_known_list
                 and getattr(msg.src, "type", None) in ("18", DevType.HGI)
                 and msg.src.id != HGI_DEV_ADDR.id
                 and msg.src.id != hgi_id
@@ -158,7 +158,7 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
                 pass
             else:
                 # may: DeviceNotFoundError, but don't suppress
-                src_dev = gwy.device_registry.get_device(msg.src.id)
+                src_dev = gateway.device_registry.get_device(msg.src.id)
                 if (
                     getattr(msg.src, "type", None) in ("01", DevType.CTL)
                     and hasattr(src_dev, "tcs")
@@ -166,12 +166,12 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
                     and hasattr(src_dev, "_make_tcs_controller")
                 ):
                     src_dev._make_tcs_controller(msg=msg)
-        if getattr(gwy.config, "enable_eavesdrop", False):
-            engine = getattr(gwy, "_eavesdrop_engine", None)
+        if getattr(gateway.config, "enable_eavesdrop", False):
+            engine = getattr(gateway, "_eavesdrop_engine", None)
             if engine is None:
-                engine = EavesdropEngine(gwy)
+                engine = EavesdropEngine(gateway)
                 with contextlib.suppress(AttributeError):
-                    gwy._eavesdrop_engine = engine
+                    gateway._eavesdrop_engine = engine
             engine.eavesdrop_referenced_devices(msg)
 
         if msg.dst.id == msg.src.id:
@@ -186,15 +186,15 @@ def instantiate_devices(gwy: Gateway, msg: Message) -> bool:
     return True
 
 
-def validate_slugs(gwy: Gateway, msg: Message) -> bool:
+def validate_slugs(gateway: Gateway, msg: Message) -> bool:
     """Validate the device classes against the transmitted code/verb.
 
     This is Stage 3 of the processing pipeline. It verifies whether the
     source is permitted to Tx this payload, and if the destination is
     permitted to Rx it, based on protocol schemas.
 
-    :param gwy: The gateway handling the message.
-    :type gwy: Gateway
+    :param gateway: The gateway handling the message.
+    :type gateway: Gateway
     :param msg: The message containing the verb and code to validate.
     :type msg: Message
     :raises exc.PacketInvalid: If either slug cannot process the verb/code.
@@ -202,7 +202,7 @@ def validate_slugs(gwy: Gateway, msg: Message) -> bool:
     :rtype: bool
     """
     # 1. Check Source Slug
-    src_dev = gwy.device_registry.device_by_id.get(msg.src.id)
+    src_dev = gateway.device_registry.device_by_id.get(msg.src.id)
     slug = getattr(src_dev, "_SLUG", None)
 
     if slug not in (None, DevType.HGI, DevType.DEV, DevType.HEA, DevType.HVC):
@@ -226,7 +226,7 @@ def validate_slugs(gwy: Gateway, msg: Message) -> bool:
     ):
         # HGI80 can do what it likes
         # receiving an I_ isn't currently in the schema & so can't yet be tested
-        dst_dev = gwy.device_registry.device_by_id.get(msg.dst.id)
+        dst_dev = gateway.device_registry.device_by_id.get(msg.dst.id)
         dst_slug = getattr(dst_dev, "_SLUG", None)
 
         if dst_slug not in (None, DevType.HGI, DevType.DEV, DevType.HEA, DevType.HVC):
@@ -255,4 +255,4 @@ def validate_slugs(gwy: Gateway, msg: Message) -> bool:
                             f"{msg!r} < Unexpected verb/code for dst ({dst_slug}) to Rx"
                         )
 
-    return gwy.config.reduce_processing < DONT_UPDATE_ENTITIES
+    return gateway.config.reduce_processing < DONT_UPDATE_ENTITIES

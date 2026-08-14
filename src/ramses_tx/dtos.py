@@ -71,8 +71,7 @@ class PacketDTO:
 
 @dataclass(frozen=True, slots=True)
 class CommandDTO:
-    """
-    Instructions strictly for L2/L3 transmission over the radio.
+    """Instructions strictly for L2/L3 transmission over the radio.
 
     :param verb: The action verb.
     :type verb: str

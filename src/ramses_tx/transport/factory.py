@@ -67,7 +67,6 @@ async def transport_factory(
     :rtype: RamsesTransportT
     :raises exc.TransportSourceInvalid: If the packet source is invalid or multiple sources are specified.
     """
-
     # Apply regex rules to the Protocol before binding the Transport
     if config.use_regex:
         protocol.set_regex_rules(config.use_regex)

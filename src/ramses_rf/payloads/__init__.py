@@ -9,7 +9,6 @@ from .base import PayloadBase
 from .dhw import DhwConfigPayload, DhwParamsPayload, DhwStatePayload
 from .heating import (
     BindingPayload,
-    DhwTemperaturePayload,
     FlowTempPayload,
     HeatDemandPayload,
     OutdoorTempPayload,
@@ -95,7 +94,6 @@ __all__ = [
     "DhwConfigPayload",
     "DhwParamsPayload",
     "DhwStatePayload",
-    "DhwTemperaturePayload",
     "FanModePayload",
     "FlowTempPayload",
     "HeatDemandPayload",
@@ -146,7 +144,6 @@ __all__ = [
     "SystemFaultLogPayload",
     "SystemFaultPayload",
     "SystemFlagPayload",
-    "SystemLanguagePayload",
     "SystemLanguagePayload",
     "SystemLogIndexPayload",
     "SystemOpenThermBridgePayload",

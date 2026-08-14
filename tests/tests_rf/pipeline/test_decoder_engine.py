@@ -1,4 +1,4 @@
-"""RAMSES RF - Golden Master parity test for async decoder engine."""
+"""Unit and contract tests for the async DecoderEngine pipeline."""
 
 import asyncio
 import re

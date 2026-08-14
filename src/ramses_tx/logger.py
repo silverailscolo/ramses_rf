@@ -88,7 +88,6 @@ class _Logger(logging.Logger):  # use pkt.dtm for the log record timestamp
 
         Will overwrite created and msecs (and thus asctime), but not relativeCreated.
         """
-
         extra = dict(extra or {})  # work with a copy
         extra["frame"] = extra.pop("_frame", "")
         if extra["frame"]:
@@ -137,11 +136,11 @@ class _Formatter:  # format asctime with configurable precision
 
 
 class ColoredFormatter(_Formatter, colorlog.ColoredFormatter):  # type: ignore[misc]
-    pass
+    """Color-formatted log message formatter."""
 
 
 class Formatter(_Formatter, logging.Formatter):  # type: ignore[misc]
-    pass
+    """Standard log message formatter."""
 
 
 class PktLogFilter(logging.Filter):  # record.levelno in (logging.INFO, logging.WARNING)
@@ -181,6 +180,8 @@ class BlockMqttFilter(logging.Filter):
 
 
 class TimedRotatingFileHandler(_TimedRotatingFileHandler):
+    """Timed rotating log file handler with midnight rollover."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         assert self.when == "MIDNIGHT"
@@ -249,21 +250,32 @@ def set_pkt_logging(
     flush_level: int = logging.ERROR,
     flush_interval: float = 60.0,
 ) -> QueueListener | None:
-    """Create/configure handlers, formatters, etc.
+    """Create and configure packet log handlers and formatters.
 
-    Parameters:
-    - logger:         The logger to configure.
-    - cc_console:     If True, output to stdout/stderr.
-    - packet_log_path: base path to store packet logs in, from root
-    - packet_log_prefix: prefix of file to store packet logs in
-    - packet_log_retention_days: keep copies, rotate at midnight unless:
-    - rotate_bytes: rotate log files when log > rotate_size
-    - buffer_capacity: If > 0, buffer logs in memory up to this capacity.
-    - flush_level: The logging level that triggers the buffer to flush.
-    - flush_interval: Accepted here to satisfy kwargs unpacked
-      from config (unused locally).
+    :param logger: The logger instance to configure.
+    :type logger: logging.Logger
+    :param cc_console: If True, output to stdout/stderr.
+    :type cc_console: bool
+    :param packet_log_path: Base directory path to store packet logs in.
+    :type packet_log_path: str | None
+    :param packet_log_prefix: Prefix filename for packet logs.
+    :type packet_log_prefix: str | None
+    :param packet_log_retention_days: Number of days to retain rotated
+        logs.
+    :type packet_log_retention_days: int
+    :param rotate_bytes: Maximum size in bytes before rotating log file.
+    :type rotate_bytes: int | None
+    :param buffer_capacity: Memory buffer size in records before
+        flushing.
+    :type buffer_capacity: int
+    :param flush_level: Log level threshold to immediately trigger
+        flush.
+    :type flush_level: int
+    :param flush_interval: Maximum interval in seconds before flushing.
+    :type flush_interval: float
+    :returns: Configured QueueListener instance if async, or None.
+    :rtype: QueueListener | None
     """
-
     logger.propagate = False  # log file is distinct from any app/debug logging
     logger.setLevel(logging.DEBUG)  # must be at least .INFO
 

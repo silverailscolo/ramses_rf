@@ -64,58 +64,58 @@ MSG_FORMAT_18 = "|| {:18s} | {:18s} | {:2s} | {:16s} | {:^4s} || {}"
 _TD_SECONDS_003 = td(seconds=3)
 
 
-def _log_message(gwy: Gateway, msg: Message) -> None:
+def _log_message(gateway: Gateway, msg: Message) -> None:
     """Log msg according to src, code, log.debug setting.
 
-    :param gwy: The gateway handling the message.
-    :type gwy: Gateway
+    :param gateway: The gateway handling the message.
+    :type gateway: Gateway
     :param msg: the Message being processed.
     :type msg: Message
     """
     if _DBG_FORCE_LOG_MESSAGES:
         _LOGGER.warning(msg)
-    elif msg.src != gwy.hgi or (msg.code != Code._PUZZ and msg.verb != RQ):
+    elif msg.src != gateway.hgi or (msg.code != Code._PUZZ and msg.verb != RQ):
         _LOGGER.info(msg)
-    elif msg.src != gwy.hgi or msg.verb != RQ:
+    elif msg.src != gateway.hgi or msg.verb != RQ:
         _LOGGER.info(msg)
     elif _LOGGER.getEffectiveLevel() == logging.DEBUG:
         _LOGGER.info(msg)
 
 
-async def _cqrs_ingestion_engine(gwy: Gateway, msg: Message) -> None:
+async def _cqrs_ingestion_engine(gateway: Gateway, msg: Message) -> None:
     """Parallel ingestion engine to populate immutable CQRS read-models."""
-    await process_state_updates(gwy, msg)
+    await process_state_updates(gateway, msg)
 
 
-async def process_msg(gwy: Gateway, msg: Message) -> None:
+async def process_msg(gateway: Gateway, msg: Message) -> None:
     """Decode the packet payload and route it through the message pipeline.
 
     This executor acts as a Chain of Responsibility, routing the message
     through sequential, mathematically isolated validation and dispatch stages.
 
-    :param gwy: The gateway instance handling the routing.
-    :type gwy: Gateway
+    :param gateway: The gateway instance handling the routing.
+    :type gateway: Gateway
     :param msg: The processed message to route.
     :type msg: Message
     """
     # All methods require msg with a valid payload, except instantiate_devices(),
     # which requires a valid payload only for 000C.
     try:
-        if cm := getattr(gwy, "conversation_manager", None):
+        if cm := getattr(gateway, "conversation_manager", None):
             cm.process_msg(msg)
 
-        if not validate_addresses(gwy, msg):
-            _log_message(gwy, msg)
+        if not validate_addresses(gateway, msg):
+            _log_message(gateway, msg)
             return
 
-        if not instantiate_devices(gwy, msg):
+        if not instantiate_devices(gateway, msg):
             return
 
-        if not validate_slugs(gwy, msg):
-            _log_message(gwy, msg)
+        if not validate_slugs(gateway, msg):
+            _log_message(gateway, msg)
             return
 
-        await _cqrs_ingestion_engine(gwy, msg)
+        await _cqrs_ingestion_engine(gateway, msg)
 
     except (AssertionError, exc.RamsesException, NotImplementedError) as err:
         (_LOGGER.error if _DBG_INCREASE_LOG_LEVELS else _LOGGER.warning)(
@@ -123,14 +123,14 @@ async def process_msg(gwy: Gateway, msg: Message) -> None:
         )
 
     except (AttributeError, LookupError, TypeError, ValueError) as err:
-        if getattr(gwy.config, "enforce_strict_handling", False):
+        if getattr(gateway.config, "enforce_strict_handling", False):
             raise
         _LOGGER.warning("%s < %s(%s)", msg, err.__class__.__name__, err, exc_info=True)
 
     else:
-        _log_message(gwy, msg)
-        if gwy.message_store:
-            gwy.message_store.add(msg)
+        _log_message(gateway, msg)
+        if gateway.message_store:
+            gateway.message_store.add(msg)
             # why add it? enable for evohome
 
 

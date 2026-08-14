@@ -143,7 +143,7 @@ HVAC_DEV_CLASS_BY_SLUG = {
 
 
 def best_dev_role(
-    dev_addr: Address,
+    device_address: Address,
     *,
     msg: Message | None = None,
     eavesdrop: bool = False,
@@ -157,7 +157,6 @@ def best_dev_role(
     HVAC devices must be explicitly typed, or fingerprinted/eavesdropped.
     The generic HVAC class can be promoted later on, when more information is available.
     """
-
     cls: type[Device]
     slug: str | None
 
@@ -172,29 +171,37 @@ def best_dev_role(
     if slug and slug in _CLASS_BY_SLUG:
         cls = _CLASS_BY_SLUG[slug]
         _LOGGER.debug(
-            "Using an explicitly-defined class for: %r (%s)", dev_addr, cls._SLUG
+            "Using an explicitly-defined class for: %r (%s)",
+            device_address,
+            cls._SLUG,
         )
         return cls
 
-    if dev_addr.type == DEV_TYPE_MAP.HGI:
+    if device_address.type == DEV_TYPE_MAP.HGI:
         _LOGGER.debug(
-            "Using the default class for: %r (%s)", dev_addr, HgiGateway._SLUG
+            "Using the default class for: %r (%s)",
+            device_address,
+            HgiGateway._SLUG,
         )
         return HgiGateway
 
     try:  # or, is it a well-known CH/DHW class, derived from the device type...
-        if cls := class_dev_heat(dev_addr, msg=msg, eavesdrop=eavesdrop):
+        if cls := class_dev_heat(device_address, msg=msg, eavesdrop=eavesdrop):
             _LOGGER.debug(
-                f"Using the default Heat class for: {dev_addr!r} ({cls._SLUG})"
+                "Using the default Heat class for: %r (%s)",
+                device_address,
+                cls._SLUG,
             )
             return cls
     except exc.DeviceNotRecognised:
         pass
 
     try:  # or, a HVAC class, eavesdropped from the message code/payload...
-        if cls := class_dev_hvac(dev_addr, msg=msg, eavesdrop=eavesdrop):
+        if cls := class_dev_hvac(device_address, msg=msg, eavesdrop=eavesdrop):
             _LOGGER.debug(
-                f"Using eavesdropped HVAC class for: {dev_addr!r} ({cls._SLUG})"
+                "Using eavesdropped HVAC class for: %r (%s)",
+                device_address,
+                cls._SLUG,
             )
             return cls  # includes DeviceHvac
     except exc.DeviceNotRecognised:
@@ -202,14 +209,16 @@ def best_dev_role(
 
     # otherwise, use the default device class...
     _LOGGER.debug(
-        f"Using a promotable HVAC class for: {dev_addr!r} ({DeviceHvac._SLUG})"
+        "Using a promotable HVAC class for: %r (%s)",
+        device_address,
+        DeviceHvac._SLUG,
     )
     return DeviceHvac
 
 
 def device_factory(
-    gwy: Gateway,
-    dev_addr: Address,
+    gateway: Gateway,
+    device_address: Address,
     *,
     msg: Message | None = None,
     traits: DeviceTraits | None = None,
@@ -218,13 +227,12 @@ def device_factory(
 
     Devices of certain classes are promotable to a compatible sub class.
     """
-
     traits = traits or DeviceTraits()
 
     cls: type[Device] = best_dev_role(
-        dev_addr,
+        device_address,
         msg=msg,
-        eavesdrop=gwy.config.enable_eavesdrop,
+        eavesdrop=gateway.config.enable_eavesdrop,
         traits=traits,
     )
 
@@ -234,26 +242,29 @@ def device_factory(
         and traits.faked
     ):
         raise exc.SchemaInconsistentError(
-            f"Faked devices from the HVAC domain must have an explicit class: {dev_addr}"
+            f"Faked devices from the HVAC domain must have an explicit class: "
+            f"{device_address}"
         )
 
-    dev: Device = cls.create_from_schema(gwy, dev_addr, traits=traits)
+    dev: Device = cls.create_from_schema(gateway, device_address, traits=traits)
     return dev
 
 
 def class_dev_heat(
-    dev_addr: Address, *, msg: Message | None = None, eavesdrop: bool = False
+    device_address: Address,
+    *,
+    msg: Message | None = None,
+    eavesdrop: bool = False,
 ) -> type[DeviceHeat]:
     """Return a device class, but only if the device must be from the CH/DHW group.
 
     May return a device class, DeviceHeat (which will need promotion).
     """
-
-    if dev_addr.type in DEV_TYPE_MAP.THM_DEVICES:
+    if device_address.type in DEV_TYPE_MAP.THM_DEVICES:
         return _HEAT_CLASS_BY_SLUG[DevType.THM]
 
     try:
-        slug = DEV_TYPE_MAP.slug(dev_addr.type)
+        slug = DEV_TYPE_MAP.slug(device_address.type)
     except KeyError:
         pass
     else:
@@ -261,32 +272,34 @@ def class_dev_heat(
 
     if not eavesdrop:
         raise exc.DeviceNotRecognised(
-            f"No CH/DHW class for: {dev_addr} (no eavesdropping)"
+            f"No CH/DHW class for: {device_address} (no eavesdropping)"
         )
 
     if msg and msg.code in CODES_OF_HEAT_DOMAIN_ONLY:
         return DeviceHeat
 
     raise exc.DeviceNotRecognised(
-        f"No CH/DHW class for: {dev_addr} (unknown type: {dev_addr.type})"
+        f"No CH/DHW class for: {device_address} (unknown type: {device_address.type})"
     )
 
 
 def class_dev_hvac(
-    dev_addr: Address, *, msg: Message | None = None, eavesdrop: bool = False
+    device_address: Address,
+    *,
+    msg: Message | None = None,
+    eavesdrop: bool = False,
 ) -> type[DeviceHvac]:
     """Return a device class, but only if the device must be from the HVAC group.
 
     May return a base class, `DeviceHvac`, which will need promotion.
     """
-
     if not eavesdrop:
         raise exc.DeviceNotRecognised(
-            f"No HVAC class for: {dev_addr} (no eavesdropping)"
+            f"No HVAC class for: {device_address} (no eavesdropping)"
         )
 
     if msg is None:
-        raise exc.DeviceNotRecognised(f"No HVAC class for: {dev_addr} (no msg)")
+        raise exc.DeviceNotRecognised(f"No HVAC class for: {device_address} (no msg)")
 
     if klass := HVAC_KLASS_BY_VC_PAIR.get((msg.verb, msg.code)):
         return _HVAC_CLASS_BY_SLUG[klass]
@@ -295,5 +308,5 @@ def class_dev_hvac(
         return DeviceHvac
 
     raise exc.DeviceNotRecognised(
-        f"No HVAC class for: {dev_addr} (insufficient meta-data)"
+        f"No HVAC class for: {device_address} (insufficient meta-data)"
     )
