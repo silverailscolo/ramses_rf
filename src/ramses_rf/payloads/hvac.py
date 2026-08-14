@@ -792,7 +792,7 @@ class RelativeHumidity6BPayload(RelativeHumidityPayload):
         return struct.pack(self._STRUCT_FMT, idx_raw, hum_raw, temp_raw, dew_raw)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert multi-sensor humidity payload to legacy dictionary format.
+        """Convert humidity payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
@@ -1241,7 +1241,7 @@ class HvacProgrammeEnabledPayload(PayloadBase):
 @register_payload("22E5")
 @register_payload("22E9")
 class HvacVentilationStatusPayload(PayloadBase):
-    """Master payload dispatcher for HVAC ventilation status (Opcode 22E0, 22E5, 22E9).
+    """Master payload dispatcher for HVAC status (22E0/22E5/22E9).
 
     Protocol Notes:
       # RP --- 32:155617 18:005904 --:------ 22E0 004 00-34-A0-1E
@@ -1327,7 +1327,7 @@ class HvacVentilationStatus2BPayload(HvacVentilationStatusPayload):
         return struct.pack(self._STRUCT_FMT, self.flow_mode, self.status_flags)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert 2-byte ventilation status payload to legacy dictionary layout.
+        """Convert ventilation status to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
@@ -1413,7 +1413,7 @@ class HvacVentilationStatus4BPayload(HvacVentilationStatusPayload):
         return struct.pack(self._STRUCT_FMT, self.flow_mode, self.status_flags, 0, 0)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert 4-byte ventilation status payload to legacy dictionary layout.
+        """Convert ventilation status to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any

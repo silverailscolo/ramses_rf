@@ -169,7 +169,6 @@ class PresenceDetect(HvacSensorBase):  # 2E10
         :return: The sent message, or None if no response was returned
         :rtype: Message | None
         """
-
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 

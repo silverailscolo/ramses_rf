@@ -157,7 +157,6 @@ def best_dev_role(
     HVAC devices must be explicitly typed, or fingerprinted/eavesdropped.
     The generic HVAC class can be promoted later on, when more information is available.
     """
-
     cls: type[Device]
     slug: str | None
 
@@ -218,7 +217,6 @@ def device_factory(
 
     Devices of certain classes are promotable to a compatible sub class.
     """
-
     traits = traits or DeviceTraits()
 
     cls: type[Device] = best_dev_role(
@@ -248,7 +246,6 @@ def class_dev_heat(
 
     May return a device class, DeviceHeat (which will need promotion).
     """
-
     if dev_addr.type in DEV_TYPE_MAP.THM_DEVICES:
         return _HEAT_CLASS_BY_SLUG[DevType.THM]
 
@@ -279,7 +276,6 @@ def class_dev_hvac(
 
     May return a base class, `DeviceHvac`, which will need promotion.
     """
-
     if not eavesdrop:
         raise exc.DeviceNotRecognised(
             f"No HVAC class for: {dev_addr} (no eavesdropping)"

@@ -542,7 +542,7 @@ class SystemLanguagePayload(PayloadBase):
     def from_bytes(
         cls, raw_data: bytes
     ) -> "SystemLanguage2BPayload | SystemLanguage3BPayload":
-        """Unpack system language binary payload, dispatching by length."""
+        """Unpack system language binary payload by length."""
         if len(raw_data) >= 3:
             return SystemLanguage3BPayload.from_bytes(raw_data)
         return SystemLanguage2BPayload.from_bytes(raw_data)
@@ -1280,7 +1280,7 @@ class SystemOutdoorTempPayload(PayloadBase):
 
 @register_payload("1F09")
 class SystemSyncHeartbeatPayload(PayloadBase):
-    """Master payload dispatcher for system synchronization heartbeat (Opcode 1F09).
+    """Master payload dispatcher for sync heartbeat (Opcode 1F09).
 
     Protocol Notes:
       # system_sync - FF (I), 00 (RP), F8 (W, after 1FC9).
@@ -1296,7 +1296,7 @@ class SystemSyncHeartbeatPayload(PayloadBase):
     def from_bytes(
         cls, raw_data: bytes
     ) -> "SystemSyncHeartbeat1BPayload | SystemSyncHeartbeat3BPayload":
-        """Unpack system sync heartbeat binary payload, dispatching by length."""
+        """Unpack system sync heartbeat binary payload by length."""
         if len(raw_data) >= 3:
             return SystemSyncHeartbeat3BPayload.from_bytes(raw_data)
         return SystemSyncHeartbeat1BPayload.from_bytes(raw_data)
@@ -1451,7 +1451,7 @@ class SystemConfigPayload(PayloadBase):
     def from_bytes(
         cls, raw_data: bytes
     ) -> "SystemConfig2BPayload | SystemConfigVarPayload":
-        """Unpack system config binary payload, dispatching by length."""
+        """Unpack system config binary payload by length."""
         if len(raw_data) > 2:
             return SystemConfigVarPayload.from_bytes(raw_data)
         return SystemConfig2BPayload.from_bytes(raw_data)
@@ -1712,7 +1712,7 @@ class SystemDateTime2BPayload(SystemDateTimePayload):
         return struct.pack(self._STRUCT_FMT, self.domain_idx, 0x00)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert 2-byte system date & time payload to legacy dictionary layout.
+        """Convert date & time payload to legacy dictionary layout.
 
         :returns: Decoded system date & time dictionary.
         :rtype: dict[str, Any]
@@ -1741,7 +1741,8 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
 
     :param domain_idx: Domain/header index byte.
     :type domain_idx: int
-    :param datetime_str: Formatted ISO datetime string (e.g., '2026-05-12T04:00:59').
+    :param datetime_str: Formatted ISO datetime string (e.g.,
+        '2026-05-12T04:00:59').
     :type datetime_str: str | None
     :param is_dst: Daylight Saving Time active flag.
     :type is_dst: bool | None

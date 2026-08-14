@@ -116,6 +116,7 @@ class ProtocolContext(StateMachineInterface):
     # Properties to maintain backward compatibility with the test suite
     @property
     def max_retry_limit(self) -> int:
+        """Return the maximum number of transmission retries."""
         return self._qos_mgr.max_retry_limit
 
     @max_retry_limit.setter
@@ -124,14 +125,17 @@ class ProtocolContext(StateMachineInterface):
 
     @property
     def echo_timeout(self) -> float:
+        """Return timeout duration in seconds when waiting for echo."""
         return self._qos_mgr.echo_timeout
 
     @property
     def reply_timeout(self) -> float:
+        """Return timeout duration in seconds when waiting for reply."""
         return self._qos_mgr.reply_timeout
 
     @property
     def qsize(self) -> int:
+        """Return the current number of queued commands."""
         return self._qos_mgr.qsize
 
     @property

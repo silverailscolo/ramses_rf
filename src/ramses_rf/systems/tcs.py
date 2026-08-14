@@ -382,7 +382,6 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         :returns: A tuple containing the version number and an I/O flag.
         :rtype: tuple[int, bool]
         """
-
         # RQ --- 30:185469 01:037519 --:------ 0006 001 00
         # RP --- 01:037519 30:185469 --:------ 0006 004 000500E6
 
@@ -567,7 +566,6 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         :returns: The created or retrieved DHW zone.
         :rtype: DhwZone
         """
-
         schema = shrink(SCH_TCS_DHW(schema))
 
         if not self._dhw:
@@ -806,7 +804,6 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         Raise an exception if the new schema is not a superset of the
         existing schema.
         """
-
         _schema: dict[str, Any]
         # Use keep_hints=True so that _name in zone entries survives
         # shrink() and reaches Zone._update_schema for hydration
@@ -856,7 +853,6 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         :returns: The configured system instance.
         :rtype: System
         """
-
         tcs = cls(ctl)
         tcs._update_schema(**schema)
         return tcs
@@ -1013,7 +1009,6 @@ def system_factory(
         :returns: The appropriate system class type.
         :rtype: type[System]
         """
-
         klass: str = schema.get(SZ_CLASS)  # type: ignore[assignment]
 
         # a specified system class always takes precedence (even if it is wrong)...

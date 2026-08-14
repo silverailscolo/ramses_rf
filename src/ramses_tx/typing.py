@@ -42,6 +42,8 @@ PayloadT = NewType("PayloadT", str)
 
 # Device Traits
 class DeviceTraitsT(TypedDict):
+    """Schema representing device traits and metadata."""
+
     alias: str | None
     faked: bool | None
     class_: str | None  # "class" is a reserved keyword
@@ -89,10 +91,12 @@ class QosParams:
 
     @property
     def max_retries(self) -> int:
+        """Return the maximum retry count."""
         return self._max_retries
 
     @property
     def timeout(self) -> float:
+        """Return the QoS timeout duration in seconds."""
         return self._timeout
 
 
@@ -117,14 +121,17 @@ class SendParams:
 
     @property
     def gap_duration(self) -> float:
+        """Return the gap duration between transmissions in seconds."""
         return self._gap_duration
 
     @property
     def num_repeats(self) -> int:
+        """Return the repeat count for transmission."""
         return self._num_repeats
 
     @property
     def priority(self) -> Priority:
+        """Return the transmission priority."""
         return self._priority
 
 
@@ -217,10 +224,14 @@ class _Temperature(TypedDict):
 
 
 class FaultLogEntryNull(TypedDict):
+    """Empty fault log entry payload schema."""
+
     _log_idx: LogIdxT
 
 
 class FaultLogEntry(TypedDict):
+    """Fault log entry payload schema."""
+
     _log_idx: LogIdxT
     timestamp: str
     fault_state: FaultState
@@ -234,86 +245,124 @@ class FaultLogEntry(TypedDict):
 
 
 class AirQuality(TypedDict):
+    """Air quality measurement payload schema."""
+
     air_quality: float | None
     air_quality_basis: NotRequired[str]
 
 
 class Co2Level(TypedDict):
+    """CO2 level measurement payload schema."""
+
     co2_level: float | None
 
 
 class RelativeHumidity(TypedDict):
+    """Relative humidity measurement payload schema."""
+
     relative_humidity: _HexToTempT
     temperature: NotRequired[float | None]
     dewpoint_temp: NotRequired[float | None]
 
 
 class IndoorHumidity(TypedDict):
+    """Indoor relative humidity measurement payload schema."""
+
     indoor_humidity: _HexToTempT
     temperature: NotRequired[float | None]
     dewpoint_temp: NotRequired[float | None]
 
 
 class OutdoorHumidity(TypedDict):
+    """Outdoor relative humidity measurement payload schema."""
+
     outdoor_humidity: _HexToTempT
     temperature: NotRequired[float | None]
     dewpoint_temp: NotRequired[float | None]
 
 
 class ExhaustTemp(TypedDict):
+    """Exhaust air temperature payload schema."""
+
     exhaust_temp: _HexToTempT
 
 
 class SupplyTemp(TypedDict):
+    """Supply air temperature payload schema."""
+
     supply_temp: _HexToTempT
 
 
 class IndoorTemp(TypedDict):
+    """Indoor air temperature payload schema."""
+
     indoor_temp: _HexToTempT
 
 
 class OutdoorTemp(TypedDict):
+    """Outdoor air temperature payload schema."""
+
     outdoor_temp: _HexToTempT
 
 
 class Capabilities(TypedDict):
+    """Fan speed capabilities payload schema."""
+
     speed_capabilities: list[str] | None
 
 
 class BypassPosition(TypedDict):
+    """Ventilator bypass damper position payload schema."""
+
     bypass_position: float | None
 
 
 class FanInfo(TypedDict):
+    """Ventilator status information payload schema."""
+
     fan_info: str | None
     _unknown_fan_info_flags: list[int]
 
 
 class ExhaustFanSpeed(TypedDict):
+    """Exhaust fan speed payload schema."""
+
     exhaust_fan: float | None
 
 
 class SupplyFanSpeed(TypedDict):
+    """Supply fan speed payload schema."""
+
     supply_fan: float | None
 
 
 class RemainingMins(TypedDict):
+    """Remaining boost minutes payload schema."""
+
     remaining_mins: int | None
 
 
 class PostHeater(TypedDict):
+    """Post-heater modulation level payload schema."""
+
     post_heater: float | None
 
 
 class PreHeater(TypedDict):
+    """Pre-heater modulation level payload schema."""
+
     pre_heater: float | None
 
 
 class SupplyFlow(TypedDict):
+    """Supply air flow rate payload schema."""
+
     supply_flow: float | None
 
 
 class ExhaustFlow(TypedDict):
+    """Exhaust air flow rate payload schema."""
+
     exhaust_flow: float | None
 
 
@@ -667,6 +716,8 @@ class PayDictT:
 
 
 class PortConfigT(TypedDict):
+    """Serial port communication configuration schema."""
+
     baudrate: int  # 57600, 115200
     dsrdtr: bool
     rtscts: bool
@@ -675,6 +726,8 @@ class PortConfigT(TypedDict):
 
 
 class PktLogConfigT(TypedDict):
+    """Packet logger configuration schema."""
+
     packet_log_path: str
     packet_log_prefix: str
     packet_log_retention_days: int | None

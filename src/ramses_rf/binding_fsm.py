@@ -298,7 +298,6 @@ class BindingManagerRespondent(BindingManagerBase):
         :return: A tuple containing the (tender, accept, affirm, ratify) objects.
         :raises exc.BindingFsmError: If already binding.
         """
-
         if self.is_binding:
             raise exc.BindingFsmError(
                 f"{self}: bad State for bindings as a Respondent (is already binding)"
@@ -340,7 +339,6 @@ class BindingManagerRespondent(BindingManagerBase):
         :param idx: The bound index.
         :return: The sent accept packet.
         """
-
         cmd = build_dto(
             Intent(
                 src=Address(self._dev.id),
@@ -410,7 +408,6 @@ class BindingManagerSupplicant(BindingManagerBase):
         :return: A tuple containing the (tender, accept, affirm, ratify) objects.
         :raises exc.BindingFsmError: If already binding.
         """
-
         if self.is_binding:
             raise exc.BindingFsmError(
                 f"{self}: bad State for binding as a Supplicant (is already binding)"
@@ -535,7 +532,6 @@ class BindingManagerSupplicant(BindingManagerBase):
         :param cmd: The ratify command to cast.
         :return: The sent addenda packet.
         """
-
         pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
             cmd, priority=Priority.HIGH, qos=BINDING_QOS
         )
@@ -689,42 +685,50 @@ class BindStateBase:
 
     # Respondent State APIs...
     async def wait_for_offer(self, timeout: float | None = None) -> Message:
+        """Wait for an offer message from a supplicant."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't wait_for_offer() from this State"
         )
 
     def cast_accept_offer(self) -> None:
+        """Cast accept offer command to supplicant."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't accept_offer() from this State"
         )
 
     async def wait_for_confirm(self, timeout: float | None = None) -> Message:
+        """Wait for a confirmation message from supplicant."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't wait_for_confirm() from this State"
         )
 
     async def wait_for_addenda(self, timeout: float | None = None) -> Message:
+        """Wait for an optional addenda message from supplicant."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't wait_for_addenda() from this State"
         )
 
     # Supplicant State APIs...
     def cast_offer(self, timeout: float | None = None) -> None:
+        """Cast binding offer command to respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't make_offer() from this State"
         )
 
     async def wait_for_accept(self, timeout: float | None = None) -> Message:
+        """Wait for an accept message from respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't wait_for_accept() from this State"
         )
 
     async def cast_confirm_accept(self, timeout: float | None = None) -> Message:
+        """Send confirmation of accepted offer to respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't confirm_accept() from this State"
         )
 
     async def cast_addenda(self, timeout: float | None = None) -> Message:
+        """Send optional addenda message to respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't cast_addenda() from this State"
         )
@@ -779,7 +783,6 @@ class _DevIsReadyToSendCmd(BindStateBase):
 
     def _retries_exceeded(self) -> None:
         """Process an overrun of the retry limit when sending a Command."""
-
         msg = (
             f"{self._context}: Failed to transition to {self._next_ctx_state}: "
             f"{self._expected_cmd_phase} command echo not received after "
@@ -793,7 +796,6 @@ class _DevIsReadyToSendCmd(BindStateBase):
 
     def send_cmd(self, cmd: CommandDTO) -> None:
         """If sending a cmd, expect the corresponding echo."""
-
         if not self.is_phase(cmd, self._expected_cmd_phase):
             return
 
@@ -866,6 +868,7 @@ class RespIsWaitingForAddenda(_DevIsWaitingForMsg, BindStateBase):
     _next_ctx_state: type[BindStateBase] = RespHasBoundAsRespondent
 
     async def wait_for_addenda(self, timeout: float | None = None) -> Message:
+        """Wait for addenda message from supplicant."""
         return await self._wait_for_fut_result(timeout or _RATIFY_WAIT_TIME)
 
 
@@ -885,6 +888,7 @@ class RespSendAcceptWaitForConfirm(_DevSendCmdUntilReply, BindStateBase):
         pass
 
     async def wait_for_confirm(self, timeout: float | None = None) -> Message:
+        """Wait for confirmation message from supplicant."""
         return await self._wait_for_fut_result(timeout or _AFFIRM_WAIT_TIME)
 
 
@@ -897,6 +901,7 @@ class RespIsWaitingForOffer(_DevIsWaitingForMsg, BindStateBase):
     _next_ctx_state: type[BindStateBase] = RespSendAcceptWaitForConfirm
 
     async def wait_for_offer(self, timeout: float | None = None) -> Message:
+        """Wait for binding offer message from supplicant."""
         return await self._wait_for_fut_result(timeout or _TENDER_WAIT_TIME)
 
 
@@ -924,6 +929,7 @@ class SuppIsReadyToSendAddenda(
     _next_ctx_state: type[BindStateBase] = SuppHasBoundAsSupplicant
 
     async def cast_addenda(self, timeout: float | None = None) -> Message:
+        """Transmit addenda command to respondent."""
         return await self._wait_for_fut_result(timeout or _ACCEPT_WAIT_TIME)
 
 
@@ -940,6 +946,7 @@ class SuppIsReadyToSendConfirm(
     )
 
     async def cast_confirm_accept(self, timeout: float | None = None) -> Message:
+        """Transmit confirmation command to respondent."""
         return await self._wait_for_fut_result(timeout or _ACCEPT_WAIT_TIME)
 
 
@@ -953,9 +960,11 @@ class SuppSendOfferWaitForAccept(_DevSendCmdUntilReply, BindStateBase):
     _next_ctx_state: type[BindStateBase] = SuppIsReadyToSendConfirm
 
     def cast_offer(self, timeout: float | None = None) -> None:
+        """Transmit offer command to respondent."""
         pass
 
     async def wait_for_accept(self, timeout: float | None = None) -> Message:
+        """Wait for accept response from respondent."""
         return await self._wait_for_fut_result(timeout or _ACCEPT_WAIT_TIME)
 
 

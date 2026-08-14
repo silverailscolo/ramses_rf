@@ -9,6 +9,12 @@ DEBUG_PORT = 5678
 
 
 def start_debugging(wait_for_client: bool) -> None:
+    """Start the debugpy debugger listener.
+
+    :param wait_for_client: Whether to pause execution until a client
+        attaches.
+    :type wait_for_client: bool
+    """
     import debugpy
 
     debugpy.listen(address=(DEBUG_ADDR, DEBUG_PORT))

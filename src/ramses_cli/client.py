@@ -104,7 +104,6 @@ def normalise_config(
     :param lib_config: The configuration dictionary from Home Assistant.
     :return: A tuple containing the serial port and normalized config.
     """
-
     serial_port = lib_config.pop(SZ_SERIAL_PORT, None)
 
     # fix for: https://github.com/ramses-rf/ramses_rf/issues/96
@@ -224,7 +223,6 @@ async def cli(
     :param eavesdrop: Whether to enable eavesdropping mode.
     :param kwargs: Additional keyword arguments.
     """
-
     if kwargs[SZ_DBG_MODE] > 0:  # Do first
         start_debugging(kwargs[SZ_DBG_MODE] == 1)
 

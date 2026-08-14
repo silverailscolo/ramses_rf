@@ -119,18 +119,23 @@ class AttrDict(dict):  # type: ignore[type-arg]
         self._readonly()
 
     def clear(self) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def pop(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def popitem(self) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def setdefault(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def __init__(self, main_table: dict[str, dict], attr_table: dict[str, Any]) -> None:  # type: ignore[type-arg]
