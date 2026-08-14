@@ -13,17 +13,6 @@ if TYPE_CHECKING:
     from .base import PayloadBase
 
 
-def _clean_payload_value(val: Any) -> Any:
-    """Ensure all values in legacy payload dictionary are JSON-serializable."""
-    if isinstance(val, bytes):
-        return val.hex().upper()
-    if isinstance(val, dict):
-        return {k: _clean_payload_value(v) for k, v in val.items()}
-    if isinstance(val, list):
-        return [_clean_payload_value(v) for v in val]
-    return val
-
-
 def payload_to_dict(payload: PayloadBase) -> dict[str, Any]:
     """Convert a PayloadBase instance into a dictionary structure.
 
@@ -36,5 +25,4 @@ def payload_to_dict(payload: PayloadBase) -> dict[str, Any]:
     if not is_dataclass(cast(object, payload)):
         err_msg = f"Expected dataclass instance, got {type(payload).__name__}"
         raise TypeError(err_msg)
-    raw_dict = {k: v for k, v in asdict(payload).items() if not k.startswith("_")}
-    return cast(dict[str, Any], _clean_payload_value(raw_dict))
+    return {k: v for k, v in asdict(payload).items() if not k.startswith("_")}
