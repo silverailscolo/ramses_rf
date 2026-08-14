@@ -297,8 +297,16 @@ def hex_from_dtm(
     :rtype: HexStr12 | HexStr14
     """
 
-    def _dtm_to_hex(year, mon, mday, hour, min, sec, *args: int) -> str:  # type: ignore[no-untyped-def]
-        return f"{sec:02X}{min:02X}{hour:02X}{mday:02X}{mon:02X}{year:04X}"
+    def _dtm_to_hex(
+        year: int,
+        month: int,
+        mday: int,
+        hour: int,
+        minute: int,
+        second: int,
+        *args: int,
+    ) -> str:
+        return f"{second:02X}{minute:02X}{hour:02X}{mday:02X}{month:02X}{year:04X}"
 
     if dtm is None:
         return "FF" * (7 if incl_seconds else 6)
