@@ -55,7 +55,7 @@ def build_set_temperature(intent: Command) -> CommandDTO:
     if zone_idx is None or setpoint is None:
         raise ValueError("Missing 'zone_idx' or 'setpoint' in intent data")
 
-    payload = ZoneSetpointPayload(zone_idx=zone_idx, setpoint_temp=setpoint).hex()
+    payload = ZoneSetpointPayload(zone_index=zone_idx, setpoint_temp=setpoint).hex()
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
@@ -100,7 +100,7 @@ def build_set_mode(intent: Command) -> CommandDTO:
     until, duration = normalise_until(mode, setpoint, until, duration)
 
     payload = ZoneModePayload(
-        zone_idx=zone_idx,
+        zone_index=zone_idx,
         setpoint_temp=setpoint,
         mode_code=mode,
         duration_minutes=duration,
@@ -138,7 +138,7 @@ def build_set_name(intent: Command) -> CommandDTO:
     if zone_idx is None or name is None:
         raise ValueError("Missing 'zone_idx' or 'name' in intent data")
 
-    payload = ZoneNamePayload(zone_idx=zone_idx, name=name).hex()
+    payload = ZoneNamePayload(zone_index=zone_idx, name=name).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -198,7 +198,7 @@ def build_set_config(intent: Command) -> CommandDTO:
         zone_flags |= 0x10
 
     payload = ZoneConfigPayload(
-        zone_idx=zone_idx,
+        zone_index=zone_idx,
         zone_flags=zone_flags,
         min_temp=min_temp,
         max_temp=max_temp,

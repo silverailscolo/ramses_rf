@@ -8,8 +8,8 @@ class FanParamInfo:
     """Metadata descriptor for an HVAC fan configuration parameter."""
 
     description: str
-    min_val: float
-    max_val: float
+    min_value: float
+    max_value: float
     precision: float
     data_type: str
     data_unit: str

@@ -409,15 +409,15 @@ class SystemRolePayload(PayloadBase):
       Field-spaced hex : 00 01
       Payload hex      : 0001
 
-    :param domain_idx: System domain index byte.
-    :type domain_idx: int
+    :param domain_index: System domain index byte.
+    :type domain_index: int
     :param role_code: Device role classification code byte.
     :type role_code: int
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    domain_idx: int
+    domain_index: int
     role_code: int
 
     @classmethod
@@ -433,7 +433,7 @@ class SystemRolePayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 000E: {len(raw_data)}")
         dom, role = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain_idx=dom, role_code=role)
+        return cls(domain_index=dom, role_code=role)
 
     def to_bytes(self) -> bytes:
         """Pack system role data into binary payload.
@@ -441,7 +441,7 @@ class SystemRolePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.domain_idx, self.role_code)
+        return struct.pack(self._STRUCT_FMT, self.domain_index, self.role_code)
 
 
 # ----------------------------------------------------------------------
@@ -461,10 +461,10 @@ class SystemFlagPayload(PayloadBase):
       Field-spaced hex : 00 01
       Payload hex      : 0001
 
-    :param domain_idx: System domain index byte.
-    :type domain_idx: int
-    :param flag_val: System flag byte value.
-    :type flag_val: int
+    :param domain_index: System domain index byte.
+    :type domain_index: int
+    :param flag_value: System flag byte value.
+    :type flag_value: int
 
     Sample Packet Logs & Protocol Notes:
     # Sent by THM when in signal strength test mode (0505, except 1st pkt):
@@ -493,8 +493,8 @@ class SystemFlagPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    domain_idx: int
-    flag_val: int
+    domain_index: int
+    flag_value: int
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -509,7 +509,7 @@ class SystemFlagPayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 0016: {len(raw_data)}")
         dom, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain_idx=dom, flag_val=flg)
+        return cls(domain_index=dom, flag_value=flg)
 
     def to_bytes(self) -> bytes:
         """Pack system flag data into binary payload.
@@ -517,7 +517,7 @@ class SystemFlagPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.domain_idx, self.flag_val)
+        return struct.pack(self._STRUCT_FMT, self.domain_index, self.flag_value)
 
 
 # ----------------------------------------------------------------------
@@ -697,16 +697,16 @@ class SystemParameterPayload(PayloadBase):
       # .W --- 04:000722 01:158182 --:------ 01D0 002 0003  # TRV in zone 00
       # .I --- 01:158182 04:000722 --:------ 01D0 002 0003
 
-    :param param_idx: Parameter index byte.
-    :type param_idx: int
-    :param param_val: Parameter value byte.
-    :type param_val: int
+    :param parameter_index: Parameter index byte.
+    :type parameter_index: int
+    :param parameter_value: Parameter value byte.
+    :type parameter_value: int
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    param_idx: int
-    param_val: int
+    parameter_index: int
+    parameter_value: int
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -721,7 +721,7 @@ class SystemParameterPayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 01D0: {len(raw_data)}")
         idx, val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(param_idx=idx, param_val=val)
+        return cls(parameter_index=idx, parameter_value=val)
 
     def to_bytes(self) -> bytes:
         """Pack system parameter data into binary payload.
@@ -729,7 +729,7 @@ class SystemParameterPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.param_idx, self.param_val)
+        return struct.pack(self._STRUCT_FMT, self.parameter_index, self.parameter_value)
 
 
 # ----------------------------------------------------------------------
@@ -756,14 +756,14 @@ class SystemFaultPayload(PayloadBase):
 
     :param fault_code: System fault code byte.
     :type fault_code: int
-    :param flag_val: Fault flag byte.
-    :type flag_val: int
+    :param flag_value: Fault flag byte.
+    :type flag_value: int
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
     fault_code: int
-    flag_val: int
+    flag_value: int
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -778,7 +778,7 @@ class SystemFaultPayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 01E9: {len(raw_data)}")
         code, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(fault_code=code, flag_val=flg)
+        return cls(fault_code=code, flag_value=flg)
 
     def to_bytes(self) -> bytes:
         """Pack system fault data into binary payload.
@@ -786,7 +786,7 @@ class SystemFaultPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.fault_code, self.flag_val)
+        return struct.pack(self._STRUCT_FMT, self.fault_code, self.flag_value)
 
 
 # ----------------------------------------------------------------------
@@ -806,15 +806,15 @@ class SystemFaultLogPayload(PayloadBase):
       Field-spaced hex : 00 00010000
       Payload hex      : 0000010000
 
-    :param log_idx: Fault log index byte.
-    :type log_idx: int
+    :param log_index: Fault log index byte.
+    :type log_index: int
     :param log_data: Fault log raw byte sequence.
     :type log_data: bytes
     """
 
     _STRUCT_FMT_HEADER: ClassVar[str] = ">B"
 
-    log_idx: int
+    log_index: int
     log_data: bytes
 
     @classmethod
@@ -828,8 +828,8 @@ class SystemFaultLogPayload(PayloadBase):
         :raises ValueError: If raw_data is empty.
         """
         if not raw_data:
-            return cls(log_idx=0, log_data=b"")
-        return cls(log_idx=raw_data[0], log_data=raw_data[1:])
+            return cls(log_index=0, log_data=b"")
+        return cls(log_index=raw_data[0], log_data=raw_data[1:])
 
     def to_bytes(self) -> bytes:
         """Pack system fault log data into binary payload.
@@ -837,7 +837,7 @@ class SystemFaultLogPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return bytes([self.log_idx]) + self.log_data
+        return bytes([self.log_index]) + self.log_data
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert fault log payload to legacy dictionary layout.
@@ -847,8 +847,8 @@ class SystemFaultLogPayload(PayloadBase):
         :returns: Decoded fault log dictionary.
         :rtype: dict[str, Any]
         """
-        raw_hex = (bytes([self.log_idx]) + self.log_data).hex().upper()
-        log_index_str = raw_hex[4:6] if len(raw_hex) >= 6 else f"{self.log_idx:02X}"
+        raw_hex = (bytes([self.log_index]) + self.log_data).hex().upper()
+        log_index_str = raw_hex[4:6] if len(raw_hex) >= 6 else f"{self.log_index:02X}"
 
         verb = getattr(msg, "verb", "I") if msg is not None else "I"
         verb_str = getattr(verb, "value", str(verb)).split(".")[-1]
@@ -870,22 +870,22 @@ class SystemFaultLogPayload(PayloadBase):
             entry = [v for k, v in log_entry_dict.items() if k in keys_to_include]
 
             dev_class = log_entry_dict.get(SZ_DEVICE_CLASS)
-            domain_idx = log_entry_dict.get(SZ_DOMAIN_IDX)
+            domain_index = log_entry_dict.get(SZ_DOMAIN_IDX)
             dev_id = log_entry_dict.get(SZ_DEVICE_ID)
 
             if dev_class != FaultDeviceClass.ACTUATOR:
                 entry.append(dev_class)
-            elif domain_idx == FC:
+            elif domain_index == FC:
                 entry.append(DEV_ROLE_MAP[DevRole.APP])
-            elif domain_idx == FA:
+            elif domain_index == FA:
                 entry.append(DEV_ROLE_MAP[DevRole.HTG])
-            elif domain_idx == F9:
+            elif domain_index == F9:
                 entry.append(DEV_ROLE_MAP[DevRole.HT1])
             else:
                 entry.append(FaultDeviceClass.ACTUATOR)
 
             if dev_class != FaultDeviceClass.CONTROLLER:
-                entry.append(domain_idx)
+                entry.append(domain_index)
 
             if dev_id not in ("00:000000", "00:000001", "00:000002"):
                 entry.append(dev_id)
@@ -922,8 +922,8 @@ class SystemLogIndexPayload(PayloadBase):
       # RP --- 10:048122 18:006402 --:------ 042F 009 000200001400163010
       # Non-evohome (VMI) are len==9.
 
-    :param domain_idx: Log domain index byte.
-    :type domain_idx: int
+    :param domain_index: Log domain index byte.
+    :type domain_index: int
     :param log_pointer: Current log entry pointer.
     :type log_pointer: int
     :param raw_bytes: Optional raw extra payload bytes.
@@ -932,7 +932,7 @@ class SystemLogIndexPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    domain_idx: int
+    domain_index: int
     log_pointer: int
     raw_bytes: bytes | None = None
 
@@ -949,7 +949,7 @@ class SystemLogIndexPayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 042F: {len(raw_data)}")
         dom, ptr = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain_idx=dom, log_pointer=ptr, raw_bytes=raw_data)
+        return cls(domain_index=dom, log_pointer=ptr, raw_bytes=raw_data)
 
     def to_bytes(self) -> bytes:
         """Pack system log index data into binary payload.
@@ -959,7 +959,7 @@ class SystemLogIndexPayload(PayloadBase):
         """
         if self.raw_bytes is not None:
             return self.raw_bytes
-        return struct.pack(self._STRUCT_FMT, self.domain_idx, self.log_pointer)
+        return struct.pack(self._STRUCT_FMT, self.domain_index, self.log_pointer)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert system log index payload to legacy dictionary format.
@@ -977,7 +977,7 @@ class SystemLogIndexPayload(PayloadBase):
                 "counter_5": f"0x{raw_hex[10:14]}",
                 "unknown_7": f"0x{raw_hex[14:18]}",
             }
-        return {"domain_idx": self.domain_idx, "log_pointer": self.log_pointer}
+        return {"domain_idx": self.domain_index, "log_pointer": self.log_pointer}
 
 
 # ----------------------------------------------------------------------
@@ -1443,8 +1443,8 @@ class SystemConfigPayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    config_idx: int
-    config_val: int
+    config_index: int
+    config_value: int
     raw_extra: bytes | None = None
 
     @classmethod
@@ -1480,18 +1480,18 @@ class SystemConfig2BPayload(SystemConfigPayload):
       Field-spaced hex : 00 00
       Payload hex      : 0000
 
-    :param config_idx: Configuration index byte.
-    :type config_idx: int
-    :param config_val: Configuration value byte.
-    :type config_val: int
+    :param config_index: Configuration index byte.
+    :type config_index: int
+    :param config_value: Configuration value byte.
+    :type config_value: int
     :param raw_extra: Trailing bytes (None for 2B payload).
     :type raw_extra: bytes | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    config_idx: int
-    config_val: int
+    config_index: int
+    config_value: int
     raw_extra: bytes | None = None
 
     @classmethod
@@ -1509,7 +1509,7 @@ class SystemConfig2BPayload(SystemConfigPayload):
                 f"Invalid payload length for SystemConfig2BPayload: {len(raw_data)}"
             )
         c_idx, c_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(config_idx=c_idx, config_val=c_val)
+        return cls(config_index=c_idx, config_value=c_val)
 
     def to_bytes(self) -> bytes:
         """Pack 2-byte system config into binary payload.
@@ -1517,16 +1517,16 @@ class SystemConfig2BPayload(SystemConfigPayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.config_idx, self.config_val)
+        return struct.pack(self._STRUCT_FMT, self.config_index, self.config_value)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert system config payload to legacy dictionary layout."""
         if msg and hasattr(msg, "src"):
             dev_type = getattr(msg.src, "type", None) or getattr(msg.src, "id", "")[:2]
             if dev_type in ("21", "37", "32"):
-                return {"presence_detected": bool(self.config_val != 0)}
+                return {"presence_detected": bool(self.config_value != 0)}
 
-        mode_code = f"{self.config_idx:02X}"
+        mode_code = f"{self.config_index:02X}"
         if mode_code in SYS_MODE_MAP:
             result: dict[str, Any] = {SZ_SYSTEM_MODE: SYS_MODE_MAP[mode_code]}
             if mode_code not in (
@@ -1537,7 +1537,7 @@ class SystemConfig2BPayload(SystemConfigPayload):
                 result[SZ_UNTIL] = None
             return result
 
-        return {"config_idx": self.config_idx, "config_val": self.config_val}
+        return {"config_idx": self.config_index, "config_val": self.config_value}
 
 
 @dataclass(frozen=True, slots=True)
@@ -1554,18 +1554,18 @@ class SystemConfigVarPayload(SystemConfigPayload):
       Field-spaced hex : 01 00 000000000000
       Payload hex      : 0100000000000000
 
-    :param config_idx: Configuration index byte.
-    :type config_idx: int
-    :param config_val: Configuration value byte.
-    :type config_val: int
+    :param config_index: Configuration index byte.
+    :type config_index: int
+    :param config_value: Configuration value byte.
+    :type config_value: int
     :param raw_extra: Trailing configuration bytes.
     :type raw_extra: bytes | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    config_idx: int
-    config_val: int
+    config_index: int
+    config_value: int
     raw_extra: bytes | None = None
 
     @classmethod
@@ -1583,7 +1583,7 @@ class SystemConfigVarPayload(SystemConfigPayload):
                 f"Invalid payload length for SystemConfigVarPayload: {len(raw_data)}"
             )
         c_idx, c_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(config_idx=c_idx, config_val=c_val, raw_extra=raw_data[2:])
+        return cls(config_index=c_idx, config_value=c_val, raw_extra=raw_data[2:])
 
     def to_bytes(self) -> bytes:
         """Pack variable-length system config into binary payload.
@@ -1591,7 +1591,7 @@ class SystemConfigVarPayload(SystemConfigPayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.config_idx, self.config_val) + (
+        return struct.pack(self._STRUCT_FMT, self.config_index, self.config_value) + (
             self.raw_extra or b""
         )
 
@@ -1600,9 +1600,9 @@ class SystemConfigVarPayload(SystemConfigPayload):
         if msg and hasattr(msg, "src"):
             dev_type = getattr(msg.src, "type", None) or getattr(msg.src, "id", "")[:2]
             if dev_type in ("21", "37", "32"):
-                return {"presence_detected": bool(self.config_val != 0)}
+                return {"presence_detected": bool(self.config_value != 0)}
 
-        mode_code = f"{self.config_idx:02X}"
+        mode_code = f"{self.config_index:02X}"
         if mode_code in SYS_MODE_MAP:
             result: dict[str, Any] = {SZ_SYSTEM_MODE: SYS_MODE_MAP[mode_code]}
             if mode_code not in (
@@ -1617,7 +1617,7 @@ class SystemConfigVarPayload(SystemConfigPayload):
                 result[SZ_UNTIL] = until_dtm
             return result
 
-        return {"config_idx": self.config_idx, "config_val": self.config_val}
+        return {"config_idx": self.config_index, "config_val": self.config_value}
 
 
 # Update VARIANTS property after variants are defined
@@ -1641,9 +1641,9 @@ class SystemDateTimePayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    domain_idx: int
+    domain_index: int
     datetime_str: str | None = None
-    is_dst: bool | None = None
+    is_daylight_saving: bool | None = None
 
     @classmethod
     def from_bytes(
@@ -1678,13 +1678,13 @@ class SystemDateTime2BPayload(SystemDateTimePayload):
       Field-spaced hex : 00 00
       Payload hex      : 0000
 
-    :param domain_idx: Domain/header index byte.
-    :type domain_idx: int
+    :param domain_index: Domain/header index byte.
+    :type domain_index: int
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    domain_idx: int
+    domain_index: int
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1701,7 +1701,7 @@ class SystemDateTime2BPayload(SystemDateTimePayload):
                 f"Invalid payload length for SystemDateTime2BPayload: {len(raw_data)}"
             )
         dom, _flag = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain_idx=dom)
+        return cls(domain_index=dom)
 
     def to_bytes(self) -> bytes:
         """Pack 2-byte system date & time header binary payload.
@@ -1709,7 +1709,7 @@ class SystemDateTime2BPayload(SystemDateTimePayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.domain_idx, 0x00)
+        return struct.pack(self._STRUCT_FMT, self.domain_index, 0x00)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert date & time payload to legacy dictionary layout.
@@ -1739,20 +1739,20 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
       Field-spaced hex : 00 F0 BB 00 04 0C 05 07EA
       Payload hex      : 00F0BB00040C0507EA
 
-    :param domain_idx: Domain/header index byte.
-    :type domain_idx: int
+    :param domain_index: Domain/header index byte.
+    :type domain_index: int
     :param datetime_str: Formatted ISO datetime string (e.g.,
         '2026-05-12T04:00:59').
     :type datetime_str: str | None
-    :param is_dst: Daylight Saving Time active flag.
-    :type is_dst: bool | None
+    :param is_daylight_saving: Daylight Saving Time active flag.
+    :type is_daylight_saving: bool | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BBBBBBBH"
 
-    domain_idx: int
+    domain_index: int
     datetime_str: str | None = None
-    is_dst: bool | None = None
+    is_daylight_saving: bool | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1773,9 +1773,9 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
         dt_str = hex_to_dtm(hex_str)
         dst_flag = True if bool(raw_data[2] & 0x80) else None
         return cls(
-            domain_idx=dom,
+            domain_index=dom,
             datetime_str=dt_str,
-            is_dst=dst_flag,
+            is_daylight_saving=dst_flag,
         )
 
     def to_bytes(self) -> bytes:
@@ -1786,10 +1786,14 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
         """
         if self.datetime_str is not None:
             dt_hex = hex_from_dtm(
-                self.datetime_str, is_dst=self.is_dst or False, incl_seconds=True
+                self.datetime_str,
+                is_dst=self.is_daylight_saving or False,
+                incl_seconds=True,
             )
-            return bytes([self.domain_idx, 0xF0]) + bytes.fromhex(dt_hex)
-        return struct.pack(self._STRUCT_FMT, self.domain_idx, 0xF0, 0, 0, 0, 0, 0, 0, 0)
+            return bytes([self.domain_index, 0xF0]) + bytes.fromhex(dt_hex)
+        return struct.pack(
+            self._STRUCT_FMT, self.domain_index, 0xF0, 0, 0, 0, 0, 0, 0, 0
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert system date & time payload to legacy dictionary layout.
@@ -1800,7 +1804,7 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
         res: dict[str, Any] = {}
         if self.datetime_str is not None:
             res["datetime"] = self.datetime_str
-        res["is_dst"] = self.is_dst
+        res["is_dst"] = self.is_daylight_saving
         return res
 
 
@@ -1994,15 +1998,15 @@ class RelayFailsafePayload(PayloadBase):
       Field-spaced hex : 00 01
       Payload hex      : 0001
 
-    :param domain_or_zone_idx: Domain or zone index byte.
-    :type domain_or_zone_idx: int
+    :param domain_or_zone_index: Domain or zone index byte.
+    :type domain_or_zone_index: int
     :param failsafe_enabled: Failsafe status flag boolean.
     :type failsafe_enabled: bool
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    domain_or_zone_idx: int
+    domain_or_zone_index: int
     failsafe_enabled: bool
     _unknown_0: str | None = None
 
@@ -2025,14 +2029,14 @@ class RelayFailsafePayload(PayloadBase):
         if len(raw_data) >= 3:
             return cls._from_3b(raw_data[:3])
         idx, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain_or_zone_idx=idx, failsafe_enabled=bool(flg))
+        return cls(domain_or_zone_index=idx, failsafe_enabled=bool(flg))
 
     @classmethod
     def _from_3b(cls, raw_data: bytes) -> Self:
         idx = raw_data[0]
         flg = raw_data[1]
         u0 = f"{raw_data[2]:02X}"
-        return cls(domain_or_zone_idx=idx, failsafe_enabled=bool(flg), _unknown_0=u0)
+        return cls(domain_or_zone_index=idx, failsafe_enabled=bool(flg), _unknown_0=u0)
 
     def to_bytes(self) -> bytes:
         """Pack relay failsafe data into binary payload.
@@ -2043,13 +2047,13 @@ class RelayFailsafePayload(PayloadBase):
         if self._unknown_0 is not None:
             return bytes(
                 [
-                    self.domain_or_zone_idx,
+                    self.domain_or_zone_index,
                     int(self.failsafe_enabled),
                     int(self._unknown_0, 16),
                 ]
             )
         return struct.pack(
-            self._STRUCT_FMT, self.domain_or_zone_idx, int(self.failsafe_enabled)
+            self._STRUCT_FMT, self.domain_or_zone_index, int(self.failsafe_enabled)
         )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
@@ -2060,7 +2064,7 @@ class RelayFailsafePayload(PayloadBase):
         :returns: Decoded relay failsafe dictionary.
         :rtype: dict[str, Any]
         """
-        idx_str = f"{self.domain_or_zone_idx:02X}"
+        idx_str = f"{self.domain_or_zone_index:02X}"
         res: dict[str, Any] = {
             "domain_id": idx_str,
             "failsafe_enabled": self.failsafe_enabled,

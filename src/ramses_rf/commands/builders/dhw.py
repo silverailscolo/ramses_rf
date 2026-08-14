@@ -53,7 +53,7 @@ def build_set_dhw_params(intent: Command) -> CommandDTO:
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     payload = DhwParamsPayload(
-        dhw_idx=dhw_idx,
+        dhw_index=dhw_idx,
         setpoint=setpoint,
         overrun=overrun,
         differential=differential,
@@ -101,7 +101,7 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 
     # I_ requires addr0=src, addr2=dst (which are the same for put_dhw_temp)
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.src)
-    payload = DhwTempPayload(dhw_idx=dhw_idx, temperature=temperature).hex()
+    payload = DhwTempPayload(dhw_index=dhw_idx, temperature=temperature).hex()
 
     return CommandDTO(
         verb=I_,

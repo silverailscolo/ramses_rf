@@ -191,21 +191,21 @@ class DaySchedule:
 class ScheduleData:
     """Complete 7-day schedule for a zone or DHW.
 
-    :param zone_idx: Zone or domain index ('00'-'0F' or 'HW').
-    :type zone_idx: str
+    :param zone_index: Zone or domain index ('00'-'0F' or 'HW').
+    :type zone_index: str
     :param days: Tuple of daily schedules.
     :type days: tuple[DaySchedule, ...]
     """
 
-    zone_idx: str
+    zone_index: str
     days: tuple[DaySchedule, ...]
 
     def __post_init__(self) -> None:
         """Validate zone index and day array bounds."""
-        if self.zone_idx != "HW" and not (
-            len(self.zone_idx) == 2 and 0 <= int(self.zone_idx, 16) <= 15
+        if self.zone_index != "HW" and not (
+            len(self.zone_index) == 2 and 0 <= int(self.zone_index, 16) <= 15
         ):
-            raise ValueError(f"Invalid zone_idx: {self.zone_idx!r}")
+            raise ValueError(f"Invalid zone_index: {self.zone_index!r}")
         if len(self.days) > 7:
             raise ValueError(f"Schedule cannot exceed 7 days: {len(self.days)}")
 
@@ -219,7 +219,7 @@ class ScheduleData:
         :rtype: Self
         :raises ValueError: If dictionary structures or values are invalid.
         """
-        zone_idx = str(data[SZ_ZONE_IDX])
+        zone_index = str(data[SZ_ZONE_IDX])
         raw_schedule = data.get(SZ_SCHEDULE)
         if not isinstance(raw_schedule, (list, tuple)):
             raise ValueError(f"Invalid schedule structure: {raw_schedule}")
@@ -258,7 +258,7 @@ class ScheduleData:
                 DaySchedule(day_of_week=day_of_week, switchpoints=tuple(switchpoints))
             )
 
-        return cls(zone_idx=zone_idx, days=tuple(days))
+        return cls(zone_index=zone_index, days=tuple(days))
 
     def to_dict(self) -> WeeklyScheduleDict:
         """Serialize ScheduleData dataclass back into dictionary layout.
@@ -289,7 +289,7 @@ class ScheduleData:
             schedule.append(day_dict)
 
         return {
-            SZ_ZONE_IDX: self.zone_idx,
+            SZ_ZONE_IDX: self.zone_index,
             SZ_SCHEDULE: schedule,
         }
 
@@ -319,7 +319,7 @@ def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> WeeklySchedule
                 f"Invalid schedule switchpoint binary block: {raw_schedule[i : i + SWITCHPOINT_STRUCT_SIZE]!r}"
             )
 
-        zone_index = switchpoint_payload.zone_idx
+        zone_index = switchpoint_payload.zone_index
         day_of_week = switchpoint_payload.day_of_week
         time_of_day = switchpoint_payload.time_of_day_mins
         value = switchpoint_payload.setpoint_value
@@ -367,7 +367,7 @@ def full_schedule_to_fragments(
 
     schedule_data = ScheduleData.from_dict(full_schedule)
     zone_index = (
-        int(schedule_data.zone_idx, 16) if schedule_data.zone_idx != "HW" else 0xFA
+        int(schedule_data.zone_index, 16) if schedule_data.zone_index != "HW" else 0xFA
     )
     for day in schedule_data.days:
         for switchpoint in day.switchpoints:
@@ -379,7 +379,7 @@ def full_schedule_to_fragments(
                 else switchpoint.enabled
             )
             switchpoint_payload = ScheduleSwitchpointPayload.from_switchpoint(
-                zone_idx=zone_index,
+                zone_index=zone_index,
                 day_of_week=day.day_of_week,
                 time_of_day_mins=time_of_day_mins,
                 setpoint=setpoint,
@@ -401,17 +401,17 @@ def full_schedule_to_fragments(
     ]
 
 
-def _to_protocol_zone_idx(zone_idx: str) -> str:
+def _to_protocol_zone_idx(zone_index: str) -> str:
     """Translate domain zone index string to RAMSES RF protocol index.
 
     DHW uses domain identifier 'HW' externally, which translates to '00' in protocol.
 
-    :param zone_idx: Domain zone index string ('HW' or '00'-'0F').
-    :type zone_idx: str
+    :param zone_index: Domain zone index string ('HW' or '00'-'0F').
+    :type zone_index: str
     :returns: RAMSES RF protocol zone index ('00'-'0F').
     :rtype: str
     """
-    return "00" if zone_idx == "HW" else zone_idx
+    return "00" if zone_index == "HW" else zone_index
 
 
 class Schedule:  # 0404
@@ -700,7 +700,7 @@ class Schedule:  # 0404
         """Process a payload set and return the full schedule.
 
         Sets `self._full_schedule`. If the schedule is for DHW, set the
-        `zone_idx` key to 'HW' (to avoid confusing with zone '00').
+        `zone_index` key to 'HW' (to avoid confusing with zone '00').
 
         :param payload_set: The completed array of fragment payloads.
         :type payload_set: PayloadSetT

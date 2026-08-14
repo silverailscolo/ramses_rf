@@ -502,8 +502,8 @@ def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
     for dev in sorted(devices, key=lambda d: d.device_id):
         rssi_str = f"{dev.rssi:.0f}" if dev.rssi is not None else "-"
         details = ""
-        if dev.zone_idx:
-            details += f"zone={dev.zone_idx}  "
+        if dev.zone_index:
+            details += f"zone={dev.zone_index}  "
         if dev.bound_to:
             details += f"bound to {dev.bound_to}"
         if dev.is_battery:
