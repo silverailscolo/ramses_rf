@@ -69,7 +69,9 @@ class SpiderThermostatPayload(PayloadBase):
     :type setpoint_max: float | None
 
     Protocol Notes:
-    # unknown_01ff, to/from a Itho Spider/Thermostat
+      # unknown_01ff, to/from a Itho Spider/Thermostat
+      # lots of '80's, and temps are int(payload[6:8], 16) / 2
+      # 0x80 is N/A, as is 0x7F
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BBbbb"
@@ -913,6 +915,9 @@ class HvacProgrammeSchemePayload(PayloadBase):
       Field-spaced hex : 0B 03
       Payload hex      : 0B03
 
+    Protocol Notes:
+      # [3:4] - setpoints/day (default 3). From a VMI.
+
     :param scheme_code: Schedule scheme classification code byte.
     :type scheme_code: int
     :param daily_setpoints: Daily setpoint count byte.
@@ -1236,7 +1241,14 @@ class HvacProgrammeEnabledPayload(PayloadBase):
 @register_payload("22E5")
 @register_payload("22E9")
 class HvacVentilationStatusPayload(PayloadBase):
-    """Master payload dispatcher for HVAC ventilation status (Opcode 22E0, 22E5, 22E9)."""
+    """Master payload dispatcher for HVAC ventilation status (Opcode 22E0, 22E5, 22E9).
+
+    Protocol Notes:
+      # RP --- 32:155617 18:005904 --:------ 22E0 004 00-34-A0-1E
+      # RP --- 32:153258 18:005904 --:------ 22E0 004 00-64-A0-1E
+      # RP --- 32:153258 18:005904 --:------ 22E5 004 00-96-C8-14
+      # RP --- 32:155617 18:005904 --:------ 22E5 004 00-72-C8-14
+    """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
@@ -1452,8 +1464,10 @@ class HvacFanModePayload(PayloadBase):
     :type mode_max: int | None
 
     Protocol Notes:
-    # ClimaRad Ventura fan & remote
-    # the broadcast address (NON_DEV_ADDR). Directed 22F1 packets from Itho
+      # ClimaRad Ventura fan & remote
+      # mode_max=04 -> itho (5 modes: 00-04), mode_max=0A -> nuaire,
+      # mode_max=06 -> vasco, and mode_max 07/0B/empty -> orcon (8 modes: 00-07).
+      # The mode_max=04 -> itho detection is scoped to standalone 22F1 packets.
     """
 
     header: int
@@ -1721,8 +1735,10 @@ class HvacBypassPositionPayload(PayloadBase):
     :param raw_bytes: Raw binary payload bytes.
     :type raw_bytes: bytes
 
-    Sample Packet Logs:
-    # .W --- 32:111111 37:111111 --:------ 22F8 003 630203
+    Protocol Notes:
+      # 16 Actual supply flow rate (m3/h) SZ_SUPPLY_FLOW (Orcon is m3/h, data is L/s)
+      # ithoMessageAUTORFTAutoNightCommandBytes[] = {0x22, 0xF8, 0x03, 0x63, 0x02, 0x03};
+      # .W --- 32:111111 37:111111 --:------ 22F8 003 630203
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BBB"
@@ -2370,6 +2386,10 @@ class HvacVentilationStatePayload(PayloadBase):
       --------------------------------------------------------------
       Field-spaced hex : 000102
       Payload hex      : 000102
+
+    Protocol Notes:
+      # RQ --- 32:168090 30:082155 --:------ 31DA 001 21
+      # Itho spIDer: RF to Internet gateway (like a RFG100)
 
     :param raw_bytes: Raw binary payload bytes.
     :type raw_bytes: bytes
@@ -3221,10 +3241,12 @@ class HvacVentilationDemandPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 31E0.
 
     Sample Packet Logs & Protocol Notes:
-    # ufc_demand, HVAC (Itho autotemp / spider)
-    # .I --- 37:005302 32:132403 --:------ 31E0 008 00-0000-00 01-0064-00
-    # .I --- 29:146052 32:023459 --:------ 31E0 003 00-0000
-    # .I --- 29:146052 32:023459 --:------ 31E0 003 00-00C8
+      # ufc_demand, HVAC (Itho autotemp / spider)
+      # 10:15:42.712 077  I --- 29:146052 32:023459 --:------ 31E0 003 0000C8
+      # 10:21:18.549 078  I --- 29:146052 32:023459 --:------ 31E0 003 000000
+      # 07:56:50.522 095  I --- --:------ --:------ 07:044315 31E0 004 00006E00
+      # .I --- 37:005302 32:132403 --:------ 31E0 008 00-0000-00 01-0064-00
+      # HVAC: two-way switch; also an "06/22F1"?
     """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
@@ -3410,6 +3432,10 @@ class SetpointBoundsPayload(PayloadBase):
       Field-spaced hex : 00 01F4 0E10 01
       Payload hex      : 0001F40E1001
 
+    Protocol Notes:
+      # setpoint_bounds (was: ufh_setpoint). Allow CTL to receive DT4R bounds.
+      # (0[012]03)? only if len(array) == 1. Never an array.
+
     :param ufh_idx: UFH or zone index byte.
     :type ufh_idx: int
     :param min_temp: Minimum setpoint temperature bound in °C.
@@ -3519,6 +3545,9 @@ class NowNextSetpointPayload(PayloadBase):
       Field-spaced hex : 00 0834 07D0 003C
       Payload hex      : 00083407D0003C
 
+    Protocol Notes:
+      # Hometronics setpoint_now / setpt_now_next.
+
     :param zone_idx: Zone index byte.
     :type zone_idx: int
     :param setpoint_now: Current target setpoint temperature in °C.
@@ -3590,6 +3619,9 @@ class UfhSystemModePayload(PayloadBase):
       --------------------------------------------------------------
       Field-spaced hex : 00 14
       Payload hex      : 0014
+
+    Protocol Notes:
+      # Spider thermostat, HVAC system switch (Spider master THM).
 
     :param idx: UFH index byte.
     :type idx: int
@@ -3673,6 +3705,9 @@ class DesiredBoilerSetpointPayload(PayloadBase):
       Field-spaced hex : 00 1964
       Payload hex      : 001964
 
+    Protocol Notes:
+      # Desired boiler setpoint from controller to boiler/heat actuator.
+
     :param domain_or_zone_idx: Domain or zone index byte.
     :type domain_or_zone_idx: int
     :param target_temp: Target boiler temperature setpoint in °C.
@@ -3739,6 +3774,13 @@ class CoolingStatePayload(PayloadBase):
       --------------------------------------------------------------
       Field-spaced hex : 00 C8
       Payload hex      : 00C8
+
+    Protocol Notes:
+      # 10:14:08.526 045  I --- 01:023389 --:------ 01:023389 2D49 003 010000
+      # 10:14:12.253 047  I --- 01:023389 --:------ 01:023389 2D49 003 00C800
+      # 10:14:12.272 047  I --- 01:023389 --:------ 01:023389 2D49 003 01C800
+      # 10:14:12.390 049  I --- 01:023389 --:------ 01:023389 2D49 003 880000
+      # Seen with Hometronic systems and BDR91T in heatpump mode.
 
     :param domain_or_zone_idx: Domain or zone index byte.
     :type domain_or_zone_idx: int

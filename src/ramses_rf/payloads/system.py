@@ -60,10 +60,18 @@ class SystemClockPayload(PayloadBase):
     :param day_of_week: Day of week integer (1-7).
     :type day_of_week: int
 
+    Protocol Notes:
+      # When in test mode, a 12: will send a W ?every 6 seconds.
+      # Sent by a CTL before an rf_check.
+      # Sent by a THM when in signal strength test mode (0505, except 1st pkt).
+      # Loopback (not Tx'd) by a HGI80 whenever its button is pressed.
+
     Sample Packet Logs:
     # .I --- 30:082155 30:082155 --:------ 0001 005 0005080007  # every ~10:00
     # .I --- 34:021943 34:021943 --:------ 0001 005 000D000003  # every ~20:00
     # 12:39:56.099 061  W --- 12:010740 --:------ 12:010740 0001 005 0000000501
+    # 13:48:38.518 080  W --- 12:010740 --:------ 12:010740 0001 005 0000000501
+    # 13:48:45.518 074  W --- 12:010740 --:------ 12:010740 0001 005 0000000505
     # 16:53:34.635 058  W --- 04:166090 --:------ 01:032820 0001 005 0100000505
     # 00:22:41.540 ---  I --- --:------ --:------ --:------ 0001 005 00FFFF02FF
     # 00:22:41.757 ---  I --- --:------ --:------ --:------ 0001 005 00FFFF0200
@@ -684,6 +692,11 @@ class SystemParameterPayload(PayloadBase):
       Field-spaced hex : 00 01
       Payload hex      : 0001
 
+    Protocol Notes:
+      # unknown_01d0, from a HR91 (when its buttons are pushed)
+      # .W --- 04:000722 01:158182 --:------ 01D0 002 0003  # TRV in zone 00
+      # .I --- 01:158182 04:000722 --:------ 01D0 002 0003
+
     :param param_idx: Parameter index byte.
     :type param_idx: int
     :param param_val: Parameter value byte.
@@ -735,6 +748,11 @@ class SystemFaultPayload(PayloadBase):
       --------------------------------------------------------------
       Field-spaced hex : 00 01
       Payload hex      : 0001
+
+    Protocol Notes:
+      # unknown_01e9, from a HR91 (when its buttons are pushed)
+      # .W --- 04:000722 01:158182 --:------ 01E9 002 0003  # TRV in zone 00
+      # .I --- 01:158182 04:000722 --:------ 01E9 002 0000
 
     :param fault_code: System fault code byte.
     :type fault_code: int
@@ -899,6 +917,11 @@ class SystemLogIndexPayload(PayloadBase):
       Field-spaced hex : 00 01
       Payload hex      : 0001
 
+    Protocol Notes:
+      # .I --- 32:168090 --:------ 32:168090 042F 009 000000100F00105050
+      # RP --- 10:048122 18:006402 --:------ 042F 009 000200001400163010
+      # Non-evohome (VMI) are len==9.
+
     :param domain_idx: Log domain index byte.
     :type domain_idx: int
     :param log_pointer: Current log entry pointer.
@@ -974,14 +997,15 @@ class SystemStatusPayload(PayloadBase):
       Field-spaced hex : 00 00
       Payload hex      : 0000
 
+    Protocol Notes:
+      # .I --- --:------ --:------ 12:207082 0B04 002 00C8
+      # RP --- 10:048122 18:006402 --:------ 0B04 002 0000
+      # TODO: unknown_0b04, from THM (only when its a CTL?)
+
     :param state_code: System operational state code.
     :type state_code: int
     :param flags: System status flags.
     :type flags: int
-
-    Sample Packet Logs & Protocol Notes:
-    # RP --- 10:048122 18:006402 --:------ 0B04 002 0000
-    # TODO: unknown_0b04, from THM (only when its a CTL?)
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
@@ -1114,6 +1138,11 @@ class SystemDeviceInfoPayload(PayloadBase):
       --------------------------------------------------------------
       Field-spaced hex : 00 010203
       Payload hex      : 00010203
+
+    Protocol Notes:
+      # Some HVAC devices will RP|10E0|00.
+      # Payload length is variable (typically >= 19 bytes).
+      # Trailing 0x00 padding bytes are stripped during string decoding.
 
     :param info_type: Device info type byte.
     :type info_type: int
@@ -1251,7 +1280,12 @@ class SystemOutdoorTempPayload(PayloadBase):
 
 @register_payload("1F09")
 class SystemSyncHeartbeatPayload(PayloadBase):
-    """Master payload dispatcher for system synchronization heartbeat (Opcode 1F09)."""
+    """Master payload dispatcher for system synchronization heartbeat (Opcode 1F09).
+
+    Protocol Notes:
+      # system_sync - FF (I), 00 (RP), F8 (W, after 1FC9).
+      # FF is evohome, DB is Hometronics.
+    """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
@@ -1401,7 +1435,11 @@ SystemSyncHeartbeatPayload.VARIANTS = (
 @register_payload("2E04")
 @register_payload("2E10")
 class SystemConfigPayload(PayloadBase):
-    """Master payload dispatcher for Opcode 2E04 and 2E10."""
+    """Master payload dispatcher for Opcode 2E04 and 2E10.
+
+    Protocol Notes:
+      # Hometronics lifestyle ID: presence_detect, HVAC sensor, or Timed boost for Vasco D60.
+    """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
@@ -1594,7 +1632,12 @@ SystemConfigPayload.VARIANTS = (
 
 @register_payload("313F")
 class SystemDateTimePayload(PayloadBase):
-    """Master payload dispatcher for system date and time (Opcode 313F)."""
+    """Master payload dispatcher for system date and time (Opcode 313F).
+
+    Protocol Notes:
+      # datetime (time report)
+      # .W --- 30:253184 34:010943 --:------ 313F 009 006000070E0507E500
+    """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 

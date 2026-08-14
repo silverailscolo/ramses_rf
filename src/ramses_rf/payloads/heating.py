@@ -1264,6 +1264,9 @@ class ZoneName22BPayload(ZoneNamePayload):
       Field-spaced hex : 00 00 4C6F756E67650000000000000000000000000000
       Payload hex      : 00004C6F756E67650000000000000000000000000000
 
+    Protocol Notes:
+      # RQ payload is zz00; limited to 12 chars in evohome UI? if "7F"*20: not a zone
+
     :param zone_idx: Zone index byte.
     :type zone_idx: int | str
     :param name: ASCII Zone Name string (max 20 chars).
@@ -1564,6 +1567,11 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
       --------------------------------------------------------------
       Field-spaced hex : 00 0834
       Payload hex      : 000834
+
+    Protocol Notes:
+      # RQ --- 12:010740 01:145038 --:------ 2309 003 03073A
+      # RQ --- 22:131874 01:063844 --:------ 2309 003 020708
+      # NOTE: 12 uses: r"^0[0-9A-F]$"
 
     :param zone_idx: Zone index byte.
     :type zone_idx: int | str
@@ -1925,6 +1933,10 @@ class RelayDemand2BPayload(RelayDemandPayload):
       --------------------------------------------------------------
       Field-spaced hex : 00 64
       Payload hex      : 0064
+
+    Protocol Notes:
+      # RP --- 13:109598 18:199952 --:------ 0008 002 0000
+      # RP --- 13:109598 18:199952 --:------ 0008 002 00C8
 
     :param domain_or_zone_idx: Domain or zone index byte.
     :type domain_or_zone_idx: int
@@ -2661,6 +2673,9 @@ class ChPressurePayload(PayloadBase):
       Field-spaced hex : 00 00EA
       Payload hex      : 0000EA
 
+    Protocol Notes:
+      # 0x09F6 (2550 dec = 2.55 bar), 0x31FF, 0x7FFF appear to be sentinel values.
+
     :param pressure_bar: Pressure in Bar float, or None if sentinel/invalid.
     :type pressure_bar: float | None
     """
@@ -2708,7 +2723,15 @@ class ChPressurePayload(PayloadBase):
 
 @register_payload("2349")
 class ZoneModePayload(PayloadBase):
-    """Master payload dispatcher for zone mode (Opcode 2349)."""
+    """Master payload dispatcher for zone mode (Opcode 2349).
+
+    Protocol Notes:
+      # RP --- 30:258557 34:225071 --:------ 2349 013 007FFF00FFFFFFFFFFFFFFFFFF
+      # RP --- 30:253184 34:010943 --:------ 2349 013 00064000FFFFFF00110E0507E5
+      # RQ --- 34:225071 30:258557 --:------ 2349 001 00
+      # .W --- 18:141846 01:050858 --:------ 2349 013 02-0960-04-FFFFFF-0409160607E5
+      # .W --- 18:141846 01:050858 --:------ 2349 007 02-08FC-01-FFFFFF
+    """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
@@ -3138,6 +3161,10 @@ class SetpointOverridePayload(PayloadBase):
       Field-spaced hex : 00 07D0
       Payload hex      : 0007D0
 
+    Protocol Notes:
+      # .I 024 03:052382 --:------ 03:052382 2389 003 02001B
+      # State (of cooling?), from BDR91T, Hometronics CTL.
+
     :param domain_or_zone_idx: Domain or zone index byte.
     :type domain_or_zone_idx: int
     :param target_temp: Target temperature in °C.
@@ -3432,7 +3459,17 @@ class ActuatorStatePayload(PayloadBase):
 
 @register_payload("3EF1")
 class ActuatorCyclePayload(PayloadBase):
-    """Master payload dispatcher and base class for Opcode 3EF1."""
+    """Master payload dispatcher and base class for Opcode 3EF1.
+
+    Protocol Notes:
+      # RP --- 13:109598 18:002563 --:------ 3EF1 007 0000BF-00BFC8FF
+      # RP --- 10:048122 18:140805 --:------ 3EF1 007 007FFF-003C2A10  # 10:s RP always 7FFF
+      # RP --- 13:109598 18:199952 --:------ 3EF1 007 0001B8-01B800FF  # 13:s RP
+      # RQ --- 31:004811 13:077615 --:------ 3EF1 001 00
+      # RP --- 13:077615 31:004811 --:------ 3EF1 007 00024D001300FF
+      # RQ --- 22:068154 13:031208 --:------ 3EF1 002 0000
+      # RP --- 13:031208 22:068154 --:------ 3EF1 007 00024E00E000FF
+    """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
