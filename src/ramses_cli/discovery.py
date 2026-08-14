@@ -14,7 +14,13 @@ from ramses_rf import exceptions as exc
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
-from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
+from ramses_rf.const import (
+    SZ_FRAGMENT_NUMBER,
+    SZ_LOG_INDEX,
+    SZ_SCHEDULE,
+    SZ_TOTAL_FRAGMENTS,
+    SZ_ZONE_INDEX,
+)
 from ramses_rf.devices import Controller, Fakeable
 from ramses_rf.enums import Action
 from ramses_rf.protocol.opentherm import OTB_DATA_IDS
@@ -177,7 +183,7 @@ async def set_schedule(
     :param schedule: A JSON string describing the full schedule dictionary.
     """
     schedule_ = json.loads(schedule)
-    zone_idx = schedule_[SZ_ZONE_IDX]
+    zone_idx = schedule_.get(SZ_ZONE_INDEX, schedule_.get("zone_idx"))
 
     controller = gateway.device_registry.get_device(controller_id, cls=Controller)
     if not controller.tcs:
@@ -370,7 +376,11 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                     src=HGI_DEV_ADDR,
                     dst=Address(device_id),
                     action=Action.GET_SCHEDULE_FRAGMENT,
-                    data={"zone_idx": "HW", "frag_number": 1, "total_frags": 0},
+                    data={
+                        SZ_ZONE_INDEX: "HW",
+                        SZ_FRAGMENT_NUMBER: 1,
+                        SZ_TOTAL_FRAGMENTS: 0,
+                    },
                 )
             )
             gateway.send_cmd(cmd1)
@@ -379,7 +389,11 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                     src=HGI_DEV_ADDR,
                     dst=Address(device_id),
                     action=Action.GET_SCHEDULE_FRAGMENT,
-                    data={"zone_idx": "00", "frag_number": 1, "total_frags": 0},
+                    data={
+                        SZ_ZONE_INDEX: "00",
+                        SZ_FRAGMENT_NUMBER: 1,
+                        SZ_TOTAL_FRAGMENTS: 0,
+                    },
                 )
             )
             gateway.send_cmd(cmd2)
@@ -391,7 +405,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         src=HGI_DEV_ADDR,
                         dst=Address(device_id),
                         action=Action.GET_FAULTLOG_ENTRY,
-                        data={"log_idx": log_idx},
+                        data={SZ_LOG_INDEX: log_idx},
                     )
                 )
                 gateway.send_cmd(cmd3)

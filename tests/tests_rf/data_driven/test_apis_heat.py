@@ -22,20 +22,35 @@ from ramses_tx.typing import DeviceIdT
 
 def _get_schedule_fragment(
     ctl_id: DeviceIdT | str,
-    zone_idx: int | str,
-    frag_number: int,
-    total_frags: int | None,
+    zone_index: int | str | None = None,
+    frag_number: int | None = None,
+    total_frags: int | None = None,
+    *,
+    zone_idx: int | str | None = None,
+    fragment_number: int | None = None,
+    total_fragments: int | None = None,
     **kwargs: Any,
 ) -> Command:
+    z_idx = (
+        zone_index
+        if zone_index is not None
+        else (zone_idx if zone_idx is not None else "00")
+    )
+    f_num = (
+        fragment_number
+        if fragment_number is not None
+        else (frag_number if frag_number is not None else 1)
+    )
+    t_frags = total_fragments if total_fragments is not None else total_frags
     return build_dto(
         Intent(
             src=HGI_DEV_ADDR,
             dst=Address(ctl_id),
             action=Action.GET_SCHEDULE_FRAGMENT,
             data={
-                "zone_idx": zone_idx,
-                "frag_number": frag_number,
-                "total_frags": total_frags if total_frags is not None else 0,
+                "zone_idx": z_idx,
+                "frag_number": f_num,
+                "total_frags": t_frags if t_frags is not None else 0,
             },
         )
     )
@@ -47,11 +62,19 @@ def _put_system_log_entry(
     fault_type: str,
     device_class: str,
     device_id: DeviceIdT | str | None = None,
-    domain_idx: int | str = "00",
+    domain_index: int | str = "00",
+    domain_idx: int | str | None = None,
+    log_index: int | str | None = None,
     _log_idx: int | str | None = None,
     timestamp: dt | str | None = None,
     **kwargs: Any,
 ) -> Command:
+    dom = (
+        domain_index
+        if domain_index != "00"
+        else (domain_idx if domain_idx is not None else "00")
+    )
+    l_idx = log_index if log_index is not None else _log_idx
     return build_dto(
         Intent(
             src=HGI_DEV_ADDR,
@@ -62,8 +85,8 @@ def _put_system_log_entry(
                 "fault_type": fault_type,
                 "device_class": device_class,
                 "device_id": device_id,
-                "domain_idx": domain_idx,
-                "log_idx": _log_idx,
+                "domain_idx": dom,
+                "log_idx": l_idx,
                 "timestamp": timestamp,
             },
         )
@@ -72,21 +95,27 @@ def _put_system_log_entry(
 
 def _set_mix_valve_params(
     ctl_id: DeviceIdT | str,
-    zone_idx: int | str,
+    zone_index: int | str | None = None,
     *,
+    zone_idx: int | str | None = None,
     max_flow_setpoint: int = 55,
     min_flow_setpoint: int = 15,
     valve_run_time: int = 150,
     pump_run_time: int = 15,
     **kwargs: Any,
 ) -> Command:
+    z_idx = (
+        zone_index
+        if zone_index is not None
+        else (zone_idx if zone_idx is not None else "01")
+    )
     return build_dto(
         Intent(
             src=HGI_DEV_ADDR,
             dst=Address(ctl_id),
             action=Action.SET_MIX_VALVE_PARAMS,
             data={
-                "zone_idx": zone_idx,
+                "zone_idx": z_idx,
                 "max_flow_setpoint": max_flow_setpoint,
                 "min_flow_setpoint": min_flow_setpoint,
                 "valve_run_time": valve_run_time,
@@ -99,20 +128,27 @@ def _set_mix_valve_params(
 
 def _set_tpi_params(
     ctl_id: DeviceIdT | str,
-    domain_id: int | str | None,
+    domain_id: int | str | None = None,
     *,
+    domain_index: int | str | None = None,
     cycle_rate: int = 3,
     min_on_time: int = 5,
     min_off_time: int = 5,
     proportional_band_width: float | None = None,
+    **kwargs: Any,
 ) -> Command:
+    dom = (
+        domain_index
+        if domain_index is not None
+        else (domain_id if domain_id is not None else "00")
+    )
     return build_dto(
         Intent(
             src=HGI_DEV_ADDR,
             dst=Address(ctl_id),
             action=Action.SET_TPI_PARAMS,
             data={
-                "domain_id": domain_id or "00",
+                "domain_id": dom,
                 "cycle_rate": cycle_rate,
                 "min_on_time": min_on_time,
                 "min_off_time": min_off_time,
@@ -211,7 +247,17 @@ def _test_api_good(
         assert cmd.payload == pkt.raw_payload  # aka pkt.raw_payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
-            assert shrink(msg.payload, keep_falsys=True) == eval(payload)
+            LEGACY_MAP = {
+                "zone_index": "zone_idx",
+                "domain_index": "domain_id",
+                "fragment_number": "frag_number",
+                "total_fragments": "total_frags",
+            }
+            actual = shrink(msg.payload, keep_falsys=True)
+            expected = eval(payload)
+            if isinstance(actual, dict) and isinstance(expected, dict):
+                actual = {LEGACY_MAP.get(k, k): v for k, v in actual.items()}
+            assert actual == expected
 
 
 def _test_api_fail(
@@ -351,7 +397,14 @@ def test_set_1100() -> None:  # NOTE: bespoke: see params
         assert cmd.payload == pkt.raw_payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
-            assert shrink(msg.payload, keep_falsys=True) == eval(payload)
+            actual = shrink(msg.payload, keep_falsys=True)
+            expected = eval(payload)
+            if isinstance(actual, dict) and isinstance(expected, dict):
+                actual = {
+                    ("domain_id" if k == "domain_index" else k): v
+                    for k, v in actual.items()
+                }
+            assert actual == expected
 
 
 SET_2309_FAIL = (
@@ -388,6 +441,7 @@ def test_set_2e04() -> None:  # NOTE: bespoke: payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             actual = shrink(msg.payload, keep_falsys=True)
+            actual.pop("zone_index", None)
             actual.pop("zone_idx", None)
             assert actual == eval(payload)
 

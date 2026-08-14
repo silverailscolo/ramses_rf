@@ -205,7 +205,11 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
         from ramses_rf.enums import Action
 
         assert intent.action == Action.PUT_SENSOR_TEMP
-        assert intent.data == {"temperature": 22.0, "zone_idx": "00"}
+        assert intent.data == {
+            "temperature": 22.0,
+            "zone_index": "00",
+            "zone_idx": "00",
+        }
 
 
 @pytest.mark.asyncio

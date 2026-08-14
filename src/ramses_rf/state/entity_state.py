@@ -14,7 +14,7 @@ import logging
 from datetime import UTC, datetime as dt
 from typing import TYPE_CHECKING, Any, Literal, overload
 
-from ramses_rf.const import SZ_DOMAIN_ID, SZ_ZONE_IDX
+from ramses_rf.const import SZ_DHW_INDEX, SZ_DOMAIN_INDEX, SZ_ZONE_INDEX
 from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -160,11 +160,21 @@ class EntityState:
             in_list = isinstance(msg.payload, list)
             if not (
                 context_value == zone_idx
-                or (in_dict and str(msg.payload.get(SZ_ZONE_IDX)) == zone_idx)
+                or (
+                    in_dict
+                    and (
+                        str(msg.payload.get(SZ_ZONE_INDEX)) == zone_idx
+                        or str(msg.payload.get("zone_idx")) == zone_idx
+                    )
+                )
                 or (
                     in_list
                     and any(
-                        isinstance(d, dict) and str(d.get(SZ_ZONE_IDX)) == zone_idx
+                        isinstance(d, dict)
+                        and (
+                            str(d.get(SZ_ZONE_INDEX)) == zone_idx
+                            or str(d.get("zone_idx")) == zone_idx
+                        )
                         for d in msg.payload
                     )
                 )
@@ -176,10 +186,16 @@ class EntityState:
             in_list = isinstance(msg.payload, list)
             if not (
                 context_value in ("FC", "FA", "F9", "FA")
-                or (in_dict and "dhw_idx" in msg.payload)
+                or (
+                    in_dict
+                    and (SZ_DHW_INDEX in msg.payload or "dhw_idx" in msg.payload)
+                )
                 or (
                     in_list
-                    and any(isinstance(d, dict) and "dhw_idx" in d for d in msg.payload)
+                    and any(
+                        isinstance(d, dict) and (SZ_DHW_INDEX in d or "dhw_idx" in d)
+                        for d in msg.payload
+                    )
                 )
             ):
                 return  # Payload does not belong to DHW
@@ -442,24 +458,32 @@ class EntityState:
         filter_val: str | None = None
 
         if domain_id:
-            filter_idx, filter_val = SZ_DOMAIN_ID, domain_id
+            filter_idx, filter_val = SZ_DOMAIN_INDEX, domain_id
         elif zone_index:
-            filter_idx, filter_val = SZ_ZONE_IDX, zone_index
+            filter_idx, filter_val = SZ_ZONE_INDEX, zone_index
+
+        def _matches_filter(d: dict[str, Any]) -> bool:
+            if not filter_idx:
+                return True
+            val = d.get(filter_idx)
+            if val is None:
+                if filter_idx == SZ_ZONE_INDEX:
+                    val = d.get("zone_idx")
+                elif filter_idx == SZ_DOMAIN_INDEX:
+                    val = d.get("domain_id", d.get("domain_idx"))
+            return val == filter_val
 
         if isinstance(payload, dict):
             msg_dict = payload
             if (
                 filter_idx
-                and filter_idx != SZ_DOMAIN_ID
-                and msg_dict.get(filter_idx) != filter_val
+                and filter_idx != SZ_DOMAIN_INDEX
+                and not _matches_filter(msg_dict)
             ):
                 return None
         elif filter_idx:
             msg_dict = {
-                k: v
-                for d in payload
-                for k, v in d.items()
-                if d.get(filter_idx) == filter_val
+                k: v for d in payload for k, v in d.items() if _matches_filter(d)
             }
             if not msg_dict:
                 return None
@@ -474,7 +498,20 @@ class EntityState:
             return {
                 k: v
                 for k, v in msg_dict.items()
-                if k not in ("dhw_idx", SZ_DOMAIN_ID, SZ_ZONE_IDX) and k[:1] != "_"
+                if k
+                not in (
+                    "dhw_index",
+                    "dhw_idx",
+                    "domain_index",
+                    "domain_id",
+                    "domain_idx",
+                    "zone_index",
+                    "zone_idx",
+                    SZ_DHW_INDEX,
+                    SZ_DOMAIN_INDEX,
+                    SZ_ZONE_INDEX,
+                )
+                and k[:1] != "_"
             }
         return msg_dict.get(key)
 
@@ -496,11 +533,16 @@ class EntityState:
                 in_list = isinstance(msg.payload, list)
                 if (
                     context_value in ("FC", "FA", "F9", "FA")
-                    or (in_dict and "dhw_idx" in msg.payload)
+                    or (
+                        in_dict
+                        and (SZ_DHW_INDEX in msg.payload or "dhw_idx" in msg.payload)
+                    )
                     or (
                         in_list
                         and any(
-                            isinstance(d, dict) and "dhw_idx" in d for d in msg.payload
+                            isinstance(d, dict)
+                            and (SZ_DHW_INDEX in d or "dhw_idx" in d)
+                            for d in msg.payload
                         )
                     )
                 ):
@@ -510,11 +552,18 @@ class EntityState:
                 in_list = isinstance(msg.payload, list)
                 if (
                     context_value == zone_idx
-                    or (in_dict and str(msg.payload.get("zone_idx")) == zone_idx)
+                    or (
+                        in_dict
+                        and str(
+                            msg.payload.get(SZ_ZONE_INDEX, msg.payload.get("zone_idx"))
+                        )
+                        == zone_idx
+                    )
                     or (
                         in_list
                         and any(
-                            isinstance(d, dict) and str(d.get("zone_idx")) == zone_idx
+                            isinstance(d, dict)
+                            and str(d.get(SZ_ZONE_INDEX, d.get("zone_idx"))) == zone_idx
                             for d in msg.payload
                         )
                     )
@@ -616,7 +665,7 @@ class EntityState:
     _msg_qry_by_code_key = find_latest_code
 
     async def _msg_qry(self, sql: str) -> list[dict[str, Any]]:
-        """Custom query for an entity's stored payloads."""
+        """Query an entity's stored payloads."""
         _LOGGER.warning("Legacy _msg_qry (SQL) called. Returning empty.")
         return []
 

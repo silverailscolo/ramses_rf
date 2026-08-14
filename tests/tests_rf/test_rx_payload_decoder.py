@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from ramses_rf.const import SZ_ZONE_INDEX
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_tx.exceptions import PacketPayloadInvalid
 from ramses_tx.packet import Packet
@@ -158,5 +159,5 @@ def test_30c9_controller_still_injects_zone_idx() -> None:
         _DTM, "000  I --- 01:050858 --:------ 01:050858 30C9 003 050AA0"
     )
     result: Any = decode_packet(pkt.to_dto())
-    assert result.get("zone_idx") == "05"
+    assert result.get(SZ_ZONE_INDEX, result.get("zone_idx")) == "05"
     assert result.get("temperature") is not None

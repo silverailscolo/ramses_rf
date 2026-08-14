@@ -52,14 +52,15 @@ MAX_NUM_REPEATS: Final[int] = 5  # used in ramses_cc Action schema
 
 # SZ_CALLBACK: Final = "callback"  # obsolete?
 # SZ_GAP_DURATION: Final = "gap_duration"  # obsolete?
-# SZ_MAX_RETRIES: Final = "max_retries"  # obsolete?
-SZ_NUM_REPEATS: Final = "num_repeats"
+SZ_REPEAT_COUNT: Final = "repeat_count"
+SZ_NUM_REPEATS: Final = SZ_REPEAT_COUNT
 SZ_PRIORITY: Final = "priority"
 SZ_TIMEOUT: Final = "timeout"
 
 
 # used by transport...
-SZ_ACTIVE_HGI: Final = "active_gwy"
+SZ_ACTIVE_GATEWAY: Final = "active_gwy"
+SZ_ACTIVE_HGI: Final = SZ_ACTIVE_GATEWAY
 SZ_SIGNATURE: Final = "signature"
 SZ_IS_EVOFW3: Final = "is_evofw3"
 SZ_READER_TASK: Final[str] = "reader_task"

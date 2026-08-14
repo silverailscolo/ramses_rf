@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from ramses_rf.const import SZ_UFH_IDX, SZ_ZONE_IDX, SZ_ZONE_TYPE, ZON_ROLE_MAP, DevType
+from ramses_rf.const import (
+    SZ_UFH_INDEX,
+    SZ_ZONE_INDEX,
+    SZ_ZONE_TYPE,
+    ZON_ROLE_MAP,
+    DevType,
+)
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -84,14 +90,16 @@ class UfhTopologyHandler(TopologyHandler):
                 if not isinstance(payload, dict):
                     continue
 
-                ufh_idx = payload.get(SZ_UFH_IDX)
-                zone_idx = payload.get(SZ_ZONE_IDX)
+                ufh_idx = payload.get(SZ_UFH_INDEX, payload.get("ufh_idx"))
+                zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
 
                 if ufh_idx is not None:
                     event_circuit = TopologyChangedEvent(
                         action=TopologyAction.CREATE_CIRCUIT,
                         device_id=ufc_id,
                         metadata={
+                            SZ_UFH_INDEX: str(ufh_idx),
+                            SZ_ZONE_INDEX: str(zone_idx) if zone_idx else "None",
                             "ufh_idx": str(ufh_idx),
                             "zone_idx": str(zone_idx) if zone_idx else "None",
                             "child_id": str(zone_idx) if zone_idx else "None",

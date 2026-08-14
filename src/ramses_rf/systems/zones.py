@@ -19,6 +19,7 @@ from ramses_rf.const import (
     SZ_SETPOINT,
     SZ_TEMPERATURE,
     SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
     ZON_MODE_MAP,
     ZON_ROLE_MAP,
     DevRole,
@@ -88,6 +89,7 @@ class ZoneBase(Child, Parent, Entity):
     _ROLE_SENSORS: str | None = None
 
     def __init__(self, tcs: Evohome, zone_index: str) -> None:
+        """Initialize a ZoneBase instance for the given TCS and zone index."""
         super().__init__(tcs._gateway)
 
         # Parallel CQRS States
@@ -130,9 +132,11 @@ class ZoneBase(Child, Parent, Entity):
         raise NotImplementedError
 
     def __repr__(self) -> str:
+        """Return the string representation of the zone."""
         return f"{self.id} ({self._SLUG})"
 
     def __lt__(self, other: object) -> bool:
+        """Compare two zones by their zone index."""
         if not isinstance(other, ZoneBase):
             return NotImplemented
         return self.idx < other.idx
@@ -159,6 +163,7 @@ class ZoneSchedule(ZoneBase):  # 0404
     """Zone mixin providing schedule retrieval and modification."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize a ZoneSchedule instance."""
         super().__init__(*args, **kwargs)
 
         self._schedule = Schedule(self)  # type: ignore[arg-type]
@@ -199,6 +204,7 @@ class DhwZone(ZoneSchedule):  # CS92A
     _SLUG: str | None = ZoneRole.DHW  # type: ignore[assignment]
 
     def __init__(self, tcs: _StoredHwT, zone_index: str = "HW") -> None:
+        """Initialize a DhwZone instance."""
         _LOGGER.debug("Creating a DHW for TCS: %s_HW (%s)", tcs.id, self.__class__)
 
         if tcs.dhw:
@@ -627,7 +633,11 @@ class Zone(ZoneSchedule):
             for msg in reversed(msgs):
                 p_load = msg.payload
                 if isinstance(p_load, dict):
-                    if str(p_load.get(SZ_ZONE_IDX)) == self.idx and SZ_NAME in p_load:
+                    if (
+                        str(p_load.get(SZ_ZONE_INDEX, p_load.get(SZ_ZONE_IDX)))
+                        == self.idx
+                        and SZ_NAME in p_load
+                    ):
                         self.zone_state = dataclasses.replace(
                             self.zone_state, name=str(p_load[SZ_NAME])
                         )
@@ -636,7 +646,8 @@ class Zone(ZoneSchedule):
                     for item in p_load:
                         if isinstance(item, dict):
                             if (
-                                str(item.get(SZ_ZONE_IDX)) == self.idx
+                                str(item.get(SZ_ZONE_INDEX, item.get(SZ_ZONE_IDX)))
+                                == self.idx
                                 and SZ_NAME in item
                             ):
                                 self.zone_state = dataclasses.replace(
@@ -689,7 +700,7 @@ class Zone(ZoneSchedule):
         return await send_system_intent(
             self,
             Action.SET_TEMPERATURE,
-            {"zone_idx": self.idx, "setpoint": value},
+            {SZ_ZONE_INDEX: self.idx, "setpoint": value},
         )
 
     async def temperature(self) -> float | None:  # 30C9
@@ -727,7 +738,7 @@ class Zone(ZoneSchedule):
             return await send_system_intent(
                 self,
                 Action.GET_ZONE_TEMP,
-                {"zone_idx": self.idx},
+                {SZ_ZONE_INDEX: self.idx},
             )
         except ProtocolTimeoutError as err:
             _LOGGER.warning("%s: _get_temp timed out: %s", self, err)
@@ -759,7 +770,7 @@ class Zone(ZoneSchedule):
             self,
             Action.SET_ZONE_CONFIG,
             {
-                "zone_idx": self.idx,
+                SZ_ZONE_INDEX: self.idx,
                 "min_temp": min_temp,
                 "max_temp": max_temp,
                 "local_override": local_override,
@@ -792,7 +803,7 @@ class Zone(ZoneSchedule):
                 self,
                 Action.SET_MODE,
                 {
-                    "zone_idx": self.idx,
+                    SZ_ZONE_INDEX: self.idx,
                     "mode": mode,
                     "setpoint": setpoint,
                     "until": until,
@@ -804,7 +815,7 @@ class Zone(ZoneSchedule):
                 self,
                 Action.SET_TEMPERATURE,
                 {
-                    "zone_idx": self.idx,
+                    SZ_ZONE_INDEX: self.idx,
                     "setpoint": setpoint,
                 },
             )
@@ -817,7 +828,7 @@ class Zone(ZoneSchedule):
             self,
             Action.SET_ZONE_NAME,
             {
-                "zone_idx": self.idx,
+                SZ_ZONE_INDEX: self.idx,
                 "name": name,
             },
         )

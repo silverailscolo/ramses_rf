@@ -14,8 +14,13 @@ from ramses_rf.const import (
     SZ_ACCEPT,
     SZ_BINDINGS,
     SZ_CONFIRM,
+    SZ_DOMAIN_INDEX,
+    SZ_FRAGMENT_NUMBER,
     SZ_OFFER,
     SZ_PHASE,
+    SZ_TOTAL_FRAGMENTS,
+    SZ_UFH_INDEX,
+    SZ_ZONE_INDEX,
     ZON_MODE_MAP,
     ZON_ROLE_MAP,
 )
@@ -231,7 +236,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
             result = {"heat_demand": value}
         index = self.domain_or_zone_index
         if index >= 0xF0:
-            result["domain_id"] = "FC" if index == 0xFC else f"{index:02X}"
+            result[SZ_DOMAIN_INDEX] = "FC" if index == 0xFC else f"{index:02X}"
         else:
             is_ufc = False
             if msg is not None and getattr(msg, "src", None) is not None:
@@ -241,7 +246,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
                     "UFC",
                 ):
                     is_ufc = True
-            index_name = "ufx_idx" if is_ufc else "zone_idx"
+            index_name = "ufx_idx" if is_ufc else SZ_ZONE_INDEX
             result[index_name] = f"{index:02X}"
         return result
 
@@ -424,7 +429,7 @@ class Temperature3BPayload(TemperaturePayload):
             if isinstance(self.zone_index, int)
             else str(self.zone_index)
         )
-        return {"zone_idx": idx_str, "temperature": self.temperature}
+        return {SZ_ZONE_INDEX: idx_str, "temperature": self.temperature}
 
 
 # Update VARIANTS property after variants are defined
@@ -546,9 +551,9 @@ class ScheduleFragmentPayload(PayloadBase):
         else:
             zone_str = str(self.zone_index)
         result: dict[str, Any] = {
-            "zone_idx": zone_str,
-            "frag_number": self.frag_number,
-            "total_frags": self.total_frags if self.total_frags != 0 else None,
+            SZ_ZONE_INDEX: zone_str,
+            SZ_FRAGMENT_NUMBER: self.frag_number,
+            SZ_TOTAL_FRAGMENTS: self.total_frags if self.total_frags != 0 else None,
         }
         if self.fragment_bytes:
             result["fragment"] = self.fragment_bytes.hex().upper()
@@ -922,7 +927,7 @@ class SystemSyncVarPayload(SystemSyncPayload):
                 result["unknown_21"] = self._unknown_21
             return result
 
-        result["zone_idx"] = f"{self.sync_flag:02X}"
+        result[SZ_ZONE_INDEX] = f"{self.sync_flag:02X}"
         if self.max_flow_setpoint is not None:
             result["max_flow_setpoint"] = self.max_flow_setpoint
         if self.min_flow_setpoint is not None:
@@ -1337,7 +1342,7 @@ class ZoneName22BPayload(ZoneNamePayload):
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
-        return {"zone_idx": idx_str, "name": self.name}
+        return {SZ_ZONE_INDEX: idx_str, "name": self.name}
 
 
 @dataclass(frozen=True, slots=True)
@@ -1407,7 +1412,7 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
-        return {"zone_idx": idx_str, "setpoint": self.setpoint_temp}
+        return {SZ_ZONE_INDEX: idx_str, "setpoint": self.setpoint_temp}
 
 
 # Update VARIANTS property after variants are defined
@@ -1652,7 +1657,7 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
             else self.zone_index
         )
         return {
-            "zone_idx": idx_str,
+            SZ_ZONE_INDEX: idx_str,
             "setpoint": self.setpoint_temp,
         }
 
@@ -2099,16 +2104,16 @@ class ZoneDevicesPayload(PayloadBase):
                     is_ufc_device = True
 
             if is_ufc_device or (sub is not None and sub != 0x7F):
-                result["ufh_idx"] = f"{z_raw:02X}"
-                result["zone_idx"] = None if sub == 0x7F else f"{sub:02X}"
+                result[SZ_UFH_INDEX] = f"{z_raw:02X}"
+                result[SZ_ZONE_INDEX] = None if sub == 0x7F else f"{sub:02X}"
             else:
-                result["zone_idx"] = f"{z_raw:02X}"
+                result[SZ_ZONE_INDEX] = f"{z_raw:02X}"
         elif role_hex in ("0D", "0E"):
-            result["domain_id"] = "FA" if z_raw == 0 else "F9"
+            result[SZ_DOMAIN_INDEX] = "FA" if z_raw == 0 else "F9"
         elif role_hex == "0F":
-            result["domain_id"] = "FC"
+            result[SZ_DOMAIN_INDEX] = "FC"
         else:
-            result["zone_idx"] = f"{z_raw:02X}"
+            result[SZ_ZONE_INDEX] = f"{z_raw:02X}"
 
         dev_hex = f"{dev_raw:06X}"
         if dev_hex in ("7FFFFF", "FFFFFF", "000000"):
@@ -2553,7 +2558,7 @@ class TpiParams4BPayload(TpiParamsPayload):
             else self.domain_id
         )
         return {
-            "domain_id": dom,
+            SZ_DOMAIN_INDEX: dom,
             "cycle_rate": self.cycle_rate,
             "min_on_time": self.min_on_time,
             "min_off_time": self.min_off_time,
@@ -2658,7 +2663,7 @@ class TpiParams8BPayload(TpiParamsPayload):
             else self.domain_id
         )
         return {
-            "domain_id": dom,
+            SZ_DOMAIN_INDEX: dom,
             "cycle_rate": self.cycle_rate,
             "min_on_time": self.min_on_time,
             "min_off_time": self.min_off_time,
@@ -2900,7 +2905,7 @@ class ZoneMode4BPayload(ZoneModePayload):
             else self.zone_index
         )
         return {
-            "zone_idx": idx_str,
+            SZ_ZONE_INDEX: idx_str,
             "mode": mode_str,
             "setpoint": self.setpoint_temp,
         }
@@ -3015,7 +3020,7 @@ class ZoneMode7BPayload(ZoneModePayload):
             else self.zone_index
         )
         result: dict[str, Any] = {
-            "zone_idx": idx_str,
+            SZ_ZONE_INDEX: idx_str,
             "mode": mode_str,
             "setpoint": self.setpoint_temp,
         }
@@ -3149,7 +3154,7 @@ class ZoneMode13BPayload(ZoneModePayload):
             else self.zone_index
         )
         result: dict[str, Any] = {
-            "zone_idx": idx_str,
+            SZ_ZONE_INDEX: idx_str,
             "mode": mode_str,
             "setpoint": self.setpoint_temp,
         }

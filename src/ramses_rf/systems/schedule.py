@@ -14,11 +14,12 @@ from typing import TYPE_CHECKING, Any, Final, Self
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
-    SZ_FRAG_NUMBER,
     SZ_FRAGMENT,
+    SZ_FRAGMENT_NUMBER,
     SZ_SCHEDULE,
-    SZ_TOTAL_FRAGS,
+    SZ_TOTAL_FRAGMENTS,
     SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
 )
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
@@ -219,7 +220,9 @@ class ScheduleData:
         :rtype: Self
         :raises ValueError: If dictionary structures or values are invalid.
         """
-        zone_index = str(data[SZ_ZONE_IDX])
+        zone_index = str(
+            data.get(SZ_ZONE_INDEX, data.get(SZ_ZONE_IDX, data.get("zone_idx", "")))
+        )
         raw_schedule = data.get(SZ_SCHEDULE)
         if not isinstance(raw_schedule, (list, tuple)):
             raise ValueError(f"Invalid schedule structure: {raw_schedule}")
@@ -289,6 +292,7 @@ class ScheduleData:
             schedule.append(day_dict)
 
         return {
+            SZ_ZONE_INDEX: self.zone_index,
             SZ_ZONE_IDX: self.zone_index,
             SZ_SCHEDULE: schedule,
         }
@@ -348,7 +352,11 @@ def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> WeeklySchedule
     schedule.append(
         {SZ_DAY_OF_WEEK: current_day_of_week, SZ_SWITCHPOINTS: switchpoints}
     )
-    return {SZ_ZONE_IDX: f"{zone_index:02X}", SZ_SCHEDULE: schedule}
+    return {
+        SZ_ZONE_INDEX: f"{zone_index:02X}",
+        SZ_ZONE_IDX: f"{zone_index:02X}",
+        SZ_SCHEDULE: schedule,
+    }
 
 
 def full_schedule_to_fragments(
@@ -499,7 +507,9 @@ class Schedule:  # 0404
         if not isinstance(payload, dict):
             return
 
-        pkt_zone_idx = payload.get(SZ_ZONE_IDX)
+        pkt_zone_idx = payload.get(
+            SZ_ZONE_INDEX, payload.get(SZ_ZONE_IDX, payload.get("zone_idx"))
+        )
         if pkt_zone_idx is not None:
             translated_idx = _to_protocol_zone_idx(self.idx)
             if pkt_zone_idx != translated_idx and pkt_zone_idx != self.idx:
@@ -623,9 +633,9 @@ class Schedule:  # 0404
             self,
             Action.GET_SCHEDULE_FRAGMENT,
             data={
-                "zone_idx": self.idx,
-                "frag_number": frag_num,
-                "total_frags": frag_set_size,
+                SZ_ZONE_INDEX: self.idx,
+                SZ_FRAGMENT_NUMBER: frag_num,
+                SZ_TOTAL_FRAGMENTS: frag_set_size,
             },
             wait_for_reply=True,
         )
@@ -711,7 +721,10 @@ class Schedule:  # 0404
             if the fragment set is incomplete.
         """
         if payload_set == [None]:
-            self._full_schedule = {SZ_ZONE_IDX: self.idx}
+            self._full_schedule = {
+                SZ_ZONE_INDEX: self.idx,
+                SZ_ZONE_IDX: self.idx,
+            }
             return self._full_schedule
 
         if None in payload_set:
@@ -729,6 +742,7 @@ class Schedule:  # 0404
             raise exc.ScheduleError("Failed to decompress schedule fragments") from err
 
         if self.idx == "HW":
+            schedule[SZ_ZONE_INDEX] = "HW"
             schedule[SZ_ZONE_IDX] = "HW"
         self._full_schedule = schedule
         self._set_state(ScheduleIsSynchronised)
@@ -744,8 +758,8 @@ class Schedule:  # 0404
         :returns: Initialised array for expected fragments.
         :rtype: PayloadSetT
         """
-        total_frags = payload.get(SZ_TOTAL_FRAGS)
-        frag_num = payload.get(SZ_FRAG_NUMBER)
+        total_frags = payload.get(SZ_TOTAL_FRAGMENTS, payload.get("total_frags"))
+        frag_num = payload.get(SZ_FRAGMENT_NUMBER, payload.get("frag_number"))
 
         if total_frags is None or frag_num is None:
             return [None]
@@ -771,15 +785,16 @@ class Schedule:  # 0404
         :returns: Updated fragment payload collection.
         :rtype: PayloadSetT
         """
-        if payload.get(SZ_TOTAL_FRAGS) is None:  # zone has no schedule
+        total_frags = payload.get(SZ_TOTAL_FRAGMENTS, payload.get("total_frags"))
+        if total_frags is None:  # zone has no schedule
             payload_set = [None]
             self._proc_payload_set(payload_set)
             return payload_set
 
-        if payload.get(SZ_TOTAL_FRAGS) != len(payload_set):  # sched has changed
+        if total_frags != len(payload_set):  # sched has changed
             return self._init_payload_set(payload)
 
-        frag_num = payload.get(SZ_FRAG_NUMBER)
+        frag_num = payload.get(SZ_FRAGMENT_NUMBER, payload.get("frag_number"))
         if frag_num is not None and 0 < frag_num <= len(payload_set):
             payload_set[frag_num - 1] = payload
 
@@ -806,9 +821,9 @@ class Schedule:  # 0404
             self,
             Action.SET_SCHEDULE_FRAGMENT,
             data={
-                "zone_idx": self.idx,
-                "frag_number": fragment_number,
-                "total_frags": total_fragments,
+                SZ_ZONE_INDEX: self.idx,
+                SZ_FRAGMENT_NUMBER: fragment_number,
+                SZ_TOTAL_FRAGMENTS: total_fragments,
                 "fragment": fragment,
             },
             wait_for_reply=True,
@@ -824,6 +839,7 @@ class Schedule:  # 0404
         :raises exc.ScheduleError: On validation failure.
         """
         full_schedule: WeeklyScheduleDict = {
+            SZ_ZONE_INDEX: self.idx,
             SZ_ZONE_IDX: self.idx,
             SZ_SCHEDULE: schedule,
         }
@@ -836,6 +852,7 @@ class Schedule:  # 0404
 
         if self.idx == "HW":
             # Translate DHW domain index 'HW' to protocol zone index '00'
+            validated[SZ_ZONE_INDEX] = _to_protocol_zone_idx(self.idx)
             validated[SZ_ZONE_IDX] = _to_protocol_zone_idx(self.idx)
 
         return validated
