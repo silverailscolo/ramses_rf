@@ -9,8 +9,7 @@ from ramses_rf.commands.builders.helpers import (
 from ramses_rf.commands.core import Command
 from ramses_rf.const import SZ_DHW_IDX, ZON_MODE_MAP
 from ramses_rf.enums import DevType
-from ramses_rf.payloads.dhw import DhwParamsPayload
-from ramses_rf.payloads.heating import DhwTemperaturePayload
+from ramses_rf.payloads.dhw import DhwParamsPayload, DhwTempPayload
 from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import hex_from_dtm
@@ -102,7 +101,7 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 
     # I_ requires addr0=src, addr2=dst (which are the same for put_dhw_temp)
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.src)
-    payload = DhwTemperaturePayload(dhw_idx=dhw_idx, temperature=temperature).hex()
+    payload = DhwTempPayload(dhw_idx=dhw_idx, temperature=temperature).hex()
 
     return CommandDTO(
         verb=I_,

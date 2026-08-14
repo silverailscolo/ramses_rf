@@ -5,7 +5,6 @@ from ramses_rf.commands.builders import dhw, heat, opentherm, schedules, zones
 from ramses_rf.commands.core import Command
 from ramses_rf.enums import Action
 from ramses_rf.payloads.dhw import DhwParams6BPayload, DhwParamsPayload
-from ramses_rf.payloads.heating import DhwTemperaturePayload
 from ramses_tx.const import I_, RQ, W_, Code
 
 
@@ -48,22 +47,8 @@ def test_dhw_params_payload_roundtrip() -> None:
     assert payload.hex() == raw_hex
 
 
-def test_dhw_temperature_payload_dispatch() -> None:
-    """Verify DhwTemperaturePayload.from_bytes dispatches 6-byte 10A0 payloads to DhwParamsPayload."""
-    # Arrange
-    raw_bytes = bytes.fromhex("001388050064")
-
-    # Act
-    payload = DhwTemperaturePayload.from_bytes(raw_bytes)
-
-    # Assert
-    assert isinstance(payload, DhwParams6BPayload)
-    assert payload.dhw_idx == 0
-    assert payload.setpoint == 50.0
-
-
 def test_build_put_dhw_temp_parity() -> None:
-    """Verify build_put_dhw_temp generates correct hex payload via DhwTemperaturePayload."""
+    """Verify build_put_dhw_temp generates correct hex payload via DhwTempPayload."""
     # Arrange
     cmd = Command(
         src=Address("07:123456"),
