@@ -196,7 +196,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             await self._bind_and_configure()
 
             self._extra[SZ_ACTIVE_HGI] = self._ieee
-            self._make_connection(gwy_id=DeviceIdT(str(self._ieee)))
+            self._make_connection(gateway_id=DeviceIdT(str(self._ieee)))
             _LOGGER.info(
                 "Zigbee transport ready: ieee=%s cluster=0x%04x attr=0x%04x",
                 self._ieee,
@@ -1066,25 +1066,29 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         return raw.decode("ascii", errors="ignore")
 
     async def _send_command(
-        self, chunk: str, seq: int, total: int, cmd_override: int | None = None
+        self,
+        chunk: str,
+        sequence_number: int,
+        total: int,
+        command_override: int | None = None,
     ) -> None:
         """Send a string payload as a ZCL command to the write cluster.
 
         :param chunk: The payload to send.
         :type chunk: str
-        :param seq: Chunk sequence number.
-        :type seq: int
+        :param sequence_number: Chunk sequence number.
+        :type sequence_number: int
         :param total: Total chunks.
         :type total: int
-        :param cmd_override: Command ID to override default.
-        :type cmd_override: int | None, optional
+        :param command_override: Command ID to override default.
+        :type command_override: int | None, optional
         :raises TransportZigbeeError: If the send attempt fails after retries.
         """
         cluster = self._get_active_write_cluster()
         if not cluster:
             raise exc.TransportZigbeeError("Zigbee write cluster not ready")
 
-        _LOGGER.debug("Zigbee TX %s/%s: %s", seq, total, chunk)
+        _LOGGER.debug("Zigbee TX %s/%s: %s", sequence_number, total, chunk)
         last_err: Exception | None = None
 
         # If a command override is requested (e.g., ACK=0x01) and we have
@@ -1094,7 +1098,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         tried_clusters: list[Any] = []
         candidate_clusters: list[Any] = []
 
-        if cmd_override is not None and getattr(self, "_cluster", None) is not None:
+        if command_override is not None and getattr(self, "_cluster", None) is not None:
             candidate_clusters.append(self._cluster)
         candidate_clusters.append(cluster)
 
@@ -1104,7 +1108,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     continue
                 tried_clusters.append(candidate)
                 try:
-                    use_cmd = cmd_override if cmd_override is not None else self._cmd_id
+                    use_cmd = (
+                        command_override
+                        if command_override is not None
+                        else self._cmd_id
+                    )
 
                     # Prefer explicit client_command API when available (client->server)
                     if hasattr(candidate, "client_command"):
@@ -1130,7 +1138,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                                 "Zigbee write cmd %s/%s attempt %s failed "
                                 "(endpoint=%s cluster=0x%04x cmd=0x%02x): "
                                 "%s (%s)",
-                                seq,
+                                sequence_number,
                                 total,
                                 attempt,
                                 self._write_endpoint_id,
@@ -1156,7 +1164,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                                 "Zigbee write server cmd %s/%s attempt %s "
                                 "failed (endpoint=%s cluster=0x%04x "
                                 "cmd=0x%02x): %s (%s)",
-                                seq,
+                                sequence_number,
                                 total,
                                 attempt,
                                 self._write_endpoint_id,
@@ -1179,7 +1187,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                                 "Zigbee write generic cmd %s/%s attempt %s "
                                 "failed (endpoint=%s cluster=0x%04x "
                                 "cmd=0x%02x): %s (%s)",
-                                seq,
+                                sequence_number,
                                 total,
                                 attempt,
                                 self._write_endpoint_id,
@@ -1213,7 +1221,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     _LOGGER.exception(
                         "Zigbee write cmd %s/%s attempt %s unexpected "
                         "failure (endpoint=%s cluster=0x%04x): %s (%s)",
-                        seq,
+                        sequence_number,
                         total,
                         attempt,
                         self._write_endpoint_id,
@@ -1238,13 +1246,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             raise exc.TransportZigbeeError("Failed to send Zigbee command")
         raise exc.TransportZigbeeError("Failed to send Zigbee command") from last_err
 
-    async def _send_chunk(self, chunk: str, seq: int, total: int) -> None:
+    async def _send_chunk(self, chunk: str, sequence_number: int, total: int) -> None:
         """Write a string chunk to a Zigbee attribute.
 
         :param chunk: The string payload.
         :type chunk: str
-        :param seq: Chunk sequence number.
-        :type seq: int
+        :param sequence_number: Chunk sequence number.
+        :type sequence_number: int
         :param total: Total chunks.
         :type total: int
         :raises TransportZigbeeError: If the send attempt fails after retries.
@@ -1255,7 +1263,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         _LOGGER.debug(
             "Zigbee write chunk %s/%s (len=%s endpoint=%s cluster=0x%04x): %s",
-            seq,
+            sequence_number,
             total,
             len(chunk),
             self._write_endpoint_id,
@@ -1280,7 +1288,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 _LOGGER.exception(
                     "Zigbee write chunk %s/%s attempt %s failed "
                     "(endpoint=%s cluster=0x%04x): %s",
-                    seq,
+                    sequence_number,
                     total,
                     attempt,
                     self._write_endpoint_id,

@@ -123,7 +123,7 @@ class StateHeader:
         code: Code | str,
         verb: VerbT | str,
         source_id: DeviceIdT | str,
-        context_val: str | bool | None,
+        context_value: str | bool | None,
     ) -> StateHeader:
         """Cleanly generate a StateHeader from primitive or rich variables.
 
@@ -133,8 +133,8 @@ class StateHeader:
         :type verb: VerbT | str
         :param source_id: The source L2 device ID (e.g., '01:123456').
         :type source_id: DeviceIdT | str
-        :param context_val: The sub-payload context key.
-        :type context_val: str | bool | None
+        :param context_value: The sub-payload context key.
+        :type context_value: str | bool | None
         :return: The immutable StateHeader instance.
         :rtype: StateHeader
         """
@@ -156,7 +156,7 @@ class StateHeader:
             code=safe_code,
             verb=safe_verb,
             source_id=safe_src,
-            context=RoutingContext(context_val),
+            context=RoutingContext(context_value),
         )
 
     @property

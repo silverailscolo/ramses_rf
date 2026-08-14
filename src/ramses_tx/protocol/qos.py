@@ -89,13 +89,15 @@ class QosManager:
         """Return the number of commands currently in the queue."""
         return self._que.qsize()
 
-    def enqueue(self, priority: Priority, cmd: CommandDTO, qos: QosParams) -> _FutureT:
+    def enqueue(
+        self, priority: Priority, command: CommandDTO, qos: QosParams
+    ) -> _FutureT:
         """Add a command to the queue and return its future.
 
         :param priority: The transmission priority.
         :type priority: Priority
-        :param cmd: The command to transmit.
-        :type cmd: CommandDTO
+        :param command: The command to transmit.
+        :type command: CommandDTO
         :param qos: Quality of Service parameters.
         :type qos: QosParams
         :return: The future representing the expected response.
@@ -104,7 +106,7 @@ class QosManager:
         """
         fut: _FutureT = self._loop.create_future()
         try:
-            self._que.put_nowait((priority, dt.now(), cmd, qos, fut))
+            self._que.put_nowait((priority, dt.now(), command, qos, fut))
         except asyncio.QueueFull as err:
             fut.cancel("Send buffer overflow")
             raise ProtocolSendFailed("Send buffer overflow") from err
@@ -163,13 +165,13 @@ class QosManager:
         self._multiplier = max(0, self._multiplier - 1)
         return delay, old_val
 
-    def restore_multiplier(self, old_val: int) -> None:
+    def restore_multiplier(self, old_value: int) -> None:
         """Restore and increment the multiplier after a timeout sleep.
 
-        :param old_val: The previous multiplier value.
-        :type old_val: int
+        :param old_value: The previous multiplier value.
+        :type old_value: int
         """
-        self._multiplier = min(3, old_val + 1)
+        self._multiplier = min(3, old_value + 1)
 
 
 @dataclass(frozen=True)

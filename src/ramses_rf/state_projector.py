@@ -157,7 +157,7 @@ _DHW_OPCODES: Final[frozenset[Code | str]] = frozenset(
 )
 
 
-def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
+def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
     """Resolve the DhwZone that should ingest a DHW opcode (1260/10A0/1F41).
 
     These payloads carry no ``zone_idx``/``domain_id``, so standard target
@@ -173,8 +173,8 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
 
     :param msg: The inbound message.
     :type msg: Message
-    :param src_dev: The source device (DhwSensor or Controller).
-    :type src_dev: Any
+    :param source_device: The source device (DhwSensor or Controller).
+    :type source_device: Any
     :return: The DhwZone to route to, or ``None`` if the message is not
         a DHW opcode or the source is not a DHW sender.
     :rtype: DhwZone | None
@@ -182,10 +182,10 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
     if msg.code not in _DHW_OPCODES:
         return None
 
-    src_type = getattr(src_dev, "type", None) or (
+    src_type = getattr(source_device, "type", None) or (
         msg.src.id[:2] if hasattr(msg.src, "id") and msg.src.id else None
     )
-    src_slug = str(getattr(src_dev, "_SLUG", ""))
+    src_slug = str(getattr(source_device, "_SLUG", ""))
     if msg.code in (Code._1260, "1260"):
         is_dhw_src = src_type in ("07", "01") or src_slug in ("DHW", "CTL")
     else:  # 10A0 / 1F41 are owned by the Controller
@@ -194,11 +194,11 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
     if not is_dhw_src:
         return None
 
-    tcs = getattr(src_dev, "tcs", None) or getattr(src_dev, "_tcs", None)
-    if tcs is None and hasattr(src_dev, "dhw"):
-        tcs = src_dev
-    if tcs is None and hasattr(src_dev, "_gateway"):
-        tcs = getattr(src_dev._gateway, "tcs", None)
+    tcs = getattr(source_device, "tcs", None) or getattr(source_device, "_tcs", None)
+    if tcs is None and hasattr(source_device, "dhw"):
+        tcs = source_device
+    if tcs is None and hasattr(source_device, "_gateway"):
+        tcs = getattr(source_device._gateway, "tcs", None)
     if tcs is None and getattr(msg, "_gateway", None) is not None:
         tcs = getattr(msg._gateway, "tcs", None)
 

@@ -127,16 +127,16 @@ async def exec_cmd(gateway: Gateway, **kwargs: Any) -> None:
 
 
 async def get_faults(
-    gateway: Gateway, ctl_id: DeviceIdT, start: int = 0, limit: int = 0x3F
+    gateway: Gateway, controller_id: DeviceIdT, start: int = 0, limit: int = 0x3F
 ) -> None:
     """Retrieve the fault log from a target controller.
 
     :param gateway: The gateway instance.
-    :param ctl_id: The device ID of the controller to query.
+    :param controller_id: The device ID of the controller to query.
     :param start: The index to start querying from.
     :param limit: The maximum number of fault entries to return.
     """
-    ctl = gateway.device_registry.get_device(ctl_id, cls=Controller)
+    ctl = gateway.device_registry.get_device(controller_id, cls=Controller)
 
     try:
         if ctl.tcs:
@@ -145,19 +145,21 @@ async def get_faults(
         _LOGGER.error("get_faults(): Function timed out: %s", err)
 
 
-async def get_schedule(gateway: Gateway, ctl_id: DeviceIdT, zone_idx: str) -> None:
+async def get_schedule(
+    gateway: Gateway, controller_id: DeviceIdT, zone_index: str
+) -> None:
     """Retrieve the zone schedule for a specific zone under a controller.
 
     :param gateway: The gateway instance.
-    :param ctl_id: The device ID of the controller.
-    :param zone_idx: The zone index string (e.g. "00" or "HW").
+    :param controller_id: The device ID of the controller.
+    :param zone_index: The zone index string (e.g. "00" or "HW").
     """
-    ctl = gateway.device_registry.get_device(ctl_id, cls=Controller)
+    ctl = gateway.device_registry.get_device(controller_id, cls=Controller)
     if not ctl.tcs:
         _LOGGER.error("get_schedule(): Controller has no TCS active.")
         return
 
-    zone = ctl.tcs.get_htg_zone(zone_idx)
+    zone = ctl.tcs.get_htg_zone(zone_index)
 
     try:
         await zone.get_schedule()
@@ -165,17 +167,19 @@ async def get_schedule(gateway: Gateway, ctl_id: DeviceIdT, zone_idx: str) -> No
         _LOGGER.error("get_schedule(): Function timed out: %s", err)
 
 
-async def set_schedule(gateway: Gateway, ctl_id: DeviceIdT, schedule: str) -> None:
+async def set_schedule(
+    gateway: Gateway, controller_id: DeviceIdT, schedule: str
+) -> None:
     """Set the zone schedule for a specific zone under a controller via JSON payload.
 
     :param gateway: The gateway instance.
-    :param ctl_id: The device ID of the controller.
+    :param controller_id: The device ID of the controller.
     :param schedule: A JSON string describing the full schedule dictionary.
     """
     schedule_ = json.loads(schedule)
     zone_idx = schedule_[SZ_ZONE_IDX]
 
-    ctl = gateway.device_registry.get_device(ctl_id, cls=Controller)
+    ctl = gateway.device_registry.get_device(controller_id, cls=Controller)
     if not ctl.tcs:
         _LOGGER.error("set_schedule(): Controller has no TCS active.")
         return
@@ -189,15 +193,15 @@ async def set_schedule(gateway: Gateway, ctl_id: DeviceIdT, schedule: str) -> No
 
 
 async def script_bind_req(
-    gateway: Gateway, dev_id: DeviceIdT, code: Code = Code._2309
+    gateway: Gateway, device_id: DeviceIdT, code: Code = Code._2309
 ) -> None:
     """Make the targeted device artificially enter a supplicant bind phase.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to transition to binding state.
+    :param device_id: The device ID to transition to binding state.
     :param code: The code to offer during the bind request.
     """
-    dev = gateway.device_registry.get_device(dev_id)
+    dev = gateway.device_registry.get_device(device_id)
     assert isinstance(dev, Fakeable)  # mypy
     dev._make_fake()
     await dev._initiate_binding_process([code])
@@ -205,40 +209,42 @@ async def script_bind_req(
 
 async def script_bind_wait(
     gateway: Gateway,
-    dev_id: DeviceIdT,
+    device_id: DeviceIdT,
     code: Code = Code._2309,
-    idx: IndexT = "00",
+    zone_index: IndexT = "00",
 ) -> None:
     """Make the targeted device artificially enter a respondent bind phase.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to transition to binding state.
+    :param device_id: The device ID to transition to binding state.
     :param code: The expected bind code to accept.
-    :param idx: The internal domain or zone index to map to.
+    :param zone_index: The internal domain or zone index to map to.
     """
-    dev = gateway.device_registry.get_device(dev_id)
+    dev = gateway.device_registry.get_device(device_id)
     assert isinstance(dev, Fakeable)  # mypy
     dev._make_fake()
-    await dev._wait_for_binding_request([code], idx=idx)
+    await dev._wait_for_binding_request([code], zone_index=zone_index)
 
 
-def script_poll_device(gateway: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task[None]]:
+def script_poll_device(
+    gateway: Gateway, device_id: DeviceIdT
+) -> list[asyncio.Task[None]]:
     """Generate tasks to periodically poll a device for vital status metrics.
 
     :param gateway: The gateway instance.
-    :param dev_id: The targeted device ID.
+    :param device_id: The targeted device ID.
     :return: A list containing tasks executing the periodic polling.
     """
 
     async def periodic_send(
         gateway: Gateway,
-        cmd: CommandDTO,
+        command: CommandDTO,
         count: int = 1,
         interval: float | None = None,
     ) -> None:
         async def periodic_(interval_: float) -> None:
             await asyncio.sleep(interval_)
-            gateway.send_cmd(cmd, priority=Priority.LOW)
+            gateway.send_cmd(command, priority=Priority.LOW)
 
         if interval is None:
             interval = 0 if count == 1 else 60
@@ -258,7 +264,7 @@ def script_poll_device(gateway: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task
         cmd = CommandDTO(
             verb=RQ,
             addr1=HGI_DEV_ADDR.id,
-            addr2=dev_id,
+            addr2=device_id,
             addr3=NON_DEV_ADDR.id,
             code=code,
             payload="00",
@@ -270,24 +276,24 @@ def script_poll_device(gateway: Gateway, dev_id: DeviceIdT) -> list[asyncio.Task
 
 
 @script_decorator
-async def script_scan_disc(gateway: Gateway, dev_id: DeviceIdT) -> None:
+async def script_scan_disc(gateway: Gateway, device_id: DeviceIdT) -> None:
     """Trigger the target device's internal discovery poller routine.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to scan.
+    :param device_id: The device ID to scan.
     """
     _LOGGER.warning("scan_disc() invoked...")
 
-    dev = gateway.device_registry.get_device(dev_id)
+    dev = gateway.device_registry.get_device(device_id)
     gateway.polling_manager.update_device_tasks(dev)
 
 
 @script_decorator
-async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
+async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
     """Execute a comprehensive probe of a target device across all recognized schema codes.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to scan.
+    :param device_id: The device ID to scan.
     """
     _LOGGER.warning("scan_full() invoked - expect a lot of Warnings")
 
@@ -296,7 +302,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
             CommandDTO(
                 verb=RQ,
                 addr1=HGI_DEV_ADDR.id,
-                addr2=dev_id,
+                addr2=device_id,
                 addr3=NON_DEV_ADDR.id,
                 code=Code._0016,
                 payload="0000",
@@ -312,7 +318,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
                     CommandDTO(
                         verb=RQ,
                         addr1=HGI_DEV_ADDR.id,
-                        addr2=dev_id,
+                        addr2=device_id,
                         addr3=NON_DEV_ADDR.id,
                         code=code,
                         payload=f"00{zone_type:02X}",
@@ -325,7 +331,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
                     CommandDTO(
                         verb=RQ,
                         addr1=HGI_DEV_ADDR.id,
-                        addr2=dev_id,
+                        addr2=device_id,
                         addr3=NON_DEV_ADDR.id,
                         code=code,
                         payload=f"{zone_idx:02X}00",
@@ -341,7 +347,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
                     CommandDTO(
                         verb=W_,
                         addr1=HGI_DEV_ADDR.id,
-                        addr2=dev_id,
+                        addr2=device_id,
                         addr3=NON_DEV_ADDR.id,
                         code=code,
                         payload=f"{str_zone_idx}00",
@@ -351,7 +357,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
                     CommandDTO(
                         verb=W_,
                         addr1=HGI_DEV_ADDR.id,
-                        addr2=dev_id,
+                        addr2=device_id,
                         addr3=NON_DEV_ADDR.id,
                         code=code,
                         payload=f"{str_zone_idx}03",
@@ -362,7 +368,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
             cmd1 = build_dto(
                 Intent(
                     src=HGI_DEV_ADDR,
-                    dst=Address(dev_id),
+                    dst=Address(device_id),
                     action=Action.GET_SCHEDULE_FRAGMENT,
                     data={"zone_idx": "HW", "frag_number": 1, "total_frags": 0},
                 )
@@ -371,7 +377,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
             cmd2 = build_dto(
                 Intent(
                     src=HGI_DEV_ADDR,
-                    dst=Address(dev_id),
+                    dst=Address(device_id),
                     action=Action.GET_SCHEDULE_FRAGMENT,
                     data={"zone_idx": "00", "frag_number": 1, "total_frags": 0},
                 )
@@ -383,7 +389,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
                 cmd3 = build_dto(
                     Intent(
                         src=HGI_DEV_ADDR,
-                        dst=Address(dev_id),
+                        dst=Address(device_id),
                         action=Action.GET_FAULTLOG_ENTRY,
                         data={"log_idx": log_idx},
                     )
@@ -394,7 +400,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
             cmd4 = build_dto(
                 Intent(
                     src=HGI_DEV_ADDR,
-                    dst=Address(dev_id),
+                    dst=Address(device_id),
                     action=Action.GET_TPI_PARAMS,
                     data={},
                 )
@@ -405,7 +411,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
             cmd = build_dto(
                 Intent(
                     src=HGI_DEV_ADDR,
-                    dst=Address(dev_id),
+                    dst=Address(device_id),
                     action=Action.GET_SYSTEM_MODE,
                     data={},
                 )
@@ -417,7 +423,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
                 cmd = build_dto(
                     Intent(
                         src=HGI_DEV_ADDR,
-                        dst=Address(dev_id),
+                        dst=Address(device_id),
                         action=Action.GET_OPENTHERM_DATA,
                         data={"msg_id": data_id},
                     )
@@ -432,7 +438,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
-                    addr2=dev_id,
+                    addr2=device_id,
                     addr3=NON_DEV_ADDR.id,
                     code=code,
                     payload="00",
@@ -444,7 +450,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
-                    addr2=dev_id,
+                    addr2=device_id,
                     addr3=NON_DEV_ADDR.id,
                     code=code,
                     payload="0000",
@@ -457,7 +463,7 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
             CommandDTO(
                 verb=RQ,
                 addr1=HGI_DEV_ADDR.id,
-                addr2=dev_id,
+                addr2=device_id,
                 addr3=NON_DEV_ADDR.id,
                 code=code,
                 payload="0000",
@@ -467,12 +473,12 @@ async def script_scan_full(gateway: Gateway, dev_id: DeviceIdT) -> None:
 
 @script_decorator
 async def script_scan_hard(
-    gateway: Gateway, dev_id: DeviceIdT, *, start_code: None | int = None
+    gateway: Gateway, device_id: DeviceIdT, *, start_code: None | int = None
 ) -> None:
     """Execute a sequential numeric ping across the theoretical code space.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to probe.
+    :param device_id: The device ID to probe.
     :param start_code: Hex starting point for the iteration.
     """
     _LOGGER.warning("scan_hard() invoked - expect some Warnings")
@@ -485,7 +491,7 @@ async def script_scan_hard(
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
-                    addr2=dev_id,
+                    addr2=device_id,
                     addr3=NON_DEV_ADDR.id,
                     code=f"{code:04X}",
                     payload="0000",
@@ -496,11 +502,11 @@ async def script_scan_hard(
 
 
 @script_decorator
-async def script_scan_fan(gateway: Gateway, dev_id: DeviceIdT) -> None:
+async def script_scan_fan(gateway: Gateway, device_id: DeviceIdT) -> None:
     """Probe an HVAC/Ventilator targeted device with standard parameters.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to probe.
+    :param device_id: The device ID to probe.
     """
     _LOGGER.warning("scan_fan() invoked - expect a lot of nonsense")
 
@@ -519,7 +525,7 @@ async def script_scan_fan(gateway: Gateway, dev_id: DeviceIdT) -> None:
             CommandDTO(
                 verb=RQ,
                 addr1=HGI_DEV_ADDR.id,
-                addr2=dev_id,
+                addr2=device_id,
                 addr3=NON_DEV_ADDR.id,
                 code=code,
                 payload="00",
@@ -557,7 +563,7 @@ async def script_scan_fan(gateway: Gateway, dev_id: DeviceIdT) -> None:
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
-                    addr2=dev_id,
+                    addr2=device_id,
                     addr3=NON_DEV_ADDR.id,
                     code=code,
                     payload="00",
@@ -566,11 +572,11 @@ async def script_scan_fan(gateway: Gateway, dev_id: DeviceIdT) -> None:
 
 
 @script_decorator
-async def script_scan_otb(gateway: Gateway, dev_id: DeviceIdT) -> None:
+async def script_scan_otb(gateway: Gateway, device_id: DeviceIdT) -> None:
     """Probe an OpenTherm Bridge targeted device across known data ID tables.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to probe.
+    :param device_id: The device ID to probe.
     """
     _LOGGER.warning("script_scan_otb_full invoked - expect a lot of nonsense")
 
@@ -578,7 +584,7 @@ async def script_scan_otb(gateway: Gateway, dev_id: DeviceIdT) -> None:
         cmd = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
-                dst=Address(dev_id),
+                dst=Address(device_id),
                 action=Action.GET_OPENTHERM_DATA,
                 data={"msg_id": msg_id},
             )
@@ -587,11 +593,11 @@ async def script_scan_otb(gateway: Gateway, dev_id: DeviceIdT) -> None:
 
 
 @script_decorator
-async def script_scan_otb_hard(gateway: Gateway, dev_id: DeviceIdT) -> None:
+async def script_scan_otb_hard(gateway: Gateway, device_id: DeviceIdT) -> None:
     """Probe an OpenTherm Bridge target iteratively across numeric data ID space.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to probe.
+    :param device_id: The device ID to probe.
     """
     _LOGGER.warning("script_scan_otb_hard invoked - expect a lot of nonsense")
 
@@ -599,7 +605,7 @@ async def script_scan_otb_hard(gateway: Gateway, dev_id: DeviceIdT) -> None:
         cmd = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
-                dst=Address(dev_id),
+                dst=Address(device_id),
                 action=Action.GET_OPENTHERM_DATA,
                 data={"msg_id": msg_id},
             )
@@ -608,11 +614,11 @@ async def script_scan_otb_hard(gateway: Gateway, dev_id: DeviceIdT) -> None:
 
 
 @script_decorator
-async def script_scan_otb_map(gateway: Gateway, dev_id: DeviceIdT) -> None:
+async def script_scan_otb_map(gateway: Gateway, device_id: DeviceIdT) -> None:
     """Execute mapping verifications between native RAMSES codes and OpenTherm properties.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to probe.
+    :param device_id: The device ID to probe.
     """
     _LOGGER.warning("script_scan_otb_map invoked - expect a lot of nonsense")
 
@@ -635,7 +641,7 @@ async def script_scan_otb_map(gateway: Gateway, dev_id: DeviceIdT) -> None:
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
-                    addr2=dev_id,
+                    addr2=device_id,
                     addr3=NON_DEV_ADDR.id,
                     code=code,
                     payload="00",
@@ -646,7 +652,7 @@ async def script_scan_otb_map(gateway: Gateway, dev_id: DeviceIdT) -> None:
         cmd = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
-                dst=Address(dev_id),
+                dst=Address(device_id),
                 action=Action.GET_OPENTHERM_DATA,
                 data={"msg_id": msg_id},
             )
@@ -655,11 +661,11 @@ async def script_scan_otb_map(gateway: Gateway, dev_id: DeviceIdT) -> None:
 
 
 @script_decorator
-async def script_scan_otb_ramses(gateway: Gateway, dev_id: DeviceIdT) -> None:
+async def script_scan_otb_ramses(gateway: Gateway, device_id: DeviceIdT) -> None:
     """Probe an OpenTherm bridge exclusively for native RAMSES codes.
 
     :param gateway: The gateway instance.
-    :param dev_id: The device ID to probe.
+    :param device_id: The device ID to probe.
     """
     _LOGGER.warning("script_scan_otb_ramses invoked - expect a lot of nonsense")
 
@@ -696,7 +702,7 @@ async def script_scan_otb_ramses(gateway: Gateway, dev_id: DeviceIdT) -> None:
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
-                    addr2=dev_id,
+                    addr2=device_id,
                     addr3=NON_DEV_ADDR.id,
                     code=c,
                     payload="00",

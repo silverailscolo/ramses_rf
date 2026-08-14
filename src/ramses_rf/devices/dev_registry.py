@@ -440,19 +440,19 @@ class DeviceRegistry:
                 if zone:
                     zone._update_schema(**{"class": event.metadata["class"]})
 
-    def _add_device(self, dev: Device) -> None:
+    def _add_device(self, device: Device) -> None:
         """Add a device to the registry.
 
-        :param dev: The device instance to add.
-        :type dev: Device
+        :param device: The device instance to add.
+        :type device: Device
         :raises SchemaInconsistentError: If the device already exists in
             the registry.
         """
-        if dev.id in self.device_by_id:
-            raise SchemaInconsistentError(f"Device already exists: {dev.id}")
+        if device.id in self.device_by_id:
+            raise SchemaInconsistentError(f"Device already exists: {device.id}")
 
-        self.devices.append(dev)
-        self.device_by_id[dev.id] = dev
+        self.devices.append(device)
+        self.device_by_id[device.id] = device
 
     @overload
     def get_device(
@@ -570,7 +570,7 @@ class DeviceRegistry:
 
     @staticmethod
     def _maybe_reparent_bdr(
-        dev: Device | None,
+        device: Device | None,
         parent: Parent | None,
         child_id: str | None,
     ) -> None:
@@ -590,14 +590,14 @@ class DeviceRegistry:
 
         See: https://github.com/ramses-rf/ramses_cc/issues/834
 
-        :param dev: The device being bound (expected to be a BDR).
+        :param device: The device being bound (expected to be a BDR).
         :param parent: The new parent to bind to (expected to be the TCS).
         :param child_id: The new child_id (must be FC for re-parenting).
         """
-        if not dev or not parent or child_id != FC:
+        if not device or not parent or child_id != FC:
             return
 
-        old_parent = dev._parent
+        old_parent = device._parent
         if old_parent is None or old_parent is parent:
             return
 
@@ -608,7 +608,7 @@ class DeviceRegistry:
         if not isinstance(old_parent, DhwZone):
             return
 
-        if getattr(dev, "_child_id", None) != FA:
+        if getattr(device, "_child_id", None) != FA:
             return
 
         # Re-parent even if the DhwZone has a sensor — the FC binding
@@ -620,11 +620,11 @@ class DeviceRegistry:
         _LOGGER.info(
             "RE-PARENTING: %s from DhwZone (hotwater_valve) to "
             "System (appliance_control)",
-            dev.id,
+            device.id,
         )
 
         # Detach from the DhwZone (encapsulated referential integrity)
-        old_parent._detach_child(dev)
+        old_parent._detach_child(device)
 
         # Clean up the DhwZone if it is now empty
         tcs = getattr(old_parent, "tcs", None)

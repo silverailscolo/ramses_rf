@@ -166,9 +166,9 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         """Resume the receiving end."""
         self._reading = True
 
-    def _make_connection(self, gwy_id: DeviceIdT | None) -> None:
+    def _make_connection(self, gateway_id: DeviceIdT | None) -> None:
         """Register the connection with the protocol."""
-        self._extra[SZ_ACTIVE_HGI] = gwy_id  # or HGI_DEV_ADDR.id
+        self._extra[SZ_ACTIVE_HGI] = gateway_id  # or HGI_DEV_ADDR.id
 
         if self.loop.is_closed():
             _LOGGER.debug("Event loop closed, cannot make connection")
@@ -255,9 +255,9 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             _LOGGER.debug("%s < Transport Error(%s)", pkt, err)
             return
 
-    def _pkt_read(self, pkt: Packet) -> None:
+    def _pkt_read(self, packet: Packet) -> None:
         """Pass any valid Packets to the protocol's callback."""
-        self._this_pkt, self._prev_pkt = pkt, self._this_pkt
+        self._this_pkt, self._prev_pkt = packet, self._this_pkt
 
         if self._closing is True:
             raise exc.TransportError("Transport is closing or has closed")
@@ -266,15 +266,15 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             raise exc.TransportError("Event loop is closed")
 
         try:
-            self.loop.call_soon_threadsafe(self._protocol.pkt_received, pkt)
+            self.loop.call_soon_threadsafe(self._protocol.pkt_received, packet)
         except RuntimeError as err:
             # Event loop may close between the is_closed() check and this
             # call when the paho-mqtt thread races asyncio teardown (issue 802)
             raise exc.TransportError(f"Event loop is closed: {err}") from err
         except AssertionError as err:
-            _LOGGER.exception("%s < exception from msg layer: %s", pkt, err)
+            _LOGGER.exception("%s < exception from msg layer: %s", packet, err)
         except exc.ProtocolError as err:
-            _LOGGER.error("%s < exception from msg layer: %s", pkt, err)
+            _LOGGER.error("%s < exception from msg layer: %s", packet, err)
 
     async def send_frame(self, frame: str) -> None:
         """Send a frame (alias for write_frame)."""

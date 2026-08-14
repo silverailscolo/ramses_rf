@@ -206,7 +206,7 @@ class EntityState:
 
     def _add_record(
         self,
-        dev_id: str,
+        device_id: str,
         code: Code | str | None = None,
         verb: str = " I",
         payload: str = "00",
@@ -214,7 +214,7 @@ class EntityState:
         """Add a (dummy) record to the central SQLite MessageStore."""
         if self._gateway.message_store:
             self._gateway.message_store.add_record(
-                dev_id, code=str(code), verb=verb, payload=payload
+                device_id, code=str(code), verb=verb, payload=payload
             )
 
     async def _delete_msg(self, msg: ApplicationMessage) -> None:
@@ -275,10 +275,10 @@ class EntityState:
             )
         return msg
 
-    async def get_flag(self, code: Code | str, key: str, idx: int) -> bool | None:
+    async def get_flag(self, code: Code | str, key: str, index: int) -> bool | None:
         """Get the boolean value of a specific flag within a payload."""
         if flags := await self.get_value(code, key=key):
-            return bool(flags[idx])
+            return bool(flags[index])
         return None
 
     _msg_flag = get_flag
@@ -415,7 +415,7 @@ class EntityState:
         self,
         msg: ApplicationMessage | None,
         key: str | None = "*",
-        zone_idx: str | None = None,
+        zone_index: str | None = None,
         domain_id: str | None = None,
     ) -> Any:
         """Get all or a specific key with its values from a Message."""
@@ -448,8 +448,8 @@ class EntityState:
 
         if domain_id:
             idx, val = SZ_DOMAIN_ID, domain_id
-        elif zone_idx:
-            idx, val = SZ_ZONE_IDX, zone_idx
+        elif zone_index:
+            idx, val = SZ_ZONE_IDX, zone_index
 
         if isinstance(payload, dict):
             msg_dict = payload

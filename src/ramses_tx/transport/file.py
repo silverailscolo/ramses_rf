@@ -24,14 +24,14 @@ class _FileTransportAbstractor:
 
     def __init__(
         self,
-        pkt_source: dict[str, str] | str | TextIOWrapper,
+        packet_source: dict[str, str] | str | TextIOWrapper,
         protocol: RamsesProtocolT,
         /,
         *,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the file transport abstractor."""
-        self._pkt_source = pkt_source
+        self._pkt_source = packet_source
         self._protocol = protocol
         self._loop = loop or asyncio.get_event_loop()
 
@@ -41,7 +41,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
     def __init__(
         self,
-        pkt_source: dict[str, str] | str | TextIOWrapper,
+        packet_source: dict[str, str] | str | TextIOWrapper,
         protocol: RamsesProtocolT,
         /,
         *,
@@ -53,7 +53,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         if not config.disable_sending:
             raise TransportSourceInvalid("This Transport cannot send packets")
 
-        _FileTransportAbstractor.__init__(self, pkt_source, protocol, loop=loop)
+        _FileTransportAbstractor.__init__(self, packet_source, protocol, loop=loop)
         _ReadTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._evt_reading = asyncio.Event()

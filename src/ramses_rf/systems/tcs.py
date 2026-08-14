@@ -295,15 +295,15 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         )
 
     def get_htg_zone(
-        self, zone_idx: str, *, msg: Message | None = None, **schema: Any
+        self, zone_index: str, *, msg: Message | None = None, **schema: Any
     ) -> Zone:
         """Return a heating zone, create it if required.
 
-        Heating zones are uniquely identified by a tcs_id and zone_idx pair.
+        Heating zones are uniquely identified by a tcs_id and zone_index pair.
         If created, attach it to this TCS.
 
-        :param zone_idx: The hexadecimal string identifier for the zone.
-        :type zone_idx: str
+        :param zone_index: The hexadecimal string identifier for the zone.
+        :type zone_index: str
         :param msg: An optional message to handle upon creation.
         :type msg: Message | None, optional
         :param schema: Keyword arguments defining the zone schema.
@@ -315,9 +315,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         # Zone._update_schema for hydration (ramses-rf/ramses_cc#919).
         schema = shrink(SCH_TCS_ZONES_ZON(schema), keep_hints=True)
 
-        zon: Zone = self.zone_by_idx.get(zone_idx)  # type: ignore[assignment]
+        zon: Zone = self.zone_by_idx.get(zone_index)  # type: ignore[assignment]
         if zon is None:  # not found in tcs, create it
-            zon = zone_factory(self, zone_idx, msg=msg, **schema)  # type: ignore[unreachable]
+            zon = zone_factory(self, zone_index, msg=msg, **schema)  # type: ignore[unreachable]
             self.zone_by_idx[zon.idx] = zon
             self.zones.append(zon)
 
@@ -732,11 +732,11 @@ class Datetime(SystemBase):  # 313F
         msg = await self._gateway.dispatcher.send(intent)
         return dt.fromisoformat(msg.payload[SZ_DATETIME])
 
-    async def set_datetime(self, dtm: dt) -> Message:
+    async def set_datetime(self, date_time: dt) -> Message:
         """Set the date and time of the system.
 
-        :param dtm: The datetime object to set.
-        :type dtm: dt
+        :param date_time: The datetime object to set.
+        :type date_time: dt
         :returns: The resulting message.
         :rtype: Message
         """
@@ -744,7 +744,7 @@ class Datetime(SystemBase):  # 313F
             src=HGI_DEV_ADDR,
             dst=Address(self.id),
             action=Action.SET_SYSTEM_TIME,
-            data={"datetime": dtm},
+            data={"datetime": date_time},
         )
         return await self._gateway.dispatcher.send(intent, priority=Priority.HIGH)
 
@@ -992,7 +992,7 @@ def system_factory(
     """
 
     def best_tcs_class(
-        ctl_addr: Address,
+        controller_address: Address,
         *,
         msg: Message | None = None,
         eavesdrop: bool = False,
@@ -1000,8 +1000,8 @@ def system_factory(
     ) -> type[System]:
         """Return the best system class for a given CTL/schema.
 
-        :param ctl_addr: The central controller address.
-        :type ctl_addr: Address
+        :param controller_address: The central controller address.
+        :type controller_address: Address
         :param msg: An optional message.
         :type msg: Message | None, optional
         :param eavesdrop: Whether eavesdropping is enabled.
@@ -1016,14 +1016,16 @@ def system_factory(
         # a specified system class always takes precedence (even if it is wrong)...
         if klass and (cls := SYS_CLASS_BY_SLUG.get(klass)):
             _LOGGER.debug(
-                f"Using an explicitly-defined system class for: {ctl_addr} "
+                f"Using an explicitly-defined system class for: {controller_address} "
                 f"({cls._SLUG})"
             )
             return cls
 
         # otherwise, use the default system class...
         _LOGGER.debug(
-            "Using a generic system class for: %s (%s)", ctl_addr, Device._SLUG
+            "Using a generic system class for: %s (%s)",
+            controller_address,
+            Evohome._SLUG,
         )
         return Evohome
 

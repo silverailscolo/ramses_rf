@@ -382,7 +382,7 @@ def build_set_system_time(intent: Command) -> CommandDTO:
     datetime = intent.get("datetime")
     is_dst = intent.get("is_dst", False)
 
-    dt_str = hex_from_dtm(datetime, is_dst=is_dst, incl_seconds=True)
+    dt_str = hex_from_dtm(datetime, is_daylight_saving=is_dst, incl_seconds=True)
     payload = f"0060{dt_str}"
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(

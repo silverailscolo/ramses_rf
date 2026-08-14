@@ -523,7 +523,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     def send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -534,7 +534,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     ) -> asyncio.Task[Packet]:
         """Schedule command transmission as a background task."""
         coro = self.async_send_cmd(
-            cmd,
+            command,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
@@ -553,7 +553,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     async def async_send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -565,7 +565,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         """Transmit a command and wait for response packet."""
         try:
             return await self._engine.async_send_cmd(
-                cmd,
+                command,
                 gap_duration=gap_duration,
                 num_repeats=num_repeats,
                 priority=priority,

@@ -123,7 +123,7 @@ class DecoderEngine:
             code=dto.code,
             verb=dto.verb,
             source_id=src_id,
-            context_val=context_val,
+            context_value=context_val,
         )
 
         # Instantiate the immutable historical fact at the pipeline's edge

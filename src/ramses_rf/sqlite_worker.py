@@ -98,9 +98,9 @@ class SQLiteWorker:
         """Submit a disk snapshot request (Non-blocking)."""
         self._queue.put(SnapshotRequest())
 
-    def submit_delete_message(self, query: str, params: tuple[Any, ...]) -> None:
+    def submit_delete_message(self, query: str, parameters: tuple[Any, ...]) -> None:
         """Submit a request to delete specific messages (Non-blocking)."""
-        self._queue.put(DeleteMessageRequest(query, params))
+        self._queue.put(DeleteMessageRequest(query, parameters))
 
     def flush(self, timeout: float = 10.0) -> None:
         """Block until all currently pending tasks are processed."""

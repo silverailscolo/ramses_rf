@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import voluptuous as vol
 
@@ -346,7 +346,7 @@ SCH_RESTORE_CACHE_DICT = {
 #
 # 7/7: Other stuff
 def _get_device(
-    gateway: Gateway, dev_id: DeviceIdT, **kwargs: Any
+    gateway: Gateway, device_id: DeviceIdT, **kwargs: Any
 ) -> Device:  # , **traits
     """Get a device from the gateway.
 
@@ -355,28 +355,27 @@ def _get_device(
     The underlying method is wrapped only to provide a better error message.
     """
 
-    def check_filter_lists(dev_id: DeviceIdT) -> None:
+    def check_filter_lists(device_id: DeviceIdT) -> None:
         """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
         err_msg = None
         if (
             gateway._engine._enforce_known_list
-            and dev_id not in gateway._engine._include
+            and device_id not in gateway._engine._include
         ):
             err_msg = f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"
         # issue ramses_cc #296: if enforce_known_list is turned on, error on any "unknown" dev_id
         # fix: delete from schema?
-        if dev_id in gateway._engine._exclude:
+        if device_id in gateway._engine._exclude:
             err_msg = f"it is in the {SZ_SCHEMA}, but also in the {SZ_BLOCK_LIST}"
 
         if err_msg:
             raise exc.DeviceNotFoundError(
-                f"Can't create {dev_id}: {err_msg} (check the lists and the {SZ_SCHEMA})"
+                f"Can't create {device_id}: {err_msg} (check configuration.yaml)"
             )
 
-    check_filter_lists(dev_id)
+    check_filter_lists(device_id)
 
-    dev: Device = gateway.device_registry.get_device(dev_id, **kwargs)
-    return dev
+    return cast("Device", gateway.device_registry.get_device(device_id, **kwargs))
 
 
 def load_schema(
@@ -448,13 +447,15 @@ def load_fan(gateway: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Dev
     return fan
 
 
-def load_tcs(gateway: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evohome:
+def load_tcs(
+    gateway: Gateway, controller_id: DeviceIdT, schema: dict[str, Any]
+) -> Evohome:
     """Create a TCS using its schema.
 
     :param gateway: The Gateway instance managing the TCS.
     :type gateway: Gateway
-    :param ctl_id: The controller device ID for the TCS.
-    :type ctl_id: DeviceIdT
+    :param controller_id: The controller device ID for the TCS.
+    :type controller_id: DeviceIdT
     :param schema: The schema dictionary for the TCS.
     :type schema: dict[str, Any]
     :returns: The created or retrieved Evohome TCS instance.
@@ -463,7 +464,7 @@ def load_tcs(gateway: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evo
     # print(schema)
     # schema = SCH_TCS_ZONES_ZON(schema)
 
-    ctl = _get_device(gateway, ctl_id)
+    ctl = _get_device(gateway, controller_id)
     if ctl.tcs is None:
         raise exc.SchemaInconsistentError(f"No TCS assigned to controller {ctl.id}")
     ctl.tcs._update_schema(**schema)

@@ -189,13 +189,13 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
 
 
 def getLogger(  # permits a bespoke Logger class
-    name: str | None = None, pkt_log: bool = False
+    name: str | None = None, packet_log: bool = False
 ) -> logging.Logger:
     """Return a logger with the specified name, creating it if necessary.
 
     Used to set record timestamps to its packet timestamp instead of the current time.
     """
-    if name is None or not pkt_log:
+    if name is None or not packet_log:
         return logging.getLogger(name)
 
     # Acquire lock, so no-one else uses our Logger class

@@ -1787,7 +1787,7 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
         if self.datetime_str is not None:
             dt_hex = hex_from_dtm(
                 self.datetime_str,
-                is_dst=self.is_daylight_saving or False,
+                is_daylight_saving=self.is_daylight_saving or False,
                 incl_seconds=True,
             )
             return bytes([self.domain_index, 0xF0]) + bytes.fromhex(dt_hex)
