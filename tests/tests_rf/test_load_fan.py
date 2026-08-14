@@ -104,5 +104,5 @@ def test_load_fan_processes_remotes_and_sensors(mock_gateway: MagicMock) -> None
     assert REMOTE_DEVICE_ID in mock_gateway.device_registry.device_by_id
     assert SENSOR_DEVICE_ID in mock_gateway.device_registry.device_by_id
 
-    if fan._gwy.message_store:
-        fan._gwy.message_store.stop()
+    if fan._gateway.message_store:
+        fan._gateway.message_store.stop()
