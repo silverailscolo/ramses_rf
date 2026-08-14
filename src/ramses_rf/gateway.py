@@ -64,6 +64,27 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+def _payload_to_serialisable(payload: Any) -> Any:
+    """Convert a payload object to a JSON-serialisable form.
+
+    Payload dataclasses may contain ``bytes`` fields (e.g.
+    ``PuzzlePayload``) that HA's storage layer cannot JSON-encode.
+    If the payload has a ``to_dict()`` method, use it; otherwise
+    return the payload as-is (legacy behaviour for plain dicts/strings).
+
+    :param payload: The payload object from an ``ApplicationMessage``.
+    :type payload: Any
+    :returns: A JSON-serialisable representation of the payload.
+    :rtype: Any
+    """
+    if hasattr(payload, "to_dict"):
+        try:
+            return payload.to_dict()
+        except Exception:  # noqa: BLE001
+            return str(payload)
+    return payload
+
+
 class Gateway(GatewayLifecycle, GatewayInterface):
     """The gateway class.
 
@@ -374,7 +395,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                     "addr2": msg._addrs[1].id,  # <-- Exact raw addr2
                     "addr3": msg._addrs[2].id,  # <-- Exact raw addr3
                     "code": str(msg.code),
-                    "payload": msg.payload,
+                    "payload": _payload_to_serialisable(msg.payload),
                     # Frame string is required by _restore_cached_packets /
                     # Packet.from_dict to reconstruct the Packet on warm restart.
                     # Without it, from_dict gets an empty frame body and raises
