@@ -338,7 +338,7 @@ def test_schedule_data_dataclass_validation_and_dict_conversion() -> None:
     sched_data = ScheduleData.from_dict(raw_schedule)
 
     # Assert
-    assert sched_data.zone_idx == "HW"
+    assert sched_data.zone_index == "HW"
     assert len(sched_data.days) == 1
     assert sched_data.days[0].day_of_week == 0
     assert sched_data.days[0].switchpoints[0].enabled is True
@@ -351,32 +351,32 @@ def test_schedule_data_dataclass_validation_and_dict_conversion() -> None:
     assert sp_dict.get(SZ_ENABLED) is True
 
     # Invalid zone index
-    with pytest.raises(ValueError, match="Invalid zone_idx"):
-        ScheduleData(zone_idx="INVALID", days=sched_data.days)
+    with pytest.raises(ValueError, match="Invalid zone_index"):
+        ScheduleData(zone_index="INVALID", days=sched_data.days)
 
 
 def test_schedule_switchpoint_payload_from_switchpoint() -> None:
     """Verify ScheduleSwitchpointPayload.from_switchpoint factory method."""
     # Zone switchpoint
     sp1 = ScheduleSwitchpointPayload.from_switchpoint(
-        zone_idx="01",
+        zone_index="01",
         day_of_week=0,
         time_of_day_mins=360,
         setpoint=21.0,
     )
-    assert sp1.zone_idx == 1
+    assert sp1.zone_index == 1
     assert sp1.day_of_week == 0
     assert sp1.time_of_day_mins == 360
     assert sp1.setpoint_value == 2100
 
     # DHW switchpoint
     sp2 = ScheduleSwitchpointPayload.from_switchpoint(
-        zone_idx="HW",
+        zone_index="HW",
         day_of_week=1,
         time_of_day_mins=480,
         setpoint=True,
     )
-    assert sp2.zone_idx == 0xFA
+    assert sp2.zone_index == 0xFA
     assert sp2.day_of_week == 1
     assert sp2.time_of_day_mins == 480
     assert sp2.setpoint_value == 1

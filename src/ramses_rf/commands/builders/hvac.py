@@ -319,8 +319,8 @@ def build_set_fan_param(intent: Command) -> CommandDTO:
             "This parameter is not defined in the device schema"
         )
 
-    min_val = param_schema.min_val
-    max_val = param_schema.max_val
+    min_val = param_schema.min_value
+    max_val = param_schema.max_value
     precision = param_schema.precision
     data_type = param_schema.data_type
 

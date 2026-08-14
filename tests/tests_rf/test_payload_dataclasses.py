@@ -95,7 +95,7 @@ def test_heat_demand_payload_3150_2byte_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.domain_or_zone_idx == 1
+    assert payload.domain_or_zone_index == 1
     assert payload.demand_percent == 202
     assert payload.raw_extra is None
     assert reencoded == raw_hex
@@ -118,7 +118,7 @@ def test_heat_demand_payload_3150_multibyte_parity() -> None:
     as_dict = [payload_to_dict(x) for x in payload]
 
     # Assert
-    assert payload[0].domain_or_zone_idx == 1
+    assert payload[0].domain_or_zone_index == 1
     assert payload[0].demand_percent == 202
     assert reencoded == raw_hex
     assert as_dict == [
@@ -139,7 +139,7 @@ def test_temperature_payload_30c9_simple_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx is None
+    assert payload.zone_index is None
     assert payload.temperature == 20.0
     assert reencoded == raw_hex
     assert as_dict == {"zone_idx": None, "temperature": 20.0}
@@ -157,7 +157,7 @@ def test_temperature_payload_30c9_zone_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx == 1
+    assert payload.zone_index == 1
     assert payload.temperature == 20.0
     assert reencoded == raw_hex
     assert as_dict == {"zone_idx": 1, "temperature": 20.0}
@@ -175,7 +175,7 @@ def test_schedule_switchpoint_payload_0404_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx == 1
+    assert payload.zone_index == 1
     assert payload.day_of_week == 1
     assert payload.time_of_day_mins == 360
     assert payload.setpoint_value == 2000
@@ -200,7 +200,7 @@ def test_dhw_params_payload_10a0_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.dhw_idx == 0
+    assert payload.dhw_index == 0
     assert payload.setpoint == 38.0
 
     assert reencoded == raw_hex
@@ -270,7 +270,7 @@ def test_zone_config_payload_000a_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx == 0
+    assert payload.zone_index == 0
     assert payload.zone_flags == 0
     assert payload.min_temp == 5.0
     assert payload.max_temp == 35.12
@@ -295,7 +295,7 @@ def test_fan_mode_payload_22f1_parity() -> None:
 
     # Assert
     assert payload.header == 0
-    assert payload.mode_idx == 2
+    assert payload.mode_index == 2
     assert payload.mode_max == 4
     assert reencoded == raw_hex
     assert as_dict == {"header": 0, "mode_idx": 2, "mode_max": 4}
@@ -312,11 +312,11 @@ def test_hvac_fan_param_payload_2411_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.param_id == 10
+    assert payload.parameter_id == 10
     assert payload.data_type == 16
     assert payload.value_scaled == 5
-    assert payload.min_val_scaled == 0
-    assert payload.max_val_scaled == 100
+    assert payload.min_value_scaled == 0
+    assert payload.max_value_scaled == 100
     assert payload.precision_scaled == 1
     assert payload.trailer_bytes == b"\x00\x01"
     assert reencoded == raw_hex
@@ -375,7 +375,7 @@ def test_opentherm_msg_payload_3220_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.ot_idx == 0
+    assert payload.opentherm_index == 0
     assert payload.msg_id == 0
     assert payload.msg_type == 1
     assert payload.raw_value == b"\x19\x00"
@@ -399,7 +399,7 @@ def test_dhw_temp_payload_1260_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.dhw_idx == 0
+    assert payload.dhw_index == 0
     assert payload.temperature == 21.03
     assert reencoded == raw_hex
     assert as_dict == {"dhw_idx": 0, "temperature": 21.03}
@@ -417,7 +417,7 @@ def test_dhw_config_payload_12f0_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.dhw_idx == 0
+    assert payload.dhw_index == 0
     assert payload.setpoint_temp == 50.0
     assert reencoded == raw_hex
     assert as_dict == {"dhw_idx": 0, "setpoint_temp": 50.0}
@@ -434,7 +434,7 @@ def test_dhw_state_payload_1f41_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.dhw_idx == 0
+    assert payload.dhw_index == 0
     assert payload.active_flag == 1
     assert reencoded == raw_hex
     assert as_dict == {
@@ -444,7 +444,7 @@ def test_dhw_state_payload_1f41_parity() -> None:
     }
 
     # Verify programmatic creation with mode_val does not drop mode_val
-    on_fly_payload = DhwStatePayload(dhw_idx=0, active_flag=1, mode_val=2)
+    on_fly_payload = DhwStatePayload(dhw_index=0, active_flag=1, mode_value=2)
     assert on_fly_payload.to_bytes().hex().upper() == "000102"
 
     # Verify field update on unpacked payload reflects new data dynamically
@@ -467,7 +467,7 @@ def test_zone_setpoint_payload_0004_parity() -> None:
 
     # Assert
     assert isinstance(payload, ZoneSetpointPayload)
-    assert payload.zone_idx == 1
+    assert payload.zone_index == 1
     assert payload.setpoint_temp == 20.0
 
     assert reencoded == raw_hex
@@ -502,7 +502,7 @@ def test_setpoint_info_payload_2309_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx == 0
+    assert payload.zone_index == 0
     assert payload.setpoint_temp == 21.0
     assert reencoded == raw_hex
     assert as_dict == {"zone_idx": 0, "setpoint_temp": 21.0}
@@ -519,7 +519,7 @@ def test_flow_temp_payload_3200_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.domain_idx == 0
+    assert payload.domain_index == 0
     assert payload.temperature == 48.90
     assert reencoded == raw_hex
     assert as_dict == {"domain_idx": 0, "temperature": 48.90}
@@ -703,7 +703,7 @@ def test_relay_demand_payload_0008_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.domain_or_zone_idx == 0
+    assert payload.domain_or_zone_index == 0
     assert payload.demand_percent == 0.5
     assert reencoded == raw_hex
     assert as_dict == {
@@ -726,7 +726,7 @@ def test_relay_failsafe_payload_0009_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.domain_or_zone_idx == 0
+    assert payload.domain_or_zone_index == 0
     assert payload.failsafe_enabled is True
     assert reencoded == raw_hex
     assert as_dict == {"domain_or_zone_idx": 0, "failsafe_enabled": True}
@@ -744,7 +744,7 @@ def test_window_state_payload_12b0_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx == 0
+    assert payload.zone_index == 0
     assert payload.window_open is True
     assert reencoded == raw_hex
     assert as_dict == {"zone_idx": 0, "window_open": True}
@@ -778,7 +778,7 @@ def test_relay_demand_payload_0008_jasper_13byte_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.domain_or_zone_idx == 0
+    assert payload.domain_or_zone_index == 0
     assert payload.demand_percent == 0.5
     assert payload.raw_extra == bytes.fromhex("0102030405060708090A0B")
     assert reencoded == raw_hex
@@ -838,7 +838,7 @@ def test_system_fault_log_payload_0418_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.log_idx == 0
+    assert payload.log_index == 0
     assert payload.log_data == bytes.fromhex("00010000")
     assert reencoded == raw_hex
     assert as_dict == {"log_idx": 0, "log_data": b"\x00\x01\x00\x00"}
@@ -855,8 +855,8 @@ def test_system_config_payload_2e04_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.config_idx == 0
-    assert payload.config_val == 0
+    assert payload.config_index == 0
+    assert payload.config_value == 0
     assert reencoded == raw_hex
     assert as_dict == {"config_idx": 0, "config_val": 0, "raw_extra": None}
 
@@ -893,7 +893,7 @@ def test_hvac_fan_param_payload_2411_22byte_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.param_id == 1
+    assert payload.parameter_id == 1
     assert payload.value_scaled == 50
     assert as_dict["param_id"] == 1
     assert as_dict["value_scaled"] == 50
@@ -914,7 +914,7 @@ def test_schedule_fragment_payload_0404_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx == 1
+    assert payload.zone_index == 1
     assert payload.frag_number == 1
     assert payload.total_frags == 3
     assert reencoded == raw_hex
@@ -961,7 +961,7 @@ def test_zone_mode_payload_2349_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx == 0
+    assert payload.zone_index == 0
     assert payload.setpoint_temp == 21.0
     assert payload.mode_code == 0
     assert payload.duration_minutes is None
@@ -987,7 +987,7 @@ def test_zone_name_payload_parity() -> None:
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert payload.zone_idx == 0
+    assert payload.zone_index == 0
     assert payload.name == "Lounge"
     assert reencoded == raw_hex
     assert as_dict == {
@@ -1199,7 +1199,7 @@ def test_hvac_payload_roundtrip_codecs_parity() -> None:
     # Arrange & Act 4: HvacFanModePayload (22F1)
     raw_22f1 = bytes.fromhex("000204")
     p_22f1 = ramses_rf.payloads.hvac.HvacFanModePayload.from_bytes(raw_22f1)
-    assert p_22f1.mode_idx == 2
+    assert p_22f1.mode_index == 2
     assert p_22f1.to_bytes() == raw_22f1
 
     # Arrange & Act 5: HvacFlowRatePayload (22F2)
@@ -1270,12 +1270,12 @@ def test_polymorphic_dispatchers_parity_comprehensive() -> None:
     )
     assert isinstance(p_0004_22b, ramses_rf.payloads.heating.ZoneName22BPayload)
     assert p_0004_22b.name == "Living Room"
-    assert p_0004_22b.zone_idx == 0
+    assert p_0004_22b.zone_index == 0
     assert payload_to_dict(p_0004_22b) == {"zone_idx": 0, "name": "Living Room"}
 
     p_0004_3b = ZoneNamePayload.from_bytes(bytes.fromhex("0007D0"))
     assert isinstance(p_0004_3b, ramses_rf.payloads.heating.ZoneNameShort3BPayload)
-    assert p_0004_3b.zone_idx == 0
+    assert p_0004_3b.zone_index == 0
     assert p_0004_3b.setpoint_temp == 20.0
     assert payload_to_dict(p_0004_3b) == {"zone_idx": 0, "setpoint_temp": 20.0}
 
@@ -1360,14 +1360,14 @@ def test_polymorphic_dispatchers_parity_comprehensive() -> None:
     # 7. ZoneSetpoint (2309): 3B
     p_2309 = ZoneSetpointPayload.from_bytes(bytes.fromhex("0007D0"))
     assert isinstance(p_2309, ramses_rf.payloads.heating.ZoneSetpoint3BPayload)
-    assert p_2309.zone_idx == 0
+    assert p_2309.zone_index == 0
     assert p_2309.setpoint_temp == 20.0
     assert payload_to_dict(p_2309) == {"zone_idx": 0, "setpoint_temp": 20.0}
 
     # 8. ZoneMode (2349): 4B, 7B, and 13B
     p_2349_4b = ZoneModePayload.from_bytes(bytes.fromhex("0007D000"))
     assert isinstance(p_2349_4b, ramses_rf.payloads.heating.ZoneMode4BPayload)
-    assert p_2349_4b.zone_idx == 0
+    assert p_2349_4b.zone_index == 0
     assert p_2349_4b.setpoint_temp == 20.0
     assert p_2349_4b.mode_code == 0
     assert payload_to_dict(p_2349_4b) == {
@@ -1385,20 +1385,20 @@ def test_polymorphic_dispatchers_parity_comprehensive() -> None:
 
     p_2349_13b = ZoneModePayload.from_bytes(bytes.fromhex("0007D001FFFFFF00110E0507E5"))
     assert isinstance(p_2349_13b, ramses_rf.payloads.heating.ZoneMode13BPayload)
-    assert p_2349_13b.zone_idx == 0
+    assert p_2349_13b.zone_index == 0
     assert p_2349_13b.setpoint_temp == 20.0
     assert p_2349_13b.until_dtm == "2021-05-14T17:00:00"
 
     # 9. SystemDateTime (313F): 2B and 9B
     p_313f_2b = SystemDateTimePayload.from_bytes(bytes.fromhex("0000"))
     assert isinstance(p_313f_2b, ramses_rf.payloads.system.SystemDateTime2BPayload)
-    assert p_313f_2b.domain_idx == 0
+    assert p_313f_2b.domain_index == 0
     assert payload_to_dict(p_313f_2b) == {"domain_idx": 0}
 
     p_313f_9b = SystemDateTimePayload.from_bytes(bytes.fromhex("00F0BB00040C0507EA"))
     assert isinstance(p_313f_9b, ramses_rf.payloads.system.SystemDateTime9BPayload)
     assert p_313f_9b.datetime_str == "2026-05-12T04:00:59"
-    assert p_313f_9b.is_dst is True
+    assert p_313f_9b.is_daylight_saving is True
 
     # 10. HeatDemand (3150): 1B and 2B
     p_3150_1b = HeatDemandPayload.from_bytes(bytes.fromhex("C8"))
@@ -1407,7 +1407,7 @@ def test_polymorphic_dispatchers_parity_comprehensive() -> None:
 
     p_3150_2b = HeatDemandPayload.from_bytes(bytes.fromhex("01CA"))
     assert isinstance(p_3150_2b, ramses_rf.payloads.heating.HeatDemand2BPayload)
-    assert p_3150_2b.domain_or_zone_idx == 1
+    assert p_3150_2b.domain_or_zone_index == 1
     assert p_3150_2b.demand_percent == 202
 
 

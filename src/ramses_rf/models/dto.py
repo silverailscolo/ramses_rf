@@ -17,15 +17,15 @@ class ThermalDemandDTO:
     :type thermal_demand: float | None
     :param mode: Active thermal mode (HEAT, COOL, OFF).
     :type mode: ThermalMode
-    :param ufx_idx: Circuit or zone index string if applicable.
-    :type ufx_idx: str | None
+    :param ufh_index: Circuit or zone index string if applicable.
+    :type ufh_index: str | None
     :param domain_id: System domain identifier if applicable.
     :type domain_id: str | None
     """
 
     thermal_demand: float | None = None
     mode: ThermalMode = ThermalMode.HEAT
-    ufx_idx: str | None = None
+    ufh_index: str | None = None
     domain_id: str | None = None
 
     @property
@@ -64,15 +64,15 @@ class ThermalDemandDTO:
 class UfhCircuitDemandDTO:
     """DTO for an Underfloor Heating (UFH) circuit demand.
 
-    :param ufx_idx: Circuit index identifier.
-    :type ufx_idx: str
+    :param ufh_index: Circuit index identifier.
+    :type ufh_index: str
     :param thermal_demand: Active demand magnitude (0.0 to 1.0) or None.
     :type thermal_demand: float | None
     :param mode: Active thermal mode (HEAT, COOL, OFF).
     :type mode: ThermalMode
     """
 
-    ufx_idx: str
+    ufh_index: str
     thermal_demand: float | None = None
     mode: ThermalMode = ThermalMode.HEAT
 
@@ -161,11 +161,11 @@ class ActuatorCycleDTO:
 class ZoneScheduleDTO:
     """CQRS DTO wrapping zone or system weekly schedule payload.
 
-    :param zone_idx: Zone index string (e.g. '00', 'HW').
-    :type zone_idx: str
+    :param zone_index: Zone index string (e.g. '00', 'HW').
+    :type zone_index: str
     :param schedule: Weekly schedule list of daily switchpoint dicts.
     :type schedule: list[dict[str, Any]]
     """
 
-    zone_idx: str
+    zone_index: str
     schedule: list[dict[str, Any]]

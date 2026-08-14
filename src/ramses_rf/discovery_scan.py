@@ -87,15 +87,15 @@ _CTL_ONLY_CODES_WITH_VERB: dict[str, frozenset[str]] = {
 # Codes that indicate battery-powered devices.
 _BATTERY_CODES: frozenset[str] = frozenset({"1060", "1FC9"})
 
-# Codes that carry zone_idx in the payload (binding telemetry).
+# Codes that carry zone_index in the payload (binding telemetry).
 # Used to extract zone assignment from traffic.
 # NOTE: 30C9 (Room Setpoint) is excluded - its payload is 00{setpoint}
 # where the first byte is always 00 (a constant), not a zone index.
-# 3150 (Actuator State) and 12B0 (Window Open) have the real zone_idx.
-# 000A (Zone Info) is sent by THMs (22:) with their zone_idx as payload —
+# 3150 (Actuator State) and 12B0 (Window Open) have the real zone_index.
+# 000A (Zone Info) is sent by THMs (22:) with their zone_index as payload —
 # e.g. RQ 000A 001 01 means the THM is asking about zone 01 (its zone).
 # The CTL and HGI also send 000A, but the HGI is excluded by is_hgi and
-# the CTL's zone_idx is unused (it gets main_tcs, not a zone placement).
+# the CTL's zone_index is unused (it gets main_tcs, not a zone placement).
 _ZONE_BINDING_CODES: frozenset[str] = frozenset(
     {"3150", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09", "000A"}
 )
@@ -190,7 +190,7 @@ class DiscoveredDevice:
     likely_type: str  # DevType value (e.g. "CTL", "TRV")
     codes_seen: list[str] = field(default_factory=list)  # sorted, deduplicated
     bound_to: str | None = None  # parent device ID (CTL for TRV, FAN for REM)
-    zone_idx: str | None = None  # zone index if known from payload
+    zone_index: str | None = None  # zone index if known from payload
     domain_id: str | None = None  # domain ID if known (FC=appliance_control)
     # True if domain_id was set from an authoritative 000C binding table
     # entry; False if from a 3B00/3EF0 fallback hint.  Consumers (ramses_cc)
@@ -200,8 +200,8 @@ class DiscoveredDevice:
     rssi: float | None = None  # running average
     confidence: str = "low"  # high, medium, low
     is_battery: bool = False  # seen sending battery info
-    src_count: int = 0  # number of packets where this device was src
-    dst_count: int = 0  # number of packets where this device was dst
+    source_count: int = 0  # number of packets where this device was src
+    destination_count: int = 0  # number of packets where this device was dst
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict (for JSON export)."""
@@ -364,8 +364,8 @@ class DiscoveryScan:
             with contextlib.suppress(ValueError, TypeError):
                 rssi = float(dto.rssi)
 
-        # Extract zone_idx from payload if this is a binding code
-        zone_idx = (
+        # Extract zone_index from payload if this is a binding code
+        zone_index = (
             _extract_zone_idx_from_payload(dto.payload or dto.raw_payload)
             if code in _ZONE_BINDING_CODES
             else None
@@ -404,7 +404,7 @@ class DiscoveryScan:
                 code=code,
                 verb=verb,
                 rssi=rssi,
-                zone_idx=zone_idx,
+                zone_index=zone_index,
                 domain_id=domain_id,
                 is_authoritative_domain=is_authoritative_domain,
                 is_src=True,
@@ -418,7 +418,7 @@ class DiscoveryScan:
                 code=code,
                 verb=verb,
                 rssi=None,  # RSSI is for the sender, not the receiver
-                zone_idx=zone_idx,
+                zone_index=zone_index,
                 domain_id=None,
                 is_src=False,
                 dst=None,
@@ -432,7 +432,7 @@ class DiscoveryScan:
                 code=code,
                 verb=verb,
                 rssi=None,
-                zone_idx=None,
+                zone_index=None,
                 domain_id=None,
                 is_src=False,
                 dst=None,
@@ -445,7 +445,7 @@ class DiscoveryScan:
         code: str,
         verb: str,
         rssi: float | None,
-        zone_idx: str | None,
+        zone_index: str | None,
         domain_id: str | None = None,
         is_authoritative_domain: bool = False,
         is_src: bool,
@@ -478,8 +478,8 @@ class DiscoveryScan:
                     rssi=rssi,
                     confidence="high",
                     is_battery=False,
-                    src_count=1 if is_src else 0,
-                    dst_count=0 if is_src else 1,
+                    source_count=1 if is_src else 0,
+                    destination_count=0 if is_src else 1,
                 )
                 self._devices[dev_id] = dev
                 self._dirty = True  # persist the new entry
@@ -490,9 +490,9 @@ class DiscoveryScan:
             else:
                 dev.last_seen = now
                 if is_src:
-                    dev.src_count += 1
+                    dev.source_count += 1
                 else:
-                    dev.dst_count += 1
+                    dev.destination_count += 1
                 if code and code not in dev.codes_seen:
                     dev.codes_seen.append(code)
                     dev.codes_seen.sort()
@@ -506,7 +506,7 @@ class DiscoveryScan:
             return
 
         # For known devices, still update zone bindings (they may have been
-        # accepted before the scan engine captured zone_idx from broadcast
+        # accepted before the scan engine captured zone_index from broadcast
         # traffic).  Skip full processing (classification, confidence, etc.)
         # since the device is already known.
         if self._is_known(dev_id) and not is_hgi:
@@ -526,8 +526,8 @@ class DiscoveryScan:
                     rssi=rssi,
                     confidence="high",
                     is_battery=code in _BATTERY_CODES,
-                    src_count=1 if is_src else 0,
-                    dst_count=0 if is_src else 1,
+                    source_count=1 if is_src else 0,
+                    destination_count=0 if is_src else 1,
                     domain_id=domain_id if domain_id and is_src else None,
                     is_authoritative_domain=(
                         is_authoritative_domain and bool(domain_id) and is_src
@@ -542,9 +542,9 @@ class DiscoveryScan:
             else:
                 dev.last_seen = dt.now().isoformat(timespec="seconds")
                 if is_src:
-                    dev.src_count += 1
+                    dev.source_count += 1
                 else:
-                    dev.dst_count += 1
+                    dev.destination_count += 1
                 if code and code not in dev.codes_seen:
                     dev.codes_seen.append(code)
                     dev.codes_seen.sort()
@@ -555,13 +555,13 @@ class DiscoveryScan:
                     else:
                         dev.rssi = (dev.rssi + rssi) / 2
                     self._dirty = True
-                if zone_idx and is_src and not dev_id.startswith("01:"):
+                if zone_index and is_src and not dev_id.startswith("01:"):
                     # Skip CTL (01:) — it sends 000A with zone config for
                     # multiple zones, not its own zone binding.  Setting
-                    # zone_idx on the CTL corrupts its comment and schema
+                    # zone_index on the CTL corrupts its comment and schema
                     # entry (issue 813).
-                    bound_changed = dev.zone_idx != zone_idx
-                    dev.zone_idx = zone_idx
+                    bound_changed = dev.zone_index != zone_index
+                    dev.zone_index = zone_index
                     if dst and _is_valid_address(dst) and dst != dev_id:
                         if dev.bound_to != dst:
                             dev.bound_to = dst
@@ -573,7 +573,7 @@ class DiscoveryScan:
                             "DiscoveryScan: updated zone binding for known "
                             "device %s (zone=%s, bound_to=%s)",
                             dev_id,
-                            zone_idx,
+                            zone_index,
                             dev.bound_to,
                         )
                 # Domain_id update (issue 834): an authoritative 000C
@@ -633,17 +633,17 @@ class DiscoveryScan:
                 rssi=rssi,
                 confidence=_initial_confidence(is_src, code, verb),
                 is_battery=code in _BATTERY_CODES,
-                src_count=1 if is_src else 0,
-                dst_count=0 if is_src else 1,
+                source_count=1 if is_src else 0,
+                destination_count=0 if is_src else 1,
             )
             # Set binding info if available
-            # zone_idx is extracted from the payload and is valid even for
+            # zone_index is extracted from the payload and is valid even for
             # broadcasts (dst == --:------).  bound_to requires a valid dst.
             # Skip for HGI gateways — they don't have zone bindings.
             # Skip for CTL (01:) — it sends 000A with zone config for
             # multiple zones, not its own zone binding (issue 813).
-            if zone_idx and is_src and not is_hgi and not dev_id.startswith("01:"):
-                dev.zone_idx = zone_idx
+            if zone_index and is_src and not is_hgi and not dev_id.startswith("01:"):
+                dev.zone_index = zone_index
                 if dst and _is_valid_address(dst) and dst != dev_id:
                     dev.bound_to = dst
                 dev.confidence = "high"  # binding telemetry = high confidence
@@ -691,9 +691,9 @@ class DiscoveryScan:
 
         dev.last_seen = now
         if is_src:
-            dev.src_count += 1
+            dev.source_count += 1
         else:
-            dev.dst_count += 1
+            dev.destination_count += 1
 
         # Add code to codes_seen (deduplicated, keep sorted)
         if code and code not in dev.codes_seen:
@@ -714,14 +714,14 @@ class DiscoveryScan:
             dev.is_battery = True
             changed = True
 
-        # Update zone binding (prefer src packets with zone_idx)
-        # zone_idx is extracted from the payload and is valid even for
+        # Update zone binding (prefer src packets with zone_index)
+        # zone_index is extracted from the payload and is valid even for
         # broadcasts (dst == --:------).  bound_to requires a valid dst
         # that is different from the device itself.
         # Skip for HGI gateways — they don't have zone bindings.
-        if zone_idx and is_src and not is_hgi:
-            bound_changed = dev.zone_idx != zone_idx
-            dev.zone_idx = zone_idx
+        if zone_index and is_src and not is_hgi:
+            bound_changed = dev.zone_index != zone_index
+            dev.zone_index = zone_index
             if dst and _is_valid_address(dst) and dst != dev_id:
                 if dev.bound_to != dst:
                     dev.bound_to = dst
@@ -982,8 +982,8 @@ def _initial_confidence(is_src: bool, code: str, verb: str) -> str:
 
 def _recompute_confidence(dev: DiscoveredDevice) -> str:
     """Recompute confidence based on accumulated evidence."""
-    # High: has zone binding info (zone_idx, with or without bound_to)
-    if dev.zone_idx:
+    # High: has zone binding info (zone_index, with or without bound_to)
+    if dev.zone_index:
         return "high"
 
     # High: sends CTL-only codes
@@ -994,11 +994,11 @@ def _recompute_confidence(dev: DiscoveredDevice) -> str:
         return "high"
 
     # Medium: seen as src multiple times
-    if dev.src_count >= 2:
+    if dev.source_count >= 2:
         return "medium"
 
     # Medium: seen as src at least once with known codes
-    if dev.src_count >= 1 and len(dev.codes_seen) >= 2:
+    if dev.source_count >= 1 and len(dev.codes_seen) >= 2:
         return "medium"
 
     # Low: only seen as dst, or seen once as src
@@ -1006,10 +1006,10 @@ def _recompute_confidence(dev: DiscoveredDevice) -> str:
 
 
 def _extract_zone_idx_from_payload(payload: Any | str) -> str | None:
-    """Extract and validate the zone_idx from a packet payload.
+    """Extract and validate the zone_index from a packet payload.
 
     Zone index is typically the first 2 hex chars of a raw payload string or
-    the zone_idx property of a typed PayloadBase object. Returns None if
+    the zone_index property of a typed PayloadBase object. Returns None if
     payload is empty, too short, or not a valid zone index.
 
     Valid zone indices are 00-0B (12 zones max). Values like FC (appliance
@@ -1027,8 +1027,8 @@ def _extract_zone_idx_from_payload(payload: Any | str) -> str | None:
             if res is not None:
                 return res
         return None
-    if hasattr(payload, "zone_idx"):
-        val = payload.zone_idx
+    if hasattr(payload, "zone_index"):
+        val = payload.zone_index
         if isinstance(val, int):
             if val > 0x0B:
                 return None
@@ -1098,7 +1098,7 @@ def _is_appliance_control_signal(
     has been observed for the device.  See
     ``_extract_domain_id_from_000c`` for the authoritative path.
 
-    See issue 834: without this signal, a BDR with no zone_idx is
+    See issue 834: without this signal, a BDR with no zone_index is
     misclassified as a hotwater_valve by ramses_cc's
     generate_schema_entry.
     """
