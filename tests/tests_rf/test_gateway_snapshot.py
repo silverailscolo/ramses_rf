@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from syrupy.assertion import SnapshotAssertion
 
 LOG_HVAC = (
-    Path(__file__).parent.parent / "tests" / "systems" / "_hvac_nuaire" / "packet.log"
+    Path(__file__).parent / "data_driven" / "systems" / "_hvac_nuaire" / "packet.log"
 )
 LOG_OPENTHERM = (
     Path(__file__).parent

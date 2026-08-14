@@ -12,10 +12,8 @@ from ramses_rf import Gateway
 from .conftest import TEST_DIR
 
 # Define the log files to use for topology snapshot testing
-LOG_STANDARD = Path(f"{TEST_DIR}/logs/test_phase2_95_topology_parity_packet_log.log")
-LOG_OPENTHERM = Path(
-    f"{TEST_DIR}/logs/test_phase2_95_topology_parity_packet_log_OpenTherm.log"
-)
+LOG_STANDARD = Path(f"{TEST_DIR}/logs/topology_sample.log")
+LOG_OPENTHERM = Path(f"{TEST_DIR}/logs/topology_sample_opentherm.log")
 
 
 @pytest.fixture(autouse=True)
