@@ -207,9 +207,9 @@ def test_application_message_factory(patch_parsers: Any) -> None:
     assert app_msg.verb == base_msg.verb
 
     # 2. Test Context Binding
-    mock_gwy = object()
-    app_msg.bind_context(mock_gwy)
-    assert app_msg._gwy is mock_gwy
+    mock_gateway = object()
+    app_msg.bind_context(mock_gateway)
+    assert app_msg._gateway is mock_gateway
 
     # 3. Test Expiration (Fresh Packet)
     # Should not be expired because (now - dtm) is ~0 seconds

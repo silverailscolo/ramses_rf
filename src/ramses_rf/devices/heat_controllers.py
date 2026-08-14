@@ -54,7 +54,6 @@ class Controller(DeviceHeat):  # CTL (01):
             TCSs are uniquely identified by a controller ID.
             If a TCS is created, attach it to this device (which should be a CTL).
             """
-
             # Deferred import to prevent circular dependency at module load time
             # DO NOT MOVE to module level.
             from ramses_rf.systems import Evohome, system_factory
@@ -139,7 +138,6 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         Circuits are uniquely identified by a UFH controller ID|cct_idx pair.
         If a circuit is created, attach it to this UFC.
         """
-
         schema = {}  # shrink(SCH_CCT(schema))
 
         child = self.child_by_id.get(cct_idx)
@@ -159,6 +157,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     #     return self.circuit_by_id
 
     async def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
+        """Return the overall heating demand percentage (0.0 to 1.0)."""
         state = getattr(self, "demand_state", None)
         return state.heat_demand if state else None
 
@@ -185,10 +184,12 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         return await self.thermal_demands()
 
     async def relay_demand(self) -> float | None:  # 0008|FC
+        """Return the primary relay demand percentage (0.0 to 1.0)."""
         state = getattr(self, "demand_state", None)
         return state.relay_demand if state else None
 
     async def relay_demand_fa(self) -> float | None:  # 0008|FA
+        """Return the secondary relay demand percentage (0.0 to 1.0)."""
         state = getattr(self, "ufh_state", None)
         return state.relay_demand_fa if state else None
 
@@ -206,6 +207,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         return res if isinstance(res, dict) else None
 
     async def schema(self) -> dict[str, Any]:
+        """Return the device circuit configuration schema."""
         base_schema = await super().schema()
         return {
             **base_schema,
@@ -213,6 +215,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         }
 
     async def params(self) -> dict[str, Any]:
+        """Return the device setpoints and parameter values."""
         base_params = await super().params()
         return {
             **base_params,
@@ -220,6 +223,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         }
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -241,7 +245,7 @@ class UfhCircuit(Child, Entity):  # FIXME
     _STATE_ATTR: str | None = None
 
     def __init__(self, ufc: UfhController, ufh_idx: str) -> None:
-        super().__init__(ufc._gwy)
+        super().__init__(ufc._gateway)
 
         # FIXME: gwy.message_store entities must know their parent device ID
         # and their own idx
@@ -262,10 +266,12 @@ class UfhCircuit(Child, Entity):  # FIXME
 
     @property
     def ufx_idx(self) -> str:
+        """Return the UFH circuit index string."""
         return str(self._child_id)
 
     @property
     def zone_idx(self) -> str | None:
+        """Return the associated zone index string or None."""
         if self._zone:
             return str(self._zone._child_id)
         return None

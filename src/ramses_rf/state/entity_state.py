@@ -93,11 +93,13 @@ class EntityState:
     """
 
     def __init__(
-        self, entity: EntityInterface | DeviceInterface, gwy: GatewayInterface
+        self,
+        entity: EntityInterface | DeviceInterface,
+        gateway: GatewayInterface,
     ) -> None:
         """Initialize the EntityState."""
         self._entity = entity
-        self._gwy = gwy
+        self._gateway = gateway
         # Context-Aware O(1) Dictionary natively keyed by StateHeader DTO
         self._current_state: dict[StateHeader, ApplicationMessage] = {}
         self._log_cursor: int = 0  # Tracks cursor position in global log
@@ -108,10 +110,10 @@ class EntityState:
 
     def _sync_state(self) -> None:
         """Hybrid Push Model: Sync O(1) cache using cursor on global log."""
-        if self._gwy.message_store is None:
+        if self._gateway.message_store is None:
             return
 
-        log_iterable = self._gwy.message_store.log_by_dtm
+        log_iterable = self._gateway.message_store.log_by_dtm
         if isinstance(log_iterable, dict):
             log_iterable = list(log_iterable.values())
 
@@ -210,15 +212,15 @@ class EntityState:
         payload: str = "00",
     ) -> None:
         """Add a (dummy) record to the central SQLite MessageStore."""
-        if self._gwy.message_store:
-            self._gwy.message_store.add_record(
+        if self._gateway.message_store:
+            self._gateway.message_store.add_record(
                 dev_id, code=str(code), verb=verb, payload=payload
             )
 
     async def _delete_msg(self, msg: ApplicationMessage) -> None:
         """Remove the msg from the central state databases."""
-        if self._gwy.message_store:
-            await self._gwy.message_store.rem(msg)
+        if self._gateway.message_store:
+            await self._gateway.message_store.rem(msg)
         self._pending_deletes.discard(msg.state_header)
 
     async def _get_msg_by_hdr(
@@ -236,8 +238,8 @@ class EntityState:
         else:
             header = hdr
 
-        if self._gwy.message_store:
-            store = self._gwy.message_store
+        if self._gateway.message_store:
+            store = self._gateway.message_store
             msgs = await store.get(hdr=header)
             if msgs:
                 if (
@@ -423,7 +425,7 @@ class EntityState:
         if getattr(msg, "_expired", False):
             hdr = msg.state_header
             if hdr not in self._pending_deletes:
-                loop = getattr(self._gwy, "_loop", None)
+                loop = getattr(self._gateway, "_loop", None)
                 if loop is None:
                     with contextlib.suppress(RuntimeError):
                         loop = asyncio.get_running_loop()

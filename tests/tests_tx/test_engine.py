@@ -308,9 +308,9 @@ async def test_engine_msg_handler(dummy_engine: Engine, mock_dto: PacketDTO) -> 
 def test_application_message_bind_context(mock_dto: PacketDTO) -> None:
     # Bind context successfully sets arbitrary properties
     app_msg = ApplicationMessage(mock_dto)
-    mock_gwy = object()
-    app_msg.bind_context(mock_gwy)
-    assert app_msg._gwy is mock_gwy
+    mock_gateway = object()
+    app_msg.bind_context(mock_gateway)
+    assert app_msg._gateway is mock_gateway
 
 
 def test_application_message_expired_1f09_logic(mock_dto: PacketDTO) -> None:

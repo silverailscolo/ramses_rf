@@ -104,7 +104,6 @@ def normalise_config(
     :param lib_config: The configuration dictionary from Home Assistant.
     :return: A tuple containing the serial port and normalized config.
     """
-
     serial_port = lib_config.pop(SZ_SERIAL_PORT, None)
 
     # fix for: https://github.com/ramses-rf/ramses_rf/issues/96
@@ -224,7 +223,6 @@ async def cli(
     :param eavesdrop: Whether to enable eavesdropping mode.
     :param kwargs: Additional keyword arguments.
     """
-
     if kwargs[SZ_DBG_MODE] > 0:  # Do first
         start_debugging(kwargs[SZ_DBG_MODE] == 1)
 
@@ -522,14 +520,14 @@ def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
         print(f"\nExported to {output_path}")
 
 
-def print_results(gwy: Gateway, **kwargs: Any) -> None:
+def print_results(gateway: Gateway, **kwargs: Any) -> None:
     """Print the results of execution commands (faults, schedules).
 
-    :param gwy: The gateway instance.
+    :param gateway: The gateway instance.
     :param kwargs: The command arguments.
     """
     if kwargs[GET_FAULTS]:
-        fault_log = gwy.device_registry.system_by_id[
+        fault_log = gateway.device_registry.system_by_id[
             kwargs[GET_FAULTS]
         ]._faultlog.faultlog
 
@@ -542,10 +540,11 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
     if kwargs[GET_SCHED][0]:
         system_id, zone_idx = kwargs[GET_SCHED]
         if zone_idx == "HW":
-            dhw = gwy.device_registry.system_by_id[system_id].dhw
+            dhw = gateway.device_registry.system_by_id[system_id].dhw
             zone: Any = dhw
         else:
-            zone = gwy.device_registry.system_by_id[system_id].zone_by_idx[zone_idx]
+            sys_entry = gateway.device_registry.system_by_id[system_id]
+            zone = sys_entry.zone_by_idx[zone_idx]
         assert zone
         schedule = zone.schedule
 
@@ -571,22 +570,22 @@ def _write_state(schema: dict[str, Any], msgs: dict[str, str]) -> None:
         f.write(json.dumps(schema, indent=4))
 
 
-async def _save_state(gwy: Gateway) -> None:
+async def _save_state(gateway: Gateway) -> None:
     """Save the gateway state to files.
 
-    :param gwy: The gateway instance.
+    :param gateway: The gateway instance.
     """
-    schema, msgs = await gwy.get_state()
+    schema, msgs = await gateway.get_state()
     await asyncio.to_thread(_write_state, schema, msgs)
 
 
-async def _print_engine_state(gwy: Gateway, **kwargs: Any) -> None:
+async def _print_engine_state(gateway: Gateway, **kwargs: Any) -> None:
     """Print the current engine state (schema and packets).
 
-    :param gwy: The gateway instance.
+    :param gateway: The gateway instance.
     :param kwargs: Command arguments to determine verbosity.
     """
-    (schema, packets) = await gwy.get_state(include_expired=True)
+    (schema, packets) = await gateway.get_state(include_expired=True)
 
     if kwargs["print_state"] > 0:
         print(f"schema: {json.dumps(schema, indent=4)}\r\n")
@@ -594,51 +593,60 @@ async def _print_engine_state(gwy: Gateway, **kwargs: Any) -> None:
         print(f"packets: {json.dumps(packets, indent=4)}\r\n")
 
 
-async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
+async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
     """Print a summary of the system state, schema, params, and status.
 
-    :param gwy: The gateway instance.
+    :param gateway: The gateway instance.
     :param kwargs: Command arguments to determine what to display.
     """
-    entity = gwy.tcs or gwy
+    entity = gateway.tcs or gateway
 
     if kwargs.get("show_schema"):
         print(f"Schema[{entity}] = {json.dumps(await entity.schema(), indent=4)}\r\n")
 
-        # schema = {d.id: await d.schema() for d in sorted(gwy.device_registry.devices)}
+        # schema = {d.id: await d.schema() for d in sorted(gateway.device_registry.devices)}
         # print(f"Schema[devices] = {json.dumps({'schema': schema}, indent=4)}\r\n")
 
     if kwargs.get("show_params"):
         print(f"Params[{entity}] = {json.dumps(await entity.params(), indent=4)}\r\n")
 
-        params = {d.id: await d.params() for d in sorted(gwy.device_registry.devices)}
+        params = {
+            d.id: await d.params() for d in sorted(gateway.device_registry.devices)
+        }
         print(f"Params[devices] = {json.dumps({'params': params}, indent=4)}\r\n")
 
     if kwargs.get("show_status"):
         print(f"Status[{entity}] = {json.dumps(await entity.status(), indent=4)}\r\n")
 
-        status = {d.id: await d.status() for d in sorted(gwy.device_registry.devices)}
+        status = {
+            d.id: await d.status() for d in sorted(gateway.device_registry.devices)
+        }
         print(f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n")
 
     if kwargs.get("show_knowns"):  # show device hints (show-knowns)
-        print(f"allow_list (hints) = {json.dumps(gwy.config.known_list, indent=4)}\r\n")
+        known = json.dumps(gateway.config.known_list, indent=4)
+        print(f"allow_list (hints) = {known}\r\n")
 
     if kwargs.get("show_traits"):  # show device traits
         result = {
             # {k: v for k, v in (await d.traits()).items() if k[:1] == "_"}
             d.id: await d.traits()
-            for d in sorted(gwy.device_registry.devices)
+            for d in sorted(gateway.device_registry.devices)
         }
         print(json.dumps(result, indent=4), "\r\n")
 
     if kwargs.get("show_crazys"):
         for device in [
-            d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.CTL
+            d for d in gateway.device_registry.devices if d.type == DEV_TYPE_MAP.CTL
         ]:
-            if gwy.message_store:
-                for msg in await gwy.message_store.get(src=device.id, code=Code._0005):
+            if gateway.message_store:
+                for msg in await gateway.message_store.get(
+                    src=device.id, code=Code._0005
+                ):
                     print(f"{msg}")
-                for msg in await gwy.message_store.get(src=device.id, code=Code._000C):
+                for msg in await gateway.message_store.get(
+                    src=device.id, code=Code._000C
+                ):
                     print(f"{msg}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
@@ -651,10 +659,10 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
                                 print(f"{pkt}")
             print()
         for device in [
-            d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
+            d for d in gateway.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
         ]:
-            if gwy.message_store:
-                for msg in await gwy.message_store.get(src=device.id):
+            if gateway.message_store:
+                for msg in await gateway.message_store.get(src=device.id):
                     print(f"{msg}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError

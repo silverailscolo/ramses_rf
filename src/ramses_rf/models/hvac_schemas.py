@@ -1,8 +1,12 @@
+"""HVAC parameter schema definitions and mode lookup tables."""
+
 from dataclasses import dataclass
 
 
 @dataclass
 class FanParamInfo:
+    """Metadata descriptor for an HVAC fan configuration parameter."""
+
     description: str
     min_val: float
     max_val: float

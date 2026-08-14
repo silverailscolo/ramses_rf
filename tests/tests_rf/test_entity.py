@@ -80,11 +80,12 @@ class Test_entity_base:
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
-        assert dev._gwy.message_store is not None
-        dev._gwy.message_store.add(self.msg5)
-        dev._gwy.message_store.add(self.msg6)
-        dev._gwy.message_store.add(self.msg7)
-        assert len(await dev._gwy.message_store.all()) == 3, "len(msg_db.all) wrong"
+        assert dev._gateway.message_store is not None
+        dev._gateway.message_store.add(self.msg5)
+        dev._gateway.message_store.add(self.msg6)
+        dev._gateway.message_store.add(self.msg7)
+        msgs = await dev._gateway.message_store.all()
+        assert len(msgs) == 3, "len(msg_db.all) wrong"
 
         # start tests
         assert dev.id == "04:189078"
@@ -139,10 +140,10 @@ class Test_entity_base:
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
-        assert dev._gwy.message_store is not None
-        dev._gwy.message_store.add(self.msg5)
-        dev._gwy.message_store.add(self.msg6)
-        dev._gwy.message_store.add(self.msg7)
+        assert dev._gateway.message_store is not None
+        dev._gateway.message_store.add(self.msg5)
+        dev._gateway.message_store.add(self.msg6)
+        dev._gateway.message_store.add(self.msg7)
 
         # start tests
         assert dev.id == "04:189078_01"
@@ -204,15 +205,14 @@ class Test_entity_base:
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
-        assert dev._gwy.message_store is not None
-        dev._gwy.message_store.add(self.msg8)
-        dev._gwy.message_store.add(self.msg9)
+        assert dev._gateway.message_store is not None
+        dev._gateway.message_store.add(self.msg8)
+        dev._gateway.message_store.add(self.msg9)
 
         # start tests
         assert dev.id == "01:145038_HW"
-        assert await dev._gwy.message_store.all() == (self.msg8, self.msg9), (
-            "wrong dhw all"
-        )
+        msgs = await dev._gateway.message_store.all()
+        assert msgs == (self.msg8, self.msg9), "wrong dhw all"
 
         # create _msgs
         assert await dev.entity_state.get_message_log_flat() == {

@@ -17,9 +17,7 @@ if TYPE_CHECKING:
 
 
 class ApplicationMessage(Message):
-    """Application-level message extended with gateway context and
-    expiration.
-    """
+    """Application message extended with gateway context and expiry."""
 
     CANT_EXPIRE: float = -1.0  # sentinel value for fraction_expired
     HAS_EXPIRED: float = 2.0  # fraction_expired >= HAS_EXPIRED
@@ -27,32 +25,30 @@ class ApplicationMessage(Message):
 
     _engine: Engine | None = None
     _fraction_expired: float | None = None
-    _gwy: Any | None = None
+    _gateway: Any | None = None
     _delete_task_queued: bool = False
 
     @classmethod
     def from_dto(cls, dto: PacketDTO) -> ApplicationMessage:
-        """Factory to safely promote a transport Message to an
-        ApplicationMessage.
-        """
+        """Promote a transport Message to an ApplicationMessage."""
         # Initialize the subclass identically to how the base class initializes
         return cls(dto)
 
-    def bind_context(self, gwy: Any) -> None:
+    def bind_context(self, gateway: Any) -> None:
         """Explicitly assign the application context (gateway).
 
-        :param gwy: The application context (gateway) to associate.
-        :type gwy: Any
+        :param gateway: The application context (gateway) to associate.
+        :type gateway: Any
         """
-        self._gwy = gwy
+        self._gateway = gateway
 
-    def set_gateway(self, gwy: Engine) -> None:
+    def set_gateway(self, gateway: Engine) -> None:
         """Set the gateway (engine) instance for this message.
 
-        :param gwy: The gateway (engine) instance to associate.
-        :type gwy: Engine
+        :param gateway: The gateway (engine) instance to associate.
+        :type gateway: Engine
         """
-        self._engine = gwy
+        self._engine = gateway
 
     def _get_lifespan(self) -> bool | td:
         """Return the lifespan of a packet before it expires."""

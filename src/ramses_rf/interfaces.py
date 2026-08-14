@@ -49,14 +49,24 @@ class ConversationManagerInterface(Protocol):
         *,
         timeout: float | None = None,
         max_retries: int | None = None,
-    ) -> asyncio.Future[Message]: ...
+    ) -> asyncio.Future[Message]:
+        """Track an intent transaction until resolution."""
+        ...
 
 
 class MessageStoreInterface(Protocol):
-    def add(self, msg: Any) -> Any: ...
+    """Protocol interface for central message store."""
+
+    def add(self, msg: Any) -> Any:
+        """Add message to store index."""
+        ...
+
     def add_record(
         self, src: str, code: str = "", verb: str = "", payload: str = "00"
-    ) -> None: ...
+    ) -> None:
+        """Add record without message contents."""
+        ...
+
     def start_consumer(self, in_queue: asyncio.Queue[Any]) -> None:
         """Start the asynchronous queue consumer task for SSOT ingestion."""
         ...
@@ -72,7 +82,10 @@ class MessageStoreInterface(Protocol):
         code: str | None = None,
         context: Any | None = None,
         hdr: str | StateHeader | None = None,
-    ) -> tuple[Message, ...] | list[Message]: ...
+    ) -> tuple[Message, ...] | list[Message]:
+        """Query matching messages from store."""
+        ...
+
     async def rem(
         self,
         msg: Any | None = None,
@@ -84,7 +97,10 @@ class MessageStoreInterface(Protocol):
         code: str | None = None,
         context: Any | None = None,
         hdr: str | None = None,
-    ) -> tuple[Any, ...] | None: ...
+    ) -> tuple[Any, ...] | None:
+        """Remove matching messages from store."""
+        ...
+
     async def contains(
         self,
         *,
@@ -95,21 +111,49 @@ class MessageStoreInterface(Protocol):
         code: str | None = None,
         context: Any | None = None,
         hdr: str | None = None,
-    ) -> bool: ...
-    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Any]: ...
-    async def all(self, include_expired: bool = False) -> tuple[Any, ...]: ...
-    async def clr(self) -> None: ...
-    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Any, ...]: ...
+    ) -> bool:
+        """Return True if store contains matching record."""
+        ...
+
+    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Any]:
+        """Query response opcode codes."""
+        ...
+
+    async def all(self, include_expired: bool = False) -> tuple[Any, ...]:
+        """Return all indexed messages."""
+        ...
+
+    async def clr(self) -> None:
+        """Clear all indexed messages."""
+        ...
+
+    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Any, ...]:
+        """Execute custom SQL query on store."""
+        ...
+
     async def qry_field(
         self, sql: str, parameters: tuple[str, ...]
-    ) -> list[tuple[Any, ...]]: ...
+    ) -> list[tuple[Any, ...]]:
+        """Execute custom SQL query returning field values."""
+        ...
 
     @property
-    def log_by_dtm(self) -> Any: ...
+    def log_by_dtm(self) -> Any:
+        """Return in-memory log dictionary keyed by timestamp."""
+        ...
+
     @property
-    def state_cache(self) -> Any: ...
-    def flush(self) -> None: ...
-    def stop(self) -> None: ...
+    def state_cache(self) -> Any:
+        """Return in-memory state cache dictionary."""
+        ...
+
+    def flush(self) -> None:
+        """Flush pending disk writes."""
+        ...
+
+    def stop(self) -> None:
+        """Stop background tasks and close database."""
+        ...
 
 
 class EntityInterface(Protocol):
@@ -266,7 +310,9 @@ class GatewayInterface(Protocol):
         ...
 
     @property
-    def message_store(self) -> MessageStoreInterface | None: ...
+    def message_store(self) -> MessageStoreInterface | None:
+        """Return the SQLite message store instance or None."""
+        ...
 
     @message_store.setter
     def message_store(self, value: MessageStoreInterface | None) -> None: ...

@@ -1,4 +1,4 @@
-# tests/tests/test_systems.py
+# tests/tests_rf/data_driven/test_systems.py
 #!/usr/bin/env python3
 """RAMSES RF - Test the payload parsers and corresponding output.
 
@@ -250,11 +250,9 @@ async def test_fuzz_from_log_file(dir_name: Path) -> None:
 
     schema, packets = await gwy.get_state(include_expired=True)
 
-    # This loop is non-deterministic, but should be stable (fails rarely)
-    # The logic is that the system state should be consistent regardless
-    # of the order of the packets (within reason)
-    for _ in range(3):
-        packets = shuffle_dict(packets)
+    # Test that the system state is consistent regardless of packet order
+    for i in range(3):
+        packets = shuffle_dict(packets, seed=i)
         await gwy._restore_cached_packets(packets)
         await assert_expected_set(gwy, expected)
 
@@ -278,11 +276,9 @@ async def test_fuzz_from_log_file_sql(dir_name: Path) -> None:
 
     schema, packets = await gwy.get_state(include_expired=True)
 
-    # This loop is non-deterministic, but should be stable (fails rarely)
-    # The logic is that the system state should be consistent regardless
-    # of the order of the packets (within reason)
-    for _ in range(3):
-        packets = shuffle_dict(packets)
+    # Test that the system state is consistent regardless of packet order
+    for i in range(3):
+        packets = shuffle_dict(packets, seed=i)
         await gwy._restore_cached_packets(packets)
         if gwy.message_store:
             gwy.message_store.flush()

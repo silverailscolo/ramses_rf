@@ -65,18 +65,18 @@ class _Entity:
 
     _SLUG: str = None  # type: ignore[assignment]
 
-    def __init__(self, gwy: Gateway) -> None:
+    def __init__(self, gateway: Gateway) -> None:
         """Initialize the base entity and its composed components.
 
-        :param gwy: The gateway orchestrator.
-        :type gwy: Gateway
+        :param gateway: The gateway orchestrator.
+        :type gateway: Gateway
         """
-        self._gwy = gwy
+        self._gateway = gateway
         self.id: DeviceIdT = None  # type: ignore[assignment]
         self._qos_tx_count = 0
 
         # Specialized components via Composition
-        self.entity_state: EntityState = EntityState(self, self._gwy)
+        self.entity_state: EntityState = EntityState(self, self._gateway)
 
         # Context required by children (Zones/Devices)
         self._z_id: DeviceIdT = None  # type: ignore[assignment]
@@ -150,7 +150,7 @@ class _Entity:
             _LOGGER.info("%s < Sending was deprecated for %s", cmd, self)
             return None
 
-        return self._gwy.send_cmd(cmd, **kwargs)
+        return self._gateway.send_cmd(cmd, **kwargs)
 
     async def _async_send_cmd(
         self,
@@ -184,7 +184,7 @@ class _Entity:
             if hasattr(qos, "timeout") and qos.timeout is not None:
                 kwargs["timeout"] = qos.timeout
 
-        return await self._gwy.async_send_cmd(cmd, **kwargs)
+        return await self._gateway.async_send_cmd(cmd, **kwargs)
 
 
 class Entity(_Entity):

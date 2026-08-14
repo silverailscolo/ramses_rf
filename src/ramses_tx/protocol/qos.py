@@ -232,7 +232,6 @@ class Qos:
     @classmethod  # constructor from verb|code pair
     def verb_code(cls, verb: VerbT, code: str | Code, **kwargs: Any) -> Qos:
         """Constructor to create a QoS based upon the defaults for a verb|code pair."""
-
         default_qos = cls.DEFAULT_QOS_TABLE.get(
             f"{verb}|{code}",
             (

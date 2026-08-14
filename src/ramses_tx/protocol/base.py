@@ -197,8 +197,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
     async def wait_for_connection_made(
         self, timeout: float = 1.0
     ) -> TransportInterface:
-        """A courtesy function to wait until connection_made() has been
-        invoked.
+        """Wait until connection_made() has been invoked.
 
         Will raise TransportError if isn't connected within timeout
         seconds.
@@ -242,8 +241,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             self._wait_connection_lost.set_result(None)
 
     async def wait_for_connection_lost(self, timeout: float = 1.0) -> Exception | None:
-        """A courtesy function to wait until connection_lost() has been
-        invoked.
+        """Wait until connection_lost() has been invoked.
 
         Includes scenarios where neither connection_made() nor
         connection_lost() were invoked.
@@ -255,8 +253,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             return None
 
         try:
-            await asyncio.wait_for(self._wait_connection_lost, timeout)
-            return None
+            return await asyncio.wait_for(self._wait_connection_lost, timeout)
         except TimeoutError as err:
             raise TransportError(
                 f"Transport did not unbind from Protocol within {timeout} secs"
@@ -270,15 +267,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             return err
 
     def pause_writing(self) -> None:
-        """Called when the transport's buffer goes over the high-water
-        mark.
-        """
+        """Called when transport buffer exceeds high-water mark."""
         self._pause_writing = True
 
     def resume_writing(self) -> None:
-        """Called when the transport's buffer drains below the low-water
-        mark.
-        """
+        """Called when transport buffer drains below low-water mark."""
         self._pause_writing = False
 
     async def _send_impersonation_alert(self, cmd: CommandDTO) -> None:
@@ -341,8 +334,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         priority: Priority = Priority.DEFAULT,
         qos: QosParams | None = None,
     ) -> Packet:
-        """Send a Command with Qos (with retries, until success or
-        ProtocolError).
+        """Send a Command with QoS until success or ProtocolError.
 
         Returns the Command's response Packet or the Command echo.
 
@@ -497,9 +489,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
 
 class _DeviceIdFilterMixin(_BaseProtocol):
-    """Filter out any unwanted (but otherwise valid) packets via device
-    ids.
-    """
+    """Filter out unwanted (valid) packets via device IDs."""
 
     def __init__(
         self,

@@ -270,7 +270,6 @@
     'main_tcs': '01:195932',
     'orphans_heat': list([
       '04:017810',
-      '13:027756',
     ]),
     'orphans_hvac': list([
     ]),

@@ -168,7 +168,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             device_filter=self._device_filter,
             config=self._gwy_config,
             device_factory_cb=lambda addr, msg, traits: device_factory(
-                gwy=self, dev_addr=addr, msg=msg, traits=traits
+                gateway=self, device_address=addr, msg=msg, traits=traits
             ),
             on_topology_changed_cb=self._on_topology_changed,
         )
@@ -216,6 +216,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     @property
     def device_registry(self) -> DeviceRegistryInterface:
+        """Return the active device registry instance."""
         return self._device_registry
 
     @property
@@ -230,14 +231,17 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     @property
     def dispatcher(self) -> CommandDispatcher:
+        """Return the command dispatcher instance."""
         return self._dispatcher
 
     @property
     def config(self) -> GatewayConfig:
+        """Return the gateway configuration."""
         return self._gwy_config
 
     @property
     def message_store(self) -> MessageStoreInterface | None:
+        """Return the SQLite message store instance or None."""
         return self._message_store
 
     @message_store.setter
@@ -246,6 +250,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     @property
     def hgi(self) -> HgiGateway | None:
+        """Return the HGI gateway device interface or None."""
         if not self._engine._transport:
             return None
         if device_id := self._engine._transport.get_extra_info(SZ_ACTIVE_HGI):
@@ -253,17 +258,20 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return None
 
     def update_message_history(self, msg: ApplicationMessage) -> None:
+        """Update current and previous message tracking references."""
         with self._history_lock:
             self._prev_msg = self._this_msg
             self._this_msg = msg
 
     def clear_message_history(self) -> None:
+        """Clear the tracked message history references."""
         with self._history_lock:
             self._prev_msg = None
             self._this_msg = None
 
     @property
     def tcs(self) -> Evohome | None:
+        """Return the primary Evohome system or None."""
         if self._tcs is None and self.device_registry.systems:
             self._tcs = self.device_registry.systems[0]
         return self._tcs
@@ -315,6 +323,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             await res
 
     async def schema(self) -> dict[str, Any]:
+        """Return the entire gateway and device topology schema."""
         schema: dict[str, Any] = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}
         for tcs in self.device_registry.systems:
             schema[tcs.ctl.id] = await tcs.schema()
@@ -328,9 +337,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return schema
 
     async def params(self) -> dict[str, Any]:
+        """Return parameters across all registered devices."""
         return await self.device_registry.params()
 
     async def status(self) -> dict[str, Any]:
+        """Return operational status across all registered devices."""
         status_dict = await self.device_registry.status()
         tx_rate = (
             self._engine._transport.get_extra_info("tx_rate")
@@ -453,6 +464,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         *,
         msg_filter: Callable[[PacketDTO], bool] | None = None,
     ) -> Callable[[], None]:
+        """Register an asynchronous packet message handler callback."""
         return self._engine.add_msg_handler(msg_handler, msg_filter=msg_filter)
 
     def add_raw_pkt_handler(
@@ -468,6 +480,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return self._engine.add_raw_pkt_handler(msg_handler)
 
     def add_task(self, task: asyncio.Task[Any]) -> None:
+        """Register a tracked asyncio task on the transport engine."""
         self._engine.add_task(task)
 
     @staticmethod
@@ -478,6 +491,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         payload: PayloadT,
         **kwargs: Any,
     ) -> CommandDTO:
+        """Create a standardized CommandDTO packet command."""
         return Engine.create_cmd(
             verb,
             device_id,
@@ -497,6 +511,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         timeout: float = DEFAULT_SEND_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> asyncio.Task[Packet]:
+        """Schedule command transmission as a background task."""
         coro = self.async_send_cmd(
             cmd,
             gap_duration=gap_duration,
@@ -526,6 +541,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         timeout: float = DEFAULT_SEND_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> Packet:
+        """Transmit a command and wait for response packet."""
         try:
             return await self._engine.async_send_cmd(
                 cmd,

@@ -30,13 +30,13 @@ __all__ = [
 class TopologyBuilder:
     """Builder for discovering and building system topology read-models."""
 
-    def __init__(self, gwy: Gateway) -> None:
+    def __init__(self, gateway: Gateway) -> None:
         """Initialize the topology builder.
 
-        :param gwy: The gateway handling topology state.
-        :type gwy: Gateway
+        :param gateway: The gateway handling topology state.
+        :type gateway: Gateway
         """
-        self._gwy = gwy
+        self._gateway = gateway
 
     async def update_topology(self, payload: dict[str, Any], msg: Message) -> None:
         """Process a decoded payload and update topology models.
@@ -46,22 +46,22 @@ class TopologyBuilder:
         :param msg: The raw message object.
         :type msg: Message
         """
-        await update_topology_schema_state(self._gwy, payload, msg)
+        await update_topology_schema_state(self._gateway, payload, msg)
 
 
 async def update_topology_schema_state(
-    gwy: Gateway, p: dict[str, Any], msg: Message
+    gateway: Gateway, p: dict[str, Any], msg: Message
 ) -> None:
     """Discover and instantiate schema entities (TCS, zones, DHW, UFH) from packets.
 
-    :param gwy: The gateway handling entity instantiation.
-    :type gwy: Gateway
+    :param gateway: The gateway handling entity instantiation.
+    :type gateway: Gateway
     :param p: Decoded payload dictionary.
     :type p: dict[str, Any]
     :param msg: Message object containing headers and routing addrs.
     :type msg: Message
     """
-    registry = getattr(gwy, "device_registry", None)
+    registry = getattr(gateway, "device_registry", None)
     tcs = None
     if registry:
         if getattr(msg.src, "type", None) in ("01", DevType.CTL):
@@ -356,10 +356,10 @@ async def update_topology_schema_state(
         case _:
             pass
 
-    if getattr(gwy.config, "enable_eavesdrop", False):
-        engine = getattr(gwy, "_eavesdrop_engine", None)
+    if getattr(gateway.config, "enable_eavesdrop", False):
+        engine = getattr(gateway, "_eavesdrop_engine", None)
         if engine is None:
-            engine = EavesdropEngine(gwy)
+            engine = EavesdropEngine(gateway)
             with contextlib.suppress(AttributeError):
-                gwy._eavesdrop_engine = engine
+                gateway._eavesdrop_engine = engine
         await engine.process_eavesdrop(msg)

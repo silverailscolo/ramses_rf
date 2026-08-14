@@ -1581,7 +1581,7 @@ class TestHvacParentInference:
     async def test_fan_reply_infers_parent(self) -> None:
         """A FAN (32:) replying RP to a REM should set bound_to on the
         REM."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             # REM sends RQ to FAN
@@ -1615,7 +1615,7 @@ class TestHvacParentInference:
     async def test_rem_sending_to_fan_does_not_infer(self) -> None:
         """A REM sending I|22F1 to a FAN should NOT set bound_to — the
         FAN hasn't confirmed the binding."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             dto = make_dto(
@@ -1634,7 +1634,7 @@ class TestHvacParentInference:
 
     async def test_fan_reply_to_co2_infers_parent(self) -> None:
         """A FAN (32:) replying RP to a CO2 should set bound_to."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             # FAN replies RP to CO2
@@ -1660,7 +1660,7 @@ class TestHvacParentInference:
         its paired remote.  This is different from a REM broadcasting to a
         FAN (which doesn't prove binding).
         """
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             dto = make_dto(
@@ -1679,7 +1679,7 @@ class TestHvacParentInference:
 
     async def test_non_32_src_does_not_infer(self) -> None:
         """A non-FAN (not 32:) replying RP should NOT infer bound_to."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             dto = make_dto(
@@ -1699,7 +1699,7 @@ class TestHvacParentInference:
     async def test_zone_binding_takes_precedence(self) -> None:
         """If zone binding sets bound_to first, HVAC inference must not
         overwrite it."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             # First: zone binding to a different FAN
@@ -1733,7 +1733,7 @@ class TestHvacParentInference:
     async def test_fan_reply_enriches_existing_device(self) -> None:
         """If a REM is discovered without bound_to, a later FAN reply
         should enrich it with bound_to."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             # First: REM discovered via a non-HVAC code (no bound_to)

@@ -670,8 +670,10 @@ class DeviceRegistry:
         raise DeviceNotFaked(f"The device is not fakeable: {device_id}")
 
     async def known_list(self) -> DeviceListT:
-        """Return the working known_list (a superset of the provided
-        known_list).
+        """Return the working known_list of devices.
+
+        Returns a superset of the provided configuration known_list,
+        augmented with dynamically discovered device traits.
 
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
@@ -820,8 +822,7 @@ class DeviceRegistry:
         self.device_by_id[event.device_id] = new_dev
 
     async def generate_schema(self) -> dict[str, Any]:
-        """Generate the complete topology schema natively from the CQRS
-        Read-Model.
+        """Generate topology schema natively from the CQRS Read-Model.
 
         This method interrogates the mathematically correct devices and
         systems tracked within the DeviceRegistry to produce a topology

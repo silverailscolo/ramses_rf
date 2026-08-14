@@ -210,13 +210,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
         schema = shrink(SCH_VCS(schema))
         for dev_id in schema.get(SZ_REMOTES, []):
-            child = self._gwy.device_registry.get_device(dev_id)  # ensure exists
+            child = self._gateway.device_registry.get_device(dev_id)  # ensure exists
             self._remote_ids.add(DeviceIdT(dev_id))
             # 6d: set bidirectional parent link on the child
             if hasattr(child, "_parent_fan"):
                 child._parent_fan = self
         for dev_id in schema.get(SZ_SENSORS, []):
-            child = self._gwy.device_registry.get_device(dev_id)  # ensure exists
+            child = self._gateway.device_registry.get_device(dev_id)  # ensure exists
             self._sensor_ids.add(DeviceIdT(dev_id))
             # 6d: set bidirectional parent link on the child
             if hasattr(child, "_parent_fan"):
@@ -238,16 +238,14 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return result
 
     def set_initialized_callback(self, callback: Callable[[], None] | None) -> None:
-        """Set a callback to be executed when the next message (any) is
-        received.
+        """Set a callback to be executed when next message is received.
 
-        The callback will be used exactly once to indicate that the device
-        is fully functional. In ramses_cc, 2411 entities are created - on
-        the fly - only for devices that support them.
+        The callback will be used exactly once to indicate that the
+        device is fully functional. In ramses_cc, 2411 entities are
+        created - on the fly - only for devices that support them.
 
         :param callback: A callable that takes no arguments and returns
-                         None. If None, any existing callback will be
-                         cleared.
+            None. If None, any existing callback will be cleared.
         :type callback: Callable[[], None] | None
         :raises ValueError: If the callback is not callable and not None
         """
@@ -339,8 +337,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The HGI device instance, or None if not available
         :rtype: float | None
         """
-        if self._hgi is None and self._gwy and hasattr(self._gwy, "hgi"):
-            self._hgi = self._gwy.hgi
+        if self._hgi is None and self._gateway and hasattr(self._gateway, "hgi"):
+            self._hgi = self._gateway.hgi
         return self._hgi
 
     def get_2411_param(self, param_id: str) -> float | None:
@@ -569,7 +567,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             action=Action.SET_FAN_MODE,
             data={"fan_mode": fan_mode, "scheme": self._scheme or "orcon"},
         )
-        return await self._gwy.dispatcher.send(
+        return await self._gateway.dispatcher.send(
             intent, priority=Priority.HIGH, wait_for_reply=True
         )
 
@@ -594,13 +592,12 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return self.hvac_state.air_quality_basis
 
     async def bypass_mode(self) -> str | None:
-        """
-        :return: bypass mode as on|off|auto
-        """
+        """Return bypass mode as on|off|auto."""
         return self.hvac_state.bypass_mode
 
     async def bypass_position(self) -> float | str | None:
-        """
+        """Return bypass position (0.0 to 1.0) or fault string.
+
         Position info is found in 22F7 and in 31DA. The most recent packet
         is returned.
 
@@ -610,10 +607,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return self.hvac_state.bypass_position
 
     async def bypass_state(self) -> str | None:
-        """
-        Orcon, others?
-        :return: bypass position as on/off
-        """
+        """Return bypass state as on/off."""
         return self.hvac_state.bypass_state
 
     async def co2_level(self) -> int | None:
@@ -625,11 +619,10 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return self.hvac_state.co2_level
 
     async def exhaust_fan_speed(self) -> float | None:
-        """
+        """Return exhaust fan speed as percentage (0.0 to 1.0).
+
         Some fans (Vasco, Itho) use Code._31D9 for speed + mode,
         Orcon sends SZ_EXHAUST_FAN_SPEED in 31DA. See parser for details.
-
-        :return: speed as percentage
         """
         return self.hvac_state.exhaust_fan_speed
 
@@ -651,41 +644,34 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return self.hvac_state.exhaust_temp
 
     async def fan_rate(self) -> str | None:
-        """
-        Lookup fan mode description from _22F4 message payload, e.g. "low",
-        "medium", "boost". For manufacturers Orcon, Vasco, ClimaRad.
+        """Lookup fan mode description from _22F4 message payload.
 
-        :return: int or str describing rate of fan
+        Returns e.g. "low", "medium", "boost" for Orcon, Vasco,
+        ClimaRad.
         """
         return self.hvac_state.fan_rate
 
     async def fan_mode(self) -> str | None:
-        """
-        Lookup fan mode description from _22F4 message payload, e.g. "auto",
-        "manual", "off". For manufacturers Orcon, Vasco, ClimaRad.
+        """Lookup fan mode description from _22F4 message payload.
 
-        :return: a string describing mode
+        Returns e.g. "auto", "manual", "off" for Orcon, Vasco,
+        ClimaRad.
         """
         return self.hvac_state.fan_mode
 
     async def fan_info(self) -> str | None:
-        """
-        Extract fan info description from MessageStore _31D9 or _31DA payload,
-        e.g. "speed 2, medium".
-        By its name, the result is picked up by a sensor in HA Climate UI.
-        Some manufacturers (Orcon, Vasco) include the fan mode (auto, manual),
-        others don't (Itho).
+        """Extract fan info description from _31D9 or _31DA payload.
 
-        :return: string describing fan mode, speed
+        E.g. "speed 2, medium". Some manufacturers (Orcon, Vasco)
+        include the fan mode (auto, manual), others don't (Itho).
         """
         return self.hvac_state.fan_info
 
     async def indoor_humidity(self) -> float | None:
-        """
-        Extract indoor_humidity from MessageStore _12A0 or _31DA payload
-        Just a demo for SQLite query helper at the moment.
+        """Extract indoor humidity from _12A0 or _31DA payload.
 
-        :return: float RH value from 0.0 to 1.0 = 100%
+        :return: Float RH value from 0.0 to 1.0 (100%).
+        :rtype: float | None
         """
         return self.hvac_state.indoor_humidity
 
@@ -753,16 +739,17 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         return self.hvac_state.request_fan_speed
 
     async def request_src(self) -> str | None:
-        """
-        Orcon, others?
-        :return: source sensor of auto speed request: IDL, CO2 or HUM
+        """Return source sensor of auto speed request.
+
+        For example: IDL, CO2, or HUM.
         """
         return self.hvac_state.request_reason
 
     async def speed_cap(self) -> int | None:
         """Return the speed capabilities of the fan.
 
-        :return: The speed capabilities as an integer, or None if not available
+        :return: The speed capabilities as an integer, or None if not
+                 available.
         :rtype: int | None
         """
         return self.hvac_state.speed_capabilities
