@@ -1,5 +1,6 @@
 import time
 
+from ramses_rf.const import SZ_IS_DAYLIGHT_SAVING
 from ramses_rf.payloads.hvac import (
     HvacAirQualityPayload,
     HvacFanModePayload,
@@ -95,8 +96,8 @@ def test_system_date_time_is_dst_to_dict_performance_and_parity() -> None:
     elapsed_us = (time.perf_counter() - start_time) * 1e6 / 10000
 
     # Assert
-    assert "is_dst" in result_dict
-    assert result_dict["is_dst"] is None
+    assert SZ_IS_DAYLIGHT_SAVING in result_dict
+    assert result_dict[SZ_IS_DAYLIGHT_SAVING] is None
     assert elapsed_us < 50.0
 
 

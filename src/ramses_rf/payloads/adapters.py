@@ -48,11 +48,13 @@ _FIELD_TO_LEGACY_KEY: dict[str, str] = {
 }
 
 
-def payload_to_dict(payload: PayloadBase) -> dict[str, Any]:
+def payload_to_dict(payload: PayloadBase, *, legacy: bool = False) -> dict[str, Any]:
     """Convert a PayloadBase instance into a dictionary structure.
 
     :param payload: The payload dataclass instance to convert.
     :type payload: PayloadBase
+    :param legacy: If True, translate field names to legacy abbreviated keys.
+    :type legacy: bool
     :returns: Dictionary representation of the payload attributes.
     :rtype: dict[str, Any]
     :raises TypeError: If the input is not a dataclass instance.
@@ -60,8 +62,10 @@ def payload_to_dict(payload: PayloadBase) -> dict[str, Any]:
     if not is_dataclass(cast(object, payload)):
         err_msg = f"Expected dataclass instance, got {type(payload).__name__}"
         raise TypeError(err_msg)
-    return {
-        _FIELD_TO_LEGACY_KEY.get(k, k): v
-        for k, v in asdict(payload).items()
-        if not k.startswith("_")
-    }
+    if legacy:
+        return {
+            _FIELD_TO_LEGACY_KEY.get(k, k): v
+            for k, v in asdict(payload).items()
+            if not k.startswith("_")
+        }
+    return {k: v for k, v in asdict(payload).items() if not k.startswith("_")}

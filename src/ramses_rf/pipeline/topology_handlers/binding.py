@@ -180,10 +180,14 @@ class BindTopologyHandler(TopologyHandler):
                     device_role = f"{payload.device_role_id:02X}"
                     devices = [payload.device_id_str]
                 elif isinstance(payload, dict):
-                    val_zone = payload.get("zone_idx")
+                    val_zone = payload.get("zone_index") or payload.get("zone_idx")
                     zone_idx = str(val_zone) if val_zone is not None else None
 
-                    val_domain = payload.get("domain_id")
+                    val_domain = (
+                        payload.get("domain_index")
+                        or payload.get("domain_id")
+                        or payload.get("domain_idx")
+                    )
                     domain_id = str(val_domain) if val_domain is not None else None
 
                     val_role = payload.get("device_role")

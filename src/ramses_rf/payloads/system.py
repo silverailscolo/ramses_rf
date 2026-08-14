@@ -14,14 +14,16 @@ from ramses_rf.const import (
     SYS_MODE_MAP,
     SZ_DEVICE_CLASS,
     SZ_DEVICE_ID,
-    SZ_DOMAIN_IDX,
+    SZ_DOMAIN_INDEX,
     SZ_FAULT_STATE,
     SZ_FAULT_TYPE,
+    SZ_IS_DAYLIGHT_SAVING,
     SZ_LOG_ENTRY,
-    SZ_LOG_IDX,
+    SZ_LOG_INDEX,
     SZ_SYSTEM_MODE,
     SZ_TIMESTAMP,
     SZ_UNTIL,
+    SZ_ZONE_INDEX,
 )
 from ramses_rf.enums import DevRole
 from ramses_rf.payloads.helpers import parse_fault_log_entry
@@ -853,7 +855,7 @@ class SystemFaultLogPayload(PayloadBase):
         verb = getattr(msg, "verb", "I") if msg is not None else "I"
         verb_str = getattr(verb, "value", str(verb)).split(".")[-1]
         if verb_str == "RQ":
-            return {SZ_LOG_IDX: log_index_str}
+            return {SZ_LOG_INDEX: log_index_str}
 
         if len(raw_hex) < 44 or hex_to_dts(raw_hex[18:30]) is None:
             return {SZ_LOG_ENTRY: None}
@@ -870,7 +872,9 @@ class SystemFaultLogPayload(PayloadBase):
             entry = [v for k, v in log_entry_dict.items() if k in keys_to_include]
 
             dev_class = log_entry_dict.get(SZ_DEVICE_CLASS)
-            domain_index = log_entry_dict.get(SZ_DOMAIN_IDX)
+            domain_index = log_entry_dict.get(
+                SZ_DOMAIN_INDEX, log_entry_dict.get("domain_idx")
+            )
             dev_id = log_entry_dict.get(SZ_DEVICE_ID)
 
             if dev_class != FaultDeviceClass.ACTUATOR:
@@ -893,11 +897,11 @@ class SystemFaultLogPayload(PayloadBase):
             entry.extend((raw_hex[6:8], raw_hex[14:18], raw_hex[30:38]))
 
             return {
-                SZ_LOG_IDX: log_index_str,
+                SZ_LOG_INDEX: log_index_str,
                 SZ_LOG_ENTRY: tuple([str(r) for r in entry]),
             }
         except Exception:
-            return {SZ_LOG_IDX: log_index_str, SZ_LOG_ENTRY: None}
+            return {SZ_LOG_INDEX: log_index_str, SZ_LOG_ENTRY: None}
 
 
 # ----------------------------------------------------------------------
@@ -977,7 +981,7 @@ class SystemLogIndexPayload(PayloadBase):
                 "counter_5": f"0x{raw_hex[10:14]}",
                 "unknown_7": f"0x{raw_hex[14:18]}",
             }
-        return {"domain_idx": self.domain_index, "log_pointer": self.log_pointer}
+        return {SZ_DOMAIN_INDEX: self.domain_index, "log_pointer": self.log_pointer}
 
 
 # ----------------------------------------------------------------------
@@ -1115,7 +1119,7 @@ class DeviceBatteryPayload(PayloadBase):
             "battery_level": self.battery_level,
         }
         if self.header != 0:
-            result["zone_idx"] = f"{self.header:02X}"
+            result[SZ_ZONE_INDEX] = f"{self.header:02X}"
         return result
 
 
@@ -1717,7 +1721,7 @@ class SystemDateTime2BPayload(SystemDateTimePayload):
         :returns: Decoded system date & time dictionary.
         :rtype: dict[str, Any]
         """
-        return {"is_dst": None}
+        return {SZ_IS_DAYLIGHT_SAVING: None}
 
 
 @dataclass(frozen=True, slots=True)
@@ -1804,7 +1808,7 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
         result: dict[str, Any] = {}
         if self.datetime_str is not None:
             result["datetime"] = self.datetime_str
-        result["is_dst"] = self.is_daylight_saving
+        result[SZ_IS_DAYLIGHT_SAVING] = self.is_daylight_saving
         return result
 
 
@@ -2082,7 +2086,7 @@ class RelayFailsafePayload(PayloadBase):
         """
         idx_str = f"{self.domain_or_zone_index:02X}"
         result: dict[str, Any] = {
-            "domain_id": idx_str,
+            SZ_DOMAIN_INDEX: idx_str,
             "failsafe_enabled": self.failsafe_enabled,
         }
         if self._unknown_0 is not None:

@@ -26,11 +26,14 @@ from ramses_rf.const import (
     SZ_POST_HEAT,
     SZ_PRE_HEAT,
     SZ_REMAINING_MINS,
+    SZ_REQUEST_REASON,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
     SZ_SUPPLY_TEMP,
     SZ_TEMPERATURE,
+    SZ_UFH_INDEX,
+    SZ_ZONE_INDEX,
 )
 from ramses_rf.protocol.ramses import (
     _31DA_FAN_INFO,
@@ -1166,7 +1169,7 @@ class HvacAutoRequestPayload(PayloadBase):
         if self.exhaust_fan_speed is not None or self.unknown_78 is not None:
             return {
                 "exhaust_fan_speed": self.exhaust_fan_speed,
-                "req_reason": self.request_reason,
+                SZ_REQUEST_REASON: self.request_reason,
                 "unknown_78": self.unknown_78,
                 "unknown_80": self.unknown_80,
                 "unknown_82": self.unknown_82,
@@ -1174,7 +1177,7 @@ class HvacAutoRequestPayload(PayloadBase):
         if self.requested_fan_percent is not None and self.request_reason is not None:
             return {
                 "requested_fan_percent": self.requested_fan_percent,
-                "req_reason": self.request_reason,
+                SZ_REQUEST_REASON: self.request_reason,
             }
         return {}
 
@@ -2201,7 +2204,7 @@ class HvacAirQualityPayload(PayloadBase):
             if md != "disabled":
                 result["demand"] = dm
             if b[0] != 0:
-                result["zone_idx"] = f"{b[0]:02X}"
+                result[SZ_ZONE_INDEX] = f"{b[0]:02X}"
             return result
         if self._unknown_0 is not None:
             return {
@@ -3141,7 +3144,7 @@ class WindowStatePayload(PayloadBase):
         z_idx = getattr(self, "zone_index", 0)
         open_val = getattr(self, "window_open", None)
         idx_str = f"{z_idx:02X}"
-        return {"zone_idx": idx_str, "window_open": open_val}
+        return {SZ_ZONE_INDEX: idx_str, "window_open": open_val}
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> "WindowStatePayload":
@@ -3535,7 +3538,7 @@ class SetpointBoundsPayload(PayloadBase):
         """
         mode_map = {0: "off", 1: "heat", 2: "cool"}
         result: dict[str, Any] = {
-            "ufh_idx": f"{self.ufh_index:02X}",
+            SZ_UFH_INDEX: f"{self.ufh_index:02X}",
             "setpoint_bounds": (self.min_temp, self.max_temp),
         }
         if self.mode_code in mode_map:

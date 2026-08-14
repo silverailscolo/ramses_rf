@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING
 from ramses_rf.const import (
     SZ_DEVICE_CLASS,
     SZ_DEVICE_ID,
-    SZ_DOMAIN_IDX,
+    SZ_DOMAIN_INDEX,
     SZ_FAULT_STATE,
     SZ_FAULT_TYPE,
-    SZ_LOG_IDX,
+    SZ_LOG_INDEX,
     SZ_TIMESTAMP,
 )
 from ramses_tx.address import hex_id_to_dev_id
@@ -49,14 +49,14 @@ def parse_fault_log_entry(
 
     # these are only useful for I_, not RP
     if (timestamp := hex_to_dts(payload[18:30])) is None:
-        return {f"_{SZ_LOG_IDX}": log_index_str}  # type: ignore[return-value]
+        return {f"_{SZ_LOG_INDEX}": log_index_str}  # type: ignore[return-value]
 
     result: PayDictT.FAULT_LOG_ENTRY = {
-        f"_{SZ_LOG_IDX}": log_index_str,  # type: ignore[misc]
+        f"_{SZ_LOG_INDEX}": log_index_str,  # type: ignore[misc]
         SZ_TIMESTAMP: timestamp,
         SZ_FAULT_STATE: FAULT_STATE.get(payload[2:4], FaultState.UNKNOWN),
         SZ_FAULT_TYPE: FAULT_TYPE.get(payload[8:10], FaultType.UNKNOWN),
-        SZ_DOMAIN_IDX: payload[10:12],
+        SZ_DOMAIN_INDEX: payload[10:12],
         SZ_DEVICE_CLASS: FAULT_DEVICE_CLASS.get(
             payload[12:14], FaultDeviceClass.UNKNOWN
         ),

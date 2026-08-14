@@ -20,6 +20,7 @@ from ramses_rf.const import (
     SZ_NAME,
     SZ_SENSOR as SZ_SENSOR,
     SZ_ZONE_IDX as SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
     SZ_ZONE_TYPE,
     SZ_ZONES,
 )
@@ -158,7 +159,10 @@ SCH_TCS_DHW = vol.Schema(
 _CH_TCS_UFH_CIRCUIT = vol.Schema(
     {
         vol.Required(SCH_UFH_IDX): vol.Schema(
-            {vol.Optional(SZ_ZONE_IDX): SCH_ZON_IDX},
+            {
+                vol.Optional(SZ_ZONE_INDEX): SCH_ZON_IDX,
+                vol.Optional(SZ_ZONE_IDX): SCH_ZON_IDX,
+            },
         ),
     },
     extra=vol.PREVENT_EXTRA,

@@ -9,7 +9,7 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
 from ramses_rf.address import Address, id_to_address
-from ramses_rf.const import SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
+from ramses_rf.const import SZ_DHW_INDEX, SZ_DOMAIN_INDEX, SZ_UFH_INDEX, SZ_ZONE_INDEX
 from ramses_rf.payloads.base import PayloadBase
 from ramses_tx import CommandDTO, PacketDTO
 from ramses_tx.models import DeviceId, RawPacket, TransportMessage
@@ -404,16 +404,16 @@ class Message:
 
         IDX_NAMES = {
             Code._0002: "other_idx",
-            Code._10A0: SZ_DHW_IDX,
-            Code._1260: SZ_DHW_IDX,
-            Code._1F41: SZ_DHW_IDX,
-            Code._22C9: SZ_UFH_IDX,
+            Code._10A0: SZ_DHW_INDEX,
+            Code._1260: SZ_DHW_INDEX,
+            Code._1F41: SZ_DHW_INDEX,
+            Code._22C9: SZ_UFH_INDEX,
             Code._2389: "other_idx",
             Code._2D49: "other_idx",
             Code._31D9: "hvac_id",
             Code._31DA: "hvac_id",
             Code._3220: "msg_id",
-        }  # ALSO: SZ_DOMAIN_ID, SZ_ZONE_IDX
+        }  # ALSO: SZ_DOMAIN_INDEX, SZ_ZONE_INDEX
 
         if self.code in (Code._31D9, Code._31DA):
             assert isinstance(self._index_value, str)  # mypy hint
@@ -473,7 +473,7 @@ class Message:
 
         assert isinstance(self._index_value, str)  # mypy hint
         default_index_name = (
-            SZ_DOMAIN_ID if self._index_value[:1] == "F" else SZ_ZONE_IDX
+            SZ_DOMAIN_INDEX if self._index_value[:1] == "F" else SZ_ZONE_INDEX
         )
         index_name = IDX_NAMES.get(self.code, default_index_name)
 

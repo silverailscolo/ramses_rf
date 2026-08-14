@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
+from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX, SZ_ZONE_INDEX
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
 from ramses_rf.payloads.heating import ScheduleSwitchpointPayload
@@ -70,14 +70,19 @@ async def test_schedule_helpers(dir_name: Path) -> None:
     new_schedule = deepcopy(schedule)
 
     # Act & Assert
+    if "zone_idx" in schedule:
+        schedule[SZ_ZONE_INDEX] = schedule.pop("zone_idx")
+    if "zone_idx" in new_schedule:
+        new_schedule[SZ_ZONE_INDEX] = new_schedule.pop("zone_idx")
+
     ScheduleData.from_dict(schedule)
-    if schedule[SZ_ZONE_IDX] == "HW":
-        schedule[SZ_ZONE_IDX] = "00"
+    if schedule[SZ_ZONE_INDEX] == "HW":
+        schedule[SZ_ZONE_INDEX] = "00"
 
     assert schedule == fragments_to_full_schedule(full_schedule_to_fragments(schedule))
 
-    if new_schedule[SZ_ZONE_IDX] == "HW":
-        new_schedule[SZ_ZONE_IDX] = "00"
+    if new_schedule[SZ_ZONE_INDEX] == "HW":
+        new_schedule[SZ_ZONE_INDEX] = "00"
         new_schedule[SZ_SCHEDULE][-1][SZ_SWITCHPOINTS][-1][SZ_ENABLED] = not (
             schedule[SZ_SCHEDULE][-1][SZ_SWITCHPOINTS][-1][SZ_ENABLED]
         )
