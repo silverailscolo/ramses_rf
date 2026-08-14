@@ -340,8 +340,8 @@ class PollingManager:
 
         # Refresh tasks for all devices currently in registry and prune stale tasks
         active_keys: set[tuple[str, ...]] = set()
-        for dev in list(self._gateway.device_registry.devices):
-            active_keys.update(self.update_device_tasks(dev))
+        for device in list(self._gateway.device_registry.devices):
+            active_keys.update(self.update_device_tasks(device))
 
         for key in list(self._tasks):
             if key not in active_keys:

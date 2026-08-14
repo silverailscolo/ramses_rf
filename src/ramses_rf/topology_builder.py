@@ -74,9 +74,12 @@ async def update_topology_schema_state(
                 tcs = getattr(ctl_dev, "tcs", None)
         else:
             if (devices := p.get("devices")) and isinstance(devices, list):
-                for d in devices:
-                    if getattr(d, "type", str(d)[:2]) == "01":
-                        ctl_id = str(d)
+                for candidate_device in devices:
+                    if (
+                        getattr(candidate_device, "type", str(candidate_device)[:2])
+                        == "01"
+                    ):
+                        ctl_id = str(candidate_device)
                         if ctl_dev := registry.device_by_id.get(ctl_id):
                             tcs = getattr(ctl_dev, "tcs", None)
                         break
@@ -111,13 +114,13 @@ async def update_topology_schema_state(
                 if isinstance(z_type, str) and z_type in ZON_ROLE_MAP.HEAT_ZONES:
                     schema: dict[str, Any] = {"class": ZON_ROLE_MAP[z_type]}
                     if zone_mask := p.get("zone_mask"):
-                        for idx, active in enumerate(zone_mask):
+                        for bit_index, active in enumerate(zone_mask):
                             if active:
                                 with contextlib.suppress(
                                     exc.DeviceNotFoundError,
                                     exc.SchemaInconsistentError,
                                 ):
-                                    z_str = f"{idx:02X}"
+                                    z_str = f"{bit_index:02X}"
                                     ez = getattr(tcs, "zone_by_idx", {}).get(z_str)
                                     if (
                                         ez is not None
@@ -144,9 +147,9 @@ async def update_topology_schema_state(
                                 tcs.get_htg_zone(z_str, **schema)
 
             elif tcs:
-                for idx, flag in enumerate(p.get(SZ_ZONE_MASK, [])):
+                for bit_index, flag in enumerate(p.get(SZ_ZONE_MASK, [])):
                     if flag == 1:
-                        z_id = f"{idx:02X}"
+                        z_id = f"{bit_index:02X}"
                         if z_id not in tcs.zone_by_idx:
                             tcs.get_htg_zone(z_id)
 

@@ -224,7 +224,7 @@ class SystemChangeCounterPayload(PayloadBase):
         hdr: int = 0,
         h1: int = 0,
         h2: int = 5,
-    ) -> Any:
+    ) -> "SystemChangeCounterPayload":
         """Construct SystemChangeCounter payload variant dynamically from arguments."""
         if cls is not SystemChangeCounterPayload:
             return super().__new__(cls)
@@ -288,13 +288,13 @@ class SystemChangeCounter3BPayload(SystemChangeCounterPayload):
                 f"Invalid payload length for SystemChangeCounter3BPayload: {len(raw_data)}"
             )
         hdr, counter_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        val = None if counter_raw == 0xFFFF else counter_raw
-        return cls(hdr=hdr, change_counter=val)
+        counter_val = None if counter_raw == 0xFFFF else counter_raw
+        return cls(hdr=hdr, change_counter=counter_val)
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte system change counter binary payload."""
-        val = 0xFFFF if self.change_counter is None else self.change_counter
-        return struct.pack(self._STRUCT_FMT, self.hdr, val)
+        counter_val = 0xFFFF if self.change_counter is None else self.change_counter
+        return struct.pack(self._STRUCT_FMT, self.hdr, counter_val)
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,13 +326,13 @@ class SystemChangeCounter4BPayload(SystemChangeCounterPayload):
                 f"Invalid payload length for SystemChangeCounter4BPayload: {len(raw_data)}"
             )
         h1, h2, counter_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        val = None if counter_raw == 0xFFFF else counter_raw
-        return cls(h1=h1, h2=h2, change_counter=val)
+        counter_val = None if counter_raw == 0xFFFF else counter_raw
+        return cls(h1=h1, h2=h2, change_counter=counter_val)
 
     def to_bytes(self) -> bytes:
         """Pack 4-byte system change counter binary payload."""
-        val = 0xFFFF if self.change_counter is None else self.change_counter
-        return struct.pack(self._STRUCT_FMT, self.h1, self.h2, val)
+        counter_val = 0xFFFF if self.change_counter is None else self.change_counter
+        return struct.pack(self._STRUCT_FMT, self.h1, self.h2, counter_val)
 
 
 # Update VARIANTS property after variants are defined
@@ -720,8 +720,8 @@ class SystemParameterPayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 01D0: {len(raw_data)}")
-        idx, val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(parameter_index=idx, parameter_value=val)
+        index, value = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(parameter_index=index, parameter_value=value)
 
     def to_bytes(self) -> bytes:
         """Pack system parameter data into binary payload.
@@ -1110,13 +1110,13 @@ class DeviceBatteryPayload(PayloadBase):
         :returns: Decoded battery dictionary.
         :rtype: dict[str, Any]
         """
-        res: dict[str, Any] = {
+        result: dict[str, Any] = {
             "battery_low": self.battery_low,
             "battery_level": self.battery_level,
         }
         if self.header != 0:
-            res["zone_idx"] = f"{self.header:02X}"
-        return res
+            result["zone_idx"] = f"{self.header:02X}"
+        return result
 
 
 # ----------------------------------------------------------------------
@@ -1244,10 +1244,10 @@ class SystemOutdoorTempPayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 1290: {len(raw_data)}")
-        buf = raw_data[1:3] if len(raw_data) >= 3 else raw_data[0:2]
-        if buf in (b"\x7f\xff", b"\x31\xff", b"\x7f\x7f"):
+        temp_bytes = raw_data[1:3] if len(raw_data) >= 3 else raw_data[0:2]
+        if temp_bytes in (b"\x7f\xff", b"\x31\xff", b"\x7f\x7f"):
             return cls(outdoor_temp=None)
-        (temp_raw,) = struct.unpack_from(cls._STRUCT_FMT, buf, 0)
+        (temp_raw,) = struct.unpack_from(cls._STRUCT_FMT, temp_bytes, 0)
         return cls(outdoor_temp=temp_raw / 100.0)
 
     def to_bytes(self) -> bytes:
@@ -1347,8 +1347,8 @@ class SystemSyncHeartbeat1BPayload(SystemSyncHeartbeatPayload):
         """
         if not raw_data:
             raise ValueError("Payload data cannot be empty")
-        (seq,) = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(sync_sequence=seq)
+        (sequence,) = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(sync_sequence=sequence)
 
     def to_bytes(self) -> bytes:
         """Pack 1-byte system sync heartbeat into binary payload.
@@ -1401,8 +1401,8 @@ class SystemSyncHeartbeat3BPayload(SystemSyncHeartbeatPayload):
             raise ValueError(
                 f"Invalid payload length for SystemSyncHeartbeat3BPayload: {len(raw_data)}"
             )
-        seq, secs_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(sync_sequence=seq, remaining_seconds=secs_raw / 10.0)
+        sequence, secs_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(sync_sequence=sequence, remaining_seconds=secs_raw / 10.0)
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte system sync heartbeat into binary payload.
@@ -1801,11 +1801,11 @@ class SystemDateTime9BPayload(SystemDateTimePayload):
         :returns: Decoded system date & time dictionary.
         :rtype: dict[str, Any]
         """
-        res: dict[str, Any] = {}
+        result: dict[str, Any] = {}
         if self.datetime_str is not None:
-            res["datetime"] = self.datetime_str
-        res["is_dst"] = self.is_daylight_saving
-        return res
+            result["datetime"] = self.datetime_str
+        result["is_dst"] = self.is_daylight_saving
+        return result
 
 
 # Update VARIANTS property after variants are defined
@@ -1851,8 +1851,8 @@ class SystemActuatorPayload(PayloadBase):
         """
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length: {len(raw_data)}")
-        dom, val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain=dom, actuator_value=val)
+        dom, val_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(domain=dom, actuator_value=val_raw)
 
     def to_bytes(self) -> bytes:
         """Pack system actuator data into binary payload.
@@ -2042,15 +2042,17 @@ class RelayFailsafePayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 0009: {len(raw_data)}")
         if len(raw_data) >= 3:
             return cls._from_3b(raw_data[:3])
-        idx, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(domain_or_zone_index=idx, failsafe_enabled=bool(flg))
+        index, flag = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(domain_or_zone_index=index, failsafe_enabled=bool(flag))
 
     @classmethod
     def _from_3b(cls, raw_data: bytes) -> Self:
-        idx = raw_data[0]
-        flg = raw_data[1]
+        index = raw_data[0]
+        flag = raw_data[1]
         u0 = f"{raw_data[2]:02X}"
-        return cls(domain_or_zone_index=idx, failsafe_enabled=bool(flg), _unknown_0=u0)
+        return cls(
+            domain_or_zone_index=index, failsafe_enabled=bool(flag), _unknown_0=u0
+        )
 
     def to_bytes(self) -> bytes:
         """Pack relay failsafe data into binary payload.
@@ -2079,13 +2081,13 @@ class RelayFailsafePayload(PayloadBase):
         :rtype: dict[str, Any]
         """
         idx_str = f"{self.domain_or_zone_index:02X}"
-        res: dict[str, Any] = {
+        result: dict[str, Any] = {
             "domain_id": idx_str,
             "failsafe_enabled": self.failsafe_enabled,
         }
         if self._unknown_0 is not None:
-            res["unknown_0"] = self._unknown_0
-        return res
+            result["unknown_0"] = self._unknown_0
+        return result
 
 
 # ----------------------------------------------------------------------

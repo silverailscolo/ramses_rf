@@ -46,12 +46,12 @@ class RadTopologyHandler(TopologyHandler):
             ctl_id = msg.addr3.id
 
         if msg.header.verb == I_ and ctl_id and msg.src.id != ctl_id:
-            for p in self._get_payloads(msg):
-                if not isinstance(p, dict):
+            for payload in self._get_payloads(msg):
+                if not isinstance(payload, dict):
                     continue
 
-                zone_idx = p.get(SZ_ZONE_IDX)
-                domain_id = p.get(SZ_DOMAIN_ID)
+                zone_idx = payload.get(SZ_ZONE_IDX)
+                domain_id = payload.get(SZ_DOMAIN_ID)
 
                 if zone_idx is None and domain_id is None:
                     continue

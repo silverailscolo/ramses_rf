@@ -339,7 +339,7 @@ class BindingManagerRespondent(BindingManagerBase):
         :param zone_index: The bound index.
         :return: The sent accept packet.
         """
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=Address(self._dev.id),
                 dst=Address(tender.src.id),
@@ -348,14 +348,14 @@ class BindingManagerRespondent(BindingManagerBase):
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(cmd).payload["phase"] == BindPhase.ACCEPT
+            assert Message._from_cmd(command).payload["phase"] == BindPhase.ACCEPT
 
-        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
-            cmd, priority=Priority.HIGH, qos=BINDING_QOS
+        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
+            command, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
         self.state.cast_accept_offer()
-        return pkt
+        return packet
 
     async def _wait_for_confirm(
         self,
@@ -455,7 +455,7 @@ class BindingManagerSupplicant(BindingManagerBase):
         # if vendor_code, send an 10E0
 
         # state = self.state
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=Address(self._dev.id),
                 dst=Address(self._dev.id),
@@ -469,15 +469,15 @@ class BindingManagerSupplicant(BindingManagerBase):
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(cmd).payload["phase"] == BindPhase.TENDER
+            assert Message._from_cmd(command).payload["phase"] == BindPhase.TENDER
 
-        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
-            cmd, priority=Priority.HIGH, qos=BINDING_QOS
+        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
+            command, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
         # await state._fut
         self.state.cast_offer()
-        return pkt
+        return packet
 
     async def _wait_for_accept(
         self,
@@ -503,30 +503,30 @@ class BindingManagerSupplicant(BindingManagerBase):
         """
         # HACK assumes all idx same
         if accept.payload and hasattr(accept.payload, "idx"):
-            idx = str(accept.payload.idx)
+            index = str(accept.payload.idx)
         elif accept._dto.raw_payload:
-            idx = accept._dto.raw_payload[:2]
+            index = accept._dto.raw_payload[:2]
         else:
-            idx = "00"
+            index = "00"
 
         target_id = accept.dst.id if accept.src.id == self._dev.id else accept.src.id
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=Address(self._dev.id),
                 dst=Address(target_id),
                 action=Action.PUT_BIND,
-                data={"verb": I_, "codes": confirm_code, "idx": idx},
+                data={"verb": I_, "codes": confirm_code, "idx": index},
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(cmd).payload["phase"] == BindPhase.AFFIRM
+            assert Message._from_cmd(command).payload["phase"] == BindPhase.AFFIRM
 
-        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
-            cmd, priority=Priority.HIGH, qos=BINDING_QOS
+        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
+            command, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
         await self.state.cast_confirm_accept()
-        return pkt
+        return packet
 
     async def _cast_addenda(self, accept: Message, command: CommandDTO) -> Packet:
         """Supp casts an Addenda (the final 10E0 command).
@@ -535,12 +535,12 @@ class BindingManagerSupplicant(BindingManagerBase):
         :param command: The ratify command to cast.
         :return: The sent addenda packet.
         """
-        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
+        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
             command, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
         await self.state.cast_addenda()
-        return pkt
+        return packet
 
 
 class BindingManager(BindingManagerRespondent, BindingManagerSupplicant):
@@ -674,25 +674,25 @@ class BindStateBase:
                 command._addrs[1].id,
                 command._addrs[2].id,
             )
-            src = addr1
+            source = addr1
             # For 1FC9, addr3 is often the actual destination or equal to src
-            dst = addr2 if addr2 != NON_DEVICE_ID else addr3
+            destination = addr2 if addr2 != NON_DEVICE_ID else addr3
         else:
             addrs = [
                 a
                 for a in (command.addr1, command.addr2, command.addr3)
                 if a != NON_DEVICE_ID
             ]
-            src = DeviceIdT(addrs[0] if addrs else NON_DEVICE_ID)
-            dst = DeviceIdT(addrs[1] if len(addrs) > 1 else src)
+            source = DeviceIdT(addrs[0] if addrs else NON_DEVICE_ID)
+            destination = DeviceIdT(addrs[1] if len(addrs) > 1 else source)
 
         if phase == BindPhase.TENDER:
-            return command.verb == I_ and dst in (src, ALL_DEVICE_ID)
+            return command.verb == I_ and destination in (source, ALL_DEVICE_ID)
         if phase == BindPhase.ACCEPT:
             # Historically, this was `dst is not src` on distinct Address objects, which was always True
             return command.verb == W_
         # if phase == BindPhase.AFFIRM:
-        return command.verb == I_ and dst not in (src, ALL_DEVICE_ID)
+        return command.verb == I_ and destination not in (source, ALL_DEVICE_ID)
 
     # Respondent State APIs...
     async def wait_for_offer(self, timeout: float | None = None) -> Message:

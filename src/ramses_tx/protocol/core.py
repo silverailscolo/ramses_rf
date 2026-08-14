@@ -309,26 +309,28 @@ class PortProtocol(_DeviceIdFilterMixin):
         # patching at base.py:309), so we must replicate it here. Without this,
         # all commands go out with the 18:000730 placeholder instead of the real
         # HGI ID. See ramses_cc#757.
-        command = self._patch_cmd_if_needed(command)
+        patched_cmd = self._patch_cmd_if_needed(command)
 
         # Manual filter check to avoid calling super().send_cmd(), which fails
         if not self._is_wanted_addrs(
-            DeviceIdT(command.addr1), DeviceIdT(command.addr2), sending=True
+            DeviceIdT(patched_cmd.addr1), DeviceIdT(patched_cmd.addr2), sending=True
         ):
-            raise ProtocolError(f"Command excluded by device_id filter: {command}")
+            raise ProtocolError(f"Command excluded by device_id filter: {patched_cmd}")
 
-        pkt = await self._send_cmd(
-            command,
+        packet = await self._send_cmd(
+            patched_cmd,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
             qos=qos or DEFAULT_QOS,
         )
 
-        if not pkt:
-            raise ProtocolSendFailed(f"Failed to send command: {command} (REPORT THIS)")
+        if not packet:
+            raise ProtocolSendFailed(
+                f"Failed to send command: {patched_cmd} (REPORT THIS)"
+            )
 
-        return pkt
+        return packet
 
 
 RamsesProtocolT: TypeAlias = PortProtocol | ReadProtocol

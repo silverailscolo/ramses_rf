@@ -352,8 +352,8 @@ class DiscoveryScan:
         just dict lookups and updates.
         """
         # Extract device IDs from the packet
-        src = dto.addr1.strip()
-        dst = dto.addr2.strip()
+        source = dto.addr1.strip()
+        destination = dto.addr2.strip()
         addr3 = dto.addr3.strip() if dto.addr3 else ""
         code = str(dto.code).strip()
         verb = dto.verb if dto.verb else ""
@@ -389,18 +389,18 @@ class DiscoveryScan:
             # relay (FA domain), NOT the appliance_control (FC domain).
             # Both relays broadcast 3B00/3EF0, so the heuristic alone is
             # ambiguous — the schema declaration is the disambiguator.
-            if not self._is_declared_hotwater_valve(src):
+            if not self._is_declared_hotwater_valve(source):
                 domain_id = (
                     "FC"
-                    if _is_appliance_control_signal(src, code, verb, True)
+                    if _is_appliance_control_signal(source, code, verb, True)
                     else None
                 )
 
         # Process each address in the packet
-        # src: high-confidence (device is actively sending)
-        if src and _is_valid_address(src):
+        # source: high-confidence (device is actively sending)
+        if source and _is_valid_address(source):
             self._process_device(
-                src,
+                source,
                 code=code,
                 verb=verb,
                 rssi=rssi,
@@ -408,13 +408,13 @@ class DiscoveryScan:
                 domain_id=domain_id,
                 is_authoritative_domain=is_authoritative_domain,
                 is_source=True,
-                destination=dst,
+                destination=destination,
             )
 
-        # dst: lower-confidence (device is being talked to)
-        if dst and _is_valid_address(dst):
+        # destination: lower-confidence (device is being talked to)
+        if destination and _is_valid_address(destination):
             self._process_device(
-                dst,
+                destination,
                 code=code,
                 verb=verb,
                 rssi=None,  # RSSI is for the sender, not the receiver
@@ -422,11 +422,11 @@ class DiscoveryScan:
                 domain_id=None,
                 is_source=False,
                 destination=None,
-                source=src,  # who sent this packet (for HVAC reply inference)
+                source=source,  # who sent this packet (for HVAC reply inference)
             )
 
         # addr3: lowest-confidence (broadcast target or relay)
-        if addr3 and _is_valid_address(addr3) and addr3 not in (src, dst):
+        if addr3 and _is_valid_address(addr3) and addr3 not in (source, destination):
             self._process_device(
                 addr3,
                 code=code,
@@ -464,12 +464,12 @@ class DiscoveryScan:
         # and should not trigger discovery notifications.
         if is_hgi and self._is_known(device_id):
             now = dt.now().isoformat(timespec="seconds")
-            dev = self._devices.get(device_id)
-            if dev is None:
+            device = self._devices.get(device_id)
+            if device is None:
                 # First time seeing this known HGI — create a minimal entry
                 # so it appears in scan results, but don't mark dirty (no
                 # discovery notification needed for a known device).
-                dev = DiscoveredDevice(
+                device = DiscoveredDevice(
                     device_id=device_id,
                     first_seen=now,
                     last_seen=now,
@@ -481,27 +481,27 @@ class DiscoveryScan:
                     source_count=1 if is_source else 0,
                     destination_count=0 if is_source else 1,
                 )
-                self._devices[device_id] = dev
+                self._devices[device_id] = device
                 self._dirty = True  # persist the new entry
                 _LOGGER.debug(
                     "DiscoveryScan: tracking known HGI %s (not a new discovery)",
                     device_id,
                 )
             else:
-                dev.last_seen = now
+                device.last_seen = now
                 if is_source:
-                    dev.source_count += 1
+                    device.source_count += 1
                 else:
-                    dev.destination_count += 1
-                if code and code not in dev.codes_seen:
-                    dev.codes_seen.append(code)
-                    dev.codes_seen.sort()
+                    device.destination_count += 1
+                if code and code not in device.codes_seen:
+                    device.codes_seen.append(code)
+                    device.codes_seen.sort()
                     self._dirty = True  # persist updated codes
                 if rssi is not None and is_source:
-                    if dev.rssi is None:
-                        dev.rssi = rssi
+                    if device.rssi is None:
+                        device.rssi = rssi
                     else:
-                        dev.rssi = (dev.rssi + rssi) / 2
+                        device.rssi = (device.rssi + rssi) / 2
                     self._dirty = True  # persist updated RSSI
             return
 
@@ -510,14 +510,14 @@ class DiscoveryScan:
         # traffic).  Skip full processing (classification, confidence, etc.)
         # since the device is already known.
         if self._is_known(device_id) and not is_hgi:
-            dev = self._devices.get(device_id)
-            if dev is None:
+            device = self._devices.get(device_id)
+            if device is None:
                 # Known device not yet tracked in scan — create a minimal
                 # entry so codes_seen is accumulated (needed for DHW valve
                 # inference via 1100 code, etc.)
                 now = dt.now().isoformat(timespec="seconds")
                 likely_type = _classify(device_id, code, verb, is_source=is_source)
-                dev = DiscoveredDevice(
+                device = DiscoveredDevice(
                     device_id=device_id,
                     first_seen=now,
                     last_seen=now,
@@ -533,52 +533,52 @@ class DiscoveryScan:
                         is_authoritative_domain and bool(domain_id) and is_source
                     ),
                 )
-                self._devices[device_id] = dev
+                self._devices[device_id] = device
                 self._dirty = True
                 _LOGGER.debug(
                     "DiscoveryScan: tracking known device %s (not a new discovery)",
                     device_id,
                 )
             else:
-                dev.last_seen = dt.now().isoformat(timespec="seconds")
+                device.last_seen = dt.now().isoformat(timespec="seconds")
                 if is_source:
-                    dev.source_count += 1
+                    device.source_count += 1
                 else:
-                    dev.destination_count += 1
-                if code and code not in dev.codes_seen:
-                    dev.codes_seen.append(code)
-                    dev.codes_seen.sort()
+                    device.destination_count += 1
+                if code and code not in device.codes_seen:
+                    device.codes_seen.append(code)
+                    device.codes_seen.sort()
                     self._dirty = True
                 if rssi is not None and is_source:
-                    if dev.rssi is None:
-                        dev.rssi = rssi
+                    if device.rssi is None:
+                        device.rssi = rssi
                     else:
-                        dev.rssi = (dev.rssi + rssi) / 2
+                        device.rssi = (device.rssi + rssi) / 2
                     self._dirty = True
                 if zone_index and is_source and not device_id.startswith("01:"):
                     # Skip CTL (01:) — it sends 000A with zone config for
                     # multiple zones, not its own zone binding.  Setting
                     # zone_index on the CTL corrupts its comment and schema
                     # entry (issue 813).
-                    bound_changed = dev.zone_index != zone_index
-                    dev.zone_index = zone_index
+                    bound_changed = device.zone_index != zone_index
+                    device.zone_index = zone_index
                     if (
                         destination
                         and _is_valid_address(destination)
                         and destination != device_id
                     ):
-                        if dev.bound_to != destination:
-                            dev.bound_to = destination
+                        if device.bound_to != destination:
+                            device.bound_to = destination
                             bound_changed = True
                     if bound_changed:
-                        dev.confidence = "high"
+                        device.confidence = "high"
                         self._dirty = True
                         _LOGGER.debug(
                             "DiscoveryScan: updated zone binding for known "
                             "device %s (zone=%s, bound_to=%s)",
                             device_id,
                             zone_index,
-                            dev.bound_to,
+                            device.bound_to,
                         )
                 # Domain_id update (issue 834): an authoritative 000C
                 # binding overrides any previous hint; a 3B00/3EF0 hint
@@ -587,12 +587,12 @@ class DiscoveryScan:
                     domain_id
                     and is_source
                     and _should_update_domain_id(
-                        dev.domain_id, domain_id, is_authoritative_domain
+                        device.domain_id, domain_id, is_authoritative_domain
                     )
                 ):
-                    dev.domain_id = domain_id
-                    dev.is_authoritative_domain = is_authoritative_domain
-                    dev.confidence = "high"
+                    device.domain_id = domain_id
+                    device.is_authoritative_domain = is_authoritative_domain
+                    device.confidence = "high"
                     self._dirty = True
 
                 # HVAC topology inference for known devices: a FAN (32:)
@@ -602,7 +602,7 @@ class DiscoveryScan:
                 # line ~582, so we need to run it here too.
                 if (
                     not is_hgi
-                    and not dev.bound_to
+                    and not device.bound_to
                     and not is_source
                     and source
                     and _is_valid_address(source)
@@ -610,7 +610,7 @@ class DiscoveryScan:
                     and verb in (" I", "RP")
                     and code in _HVAC_PARENT_INFERENCE_CODES
                 ):
-                    dev.bound_to = source
+                    device.bound_to = source
                     self._dirty = True
                     _LOGGER.debug(
                         "DiscoveryScan: HVAC bound_to %s -> %s (known device, "
@@ -623,12 +623,12 @@ class DiscoveryScan:
             return
 
         now = dt.now().isoformat(timespec="seconds")
-        dev = self._devices.get(device_id)
+        device = self._devices.get(device_id)
 
-        if dev is None:
+        if device is None:
             # New device — classify and create entry
             likely_type = _classify(device_id, code, verb, is_source=is_source)
-            dev = DiscoveredDevice(
+            device = DiscoveredDevice(
                 device_id=device_id,
                 first_seen=now,
                 last_seen=now,
@@ -652,14 +652,14 @@ class DiscoveryScan:
                 and not is_hgi
                 and not device_id.startswith("01:")
             ):
-                dev.zone_index = zone_index
+                device.zone_index = zone_index
                 if (
                     destination
                     and _is_valid_address(destination)
                     and destination != device_id
                 ):
-                    dev.bound_to = destination
-                dev.confidence = "high"  # binding telemetry = high confidence
+                    device.bound_to = destination
+                device.confidence = "high"  # binding telemetry = high confidence
             # Domain_id from 000C binding (authoritative) or 3B00/3EF0
             # (hint).  See issue 834: a 000C FA binding must override a
             # previous 3B00/3EF0 FC hint (the BDR is hotwater_valve, not
@@ -669,12 +669,12 @@ class DiscoveryScan:
                 and is_source
                 and not is_hgi
                 and _should_update_domain_id(
-                    dev.domain_id, domain_id, is_authoritative_domain
+                    device.domain_id, domain_id, is_authoritative_domain
                 )
             ):
-                dev.domain_id = domain_id
-                dev.is_authoritative_domain = is_authoritative_domain
-                dev.confidence = "high"
+                device.domain_id = domain_id
+                device.is_authoritative_domain = is_authoritative_domain
+                device.confidence = "high"
             # HVAC topology inference: a FAN (32:) sending a directed packet
             # (I or RP) to this device confirms the binding — the FAN is the
             # controller and it's communicating with its paired remote.
@@ -688,43 +688,43 @@ class DiscoveryScan:
                 and verb in (" I", "RP")
                 and code in _HVAC_PARENT_INFERENCE_CODES
             ):
-                dev.bound_to = source
-            self._devices[device_id] = dev
+                device.bound_to = source
+            self._devices[device_id] = device
             self._dirty = True
             _LOGGER.info(
                 "DiscoveryScan: new device %s (%s, %s)",
                 device_id,
                 likely_type,
-                dev.confidence,
+                device.confidence,
             )
             return
 
         # Existing device — enrich
         changed = False
 
-        dev.last_seen = now
+        device.last_seen = now
         if is_source:
-            dev.source_count += 1
+            device.source_count += 1
         else:
-            dev.destination_count += 1
+            device.destination_count += 1
 
         # Add code to codes_seen (deduplicated, keep sorted)
-        if code and code not in dev.codes_seen:
-            dev.codes_seen.append(code)
-            dev.codes_seen.sort()
+        if code and code not in device.codes_seen:
+            device.codes_seen.append(code)
+            device.codes_seen.sort()
             changed = True
 
         # Update RSSI as running average (only from src packets)
         if rssi is not None and is_source:
-            if dev.rssi is None:
-                dev.rssi = rssi
+            if device.rssi is None:
+                device.rssi = rssi
             else:
-                dev.rssi = (dev.rssi + rssi) / 2
+                device.rssi = (device.rssi + rssi) / 2
             changed = True
 
         # Update battery flag
-        if code in _BATTERY_CODES and not dev.is_battery:
-            dev.is_battery = True
+        if code in _BATTERY_CODES and not device.is_battery:
+            device.is_battery = True
             changed = True
 
         # Update zone binding (prefer src packets with zone_index)
@@ -733,18 +733,18 @@ class DiscoveryScan:
         # that is different from the device itself.
         # Skip for HGI gateways — they don't have zone bindings.
         if zone_index and is_source and not is_hgi:
-            bound_changed = dev.zone_index != zone_index
-            dev.zone_index = zone_index
+            bound_changed = device.zone_index != zone_index
+            device.zone_index = zone_index
             if (
                 destination
                 and _is_valid_address(destination)
                 and destination != device_id
             ):
-                if dev.bound_to != destination:
-                    dev.bound_to = destination
+                if device.bound_to != destination:
+                    device.bound_to = destination
                     bound_changed = True
             if bound_changed:
-                dev.confidence = "high"
+                device.confidence = "high"
                 changed = True
 
         # Update domain_id (issue 834): an authoritative 000C binding
@@ -755,12 +755,12 @@ class DiscoveryScan:
             and is_source
             and not is_hgi
             and _should_update_domain_id(
-                dev.domain_id, domain_id, is_authoritative_domain
+                device.domain_id, domain_id, is_authoritative_domain
             )
         ):
-            dev.domain_id = domain_id
-            dev.is_authoritative_domain = is_authoritative_domain
-            dev.confidence = "high"
+            device.domain_id = domain_id
+            device.is_authoritative_domain = is_authoritative_domain
+            device.confidence = "high"
             changed = True
 
         # HVAC topology inference: a FAN (32:) sending a directed packet
@@ -770,7 +770,7 @@ class DiscoveryScan:
         # Skip for HGI gateways — they don't have HVAC parent bindings.
         if (
             not is_hgi
-            and not dev.bound_to
+            and not device.bound_to
             and not is_source
             and source
             and _is_valid_address(source)
@@ -778,19 +778,19 @@ class DiscoveryScan:
             and verb in (" I", "RP")
             and code in _HVAC_PARENT_INFERENCE_CODES
         ):
-            dev.bound_to = source
+            device.bound_to = source
             changed = True
 
         # Upgrade confidence based on accumulated evidence
-        new_conf = _recompute_confidence(dev)
-        if new_conf != dev.confidence:
-            dev.confidence = new_conf
+        new_conf = _recompute_confidence(device)
+        if new_conf != device.confidence:
+            device.confidence = new_conf
             changed = True
 
         # Re-classify if we have more info now
-        new_type = _classify(device_id, code, verb, is_source=is_source, device=dev)
-        if new_type != dev.likely_type and new_type != DevType.DEV:
-            dev.likely_type = new_type
+        new_type = _classify(device_id, code, verb, is_source=is_source, device=device)
+        if new_type != device.likely_type and new_type != DevType.DEV:
+            device.likely_type = new_type
             changed = True
 
         if changed:
@@ -949,15 +949,15 @@ def _classify(
         if valid_types is None or vc_type in valid_types:
             return vc_type
 
-    # 4. Check accumulated codes if we have a dev
+    # 4. Check accumulated codes if we have a device
     if device and is_source:
-        for c in device.codes_seen:
-            if c in _CTL_ONLY_CODES:
+        for code_seen in device.codes_seen:
+            if code_seen in _CTL_ONLY_CODES:
                 return DevType.CTL
         # Check verb-aware CTL codes from accumulated data
-        for c in device.codes_seen:
-            if c in _CTL_ONLY_CODES_WITH_VERB:
-                ctl_verbs = _CTL_ONLY_CODES_WITH_VERB[c]
+        for code_seen in device.codes_seen:
+            if code_seen in _CTL_ONLY_CODES_WITH_VERB:
+                ctl_verbs = _CTL_ONLY_CODES_WITH_VERB[code_seen]
                 # Check if any verb in the accumulated data matches
                 # We don't track per-code verbs, so be conservative:
                 # only classify as CTL if the current verb matches
@@ -975,9 +975,9 @@ def _classify(
         # - I 31DA (FAN broadcasting status) → FAN
         # - RP 31DA (FAN responding to request) → FAN
         valid_types = _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix)
-        for c in device.codes_seen:
-            if (verb, c) in _VC_TO_TYPE:
-                vc_type = _VC_TO_TYPE[(verb, c)]
+        for code_seen in device.codes_seen:
+            if (verb, code_seen) in _VC_TO_TYPE:
+                vc_type = _VC_TO_TYPE[(verb, code_seen)]
                 if valid_types is None or vc_type in valid_types:
                     return vc_type
 
@@ -1040,31 +1040,31 @@ def _extract_zone_idx_from_payload(payload: Any | str) -> str | None:
     """
     if isinstance(payload, list):
         for item in payload:
-            res = _extract_zone_idx_from_payload(item)
-            if res is not None:
-                return res
+            result = _extract_zone_idx_from_payload(item)
+            if result is not None:
+                return result
         return None
     if hasattr(payload, "zone_index"):
-        val = payload.zone_index
-        if isinstance(val, int):
-            if val > 0x0B:
+        zone_idx_val = payload.zone_index
+        if isinstance(zone_idx_val, int):
+            if zone_idx_val > 0x0B:
                 return None
-            return f"{val:02X}"
-        idx = str(val).upper()
+            return f"{zone_idx_val:02X}"
+        index_str = str(zone_idx_val).upper()
     elif isinstance(payload, str) and len(payload) >= 2:
-        idx = payload[:2].upper()
+        index_str = payload[:2].upper()
     else:
         return None
 
     # Validate: must be hex chars
     try:
-        val = int(idx, 16)
+        zone_num = int(index_str, 16)
     except ValueError:
         return None
     # Validate: zone indices are 00-0B (12 zones max)
-    if val > 0x0B:
+    if zone_num > 0x0B:
         return None
-    return idx
+    return index_str
 
 
 def _should_update_domain_id(
@@ -1158,20 +1158,20 @@ def _extract_domain_id_from_000c(payload: Any | str) -> str | None:
     """
     if isinstance(payload, list):
         for item in payload:
-            res = _extract_domain_id_from_000c(item)
-            if res is not None:
-                return res
+            result = _extract_domain_id_from_000c(item)
+            if result is not None:
+                return result
         return None
     if hasattr(payload, "domain_id"):
-        res = payload.domain_id
-        return str(res) if res is not None else None
+        result_domain = payload.domain_id
+        return str(result_domain) if result_domain is not None else None
     if not payload or not isinstance(payload, str) or len(payload) < 4:
         return None
     role = payload[2:4].upper()
     if role not in _000C_DOMAIN_ROLES:
         return None
-    idx = payload[:2].upper()
+    index_str = payload[:2].upper()
     if role == _000C_ROLE_APP:
         return "FC"
     # HTG/DHW: index "00" → FA, index "01" → F9
-    return "FA" if idx == "00" else "F9"
+    return "FA" if index_str == "00" else "F9"

@@ -130,7 +130,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     # TODO: should be a private method
     def get_circuit(
         self, circuit_index: str, *, msg: Message | None = None, **schema: Any
-    ) -> Any:
+    ) -> UfhCircuit:
         """Return a UFH circuit, create it if required.
 
         First, use the schema to create/update it, then pass it any msg to handle.
@@ -203,8 +203,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         if state is None:
             return None
 
-        res = state.setpoints
-        return res if isinstance(res, dict) else None
+        result = state.setpoints
+        return result if isinstance(result, dict) else None
 
     async def schema(self) -> dict[str, Any]:
         """Return the device circuit configuration schema."""

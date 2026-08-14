@@ -52,7 +52,7 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
 
     @functools.wraps(fnc)
     async def wrapper(gateway: Gateway, *args: Any, **kwargs: Any) -> None:
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
                 dst=HGI_DEV_ADDR,
@@ -60,11 +60,11 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
                 data={"message": "Script begins:"},
             )
         )
-        gateway.send_cmd(cmd, priority=Priority.HIGHEST, num_repeats=3)
+        gateway.send_cmd(command, priority=Priority.HIGHEST, num_repeats=3)
 
         await fnc(gateway, *args, **kwargs)
 
-        cmd2 = build_dto(
+        finish_command = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
                 dst=HGI_DEV_ADDR,
@@ -72,7 +72,7 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
                 data={"message": "Script done."},
             )
         )
-        gateway.send_cmd(cmd2, priority=Priority.LOWEST, num_repeats=3)
+        gateway.send_cmd(finish_command, priority=Priority.LOWEST, num_repeats=3)
 
     return wrapper
 
@@ -122,8 +122,8 @@ async def exec_cmd(gateway: Gateway, **kwargs: Any) -> None:
     :param gateway: The gateway instance.
     :param kwargs: CLI parameters containing the 'EXEC_CMD' string.
     """
-    cmd = CommandDTO.from_cli(kwargs[EXEC_CMD])
-    await gateway.async_send_cmd(cmd, priority=Priority.HIGH)
+    command = CommandDTO.from_cli(kwargs[EXEC_CMD])
+    await gateway.async_send_cmd(command, priority=Priority.HIGH)
 
 
 async def get_faults(
@@ -136,11 +136,11 @@ async def get_faults(
     :param start: The index to start querying from.
     :param limit: The maximum number of fault entries to return.
     """
-    ctl = gateway.device_registry.get_device(controller_id, cls=Controller)
+    controller = gateway.device_registry.get_device(controller_id, cls=Controller)
 
     try:
-        if ctl.tcs:
-            await ctl.tcs.get_faultlog(start=start, limit=limit)  # 0418
+        if controller.tcs:
+            await controller.tcs.get_faultlog(start=start, limit=limit)  # 0418
     except exc.ExpiredCallbackError as err:
         _LOGGER.error("get_faults(): Function timed out: %s", err)
 
@@ -154,12 +154,12 @@ async def get_schedule(
     :param controller_id: The device ID of the controller.
     :param zone_index: The zone index string (e.g. "00" or "HW").
     """
-    ctl = gateway.device_registry.get_device(controller_id, cls=Controller)
-    if not ctl.tcs:
+    controller = gateway.device_registry.get_device(controller_id, cls=Controller)
+    if not controller.tcs:
         _LOGGER.error("get_schedule(): Controller has no TCS active.")
         return
 
-    zone = ctl.tcs.get_htg_zone(zone_index)
+    zone = controller.tcs.get_htg_zone(zone_index)
 
     try:
         await zone.get_schedule()
@@ -179,12 +179,12 @@ async def set_schedule(
     schedule_ = json.loads(schedule)
     zone_idx = schedule_[SZ_ZONE_IDX]
 
-    ctl = gateway.device_registry.get_device(controller_id, cls=Controller)
-    if not ctl.tcs:
+    controller = gateway.device_registry.get_device(controller_id, cls=Controller)
+    if not controller.tcs:
         _LOGGER.error("set_schedule(): Controller has no TCS active.")
         return
 
-    zone = ctl.tcs.get_htg_zone(zone_idx)
+    zone = controller.tcs.get_htg_zone(zone_idx)
 
     try:
         await zone.set_schedule(schedule_[SZ_SCHEDULE])  # 0404
@@ -201,10 +201,10 @@ async def script_bind_req(
     :param device_id: The device ID to transition to binding state.
     :param code: The code to offer during the bind request.
     """
-    dev = gateway.device_registry.get_device(device_id)
-    assert isinstance(dev, Fakeable)  # mypy
-    dev._make_fake()
-    await dev._initiate_binding_process([code])
+    device = gateway.device_registry.get_device(device_id)
+    assert isinstance(device, Fakeable)  # mypy
+    device._make_fake()
+    await device._initiate_binding_process([code])
 
 
 async def script_bind_wait(
@@ -220,10 +220,10 @@ async def script_bind_wait(
     :param code: The expected bind code to accept.
     :param zone_index: The internal domain or zone index to map to.
     """
-    dev = gateway.device_registry.get_device(device_id)
-    assert isinstance(dev, Fakeable)  # mypy
-    dev._make_fake()
-    await dev._wait_for_binding_request([code], zone_index=zone_index)
+    device = gateway.device_registry.get_device(device_id)
+    assert isinstance(device, Fakeable)  # mypy
+    device._make_fake()
+    await device._wait_for_binding_request([code], zone_index=zone_index)
 
 
 def script_poll_device(
@@ -261,7 +261,7 @@ def script_poll_device(
     tasks = []
 
     for code in (Code._0016, Code._1FC9):
-        cmd = CommandDTO(
+        command = CommandDTO(
             verb=RQ,
             addr1=HGI_DEV_ADDR.id,
             addr2=device_id,
@@ -269,7 +269,7 @@ def script_poll_device(
             code=code,
             payload="00",
         )
-        tasks.append(asyncio.create_task(periodic_send(gateway, cmd, count=0)))
+        tasks.append(asyncio.create_task(periodic_send(gateway, command, count=0)))
 
     gateway._engine._tasks.extend(tasks)
     return tasks
@@ -284,8 +284,8 @@ async def script_scan_disc(gateway: Gateway, device_id: DeviceIdT) -> None:
     """
     _LOGGER.warning("scan_disc() invoked...")
 
-    dev = gateway.device_registry.get_device(device_id)
-    gateway.polling_manager.update_device_tasks(dev)
+    device = gateway.device_registry.get_device(device_id)
+    gateway.polling_manager.update_device_tasks(device)
 
 
 @script_decorator
@@ -408,7 +408,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
             gateway.send_cmd(cmd4)
 
         elif code == Code._2E04:
-            cmd = build_dto(
+            command = build_dto(
                 Intent(
                     src=HGI_DEV_ADDR,
                     dst=Address(device_id),
@@ -416,11 +416,11 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                     data={},
                 )
             )
-            gateway.send_cmd(cmd)
+            gateway.send_cmd(command)
 
         elif code == Code._3220:
             for data_id in (0, 3):  # these are mandatory READ_DATA data_ids
-                cmd = build_dto(
+                command = build_dto(
                     Intent(
                         src=HGI_DEV_ADDR,
                         dst=Address(device_id),
@@ -428,7 +428,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         data={"msg_id": data_id},
                     )
                 )
-                gateway.send_cmd(cmd)
+                gateway.send_cmd(command)
 
         elif code == Code._PUZZ:
             continue
@@ -581,7 +581,7 @@ async def script_scan_otb(gateway: Gateway, device_id: DeviceIdT) -> None:
     _LOGGER.warning("script_scan_otb_full invoked - expect a lot of nonsense")
 
     for msg_id in OTB_DATA_IDS:
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
                 dst=Address(device_id),
@@ -589,7 +589,7 @@ async def script_scan_otb(gateway: Gateway, device_id: DeviceIdT) -> None:
                 data={"msg_id": msg_id},
             )
         )
-        gateway.send_cmd(cmd)
+        gateway.send_cmd(command)
 
 
 @script_decorator
@@ -602,7 +602,7 @@ async def script_scan_otb_hard(gateway: Gateway, device_id: DeviceIdT) -> None:
     _LOGGER.warning("script_scan_otb_hard invoked - expect a lot of nonsense")
 
     for msg_id in range(0x80):
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
                 dst=Address(device_id),
@@ -610,7 +610,7 @@ async def script_scan_otb_hard(gateway: Gateway, device_id: DeviceIdT) -> None:
                 data={"msg_id": msg_id},
             )
         )
-        gateway.send_cmd(cmd, priority=Priority.LOW)
+        gateway.send_cmd(command, priority=Priority.LOW)
 
 
 @script_decorator
@@ -649,7 +649,7 @@ async def script_scan_otb_map(gateway: Gateway, device_id: DeviceIdT) -> None:
             ),
             priority=Priority.LOW,
         )
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
                 dst=Address(device_id),
@@ -657,7 +657,7 @@ async def script_scan_otb_map(gateway: Gateway, device_id: DeviceIdT) -> None:
                 data={"msg_id": msg_id},
             )
         )
-        gateway.send_cmd(cmd, priority=Priority.LOW)
+        gateway.send_cmd(command, priority=Priority.LOW)
 
 
 @script_decorator
@@ -696,7 +696,7 @@ async def script_scan_otb_ramses(gateway: Gateway, device_id: DeviceIdT) -> None
         Code._3EF1,  # rel. modulation level  / RelativeModulationLevel
     )
 
-    for c in _CODES:
+    for code in _CODES:
         gateway.send_cmd(
             (
                 CommandDTO(
@@ -704,7 +704,7 @@ async def script_scan_otb_ramses(gateway: Gateway, device_id: DeviceIdT) -> None
                     addr1=HGI_DEV_ADDR.id,
                     addr2=device_id,
                     addr3=NON_DEV_ADDR.id,
-                    code=c,
+                    code=code,
                     payload="00",
                 )
             ),

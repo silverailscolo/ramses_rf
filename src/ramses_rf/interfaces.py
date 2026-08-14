@@ -16,7 +16,8 @@ SchemaUpdatedCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 if TYPE_CHECKING:
     from .commands.dispatcher import CommandDispatcher as CQRSDispatcher
-    from .devices.dev_base import Device
+    from .config import GatewayConfig
+    from .devices.dev_base import Device, Fakeable
     from .models import TopologyChangedEvent
     from .routing import StateHeader
     from .topology import Parent
@@ -57,7 +58,7 @@ class ConversationManagerInterface(Protocol):
 class MessageStoreInterface(Protocol):
     """Protocol interface for central message store."""
 
-    def add(self, msg: Any) -> Any:
+    def add(self, msg: Message) -> Message | None:
         """Add message to store index."""
         ...
 
@@ -138,12 +139,12 @@ class MessageStoreInterface(Protocol):
         ...
 
     @property
-    def log_by_dtm(self) -> Any:
+    def log_by_dtm(self) -> tuple[Message, ...]:
         """Return in-memory log dictionary keyed by timestamp."""
         ...
 
     @property
-    def state_cache(self) -> Any:
+    def state_cache(self) -> dict[StateHeader, Message]:
         """Return in-memory state cache dictionary."""
         ...
 
@@ -262,7 +263,7 @@ class DeviceRegistryInterface(Protocol):
         self,
         device_id: DeviceIdT,
         create_device: bool = False,
-    ) -> Any:
+    ) -> Device | Fakeable:
         """Create a faked device."""
         ...
 
@@ -318,7 +319,7 @@ class GatewayInterface(Protocol):
     def message_store(self, value: MessageStoreInterface | None) -> None: ...
 
     @property
-    def config(self) -> Any:
+    def config(self) -> GatewayConfig:
         """Return the gateway configuration."""
         ...
 

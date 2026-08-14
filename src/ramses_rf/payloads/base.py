@@ -7,6 +7,7 @@ for all RAMSES packet payload dataclasses.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import ItemsView, KeysView, ValuesView
 from dataclasses import dataclass
 from typing import Any, Self
 
@@ -45,13 +46,13 @@ class PayloadBase(ABC):
         """
         ...
 
-    def to_dict(self, *args: Any, **kwargs: Any) -> Any:
+    def to_dict(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """Convert payload dataclass to legacy dictionary format.
 
         :param args: Optional positional arguments for compatibility.
         :param kwargs: Optional keyword arguments for compatibility.
-        :returns: Dictionary or list representation of the payload.
-        :rtype: Any
+        :returns: Dictionary representation of the payload.
+        :rtype: dict[str, Any]
         """
         return payload_to_dict(self)
 
@@ -64,9 +65,9 @@ class PayloadBase(ABC):
         :rtype: Any
         :raises KeyError: If key is not in dictionary.
         """
-        d = self.to_dict()
-        if isinstance(d, dict):
-            return d[key]
+        result_dict = self.to_dict()
+        if isinstance(result_dict, dict):
+            return result_dict[key]
         raise KeyError(key)
 
     def __contains__(self, key: object) -> bool:
@@ -77,8 +78,8 @@ class PayloadBase(ABC):
         :returns: True if key exists, False otherwise.
         :rtype: bool
         """
-        d = self.to_dict()
-        return key in d if isinstance(d, dict) else False
+        result_dict = self.to_dict()
+        return key in result_dict if isinstance(result_dict, dict) else False
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get value for key with optional fallback default.
@@ -90,35 +91,37 @@ class PayloadBase(ABC):
         :returns: Field value or default.
         :rtype: Any
         """
-        d = self.to_dict()
-        return d.get(key, default) if isinstance(d, dict) else default
+        result_dict = self.to_dict()
+        return (
+            result_dict.get(key, default) if isinstance(result_dict, dict) else default
+        )
 
-    def keys(self) -> Any:
+    def keys(self) -> KeysView[str]:
         """Return dictionary keys view for legacy compatibility.
 
         :returns: Keys view.
-        :rtype: Any
+        :rtype: KeysView[str]
         """
-        d = self.to_dict()
-        return d.keys() if isinstance(d, dict) else {}.keys()
+        result_dict = self.to_dict()
+        return result_dict.keys() if isinstance(result_dict, dict) else {}.keys()
 
-    def values(self) -> Any:
+    def values(self) -> ValuesView[Any]:
         """Return dictionary values view for legacy compatibility.
 
         :returns: Values view.
-        :rtype: Any
+        :rtype: ValuesView[Any]
         """
-        d = self.to_dict()
-        return d.values() if isinstance(d, dict) else {}.values()
+        result_dict = self.to_dict()
+        return result_dict.values() if isinstance(result_dict, dict) else {}.values()
 
-    def items(self) -> Any:
+    def items(self) -> ItemsView[str, Any]:
         """Return dictionary items view for legacy compatibility.
 
         :returns: Items view.
-        :rtype: Any
+        :rtype: ItemsView[str, Any]
         """
-        d = self.to_dict()
-        return d.items() if isinstance(d, dict) else {}.items()
+        result_dict = self.to_dict()
+        return result_dict.items() if isinstance(result_dict, dict) else {}.items()
 
     def hex(self) -> str:
         """Return uppercase ASCII hex representation of binary payload.

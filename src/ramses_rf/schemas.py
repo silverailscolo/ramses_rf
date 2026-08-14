@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final
 
 import voluptuous as vol
 
@@ -375,7 +375,8 @@ def _get_device(
 
     check_filter_lists(device_id)
 
-    return cast("Device", gateway.device_registry.get_device(device_id, **kwargs))
+    device: Device = gateway.device_registry.get_device(device_id, **kwargs)
+    return device
 
 
 def load_schema(
@@ -421,11 +422,11 @@ def load_schema(
     # create any devices in the known list that are faked, or fake those already created
     for device_id, traits in known_list.items():
         if traits.get(SZ_FAKED):
-            dev = _get_device(gateway, DeviceIdT(device_id))  # , **traits)
-            if not isinstance(dev, Fakeable):
-                raise exc.DeviceNotFaked(f"Device is not fakeable: {dev}")
-            if not dev.is_faked:
-                dev._make_fake()
+            device = _get_device(gateway, DeviceIdT(device_id))  # , **traits)
+            if not isinstance(device, Fakeable):
+                raise exc.DeviceNotFaked(f"Device is not fakeable: {device}")
+            if not device.is_faked:
+                device._make_fake()
 
 
 def load_fan(gateway: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
@@ -464,16 +465,18 @@ def load_tcs(
     # print(schema)
     # schema = SCH_TCS_ZONES_ZON(schema)
 
-    ctl = _get_device(gateway, controller_id)
-    if ctl.tcs is None:
-        raise exc.SchemaInconsistentError(f"No TCS assigned to controller {ctl.id}")
-    ctl.tcs._update_schema(**schema)
+    controller = _get_device(gateway, controller_id)
+    if controller.tcs is None:
+        raise exc.SchemaInconsistentError(
+            f"No TCS assigned to controller {controller.id}"
+        )
+    controller.tcs._update_schema(**schema)
 
     for dev_id in schema.get(SZ_UFH_SYSTEM, {}):  # UFH controllers
-        _get_device(gateway, dev_id, parent=ctl.tcs)  # , **_schema)
+        _get_device(gateway, dev_id, parent=controller.tcs)  # , **_schema)
 
     for dev_id in schema.get(SZ_ORPHANS, []):
-        _get_device(gateway, dev_id, parent=ctl)
+        _get_device(gateway, dev_id, parent=controller)
 
     # if DEV_MODE:
     #     import json
@@ -484,4 +487,4 @@ def load_tcs(
     #     print(src)
     #     print(dst)
 
-    return ctl.tcs
+    return controller.tcs

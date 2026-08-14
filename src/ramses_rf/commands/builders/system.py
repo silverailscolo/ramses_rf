@@ -208,7 +208,7 @@ def build_put_bind(intent: Command) -> CommandDTO:
     verb = intent.get("verb")
     codes = intent.get("codes")
     oem_code = intent.get("oem_code")
-    idx = intent.get("idx")
+    index = intent.get("idx")
 
     kodes: list[str] = []
     if not codes:
@@ -235,8 +235,8 @@ def build_put_bind(intent: Command) -> CommandDTO:
             payload += f"{oem_code}{Code._10E0}{hex_id}"
         payload += f"00{Code._1FC9}{hex_id}"
 
-        dst = intent.dst if intent.dst.id != ALL_DEV_ADDR.id else intent.src
-        addr1, addr2, addr3 = resolve_addrs(intent.src, dst)
+        destination = intent.dst if intent.dst.id != ALL_DEV_ADDR.id else intent.src
+        addr1, addr2, addr3 = resolve_addrs(intent.src, destination)
         return CommandDTO(
             verb=I_,
             addr1=addr1,
@@ -253,7 +253,7 @@ def build_put_bind(intent: Command) -> CommandDTO:
         if not kodes:
             raise ValueError(f"Invalid codes for a bind accept: {codes}")
         hex_id = dev_id_to_hex_id(intent.src.id)
-        payload = "".join(f"{idx or '00'}{c}{hex_id}" for c in kodes)
+        payload = "".join(f"{index or '00'}{c}{hex_id}" for c in kodes)
         addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
         return CommandDTO(
             verb=W_,
@@ -269,10 +269,10 @@ def build_put_bind(intent: Command) -> CommandDTO:
     elif verb == I_:
         # put_bind_confirm
         if not kodes:
-            payload = idx or "00"
+            payload = index or "00"
         else:
             hex_id = dev_id_to_hex_id(intent.src.id)
-            payload = f"{idx or '00'}{kodes[0]}{hex_id}"
+            payload = f"{index or '00'}{kodes[0]}{hex_id}"
         addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
         return CommandDTO(
             verb=I_,

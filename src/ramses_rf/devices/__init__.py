@@ -246,8 +246,8 @@ def device_factory(
             f"{device_address}"
         )
 
-    dev: Device = cls.create_from_schema(gateway, device_address, traits=traits)
-    return dev
+    device: Device = cls.create_from_schema(gateway, device_address, traits=traits)
+    return device
 
 
 def class_dev_heat(

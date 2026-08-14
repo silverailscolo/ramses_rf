@@ -218,8 +218,8 @@ class Message:
         # Temporary shim bridging backwards logic during Phase 2
         from ramses_tx.packet import Packet
 
-        pkt = Packet._from_cmd(command, dtm=dtm)
-        return cls(pkt.to_dto())
+        packet = Packet._from_cmd(command, dtm=dtm)
+        return cls(packet.to_dto())
 
     def __str__(self) -> str:
         """Return a human-readable string representation of this object.
@@ -230,23 +230,23 @@ class Message:
 
         def format_context(dto: PacketDTO) -> str:
             """Extract the context string from the packet safely."""
-            val: str = ""
+            context_val: str = ""
             if self._index_value is True:
-                val = "[..]"
+                context_val = "[..]"
             elif self._index_value is False:
-                val = ""
+                context_val = ""
             elif self._index_value is None:
-                val = "??"  # type: ignore[unreachable]
+                context_val = "??"  # type: ignore[unreachable]
             else:
-                val = str(self._index_value)
+                context_val = str(self._index_value)
 
             if (
-                not val
+                not context_val
                 and isinstance(dto.raw_payload, str)
                 and dto.raw_payload[:2] not in ("00", "FF")
             ):
                 return f"({dto.raw_payload[:2]})"
-            return val
+            return context_val
 
         if self._str is not None:
             return self._str
@@ -284,9 +284,9 @@ class Message:
         addr1 = self._addrs[0].id
         addr2 = self._addrs[1].id
         addr3 = self._addrs[2].id
-        seqn = self.seqn if self.seqn else "---"
+        sequence_number = self.seqn if self.seqn else "---"
         return (
-            f"{self.verb} {seqn} {addr1} {addr2} {addr3} "
+            f"{self.verb} {sequence_number} {addr1} {addr2} {addr3} "
             f"{self.code} {self.len:03d} {raw_payload}"
         )
 
@@ -340,16 +340,16 @@ class Message:
             except TypeError:
                 return self._payload.to_dict()
         if isinstance(self._payload, list):
-            res = []
+            result = []
             for item in self._payload:
                 if isinstance(item, PayloadBase):
                     try:
-                        res.append(item.to_dict(msg=self))
+                        result.append(item.to_dict(msg=self))
                     except TypeError:
-                        res.append(item.to_dict())
+                        result.append(item.to_dict())
                 else:
-                    res.append(item)
-            return res
+                    result.append(item)
+            return result
         return self._payload
 
     @property

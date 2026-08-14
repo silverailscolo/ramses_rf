@@ -70,16 +70,16 @@ def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
 
     def append_keys(ppl: dict[str, Any]) -> str:
         _ks: str = ""
-        for k, v in ppl.items():
+        for key, value in ppl.items():
             if (
-                k not in _ks and k not in _keys and v is not None
+                key not in _ks and key not in _keys and value is not None
             ):  # ignore keys with None value
-                _ks += k + "|"
+                _ks += key + "|"
         return _ks
 
     if isinstance(parsed_payload, list):
-        for d in parsed_payload:
-            _keys += append_keys(d)
+        for item in parsed_payload:
+            _keys += append_keys(item)
     elif isinstance(parsed_payload, dict):
         _keys += append_keys(parsed_payload)
     return _keys
@@ -300,8 +300,8 @@ class MessageStore(MessageStoreInterface):
             for row in rows:
                 dtm_val = row[0]
                 verb = row[1]
-                src = row[2]
-                dst = row[3]
+                source = row[2]
+                destination = row[3]
                 code = row[4]
                 hdr = row[6]
                 payload_blob = row[8]
@@ -310,7 +310,7 @@ class MessageStore(MessageStoreInterface):
                 frame = (
                     row[9]
                     if len(row) > 9 and row[9]
-                    else f"{verb} --- {src} {dst} --:------ {code} 001 00"
+                    else f"{verb} --- {source} {destination} --:------ {code} 001 00"
                 )
                 dtm_str = DtmStrT(dtm_val.isoformat(timespec="microseconds"))
 
@@ -318,8 +318,8 @@ class MessageStore(MessageStoreInterface):
                 # so we pad with `... ` to satisfy Packet logic.
                 pkt_line = f"... {frame}"
                 try:
-                    pkt = Packet(dtm_val, pkt_line)
-                    msg = Message._from_pkt(pkt)
+                    packet = Packet(dtm_val, pkt_line)
+                    msg = Message._from_pkt(packet)
                     msg._payload = orjson.loads(payload_blob)
 
                     self._message_log[dtm_str] = msg
@@ -558,10 +558,10 @@ class MessageStore(MessageStoreInterface):
 
         else:
             if msgs is not None:
-                for m in msgs:
-                    dtm_val = DtmStrT(m.dtm.isoformat(timespec="microseconds"))
+                for message in msgs:
+                    dtm_val = DtmStrT(message.dtm.isoformat(timespec="microseconds"))
                     self._message_log.pop(dtm_val, None)
-                    self._state_cache.pop(m.state_header, None)
+                    self._state_cache.pop(message.state_header, None)
         return msgs
 
     async def get(
@@ -608,42 +608,42 @@ class MessageStore(MessageStoreInterface):
             else:
                 kwargs["ctx"] = "False"
 
-        res: list[Message] = []
-        for m in self.log_by_dtm:
+        result: list[Message] = []
+        for message in self.log_by_dtm:
             match = True
-            for k, v in kwargs.items():
-                if k == "dtm" and m.dtm != v:
+            for filter_key, filter_val in kwargs.items():
+                if filter_key == "dtm" and message.dtm != filter_val:
                     match = False
                     break
-                elif k == "verb" and str(m.verb) != v:
+                elif filter_key == "verb" and str(message.verb) != filter_val:
                     match = False
                     break
-                elif k == "src" and m.src.id != v:
+                elif filter_key == "src" and message.src.id != filter_val:
                     match = False
                     break
-                elif k == "dst" and m.dst.id != v:
+                elif filter_key == "dst" and message.dst.id != filter_val:
                     match = False
                     break
-                elif k == "code" and str(m.code) != v:
+                elif filter_key == "code" and str(message.code) != filter_val:
                     match = False
                     break
-                elif k == "hdr":
-                    if isinstance(v, StateHeader):
-                        if m.state_header != v:
+                elif filter_key == "hdr":
+                    if isinstance(filter_val, StateHeader):
+                        if message.state_header != filter_val:
                             match = False
                             break
                     else:
-                        if m.state_header.legacy_hdr != v:
+                        if message.state_header.legacy_hdr != filter_val:
                             match = False
                             break
-                elif k == "ctx":
-                    if m.context.as_string != str(v):
+                elif filter_key == "ctx":
+                    if message.context.as_string != str(filter_val):
                         match = False
                         break
             if match:
-                res.append(m)
+                result.append(message)
 
-        return tuple(res)
+        return tuple(result)
 
     async def contains(
         self,
@@ -678,9 +678,11 @@ class MessageStore(MessageStoreInterface):
         dst_id = parameters[1] if len(parameters) > 1 else None
 
         codes = set()
-        for m in self._state_cache.values():
-            if m.verb == RP and (m.src.id == src_id or m.dst.id == dst_id):
-                codes.add(m.code)
+        for message in self._state_cache.values():
+            if message.verb == RP and (
+                message.src.id == src_id or message.dst.id == dst_id
+            ):
+                codes.add(message.code)
 
         return [Code(str(c)) for c in codes]
 

@@ -241,7 +241,7 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         is_echo = self._is_recent_tx(frame)
 
         try:
-            pkt = Packet.from_file(dtm_str, frame, is_echo=is_echo)
+            packet = Packet.from_file(dtm_str, frame, is_echo=is_echo)
         except ValueError as err:
             _LOGGER.debug("%s < PacketInvalid(%s)", frame, err)
             return
@@ -250,9 +250,9 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             return
 
         try:
-            self._pkt_read(pkt)
+            self._pkt_read(packet)
         except exc.TransportError as err:
-            _LOGGER.debug("%s < Transport Error(%s)", pkt, err)
+            _LOGGER.debug("%s < Transport Error(%s)", packet, err)
             return
 
     def _pkt_read(self, packet: Packet) -> None:
@@ -377,8 +377,8 @@ class _FullTransport(_ReadTransport):
 
         try:
             now = self._dt_now()
-            pkt = Packet(now, frame_clean, is_tx=True)
-            dto = pkt.to_dto()
+            packet = Packet(now, frame_clean, is_tx=True)
+            dto = packet.to_dto()
             tx_key: _TxKeyT = (
                 dto.verb,
                 dto.code,

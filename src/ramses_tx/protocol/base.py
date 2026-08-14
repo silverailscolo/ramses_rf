@@ -120,11 +120,17 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         if not rules:
             return frame
         result = frame
-        for k, v in rules.items():
+        for pattern, replacement in rules.items():
             try:
-                result = re.sub(k, v, result)
+                result = re.sub(pattern, replacement, result)
             except re.error as err:
-                _LOGGER.warning("%s < issue with regex (%s, %s): %s", frame, k, v, err)
+                _LOGGER.warning(
+                    "%s < issue with regex (%s, %s): %s",
+                    frame,
+                    pattern,
+                    replacement,
+                    err,
+                )
         return result
 
     def add_handler(
@@ -355,23 +361,25 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         assert 0 <= num_repeats <= MAX_NUM_REPEATS, "Out of range: num_repeats"
 
         # Patch command with actual HGI ID if it uses the default placeholder
-        command = self._patch_cmd_if_needed(command)
+        patched_cmd = self._patch_cmd_if_needed(command)
 
         if qos and not self._context:
-            _LOGGER.warning("%s < QoS is currently disabled by this Protocol", command)
+            _LOGGER.warning(
+                "%s < QoS is currently disabled by this Protocol", patched_cmd
+            )
 
-        if command.addr1 != self.hgi_id:  # Was HGI_DEV_ADDR.id
-            await self._send_impersonation_alert(command)
+        if patched_cmd.addr1 != self.hgi_id:  # Was HGI_DEV_ADDR.id
+            await self._send_impersonation_alert(patched_cmd)
 
-        pkt = await self._send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
-            command,
+        packet = await self._send_cmd(  # may: raise ProtocolError/ProtocolSendFailed
+            patched_cmd,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
             qos=qos or DEFAULT_QOS,
         )
 
-        return pkt
+        return packet
 
     async def _send_cmd(
         self,
@@ -401,7 +409,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             await self._transport.write_frame(frame)
 
     def pkt_received(self, packet: Packet) -> None:
-        """Wrap self._pkt_received(pkt).
+        """Wrap self._pkt_received(packet).
 
         Applies inbound regex modifications and tracks synchronization
         cycles before passing the packet to the internal receiver.
@@ -409,7 +417,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         :param packet: The received Packet object to process.
         :type packet: Packet
         """
-        # Use pkt._frame and prepend RSSI so from_port can correctly parse it
+        # Use packet._frame and prepend RSSI so from_port can correctly parse it
         raw_frame = packet._frame
         hacked_frame = self._apply_regex(raw_frame, self._inbound_regex)
 
@@ -420,7 +428,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
                 packet = Packet.from_port(packet.dtm, f"{packet.rssi} {hacked_frame}")
             except (ValueError, PacketInvalid) as err:
                 _LOGGER.debug("Regex modified frame is invalid, reverting: %s", err)
-                # Fallback to original packet if regex broke it (pkt
+                # Fallback to original packet if regex broke it (packet
                 # remains unchanged)
 
         # Track Sync Cycles
@@ -478,15 +486,15 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         if self._msg_handler is not None:
             _LOGGER.debug("Dispatching valid message to handler: %s", msg)
             # Ensure safe dispatch to either coroutine or standard handler
-            res = self._msg_handler(msg)
-            if asyncio.iscoroutine(res):
-                self._create_handler_task(res)
+            result = self._msg_handler(msg)
+            if asyncio.iscoroutine(result):
+                self._create_handler_task(result)
 
         for callback, msg_filter in self._msg_handlers:
             if msg_filter is None or msg_filter(msg):
-                res = callback(msg)
-                if asyncio.iscoroutine(res):
-                    self._create_handler_task(res)
+                result = callback(msg)
+                if asyncio.iscoroutine(result):
+                    self._create_handler_task(result)
 
 
 class _DeviceIdFilterMixin(_BaseProtocol):
@@ -631,9 +639,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                 _LOGGER.debug("Dropped invalid packet for raw handlers: %s", err)
             else:
                 for handler in self._raw_pkt_handlers:
-                    res = handler(dto)
-                    if asyncio.iscoroutine(res):
-                        self._create_handler_task(res)
+                    result = handler(dto)
+                    if asyncio.iscoroutine(result):
+                        self._create_handler_task(result)
 
             if not self._is_wanted_addrs(packet.src.id, packet.dst.id):
                 _LOGGER.debug("%s < Packet excluded by device_id filter", packet)

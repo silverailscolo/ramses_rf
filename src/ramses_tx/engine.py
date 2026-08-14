@@ -226,9 +226,9 @@ class Engine:
 
         # Shutdown Safety - securely lock the task registry to clean up
         with self._tasks_lock:
-            tasks = [t for t in self._tasks if not t.done()]
-            for t in tasks:
-                t.cancel()
+            tasks = [task for task in self._tasks if not task.done()]
+            for task in tasks:
+                task.cancel()
 
         if tasks:
             await asyncio.wait(tasks)
@@ -239,10 +239,9 @@ class Engine:
                 if task.done() and not task.cancelled():
                     if exc := task.exception():
                         _LOGGER.debug(
-                            "Background task %s failed: %s",
-                            task.get_name(),
-                            exc,
+                            "Unhandled exception in background worker task: %s", exc
                         )
+            self._tasks.clear()
 
         if self._transport:
             self._transport.close()
@@ -405,6 +404,6 @@ class Engine:
         # Safely pass execution to Gateway's extended handling logic
         handler = getattr(self, "_handle_msg", None)
         if handler:
-            res = handler(msg)
-            if asyncio.iscoroutine(res):
-                await res
+            result = handler(msg)
+            if asyncio.iscoroutine(result):
+                await result

@@ -239,8 +239,8 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
                 await asyncio.sleep(_SIGNATURE_GAP_SECS)
 
                 if self._init_fut.done():
-                    pkt = self._init_fut.result()
-                    self._make_connection(gateway_id=pkt.src.id if pkt else None)
+                    packet = self._init_fut.result()
+                    self._make_connection(gateway_id=packet.src.id if packet else None)
                     return
 
             if not self._init_fut.done():

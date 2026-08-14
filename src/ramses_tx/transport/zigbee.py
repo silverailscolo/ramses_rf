@@ -118,14 +118,14 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._write_endpoint_id = int(float(path_parts[5]))
 
         query = parse_qs(self._zigbee_url.query)
-        cmd = query.get("cmd", ["0x00"])[0] or "0x00"
+        command_str = query.get("cmd", ["0x00"])[0] or "0x00"
 
         # For this deployment we use custom ZCL commands for all payloads
         # (ESP <-> HA uses commands only). Force command mode regardless of
         # URL query; this removes the attribute-path fallback and keeps
         # handling simple and consistent.
         self._use_command_mode = True
-        self._cmd_id = int(cmd, 16 if cmd.startswith("0x") else 10)
+        self._cmd_id = int(command_str, 16 if command_str.startswith("0x") else 10)
 
         # For custom commands, we listen on client-side cluster where Zigbee stack
         # delivers incoming commands from the ESP's client cluster
@@ -252,9 +252,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         try:
             m = re.match(r"^(\d{1,3})/(\d{1,3})\|", payload)
             if m:
-                seq = int(m.group(1))
+                sequence_number = int(m.group(1))
                 total = int(m.group(2))
-                ack = f"ACK {seq}/{total}"
+                ack = f"ACK {sequence_number}/{total}"
 
                 # Fire-and-forget ACK send on the cluster that delivered this payload
                 _LOGGER.debug("Scheduling application ACK: %s", ack)
@@ -330,9 +330,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         try:
             m = re.match(r"^(\d{1,3})/(\d{1,3})\|", payload)
             if m:
-                seq = int(m.group(1))
+                sequence_number = int(m.group(1))
                 total = int(m.group(2))
-                ack = f"ACK {seq}/{total}"
+                ack = f"ACK {sequence_number}/{total}"
 
                 _LOGGER.debug("Scheduling application ACK (cmd): %s", ack)
                 target_cluster = getattr(self, "_cluster", None)
@@ -374,11 +374,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # before APS fragmentation. Each chunk must fit within ZCL command size.
         if self._use_command_mode:
             chunks = list(self._chunk_payload(payload))
-            for seq, total, chunk in chunks:
+            for sequence_number, total, chunk in chunks:
                 try:
-                    await self._send_command(chunk, seq, total)
+                    await self._send_command(chunk, sequence_number, total)
                     # Delay between chunks to prevent ZBOSS buffer pool exhaustion
-                    if seq < total:
+                    if sequence_number < total:
                         await asyncio.sleep(0.025)
                 except asyncio.CancelledError:
                     raise
@@ -392,7 +392,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 ) as err:
                     _LOGGER.exception(
                         "Zigbee chunk %s/%s failed: %s - continuing",
-                        seq,
+                        sequence_number,
                         total,
                         err,
                     )
@@ -400,11 +400,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             return
 
         chunks = list(self._chunk_payload(payload))
-        for seq, total, chunk in chunks:
+        for sequence_number, total, chunk in chunks:
             try:
-                await self._send_chunk(chunk, seq, total)
+                await self._send_chunk(chunk, sequence_number, total)
                 # Delay between chunks to prevent ZBOSS buffer pool exhaustion
-                if seq < total:
+                if sequence_number < total:
                     await asyncio.sleep(0.025)
             except asyncio.CancelledError:
                 raise
@@ -418,7 +418,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             ) as err:
                 _LOGGER.exception(
                     "Zigbee chunk %s/%s failed: %s - continuing",
-                    seq,
+                    sequence_number,
                     total,
                     err,
                 )
@@ -525,8 +525,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         now = dt_now()
         stale_keys = [
             key
-            for key, buf in self._chunk_buffers.items()
-            if (now - buf["timestamp"]).total_seconds() > self._CHUNK_TIMEOUT
+            for key, chunk_buffer in self._chunk_buffers.items()
+            if (now - chunk_buffer["timestamp"]).total_seconds() > self._CHUNK_TIMEOUT
         ]
         for key in stale_keys:
             _LOGGER.warning("Dropping stale incomplete chunk buffer for %s", key)
@@ -544,12 +544,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             m = re.match(r"^(\d{1,3})/(\d{1,3})\|(.*)$", payload, re.DOTALL)
             if not m:
                 return None
-            seq = int(m.group(1))
+            sequence_number = int(m.group(1))
             total = int(m.group(2))
             body = m.group(3)
-            if seq < 1 or total < 1 or seq > total:
+            if sequence_number < 1 or total < 1 or sequence_number > total:
                 return None
-            return (seq, total, body)
+            return (sequence_number, total, body)
         except asyncio.CancelledError:
             raise
         except (ValueError, TypeError, IndexError) as err:
@@ -573,28 +573,28 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         if not parsed:
             return False
 
-        seq, total, body = parsed
+        sequence_number, total, body = parsed
         key = str(self._ieee)
-        buf = self._chunk_buffers.get(key)
+        chunk_buffer = self._chunk_buffers.get(key)
 
-        if not buf or buf.get("total") != total:
+        if not chunk_buffer or chunk_buffer.get("total") != total:
             # Start new assembly
-            buf = {
+            chunk_buffer = {
                 "total": total,
                 "parts": [None] * total,
                 "received": 0,
                 "timestamp": dt_now(),
             }
-            self._chunk_buffers[key] = buf
+            self._chunk_buffers[key] = chunk_buffer
         else:
-            buf["timestamp"] = dt_now()
+            chunk_buffer["timestamp"] = dt_now()
 
-        parts = buf["parts"]
-        if parts[seq - 1] is None:
-            parts[seq - 1] = body
-            buf["received"] += 1
+        parts = chunk_buffer["parts"]
+        if parts[sequence_number - 1] is None:
+            parts[sequence_number - 1] = body
+            chunk_buffer["received"] += 1
             try:
-                ack = f"ACK {seq}/{total}"
+                ack = f"ACK {sequence_number}/{total}"
                 _LOGGER.info("Scheduling application ACK (part): %s", ack)
                 target_cluster = getattr(self, "_cluster", None)
 
@@ -616,7 +616,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             ) as err:
                 _LOGGER.exception("Failed to schedule application ACK: %s", err)
 
-        if buf["received"] < total:
+        if chunk_buffer["received"] < total:
             # Not complete yet
             return True
 
@@ -1007,17 +1007,17 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         total = math.ceil(len(payload) / self._chunk_body_len)
         chunks: list[tuple[int, int, str]] = []
 
-        for idx in range(total):
-            start = idx * self._chunk_body_len
+        for chunk_index in range(total):
+            start = chunk_index * self._chunk_body_len
             body = payload[start : start + self._chunk_body_len]
-            header = f"{idx + 1}/{total}|"
+            header = f"{chunk_index + 1}/{total}|"
             allowed = self._max_char_len - len(header)
             if allowed <= 0:
                 raise exc.TransportZigbeeError(
                     "Chunk header exceeds Zigbee char-string limit"
                 )
             body = body[:allowed]
-            chunks.append((idx + 1, total, header + body))
+            chunks.append((chunk_index + 1, total, header + body))
 
         return chunks
 
@@ -1323,7 +1323,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         """
         try:
             chunks = list(self._chunk_payload(text))
-            for seq, total, chunk in chunks:
+            for sequence_number, total, chunk in chunks:
                 # If a target_cluster was provided, send on that cluster deterministically
                 if target_cluster is not None:
                     use_cmd = (
@@ -1354,7 +1354,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                         ) from err
                 else:
                     # No explicit cluster provided: fall back to the configured write cluster
-                    await self._send_command(chunk, seq, total)
+                    await self._send_command(chunk, sequence_number, total)
                 await asyncio.sleep(0.01)
         except asyncio.CancelledError:
             raise
