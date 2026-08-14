@@ -129,23 +129,26 @@ class PayloadBase(ABC):
         return self.to_bytes().hex().upper()
 
 
-def parse_idx(idx: int | str) -> int:
+def parse_index(index: int | str) -> int:
     """Parse integer or hex string zone/domain index into a byte integer.
 
-    :param idx: Zone/domain index integer or hex string
+    :param index: Zone/domain index integer or hex string
         (e.g. 1, "01", "HW", "FA").
-    :type idx: int | str
+    :type index: int | str
     :returns: Index as an unsigned 8-bit integer.
     :rtype: int
-    :raises ValueError: If idx is an invalid index value.
+    :raises ValueError: If index is an invalid index value.
     """
-    if isinstance(idx, int):
-        if not (0 <= idx <= 255):
-            raise ValueError(f"Invalid zone index: {idx}")
-        return idx
-    if idx == "HW":
+    if isinstance(index, int):
+        if not (0 <= index <= 255):
+            raise ValueError(f"Invalid zone index: {index}")
+        return index
+    if index == "HW":
         return 0xFA
-    result = int(idx, 16)
+    result = int(index, 16)
     if not (0 <= result <= 255):
-        raise ValueError(f"Invalid zone index: {idx}")
+        raise ValueError(f"Invalid zone index: {index}")
     return result
+
+
+parse_idx = parse_index

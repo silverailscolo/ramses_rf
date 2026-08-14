@@ -548,7 +548,7 @@ class TestConfidence:
             first_seen="",
             last_seen="",
             likely_type="TRV",
-            zone_idx="02",
+            zone_index="02",
             bound_to="01:145038",
         )
         assert _recompute_confidence(dev) == "high"
@@ -569,7 +569,7 @@ class TestConfidence:
             first_seen="",
             last_seen="",
             likely_type="TRV",
-            src_count=3,
+            source_count=3,
         )
         assert _recompute_confidence(dev) == "medium"
 
@@ -579,8 +579,8 @@ class TestConfidence:
             first_seen="",
             last_seen="",
             likely_type="TRV",
-            dst_count=5,
-            src_count=0,
+            destination_count=5,
+            source_count=0,
         )
         assert _recompute_confidence(dev) == "low"
 
@@ -601,7 +601,7 @@ class TestDiscoveredDevice:
             likely_type="TRV",
             codes_seen=["1060", "3150"],
             bound_to="01:145038",
-            zone_idx="02",
+            zone_index="02",
             rssi=-72.0,
             confidence="high",
         )
@@ -610,7 +610,7 @@ class TestDiscoveredDevice:
         assert d["likely_type"] == "TRV"
         assert d["codes_seen"] == ["1060", "3150"]
         assert d["bound_to"] == "01:145038"
-        assert d["zone_idx"] == "02"
+        assert d["zone_index"] == "02"
 
     def test_from_dict(self) -> None:
         data = {
@@ -712,7 +712,7 @@ class TestDiscoveryScanPacketHandling:
         assert dev is not None
         assert dev.likely_type == "TRV"
         assert dev.confidence == "high"  # 3150 is a binding code
-        assert dev.src_count == 1
+        assert dev.source_count == 1
         assert "3150" in dev.codes_seen
 
     def test_new_device_from_dst(self) -> None:
@@ -722,7 +722,7 @@ class TestDiscoveryScanPacketHandling:
         # dst (01:145038) should also be recorded
         dev = scan.get_device("01:145038")
         assert dev is not None
-        assert dev.dst_count == 1
+        assert dev.destination_count == 1
         assert dev.confidence == "low"  # only seen as dst
 
     def test_known_device_skipped(self) -> None:
@@ -760,7 +760,7 @@ class TestDiscoveryScanPacketHandling:
         scan.clear_dirty()
         scan._process_packet(make_dto(src="18:130236", code="10E0"))
         assert scan.get_device("18:130236") is dev  # same object
-        assert dev.src_count == 2
+        assert dev.source_count == 2
         assert "10E0" in dev.codes_seen
 
     def test_unknown_hgi_tracked(self) -> None:
@@ -779,7 +779,7 @@ class TestDiscoveryScanPacketHandling:
         dev2 = scan.get_device("18:999999")
         assert dev2 is not None
         assert dev2.first_seen == first_seen  # same entry, not re-created
-        assert dev2.src_count == 2
+        assert dev2.source_count == 2
 
     def test_known_in_schema_skipped(self) -> None:
         """Known devices in schema should be tracked for codes_seen but
@@ -834,7 +834,7 @@ class TestDiscoveryScanPacketHandling:
         )
         dev = scan.get_device("04:056053")
         assert dev is not None
-        assert dev.zone_idx == "02"
+        assert dev.zone_index == "02"
         assert dev.bound_to == "01:145038"
         assert dev.confidence == "high"
 
@@ -852,7 +852,7 @@ class TestDiscoveryScanPacketHandling:
         )
         dev = scan.get_device("22:012299")
         assert dev is not None
-        assert dev.zone_idx == "01"
+        assert dev.zone_index == "01"
         assert dev.bound_to == "01:216136"
         assert dev.confidence == "high"
 
@@ -873,7 +873,7 @@ class TestDiscoveryScanPacketHandling:
         dev = scan.get_device("01:216136")
         assert dev is not None
         # CTL must NOT have zone_idx set
-        assert dev.zone_idx is None
+        assert dev.zone_index is None
         assert dev.bound_to is None
 
     def test_bdr_3b00_sets_domain_id_fc(self) -> None:
@@ -1004,7 +1004,7 @@ class TestDiscoveryScanPacketHandling:
         )
         dev = scan.get_device("04:056053")
         assert dev is not None
-        assert dev.dst_count == 1  # addr3 treated as non-src
+        assert dev.destination_count == 1  # addr3 treated as non-src
 
     def test_broadcast_address_skipped(self) -> None:
         gwy = make_mock_gateway()
@@ -1196,7 +1196,7 @@ class TestOutOfOrderDiscovery:
         trv = scan.get_device("04:056053")
         assert trv is not None
         assert trv.bound_to == "01:145038"
-        assert trv.zone_idx == "02"
+        assert trv.zone_index == "02"
         # CTL should also be recorded (as dst)
         ctl = scan.get_device("01:145038")
         assert ctl is not None
@@ -1214,7 +1214,7 @@ class TestOutOfOrderDiscovery:
 
         # Phase 2: CTL sends its own traffic
         scan._process_packet(make_dto(src="01:145038", dst="18:006402", code="2E04"))
-        assert ctl.src_count == 1
+        assert ctl.source_count == 1
         assert "2E04" in ctl.codes_seen
         # Confidence should upgrade to medium (src_count >= 1 + codes >= 2)
         assert ctl.confidence in ("medium", "high")
@@ -1350,7 +1350,7 @@ class TestVirtualRfIntegration:
 
             # Verify TRV has zone binding
             trv = discovered[TRV_ID]
-            assert trv.zone_idx == "02"
+            assert trv.zone_index == "02"
             assert trv.bound_to == CTL_ID
             assert trv.confidence == "high"
             assert trv.is_battery is True

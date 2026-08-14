@@ -52,7 +52,7 @@ def build_get_schedule_fragment(intent: Command) -> CommandDTO:
         )
 
     payload = ScheduleFragmentPayload(
-        zone_idx=zone_idx,
+        zone_index=zone_idx,
         frag_number=frag_number,
         total_frags=total_frags,
         fragment_bytes=b"",
@@ -95,7 +95,7 @@ def build_set_schedule_fragment(intent: Command) -> CommandDTO:
 
     frag_bytes = bytes.fromhex(fragment)
     payload = ScheduleFragmentPayload(
-        zone_idx=zone_idx,
+        zone_index=zone_idx,
         frag_number=frag_num,
         total_frags=frag_cnt,
         fragment_bytes=frag_bytes,

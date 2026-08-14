@@ -138,12 +138,12 @@ def test_fan_mode_null_sentinel_mapping() -> None:
 
     # Assert
     assert mode_valid.header == 0
-    assert mode_valid.mode_idx == 2
+    assert mode_valid.mode_index == 2
     assert mode_valid.mode_max == 4
     assert mode_valid.to_bytes() == b"\x00\x02\x04"
 
     assert mode_null.header == 0
-    assert mode_null.mode_idx is None
+    assert mode_null.mode_index is None
     assert mode_null.mode_max is None
     assert mode_null.to_bytes() == b"\x00\xff\xff"
 
@@ -158,13 +158,13 @@ def test_hvac_fan_param_null_sentinel_mapping() -> None:
     )
 
     # Assert
-    assert param_valid.param_id == 10
+    assert param_valid.parameter_id == 10
     assert param_valid.value_scaled == 5
     assert param_valid.to_bytes() == bytes.fromhex(
         "00000A0010000000050000000000000064000000010001"
     )
 
-    assert param_null.param_id == 10
+    assert param_null.parameter_id == 10
     assert param_null.value_scaled is None
     assert param_null.to_bytes() == bytes.fromhex(
         "00000A0010FFFFFFFF0000000000000064000000010001"
