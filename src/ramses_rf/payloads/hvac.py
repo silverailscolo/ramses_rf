@@ -388,13 +388,13 @@ class Co2Payload(PayloadBase):
     def __new__(
         cls,
         co2_level: int | None = None,
-        domain_idx: int | None = None,
+        domain_index: int | None = None,
     ) -> Any:
         """Construct Co2 payload variant dynamically from arguments."""
         if cls is not Co2Payload:
             return super().__new__(cls)
-        if domain_idx is not None:
-            return Co23BPayload(domain_idx=domain_idx, co2_level=co2_level)
+        if domain_index is not None:
+            return Co23BPayload(domain_index=domain_index, co2_level=co2_level)
         return Co22BPayload(co2_level=co2_level)
 
     def to_dict(self) -> dict[str, Any]:
@@ -470,15 +470,15 @@ class Co23BPayload(Co2Payload):
       Field-spaced hex : 00 02D0
       Payload hex      : 0002D0
 
-    :param domain_idx: Domain index byte.
-    :type domain_idx: int
+    :param domain_index: Domain index byte.
+    :type domain_index: int
     :param co2_level: CO2 concentration level in PPM (parts per million).
     :type co2_level: int | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BH"
 
-    domain_idx: int
+    domain_index: int
     co2_level: int | None
 
     @classmethod
@@ -490,12 +490,12 @@ class Co23BPayload(Co2Payload):
             )
         hdr, val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         co2 = None if val in (32767, 0x7FFF, 0xFFFF) else val
-        return cls(domain_idx=hdr, co2_level=co2)
+        return cls(domain_index=hdr, co2_level=co2)
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte CO2 payload."""
         val = 32767 if self.co2_level is None else self.co2_level
-        return struct.pack(self._STRUCT_FMT, self.domain_idx, val)
+        return struct.pack(self._STRUCT_FMT, self.domain_index, val)
 
 
 # Update VARIANTS property after variants are defined
@@ -532,7 +532,7 @@ class RelativeHumidityPayload(PayloadBase):
         :returns: HVAC index or None.
         :rtype: str | None
         """
-        return getattr(self, "_hvac_idx", None)
+        return getattr(self, "_hvac_index", None)
 
     @property
     def temperature(self) -> float | None:
@@ -719,8 +719,8 @@ class RelativeHumidity6BPayload(RelativeHumidityPayload):
 
     :param humidity_percent: Relative humidity value (0.0 - 100.0%).
     :type humidity_percent: float | None
-    :param _hvac_idx: HVAC index string.
-    :type _hvac_idx: str | None
+    :param _hvac_index: HVAC index string.
+    :type _hvac_index: str | None
     :param _temperature: Temperature reading in °C.
     :type _temperature: float | None
     :param _dewpoint_temp: Dewpoint temperature in °C.
@@ -730,7 +730,7 @@ class RelativeHumidity6BPayload(RelativeHumidityPayload):
     _STRUCT_FMT: ClassVar[str] = ">BBhh"
 
     humidity_percent: float | None
-    _hvac_idx: str | None = None
+    _hvac_index: str | None = None
     _temperature: float | None = None
     _dewpoint_temp: float | None = None
 
@@ -762,7 +762,7 @@ class RelativeHumidity6BPayload(RelativeHumidityPayload):
         dew = None if dew_raw in (0x7FFF, 0x31FF) else dew_raw / 100.0
         return cls(
             humidity_percent=hum,
-            _hvac_idx=idx,
+            _hvac_index=idx,
             _temperature=temp,
             _dewpoint_temp=dew,
         )
@@ -788,7 +788,7 @@ class RelativeHumidity6BPayload(RelativeHumidityPayload):
             if self._dewpoint_temp is None
             else int(round(self._dewpoint_temp * 100.0))
         )
-        idx_raw = int(self._hvac_idx, 16) if self._hvac_idx is not None else 0
+        idx_raw = int(self._hvac_index, 16) if self._hvac_index is not None else 0
         return struct.pack(self._STRUCT_FMT, idx_raw, hum_raw, temp_raw, dew_raw)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
@@ -971,18 +971,18 @@ class HvacProgrammeConfigPayload(PayloadBase):
       Field-spaced hex : 01 00 0168
       Payload hex      : 01000168
 
-    :param day_idx: Schedule day index byte.
-    :type day_idx: int
-    :param setpoint_idx: Schedule setpoint index byte.
-    :type setpoint_idx: int
+    :param day_index: Schedule day index byte.
+    :type day_index: int
+    :param setpoint_index: Schedule setpoint index byte.
+    :type setpoint_index: int
     :param start_time_mins: Start time in minutes past midnight.
     :type start_time_mins: int
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BBH"
 
-    day_idx: int
-    setpoint_idx: int
+    day_index: int
+    setpoint_index: int
     start_time_mins: int
 
     @classmethod
@@ -998,7 +998,7 @@ class HvacProgrammeConfigPayload(PayloadBase):
         if len(raw_data) < 4:
             raise ValueError(f"Invalid payload length for 1F70: {len(raw_data)}")
         d_idx, sp_idx, t_mins = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(day_idx=d_idx, setpoint_idx=sp_idx, start_time_mins=t_mins)
+        return cls(day_index=d_idx, setpoint_index=sp_idx, start_time_mins=t_mins)
 
     def to_bytes(self) -> bytes:
         """Pack HVAC programme config data into binary payload.
@@ -1007,7 +1007,7 @@ class HvacProgrammeConfigPayload(PayloadBase):
         :rtype: bytes
         """
         return struct.pack(
-            self._STRUCT_FMT, self.day_idx, self.setpoint_idx, self.start_time_mins
+            self._STRUCT_FMT, self.day_index, self.setpoint_index, self.start_time_mins
         )
 
 
@@ -1087,8 +1087,8 @@ class HvacAutoRequestPayload(PayloadBase):
 
     :param exhaust_fan_speed: Exhaust fan speed percentage.
     :type exhaust_fan_speed: float | None
-    :param req_reason: Request reason string.
-    :type req_reason: str | None
+    :param request_reason: Request reason string.
+    :type request_reason: str | None
     :param unknown_78: Optional unknown field 78 string.
     :type unknown_78: str | None
     :param unknown_80: Optional unknown field 80 string.
@@ -1097,19 +1097,18 @@ class HvacAutoRequestPayload(PayloadBase):
     :type unknown_82: str | None
     :param requested_fan_percent: Auto requested fan speed percentage.
     :type requested_fan_percent: float | None
-    :param request_reason: Request reason classification code byte.
-    :type request_reason: int | None
+    :param request_reason: Optional request reason string or code byte.
+    :type request_reason: str | int | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
     exhaust_fan_speed: float | None = None
-    req_reason: str | None = None
+    request_reason: str | int | None = None
     unknown_78: str | None = None
     unknown_80: str | None = None
     unknown_82: str | None = None
     requested_fan_percent: float | None = None
-    request_reason: int | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1130,7 +1129,7 @@ class HvacAutoRequestPayload(PayloadBase):
             reason_str = reason_map.get(reason_raw, f"{reason_raw:02X}")
             return cls(
                 exhaust_fan_speed=spd,
-                req_reason=reason_str,
+                request_reason=reason_str,
                 unknown_78=f"{raw_data[39]:02X}",
                 unknown_80=f"{raw_data[40]:02X}",
                 unknown_82=f"{raw_data[41]:02X}",
@@ -1147,7 +1146,9 @@ class HvacAutoRequestPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        if self.requested_fan_percent is not None and self.request_reason is not None:
+        if self.requested_fan_percent is not None and isinstance(
+            self.request_reason, int
+        ):
             fan_raw = int(round(self.requested_fan_percent * 2.0))
             return bytes([fan_raw, self.request_reason])
         return b"\x00"
@@ -1160,10 +1161,10 @@ class HvacAutoRequestPayload(PayloadBase):
         :returns: Decoded auto request dictionary.
         :rtype: dict[str, Any]
         """
-        if self.req_reason is not None:
+        if self.exhaust_fan_speed is not None or self.unknown_78 is not None:
             return {
                 "exhaust_fan_speed": self.exhaust_fan_speed,
-                "req_reason": self.req_reason,
+                "req_reason": self.request_reason,
                 "unknown_78": self.unknown_78,
                 "unknown_80": self.unknown_80,
                 "unknown_82": self.unknown_82,
@@ -1171,7 +1172,7 @@ class HvacAutoRequestPayload(PayloadBase):
         if self.requested_fan_percent is not None and self.request_reason is not None:
             return {
                 "requested_fan_percent": self.requested_fan_percent,
-                "request_reason": self.request_reason,
+                "req_reason": self.request_reason,
             }
         return {}
 
@@ -1458,8 +1459,8 @@ class HvacFanModePayload(PayloadBase):
 
     :param header: Domain or header index byte.
     :type header: int
-    :param mode_idx: Selected fan mode integer index, or None if unconfigured.
-    :type mode_idx: int | None
+    :param mode_index: Selected fan mode integer index, or None if unconfigured.
+    :type mode_index: int | None
     :param mode_max: Maximum supported fan mode integer index, or None if unconfigured.
     :type mode_max: int | None
 
@@ -1471,7 +1472,7 @@ class HvacFanModePayload(PayloadBase):
     """
 
     header: int
-    mode_idx: int | None
+    mode_index: int | None
     mode_max: int | None
 
     @classmethod
@@ -1487,9 +1488,9 @@ class HvacFanModePayload(PayloadBase):
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 22F1: {len(raw_data)}")
         hdr, raw_idx, raw_max = struct.unpack_from(">BBB", raw_data, 0)
-        mode_idx = None if raw_idx in (0xEF, 0xFE, 0xFF) else raw_idx
+        mode_index = None if raw_idx in (0xEF, 0xFE, 0xFF) else raw_idx
         mode_max = None if raw_max in (0xEF, 0xFE, 0xFF) else raw_max
-        return cls(header=hdr, mode_idx=mode_idx, mode_max=mode_max)
+        return cls(header=hdr, mode_index=mode_index, mode_max=mode_max)
 
     def to_bytes(self) -> bytes:
         """Pack fan mode data into 3-byte binary payload.
@@ -1497,7 +1498,7 @@ class HvacFanModePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        raw_idx = 0xFF if self.mode_idx is None else self.mode_idx
+        raw_idx = 0xFF if self.mode_index is None else self.mode_index
         raw_max = 0xFF if self.mode_max is None else self.mode_max
         return struct.pack(">BBB", self.header, raw_idx, raw_max)
 
@@ -1509,7 +1510,7 @@ class HvacFanModePayload(PayloadBase):
         :returns: Decoded fan mode dictionary.
         :rtype: dict[str, Any]
         """
-        if self.mode_idx is None:
+        if self.mode_index is None:
             return {}
         if self.mode_max == 4:
             mode_map = {0: "off", 1: "auto", 2: "low", 3: "medium", 4: "high"}
@@ -1532,7 +1533,7 @@ class HvacFanModePayload(PayloadBase):
             mode_map = {2: "normal", 3: "boost", 9: "heater_off", 10: "heater_auto"}
         else:
             mode_map = {}
-        fan_mode = mode_map.get(self.mode_idx, f"{self.mode_idx:02X}")
+        fan_mode = mode_map.get(self.mode_index, f"{self.mode_index:02X}")
         scheme = (
             {
                 4: "itho",
@@ -1546,7 +1547,7 @@ class HvacFanModePayload(PayloadBase):
         )
         return {
             "fan_mode": fan_mode,
-            "_mode_idx": f"{self.mode_idx:02X}",
+            "_mode_idx": f"{self.mode_index:02X}",
             "_mode_max": f"{self.mode_max:02X}" if self.mode_max is not None else None,
             "_scheme": scheme,
         }
@@ -1958,16 +1959,16 @@ class HvacFanParamPayload(PayloadBase):
       # 4-byte boolean parameter values: 0 = False, 1 = True.
       # Sentinel values (e.g. 0x000000FF, 0xFFFFFFFF) indicate parameter N/A.
 
-    :param param_id: Fan parameter identifier integer.
-    :type param_id: int
+    :param parameter_id: Fan parameter identifier integer.
+    :type parameter_id: int
     :param data_type: Parameter data type integer.
     :type data_type: int
     :param value_scaled: Current scaled parameter value integer, or None if sentinel/N/A.
     :type value_scaled: int | None
-    :param min_val_scaled: Minimum allowed scaled parameter value integer.
-    :type min_val_scaled: int
-    :param max_val_scaled: Maximum allowed scaled parameter value integer.
-    :type max_val_scaled: int
+    :param min_value_scaled: Minimum allowed scaled parameter value integer.
+    :type min_value_scaled: int
+    :param max_value_scaled: Maximum allowed scaled parameter value integer.
+    :type max_value_scaled: int
     :param precision_scaled: Parameter scaling precision integer.
     :type precision_scaled: int
     :param trailer_bytes: Reserved trailer bytes sequence.
@@ -1976,11 +1977,11 @@ class HvacFanParamPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BHBBiiii2s"
 
-    param_id: int
+    parameter_id: int
     data_type: int
     value_scaled: int | None
-    min_val_scaled: int | None
-    max_val_scaled: int | None
+    min_value_scaled: int | None
+    max_value_scaled: int | None
     precision_scaled: int
     trailer_bytes: bytes
     _raw_3b: bytes | None = None
@@ -1999,11 +2000,11 @@ class HvacFanParamPayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 2411: {len(raw_data)}")
         if len(raw_data) < 22:
             return cls(
-                param_id=raw_data[2] if len(raw_data) >= 3 else 0,
+                parameter_id=raw_data[2] if len(raw_data) >= 3 else 0,
                 data_type=0,
                 value_scaled=None,
-                min_val_scaled=0,
-                max_val_scaled=0,
+                min_value_scaled=0,
+                max_value_scaled=0,
                 precision_scaled=0,
                 trailer_bytes=b"",
                 _raw_3b=raw_data,
@@ -2024,11 +2025,11 @@ class HvacFanParamPayload(PayloadBase):
         min_scaled = None if min_s in (0x000000FF, 0xFFFFFFFF, -1) else min_s
         max_scaled = None if max_s in (0x000000FF, 0xFFFFFFFF, -1) else max_s
         return cls(
-            param_id=p_id,
+            parameter_id=p_id,
             data_type=d_type,
             value_scaled=val_scaled,
-            min_val_scaled=min_scaled,
-            max_val_scaled=max_scaled,
+            min_value_scaled=min_scaled,
+            max_value_scaled=max_scaled,
             precision_scaled=prec_s,
             trailer_bytes=trailer,
         )
@@ -2042,12 +2043,12 @@ class HvacFanParamPayload(PayloadBase):
         if self._raw_3b is not None:
             return self._raw_3b
         val_s = -1 if self.value_scaled is None else self.value_scaled
-        min_s = -1 if self.min_val_scaled is None else self.min_val_scaled
-        max_s = -1 if self.max_val_scaled is None else self.max_val_scaled
+        min_s = -1 if self.min_value_scaled is None else self.min_value_scaled
+        max_s = -1 if self.max_value_scaled is None else self.max_value_scaled
         return struct.pack(
             self._STRUCT_FMT,
             0,
-            self.param_id,
+            self.parameter_id,
             0,
             self.data_type,
             val_s,
@@ -2065,7 +2066,7 @@ class HvacFanParamPayload(PayloadBase):
         :returns: Decoded fan parameter dictionary.
         :rtype: dict[str, Any]
         """
-        p_str = f"{self.param_id:02X}"
+        p_str = f"{self.parameter_id:02X}"
         schema_info = _2411_PARAMS_SCHEMA.get(p_str)
         desc = (
             schema_info.get(SZ_DESCRIPTION, p_str)
@@ -2078,8 +2079,8 @@ class HvacFanParamPayload(PayloadBase):
             "parameter": p_str,
             "description": desc,
             "value": self.value_scaled,
-            "min_value": self.min_val_scaled,
-            "max_value": self.max_val_scaled,
+            "min_value": self.min_value_scaled,
+            "max_value": self.max_value_scaled,
             "precision": self.precision_scaled,
         }
 
@@ -2654,8 +2655,8 @@ class HvacFaultLogEntryPayload(PayloadBase):
       Field-spaced hex : 00 01
       Payload hex      : 0001
 
-    :param fault_idx: Fault log index byte.
-    :type fault_idx: int
+    :param fault_index: Fault log index byte.
+    :type fault_index: int
     :param fault_code: HVAC fault code integer.
     :type fault_code: int
 
@@ -2679,7 +2680,7 @@ class HvacFaultLogEntryPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    fault_idx: int
+    fault_index: int
     fault_code: int
 
     @classmethod
@@ -2695,7 +2696,7 @@ class HvacFaultLogEntryPayload(PayloadBase):
         if len(raw_data) < 2:
             raise ValueError(f"Invalid payload length for 4401: {len(raw_data)}")
         idx, code = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(fault_idx=idx, fault_code=code)
+        return cls(fault_index=idx, fault_code=code)
 
     def to_bytes(self) -> bytes:
         """Pack HVAC fault log entry data into binary payload.
@@ -2703,7 +2704,7 @@ class HvacFaultLogEntryPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.fault_idx, self.fault_code)
+        return struct.pack(self._STRUCT_FMT, self.fault_index, self.fault_code)
 
 
 # ----------------------------------------------------------------------
@@ -3114,22 +3115,22 @@ class WindowStatePayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    zone_idx: int
+    zone_index: int
     window_open: bool | None
 
     def __new__(
         cls,
-        zone_idx: int = 0,
+        zone_index: int = 0,
         window_open: bool | None = None,
     ) -> Any:
         """Construct WindowState payload variant dynamically from arguments."""
         if cls is not WindowStatePayload:
             return super().__new__(cls)
-        return WindowState3BPayload(zone_idx=zone_idx, window_open=window_open)
+        return WindowState3BPayload(zone_index=zone_index, window_open=window_open)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert window state payload to legacy dictionary layout."""
-        z_idx = getattr(self, "zone_idx", 0)
+        z_idx = getattr(self, "zone_index", 0)
         open_val = getattr(self, "window_open", None)
         idx_str = f"{z_idx:02X}"
         return {"zone_idx": idx_str, "window_open": open_val}
@@ -3169,7 +3170,7 @@ class WindowState2BPayload(WindowStatePayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    zone_idx: int
+    zone_index: int
     window_open: bool | None
 
     @classmethod
@@ -3180,12 +3181,12 @@ class WindowState2BPayload(WindowStatePayload):
                 f"Invalid payload length for WindowState2BPayload: {len(raw_data)}"
             )
         z_idx, open_flag = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(zone_idx=z_idx, window_open=bool(open_flag))
+        return cls(zone_index=z_idx, window_open=bool(open_flag))
 
     def to_bytes(self) -> bytes:
         """Pack 2-byte window state binary payload."""
         val = 0xFF if self.window_open is None else int(self.window_open)
-        return struct.pack(self._STRUCT_FMT, self.zone_idx, val)
+        return struct.pack(self._STRUCT_FMT, self.zone_index, val)
 
 
 @dataclass(frozen=True, slots=True)
@@ -3205,7 +3206,7 @@ class WindowState3BPayload(WindowStatePayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BBB"
 
-    zone_idx: int
+    zone_index: int
     window_open: bool | None
 
     @classmethod
@@ -3217,13 +3218,15 @@ class WindowState3BPayload(WindowStatePayload):
             )
         z_idx, open_flag, _trailer = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         val = None if (open_flag, _trailer) == (0xFF, 0xFF) else bool(open_flag)
-        return cls(zone_idx=z_idx, window_open=val)
+        return cls(zone_index=z_idx, window_open=val)
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte window state binary payload."""
         if self.window_open is None:
-            return struct.pack(self._STRUCT_FMT, self.zone_idx, 0xFF, 0xFF)
-        return struct.pack(self._STRUCT_FMT, self.zone_idx, int(self.window_open), 0x00)
+            return struct.pack(self._STRUCT_FMT, self.zone_index, 0xFF, 0xFF)
+        return struct.pack(
+            self._STRUCT_FMT, self.zone_index, int(self.window_open), 0x00
+        )
 
 
 # Update VARIANTS property after variants are defined
@@ -3436,8 +3439,8 @@ class SetpointBoundsPayload(PayloadBase):
       # setpoint_bounds (was: ufh_setpoint). Allow CTL to receive DT4R bounds.
       # (0[012]03)? only if len(array) == 1. Never an array.
 
-    :param ufh_idx: UFH or zone index byte.
-    :type ufh_idx: int
+    :param ufh_index: UFH or zone index byte.
+    :type ufh_index: int
     :param min_temp: Minimum setpoint temperature bound in °C.
     :type min_temp: float
     :param max_temp: Maximum setpoint temperature bound in °C.
@@ -3448,7 +3451,7 @@ class SetpointBoundsPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BhhB"
 
-    ufh_idx: int
+    ufh_index: int
     min_temp: float | None
     max_temp: float | None
     mode_code: int
@@ -3478,7 +3481,7 @@ class SetpointBoundsPayload(PayloadBase):
                 )
                 res.append(
                     cls(
-                        ufh_idx=idx,
+                        ufh_index=idx,
                         min_temp=cls._parse_temp(min_raw),
                         max_temp=cls._parse_temp(max_raw),
                         mode_code=mode_code,
@@ -3490,7 +3493,7 @@ class SetpointBoundsPayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 22C9: {len(raw_data)}")
         idx, min_raw, max_raw, mode_code = struct.unpack_from(">BhhB", raw_data, 0)
         return cls(
-            ufh_idx=idx,
+            ufh_index=idx,
             min_temp=cls._parse_temp(min_raw),
             max_temp=cls._parse_temp(max_raw),
             mode_code=mode_code,
@@ -3506,7 +3509,7 @@ class SetpointBoundsPayload(PayloadBase):
         max_raw = 0x7FFF if self.max_temp is None else int(round(self.max_temp * 100.0))
         return struct.pack(
             ">BhhB",
-            self.ufh_idx,
+            self.ufh_index,
             min_raw,
             max_raw,
             self.mode_code,
@@ -3522,7 +3525,7 @@ class SetpointBoundsPayload(PayloadBase):
             self.mode_code, f"{self.mode_code:02X}"
         )
         return {
-            "ufh_idx": f"{self.ufh_idx:02X}",
+            "ufh_idx": f"{self.ufh_index:02X}",
             "setpoint_bounds": (self.min_temp, self.max_temp),
             "mode": mode_str,
         }
@@ -3550,8 +3553,8 @@ class NowNextSetpointPayload(PayloadBase):
     Protocol Notes:
       # Hometronics setpoint_now / setpt_now_next.
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int
+    :param zone_index: Zone index byte.
+    :type zone_index: int
     :param setpoint_now: Current target setpoint temperature in °C.
     :type setpoint_now: float
     :param setpoint_next: Upcoming scheduled setpoint temperature in °C.
@@ -3562,7 +3565,7 @@ class NowNextSetpointPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BhhH"
 
-    zone_idx: int
+    zone_index: int
     setpoint_now: float
     setpoint_next: float
     minutes_remaining: int
@@ -3579,10 +3582,10 @@ class NowNextSetpointPayload(PayloadBase):
         """
         if len(raw_data) < 7:
             raise ValueError(f"Invalid payload length for 2249: {len(raw_data)}")
-        # Unpack zone_idx, setpoint_now, setpoint_next, mins directly from offset 0
+        # Unpack zone_index, setpoint_now, setpoint_next, mins directly from offset 0
         idx, sp_now, sp_next, mins = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
-            zone_idx=idx,
+            zone_index=idx,
             setpoint_now=sp_now / 100.0,
             setpoint_next=sp_next / 100.0,
             minutes_remaining=mins,
@@ -3598,7 +3601,7 @@ class NowNextSetpointPayload(PayloadBase):
         next_raw = int(round(self.setpoint_next * 100.0))
         return struct.pack(
             self._STRUCT_FMT,
-            self.zone_idx,
+            self.zone_index,
             now_raw,
             next_raw,
             self.minutes_remaining,
@@ -3625,8 +3628,8 @@ class UfhSystemModePayload(PayloadBase):
     Protocol Notes:
       # Spider thermostat, HVAC system switch (Spider master THM).
 
-    :param idx: UFH index byte.
-    :type idx: int
+    :param ufh_index: UFH index byte.
+    :type ufh_index: int
     :param flags: Raw mode flags byte.
     :type flags: int
     :param cool_mode: Cool mode enabled flag boolean.
@@ -3639,7 +3642,7 @@ class UfhSystemModePayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    idx: int
+    ufh_index: int
     flags: int
     cool_mode: bool
     heat_mode: bool
@@ -3659,7 +3662,7 @@ class UfhSystemModePayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 22D0: {len(raw_data)}")
         ufh_idx, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
-            idx=ufh_idx,
+            ufh_index=ufh_idx,
             flags=flg,
             cool_mode=bool(flg & 0x02),
             heat_mode=bool(flg & 0x04),
@@ -3672,7 +3675,7 @@ class UfhSystemModePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.idx, self.flags)
+        return struct.pack(self._STRUCT_FMT, self.ufh_index, self.flags)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert UFH system mode payload to legacy dictionary format.
@@ -3683,7 +3686,7 @@ class UfhSystemModePayload(PayloadBase):
         :rtype: dict[str, Any]
         """
         return {
-            "idx": f"{self.idx:02X}",
+            "idx": f"{self.ufh_index:02X}",
             "cool_mode": self.cool_mode,
             "heat_mode": self.heat_mode,
             "is_active": self.is_active,
@@ -3710,15 +3713,15 @@ class DesiredBoilerSetpointPayload(PayloadBase):
     Protocol Notes:
       # Desired boiler setpoint from controller to boiler/heat actuator.
 
-    :param domain_or_zone_idx: Domain or zone index byte.
-    :type domain_or_zone_idx: int
+    :param domain_or_zone_index: Domain or zone index byte.
+    :type domain_or_zone_index: int
     :param target_temp: Target boiler temperature setpoint in °C.
     :type target_temp: float
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    domain_or_zone_idx: int
+    domain_or_zone_index: int
     target_temp: float | None
 
     @classmethod
@@ -3736,7 +3739,7 @@ class DesiredBoilerSetpointPayload(PayloadBase):
         idx, t_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         t_val = None if t_raw in (0x31FF, 0x7FFF) else t_raw / 100.0
         return cls(
-            domain_or_zone_idx=idx,
+            domain_or_zone_index=idx,
             target_temp=t_val,
         )
 
@@ -3749,7 +3752,7 @@ class DesiredBoilerSetpointPayload(PayloadBase):
         t_raw = (
             0x7FFF if self.target_temp is None else int(round(self.target_temp * 100.0))
         )
-        return struct.pack(self._STRUCT_FMT, self.domain_or_zone_idx, t_raw)
+        return struct.pack(self._STRUCT_FMT, self.domain_or_zone_index, t_raw)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert desired boiler setpoint payload to legacy dictionary layout.
@@ -3784,15 +3787,15 @@ class CoolingStatePayload(PayloadBase):
       # 10:14:12.390 049  I --- 01:023389 --:------ 01:023389 2D49 003 880000
       # Seen with Hometronic systems and BDR91T in heatpump mode.
 
-    :param domain_or_zone_idx: Domain or zone index byte.
-    :type domain_or_zone_idx: int
+    :param domain_or_zone_index: Domain or zone index byte.
+    :type domain_or_zone_index: int
     :param state: Cooling state boolean.
     :type state: bool
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    domain_or_zone_idx: int
+    domain_or_zone_index: int
     state: bool
 
     @classmethod
@@ -3809,7 +3812,7 @@ class CoolingStatePayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 2D49: {len(raw_data)}")
         idx, st_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
-            domain_or_zone_idx=idx,
+            domain_or_zone_index=idx,
             state=bool(st_raw),
         )
 
@@ -3820,7 +3823,7 @@ class CoolingStatePayload(PayloadBase):
         :rtype: bytes
         """
         return struct.pack(
-            self._STRUCT_FMT, self.domain_or_zone_idx, 0xC8 if self.state else 0x00
+            self._STRUCT_FMT, self.domain_or_zone_index, 0xC8 if self.state else 0x00
         )
 
 

@@ -18,7 +18,7 @@ def test_thermal_demand_dto_heat_mode() -> None:
     magnitude = 0.75
 
     # Act
-    dto = ThermalDemandDTO(thermal_demand=magnitude, mode=mode, ufx_idx="01")
+    dto = ThermalDemandDTO(thermal_demand=magnitude, mode=mode, ufh_index="01")
 
     # Assert
     assert dto.thermal_demand == 0.75
@@ -26,7 +26,7 @@ def test_thermal_demand_dto_heat_mode() -> None:
     assert dto.heating_demand == 0.75
     assert dto.cooling_demand == 0.0
     assert dto.heat_demand == 0.75
-    assert dto.ufx_idx == "01"
+    assert dto.ufh_index == "01"
 
 
 def test_thermal_demand_dto_cool_mode() -> None:
@@ -35,7 +35,7 @@ def test_thermal_demand_dto_cool_mode() -> None:
     magnitude = 0.50
 
     # Act
-    dto = ThermalDemandDTO(thermal_demand=magnitude, mode=mode, ufx_idx="02")
+    dto = ThermalDemandDTO(thermal_demand=magnitude, mode=mode, ufh_index="02")
 
     # Assert
     assert dto.thermal_demand == 0.50
@@ -64,10 +64,10 @@ def test_ufh_circuit_demand_dto() -> None:
     demand = 0.85
 
     # Act
-    dto = UfhCircuitDemandDTO(ufx_idx=idx, thermal_demand=demand)
+    dto = UfhCircuitDemandDTO(ufh_index=idx, thermal_demand=demand)
 
     # Assert
-    assert dto.ufx_idx == "00"
+    assert dto.ufh_index == "00"
     assert dto.thermal_demand == 0.85
     assert dto.heating_demand == 0.85
     assert dto.cooling_demand == 0.0
@@ -120,8 +120,8 @@ def test_zone_schedule_dto() -> None:
     raw_schedule = [{"day_of_week": 0, "switchpoints": []}]
 
     # Act
-    dto = ZoneScheduleDTO(zone_idx=zone_idx, schedule=raw_schedule)
+    dto = ZoneScheduleDTO(zone_index=zone_idx, schedule=raw_schedule)
 
     # Assert
-    assert dto.zone_idx == "01"
+    assert dto.zone_index == "01"
     assert dto.schedule == raw_schedule

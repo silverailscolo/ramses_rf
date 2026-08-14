@@ -93,7 +93,7 @@ class ZoneBase(Child, Parent, Entity):
         # Parallel CQRS States
         self.temp_state = TemperatureState()
         self.demand_state = DemandState()
-        self.schedule_state = ScheduleState(zone_idx=zone_idx, days=())
+        self.schedule_state = ScheduleState(zone_index=zone_idx, days=())
         self.trv_state = TrvState()
         self.zone_state = ZoneState()
 
@@ -334,7 +334,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         val = self.demand_state.heat_demand
         if val is None:
             return None
-        return ThermalDemandDTO(thermal_demand=val, ufx_idx=str(self.idx))
+        return ThermalDemandDTO(thermal_demand=val, ufh_index=str(self.idx))
 
     async def heat_demand(self) -> float | None:  # 3150
         """Return the DHW heat demand percentage (0.0 to 1.0)."""

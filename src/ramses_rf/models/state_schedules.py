@@ -31,7 +31,7 @@ class DailySchedule:
 class ScheduleState:
     """The immutable state of a zone's 7-day schedule."""
 
-    zone_idx: str
+    zone_index: str
     days: tuple[DailySchedule, ...]
     version: int | None = None
     is_current: bool = False

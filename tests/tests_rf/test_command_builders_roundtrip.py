@@ -39,7 +39,7 @@ def test_dhw_params_payload_roundtrip() -> None:
 
     # Assert
     assert isinstance(payload, DhwParams6BPayload)
-    assert payload.dhw_idx == 0
+    assert payload.dhw_index == 0
     assert payload.setpoint == 50.0
     assert payload.overrun == 5
     assert payload.differential == 1.0

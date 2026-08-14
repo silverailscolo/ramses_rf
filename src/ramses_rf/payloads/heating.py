@@ -23,7 +23,7 @@ from ramses_tx.address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, hex_id_to_dev
 from ramses_tx.helpers import hex_from_dtm, hex_to_dtm, hex_to_percent
 from ramses_tx.typing import DeviceIdT
 
-from .base import PayloadBase, parse_idx
+from .base import PayloadBase, parse_index
 from .registry import register_payload
 
 # ----------------------------------------------------------------------
@@ -35,13 +35,13 @@ class HeatDemandPayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    domain_or_zone_idx: int | None
+    domain_or_zone_index: int | None
     demand_percent: int
     raw_extra: bytes | None
 
     def __new__(
         cls,
-        domain_or_zone_idx: int | None = None,
+        domain_or_zone_index: int | None = None,
         demand_percent: int = 0,
         raw_extra: bytes | None = None,
         _is_array_item: bool = False,
@@ -49,9 +49,9 @@ class HeatDemandPayload(PayloadBase):
         """Construct HeatDemand payload variant dynamically."""
         if cls is not HeatDemandPayload:
             return super().__new__(cls)
-        if domain_or_zone_idx is not None:
+        if domain_or_zone_index is not None:
             return HeatDemand2BPayload(
-                domain_or_zone_idx=domain_or_zone_idx,
+                domain_or_zone_index=domain_or_zone_index,
                 demand_percent=demand_percent,
                 raw_extra=raw_extra,
                 _is_array_item=_is_array_item,
@@ -68,7 +68,7 @@ class HeatDemandPayload(PayloadBase):
         if len(raw_data) >= 4 and len(raw_data) % 2 == 0:
             return [
                 HeatDemand2BPayload(
-                    domain_or_zone_idx=idx,
+                    domain_or_zone_index=idx,
                     demand_percent=demand,
                     _is_array_item=True,
                 )
@@ -111,7 +111,7 @@ class HeatDemand1BPayload(HeatDemandPayload):
     _STRUCT_FMT: ClassVar[str] = ">B"
 
     demand_percent: int
-    domain_or_zone_idx: int | None = None
+    domain_or_zone_index: int | None = None
     raw_extra: bytes | None = None
 
     @classmethod
@@ -168,8 +168,8 @@ class HeatDemand2BPayload(HeatDemandPayload):
       Field-spaced hex : 00 C8
       Payload hex      : 00C8
 
-    :param domain_or_zone_idx: Domain or zone index byte.
-    :type domain_or_zone_idx: int
+    :param domain_or_zone_index: Domain or zone index byte.
+    :type domain_or_zone_index: int
     :param demand_percent: Heat demand value (0-200, where 200 = 100%).
     :type demand_percent: int
     :param raw_extra: Optional raw extra bytes.
@@ -178,7 +178,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    domain_or_zone_idx: int
+    domain_or_zone_index: int
     demand_percent: int
     raw_extra: bytes | None = None
     _is_array_item: bool = False
@@ -199,7 +199,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
             )
         idx, demand = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         extra = raw_data[2:] if len(raw_data) > 2 else None
-        return cls(domain_or_zone_idx=idx, demand_percent=demand, raw_extra=extra)
+        return cls(domain_or_zone_index=idx, demand_percent=demand, raw_extra=extra)
 
     def to_bytes(self) -> bytes:
         """Pack 2-byte heat demand binary payload.
@@ -208,7 +208,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
         :rtype: bytes
         """
         buf = struct.pack(
-            self._STRUCT_FMT, self.domain_or_zone_idx, self.demand_percent & 0xFF
+            self._STRUCT_FMT, self.domain_or_zone_index, self.demand_percent & 0xFF
         )
         if self.raw_extra is not None:
             buf += self.raw_extra
@@ -229,7 +229,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
             if val == 1.01:
                 val = 1.0
             res = {"heat_demand": val}
-        idx = self.domain_or_zone_idx
+        idx = self.domain_or_zone_index
         if idx >= 0xF0:
             res["domain_id"] = "FC" if idx == 0xFC else f"{idx:02X}"
         else:
@@ -266,19 +266,19 @@ class TemperaturePayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    zone_idx: int | str | None
+    zone_index: int | str | None
     temperature: float | bool | None
 
     def __new__(
         cls,
-        zone_idx: int | str | None = None,
+        zone_index: int | str | None = None,
         temperature: float | bool | None = None,
     ) -> Any:
         """Construct Temperature payload variant dynamically from arguments."""
         if cls is not TemperaturePayload:
             return super().__new__(cls)
-        if zone_idx is not None:
-            return Temperature3BPayload(zone_idx=zone_idx, temperature=temperature)
+        if zone_index is not None:
+            return Temperature3BPayload(zone_index=zone_index, temperature=temperature)
         return Temperature2BPayload(temperature=temperature)
 
     @classmethod
@@ -298,7 +298,7 @@ class TemperaturePayload(PayloadBase):
         if len(raw_data) > 3 and len(raw_data) % 3 == 0:
             return [
                 Temperature3BPayload(
-                    zone_idx=idx,
+                    zone_index=idx,
                     temperature=cls._parse_temp_val(temp_raw),
                 )
                 for idx, temp_raw in (
@@ -339,7 +339,7 @@ class Temperature2BPayload(TemperaturePayload):
 
     _STRUCT_FMT: ClassVar[str] = ">h"
 
-    zone_idx: None = None
+    zone_index: None = None
     temperature: float | bool | None = None
 
     @classmethod
@@ -380,21 +380,21 @@ class Temperature3BPayload(TemperaturePayload):
       Field-spaced hex : 01 07D0
       Payload hex      : 0107D0
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int | str
+    :param zone_index: Zone index byte.
+    :type zone_index: int | str
     :param temperature: Temperature in °C, False if disabled, or None if N/A.
     :type temperature: float | bool | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    zone_idx: int | str
+    zone_index: int | str
     temperature: float | bool | None
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -404,7 +404,7 @@ class Temperature3BPayload(TemperaturePayload):
                 f"Invalid payload length for Temperature3BPayload: {len(raw_data)}"
             )
         idx, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(zone_idx=idx, temperature=cls._parse_temp_val(temp_raw))
+        return cls(zone_index=idx, temperature=cls._parse_temp_val(temp_raw))
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte temperature payload."""
@@ -414,15 +414,15 @@ class Temperature3BPayload(TemperaturePayload):
             temp_raw = 0x7EFF
         else:
             temp_raw = int(round(self.temperature * 100.0))
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         return struct.pack(self._STRUCT_FMT, idx, temp_raw)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert 3-byte temperature payload to legacy dictionary layout."""
         idx_str = (
-            f"{self.zone_idx:02X}"
-            if isinstance(self.zone_idx, int)
-            else str(self.zone_idx)
+            f"{self.zone_index:02X}"
+            if isinstance(self.zone_index, int)
+            else str(self.zone_index)
         )
         return {"zone_idx": idx_str, "temperature": self.temperature}
 
@@ -452,8 +452,8 @@ class ScheduleFragmentPayload(PayloadBase):
       Field-spaced hex : 01 20 0000 08 01 03 6881
       Payload hex      : 012000000801036881
 
-    :param zone_idx: Zone/domain index byte.
-    :type zone_idx: int
+    :param zone_index: Zone/domain index byte.
+    :type zone_index: int
     :param frag_number: Fragment index number (1-based).
     :type frag_number: int
     :param total_frags: Total fragment count for schedule transfer.
@@ -469,7 +469,7 @@ class ScheduleFragmentPayload(PayloadBase):
 
     _STRUCT_FMT_HEADER: ClassVar[str] = ">B3sBBB"
 
-    zone_idx: int | str
+    zone_index: int | str
     frag_number: int
     total_frags: int
     fragment_bytes: bytes
@@ -477,8 +477,8 @@ class ScheduleFragmentPayload(PayloadBase):
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -497,11 +497,11 @@ class ScheduleFragmentPayload(PayloadBase):
         raw_idx, prefix, _frag_len, frag_num, total_frags = struct.unpack_from(
             cls._STRUCT_FMT_HEADER, raw_data, 0
         )
-        zone_idx: int | str = (
+        zone_index: int | str = (
             "HW" if raw_idx == 0 and prefix == b"\x23\x00\x08" else raw_idx
         )
         return cls(
-            zone_idx=zone_idx,
+            zone_index=zone_index,
             frag_number=frag_num,
             total_frags=total_frags,
             fragment_bytes=raw_data[7:],
@@ -514,7 +514,7 @@ class ScheduleFragmentPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         prefix = (
             self._header_prefix
             if self._header_prefix is not None
@@ -539,12 +539,12 @@ class ScheduleFragmentPayload(PayloadBase):
         :returns: Decoded schedule fragment dictionary.
         :rtype: dict[str, Any]
         """
-        if self.zone_idx in (0xFA, "HW"):
+        if self.zone_index in (0xFA, "HW"):
             zone_str = "HW"
-        elif isinstance(self.zone_idx, int):
-            zone_str = f"{self.zone_idx:02X}"
+        elif isinstance(self.zone_index, int):
+            zone_str = f"{self.zone_index:02X}"
         else:
-            zone_str = str(self.zone_idx)
+            zone_str = str(self.zone_index)
         res: dict[str, Any] = {
             "zone_idx": zone_str,
             "frag_number": self.frag_number,
@@ -579,8 +579,8 @@ class ScheduleSwitchpointPayload(PayloadBase):
       Field-spaced hex : 00000000 01 000000 01 000000 6801 0000 D007 0000
       Payload hex      : 00000000010000000100000068010000D0070000
 
-    :param zone_idx: Zone/domain index byte.
-    :type zone_idx: int
+    :param zone_index: Zone/domain index byte.
+    :type zone_index: int
     :param day_of_week: Day of week integer (1-7).
     :type day_of_week: int
     :param time_of_day_mins: Time of day in minutes.
@@ -591,7 +591,7 @@ class ScheduleSwitchpointPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = "<xxxxBxxxBxxxHxxHH"
 
-    zone_idx: int
+    zone_index: int
     day_of_week: int
     time_of_day_mins: int
     setpoint_value: int
@@ -613,7 +613,7 @@ class ScheduleSwitchpointPayload(PayloadBase):
 
         idx, dow, tod, val, _ = struct.unpack(cls._STRUCT_FMT, raw_data)
         return cls(
-            zone_idx=idx,
+            zone_index=idx,
             day_of_week=dow,
             time_of_day_mins=tod,
             setpoint_value=val,
@@ -622,15 +622,15 @@ class ScheduleSwitchpointPayload(PayloadBase):
     @classmethod
     def from_switchpoint(
         cls,
-        zone_idx: int | str,
+        zone_index: int | str,
         day_of_week: int,
         time_of_day_mins: int,
         setpoint: float | bool | None,
     ) -> Self:
         """Create a ScheduleSwitchpointPayload from switchpoint domain values.
 
-        :param zone_idx: Zone or domain index byte or string.
-        :type zone_idx: int | str
+        :param zone_index: Zone or domain index byte or string.
+        :type zone_index: int | str
         :param day_of_week: Day of week integer (0-6).
         :type day_of_week: int
         :param time_of_day_mins: Time of day in minutes.
@@ -640,7 +640,7 @@ class ScheduleSwitchpointPayload(PayloadBase):
         :returns: A populated ScheduleSwitchpointPayload instance.
         :rtype: Self
         """
-        idx = parse_idx(zone_idx)
+        idx = parse_index(zone_index)
         if isinstance(setpoint, bool):
             value = int(setpoint)
         elif isinstance(setpoint, (int, float)):
@@ -648,7 +648,7 @@ class ScheduleSwitchpointPayload(PayloadBase):
         else:
             value = 0
         return cls(
-            zone_idx=idx,
+            zone_index=idx,
             day_of_week=day_of_week,
             time_of_day_mins=time_of_day_mins,
             setpoint_value=value,
@@ -662,7 +662,7 @@ class ScheduleSwitchpointPayload(PayloadBase):
         """
         return struct.pack(
             self._STRUCT_FMT,
-            self.zone_idx,
+            self.zone_index,
             self.day_of_week,
             self.time_of_day_mins,
             self.setpoint_value,
@@ -1092,14 +1092,14 @@ class ZoneConfigPayload(PayloadBase):
       Payload hex      : 000001F40DB8
 
     Discovery & Protocol Notes:
-      # 000A (Zone Info) is sent by THMs (22:) with their zone_idx as payload (e.g. RQ 000A 001 01).
+      # 000A (Zone Info) is sent by THMs (22:) with their zone_index as payload (e.g. RQ 000A 001 01).
       # CTL (01:) sends 000A with full zone configuration arrays.
       # Sample Packet Logs:
       # .I --- 01:158182 --:------ 01:158182 000A 048 001201F409C4011101F409C40...
       # .I --- 01:158182 --:------ 01:158182 000A 006 081001F409C4
 
-    :param zone_idx: Zone index integer.
-    :type zone_idx: int
+    :param zone_index: Zone index integer.
+    :type zone_index: int
     :param zone_flags: Zone flags byte.
     :type zone_flags: int
     :param min_temp: Minimum zone temperature setting in °C.
@@ -1110,15 +1110,15 @@ class ZoneConfigPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BBhh"
 
-    zone_idx: int | str
+    zone_index: int | str
     zone_flags: int
     min_temp: float | None
     max_temp: float | None
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
 
     @classmethod
     def _from_bytes_single(cls, raw_data: bytes, offset: int = 0) -> Self:
@@ -1136,7 +1136,7 @@ class ZoneConfigPayload(PayloadBase):
             cls._STRUCT_FMT, raw_data, offset
         )
         return cls(
-            zone_idx=idx,
+            zone_index=idx,
             zone_flags=flags,
             min_temp=None if min_raw in (0x7FFF, 0x31FF) else min_raw / 100.0,
             max_temp=None if max_raw in (0x7FFF, 0x31FF) else max_raw / 100.0,
@@ -1153,10 +1153,12 @@ class ZoneConfigPayload(PayloadBase):
         :raises ValueError: If raw_data length is invalid.
         """
         if len(raw_data) == 1:
-            return cls(zone_idx=raw_data[0], zone_flags=0, min_temp=None, max_temp=None)
+            return cls(
+                zone_index=raw_data[0], zone_flags=0, min_temp=None, max_temp=None
+            )
         if len(raw_data) == 2:
             return cls(
-                zone_idx=raw_data[0],
+                zone_index=raw_data[0],
                 zone_flags=raw_data[1],
                 min_temp=None,
                 max_temp=None,
@@ -1176,7 +1178,7 @@ class ZoneConfigPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         min_raw = 0x7FFF if self.min_temp is None else int(round(self.min_temp * 100.0))
         max_raw = 0x7FFF if self.max_temp is None else int(round(self.max_temp * 100.0))
         return struct.pack(
@@ -1209,13 +1211,13 @@ class ZoneNamePayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    zone_idx: int | str
+    zone_index: int | str
     name: str | None
     setpoint_temp: float | None
 
     def __new__(
         cls,
-        zone_idx: int | str = 0,
+        zone_index: int | str = 0,
         name: str | None = None,
         setpoint_temp: float | None = None,
     ) -> Any:
@@ -1224,9 +1226,9 @@ class ZoneNamePayload(PayloadBase):
             return super().__new__(cls)
         if setpoint_temp is not None:
             return ZoneNameShort3BPayload(
-                zone_idx=zone_idx, setpoint_temp=setpoint_temp
+                zone_index=zone_index, setpoint_temp=setpoint_temp
             )
-        return ZoneName22BPayload(zone_idx=zone_idx, name=name)
+        return ZoneName22BPayload(zone_index=zone_index, name=name)
 
     @classmethod
     def from_bytes(
@@ -1267,21 +1269,21 @@ class ZoneName22BPayload(ZoneNamePayload):
     Protocol Notes:
       # RQ payload is zz00; limited to 12 chars in evohome UI? if "7F"*20: not a zone
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int | str
+    :param zone_index: Zone index byte.
+    :type zone_index: int | str
     :param name: ASCII Zone Name string (max 20 chars).
     :type name: str | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bx20s"
 
-    zone_idx: int | str
+    zone_index: int | str
     name: str | None = None
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1302,7 +1304,7 @@ class ZoneName22BPayload(ZoneNamePayload):
             name = None
         else:
             name = name_raw.rstrip(b"\x00").decode("ascii", errors="replace")
-        return cls(zone_idx=idx, name=name)
+        return cls(zone_index=idx, name=name)
 
     def to_bytes(self) -> bytes:
         """Pack 22-byte zone name data into binary payload.
@@ -1310,7 +1312,7 @@ class ZoneName22BPayload(ZoneNamePayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         name_bytes = (
             b"\x7f" * 20
             if self.name is None
@@ -1327,7 +1329,9 @@ class ZoneName22BPayload(ZoneNamePayload):
         if self.name is None:
             return {}
         idx_str = (
-            f"{self.zone_idx:02X}" if isinstance(self.zone_idx, int) else self.zone_idx
+            f"{self.zone_index:02X}"
+            if isinstance(self.zone_index, int)
+            else self.zone_index
         )
         return {"zone_idx": idx_str, "name": self.name}
 
@@ -1345,21 +1349,21 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
       Field-spaced hex : 01 07D0
       Payload hex      : 0107D0
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int | str
+    :param zone_index: Zone index byte.
+    :type zone_index: int | str
     :param setpoint_temp: Target temperature in °C.
     :type setpoint_temp: float
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    zone_idx: int | str
+    zone_index: int | str
     setpoint_temp: float
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1376,7 +1380,7 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
                 f"Invalid payload length for ZoneNameShort3BPayload: {len(raw_data)}"
             )
         idx, sp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(zone_idx=idx, setpoint_temp=sp_raw / 100.0)
+        return cls(zone_index=idx, setpoint_temp=sp_raw / 100.0)
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte zone setpoint data into binary payload.
@@ -1385,7 +1389,7 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
         :rtype: bytes
         """
         sp_raw = int(round(self.setpoint_temp * 100.0))
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         return bytes([idx]) + sp_raw.to_bytes(2, byteorder="big", signed=True)
 
     def to_dict(self) -> dict[str, Any]:
@@ -1395,7 +1399,9 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
         :rtype: dict[str, Any]
         """
         idx_str = (
-            f"{self.zone_idx:02X}" if isinstance(self.zone_idx, int) else self.zone_idx
+            f"{self.zone_index:02X}"
+            if isinstance(self.zone_index, int)
+            else self.zone_index
         )
         return {"zone_idx": idx_str, "setpoint": self.setpoint_temp}
 
@@ -1517,18 +1523,18 @@ class ZoneSetpointPayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    zone_idx: int | str
+    zone_index: int | str
     setpoint_temp: float | bool | None
 
     def __new__(
         cls,
-        zone_idx: int | str = 0,
+        zone_index: int | str = 0,
         setpoint_temp: float | bool | None = None,
     ) -> Any:
         """Construct ZoneSetpoint payload variant dynamically."""
         if cls is not ZoneSetpointPayload:
             return super().__new__(cls)
-        return ZoneSetpoint3BPayload(zone_idx=zone_idx, setpoint_temp=setpoint_temp)
+        return ZoneSetpoint3BPayload(zone_index=zone_index, setpoint_temp=setpoint_temp)
 
     @classmethod
     def from_bytes(
@@ -1573,21 +1579,21 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
       # RQ --- 22:131874 01:063844 --:------ 2309 003 020708
       # NOTE: 12 uses: r"^0[0-9A-F]$"
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int | str
+    :param zone_index: Zone index byte.
+    :type zone_index: int | str
     :param setpoint_temp: Setpoint temperature in °C.
     :type setpoint_temp: float | bool | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    zone_idx: int | str
+    zone_index: int | str
     setpoint_temp: float | bool | None
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
 
     @classmethod
     def _parse_sp_val(cls, sp_raw: int) -> float | bool | None:
@@ -1613,7 +1619,7 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
                 f"Invalid payload length for ZoneSetpoint3BPayload: {len(raw_data)}"
             )
         idx, sp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(zone_idx=idx, setpoint_temp=cls._parse_sp_val(sp_raw))
+        return cls(zone_index=idx, setpoint_temp=cls._parse_sp_val(sp_raw))
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte setpoint info data into binary payload.
@@ -1627,7 +1633,7 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
             sp_raw = 0x7EFF
         else:
             sp_raw = int(round(self.setpoint_temp * 100.0))
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         return struct.pack(self._STRUCT_FMT, idx, sp_raw)
 
     def to_dict(self) -> dict[str, Any]:
@@ -1637,7 +1643,9 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
         :rtype: dict[str, Any]
         """
         idx_str = (
-            f"{self.zone_idx:02X}" if isinstance(self.zone_idx, int) else self.zone_idx
+            f"{self.zone_index:02X}"
+            if isinstance(self.zone_index, int)
+            else self.zone_index
         )
         return {
             "zone_idx": idx_str,
@@ -1672,15 +1680,15 @@ class FlowTempPayload(PayloadBase):
     Sample Packet Logs:
       # RP --- 10:048122 18:006402 --:------ 3200 003 00131A
 
-    :param domain_idx: Domain index byte.
-    :type domain_idx: int
+    :param domain_index: Domain index byte.
+    :type domain_index: int
     :param temperature: Flow temperature in °C, or None if invalid.
     :type temperature: float | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    domain_idx: int
+    domain_index: int
     temperature: float | None
 
     @classmethod
@@ -1697,7 +1705,7 @@ class FlowTempPayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 3200: {len(raw_data)}")
         idx, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         temp_val = None if temp_raw in (0x31FF, 0x7FFF) else temp_raw / 100.0
-        return cls(domain_idx=idx, temperature=temp_val)
+        return cls(domain_index=idx, temperature=temp_val)
 
     def to_bytes(self) -> bytes:
         """Pack flow temperature data into binary payload.
@@ -1708,7 +1716,7 @@ class FlowTempPayload(PayloadBase):
         temp_raw = (
             0x7FFF if self.temperature is None else int(round(self.temperature * 100.0))
         )
-        return struct.pack(self._STRUCT_FMT, self.domain_idx, temp_raw)
+        return struct.pack(self._STRUCT_FMT, self.domain_index, temp_raw)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert flow temperature payload to legacy dictionary layout.
@@ -1886,13 +1894,13 @@ class RelayDemandPayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    domain_or_zone_idx: int
+    domain_or_zone_index: int
     demand_percent: float
     raw_extra: bytes | None
 
     def __new__(
         cls,
-        domain_or_zone_idx: int = 0,
+        domain_or_zone_index: int = 0,
         demand_percent: float = 0.0,
         raw_extra: bytes | None = None,
     ) -> Any:
@@ -1900,7 +1908,7 @@ class RelayDemandPayload(PayloadBase):
         if cls is not RelayDemandPayload:
             return super().__new__(cls)
         return RelayDemand2BPayload(
-            domain_or_zone_idx=domain_or_zone_idx,
+            domain_or_zone_index=domain_or_zone_index,
             demand_percent=demand_percent,
             raw_extra=raw_extra,
         )
@@ -1938,8 +1946,8 @@ class RelayDemand2BPayload(RelayDemandPayload):
       # RP --- 13:109598 18:199952 --:------ 0008 002 0000
       # RP --- 13:109598 18:199952 --:------ 0008 002 00C8
 
-    :param domain_or_zone_idx: Domain or zone index byte.
-    :type domain_or_zone_idx: int
+    :param domain_or_zone_index: Domain or zone index byte.
+    :type domain_or_zone_index: int
     :param demand_percent: Heat demand percentage (0.0 - 100.0).
     :type demand_percent: float
     :param raw_extra: Optional trailing payload bytes for 13-byte Jasper payloads.
@@ -1948,7 +1956,7 @@ class RelayDemand2BPayload(RelayDemandPayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
-    domain_or_zone_idx: int
+    domain_or_zone_index: int
     demand_percent: float
     raw_extra: bytes | None = None
 
@@ -1969,7 +1977,7 @@ class RelayDemand2BPayload(RelayDemandPayload):
         idx, demand_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         extra = raw_data[2:] if len(raw_data) > 2 else None
         return cls(
-            domain_or_zone_idx=idx,
+            domain_or_zone_index=idx,
             demand_percent=demand_raw / 200.0,
             raw_extra=extra,
         )
@@ -1981,7 +1989,7 @@ class RelayDemand2BPayload(RelayDemandPayload):
         :rtype: bytes
         """
         demand_raw = min(200, max(0, int(round(self.demand_percent * 200.0))))
-        res = struct.pack(self._STRUCT_FMT, self.domain_or_zone_idx, demand_raw)
+        res = struct.pack(self._STRUCT_FMT, self.domain_or_zone_index, demand_raw)
         if self.raw_extra is not None:
             res += self.raw_extra
         return res
@@ -2007,10 +2015,10 @@ class ZoneDevicesPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 000C.
 
     Protocol & Heuristic Notes:
-      # TODO: 000C to a UFC should be ufh_idx, not zone_idx
+      # TODO: 000C to a UFC should be ufh_idx, not zone_index
       # NOTE: Both len=5 and len=6 elements are valid! So collision when len = 036!
-      # Note: 000C sent to a UFC device represents ufh_idx rather than zone_idx
-      # If sent to/from a UFC device, byte 0 is ufh_idx and sub_idx is zone_idx
+      # Note: 000C sent to a UFC device represents ufh_idx rather than zone_index
+      # If sent to/from a UFC device, byte 0 is ufh_idx and sub_index is zone_index
       # Sample Packet Logs:
       # .I --- 34:092243 --:------ 34:092243 000C 018 00-0A-7F-FFFFFF
       # RP --- 01:145038 18:013393 --:------ 000C 006 00-00-00-10DAFD
@@ -2025,42 +2033,42 @@ class ZoneDevicesPayload(PayloadBase):
 
     def __new__(
         cls,
-        zone_idx_raw: int = 0,
+        zone_index_raw: int = 0,
         device_role_id: int = 0,
         device_id_raw: int = 0,
-        sub_idx: int = 0,
+        sub_index: int = 0,
     ) -> Any:
         """Construct ZoneDevices payload variant dynamically from arguments."""
         if cls is not ZoneDevicesPayload:
             return super().__new__(cls)
-        if sub_idx != 0:
+        if sub_index != 0:
             return ZoneDevices6BPayload(
-                zone_idx_raw=zone_idx_raw,
+                zone_index_raw=zone_index_raw,
                 device_role_id=device_role_id,
-                sub_idx=sub_idx,
+                sub_index=sub_index,
                 device_id_raw=device_id_raw,
             )
         return ZoneDevices5BPayload(
-            zone_idx_raw=zone_idx_raw,
+            zone_index_raw=zone_index_raw,
             device_role_id=device_role_id,
             device_id_raw=device_id_raw,
-            sub_idx=0,
+            sub_index=0,
         )
 
     @property
-    def zone_idx(self) -> int | None:
+    def zone_index(self) -> int | None:
         """Return numeric zone index or None if domain-level binding."""
         if getattr(self, "device_role_id", 0) in (0x0F, 0x0E, 0x0D):
             return None
-        sub = getattr(self, "sub_idx", 0)
-        z_raw = getattr(self, "zone_idx_raw", 0)
+        sub = getattr(self, "sub_index", 0)
+        z_raw = getattr(self, "zone_index_raw", 0)
         return sub if getattr(self, "device_role_id", 0) == 0x09 and sub else z_raw
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert zone devices payload to legacy dictionary layout."""
         role_id = getattr(self, "device_role_id", 0)
-        z_raw = getattr(self, "zone_idx_raw", 0)
-        sub = getattr(self, "sub_idx", 0)
+        z_raw = getattr(self, "zone_index_raw", 0)
+        sub = getattr(self, "sub_index", 0)
         dev_raw = getattr(self, "device_id_raw", 0)
 
         role_hex = f"{role_id:02X}"
@@ -2108,7 +2116,7 @@ class ZoneDevicesPayload(PayloadBase):
     def domain_id(self) -> str | None:
         """Derive authoritative binding domain ID (FC, FA, F9) from role & index."""
         role_id = getattr(self, "device_role_id", 0)
-        z_raw = getattr(self, "zone_idx_raw", 0)
+        z_raw = getattr(self, "zone_index_raw", 0)
         if role_id == 0x0F:
             return "FC"
         if role_id in (0x0E, 0x0D):
@@ -2135,16 +2143,16 @@ class ZoneDevicesPayload(PayloadBase):
             res_list: list[PayloadBase] = [
                 ZoneDevices6BPayload.from_bytes(raw_data[:6])
             ]
-            zone_idx = raw_data[0]
+            zone_index = raw_data[0]
             for i in range(6, len(raw_data), 5):
                 role_id_seq, sub_idx_seq, dev_bytes_seq = struct.unpack_from(
                     ">BB3s", raw_data, i
                 )
                 res_list.append(
                     ZoneDevices6BPayload(
-                        zone_idx_raw=zone_idx,
+                        zone_index_raw=zone_index,
                         device_role_id=role_id_seq,
-                        sub_idx=sub_idx_seq,
+                        sub_index=sub_idx_seq,
                         device_id_raw=int.from_bytes(dev_bytes_seq, byteorder="big"),
                     )
                 )
@@ -2193,10 +2201,10 @@ class ZoneDevices5BPayload(ZoneDevicesPayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BB3s"
 
-    zone_idx_raw: int
+    zone_index_raw: int
     device_role_id: int
     device_id_raw: int
-    sub_idx: int = 0
+    sub_index: int = 0
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -2205,12 +2213,14 @@ class ZoneDevices5BPayload(ZoneDevicesPayload):
             raise ValueError(
                 f"Invalid payload length for ZoneDevices5BPayload: {len(raw_data)}"
             )
-        zone_idx, role_id, dev_bytes = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        zone_index, role_id, dev_bytes = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         return cls(
-            zone_idx_raw=zone_idx,
+            zone_index_raw=zone_index,
             device_role_id=role_id,
             device_id_raw=int.from_bytes(dev_bytes, byteorder="big"),
-            sub_idx=0,
+            sub_index=0,
         )
 
     def to_bytes(self) -> bytes:
@@ -2218,7 +2228,7 @@ class ZoneDevices5BPayload(ZoneDevicesPayload):
         dev_bytes = self.device_id_raw.to_bytes(3, byteorder="big")
         return struct.pack(
             self._STRUCT_FMT,
-            self.zone_idx_raw,
+            self.zone_index_raw,
             self.device_role_id,
             dev_bytes,
         )
@@ -2242,9 +2252,9 @@ class ZoneDevices6BPayload(ZoneDevicesPayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BBB3s"
 
-    zone_idx_raw: int
+    zone_index_raw: int
     device_role_id: int
-    sub_idx: int
+    sub_index: int
     device_id_raw: int
 
     @classmethod
@@ -2254,13 +2264,13 @@ class ZoneDevices6BPayload(ZoneDevicesPayload):
             raise ValueError(
                 f"Invalid payload length for ZoneDevices6BPayload: {len(raw_data)}"
             )
-        zone_idx, role_id, sub_idx, dev_bytes = struct.unpack_from(
+        zone_index, role_id, sub_index, dev_bytes = struct.unpack_from(
             cls._STRUCT_FMT, raw_data, 0
         )
         return cls(
-            zone_idx_raw=zone_idx,
+            zone_index_raw=zone_index,
             device_role_id=role_id,
-            sub_idx=sub_idx,
+            sub_index=sub_index,
             device_id_raw=int.from_bytes(dev_bytes, byteorder="big"),
         )
 
@@ -2269,9 +2279,9 @@ class ZoneDevices6BPayload(ZoneDevicesPayload):
         dev_bytes = self.device_id_raw.to_bytes(3, byteorder="big")
         return struct.pack(
             self._STRUCT_FMT,
-            self.zone_idx_raw,
+            self.zone_index_raw,
             self.device_role_id,
-            self.sub_idx,
+            self.sub_index,
             dev_bytes,
         )
 
@@ -2737,7 +2747,7 @@ class ZoneModePayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    zone_idx: int | str
+    zone_index: int | str
     setpoint_temp: float | None
     mode_code: int | str
     duration_minutes: int | None
@@ -2745,7 +2755,7 @@ class ZoneModePayload(PayloadBase):
 
     def __new__(
         cls,
-        zone_idx: int | str = 0,
+        zone_index: int | str = 0,
         setpoint_temp: float | None = None,
         mode_code: int | str = 0,
         duration_minutes: int | None = None,
@@ -2756,14 +2766,14 @@ class ZoneModePayload(PayloadBase):
             return super().__new__(cls)
         if until_dtm is not None:
             return ZoneMode13BPayload(
-                zone_idx=zone_idx,
+                zone_index=zone_index,
                 setpoint_temp=setpoint_temp,
                 mode_code=mode_code,
                 duration_minutes=duration_minutes,
                 until_dtm=until_dtm,
             )
         return ZoneMode7BPayload(
-            zone_idx=zone_idx,
+            zone_index=zone_index,
             setpoint_temp=setpoint_temp,
             mode_code=mode_code,
             duration_minutes=duration_minutes,
@@ -2807,8 +2817,8 @@ class ZoneMode4BPayload(ZoneModePayload):
       Field-spaced hex : 00 0834 00
       Payload hex      : 00083400
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int | str
+    :param zone_index: Zone index byte.
+    :type zone_index: int | str
     :param setpoint_temp: Target setpoint temperature in °C.
     :type setpoint_temp: float | None
     :param mode_code: Zone mode code integer.
@@ -2817,7 +2827,7 @@ class ZoneMode4BPayload(ZoneModePayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BhB"
 
-    zone_idx: int | str
+    zone_index: int | str
     setpoint_temp: float | None
     mode_code: int | str
     duration_minutes: int | None = None
@@ -2825,8 +2835,8 @@ class ZoneMode4BPayload(ZoneModePayload):
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
 
@@ -2846,7 +2856,7 @@ class ZoneMode4BPayload(ZoneModePayload):
             )
         raw_idx, sp_raw, mode = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         setpoint = None if sp_raw in (0x31FF, 0x7FFF) else sp_raw / 100.0
-        return cls(zone_idx=raw_idx, setpoint_temp=setpoint, mode_code=mode)
+        return cls(zone_index=raw_idx, setpoint_temp=setpoint, mode_code=mode)
 
     def to_bytes(self) -> bytes:
         """Pack 4-byte zone mode data into binary payload.
@@ -2854,7 +2864,7 @@ class ZoneMode4BPayload(ZoneModePayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         if self.setpoint_temp is None:
             sp_raw = 0x7FFF
         else:
@@ -2879,7 +2889,9 @@ class ZoneMode4BPayload(ZoneModePayload):
         )
         mode_str = ZON_MODE_MAP.get(mode_code_hex, mode_code_hex)
         idx_str = (
-            f"{self.zone_idx:02X}" if isinstance(self.zone_idx, int) else self.zone_idx
+            f"{self.zone_index:02X}"
+            if isinstance(self.zone_index, int)
+            else self.zone_index
         )
         return {
             "zone_idx": idx_str,
@@ -2903,8 +2915,8 @@ class ZoneMode7BPayload(ZoneModePayload):
       Field-spaced hex : 00 0834 00 FFFFFF
       Payload hex      : 00083400FFFFFF
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int | str
+    :param zone_index: Zone index byte.
+    :type zone_index: int | str
     :param setpoint_temp: Target setpoint temperature in °C.
     :type setpoint_temp: float | None
     :param mode_code: Zone mode code integer.
@@ -2917,7 +2929,7 @@ class ZoneMode7BPayload(ZoneModePayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BhB"
 
-    zone_idx: int | str
+    zone_index: int | str
     setpoint_temp: float | None
     mode_code: int | str
     duration_minutes: int | None = None
@@ -2925,8 +2937,8 @@ class ZoneMode7BPayload(ZoneModePayload):
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
 
@@ -2950,7 +2962,7 @@ class ZoneMode7BPayload(ZoneModePayload):
         if raw_data[4:7] != b"\xff\xff\xff":
             dur = int.from_bytes(raw_data[4:7], byteorder="big")
         return cls(
-            zone_idx=raw_idx,
+            zone_index=raw_idx,
             setpoint_temp=setpoint,
             mode_code=mode,
             duration_minutes=dur,
@@ -2962,7 +2974,7 @@ class ZoneMode7BPayload(ZoneModePayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         if self.setpoint_temp is None:
             sp_raw = 0x7FFF
         else:
@@ -2992,7 +3004,9 @@ class ZoneMode7BPayload(ZoneModePayload):
         )
         mode_str = ZON_MODE_MAP.get(mode_code_hex, mode_code_hex)
         idx_str = (
-            f"{self.zone_idx:02X}" if isinstance(self.zone_idx, int) else self.zone_idx
+            f"{self.zone_index:02X}"
+            if isinstance(self.zone_index, int)
+            else self.zone_index
         )
         res: dict[str, Any] = {
             "zone_idx": idx_str,
@@ -3020,8 +3034,8 @@ class ZoneMode13BPayload(ZoneModePayload):
       Field-spaced hex : 00 0834 00 FFFFFF 00110E0507E5
       Payload hex      : 00083400FFFFFF00110E0507E5
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int | str
+    :param zone_index: Zone index byte.
+    :type zone_index: int | str
     :param setpoint_temp: Target setpoint temperature in °C.
     :type setpoint_temp: float | None
     :param mode_code: Zone mode code integer.
@@ -3034,7 +3048,7 @@ class ZoneMode13BPayload(ZoneModePayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BhB"
 
-    zone_idx: int | str
+    zone_index: int | str
     setpoint_temp: float | None
     mode_code: int | str
     duration_minutes: int | None = None
@@ -3042,8 +3056,8 @@ class ZoneMode13BPayload(ZoneModePayload):
 
     def __post_init__(self) -> None:
         """Normalise index arguments."""
-        if isinstance(self.zone_idx, str):
-            object.__setattr__(self, "zone_idx", parse_idx(self.zone_idx))
+        if isinstance(self.zone_index, str):
+            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
 
@@ -3068,7 +3082,7 @@ class ZoneMode13BPayload(ZoneModePayload):
             dur = int.from_bytes(raw_data[4:7], byteorder="big")
         until_raw = hex_to_dtm(raw_data[7:13].hex().upper())
         return cls(
-            zone_idx=raw_idx,
+            zone_index=raw_idx,
             setpoint_temp=setpoint,
             mode_code=mode,
             duration_minutes=dur,
@@ -3081,7 +3095,7 @@ class ZoneMode13BPayload(ZoneModePayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        idx = parse_idx(self.zone_idx)
+        idx = parse_index(self.zone_index)
         if self.setpoint_temp is None:
             sp_raw = 0x7FFF
         else:
@@ -3124,7 +3138,9 @@ class ZoneMode13BPayload(ZoneModePayload):
         )
         mode_str = ZON_MODE_MAP.get(mode_code_hex, mode_code_hex)
         idx_str = (
-            f"{self.zone_idx:02X}" if isinstance(self.zone_idx, int) else self.zone_idx
+            f"{self.zone_index:02X}"
+            if isinstance(self.zone_index, int)
+            else self.zone_index
         )
         res: dict[str, Any] = {
             "zone_idx": idx_str,
@@ -3167,15 +3183,15 @@ class SetpointOverridePayload(PayloadBase):
       # .I 024 03:052382 --:------ 03:052382 2389 003 02001B
       # State (of cooling?), from BDR91T, Hometronics CTL.
 
-    :param domain_or_zone_idx: Domain or zone index byte.
-    :type domain_or_zone_idx: int
+    :param domain_or_zone_index: Domain or zone index byte.
+    :type domain_or_zone_index: int
     :param target_temp: Target temperature in °C.
     :type target_temp: float
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    domain_or_zone_idx: int
+    domain_or_zone_index: int
     target_temp: float
 
     @classmethod
@@ -3192,7 +3208,7 @@ class SetpointOverridePayload(PayloadBase):
             raise ValueError(f"Invalid payload length for 2389: {len(raw_data)}")
         idx, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
-            domain_or_zone_idx=idx,
+            domain_or_zone_index=idx,
             target_temp=temp_raw / 100.0,
         )
 
@@ -3203,7 +3219,7 @@ class SetpointOverridePayload(PayloadBase):
         :rtype: bytes
         """
         temp_raw = int(round(self.target_temp * 100.0))
-        return struct.pack(self._STRUCT_FMT, self.domain_or_zone_idx, temp_raw)
+        return struct.pack(self._STRUCT_FMT, self.domain_or_zone_index, temp_raw)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert setpoint override payload to legacy dictionary layout.
@@ -3480,14 +3496,14 @@ class ActuatorCyclePayload(PayloadBase):
         cycle_countdown_sec: int | None = None,
         actuator_countdown_sec: int | None = None,
         modulation_level: float | None = None,
-        domain_idx: int | None = None,
+        domain_index: int | None = None,
     ) -> Any:
         """Construct ActuatorCycle payload variant dynamically from arguments."""
         if cls is not ActuatorCyclePayload:
             return super().__new__(cls)
-        if domain_idx is not None:
+        if domain_index is not None:
             return ActuatorCycle7BPayload(
-                domain_idx=domain_idx,
+                domain_index=domain_index,
                 cycle_countdown_sec=cycle_countdown_sec,
                 actuator_countdown_sec=actuator_countdown_sec,
                 modulation_level=modulation_level,
@@ -3598,7 +3614,7 @@ class ActuatorCycle7BPayload(ActuatorCyclePayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BhhBB"
 
-    domain_idx: int
+    domain_index: int
     cycle_countdown_sec: int | None
     actuator_countdown_sec: int | None
     modulation_level: float | None
@@ -3617,7 +3633,7 @@ class ActuatorCycle7BPayload(ActuatorCyclePayload):
         a_down = c_down if (a_raw < 0 or a_raw == 0x7FFF) else a_raw
         mod = hex_to_percent(f"{mod_byte:02X}")
         return cls(
-            domain_idx=idx,
+            domain_index=idx,
             cycle_countdown_sec=c_down,
             actuator_countdown_sec=a_down,
             modulation_level=mod,
@@ -3636,7 +3652,7 @@ class ActuatorCycle7BPayload(ActuatorCyclePayload):
         else:
             mod_raw = min(200, max(0, int(round(self.modulation_level * 200.0))))
         return struct.pack(
-            self._STRUCT_FMT, self.domain_idx, c_raw, a_raw, mod_raw, 0xFF
+            self._STRUCT_FMT, self.domain_index, c_raw, a_raw, mod_raw, 0xFF
         )
 
 

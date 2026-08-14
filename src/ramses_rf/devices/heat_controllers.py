@@ -170,7 +170,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         state = getattr(self, "ufh_state", None)
         if state and state.heat_demands:
             return [
-                UfhCircuitDemandDTO(ufx_idx=str(k), thermal_demand=v)
+                UfhCircuitDemandDTO(ufh_index=str(k), thermal_demand=v)
                 for k, v in state.heat_demands.items()
             ]
         return None
