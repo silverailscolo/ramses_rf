@@ -8,7 +8,6 @@ import warnings
 from collections.abc import AsyncGenerator, Callable
 from dataclasses import fields
 from pathlib import Path
-from random import shuffle
 from typing import Any
 
 import pytest
@@ -38,20 +37,21 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 TEST_DIR = Path(__file__).resolve().parent
 
 
-def shuffle_dict(old_dict: dict[str, Any]) -> dict[str, Any]:
-    """Return a dictionary with its keys shuffled.
+def shuffle_dict(old_dict: dict[str, Any], seed: int = 42) -> dict[str, Any]:
+    """Return a dictionary with its keys deterministically shuffled.
 
     :param old_dict: The dictionary to shuffle.
     :type old_dict: dict
+    :param seed: Seed for deterministic pseudo-random shuffling.
+    :type seed: int
     :return: A new dictionary with shuffled keys.
     :rtype: dict
     """
-    keys = list(old_dict.keys())
-    shuffle(keys)
-    new_dict: dict[str, Any] = dict()
-    for key in keys:
-        new_dict.update({key: old_dict[key]})
-    return new_dict
+    import random
+
+    keys = sorted(old_dict.keys())
+    random.Random(seed).shuffle(keys)
+    return {key: old_dict[key] for key in keys}
 
 
 @pytest.fixture

@@ -248,14 +248,6 @@
   ]
 
 [[tool.mypy.overrides]]
-  module = "tests.*"
-
-  disable_error_code = [
-    "arg-type",  #     30
-    "type-arg",  #     22
-  ]
-
-[[tool.mypy.overrides]]
   module = "tests_rf.*"
 
   disable_error_code = [
@@ -281,7 +273,6 @@
   module = [
     "ramses_cli.*",
     "ramses_rf.*",
-    "tests",
   ]
 
   disallow_any_explicit = false
