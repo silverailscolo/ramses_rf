@@ -459,3 +459,80 @@ async def test_is_recent_tx_rejects_unrelated_frame() -> None:
     # Completely different frame
     other_frame = "000  I --- 21:057310 18:002965 --:------ 22C9 006 00086608CA02"
     assert transport._is_recent_tx(other_frame) is False
+
+
+@pytest.mark.asyncio
+async def test_limit_duty_cycle_deducts_frame_bits() -> None:
+    """Verify limit_duty_cycle tracks and deducts frame bits from bucket."""
+    from ramses_tx.transport.port import limit_duty_cycle
+
+    class MockPortTransport:
+        def __init__(self) -> None:
+            self._tx_bits_in_bucket: float | None = None
+            self._tx_last_time_bit_added: float | None = None
+
+        @limit_duty_cycle(max_duty_cycle=0.01)
+        async def send(self, frame: str) -> None:
+            pass
+
+    transport = MockPortTransport()
+    frame = "... RQ ... 18:000730 01:123456 --:------ 313F 001 00"
+
+    # Act
+    await transport.send(frame)
+
+    # Assert
+    assert transport._tx_bits_in_bucket is not None
+    # Initial bucket is 38400 * 0.01 * 3600 = 1382400. Frame bits = 330 + len(frame[46:]) * 10 = 400
+    assert transport._tx_bits_in_bucket < 1382400.0
+
+
+@pytest.mark.asyncio
+async def test_limit_duty_cycle_throttles_when_bucket_insufficient() -> None:
+    """Verify limit_duty_cycle triggers asyncio.sleep when bucket is depleted."""
+    from ramses_tx.transport.port import limit_duty_cycle
+
+    class MockPortTransport:
+        def __init__(self) -> None:
+            from time import perf_counter
+
+            self._tx_bits_in_bucket: float | None = 10.0  # severely depleted
+            self._tx_last_time_bit_added: float | None = perf_counter()
+
+        @limit_duty_cycle(max_duty_cycle=0.01)
+        async def send(self, frame: str) -> None:
+            pass
+
+    transport = MockPortTransport()
+    frame = "... RQ ... 18:000730 01:123456 --:------ 313F 001 00"
+
+    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        # Act
+        await transport.send(frame)
+
+        # Assert
+        mock_sleep.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_limit_duty_cycle_zero_returns_null_wrapper() -> None:
+    """Verify limit_duty_cycle(0.0) bypasses bucket tracking."""
+    from ramses_tx.transport.port import limit_duty_cycle
+
+    class MockPortTransport:
+        def __init__(self) -> None:
+            self._tx_bits_in_bucket: float | None = None
+            self._tx_last_time_bit_added: float | None = None
+
+        @limit_duty_cycle(max_duty_cycle=0.0)
+        async def send(self, frame: str) -> None:
+            pass
+
+    transport = MockPortTransport()
+    frame = "... RQ ... 18:000730 01:123456 --:------ 313F 001 00"
+
+    # Act
+    await transport.send(frame)
+
+    # Assert
+    assert transport._tx_bits_in_bucket is None

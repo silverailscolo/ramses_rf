@@ -1409,3 +1409,22 @@ def test_polymorphic_dispatchers_parity_comprehensive() -> None:
     assert isinstance(p_3150_2b, ramses_rf.payloads.heating.HeatDemand2BPayload)
     assert p_3150_2b.domain_or_zone_idx == 1
     assert p_3150_2b.demand_percent == 202
+
+
+def test_dataclass_buffer_underrun_guards() -> None:
+    """Verify that concrete and polymorphic payload classes guard against truncated bytes."""
+    # Arrange & Act & Assert
+    with pytest.raises(ValueError):
+        ZoneSetpointPayload.from_bytes(b"\x00\x01")  # Expected 3 bytes
+
+    with pytest.raises(ValueError):
+        DhwParamsPayload.from_bytes(b"\x00")  # Expected at least 3 bytes
+
+    with pytest.raises(ValueError):
+        ZoneModePayload.from_bytes(b"\x00\x01")  # Expected at least 4 bytes
+
+    with pytest.raises(ValueError):
+        SystemDateTimePayload.from_bytes(b"\x00")  # Expected at least 2 bytes
+
+    with pytest.raises(ValueError):
+        HeatDemandPayload.from_bytes(b"")  # Expected at least 1 byte
