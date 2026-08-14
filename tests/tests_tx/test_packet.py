@@ -68,7 +68,7 @@ def test_packet_validation_errors() -> None:
     :return: None
     """
     with pytest.raises(PacketInvalid, match="Custom error"):
-        Packet(DTM, VALID_FRAME_I, err_msg="Custom error")
+        Packet(DTM, VALID_FRAME_I, error_message="Custom error")
 
     with pytest.raises(PacketInvalid, match="Null packet"):
         # Frame is sliced by 4:, so a frame of length < 4 is effectively empty.

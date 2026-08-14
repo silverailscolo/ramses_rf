@@ -34,7 +34,7 @@ def _mock_message(
         payload="0001C8",  # A realistic hex string to pass validation checks
     )
     mock_header = StateHeader.create(
-        code=code, verb=" I", source_id=src_id, context_val=None
+        code=code, verb=" I", source_id=src_id, context_value=None
     )
     return CoreMessage(
         topic=Topic.RAW_EVENT,

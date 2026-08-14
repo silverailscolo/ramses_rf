@@ -288,7 +288,7 @@ class Test_entity_base:
         assert val == 10  # from index 0 ('00')
 
         # Case 4: Correct filtering when zone_idx is provided
-        val = dev.entity_state._msg_value_msg(msg_list, key="val", zone_idx="01")
+        val = dev.entity_state._msg_value_msg(msg_list, key="val", zone_index="01")
         assert val == 20
 
 

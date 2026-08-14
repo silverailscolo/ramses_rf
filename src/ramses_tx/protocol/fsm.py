@@ -272,7 +272,7 @@ class ProtocolContext(StateMachineInterface):
         """Handle the transport connection being made."""
         self._state.connection_made()
 
-    def connection_lost(self, err: Exception | None) -> None:
+    def connection_lost(self, error: Exception | None) -> None:
         """Handle the transport connection being lost."""
         # Cancel any in-flight send_fnc_wrapper tasks that are not tracked
         # by the Engine's task registry.  Without this, they linger as
@@ -283,9 +283,9 @@ class ProtocolContext(StateMachineInterface):
 
         self._state.connection_lost()
 
-    def pkt_received(self, pkt: Packet) -> None:
+    def pkt_received(self, packet: Packet) -> None:
         """Process a received packet (echo or reply)."""
-        self._state.pkt_rcvd(pkt)
+        self._state.pkt_rcvd(packet)
 
     def pause_writing(self) -> None:
         """Handle the transport pausing writing."""
@@ -298,7 +298,7 @@ class ProtocolContext(StateMachineInterface):
     async def send_cmd(
         self,
         send_fnc: Callable[[CommandDTO], Coroutine[Any, Any, None]],
-        cmd: CommandDTO,
+        command: CommandDTO,
         priority: Priority,
         qos: QosParams,
     ) -> Packet:
@@ -306,8 +306,8 @@ class ProtocolContext(StateMachineInterface):
 
         :param send_fnc: The function used to actually transmit the command.
         :type send_fnc: Callable[[CommandDTO], Coroutine[Any, Any, None]]
-        :param cmd: The command to send.
-        :type cmd: CommandDTO
+        :param command: The command to send.
+        :type command: CommandDTO
         :param priority: The transmission priority.
         :type priority: Priority
         :param qos: Quality of Service parameters.
@@ -322,7 +322,7 @@ class ProtocolContext(StateMachineInterface):
         if isinstance(self._state, Inactive):
             raise ProtocolSendFailed(f"{self}: Send failed (no active transport?)")
 
-        fut = self._qos_mgr.enqueue(priority, cmd, qos)
+        fut = self._qos_mgr.enqueue(priority, command, qos)
 
         if isinstance(self._state, IsInIdle):
             self._loop.call_soon_threadsafe(self._check_buffer_for_cmd)
@@ -336,9 +336,9 @@ class ProtocolContext(StateMachineInterface):
                 "TOUT.. = %s: send_timeout=%s (%s)",
                 self,
                 timeout,
-                self._qos_mgr.cmd is cmd,
+                self._qos_mgr.cmd is command,
             )
-            if self._qos_mgr.cmd is cmd:
+            if self._qos_mgr.cmd is command:
                 self.set_state(IsInIdle, expired=True)
             raise ProtocolTimeoutError(msg) from err
 
@@ -363,16 +363,16 @@ class ProtocolContext(StateMachineInterface):
         finally:
             self._qos_mgr.task_done()
 
-    def _send_cmd(self, cmd: CommandDTO, is_retry: bool = False) -> None:
-        """Wrapper to send a command with retries, until success or exception.
+    def _send_cmd(self, command: CommandDTO, is_retry: bool = False) -> None:
+        """Wrap sending a command with retries, until success or exception.
 
-        :param cmd: The command to transmit.
-        :type cmd: CommandDTO
+        :param command: The command to transmit.
+        :type command: CommandDTO
         :param is_retry: Flag indicating if this is a retry attempt.
         :type is_retry: bool
         """
 
-        async def send_fnc_wrapper(cmd: CommandDTO) -> None:
+        async def send_fnc_wrapper(kmd: CommandDTO) -> None:
             # Native Sync Collision Avoidance incorporated into FSM queue processing
             def is_imminent(p: Packet) -> bool:
                 lower = td(seconds=0.010 * 0.8)
@@ -399,7 +399,7 @@ class ProtocolContext(StateMachineInterface):
                 await asyncio.sleep(0.084)
 
             try:
-                await self._send_fnc(cmd)
+                await self._send_fnc(kmd)
             # NOTE this exception has been left deliberatley broad to
             # allow any unexpected failures to correctly transition the
             # FSM back to the IsInIdle state and injects the exception
@@ -408,11 +408,11 @@ class ProtocolContext(StateMachineInterface):
                 self.set_state(IsInIdle, exception=err)
 
         try:
-            self._state.cmd_sent(cmd, is_retry=is_retry)
+            self._state.cmd_sent(command, is_retry=is_retry)
         except ProtocolFsmError as err:
             self.set_state(IsInIdle, exception=err)
         else:
-            task = self._loop.create_task(send_fnc_wrapper(cmd))
+            task = self._loop.create_task(send_fnc_wrapper(command))
             self._send_tasks.add(task)
             task.add_done_callback(self._send_tasks.discard)
 
@@ -453,7 +453,7 @@ class ProtocolStateBase:
 
         self._context.set_state(Inactive, exception=TransportError("Connection lost"))
 
-    def pkt_rcvd(self, pkt: Packet) -> None:
+    def pkt_rcvd(self, packet: Packet) -> None:
         """Raise a NotImplementedError."""
         raise NotImplementedError("Invalid state to receive a packet")
 
@@ -465,7 +465,7 @@ class ProtocolStateBase:
         """Do nothing."""
         pass
 
-    def cmd_sent(self, cmd: CommandDTO, is_retry: bool | None = None) -> None:
+    def cmd_sent(self, command: CommandDTO, is_retry: bool | None = None) -> None:
         """Raise an error as default states cannot send commands."""
         raise ProtocolFsmError(f"Invalid state to send a command: {self._context}")
 
@@ -477,32 +477,32 @@ class Inactive(ProtocolStateBase):
         """Transition to IsInIdle."""
         self._context.set_state(IsInIdle)
 
-    def pkt_rcvd(self, pkt: Packet) -> None:
+    def pkt_rcvd(self, packet: Packet) -> None:
         """Raise an exception, as a packet is not expected in this state."""
-        if pkt.code != Code._PUZZ:
+        if packet.code != Code._PUZZ:
             _LOGGER.warning("%s: Invalid state to receive a packet", self._context)
 
 
 class IsInIdle(ProtocolStateBase):
     """The Protocol is not in the process of sending a CommandDTO."""
 
-    def pkt_rcvd(self, pkt: Packet) -> None:
+    def pkt_rcvd(self, packet: Packet) -> None:
         """Do nothing as we're not expecting an echo, nor a reply."""
         pass
 
-    def cmd_sent(self, cmd: CommandDTO, is_retry: bool | None = None) -> None:
+    def cmd_sent(self, command: CommandDTO, is_retry: bool | None = None) -> None:
         """Transition to WantEcho."""
-        self._sent_cmd = cmd
+        self._sent_cmd = command
 
-        if HGI_DEVICE_ID in cmd.tx_header:
+        if HGI_DEVICE_ID in command.tx_header:
             hgi_id = self._context._protocol.hgi_id
-            cmd = dataclasses.replace(
-                cmd,
-                addr1=cmd.addr1 if cmd.addr1 != HGI_DEVICE_ID else hgi_id,
-                addr2=cmd.addr2 if cmd.addr2 != HGI_DEVICE_ID else hgi_id,
-                addr3=cmd.addr3 if cmd.addr3 != HGI_DEVICE_ID else hgi_id,
+            command = dataclasses.replace(
+                command,
+                addr1=command.addr1 if command.addr1 != HGI_DEVICE_ID else hgi_id,
+                addr2=command.addr2 if command.addr2 != HGI_DEVICE_ID else hgi_id,
+                addr3=command.addr3 if command.addr3 != HGI_DEVICE_ID else hgi_id,
             )
-            self._sent_cmd = cmd  # update the tracked cmd
+            self._sent_cmd = command  # update the tracked cmd
         self._context.set_state(WantEcho)
 
 
@@ -514,7 +514,7 @@ class WantEcho(ProtocolStateBase):
         super().__init__(context)
         self._sent_cmd = context._state._sent_cmd
 
-    def pkt_rcvd(self, pkt: Packet) -> None:
+    def pkt_rcvd(self, packet: Packet) -> None:
         """If the pkt is the expected Echo, transition to IsInIdle."""
         if self._sent_cmd is None:
             _LOGGER.debug(
@@ -525,14 +525,14 @@ class WantEcho(ProtocolStateBase):
             return
 
         try:
-            pkt_hdr = pkt._hdr
+            pkt_hdr = packet._hdr
         except PacketPayloadInvalid:
             return  # malformed packet, ignore
 
         if HGI_DEVICE_ID in pkt_hdr:
-            assert pkt._hdr_ is not None
+            assert packet._hdr_ is not None
             pkt__hdr = HeaderT(
-                pkt._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+                packet._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
             )
         else:
             pkt__hdr = pkt_hdr
@@ -540,10 +540,10 @@ class WantEcho(ProtocolStateBase):
         if pkt__hdr != self._sent_cmd.tx_header:
             return
 
-        self._echo_pkt = pkt
-        self._context.set_state(IsInIdle, result=pkt)
+        self._echo_pkt = packet
+        self._context.set_state(IsInIdle, result=packet)
 
-    def cmd_sent(self, cmd: CommandDTO, is_retry: bool | None = None) -> None:
+    def cmd_sent(self, command: CommandDTO, is_retry: bool | None = None) -> None:
         """Transition to WantEcho (i.e. a retransmit)."""
         pass
 

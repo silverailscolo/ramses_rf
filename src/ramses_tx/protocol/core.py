@@ -87,7 +87,7 @@ class ReadProtocol(_DeviceIdFilterMixin):
 
     async def send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -97,7 +97,7 @@ class ReadProtocol(_DeviceIdFilterMixin):
     ) -> Packet:
         """Raise an exception as the Protocol cannot send Commands."""
         raise NotImplementedError(
-            f"{cmd.verb}|{cmd.code}: < this Protocol is Read-Only"
+            f"{command.verb}|{command.code}: < this Protocol is Read-Only"
         )
 
 
@@ -183,11 +183,11 @@ class PortProtocol(_DeviceIdFilterMixin):
         else:
             self._context.resume_writing()
 
-    def connection_lost(self, err: Exception | None) -> None:
+    def connection_lost(self, error: Exception | None) -> None:
         """Inform the FSM that the connection with the Transport has been lost."""
-        super().connection_lost(err)
+        super().connection_lost(error)
         if self._context:
-            self._context.connection_lost(err)
+            self._context.connection_lost(error)
 
     def pause_writing(self) -> None:
         """Inform the FSM that the Protocol has been paused."""
@@ -201,18 +201,18 @@ class PortProtocol(_DeviceIdFilterMixin):
         if self._context:
             self._context.resume_writing()
 
-    def _pkt_received(self, pkt: Packet) -> None:
+    def _pkt_received(self, packet: Packet) -> None:
         """Pass any valid/wanted packets to the callback."""
-        super()._pkt_received(pkt)
+        super()._pkt_received(packet)
         if self._context:
-            self._context.pkt_received(pkt)
+            self._context.pkt_received(packet)
 
-    async def _send_impersonation_alert(self, cmd: CommandDTO) -> None:
+    async def _send_impersonation_alert(self, command: CommandDTO) -> None:
         """Send a puzzle packet warning that impersonation is occurring."""
         if _DBG_DISABLE_IMPERSONATION_ALERTS:
             return
 
-        msg = f"{self}: Impersonating device: {cmd.addr1}, for pkt: {str(cmd)}"
+        msg = f"{self}: Impersonating device: {command.addr1}, for pkt: {str(command)}"
         if self._is_evofw3 is False:
             _LOGGER.error("%s, NB: non-evofw3 gateways can't impersonate!", msg)
         else:
@@ -225,7 +225,7 @@ class PortProtocol(_DeviceIdFilterMixin):
 
     async def _send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -243,29 +243,39 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         qos = qos or DEFAULT_QOS
 
-        if cmd.verb.strip() == "RQ" or (qos is not None and qos.max_retries > 0):
+        if command.verb.strip() == "RQ" or (qos is not None and qos.max_retries > 0):
             num_repeats = 0
 
         if _DBG_DISABLE_QOS:
-            await send_cmd(cmd)
+            await send_cmd(command)
             return None  # type: ignore[return-value]
 
         assert self._context
 
         try:
-            return await self._context.send_cmd(send_cmd, cmd, priority, qos)
+            return await self._context.send_cmd(send_cmd, command, priority, qos)
         except ProtocolTimeoutError as err:
             _LOGGER.warning(
-                "%s: Send timed out for %s|%s: %s", self, cmd.verb, cmd.code, err
+                "%s: Send timed out for %s|%s: %s",
+                self,
+                command.verb,
+                command.code,
+                err,
             )
             raise
         except ProtocolError as err:
-            _LOGGER.info("%s: Failed to send %s|%s: %s", self, cmd.verb, cmd.code, err)
+            _LOGGER.info(
+                "%s: Failed to send %s|%s: %s",
+                self,
+                command.verb,
+                command.code,
+                err,
+            )
             raise
 
     async def send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -292,23 +302,23 @@ class PortProtocol(_DeviceIdFilterMixin):
         assert 0 <= num_repeats <= MAX_NUM_REPEATS, "Out of range: num_repeats"
 
         if qos and not self._context:
-            _LOGGER.warning("%s < QoS is currently disabled by this Protocol", cmd)
+            _LOGGER.warning("%s < QoS is currently disabled by this Protocol", command)
 
         # Patch command with actual HGI ID if it uses the default placeholder.
         # PortProtocol.send_cmd overrides _BaseProtocol.send_cmd (which does this
         # patching at base.py:309), so we must replicate it here. Without this,
         # all commands go out with the 18:000730 placeholder instead of the real
         # HGI ID. See ramses_cc#757.
-        cmd = self._patch_cmd_if_needed(cmd)
+        command = self._patch_cmd_if_needed(command)
 
         # Manual filter check to avoid calling super().send_cmd(), which fails
         if not self._is_wanted_addrs(
-            DeviceIdT(cmd.addr1), DeviceIdT(cmd.addr2), sending=True
+            DeviceIdT(command.addr1), DeviceIdT(command.addr2), sending=True
         ):
-            raise ProtocolError(f"Command excluded by device_id filter: {cmd}")
+            raise ProtocolError(f"Command excluded by device_id filter: {command}")
 
         pkt = await self._send_cmd(
-            cmd,
+            command,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
@@ -316,7 +326,7 @@ class PortProtocol(_DeviceIdFilterMixin):
         )
 
         if not pkt:
-            raise ProtocolSendFailed(f"Failed to send command: {cmd} (REPORT THIS)")
+            raise ProtocolSendFailed(f"Failed to send command: {command} (REPORT THIS)")
 
         return pkt
 

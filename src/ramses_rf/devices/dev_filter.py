@@ -40,11 +40,11 @@ class DeviceFilter:
         self._enforce_known_list = enforce_known_list
         self._hgi_id_provider = hgi_id_provider
 
-    def check_filter_lists(self, dev_id: DeviceIdT) -> None:
+    def check_filter_lists(self, device_id: DeviceIdT) -> None:
         """Raise a DeviceNotFoundError if a device_id is filtered out by a list.
 
-        :param dev_id: The device identifier to evaluate.
-        :type dev_id: DeviceIdT
+        :param device_id: The device identifier to evaluate.
+        :type device_id: DeviceIdT
         :returns: None
         :rtype: None
         :raises DeviceNotFoundError: If the device is unwanted, strictly not known, or excluded.
@@ -57,25 +57,25 @@ class DeviceFilter:
         # The block_list check below is intentionally NOT exempted — the
         # protocol-level filter (_is_wanted_addrs in ramses_tx) keeps
         # HGI_DEV_ADDR subject to the block_list.
-        if dev_id in self._unwanted and dev_id != HGI_DEV_ADDR.id:
+        if device_id in self._unwanted and device_id != HGI_DEV_ADDR.id:
             raise DeviceNotFoundError(
-                f"Can't create {dev_id}: it is unwanted or invalid"
+                f"Can't create {device_id}: it is unwanted or invalid"
             )
 
         if self._enforce_known_list and (
-            dev_id not in self._include
-            and dev_id != self._hgi_id_provider()
-            and dev_id != HGI_DEV_ADDR.id
+            device_id not in self._include
+            and device_id != self._hgi_id_provider()
+            and device_id != HGI_DEV_ADDR.id
         ):
-            self._unwanted.append(dev_id)
+            self._unwanted.append(device_id)
             raise DeviceNotFoundError(
-                f"Can't create {dev_id}: it is not an allowed device_id"
+                f"Can't create {device_id}: it is not an allowed device_id"
                 f" (if required, add it to the {SZ_KNOWN_LIST})"
             )
 
-        if dev_id in self._exclude:
-            self._unwanted.append(dev_id)
+        if device_id in self._exclude:
+            self._unwanted.append(device_id)
             raise DeviceNotFoundError(
-                f"Can't create {dev_id}: it is a blocked device_id"
+                f"Can't create {device_id}: it is a blocked device_id"
                 f" (if required, remove it from the {SZ_BLOCK_LIST})"
             )

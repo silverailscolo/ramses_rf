@@ -353,41 +353,41 @@ class TestClassify:
     """Tests for _classify."""
 
     def test_prefix_ctl(self) -> None:
-        assert _classify("01:145038", "2E04", " I", is_src=True) == DevType.CTL
+        assert _classify("01:145038", "2E04", " I", is_source=True) == DevType.CTL
 
     def test_prefix_trv(self) -> None:
-        assert _classify("04:056053", "3150", " I", is_src=True) == DevType.TRV
+        assert _classify("04:056053", "3150", " I", is_source=True) == DevType.TRV
 
     def test_prefix_dhw(self) -> None:
-        assert _classify("07:046947", "10A0", " I", is_src=True) == DevType.DHW
+        assert _classify("07:046947", "10A0", " I", is_source=True) == DevType.DHW
 
     def test_prefix_otb(self) -> None:
-        assert _classify("10:067219", "0008", " I", is_src=True) == DevType.OTB
+        assert _classify("10:067219", "0008", " I", is_source=True) == DevType.OTB
 
     def test_prefix_bdr(self) -> None:
-        assert _classify("13:042605", "1100", " I", is_src=True) == DevType.BDR
+        assert _classify("13:042605", "1100", " I", is_source=True) == DevType.BDR
 
     def test_prefix_fan(self) -> None:
-        assert _classify("32:157747", "31DA", " I", is_src=True) == DevType.FAN
+        assert _classify("32:157747", "31DA", " I", is_source=True) == DevType.FAN
 
     def test_prefix_rem(self) -> None:
-        assert _classify("37:179540", "22F1", " I", is_src=True) == DevType.REM
+        assert _classify("37:179540", "22F1", " I", is_source=True) == DevType.REM
 
     def test_vc_pair_fan(self) -> None:
         """I 31DA → FAN (from HVAC_KLASS_BY_VC_PAIR)."""
-        assert _classify("32:157747", "31DA", " I", is_src=True) == DevType.FAN
+        assert _classify("32:157747", "31DA", " I", is_source=True) == DevType.FAN
 
     def test_vc_pair_rem(self) -> None:
         """I 22F1 → REM."""
-        assert _classify("37:179540", "22F1", " I", is_src=True) == DevType.REM
+        assert _classify("37:179540", "22F1", " I", is_source=True) == DevType.REM
 
     def test_vc_pair_co2(self) -> None:
         """I 1298 → CO2."""
-        assert _classify("37:123456", "1298", " I", is_src=True) == DevType.CO2
+        assert _classify("37:123456", "1298", " I", is_source=True) == DevType.CO2
 
     def test_hvac_prefix_wins_over_vc_pair(self) -> None:
         """A FAN (32:) sending 22F1 should stay FAN, not become REM."""
-        assert _classify("32:157747", "22F1", " I", is_src=True) == DevType.FAN
+        assert _classify("32:157747", "22F1", " I", is_source=True) == DevType.FAN
 
     def test_vc_pair_for_non_hvac_prefix(self) -> None:
         """A non-HVAC prefix sending an HVAC code should use the VC pair.
@@ -397,21 +397,21 @@ class TestClassify:
         prefix to test VC pair override on non-HVAC prefixes.
         """
         # 30: is RFG, but if it sends I 31DA the VC pair should win → FAN
-        assert _classify("30:123456", "31DA", " I", is_src=True) == DevType.FAN
+        assert _classify("30:123456", "31DA", " I", is_source=True) == DevType.FAN
 
     def test_ctl_only_code(self) -> None:
         """A device sending 1030 (CTL-only code) is classified as CTL."""
-        assert _classify("01:145038", "1030", " I", is_src=True) == DevType.CTL
+        assert _classify("01:145038", "1030", " I", is_source=True) == DevType.CTL
 
     def test_ctl_only_code_not_from_dst(self) -> None:
         """CTL-only code from dst (not src) should not classify as CTL."""
-        result = _classify("01:145038", "1030", " I", is_src=False)
+        result = _classify("01:145038", "1030", " I", is_source=False)
         # Falls back to prefix
         assert result == DevType.CTL  # prefix 01 = CTL anyway
 
     def test_unknown_prefix(self) -> None:
         """Unknown prefix with no VC match returns DEV."""
-        assert _classify("99:999999", "0001", " I", is_src=True) == DevType.DEV
+        assert _classify("99:999999", "0001", " I", is_source=True) == DevType.DEV
 
     def test_reclassify_with_dev(self) -> None:
         """Re-classify using accumulated codes_seen."""
@@ -422,31 +422,31 @@ class TestClassify:
             likely_type="DEV",
             codes_seen=["1030", "2E04"],
         )
-        result = _classify("01:145038", "0001", " I", is_src=True, dev=dev)
+        result = _classify("01:145038", "0001", " I", is_source=True, device=dev)
         assert result == DevType.CTL
 
     def test_313f_i_is_ctl(self) -> None:
         """313F I (datetime broadcast) is CTL-only."""
-        assert _classify("01:145038", "313F", " I", is_src=True) == DevType.CTL
+        assert _classify("01:145038", "313F", " I", is_source=True) == DevType.CTL
 
     def test_313f_rp_is_ctl(self) -> None:
         """313F RP (datetime reply) is CTL-only."""
-        assert _classify("01:145038", "313F", "RP", is_src=True) == DevType.CTL
+        assert _classify("01:145038", "313F", "RP", is_source=True) == DevType.CTL
 
     def test_313f_rq_is_not_ctl(self) -> None:
         """313F RQ (datetime request) is NOT CTL-only — TRVs send RQ too."""
         # A 04: TRV sending 313F RQ should stay TRV, not become CTL
-        result = _classify("04:056053", "313F", "RQ", is_src=True)
+        result = _classify("04:056053", "313F", "RQ", is_source=True)
         assert result == DevType.TRV
 
     def test_313f_rq_unknown_prefix_is_not_ctl(self) -> None:
         """313F RQ from unknown prefix should not be classified as CTL."""
-        result = _classify("99:999999", "313F", "RQ", is_src=True)
+        result = _classify("99:999999", "313F", "RQ", is_source=True)
         assert result == DevType.DEV
 
     def test_37_313f_rq_is_not_ctl(self) -> None:
         """313F RQ from 37: should not be CTL — falls back to REM (prefix)."""
-        result = _classify("37:154519", "313F", "RQ", is_src=True)
+        result = _classify("37:154519", "313F", "RQ", is_source=True)
         assert result == DevType.REM
 
     def test_37_31d9_is_fan(self) -> None:
@@ -455,46 +455,46 @@ class TestClassify:
         31D9 I maps to FAN in HVAC_KLASS_BY_VC_PAIR, and 37: is ambiguous
         (FAN/REM/CO2/HUM/DIS) so FAN is a valid type for 37:.
         """
-        result = _classify("37:154519", "31D9", " I", is_src=True)
+        result = _classify("37:154519", "31D9", " I", is_source=True)
         assert result == DevType.FAN
 
     def test_32_31d9_is_fan(self) -> None:
         """32: sending 31D9 I should be FAN (unambiguous prefix)."""
-        assert _classify("32:153289", "31D9", " I", is_src=True) == DevType.FAN
+        assert _classify("32:153289", "31D9", " I", is_source=True) == DevType.FAN
 
     def test_37_22f1_is_rem(self) -> None:
         """37: sending 22F1 I should be REM (VC pair matches valid type)."""
-        assert _classify("37:168270", "22F1", " I", is_src=True) == DevType.REM
+        assert _classify("37:168270", "22F1", " I", is_source=True) == DevType.REM
 
     def test_29_31d9_is_fan(self) -> None:
         """29: sending 31D9 I should be FAN (VC pair matches valid type)."""
-        assert _classify("29:146052", "31D9", " I", is_src=True) == DevType.FAN
+        assert _classify("29:146052", "31D9", " I", is_source=True) == DevType.FAN
 
     def test_29_22f1_is_rem(self) -> None:
         """29: sending 22F1 I should be REM (VC pair matches valid type)."""
-        assert _classify("29:181813", "22F1", " I", is_src=True) == DevType.REM
+        assert _classify("29:181813", "22F1", " I", is_source=True) == DevType.REM
 
     def test_29_1298_is_co2(self) -> None:
         """29: sending 1298 I should be CO2 (VC pair matches valid type)."""
-        assert _classify("29:123456", "1298", " I", is_src=True) == DevType.CO2
+        assert _classify("29:123456", "1298", " I", is_source=True) == DevType.CO2
 
     def test_29_no_vc_falls_back_to_fan(self) -> None:
         """29: with no matching VC pair should default to FAN (prefix fallback)."""
         # 2411 is not in HVAC_KLASS_BY_VC_PAIR
-        assert _classify("29:123150", "2411", " I", is_src=True) == DevType.FAN
+        assert _classify("29:123150", "2411", " I", is_source=True) == DevType.FAN
 
     def test_37_1298_is_co2(self) -> None:
         """37: sending 1298 I should be CO2 (VC pair matches valid type)."""
-        assert _classify("37:123456", "1298", " I", is_src=True) == DevType.CO2
+        assert _classify("37:123456", "1298", " I", is_source=True) == DevType.CO2
 
     def test_18_is_hgi_regardless_of_codes(self) -> None:
         """18: is always HGI — it relays packets from all device types."""
         # 22F1 I maps to REM, but 18: is a gateway, not a REM
-        assert _classify("18:130236", "22F1", " I", is_src=True) == DevType.HGI
+        assert _classify("18:130236", "22F1", " I", is_source=True) == DevType.HGI
         # 31DA I maps to FAN, but 18: is a gateway, not a FAN
-        assert _classify("18:130236", "31DA", " I", is_src=True) == DevType.HGI
+        assert _classify("18:130236", "31DA", " I", is_source=True) == DevType.HGI
         # 31D9 I maps to FAN, but 18: is a gateway, not a FAN
-        assert _classify("18:130236", "31D9", " I", is_src=True) == DevType.HGI
+        assert _classify("18:130236", "31D9", " I", is_source=True) == DevType.HGI
 
     def test_37_rq_31da_is_not_fan(self) -> None:
         """37: sending RQ 31DA should NOT be FAN — it's a DIS requesting status.
@@ -504,7 +504,7 @@ class TestClassify:
         for fan status — it's not a FAN broadcasting its own status.
         """
         # Direct RQ 31DA — not in _VC_TO_TYPE (only I and RP are)
-        result = _classify("37:169161", "31DA", "RQ", is_src=True)
+        result = _classify("37:169161", "31DA", "RQ", is_source=True)
         assert result != DevType.FAN
 
     def test_37_rq_31da_with_accumulated_codes_not_fan(self) -> None:
@@ -521,12 +521,12 @@ class TestClassify:
             likely_type="DEV",
             codes_seen=["31DA", "1470", "313F"],
         )
-        result = _classify("37:169161", "31DA", "RQ", is_src=True, dev=dev)
+        result = _classify("37:169161", "31DA", "RQ", is_source=True, device=dev)
         assert result != DevType.FAN
 
     def test_37_i_31da_is_fan(self) -> None:
         """37: sending I 31DA (broadcast) IS FAN — it's broadcasting status."""
-        result = _classify("37:169161", "31DA", " I", is_src=True)
+        result = _classify("37:169161", "31DA", " I", is_source=True)
         assert result == DevType.FAN
 
 

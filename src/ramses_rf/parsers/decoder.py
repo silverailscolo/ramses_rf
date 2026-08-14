@@ -34,14 +34,14 @@ _UNKNOWN_PACKET_HELP_MSG: str = (
 _LOGGER = logging.getLogger(__name__)
 
 
-def _get_code(code_str: str) -> Code | None:
+def _get_code(code_string: str) -> Code | None:
     """Safely convert a string to a Code enum, returning None if invalid.
 
-    :param code_str: The raw string representation of the packet code.
+    :param code_string: The raw string representation of the packet code.
     :return: A matching Code enum object or None if invalid.
     """
     try:
-        return Code(code_str)
+        return Code(code_string)
     except ValueError:
         return None
 
@@ -49,13 +49,13 @@ def _get_code(code_str: str) -> Code | None:
 class _LegacyAddress:
     """Adapter class to mimic ramses_tx.Address for legacy parsers."""
 
-    def __init__(self, addr_str: str) -> None:
+    def __init__(self, address_string: str) -> None:
         """Initialize the legacy address with id and type.
 
-        :param addr_str: The raw address string instance.
+        :param address_string: The raw address string instance.
         """
-        self.id = addr_str
-        self.type = addr_str.split(":")[0] if ":" in addr_str else ""
+        self.id = address_string
+        self.type = address_string.split(":")[0] if ":" in address_string else ""
 
     def __eq__(self, other: Any) -> bool:
         """Evaluate equality based on address ID.
@@ -120,15 +120,15 @@ class _LegacyMessage:
 
         self._has_array = self._calculate_has_array()
 
-    def _get_addr(self, addr_str: str) -> _LegacyAddress:
+    def _get_addr(self, address_string: str) -> _LegacyAddress:
         """Retrieve or create an interned legacy address instance.
 
-        :param addr_str: The address identity string.
+        :param address_string: The address identity string.
         :return: A cached or newly instantiated _LegacyAddress object.
         """
-        if addr_str not in self._addr_cache:
-            self._addr_cache[addr_str] = _LegacyAddress(addr_str)
-        return self._addr_cache[addr_str]
+        if address_string not in self._addr_cache:
+            self._addr_cache[address_string] = _LegacyAddress(address_string)
+        return self._addr_cache[address_string]
 
     @property
     def _has_payload(self) -> bool:

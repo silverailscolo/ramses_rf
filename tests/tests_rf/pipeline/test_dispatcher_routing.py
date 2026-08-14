@@ -33,7 +33,7 @@ def _mock_message(
         payload="00",
     )
     mock_header = StateHeader.create(
-        code=code, verb=" I", source_id=src_id, context_val=None
+        code=code, verb=" I", source_id=src_id, context_value=None
     )
     return Message(
         topic=Topic.RAW_EVENT,

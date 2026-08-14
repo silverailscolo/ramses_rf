@@ -91,7 +91,7 @@ def sch_packet_log_dict_factory(
 
     SCH_PACKET_LOG_NAME = str
 
-    def NormalisePacketLog(
+    def normalise_packet_log_factory(
         retention_days: int = 7,
     ) -> Callable[[str | PktLogConfigT], PktLogConfigT]:
         def normalise_packet_log(
@@ -115,7 +115,7 @@ def sch_packet_log_dict_factory(
             None,
             vol.All(
                 SCH_PACKET_LOG_NAME,
-                NormalisePacketLog(retention_days=default_retention_days),
+                normalise_packet_log_factory(retention_days=default_retention_days),
             ),
             SCH_PACKET_LOG_CONFIG,
         )
@@ -158,7 +158,7 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     """Return a serial port dict."""
     SCH_SERIAL_PORT_NAME = str
 
-    def NormaliseSerialPort() -> Callable[[str | PortConfigT], PortConfigT]:
+    def normalise_serial_port_factory() -> Callable[[str | PortConfigT], PortConfigT]:
         def normalise_serial_port(
             node_value: str | PortConfigT,
         ) -> PortConfigT:
@@ -175,7 +175,7 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
         vol.Required(SZ_SERIAL_PORT): vol.Any(
             vol.All(
                 SCH_SERIAL_PORT_NAME,
-                NormaliseSerialPort(),
+                normalise_serial_port_factory(),
             ),
             SCH_SERIAL_PORT_CONFIG.extend(
                 {vol.Required(SZ_PORT_NAME): SCH_SERIAL_PORT_NAME}
@@ -184,11 +184,12 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     }
 
 
-def extract_serial_port(ser_port_dict: dict[str, Any]) -> tuple[str, PortConfigT]:
+def extract_serial_port(serial_port_dict: dict[str, Any]) -> tuple[str, PortConfigT]:
     """Extract serial port and port config tuple from schema."""
-    port_name = str(ser_port_dict.get(SZ_PORT_NAME, ""))
+    port_name = str(serial_port_dict.get(SZ_PORT_NAME, ""))
     port_config = cast(
-        "PortConfigT", {k: v for k, v in ser_port_dict.items() if k != SZ_PORT_NAME}
+        "PortConfigT",
+        {k: v for k, v in serial_port_dict.items() if k != SZ_PORT_NAME},
     )
     return port_name, port_config
 

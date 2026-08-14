@@ -11,63 +11,63 @@ from datetime import date, datetime as dt
 from typing import Any, Literal, TypeAlias, TypeGuard, overload
 
 
-def is_hex_byte(val: Any) -> TypeGuard[HexByte]:
-    """Return True if val is a 2-character hex string (1 byte).
+def is_hex_byte(value: Any) -> TypeGuard[HexByte]:
+    """Return True if value is a 2-character hex string (1 byte).
 
-    :param val: Value to validate.
-    :type val: Any
+    :param value: Value to validate.
+    :type value: Any
     :returns: True if value is a 2-character hex string.
     :rtype: TypeGuard[HexByte]
     """
     return (
-        isinstance(val, str)
-        and len(val) == 2
-        and all(c in "0123456789abcdefABCDEF" for c in val)
+        isinstance(value, str)
+        and len(value) == 2
+        and all(c in "0123456789abcdefABCDEF" for c in value)
     )
 
 
-def is_hex_str4(val: Any) -> TypeGuard[HexStr4]:
-    """Return True if val is a 4-character hex string (2 bytes).
+def is_hex_str4(value: Any) -> TypeGuard[HexStr4]:
+    """Return True if value is a 4-character hex string (2 bytes).
 
-    :param val: Value to validate.
-    :type val: Any
+    :param value: Value to validate.
+    :type value: Any
     :returns: True if value is a 4-character hex string.
     :rtype: TypeGuard[HexStr4]
     """
     return (
-        isinstance(val, str)
-        and len(val) == 4
-        and all(c in "0123456789abcdefABCDEF" for c in val)
+        isinstance(value, str)
+        and len(value) == 4
+        and all(c in "0123456789abcdefABCDEF" for c in value)
     )
 
 
-def is_hex_str8(val: Any) -> TypeGuard[HexStr8]:
-    """Return True if val is an 8-character hex string (4 bytes).
+def is_hex_str8(value: Any) -> TypeGuard[HexStr8]:
+    """Return True if value is an 8-character hex string (4 bytes).
 
-    :param val: Value to validate.
-    :type val: Any
+    :param value: Value to validate.
+    :type value: Any
     :returns: True if value is an 8-character hex string.
     :rtype: TypeGuard[HexStr8]
     """
     return (
-        isinstance(val, str)
-        and len(val) == 8
-        and all(c in "0123456789abcdefABCDEF" for c in val)
+        isinstance(value, str)
+        and len(value) == 8
+        and all(c in "0123456789abcdefABCDEF" for c in value)
     )
 
 
-def is_hex_str12(val: Any) -> TypeGuard[HexStr12]:
-    """Return True if val is a 12-character hex string (6 bytes).
+def is_hex_str12(value: Any) -> TypeGuard[HexStr12]:
+    """Return True if value is a 12-character hex string (6 bytes).
 
-    :param val: Value to validate.
-    :type val: Any
+    :param value: Value to validate.
+    :type value: Any
     :returns: True if value is a 12-character hex string.
     :rtype: TypeGuard[HexStr12]
     """
     return (
-        isinstance(val, str)
-        and len(val) == 12
-        and all(c in "0123456789abcdefABCDEF" for c in val)
+        isinstance(value, str)
+        and len(value) == 12
+        and all(c in "0123456789abcdefABCDEF" for c in value)
     )
 
 
@@ -283,14 +283,16 @@ def hex_to_dtm(value: HexStr12 | HexStr14) -> str | None:  # from parsers
 
 
 def hex_from_dtm(
-    dtm: date | dt | str | None, is_dst: bool = False, incl_seconds: bool = False
+    dtm: date | dt | str | None,
+    is_daylight_saving: bool = False,
+    incl_seconds: bool = False,
 ) -> HexStr12 | HexStr14:
     """Convert a datetime to a 12/14-character hex string.
 
     :param dtm: The datetime object, date, ISO format string, or None.
     :type dtm: date | dt | str | None
-    :param is_dst: Explicitly set Daylight Saving Time flag, defaults to False.
-    :type is_dst: bool
+    :param is_daylight_saving: Explicitly set Daylight Saving Time flag, defaults to False.
+    :type is_daylight_saving: bool
     :param incl_seconds: Include seconds byte (14-char output), defaults to False.
     :type incl_seconds: bool
     :returns: The 12 or 14 character hex string representation.
@@ -314,7 +316,7 @@ def hex_from_dtm(
         dtm = dt.fromisoformat(dtm)
     t_tuple = dtm.timetuple()
     dtm_str = _dtm_to_hex(*t_tuple)
-    if is_dst or t_tuple[8] > 0:
+    if is_daylight_saving or t_tuple[8] > 0:
         dtm_str = f"{int(dtm_str[:2], 16) | 0x80:02X}" + dtm_str[2:]
     return dtm_str if incl_seconds else dtm_str[2:]
 

@@ -790,13 +790,15 @@ class Schedule:  # 0404
 
         return self._init_payload_set(payload)
 
-    async def _send_fragment(self, frag_num: int, frag_cnt: int, fragment: str) -> None:
+    async def _send_fragment(
+        self, fragment_number: int, total_fragments: int, fragment: str
+    ) -> None:
         """Send a schedule fragment to the controller.
 
-        :param frag_num: Current fragment number (1-based).
-        :type frag_num: int
-        :param frag_cnt: Total fragment count.
-        :type frag_cnt: int
+        :param fragment_number: Current fragment number (1-based).
+        :type fragment_number: int
+        :param total_fragments: Total fragment count.
+        :type total_fragments: int
         :param fragment: Hexadecimal fragment payload string.
         :type fragment: str
         """
@@ -805,8 +807,8 @@ class Schedule:  # 0404
             Action.SET_SCHEDULE_FRAGMENT,
             data={
                 "zone_idx": self.idx,
-                "frag_num": frag_num,
-                "frag_cnt": frag_cnt,
+                "frag_number": fragment_number,
+                "total_frags": total_fragments,
                 "fragment": fragment,
             },
             wait_for_reply=True,

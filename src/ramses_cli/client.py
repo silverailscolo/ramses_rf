@@ -145,18 +145,18 @@ class DeviceIdParamType(click.ParamType):
 
     name = "device_id"
 
-    def convert(self, value: str, param: Any, ctx: click.Context | None) -> str:
+    def convert(self, value: str, parameter: Any, context: click.Context | None) -> str:
         """Convert the value to a Device ID.
 
         :param value: The value to convert.
-        :param param: The parameter being converted.
-        :param ctx: The Click context.
+        :param parameter: The parameter being converted.
+        :param context: The Click context.
         :return: The converted Device ID.
         :raises click.BadParameter: If value is not a valid Device ID.
         """
         if is_valid_dev_id(value):
             return value.upper()
-        self.fail(f"{value!r} is not a valid device_id", param, ctx)
+        self.fail(f"{value!r} is not a valid device_id", parameter, context)
         assert False  # satisfy mypy
 
 
@@ -641,11 +641,11 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
         ]:
             if gateway.message_store:
                 for msg in await gateway.message_store.get(
-                    src=device.id, code=Code._0005
+                    source=device.id, code=Code._0005
                 ):
                     print(f"{msg}")
                 for msg in await gateway.message_store.get(
-                    src=device.id, code=Code._000C
+                    source=device.id, code=Code._000C
                 ):
                     print(f"{msg}")
             else:  # TODO(eb): replace next block by
@@ -662,7 +662,7 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
             d for d in gateway.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
         ]:
             if gateway.message_store:
-                for msg in await gateway.message_store.get(src=device.id):
+                for msg in await gateway.message_store.get(source=device.id):
                     print(f"{msg}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError

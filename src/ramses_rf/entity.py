@@ -87,11 +87,11 @@ class _Entity:
     def __repr__(self) -> str:
         return f"{self.id} ({self._SLUG})"
 
-    def deprecate_device(self, pkt: Packet, reset: bool = False) -> None:
+    def deprecate_device(self, packet: Packet, reset: bool = False) -> None:
         """If an entity is deprecated enough times, stop sending to it.
 
-        :param pkt: The packet triggering deprecation.
-        :type pkt: Packet
+        :param packet: The packet triggering deprecation.
+        :type packet: Packet
         :param reset: If True, reset the deprecation counter, defaults to False.
         :type reset: bool, optional
         """
@@ -102,7 +102,7 @@ class _Entity:
         self._qos_tx_count += 1
         if self._qos_tx_count == _QOS_TX_LIMIT:
             _LOGGER.warning(
-                f"{pkt} < Sending now deprecated for {self} "
+                f"{packet} < Sending now deprecated for {self} "
                 "(consider adjusting device_id filters)"
             )
 
@@ -136,32 +136,32 @@ class _Entity:
         elif isinstance(event.state, PowerState) and hasattr(self, "power_state"):
             setattr(self, "power_state", event.state)  # noqa: B010
 
-    def _send_cmd(self, cmd: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
+    def _send_cmd(self, command: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
         """Proxy command sending to the Gateway.
 
-        :param cmd: The command to send.
-        :type cmd: CommandDTO
+        :param command: The command to send.
+        :type command: CommandDTO
         :param kwargs: Optional sending parameters (e.g., priority).
         :type kwargs: Any
         :returns: The corresponding asyncio Task or None.
         :rtype: asyncio.Task[Any] | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.info("%s < Sending was deprecated for %s", cmd, self)
+            _LOGGER.info("%s < Sending was deprecated for %s", command, self)
             return None
 
-        return self._gateway.send_cmd(cmd, **kwargs)
+        return self._gateway.send_cmd(command, **kwargs)
 
     async def _async_send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         priority: Priority | None = None,
         qos: QosParams | None = None,
     ) -> Packet | None:
         """Proxy asynchronous command sending to the Gateway.
 
-        :param cmd: The command to send.
-        :type cmd: CommandDTO
+        :param command: The command to send.
+        :type command: CommandDTO
         :param priority: Transmission priority, defaults to None.
         :type priority: Priority | None, optional
         :param qos: Quality of Service parameters, defaults to None.
@@ -170,7 +170,7 @@ class _Entity:
         :rtype: Packet | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.warning("%s < Sending was deprecated for %s", cmd, self)
+            _LOGGER.warning("%s < Sending was deprecated for %s", command, self)
             return None
 
         # Build kwargs dynamically to prevent passing `None` to strict Gateway args
@@ -184,7 +184,7 @@ class _Entity:
             if hasattr(qos, "timeout") and qos.timeout is not None:
                 kwargs["timeout"] = qos.timeout
 
-        return await self._gateway.async_send_cmd(cmd, **kwargs)
+        return await self._gateway.async_send_cmd(command, **kwargs)
 
 
 class Entity(_Entity):

@@ -3457,11 +3457,11 @@ class SetpointBoundsPayload(PayloadBase):
     mode_code: int
 
     @classmethod
-    def _parse_temp(cls, raw_val: int) -> float | None:
+    def _parse_temp(cls, raw_value: int) -> float | None:
         """Decode raw 16-bit signed integer temperature bound."""
-        if raw_val in (0x31FF, 0x7FFF):
+        if raw_value in (0x31FF, 0x7FFF):
             return None
-        return raw_val / 100.0
+        return raw_value / 100.0
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self | list[Self]:

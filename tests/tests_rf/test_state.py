@@ -247,34 +247,36 @@ class TestMessageStore:
 
         assert await msg_db.contains(code="2309")
         assert await msg_db.contains(code="3150")
-        assert await msg_db.contains(src="01:087939", dst="01:087939", code="2309")
-        assert not await msg_db.contains(src="01:12345", code="2309")
+        assert await msg_db.contains(
+            source="01:087939", destination="01:087939", code="2309"
+        )
+        assert not await msg_db.contains(source="01:12345", code="2309")
         assert not await msg_db.contains(code="1234")
-        assert await msg_db.contains(dst="01:087939")
+        assert await msg_db.contains(destination="01:087939")
 
-        res = await msg_db.get(src=self._SRC2)
+        res = await msg_db.get(source=self._SRC2)
         assert len(res) == 1
         assert res[0].code == Code._2309
 
-        res = await msg_db.get(dst=self._SRC2)
+        res = await msg_db.get(destination=self._SRC2)
         assert len(res) == 2
         assert res[0].code == Code._2309
         assert res[1].code == Code._3220
 
-        res = await msg_db.get(src=self._SRC1)
+        res = await msg_db.get(source=self._SRC1)
         assert len(res) == 3
         assert res[0].code == Code._1298
         assert res[1].code == Code._1298
         assert res[2].code == Code._31DA
 
-        res = await msg_db.get(src="04:189078")
+        res = await msg_db.get(source="04:189078")
         assert len(res) == 1
         assert res[0].code == Code._3150
 
         assert len(await msg_db.all()) == 6
 
         msg_db.add(self.msg7)
-        res = await msg_db.get(src="04:189078")
+        res = await msg_db.get(source="04:189078")
         assert len(res) == 2
 
         msg_db.stop()

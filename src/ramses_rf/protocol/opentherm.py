@@ -1053,9 +1053,9 @@ def parity(x: int) -> int:
     return x & 1
 
 
-def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
+def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
     """Make this the docstring."""
-    assert len(val_seqx) in (2, 4), f"Invalid value sequence: {val_seqx}"
+    assert len(value_sequence) in (2, 4), f"Invalid value sequence: {value_sequence}"
 
     # based upon: https://github.com/mvn23/pyotgw/blob/master/pyotgw/protocol.py
 
@@ -1115,12 +1115,12 @@ def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
     # ], "Corrupt OPENTHERM_MESSAGES schema"
 
     try:
-        fnc = DATA_TYPES[val_type]
+        fnc = DATA_TYPES[value_type]
     except KeyError:
-        return val_seqx
+        return value_sequence
 
     try:
-        result: _DataValueT = fnc(val_seqx[:2], val_seqx[2:])
+        result: _DataValueT = fnc(value_sequence[:2], value_sequence[2:])
         return result
     except ValueError:
         return None

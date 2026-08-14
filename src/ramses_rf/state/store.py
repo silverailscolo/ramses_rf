@@ -47,15 +47,15 @@ _LOGGER = logging.getLogger(__name__)
 def _setup_db_adapters() -> None:
     """Set up the database adapters and converters."""
 
-    def adapt_datetime_iso(val: dt) -> str:
+    def adapt_datetime_iso(value: dt) -> str:
         """Adapt datetime to timezone-naive ISO 8601 string."""
-        return val.isoformat(timespec="microseconds")
+        return value.isoformat(timespec="microseconds")
 
     sqlite3.register_adapter(dt, adapt_datetime_iso)
 
-    def convert_datetime(val: bytes) -> dt:
+    def convert_datetime(value: bytes) -> dt:
         """Convert ISO 8601 string to datetime object."""
-        return dt.fromisoformat(val.decode())
+        return dt.fromisoformat(value.decode())
 
     sqlite3.register_converter("DTM", convert_datetime)
 
@@ -425,36 +425,39 @@ class MessageStore(MessageStoreInterface):
         return old
 
     def add_record(
-        self, src: str, code: str = "", verb: str = "", payload: str = "00"
+        self, source: str, code: str = "", verb: str = "", payload: str = "00"
     ) -> None:
         """Add single record with timestamp now() and no payload.
 
-        :param src: Device ID to use as source address.
+        :param source: Device ID to use as source address.
         :param code: Two-byte opcode hex string.
         :param verb: Two-letter verb string.
         :param payload: Payload hex string.
         """
         _now: dt = dt.now()
         dtm = DtmStrT(_now.isoformat(timespec="microseconds"))
-        hdr = f"{code}|{verb}|{src}|{payload}"
+        hdr = f"{code}|{verb}|{source}|{payload}"
 
         if self._worker:
             data = PacketLogEntry(
                 dtm=_now,
                 verb=verb,
-                src=src,
-                dst=src,
+                src=source,
+                dst=source,
                 code=code,
                 ctx=None,
                 hdr=hdr,
                 plk="|",
                 payload_blob=orjson.dumps({"payload": payload}),
-                frame=f"{verb} --- {src} {src} --:------ {code} 001 {payload}",
+                frame=f"{verb} --- {source} {source} --:------ {code} 001 {payload}",
             )
             self._worker.submit_packet(data)
 
         msg: Message = Message._from_pkt(
-            Packet(_now, f"... {verb} --- {src} --:------ {src} {code} 005 0000000000")
+            Packet(
+                _now,
+                f"... {verb} --- {source} --:------ {source} {code} 005 0000000000",
+            )
         )
         self._message_log[dtm] = msg
         self._state_cache[msg.state_header] = msg
@@ -493,8 +496,8 @@ class MessageStore(MessageStoreInterface):
         msg: Message | None = None,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
@@ -505,8 +508,8 @@ class MessageStore(MessageStoreInterface):
             k: v
             for k, v in {
                 "dtm": dtm,
-                "src": src,
-                "dst": dst,
+                "src": source,
+                "dst": destination,
                 "verb": verb,
                 "code": code,
                 "ctx": context,
@@ -526,8 +529,8 @@ class MessageStore(MessageStoreInterface):
             msgs_to_remove = await self.get(
                 msg=msg,
                 dtm=dtm,
-                src=src,
-                dst=dst,
+                source=source,
+                destination=destination,
                 verb=verb,
                 code=code,
                 context=context,
@@ -566,8 +569,8 @@ class MessageStore(MessageStoreInterface):
         msg: Message | None = None,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
@@ -578,8 +581,8 @@ class MessageStore(MessageStoreInterface):
             k: v
             for k, v in {
                 "dtm": dtm,
-                "src": src,
-                "dst": dst,
+                "src": source,
+                "dst": destination,
                 "verb": verb,
                 "code": code,
                 "ctx": context,
@@ -646,8 +649,8 @@ class MessageStore(MessageStoreInterface):
         self,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
@@ -658,8 +661,8 @@ class MessageStore(MessageStoreInterface):
             len(
                 await self.get(
                     dtm=dtm,
-                    src=src,
-                    dst=dst,
+                    source=source,
+                    destination=destination,
                     verb=verb,
                     code=code,
                     context=context,

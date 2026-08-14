@@ -21,7 +21,7 @@ from .logger import getLogger
 from .typing import HeaderT, PayloadT
 
 _LOGGER = logging.getLogger(__name__)
-PKT_LOGGER = getLogger(f"{__name__}_log", pkt_log=True)
+PKT_LOGGER = getLogger(f"{__name__}_log", packet_log=True)
 
 
 class Packet:
@@ -84,7 +84,7 @@ class Packet:
         /,
         *,
         comment: str = "",
-        err_msg: str = "",
+        error_message: str = "",
         raw_frame: bytes | str = b"",
         is_echo: bool = False,
         is_tx: bool = False,
@@ -97,8 +97,8 @@ class Packet:
         :type raw_line: str
         :param comment: Optional comment extracted from log line
         :type comment: str
-        :param err_msg: Optional error message from parser
-        :type err_msg: str
+        :param error_message: Optional error message from parser
+        :type error_message: str
         :param raw_frame: Raw physical bytes sequence from hardware interface
         :type raw_frame: bytes | str
         :param is_echo: True if packet is a serial hardware echo
@@ -114,7 +114,7 @@ class Packet:
                 dto_or_dtm,
                 raw_line,
                 comment=comment,
-                err_msg=err_msg,
+                error_message=error_message,
                 raw_frame=raw_frame,
                 is_echo=is_echo,
                 is_tx=is_tx,
@@ -140,7 +140,7 @@ class Packet:
 
         self._dto = dto_or_dtm
         self.comment = comment
-        self.error_text = err_msg
+        self.error_text = error_message
         self.raw_line = raw_line
         if isinstance(raw_frame, str):
             self.raw_frame = raw_frame.encode("ascii", errors="replace")
@@ -182,7 +182,7 @@ class Packet:
         raw_line: str,
         *,
         comment: str = "",
-        err_msg: str = "",
+        error_message: str = "",
         raw_frame: bytes | str = b"",
         is_echo: bool = False,
         is_tx: bool = False,
@@ -195,8 +195,8 @@ class Packet:
         :type raw_line: str
         :param comment: Optional comment string
         :type comment: str
-        :param err_msg: Optional error text string
-        :type err_msg: str
+        :param error_message: Optional error text string
+        :type error_message: str
         :param raw_frame: Raw physical bytes sequence from hardware interface
         :type raw_frame: bytes | str
         :param is_echo: True if packet is a serial hardware echo
@@ -274,7 +274,7 @@ class Packet:
         pkt._is_echo = is_echo
         pkt._is_tx = is_tx
         pkt.comment = comment or extracted_comment
-        pkt.error_text = err_msg or extracted_err
+        pkt.error_text = error_message or extracted_err
         pkt.raw_line = raw_line
         if isinstance(raw_frame, str):
             pkt.raw_frame = raw_frame.encode("ascii", errors="replace")
@@ -652,18 +652,18 @@ class Packet:
         :rtype: tuple[str, str, str]
         """
         fragment, _, comment = raw_line.partition("#")
-        fragment, _, err_msg = fragment.partition("*")
+        fragment, _, error_message = fragment.partition("*")
         pkt_str, _, _ = fragment.partition("<")  # discard any parser hints
 
-        parts = tuple(map(str.strip, (pkt_str, err_msg, comment)))
+        parts = tuple(map(str.strip, (pkt_str, error_message, comment)))
         return parts[0], parts[1], parts[2]
 
     @classmethod
-    def _from_cmd(cls, cmd: CommandDTO, dtm: dt | None = None) -> Packet:
+    def _from_cmd(cls, command: CommandDTO, dtm: dt | None = None) -> Packet:
         """Create a Packet from a CommandDTO.
 
-        :param cmd: Command DTO object
-        :type cmd: CommandDTO
+        :param command: Command DTO object
+        :type command: CommandDTO
         :param dtm: Optional timestamp for packet creation
         :type dtm: dt | None
         :returns: Constructed Packet instance
@@ -672,8 +672,8 @@ class Packet:
         if dtm is None:
             dtm = dt.now()
         raw_line = (
-            f"{cmd.verb.strip():>2} --- {cmd.addr1} {cmd.addr2} {cmd.addr3} "
-            f"{cmd.code} {int(len(cmd.payload) / 2):03d} {cmd.payload}"
+            f"{command.verb.strip():>2} --- {command.addr1} {command.addr2} {command.addr3} "
+            f"{command.code} {int(len(command.payload) / 2):03d} {command.payload}"
         )
         return cls.from_raw_line(dtm, f"... {raw_line}")
 
@@ -865,24 +865,26 @@ class Packet:
         )
 
 
-def pkt_header(pkt: Packet, /) -> HeaderT | None:
+def pkt_header(packet: Packet, /) -> HeaderT | None:
     """Return the QoS header fingerprint of a packet.
 
-    :param pkt: Packet instance to evaluate
-    :type pkt: Packet
+    :param packet: Packet instance to evaluate
+    :type packet: Packet
     :returns: Header fingerprint string or None
     :rtype: HeaderT | None
     """
-    if pkt.code == Code._1FC9:
-        device_id = ALL_DEV_ADDR.id if pkt.src == pkt.dst else pkt.dst.id
-        return HeaderT("|".join((pkt.code, pkt.verb, device_id)))
+    if packet.code == Code._1FC9:
+        device_id = ALL_DEV_ADDR.id if packet.src == packet.dst else packet.dst.id
+        return HeaderT("|".join((packet.code, packet.verb, device_id)))
 
-    if pkt.verb in (I_, RP) or pkt.src == pkt.dst:
-        header = "|".join((pkt.code, pkt.verb, pkt.src.id))
+    if packet.verb in (I_, RP) or packet.src == packet.dst:
+        header = "|".join((packet.code, packet.verb, packet.src.id))
     else:
-        header = "|".join((pkt.code, pkt.verb, pkt.dst.id))
+        header = "|".join((packet.code, packet.verb, packet.dst.id))
 
     try:
-        return HeaderT(f"{header}|{pkt._ctx}" if isinstance(pkt._ctx, str) else header)
+        return HeaderT(
+            f"{header}|{packet._ctx}" if isinstance(packet._ctx, str) else header
+        )
     except AssertionError:
         return HeaderT(header)
