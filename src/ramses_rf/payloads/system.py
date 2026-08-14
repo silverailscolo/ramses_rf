@@ -6,7 +6,6 @@ device binding, fault log, and gateway heartbeat packet payloads.
 
 import re
 import struct
-from abc import ABC
 from dataclasses import dataclass
 from typing import Any, ClassVar, Self
 
@@ -516,14 +515,43 @@ class SystemFlagPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
+# ----------------------------------------------------------------------
+
+
 @register_payload("0100")
-@dataclass(frozen=True, slots=True)
-class SystemLanguageBasePayload(PayloadBase, ABC):
-    """Abstract base class for system language (Opcode 0100)."""
+class SystemLanguagePayload(PayloadBase):
+    """Master payload dispatcher for system language (Opcode 0100).
+
+    Dispatches system language configuration payloads to 2-byte or
+    3-byte variant sub-dataclasses based on payload length.
+    """
+
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
+
+    language: str | None = None
+
+    @classmethod
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "SystemLanguage2BPayload | SystemLanguage3BPayload":
+        """Unpack system language binary payload, dispatching by length."""
+        if len(raw_data) >= 3:
+            return SystemLanguage3BPayload.from_bytes(raw_data)
+        return SystemLanguage2BPayload.from_bytes(raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack payload base default method.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to
+            variant sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
 
 
 @dataclass(frozen=True, slots=True)
-class SystemLanguage2BPayload(SystemLanguageBasePayload):
+class SystemLanguage2BPayload(SystemLanguagePayload):
     """System language 2-byte configuration layout (Opcode 0100).
 
     2-byte Language binary layout:
@@ -580,7 +608,7 @@ class SystemLanguage2BPayload(SystemLanguageBasePayload):
 
 
 @dataclass(frozen=True, slots=True)
-class SystemLanguage3BPayload(SystemLanguageBasePayload):
+class SystemLanguage3BPayload(SystemLanguagePayload):
     """System language 3-byte string configuration layout (Opcode 0100).
 
     3-byte Language binary layout:
@@ -632,27 +660,11 @@ class SystemLanguage3BPayload(SystemLanguageBasePayload):
         return {"language": self.language}
 
 
-@register_payload("0100")
-class SystemLanguagePayload(PayloadBase, ABC):
-    """Master payload dispatcher for system language (Opcode 0100).
-
-    Dispatches system language configuration payloads to 2-byte or
-    3-byte variant sub-dataclasses based on payload length.
-    """
-
-    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = (
-        SystemLanguage2BPayload,
-        SystemLanguage3BPayload,
-    )
-
-    @classmethod
-    def from_bytes(
-        cls, raw_data: bytes
-    ) -> SystemLanguage2BPayload | SystemLanguage3BPayload:
-        """Unpack system language binary payload, dispatching by length."""
-        if len(raw_data) >= 3:
-            return SystemLanguage3BPayload.from_bytes(raw_data)
-        return SystemLanguage2BPayload.from_bytes(raw_data)
+# Update VARIANTS property after variants are defined
+SystemLanguagePayload.VARIANTS = (
+    SystemLanguage2BPayload,
+    SystemLanguage3BPayload,
+)
 
 
 # ----------------------------------------------------------------------
@@ -1234,13 +1246,40 @@ class SystemOutdoorTempPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
+# ----------------------------------------------------------------------
+
+
 @register_payload("1F09")
-class SystemSyncHeartbeatBasePayload(PayloadBase, ABC):
-    """Abstract base class for system synchronization heartbeat (Opcode 1F09)."""
+class SystemSyncHeartbeatPayload(PayloadBase):
+    """Master payload dispatcher for system synchronization heartbeat (Opcode 1F09)."""
+
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
+
+    sync_sequence: int
+    remaining_seconds: float | None = None
+
+    @classmethod
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "SystemSyncHeartbeat1BPayload | SystemSyncHeartbeat3BPayload":
+        """Unpack system sync heartbeat binary payload, dispatching by length."""
+        if len(raw_data) >= 3:
+            return SystemSyncHeartbeat3BPayload.from_bytes(raw_data)
+        return SystemSyncHeartbeat1BPayload.from_bytes(raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack payload base default method.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to
+            variant sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
 
 
 @dataclass(frozen=True, slots=True)
-class SystemSyncHeartbeat1BPayload(SystemSyncHeartbeatBasePayload):
+class SystemSyncHeartbeat1BPayload(SystemSyncHeartbeatPayload):
     """System synchronization heartbeat 1-byte layout (Opcode 1F09).
 
     1-byte System Sync Heartbeat binary layout:
@@ -1253,11 +1292,14 @@ class SystemSyncHeartbeat1BPayload(SystemSyncHeartbeatBasePayload):
 
     :param sync_sequence: Synchronization sequence flag.
     :type sync_sequence: int
+    :param remaining_seconds: Remaining seconds (None for 1B payload).
+    :type remaining_seconds: float | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">B"
 
     sync_sequence: int
+    remaining_seconds: float | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1288,7 +1330,7 @@ class SystemSyncHeartbeat1BPayload(SystemSyncHeartbeatBasePayload):
 
 
 @dataclass(frozen=True, slots=True)
-class SystemSyncHeartbeat3BPayload(SystemSyncHeartbeatBasePayload):
+class SystemSyncHeartbeat3BPayload(SystemSyncHeartbeatPayload):
     """System synchronization heartbeat 3-byte layout (Opcode 1F09).
 
     3-byte System Sync Heartbeat binary layout:
@@ -1303,13 +1345,13 @@ class SystemSyncHeartbeat3BPayload(SystemSyncHeartbeatBasePayload):
     :param sync_sequence: Synchronization sequence flag.
     :type sync_sequence: int
     :param remaining_seconds: Remaining synchronization seconds.
-    :type remaining_seconds: float
+    :type remaining_seconds: float | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BH"
 
     sync_sequence: int
-    remaining_seconds: float
+    remaining_seconds: float | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1334,7 +1376,11 @@ class SystemSyncHeartbeat3BPayload(SystemSyncHeartbeatBasePayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        secs_raw = int(round(self.remaining_seconds * 10.0))
+        secs_raw = (
+            0
+            if self.remaining_seconds is None
+            else int(round(self.remaining_seconds * 10.0))
+        )
         return struct.pack(self._STRUCT_FMT, self.sync_sequence, secs_raw)
 
     def to_dict(self) -> dict[str, Any]:
@@ -1342,37 +1388,49 @@ class SystemSyncHeartbeat3BPayload(SystemSyncHeartbeatBasePayload):
         return {"remaining_seconds": self.remaining_seconds}
 
 
-@register_payload("1F09")
-class SystemSyncHeartbeatPayload(PayloadBase, ABC):
-    """Master payload dispatcher for Opcode 1F09."""
-
-    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = (
-        SystemSyncHeartbeat1BPayload,
-        SystemSyncHeartbeat3BPayload,
-    )
-
-    @classmethod
-    def from_bytes(
-        cls, raw_data: bytes
-    ) -> SystemSyncHeartbeat1BPayload | SystemSyncHeartbeat3BPayload:
-        """Unpack system sync heartbeat binary payload, dispatching by length."""
-        if len(raw_data) >= 3:
-            return SystemSyncHeartbeat3BPayload.from_bytes(raw_data)
-        return SystemSyncHeartbeat1BPayload.from_bytes(raw_data)
+# Update VARIANTS property after variants are defined
+SystemSyncHeartbeatPayload.VARIANTS = (
+    SystemSyncHeartbeat1BPayload,
+    SystemSyncHeartbeat3BPayload,
+)
 
 
 # ----------------------------------------------------------------------
 
 
 @register_payload("2E04")
-# ----------------------------------------------------------------------
+@register_payload("2E10")
+class SystemConfigPayload(PayloadBase):
+    """Master payload dispatcher for Opcode 2E04 and 2E10."""
 
-class SystemConfigBasePayload(PayloadBase, ABC):
-    """Abstract base class for system configuration parameter (Opcode 2E04, 2E10)."""
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
+
+    config_idx: int
+    config_val: int
+    raw_extra: bytes | None = None
+
+    @classmethod
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "SystemConfig2BPayload | SystemConfigVarPayload":
+        """Unpack system config binary payload, dispatching by length."""
+        if len(raw_data) > 2:
+            return SystemConfigVarPayload.from_bytes(raw_data)
+        return SystemConfig2BPayload.from_bytes(raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack payload base default method.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to
+            variant sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
 
 
 @dataclass(frozen=True, slots=True)
-class SystemConfig2BPayload(SystemConfigBasePayload):
+class SystemConfig2BPayload(SystemConfigPayload):
     """System configuration parameter 2-byte payload (Opcode 2E04, 2E10).
 
     2-byte System Config binary layout:
@@ -1388,15 +1446,15 @@ class SystemConfig2BPayload(SystemConfigBasePayload):
     :type config_idx: int
     :param config_val: Configuration value byte.
     :type config_val: int
-
-    Protocol Notes:
-    # presence_detect, HVAC sensor, or Timed boost for Vasco D60
+    :param raw_extra: Trailing bytes (None for 2B payload).
+    :type raw_extra: bytes | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
     config_idx: int
     config_val: int
+    raw_extra: bytes | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1445,32 +1503,32 @@ class SystemConfig2BPayload(SystemConfigBasePayload):
 
 
 @dataclass(frozen=True, slots=True)
-class SystemConfigVarPayload(SystemConfigBasePayload):
+class SystemConfigVarPayload(SystemConfigPayload):
     """System configuration parameter variable-length payload (Opcode 2E04, 2E10).
 
     Variable-length System Config binary layout:
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
-      +0       B      1B   Config Index (uint8)         : 00
+      +0       B      1B   Config Index (uint8)         : 01
       +1       B      1B   Config Value (uint8)         : 00
-      +2       s     ...   Trailing config bytes        : ...
+      +2       6s     6B   Trailing config bytes        : 00 00 00 00 00 00
       --------------------------------------------------------------
-      Field-spaced hex : 00 00 ...
-      Payload hex      : 0000...
+      Field-spaced hex : 01 00 000000000000
+      Payload hex      : 0100000000000000
 
     :param config_idx: Configuration index byte.
     :type config_idx: int
     :param config_val: Configuration value byte.
     :type config_val: int
     :param raw_extra: Trailing configuration bytes.
-    :type raw_extra: bytes
+    :type raw_extra: bytes | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
     config_idx: int
     config_val: int
-    raw_extra: bytes
+    raw_extra: bytes | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1495,9 +1553,8 @@ class SystemConfigVarPayload(SystemConfigBasePayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return (
-            struct.pack(self._STRUCT_FMT, self.config_idx, self.config_val)
-            + self.raw_extra
+        return struct.pack(self._STRUCT_FMT, self.config_idx, self.config_val) + (
+            self.raw_extra or b""
         )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
@@ -1525,60 +1582,129 @@ class SystemConfigVarPayload(SystemConfigBasePayload):
         return {"config_idx": self.config_idx, "config_val": self.config_val}
 
 
-@register_payload("2E04")
-@register_payload("2E10")
-class SystemConfigPayload(PayloadBase, ABC):
-    """Master payload dispatcher for Opcode 2E04 and 2E10."""
-
-    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = (
-        SystemConfig2BPayload,
-        SystemConfigVarPayload,
-    )
-
-    @classmethod
-    def from_bytes(
-        cls, raw_data: bytes
-    ) -> SystemConfig2BPayload | SystemConfigVarPayload:
-        """Unpack system config binary payload, dispatching by length."""
-        if len(raw_data) > 2:
-            return SystemConfigVarPayload.from_bytes(raw_data)
-        return SystemConfig2BPayload.from_bytes(raw_data)
+# Update VARIANTS property after variants are defined
+SystemConfigPayload.VARIANTS = (
+    SystemConfig2BPayload,
+    SystemConfigVarPayload,
+)
 
 
 # ----------------------------------------------------------------------
 
 
 @register_payload("313F")
-@dataclass(frozen=True, slots=True)
 class SystemDateTimePayload(PayloadBase):
-    """System date and time payload (Opcode 313F).
+    """Master payload dispatcher for system date and time (Opcode 313F)."""
+
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
+
+    domain_idx: int
+    datetime_str: str | None = None
+    is_dst: bool | None = None
+
+    @classmethod
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "SystemDateTime2BPayload | SystemDateTime9BPayload":
+        """Unpack system date & time payload, dispatching by length."""
+        if len(raw_data) >= 9:
+            return SystemDateTime9BPayload.from_bytes(raw_data)
+        return SystemDateTime2BPayload.from_bytes(raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack payload base default method.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to
+            variant sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
+
+
+@dataclass(frozen=True, slots=True)
+class SystemDateTime2BPayload(SystemDateTimePayload):
+    """2-byte system date and time header payload (Opcode 313F).
+
+    2-byte System Date & Time Header binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Domain / Header Index        : 00
+      +1       B      1B   Sub-index / Flag             : 00
+      --------------------------------------------------------------
+      Field-spaced hex : 00 00
+      Payload hex      : 0000
+
+    :param domain_idx: Domain/header index byte.
+    :type domain_idx: int
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BB"
+
+    domain_idx: int
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack 2-byte system date & time header binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked SystemDateTime2BPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 2 bytes.
+        """
+        if len(raw_data) < 2:
+            raise ValueError(
+                f"Invalid payload length for SystemDateTime2BPayload: {len(raw_data)}"
+            )
+        dom, _flag = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(domain_idx=dom)
+
+    def to_bytes(self) -> bytes:
+        """Pack 2-byte system date & time header binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return struct.pack(self._STRUCT_FMT, self.domain_idx, 0x00)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert 2-byte system date & time payload to legacy dictionary layout.
+
+        :returns: Decoded system date & time dictionary.
+        :rtype: dict[str, Any]
+        """
+        return {"is_dst": None}
+
+
+@dataclass(frozen=True, slots=True)
+class SystemDateTime9BPayload(SystemDateTimePayload):
+    """9-byte system date and time payload (Opcode 313F).
 
     9-byte System Date & Time binary layout:
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
       +0       B      1B   Domain / Header Index        : 00
       +1       B      1B   Sub-index / Flags            : F0
-      +2       B      1B   Year | DST flag (0x80)       : 96 (22 | 0x80)
-      +3       B      1B   Month (1-12)                 : 05
-      +4       B      1B   Day (1-31)                   : 02
-      +5       B      1B   Hours (0-23)                 : 0A (10)
-      +6       B      1B   Minutes (0-59)               : 02
-      +7       B      1B   Seconds (0-59)               : 36 (54)
-      +8       B      1B   Padding / Reserved           : 00
+      +2       B      1B   Seconds | DST Flag (0x80)    : BB (59s + DST)
+      +3       B      1B   Minutes (0-59)               : 00 (0m)
+      +4       B      1B   Hours (0-23)                 : 04 (4h)
+      +5       B      1B   Day (1-31)                   : 0C (12)
+      +6       B      1B   Month (1-12)                 : 05 (May)
+      +7       H      2B   Year (uint16)                : 07 EA (2026)
       --------------------------------------------------------------
-      Field-spaced hex : 00 F0 36 02 0A 02 05 07 E6
-      Payload hex      : 00F036020A020507E6
-
+      Field-spaced hex : 00 F0 BB 00 04 0C 05 07EA
+      Payload hex      : 00F0BB00040C0507EA
 
     :param domain_idx: Domain/header index byte.
-    :type domain_idx: str | int | None
-    :param datetime_str: Formatted ISO datetime string (e.g., '2022-05-02T10:02:54').
+    :type domain_idx: int
+    :param datetime_str: Formatted ISO datetime string (e.g., '2026-05-12T04:00:59').
     :type datetime_str: str | None
     :param is_dst: Daylight Saving Time active flag.
     :type is_dst: bool | None
     """
 
-    _STRUCT_FMT_HEADER: ClassVar[str] = ">B"
+    _STRUCT_FMT: ClassVar[str] = ">BBBBBBBH"
 
     domain_idx: int
     datetime_str: str | None = None
@@ -1586,31 +1712,30 @@ class SystemDateTimePayload(PayloadBase):
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack system date & time binary payload.
+        """Unpack 9-byte system date & time binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked SystemDateTimePayload instance.
+        :returns: Unpacked SystemDateTime9BPayload instance.
         :rtype: Self
-        :raises ValueError: If raw_data length is less than 2 bytes.
+        :raises ValueError: If raw_data length is less than 9 bytes.
         """
-        if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 313F: {len(raw_data)}")
-
-        (dom,) = struct.unpack_from(cls._STRUCT_FMT_HEADER, raw_data, 0)
-        if len(raw_data) >= 9:
-            hex_str = raw_data[2:9].hex().upper()
-            dt_str = hex_to_dtm(hex_str)
-            dst_flag = True if bool(raw_data[2] & 0x80) else None
-            return cls(
-                domain_idx=dom,
-                datetime_str=dt_str,
-                is_dst=dst_flag,
+        if len(raw_data) < 9:
+            raise ValueError(
+                f"Invalid payload length for SystemDateTime9BPayload: {len(raw_data)}"
             )
-        return cls(domain_idx=dom)
+        dom = raw_data[0]
+        hex_str = raw_data[2:9].hex().upper()
+        dt_str = hex_to_dtm(hex_str)
+        dst_flag = True if bool(raw_data[2] & 0x80) else None
+        return cls(
+            domain_idx=dom,
+            datetime_str=dt_str,
+            is_dst=dst_flag,
+        )
 
     def to_bytes(self) -> bytes:
-        """Pack system date & time data into binary payload.
+        """Pack 9-byte system date & time data into binary payload.
 
         :returns: Packed binary payload bytes.
         :rtype: bytes
@@ -1619,12 +1744,8 @@ class SystemDateTimePayload(PayloadBase):
             dt_hex = hex_from_dtm(
                 self.datetime_str, is_dst=self.is_dst or False, incl_seconds=True
             )
-            return (
-                struct.pack(self._STRUCT_FMT_HEADER, self.domain_idx)
-                + b"\xf0"
-                + bytes.fromhex(dt_hex)
-            )
-        return struct.pack(self._STRUCT_FMT_HEADER, self.domain_idx) + b"\x00"
+            return bytes([self.domain_idx, 0xF0]) + bytes.fromhex(dt_hex)
+        return struct.pack(self._STRUCT_FMT, self.domain_idx, 0xF0, 0, 0, 0, 0, 0, 0, 0)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert system date & time payload to legacy dictionary layout.
@@ -1637,6 +1758,13 @@ class SystemDateTimePayload(PayloadBase):
             res["datetime"] = self.datetime_str
         res["is_dst"] = self.is_dst
         return res
+
+
+# Update VARIANTS property after variants are defined
+SystemDateTimePayload.VARIANTS = (
+    SystemDateTime2BPayload,
+    SystemDateTime9BPayload,
+)
 
 
 @dataclass(frozen=True, slots=True)

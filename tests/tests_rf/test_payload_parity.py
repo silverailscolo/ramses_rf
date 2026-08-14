@@ -10,11 +10,16 @@ import ramses_rf.payloads.system
 import ramses_tx.const as tx_const
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
-from ramses_rf.payloads.dhw import DhwConfigPayload, DhwStatePayload, DhwTempPayload
+from ramses_rf.payloads.dhw import (
+    DhwConfigPayload,
+    DhwParams3BPayload,
+    DhwParamsPayload,
+    DhwStatePayload,
+    DhwTempPayload,
+)
 from ramses_rf.payloads.heating import (
     ActuatorStatePayload,
     BindingPayload,
-    DhwTemperaturePayload,
     FlowTempPayload,
     HeatDemandPayload,
     OutdoorTempPayload,
@@ -183,23 +188,28 @@ def test_schedule_switchpoint_payload_0404_parity() -> None:
     }
 
 
-def test_dhw_temperature_payload_10a0_parity() -> None:
+def test_dhw_params_payload_10a0_parity() -> None:
     # Arrange
     raw_hex = "000ED8"
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
-    payload = DhwTemperaturePayload.from_bytes(raw_bytes)
+    payload = DhwParamsPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, DhwParams3BPayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
     # Assert
-    assert isinstance(payload, DhwTemperaturePayload)
     assert payload.dhw_idx == 0
-    assert payload.temperature == 38.0
+    assert payload.setpoint == 38.0
 
     assert reencoded == raw_hex
-    assert as_dict == {"dhw_idx": 0, "temperature": 38.0}
+    assert as_dict == {
+        "dhw_idx": 0,
+        "setpoint": 38.0,
+        "overrun": None,
+        "differential": None,
+    }
 
 
 def test_system_sync_payload_1030_parity() -> None:
@@ -451,6 +461,7 @@ def test_zone_setpoint_payload_0004_parity() -> None:
 
     # Act
     payload = ZoneSetpointPayload.from_bytes(raw_bytes)
+    assert not isinstance(payload, list)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -847,7 +858,7 @@ def test_system_config_payload_2e04_parity() -> None:
     assert payload.config_idx == 0
     assert payload.config_val == 0
     assert reencoded == raw_hex
-    assert as_dict == {"config_idx": 0, "config_val": 0}
+    assert as_dict == {"config_idx": 0, "config_val": 0, "raw_extra": None}
 
 
 def test_zone_config_payload_000a_array_parity() -> None:
@@ -1249,3 +1260,152 @@ def test_payload_invalid_byte_length_exception_handling() -> None:
 
     with pytest.raises(ValueError, match="Invalid payload length"):
         ramses_rf.payloads.system.DeviceBatteryPayload.from_bytes(b"\x00")
+
+
+def test_polymorphic_dispatchers_parity_comprehensive() -> None:
+    """Verify polymorphic dispatcher decoding, serialization, and dictionary parity across all variants."""
+    # 1. ZoneName (0004): 22B and Short 3B
+    p_0004_22b = ZoneNamePayload.from_bytes(
+        bytes.fromhex("00004C6976696E6720526F6F6D000000000000000000")
+    )
+    assert isinstance(p_0004_22b, ramses_rf.payloads.heating.ZoneName22BPayload)
+    assert p_0004_22b.name == "Living Room"
+    assert p_0004_22b.zone_idx == 0
+    assert payload_to_dict(p_0004_22b) == {"zone_idx": 0, "name": "Living Room"}
+
+    p_0004_3b = ZoneNamePayload.from_bytes(bytes.fromhex("0007D0"))
+    assert isinstance(p_0004_3b, ramses_rf.payloads.heating.ZoneNameShort3BPayload)
+    assert p_0004_3b.zone_idx == 0
+    assert p_0004_3b.setpoint_temp == 20.0
+    assert payload_to_dict(p_0004_3b) == {"zone_idx": 0, "setpoint_temp": 20.0}
+
+    # 2. RelayDemand (0008): 2B and Jasper 13B
+    p_0008_2b = RelayDemandPayload.from_bytes(bytes.fromhex("00C8"))
+    assert isinstance(p_0008_2b, ramses_rf.payloads.heating.RelayDemand2BPayload)
+    assert p_0008_2b.demand_percent == 1.0
+    assert payload_to_dict(p_0008_2b) == {
+        "domain_or_zone_idx": 0,
+        "demand_percent": 1.0,
+        "raw_extra": None,
+    }
+
+    p_0008_13b = RelayDemandPayload.from_bytes(
+        bytes.fromhex("00000000000000000000000000")
+    )
+    assert isinstance(p_0008_13b, ramses_rf.payloads.heating.RelayDemand2BPayload)
+    assert p_0008_13b.to_bytes().hex().upper() == "00000000000000000000000000"
+
+    # 3. SystemLanguage (0100): 2B and 3B
+    p_0100_2b = ramses_rf.payloads.system.SystemLanguagePayload.from_bytes(
+        bytes.fromhex("0000")
+    )
+    assert isinstance(p_0100_2b, ramses_rf.payloads.system.SystemLanguage2BPayload)
+    assert p_0100_2b.language == "00"
+    assert payload_to_dict(p_0100_2b) == {"language": "00"}
+
+    p_0100_3b = ramses_rf.payloads.system.SystemLanguagePayload.from_bytes(
+        bytes.fromhex("00454E")
+    )
+    assert isinstance(p_0100_3b, ramses_rf.payloads.system.SystemLanguage3BPayload)
+    assert p_0100_3b.language == "EN"
+    assert payload_to_dict(p_0100_3b) == {"language": "EN"}
+
+    # 4. TpiParams (1100): 4B and 8B
+    p_1100_4b = ramses_rf.payloads.heating.TpiParamsPayload.from_bytes(
+        bytes.fromhex("FC180404")
+    )
+    assert isinstance(p_1100_4b, ramses_rf.payloads.heating.TpiParams4BPayload)
+    assert p_1100_4b.cycle_rate == 6
+    assert p_1100_4b.min_on_time == 1.0
+    assert p_1100_4b.min_off_time == 1.0
+
+    p_1100_8b = ramses_rf.payloads.heating.TpiParamsPayload.from_bytes(
+        bytes.fromhex("FC180404007FFF00")
+    )
+    assert isinstance(p_1100_8b, ramses_rf.payloads.heating.TpiParams8BPayload)
+    assert p_1100_8b.cycle_rate == 6
+    assert p_1100_8b.proportional_band_width is None
+
+    # 5. RelativeHumidity (12A0): 1B, 2B, and 6B
+    p_12a0_1b = RelativeHumidityPayload.from_bytes(bytes.fromhex("64"))
+    assert isinstance(p_12a0_1b, ramses_rf.payloads.hvac.RelativeHumidity1BPayload)
+    assert p_12a0_1b.humidity_percent == 50.0
+    assert payload_to_dict(p_12a0_1b) == {"humidity_percent": 50.0}
+
+    p_12a0_2b = RelativeHumidityPayload.from_bytes(bytes.fromhex("0064"))
+    assert isinstance(p_12a0_2b, ramses_rf.payloads.hvac.RelativeHumidity2BPayload)
+    assert p_12a0_2b.humidity_percent == 1.0
+    assert payload_to_dict(p_12a0_2b) == {"humidity_percent": 1.0}
+
+    p_12a0_6b = RelativeHumidityPayload.from_bytes(bytes.fromhex("006407D00834"))
+    assert isinstance(p_12a0_6b, ramses_rf.payloads.hvac.RelativeHumidity6BPayload)
+    assert p_12a0_6b.humidity_percent == 1.0
+    assert p_12a0_6b.temperature == 20.0
+    assert p_12a0_6b.dewpoint_temp == 21.0
+    assert payload_to_dict(p_12a0_6b) == {"humidity_percent": 1.0}
+
+    # 6. HvacVentilationStatus (22E0, 22E5, 22E9): 2B and 4B
+    p_22e0_2b = HvacVentilationStatusPayload.from_bytes(bytes.fromhex("0100"))
+    assert isinstance(p_22e0_2b, ramses_rf.payloads.hvac.HvacVentilationStatus2BPayload)
+    assert p_22e0_2b.flow_mode == 1
+    assert p_22e0_2b.status_flags == 0
+    assert payload_to_dict(p_22e0_2b) == {"flow_mode": 1, "status_flags": 0}
+
+    p_22e0_4b = HvacVentilationStatusPayload.from_bytes(bytes.fromhex("0034A01E"))
+    assert isinstance(p_22e0_4b, ramses_rf.payloads.hvac.HvacVentilationStatus4BPayload)
+    assert p_22e0_4b.flow_mode == 0
+    assert p_22e0_4b.status_flags == 0x34
+    assert payload_to_dict(p_22e0_4b)["flow_mode"] == 0
+
+    # 7. ZoneSetpoint (2309): 3B
+    p_2309 = ZoneSetpointPayload.from_bytes(bytes.fromhex("0007D0"))
+    assert isinstance(p_2309, ramses_rf.payloads.heating.ZoneSetpoint3BPayload)
+    assert p_2309.zone_idx == 0
+    assert p_2309.setpoint_temp == 20.0
+    assert payload_to_dict(p_2309) == {"zone_idx": 0, "setpoint_temp": 20.0}
+
+    # 8. ZoneMode (2349): 4B, 7B, and 13B
+    p_2349_4b = ZoneModePayload.from_bytes(bytes.fromhex("0007D000"))
+    assert isinstance(p_2349_4b, ramses_rf.payloads.heating.ZoneMode4BPayload)
+    assert p_2349_4b.zone_idx == 0
+    assert p_2349_4b.setpoint_temp == 20.0
+    assert p_2349_4b.mode_code == 0
+    assert payload_to_dict(p_2349_4b) == {
+        "zone_idx": 0,
+        "setpoint_temp": 20.0,
+        "mode_code": 0,
+        "duration_minutes": None,
+        "until_dtm": None,
+    }
+
+    p_2349_7b = ZoneModePayload.from_bytes(bytes.fromhex("0007D00200003C"))
+    assert isinstance(p_2349_7b, ramses_rf.payloads.heating.ZoneMode7BPayload)
+    assert p_2349_7b.duration_minutes == 60
+    assert payload_to_dict(p_2349_7b).get("duration_minutes") == 60
+
+    p_2349_13b = ZoneModePayload.from_bytes(bytes.fromhex("0007D001FFFFFF00110E0507E5"))
+    assert isinstance(p_2349_13b, ramses_rf.payloads.heating.ZoneMode13BPayload)
+    assert p_2349_13b.zone_idx == 0
+    assert p_2349_13b.setpoint_temp == 20.0
+    assert p_2349_13b.until_dtm == "2021-05-14T17:00:00"
+
+    # 9. SystemDateTime (313F): 2B and 9B
+    p_313f_2b = SystemDateTimePayload.from_bytes(bytes.fromhex("0000"))
+    assert isinstance(p_313f_2b, ramses_rf.payloads.system.SystemDateTime2BPayload)
+    assert p_313f_2b.domain_idx == 0
+    assert payload_to_dict(p_313f_2b) == {"domain_idx": 0}
+
+    p_313f_9b = SystemDateTimePayload.from_bytes(bytes.fromhex("00F0BB00040C0507EA"))
+    assert isinstance(p_313f_9b, ramses_rf.payloads.system.SystemDateTime9BPayload)
+    assert p_313f_9b.datetime_str == "2026-05-12T04:00:59"
+    assert p_313f_9b.is_dst is True
+
+    # 10. HeatDemand (3150): 1B and 2B
+    p_3150_1b = HeatDemandPayload.from_bytes(bytes.fromhex("C8"))
+    assert isinstance(p_3150_1b, ramses_rf.payloads.heating.HeatDemand1BPayload)
+    assert p_3150_1b.demand_percent == 200
+
+    p_3150_2b = HeatDemandPayload.from_bytes(bytes.fromhex("01CA"))
+    assert isinstance(p_3150_2b, ramses_rf.payloads.heating.HeatDemand2BPayload)
+    assert p_3150_2b.domain_or_zone_idx == 1
+    assert p_3150_2b.demand_percent == 202

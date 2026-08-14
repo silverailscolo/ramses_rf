@@ -507,40 +507,21 @@ Co2Payload.VARIANTS = (
 
 
 @register_payload("12A0")
-@dataclass(frozen=True, slots=True)
 class RelativeHumidityPayload(PayloadBase):
-    """Relative humidity payload (Opcode 12A0).
+    """Master payload dispatcher for relative humidity (Opcode 12A0)."""
 
-    Multi-element 12A0 arrays (Ventura V1x, Orcon, etc.) contain indoor (00),
-    supply (01), and outdoor (02) sensor readings. See ramses_cc#742.
-
-    1-2 byte Relative Humidity binary layout:
-      Offset  Format  Len  Description                    Sample Hex
-      --------------------------------------------------------------
-      +0       B      1B   Humidity percentage (uint8)  : 64 (50.0%)
-      --------------------------------------------------------------
-      Field-spaced hex : 64
-      Payload hex      : 64
-
-    :param humidity_percent: Relative humidity value (0.0 - 100.0%).
-    :type humidity_percent: float
-    """
-
-    _STRUCT_FMT_1B: ClassVar[str] = ">B"
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
     humidity_percent: float | None
-    _hvac_idx: str | None = None
-    _temperature: float | None = None
-    _dewpoint_temp: float | None = None
 
     @property
     def humidity(self) -> float | None:
-        """Alias for humidity_percent for backward compatibility.
+        """Alias for humidity_percent.
 
         :returns: Humidity percentage or None.
         :rtype: float | None
         """
-        return self.humidity_percent
+        return getattr(self, "humidity_percent", None)
 
     @property
     def hvac_idx(self) -> str | None:
@@ -549,7 +530,7 @@ class RelativeHumidityPayload(PayloadBase):
         :returns: HVAC index or None.
         :rtype: str | None
         """
-        return self._hvac_idx
+        return getattr(self, "_hvac_idx", None)
 
     @property
     def temperature(self) -> float | None:
@@ -558,7 +539,7 @@ class RelativeHumidityPayload(PayloadBase):
         :returns: Temperature or None.
         :rtype: float | None
         """
-        return self._temperature
+        return getattr(self, "_temperature", None)
 
     @property
     def dewpoint_temp(self) -> float | None:
@@ -567,38 +548,206 @@ class RelativeHumidityPayload(PayloadBase):
         :returns: Dewpoint temperature or None.
         :rtype: float | None
         """
-        return self._dewpoint_temp
+        return getattr(self, "_dewpoint_temp", None)
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> Self | list[Self]:
-        """Unpack relative humidity binary payload.
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "RelativeHumidityPayload | list[RelativeHumidityPayload]":
+        """Unpack relative humidity payload, dispatching by length."""
+        if not raw_data:
+            raise ValueError("Payload data cannot be empty")
+        if len(raw_data) > 7 and len(raw_data) % 7 == 0:
+            return [
+                RelativeHumidity6BPayload.from_bytes(raw_data[i : i + 7], is_array=True)
+                for i in range(0, len(raw_data), 7)
+            ]
+        if len(raw_data) >= 6:
+            return RelativeHumidity6BPayload.from_bytes(raw_data, is_array=False)
+        if len(raw_data) >= 2:
+            return RelativeHumidity2BPayload.from_bytes(raw_data)
+        return RelativeHumidity1BPayload.from_bytes(raw_data)
+
+    def to_bytes(self) -> bytes:
+        """Pack payload base default method.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to
+            variant sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
+
+
+@dataclass(frozen=True, slots=True)
+class RelativeHumidity1BPayload(RelativeHumidityPayload):
+    """1-byte relative humidity payload (Opcode 12A0).
+
+    1-byte Relative Humidity binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Humidity percentage (uint8)  : 64 (50.0%)
+      --------------------------------------------------------------
+      Field-spaced hex : 64
+      Payload hex      : 64
+
+    :param humidity_percent: Relative humidity value (0.0 - 100.0%).
+    :type humidity_percent: float | None
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">B"
+
+    humidity_percent: float | None
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack 1-byte relative humidity binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked RelativeHumidityPayload instance or list of instances.
-        :rtype: Self | list[Self]
-        :raises ValueError: If raw_data is empty.
+        :returns: Unpacked RelativeHumidity1BPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 1 byte.
         """
-        if not raw_data:
-            raise ValueError("Payload data cannot be empty")
-
-        if len(raw_data) > 7 and len(raw_data) % 7 == 0:
-            return [
-                cls._from_7b_bytes(raw_data[i : i + 7], is_array=True)
-                for i in range(0, len(raw_data), 7)
-            ]
-
-        if len(raw_data) >= 6:
-            return cls._from_7b_bytes(raw_data, is_array=False)
-
-        offset = 1 if len(raw_data) >= 2 and raw_data[0] == 0 else 0
-        raw_val = raw_data[offset]
-        scale = 100.0 if len(raw_data) >= 2 else 2.0
-        hum = None if raw_val in (0x00, 0xEF, 0xFF) else raw_val / scale
+        if len(raw_data) < 1:
+            raise ValueError(
+                f"Invalid payload length for RelativeHumidity1BPayload: {len(raw_data)}"
+            )
+        raw_val = raw_data[0]
+        hum = None if raw_val in (0x00, 0xEF, 0xFF) else raw_val / 2.0
         return cls(humidity_percent=hum)
 
+    def to_bytes(self) -> bytes:
+        """Pack 1-byte relative humidity binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        if self.humidity_percent is None:
+            return struct.pack(self._STRUCT_FMT, 0x00)
+        raw_val = int(round(self.humidity_percent * 2.0))
+        return struct.pack(self._STRUCT_FMT, raw_val)
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert 1-byte humidity payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded humidity dictionary.
+        :rtype: dict[str, Any]
+        """
+        return {SZ_INDOOR_HUMIDITY: self.humidity_percent}
+
+
+@dataclass(frozen=True, slots=True)
+class RelativeHumidity2BPayload(RelativeHumidityPayload):
+    """2-byte relative humidity payload (Opcode 12A0).
+
+    2-byte Relative Humidity binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Header / Index               : 00
+      +1       B      1B   Humidity percentage (uint8)  : 32 (50.0%)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 32
+      Payload hex      : 0032
+
+    :param humidity_percent: Relative humidity value (0.0 - 100.0%).
+    :type humidity_percent: float | None
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BB"
+
+    humidity_percent: float | None
+
     @classmethod
-    def _from_7b_bytes(cls, raw_data: bytes, is_array: bool) -> Self:
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack 2-byte relative humidity binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked RelativeHumidity2BPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 2 bytes.
+        """
+        if len(raw_data) < 2:
+            raise ValueError(
+                f"Invalid payload length for RelativeHumidity2BPayload: {len(raw_data)}"
+            )
+        _hdr, raw_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        hum = None if raw_val in (0x00, 0xEF, 0xFF) else raw_val / 100.0
+        return cls(humidity_percent=hum)
+
+    def to_bytes(self) -> bytes:
+        """Pack 2-byte relative humidity binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        if self.humidity_percent is None:
+            return struct.pack(self._STRUCT_FMT, 0x00, 0x00)
+        raw_val = int(round(self.humidity_percent * 100.0))
+        return struct.pack(self._STRUCT_FMT, 0x00, raw_val)
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert 2-byte humidity payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded humidity dictionary.
+        :rtype: dict[str, Any]
+        """
+        return {SZ_INDOOR_HUMIDITY: self.humidity_percent}
+
+
+@dataclass(frozen=True, slots=True)
+class RelativeHumidity6BPayload(RelativeHumidityPayload):
+    """Multi-sensor relative humidity payload (Opcode 12A0).
+
+    Multi-sensor Relative Humidity binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Sensor / HVAC Index (uint8)  : 00
+      +1       B      1B   Humidity percentage (uint8)  : 32 (50.0%)
+      +2       h      2B   Temperature (int16*100)      : 08 34 (21.00°C)
+      +4       h      2B   Dewpoint Temp (int16*100)    : 04 B0 (12.00°C)
+      --------------------------------------------------------------
+      Field-spaced hex : 00 32 0834 04B0
+      Payload hex      : 0032083404B0
+
+    :param humidity_percent: Relative humidity value (0.0 - 100.0%).
+    :type humidity_percent: float | None
+    :param _hvac_idx: HVAC index string.
+    :type _hvac_idx: str | None
+    :param _temperature: Temperature reading in °C.
+    :type _temperature: float | None
+    :param _dewpoint_temp: Dewpoint temperature in °C.
+    :type _dewpoint_temp: float | None
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BBhh"
+
+    humidity_percent: float | None
+    _hvac_idx: str | None = None
+    _temperature: float | None = None
+    _dewpoint_temp: float | None = None
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes, is_array: bool = False) -> Self:
+        """Unpack multi-sensor relative humidity binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :param is_array: True if element from multi-sensor array.
+        :type is_array: bool
+        :returns: Unpacked RelativeHumidity6BPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 6 bytes.
+        """
+        if len(raw_data) < 6:
+            raise ValueError(
+                f"Invalid payload length for RelativeHumidity6BPayload: {len(raw_data)}"
+            )
         idx = f"{raw_data[0]:02X}" if is_array else None
         offset = (
             1 if (idx is not None or (raw_data[0] == 0 and len(raw_data) >= 6)) else 0
@@ -610,22 +759,38 @@ class RelativeHumidityPayload(PayloadBase):
         (dew_raw,) = struct.unpack_from(">h", raw_data, offset + 3)
         dew = None if dew_raw in (0x7FFF, 0x31FF) else dew_raw / 100.0
         return cls(
-            humidity_percent=hum, _hvac_idx=idx, _temperature=temp, _dewpoint_temp=dew
+            humidity_percent=hum,
+            _hvac_idx=idx,
+            _temperature=temp,
+            _dewpoint_temp=dew,
         )
 
     def to_bytes(self) -> bytes:
-        """Pack relative humidity data into binary payload.
+        """Pack multi-sensor relative humidity data into binary payload.
 
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        if self.humidity_percent is None:
-            return struct.pack(self._STRUCT_FMT_1B, 0x00)
-        raw_val = int(round(self.humidity_percent * 2.0))
-        return struct.pack(self._STRUCT_FMT_1B, raw_val)
+        hum_raw = (
+            0
+            if self.humidity_percent is None
+            else int(round(self.humidity_percent * 100.0))
+        )
+        temp_raw = (
+            0x7FFF
+            if self._temperature is None
+            else int(round(self._temperature * 100.0))
+        )
+        dew_raw = (
+            0x7FFF
+            if self._dewpoint_temp is None
+            else int(round(self._dewpoint_temp * 100.0))
+        )
+        idx_raw = int(self._hvac_idx, 16) if self._hvac_idx is not None else 0
+        return struct.pack(self._STRUCT_FMT, idx_raw, hum_raw, temp_raw, dew_raw)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert humidity payload to legacy dictionary format.
+        """Convert multi-sensor humidity payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
@@ -637,21 +802,27 @@ class RelativeHumidityPayload(PayloadBase):
             res["hvac_idx"] = self.hvac_idx
             if self.hvac_idx == "00":
                 res[SZ_INDOOR_HUMIDITY] = self.humidity
+                res[SZ_TEMPERATURE] = self.temperature
+                res[SZ_DEWPOINT_TEMP] = self.dewpoint_temp
             elif self.hvac_idx == "02":
                 res[SZ_OUTDOOR_HUMIDITY] = self.humidity
+                res[SZ_TEMPERATURE] = self.temperature
+                res[SZ_DEWPOINT_TEMP] = self.dewpoint_temp
             else:
                 res["rel_humidity"] = self.humidity
         else:
             res[SZ_INDOOR_HUMIDITY] = self.humidity
-
-        if (
-            self.temperature is not None
-            or self.dewpoint_temp is not None
-            or len(getattr(self, "_raw", b"")) >= 6
-        ):
             res[SZ_TEMPERATURE] = self.temperature
             res[SZ_DEWPOINT_TEMP] = self.dewpoint_temp
         return res
+
+
+# Update VARIANTS property after variants are defined
+RelativeHumidityPayload.VARIANTS = (
+    RelativeHumidity1BPayload,
+    RelativeHumidity2BPayload,
+    RelativeHumidity6BPayload,
+)
 
 
 # ----------------------------------------------------------------------
@@ -1062,15 +1233,41 @@ class HvacProgrammeEnabledPayload(PayloadBase):
 
 
 @register_payload("22E0")
-# ----------------------------------------------------------------------
-
 @register_payload("22E5")
-# ----------------------------------------------------------------------
-
 @register_payload("22E9")
-@dataclass(frozen=True, slots=True)
 class HvacVentilationStatusPayload(PayloadBase):
-    """HVAC ventilation status payload (Opcode 22E0, 22E5, 22E9).
+    """Master payload dispatcher for HVAC ventilation status (Opcode 22E0, 22E5, 22E9)."""
+
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
+
+    flow_mode: int
+    status_flags: int
+
+    @classmethod
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "HvacVentilationStatus2BPayload | HvacVentilationStatus4BPayload":
+        """Unpack ventilation status payload, dispatching by length."""
+        if len(raw_data) >= 4:
+            return HvacVentilationStatus4BPayload.from_bytes(raw_data)
+        if len(raw_data) >= 2:
+            return HvacVentilationStatus2BPayload.from_bytes(raw_data)
+        raise ValueError(f"Invalid payload length: {len(raw_data)}")
+
+    def to_bytes(self) -> bytes:
+        """Pack payload base default method.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to
+            variant sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
+
+
+@dataclass(frozen=True, slots=True)
+class HvacVentilationStatus2BPayload(HvacVentilationStatusPayload):
+    """2-byte HVAC ventilation status payload (Opcode 22E0, 22E5, 22E9).
 
     2-byte Ventilation Status binary layout:
       Offset  Format  Len  Description                    Sample Hex
@@ -1085,83 +1282,148 @@ class HvacVentilationStatusPayload(PayloadBase):
     :type flow_mode: int
     :param status_flags: Status flags byte.
     :type status_flags: int
-
-    Sample Packet Logs:
-    # RP --- 32:155617 18:005904 --:------ 22E0 004 00-34-A0-1E
-    # RP --- 32:153258 18:005904 --:------ 22E0 004 00-64-A0-1E
-    # RP --- 32:153258 18:005904 --:------ 22E5 004 00-96-C8-14
-    # RP --- 32:155617 18:005904 --:------ 22E5 004 00-72-C8-14
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BB"
 
     flow_mode: int
     status_flags: int
-    _percent_2: float | None = None
-    _percent_4: float | None = None
-    _percent_6: float | None = None
-    _raw_bytes: bytes | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack ventilation status binary payload.
+        """Unpack 2-byte ventilation status binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked HvacVentilationStatusPayload instance.
+        :returns: Unpacked HvacVentilationStatus2BPayload instance.
         :rtype: Self
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length: {len(raw_data)}")
-        if len(raw_data) >= 4:
-            hdr, r2, r4, r6 = struct.unpack_from(">BBBB", raw_data, 0)
-            return cls(
-                flow_mode=hdr,
-                status_flags=r2,
-                _percent_2=round(r2 / 200.0, 2),
-                _percent_4=round(r4 / 200.0, 2),
-                _percent_6=round(r6 / 200.0, 2),
-                _raw_bytes=raw_data,
+            raise ValueError(
+                f"Invalid payload length for HvacVentilationStatus2BPayload: {len(raw_data)}"
             )
         f_mode, s_flags = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(
-            flow_mode=f_mode,
-            status_flags=s_flags,
-            _raw_bytes=raw_data if len(raw_data) > 2 else None,
-        )
+        return cls(flow_mode=f_mode, status_flags=s_flags)
 
     def to_bytes(self) -> bytes:
-        """Pack ventilation status data into binary payload.
+        """Pack 2-byte ventilation status data into binary payload.
 
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        if self._raw_bytes is not None:
-            return self._raw_bytes
         return struct.pack(self._STRUCT_FMT, self.flow_mode, self.status_flags)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert ventilation status payload to legacy dictionary layout.
+        """Convert 2-byte ventilation status payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
         :returns: Decoded ventilation status dictionary.
         :rtype: dict[str, Any]
         """
-        if self._raw_bytes is not None and len(self._raw_bytes) >= 4:
-            hdr, r2, r4, r6 = struct.unpack_from(">BBBB", self._raw_bytes, 0)
-            if r2 == 1:
-                return {"unknown_4": f"{r4:02X}", "unknown_6": f"{r6:02X}"}
-            return {
-                "percent_2": round(r2 / 200.0, 2),
-                "percent_4": round(r4 / 200.0, 2),
-                "percent_6": round(r6 / 200.0, 2),
-            }
         return {
             "flow_mode": self.flow_mode,
             "status_flags": self.status_flags,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class HvacVentilationStatus4BPayload(HvacVentilationStatusPayload):
+    """4-byte HVAC ventilation status payload (Opcode 22E0, 22E5, 22E9).
+
+    4-byte Ventilation Status binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Flow Mode Header             : 00
+      +1       B      1B   Raw byte 2 (uint8)           : 34
+      +2       B      1B   Raw byte 4 (uint8)           : A0
+      +3       B      1B   Raw byte 6 (uint8)           : 1E
+      --------------------------------------------------------------
+      Field-spaced hex : 00 34 A0 1E
+      Payload hex      : 0034A01E
+
+    :param flow_mode: Current ventilation flow mode byte.
+    :type flow_mode: int
+    :param status_flags: Status flags byte (raw byte 2).
+    :type status_flags: int
+    :param percent_2: Normalized percentage from byte 2.
+    :type percent_2: float | None
+    :param percent_4: Normalized percentage from byte 4.
+    :type percent_4: float | None
+    :param percent_6: Normalized percentage from byte 6.
+    :type percent_6: float | None
+    :param raw_bytes: Complete raw payload bytes.
+    :type raw_bytes: bytes
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BBBB"
+
+    flow_mode: int
+    status_flags: int
+    percent_2: float | None = None
+    percent_4: float | None = None
+    percent_6: float | None = None
+    raw_bytes: bytes = b""
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack 4-byte ventilation status binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked HvacVentilationStatus4BPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is less than 4 bytes.
+        """
+        if len(raw_data) < 4:
+            raise ValueError(
+                f"Invalid payload length for HvacVentilationStatus4BPayload: {len(raw_data)}"
+            )
+        hdr, r2, r4, r6 = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(
+            flow_mode=hdr,
+            status_flags=r2,
+            percent_2=round(r2 / 200.0, 2),
+            percent_4=round(r4 / 200.0, 2),
+            percent_6=round(r6 / 200.0, 2),
+            raw_bytes=raw_data,
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack 4-byte ventilation status data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        if self.raw_bytes:
+            return self.raw_bytes
+        return struct.pack(self._STRUCT_FMT, self.flow_mode, self.status_flags, 0, 0)
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert 4-byte ventilation status payload to legacy dictionary layout.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded ventilation status dictionary.
+        :rtype: dict[str, Any]
+        """
+        if self.status_flags == 1:
+            r4 = self.raw_bytes[2] if len(self.raw_bytes) > 2 else 0
+            r6 = self.raw_bytes[3] if len(self.raw_bytes) > 3 else 0
+            return {"unknown_4": f"{r4:02X}", "unknown_6": f"{r6:02X}"}
+        return {
+            "percent_2": self.percent_2,
+            "percent_4": self.percent_4,
+            "percent_6": self.percent_6,
+        }
+
+
+# Update VARIANTS property after variants are defined
+HvacVentilationStatusPayload.VARIANTS = (
+    HvacVentilationStatus2BPayload,
+    HvacVentilationStatus4BPayload,
+)
 
 
 # ----------------------------------------------------------------------
@@ -3473,10 +3735,10 @@ class CoolingStatePayload(PayloadBase):
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
       +0       B      1B   Domain / Zone Index (uint8)  : 00
-      +1       B      1B   Cooling Active (0=No, 1=Yes) : 01
+      +1       B      1B   Cooling Active (0=No, C8=Yes): C8
       --------------------------------------------------------------
-      Field-spaced hex : 00 01
-      Payload hex      : 0001
+      Field-spaced hex : 00 C8
+      Payload hex      : 00C8
 
     :param domain_or_zone_idx: Domain or zone index byte.
     :type domain_or_zone_idx: int

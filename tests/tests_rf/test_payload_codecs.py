@@ -147,13 +147,82 @@ def test_payload_dataclass_truncated_bytes_rejection(
     assert sample_hex is not None
     raw_bytes = bytes.fromhex(sample_hex)
 
-    # If payload requires fixed byte length > 0, test truncated byte rejection
     if len(raw_bytes) == 0:
         pytest.skip("0-byte payload")
 
-    # Act & Assert
+    # Act & Assert 1: Rejection of empty byte string
     try:
         instance = target_cls.from_bytes(b"")
         assert isinstance(instance, (target_cls, list, base_mod.PayloadBase))
     except ValueError:
         pass  # Expected rejection for strict fixed-length payloads
+
+    # Act & Assert 2: Rejection of 1-byte truncated byte string
+    if len(raw_bytes) > 1:
+        truncated_bytes = raw_bytes[:-1]
+        try:
+            instance = target_cls.from_bytes(truncated_bytes)
+            assert isinstance(instance, (target_cls, list, base_mod.PayloadBase))
+        except ValueError:
+            pass  # Expected rejection for fixed-length struct payloads
+
+
+# Build list of polymorphic Master Dispatchers and their variant classes
+DISPATCHER_TARGETS: list[
+    tuple[str, type[base_mod.PayloadBase], type[base_mod.PayloadBase]]
+] = []
+
+for opcode, master_cls in sorted(PAYLOAD_REGISTRY._registry.items()):
+    variants = getattr(master_cls, "VARIANTS", ())
+    if variants:
+        for v in variants:
+            DISPATCHER_TARGETS.append((opcode, master_cls, v))
+
+
+@pytest.mark.parametrize("opcode, master_cls, variant_cls", DISPATCHER_TARGETS)
+def test_master_dispatcher_dynamic_dispatch(
+    opcode: str,
+    master_cls: type[base_mod.PayloadBase],
+    variant_cls: type[base_mod.PayloadBase],
+) -> None:
+    """Verify Master Dispatcher dynamically constructs the correct variant sub-dataclass."""
+    # Arrange
+    sample_hex = _extract_sample_hex(variant_cls)
+    assert sample_hex is not None, (
+        f"Missing sample hex for variant {variant_cls.__name__} (Opcode {opcode})"
+    )
+    raw_bytes = bytes.fromhex(sample_hex)
+
+    # Act
+    decoded = master_cls.from_bytes(raw_bytes)
+    item = decoded[0] if isinstance(decoded, list) else decoded
+
+    # Assert
+    assert isinstance(item, variant_cls), (
+        f"Master Dispatcher '{master_cls.__name__}' for Opcode {opcode} failed to "
+        f"dispatch to variant '{variant_cls.__name__}' on input hex '{sample_hex}'! "
+        f"Got instance of '{type(item).__name__}'."
+    )
+    assert isinstance(item, master_cls), (
+        f"Variant instance '{type(item).__name__}' is not an instance of "
+        f"Master Dispatcher '{master_cls.__name__}'!"
+    )
+
+
+@pytest.mark.parametrize("opcode, target_cls", DISCOVERED_PAYLOAD_TARGETS)
+def test_payload_dataclass_hex_representation(
+    opcode: str, target_cls: type[base_mod.PayloadBase]
+) -> None:
+    """Verify payload dataclass serialization to uppercase hex strings."""
+    # Arrange
+    sample_hex = _extract_sample_hex(target_cls)
+    assert sample_hex is not None
+    raw_bytes = bytes.fromhex(sample_hex)
+
+    # Act
+    decoded = target_cls.from_bytes(raw_bytes)
+    item = decoded[0] if isinstance(decoded, list) else decoded
+    encoded_hex = item.to_bytes().hex().upper()
+
+    # Assert
+    assert encoded_hex == sample_hex.upper()

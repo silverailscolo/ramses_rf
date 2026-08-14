@@ -5,7 +5,6 @@ Domestic Hot Water packet payloads.
 """
 
 import struct
-from abc import ABC
 from dataclasses import dataclass
 from typing import Any, ClassVar, Self
 
@@ -43,8 +42,13 @@ class DhwTempPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    dhw_idx: int
-    temperature: float | None
+    dhw_idx: int | str = 0
+    temperature: float | None = None
+
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.dhw_idx, str):
+            object.__setattr__(self, "dhw_idx", parse_idx(self.dhw_idx))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -68,11 +72,12 @@ class DhwTempPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
+        idx = parse_idx(self.dhw_idx)
         if self.temperature is None:
             temp_raw = 0x7FFF
         else:
             temp_raw = int(round(self.temperature * 100.0))
-        return struct.pack(self._STRUCT_FMT, self.dhw_idx, temp_raw)
+        return struct.pack(self._STRUCT_FMT, idx, temp_raw)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert DHW temperature payload to legacy dictionary layout.
@@ -211,12 +216,8 @@ class DhwConfigPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-class DhwParamsBasePayload(PayloadBase, ABC):
-    """Abstract base class for DHW parameters (Opcode 10A0)."""
-
-
 @register_payload("10A0")
-class DhwParamsPayload(DhwParamsBasePayload):
+class DhwParamsPayload(PayloadBase):
     """Master payload dispatcher for DHW parameters (Opcode 10A0).
 
     Dispatches DHW parameters binary payloads to 3-byte or 6-byte
@@ -248,6 +249,11 @@ class DhwParamsPayload(DhwParamsBasePayload):
     """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
+
+    dhw_idx: int | str
+    setpoint: float | None
+    overrun: int | None = None
+    differential: float | None = None
 
     def __new__(
         cls,
@@ -288,7 +294,7 @@ class DhwParamsPayload(DhwParamsBasePayload):
 
 
 @dataclass(frozen=True, slots=True)
-class DhwParams3BPayload(DhwParamsBasePayload):
+class DhwParams3BPayload(DhwParamsPayload):
     """DHW 3-byte parameters payload (Opcode 10A0).
 
     3-byte DHW Parameters binary layout:
@@ -304,12 +310,23 @@ class DhwParams3BPayload(DhwParamsBasePayload):
     :type dhw_idx: int
     :param setpoint: Target setpoint temperature in °C, or None.
     :type setpoint: float | None
+    :param overrun: Overrun minutes (None for 3B payload).
+    :type overrun: int | None
+    :param differential: Differential °C (None for 3B payload).
+    :type differential: float | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    dhw_idx: int
-    setpoint: float | None
+    dhw_idx: int | str = 0
+    setpoint: float | None = None
+    overrun: int | None = None
+    differential: float | None = None
+
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.dhw_idx, str):
+            object.__setattr__(self, "dhw_idx", parse_idx(self.dhw_idx))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -324,8 +341,9 @@ class DhwParams3BPayload(DhwParamsBasePayload):
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte DHW parameters into binary payload."""
+        idx = parse_idx(self.dhw_idx)
         sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
-        return struct.pack(self._STRUCT_FMT, self.dhw_idx, sp_raw)
+        return struct.pack(self._STRUCT_FMT, idx, sp_raw)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert 3-byte DHW parameters payload to legacy dictionary layout."""
@@ -333,7 +351,7 @@ class DhwParams3BPayload(DhwParamsBasePayload):
 
 
 @dataclass(frozen=True, slots=True)
-class DhwParams6BPayload(DhwParamsBasePayload):
+class DhwParams6BPayload(DhwParamsPayload):
     """DHW 6-byte parameters payload (Opcode 10A0).
 
     6-byte DHW Parameters binary layout:
@@ -359,10 +377,15 @@ class DhwParams6BPayload(DhwParamsBasePayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BhBh"
 
-    dhw_idx: int
-    setpoint: float | None
-    overrun: int
-    differential: float
+    dhw_idx: int | str = 0
+    setpoint: float | None = None
+    overrun: int = 0
+    differential: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Normalise index arguments."""
+        if isinstance(self.dhw_idx, str):
+            object.__setattr__(self, "dhw_idx", parse_idx(self.dhw_idx))
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -384,11 +407,10 @@ class DhwParams6BPayload(DhwParamsBasePayload):
 
     def to_bytes(self) -> bytes:
         """Pack 6-byte DHW parameters into binary payload."""
+        idx = parse_idx(self.dhw_idx)
         sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
         diff_raw = int(round(self.differential * 100.0))
-        return struct.pack(
-            self._STRUCT_FMT, self.dhw_idx, sp_raw, self.overrun, diff_raw
-        )
+        return struct.pack(self._STRUCT_FMT, idx, sp_raw, self.overrun, diff_raw)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert 6-byte DHW parameters payload to legacy dictionary layout."""

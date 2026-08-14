@@ -321,3 +321,50 @@ def test_all_discovered_payload_dataclasses_specification_compliance() -> None:
         assert "to_bytes" in target_cls.__dict__ or hasattr(target_cls, "to_bytes"), (
             f"Class '{target_name}' in {target_file} missing to_bytes"
         )
+
+
+def test_master_dispatcher_variant_subclassing_and_decorator_exclusivity() -> None:
+    """Verify polymorphic Master Dispatcher inheritance and @register_payload exclusivity.
+
+    Enforces the PR #1037 / Issue #837 rule:
+    1. Every variant in MasterDispatcher.VARIANTS must inherit directly from MasterDispatcher.
+    2. Variant sub-dataclasses must NEVER carry @register_payload themselves.
+    """
+    for opcode, payload_cls in REGISTERED_PAYLOAD_CLASSES:
+        variants: tuple[type, ...] = getattr(payload_cls, "VARIANTS", ())
+        if not variants:
+            continue
+
+        assert isinstance(variants, tuple), (
+            f"Master Dispatcher '{payload_cls.__name__}' VARIANTS must be a tuple"
+        )
+
+        for variant_cls in variants:
+            v_name = variant_cls.__name__
+
+            # 1. Direct inheritance check
+            assert issubclass(variant_cls, payload_cls), (
+                f"SPECIFICATION VIOLATION: Variant '{v_name}' does not inherit from "
+                f"Master Dispatcher '{payload_cls.__name__}' for Opcode {opcode}!"
+            )
+
+            # 2. Decorator exclusivity check
+            assert variant_cls not in PAYLOAD_REGISTRY._registry.values(), (
+                f"SPECIFICATION VIOLATION: Variant '{v_name}' is decorated with @register_payload! "
+                f"Only the Master Dispatcher '{payload_cls.__name__}' must be decorated."
+            )
+
+
+def test_opcode_registration_coverage_against_known_opcodes() -> None:
+    """Verify that all known opcodes in CODE_NAME_LOOKUP are registered in PAYLOAD_REGISTRY."""
+    from ramses_rf.protocol.ramses import CODE_NAME_LOOKUP
+
+    missing_opcodes = [
+        code.value
+        for code in CODE_NAME_LOOKUP
+        if str(code.value) not in PAYLOAD_REGISTRY._registry
+    ]
+    assert not missing_opcodes, (
+        f"The following opcodes in CODE_NAME_LOOKUP are missing from PAYLOAD_REGISTRY: {missing_opcodes}"
+    )
+    assert len(PAYLOAD_REGISTRY._registry) >= 100
