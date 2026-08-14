@@ -109,9 +109,9 @@ class FaultLogEntry:
         return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
 
     @classmethod
-    def from_pkt(cls, pkt: Packet) -> FaultLogEntry:
+    def from_pkt(cls, packet: Packet) -> FaultLogEntry:
         """Create a fault log entry from a packet's payload."""
-        log_entry = parse_fault_log_entry(pkt.raw_payload)
+        log_entry = parse_fault_log_entry(packet.raw_payload)
         if log_entry is None or "timestamp" not in log_entry:
             raise exc.SystemInconsistent("Null fault log entry")
 
@@ -164,34 +164,34 @@ class FaultLog:  # 0418
         if isinstance(event.state, FaultLogState):
             self.state = event.state
 
-    def _insert_into_map(self, idx: FaultIdxT, dtm: FaultDtmT | None) -> FaultMapT:
+    def _insert_into_map(self, index: FaultIdxT, dtm: FaultDtmT | None) -> FaultMapT:
         """Rebuild the map (as best as possible), given the a log entry."""
         new_map: FaultMapT = OrderedDict()
 
-        # usu. idx == 0, but could be > 0
+        # usu. index == 0, but could be > 0
         new_map |= {
-            k: v for k, v in self._map.items() if k < idx and (dtm is None or v > dtm)
+            k: v for k, v in self._map.items() if k < index and (dtm is None or v > dtm)
         }
 
         if dtm is None:  # there are no subsequent log entries
             return new_map
 
-        new_map |= {idx: dtm}
+        new_map |= {index: dtm}
 
         if not (idxs := [k for k, v in self._map.items() if v < dtm]):
             return new_map
 
-        if (next_idx := min(idxs)) > idx:
+        if (next_idx := min(idxs)) > index:
             diff = 0
-        elif next_idx == idx:
-            diff = 1  # next - idx + 1
+        elif next_idx == index:
+            diff = 1  # next - index + 1
         else:
-            diff = idx + 1  # 1 if self._map.get(idx) else 0
+            diff = index + 1  # 1 if self._map.get(index) else 0
 
         new_map |= {
             k + diff: v  # type: ignore[misc]
             for k, v in self._map.items()
-            if (k >= idx or v < dtm) and k + diff <= self._MAX_LOG_IDX
+            if (k >= index or v < dtm) and k + diff <= self._MAX_LOG_IDX
         }
 
         return new_map
@@ -213,32 +213,32 @@ class FaultLog:  # 0418
             self._is_current = False
 
         if SZ_LOG_IDX in msg.payload:
-            idx = FaultIdxT(int(msg.payload[SZ_LOG_IDX], 16))
+            log_idx = FaultIdxT(int(msg.payload[SZ_LOG_IDX], 16))
         elif msg.payload.get(SZ_LOG_ENTRY) is None:
-            idx = FaultIdxT(0)
+            log_idx = FaultIdxT(0)
         else:
             return  # we can't do anything useful with this message
 
         if msg.payload[SZ_LOG_ENTRY] is None:  # NOTE: Subsequent entries will be empty
-            self._map = self._insert_into_map(idx, None)
+            self._map = self._insert_into_map(log_idx, None)
             self._log = {k: v for k, v in self._log.items() if k in self._map.values()}
             return  # If idx != 0, should we also check from idx = 0?
 
         entry = FaultLogEntry.from_msg(msg)  # if msg.payload[SZ_LOG_ENTRY] else None
         dtm: FaultDtmT = entry.timestamp  # type: ignore[assignment]
 
-        if self._map.get(idx) == dtm:
+        if self._map.get(log_idx) == dtm:
             return  # i.e. No evidence anything has changed
 
         if dtm not in self._log:
             self._log |= {dtm: entry}  # must add entry before _insert_into_map()
-        self._map = self._insert_into_map(idx, dtm)  # updates self._map
+        self._map = self._insert_into_map(log_idx, dtm)  # updates self._map
         self._log = {k: v for k, v in self._log.items() if k in self._map.values()}
 
         # if idx != 0:  # there's other (new/changed) entries above this one?
         #     pass
 
-    def _hack_pkt_idx(self, orig_msg: Message, idx: str) -> Message:
+    def _hack_pkt_idx(self, orig_msg: Message, log_index: str) -> Message:
         """Modify the Message so that it has the expected log index.
 
         If there is no log entry for log_idx=<idx>, then the headers won't match:
@@ -250,22 +250,23 @@ class FaultLog:  # 0418
             orig_msg._dto.raw_payload == "000000B0000000000000000000007FFFFF7000000000"
         )
 
-        if idx == "00":  # no need to hack
+        if log_index == "00":  # no need to hack
             return orig_msg
 
         # Replace payload in an immutable PacketDTO copy rather than mutating raw Packet state
         new_dto = dataclasses.replace(
             orig_msg._dto,
-            raw_payload=f"0000{idx}B0000000000000000000007FFFFF7000000000",
+            raw_payload=f"0000{log_index}B0000000000000000000007FFFFF7000000000",
         )
         msg = Message(new_dto)
-        msg._payload = {SZ_LOG_IDX: idx, SZ_LOG_ENTRY: None}  # PayDictT._0418_NULL
+        msg._payload = {
+            SZ_LOG_IDX: log_index,
+            SZ_LOG_ENTRY: None,
+        }  # PayDictT._0418_NULL
         return msg
 
     async def get_faultlog(
         self,
-        /,
-        *,
         start: int = 0,
         limit: int | None = DEFAULT_GET_LIMIT,
         force_refresh: bool = False,
@@ -285,17 +286,17 @@ class FaultLog:  # 0418
                 return self.faultlog
 
             error_occurred = False
-            for idx in range(start, min(start + limit, self._MAX_LOG_IDX + 1)):
+            for log_idx in range(start, min(start + limit, self._MAX_LOG_IDX + 1)):
                 try:
                     msg = await send_system_intent(
                         self._tcs,
                         Action.GET_FAULTLOG_ENTRY,
-                        data={"log_idx": idx},
+                        data={"log_idx": log_idx},
                         wait_for_reply=True,
                     )
                 except exc.RamsesException as err:
                     _LOGGER.warning(
-                        "Failed to retrieve fault log entry %s: %s", idx, err
+                        "Failed to retrieve fault log entry %s: %s", log_idx, err
                     )
                     error_occurred = True
                     self._is_current = False
@@ -306,7 +307,7 @@ class FaultLog:  # 0418
                     == "000000B0000000000000000000007FFFFF7000000000"
                 ):
                     msg = self._hack_pkt_idx(
-                        msg, f"{idx:02X}"
+                        msg, f"{log_idx:02X}"
                     )  # RPs for null entries have idx==00
                     self._process_msg(msg)  # since pkt via dispatcher aint got idx
                     break
@@ -325,7 +326,7 @@ class FaultLog:  # 0418
         # if self._faultlog:
         #     return self._faultlog
 
-        return {idx: self._log[dtm] for idx, dtm in self._map.items()}
+        return {log_idx: self._log[dtm] for log_idx, dtm in self._map.items()}
 
     @property
     def is_current(self) -> bool:

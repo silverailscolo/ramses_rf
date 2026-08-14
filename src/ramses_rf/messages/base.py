@@ -144,18 +144,18 @@ class Message:
             code=self.code,
             verb=self.verb,
             source_id=self.src.id,
-            context_val=self.context.value,
+            context_value=self.context.value,
         )
 
-    def _format_frame(self, seqn: str | None = None) -> str:
+    def _format_frame(self, sequence_number: str | None = None) -> str:
         """Format the message into a standard ASCII RAMSES RF packet frame.
 
-        :param seqn: Optional sequence number string. Defaults to "---".
-        :type seqn: str | None
+        :param sequence_number: Optional sequence number string. Defaults to "---".
+        :type sequence_number: str | None
         :returns: The formatted ASCII frame string.
         :rtype: str
         """
-        seq_str = seqn if seqn else "---"
+        seq_str = sequence_number if sequence_number else "---"
         dto = self._dto
         return f"{dto.verb} {seq_str} {dto.addr1} {dto.addr2} {dto.addr3} {dto.code} {dto.length} {dto.payload}"
 
@@ -187,29 +187,29 @@ class Message:
         return self._format_frame(getattr(self, "seqn", None))
 
     @classmethod
-    def _from_pkt(cls: type[_MessageT], pkt: Any) -> _MessageT:
+    def _from_pkt(cls: type[_MessageT], packet: Any) -> _MessageT:
         """Create a Message (or subclass) from a legacy Packet.
 
-        :param pkt: The legacy packet object.
-        :type pkt: Any
+        :param packet: The legacy packet object.
+        :type packet: Any
         :return: The generated message.
         :rtype: Message
         """
-        if isinstance(pkt, cls):
-            return pkt
-        msg = getattr(pkt, "_msg", None)
+        if isinstance(packet, cls):
+            return packet
+        msg = getattr(packet, "_msg", None)
         if isinstance(msg, cls):
             return msg
-        return cls(pkt.to_dto())
+        return cls(packet.to_dto())
 
     @classmethod
     def _from_cmd(
-        cls: type[_MessageT], cmd: CommandDTO, dtm: dt | None = None
+        cls: type[_MessageT], command: CommandDTO, dtm: dt | None = None
     ) -> _MessageT:
         """Create a Message (or subclass) from a Command.
 
-        :param cmd: The command.
-        :type cmd: CommandDTO
+        :param command: The command.
+        :type command: CommandDTO
         :param dtm: Datetime overrides.
         :type dtm: dt | None
         :return: The generated message.
@@ -218,8 +218,8 @@ class Message:
         # Temporary shim bridging backwards logic during Phase 2
         from ramses_tx.packet import Packet
 
-        pkt = Packet._from_cmd(cmd, dtm=dtm)
-        return cls(pkt.to_dto())
+        packet = Packet._from_cmd(command, dtm=dtm)
+        return cls(packet.to_dto())
 
     def __str__(self) -> str:
         """Return a human-readable string representation of this object.
@@ -230,23 +230,23 @@ class Message:
 
         def format_context(dto: PacketDTO) -> str:
             """Extract the context string from the packet safely."""
-            val: str = ""
+            context_val: str = ""
             if self._index_value is True:
-                val = "[..]"
+                context_val = "[..]"
             elif self._index_value is False:
-                val = ""
+                context_val = ""
             elif self._index_value is None:
-                val = "??"  # type: ignore[unreachable]
+                context_val = "??"  # type: ignore[unreachable]
             else:
-                val = str(self._index_value)
+                context_val = str(self._index_value)
 
             if (
-                not val
+                not context_val
                 and isinstance(dto.raw_payload, str)
                 and dto.raw_payload[:2] not in ("00", "FF")
             ):
                 return f"({dto.raw_payload[:2]})"
-            return val
+            return context_val
 
         if self._str is not None:
             return self._str
@@ -284,9 +284,9 @@ class Message:
         addr1 = self._addrs[0].id
         addr2 = self._addrs[1].id
         addr3 = self._addrs[2].id
-        seqn = self.seqn if self.seqn else "---"
+        sequence_number = self.seqn if self.seqn else "---"
         return (
-            f"{self.verb} {seqn} {addr1} {addr2} {addr3} "
+            f"{self.verb} {sequence_number} {addr1} {addr2} {addr3} "
             f"{self.code} {self.len:03d} {raw_payload}"
         )
 
@@ -314,16 +314,16 @@ class Message:
             return NotImplemented
         return self.dtm < other.dtm
 
-    def _name(self, addr: Address) -> str:
+    def _name(self, address: Address) -> str:
         """Return a friendly name for an Address, or a Device.
 
-        :param addr: The address to identify.
-        :type addr: Address
+        :param address: The address to identify.
+        :type address: Address
         :return: A friendly name for an Address, or a Device.
         :rtype: str
         """
         # can't do 'CTL:123456' instead of ' 01:123456'
-        return f" {addr.id}"
+        return f" {address.id}"
 
     @property
     def payload(self) -> PayloadT:
@@ -340,16 +340,16 @@ class Message:
             except TypeError:
                 return self._payload.to_dict()
         if isinstance(self._payload, list):
-            res = []
+            result = []
             for item in self._payload:
                 if isinstance(item, PayloadBase):
                     try:
-                        res.append(item.to_dict(msg=self))
+                        result.append(item.to_dict(msg=self))
                     except TypeError:
-                        res.append(item.to_dict())
+                        result.append(item.to_dict())
                 else:
-                    res.append(item)
-            return res
+                    result.append(item)
+            return result
         return self._payload
 
     @property

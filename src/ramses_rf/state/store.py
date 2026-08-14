@@ -47,15 +47,15 @@ _LOGGER = logging.getLogger(__name__)
 def _setup_db_adapters() -> None:
     """Set up the database adapters and converters."""
 
-    def adapt_datetime_iso(val: dt) -> str:
+    def adapt_datetime_iso(value: dt) -> str:
         """Adapt datetime to timezone-naive ISO 8601 string."""
-        return val.isoformat(timespec="microseconds")
+        return value.isoformat(timespec="microseconds")
 
     sqlite3.register_adapter(dt, adapt_datetime_iso)
 
-    def convert_datetime(val: bytes) -> dt:
+    def convert_datetime(value: bytes) -> dt:
         """Convert ISO 8601 string to datetime object."""
-        return dt.fromisoformat(val.decode())
+        return dt.fromisoformat(value.decode())
 
     sqlite3.register_converter("DTM", convert_datetime)
 
@@ -70,16 +70,16 @@ def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
 
     def append_keys(ppl: dict[str, Any]) -> str:
         _ks: str = ""
-        for k, v in ppl.items():
+        for key, value in ppl.items():
             if (
-                k not in _ks and k not in _keys and v is not None
+                key not in _ks and key not in _keys and value is not None
             ):  # ignore keys with None value
-                _ks += k + "|"
+                _ks += key + "|"
         return _ks
 
     if isinstance(parsed_payload, list):
-        for d in parsed_payload:
-            _keys += append_keys(d)
+        for item in parsed_payload:
+            _keys += append_keys(item)
     elif isinstance(parsed_payload, dict):
         _keys += append_keys(parsed_payload)
     return _keys
@@ -300,8 +300,8 @@ class MessageStore(MessageStoreInterface):
             for row in rows:
                 dtm_val = row[0]
                 verb = row[1]
-                src = row[2]
-                dst = row[3]
+                source = row[2]
+                destination = row[3]
                 code = row[4]
                 hdr = row[6]
                 payload_blob = row[8]
@@ -310,7 +310,7 @@ class MessageStore(MessageStoreInterface):
                 frame = (
                     row[9]
                     if len(row) > 9 and row[9]
-                    else f"{verb} --- {src} {dst} --:------ {code} 001 00"
+                    else f"{verb} --- {source} {destination} --:------ {code} 001 00"
                 )
                 dtm_str = DtmStrT(dtm_val.isoformat(timespec="microseconds"))
 
@@ -318,8 +318,8 @@ class MessageStore(MessageStoreInterface):
                 # so we pad with `... ` to satisfy Packet logic.
                 pkt_line = f"... {frame}"
                 try:
-                    pkt = Packet(dtm_val, pkt_line)
-                    msg = Message._from_pkt(pkt)
+                    packet = Packet(dtm_val, pkt_line)
+                    msg = Message._from_pkt(packet)
                     msg._payload = orjson.loads(payload_blob)
 
                     self._message_log[dtm_str] = msg
@@ -425,36 +425,39 @@ class MessageStore(MessageStoreInterface):
         return old
 
     def add_record(
-        self, src: str, code: str = "", verb: str = "", payload: str = "00"
+        self, source: str, code: str = "", verb: str = "", payload: str = "00"
     ) -> None:
         """Add single record with timestamp now() and no payload.
 
-        :param src: Device ID to use as source address.
+        :param source: Device ID to use as source address.
         :param code: Two-byte opcode hex string.
         :param verb: Two-letter verb string.
         :param payload: Payload hex string.
         """
         _now: dt = dt.now()
         dtm = DtmStrT(_now.isoformat(timespec="microseconds"))
-        hdr = f"{code}|{verb}|{src}|{payload}"
+        hdr = f"{code}|{verb}|{source}|{payload}"
 
         if self._worker:
             data = PacketLogEntry(
                 dtm=_now,
                 verb=verb,
-                src=src,
-                dst=src,
+                src=source,
+                dst=source,
                 code=code,
                 ctx=None,
                 hdr=hdr,
                 plk="|",
                 payload_blob=orjson.dumps({"payload": payload}),
-                frame=f"{verb} --- {src} {src} --:------ {code} 001 {payload}",
+                frame=f"{verb} --- {source} {source} --:------ {code} 001 {payload}",
             )
             self._worker.submit_packet(data)
 
         msg: Message = Message._from_pkt(
-            Packet(_now, f"... {verb} --- {src} --:------ {src} {code} 005 0000000000")
+            Packet(
+                _now,
+                f"... {verb} --- {source} --:------ {source} {code} 005 0000000000",
+            )
         )
         self._message_log[dtm] = msg
         self._state_cache[msg.state_header] = msg
@@ -493,8 +496,8 @@ class MessageStore(MessageStoreInterface):
         msg: Message | None = None,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
@@ -505,8 +508,8 @@ class MessageStore(MessageStoreInterface):
             k: v
             for k, v in {
                 "dtm": dtm,
-                "src": src,
-                "dst": dst,
+                "src": source,
+                "dst": destination,
                 "verb": verb,
                 "code": code,
                 "ctx": context,
@@ -526,8 +529,8 @@ class MessageStore(MessageStoreInterface):
             msgs_to_remove = await self.get(
                 msg=msg,
                 dtm=dtm,
-                src=src,
-                dst=dst,
+                source=source,
+                destination=destination,
                 verb=verb,
                 code=code,
                 context=context,
@@ -555,10 +558,10 @@ class MessageStore(MessageStoreInterface):
 
         else:
             if msgs is not None:
-                for m in msgs:
-                    dtm_val = DtmStrT(m.dtm.isoformat(timespec="microseconds"))
+                for message in msgs:
+                    dtm_val = DtmStrT(message.dtm.isoformat(timespec="microseconds"))
                     self._message_log.pop(dtm_val, None)
-                    self._state_cache.pop(m.state_header, None)
+                    self._state_cache.pop(message.state_header, None)
         return msgs
 
     async def get(
@@ -566,8 +569,8 @@ class MessageStore(MessageStoreInterface):
         msg: Message | None = None,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
@@ -578,8 +581,8 @@ class MessageStore(MessageStoreInterface):
             k: v
             for k, v in {
                 "dtm": dtm,
-                "src": src,
-                "dst": dst,
+                "src": source,
+                "dst": destination,
                 "verb": verb,
                 "code": code,
                 "ctx": context,
@@ -605,49 +608,49 @@ class MessageStore(MessageStoreInterface):
             else:
                 kwargs["ctx"] = "False"
 
-        res: list[Message] = []
-        for m in self.log_by_dtm:
+        result: list[Message] = []
+        for message in self.log_by_dtm:
             match = True
-            for k, v in kwargs.items():
-                if k == "dtm" and m.dtm != v:
+            for filter_key, filter_val in kwargs.items():
+                if filter_key == "dtm" and message.dtm != filter_val:
                     match = False
                     break
-                elif k == "verb" and str(m.verb) != v:
+                elif filter_key == "verb" and str(message.verb) != filter_val:
                     match = False
                     break
-                elif k == "src" and m.src.id != v:
+                elif filter_key == "src" and message.src.id != filter_val:
                     match = False
                     break
-                elif k == "dst" and m.dst.id != v:
+                elif filter_key == "dst" and message.dst.id != filter_val:
                     match = False
                     break
-                elif k == "code" and str(m.code) != v:
+                elif filter_key == "code" and str(message.code) != filter_val:
                     match = False
                     break
-                elif k == "hdr":
-                    if isinstance(v, StateHeader):
-                        if m.state_header != v:
+                elif filter_key == "hdr":
+                    if isinstance(filter_val, StateHeader):
+                        if message.state_header != filter_val:
                             match = False
                             break
                     else:
-                        if m.state_header.legacy_hdr != v:
+                        if message.state_header.legacy_hdr != filter_val:
                             match = False
                             break
-                elif k == "ctx":
-                    if m.context.as_string != str(v):
+                elif filter_key == "ctx":
+                    if message.context.as_string != str(filter_val):
                         match = False
                         break
             if match:
-                res.append(m)
+                result.append(message)
 
-        return tuple(res)
+        return tuple(result)
 
     async def contains(
         self,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
@@ -658,8 +661,8 @@ class MessageStore(MessageStoreInterface):
             len(
                 await self.get(
                     dtm=dtm,
-                    src=src,
-                    dst=dst,
+                    source=source,
+                    destination=destination,
                     verb=verb,
                     code=code,
                     context=context,
@@ -675,9 +678,11 @@ class MessageStore(MessageStoreInterface):
         dst_id = parameters[1] if len(parameters) > 1 else None
 
         codes = set()
-        for m in self._state_cache.values():
-            if m.verb == RP and (m.src.id == src_id or m.dst.id == dst_id):
-                codes.add(m.code)
+        for message in self._state_cache.values():
+            if message.verb == RP and (
+                message.src.id == src_id or message.dst.id == dst_id
+            ):
+                codes.add(message.code)
 
         return [Code(str(c)) for c in codes]
 

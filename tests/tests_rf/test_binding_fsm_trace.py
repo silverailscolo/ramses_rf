@@ -48,7 +48,7 @@ async def test_topology_builder_trv_implicit_binding() -> None:
             code="1060",
             verb=" I",
             source_id="04:111111",
-            context_val=None,
+            context_value=None,
         ),
         src=Address("04:111111"),
         dst=Address("--:------"),

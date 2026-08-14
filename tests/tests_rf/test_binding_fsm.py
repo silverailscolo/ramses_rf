@@ -415,7 +415,7 @@ async def _test_flow_20x(
     require_ratify = len(pkt_flow_expected) > _RATIFY
 
     resp_coro = respondent._wait_for_binding_request(
-        accept_codes, idx=idx, require_ratify=require_ratify
+        accept_codes, zone_index=idx, require_ratify=require_ratify
     )
 
     # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
@@ -432,7 +432,7 @@ async def _test_flow_20x(
         ratify_cmd = None
 
     supp_coro = supplicant._initiate_binding_process(
-        offer_codes, confirm_code=confirm_code, ratify_cmd=ratify_cmd
+        offer_codes, confirm_code=confirm_code, ratify_command=ratify_cmd
     )
 
     # Step 2: Wait until flow is completed (or timeout)

@@ -157,7 +157,7 @@ _DHW_OPCODES: Final[frozenset[Code | str]] = frozenset(
 )
 
 
-def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
+def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
     """Resolve the DhwZone that should ingest a DHW opcode (1260/10A0/1F41).
 
     These payloads carry no ``zone_idx``/``domain_id``, so standard target
@@ -173,8 +173,8 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
 
     :param msg: The inbound message.
     :type msg: Message
-    :param src_dev: The source device (DhwSensor or Controller).
-    :type src_dev: Any
+    :param source_device: The source device (DhwSensor or Controller).
+    :type source_device: Any
     :return: The DhwZone to route to, or ``None`` if the message is not
         a DHW opcode or the source is not a DHW sender.
     :rtype: DhwZone | None
@@ -182,10 +182,10 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
     if msg.code not in _DHW_OPCODES:
         return None
 
-    src_type = getattr(src_dev, "type", None) or (
+    src_type = getattr(source_device, "type", None) or (
         msg.src.id[:2] if hasattr(msg.src, "id") and msg.src.id else None
     )
-    src_slug = str(getattr(src_dev, "_SLUG", ""))
+    src_slug = str(getattr(source_device, "_SLUG", ""))
     if msg.code in (Code._1260, "1260"):
         is_dhw_src = src_type in ("07", "01") or src_slug in ("DHW", "CTL")
     else:  # 10A0 / 1F41 are owned by the Controller
@@ -194,11 +194,11 @@ def _get_dhw_zone_from_msg(msg: Message, src_dev: Any) -> DhwZone | None:
     if not is_dhw_src:
         return None
 
-    tcs = getattr(src_dev, "tcs", None) or getattr(src_dev, "_tcs", None)
-    if tcs is None and hasattr(src_dev, "dhw"):
-        tcs = src_dev
-    if tcs is None and hasattr(src_dev, "_gateway"):
-        tcs = getattr(src_dev._gateway, "tcs", None)
+    tcs = getattr(source_device, "tcs", None) or getattr(source_device, "_tcs", None)
+    if tcs is None and hasattr(source_device, "dhw"):
+        tcs = source_device
+    if tcs is None and hasattr(source_device, "_gateway"):
+        tcs = getattr(source_device._gateway, "tcs", None)
     if tcs is None and getattr(msg, "_gateway", None) is not None:
         tcs = getattr(msg._gateway, "tcs", None)
 
@@ -238,9 +238,9 @@ def _resolve_logical_targets(
     tcs = getattr(src_dev, "tcs", None) if src_dev else None
     tcs = tcs or getattr(gateway, "tcs", None)
     if tcs is None and registry:
-        for dev in registry.device_by_id.values():
-            if str(dev.id).startswith("01:"):
-                tcs = getattr(dev, "tcs", None) or dev
+        for candidate_dev in registry.device_by_id.values():
+            if str(candidate_dev.id).startswith("01:"):
+                tcs = getattr(candidate_dev, "tcs", None) or candidate_dev
                 break
 
     # 1. Fault logs strictly target the TCS (if it exists) or the source device
@@ -432,30 +432,34 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     _NULL_HUMIDITY_FIELDS = frozenset({SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY})
 
     updates: dict[str, Any] = {}
-    for f in fields:
-        if f not in p:
+    for field_name in fields:
+        if field_name not in p:
             continue
-        val = p[f]
+        field_val = p[field_name]
         # Filter out null-marker values that 31DA/31D9 snapshots emit for
         # sensors the device does not have.  Without this, every polling cycle
         # (~10 min) overwrites good telemetry from 22F1/12A0/22F7 with null
         # markers, causing sensors to bounce to None/FF/0.  See issue #742.
-        if val is None:
+        if field_val is None:
             continue
         # None = "not implemented" (e.g. EF in bypass_position)
         # Raw hex (e.g. "FF", "04") = non-semantic fan_mode from 31D9
         # long-payload devices; the quirk normalises these to None, but
         # filter here as belt-and-suspenders.  See ramses_cc issue 723.
-        if f == SZ_FAN_MODE and isinstance(val, str) and len(val) == 2:
+        if (
+            field_name == SZ_FAN_MODE
+            and isinstance(field_val, str)
+            and len(field_val) == 2
+        ):
             try:
-                int(val, 16)
+                int(field_val, 16)
                 continue
             except ValueError:
                 pass
         # 0.0 for humidity = "no sensor" (00 parses as 0%, physically impossible)
-        if f in _NULL_HUMIDITY_FIELDS and val == 0:
+        if field_name in _NULL_HUMIDITY_FIELDS and field_val == 0:
             continue
-        updates[f] = val
+        updates[field_name] = field_val
 
     # Handle non-standard names passed by the semantic parsers
     if SZ_REMAINING_DAYS in p and p[SZ_REMAINING_DAYS] is not None:
@@ -707,16 +711,16 @@ def _route_2411_to_fan(gateway: Gateway, msg: Message) -> None:
         if dst_dev is not None and dst_dev not in candidates:
             candidates.append(dst_dev)
 
-    for dev in candidates:
-        if not isinstance(dev, HvacVentilator):
+    for candidate_dev in candidates:
+        if not isinstance(candidate_dev, HvacVentilator):
             continue
         try:
-            dev._handle_2411_message(msg)
-            dev._handle_initialized_callback()
+            candidate_dev._handle_2411_message(msg)
+            candidate_dev._handle_initialized_callback()
         except (exc.RamsesException, AttributeError, TypeError, ValueError) as err:
             _LOGGER.error(
                 "Failed to route 2411 message to ventilator %s: %s",
-                dev.id,
+                candidate_dev.id,
                 err,
             )
 
@@ -752,18 +756,21 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
     """
     # Notify candidate devices of _last_msg_dtm and all binding devices of rcvd_msg
     if registry := getattr(gateway, "device_registry", None):
-        for dev in list(registry.device_by_id.values()):
-            if dev.id in (getattr(msg.src, "id", None), getattr(msg.dst, "id", None)):
-                if hasattr(dev, "_last_msg_dtm"):
-                    dev._last_msg_dtm = msg.dtm
+        for device in list(registry.device_by_id.values()):
+            if device.id in (
+                getattr(msg.src, "id", None),
+                getattr(msg.dst, "id", None),
+            ):
+                if hasattr(device, "_last_msg_dtm"):
+                    device._last_msg_dtm = msg.dtm
                 # Fire the initialized callback on the first message from/to
                 # a FAN device.  Phase 2.95 removed the _handle_msg override
                 # that used to do this; without it, ramses_cc never sends the
                 # initial 2411 RQs and all parameter entities stay
                 # unavailable.  See ramses_cc issue 851.
-                if isinstance(dev, HvacVentilator):
-                    dev._handle_initialized_callback()
-            if (bm := getattr(dev, "_binding_manager", None)) and getattr(
+                if isinstance(device, HvacVentilator):
+                    device._handle_initialized_callback()
+            if (bm := getattr(device, "_binding_manager", None)) and getattr(
                 bm, "is_binding", False
             ):
                 bm.rcvd_msg(msg)
@@ -781,23 +788,23 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
     raw_payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
     payloads = [p.to_dict() if hasattr(p, "to_dict") else p for p in raw_payloads]
     with contextlib.suppress(exc.DeviceNotFoundError, exc.SchemaInconsistentError):
-        for p in payloads:
-            if isinstance(p, dict):
-                await update_topology_schema_state(gateway, p, msg)
+        for payload in payloads:
+            if isinstance(payload, dict):
+                await update_topology_schema_state(gateway, payload, msg)
 
     # Legacy Parity: Request packets (RQ) do not contain state update telemetry.
     if getattr(msg, "verb", "") == "RQ":
         return
 
-    for p in payloads:
-        if not isinstance(p, dict):
+    for payload in payloads:
+        if not isinstance(payload, dict):
             continue
-        targets = _resolve_logical_targets(gateway, msg, p)
+        targets = _resolve_logical_targets(gateway, msg, payload)
         for target in targets:
-            _update_system_state(target, p, msg)
-            _update_hvac_state(target, p, msg)
-            _update_dhw_state(target, p, msg)
-            _update_temperature_state(target, p, msg)
-            _update_demand_state(target, p, msg)
-            _update_faultlog_state(target, p, msg)
-            _update_schedule_state(target, p, msg)
+            _update_system_state(target, payload, msg)
+            _update_hvac_state(target, payload, msg)
+            _update_dhw_state(target, payload, msg)
+            _update_temperature_state(target, payload, msg)
+            _update_demand_state(target, payload, msg)
+            _update_faultlog_state(target, payload, msg)
+            _update_schedule_state(target, payload, msg)

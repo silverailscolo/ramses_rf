@@ -129,8 +129,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
     # TODO: should be a private method
     def get_circuit(
-        self, cct_idx: str, *, msg: Message | None = None, **schema: Any
-    ) -> Any:
+        self, circuit_index: str, *, msg: Message | None = None, **schema: Any
+    ) -> UfhCircuit:
         """Return a UFH circuit, create it if required.
 
         First, use the schema to create/update it, then pass it any msg to handle.
@@ -140,11 +140,11 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         """
         schema = {}  # shrink(SCH_CCT(schema))
 
-        child = self.child_by_id.get(cct_idx)
+        child = self.child_by_id.get(circuit_index)
         cct = child if isinstance(child, UfhCircuit) else None
         if not cct:
-            cct = UfhCircuit(self, cct_idx)
-            self.child_by_id[cct_idx] = cct
+            cct = UfhCircuit(self, circuit_index)
+            self.child_by_id[circuit_index] = cct
             self.childs.append(cct)
 
         elif schema:
@@ -203,8 +203,8 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         if state is None:
             return None
 
-        res = state.setpoints
-        return res if isinstance(res, dict) else None
+        result = state.setpoints
+        return result if isinstance(result, dict) else None
 
     async def schema(self) -> dict[str, Any]:
         """Return the device circuit configuration schema."""
@@ -244,18 +244,18 @@ class UfhCircuit(Child, Entity):  # FIXME
     _SLUG: str = "CCT"  # previously None, strict Mypy fix
     _STATE_ATTR: str | None = None
 
-    def __init__(self, ufc: UfhController, ufh_idx: str) -> None:
+    def __init__(self, ufc: UfhController, ufh_index: str) -> None:
         super().__init__(ufc._gateway)
 
         # FIXME: gwy.message_store entities must know their parent device ID
         # and their own idx
         self._z_id = ufc.id
-        self._z_idx = DevIndexT(ufh_idx)
+        self._z_idx = DevIndexT(ufh_index)
 
-        self.id: DeviceIdT = DeviceIdT(f"{ufc.id}_{ufh_idx}")
+        self.id: DeviceIdT = DeviceIdT(f"{ufc.id}_{ufh_index}")
 
         self.ufc: UfhController = ufc
-        self._child_id = ufh_idx
+        self._child_id = ufh_index
 
         # TODO: _ctl should be: .ufc? .ctl?
         self._ctl: Controller | None = None

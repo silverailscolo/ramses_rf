@@ -135,28 +135,30 @@ def hex_id_to_dev_id(device_hex: str) -> DeviceIdT:
 
 
 @lru_cache(maxsize=2048)
-def is_valid_dev_id(value: str, dev_class: None | str = None) -> bool:
+def is_valid_dev_id(value: str, device_class: None | str = None) -> bool:
     """Return True if a device_id is valid."""
     return isinstance(value, str) and DEVICE_ID_REGEX.ANY.match(value) is not None
 
 
 @lru_cache(maxsize=2048)
 def pkt_addrs(
-    addr_fragment: str,
+    address_fragment: str,
 ) -> tuple[Address, Address, Address, Address, Address]:
     """Parse address fields from a 30-character address fragment.
 
-    :param addr_fragment: The 30-char fragment
-    :type addr_fragment: str
+    :param address_fragment: The 30-char fragment
+    :type address_fragment: str
     :return: A tuple of (src_addr, dst_addr, addr_0, addr_1, addr_2)
     :rtype: tuple[Address, Address, Address, Address, Address]
     :raises PacketAddrSetInvalid: If the address fields are not valid.
     """
     try:
-        addrs = tuple(id_to_address(addr_fragment[i : i + 9]) for i in range(0, 30, 10))
+        addrs = tuple(
+            id_to_address(address_fragment[i : i + 9]) for i in range(0, 30, 10)
+        )
     except ValueError as err:
         raise exc.PacketAddrSetInvalid(
-            f"Invalid address set: {addr_fragment}: {err}"
+            f"Invalid address set: {address_fragment}: {err}"
         ) from None
 
     if not _DBG_DISABLE_STRICT_CHECKING and (
@@ -176,7 +178,7 @@ def pkt_addrs(
             and addrs[1] == NON_DEV_ADDR
         )
     ):
-        raise exc.PacketAddrSetInvalid(f"Invalid address set: {addr_fragment}")
+        raise exc.PacketAddrSetInvalid(f"Invalid address set: {address_fragment}")
 
     device_addrs = list(filter(lambda a: a.type != "--", addrs))  # dex
     src_addr = device_addrs[0]

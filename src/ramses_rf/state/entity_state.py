@@ -22,7 +22,7 @@ from ramses_tx.const import I_, RP, RQ, Code, VerbT
 from ramses_tx.typing import PayDictT
 
 from .. import exceptions as exc
-from ..messages import ApplicationMessage, Message
+from ..messages import Message
 from ..protocol.ramses import CODE_NAME_LOOKUP
 from ..routing import RoutingContext, StateHeader
 
@@ -45,19 +45,19 @@ class StateCache:
 
     def __init__(self) -> None:
         """Initialize the StateCache."""
-        self._cache: dict[StateHeader, ApplicationMessage] = {}
+        self._cache: dict[StateHeader, Message] = {}
 
-    def add(self, msg: ApplicationMessage) -> None:
+    def add(self, msg: Message) -> None:
         """Add a message to the cache natively via its header."""
         self._cache[msg.state_header] = msg
 
-    def get_message(self, header: StateHeader) -> ApplicationMessage | None:
+    def get_message(self, header: StateHeader) -> Message | None:
         """Retrieve a message directly by its StateHeader."""
         return self._cache.get(header)
 
     def get_by_routing_key(
         self, code: Code | str, verb: VerbT | str, context: Any
-    ) -> ApplicationMessage | None:
+    ) -> Message | None:
         """Fallback O(N) lookup when source_id is unknown."""
         context_str = RoutingContext(context).as_string
         for hdr, msg in self._cache.items():
@@ -69,17 +69,17 @@ class StateCache:
                 return msg
         return None
 
-    def get_by_code(self, code: Code | str) -> list[ApplicationMessage]:
+    def get_by_code(self, code: Code | str) -> list[Message]:
         """Retrieve all messages for a specific code."""
         return [msg for hdr, msg in self._cache.items() if hdr.code == code]
 
-    def get_all(self) -> list[ApplicationMessage]:
+    def get_all(self) -> list[Message]:
         """Retrieve all stored messages."""
         return list(self._cache.values())
 
     def get_records(
         self,
-    ) -> list[tuple[Code | str, VerbT | str, Any, ApplicationMessage]]:
+    ) -> list[tuple[Code | str, VerbT | str, Any, Message]]:
         """Retrieve all cache records as tuples of (code, verb, ctx, msg)."""
         return [(h.code, h.verb, h.context.value, m) for h, m in self._cache.items()]
 
@@ -101,7 +101,7 @@ class EntityState:
         self._entity = entity
         self._gateway = gateway
         # Context-Aware O(1) Dictionary natively keyed by StateHeader DTO
-        self._current_state: dict[StateHeader, ApplicationMessage] = {}
+        self._current_state: dict[StateHeader, Message] = {}
         self._log_cursor: int = 0  # Tracks cursor position in global log
 
         # Tracks DB tasks to maintain Message object immutability
@@ -114,8 +114,6 @@ class EntityState:
             return
 
         log_iterable = self._gateway.message_store.log_by_dtm
-        if isinstance(log_iterable, dict):
-            log_iterable = list(log_iterable.values())
 
         current_len = len(log_iterable)
         if current_len == self._log_cursor:
@@ -138,7 +136,7 @@ class EntityState:
 
         self._log_cursor = current_len
 
-    def ingest_message(self, msg: ApplicationMessage) -> None:
+    def ingest_message(self, msg: Message) -> None:
         """SSOT async ingestion queue preparation.
 
         In Phase 3, this will drop the DecodedMessage into an asyncio.Queue.
@@ -146,7 +144,7 @@ class EntityState:
         """
         self.update_state(msg)
 
-    def update_state(self, msg: ApplicationMessage) -> None:
+    def update_state(self, msg: Message) -> None:
         """Push model: Instantly cache relevant messages upon arrival."""
         if not self._is_relevant_msg(msg):
             return
@@ -189,7 +187,7 @@ class EntityState:
         # Context-aware O(1) Overwrite directly keyed by DTO
         self._current_state[msg.state_header] = msg
 
-    def _is_relevant_msg(self, msg: ApplicationMessage) -> bool:
+    def _is_relevant_msg(self, msg: Message) -> bool:
         """Check if a central MessageStore packet is relevant to entity."""
         return bool(
             msg.src.id == self._entity.id[:_ID_SLICE]
@@ -197,7 +195,7 @@ class EntityState:
             or (msg.dst.id == ALL_DEVICE_ID and msg.code == Code._1FC9)
         )
 
-    async def get_all_messages(self) -> list[ApplicationMessage]:
+    async def get_all_messages(self) -> list[Message]:
         """Return a flattened list of all messages logged on this device."""
         cache = await self._build_state_cache()
         return cache.get_all()
@@ -206,7 +204,7 @@ class EntityState:
 
     def _add_record(
         self,
-        dev_id: str,
+        device_id: str,
         code: Code | str | None = None,
         verb: str = " I",
         payload: str = "00",
@@ -214,18 +212,16 @@ class EntityState:
         """Add a (dummy) record to the central SQLite MessageStore."""
         if self._gateway.message_store:
             self._gateway.message_store.add_record(
-                dev_id, code=str(code), verb=verb, payload=payload
+                device_id, code=str(code), verb=verb, payload=payload
             )
 
-    async def _delete_msg(self, msg: ApplicationMessage) -> None:
+    async def _delete_msg(self, msg: Message) -> None:
         """Remove the msg from the central state databases."""
         if self._gateway.message_store:
             await self._gateway.message_store.rem(msg)
         self._pending_deletes.discard(msg.state_header)
 
-    async def _get_msg_by_hdr(
-        self, hdr: HeaderT | StateHeader
-    ) -> ApplicationMessage | None:
+    async def _get_msg_by_hdr(self, hdr: HeaderT | StateHeader) -> Message | None:
         """Return a msg, if any, that matches a given header."""
         if isinstance(hdr, str):
             code_str, verb_str, src_id, *args = hdr.split("|")
@@ -249,8 +245,7 @@ class EntityState:
                     raise exc.DatabaseQueryError(
                         f"Header mismatch: {msgs[0].state_header.legacy_hdr} != {hdr}"
                     )
-                if isinstance(msgs[0], ApplicationMessage):
-                    return msgs[0]
+                return msgs[0]
             return None
 
         cache = await self._build_state_cache()
@@ -275,10 +270,10 @@ class EntityState:
             )
         return msg
 
-    async def get_flag(self, code: Code | str, key: str, idx: int) -> bool | None:
+    async def get_flag(self, code: Code | str, key: str, index: int) -> bool | None:
         """Get the boolean value of a specific flag within a payload."""
         if flags := await self.get_value(code, key=key):
-            return bool(flags[idx])
+            return bool(flags[index])
         return None
 
     _msg_flag = get_flag
@@ -336,13 +331,13 @@ class EntityState:
     @overload
     async def get_value(
         self,
-        code: Code | str | tuple[Code | str, ...] | ApplicationMessage,
+        code: Code | str | tuple[Code | str, ...] | Message,
         *args: Any,
         **kwargs: Any,
     ) -> Any: ...
     async def get_value(
         self,
-        code: Code | str | tuple[Code | str, ...] | ApplicationMessage,
+        code: Code | str | tuple[Code | str, ...] | Message,
         *args: Any,
         **kwargs: Any,
     ) -> Any:
@@ -413,9 +408,9 @@ class EntityState:
 
     def _msg_value_msg(
         self,
-        msg: ApplicationMessage | None,
+        msg: Message | None,
         key: str | None = "*",
-        zone_idx: str | None = None,
+        zone_index: str | None = None,
         domain_id: str | None = None,
     ) -> Any:
         """Get all or a specific key with its values from a Message."""
@@ -443,21 +438,28 @@ class EntityState:
         if msg.code == Code._1FC9:
             return [x[1] for x in payload]
 
-        idx: str | None = None
-        val: str | None = None
+        filter_idx: str | None = None
+        filter_val: str | None = None
 
         if domain_id:
-            idx, val = SZ_DOMAIN_ID, domain_id
-        elif zone_idx:
-            idx, val = SZ_ZONE_IDX, zone_idx
+            filter_idx, filter_val = SZ_DOMAIN_ID, domain_id
+        elif zone_index:
+            filter_idx, filter_val = SZ_ZONE_IDX, zone_index
 
         if isinstance(payload, dict):
             msg_dict = payload
-            if idx and idx != SZ_DOMAIN_ID and msg_dict.get(idx) != val:
+            if (
+                filter_idx
+                and filter_idx != SZ_DOMAIN_ID
+                and msg_dict.get(filter_idx) != filter_val
+            ):
                 return None
-        elif idx:
+        elif filter_idx:
             msg_dict = {
-                k: v for d in payload for k, v in d.items() if d.get(idx) == val
+                k: v
+                for d in payload
+                for k, v in d.items()
+                if d.get(filter_idx) == filter_val
             }
             if not msg_dict:
                 return None
@@ -478,7 +480,7 @@ class EntityState:
 
     async def _msg_dev_qry(self) -> list[Code | str] | None:
         """Retrieve a list of Code keys involving this device."""
-        res: set[Code | str] = set()
+        result: set[Code | str] = set()
         entity_id = self._entity.id
         is_dhw = entity_id[_ID_SLICE:] == "_HW"
         is_zone = len(entity_id) > 9 and not is_dhw
@@ -502,7 +504,7 @@ class EntityState:
                         )
                     )
                 ):
-                    res.add(code)
+                    result.add(code)
             elif is_zone:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
@@ -517,10 +519,10 @@ class EntityState:
                         )
                     )
                 ):
-                    res.add(code)
+                    result.add(code)
             else:
-                res.add(code)
-        return list(res)
+                result.add(code)
+        return list(result)
 
     async def find_latest_code(
         self,
@@ -530,7 +532,7 @@ class EntityState:
     ) -> Code | str | None:
         """Retrieve the most current Code involving this device."""
         latest: dt = dt.min.replace(tzinfo=UTC)
-        res: Code | str | None = None
+        result: Code | str | None = None
 
         entity_id = self._entity.id
         is_dhw = entity_id[_ID_SLICE:] == "_HW"
@@ -608,8 +610,8 @@ class EntityState:
 
             if msg_dtm > latest:
                 latest = msg_dtm
-                res = cd
-        return res
+                result = cd
+        return result
 
     _msg_qry_by_code_key = find_latest_code
 
@@ -618,10 +620,10 @@ class EntityState:
         _LOGGER.warning("Legacy _msg_qry (SQL) called. Returning empty.")
         return []
 
-    async def get_message_log_flat(self) -> dict[Code | str, ApplicationMessage]:
+    async def get_message_log_flat(self) -> dict[Code | str, Message]:
         """Dynamically build flat dict of all I/RP messages logged."""
         self._sync_state()
-        _msg_dict: dict[Code | str, ApplicationMessage] = {}
+        _msg_dict: dict[Code | str, Message] = {}
 
         # Build from _build_state_cache to guarantee strict zone_idx isolation
         cache = await self._build_state_cache()

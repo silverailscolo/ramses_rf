@@ -346,7 +346,7 @@ SCH_RESTORE_CACHE_DICT = {
 #
 # 7/7: Other stuff
 def _get_device(
-    gateway: Gateway, dev_id: DeviceIdT, **kwargs: Any
+    gateway: Gateway, device_id: DeviceIdT, **kwargs: Any
 ) -> Device:  # , **traits
     """Get a device from the gateway.
 
@@ -355,28 +355,28 @@ def _get_device(
     The underlying method is wrapped only to provide a better error message.
     """
 
-    def check_filter_lists(dev_id: DeviceIdT) -> None:
+    def check_filter_lists(device_id: DeviceIdT) -> None:
         """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
         err_msg = None
         if (
             gateway._engine._enforce_known_list
-            and dev_id not in gateway._engine._include
+            and device_id not in gateway._engine._include
         ):
             err_msg = f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"
         # issue ramses_cc #296: if enforce_known_list is turned on, error on any "unknown" dev_id
         # fix: delete from schema?
-        if dev_id in gateway._engine._exclude:
+        if device_id in gateway._engine._exclude:
             err_msg = f"it is in the {SZ_SCHEMA}, but also in the {SZ_BLOCK_LIST}"
 
         if err_msg:
             raise exc.DeviceNotFoundError(
-                f"Can't create {dev_id}: {err_msg} (check the lists and the {SZ_SCHEMA})"
+                f"Can't create {device_id}: {err_msg} (check configuration.yaml)"
             )
 
-    check_filter_lists(dev_id)
+    check_filter_lists(device_id)
 
-    dev: Device = gateway.device_registry.get_device(dev_id, **kwargs)
-    return dev
+    device: Device = gateway.device_registry.get_device(device_id, **kwargs)
+    return device
 
 
 def load_schema(
@@ -422,11 +422,11 @@ def load_schema(
     # create any devices in the known list that are faked, or fake those already created
     for device_id, traits in known_list.items():
         if traits.get(SZ_FAKED):
-            dev = _get_device(gateway, DeviceIdT(device_id))  # , **traits)
-            if not isinstance(dev, Fakeable):
-                raise exc.DeviceNotFaked(f"Device is not fakeable: {dev}")
-            if not dev.is_faked:
-                dev._make_fake()
+            device = _get_device(gateway, DeviceIdT(device_id))  # , **traits)
+            if not isinstance(device, Fakeable):
+                raise exc.DeviceNotFaked(f"Device is not fakeable: {device}")
+            if not device.is_faked:
+                device._make_fake()
 
 
 def load_fan(gateway: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
@@ -448,13 +448,15 @@ def load_fan(gateway: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Dev
     return fan
 
 
-def load_tcs(gateway: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evohome:
+def load_tcs(
+    gateway: Gateway, controller_id: DeviceIdT, schema: dict[str, Any]
+) -> Evohome:
     """Create a TCS using its schema.
 
     :param gateway: The Gateway instance managing the TCS.
     :type gateway: Gateway
-    :param ctl_id: The controller device ID for the TCS.
-    :type ctl_id: DeviceIdT
+    :param controller_id: The controller device ID for the TCS.
+    :type controller_id: DeviceIdT
     :param schema: The schema dictionary for the TCS.
     :type schema: dict[str, Any]
     :returns: The created or retrieved Evohome TCS instance.
@@ -463,16 +465,18 @@ def load_tcs(gateway: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evo
     # print(schema)
     # schema = SCH_TCS_ZONES_ZON(schema)
 
-    ctl = _get_device(gateway, ctl_id)
-    if ctl.tcs is None:
-        raise exc.SchemaInconsistentError(f"No TCS assigned to controller {ctl.id}")
-    ctl.tcs._update_schema(**schema)
+    controller = _get_device(gateway, controller_id)
+    if controller.tcs is None:
+        raise exc.SchemaInconsistentError(
+            f"No TCS assigned to controller {controller.id}"
+        )
+    controller.tcs._update_schema(**schema)
 
     for dev_id in schema.get(SZ_UFH_SYSTEM, {}):  # UFH controllers
-        _get_device(gateway, dev_id, parent=ctl.tcs)  # , **_schema)
+        _get_device(gateway, dev_id, parent=controller.tcs)  # , **_schema)
 
     for dev_id in schema.get(SZ_ORPHANS, []):
-        _get_device(gateway, dev_id, parent=ctl)
+        _get_device(gateway, dev_id, parent=controller)
 
     # if DEV_MODE:
     #     import json
@@ -483,4 +487,4 @@ def load_tcs(gateway: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evo
     #     print(src)
     #     print(dst)
 
-    return ctl.tcs
+    return controller.tcs

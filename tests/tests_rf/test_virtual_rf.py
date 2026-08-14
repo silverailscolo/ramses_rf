@@ -159,8 +159,8 @@ async def assert_code_in_device_msgindex(
 
         if gwy.message_store:
             return await gwy.message_store.contains(
-                src=dev_id, code=str(code)
-            ) or await gwy.message_store.contains(dst=dev_id, code=str(code))
+                source=dev_id, code=str(code)
+            ) or await gwy.message_store.contains(destination=dev_id, code=str(code))
 
         msgs = await dev.entity_state.get_message_log_flat()
         msgz = await dev.entity_state.get_state_cache_nested()

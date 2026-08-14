@@ -216,7 +216,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         async def connect_sans_signature() -> None:
             """Call connection_made() without waiting for signature."""
             self._init_fut.set_result(None)
-            self._make_connection(gwy_id=None)
+            self._make_connection(gateway_id=None)
 
         async def connect_with_signature() -> None:
             """Poll with signatures; connect after first echo."""
@@ -239,14 +239,14 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
                 await asyncio.sleep(_SIGNATURE_GAP_SECS)
 
                 if self._init_fut.done():
-                    pkt = self._init_fut.result()
-                    self._make_connection(gwy_id=pkt.src.id if pkt else None)
+                    packet = self._init_fut.result()
+                    self._make_connection(gateway_id=packet.src.id if packet else None)
                     return
 
             if not self._init_fut.done():
                 self._init_fut.set_result(None)
 
-            self._make_connection(gwy_id=None)
+            self._make_connection(gateway_id=None)
             return
 
         if self._disable_sending:
@@ -306,16 +306,16 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
                 _normalise(_str(raw_line)),
             )
 
-    def _pkt_read(self, pkt: Packet) -> None:
+    def _pkt_read(self, packet: Packet) -> None:
         if (
             not self._init_fut.done()
-            and pkt.code == Code._PUZZ
-            and pkt.payload == self._extra.get(SZ_SIGNATURE)
+            and packet.code == Code._PUZZ
+            and packet.payload == self._extra.get(SZ_SIGNATURE)
         ):
-            self._extra[SZ_ACTIVE_HGI] = pkt.src.id
-            self._init_fut.set_result(pkt)
+            self._extra[SZ_ACTIVE_HGI] = packet.src.id
+            self._init_fut.set_result(packet)
 
-        super()._pkt_read(pkt)
+        super()._pkt_read(packet)
 
     @limit_duty_cycle(MAX_DUTY_CYCLE_RATE)
     async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:

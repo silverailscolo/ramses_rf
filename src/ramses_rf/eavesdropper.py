@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import timedelta as td
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import ramses_rf.exceptions as exc
 from ramses_rf.const import (
@@ -30,6 +30,7 @@ from ramses_tx.typing import DeviceIdT
 if TYPE_CHECKING:
     from ramses_rf import Gateway
     from ramses_rf.messages import Message
+    from ramses_rf.systems import Evohome
 
 
 class EavesdropEngine:
@@ -54,8 +55,8 @@ class EavesdropEngine:
         """Safely extract the array or standard dictionary payload."""
         raw: Any = getattr(msg, "payload", getattr(msg, "data", {}))
         if isinstance(raw, dict):
-            res = raw.get("_array", [raw])
-            return res if isinstance(res, list) else [res]
+            result = raw.get("_array", [raw])
+            return result if isinstance(result, list) else [result]
         if isinstance(raw, list):
             return raw
         return []
@@ -102,20 +103,20 @@ class EavesdropEngine:
                 with contextlib.suppress(exc.DeviceNotFoundError):
                     registry.get_device(addr_id)
 
-    def _get_tcs(self, msg: Message) -> Any:
+    def _get_tcs(self, msg: Message) -> Evohome | None:
         """Find the active TCS read-model instance."""
         if tcs := getattr(msg.src, "tcs", None):
-            return tcs
+            return cast("Evohome", tcs)
         if tcs := getattr(msg.dst, "tcs", None):
-            return tcs
-        if ctl := getattr(msg.src, "ctl", None):
-            if tcs := getattr(ctl, "tcs", None):
-                return tcs
-        if ctl := getattr(msg.dst, "ctl", None):
-            if tcs := getattr(ctl, "tcs", None):
-                return tcs
+            return cast("Evohome", tcs)
+        if controller := getattr(msg.src, "ctl", None):
+            if tcs := getattr(controller, "tcs", None):
+                return cast("Evohome", tcs)
+        if controller := getattr(msg.dst, "ctl", None):
+            if tcs := getattr(controller, "tcs", None):
+                return cast("Evohome", tcs)
         if tcs := getattr(self._gateway, "tcs", None):
-            return tcs
+            return cast("Evohome", tcs)
 
         registry = getattr(self._gateway, "device_registry", None)
         if registry:
@@ -129,7 +130,7 @@ class EavesdropEngine:
                 and d.tcs is not None
             ]
             if len(ctls) == 1:
-                return ctls[0].tcs
+                return cast("Evohome", ctls[0].tcs)
         return None
 
     async def process_eavesdrop(self, msg: Message) -> None:
@@ -187,12 +188,12 @@ class EavesdropEngine:
             ctl_id = msg.addr3.id
 
         if msg.verb == I_ and ctl_id and msg.src.id != ctl_id:
-            for p in self._get_payloads(msg):
-                if not isinstance(p, dict):
+            for payload in self._get_payloads(msg):
+                if not isinstance(payload, dict):
                     continue
 
-                zone_idx = p.get(SZ_ZONE_IDX)
-                domain_id = p.get(SZ_DOMAIN_ID)
+                zone_idx = payload.get(SZ_ZONE_IDX)
+                domain_id = payload.get(SZ_DOMAIN_ID)
 
                 if zone_idx is None and domain_id is None:
                     continue
@@ -434,11 +435,11 @@ class EavesdropEngine:
 
     def _evaluate_zone_type_eavesdrop_rules(self, msg: Message) -> None:
         """Evaluate legacy passive promotion of zone classes."""
-        for p in self._get_payloads(msg):
-            if not isinstance(p, dict):
+        for payload in self._get_payloads(msg):
+            if not isinstance(payload, dict):
                 continue
 
-            zone_idx = p.get(SZ_ZONE_IDX)
+            zone_idx = payload.get(SZ_ZONE_IDX)
             if zone_idx is None:
                 continue
 
@@ -539,7 +540,7 @@ class EavesdropEngine:
             return
 
         def _testable_zones(chg_zones: dict[str, float]) -> dict[float, str]:
-            res: dict[float, str] = {}
+            result: dict[float, str] = {}
             for i1, t1 in chg_zones.items():
                 zone = tcs.zone_by_idx.get(i1) or (
                     tcs.get_htg_zone(i1) if hasattr(tcs, "get_htg_zone") else None
@@ -549,29 +550,31 @@ class EavesdropEngine:
                     and zone.sensor is None
                     and t1 not in [t2 for i2, t2 in chg_zones.items() if i2 != i1]
                 ):
-                    res[t1] = i1
-            return res
+                    result[t1] = i1
+            return result
 
         testable_zones = _testable_zones(changed_zones)
         if not testable_zones:
             return
 
         testable_sensors_map: dict[float, list[Device]] = {}
-        for d in self._gateway.device_registry.devices:
-            if isinstance(d, Temperature) and d.ctl in (tcs.ctl, None):
-                d_temp = await d.temperature()
+        for device in self._gateway.device_registry.devices:
+            if isinstance(device, Temperature) and device.ctl in (tcs.ctl, None):
+                d_temp = await device.temperature()
                 if d_temp is not None:
                     if d_temp not in testable_sensors_map:
                         testable_sensors_map[d_temp] = []
-                    testable_sensors_map[d_temp].append(d)
+                    testable_sensors_map[d_temp].append(device)
 
         unique_sensors: dict[float, Device] = {}
-        for temp_val, devs in testable_sensors_map.items():
-            if len(devs) == 1:
-                unique_sensors[temp_val] = devs[0]
+        for temp_val, candidate_devices in testable_sensors_map.items():
+            if len(candidate_devices) == 1:
+                unique_sensors[temp_val] = candidate_devices[0]
             else:
                 dedicated = [
-                    d for d in devs if not str(getattr(d, "id", "")).startswith("04:")
+                    d
+                    for d in candidate_devices
+                    if not str(getattr(d, "id", "")).startswith("04:")
                 ]
                 if len(dedicated) == 1:
                     unique_sensors[temp_val] = dedicated[0]
@@ -626,8 +629,8 @@ class EavesdropEngine:
         if not isinstance(msg.payload, dict):
             return
 
-        dev = self._gateway.device_registry.device_by_id.get(msg.src.id)
-        if dev is not None and getattr(dev, "_parent", None) is not None:
+        device = self._gateway.device_registry.device_by_id.get(msg.src.id)
+        if device is not None and getattr(device, "_parent", None) is not None:
             return
 
         trv_temp = msg.payload.get(SZ_TEMPERATURE)

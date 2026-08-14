@@ -226,9 +226,9 @@ class Engine:
 
         # Shutdown Safety - securely lock the task registry to clean up
         with self._tasks_lock:
-            tasks = [t for t in self._tasks if not t.done()]
-            for t in tasks:
-                t.cancel()
+            tasks = [task for task in self._tasks if not task.done()]
+            for task in tasks:
+                task.cancel()
 
         if tasks:
             await asyncio.wait(tasks)
@@ -239,10 +239,9 @@ class Engine:
                 if task.done() and not task.cancelled():
                     if exc := task.exception():
                         _LOGGER.debug(
-                            "Background task %s failed: %s",
-                            task.get_name(),
-                            exc,
+                            "Unhandled exception in background worker task: %s", exc
                         )
+            self._tasks.clear()
 
         if self._transport:
             self._transport.close()
@@ -332,7 +331,7 @@ class Engine:
         payload: PayloadT,
         *,
         from_id: str | None = None,
-        seqn: str | None = None,
+        sequence_number: str | None = None,
     ) -> CommandDTO:
         """Create a CommandDTO with appropriate addressing.
 
@@ -346,8 +345,8 @@ class Engine:
         :type payload: PayloadT
         :param from_id: Optional source device ID override.
         :type from_id: str | None
-        :param seqn: Optional sequence number.
-        :type seqn: str | None
+        :param sequence_number: Optional sequence number.
+        :type sequence_number: str | None
         :returns: Constructed command DTO.
         :rtype: CommandDTO
         """
@@ -377,7 +376,7 @@ class Engine:
 
     async def async_send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -393,7 +392,7 @@ class Engine:
         )
 
         return await self._protocol.send_cmd(
-            cmd,
+            command,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
@@ -405,6 +404,6 @@ class Engine:
         # Safely pass execution to Gateway's extended handling logic
         handler = getattr(self, "_handle_msg", None)
         if handler:
-            res = handler(msg)
-            if asyncio.iscoroutine(res):
-                await res
+            result = handler(msg)
+            if asyncio.iscoroutine(result):
+                await result

@@ -145,18 +145,18 @@ class DeviceIdParamType(click.ParamType):
 
     name = "device_id"
 
-    def convert(self, value: str, param: Any, ctx: click.Context | None) -> str:
+    def convert(self, value: str, parameter: Any, context: click.Context | None) -> str:
         """Convert the value to a Device ID.
 
         :param value: The value to convert.
-        :param param: The parameter being converted.
-        :param ctx: The Click context.
+        :param parameter: The parameter being converted.
+        :param context: The Click context.
         :return: The converted Device ID.
         :raises click.BadParameter: If value is not a valid Device ID.
         """
         if is_valid_dev_id(value):
             return value.upper()
-        self.fail(f"{value!r} is not a valid device_id", param, ctx)
+        self.fail(f"{value!r} is not a valid device_id", parameter, context)
         assert False  # satisfy mypy
 
 
@@ -499,18 +499,22 @@ def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
     print(f"\nFound {len(devices)} device(s):\n")
     print(f"  {'Device ID':<12} {'Type':<6} {'Conf':<7} {'RSSI':>6}  Details")
     print(f"  {'-' * 12} {'-' * 6} {'-' * 7} {'-' * 6}  {'-' * 30}")
-    for dev in sorted(devices, key=lambda d: d.device_id):
-        rssi_str = f"{dev.rssi:.0f}" if dev.rssi is not None else "-"
+    for discovered_device in sorted(devices, key=lambda d: d.device_id):
+        rssi_str = (
+            f"{discovered_device.rssi:.0f}"
+            if discovered_device.rssi is not None
+            else "-"
+        )
         details = ""
-        if dev.zone_index:
-            details += f"zone={dev.zone_index}  "
-        if dev.bound_to:
-            details += f"bound to {dev.bound_to}"
-        if dev.is_battery:
+        if discovered_device.zone_index:
+            details += f"zone={discovered_device.zone_index}  "
+        if discovered_device.bound_to:
+            details += f"bound to {discovered_device.bound_to}"
+        if discovered_device.is_battery:
             details += "  battery" if details else "battery"
         print(
-            f"  {dev.device_id:<12} {dev.likely_type:<6} "
-            f"{dev.confidence:<7} {rssi_str:>6}  {details}".rstrip()
+            f"  {discovered_device.device_id:<12} {discovered_device.likely_type:<6} "
+            f"{discovered_device.confidence:<7} {rssi_str:>6}  {details}".rstrip()
         )
 
     if output_path:
@@ -532,8 +536,8 @@ def print_results(gateway: Gateway, **kwargs: Any) -> None:
         ]._faultlog.faultlog
 
         if fault_log:
-            for k, v in fault_log.items():
-                print(f"{k:02X}", v)
+            for log_idx, entry in fault_log.items():
+                print(f"{log_idx:02X}", entry)
         else:
             print("No fault log, or failed to get the fault log.")
 
@@ -563,8 +567,8 @@ def print_results(gateway: Gateway, **kwargs: Any) -> None:
 def _write_state(schema: dict[str, Any], msgs: dict[str, str]) -> None:
     """Write the state to the file system (blocking)."""
     with open("state_msgs.log", "w") as f:
-        for dtm, pkt in msgs.items():
-            f.write(f"{dtm} {pkt}\r\n")  # if not m._expired
+        for dtm, packet_data in msgs.items():
+            f.write(f"{dtm} {packet_data}\r\n")  # if not m._expired
 
     with open("state_schema.json", "w") as f:
         f.write(json.dumps(schema, indent=4))
@@ -641,11 +645,11 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
         ]:
             if gateway.message_store:
                 for msg in await gateway.message_store.get(
-                    src=device.id, code=Code._0005
+                    source=device.id, code=Code._0005
                 ):
                     print(f"{msg}")
                 for msg in await gateway.message_store.get(
-                    src=device.id, code=Code._000C
+                    source=device.id, code=Code._000C
                 ):
                     print(f"{msg}")
             else:  # TODO(eb): replace next block by
@@ -655,21 +659,21 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
                 ).items():
                     if msg_code in (Code._0005, Code._000C):
                         for verb in verbs.values():
-                            for pkt in verb.values():
-                                print(f"{pkt}")
+                            for packet in verb.values():
+                                print(f"{packet}")
             print()
         for device in [
             d for d in gateway.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
         ]:
             if gateway.message_store:
-                for msg in await gateway.message_store.get(src=device.id):
+                for msg in await gateway.message_store.get(source=device.id):
                     print(f"{msg}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
                 for cd in (await device.entity_state.get_state_cache_nested()).values():
                     for verb in cd.values():
-                        for pkt in verb.values():
-                            print(f"{pkt}")
+                        for packet in verb.values():
+                            print(f"{packet}")
             print()
 
 
@@ -727,11 +731,11 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     gwy_config_kwargs: dict[str, Any] = {}
 
     # 1. Map inner SZ_CONFIG keys
-    for key, val in config_dict.items():
-        if key == SZ_REDUCE_PROCESSING and val is not None:
-            gwy_config_kwargs[key] = int(val)
+    for key, config_val in config_dict.items():
+        if key == SZ_REDUCE_PROCESSING and config_val is not None:
+            gwy_config_kwargs[key] = int(config_val)
         else:
-            gwy_config_kwargs[key] = val
+            gwy_config_kwargs[key] = config_val
 
     # 2. Extract known GatewayConfig keys from lib_kwargs
     known_config_keys = {

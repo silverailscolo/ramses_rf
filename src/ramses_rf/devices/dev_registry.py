@@ -328,10 +328,10 @@ class DeviceRegistry:
         """Instruct a device to initialize its Evohome TCS."""
         if not event.device_id:
             return
-        dev = self.device_by_id.get(event.device_id)
-        if dev and hasattr(dev, "_make_tcs_controller"):
-            dev._make_tcs_controller()
-            _LOGGER.debug("Created Controller on %s via %s", dev.id, event.causation)
+        device = self.device_by_id.get(event.device_id)
+        if device and hasattr(device, "_make_tcs_controller"):
+            device._make_tcs_controller()
+            _LOGGER.debug("Created Controller on %s via %s", device.id, event.causation)
 
     def _handle_create_circuit(self, event: TopologyChangedEvent) -> None:
         """Instruct a UFH controller to initialize a circuit."""
@@ -379,53 +379,50 @@ class DeviceRegistry:
 
         if eavesdrop_type == "orphan_broadcast":
             # Cache the orphan's latest telemetry for correlation
-            for p in payloads:
-                if not isinstance(p, dict):
+            for payload_item in payloads:
+                if not isinstance(payload_item, dict):
                     continue
-                if "temperature" in p:
-                    self._orphan_telemetry[event.device_id] = p
+                if "temperature" in payload_item:
+                    self._orphan_telemetry[event.device_id] = payload_item
                     _LOGGER.debug(
                         f"Correlator: Cached orphan {event.device_id} temp "
-                        f"{p['temperature']}"
+                        f"{payload_item['temperature']}"
                     )
 
         elif eavesdrop_type == "controller_sync":
             # Check if the controller is broadcasting a zone temp matching a known
             # orphan
-            for p in payloads:
-                if not isinstance(p, dict):
+            for payload_item in payloads:
+                if not isinstance(payload_item, dict):
                     continue
 
-                zone_temp = p.get("temperature")
-                zone_idx = p.get("zone_idx")
+                zone_temp = payload_item.get("temperature")
+                zone_idx = payload_item.get("zone_idx")
 
                 if zone_temp is None or zone_idx is None:
                     continue
 
                 # Find a match in our temporal cache
                 matched_orphan = None
-                for orphan_id, orphan_data in self._orphan_telemetry.items():
-                    if orphan_data.get("temperature") == zone_temp:
+                for orphan_id, orphan_payload in self._orphan_telemetry.items():
+                    if orphan_payload.get("temperature") == zone_temp:
                         matched_orphan = orphan_id
                         break
 
                 if matched_orphan:
-                    _LOGGER.info(
-                        f"Correlator: Matched orphan {matched_orphan} to "
-                        f"Zone {zone_idx}!"
-                    )
-
+                    # Construct and dispatch a synthetic BIND event!
                     bind_event = TopologyChangedEvent(
                         action=TopologyAction.BIND_DEVICE,
-                        parent_id=event.device_id,
-                        child_id=DeviceIdT(matched_orphan),
+                        device_id=DeviceIdT(matched_orphan),
+                        causation="Correlated via Passive Telemetry Matching",
                         metadata={
-                            "zone_idx": str(zone_idx),
-                            "child_id": str(zone_idx),
-                            "device_role": "sensor",
-                            "is_sensor": True,
+                            "tcs_id": event.device_id,
+                            "zone_idx": zone_idx,
                         },
-                        causation="Rule_30C9_Eavesdrop_Correlation",
+                    )
+                    _LOGGER.info(
+                        f"Correlator: Successfully correlated orphan {matched_orphan} "
+                        f"to Zone {zone_idx} on Controller {event.device_id}!"
                     )
                     self._handle_bind_device(bind_event)
 
@@ -434,25 +431,25 @@ class DeviceRegistry:
 
         # Handle zone class metadata updates from eavesdropping
         if "class" in event.metadata and "zone_idx" in event.metadata:
-            ctl = self.device_by_id.get(event.device_id)
-            if ctl and getattr(ctl, "tcs", None):
-                zone = ctl.tcs.get_htg_zone(str(event.metadata["zone_idx"]))  # type: ignore[union-attr]
+            controller = self.device_by_id.get(event.device_id)
+            if controller and getattr(controller, "tcs", None):
+                zone = controller.tcs.get_htg_zone(str(event.metadata["zone_idx"]))  # type: ignore[union-attr]
                 if zone:
                     zone._update_schema(**{"class": event.metadata["class"]})
 
-    def _add_device(self, dev: Device) -> None:
+    def _add_device(self, device: Device) -> None:
         """Add a device to the registry.
 
-        :param dev: The device instance to add.
-        :type dev: Device
+        :param device: The device instance to add.
+        :type device: Device
         :raises SchemaInconsistentError: If the device already exists in
             the registry.
         """
-        if dev.id in self.device_by_id:
-            raise SchemaInconsistentError(f"Device already exists: {dev.id}")
+        if device.id in self.device_by_id:
+            raise SchemaInconsistentError(f"Device already exists: {device.id}")
 
-        self.devices.append(dev)
-        self.device_by_id[dev.id] = dev
+        self.devices.append(device)
+        self.device_by_id[device.id] = device
 
     @overload
     def get_device(
@@ -519,9 +516,9 @@ class DeviceRegistry:
                 )
                 raise
 
-        dev = self.device_by_id.get(device_id)
+        device = self.device_by_id.get(device_id)
 
-        if not dev:
+        if not device:
             # voluptuous bug workaround:
             # https://github.com/alecthomas/voluptuous/pull/524
             _traits_raw: dict[str, Any] = dict(
@@ -535,24 +532,30 @@ class DeviceRegistry:
             traits = DeviceTraits.from_dict(traits_dict)
 
             try:
-                dev = self._device_factory_cb(Address(device_id), msg, traits)
+                device = self._device_factory_cb(Address(device_id), msg, traits)
             except Exception as err:
                 _TRACE.error(
                     "FACTORY EXCEPTION: Failed creating %s: %s", device_id, err
                 )
                 raise
 
-            if traits.faked:
-                if isinstance(dev, Fakeable):
-                    dev._make_fake()
-                else:
-                    _LOGGER.warning("The device is not fakeable: %s", dev)
+            if traits.faked and isinstance(device, Fakeable):
+                device._make_fake()
+
+            _LOGGER.debug(
+                "Created %s (%s) from %s",
+                device,
+                device.__class__.__name__,
+                "known_list" if msg is None else "msg",
+            )
 
         if parent or child_id:
-            self._maybe_reparent_bdr(dev, parent, child_id)
+            self._maybe_reparent_bdr(device, parent, child_id)
 
             try:
-                dev._apply_topology_link(parent, child_id=child_id, is_sensor=is_sensor)
+                device._apply_topology_link(
+                    parent, child_id=child_id, is_sensor=is_sensor
+                )
             except (DeviceNotFoundError, SchemaInconsistentError) as err:
                 _TRACE.error(
                     f"LINK EXCEPTION: Failed linking {device_id} to parent "
@@ -560,17 +563,17 @@ class DeviceRegistry:
                 )
                 raise
 
-        if cls is not None and not isinstance(dev, cls):
+        if cls is not None and not isinstance(device, cls):
             raise TypeError(
-                f"Device {device_id} is of type {type(dev).__name__}, "
+                f"Device {device_id} is of type {type(device).__name__}, "
                 f"but {cls.__name__} was expected."
             )
 
-        return dev
+        return device
 
     @staticmethod
     def _maybe_reparent_bdr(
-        dev: Device | None,
+        device: Device | None,
         parent: Parent | None,
         child_id: str | None,
     ) -> None:
@@ -590,14 +593,14 @@ class DeviceRegistry:
 
         See: https://github.com/ramses-rf/ramses_cc/issues/834
 
-        :param dev: The device being bound (expected to be a BDR).
+        :param device: The device being bound (expected to be a BDR).
         :param parent: The new parent to bind to (expected to be the TCS).
         :param child_id: The new child_id (must be FC for re-parenting).
         """
-        if not dev or not parent or child_id != FC:
+        if not device or not parent or child_id != FC:
             return
 
-        old_parent = dev._parent
+        old_parent = device._parent
         if old_parent is None or old_parent is parent:
             return
 
@@ -608,7 +611,7 @@ class DeviceRegistry:
         if not isinstance(old_parent, DhwZone):
             return
 
-        if getattr(dev, "_child_id", None) != FA:
+        if getattr(device, "_child_id", None) != FA:
             return
 
         # Re-parent even if the DhwZone has a sensor — the FC binding
@@ -620,11 +623,11 @@ class DeviceRegistry:
         _LOGGER.info(
             "RE-PARENTING: %s from DhwZone (hotwater_valve) to "
             "System (appliance_control)",
-            dev.id,
+            device.id,
         )
 
         # Detach from the DhwZone (encapsulated referential integrity)
-        old_parent._detach_child(dev)
+        old_parent._detach_child(device)
 
         # Clean up the DhwZone if it is now empty
         tcs = getattr(old_parent, "tcs", None)
@@ -663,9 +666,9 @@ class DeviceRegistry:
                 f"The device id is not in the known_list: {device_id}"
             )
 
-        if (dev := self.get_device(device_id)) and isinstance(dev, Fakeable):
-            dev._make_fake()
-            return dev
+        if (device := self.get_device(device_id)) and isinstance(device, Fakeable):
+            device._make_fake()
+            return device
 
         raise DeviceNotFaked(f"The device is not fakeable: {device_id}")
 
@@ -679,16 +682,18 @@ class DeviceRegistry:
         :rtype: DeviceListT
         """
         result: DeviceListT = {k: v for k, v in self._config.known_list.items()}
-        for d in self.devices:
+        for device in self.devices:
             if (
                 not self._config.engine.enforce_known_list
-                or d.id in self._config.mac_filter_list
+                or device.id in self._config.mac_filter_list
             ):
-                traits = await d.traits()
+                traits = await device.traits()
                 dev_traits = {k: traits.get(k) for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)}
-                if ssot_class := self._config.known_list.get(d.id, {}).get("class"):
+                if ssot_class := self._config.known_list.get(device.id, {}).get(
+                    "class"
+                ):
                     dev_traits[SZ_CLASS] = ssot_class
-                result[d.id] = dev_traits
+                result[device.id] = dev_traits
         return result
 
     async def params(self) -> dict[str, Any]:
@@ -718,12 +723,12 @@ class DeviceRegistry:
         # DO NOT MOVE to module level.
         from ramses_rf.systems import Evohome
 
-        res: dict[DeviceIdT, Evohome] = {}
-        for d in self.devices:
-            tcs = getattr(d, "tcs", None)
-            if isinstance(tcs, Evohome) and tcs.id == d.id:
-                res[d.id] = tcs
-        return res
+        result: dict[DeviceIdT, Evohome] = {}
+        for device in self.devices:
+            tcs = getattr(device, "tcs", None)
+            if isinstance(tcs, Evohome) and tcs.id == device.id:
+                result[device.id] = tcs
+        return result
 
     @property
     def systems(self) -> list[Evohome]:
@@ -741,13 +746,15 @@ class DeviceRegistry:
         :rtype: list[DeviceIdT]
         """
         orphans = []
-        for d in self.devices:
-            if not getattr(d, "tcs", None) and isinstance(d, DeviceHeat):
+        for device in self.devices:
+            if not getattr(device, "tcs", None) and isinstance(device, DeviceHeat):
                 is_present = (
-                    await d._is_present() if hasattr(d, "_is_present") else False
+                    await device._is_present()
+                    if hasattr(device, "_is_present")
+                    else False
                 )
                 if is_present:
-                    orphans.append(d.id)
+                    orphans.append(device.id)
         return sorted(orphans)
 
     async def get_hvac_orphans(self) -> list[DeviceIdT]:
@@ -762,17 +769,19 @@ class DeviceRegistry:
         from .hvac_ventilators import HvacVentilator
 
         owned: set[DeviceIdT] = set()
-        for d in self.devices:
-            if isinstance(d, HvacVentilator):
-                owned |= d._remote_ids | d._sensor_ids
+        for device in self.devices:
+            if isinstance(device, HvacVentilator):
+                owned |= device._remote_ids | device._sensor_ids
         orphans = []
-        for d in self.devices:
-            if isinstance(d, DeviceHvac) and d.id not in owned:
+        for device in self.devices:
+            if isinstance(device, DeviceHvac) and device.id not in owned:
                 is_present = (
-                    await d._is_present() if hasattr(d, "_is_present") else False
+                    await device._is_present()
+                    if hasattr(device, "_is_present")
+                    else False
                 )
                 if is_present:
-                    orphans.append(d.id)
+                    orphans.append(device.id)
         return sorted(orphans)
 
     def _promote_device_class(self, event: TopologyChangedEvent) -> None:

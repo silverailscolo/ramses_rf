@@ -170,15 +170,15 @@ class GatewayLifecycle:
             cm.cancel_all()
 
         # Cancel binding managers before stopping engine
-        for dev in self.device_registry.devices:
-            bm = getattr(dev, "_binding_manager", None)
+        for device in self.device_registry.devices:
+            bm = getattr(device, "_binding_manager", None)
             if bm:
                 try:
                     bm.cancel()
                 except (AttributeError, RuntimeError) as err:
                     _LOGGER.debug(
                         "Error cancelling binding manager for device %s: %s",
-                        getattr(dev, "id", dev),
+                        getattr(device, "id", device),
                         err,
                     )
 
@@ -233,32 +233,40 @@ class GatewayLifecycle:
     async def get_state(
         self, include_expired: bool = False
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Return the current schema & state (may include expired packets)."""
+        """Return the current global schema and state.
+
+        Forces a complete state projection sync across all pending packets
+        before extracting the schema and message log.
+
+        :param include_expired: If True, include expired messages in the state.
+        :type include_expired: bool
+        :returns: A tuple of (schema dictionary, sorted packet dictionary).
+        :rtype: tuple[dict[str, Any], dict[str, Any]]
+        """
+        # Drain all pending asynchronous packet ingestion tasks before taking state snapshot
         await self._pause()
 
         def wanted_msg(msg: Message, include_expired: bool = False) -> bool:
-            if msg.code == Code._313F:
-                return msg.verb in (I_, RP)
-            if getattr(msg, "_expired", False) and not include_expired:
-                return False
-            if msg.code == Code._0404:
+            if msg.code == Code._0005 and msg.verb in (I_, RP):
+                return True
+            if msg.code in (Code._0004, Code._000C, Code._0418):
                 return msg.verb in (I_, W_) and msg.len > 7
             if msg.verb in (W_, RQ):
                 return False
             return include_expired or not getattr(msg, "_expired", False)
 
-        pkts: dict[str, Any] = {}
+        packets_dict: dict[str, Any] = {}
         if self._message_store:
             all_msgs = await self._message_store.all(include_expired=True)
             for i, msg in enumerate(all_msgs):
                 if wanted_msg(msg, include_expired=include_expired):
                     dtm_str = msg.dtm.isoformat(timespec="microseconds")
-                    pkts[dtm_str] = msg.dto.source_packets[0].__dict__
+                    packets_dict[dtm_str] = msg.dto.source_packets[0].__dict__
                 if i > 0 and i % 100 == 0:
                     await asyncio.sleep(0)
 
         await self._resume()
-        return await self.schema(), dict(sorted(pkts.items()))
+        return await self.schema(), dict(sorted(packets_dict.items()))
 
     async def _restore_cached_packets(
         self, packets: dict[str, dict[str, Any] | str], _clear_state: bool = False
@@ -323,8 +331,8 @@ class GatewayLifecycle:
                     continue
 
             try:
-                pkt = Packet.from_dict(dtm, state)
-                tmp_protocol.pkt_received(pkt)
+                packet = Packet.from_dict(dtm, state)
+                tmp_protocol.pkt_received(packet)
             except Exception as err:
                 _LOGGER.debug("Gateway: Failed to restore packet %s: %s", dtm, err)
 

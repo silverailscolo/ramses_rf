@@ -108,14 +108,14 @@ __DEVICE_INFO: dict[str, list[str]] = {
 }  # convert to {dev_type: [signature, ...]}
 
 
-def check_signature(dev_type: str, signature: str) -> None:
+def check_signature(device_type: str, signature: str) -> None:
     """Raise ValueError if the device type is not known to have the signature.
 
     e.g. '01' can imply '0002FF0119FFFFFFFF', but not '0001C8820C006AFEFF'
     """
-    if not (sigs := __DEVICE_INFO.get(dev_type)) or signature not in sigs:
+    if not (sigs := __DEVICE_INFO.get(device_type)) or signature not in sigs:
         raise ValueError(
-            f"device type {dev_type} not known to have signature: {signature}"
+            f"device type {device_type} not known to have signature: {signature}"
         )
 
 

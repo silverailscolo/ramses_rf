@@ -307,7 +307,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         if not self._closing:
             self._schedule_reconnect()
 
-    def _establish_connection(self, gwy_id: DeviceIdT | None) -> None:
+    def _establish_connection(self, gateway_id: DeviceIdT | None) -> None:
         """Establish the protocol connection (call connection_made).
 
         Called from _on_connect (broker connected) or _create_connection
@@ -317,8 +317,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         """
         if self._connection_established:
             # Already connected — just update the HGI ID if we now have one
-            if gwy_id is not None:
-                self._extra[SZ_ACTIVE_HGI] = gwy_id
+            if gateway_id is not None:
+                self._extra[SZ_ACTIVE_HGI] = gateway_id
             return
 
         self._connected = True
@@ -326,7 +326,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if not self._loop.is_closed():
             try:
-                self._loop.call_soon_threadsafe(self._make_connection, gwy_id)
+                self._loop.call_soon_threadsafe(self._make_connection, gateway_id)
             except RuntimeError:
                 _LOGGER.debug("Event loop closed, cannot establish connection")
         else:

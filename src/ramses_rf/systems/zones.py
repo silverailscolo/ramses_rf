@@ -87,13 +87,13 @@ class ZoneBase(Child, Parent, Entity):
     _ROLE_ACTUATORS: str | None = None
     _ROLE_SENSORS: str | None = None
 
-    def __init__(self, tcs: Evohome, zone_idx: str) -> None:
+    def __init__(self, tcs: Evohome, zone_index: str) -> None:
         super().__init__(tcs._gateway)
 
         # Parallel CQRS States
         self.temp_state = TemperatureState()
         self.demand_state = DemandState()
-        self.schedule_state = ScheduleState(zone_index=zone_idx, days=())
+        self.schedule_state = ScheduleState(zone_index=zone_index, days=())
         self.trv_state = TrvState()
         self.zone_state = ZoneState()
 
@@ -101,20 +101,20 @@ class ZoneBase(Child, Parent, Entity):
         # own idx
         self._z_id = tcs.id  # the responsible device is the controller
         # the zone idx (ctx), 00-0B (or 0F), HW (FA)
-        self._z_idx: DevIndexT = DevIndexT(zone_idx)
+        self._z_idx: DevIndexT = DevIndexT(zone_index)
 
-        self.id: DeviceIdT = DeviceIdT(f"{tcs.id}_{zone_idx}")
+        self.id: DeviceIdT = DeviceIdT(f"{tcs.id}_{zone_index}")
 
         self.tcs: Evohome = tcs
         self.ctl: Controller = tcs.ctl
-        self._child_id: str = zone_idx
+        self._child_id: str = zone_index
 
         self._name: str | None = None  # param attr
 
     # Should be a private method
     @classmethod
     def create_from_schema(
-        cls, tcs: _MultiZoneT | _StoredHwT, zone_idx: str, **schema: Any
+        cls, tcs: _MultiZoneT | _StoredHwT, zone_index: str, **schema: Any
     ) -> Self:
         """Create a CH/DHW zone for a TCS and set its schema attrs.
 
@@ -122,7 +122,7 @@ class ZoneBase(Child, Parent, Entity):
         factory. Can be a heating zone (of a klass), or the DHW
         subsystem (idx must be 'HW').
         """
-        zon = cls(tcs, zone_idx)  # type: ignore[arg-type]
+        zon = cls(tcs, zone_index)  # type: ignore[arg-type]
         zon._update_schema(**schema)
         return zon
 
@@ -198,14 +198,14 @@ class DhwZone(ZoneSchedule):  # CS92A
 
     _SLUG: str | None = ZoneRole.DHW  # type: ignore[assignment]
 
-    def __init__(self, tcs: _StoredHwT, zone_idx: str = "HW") -> None:
+    def __init__(self, tcs: _StoredHwT, zone_index: str = "HW") -> None:
         _LOGGER.debug("Creating a DHW for TCS: %s_HW (%s)", tcs.id, self.__class__)
 
         if tcs.dhw:
             raise exc.SchemaInconsistentError(f"Duplicate DHW for TCS: {tcs.id}")
-        if zone_idx not in (None, "HW"):
+        if zone_index not in (None, "HW"):
             raise exc.SchemaInconsistentError(
-                f"Invalid zone idx for DHW: {zone_idx} (not 'HW'/null)"
+                f"Invalid zone idx for DHW: {zone_index} (not 'HW'/null)"
             )
 
         super().__init__(tcs, "HW")
@@ -331,10 +331,10 @@ class DhwZone(ZoneSchedule):  # CS92A
         :returns: ThermalDemandDTO or None.
         :rtype: ThermalDemandDTO | None
         """
-        val = self.demand_state.heat_demand
-        if val is None:
+        heat_demand_val = self.demand_state.heat_demand
+        if heat_demand_val is None:
             return None
-        return ThermalDemandDTO(thermal_demand=val, ufh_index=str(self.idx))
+        return ThermalDemandDTO(thermal_demand=heat_demand_val, ufh_index=str(self.idx))
 
     async def heat_demand(self) -> float | None:  # 3150
         """Return the DHW heat demand percentage (0.0 to 1.0)."""
@@ -434,7 +434,7 @@ class Zone(ZoneSchedule):
     _SLUG: str | None = None  # type: ignore[assignment]
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.ACT
 
-    def __init__(self, tcs: _MultiZoneT, zone_idx: str) -> None:
+    def __init__(self, tcs: _MultiZoneT, zone_index: str) -> None:
         """Create a heating zone.
 
         The type of zone may not be known at instantiation. Even when it
@@ -445,18 +445,18 @@ class Zone(ZoneSchedule):
         In addition, an electric zone may subsequently turn out to be a
         zone valve zone.
         """
-        _LOGGER.debug("Creating a Zone: %s_%s (%s)", tcs.id, zone_idx, self.__class__)
+        _LOGGER.debug("Creating a Zone: %s_%s (%s)", tcs.id, zone_index, self.__class__)
 
-        if zone_idx in tcs.zone_by_idx:
+        if zone_index in tcs.zone_by_idx:
             raise exc.SchemaInconsistentError(
-                f"Duplicate ZON for TCS: {tcs.id}_{zone_idx}"
+                f"Duplicate ZON for TCS: {tcs.id}_{zone_index}"
             )
-        if int(zone_idx, 16) >= tcs._max_zones:
+        if int(zone_index, 16) >= tcs._max_zones:
             raise exc.SchemaInconsistentError(
-                f"Invalid zone_idx: {zone_idx} (exceeds max_zones)"
+                f"Invalid zone_idx: {zone_index} (exceeds max_zones)"
             )
 
-        super().__init__(tcs, zone_idx)
+        super().__init__(tcs, zone_index)
 
         self._sensor: Device | None = None
         self.actuators: list[Device] = []
@@ -622,7 +622,7 @@ class Zone(ZoneSchedule):
         # EntityState by hydrating late-instantiated entities directly from the Store
         if self._gateway.message_store:
             msgs = await self._gateway.message_store.get(
-                code=Code._0004, src=self._z_id
+                code=Code._0004, source=self._z_id
             )
             for msg in reversed(msgs):
                 p_load = msg.payload
@@ -633,11 +633,14 @@ class Zone(ZoneSchedule):
                         )
                         return self.zone_state.name
                 elif isinstance(p_load, list):
-                    for d in p_load:
-                        if isinstance(d, dict):
-                            if str(d.get(SZ_ZONE_IDX)) == self.idx and SZ_NAME in d:
+                    for item in p_load:
+                        if isinstance(item, dict):
+                            if (
+                                str(item.get(SZ_ZONE_IDX)) == self.idx
+                                and SZ_NAME in item
+                            ):
                                 self.zone_state = dataclasses.replace(
-                                    self.zone_state, name=str(d[SZ_NAME])
+                                    self.zone_state, name=str(item[SZ_NAME])
                                 )
                                 return self.zone_state.name
 
@@ -673,10 +676,10 @@ class Zone(ZoneSchedule):
 
     async def setpoint_bounds(self) -> dict[str, Any] | None:  # 22C9, 2209
         """Return zone setpoint bounds if defined by thermostat."""
-        res = await self.entity_state.get_value(
+        result = await self.entity_state.get_value(
             (Code._22C9, Code._2209), zone_idx=self.idx
         )
-        return res if isinstance(res, dict) else None
+        return result if isinstance(result, dict) else None
 
     async def set_setpoint(self, value: float | None) -> Message | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""
@@ -954,22 +957,22 @@ ZONE_CLASS_BY_SLUG: dict[str, type[DhwZone] | type[Zone]] = class_by_attr(
 
 def zone_factory(
     tcs: _StoredHwT | _MultiZoneT,
-    idx: str,
+    zone_index: str,
     *,
     msg: Message | None = None,
     **schema: Any,
 ) -> DhwZone | Zone:
-    """Return zone class for given zone_idx and schema."""
+    """Return zone class for given zone_index and schema."""
 
     def best_zon_class(
-        ctl_addr: Address,
-        idx: str,
+        controller_address: Address,
+        zone_index: str,
         *,
         msg: Message | None = None,
         eavesdrop: bool = False,
         **schema: Any,
     ) -> type[DhwZone] | type[Zone]:
-        """Return initial zone class for given zone_idx and schema."""
+        """Return initial zone class for given zone_index and schema."""
         # NOTE: for now, zones are always promoted after instantiation
 
         # a specified zone class always takes precedence (even if it
@@ -978,42 +981,30 @@ def zone_factory(
             cls := ZONE_CLASS_BY_SLUG.get(str(sz_cls))
         ):
             _LOGGER.debug(
-                f"Using an explicitly-defined zone class for: {ctl_addr}_{idx} ({cls})"
+                f"Using an explicitly-defined zone class for: {controller_address}_{zone_index} ({cls})"
             )
             return cls
 
         # or, is it a DHW zone, derived from the zone idx...
-        if idx == "HW":
+        if zone_index == "HW":
             _LOGGER.debug(
-                f"Using the default class for: {ctl_addr}_{idx} ({DhwZone._SLUG})"
+                f"Using the default class for: {controller_address}_{zone_index} ({DhwZone._SLUG})"
             )
             return DhwZone
 
-        # try:  # or, a class eavesdropped from the message code/payload...
-        #     if cls := best_zon_class(
-        #         ctl_addr.type, msg=msg, eavesdrop=eavesdrop
-        #     ):
-        #         _LOGGER.warning(
-        #             f"Using eavesdropped zone class for: "
-        #             f"{ctl_addr}_{idx} ({cls._SLUG})"
-        #         )
-        #         return cls  # might be DeviceHvac
-        # except TypeError:
-        #     pass
-
         # otherwise, use the generic heating zone class...
         _LOGGER.debug(
-            f"Using a promotable zone class for: {ctl_addr}_{idx} ({Zone._SLUG})"
+            f"Using a promotable zone class for: {controller_address}_{zone_index} ({Zone._SLUG})"
         )
         return Zone
 
     zon = best_zon_class(
         tcs.ctl.addr,
-        idx,
+        zone_index,
         msg=msg,
         eavesdrop=tcs._gateway.config.enable_eavesdrop,
         **schema,
-    ).create_from_schema(tcs, idx, **schema)
+    ).create_from_schema(tcs, zone_index, **schema)
 
     return zon
 

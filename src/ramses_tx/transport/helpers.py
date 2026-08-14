@@ -13,37 +13,40 @@ from ..const import I_, RP, RQ, W_
 _LOGGER = logging.getLogger(__name__)
 
 
-def _normalise(pkt_line: str) -> str:
+def _normalise(packet_line: str) -> str:
     """Perform any (transparent) frame-level hacks, as required at (near-)RF layer.
 
     Goals:
       - ensure an evofw3 provides the same output as a HGI80 (none, presently)
       - handle 'strange' packets (e.g. ``I|08:|0008``)
 
-    :param pkt_line: The raw packet string from the hardware.
-    :type pkt_line: str
+    :param packet_line: The raw packet string from the hardware.
+    :type packet_line: str
     :return: The normalized packet string.
     :rtype: str
     """
     # ramses_esp-specific bugs, see: https://github.com/IndaloTech/ramses_esp/issues/1
-    if "\r\r" in pkt_line or pkt_line.startswith(" 000"):
+    if "\r\r" in packet_line or packet_line.startswith(" 000"):
         warnings.warn(
             "Legacy ramses_esp <0.4.0 frame normalization is deprecated and will be removed in a future release.",
             DeprecationWarning,
             stacklevel=2,
         )
-    pkt_line = re.sub("\r\r", "\r", pkt_line)
-    if pkt_line[:4] == " 000":
-        pkt_line = pkt_line[1:]
-    elif pkt_line[:2] in (I_, RQ, RP, W_):
-        pkt_line = ""
+    packet_line = re.sub("\r\r", "\r", packet_line)
+    if packet_line[:4] == " 000":
+        packet_line = packet_line[1:]
+    elif packet_line[:2] in (I_, RQ, RP, W_):
+        packet_line = ""
 
     # pseudo-RAMSES-II packets (encrypted payload?)...
-    if pkt_line[10:14] in (" 08:", " 31:") and pkt_line[-16:] == "* Checksum error":
-        pkt_line = pkt_line[:-17] + " # Checksum error (ignored)"
+    if (
+        packet_line[10:14] in (" 08:", " 31:")
+        and packet_line[-16:] == "* Checksum error"
+    ):
+        packet_line = packet_line[:-17] + " # Checksum error (ignored)"
 
     # remove any "/r/n" (leading whitespeace is a problem for commands, but not packets)
-    return pkt_line.strip()
+    return packet_line.strip()
 
 
 def _str(value: bytes) -> str:

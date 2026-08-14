@@ -301,21 +301,21 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         """
         self._param_update_callback = callback
 
-    def _handle_param_update(self, param_id: str, value: Any) -> None:
+    def _handle_param_update(self, parameter_id: str, value: Any) -> None:
         """Handle a parameter update and notify listeners.
 
         This method processes parameter updates and notifies any registered
         callbacks of the change. It ensures thread safety and handles any
         exceptions that may occur during callback execution.
 
-        :param param_id: The ID of the parameter that was updated
-        :type param_id: str
+        :param parameter_id: The ID of the parameter that was updated
+        :type parameter_id: str
         :param value: The new value of the parameter
         :type value: float
         """
         if callable(self._param_update_callback):
             try:
-                self._param_update_callback(param_id, value)
+                self._param_update_callback(parameter_id, value)
             except Exception as ex:
                 _LOGGER.warning("Error in param_update_callback: %s", ex)
 
@@ -381,21 +381,21 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             _LOGGER.debug("Failed to send 2411 probe to %s: %s", self.id, ex)
             return False
 
-    def get_2411_param(self, param_id: str) -> float | None:
+    def get_2411_param(self, parameter_id: str) -> float | None:
         """Get a 2411 parameter value.
 
-        :param param_id: The parameter ID to retrieve.
-        :type param_id: str
+        :param parameter_id: The parameter ID to retrieve.
+        :type parameter_id: str
         :return: The parameter value if found, None otherwise
         :rtype: float | None
         """
-        return self._params_2411.get(param_id)
+        return self._params_2411.get(parameter_id)
 
-    def set_2411_param(self, param_id: str, value: float) -> bool:
+    def set_2411_param(self, parameter_id: str, value: float) -> bool:
         """Set a 2411 parameter value.
 
-        :param param_id: The parameter ID to retrieve.
-        :type param_id: str
+        :param parameter_id: The parameter ID to retrieve.
+        :type parameter_id: str
         :param value: The parameter value to set.
         :type value: float
         :return: True if the parameter was set, False otherwise
@@ -405,25 +405,25 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             _LOGGER.warning("Device %s doesn't support 2411 parameters", self.id)
             return False
 
-        self._params_2411[param_id] = value
+        self._params_2411[parameter_id] = value
         return True
 
-    def get_fan_param(self, param_id: str) -> float | None:
+    def get_fan_param(self, parameter_id: str) -> float | None:
         """Retrieve a fan parameter value from the device's message store.
 
         This wrapper method gets a specific parameter value for a FAN device
         stored in _params_2411 dict. It first makes sure we use the proper
         param_id format.
 
-        :param param_id: The parameter ID to retrieve.
-        :type param_id: str
+        :param parameter_id: The parameter ID to retrieve.
+        :type parameter_id: str
         :return: The parameter value if found, None otherwise
         :rtype: float | None
         """
         # Ensure param_id is uppercase and strip leading zeros for
         # consistency with get_fan_param
         param_id = (
-            str(param_id).upper().lstrip("0") or "0"
+            str(parameter_id).upper().lstrip("0") or "0"
         )  # Handle case where param_id is "0"
 
         param_value = self.get_2411_param(param_id)

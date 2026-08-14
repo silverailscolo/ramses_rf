@@ -41,7 +41,7 @@ def test_state_header_legacy_formatting() -> None:
         code="3220",
         verb="RP",
         source_id="01:123456",
-        context_val="00",
+        context_value="00",
     )
     assert hdr.legacy_hdr == "3220|RP|01:123456|00"
 
@@ -49,7 +49,7 @@ def test_state_header_legacy_formatting() -> None:
         code="10A0",
         verb=" I",
         source_id="04:654321",
-        context_val=True,
+        context_value=True,
     )
     assert base_hdr.legacy_hdr == "10A0| I|04:654321|True"
 

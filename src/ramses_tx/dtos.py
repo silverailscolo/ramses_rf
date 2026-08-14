@@ -145,5 +145,5 @@ class CommandDTO:
         """Return the QoS header of this (request) packet."""
         from .packet import Packet, pkt_header
 
-        pkt = Packet._from_cmd(self)
-        return str(pkt_header(pkt))
+        packet = Packet._from_cmd(self)
+        return str(pkt_header(packet))

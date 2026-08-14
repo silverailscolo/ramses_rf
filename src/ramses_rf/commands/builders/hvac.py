@@ -179,8 +179,8 @@ def build_set_fan_mode(intent: Command) -> CommandDTO:
     """
     fan_mode = intent.get("fan_mode")
     scheme = intent.get("scheme", "orcon")
-    seqn = intent.get("seqn")
-    idx = intent.get("idx", "00")
+    sequence_number = intent.get("seqn")
+    index = intent.get("idx", "00")
     mode_max = intent.get("mode_max")
     legacy_format = intent.get("legacy_format", False)
 
@@ -211,18 +211,18 @@ def build_set_fan_mode(intent: Command) -> CommandDTO:
         mode_max = _22F1_MODE_MAX.get(scheme)
 
     if legacy_format or not mode_max:
-        payload = f"{idx}{mode}"
+        payload = f"{index}{mode}"
     else:
-        payload = f"{idx}{mode}{mode_max}"
+        payload = f"{index}{mode}{mode_max}"
 
-    if intent.src.id and seqn:
+    if intent.src.id and sequence_number:
         # Actually in intent world, src is always there, but seqn is custom
         # logic. For parity, we'll map addr2=fan_id and use intent.dst for
         # fan_id if seqn is present
         pass
 
     # legacy from_attrs mapping
-    if seqn:
+    if sequence_number:
         # I_, addr2=fan_id, seqn=seqn
         # CommandDTO doesn't accept seqn yet? Wait, CommandDTO has no seqn.
         # Oh, legacy builder took seqn and placed it. Wait, how do I set seqn in CommandDTO?
