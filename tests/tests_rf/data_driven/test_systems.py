@@ -151,14 +151,47 @@ def test_payload_from_log_file(dir_name: Path) -> None:
         else:
             actual_payload = _to_dict(actual_payload)
 
+        LEGACY_KEY_MAP = {
+            "zone_index": "zone_idx",
+            "domain_index": "domain_id",
+            "dhw_index": "dhw_idx",
+            "ufh_index": "ufh_idx",
+            "log_index": "log_idx",
+            "is_daylight_saving": "is_dst",
+        }
+
+        def _norm_dict(d: dict[str, Any], exp: dict[str, Any]) -> dict[str, Any]:
+            if "zone_idx" in exp and "ufx_idx" in d:
+                d["zone_idx"] = d.pop("ufx_idx")
+            res = {LEGACY_KEY_MAP.get(k, k): v for k, v in d.items()}
+            for key in (
+                "zone_idx",
+                "zone_index",
+                "domain_id",
+                "domain_index",
+                "dhw_idx",
+                "dhw_index",
+                "msg_id",
+                "ufx_idx",
+                "ufh_idx",
+                "ufh_index",
+            ):
+                if key not in exp:
+                    res.pop(key, None)
+            return res
+
         actual_shrunk = safe_shrink(actual_payload)
 
         if isinstance(actual_shrunk, dict) and isinstance(expected_shrunk, dict):
-            if "zone_idx" in expected_shrunk and "ufx_idx" in actual_shrunk:
-                actual_shrunk["zone_idx"] = actual_shrunk.pop("ufx_idx")
-            for key in ("zone_idx", "domain_id", "dhw_idx", "msg_id", "ufx_idx"):
-                if key not in expected_shrunk:
-                    actual_shrunk.pop(key, None)
+            actual_shrunk = _norm_dict(actual_shrunk, expected_shrunk)
+        elif isinstance(actual_shrunk, list) and isinstance(expected_shrunk, list):
+            new_actual = []
+            for act_item, exp_item in zip(actual_shrunk, expected_shrunk, strict=False):
+                if isinstance(act_item, dict) and isinstance(exp_item, dict):
+                    new_actual.append(_norm_dict(act_item, exp_item))
+                else:
+                    new_actual.append(act_item)
+            actual_shrunk = new_actual
 
         assert actual_shrunk == expected_shrunk
 

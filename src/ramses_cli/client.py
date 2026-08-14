@@ -17,7 +17,7 @@ from asyncclick.exceptions import ClickException, Exit
 from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
-from ramses_rf.const import DEV_TYPE_MAP, DONT_CREATE_MESSAGES, SZ_ZONE_IDX
+from ramses_rf.const import DEV_TYPE_MAP, DONT_CREATE_MESSAGES, SZ_ZONE_INDEX
 from ramses_rf.discovery_scan import DiscoveryScan
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import deep_merge
@@ -555,7 +555,7 @@ def print_results(gateway: Gateway, **kwargs: Any) -> None:
         if schedule is None:
             print("Failed to get the schedule.")
         else:
-            result = {SZ_ZONE_IDX: zone_idx, "schedule": schedule}
+            result = {SZ_ZONE_INDEX: zone_idx, "schedule": schedule}
             print(">>> Schedule JSON begins <<<")
             print(json.dumps(result, indent=4))
             print(">>> Schedule JSON ended <<<")

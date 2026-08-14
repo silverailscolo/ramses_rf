@@ -23,7 +23,7 @@ from .const import (
     SZ_CO2_LEVEL,
     SZ_DATETIME,
     SZ_DIFFERENTIAL,
-    SZ_DOMAIN_ID,
+    SZ_DOMAIN_INDEX,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
     SZ_EXHAUST_TEMP,
@@ -49,8 +49,8 @@ from .const import (
     SZ_REMAINING_DAYS,
     SZ_REMAINING_MINS,
     SZ_REMAINING_PERCENT,
-    SZ_REQ_REASON,
-    SZ_REQ_SPEED,
+    SZ_REQUEST_REASON,
+    SZ_REQUEST_SPEED,
     SZ_SETPOINT,
     SZ_SPEED_CAPABILITIES,
     SZ_SUPPLY_FAN_SPEED,
@@ -58,7 +58,7 @@ from .const import (
     SZ_SUPPLY_TEMP,
     SZ_SYSTEM_MODE,
     SZ_TEMPERATURE,
-    SZ_UFH_IDX,
+    SZ_UFH_INDEX,
     SZ_UNTIL,
 )
 from .devices.hvac_ventilators import HvacVentilator
@@ -468,10 +468,12 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         updates["filter_remaining_percent"] = p[SZ_REMAINING_PERCENT]
     if SZ_MINUTES in p and msg.code == Code._22F3 and p[SZ_MINUTES] is not None:
         updates["boost_timer_mins"] = p[SZ_MINUTES]
-    if SZ_REQ_SPEED in p and p[SZ_REQ_SPEED] is not None:
-        updates["request_fan_speed"] = p[SZ_REQ_SPEED]
-    if SZ_REQ_REASON in p and p[SZ_REQ_REASON] is not None:
-        updates["request_reason"] = p[SZ_REQ_REASON]
+    req_speed = p.get(SZ_REQUEST_SPEED, p.get("req_speed"))
+    if req_speed is not None:
+        updates["request_fan_speed"] = req_speed
+    req_reason = p.get(SZ_REQUEST_REASON, p.get("req_reason"))
+    if req_reason is not None:
+        updates["request_reason"] = req_reason
 
     if not updates:
         return
@@ -602,13 +604,19 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
     if SZ_HEAT_DEMAND in p:
         if slug in ("CTL", "UFC"):
-            if p.get(SZ_DOMAIN_ID) == "FC":
+            if (
+                p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx")
+            ) == "FC":
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-        elif "ufx_idx" not in p and SZ_UFH_IDX not in p:
+        elif "ufx_idx" not in p and SZ_UFH_INDEX not in p and "ufh_idx" not in p:
             updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
     if SZ_RELAY_DEMAND in p:
-        if slug == "UFC" and p.get(SZ_DOMAIN_ID) != "FC":
+        if (
+            slug == "UFC"
+            and (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx"))
+            != "FC"
+        ):
             pass
         else:
             updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]

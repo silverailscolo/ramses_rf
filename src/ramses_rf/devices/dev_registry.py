@@ -417,6 +417,7 @@ class DeviceRegistry:
                         causation="Correlated via Passive Telemetry Matching",
                         metadata={
                             "tcs_id": event.device_id,
+                            "zone_index": zone_idx,
                             "zone_idx": zone_idx,
                         },
                     )

@@ -8,7 +8,7 @@ import struct
 from dataclasses import dataclass
 from typing import Any, ClassVar, Self
 
-from ramses_rf.const import SZ_ACTIVE, SZ_DHW_IDX, SZ_MODE, SZ_UNTIL
+from ramses_rf.const import SZ_ACTIVE, SZ_DHW_INDEX, SZ_MODE, SZ_UNTIL
 from ramses_tx.helpers import hex_to_dtm
 
 from .base import PayloadBase, parse_index
@@ -523,7 +523,7 @@ class DhwState2BPayload(DhwStatePayload):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert 2-byte DHW state to legacy dictionary format."""
-        result: dict[str, Any] = {SZ_DHW_IDX: f"{self.dhw_index:02X}"}
+        result: dict[str, Any] = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
         result[SZ_ACTIVE] = (
             None if self.active_flag == 0xFF else (self.active_flag == 0x01)
         )
@@ -578,7 +578,7 @@ class DhwState3BPayload(DhwStatePayload):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert 3-byte DHW state to legacy dictionary format."""
-        result: dict[str, Any] = {SZ_DHW_IDX: f"{self.dhw_index:02X}"}
+        result: dict[str, Any] = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
         result[SZ_ACTIVE] = (
             None if self.active_flag == 0xFF else (self.active_flag == 0x01)
         )
@@ -646,7 +646,7 @@ class DhwStateOverridePayload(DhwStatePayload):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert extended DHW state to legacy dictionary format."""
-        result: dict[str, Any] = {SZ_DHW_IDX: f"{self.dhw_index:02X}"}
+        result: dict[str, Any] = {SZ_DHW_INDEX: f"{self.dhw_index:02X}"}
         result[SZ_ACTIVE] = (
             None if self.active_flag == 0xFF else (self.active_flag == 0x01)
         )

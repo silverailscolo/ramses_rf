@@ -19,9 +19,9 @@ from ramses_tx.dtos import CommandDTO
 
 def _build_zone_rq(intent: Command, code: Code, payload_suffix: str = "") -> CommandDTO:
     """Construct a standard single-zone RQ CommandDTO."""
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+        raise ValueError("Missing 'zone_index'/'zone_idx' in intent data")
 
     payload = f"{check_idx(zone_idx)}{payload_suffix}"
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
@@ -49,11 +49,11 @@ def build_set_temperature(intent: Command) -> CommandDTO:
     :rtype: CommandDTO
     :raises ValueError: If 'zone_idx' or 'setpoint' is missing.
     """
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     setpoint = intent.get("setpoint")
 
     if zone_idx is None or setpoint is None:
-        raise ValueError("Missing 'zone_idx' or 'setpoint' in intent data")
+        raise ValueError("Missing 'zone_index'/'zone_idx' or 'setpoint' in intent data")
 
     payload = ZoneSetpointPayload(zone_index=zone_idx, setpoint_temp=setpoint).hex()
 
@@ -83,9 +83,9 @@ def build_set_mode(intent: Command) -> CommandDTO:
     :rtype: CommandDTO
     :raises ValueError: If 'zone_idx' is missing or parameters are invalid.
     """
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+        raise ValueError("Missing 'zone_index'/'zone_idx' in intent data")
 
     mode = intent.get("mode")
     setpoint = intent.get("setpoint")
@@ -132,11 +132,11 @@ def build_set_name(intent: Command) -> CommandDTO:
     :rtype: CommandDTO
     :raises ValueError: If 'zone_idx' or 'name' is missing.
     """
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     name = intent.get("name")
 
     if zone_idx is None or name is None:
-        raise ValueError("Missing 'zone_idx' or 'name' in intent data")
+        raise ValueError("Missing 'zone_index'/'zone_idx' or 'name' in intent data")
 
     payload = ZoneNamePayload(zone_index=zone_idx, name=name).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
@@ -166,9 +166,9 @@ def build_set_config(intent: Command) -> CommandDTO:
     :rtype: CommandDTO
     :raises ValueError: If required parameters are missing or out of range.
     """
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+        raise ValueError("Missing 'zone_index'/'zone_idx' in intent data")
 
     min_temp = intent.get("min_temp", 5.0)
     max_temp = intent.get("max_temp", 35.0)

@@ -11,7 +11,14 @@ from typing import TYPE_CHECKING, Any
 from ramses_tx.const import Code
 
 from . import exceptions as exc
-from .const import SZ_ZONE_MASK, ZON_ROLE_MAP, DevType
+from .const import (
+    SZ_DOMAIN_INDEX,
+    SZ_UFH_INDEX,
+    SZ_ZONE_INDEX,
+    SZ_ZONE_MASK,
+    ZON_ROLE_MAP,
+    DevType,
+)
 from .eavesdropper import EavesdropEngine
 from .messages import Message
 from .schemas import SZ_CLASS
@@ -131,7 +138,11 @@ async def update_topology_schema_state(
                                     else:
                                         tcs.get_htg_zone(z_str, **schema)
                     elif (
-                        zone_idx := (p.get("zone_idx") or p.get("child_id"))
+                        zone_idx := (
+                            p.get(SZ_ZONE_INDEX)
+                            or p.get("zone_idx")
+                            or p.get("child_id")
+                        )
                     ) is not None:
                         with contextlib.suppress(
                             exc.DeviceNotFoundError, exc.SchemaInconsistentError
@@ -155,14 +166,21 @@ async def update_topology_schema_state(
 
         # 2. Code 000C: Device Role Bindings, Zone Types & UFH Circuit Mappings
         case Code._000C:
-            zone_idx = p.get("zone_idx")
-            domain_id = p.get("domain_id")
+            zone_idx = p.get(SZ_ZONE_INDEX) or p.get("zone_idx")
+            domain_id = (
+                p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx")
+            )
             devices = p.get("devices", [])
             if "device_id" in p and not devices:
                 devices = [p["device_id"]]
 
             zone_type = p.get("zone_type")
-            ufh_idx = p.get("ufh_idx") or p.get("circuit_idx") or p.get("cct_idx")
+            ufh_idx = (
+                p.get(SZ_UFH_INDEX)
+                or p.get("ufh_idx")
+                or p.get("circuit_idx")
+                or p.get("cct_idx")
+            )
 
             # Instantiate any 02: UFH Controller devices and link as children of TCS
             ufc_devs: list[Any] = []
@@ -317,7 +335,7 @@ async def update_topology_schema_state(
         # 3. Code 0004: Zone Naming & Creation
         case Code._0004:
             if tcs:
-                zone_idx = p.get("zone_idx")
+                zone_idx = p.get(SZ_ZONE_INDEX) or p.get("zone_idx")
                 name = p.get("name")
                 if zone_idx is not None and name:
                     zone = tcs.get_htg_zone(str(zone_idx))
@@ -340,7 +358,7 @@ async def update_topology_schema_state(
                 ufc_list = list(getattr(tcs, "ufh_controllers", {}).values())
 
             cct_idx = p.get("circuit_idx") or p.get("cct_idx") or p.get("ufx_idx")
-            z_idx = p.get("zone_idx")
+            z_idx = p.get(SZ_ZONE_INDEX) or p.get("zone_idx")
             if cct_idx is not None and ufc_list:
                 cct_str = (
                     f"{int(str(cct_idx), 16):02X}"

@@ -10,7 +10,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, NewType, TypeAlias
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import SZ_LOG_ENTRY, SZ_LOG_IDX
+from ramses_rf.const import SZ_LOG_ENTRY, SZ_LOG_IDX, SZ_LOG_INDEX
 from ramses_rf.models import FaultLogState, StateUpdatedEvent
 from ramses_rf.payloads.helpers import parse_fault_log_entry
 from ramses_tx import Packet
@@ -56,18 +56,43 @@ class FaultLogEntry:
     timestamp: str  # #               # 21-12-23T11:59:35 - assume is unique
     fault_state: FaultState  # #      # fault, restore, unknown_c0
     fault_type: FaultType  # #        # system_fault, battery_low, sensor_fault, etc.
-    domain_idx: str  # #              # 00-0F, FC, etc. ? only if dev_class is/not CTL?
+    domain_index: str = ""  # #       # 00-0F, FC, etc. ? only if dev_class is/not CTL?
     device_class: FaultDeviceClass  # # controller, actuator, sensor, etc.
     device_id: DeviceIdT | None  # #  # 04:164787
 
-    # def __post_init__(self):
-    #     def modify(device_id: DeviceIdT) -> DeviceIdT:
-    #     object.__setattr__(self, "device_id", modify(self.device_id))
+    def __init__(
+        self,
+        *,
+        timestamp: str,
+        fault_state: FaultState,
+        fault_type: FaultType,
+        device_class: FaultDeviceClass,
+        device_id: DeviceIdT | None,
+        domain_index: str = "",
+        domain_idx: str | None = None,
+    ) -> None:
+        """Initialize a FaultLogEntry instance."""
+        object.__setattr__(self, "timestamp", timestamp)
+        object.__setattr__(self, "fault_state", fault_state)
+        object.__setattr__(self, "fault_type", fault_type)
+        object.__setattr__(self, "device_class", device_class)
+        object.__setattr__(self, "device_id", device_id)
+        object.__setattr__(
+            self,
+            "domain_index",
+            domain_index if domain_index else (domain_idx or ""),
+        )
+
+    @property
+    def domain_idx(self) -> str:
+        """Deprecated alias for domain_index."""
+        return self.domain_index
 
     def __str__(self) -> str:
+        """Return the string representation of the fault log entry."""
         return (
             f"{self.timestamp}, {(self.fault_state + ','):<8} {self.fault_type}, "
-            f"{self.device_id}, {self.domain_idx}, {self.device_class}"
+            f"{self.device_id}, {self.domain_index}, {self.device_class}"
         )
 
     def _is_matching_pair(self, other: object) -> bool:
@@ -97,7 +122,7 @@ class FaultLogEntry:
             self.fault_type,
             self.device_class,
             self.device_id,
-            self.domain_idx,
+            self.domain_index,
         )
 
     @classmethod
@@ -106,7 +131,10 @@ class FaultLogEntry:
         log_entry = parse_fault_log_entry(msg._dto.raw_payload)
         if log_entry is None or "timestamp" not in log_entry:
             raise exc.PacketPayloadInvalid("Invalid fault log entry payload")
-        return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
+        kwargs = {k: v for k, v in log_entry.items() if k[:1] != "_"}
+        if "domain_idx" in kwargs and "domain_index" not in kwargs:
+            kwargs["domain_index"] = kwargs.pop("domain_idx")
+        return cls(**kwargs)  # type: ignore[arg-type]
 
     @classmethod
     def from_pkt(cls, packet: Packet) -> FaultLogEntry:
@@ -115,7 +143,10 @@ class FaultLogEntry:
         if log_entry is None or "timestamp" not in log_entry:
             raise exc.SystemInconsistent("Null fault log entry")
 
-        return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
+        kwargs = {k: v for k, v in log_entry.items() if k[:1] != "_"}
+        if "domain_idx" in kwargs and "domain_index" not in kwargs:
+            kwargs["domain_index"] = kwargs.pop("domain_idx")
+        return cls(**kwargs)  # type: ignore[arg-type]
 
 
 FaultDtmT = NewType("FaultDtmT", str)
@@ -142,6 +173,7 @@ class FaultLog:  # 0418
     _MAX_LOG_IDX = 0x3F  # evohome controller only keeps most recent 64 entries
 
     def __init__(self, tcs: _LogbookT) -> None:
+        """Initialize the FaultLog with a parent TCS controller."""
         self._tcs: _LogbookT = tcs
         self.id = tcs.id
         self._gateway = tcs._gateway
@@ -212,7 +244,9 @@ class FaultLog:  # 0418
         if msg.verb == I_:
             self._is_current = False
 
-        if SZ_LOG_IDX in msg.payload:
+        if SZ_LOG_INDEX in msg.payload:
+            log_idx = FaultIdxT(int(msg.payload[SZ_LOG_INDEX], 16))
+        elif SZ_LOG_IDX in msg.payload:
             log_idx = FaultIdxT(int(msg.payload[SZ_LOG_IDX], 16))
         elif msg.payload.get(SZ_LOG_ENTRY) is None:
             log_idx = FaultIdxT(0)
@@ -260,6 +294,7 @@ class FaultLog:  # 0418
         )
         msg = Message(new_dto)
         msg._payload = {
+            SZ_LOG_INDEX: log_index,
             SZ_LOG_IDX: log_index,
             SZ_LOG_ENTRY: None,
         }  # PayDictT._0418_NULL
@@ -291,7 +326,7 @@ class FaultLog:  # 0418
                     msg = await send_system_intent(
                         self._tcs,
                         Action.GET_FAULTLOG_ENTRY,
-                        data={"log_idx": log_idx},
+                        data={SZ_LOG_INDEX: log_idx},
                         wait_for_reply=True,
                     )
                 except exc.RamsesException as err:

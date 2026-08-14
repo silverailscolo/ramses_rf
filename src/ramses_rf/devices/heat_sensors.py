@@ -97,7 +97,7 @@ class Temperature(DeviceHeat):  # 30C9
         return await send_fake_intent(
             self,
             Action.PUT_SENSOR_TEMP,
-            {"temperature": value, "zone_idx": zone_idx},
+            {"temperature": value, "zone_index": zone_idx, "zone_idx": zone_idx},
         )
 
     async def status(self) -> dict[str, Any]:

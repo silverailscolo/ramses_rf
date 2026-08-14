@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ramses_rf.const import SZ_DOMAIN_ID, SZ_ZONE_IDX, DevType
+from ramses_rf.const import SZ_DOMAIN_INDEX, SZ_ZONE_INDEX, DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -50,8 +50,11 @@ class RadTopologyHandler(TopologyHandler):
                 if not isinstance(payload, dict):
                     continue
 
-                zone_idx = payload.get(SZ_ZONE_IDX)
-                domain_id = payload.get(SZ_DOMAIN_ID)
+                zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+                domain_id = payload.get(
+                    SZ_DOMAIN_INDEX,
+                    payload.get("domain_id", payload.get("domain_idx")),
+                )
 
                 if zone_idx is None and domain_id is None:
                     continue

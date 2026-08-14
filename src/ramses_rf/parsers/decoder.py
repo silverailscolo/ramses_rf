@@ -9,6 +9,7 @@ import struct
 from abc import ABC, abstractmethod
 from typing import Any
 
+from ramses_rf.const import SZ_DHW_INDEX, SZ_DOMAIN_INDEX, SZ_UFH_INDEX, SZ_ZONE_INDEX
 from ramses_rf.payloads import get_payload_class
 from ramses_rf.protocol.ramses import (
     CODE_IDX_ARE_COMPLEX,
@@ -351,17 +352,17 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
         return {}
 
     if msg.code in ("000A", "2309") and msg.src.type == "02":
-        return {"ufh_idx": str(msg._idx)}
+        return {SZ_UFH_INDEX: str(msg._idx)}
 
     idx_val = str(msg._idx)
-    idx_name = "domain_id" if idx_val.startswith("F") else "zone_idx"
+    idx_name = SZ_DOMAIN_INDEX if idx_val.startswith("F") else SZ_ZONE_INDEX
 
     idx_names = {
         "0002": "other_idx",
-        "10A0": "dhw_idx",
-        "1260": "dhw_idx",
-        "1F41": "dhw_idx",
-        "22C9": "ufh_idx",
+        "10A0": SZ_DHW_INDEX,
+        "1260": SZ_DHW_INDEX,
+        "1F41": SZ_DHW_INDEX,
+        "22C9": SZ_UFH_INDEX,
         "2389": "other_idx",
         "2D49": "other_idx",
     }

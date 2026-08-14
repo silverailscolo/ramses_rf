@@ -12,7 +12,18 @@ from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
 from .address import ALL_DEV_ADDR, ALL_DEVICE_ID, NON_DEV_ADDR, NON_DEVICE_ID, Address
-from .const import F9, FA, FC, FF, SZ_ACTIVE_HGI, IndexT, Priority, VerbT
+from .const import (
+    F9,
+    FA,
+    FC,
+    FF,
+    SZ_ACTIVE_GATEWAY,
+    SZ_ACTIVE_HGI,
+    SZ_REPEAT_COUNT,
+    IndexT,
+    Priority,
+    VerbT,
+)
 from .discovery import is_hgi80
 from .dtos import CommandDTO, PacketDTO
 from .engine import Engine
@@ -37,9 +48,11 @@ __all__ = [
     "VERSION",
     "Engine",
     #
+    "SZ_ACTIVE_GATEWAY",
     "SZ_ACTIVE_HGI",
     "SZ_DEVICE_ROLE",
     "SZ_DOMAIN_ID",
+    "SZ_REPEAT_COUNT",
     "SZ_SERIAL_PORT",
     "SZ_ZONE_CLASS",
     "SZ_ZONE_IDX",

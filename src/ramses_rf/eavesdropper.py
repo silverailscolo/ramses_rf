@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 import ramses_rf.exceptions as exc
 from ramses_rf.const import (
-    SZ_DOMAIN_ID,
+    SZ_DOMAIN_INDEX,
     SZ_TEMPERATURE,
-    SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
     ZON_ROLE_MAP,
     DevType,
 )
@@ -192,8 +192,11 @@ class EavesdropEngine:
                 if not isinstance(payload, dict):
                     continue
 
-                zone_idx = payload.get(SZ_ZONE_IDX)
-                domain_id = payload.get(SZ_DOMAIN_ID)
+                zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+                domain_id = payload.get(
+                    SZ_DOMAIN_INDEX,
+                    payload.get("domain_id", payload.get("domain_idx")),
+                )
 
                 if zone_idx is None and domain_id is None:
                     continue
@@ -439,7 +442,7 @@ class EavesdropEngine:
             if not isinstance(payload, dict):
                 continue
 
-            zone_idx = payload.get(SZ_ZONE_IDX)
+            zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
             if zone_idx is None:
                 continue
 
@@ -463,6 +466,7 @@ class EavesdropEngine:
                             action=TopologyAction.UPDATE_TRAITS,
                             device_id=ctl_id,
                             metadata={
+                                "zone_index": str(zone_idx),
                                 "zone_idx": str(zone_idx),
                                 "class": zone_class,
                             },
@@ -532,7 +536,7 @@ class EavesdropEngine:
             return
 
         changed_zones: dict[str, float] = {
-            z.get(SZ_ZONE_IDX): z.get(SZ_TEMPERATURE)
+            (z.get(SZ_ZONE_INDEX) or z.get("zone_idx")): z.get(SZ_TEMPERATURE)
             for z in msg.payload
             if z not in prev.payload and z.get(SZ_TEMPERATURE) is not None
         }

@@ -38,8 +38,9 @@ from ramses_rf.const import (
     SZ_DEWPOINT_TEMP,
     SZ_DHW_ACTIVE,
     SZ_DHW_FLOW_RATE,
+    SZ_DHW_INDEX,
     SZ_DIFFERENTIAL,
-    SZ_DOMAIN_ID,
+    SZ_DOMAIN_INDEX,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
     SZ_EXHAUST_TEMP,
@@ -69,8 +70,8 @@ from ramses_rf.const import (
     SZ_REMAINING_DAYS,
     SZ_REMAINING_MINS,
     SZ_REMAINING_PERCENT,
-    SZ_REQ_REASON,
-    SZ_REQ_SPEED,
+    SZ_REQUEST_REASON,
+    SZ_REQUEST_SPEED,
     SZ_SETPOINT,
     SZ_SETPOINT_BOUNDS,
     SZ_SPEED_CAPABILITIES,
@@ -79,10 +80,10 @@ from ramses_rf.const import (
     SZ_SUPPLY_TEMP,
     SZ_SYSTEM_MODE,
     SZ_TEMPERATURE,
-    SZ_UFH_IDX,
+    SZ_UFH_INDEX,
     SZ_UNTIL,
     SZ_WINDOW_OPEN,
-    SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
 )
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
@@ -236,17 +237,20 @@ class StateProjector:
                 continue
 
             if (
-                SZ_UFH_IDX not in payload
-                and SZ_ZONE_IDX not in payload
+                SZ_UFH_INDEX not in payload
+                and "ufh_idx" not in payload
+                and SZ_ZONE_INDEX not in payload
+                and "zone_idx" not in payload
                 and "ufx_idx" not in payload
-                and SZ_DOMAIN_ID not in payload
+                and SZ_DOMAIN_INDEX not in payload
+                and "domain_id" not in payload
                 and all(isinstance(dict_val, dict) for dict_val in payload.values())
             ):
                 for key, value in payload.items():
                     if isinstance(value, dict):
                         # Inject the outer index key so it isn't lost during unfold
                         value_copy = dict(value)
-                        value_copy[SZ_UFH_IDX] = key
+                        value_copy[SZ_UFH_INDEX] = key
                         unfolded_payloads.append(value_copy)
             else:
                 unfolded_payloads.append(payload)
@@ -301,9 +305,10 @@ class StateProjector:
                         )
 
             # Route CQRS state to Systems (TCS) and Zones
-            if SZ_ZONE_IDX in payload and msg.src.id in system_by_id:
+            zone_val = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+            if zone_val is not None and msg.src.id in system_by_id:
                 tcs = system_by_id[msg.src.id]
-                zone = tcs.zone_by_idx.get(str(payload[SZ_ZONE_IDX]))
+                zone = tcs.zone_by_idx.get(str(zone_val))
                 if zone:
                     try:
                         self._update_zone_state(zone, payload, msg)
@@ -353,10 +358,13 @@ class StateProjector:
             # neither src nor dst.  Without this, demand_state on the DhwZone
             # is never hydrated (relay_demand, relay_failsafe, heat_demand).
             # See: https://github.com/ramses-rf/ramses_cc/issues/843
-            if SZ_DOMAIN_ID in payload and src_dev and msg.src.id in system_by_id:
+            domain_val = payload.get(
+                SZ_DOMAIN_INDEX,
+                payload.get("domain_id", payload.get("domain_idx")),
+            )
+            if domain_val is not None and src_dev and msg.src.id in system_by_id:
                 tcs = system_by_id[msg.src.id]
-                domain_id = payload[SZ_DOMAIN_ID]
-                if domain_id == "FC" and tcs is not None:
+                if domain_val == "FC" and tcs is not None:
                     try:
                         self._update_demand_state(tcs, payload, msg)
                     except Exception as err:
@@ -366,7 +374,7 @@ class StateProjector:
                             err,
                         )
                 elif (
-                    domain_id in ("FA", "F9") and getattr(tcs, "dhw", None) is not None
+                    domain_val in ("FA", "F9") and getattr(tcs, "dhw", None) is not None
                 ):
                     try:
                         self._update_demand_state(tcs.dhw, payload, msg)
@@ -422,7 +430,7 @@ class StateProjector:
                             src=HGI_DEV_ADDR,
                             dst=Address(src_dev.ctl.id),
                             action=Action.GET_DHW_TEMP,
-                            data={"dhw_idx": 0},
+                            data={SZ_DHW_INDEX: 0},
                         )
                     )
                     self._gateway.send_cmd(dto)
@@ -643,10 +651,12 @@ class StateProjector:
             updates["filter_remaining_percent"] = p[SZ_REMAINING_PERCENT]
         if SZ_MINUTES in p and msg.code == Code._22F3:
             updates["boost_timer_mins"] = p[SZ_MINUTES]
-        if SZ_REQ_SPEED in p:
-            updates["request_fan_speed"] = p[SZ_REQ_SPEED]
-        if SZ_REQ_REASON in p:
-            updates["request_reason"] = p[SZ_REQ_REASON]
+        req_speed = p.get(SZ_REQUEST_SPEED, p.get("req_speed"))
+        if req_speed is not None:
+            updates["request_fan_speed"] = req_speed
+        req_reason = p.get(SZ_REQUEST_REASON, p.get("req_reason"))
+        if req_reason is not None:
+            updates["request_reason"] = req_reason
 
         if not updates:
             return
@@ -862,14 +872,22 @@ class StateProjector:
             # Prevent flattened array payloads (e.g., UFH circuit demands)
             # from overwriting the controller's aggregate FC heat demand.
             if slug in ("CTL", "UFC"):
-                if p.get(SZ_DOMAIN_ID) == "FC":
+                if (
+                    p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx")
+                ) == "FC":
                     updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-            elif SZ_UFH_IDX not in p and "ufx_idx" not in p:
+            elif SZ_UFH_INDEX not in p and "ufh_idx" not in p and "ufx_idx" not in p:
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
         elif msg.code == Code._0008 and SZ_RELAY_DEMAND in p:
             # Prevent FA (UFH) relay demands from overwriting FC relay demand
-            if slug == "UFC" and p.get(SZ_DOMAIN_ID) != "FC":
+            if (
+                slug == "UFC"
+                and (
+                    p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx")
+                )
+                != "FC"
+            ):
                 pass
             else:
                 updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
@@ -909,15 +927,23 @@ class StateProjector:
         updates: dict[str, Any] = {}
 
         # Safely extract index matching legacy typo "ufx_idx"
-        ufh_index = p.get("ufx_idx") or p.get(SZ_UFH_IDX) or p.get(SZ_ZONE_IDX)
+        ufh_index = (
+            p.get("ufx_idx")
+            or p.get(SZ_UFH_INDEX)
+            or p.get("ufh_idx")
+            or p.get(SZ_ZONE_INDEX)
+            or p.get("zone_idx")
+        )
 
         if msg.code == Code._3150 and ufh_index is not None and SZ_HEAT_DEMAND in p:
             new_demands = dict(current_state.heat_demands)
             new_demands[str(ufh_index)] = p[SZ_HEAT_DEMAND]
             updates["heat_demands"] = new_demands
+
         elif (
             msg.code == Code._0008
-            and p.get(SZ_DOMAIN_ID) == "FA"
+            and (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx"))
+            == "FA"
             and SZ_RELAY_DEMAND in p
         ):
             updates["relay_demand_fa"] = p[SZ_RELAY_DEMAND]

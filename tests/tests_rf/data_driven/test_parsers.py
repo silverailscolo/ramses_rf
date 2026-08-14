@@ -71,11 +71,18 @@ def _proc_log_line(log_line: str) -> None:
 
         keys_to_strip = (
             "zone_idx",
+            "zone_index",
             "domain_id",
+            "domain_idx",
+            "domain_index",
             "dhw_idx",
+            "dhw_index",
             "hvac_id",
             "ufh_idx",
+            "ufh_index",
             "ufx_idx",
+            "log_idx",
+            "log_index",
             "other_idx",
         )
 
@@ -95,18 +102,23 @@ def _proc_log_line(log_line: str) -> None:
         ):
             payload = payload[0]
 
+        LEGACY_KEY_MAP = {
+            "req_reason": "request_reason",
+            "req_speed": "request_speed",
+            "is_dst": "is_daylight_saving",
+        }
+
+        def _normalize_dict(d: dict[str, Any]) -> dict[str, Any]:
+            return {
+                LEGACY_KEY_MAP.get(k, k): v
+                for k, v in d.items()
+                if k not in keys_to_strip and not k.startswith("_")
+            }
+
         # Safely align the payload for comparison against legacy logs
         if isinstance(payload, dict) and isinstance(pkt_dict, dict):
-            payload = {
-                k: v
-                for k, v in payload.items()
-                if k not in keys_to_strip and not k.startswith("_")
-            }
-            pkt_dict = {
-                k: v
-                for k, v in pkt_dict.items()
-                if k not in keys_to_strip and not k.startswith("_")
-            }
+            payload = _normalize_dict(payload)
+            pkt_dict = _normalize_dict(pkt_dict)
 
         # Apply the same stripping logic if the payload is an array of dicts
         elif isinstance(payload, list) and isinstance(pkt_dict, list):
@@ -114,20 +126,8 @@ def _proc_log_line(log_line: str) -> None:
             new_pkt_dict: list[Any] = []
             for item, pkt_item in zip(payload, pkt_dict, strict=False):
                 if isinstance(item, dict) and isinstance(pkt_item, dict):
-                    new_payload.append(
-                        {
-                            k: v
-                            for k, v in item.items()
-                            if k not in keys_to_strip and not k.startswith("_")
-                        }
-                    )
-                    new_pkt_dict.append(
-                        {
-                            k: v
-                            for k, v in pkt_item.items()
-                            if k not in keys_to_strip and not k.startswith("_")
-                        }
-                    )
+                    new_payload.append(_normalize_dict(item))
+                    new_pkt_dict.append(_normalize_dict(pkt_item))
                 else:
                     new_payload.append(item)
                     new_pkt_dict.append(pkt_item)
