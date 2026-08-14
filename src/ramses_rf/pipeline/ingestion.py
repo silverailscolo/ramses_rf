@@ -149,16 +149,16 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 class StateProjector:
     """Projector task that transforms incoming telemetry into immutable states."""
 
-    def __init__(self, gwy: Any, ssot_queue: asyncio.Queue[Message]) -> None:
+    def __init__(self, gateway: Any, ssot_queue: asyncio.Queue[Message]) -> None:
         """Initialize the state projector background worker.
 
-        :param gwy: The active Gateway facade instance.
-        :type gwy: Any
+        :param gateway: The active Gateway facade instance.
+        :type gateway: Any
         :param ssot_queue: Single Source of Truth Queue from
             CentralDispatcher.
         :type ssot_queue: asyncio.Queue[Message]
         """
-        self._gwy = gwy
+        self._gateway = gateway
         self._queue = ssot_queue
         self._task: asyncio.Task[None] | None = None
 
@@ -203,7 +203,7 @@ class StateProjector:
 
         Delegates to the shared helper in ``dispatcher.py``.
         """
-        _route_2411_to_fan(self._gwy, msg)
+        _route_2411_to_fan(self._gateway, msg)
 
     def process_message_state(self, msg: Message) -> None:
         """Route valid inbound message envelopes to their respective engines.
@@ -225,7 +225,7 @@ class StateProjector:
         # the StateProjector path to keep parity with the dispatcher path.
         # See ramses_cc issue 851.
         if msg.code == Code._2411:
-            _route_2411_to_fan(self._gwy, msg)
+            _route_2411_to_fan(self._gateway, msg)
 
         payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
 
@@ -251,7 +251,7 @@ class StateProjector:
             else:
                 unfolded_payloads.append(p)
 
-        registry = getattr(self._gwy, "device_registry", None)
+        registry = getattr(self._gateway, "device_registry", None)
         if not registry:
             return
 
@@ -404,7 +404,7 @@ class StateProjector:
 
                 try:
                     cmd = build_rq_cmd(msg.src.id, Code._3EF1, "00")
-                    self._gwy.send_cmd(cmd, priority=Priority.LOW)
+                    self._gateway.send_cmd(cmd, priority=Priority.LOW)
                 except Exception as err:
                     _LOGGER.error(
                         "Failed to trigger CQRS 3EF1 reactor for %s: %s",
@@ -425,7 +425,7 @@ class StateProjector:
                             data={"dhw_idx": 0},
                         )
                     )
-                    self._gwy.send_cmd(dto)
+                    self._gateway.send_cmd(dto)
                 except Exception as err:
                     _LOGGER.error(
                         "Failed to trigger CQRS 1260 reactor for %s: %s",

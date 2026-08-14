@@ -146,7 +146,7 @@ EXPECTED_MAP = {
 class EvohomeStub:
     def __init__(self, ctl_id: DeviceIdT) -> None:
         self.id = ctl_id
-        self._gwy = None
+        self._gateway = None
 
 
 def _proc_log_line(log_line: str) -> None:

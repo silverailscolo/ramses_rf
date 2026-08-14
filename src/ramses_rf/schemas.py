@@ -345,7 +345,9 @@ SCH_RESTORE_CACHE_DICT = {
 
 #
 # 7/7: Other stuff
-def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , **traits
+def _get_device(
+    gateway: Gateway, dev_id: DeviceIdT, **kwargs: Any
+) -> Device:  # , **traits
     """Get a device from the gateway.
 
     Raise a DeviceNotFoundError if a device_id is filtered out by the known or block list.
@@ -356,11 +358,14 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
     def check_filter_lists(dev_id: DeviceIdT) -> None:
         """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
         err_msg = None
-        if gwy._engine._enforce_known_list and dev_id not in gwy._engine._include:
+        if (
+            gateway._engine._enforce_known_list
+            and dev_id not in gateway._engine._include
+        ):
             err_msg = f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"
         # issue ramses_cc #296: if enforce_known_list is turned on, error on any "unknown" dev_id
         # fix: delete from schema?
-        if dev_id in gwy._engine._exclude:
+        if dev_id in gateway._engine._exclude:
             err_msg = f"it is in the {SZ_SCHEMA}, but also in the {SZ_BLOCK_LIST}"
 
         if err_msg:
@@ -370,19 +375,19 @@ def _get_device(gwy: Gateway, dev_id: DeviceIdT, **kwargs: Any) -> Device:  # , 
 
     check_filter_lists(dev_id)
 
-    dev: Device = gwy.device_registry.get_device(dev_id, **kwargs)
+    dev: Device = gateway.device_registry.get_device(dev_id, **kwargs)
     return dev
 
 
 def load_schema(
-    gwy: Any,
+    gateway: Any,
     known_list: DeviceListT | dict[str, Any] | None = None,
     **schema: Any,
 ) -> None:
     """Instantiate all entities in the schema, and faked devices in the known_list.
 
-    :param gwy: The Gateway instance to attach devices and systems to.
-    :type gwy: Gateway
+    :param gateway: The Gateway instance to attach devices and systems to.
+    :type gateway: Gateway
     :param known_list: Optional dictionary of known device IDs and traits.
     :type known_list: dict[DeviceIdT, Any] | None
     :param schema: Keyword arguments representing the global schema.
@@ -396,19 +401,20 @@ def load_schema(
     # schema: dict = SCH_GLOBAL_SCHEMAS_DICT(schema)
 
     [
-        load_tcs(gwy, ctl_id, schema)  # type: ignore[arg-type]
+        load_tcs(gateway, ctl_id, schema)  # type: ignore[arg-type]
         for ctl_id, schema in schema.items()
         if re.match(DEVICE_ID_REGEX.ANY, ctl_id) and SZ_REMOTES not in schema
     ]
     if schema.get(SZ_MAIN_TCS):
-        gwy._tcs = gwy.device_registry.system_by_id.get(schema[SZ_MAIN_TCS])
+        sys_by_id = gateway.device_registry.system_by_id
+        gateway._tcs = sys_by_id.get(schema[SZ_MAIN_TCS])
     [
-        load_fan(gwy, fan_id, schema)  # type: ignore[arg-type]
+        load_fan(gateway, fan_id, schema)  # type: ignore[arg-type]
         for fan_id, schema in schema.items()
         if re.match(DEVICE_ID_REGEX.ANY, fan_id) and SZ_REMOTES in schema
     ]
     [  # NOTE: class favoured, domain ignored
-        _get_device(gwy, device_id)  # domain=key[-4:])
+        _get_device(gateway, device_id)  # domain=key[-4:])
         for key in (SZ_ORPHANS_HEAT, SZ_ORPHANS_HVAC)
         for device_id in schema.get(key, [])
     ]  # TODO: pass domain (Heat/HVAC), or generalise to SZ_ORPHANS
@@ -416,18 +422,18 @@ def load_schema(
     # create any devices in the known list that are faked, or fake those already created
     for device_id, traits in known_list.items():
         if traits.get(SZ_FAKED):
-            dev = _get_device(gwy, DeviceIdT(device_id))  # , **traits)
+            dev = _get_device(gateway, DeviceIdT(device_id))  # , **traits)
             if not isinstance(dev, Fakeable):
                 raise exc.DeviceNotFaked(f"Device is not fakeable: {dev}")
             if not dev.is_faked:
                 dev._make_fake()
 
 
-def load_fan(gwy: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
+def load_fan(gateway: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
     """Create a FAN using its schema (i.e. with remotes, sensors).
 
-    :param gwy: The Gateway instance managing the device.
-    :type gwy: Gateway
+    :param gateway: The Gateway instance managing the device.
+    :type gateway: Gateway
     :param fan_id: The device ID of the FAN entity.
     :type fan_id: DeviceIdT
     :param schema: The schema dictionary for the FAN entity.
@@ -435,18 +441,18 @@ def load_fan(gwy: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
     :returns: The created or retrieved FAN device instance.
     :rtype: Device
     """
-    fan = _get_device(gwy, fan_id)
+    fan = _get_device(gateway, fan_id)
     if hasattr(fan, "_update_schema"):
         fan._update_schema(**schema)
 
     return fan
 
 
-def load_tcs(gwy: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evohome:
+def load_tcs(gateway: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evohome:
     """Create a TCS using its schema.
 
-    :param gwy: The Gateway instance managing the TCS.
-    :type gwy: Gateway
+    :param gateway: The Gateway instance managing the TCS.
+    :type gateway: Gateway
     :param ctl_id: The controller device ID for the TCS.
     :type ctl_id: DeviceIdT
     :param schema: The schema dictionary for the TCS.
@@ -457,22 +463,22 @@ def load_tcs(gwy: Gateway, ctl_id: DeviceIdT, schema: dict[str, Any]) -> Evohome
     # print(schema)
     # schema = SCH_TCS_ZONES_ZON(schema)
 
-    ctl = _get_device(gwy, ctl_id)
+    ctl = _get_device(gateway, ctl_id)
     if ctl.tcs is None:
         raise exc.SchemaInconsistentError(f"No TCS assigned to controller {ctl.id}")
     ctl.tcs._update_schema(**schema)
 
     for dev_id in schema.get(SZ_UFH_SYSTEM, {}):  # UFH controllers
-        _get_device(gwy, dev_id, parent=ctl.tcs)  # , **_schema)
+        _get_device(gateway, dev_id, parent=ctl.tcs)  # , **_schema)
 
     for dev_id in schema.get(SZ_ORPHANS, []):
-        _get_device(gwy, dev_id, parent=ctl)
+        _get_device(gateway, dev_id, parent=ctl)
 
     # if DEV_MODE:
     #     import json
-
+    #
     #     src = json.dumps(shrink(schema), sort_keys=True)
-    #     dst = json.dumps(shrink(gwy.device_registry.system_by_id[ctl.id].schema), sort_keys=True)
+    #     dst = json.dumps(shrink(gateway.device_registry.system_by_id[ctl.id].schema), sort_keys=True)
     #     # assert dst == src, "They don't match!"
     #     print(src)
     #     print(dst)

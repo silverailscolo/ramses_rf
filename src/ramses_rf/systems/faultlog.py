@@ -144,7 +144,7 @@ class FaultLog:  # 0418
     def __init__(self, tcs: _LogbookT) -> None:
         self._tcs: _LogbookT = tcs
         self.id = tcs.id
-        self._gwy = tcs._gwy
+        self._gateway = tcs._gateway
 
         self.state = FaultLogState()
 

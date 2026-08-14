@@ -431,7 +431,7 @@ class Schedule:  # 0404
 
         self.ctl = zone.ctl
         self.tcs = zone.tcs
-        self._gwy = zone._gwy
+        self._gateway = zone._gateway
 
         self._full_schedule: WeeklyScheduleDict | EmptySchedule | EmptyDictT = {}
 

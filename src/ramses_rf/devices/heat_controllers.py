@@ -245,7 +245,7 @@ class UfhCircuit(Child, Entity):  # FIXME
     _STATE_ATTR: str | None = None
 
     def __init__(self, ufc: UfhController, ufh_idx: str) -> None:
-        super().__init__(ufc._gwy)
+        super().__init__(ufc._gateway)
 
         # FIXME: gwy.message_store entities must know their parent device ID
         # and their own idx

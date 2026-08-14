@@ -83,8 +83,8 @@ class TestHvacVentilator:
         assert hvac_ventilator._hgi is None
         assert hvac_ventilator._bound_devices == {}
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_set_initialized_callback_clear(
         self, hvac_ventilator: HvacVentilator
@@ -102,8 +102,8 @@ class TestHvacVentilator:
         hvac_ventilator.set_initialized_callback(None)
         assert hvac_ventilator._initialized_callback is None
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_set_initialized_callback_set(
         self, hvac_ventilator: HvacVentilator
@@ -116,8 +116,8 @@ class TestHvacVentilator:
         # Test initial state
         assert hvac_ventilator._initialized_callback is None
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
         # Set the callback
         mock_callback = MagicMock()
@@ -131,8 +131,8 @@ class TestHvacVentilator:
         :param hvac_ventilator: The HvacVentilator fixture.
         :type hvac_ventilator: HvacVentilator
         """
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
         # Define a mock callback
         mock_callback = MagicMock()
@@ -180,8 +180,8 @@ class TestHvacVentilator:
         # Check that the callback was called with the correct parameters
         mock_callback.assert_called_once_with(TEST_PARAM_ID, TEST_PARAM_VALUE)
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     async def test_setup_discovery_cmds(self, hvac_ventilator: HvacVentilator) -> None:
         """Test that discovery commands are set up correctly.
@@ -196,8 +196,8 @@ class TestHvacVentilator:
         assert "10D0" in schedule, "Filter change (10D0) not scheduled for FAN"
         assert "3150" in schedule, "Fan speed status (3150) not scheduled for FAN"
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_add_bound_device(
         self, hvac_ventilator: HvacVentilator, caplog: pytest.LogCaptureFixture
@@ -251,8 +251,8 @@ class TestHvacVentilator:
             f"Expected warning message not found in logs. Expected: {expected_message}"
         )
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_remove_bound_device(self, hvac_ventilator: HvacVentilator) -> None:
         """Test removing a bound device.
@@ -270,8 +270,8 @@ class TestHvacVentilator:
         # Removing non-existent device should not raise
         hvac_ventilator.remove_bound_device("nonexistent:device")
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_get_bound_rem(self, hvac_ventilator: HvacVentilator) -> None:
         """Test getting a bound REM device.
@@ -292,8 +292,8 @@ class TestHvacVentilator:
         hvac_ventilator.add_bound_device("38:123456", DevType.DIS)
         assert hvac_ventilator.get_bound_rem() == TEST_BOUND_DEVICE_ID
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_get_fan_param_supported(self, hvac_ventilator: HvacVentilator) -> None:
         """Test getting a supported fan parameter.
@@ -311,8 +311,8 @@ class TestHvacVentilator:
         value = hvac_ventilator.get_fan_param(TEST_PARAM_ID)
         assert value == TEST_PARAM_VALUE
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_get_fan_param_unsupported(
         self, hvac_ventilator: HvacVentilator, caplog: pytest.LogCaptureFixture
@@ -332,8 +332,8 @@ class TestHvacVentilator:
         value = hvac_ventilator.get_fan_param(TEST_PARAM_ID)
         assert value is None
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_get_fan_param_normalization(self, hvac_ventilator: HvacVentilator) -> None:
         """Test parameter ID normalization.
@@ -351,8 +351,8 @@ class TestHvacVentilator:
         assert hvac_ventilator.get_fan_param("3F") == 75
         assert hvac_ventilator.get_fan_param("0003F") == 75
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_initialized_callback(self, hvac_ventilator: HvacVentilator) -> None:
         """Test the initialized callback behaviour.
@@ -381,8 +381,8 @@ class TestHvacVentilator:
         hvac_ventilator._handle_initialized_callback()
         mock_callback.assert_called_once()  # Still only called once
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_hgi_property(
         self, hvac_ventilator: HvacVentilator, monkeypatch: pytest.MonkeyPatch
@@ -395,7 +395,7 @@ class TestHvacVentilator:
         :type monkeypatch: pytest.MonkeyPatch
         """
         # Get the gateway's hgi
-        gateway_hgi = hvac_ventilator._gwy.hgi
+        gateway_hgi = hvac_ventilator._gateway.hgi
 
         # First call should get the value from the gateway
         assert hvac_ventilator.hgi is gateway_hgi
@@ -409,7 +409,7 @@ class TestHvacVentilator:
         new_hgi = MagicMock()
 
         # Use monkeypatch to temporarily replace the hgi property
-        monkeypatch.setattr(hvac_ventilator._gwy, "hgi", new_hgi)
+        monkeypatch.setattr(hvac_ventilator._gateway, "hgi", new_hgi)
 
         # The property still returns the original cached value
         assert hvac_ventilator.hgi is gateway_hgi
@@ -417,8 +417,8 @@ class TestHvacVentilator:
 
         # Clear the cache
         hvac_ventilator._hgi = None
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
         # Now it should get the new value
         assert hvac_ventilator.hgi is new_hgi
@@ -449,8 +449,8 @@ class TestHvacVentilator:
         # No parameter update callback should be called
         mock_callback.assert_not_called()
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_missing_callback(self, hvac_ventilator: HvacVentilator) -> None:
         """Test behaviour when callbacks are not set.
@@ -484,8 +484,8 @@ class TestHvacVentilator:
         # Callback should be called with the parameter and value
         mock_callback.assert_called_once_with("3F", 50)
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()  # close sqlite3 connection
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
     def test_2411_param_01_data_type_20(self, hvac_ventilator: HvacVentilator) -> None:
         """Test parsing of 2411 parameter 01 with data type 20 (GitHub issue #342).
@@ -517,8 +517,8 @@ class TestHvacVentilator:
         stored_value = hvac_ventilator.get_fan_param("1")
         assert stored_value == 3307
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
 
     def test_2411_param_3e_data_type_90(self, hvac_ventilator: HvacVentilator) -> None:
         """Test parsing of 2411 parameter 3E with data type 90 (GitHub issue #317).
@@ -550,8 +550,8 @@ class TestHvacVentilator:
         stored_value = hvac_ventilator.get_fan_param("3E")
         assert stored_value == 800
 
-        if hvac_ventilator._gwy.message_store:
-            hvac_ventilator._gwy.message_store.stop()
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
 
 
 async def test_set_fan_mode_with_bound_rem() -> None:
@@ -561,8 +561,8 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     dev._scheme = "orcon"
     dev.get_bound_rem.return_value = "37:654321"
 
-    dev._gwy = MagicMock()
-    dev._gwy.dispatcher.send = AsyncMock(return_value="mock_packet")
+    dev._gateway = MagicMock()
+    dev._gateway.dispatcher.send = AsyncMock(return_value="mock_packet")
 
     # Call the unbound method passing our mock as 'self'
     result = await HvacVentilator.set_fan_mode(dev, "low")
@@ -571,8 +571,8 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     dev.get_bound_rem.assert_called_once()
 
     # 2. Verify the intent was transmitted with the correct QoS
-    dev._gwy.dispatcher.send.assert_awaited_once()
-    intent = dev._gwy.dispatcher.send.await_args[0][0]
+    dev._gateway.dispatcher.send.assert_awaited_once()
+    intent = dev._gateway.dispatcher.send.await_args[0][0]
 
     from ramses_rf.enums import Action
 
@@ -594,14 +594,14 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     dev.hgi = MagicMock()
     dev.hgi.id = "18:000730"
 
-    dev._gwy = MagicMock()
-    dev._gwy.dispatcher.send = AsyncMock(return_value="mock_packet")
+    dev._gateway = MagicMock()
+    dev._gateway.dispatcher.send = AsyncMock(return_value="mock_packet")
 
     await HvacVentilator.set_fan_mode(dev, "high")
 
     # Verify the intent was built using the HGI's ID ("18:000730")
-    dev._gwy.dispatcher.send.assert_awaited_once()
-    intent = dev._gwy.dispatcher.send.await_args[0][0]
+    dev._gateway.dispatcher.send.assert_awaited_once()
+    intent = dev._gateway.dispatcher.send.await_args[0][0]
 
     from ramses_rf.enums import Action
 

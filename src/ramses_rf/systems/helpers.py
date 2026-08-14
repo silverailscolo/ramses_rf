@@ -17,7 +17,7 @@ class _SystemEntity(Protocol):
     @property
     def ctl(self) -> DeviceInterface: ...
     @property
-    def _gwy(self) -> GatewayInterface: ...
+    def _gateway(self) -> GatewayInterface: ...
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ async def send_system_intent(
     wait_for_reply: bool | None = None,
 ) -> Message:
     """Dispatch system intent from HGI (or CTL) to the CTL."""
-    src_id = system._gwy.hgi.id if system._gwy.hgi else system.ctl.id
+    src_id = system._gateway.hgi.id if system._gateway.hgi else system.ctl.id
     intent = Intent(
         src=Address(src_id),
         dst=Address(system.ctl.id),
@@ -39,7 +39,7 @@ async def send_system_intent(
     )
 
     if wait_for_reply is not None:
-        return await system._gwy.dispatcher.send(
+        return await system._gateway.dispatcher.send(
             intent, priority=Priority.HIGH, wait_for_reply=wait_for_reply
         )
-    return await system._gwy.dispatcher.send(intent, priority=Priority.HIGH)
+    return await system._gateway.dispatcher.send(intent, priority=Priority.HIGH)

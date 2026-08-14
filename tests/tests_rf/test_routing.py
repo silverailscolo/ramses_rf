@@ -147,8 +147,8 @@ class TestDispatcher2411Routing:
         callback.assert_called_once()
         assert fan._initialized_callback is None
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
     @pytest.mark.asyncio
     async def test_2411_rp_also_routed(self, mock_gateway: MagicMock) -> None:
@@ -159,8 +159,8 @@ class TestDispatcher2411Routing:
 
         assert fan._supports_2411
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
     @pytest.mark.asyncio
     async def test_2411_rq_not_routed(self, mock_gateway: MagicMock) -> None:
@@ -172,8 +172,8 @@ class TestDispatcher2411Routing:
         assert not fan._supports_2411, "RQ must not flip supports_2411"
         assert fan._params_2411 == {}
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
     @pytest.mark.asyncio
     async def test_non_fan_target_not_affected(self, mock_gateway: MagicMock) -> None:
@@ -190,8 +190,8 @@ class TestDispatcher2411Routing:
         assert fan._supports_2411
         other._handle_2411_message.assert_not_called()
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
 
 class TestStateProjector2411Routing:
@@ -211,8 +211,8 @@ class TestStateProjector2411Routing:
         assert fan._params_2411.get(TEST_PARAM_ID) == TEST_PARAM_VALUE
         callback.assert_called_once()
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
     def test_state_projector_process_message_state_routes_2411(
         self, mock_gateway: MagicMock
@@ -226,8 +226,8 @@ class TestStateProjector2411Routing:
 
         assert fan._supports_2411
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
 
 @pytest.mark.asyncio
@@ -240,7 +240,7 @@ async def test_l7_routing_avoids_stranglers_knot() -> None:
 
     tcs = MagicMock()
     tcs.id = "01:145038"
-    tcs._gwy = gwy_mock
+    tcs._gateway = gwy_mock
     tcs.ctl = MagicMock()
     tcs.ctl.id = "01:145038"
     tcs.zone_by_idx = {}

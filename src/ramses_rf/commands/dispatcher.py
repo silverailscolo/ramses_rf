@@ -16,12 +16,12 @@ class CommandDispatcher:
     construction and modem dispatch.
     """
 
-    def __init__(self, gwy: GatewayInterface) -> None:
+    def __init__(self, gateway: GatewayInterface) -> None:
         """Initialize the dispatcher with a reference to the Gateway.
 
-        :param gwy: The main gateway instance for sending L3 payloads.
+        :param gateway: The main gateway instance for sending L3 payloads.
         """
-        self._gwy = gwy
+        self._gateway = gateway
 
     async def send(
         self,
@@ -42,17 +42,17 @@ class CommandDispatcher:
         :rtype: Message
         """
         dto: CommandDTO = build_dto(intent)
-        conv_mgr = self._gwy.conversation_manager
+        conv_mgr = self._gateway.conversation_manager
 
         if wait_for_reply and conv_mgr is not None:
             rply_fut = await conv_mgr.track_intent(intent, dto)
-            await self._gwy.async_send_cmd(
+            await self._gateway.async_send_cmd(
                 dto,
                 priority=priority if priority is not None else Priority(dto.priority),
             )
             return await rply_fut
 
-        pkt = await self._gwy.async_send_cmd(
+        pkt = await self._gateway.async_send_cmd(
             dto,
             priority=priority if priority is not None else Priority(dto.priority),
         )

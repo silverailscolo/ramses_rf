@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from ramses_rf.systems import Zone
     from ramses_rf.typing import PollingIntervalsT
     from ramses_tx.const import IndexT
-    from ramses_tx.dtos import PacketDTO
     from ramses_tx.typing import DeviceIdT
 
 
@@ -70,34 +69,34 @@ class DeviceBase(Entity):
 
     def __init__(
         self,
-        gwy: Gateway,
-        dev_addr: Address,
+        gateway: Gateway,
+        device_address: Address,
         *,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise the device base class.
 
-        :param gwy: The gateway instance managing this device.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway instance managing this device.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: Optional traits to apply during initialisation.
         :type traits: DeviceTraits | None
         :param kwargs: Additional arguments for the underlying entity.
         :type kwargs: Any
         """
-        super().__init__(gwy, **kwargs)
+        super().__init__(gateway, **kwargs)
 
         # FIXME: gwy.message_store entities must know their parent device ID
         # and their own idx
-        self._z_id = dev_addr.id  # the responsible device is itself
+        self._z_id = device_address.id  # the responsible device is itself
         self._z_idx = None  # depends upon its location in the schema
 
-        self.id: DeviceIdT = dev_addr.id
+        self.id: DeviceIdT = device_address.id
 
-        self.addr = dev_addr
-        self.type = dev_addr.type  # DEX  # TODO: remove this attr? use SLUG?
+        self.addr = device_address
+        self.type = device_address.type  # DEX  # TODO: remove this attr? use SLUG?
 
         self._scheme: str | None = traits.scheme if traits else None
         self._polling_interval: PollingIntervalsT | None = (
@@ -170,7 +169,11 @@ class DeviceBase(Entity):
 
     @classmethod
     def create_from_schema(
-        cls, gwy: Gateway, dev_addr: Address, *, traits: DeviceTraits | None = None
+        cls,
+        gateway: Gateway,
+        device_address: Address,
+        *,
+        traits: DeviceTraits | None = None,
     ) -> Self:
         """Create a device (for a GWY) and set its schema attrs (aka traits).
 
@@ -180,16 +183,16 @@ class DeviceBase(Entity):
         The appropriate Device class should have been determined by a
         factory. Schema attrs include: class (SLUG), alias, and faked.
 
-        :param gwy: The gateway to attach the device to.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway to attach the device to.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: The traits to apply to the newly created device.
         :type traits: DeviceTraits | None
         :return: The fully initialised device instance.
         :rtype: DeviceBase
         """
-        dev = cls(gwy, dev_addr, traits=traits)
+        dev = cls(gateway, device_address, traits=traits)
         if traits:
             dev._update_traits(traits)
         return dev
@@ -215,7 +218,7 @@ class DeviceBase(Entity):
         :return: True if the device has a battery, False otherwise.
         :rtype: None | bool
         """
-        if self._gwy.message_store:
+        if self._gateway.message_store:
             code_list = await self.entity_state._msg_dev_qry()
             return isinstance(self, BatteryState) or (
                 code_list is not None and Code._1060 in code_list
@@ -239,8 +242,9 @@ class DeviceBase(Entity):
         :returns: A dictionary mapping active command codes to interval seconds.
         :rtype: PollingIntervalsT | None
         """
-        if getattr(self._gwy, "polling_manager", None):
-            return self._gwy.polling_manager.resolve_schedule_for_device(self)
+        if getattr(self._gateway, "polling_manager", None):
+            mgr = self._gateway.polling_manager
+            return mgr.resolve_schedule_for_device(self)
         return self._polling_interval
 
     def set_polling_interval(self, interval: int | None) -> None:
@@ -264,8 +268,8 @@ class DeviceBase(Entity):
             codes = list(eff_schedule.keys()) or ["10E0"]
             self._polling_interval = {code: interval for code in codes}
 
-        if getattr(self._gwy, "polling_manager", None):
-            self._gwy.polling_manager.update_device_tasks(self)
+        if getattr(self._gateway, "polling_manager", None):
+            self._gateway.polling_manager.update_device_tasks(self)
 
     def set_command_polling_interval(self, code: str, interval: int | None) -> None:
         """Set or update the polling interval for a specific packet code.
@@ -291,8 +295,8 @@ class DeviceBase(Entity):
         else:
             self._polling_interval[code] = interval
 
-        if getattr(self._gwy, "polling_manager", None):
-            self._gwy.polling_manager.update_device_tasks(self)
+        if getattr(self._gateway, "polling_manager", None):
+            self._gateway.polling_manager.update_device_tasks(self)
 
     @property
     def is_battery(self) -> bool | None:
@@ -364,7 +368,7 @@ class DeviceBase(Entity):
         """
         result = await self.entity_state.traits()
 
-        known_dev = self._gwy.config.known_list.get(self.id)
+        known_dev = self._gateway.config.known_list.get(self.id)
 
         result.update(
             {
@@ -472,15 +476,15 @@ class Fakeable(DeviceBase):
 
     def __init__(
         self,
-        gwy: Gateway,
+        gateway: Gateway,
         *args: Any,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise a device capable of being faked or impersonated.
 
-        :param gwy: The gateway managing the faked device.
-        :type gwy: Gateway
+        :param gateway: The gateway managing the faked device.
+        :type gateway: Gateway
         :param args: Positional arguments for the base device.
         :type args: Any
         :param traits: Optional traits establishing faking context.
@@ -488,13 +492,13 @@ class Fakeable(DeviceBase):
         :param kwargs: Keyword arguments for the underlying entity.
         :type kwargs: Any
         """
-        super().__init__(gwy, *args, traits=traits, **kwargs)
+        super().__init__(gateway, *args, traits=traits, **kwargs)
 
         self._binding_manager: BindingManager | None = None
 
-        if self.id in gwy.config.known_list and gwy.config.known_list[self.id].get(
-            SZ_FAKED
-        ):
+        if self.id in gateway.config.known_list and gateway.config.known_list[
+            self.id
+        ].get(SZ_FAKED):
             self._make_fake()
 
         if traits and traits.faked:
@@ -506,9 +510,9 @@ class Fakeable(DeviceBase):
             return
 
         self._binding_manager = BindingManager(self, self._async_send_cmd)
-        if self.id not in self._gwy.config.known_list:
-            self._gwy.config.known_list[self.id] = {}
-        self._gwy.config.known_list[self.id][SZ_FAKED] = True  # TODO: remove this
+        if self.id not in self._gateway.config.known_list:
+            self._gateway.config.known_list[self.id] = {}
+        self._gateway.config.known_list[self.id][SZ_FAKED] = True  # TODO: remove this
         _LOGGER.info("Faking now enabled for: %s", self)
 
     async def _async_send_cmd(
@@ -654,27 +658,27 @@ class Device(Child, DeviceBase):
 
     def __init__(
         self,
-        gwy: Gateway,
-        dev_addr: Address,
+        gateway: Gateway,
+        device_address: Address,
         *,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise a standard child device within the topology.
 
-        :param gwy: The gateway managing this device.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway managing this device.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: Optional traits outlining class and aliases.
         :type traits: DeviceTraits | None
         :param kwargs: Additional arguments for the base initialiser.
         :type kwargs: Any
         """
-        _LOGGER.debug("Creating a Device: %s (%s)", dev_addr.id, self.__class__)
-        super().__init__(gwy, dev_addr, traits=traits, **kwargs)
+        _LOGGER.debug("Creating a Device: %s (%s)", device_address.id, self.__class__)
+        super().__init__(gateway, device_address, traits=traits, **kwargs)
 
-        gwy.device_registry._add_device(self)
+        gateway.device_registry._add_device(self)
 
 
 class HgiGateway(Device):  # HGI (18:)
@@ -706,7 +710,7 @@ class HgiGateway(Device):  # HGI (18:)
         :rtype: td
         """
         # Safely extract the custom timeout from the GatewayConfig
-        custom_timeout = getattr(self._gwy.config, "gateway_timeout", None)
+        custom_timeout = getattr(self._gateway.config, "gateway_timeout", None)
 
         if custom_timeout is not None:
             return td(minutes=int(custom_timeout))
@@ -719,14 +723,14 @@ class HgiGateway(Device):  # HGI (18:)
         :return: The active operational status of the gateway interface.
         :rtype: bool
         """
-        msg: PacketDTO | None = getattr(
-            getattr(self._gwy._engine, "_protocol", None), "_this_msg", None
-        )
+        # Ensure that this message is safely extracted
+        protocol = getattr(self._gateway._engine, "_protocol", None)
+        last_msg = getattr(protocol, "_this_msg", None)
 
-        if not msg or not hasattr(msg, "timestamp"):
+        if not last_msg or not hasattr(last_msg, "timestamp"):
             return False
 
-        dtm: dt = msg.timestamp
+        dtm: dt = last_msg.timestamp
         now = dt.now(UTC).astimezone(dtm.tzinfo) if dtm.tzinfo is not None else dt.now()
 
         # Compare against our new dynamic property
@@ -743,24 +747,24 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
 
     def __init__(
         self,
-        gwy: Gateway,
-        dev_addr: Address,
+        gateway: Gateway,
+        device_address: Address,
         *,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise a device within the heating domain.
 
-        :param gwy: The gateway managing this heating device.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway managing this heating device.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: Optional traits detailing structural schemas.
         :type traits: DeviceTraits | None
         :param kwargs: Additional arguments for the base initialiser.
         :type kwargs: Any
         """
-        super().__init__(gwy, dev_addr, traits=traits, **kwargs)
+        super().__init__(gateway, device_address, traits=traits, **kwargs)
 
         self._child_id = None  # domain_id, or zone_idx
 
@@ -812,24 +816,24 @@ class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
 
     def __init__(
         self,
-        gwy: Gateway,
-        dev_addr: Address,
+        gateway: Gateway,
+        device_address: Address,
         *,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise a device within the HVAC ventilation domain.
 
-        :param gwy: The gateway managing this HVAC device.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway managing this HVAC device.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: Optional traits detailing structural schemas.
         :type traits: DeviceTraits | None
         :param kwargs: Additional arguments for the base initialiser.
         :type kwargs: Any
         """
-        super().__init__(gwy, dev_addr, traits=traits, **kwargs)
+        super().__init__(gateway, device_address, traits=traits, **kwargs)
 
         self._child_id = "hv"  # TODO: domain_id/deprecate
         # 6d: bidirectional parent link — set by HvacVentilator._update_schema()

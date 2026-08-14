@@ -38,7 +38,7 @@ async def _send_hvac_sensor_intent(
         action=action,
         data=data,
     )
-    return await device._gwy.dispatcher.send(intent, priority=Priority.HIGH)
+    return await device._gateway.dispatcher.send(intent, priority=Priority.HIGH)
 
 
 class HvacSensorBase(DeviceHvac):
@@ -178,7 +178,7 @@ class PresenceDetect(HvacSensorBase):  # 2E10
             action=Action.PUT_PRESENCE_DETECTED,
             data={"presence_detected": value},
         )
-        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
+        return await self._gateway.dispatcher.send(intent, priority=Priority.HIGH)
 
     async def status(self) -> dict[str, Any]:
         """Return the status of the presence sensor.
