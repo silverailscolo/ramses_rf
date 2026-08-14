@@ -117,8 +117,8 @@ SCH_UFH_IDX = vol.Match(r"^0[0-8]$")
 SCH_ZON_IDX = vol.Match(r"^0[0-9AB]$")  # TODO: what if > 12 zones? (e.g. hometronics)
 
 
-def ErrorRenamedKey(new_key: str) -> Callable[[Any], None]:
-    """Return a voluptuous validator function that raises an invalid key error.
+def error_renamed_key(new_key: str) -> Callable[[Any], None]:
+    """Return a voluptuous validator function raising an invalid key error.
 
     :param new_key: The new key name to instruct the user to rename to.
     :type new_key: str
@@ -140,7 +140,7 @@ SCH_TCS_SYS = vol.Schema(
         vol.Required(SZ_APPLIANCE_CONTROL, default=None): vol.Any(
             None, SCH_DEVICE_ID_APP
         ),
-        vol.Optional("heating_control"): ErrorRenamedKey(SZ_APPLIANCE_CONTROL),
+        vol.Optional("heating_control"): error_renamed_key(SZ_APPLIANCE_CONTROL),
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -150,7 +150,7 @@ SCH_TCS_DHW = vol.Schema(
         vol.Optional(SZ_SENSOR, default=None): vol.Any(None, SCH_DEVICE_ID_DHW),
         vol.Optional(SZ_DHW_VALVE, default=None): vol.Any(None, SCH_DEVICE_ID_BDR),
         vol.Optional(SZ_HTG_VALVE, default=None): vol.Any(None, SCH_DEVICE_ID_BDR),
-        vol.Optional(SZ_DHW_SENSOR): ErrorRenamedKey(SZ_SENSOR),
+        vol.Optional(SZ_DHW_SENSOR): error_renamed_key(SZ_SENSOR),
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -179,12 +179,12 @@ SCH_TCS_ZONES_ZON = vol.Schema(
     {
         vol.Optional(SZ_CLASS, default=None): vol.Any(None, *HEAT_ZONES_STRS),
         vol.Optional(SZ_SENSOR, default=None): vol.Any(None, SCH_DEVICE_ID_SEN),
-        vol.Optional(SZ_DEVICES): ErrorRenamedKey(SZ_ACTUATORS),
+        vol.Optional(SZ_DEVICES): error_renamed_key(SZ_ACTUATORS),
         vol.Optional(SZ_ACTUATORS, default=[]): vol.All(
             [SCH_DEVICE_ID_ANY], vol.Length(min=0)
         ),
-        vol.Optional(SZ_ZONE_TYPE): ErrorRenamedKey(SZ_CLASS),
-        vol.Optional("zone_sensor"): ErrorRenamedKey(SZ_SENSOR),
+        vol.Optional(SZ_ZONE_TYPE): error_renamed_key(SZ_CLASS),
+        vol.Optional("zone_sensor"): error_renamed_key(SZ_SENSOR),
         # vol.Optional(SZ_SENSOR_FAKED): bool,
         vol.Optional(f"_{SZ_NAME}"): vol.Any(None, str),
     },
@@ -305,7 +305,7 @@ SCH_GLOBAL_CONFIG = (
 
 #
 # 6/7: External Schemas, to be used by clients of this library
-def NormaliseRestoreCache() -> Callable[[bool | dict[str, bool]], dict[str, bool]]:
+def normalise_restore_cache() -> Callable[[bool | dict[str, bool]], dict[str, bool]]:
     """Convert a shorthand restore_cache bool to a dict.
 
     restore_cache: bool ->  restore_cache:
@@ -316,12 +316,14 @@ def NormaliseRestoreCache() -> Callable[[bool | dict[str, bool]], dict[str, bool
     :rtype: Callable[[bool | dict[str, bool]], dict[str, bool]]
     """
 
-    def normalise_restore_cache(node_value: bool | dict[str, bool]) -> dict[str, bool]:
+    def _normalise(
+        node_value: bool | dict[str, bool],
+    ) -> dict[str, bool]:
         if isinstance(node_value, dict):
             return node_value
         return {SZ_RESTORE_SCHEMA: node_value, SZ_RESTORE_STATE: node_value}
 
-    return normalise_restore_cache
+    return _normalise
 
 
 SZ_RESTORE_CACHE: Final = "restore_cache"
@@ -330,7 +332,7 @@ SZ_RESTORE_STATE: Final = "restore_state"
 
 SCH_RESTORE_CACHE_DICT = {
     vol.Optional(SZ_RESTORE_CACHE, default=True): vol.Any(
-        vol.All(bool, NormaliseRestoreCache()),
+        vol.All(bool, normalise_restore_cache()),
         vol.Schema(
             {
                 vol.Optional(SZ_RESTORE_SCHEMA, default=True): bool,

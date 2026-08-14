@@ -2855,12 +2855,12 @@ class HvacSpiderSetpointBoundsPayload(PayloadBase):
         for i in range(num_pairs):
             (min_val,) = struct.unpack_from(">h", min_bytes, i * 2)
             (max_val,) = struct.unpack_from(">h", max_bytes, i * 2)
-            min_t = None if min_val in (0x31FF, 0x7FFF) else min_val / 100.0
-            max_t = None if max_val in (0x31FF, 0x7FFF) else max_val / 100.0
-            if min_t is None and max_t is None:
+            min_temp = None if min_val in (0x31FF, 0x7FFF) else min_val / 100.0
+            max_temp = None if max_val in (0x31FF, 0x7FFF) else max_val / 100.0
+            if min_temp is None and max_temp is None:
                 bounds.append(None)
             else:
-                bounds.append((min_t, max_t))
+                bounds.append((min_temp, max_temp))
         return cls(hdr=hdr, mode_code=mode_code, setpoint_bounds=tuple(bounds))
 
     def to_bytes(self) -> bytes:
@@ -2872,9 +2872,9 @@ class HvacSpiderSetpointBoundsPayload(PayloadBase):
         min_b = bytearray()
         max_b = bytearray()
         for b in self.setpoint_bounds:
-            min_t, max_t = b if b is not None else (None, None)
-            min_val = 0x7FFF if min_t is None else int(round(min_t * 100.0))
-            max_val = 0x7FFF if max_t is None else int(round(max_t * 100.0))
+            min_temp, max_temp = b if b is not None else (None, None)
+            min_val = 0x7FFF if min_temp is None else int(round(min_temp * 100.0))
+            max_val = 0x7FFF if max_temp is None else int(round(max_temp * 100.0))
             min_b.extend(struct.pack(">h", min_val))
             max_b.extend(struct.pack(">h", max_val))
         return bytes([self.hdr]) + min_b + bytes([self.mode_code]) + max_b
@@ -3473,12 +3473,14 @@ class SetpointBoundsPayload(PayloadBase):
         if len(raw_data) >= 6 and len(raw_data) % 6 == 0:
             res: list[Self] = []
             for i in range(0, len(raw_data), 6):
-                idx, min_t, max_t, mode_code = struct.unpack_from(">BhhB", raw_data, i)
+                idx, min_raw, max_raw, mode_code = struct.unpack_from(
+                    ">BhhB", raw_data, i
+                )
                 res.append(
                     cls(
                         ufh_idx=idx,
-                        min_temp=cls._parse_temp(min_t),
-                        max_temp=cls._parse_temp(max_t),
+                        min_temp=cls._parse_temp(min_raw),
+                        max_temp=cls._parse_temp(max_raw),
                         mode_code=mode_code,
                     )
                 )
@@ -3486,11 +3488,11 @@ class SetpointBoundsPayload(PayloadBase):
 
         if len(raw_data) < 6:
             raise ValueError(f"Invalid payload length for 22C9: {len(raw_data)}")
-        idx, min_t, max_t, mode_code = struct.unpack_from(">BhhB", raw_data, 0)
+        idx, min_raw, max_raw, mode_code = struct.unpack_from(">BhhB", raw_data, 0)
         return cls(
             ufh_idx=idx,
-            min_temp=cls._parse_temp(min_t),
-            max_temp=cls._parse_temp(max_t),
+            min_temp=cls._parse_temp(min_raw),
+            max_temp=cls._parse_temp(max_raw),
             mode_code=mode_code,
         )
 
