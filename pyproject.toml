@@ -294,6 +294,7 @@
     "E",  #     pycodestyle
     "F",  #     Pyflakes
     "I",  #     isort
+    "Q",  #     flake8-quotes
     "SIM",  #   flake8-simplify
     "UP",  #    pyupgrade
   ]
@@ -308,6 +309,10 @@
 
 [tool.ruff.lint.flake8-import-conventions.extend-aliases]
   voluptuous = "vol"
+
+
+[tool.ruff.lint.flake8-quotes]
+  inline-quotes = "double"
 
 
 [tool.ruff.lint.isort]
