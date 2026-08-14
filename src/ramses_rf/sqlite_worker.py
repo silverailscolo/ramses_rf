@@ -65,8 +65,7 @@ QueueItem = (
 
 
 class SQLiteWorker:
-    """A background worker thread to handle blocking storage I/O
-    asynchronously."""
+    """A worker thread handling blocking storage I/O asynchronously."""
 
     def __init__(self, db_path: str = ":memory:", disk_path: str | None = None) -> None:
         """Initialize the storage worker thread."""
@@ -114,10 +113,9 @@ class SQLiteWorker:
             _LOGGER.warning("SQLiteWorker flush timed out")
 
     def stop(self, timeout: float = 3.0) -> bool:
-        """
-        Signal the worker to stop processing and close resources safely.
+        """Signal the worker to stop processing and close resources.
 
-        :returns: True if the thread exited cleanly, False if it timed out.
+        :returns: True if the thread exited cleanly, False if timed out.
         """
         self._queue.put(None)  # Poison pill
         # Give the worker a chance to wrap up gracefully

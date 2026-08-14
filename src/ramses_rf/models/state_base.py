@@ -81,9 +81,7 @@ def _now_utc() -> dt:
 
 @dataclass(frozen=True, slots=True)
 class TopologyChangedEvent:
-    """Immutable event representing a structural change in the network
-    graph.
-    """
+    """Immutable event for a structural network graph change."""
 
     # The structural action to perform
     action: TopologyAction

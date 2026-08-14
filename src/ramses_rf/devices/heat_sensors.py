@@ -22,9 +22,12 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class Weather(DeviceHeat):  # 0002
+    """Outdoor weather / temperature sensor base class."""
+
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 0002
+        """Return the current outdoor temperature in degrees Celsius."""
         return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Message | None:
@@ -37,6 +40,7 @@ class Weather(DeviceHeat):  # 0002
         )
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -45,9 +49,12 @@ class Weather(DeviceHeat):  # 0002
 
 
 class DhwTemperature(DeviceHeat):  # 1260
+    """Domestic hot water temperature sensor mixin class."""
+
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 1260
+        """Return the current DHW temperature in degrees Celsius."""
         return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Message | None:
@@ -58,6 +65,7 @@ class DhwTemperature(DeviceHeat):  # 1260
         return await send_fake_intent(self, Action.PUT_DHW_TEMP, {"temperature": value})
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -66,10 +74,13 @@ class DhwTemperature(DeviceHeat):  # 1260
 
 
 class Temperature(DeviceHeat):  # 30C9
+    """Indoor temperature sensor base class."""
+
     # .I --- 34:145039 --:------ 34:145039 1FC9 012 00-30C9-8A368F 00-1FC9-8A368F
     # .W --- 01:054173 34:145039 --:------ 1FC9 006 03-2309-04D39D  # real CTL
     # .I --- 34:145039 01:054173 --:------ 1FC9 006 00-30C9-8A368F
     async def temperature(self) -> float | None:  # 30C9
+        """Return the current indoor temperature in degrees Celsius."""
         return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Message | None:
@@ -90,6 +101,7 @@ class Temperature(DeviceHeat):  # 30C9
         )
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -127,12 +139,15 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
     async def initiate_binding_process(
         self,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
+        """Initiate the RF binding handshake for the DHW sensor."""
         return await super()._initiate_binding_process(Code._1260)
 
     async def dhw_params(self) -> PayDictT._10A0 | None:
+        """Return the DHW parameters (10A0) payload or None."""
         return await self.entity_state.get_value(Code._10A0)
 
     async def params(self) -> dict[str, Any]:
+        """Return the device parameter dictionary."""
         base_params = await super().params()
         return {
             **base_params,

@@ -208,8 +208,9 @@ class DeviceBase(Entity):
         return super()._send_cmd(cmd, **kwargs)
 
     async def has_battery(self) -> None | bool:  # 1060
-        """Return True if the device is battery powered (excludes
-        battery-backup).
+        """Return True if the device is battery powered.
+
+        Excludes battery-backup devices.
 
         :return: True if the device has a battery, False otherwise.
         :rtype: None | bool
@@ -321,8 +322,10 @@ class DeviceBase(Entity):
         return bool(self._binding_manager and self._binding_manager.is_binding is True)
 
     async def _is_present(self) -> bool:
-        """Try to exclude ghost devices (as caused by corrupt packet
-        addresses).
+        """Exclude ghost devices from corrupt packet addresses.
+
+        Inspects the active message log flat cache to verify if any
+        unexpired packets have been received from this device.
         """
         msgs = await self.entity_state.get_message_log_flat()
         return any(
@@ -630,8 +633,10 @@ class Fakeable(DeviceBase):
         raise NotImplementedError
 
     async def oem_code(self) -> str | None:
-        """Return the OEM code (a 2-char ascii str) for this device, if
-        there is one.
+        """Return the device Original Equipment Manufacturer code.
+
+        Returns the 2-character ASCII OEM string for this device, if one
+        is present in traits or message state.
 
         :return: The Original Equipment Manufacturer code string.
         :rtype: str | None
@@ -729,8 +734,7 @@ class HgiGateway(Device):  # HGI (18:)
 
 
 class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
-    """The base class for the heat domain (Honeywell CH/DHW-compatible
-    devices).
+    """Base class for Honeywell CH/DHW-compatible heating devices.
 
     Includes UFH and heatpumps (which can also cool).
     """

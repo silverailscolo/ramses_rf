@@ -334,6 +334,23 @@ class Engine:
         from_id: str | None = None,
         seqn: str | None = None,
     ) -> CommandDTO:
+        """Create a CommandDTO with appropriate addressing.
+
+        :param verb: Command verb (I, RQ, RP, W).
+        :type verb: VerbT
+        :param device_id: Target or source device identifier.
+        :type device_id: DeviceIdT
+        :param code: Two-byte opcode.
+        :type code: Code
+        :param payload: Command payload hex string or bytes.
+        :type payload: PayloadT
+        :param from_id: Optional source device ID override.
+        :type from_id: str | None
+        :param seqn: Optional sequence number.
+        :type seqn: str | None
+        :returns: Constructed command DTO.
+        :rtype: CommandDTO
+        """
         # Normalise plain-string verbs to VerbT so that the frame is formatted
         # correctly (e.g. "W" → " W").  The old Command._from_attrs did this;
         # the migration to CommandDTO dropped it, causing malformed frames

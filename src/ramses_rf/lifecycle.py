@@ -39,9 +39,14 @@ class GatewayLifecycle:
     if TYPE_CHECKING:
 
         @property
-        def config(self) -> GatewayConfig: ...
+        def config(self) -> GatewayConfig:
+            """Return the active gateway configuration."""
+            ...
+
         @property
-        def device_registry(self) -> DeviceRegistryInterface: ...
+        def device_registry(self) -> DeviceRegistryInterface:
+            """Return the active device registry interface."""
+            ...
 
         _engine: Engine
         _message_store: MessageStoreInterface | None
@@ -50,9 +55,18 @@ class GatewayLifecycle:
         _tcs: Evohome | None
         state_projector: StateProjector | None
 
-        def add_task(self, task: asyncio.Task[Any]) -> None: ...
-        def clear_message_history(self) -> None: ...
-        async def schema(self) -> dict[str, Any]: ...
+        def add_task(self, task: asyncio.Task[Any]) -> None:
+            """Register a tracked task for clean cancellation."""
+            ...
+
+        def clear_message_history(self) -> None:
+            """Clear cached message envelopes and packets."""
+            ...
+
+        async def schema(self) -> dict[str, Any]:
+            """Return the current system topology schema."""
+            ...
+
         async def _msg_handler(self, dto: PacketDTO) -> None: ...
 
     def create_sqlite_message_index(self) -> None:

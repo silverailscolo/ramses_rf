@@ -140,7 +140,7 @@ class HeatDemand1BPayload(HeatDemandPayload):
         return struct.pack(self._STRUCT_FMT, self.demand_percent & 0xFF)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert 1-byte heat demand payload to legacy dictionary layout.
+        """Convert heat demand payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
@@ -215,7 +215,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
         return buf
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert 2-byte heat demand payload to legacy dictionary layout.
+        """Convert heat demand payload to legacy dictionary layout.
 
         :param msg: Optional message context object.
         :type msg: Any
@@ -1319,7 +1319,7 @@ class ZoneName22BPayload(ZoneNamePayload):
         return struct.pack(self._STRUCT_FMT, idx, name_bytes)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert 22-byte zone name payload to legacy dictionary layout.
+        """Convert zone name payload to legacy dictionary layout.
 
         :returns: Decoded zone name dictionary.
         :rtype: dict[str, Any]
@@ -1389,7 +1389,7 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
         return bytes([idx]) + sp_raw.to_bytes(2, byteorder="big", signed=True)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert 3-byte zone setpoint payload to legacy dictionary layout.
+        """Convert zone setpoint payload to legacy dictionary layout.
 
         :returns: Decoded zone setpoint dictionary.
         :rtype: dict[str, Any]
@@ -1534,7 +1534,7 @@ class ZoneSetpointPayload(PayloadBase):
     def from_bytes(
         cls, raw_data: bytes
     ) -> "ZoneSetpointPayload | list[ZoneSetpointPayload]":
-        """Unpack zone setpoint payload, dispatching single or array entries."""
+        """Unpack zone setpoint payload (single or array entries)."""
         if len(raw_data) < 3:
             raise ValueError(f"Invalid payload length for 2309: {len(raw_data)}")
         if len(raw_data) > 3 and len(raw_data) % 3 == 0:
@@ -2475,7 +2475,8 @@ class TpiParams4BPayload(TpiParamsPayload):
     :type min_on_time: float
     :param min_off_time: Minimum off-time in minutes.
     :type min_off_time: float
-    :param proportional_band_width: Proportional band width (None for 4B payload).
+    :param proportional_band_width: Proportional band width (None for 4B
+        payload).
     :type proportional_band_width: float | None
     """
 
@@ -2676,7 +2677,8 @@ class ChPressurePayload(PayloadBase):
     Protocol Notes:
       # 0x09F6 (2550 dec = 2.55 bar), 0x31FF, 0x7FFF appear to be sentinel values.
 
-    :param pressure_bar: Pressure in Bar float, or None if sentinel/invalid.
+    :param pressure_bar: Pressure in Bar float, or None if
+        sentinel/invalid.
     :type pressure_bar: float | None
     """
 
@@ -3004,7 +3006,7 @@ class ZoneMode7BPayload(ZoneModePayload):
 
 @dataclass(frozen=True, slots=True)
 class ZoneMode13BPayload(ZoneModePayload):
-    """13-byte zone mode override with expiration datetime payload (Opcode 2349).
+    """13-byte zone mode override with expiry payload (Opcode 2349).
 
     13-byte Zone Mode binary layout:
       Offset  Format  Len  Description                    Sample Hex
@@ -3110,7 +3112,7 @@ class ZoneMode13BPayload(ZoneModePayload):
         return res
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert 13-byte zone mode payload to legacy dictionary layout.
+        """Convert zone mode payload to legacy dictionary layout.
 
         :returns: Decoded zone mode dictionary.
         :rtype: dict[str, Any]

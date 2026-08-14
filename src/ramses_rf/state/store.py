@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-RAMSES RF - Message database and index.
+"""RAMSES RF - Message database and index.
 
 .. table:: Database Query Methods
    :widths: auto
@@ -49,23 +48,20 @@ def _setup_db_adapters() -> None:
     """Set up the database adapters and converters."""
 
     def adapt_datetime_iso(val: dt) -> str:
-        """Adapt datetime.datetime to timezone-naive ISO 8601 datetime to
-        match _message_log dtm keys."""
+        """Adapt datetime to timezone-naive ISO 8601 string."""
         return val.isoformat(timespec="microseconds")
 
     sqlite3.register_adapter(dt, adapt_datetime_iso)
 
     def convert_datetime(val: bytes) -> dt:
-        """Convert ISO 8601 datetime to datetime.datetime object to import
-        dtm in msg_db."""
+        """Convert ISO 8601 string to datetime object."""
         return dt.fromisoformat(val.decode())
 
     sqlite3.register_converter("DTM", convert_datetime)
 
 
 def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
-    """
-    Copy payload keys for fast query check.
+    """Copy payload keys for fast query check.
 
     :param parsed_payload: pre-parsed message payload dict
     :return: string of payload keys, separated by the | char
@@ -90,9 +86,11 @@ def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
 
 
 class MessageStore(MessageStoreInterface):
-    """A central in-memory SQLite3 database for indexing RF messages.
-    Index holds all the latest messages to & from all devices by `dtm`
-    (timestamp) and strictly-typed `StateHeader` DTOs."""
+    """Central SQLite database for indexing RF message envelopes.
+
+    Holds the latest messages to & from all devices by timestamp (dtm)
+    and strictly-typed StateHeader DTOs.
+    """
 
     _housekeeping_task: asyncio.Task[None] | None
     _hydration_task: asyncio.Task[None] | None
@@ -104,7 +102,6 @@ class MessageStore(MessageStoreInterface):
         disk_path: str | None = "ramses.db",
     ) -> None:
         """Instantiate a message database/index."""
-
         self.maintain = maintain
         # In-memory RAM caches (Filled & cleaned up in housekeeping_loop)
         # stores all messages for retrieval.
@@ -172,7 +169,6 @@ class MessageStore(MessageStoreInterface):
 
     def start(self) -> None:
         """Start the housekeeper loop."""
-
         if self.maintain:
             if (
                 self._housekeeping_task is not None
@@ -190,7 +186,6 @@ class MessageStore(MessageStoreInterface):
 
     def stop(self) -> None:
         """Stop the housekeeper loop and resources."""
-
         c_task = getattr(self, "_consumer_task", None)
         if c_task and not c_task.done():
             c_task.cancel()  # stop the SSOT queue consumer
@@ -338,16 +333,13 @@ class MessageStore(MessageStoreInterface):
         _LOGGER.info("Hydrated %d messages into RAM cache", len(rows))
 
     async def _housekeeping_loop(self) -> None:
-        """Periodically remove stale messages from the index,
-        unless `self.maintain` is False - as in (most) tests."""
+        """Periodically remove stale messages from index."""
 
         async def housekeeping(dt_now: dt, _cutoff: td = td(days=1)) -> None:
-            """
-            Deletes all messages older than a given delta from the dict
-            using the MessageStore.
-            :param dt_now: current timestamp
-            :param _cutoff: the oldest timestamp to retain, default is 24
-                hours ago
+            """Delete messages older than cutoff delta.
+
+            :param dt_now: Current timestamp.
+            :param _cutoff: Oldest delta to retain (default 24 hours).
             """
             dtm = dt_now - _cutoff
 
@@ -393,11 +385,11 @@ class MessageStore(MessageStoreInterface):
                 self._worker.submit_snapshot()
 
     def add(self, msg: Message) -> Message | None:
-        """
-        Add a single message to the MessageStore.
+        """Add a single message to the MessageStore.
+
         Logs a warning if there is a duplicate dtm.
 
-        :returns: any message that was removed because it had the same header
+        :returns: Any message removed because it had the same header.
         """
         dup: tuple[Message, ...] = ()
         old: Message | None = None
@@ -435,15 +427,12 @@ class MessageStore(MessageStoreInterface):
     def add_record(
         self, src: str, code: str = "", verb: str = "", payload: str = "00"
     ) -> None:
-        """
-        Add a single record to the MessageStore with timestamp `now()`
-        and no Message contents.
+        """Add single record with timestamp now() and no payload.
 
-        :param src: device id to use as source address
-        :param code: device id to use as destination address (can be
-            identical)
-        :param verb: two letter verb str to use
-        :param payload: payload str to use
+        :param src: Device ID to use as source address.
+        :param code: Two-byte opcode hex string.
+        :param verb: Two-letter verb string.
+        :param payload: Payload hex string.
         """
         _now: dt = dt.now()
         dtm = DtmStrT(_now.isoformat(timespec="microseconds"))
@@ -471,8 +460,7 @@ class MessageStore(MessageStoreInterface):
         self._state_cache[msg.state_header] = msg
 
     def _insert_into(self, msg: Message) -> Message | None:
-        """
-        Insert a message into the index.
+        """Insert a message into the index.
 
         :returns: any message replaced (by same hdr)
         """
@@ -665,8 +653,7 @@ class MessageStore(MessageStoreInterface):
         context: Any | None = None,
         hdr: str | StateHeader | None = None,
     ) -> bool:
-        """Check if the MessageStore contains at least 1 record that
-        matches the provided fields."""
+        """Return True if matching records exist for given fields."""
         return (
             len(
                 await self.get(

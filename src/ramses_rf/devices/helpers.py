@@ -67,7 +67,6 @@ async def send_fake_intent(
 
 def build_rq_cmd(device_id: str, code: str, payload: str = "00") -> CommandDTO:
     """Build a standard RQ command for a specific device."""
-
     addr1: str
     addr2: str
     addr3: str

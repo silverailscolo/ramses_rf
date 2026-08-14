@@ -72,7 +72,6 @@ class FaultLogEntry:
 
     def _is_matching_pair(self, other: object) -> bool:
         """Return True if the other entry could be a matching pair (fault/restore)."""
-
         if not isinstance(other, FaultLogEntry):
             raise exc.SystemInconsistent(f"{other} is not a FaultLogEntry")
 
@@ -94,7 +93,6 @@ class FaultLogEntry:
 
     def _as_tuple(self) -> FaultTupleT:  # only for use within this class
         """Return the log entry as a tuple, excluding dtm & state (fault/restore)."""
-
         return (
             self.fault_type,
             self.device_class,
@@ -113,7 +111,6 @@ class FaultLogEntry:
     @classmethod
     def from_pkt(cls, pkt: Packet) -> FaultLogEntry:
         """Create a fault log entry from a packet's payload."""
-
         log_entry = parse_fault_log_entry(pkt.raw_payload)
         if log_entry is None or "timestamp" not in log_entry:
             raise exc.SystemInconsistent("Null fault log entry")
@@ -169,7 +166,6 @@ class FaultLog:  # 0418
 
     def _insert_into_map(self, idx: FaultIdxT, dtm: FaultDtmT | None) -> FaultMapT:
         """Rebuild the map (as best as possible), given the a log entry."""
-
         new_map: FaultMapT = OrderedDict()
 
         # usu. idx == 0, but could be > 0
@@ -202,7 +198,6 @@ class FaultLog:  # 0418
 
     def handle_msg(self, msg: Message) -> None:
         """Handle a fault log message (some valid payloads should be ignored)."""
-
         assert msg.code == Code._0418 and msg.verb in (I_, RP), "Coding error"
 
         if msg.verb == RP and msg.payload[SZ_LOG_ENTRY] is None:
@@ -214,7 +209,6 @@ class FaultLog:  # 0418
 
     def _process_msg(self, msg: Message) -> None:
         """Handle a processable fault log message."""
-
         if msg.verb == I_:
             self._is_current = False
 
@@ -277,7 +271,6 @@ class FaultLog:  # 0418
         force_refresh: bool = False,
     ) -> dict[FaultIdxT, FaultLogEntry]:
         """Retrieve the fault log from the controller."""
-
         # Short-circuit: Return instantly from memory if already current and no refresh forced
         if not force_refresh and self._is_current:
             return self.faultlog
@@ -329,7 +322,6 @@ class FaultLog:  # 0418
     @property
     def faultlog(self) -> dict[FaultIdxT, FaultLogEntry]:
         """Return the fault log of a system."""
-
         # if self._faultlog:
         #     return self._faultlog
 
@@ -346,7 +338,6 @@ class FaultLog:  # 0418
     @property
     def latest_event(self) -> FaultLogEntry | None:
         """Return the most recently logged event (fault or restore), if any."""
-
         if not self._log:
             return None
 
@@ -355,7 +346,6 @@ class FaultLog:  # 0418
     @property
     def latest_fault(self) -> FaultLogEntry | None:
         """Return the most recently logged fault, if any."""
-
         if not self._log:
             return None
 
@@ -369,7 +359,6 @@ class FaultLog:  # 0418
     @property
     def active_faults(self) -> tuple[FaultLogEntry, ...] | None:
         """Return a list of all faults outstanding (i.e. no corresponding restore)."""
-
         if not self._log:
             return None
 

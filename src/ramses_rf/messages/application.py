@@ -17,9 +17,7 @@ if TYPE_CHECKING:
 
 
 class ApplicationMessage(Message):
-    """Application-level message extended with gateway context and
-    expiration.
-    """
+    """Application message extended with gateway context and expiry."""
 
     CANT_EXPIRE: float = -1.0  # sentinel value for fraction_expired
     HAS_EXPIRED: float = 2.0  # fraction_expired >= HAS_EXPIRED
@@ -32,9 +30,7 @@ class ApplicationMessage(Message):
 
     @classmethod
     def from_dto(cls, dto: PacketDTO) -> ApplicationMessage:
-        """Factory to safely promote a transport Message to an
-        ApplicationMessage.
-        """
+        """Promote a transport Message to an ApplicationMessage."""
         # Initialize the subclass identically to how the base class initializes
         return cls(dto)
 

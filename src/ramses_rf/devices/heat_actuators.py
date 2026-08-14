@@ -16,6 +16,8 @@ QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
 
 
 class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
+    """Heating actuator base class (e.g. 10: / 13: devices)."""
+
     # .I --- 13:109598 --:------ 13:109598 3EF0 003 00C8FF                # event-driven, 00/C8
     # RP --- 13:109598 18:002563 --:------ 0008 002 00C8                  # 00/C8, as above
     # RP --- 13:109598 18:002563 --:------ 3EF1 007 0000BF-00BFC8FF       # 00/C8, as above
@@ -74,6 +76,7 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
         )
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -83,12 +86,16 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
 
 
 class HeatDemand(DeviceHeat):  # 3150
+    """Mixin for devices providing a heat demand percentage."""
+
     HEAT_DEMAND: Final = SZ_HEAT_DEMAND  # percentage valve open (0.0-1.0)
 
     async def heat_demand(self) -> float | None:  # 3150
+        """Return the current heat demand percentage (0.0 to 1.0)."""
         return self.demand_state.heat_demand
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -97,6 +104,8 @@ class HeatDemand(DeviceHeat):  # 3150
 
 
 class RelayDemand(DeviceHeat):  # 0008
+    """Mixin for devices tracking relay demand percentage."""
+
     # .I --- 01:054173 --:------ 01:054173 1FC9 018 03-0008-04D39D FC-3B00-04D39D 03-1FC9-04D39D
     # .W --- 13:123456 01:054173 --:------ 1FC9 006 00-3EF0-35E240
     # .I --- 01:054173 13:123456 --:------ 1FC9 006 00-FFFF-04D39D
@@ -113,9 +122,11 @@ class RelayDemand(DeviceHeat):  # 0008
     RELAY_DEMAND: Final = SZ_RELAY_DEMAND  # percentage (0.0-1.0)
 
     async def relay_demand(self) -> float | None:  # 0008
+        """Return the current relay demand percentage (0.0 to 1.0)."""
         return self.demand_state.relay_demand
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -161,7 +172,6 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
     async def role(self) -> str | None:
         """Return the role of the BDR91A (there are six possibilities)."""
-
         # TODO: use self._parent?
         child_id = getattr(self, "_child_id", None)
         if child_id in DOMAIN_TYPE_MAP:
@@ -179,9 +189,11 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         return None
 
     async def tpi_params(self) -> PayDictT._1100 | None:
+        """Return the TPI configuration parameters (1100) or None."""
         return await self.entity_state.get_value(Code._1100)
 
     async def schema(self) -> dict[str, Any]:
+        """Return the device configuration schema."""
         base_schema = await super().schema()
         return {
             **base_schema,
@@ -189,6 +201,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         }
 
     async def params(self) -> dict[str, Any]:
+        """Return the device parameter dictionary."""
         base_params = await super().params()
         return {
             **base_params,
@@ -196,6 +209,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         }
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -204,6 +218,8 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
 
 
 class JimDevice(Actuator):  # BDR (08):
+    """JIM actuator device class (08:)."""
+
     _SLUG: str = DevType.JIM
     _STATE_ATTR: str | None = None
 
@@ -214,6 +230,8 @@ class JimDevice(Actuator):  # BDR (08):
 
 
 class JstDevice(RelayDemand):  # BDR (31):
+    """JST relay device class (31:)."""
+
     _SLUG: str = DevType.JST
     _STATE_ATTR: str | None = None
 
