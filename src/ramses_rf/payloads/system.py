@@ -1980,6 +1980,20 @@ class PuzzlePayload(PayloadBase):
         """
         return struct.pack(self._STRUCT_FMT_HEADER, self.msg_type) + self.payload_data
 
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert puzzle diagnostic payload to legacy dictionary format.
+
+        :param msg: Optional message context object.
+        :type msg: Any
+        :returns: Decoded puzzle diagnostic dictionary with hex-encoded
+            byte fields (JSON-serialisable).
+        :rtype: dict[str, Any]
+        """
+        return {
+            "msg_type": self.msg_type.hex().upper(),
+            "payload_data": self.payload_data.hex().upper(),
+        }
+
 
 # ----------------------------------------------------------------------
 
