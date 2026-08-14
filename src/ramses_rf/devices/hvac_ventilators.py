@@ -363,7 +363,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
         # Send RQ for param 0x01 to probe support
         try:
-            from ramses_rf.schemas import CommandDTO
+            from ramses_tx.dtos import CommandDTO
 
             from_id = self.hgi.id if self.hgi else "18:000730"
             cmd = CommandDTO(
