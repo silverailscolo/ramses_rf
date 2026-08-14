@@ -341,6 +341,46 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             self._hgi = self._gateway.hgi
         return self._hgi
 
+    async def async_probe_2411_support(self) -> bool:
+        """Send initial 2411 RQ to probe for parameter support.
+
+        This restores the discovery behavior that was removed in ramses_rf 0.58.3.
+        Sends RQ for param 0x01 (a common parameter across Orcon/Itho devices)
+        to test if the device responds. If it does, _supports_2411 will be set
+        to True by the response handler (_handle_2411_message).
+
+        This method is called by ramses_cc during FAN device initialization to
+        probe for 2411 parameter support before entity creation.
+
+        :return: True if probe was sent successfully (not if device supports 2411)
+        :rtype: bool
+
+        .. note::
+           See ramses_cc issue 851 for context on why this is needed.
+        """
+        if self._supports_2411:
+            return True  # Already confirmed
+
+        # Send RQ for param 0x01 to probe support
+        try:
+            from ramses_tx.dtos import CommandDTO
+
+            from_id = self.hgi.id if self.hgi else "18:000730"
+            cmd = CommandDTO(
+                verb="RQ",
+                addr1=from_id,
+                addr2=self.id,
+                addr3="--:------",
+                code="2411",
+                payload="000001",  # Param 0x01 (common across Orcon/Itho)
+            )
+            await self._gateway.async_send_cmd(cmd)
+            _LOGGER.debug("Sent 2411 discovery probe to %s", self.id)
+            return True
+        except Exception as ex:
+            _LOGGER.debug("Failed to send 2411 probe to %s: %s", self.id, ex)
+            return False
+
     def get_2411_param(self, parameter_id: str) -> float | None:
         """Get a 2411 parameter value.
 
