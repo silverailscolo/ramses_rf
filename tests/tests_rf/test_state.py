@@ -140,7 +140,7 @@ async def test_expired_message_deletion_queued_once(
 
     mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
     mock_loop.create_task = MagicMock(side_effect=lambda coro: coro.close())
-    cast(Any, zone_entity._gwy)._loop = mock_loop
+    cast(Any, zone_entity._gateway)._loop = mock_loop
 
     await zone_entity.get_value(Code._30C9)
     await zone_entity.get_value(Code._30C9)

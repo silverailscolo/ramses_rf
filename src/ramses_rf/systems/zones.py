@@ -88,7 +88,7 @@ class ZoneBase(Child, Parent, Entity):
     _ROLE_SENSORS: str | None = None
 
     def __init__(self, tcs: Evohome, zone_idx: str) -> None:
-        super().__init__(tcs._gwy)
+        super().__init__(tcs._gateway)
 
         # Parallel CQRS States
         self.temp_state = TemperatureState()
@@ -227,7 +227,7 @@ class DhwZone(ZoneSchedule):  # CS92A
 
         if dev_id := schema.get(SZ_SENSOR):
             try:
-                dhw_sensor = self._gwy.device_registry.get_device(
+                dhw_sensor = self._gateway.device_registry.get_device(
                     dev_id,
                     parent=self,
                     child_id=FA,
@@ -244,7 +244,7 @@ class DhwZone(ZoneSchedule):  # CS92A
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
             try:
-                dhw_valve = self._gwy.device_registry.get_device(
+                dhw_valve = self._gateway.device_registry.get_device(
                     dev_id, parent=self, child_id=FA
                 )
                 assert isinstance(dhw_valve, BdrSwitch)  # mypy
@@ -260,7 +260,7 @@ class DhwZone(ZoneSchedule):  # CS92A
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HT1]):
             try:
-                htg_valve = self._gwy.device_registry.get_device(
+                htg_valve = self._gateway.device_registry.get_device(
                     dev_id, parent=self, child_id=F9
                 )
                 assert isinstance(htg_valve, BdrSwitch)  # mypy
@@ -559,7 +559,7 @@ class Zone(ZoneSchedule):
         )
 
         if sensor_id := schema.get(SZ_SENSOR):
-            sensor_kl = self._gwy.config.known_list.get(str(sensor_id), {})
+            sensor_kl = self._gateway.config.known_list.get(str(sensor_id), {})
             sensor_cls = sensor_kl.get(SZ_CLASS)
             is_ctrl = (
                 sensor_cls in _controller_classes
@@ -568,7 +568,7 @@ class Zone(ZoneSchedule):
             )
             if not is_ctrl:
                 try:
-                    self._sensor = self._gwy.device_registry.get_device(
+                    self._sensor = self._gateway.device_registry.get_device(
                         sensor_id, parent=self, is_sensor=True
                     )
                 except (
@@ -581,7 +581,7 @@ class Zone(ZoneSchedule):
                     )
 
         for act_id in schema.get(SZ_ACTUATORS, []):
-            act_kl = self._gwy.config.known_list.get(str(act_id), {})
+            act_kl = self._gateway.config.known_list.get(str(act_id), {})
             act_cls = act_kl.get(SZ_CLASS)
             is_ctrl = (
                 act_cls in _controller_classes
@@ -591,7 +591,7 @@ class Zone(ZoneSchedule):
             if is_ctrl:
                 continue
             try:
-                self._gwy.device_registry.get_device(act_id, parent=self)
+                self._gateway.device_registry.get_device(act_id, parent=self)
             except (
                 exc.DeviceNotFoundError,
                 exc.SchemaInconsistentError,
@@ -620,8 +620,10 @@ class Zone(ZoneSchedule):
 
         # Retroactive Event-Sourced Hydration: Bypasses the soon-to-be-deleted
         # EntityState by hydrating late-instantiated entities directly from the Store
-        if self._gwy.message_store:
-            msgs = await self._gwy.message_store.get(code=Code._0004, src=self._z_id)
+        if self._gateway.message_store:
+            msgs = await self._gateway.message_store.get(
+                code=Code._0004, src=self._z_id
+            )
             for msg in reversed(msgs):
                 p_load = msg.payload
                 if isinstance(p_load, dict):
@@ -1009,7 +1011,7 @@ def zone_factory(
         tcs.ctl.addr,
         idx,
         msg=msg,
-        eavesdrop=tcs._gwy.config.enable_eavesdrop,
+        eavesdrop=tcs._gateway.config.enable_eavesdrop,
         **schema,
     ).create_from_schema(tcs, idx, **schema)
 

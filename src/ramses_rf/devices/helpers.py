@@ -23,7 +23,7 @@ class _FakeableDevice(Protocol):
     @property
     def id(self) -> DeviceIdT: ...
     @property
-    def _gwy(self) -> GatewayInterface: ...
+    def _gateway(self) -> GatewayInterface: ...
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ async def send_fake_intent(
         data=data,
     )
 
-    return await device._gwy.dispatcher.send(
+    return await device._gateway.dispatcher.send(
         intent, priority=priority, wait_for_reply=wait_for_reply
     )
 

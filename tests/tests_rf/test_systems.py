@@ -253,7 +253,7 @@ def mock_tcs(mock_system_gwy: MagicMock) -> MagicMock:
     """Provide a mocked TCS (Evohome) instance for zone tests."""
     tcs = MagicMock()
     tcs.id = "01:123456"
-    tcs._gwy = mock_system_gwy
+    tcs._gateway = mock_system_gwy
     tcs.ctl = MagicMock()
     tcs.ctl.id = "01:123456"
     tcs.ctl.addr = MagicMock()
@@ -338,7 +338,7 @@ def test_dhw_zone_schema_updates(mock_tcs: MagicMock) -> None:
     mock_valve = MagicMock(spec=BdrSwitch)
     mock_valve.id = "13:123456"
 
-    mock_tcs._gwy.device_registry.get_device.side_effect = [
+    mock_tcs._gateway.device_registry.get_device.side_effect = [
         mock_sensor,
         mock_valve,
         mock_valve,
@@ -359,16 +359,16 @@ async def test_dhw_commands(mock_tcs: MagicMock) -> None:
     dhw = DhwZone(mock_tcs, "HW")
 
     await dhw.set_setpoint(55.0)
-    mock_tcs._gwy.dispatcher.send.assert_called()
+    mock_tcs._gateway.dispatcher.send.assert_called()
 
     await dhw.set_boost_mode()
-    assert mock_tcs._gwy.dispatcher.send.call_count == 2
+    assert mock_tcs._gateway.dispatcher.send.call_count == 2
 
     await dhw.reset_mode()
-    assert mock_tcs._gwy.dispatcher.send.call_count == 3
+    assert mock_tcs._gateway.dispatcher.send.call_count == 3
 
     await dhw.reset_config()
-    assert mock_tcs._gwy.dispatcher.send.call_count == 4
+    assert mock_tcs._gateway.dispatcher.send.call_count == 4
 
 
 @pytest.mark.asyncio
@@ -402,16 +402,16 @@ async def test_zone_commands(mock_tcs: MagicMock) -> None:
     zon = Zone(mock_tcs, "01")
 
     await zon.set_setpoint(21.0)
-    mock_tcs._gwy.dispatcher.send.assert_called_once()
+    mock_tcs._gateway.dispatcher.send.assert_called_once()
 
     await zon.set_setpoint(None)
-    assert mock_tcs._gwy.dispatcher.send.call_count == 2
+    assert mock_tcs._gateway.dispatcher.send.call_count == 2
 
     await zon.set_config(min_temp=10.0, max_temp=30.0)
-    assert mock_tcs._gwy.dispatcher.send.call_count == 3
+    assert mock_tcs._gateway.dispatcher.send.call_count == 3
 
     await zon.set_name("Living Room")
-    assert mock_tcs._gwy.dispatcher.send.call_count == 4
+    assert mock_tcs._gateway.dispatcher.send.call_count == 4
 
 
 def test_zone_factory_routing(mock_tcs: MagicMock) -> None:
@@ -433,7 +433,7 @@ async def test_zone_get_temp_handles_protocol_timeout(
     async def mock_send_cmd(*args: Any, **kwargs: Any) -> Packet:
         raise ProtocolTimeoutError("Mocked 20-second FSM timeout")
 
-    mock_tcs._gwy.dispatcher.send = AsyncMock(side_effect=mock_send_cmd)
+    mock_tcs._gateway.dispatcher.send = AsyncMock(side_effect=mock_send_cmd)
 
     result = await zon._get_temp()
     assert result is None
@@ -444,11 +444,11 @@ async def test_zone_name_from_cqrs_state(mock_tcs: MagicMock) -> None:
     """Test zone name is retrieved natively from the CQRS ZoneState."""
     zon = Zone(mock_tcs, "00")
     zon.zone_state = dataclasses.replace(zon.zone_state, name="Lounge")
-    mock_tcs._gwy.message_store = AsyncMock()
+    mock_tcs._gateway.message_store = AsyncMock()
 
     result = await zon.name()
     assert result == "Lounge"
-    mock_tcs._gwy.message_store.get.assert_not_called()
+    mock_tcs._gateway.message_store.get.assert_not_called()
 
 
 # --- Window Open State Aggregation Tests ---
@@ -457,7 +457,7 @@ async def test_zone_name_from_cqrs_state(mock_tcs: MagicMock) -> None:
 def _create_mock_zone() -> Zone:
     mock_tcs = MagicMock()
     mock_tcs.id = "01:123456"
-    mock_tcs._gwy = MagicMock()
+    mock_tcs._gateway = MagicMock()
     mock_tcs.zone_by_idx = {}
     mock_tcs._max_zones = 12
     mock_tcs.ctl = MagicMock()
@@ -532,7 +532,7 @@ async def test_system_mode_returns_none_when_cqrs_empty() -> None:
 
     mock_ctl = MagicMock(spec=Controller)
     mock_ctl.id = "01:123456"
-    mock_ctl._gwy = mock_gwy
+    mock_ctl._gateway = mock_gwy
 
     tcs = Evohome(mock_ctl)
     tcs.system_state = dataclasses.replace(
@@ -553,7 +553,7 @@ async def test_system_mode_uses_hot_cqrs_state_when_available() -> None:
 
     mock_ctl = MagicMock(spec=Controller)
     mock_ctl.id = "01:123456"
-    mock_ctl._gwy = mock_gwy
+    mock_ctl._gateway = mock_gwy
 
     tcs = Evohome(mock_ctl)
     tcs.system_state = dataclasses.replace(
@@ -577,7 +577,7 @@ def test_update_system_state_hydrates_from_2e04_packet() -> None:
 
     mock_ctl = MagicMock(spec=Controller)
     mock_ctl.id = "01:123456"
-    mock_ctl._gwy = mock_gwy
+    mock_ctl._gateway = mock_gwy
 
     tcs = Evohome(mock_ctl)
 

@@ -210,13 +210,13 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
         schema = shrink(SCH_VCS(schema))
         for dev_id in schema.get(SZ_REMOTES, []):
-            child = self._gwy.device_registry.get_device(dev_id)  # ensure exists
+            child = self._gateway.device_registry.get_device(dev_id)  # ensure exists
             self._remote_ids.add(DeviceIdT(dev_id))
             # 6d: set bidirectional parent link on the child
             if hasattr(child, "_parent_fan"):
                 child._parent_fan = self
         for dev_id in schema.get(SZ_SENSORS, []):
-            child = self._gwy.device_registry.get_device(dev_id)  # ensure exists
+            child = self._gateway.device_registry.get_device(dev_id)  # ensure exists
             self._sensor_ids.add(DeviceIdT(dev_id))
             # 6d: set bidirectional parent link on the child
             if hasattr(child, "_parent_fan"):
@@ -337,8 +337,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The HGI device instance, or None if not available
         :rtype: float | None
         """
-        if self._hgi is None and self._gwy and hasattr(self._gwy, "hgi"):
-            self._hgi = self._gwy.hgi
+        if self._hgi is None and self._gateway and hasattr(self._gateway, "hgi"):
+            self._hgi = self._gateway.hgi
         return self._hgi
 
     def get_2411_param(self, param_id: str) -> float | None:
@@ -567,7 +567,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             action=Action.SET_FAN_MODE,
             data={"fan_mode": fan_mode, "scheme": self._scheme or "orcon"},
         )
-        return await self._gwy.dispatcher.send(
+        return await self._gateway.dispatcher.send(
             intent, priority=Priority.HIGH, wait_for_reply=True
         )
 

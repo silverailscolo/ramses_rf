@@ -59,7 +59,7 @@ class Message:
     _GET_CODE_NAME_CB: Callable[[Code | str], str] | None = None
     _GET_MSG_IDX_CB: Callable[[Any], dict[str, str]] | None = None
 
-    _gwy: Any | None = None
+    _gateway: Any | None = None
 
     def __init__(self, dto: PacketDTO) -> None:
         """Create a message from a valid packet.

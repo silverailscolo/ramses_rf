@@ -229,8 +229,8 @@ class DiscoveryScan:
     The scan never calls ``get_device()`` or emits topology events.
     """
 
-    def __init__(self, gwy: Gateway) -> None:
-        self._gwy = gwy
+    def __init__(self, gateway: Gateway) -> None:
+        self._gateway = gateway
         self._devices: dict[str, DiscoveredDevice] = {}
         self._dirty: bool = False
         self._remove_handler: Callable[[], None] | None = None
@@ -247,7 +247,7 @@ class DiscoveryScan:
         if self._remove_handler is not None:
             _LOGGER.warning("DiscoveryScan.start(): already running")
             return
-        self._remove_handler = self._gwy.add_raw_pkt_handler(self._on_packet)
+        self._remove_handler = self._gateway.add_raw_pkt_handler(self._on_packet)
         _LOGGER.info("DiscoveryScan: started (passive observer)")
 
     def stop(self) -> None:
@@ -291,7 +291,7 @@ class DiscoveryScan:
         # may not be in the device_registry yet when the first packets arrive.
         # TODO: when multiple HGI gateways are supported, this must check
         # against all gateway IDs, not just the single active one.
-        engine = getattr(self._gwy, "_engine", None)
+        engine = getattr(self._gateway, "_engine", None)
         transport = getattr(engine, "_transport", None) if engine else None
         if transport is not None:
             active_hgi = transport.get_extra_info(SZ_ACTIVE_HGI)
@@ -299,15 +299,15 @@ class DiscoveryScan:
                 return True
         # Also check via the hgi property (covers the case where the device
         # is in the registry but the transport extra_info is not set)
-        if self._gwy.hgi and self._gwy.hgi.id == dev_id:
+        if self._gateway.hgi and self._gateway.hgi.id == dev_id:
             return True
 
         # Check known_list (declared intent, derived from schema)
-        if dev_id in self._gwy._gwy_config.known_list:
+        if dev_id in self._gateway._gwy_config.known_list:
             return True
 
         # Check schema keys (CTL IDs are top-level keys — declared intent)
-        return dev_id in self._gwy._gwy_config.schema
+        return dev_id in self._gateway._gwy_config.schema
 
     def _is_declared_hotwater_valve(self, dev_id: str) -> bool:
         """Check if a device is declared as hotwater_valve in the schema.
@@ -323,7 +323,7 @@ class DiscoveryScan:
         both relays broadcast the same codes (issue 834 comment
         5044906835).
         """
-        schema = self._gwy._gwy_config.schema
+        schema = self._gateway._gwy_config.schema
         for entry in schema.values():
             if not isinstance(entry, dict):
                 continue

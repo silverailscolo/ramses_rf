@@ -25,7 +25,7 @@ class ApplicationMessage(Message):
 
     _engine: Engine | None = None
     _fraction_expired: float | None = None
-    _gwy: Any | None = None
+    _gateway: Any | None = None
     _delete_task_queued: bool = False
 
     @classmethod
@@ -34,21 +34,21 @@ class ApplicationMessage(Message):
         # Initialize the subclass identically to how the base class initializes
         return cls(dto)
 
-    def bind_context(self, gwy: Any) -> None:
+    def bind_context(self, gateway: Any) -> None:
         """Explicitly assign the application context (gateway).
 
-        :param gwy: The application context (gateway) to associate.
-        :type gwy: Any
+        :param gateway: The application context (gateway) to associate.
+        :type gateway: Any
         """
-        self._gwy = gwy
+        self._gateway = gateway
 
-    def set_gateway(self, gwy: Engine) -> None:
+    def set_gateway(self, gateway: Engine) -> None:
         """Set the gateway (engine) instance for this message.
 
-        :param gwy: The gateway (engine) instance to associate.
-        :type gwy: Engine
+        :param gateway: The gateway (engine) instance to associate.
+        :type gateway: Engine
         """
-        self._engine = gwy
+        self._engine = gateway
 
     def _get_lifespan(self) -> bool | td:
         """Return the lifespan of a packet before it expires."""

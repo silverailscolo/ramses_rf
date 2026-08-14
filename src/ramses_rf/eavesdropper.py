@@ -35,18 +35,18 @@ if TYPE_CHECKING:
 class EavesdropEngine:
     """Heuristic eavesdropping engine for un-bound log replay."""
 
-    def __init__(self, gwy: Gateway) -> None:
+    def __init__(self, gateway: Gateway) -> None:
         """Initialize the eavesdropping engine.
 
-        :param gwy: The Gateway instance.
-        :type gwy: Gateway
+        :param gateway: The Gateway instance.
+        :type gateway: Gateway
         """
-        self._gwy: Gateway = gwy
+        self._gateway: Gateway = gateway
         self._prev_30c9_map: dict[str, Message] = {}
 
     def _emit(self, event: TopologyChangedEvent) -> None:
         """Emit a heuristic topology event to the DeviceRegistry."""
-        registry = getattr(self._gwy, "device_registry", None)
+        registry = getattr(self._gateway, "device_registry", None)
         if registry:
             registry.handle_topology_event(event)
 
@@ -66,14 +66,14 @@ class EavesdropEngine:
         :param msg: The incoming message.
         :type msg: Message
         """
-        if not getattr(self._gwy.config, "enable_eavesdrop", False):
+        if not getattr(self._gateway.config, "enable_eavesdrop", False):
             return
 
-        registry = getattr(self._gwy, "device_registry", None)
+        registry = getattr(self._gateway, "device_registry", None)
         if not registry:
             return
 
-        hgi_id = self._gwy.hgi.id if self._gwy.hgi else None
+        hgi_id = self._gateway.hgi.id if self._gateway.hgi else None
         dst_dev = registry.device_by_id.get(msg.dst.id)
 
         if dst_dev is None and msg.src.id != hgi_id:
@@ -93,7 +93,7 @@ class EavesdropEngine:
         for addr_id in dict.fromkeys(addrs_to_check):
             if addr_id and addr_id not in ("--:------", "63:262142"):
                 if (
-                    self._gwy.config.engine.enforce_known_list
+                    self._gateway.config.engine.enforce_known_list
                     and addr_id[:2] == "18"
                     and addr_id != HGI_DEV_ADDR.id
                     and addr_id != hgi_id
@@ -114,10 +114,10 @@ class EavesdropEngine:
         if ctl := getattr(msg.dst, "ctl", None):
             if tcs := getattr(ctl, "tcs", None):
                 return tcs
-        if tcs := getattr(self._gwy, "tcs", None):
+        if tcs := getattr(self._gateway, "tcs", None):
             return tcs
 
-        registry = getattr(self._gwy, "device_registry", None)
+        registry = getattr(self._gateway, "device_registry", None)
         if registry:
             ctls = [
                 d
@@ -138,7 +138,7 @@ class EavesdropEngine:
         :param msg: The incoming message.
         :type msg: Message
         """
-        if not getattr(self._gwy.config, "enable_eavesdrop", False):
+        if not getattr(self._gateway.config, "enable_eavesdrop", False):
             return
 
         tcs = self._get_tcs(msg)
@@ -557,7 +557,7 @@ class EavesdropEngine:
             return
 
         testable_sensors_map: dict[float, list[Device]] = {}
-        for d in self._gwy.device_registry.devices:
+        for d in self._gateway.device_registry.devices:
             if isinstance(d, Temperature) and d.ctl in (tcs.ctl, None):
                 d_temp = await d.temperature()
                 if d_temp is not None:
@@ -597,7 +597,7 @@ class EavesdropEngine:
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ):
-                self._gwy.device_registry.get_device(
+                self._gateway.device_registry.get_device(
                     sensor.id, parent=zone, is_sensor=True
                 )
 
@@ -617,7 +617,7 @@ class EavesdropEngine:
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ):
-                self._gwy.device_registry.get_device(
+                self._gateway.device_registry.get_device(
                     tcs.ctl.id, parent=zone, is_sensor=True
                 )
 
@@ -626,7 +626,7 @@ class EavesdropEngine:
         if not isinstance(msg.payload, dict):
             return
 
-        dev = self._gwy.device_registry.device_by_id.get(msg.src.id)
+        dev = self._gateway.device_registry.device_by_id.get(msg.src.id)
         if dev is not None and getattr(dev, "_parent", None) is not None:
             return
 
@@ -647,6 +647,6 @@ class EavesdropEngine:
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ):
-                self._gwy.device_registry.get_device(
+                self._gateway.device_registry.get_device(
                     msg.src.id, parent=matching_zones[0], is_sensor=True
                 )

@@ -140,21 +140,21 @@ class PollingManager:
 
     def __init__(
         self,
-        gwy: Gateway,
+        gateway: Gateway,
         *,
         shadow_mode: bool = True,
         cycle_interval: float = DEFAULT_POLL_CYCLE_SECS,
     ) -> None:
         """Initialize the PollingManager.
 
-        :param gwy: The Gateway instance managing the device registry.
-        :type gwy: Gateway
+        :param gateway: The Gateway instance managing the device registry.
+        :type gateway: Gateway
         :param shadow_mode: If True, log schedules without dispatching RF commands.
         :type shadow_mode: bool
         :param cycle_interval: Maximum loop sleep interval in seconds.
         :type cycle_interval: float
         """
-        self._gwy = gwy
+        self._gateway = gateway
         self.shadow_mode: bool = shadow_mode
         self._cycle_interval: float = cycle_interval
 
@@ -284,14 +284,14 @@ class PollingManager:
         if self._running:
             return
 
-        if getattr(self._gwy.config, "disable_polling", False):
+        if getattr(self._gateway.config, "disable_polling", False):
             _LOGGER.info("PollingManager: Polling disabled by GatewayConfig.")
             return
 
         self._running = True
         self._poller_task = schedule_task(self._poll_loop)
         self._poller_task.set_name("l7_polling_manager")
-        self._gwy.add_task(self._poller_task)
+        self._gateway.add_task(self._poller_task)
         _LOGGER.info("PollingManager started (shadow_mode=%s)", self.shadow_mode)
 
     async def stop(self) -> None:
@@ -335,12 +335,12 @@ class PollingManager:
         :returns: Number of tasks processed during this cycle.
         :rtype: int
         """
-        if getattr(self._gwy.config, "disable_polling", False):
+        if getattr(self._gateway.config, "disable_polling", False):
             return 0
 
         # Refresh tasks for all devices currently in registry and prune stale tasks
         active_keys: set[tuple[str, ...]] = set()
-        for dev in list(self._gwy.device_registry.devices):
+        for dev in list(self._gateway.device_registry.devices):
             active_keys.update(self.update_device_tasks(dev))
 
         for key in list(self._tasks):
@@ -376,7 +376,7 @@ class PollingManager:
                     task.device_id, task.code, payload=task.payload or "00"
                 )
                 try:
-                    await self._gwy.async_send_cmd(cmd_dto)
+                    await self._gateway.async_send_cmd(cmd_dto)
                 except (RamsesException, TimeoutError) as err:
                     _LOGGER.warning(
                         "PollingManager failed to send command %s to %s: %s",

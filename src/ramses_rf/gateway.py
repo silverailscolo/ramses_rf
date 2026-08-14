@@ -168,7 +168,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             device_filter=self._device_filter,
             config=self._gwy_config,
             device_factory_cb=lambda addr, msg, traits: device_factory(
-                gwy=self, dev_addr=addr, msg=msg, traits=traits
+                gateway=self, device_address=addr, msg=msg, traits=traits
             ),
             on_topology_changed_cb=self._on_topology_changed,
         )
