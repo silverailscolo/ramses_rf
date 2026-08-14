@@ -239,7 +239,7 @@ class Packet:
             )
 
         verb = raw_line_body[:2]
-        seqn = fields[1]
+        sequence_number = fields[1]
         addr1 = fields[2]
         addr2 = fields[3]
         addr3 = fields[4]
@@ -252,7 +252,7 @@ class Packet:
                 f"Bad frame: Invalid payload: len({payload}) is not int('{len_}' * 2))"
             )
 
-        seq_str = seqn if seqn != "---" else ""
+        seq_str = sequence_number if sequence_number != "---" else ""
         rssi_str = rssi if rssi not in ("...", "---") else ""
 
         dto = PacketDTO(
@@ -269,42 +269,42 @@ class Packet:
             is_tx=is_tx,
         )
 
-        pkt = cls.__new__(cls)
-        pkt._dto = dto
-        pkt._is_echo = is_echo
-        pkt._is_tx = is_tx
-        pkt.comment = comment or extracted_comment
-        pkt.error_text = error_message or extracted_err
-        pkt.raw_line = raw_line
+        packet = cls.__new__(cls)
+        packet._dto = dto
+        packet._is_echo = is_echo
+        packet._is_tx = is_tx
+        packet.comment = comment or extracted_comment
+        packet.error_text = error_message or extracted_err
+        packet.raw_line = raw_line
         if isinstance(raw_frame, str):
-            pkt.raw_frame = raw_frame.encode("ascii", errors="replace")
+            packet.raw_frame = raw_frame.encode("ascii", errors="replace")
         elif raw_frame:
-            pkt.raw_frame = raw_frame
+            packet.raw_frame = raw_frame
         else:
-            pkt.raw_frame = raw_line.encode("ascii", errors="replace")
+            packet.raw_frame = raw_line.encode("ascii", errors="replace")
 
-        pkt._raw_line = raw_line_body
+        packet._raw_line = raw_line_body
 
         try:
             (
-                pkt._src,
-                pkt._dst,
-                pkt.addr1,
-                pkt.addr2,
-                pkt.addr3,
+                packet._src,
+                packet._dst,
+                packet.addr1,
+                packet.addr2,
+                packet.addr3,
             ) = pkt_addrs(f"{dto.addr1} {dto.addr2} {dto.addr3}")
-            pkt._addrs = (pkt.addr1, pkt.addr2, pkt.addr3)
+            packet._addrs = (packet.addr1, packet.addr2, packet.addr3)
         except exc.PacketInvalid as err:
             raise exc.PacketInvalid("Bad frame: Invalid address set") from err
 
-        pkt._ctx_ = None
-        pkt._hdr_ = None
-        pkt._idx_ = None
-        pkt._repr = None
-        pkt._lifespan = False
+        packet._ctx_ = None
+        packet._hdr_ = None
+        packet._idx_ = None
+        packet._repr = None
+        packet._lifespan = False
 
-        pkt._validate(strict_checking=False)
-        return pkt
+        packet._validate(strict_checking=False)
+        return packet
 
     @property
     def _pkt_extra(self) -> dict[str, Any]:
@@ -615,8 +615,8 @@ class Packet:
         if self._idx_ is not None:
             return self._idx_
 
-        res = self._ctx
-        self._idx_ = res if isinstance(res, str) else False
+        result = self._ctx
+        self._idx_ = result if isinstance(result, str) else False
         return self._idx_
 
     @property
@@ -638,8 +638,10 @@ class Packet:
         if self._hdr_ is not None:
             return self._hdr_
 
-        res = pkt_header(self)
-        self._hdr_ = res if res is not None else HeaderT(f"{self.code}|{self.verb}")
+        result = pkt_header(self)
+        self._hdr_ = (
+            result if result is not None else HeaderT(f"{self.code}|{self.verb}")
+        )
         return self._hdr_
 
     @staticmethod
@@ -727,7 +729,7 @@ class Packet:
             with contextlib.suppress(ValueError):
                 rssi = int(rssi_val)
 
-        res: dict[str, Any] = {
+        result: dict[str, Any] = {
             "dtm": dtm_str,
             "rssi": rssi,
             "verb": dto.verb,
@@ -742,9 +744,9 @@ class Packet:
         }
 
         if parsed_payload is not None:
-            res["parsed_payload"] = parsed_payload
+            result["parsed_payload"] = parsed_payload
 
-        return res
+        return result
 
     def to_json(self) -> bytes:
         """Serialize packet dataclass directly to JSON byte stream via orjson.

@@ -331,10 +331,10 @@ class DhwZone(ZoneSchedule):  # CS92A
         :returns: ThermalDemandDTO or None.
         :rtype: ThermalDemandDTO | None
         """
-        val = self.demand_state.heat_demand
-        if val is None:
+        heat_demand_val = self.demand_state.heat_demand
+        if heat_demand_val is None:
             return None
-        return ThermalDemandDTO(thermal_demand=val, ufh_index=str(self.idx))
+        return ThermalDemandDTO(thermal_demand=heat_demand_val, ufh_index=str(self.idx))
 
     async def heat_demand(self) -> float | None:  # 3150
         """Return the DHW heat demand percentage (0.0 to 1.0)."""
@@ -633,11 +633,14 @@ class Zone(ZoneSchedule):
                         )
                         return self.zone_state.name
                 elif isinstance(p_load, list):
-                    for d in p_load:
-                        if isinstance(d, dict):
-                            if str(d.get(SZ_ZONE_IDX)) == self.idx and SZ_NAME in d:
+                    for item in p_load:
+                        if isinstance(item, dict):
+                            if (
+                                str(item.get(SZ_ZONE_IDX)) == self.idx
+                                and SZ_NAME in item
+                            ):
                                 self.zone_state = dataclasses.replace(
-                                    self.zone_state, name=str(d[SZ_NAME])
+                                    self.zone_state, name=str(item[SZ_NAME])
                                 )
                                 return self.zone_state.name
 
@@ -673,10 +676,10 @@ class Zone(ZoneSchedule):
 
     async def setpoint_bounds(self) -> dict[str, Any] | None:  # 22C9, 2209
         """Return zone setpoint bounds if defined by thermostat."""
-        res = await self.entity_state.get_value(
+        result = await self.entity_state.get_value(
             (Code._22C9, Code._2209), zone_idx=self.idx
         )
-        return res if isinstance(res, dict) else None
+        return result if isinstance(result, dict) else None
 
     async def set_setpoint(self, value: float | None) -> Message | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""

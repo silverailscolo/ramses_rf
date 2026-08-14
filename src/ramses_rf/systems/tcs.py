@@ -229,7 +229,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             result[SZ_SYSTEM] = {SZ_APPLIANCE_CONTROL: None}
 
         zones = {}
-        for idx, zone in schema[SZ_ZONES].items():
+        for zone_idx, zone in schema[SZ_ZONES].items():
             _zone = {}
             if zone[SZ_SENSOR] and Address(zone[SZ_SENSOR]).type in (
                 DEV_TYPE_MAP.CTL,
@@ -243,7 +243,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             ]:  # DEX
                 _zone.update({SZ_ACTUATORS: devices})
             if _zone:
-                zones[idx] = _zone
+                zones[zone_idx] = _zone
         if zones:
             result[SZ_ZONES] = zones
 
@@ -397,11 +397,11 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
                 False,
             )  # global_ver, did_io
 
-        pkt = await send_system_intent(
+        packet = await send_system_intent(
             self, Action.GET_SCHEDULE_VERSION, data={}, wait_for_reply=True
         )
-        if pkt:
-            self._msg_0006 = Message._from_pkt(pkt)
+        if packet:
+            self._msg_0006 = Message._from_pkt(packet)
 
         return (
             self._msg_0006.payload[SZ_CHANGE_COUNTER],
@@ -818,11 +818,11 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
             dev_id := schema[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL)
         ):
             try:
-                dev = self._gateway.device_registry.get_device(
+                device = self._gateway.device_registry.get_device(
                     dev_id, parent=self, child_id=FC
                 )
-                assert isinstance(dev, (BdrSwitch, OtbGateway))
-                self._app_cntrl = dev
+                assert isinstance(device, (BdrSwitch, OtbGateway))
+                self._app_cntrl = device
             except (
                 DeviceNotFoundError,
                 SchemaInconsistentError,
@@ -839,7 +839,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
             return
 
         if _schema := (schema.get(SZ_ZONES)):  # type: ignore[assignment]
-            [self.get_htg_zone(idx, **s) for idx, s in _schema.items()]
+            [self.get_htg_zone(zone_idx, **s) for zone_idx, s in _schema.items()]
 
     @classmethod
     def create_from_schema(cls, controller: Controller, **schema: Any) -> System:

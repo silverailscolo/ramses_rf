@@ -128,10 +128,10 @@ def apply_hvac_quirks(
     # authoritative semantic fan_mode comes from 22F4 (polled) or 22F1
     # (command reply). See ramses_cc issue 723.
     if msg_code == "31D9" and "fan_mode" in mutated:
-        val = mutated["fan_mode"]
-        if isinstance(val, str) and len(val) == 2:
+        mode_value = mutated["fan_mode"]
+        if isinstance(mode_value, str) and len(mode_value) == 2:
             try:
-                int(val, 16)  # is it a raw hex byte?
+                int(mode_value, 16)  # is it a raw hex byte?
                 mutated["fan_mode"] = None
             except ValueError:
                 pass  # semantic string, keep it

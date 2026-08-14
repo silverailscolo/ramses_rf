@@ -343,10 +343,10 @@ class ProtocolContext(StateMachineInterface):
             raise ProtocolTimeoutError(msg) from err
 
         try:
-            pkt = fut.result()
-            if pkt is None:
+            packet = fut.result()
+            if packet is None:
                 raise ProtocolSendFailed(f"{self}: Send failed: FSM returned None")
-            return pkt
+            return packet
         except ProtocolSendFailed:
             raise
         except (ProtocolError, TransportError) as err:
@@ -496,13 +496,13 @@ class IsInIdle(ProtocolStateBase):
 
         if HGI_DEVICE_ID in command.tx_header:
             hgi_id = self._context._protocol.hgi_id
-            command = dataclasses.replace(
+            patched_cmd = dataclasses.replace(
                 command,
                 addr1=command.addr1 if command.addr1 != HGI_DEVICE_ID else hgi_id,
                 addr2=command.addr2 if command.addr2 != HGI_DEVICE_ID else hgi_id,
                 addr3=command.addr3 if command.addr3 != HGI_DEVICE_ID else hgi_id,
             )
-            self._sent_cmd = command  # update the tracked cmd
+            self._sent_cmd = patched_cmd  # update the tracked cmd
         self._context.set_state(WantEcho)
 
 

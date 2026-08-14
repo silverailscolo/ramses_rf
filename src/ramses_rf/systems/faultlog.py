@@ -213,26 +213,26 @@ class FaultLog:  # 0418
             self._is_current = False
 
         if SZ_LOG_IDX in msg.payload:
-            idx = FaultIdxT(int(msg.payload[SZ_LOG_IDX], 16))
+            log_idx = FaultIdxT(int(msg.payload[SZ_LOG_IDX], 16))
         elif msg.payload.get(SZ_LOG_ENTRY) is None:
-            idx = FaultIdxT(0)
+            log_idx = FaultIdxT(0)
         else:
             return  # we can't do anything useful with this message
 
         if msg.payload[SZ_LOG_ENTRY] is None:  # NOTE: Subsequent entries will be empty
-            self._map = self._insert_into_map(idx, None)
+            self._map = self._insert_into_map(log_idx, None)
             self._log = {k: v for k, v in self._log.items() if k in self._map.values()}
             return  # If idx != 0, should we also check from idx = 0?
 
         entry = FaultLogEntry.from_msg(msg)  # if msg.payload[SZ_LOG_ENTRY] else None
         dtm: FaultDtmT = entry.timestamp  # type: ignore[assignment]
 
-        if self._map.get(idx) == dtm:
+        if self._map.get(log_idx) == dtm:
             return  # i.e. No evidence anything has changed
 
         if dtm not in self._log:
             self._log |= {dtm: entry}  # must add entry before _insert_into_map()
-        self._map = self._insert_into_map(idx, dtm)  # updates self._map
+        self._map = self._insert_into_map(log_idx, dtm)  # updates self._map
         self._log = {k: v for k, v in self._log.items() if k in self._map.values()}
 
         # if idx != 0:  # there's other (new/changed) entries above this one?
@@ -267,8 +267,6 @@ class FaultLog:  # 0418
 
     async def get_faultlog(
         self,
-        /,
-        *,
         start: int = 0,
         limit: int | None = DEFAULT_GET_LIMIT,
         force_refresh: bool = False,
@@ -288,17 +286,17 @@ class FaultLog:  # 0418
                 return self.faultlog
 
             error_occurred = False
-            for idx in range(start, min(start + limit, self._MAX_LOG_IDX + 1)):
+            for log_idx in range(start, min(start + limit, self._MAX_LOG_IDX + 1)):
                 try:
                     msg = await send_system_intent(
                         self._tcs,
                         Action.GET_FAULTLOG_ENTRY,
-                        data={"log_idx": idx},
+                        data={"log_idx": log_idx},
                         wait_for_reply=True,
                     )
                 except exc.RamsesException as err:
                     _LOGGER.warning(
-                        "Failed to retrieve fault log entry %s: %s", idx, err
+                        "Failed to retrieve fault log entry %s: %s", log_idx, err
                     )
                     error_occurred = True
                     self._is_current = False
@@ -309,7 +307,7 @@ class FaultLog:  # 0418
                     == "000000B0000000000000000000007FFFFF7000000000"
                 ):
                     msg = self._hack_pkt_idx(
-                        msg, f"{idx:02X}"
+                        msg, f"{log_idx:02X}"
                     )  # RPs for null entries have idx==00
                     self._process_msg(msg)  # since pkt via dispatcher aint got idx
                     break
@@ -328,7 +326,7 @@ class FaultLog:  # 0418
         # if self._faultlog:
         #     return self._faultlog
 
-        return {idx: self._log[dtm] for idx, dtm in self._map.items()}
+        return {log_idx: self._log[dtm] for log_idx, dtm in self._map.items()}
 
     @property
     def is_current(self) -> bool:

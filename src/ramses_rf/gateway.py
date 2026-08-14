@@ -212,9 +212,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         # 1. Controller Knowledge Bridge
         def is_controller(device_id: str) -> bool:
-            dev = self._device_registry.device_by_id.get(DeviceIdT(device_id))
-            if dev:
-                return getattr(dev, "_is_controller", True)
+            device = self._device_registry.device_by_id.get(DeviceIdT(device_id))
+            if device:
+                return getattr(device, "_is_controller", True)
             return True
 
         rf_msg._IS_CONTROLLER_CB = is_controller
@@ -339,9 +339,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         if self._schema_updated_callback is None:
             return
         schema_dict = await self.schema()
-        res = self._schema_updated_callback(schema_dict)
-        if asyncio.iscoroutine(res):
-            await res
+        result = self._schema_updated_callback(schema_dict)
+        if asyncio.iscoroutine(result):
+            await result
 
     async def schema(self) -> dict[str, Any]:
         """Return the entire gateway and device topology schema."""
@@ -350,9 +350,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             schema[tcs.ctl.id] = await tcs.schema()
         # Include FAN/VCS topology (remotes/sensors membership) so that
         # HVAC structure round-trips across restarts via load_fan()
-        for dev in self.device_registry.devices:
-            if isinstance(dev, HvacVentilator) and (dev._remote_ids or dev._sensor_ids):
-                schema[dev.id] = await dev.schema()
+        for device in self.device_registry.devices:
+            if isinstance(device, HvacVentilator) and (
+                device._remote_ids or device._sensor_ids
+            ):
+                schema[device.id] = await device.schema()
         schema[f"{SZ_ORPHANS}_heat"] = await self.device_registry.get_heat_orphans()
         schema[f"{SZ_ORPHANS}_hvac"] = await self.device_registry.get_hvac_orphans()
         return schema

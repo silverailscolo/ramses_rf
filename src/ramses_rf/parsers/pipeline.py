@@ -131,8 +131,8 @@ class HeartbeatDecoder(PayloadDecoder):
         if payload_len == 1 and payload_str == "00" and msg.code != Code._1FC9:
             try:
                 parser = get_parser(msg.code) or parser_unknown
-                res = parser(payload_str, msg)
-                if res == {}:
+                result = parser(payload_str, msg)
+                if result == {}:
                     return None
             except (
                 exc.ParserBaseError,

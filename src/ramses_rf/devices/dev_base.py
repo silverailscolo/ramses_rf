@@ -192,10 +192,10 @@ class DeviceBase(Entity):
         :return: The fully initialised device instance.
         :rtype: DeviceBase
         """
-        dev = cls(gateway, device_address, traits=traits)
+        device = cls(gateway, device_address, traits=traits)
         if traits:
-            dev._update_traits(traits)
-        return dev
+            device._update_traits(traits)
+        return device
 
     def _send_cmd(self, command: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
         """Send a command from this device."""
@@ -443,8 +443,8 @@ class DeviceInfo(DeviceBase):  # 10E0
         :return: A dictionary of device information.
         :rtype: dict[str, Any] | None
         """
-        res = await self.entity_state.get_value(Code._10E0)
-        return res if isinstance(res, dict) else None
+        result = await self.entity_state.get_value(Code._10E0)
+        return result if isinstance(result, dict) else None
 
     async def traits(self) -> dict[str, Any]:
         """Return the traits of the device.
@@ -649,8 +649,8 @@ class Fakeable(DeviceBase):
         """
         traits = await self.traits()
         if not traits.get(SZ_OEM_CODE):
-            res = await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE)
-            return str(res) if res is not None else None
+            result = await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE)
+            return str(result) if result is not None else None
         oem = traits.get(SZ_OEM_CODE)
         return str(oem) if oem is not None else None
 

@@ -80,12 +80,12 @@ class UfhTopologyHandler(TopologyHandler):
             if zone_type and zone_type not in (ZON_ROLE_MAP.ACT, ZON_ROLE_MAP.UFH):
                 return
 
-            for p in self._get_payloads(msg):
-                if not isinstance(p, dict):
+            for payload in self._get_payloads(msg):
+                if not isinstance(payload, dict):
                     continue
 
-                ufh_idx = p.get(SZ_UFH_IDX)
-                zone_idx = p.get(SZ_ZONE_IDX)
+                ufh_idx = payload.get(SZ_UFH_IDX)
+                zone_idx = payload.get(SZ_ZONE_IDX)
 
                 if ufh_idx is not None:
                     event_circuit = TopologyChangedEvent(

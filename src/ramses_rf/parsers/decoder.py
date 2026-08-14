@@ -207,8 +207,8 @@ class _LegacyMessage:
         if self._idx_ is not None:
             return self._idx_
 
-        res = self._pkt_idx()
-        self._idx_ = res if res is not None else False
+        result = self._pkt_idx()
+        self._idx_ = result if result is not None else False
         return self._idx_
 
     def _pkt_idx(self) -> bool | str | None:
@@ -493,8 +493,8 @@ class HeartbeatDecoder(PayloadDecoder):
         if payload_len == 1 and raw_payload == "00" and dto.code != "1FC9":
             try:
                 parser = get_parser(dto.code) or parse_unknown_payload
-                res = parser(raw_payload, msg)
-                if res == {}:
+                result = parser(raw_payload, msg)
+                if result == {}:
                     return None
             except (
                 exc.ParserBaseError,

@@ -52,8 +52,8 @@ class CommandDispatcher:
             )
             return await rply_fut
 
-        pkt = await self._gateway.async_send_cmd(
+        packet = await self._gateway.async_send_cmd(
             dto,
             priority=priority if priority is not None else Priority(dto.priority),
         )
-        return Message._from_pkt(pkt)
+        return Message._from_pkt(packet)

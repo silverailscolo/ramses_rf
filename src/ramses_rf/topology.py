@@ -473,15 +473,15 @@ class Child:
             parent, child_id = self._get_parent(
                 parent, child_id=child_id, is_sensor=is_sensor
             )
-            ctl = (
+            controller = (
                 parent
                 if parent.__class__.__name__ == "UfhController"
                 else getattr(parent, "ctl", None)
             )
 
-            if self.ctl and self.ctl is not ctl:
+            if self.ctl and self.ctl is not controller:
                 raise exc.SystemSchemaInconsistent(
-                    f"{self} can't change controller: {self.ctl} to {ctl}"
+                    f"{self} can't change controller: {self.ctl} to {controller}"
                 )
 
             parent._add_child(self, child_id=child_id, is_sensor=is_sensor)
@@ -493,7 +493,7 @@ class Child:
         self._child_id = child_id
         self._parent = parent
 
-        self.ctl = ctl
-        self.tcs = getattr(ctl, "tcs", None)
+        self.ctl = controller
+        self.tcs = getattr(controller, "tcs", None)
 
         return parent

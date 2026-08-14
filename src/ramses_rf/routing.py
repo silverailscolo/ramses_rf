@@ -85,8 +85,8 @@ def extract_context_value(
         return payload[:2] if len(payload) >= 2 else None
 
     if getattr(payload, "msg_id", None) is not None:
-        val = payload.msg_id
-        return f"{val:02X}" if isinstance(val, int) else str(val)
+        msg_id_val = payload.msg_id
+        return f"{msg_id_val:02X}" if isinstance(msg_id_val, int) else str(msg_id_val)
 
     if getattr(payload, "data_id", None) is not None:
         return str(payload.data_id)
@@ -98,8 +98,12 @@ def extract_context_value(
         return str(payload.idx)
 
     if getattr(payload, "zone_idx", None) is not None:
-        val = payload.zone_idx
-        return f"{val:02X}" if isinstance(val, int) else str(val)
+        zone_idx_val = payload.zone_idx
+        return (
+            f"{zone_idx_val:02X}"
+            if isinstance(zone_idx_val, int)
+            else str(zone_idx_val)
+        )
 
     return None
 
