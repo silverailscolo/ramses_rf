@@ -31,10 +31,12 @@ class OpenThermMsgPayload(PayloadBase):
     variant sub-dataclasses based on payload length.
 
     Domain Notes & Sample Packet Logs:
-    # NOTE: Unknown-DataId isn't an invalid payload & is useful to train the OTB device
-    # 2021-11-05T06:25:20.669382 066 RP --- 10:023327 18:131597 --:------ 3220 005 00C01307C0
-    # 2021-11-05T06:35:20.721228 066 RP --- 10:023327 18:131597 --:------ 3220 005 0040130059
-    # 2021-12-06T06:35:55.949502 071 RP --- 10:051349 18:135447 --:------ 3220 005 00C0130ECC
+      # RQs have a context: msg_id and data_id.
+      # Note: data IDs 0x47AB and 0x1980 represent transient invalid ranges.
+      # NOTE: Unknown-DataId isn't an invalid payload & is useful to train the OTB device
+      # 2021-11-05T06:25:20.669382 066 RP --- 10:023327 18:131597 --:------ 3220 005 00C01307C0
+      # 2021-11-05T06:35:20.721228 066 RP --- 10:023327 18:131597 --:------ 3220 005 0040130059
+      # 2021-12-06T06:35:55.949502 071 RP --- 10:051349 18:135447 --:------ 3220 005 00C0130ECC
     """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
@@ -450,7 +452,11 @@ class OpenThermDiagnosticsPayload(PayloadBase):
 
 @register_payload("1FD4")
 class OpenThermFaultFlagsPayload(PayloadBase):
-    """Master payload dispatcher and base class for Opcode 1FD4."""
+    """Master payload dispatcher and base class for Opcode 1FD4.
+
+    Protocol Notes:
+      # Spider Autotemp, slave 'ticker': 2/min for R8810, every ~210 sec for R8820.
+    """
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
