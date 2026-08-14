@@ -147,9 +147,7 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
 
 class StateProjector:
-    """Projector task that transforms incoming telemetry into immutable
-    states.
-    """
+    """Projector task that transforms incoming telemetry into immutable states."""
 
     def __init__(self, gwy: Any, ssot_queue: asyncio.Queue[Message]) -> None:
         """Initialize the state projector background worker.
@@ -208,8 +206,7 @@ class StateProjector:
         _route_2411_to_fan(self._gwy, msg)
 
     def process_message_state(self, msg: Message) -> None:
-        """Route valid inbound message envelopes to their respective
-        engines.
+        """Route valid inbound message envelopes to their respective engines.
 
         :param msg: The message envelope containing raw telemetry.
         :type msg: Message
@@ -314,12 +311,39 @@ class StateProjector:
                         # `setpoint` property reads from temp_state.  Without
                         # this, the zone climate entity's target_temperature
                         # stays None (issue 843).
-                        if msg.code in (Code._2309, Code._2349):
+                        # 30C9 carries the zone temperature that the Zone's
+                        # `temperature` property reads from temp_state.
+                        # Without this, the zone climate entity's
+                        # current_temperature stays None (issue 927).
+                        if msg.code in (Code._2309, Code._2349, Code._30C9):
                             self._update_temperature_state(zone, p, msg)
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS extraction failed for zone %s: %s",
                             zone.id,
+                            err,
+                        )
+
+            # Route 30C9 from a sensor to its parent zone.  Sensor-sourced
+            # 30C9 packets have no zone_idx in the decoded payload (the
+            # sensor is not a controller, so _build_idx_dict injects no
+            # zone_idx), so the zone routing path above is not reached.
+            # Without this, the zone's current_temperature stays None when
+            # only the sensor broadcasts 30C9 (issue 927).
+            if (
+                msg.code == Code._30C9
+                and src_dev
+                and SZ_TEMPERATURE in p
+                and getattr(src_dev, "_parent", None) is not None
+            ):
+                parent = src_dev._parent
+                if hasattr(parent, "temp_state") and hasattr(parent, "zone_state"):
+                    try:
+                        self._update_temperature_state(parent, p, msg)
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for parent zone %s: %s",
+                            getattr(parent, "id", "unknown"),
                             err,
                         )
 
@@ -412,9 +436,7 @@ class StateProjector:
     def _update_opentherm_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate OpenTherm frames or parallel opcodes into
-        OpenThermState.
-        """
+        """Translate OpenTherm frames or parallel opcodes into OpenThermState."""
         current_state = getattr(target, "opentherm_state", None)
         if current_state is None:
             if getattr(target, "_SLUG", "") == "OTB":
@@ -533,8 +555,7 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_hvac_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
-        """Translate complex multi-opcode ventilation payloads into
-        HvacState.
+        """Translate complex multi-opcode ventilation payloads into HvacState.
 
         Applies hardware-specific stateful FSM rules (via the Quirks
         middleware) prior to hydration.
@@ -673,21 +694,21 @@ class StateProjector:
 
     def _update_dhw_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
         """Translate DHW opcodes into DhwState."""
-        if msg.code not in (Code._10A0, Code._1260, Code._1F41):
+        if msg.code not in (Code._10A0, Code._1260, Code._1F41, "10A0", "1260", "1F41"):
             return
 
         updates: dict[str, Any] = {}
-        if msg.code == Code._10A0:
+        if msg.code in (Code._10A0, "10A0"):
             if SZ_SETPOINT in p:
                 updates[SZ_SETPOINT] = p[SZ_SETPOINT]
             if SZ_OVERRUN in p:
                 updates[SZ_OVERRUN] = p[SZ_OVERRUN]
             if SZ_DIFFERENTIAL in p:
                 updates[SZ_DIFFERENTIAL] = p[SZ_DIFFERENTIAL]
-        elif msg.code == Code._1260:
+        elif msg.code in (Code._1260, "1260"):
             if SZ_TEMPERATURE in p:
                 updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
-        elif msg.code == Code._1F41:
+        elif msg.code in (Code._1F41, "1F41"):
             if SZ_MODE in p:
                 updates[SZ_MODE] = p[SZ_MODE]
             if SZ_ACTIVE in p:
@@ -758,9 +779,7 @@ class StateProjector:
     def _update_temperature_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate temperature/TRV opcodes into TrvState &
-        TemperatureState.
-        """
+        """Translate temperature/TRV opcodes into TrvState & TemperatureState."""
         dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
 
         if msg.code == Code._12B0 and SZ_WINDOW_OPEN in p:

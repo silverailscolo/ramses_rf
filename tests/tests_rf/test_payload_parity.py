@@ -1,6 +1,12 @@
 from dataclasses import replace
 from datetime import datetime as dt
 
+import pytest
+
+import ramses_rf.payloads.dhw
+import ramses_rf.payloads.heating
+import ramses_rf.payloads.hvac
+import ramses_rf.payloads.system
 import ramses_tx.const as tx_const
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
@@ -215,8 +221,11 @@ def test_system_sync_payload_1030_parity() -> None:
         "min_flow_setpoint": None,
         "valve_run_time": None,
         "pump_run_time": None,
-        "raw_extra": None,
     }
+
+    # Verify programmatic creation on the fly packs parameter bytes dynamically
+    on_fly_payload = SystemSyncPayload(sync_flag=10, max_flow_setpoint=55)
+    assert on_fly_payload.to_bytes().hex().upper() == "0AC80137"
 
 
 def test_binding_payload_1fc9_parity() -> None:
@@ -335,6 +344,7 @@ def test_relative_humidity_payload_12a0_parity() -> None:
 
     # Act
     payload = RelativeHumidityPayload.from_bytes(raw_bytes)
+    assert isinstance(payload, RelativeHumidityPayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -417,7 +427,21 @@ def test_dhw_state_payload_1f41_parity() -> None:
     assert payload.dhw_idx == 0
     assert payload.active_flag == 1
     assert reencoded == raw_hex
-    assert as_dict == {"dhw_idx": 0, "active_flag": 1}
+    assert as_dict == {
+        "dhw_idx": 0,
+        "active_flag": 1,
+        "mode_val": None,
+    }
+
+    # Verify programmatic creation with mode_val does not drop mode_val
+    on_fly_payload = DhwStatePayload(dhw_idx=0, active_flag=1, mode_val=2)
+    assert on_fly_payload.to_bytes().hex().upper() == "000102"
+
+    # Verify field update on unpacked payload reflects new data dynamically
+    from dataclasses import replace
+
+    updated_payload = replace(payload, active_flag=0)
+    assert updated_payload.to_bytes().hex().upper() == "0000"
 
 
 def test_zone_setpoint_payload_0004_parity() -> None:
@@ -686,6 +710,7 @@ def test_relay_failsafe_payload_0009_parity() -> None:
 
     # Act
     payload = RelayFailsafePayload.from_bytes(raw_bytes)
+    assert isinstance(payload, RelayFailsafePayload)
     reencoded = payload.to_bytes().hex().upper()
     as_dict = payload_to_dict(payload)
 
@@ -1139,3 +1164,88 @@ def test_system_datetime_payload_replace_recalculates_bytes() -> None:
     assert modified_payload.datetime_str == "2023-06-15T12:00:00"
     assert reencoded != raw_hex
     assert modified_dict.get("datetime_str") == "2023-06-15T12:00:00"
+
+
+def test_hvac_payload_roundtrip_codecs_parity() -> None:
+    # Arrange & Act 1: OutdoorHumidityPayload (1280)
+    raw_1280 = bytes.fromhex("0064")
+    p_1280 = ramses_rf.payloads.hvac.OutdoorHumidityPayload.from_bytes(raw_1280)
+    assert p_1280.humidity_percent == 50.0
+    assert p_1280.to_bytes() == raw_1280
+
+    # Arrange & Act 2: AirQualityBasisPayload (12C8)
+    raw_12c8 = bytes.fromhex("6400")
+    p_12c8 = ramses_rf.payloads.hvac.AirQualityBasisPayload.from_bytes(raw_12c8)
+    assert p_12c8.air_quality_percent == 0.5
+    assert p_12c8.to_bytes() == raw_12c8
+
+    # Arrange & Act 3: HvacProgrammeEnabledPayload (22B0)
+    raw_22b0 = bytes.fromhex("0005")
+    p_22b0 = ramses_rf.payloads.hvac.HvacProgrammeEnabledPayload.from_bytes(raw_22b0)
+    assert p_22b0.enabled is True
+    assert p_22b0.to_bytes() == raw_22b0
+
+    # Arrange & Act 4: HvacFanModePayload (22F1)
+    raw_22f1 = bytes.fromhex("000204")
+    p_22f1 = ramses_rf.payloads.hvac.HvacFanModePayload.from_bytes(raw_22f1)
+    assert p_22f1.mode_idx == 2
+    assert p_22f1.to_bytes() == raw_22f1
+
+    # Arrange & Act 5: HvacFlowRatePayload (22F2)
+    raw_22f2 = bytes.fromhex("000064")
+    p_22f2 = ramses_rf.payloads.hvac.HvacFlowRatePayload.from_bytes(raw_22f2)
+    assert p_22f2.measures == ((0, 1.0),)
+    assert p_22f2.to_bytes() == raw_22f2
+
+
+def test_system_payload_roundtrip_codecs_parity() -> None:
+    # Arrange & Act 1: OemCodePayload (000E)
+    raw_000e = bytes.fromhex("0001")
+    p_000e = ramses_rf.payloads.system.OemCodePayload.from_bytes(raw_000e)
+    assert p_000e.payload_hex == "0001"
+    assert p_000e.to_bytes() == raw_000e
+
+    # Arrange & Act 2: DeviceBatteryPayload (1060)
+    raw_1060 = bytes.fromhex("00C801")
+    p_1060 = ramses_rf.payloads.system.DeviceBatteryPayload.from_bytes(raw_1060)
+    assert p_1060.battery_level == 1.0
+    assert p_1060.battery_low is False
+    assert p_1060.to_bytes() == raw_1060
+
+    # Arrange & Act 3: SystemSyncHeartbeat1BPayload / 3BPayload (1F09)
+    raw_1f09_1b = bytes.fromhex("00")
+    p_1f09_1b = ramses_rf.payloads.system.SystemSyncHeartbeatPayload.from_bytes(
+        raw_1f09_1b
+    )
+    assert isinstance(p_1f09_1b, ramses_rf.payloads.system.SystemSyncHeartbeat1BPayload)
+    assert p_1f09_1b.sync_sequence == 0
+    assert p_1f09_1b.to_bytes() == raw_1f09_1b
+
+    raw_1f09_3b = bytes.fromhex("000514")
+    p_1f09_3b = ramses_rf.payloads.system.SystemSyncHeartbeatPayload.from_bytes(
+        raw_1f09_3b
+    )
+    assert isinstance(p_1f09_3b, ramses_rf.payloads.system.SystemSyncHeartbeat3BPayload)
+    assert p_1f09_3b.remaining_seconds == 130.0
+    assert p_1f09_3b.to_bytes() == raw_1f09_3b
+
+    # Arrange & Act 4: SystemFrame0204Payload (0204)
+    raw_0204 = bytes.fromhex("00010203")
+    p_0204 = ramses_rf.payloads.system.SystemFrame0204Payload.from_bytes(raw_0204)
+    assert p_0204.raw_payload_bytes == raw_0204
+    assert p_0204.to_bytes() == raw_0204
+
+
+def test_payload_invalid_byte_length_exception_handling() -> None:
+    # Assert ValueError raised on truncated bytes for multi-byte payloads
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        ramses_rf.payloads.dhw.DhwConfigPayload.from_bytes(b"\x00")
+
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        ramses_rf.payloads.heating.Temperature3BPayload.from_bytes(b"\x00\x01")
+
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        ramses_rf.payloads.hvac.OutdoorHumidityPayload.from_bytes(b"\x00")
+
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        ramses_rf.payloads.system.DeviceBatteryPayload.from_bytes(b"\x00")

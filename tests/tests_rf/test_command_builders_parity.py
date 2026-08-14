@@ -4,7 +4,7 @@ from ramses_rf.address import Address
 from ramses_rf.commands.builders import dhw, heat, opentherm, schedules, zones
 from ramses_rf.commands.core import Command
 from ramses_rf.enums import Action
-from ramses_rf.payloads.dhw import DhwParamsPayload
+from ramses_rf.payloads.dhw import DhwParams6BPayload, DhwParamsPayload
 from ramses_rf.payloads.heating import DhwTemperaturePayload
 from ramses_tx.const import I_, RQ, W_, Code
 
@@ -39,6 +39,7 @@ def test_dhw_params_payload_roundtrip() -> None:
     payload = DhwParamsPayload.from_bytes(raw_bytes)
 
     # Assert
+    assert isinstance(payload, DhwParams6BPayload)
     assert payload.dhw_idx == 0
     assert payload.setpoint == 50.0
     assert payload.overrun == 5
@@ -56,7 +57,7 @@ def test_dhw_temperature_payload_dispatch() -> None:
     payload = DhwTemperaturePayload.from_bytes(raw_bytes)
 
     # Assert
-    assert isinstance(payload, DhwParamsPayload)
+    assert isinstance(payload, DhwParams6BPayload)
     assert payload.dhw_idx == 0
     assert payload.setpoint == 50.0
 

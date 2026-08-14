@@ -4,10 +4,13 @@ This module provides serialization utilities to convert typed PayloadBase instan
 into legacy dictionary formats for parity testing and backward compatibility.
 """
 
-from dataclasses import asdict, is_dataclass
-from typing import Any
+from __future__ import annotations
 
-from .base import PayloadBase
+from dataclasses import asdict, is_dataclass
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from .base import PayloadBase
 
 
 def payload_to_dict(payload: PayloadBase) -> dict[str, Any]:
@@ -19,6 +22,7 @@ def payload_to_dict(payload: PayloadBase) -> dict[str, Any]:
     :rtype: dict[str, Any]
     :raises TypeError: If the input is not a dataclass instance.
     """
-    if not is_dataclass(payload):
-        raise TypeError(f"Expected dataclass instance, got {type(payload).__name__}")
+    if not is_dataclass(cast(object, payload)):
+        err_msg = f"Expected dataclass instance, got {type(payload).__name__}"
+        raise TypeError(err_msg)
     return {k: v for k, v in asdict(payload).items() if not k.startswith("_")}
