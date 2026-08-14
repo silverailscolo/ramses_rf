@@ -5,8 +5,6 @@ Applies AAA (Arrange, Act, Assert) pattern strictly.
 """
 
 import asyncio
-from pathlib import Path
-from typing import Final
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,12 +20,6 @@ from ramses_rf.pipeline.conversation import ConversationManager
 from ramses_tx import RP, Packet
 from ramses_tx.exceptions import ProtocolSendFailed, ProtocolTimeoutError
 from ramses_tx.helpers import dt_now
-
-LOG_OPENTHERM: Final[Path] = (
-    Path(__file__).parent
-    / "logs"
-    / "test_phase2_95_topology_parity_packet_log_OpenTherm.log"
-)
 
 
 def _create_mock_message(

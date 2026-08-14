@@ -33,14 +33,8 @@ if TYPE_CHECKING:
 LOG_HVAC = (
     Path(__file__).parent / "data_driven" / "systems" / "_hvac_nuaire" / "packet.log"
 )
-LOG_OPENTHERM = (
-    Path(__file__).parent
-    / "logs"
-    / "test_phase2_95_topology_parity_packet_log_OpenTherm.log"
-)
-LOG_STANDARD = (
-    Path(__file__).parent / "logs" / "test_phase2_95_topology_parity_packet_log.log"
-)
+LOG_OPENTHERM = Path(__file__).parent / "logs" / "topology_sample_opentherm.log"
+LOG_STANDARD = Path(__file__).parent / "logs" / "topology_sample.log"
 
 _LOGGER = logging.getLogger(__name__)
 
