@@ -34,7 +34,7 @@ class _PortInfo(Protocol):
 __all__ = ["comports", "is_hgi80"]
 
 # OS-Specific imports and overrides
-if os.name == "nt":
+if sys.platform == "win32":
     from serial.tools.list_ports_windows import comports as _win_comports
 
     def comports(
