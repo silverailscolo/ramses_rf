@@ -2,7 +2,7 @@
 """RAMSES RF - Serial port packet transport.
 
 For ser2net, use the following YAML with:
-``ser2net -c misc/ser2net.yaml``
+``ser2net -c examples/ser2net.yaml``
 
 .. code-block::
 
@@ -268,7 +268,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
             ) from err
 
     async def _leak_sem(self) -> None:
-        """Used to enforce a minimum time between calls to self.write()."""
+        """Enforce a minimum time between calls to self.write()."""
         while True:
             await asyncio.sleep(MIN_INTER_WRITE_GAP)
             with contextlib.suppress(ValueError):
