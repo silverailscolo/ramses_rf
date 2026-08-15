@@ -1959,9 +1959,22 @@ class HvacFanParamPayload(PayloadBase):
     Protocol Notes:
       # see: https://github.com/zxdavb/ramses_rf/issues/73 & 101
       # See: ramses-rf/ramses_rf#830
-      # FFFFFFFF) is a sentinel meaning "not available" (issue 830).
       # 4-byte boolean parameter values: 0 = False, 1 = True.
-      # Sentinel values (e.g. 0x000000FF, 0xFFFFFFFF) indicate parameter N/A.
+      # Sentinel values (e.g. 0x000000FF, 0xFFFFFFFF, -1) indicate parameter N/A.
+      # Known Parameters:
+      #   0x0007 (000007): Base ventilation enable/disable.
+      #   0x0087 (000087): Parameter 0x87 configuration.
+      #   0x0088 (000088): Timer configuration.
+      #   0x00DA (0000DA): Parameter 0xDA configuration.
+      # Sample Real-World Payloads:
+      #   W|00000700000000000000000000000000000000000000 (Base vent set to OFF)
+      #   W|00000700000000000100000000000000000000000000 (Base vent set to ON)
+      #   I|0000070000000000010000000000000001000000018A00 (Base vent is ON)
+      #  RP|0000070000000000000000000000000001000000018A00 (Base vent is OFF)
+      #  RP|0000070000000000010000000000000001000000018A00 (Base vent is ON)
+      #  RP|0000871400000000000000000000000002000000018A00 (Param 0x87)
+      #  RP|0000DA7F00000000000000000000000003000000018A00 (Param 0xDA)
+      #  RP|0000881510000002BC000001900000076C000000018A33 (Timer config)
 
     :param parameter_id: Fan parameter identifier integer.
     :type parameter_id: int

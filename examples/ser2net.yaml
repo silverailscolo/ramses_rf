@@ -1,4 +1,3 @@
-
 # HGI80-like ser2net connection that allows multiple connections
 connection: &con00
   accepter: telnet(rfc2217),ipv4,tcp,5001

@@ -46,6 +46,7 @@ from ramses_tx.schemas import (
 
 from .debug import SZ_DBG_MODE, start_debugging
 from .discovery import GET_FAULTS, GET_SCHED, SET_SCHED, spawn_scripts
+from .inspect import dissect_payload, extract_packet_details, format_dissection_output
 
 if TYPE_CHECKING:
     from _typeshed import SupportsRead
@@ -216,7 +217,7 @@ async def cli(
     eavesdrop: None | bool = None,
     **kwargs: Any,
 ) -> None:
-    """A CLI for the ramses_rf library.
+    """Initialise the CLI client for the ramses_rf library.
 
     :param ctx: The Click context.
     :param config_file: An optional configuration file to load.
@@ -244,6 +245,11 @@ class FileCommand(click.Command):  # client.py parse <file>
     """A Click Command class for file-based operations."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise FileCommand and configure input-file argument.
+
+        :param args: Positional arguments for Click Command.
+        :param kwargs: Keyword arguments for Click Command.
+        """
         super().__init__(*args, **kwargs)
         self.params.insert(  # input_file name/path only
             0, click.Argument(("input-file",))
@@ -258,6 +264,23 @@ class FileCommand(click.Command):  # client.py parse <file>
         # )
 
 
+# Args/Params for decode operations
+class DecodeCommand(click.Command):  # client.py decode [payload]
+    """A Click Command class for payload decoding operations."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise DecodeCommand and configure optional payload argument.
+
+        :param args: Positional arguments for Click Command.
+        :param kwargs: Keyword arguments for Click Command.
+        """
+        super().__init__(*args, **kwargs)
+        self.params.insert(
+            0,
+            click.Argument(("payload",), required=False),
+        )
+
+
 # Args/Params for RF packets only
 class PortCommand(
     click.Command
@@ -265,6 +288,11 @@ class PortCommand(
     """A Click Command class for serial port operations."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise PortCommand and configure serial-port argument.
+
+        :param args: Positional arguments for Click Command.
+        :param kwargs: Keyword arguments for Click Command.
+        """
         super().__init__(*args, **kwargs)
         self.params.insert(0, click.Argument(("serial-port",)))
         """ # self.params.insert(  # --no-discover
@@ -483,6 +511,94 @@ async def scan(
     config["scan_output"] = kwargs.get("file")
 
     return SCAN, lib_config, config
+
+
+# DECODE (ad-hoc payload or packet inspection)
+@click.command(cls=DecodeCommand)
+@click.option(
+    "-c", "--code", type=click.STRING, help="RAMSES opcode (e.g. 2411, 10E0, 31DA)."
+)
+@click.option(
+    "-v", "--verb", type=click.STRING, help="Message verb (e.g. RP, I, RQ, W)."
+)
+@click.option(
+    "-b",
+    "--block-size",
+    "block_size",
+    type=click.STRING,
+    default="all",
+    help="Word block size in bytes (1, 2, 4, 6, 8, or all; default: all).",
+)
+@click.option(
+    "-s",
+    "--skip",
+    type=int,
+    default=0,
+    help="Number of leading bytes to skip.",
+)
+@click.option(
+    "-j",
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Output structured dissection as JSON.",
+)
+async def decode(
+    payload: str | None = None,
+    code: str | None = None,
+    verb: str | None = None,
+    block_size: str = "all",
+    skip: int = 0,
+    json_output: bool = False,
+) -> int:
+    """Dissect and analyze an ad-hoc payload or packet string.
+
+    :param payload: Raw hex payload string or full packet log line.
+    :param code: Optional RAMSES opcode override.
+    :param verb: Optional message verb override.
+    :param block_size: Block size filter ('1', '2', '4', '6', '8', 'all').
+    :param skip: Number of leading payload bytes to skip.
+    :param json_output: Whether to output raw structured JSON.
+    :return: Exit code integer.
+    """
+    raw_input = payload
+    if not raw_input or raw_input == "-":
+        if not sys.stdin.isatty():
+            raw_input = sys.stdin.read().strip()
+
+    if not raw_input:
+        print("Error: No payload or packet string provided.", file=sys.stderr)
+        return 1
+
+    extracted_code, extracted_verb, payload_hex = extract_packet_details(raw_input)
+    target_code = code if code else extracted_code
+    target_verb = verb if verb else extracted_verb
+
+    if not payload_hex:
+        print(
+            f"Error: Could not extract hex payload from: {raw_input}",
+            file=sys.stderr,
+        )
+        return 1
+
+    block_sizes: tuple[int, ...] = (
+        (1, 2, 4, 6, 8) if block_size == "all" else (int(block_size),)
+    )
+
+    dissection = dissect_payload(
+        payload_hex,
+        block_sizes=block_sizes,
+        skip_bytes=skip,
+        opcode=target_code,
+        verb=target_verb,
+    )
+
+    if json_output:
+        print(json.dumps(dissection, indent=2, default=str))
+    else:
+        print(format_dissection_output(dissection))
+
+    return 0
 
 
 def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
@@ -868,6 +984,7 @@ cli.add_command(monitor)
 cli.add_command(execute)
 cli.add_command(listen)
 cli.add_command(scan)
+cli.add_command(decode)
 
 
 def _run_cli() -> None:

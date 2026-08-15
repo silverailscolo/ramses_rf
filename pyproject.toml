@@ -67,7 +67,7 @@
 
 [tool.hatch.build]
   sources = ["src"]
-  artifacts = ["misc/ser2net.yaml"]
+  artifacts = ["examples/ser2net.yaml"]
 
 [tool.hatch.build.targets.wheel]
   packages = ["src/ramses_rf", "src/ramses_tx", "src/ramses_cli"]

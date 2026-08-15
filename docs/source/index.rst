@@ -10,6 +10,7 @@ ramses_rf
    :caption: Intro:
 
    usage
+   hardware_setup
    glossary
    binding_process
 
