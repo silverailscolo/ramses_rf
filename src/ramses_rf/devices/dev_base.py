@@ -26,7 +26,12 @@ from ramses_rf.const import (
 )
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
-from ramses_rf.models import DemandState, PowerState, TemperatureState
+from ramses_rf.models import (
+    ActuatorState,
+    DemandState,
+    PowerState,
+    TemperatureState,
+)
 from ramses_rf.schemas import (
     SZ_ALIAS,
     SZ_CLASS,
@@ -808,6 +813,7 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
 
         self.temp_state = TemperatureState()
         self.demand_state = DemandState()
+        self.act_state: ActuatorState | None = None
 
     def _make_tcs_controller(
         self, *, msg: Message | None = None, **schema: Any

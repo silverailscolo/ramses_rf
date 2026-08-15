@@ -32,7 +32,7 @@ from ramses_rf.devices import (
     UfhController,
 )
 from ramses_rf.entity import Entity, class_by_attr
-from ramses_rf.enums import Action
+from ramses_rf.enums import Action, ThermalMode
 from ramses_rf.exceptions import (
     DeviceNotFoundError,
     SchemaInconsistentError,
@@ -190,6 +190,30 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         :rtype: float | None
         """
         return self.demand_state.heat_demand
+
+    async def thermal_mode(self) -> ThermalMode | None:  # 2D49
+        """Return the current thermal operating mode of the system.
+
+        :returns: ThermalMode.COOL if in cooling mode, ThermalMode.HEAT if heating,
+            or None if unhydrated.
+        :rtype: ThermalMode | None
+        """
+        if self.system_state.cooling_mode is True:
+            return ThermalMode.COOL
+        if self.system_state.cooling_mode is False:
+            return ThermalMode.HEAT
+        return None
+
+    async def cooling_mode(self) -> bool | None:  # 2D49
+        """Return the cooling mode active state (from 2D49).
+
+        :returns: True if cooling mode is active, False if inactive, or None if unknown.
+        :rtype: bool | None
+        """
+        mode = await self.thermal_mode()
+        if mode is None:
+            return None
+        return mode == ThermalMode.COOL
 
     async def is_calling_for_heat(self) -> NoReturn:
         """Check if the system is actively calling for heat (Deprecated)."""
@@ -902,9 +926,15 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         # FC: 00-C8 (no F9, FA), TODO: deprecate as FC only?
         if not self._heat_demands:
             return None
+        mode = (
+            ThermalMode.COOL
+            if self.system_state.cooling_mode
+            else ThermalMode.HEAT
+        )
         return {
             k: ThermalDemandDTO(
                 thermal_demand=v.payload.get("heat_demand"),
+                mode=mode,
                 domain_id=k,
             )
             for k, v in self._heat_demands.items()

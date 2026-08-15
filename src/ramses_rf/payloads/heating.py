@@ -18,6 +18,7 @@ from ramses_rf.const import (
     SZ_FRAGMENT_NUMBER,
     SZ_OFFER,
     SZ_PHASE,
+    SZ_PUMP_RELAY_STATE,
     SZ_TOTAL_FRAGMENTS,
     SZ_UFH_INDEX,
     SZ_ZONE_INDEX,
@@ -26,6 +27,7 @@ from ramses_rf.const import (
     Code,
     Verb,
 )
+from ramses_rf.enums import PumpRelayState
 from ramses_tx.address import (
     ALL_DEV_ADDR,
     NON_DEV_ADDR,
@@ -3591,9 +3593,14 @@ class ActuatorStatePayload(PayloadBase):
             )
         return result
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert actuator state payload to legacy dictionary layout.
 
+        When decoded from a 9-byte Underfloor Heating/Cooling controller (UFC /
+        device type 02), flags_3 represents the pump heating/cooling relay state.
+
+        :param msg: Optional legacy message context.
+        :type msg: Any
         :returns: Decoded actuator state dictionary.
         :rtype: dict[str, Any]
         """
@@ -3616,6 +3623,22 @@ class ActuatorStatePayload(PayloadBase):
             result["ch_setpoint"] = self.ch_setpoint
         if self.max_rel_modulation is not None:
             result["max_rel_modulation"] = self.max_rel_modulation
+
+        if (
+            self.unknown_4 is not None
+            and self.flags_3 is not None
+            and getattr(getattr(msg, "src", None), "type", None)
+            in ("02", "UFC")
+        ):
+            relay_byte = self.flags_3
+            result[SZ_PUMP_RELAY_STATE] = (
+                PumpRelayState.COOLING
+                if relay_byte & 0x10
+                else PumpRelayState.HEATING
+                if relay_byte & 0x02
+                else PumpRelayState.OFF
+            )
+
         return result
 
 

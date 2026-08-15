@@ -33,6 +33,8 @@ from ramses_rf.const import (
     SZ_CH_SETPOINT,
     SZ_CO2_LEVEL,
     SZ_COOL_ACTIVE,
+    SZ_COOLING_DEMAND,
+    SZ_COOLING_MODE,
     SZ_CYCLE_COUNTDOWN,
     SZ_DATETIME,
     SZ_DEWPOINT_TEMP,
@@ -64,6 +66,7 @@ from ramses_rf.const import (
     SZ_PRE_HEAT,
     SZ_PRESENCE_DETECTED,
     SZ_PRESSURE,
+    SZ_PUMP_RELAY_STATE,
     SZ_REL_MODULATION_LEVEL,
     SZ_RELAY_DEMAND,
     SZ_RELAY_FAILSAFE,
@@ -780,7 +783,7 @@ class StateProjector:
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
         """Translate system configuration opcodes into SystemState."""
-        if msg.code not in (Code._0100, Code._2E04, Code._313F):
+        if msg.code not in (Code._0100, Code._2E04, Code._313F, Code._2D49):
             return
 
         updates: dict[str, Any] = {}
@@ -795,6 +798,9 @@ class StateProjector:
         elif msg.code == Code._313F:
             if SZ_DATETIME in p:
                 updates[SZ_DATETIME] = p[SZ_DATETIME]
+        elif msg.code == Code._2D49:
+            if SZ_COOLING_DEMAND in p:
+                updates[SZ_COOLING_MODE] = p[SZ_COOLING_DEMAND]
 
         if not updates:
             return
@@ -1066,6 +1072,8 @@ class StateProjector:
             updates[SZ_ACTUATOR_COUNTDOWN] = p[SZ_ACTUATOR_COUNTDOWN]
         if SZ_CYCLE_COUNTDOWN in p:
             updates[SZ_CYCLE_COUNTDOWN] = p[SZ_CYCLE_COUNTDOWN]
+        if SZ_PUMP_RELAY_STATE in p:
+            updates[SZ_PUMP_RELAY_STATE] = p[SZ_PUMP_RELAY_STATE]
 
         if not updates:
             return
