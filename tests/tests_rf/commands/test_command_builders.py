@@ -183,7 +183,12 @@ def test_build_set_schedule_fragment(snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.SET_SCHEDULE_FRAGMENT,
-        data={"zone_idx": 0, "frag_num": 1, "frag_cnt": 3, "fragment": "0011223344"},
+        data={
+            "zone_idx": 0,
+            "frag_num": 1,
+            "frag_cnt": 3,
+            "fragment": "0011223344",
+        },
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -512,7 +517,10 @@ def test_build_get_hvac_fan_31da(snapshot: Any) -> None:
     dto = build_dto(intent)
     assert str(dto.verb) == Verb.I_
     assert str(dto.code) == Code._31DA
-    assert dto.payload == "0000EF007FFFEFEF7FFF7FFF7FFF7FFF0000EFEFFFFF7FFFEFEF7FFF7FFF"
+    assert (
+        dto.payload
+        == "0000EF007FFFEFEF7FFF7FFF7FFF7FFF0000EFEFFFFF7FFFEFEF7FFF7FFF"
+    )
 
 
 @pytest.mark.parametrize(
@@ -555,7 +563,9 @@ def test_build_set_fan_mode_exhaustive(
         data=data,
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == Verb.I_  # wait! I frame? My previous tests used I... wait!
+    assert (
+        str(dto.verb) == Verb.I_
+    )  # wait! I frame? My previous tests used I... wait!
     # Wait, 22F1 from the old test was: f"000  I --- {REM} {HRU} {NUL} 22F1 003 000007"
     # Wait, the code in build_set_fan_mode defaults to I_.
     assert str(dto.code) == Code._22F1
@@ -644,7 +654,13 @@ def test_build_put_co2_level_exhaustive(
                 "supply_temp": 22.0,
                 "indoor_temp": 21.86,
                 "outdoor_temp": 21.78,
-                "speed_capabilities": ["off", "low_med_high", "timer", "boost", "auto"],
+                "speed_capabilities": [
+                    "off",
+                    "low_med_high",
+                    "timer",
+                    "boost",
+                    "auto",
+                ],
                 "fan_info": "away",
                 "_unknown_fan_info_flags": [0, 0, 0],
                 "exhaust_fan_speed": 0.1,
@@ -700,7 +716,12 @@ def test_build_put_co2_level_exhaustive(
         (
             {
                 "hvac_id": "00",
-                "speed_capabilities": ["off", "low_med_high", "timer", "boost"],
+                "speed_capabilities": [
+                    "off",
+                    "low_med_high",
+                    "timer",
+                    "boost",
+                ],
                 "fan_info": "speed 1, low",
                 "_unknown_fan_info_flags": [0, 0, 0],
                 "exhaust_fan_speed": 0.49,
@@ -726,7 +747,13 @@ def test_build_put_co2_level_exhaustive(
             {
                 "hvac_id": "00",
                 "indoor_humidity": 0.44,
-                "speed_capabilities": ["off", "low_med_high", "timer", "boost", "auto"],
+                "speed_capabilities": [
+                    "off",
+                    "low_med_high",
+                    "timer",
+                    "boost",
+                    "auto",
+                ],
                 "fan_info": "speed 1, low",
                 "_unknown_fan_info_flags": [0, 0, 0],
                 "exhaust_fan_speed": 0.2,
@@ -786,7 +813,9 @@ def test_build_get_hvac_fan_31da_exhaustive(
     "setpoint",
     [5.0, 10.0, 15.5, 21.0, 21.5, 30.0, 35.0],
 )
-def test_build_set_zone_setpoint_parity(setpoint: float, snapshot: Any) -> None:
+def test_build_set_zone_setpoint_parity(
+    setpoint: float, snapshot: Any
+) -> None:
 
     intent = Intent(
         src=Address("18:000730"),
@@ -1102,7 +1131,9 @@ def test_build_put_actuator_cycle(snapshot: Any) -> None:
 
 
 @patch("ramses_tx.version.VERSION", "0.0.0")
-@patch("ramses_rf.commands.builders.system.timestamp", return_value=1700000000.0)
+@patch(
+    "ramses_rf.commands.builders.system.timestamp", return_value=1700000000.0
+)
 def test_build_send_puzzle(mock_timestamp: Any, snapshot: Any) -> None:
     intent = Intent(
         src=Address("18:000730"),

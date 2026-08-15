@@ -120,7 +120,9 @@ class TemperaturePayload(PayloadBase):
     def to_bytes(self) -> bytes:
         """Pack payload instance into raw binary bytes."""
         temp_raw = (
-            0x7FFF if self.temperature is None else int(round(self.temperature * 100.0))
+            0x7FFF
+            if self.temperature is None
+            else int(round(self.temperature * 100.0))
         )
         return struct.pack(self._STRUCT_FMT, self.zone_idx, temp_raw)
 
@@ -152,7 +154,9 @@ class DhwParamsPayload(PayloadBase):
     differential: float | None = None
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> "DhwParams3BPayload | DhwParams6BPayload":
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "DhwParams3BPayload | DhwParams6BPayload":
         """Unpack DHW parameters payload, dispatching by length."""
         if not raw_data:
             raise ValueError("Payload data cannot be empty")
@@ -208,7 +212,11 @@ class DhwParams3BPayload(DhwParamsPayload):
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte DHW parameters into binary payload."""
-        sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
+        sp_raw = (
+            0x7FFF
+            if self.setpoint is None
+            else int(round(self.setpoint * 100.0))
+        )
         return struct.pack(self._STRUCT_FMT, self.dhw_idx, sp_raw)
 
 
@@ -264,7 +272,11 @@ class DhwParams6BPayload(DhwParamsPayload):
 
     def to_bytes(self) -> bytes:
         """Pack 6-byte DHW parameters into binary payload."""
-        sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
+        sp_raw = (
+            0x7FFF
+            if self.setpoint is None
+            else int(round(self.setpoint * 100.0))
+        )
         diff_raw = int(round(self.differential * 100.0))
         return struct.pack(
             self._STRUCT_FMT, self.dhw_idx, sp_raw, self.overrun, diff_raw
@@ -341,14 +353,23 @@ class ZoneConfigPayload(PayloadBase):
             )
         if len(raw_data) > 6:
             return [
-                cls._from_bytes_single(raw_data, i) for i in range(0, len(raw_data), 6)
+                cls._from_bytes_single(raw_data, i)
+                for i in range(0, len(raw_data), 6)
             ]
         return cls._from_bytes_single(raw_data, 0)
 
     def to_bytes(self) -> bytes:
         """Pack zone config into binary payload."""
-        min_raw = 0x7FFF if self.min_temp is None else int(round(self.min_temp * 100.0))
-        max_raw = 0x7FFF if self.max_temp is None else int(round(self.max_temp * 100.0))
+        min_raw = (
+            0x7FFF
+            if self.min_temp is None
+            else int(round(self.min_temp * 100.0))
+        )
+        max_raw = (
+            0x7FFF
+            if self.max_temp is None
+            else int(round(self.max_temp * 100.0))
+        )
         return struct.pack(
             self._STRUCT_FMT, self.zone_idx, self.zone_flags, min_raw, max_raw
         )

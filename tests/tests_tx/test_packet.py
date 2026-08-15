@@ -58,7 +58,9 @@ def test_packet_partitioning() -> None:
     # _partition returns a map object, so we convert to a tuple to assert
     fragment, err_msg, comment = tuple(Packet._partition(raw_line))
 
-    assert fragment == "045  I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    assert (
+        fragment == "045  I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    )
     assert err_msg == "error"
     assert comment == "comment"
 
@@ -132,7 +134,10 @@ def test_packet_dto_serialization() -> None:
     assert (
         pkt_dict["rssi"] == 45
     )  # Intentionally mapped to int for legacy downstream compatibility
-    assert pkt_dict["frame"] == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    assert (
+        pkt_dict["frame"]
+        == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    )
 
     # Check Address resolution strictly maps to the primitive DTO strings
     assert pkt_dict["addr1"] == "01:145038"
@@ -215,7 +220,9 @@ def test_pkt_lifespan(monkeypatch: pytest.MonkeyPatch) -> None:
     assert pkt_lifespan(pkt_1f09) == td(seconds=360)
 
     # Force an array scenario for 000A logic paths
-    valid_000a = "045  I --- 01:145038 --:------ 01:145038 000A 006 001122334455"
+    valid_000a = (
+        "045  I --- 01:145038 --:------ 01:145038 000A 006 001122334455"
+    )
     pkt_000a = Packet(DTM, valid_000a)
 
     # The internal property cache was removed in Phase 3.1; length logic applies natively
@@ -235,7 +242,9 @@ def test_packet_representations() -> None:
     assert Code._1F09 in repr_str
 
     # __str__ simply delegates to super().__repr__() which outputs just the formatted frame
-    assert str(packet) == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    assert (
+        str(packet) == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    )
 
 
 def test_packet_heartbeat_payload_bypass() -> None:

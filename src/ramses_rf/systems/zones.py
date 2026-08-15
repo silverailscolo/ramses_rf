@@ -25,7 +25,13 @@ from ramses_rf.const import (
     DevRole,
     ZoneRole,
 )
-from ramses_rf.devices import BdrSwitch, Controller, Device, DhwSensor, TrvActuator
+from ramses_rf.devices import (
+    BdrSwitch,
+    Controller,
+    Device,
+    DhwSensor,
+    TrvActuator,
+)
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.enums import Action, DevType
 from ramses_rf.helpers import shrink
@@ -168,12 +174,16 @@ class ZoneSchedule(ZoneBase):  # 0404
 
         self._schedule = Schedule(self)  # type: ignore[arg-type]
 
-    async def get_schedule(self, *, force_io: bool = False) -> WeeklySchedule | None:
+    async def get_schedule(
+        self, *, force_io: bool = False
+    ) -> WeeklySchedule | None:
         """Fetch the weekly schedule from the controller."""
         await self._schedule.get_schedule(force_io=force_io)
         return self.schedule
 
-    async def set_schedule(self, schedule: WeeklySchedule) -> WeeklySchedule | None:
+    async def set_schedule(
+        self, schedule: WeeklySchedule
+    ) -> WeeklySchedule | None:
         """Upload a weekly schedule to the controller."""
         return await self._schedule.set_schedule(schedule)
 
@@ -205,10 +215,14 @@ class DhwZone(ZoneSchedule):  # CS92A
 
     def __init__(self, tcs: _StoredHwT, zone_index: str = "HW") -> None:
         """Initialize a DhwZone instance."""
-        _LOGGER.debug("Creating a DHW for TCS: %s_HW (%s)", tcs.id, self.__class__)
+        _LOGGER.debug(
+            "Creating a DHW for TCS: %s_HW (%s)", tcs.id, self.__class__
+        )
 
         if tcs.dhw:
-            raise exc.SchemaInconsistentError(f"Duplicate DHW for TCS: {tcs.id}")
+            raise exc.SchemaInconsistentError(
+                f"Duplicate DHW for TCS: {tcs.id}"
+            )
         if zone_index not in (None, "HW"):
             raise exc.SchemaInconsistentError(
                 f"Invalid zone idx for DHW: {zone_index} (not 'HW'/null)"
@@ -246,7 +260,9 @@ class DhwZone(ZoneSchedule):  # CS92A
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning("SUPPRESSED in DhwZone._update_schema (sensor): %s", err)
+                _TRACE.warning(
+                    "SUPPRESSED in DhwZone._update_schema (sensor): %s", err
+                )
 
         if dev_id := schema.get(DEV_ROLE_MAP[DevRole.HTG]):
             try:
@@ -340,7 +356,9 @@ class DhwZone(ZoneSchedule):  # CS92A
         heat_demand_val = self.demand_state.heat_demand
         if heat_demand_val is None:
             return None
-        return ThermalDemandDTO(thermal_demand=heat_demand_val, ufh_index=str(self.idx))
+        return ThermalDemandDTO(
+            thermal_demand=heat_demand_val, ufh_index=str(self.idx)
+        )
 
     async def heat_demand(self) -> float | None:  # 3150
         """Return the DHW heat demand percentage (0.0 to 1.0)."""
@@ -415,8 +433,12 @@ class DhwZone(ZoneSchedule):  # CS92A
         """Return the schema of the DHW's."""
         return {
             SZ_SENSOR: self.sensor.id if self.sensor else None,
-            SZ_DHW_VALVE: (self.hotwater_valve.id if self.hotwater_valve else None),
-            SZ_HTG_VALVE: (self.heating_valve.id if self.heating_valve else None),
+            SZ_DHW_VALVE: (
+                self.hotwater_valve.id if self.hotwater_valve else None
+            ),
+            SZ_HTG_VALVE: (
+                self.heating_valve.id if self.heating_valve else None
+            ),
         }
 
     async def params(self) -> dict[str, Any]:
@@ -451,7 +473,9 @@ class Zone(ZoneSchedule):
         In addition, an electric zone may subsequently turn out to be a
         zone valve zone.
         """
-        _LOGGER.debug("Creating a Zone: %s_%s (%s)", tcs.id, zone_index, self.__class__)
+        _LOGGER.debug(
+            "Creating a Zone: %s_%s (%s)", tcs.id, zone_index, self.__class__
+        )
 
         if zone_index in tcs.zone_by_idx:
             raise exc.SchemaInconsistentError(
@@ -486,7 +510,9 @@ class Zone(ZoneSchedule):
             if zone_type in (ZON_ROLE_MAP.ACT, ZON_ROLE_MAP.SEN):
                 return  # generic zone classes
             if zone_type not in ZON_ROLE_MAP.HEAT_ZONES:
-                raise exc.SchemaInconsistentError(f"Invalid zone type: {zone_type}")
+                raise exc.SchemaInconsistentError(
+                    f"Invalid zone type: {zone_type}"
+                )
 
             klass = ZON_ROLE_MAP.slug(zone_type)  # not incl. DHW?
 
@@ -603,7 +629,9 @@ class Zone(ZoneSchedule):
                 exc.SchemaInconsistentError,
                 exc.SystemSchemaInconsistent,
             ) as err:
-                _TRACE.warning("SUPPRESSED in Zone._update_schema (actuator): %s", err)
+                _TRACE.warning(
+                    "SUPPRESSED in Zone._update_schema (actuator): %s", err
+                )
 
     @property
     def sensor(self) -> Device | None:
@@ -646,7 +674,11 @@ class Zone(ZoneSchedule):
                     for item in p_load:
                         if isinstance(item, dict):
                             if (
-                                str(item.get(SZ_ZONE_INDEX, item.get(SZ_ZONE_IDX)))
+                                str(
+                                    item.get(
+                                        SZ_ZONE_INDEX, item.get(SZ_ZONE_IDX)
+                                    )
+                                )
                                 == self.idx
                                 and SZ_NAME in item
                             ):
@@ -692,7 +724,9 @@ class Zone(ZoneSchedule):
         )
         return result if isinstance(result, dict) else None
 
-    async def set_setpoint(self, value: float | None) -> Message | None:  # 000A/2309
+    async def set_setpoint(
+        self, value: float | None
+    ) -> Message | None:  # 000A/2309
         """Set the target temperature, until the next scheduled setpoint."""
         if value is None:
             return await self.reset_mode()
@@ -785,7 +819,9 @@ class Zone(ZoneSchedule):
 
     async def set_frost_mode(self) -> Message:  # 2349
         """Set the zone to the lowest possible setpoint, indefinitely."""
-        return await self.set_mode(mode=ZON_MODE_MAP.PERMANENT, setpoint=5)  # TODO
+        return await self.set_mode(
+            mode=ZON_MODE_MAP.PERMANENT, setpoint=5
+        )  # TODO
 
     async def set_mode(
         self,

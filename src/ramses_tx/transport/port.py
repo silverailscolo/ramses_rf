@@ -107,7 +107,10 @@ def limit_duty_cycle(
             self: PortTransport, frame: str, *args: Any, **kwargs: Any
         ) -> None:
             # Lazy initialize the instance-bound duty cycle variables
-            if self._tx_bits_in_bucket is None or self._tx_last_time_bit_added is None:
+            if (
+                self._tx_bits_in_bucket is None
+                or self._tx_last_time_bit_added is None
+            ):
                 self._tx_bits_in_bucket = BUCKET_CAPACITY
                 self._tx_last_time_bit_added = perf_counter()
 
@@ -162,7 +165,9 @@ class _PortTransportAbstractor(serial_asyncio.SerialTransport):
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the port transport abstractor."""
-        super().__init__(loop or asyncio.get_event_loop(), protocol, serial_instance)
+        super().__init__(
+            loop or asyncio.get_event_loop(), protocol, serial_instance
+        )
 
 
 class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[misc]
@@ -190,7 +195,9 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the port transport."""
-        _PortTransportAbstractor.__init__(self, serial_instance, protocol, loop=loop)
+        _PortTransportAbstractor.__init__(
+            self, serial_instance, protocol, loop=loop
+        )
         _FullTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._tx_bits_in_bucket = None
@@ -220,7 +227,11 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
 
         async def connect_with_signature() -> None:
             """Poll with signatures; connect after first echo."""
-            payload = f"0010{int(time() * 1000):012X}{hex_from_str(f'v{VERSION}')}"[:48]
+            payload = (
+                f"0010{int(time() * 1000):012X}{hex_from_str(f'v{VERSION}')}"[
+                    :48
+                ]
+            )
             sig = CommandDTO(
                 verb=I_,
                 addr1=HGI_DEV_ADDR.id,
@@ -240,7 +251,9 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
 
                 if self._init_fut.done():
                     packet = self._init_fut.result()
-                    self._make_connection(gateway_id=packet.src.id if packet else None)
+                    self._make_connection(
+                        gateway_id=packet.src.id if packet else None
+                    )
                     return
 
             if not self._init_fut.done():
@@ -318,7 +331,9 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         super()._pkt_read(packet)
 
     @limit_duty_cycle(MAX_DUTY_CYCLE_RATE)
-    async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
+    async def write_frame(
+        self, frame: str, disable_tx_limits: bool = False
+    ) -> None:
         """Transmit a frame via the underlying transport handler."""
         await self._leaker_sem.acquire()
         await super().write_frame(frame)

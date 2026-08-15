@@ -133,7 +133,9 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
         t0_enc = time.perf_counter()
         try:
             if isinstance(payload_obj, list):
-                reencoded: bytes = b"".join(item.to_bytes() for item in payload_obj)
+                reencoded: bytes = b"".join(
+                    item.to_bytes() for item in payload_obj
+                )
             else:
                 reencoded = payload_obj.to_bytes()
             if not reencoded:
@@ -142,7 +144,9 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
                     "Produced empty re-encoded byte string"
                 )
         except Exception as err:
-            reencode_errors.append(f"Line {line_num} (Opcode {pkt.code}): {err}")
+            reencode_errors.append(
+                f"Line {line_num} (Opcode {pkt.code}): {err}"
+            )
         t_reencode_acc += time.perf_counter() - t0_enc
 
         # 3. Test payload_to_dict adapter
@@ -152,7 +156,9 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
             else:
                 _as_dict = payload_to_dict(payload_obj)
         except Exception as err:
-            adapter_errors.append(f"Line {line_num} (Opcode {pkt.code}): {err}")
+            adapter_errors.append(
+                f"Line {line_num} (Opcode {pkt.code}): {err}"
+            )
 
         tested_count += 1
 
@@ -163,7 +169,9 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
     legacy_rate = legacy_decoded_count / legacy_time if legacy_time > 0 else 0
     new_rate = tested_count / new_decoding_time if new_decoding_time > 0 else 0
     reencode_rate = tested_count / t_reencode_acc if t_reencode_acc > 0 else 0
-    speedup_mult = legacy_time / new_decoding_time if new_decoding_time > 0 else 0
+    speedup_mult = (
+        legacy_time / new_decoding_time if new_decoding_time > 0 else 0
+    )
 
     # Output Comprehensive Summary Table
     summary_table = (
@@ -197,34 +205,51 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
             "Note: These historical packets reflect corrupt/truncated log lines or non-standard\n"
             "fragment buffers skipped by single-item Dataclass from_bytes parsing.\n"
         )
-        skips_by_opcode: dict[str, list[tuple[int, str, str, str, str, str]]] = {}
+        skips_by_opcode: dict[
+            str, list[tuple[int, str, str, str, str, str]]
+        ] = {}
         for skip in variant_skips:
             skips_by_opcode.setdefault(skip[1], []).append(skip)
 
         for opcode, items in sorted(skips_by_opcode.items()):
-            print(f"\n--- Opcode {opcode} ({len(items)} skipped packet log lines) ---")
-            for line_num, code, verb, payload_hex, err_msg, legacy_out in items[:5]:
+            print(
+                f"\n--- Opcode {opcode} ({len(items)} skipped packet log lines) ---"
+            )
+            for (
+                line_num,
+                code,
+                verb,
+                payload_hex,
+                err_msg,
+                legacy_out,
+            ) in items[:5]:
                 print(
                     f"  Line {line_num:5d} [{verb} {code} len={len(payload_hex) // 2:2d}]: payload={payload_hex}"
                 )
                 print(f"    Dataclass Exception: {err_msg}")
                 print(f"    Legacy Parser Output: {legacy_out}")
             if len(items) > 5:
-                print(f"  ... and {len(items) - 5} more lines for opcode {opcode}")
+                print(
+                    f"  ... and {len(items) - 5} more lines for opcode {opcode}"
+                )
 
         print(
             "\n=======================================================================================\n"
         )
 
     # Assert correctness
-    assert not parse_errors, f"Parse failures ({len(parse_errors)}):\n" + "\n".join(
-        parse_errors[:10]
+    assert not parse_errors, (
+        f"Parse failures ({len(parse_errors)}):\n"
+        + "\n".join(parse_errors[:10])
     )
     assert not reencode_errors, (
         f"Re-encode failures ({len(reencode_errors)}):\n"
         + "\n".join(reencode_errors[:10])
     )
     assert not adapter_errors, (
-        f"Adapter failures ({len(adapter_errors)}):\n" + "\n".join(adapter_errors[:10])
+        f"Adapter failures ({len(adapter_errors)}):\n"
+        + "\n".join(adapter_errors[:10])
     )
-    assert tested_count > 20000, f"Expected >20000 packets tested, got {tested_count}"
+    assert tested_count > 20000, (
+        f"Expected >20000 packets tested, got {tested_count}"
+    )

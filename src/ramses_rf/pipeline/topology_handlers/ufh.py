@@ -81,9 +81,14 @@ class UfhTopologyHandler(TopologyHandler):
             # Bypassing strict typing evaluation by casting to Any
             raw_data: Any = msg.data
             zone_type = (
-                raw_data.get(SZ_ZONE_TYPE) if isinstance(raw_data, dict) else None
+                raw_data.get(SZ_ZONE_TYPE)
+                if isinstance(raw_data, dict)
+                else None
             )
-            if zone_type and zone_type not in (ZON_ROLE_MAP.ACT, ZON_ROLE_MAP.UFH):
+            if zone_type and zone_type not in (
+                ZON_ROLE_MAP.ACT,
+                ZON_ROLE_MAP.UFH,
+            ):
                 return
 
             for payload in self._get_payloads(msg):
@@ -99,7 +104,9 @@ class UfhTopologyHandler(TopologyHandler):
                         device_id=ufc_id,
                         metadata={
                             SZ_UFH_INDEX: str(ufh_idx),
-                            SZ_ZONE_INDEX: str(zone_idx) if zone_idx else "None",
+                            SZ_ZONE_INDEX: str(zone_idx)
+                            if zone_idx
+                            else "None",
                             "ufh_idx": str(ufh_idx),
                             "zone_idx": str(zone_idx) if zone_idx else "None",
                             "child_id": str(zone_idx) if zone_idx else "None",

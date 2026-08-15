@@ -21,7 +21,10 @@ from ramses_rf.const import (
 from ramses_rf.devices import Device, Temperature
 from ramses_rf.enums import TopologyAction
 from ramses_rf.models import TopologyChangedEvent
-from ramses_rf.protocol.ramses import CODES_ONLY_FROM_CTL, HVAC_KLASS_BY_VC_PAIR
+from ramses_rf.protocol.ramses import (
+    CODES_ONLY_FROM_CTL,
+    HVAC_KLASS_BY_VC_PAIR,
+)
 from ramses_tx import Code
 from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.const import I_, RQ
@@ -124,7 +127,8 @@ class EavesdropEngine:
                 d
                 for d in list(registry.device_by_id.values())
                 if (
-                    getattr(d, "_SLUG", "") == "CTL" or getattr(d, "type", None) == "01"
+                    getattr(d, "_SLUG", "") == "CTL"
+                    or getattr(d, "type", None) == "01"
                 )
                 and hasattr(d, "tcs")
                 and d.tcs is not None
@@ -165,7 +169,13 @@ class EavesdropEngine:
             if msg._has_array:
                 await self._eavesdrop_from_controller_broadcast(tcs, msg, prev)
                 self._prev_30c9_map[ctl_id] = msg
-            elif getattr(msg.src, "type", None) in ("03", "04", "12", "22", "34"):
+            elif getattr(msg.src, "type", None) in (
+                "03",
+                "04",
+                "12",
+                "22",
+                "34",
+            ):
                 await self._eavesdrop_from_trv_broadcast(tcs, msg)
 
     def _evaluate_evohome_rules(self, msg: Message) -> None:
@@ -203,7 +213,12 @@ class EavesdropEngine:
 
                 metadata: dict[str, Any] = {}
 
-                is_actuator = getattr(msg.src, "type", None) in ("04", "08", "13", "02")
+                is_actuator = getattr(msg.src, "type", None) in (
+                    "04",
+                    "08",
+                    "13",
+                    "02",
+                )
                 is_sensor = getattr(msg.src, "type", None) in (
                     "00",
                     "03",
@@ -213,7 +228,12 @@ class EavesdropEngine:
                     "34",
                 )
 
-                if msg.code in (Code._3150, Code._0008, Code._2309, Code._000A):
+                if msg.code in (
+                    Code._3150,
+                    Code._0008,
+                    Code._2309,
+                    Code._000A,
+                ):
                     metadata["device_role"] = "actuator"
                 elif msg.code in (
                     Code._30C9,
@@ -221,11 +241,15 @@ class EavesdropEngine:
                     Code._10A0,
                     Code._12B0,
                 ):
-                    metadata["device_role"] = "sensor" if is_sensor else "actuator"
+                    metadata["device_role"] = (
+                        "sensor" if is_sensor else "actuator"
+                    )
                     if is_sensor:
                         metadata["is_sensor"] = "True"
                 else:
-                    metadata["device_role"] = "actuator" if is_actuator else "sensor"
+                    metadata["device_role"] = (
+                        "actuator" if is_actuator else "sensor"
+                    )
                     if is_sensor:
                         metadata["is_sensor"] = "True"
 
@@ -293,7 +317,10 @@ class EavesdropEngine:
         msg_code = str(msg.code)
 
         dev_class = None
-        for (schema_verb, schema_code), dev_class_name in HVAC_KLASS_BY_VC_PAIR.items():
+        for (
+            schema_verb,
+            schema_code,
+        ), dev_class_name in HVAC_KLASS_BY_VC_PAIR.items():
             if (schema_verb is None or schema_verb == msg_verb) and str(
                 schema_code
             ) == msg_code:
@@ -301,7 +328,10 @@ class EavesdropEngine:
                 break
 
         if dev_class:
-            if msg.src.id != "--:------" and getattr(msg.src, "type", None) != "01":
+            if (
+                msg.src.id != "--:------"
+                and getattr(msg.src, "type", None) != "01"
+            ):
                 self._emit(
                     TopologyChangedEvent(
                         action=TopologyAction.UPDATE_DEVICE_CLASS,
@@ -495,7 +525,9 @@ class EavesdropEngine:
                 parent_id=msg.src.id,
                 child_id=msg.dst.id,
                 metadata={
-                    "device_role": "actuator" if dst_type in ("04", "08") else "sensor"
+                    "device_role": "actuator"
+                    if dst_type in ("04", "08")
+                    else "sensor"
                 },
                 causation="Rule_Implicit_Poll_Binding",
             )
@@ -507,7 +539,11 @@ class EavesdropEngine:
             return
 
         src_type = getattr(msg.src, "type", None)
-        if getattr(msg.addr3, "type", None) == "01" and src_type in ("00", "04", "08"):
+        if getattr(msg.addr3, "type", None) == "01" and src_type in (
+            "00",
+            "04",
+            "08",
+        ):
             self._emit(
                 TopologyChangedEvent(
                     action=TopologyAction.BIND_DEVICE,
@@ -529,7 +565,9 @@ class EavesdropEngine:
         if prev is None:
             return
 
-        secs = await tcs.entity_state.get_value(Code._1F09, key="remaining_seconds")
+        secs = await tcs.entity_state.get_value(
+            Code._1F09, key="remaining_seconds"
+        )
         if not isinstance(secs, (int, float)):
             secs = 300.0
         if msg.dtm > prev.dtm + td(seconds=secs + 5):
@@ -547,12 +585,15 @@ class EavesdropEngine:
             result: dict[float, str] = {}
             for i1, t1 in chg_zones.items():
                 zone = tcs.zone_by_idx.get(i1) or (
-                    tcs.get_htg_zone(i1) if hasattr(tcs, "get_htg_zone") else None
+                    tcs.get_htg_zone(i1)
+                    if hasattr(tcs, "get_htg_zone")
+                    else None
                 )
                 if (
                     zone is not None
                     and zone.sensor is None
-                    and t1 not in [t2 for i2, t2 in chg_zones.items() if i2 != i1]
+                    and t1
+                    not in [t2 for i2, t2 in chg_zones.items() if i2 != i1]
                 ):
                     result[t1] = i1
             return result
@@ -563,7 +604,10 @@ class EavesdropEngine:
 
         testable_sensors_map: dict[float, list[Device]] = {}
         for device in self._gateway.device_registry.devices:
-            if isinstance(device, Temperature) and device.ctl in (tcs.ctl, None):
+            if isinstance(device, Temperature) and device.ctl in (
+                tcs.ctl,
+                None,
+            ):
                 d_temp = await device.temperature()
                 if d_temp is not None:
                     if d_temp not in testable_sensors_map:
@@ -628,7 +672,9 @@ class EavesdropEngine:
                     tcs.ctl.id, parent=zone, is_sensor=True
                 )
 
-    async def _eavesdrop_from_trv_broadcast(self, tcs: Any, msg: Message) -> None:
+    async def _eavesdrop_from_trv_broadcast(
+        self, tcs: Any, msg: Message
+    ) -> None:
         """Correlate a new TRV temperature broadcast against known zones."""
         if not isinstance(msg.payload, dict):
             return

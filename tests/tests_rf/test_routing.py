@@ -176,7 +176,9 @@ class TestDispatcher2411Routing:
             fan._gateway.message_store.stop()
 
     @pytest.mark.asyncio
-    async def test_non_fan_target_not_affected(self, mock_gateway: MagicMock) -> None:
+    async def test_non_fan_target_not_affected(
+        self, mock_gateway: MagicMock
+    ) -> None:
         """A non-FAN device in registry must not be touched by 2411 routing."""
         fan = _make_fan(mock_gateway)
         other = MagicMock()
@@ -197,7 +199,9 @@ class TestDispatcher2411Routing:
 class TestStateProjector2411Routing:
     """Verify StateProjector._route_2411_to_fan mirrors the dispatcher path."""
 
-    def test_state_projector_routes_2411(self, mock_gateway: MagicMock) -> None:
+    def test_state_projector_routes_2411(
+        self, mock_gateway: MagicMock
+    ) -> None:
         """The ingestion StateProjector must also route 2411 to the FAN."""
         fan = _make_fan(mock_gateway)
         callback = MagicMock()

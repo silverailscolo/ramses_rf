@@ -23,7 +23,9 @@ if TYPE_CHECKING:
     from syrupy.assertion import SnapshotAssertion
 
 # Navigate up from tests/tests_rf/test_regression_rf.py to tests/fixtures/
-FIXTURE_FILE = Path(__file__).parents[1] / "fixtures" / "regression_packets_sorted.txt"
+FIXTURE_FILE = (
+    Path(__file__).parents[1] / "fixtures" / "regression_packets_sorted.txt"
+)
 
 
 def _normalize_val(val: Any) -> Any:

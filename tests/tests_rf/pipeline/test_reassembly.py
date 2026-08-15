@@ -141,9 +141,13 @@ async def test_unrelated_packet_does_not_abort_reassembly(
     # Send the first fragment of a 000A array
     frag1 = create_dto(Verb.I_, Code._000A, "001201F4", base_time)
     # An unrelated 30C9 packet arrives between the two fragments
-    unrelated = create_dto(Verb.I_, Code._30C9, "0001C8", base_time + td(seconds=1))
+    unrelated = create_dto(
+        Verb.I_, Code._30C9, "0001C8", base_time + td(seconds=1)
+    )
     # The second 000A fragment now arrives and completes the array
-    frag2 = create_dto(Verb.I_, Code._000A, "081001F409C4", base_time + td(seconds=2))
+    frag2 = create_dto(
+        Verb.I_, Code._000A, "081001F409C4", base_time + td(seconds=2)
+    )
 
     # Act
     await in_q.put(frag1)
@@ -188,10 +192,16 @@ async def test_concurrent_arrays_from_different_sources(base_time: dt) -> None:
     await buffer.start()
 
     # Device A starts an array
-    frag_a1 = create_dto(Verb.I_, Code._000A, "001201F4", base_time, addr1="01:158182")
+    frag_a1 = create_dto(
+        Verb.I_, Code._000A, "001201F4", base_time, addr1="01:158182"
+    )
     # Device B starts an array (same code, different src) before A completes
     frag_b1 = create_dto(
-        Verb.I_, Code._000A, "00AA00BB", base_time + td(seconds=1), addr1="01:223036"
+        Verb.I_,
+        Code._000A,
+        "00AA00BB",
+        base_time + td(seconds=1),
+        addr1="01:223036",
     )
     # Device A's second fragment arrives
     frag_a2 = create_dto(
@@ -203,7 +213,11 @@ async def test_concurrent_arrays_from_different_sources(base_time: dt) -> None:
     )
     # Device B's second fragment arrives
     frag_b2 = create_dto(
-        Verb.I_, Code._000A, "0810AABBCC", base_time + td(seconds=3), addr1="01:223036"
+        Verb.I_,
+        Code._000A,
+        "0810AABBCC",
+        base_time + td(seconds=3),
+        addr1="01:223036",
     )
 
     # Act
@@ -240,8 +254,12 @@ async def test_timeout_flushes_all_pending(base_time: dt) -> None:
     await buffer.start()
 
     # Two unrelated pending arrays from different sources
-    frag_a = create_dto(Verb.I_, Code._000A, "001201F4", base_time, addr1="01:158182")
-    frag_b = create_dto(Verb.I_, Code._000A, "00AA00BB", base_time, addr1="01:223036")
+    frag_a = create_dto(
+        Verb.I_, Code._000A, "001201F4", base_time, addr1="01:158182"
+    )
+    frag_b = create_dto(
+        Verb.I_, Code._000A, "00AA00BB", base_time, addr1="01:223036"
+    )
 
     # Act
     await in_q.put(frag_a)

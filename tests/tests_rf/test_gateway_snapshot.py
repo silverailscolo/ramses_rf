@@ -31,9 +31,15 @@ if TYPE_CHECKING:
     from syrupy.assertion import SnapshotAssertion
 
 LOG_HVAC = (
-    Path(__file__).parent / "data_driven" / "systems" / "_hvac_nuaire" / "packet.log"
+    Path(__file__).parent
+    / "data_driven"
+    / "systems"
+    / "_hvac_nuaire"
+    / "packet.log"
 )
-LOG_OPENTHERM = Path(__file__).parent / "logs" / "topology_sample_opentherm.log"
+LOG_OPENTHERM = (
+    Path(__file__).parent / "logs" / "topology_sample_opentherm.log"
+)
 LOG_STANDARD = Path(__file__).parent / "logs" / "topology_sample.log"
 
 _LOGGER = logging.getLogger(__name__)
@@ -93,7 +99,9 @@ async def _get_attr_value(obj: Any, attr: str) -> Any:
     return val
 
 
-async def serialize_logical_entity(entity: System | Zone | DhwZone) -> dict[str, Any]:
+async def serialize_logical_entity(
+    entity: System | Zone | DhwZone,
+) -> dict[str, Any]:
     """Serialize the specific public API properties for logical entities.
 
     :param entity: The logical system or zone entity to serialize.
@@ -123,7 +131,11 @@ async def serialize_logical_entity(entity: System | Zone | DhwZone) -> dict[str,
                 val = await _get_attr_value(entity, attr)
                 if val is not None:
                     # Convert FaultLogEntry tuples to string to prevent snapshot volatility
-                    if attr in ("active_faults", "latest_event", "latest_fault"):
+                    if attr in (
+                        "active_faults",
+                        "latest_event",
+                        "latest_fault",
+                    ):
                         data[attr] = str(val)
                     else:
                         data[attr] = val

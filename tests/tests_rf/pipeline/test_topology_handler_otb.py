@@ -13,7 +13,9 @@ from ramses_tx import Address
 def test_otb_handler_promotes_device_class_on_3220() -> None:
     # Arrange
     events: list[TopologyChangedEvent] = []
-    handler = OtbTopologyHandler(emit_event_cb=events.append, enable_eavesdrop=True)
+    handler = OtbTopologyHandler(
+        emit_event_cb=events.append, enable_eavesdrop=True
+    )
 
     mock_header = MagicMock()
     mock_header.code = Code._3220

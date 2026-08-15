@@ -101,10 +101,16 @@ class SystemClockPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 5 bytes.
         """
         if len(raw_data) < 5:
-            raise ValueError(f"Invalid payload length for 0001: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 0001: {len(raw_data)}"
+            )
         if len(raw_data) >= 8:
-            return cls(hour=0, minute=0, second=0, day_of_week=0, _raw_bytes=raw_data)
-        _hdr, hr, mn, sc, dow = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+            return cls(
+                hour=0, minute=0, second=0, day_of_week=0, _raw_bytes=raw_data
+            )
+        _hdr, hr, mn, sc, dow = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         return cls(
             hour=hr,
             minute=mn,
@@ -121,7 +127,12 @@ class SystemClockPayload(PayloadBase):
         if self._raw_bytes is not None:
             return self._raw_bytes
         return struct.pack(
-            self._STRUCT_FMT, 0, self.hour, self.minute, self.second, self.day_of_week
+            self._STRUCT_FMT,
+            0,
+            self.hour,
+            self.minute,
+            self.second,
+            self.day_of_week,
         )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
@@ -193,7 +204,9 @@ class SystemDatePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 4 bytes.
         """
         if len(raw_data) < 4:
-            raise ValueError(f"Invalid payload length for 0002: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 0002: {len(raw_data)}"
+            )
         _hdr, yr, mo, dy = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(year=yr, month=mo, day=dy)
 
@@ -203,7 +216,9 @@ class SystemDatePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, 0, self.year, self.month, self.day)
+        return struct.pack(
+            self._STRUCT_FMT, 0, self.year, self.month, self.day
+        )
 
 
 # ----------------------------------------------------------------------
@@ -231,7 +246,9 @@ class SystemChangeCounterPayload(PayloadBase):
         """Construct SystemChangeCounter payload variant dynamically from arguments."""
         if cls is not SystemChangeCounterPayload:
             return super().__new__(cls)
-        return SystemChangeCounter4BPayload(h1=h1, h2=h2, change_counter=change_counter)
+        return SystemChangeCounter4BPayload(
+            h1=h1, h2=h2, change_counter=change_counter
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert system change counter payload to legacy dictionary layout."""
@@ -241,7 +258,9 @@ class SystemChangeCounterPayload(PayloadBase):
     def from_bytes(cls, raw_data: bytes) -> "SystemChangeCounterPayload":
         """Unpack system change counter binary payload, dispatching by length."""
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 0006: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 0006: {len(raw_data)}"
+            )
         if len(raw_data) >= 4:
             return SystemChangeCounter4BPayload.from_bytes(raw_data)
         return SystemChangeCounter3BPayload.from_bytes(raw_data)
@@ -296,7 +315,9 @@ class SystemChangeCounter3BPayload(SystemChangeCounterPayload):
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte system change counter binary payload."""
-        counter_val = 0xFFFF if self.change_counter is None else self.change_counter
+        counter_val = (
+            0xFFFF if self.change_counter is None else self.change_counter
+        )
         return struct.pack(self._STRUCT_FMT, self.hdr, counter_val)
 
 
@@ -334,7 +355,9 @@ class SystemChangeCounter4BPayload(SystemChangeCounterPayload):
 
     def to_bytes(self) -> bytes:
         """Pack 4-byte system change counter binary payload."""
-        counter_val = 0xFFFF if self.change_counter is None else self.change_counter
+        counter_val = (
+            0xFFFF if self.change_counter is None else self.change_counter
+        )
         return struct.pack(self._STRUCT_FMT, self.h1, self.h2, counter_val)
 
 
@@ -434,7 +457,9 @@ class SystemRolePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 000E: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 000E: {len(raw_data)}"
+            )
         dom, role = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(domain_index=dom, role_code=role)
 
@@ -510,7 +535,9 @@ class SystemFlagPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 0016: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 0016: {len(raw_data)}"
+            )
         dom, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(domain_index=dom, flag_value=flg)
 
@@ -520,7 +547,9 @@ class SystemFlagPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.domain_index, self.flag_value)
+        return struct.pack(
+            self._STRUCT_FMT, self.domain_index, self.flag_value
+        )
 
 
 # ----------------------------------------------------------------------
@@ -722,7 +751,9 @@ class SystemParameterPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 01D0: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 01D0: {len(raw_data)}"
+            )
         index, value = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(parameter_index=index, parameter_value=value)
 
@@ -732,7 +763,9 @@ class SystemParameterPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.parameter_index, self.parameter_value)
+        return struct.pack(
+            self._STRUCT_FMT, self.parameter_index, self.parameter_value
+        )
 
 
 # ----------------------------------------------------------------------
@@ -779,7 +812,9 @@ class SystemFaultPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 01E9: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 01E9: {len(raw_data)}"
+            )
         code, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(fault_code=code, flag_value=flg)
 
@@ -851,7 +886,9 @@ class SystemFaultLogPayload(PayloadBase):
         :rtype: dict[str, Any]
         """
         raw_hex = (bytes([self.log_index]) + self.log_data).hex().upper()
-        log_index_str = raw_hex[4:6] if len(raw_hex) >= 6 else f"{self.log_index:02X}"
+        log_index_str = (
+            raw_hex[4:6] if len(raw_hex) >= 6 else f"{self.log_index:02X}"
+        )
 
         verb = getattr(msg, "verb", Verb.I_) if msg is not None else Verb.I_
         verb_str = str(getattr(verb, "value", verb))
@@ -870,7 +907,9 @@ class SystemFaultLogPayload(PayloadBase):
                 return {SZ_LOG_ENTRY: None}
 
             keys_to_include = (SZ_TIMESTAMP, SZ_FAULT_STATE, SZ_FAULT_TYPE)
-            entry = [v for k, v in log_entry_dict.items() if k in keys_to_include]
+            entry = [
+                v for k, v in log_entry_dict.items() if k in keys_to_include
+            ]
 
             dev_class = log_entry_dict.get(SZ_DEVICE_CLASS)
             domain_index = log_entry_dict.get(
@@ -952,7 +991,9 @@ class SystemLogIndexPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 042F: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 042F: {len(raw_data)}"
+            )
         dom, ptr = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(domain_index=dom, log_pointer=ptr, raw_bytes=raw_data)
 
@@ -964,7 +1005,9 @@ class SystemLogIndexPayload(PayloadBase):
         """
         if self.raw_bytes is not None:
             return self.raw_bytes
-        return struct.pack(self._STRUCT_FMT, self.domain_index, self.log_pointer)
+        return struct.pack(
+            self._STRUCT_FMT, self.domain_index, self.log_pointer
+        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert system log index payload to legacy dictionary format.
@@ -982,7 +1025,10 @@ class SystemLogIndexPayload(PayloadBase):
                 "counter_5": f"0x{raw_hex[10:14]}",
                 "unknown_7": f"0x{raw_hex[14:18]}",
             }
-        return {SZ_DOMAIN_INDEX: self.domain_index, "log_pointer": self.log_pointer}
+        return {
+            SZ_DOMAIN_INDEX: self.domain_index,
+            "log_pointer": self.log_pointer,
+        }
 
 
 # ----------------------------------------------------------------------
@@ -1029,7 +1075,9 @@ class SystemStatusPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 0B04: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 0B04: {len(raw_data)}"
+            )
         code, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(state_code=code, flags=flg)
 
@@ -1085,7 +1133,9 @@ class DeviceBatteryPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 1060: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1060: {len(raw_data)}"
+            )
         hdr = raw_data[0]
         raw_level = raw_data[1]
         raw_flags = raw_data[2]
@@ -1179,7 +1229,10 @@ class SystemDeviceInfoPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT_HEADER, self.info_type) + self.info_bytes
+        return (
+            struct.pack(self._STRUCT_FMT_HEADER, self.info_type)
+            + self.info_bytes
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert device info payload to legacy dictionary layout.
@@ -1246,7 +1299,9 @@ class SystemOutdoorTempPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 1290: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1290: {len(raw_data)}"
+            )
         temp_bytes = raw_data[1:3] if len(raw_data) >= 3 else raw_data[0:2]
         if temp_bytes in (b"\x7f\xff", b"\x31\xff", b"\x7f\x7f"):
             return cls(outdoor_temp=None)
@@ -1520,12 +1575,17 @@ class SystemConfig2BPayload(SystemConfigPayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.config_index, self.config_value)
+        return struct.pack(
+            self._STRUCT_FMT, self.config_index, self.config_value
+        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert system config payload to legacy dictionary layout."""
         if msg and hasattr(msg, "src"):
-            dev_type = getattr(msg.src, "type", None) or getattr(msg.src, "id", "")[:2]
+            dev_type = (
+                getattr(msg.src, "type", None)
+                or getattr(msg.src, "id", "")[:2]
+            )
             if dev_type in ("21", "37", "32"):
                 return {"presence_detected": bool(self.config_value != 0)}
 
@@ -1540,7 +1600,10 @@ class SystemConfig2BPayload(SystemConfigPayload):
                 result[SZ_UNTIL] = None
             return result
 
-        return {"config_idx": self.config_index, "config_val": self.config_value}
+        return {
+            "config_idx": self.config_index,
+            "config_val": self.config_value,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -1586,7 +1649,9 @@ class SystemConfigVarPayload(SystemConfigPayload):
                 f"Invalid payload length for SystemConfigVarPayload: {len(raw_data)}"
             )
         c_idx, c_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(config_index=c_idx, config_value=c_val, raw_extra=raw_data[2:])
+        return cls(
+            config_index=c_idx, config_value=c_val, raw_extra=raw_data[2:]
+        )
 
     def to_bytes(self) -> bytes:
         """Pack variable-length system config into binary payload.
@@ -1594,14 +1659,17 @@ class SystemConfigVarPayload(SystemConfigPayload):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.config_index, self.config_value) + (
-            self.raw_extra or b""
-        )
+        return struct.pack(
+            self._STRUCT_FMT, self.config_index, self.config_value
+        ) + (self.raw_extra or b"")
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert system config payload to legacy dictionary layout."""
         if msg and hasattr(msg, "src"):
-            dev_type = getattr(msg.src, "type", None) or getattr(msg.src, "id", "")[:2]
+            dev_type = (
+                getattr(msg.src, "type", None)
+                or getattr(msg.src, "id", "")[:2]
+            )
             if dev_type in ("21", "37", "32"):
                 return {"presence_detected": bool(self.config_value != 0)}
 
@@ -1620,7 +1688,10 @@ class SystemConfigVarPayload(SystemConfigPayload):
                 result[SZ_UNTIL] = until_dtm
             return result
 
-        return {"config_idx": self.config_index, "config_val": self.config_value}
+        return {
+            "config_idx": self.config_index,
+            "config_val": self.config_value,
+        }
 
 
 # Update VARIANTS property after variants are defined
@@ -1902,7 +1973,9 @@ class SystemOpenThermBridgePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 3222: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 3222: {len(raw_data)}"
+            )
         return cls(raw_bytes=raw_data)
 
     def to_bytes(self) -> bytes:
@@ -1971,7 +2044,9 @@ class PuzzlePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 7FFF: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 7FFF: {len(raw_data)}"
+            )
         (m_type,) = struct.unpack_from(cls._STRUCT_FMT_HEADER, raw_data, 0)
         return cls(msg_type=m_type, payload_data=raw_data[2:])
 
@@ -1981,7 +2056,10 @@ class PuzzlePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT_HEADER, self.msg_type) + self.payload_data
+        return (
+            struct.pack(self._STRUCT_FMT_HEADER, self.msg_type)
+            + self.payload_data
+        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert puzzle diagnostic payload to legacy dictionary format.
@@ -2039,10 +2117,13 @@ class RelayFailsafePayload(PayloadBase):
         """
         if len(raw_data) >= 6 and len(raw_data) % 3 == 0:
             return [
-                cls._from_3b(raw_data[i : i + 3]) for i in range(0, len(raw_data), 3)
+                cls._from_3b(raw_data[i : i + 3])
+                for i in range(0, len(raw_data), 3)
             ]
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 0009: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 0009: {len(raw_data)}"
+            )
         if len(raw_data) >= 3:
             return cls._from_3b(raw_data[:3])
         index, flag = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
@@ -2054,7 +2135,9 @@ class RelayFailsafePayload(PayloadBase):
         flag = raw_data[1]
         u0 = f"{raw_data[2]:02X}"
         return cls(
-            domain_or_zone_index=index, failsafe_enabled=bool(flag), _unknown_0=u0
+            domain_or_zone_index=index,
+            failsafe_enabled=bool(flag),
+            _unknown_0=u0,
         )
 
     def to_bytes(self) -> bytes:
@@ -2072,7 +2155,9 @@ class RelayFailsafePayload(PayloadBase):
                 ]
             )
         return struct.pack(
-            self._STRUCT_FMT, self.domain_or_zone_index, int(self.failsafe_enabled)
+            self._STRUCT_FMT,
+            self.domain_or_zone_index,
+            int(self.failsafe_enabled),
         )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:

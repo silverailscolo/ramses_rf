@@ -3,7 +3,10 @@
 import pytest
 
 from ramses_rf.address import Address
-from ramses_rf.commands.builders.dhw import build_get_dhw_params, build_set_dhw_params
+from ramses_rf.commands.builders.dhw import (
+    build_get_dhw_params,
+    build_set_dhw_params,
+)
 from ramses_rf.commands.core import Command
 from ramses_rf.enums import Action
 from ramses_tx.const import RQ, Code

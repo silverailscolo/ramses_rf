@@ -32,7 +32,9 @@ async def test_hgi_id_injection() -> None:
     with (
         patch("ramses_tx.engine.transport_factory") as mock_transport_factory,
         patch.object(
-            gwy._engine._protocol, "wait_for_connection_made", new_callable=AsyncMock
+            gwy._engine._protocol,
+            "wait_for_connection_made",
+            new_callable=AsyncMock,
         ),
     ):
         # Setup the mock transport to be returned by the factory
@@ -70,13 +72,16 @@ async def test_hgi_id_default_behavior() -> None:
 
     # 1. Instantiate Gateway WITHOUT the custom hgi_id using GatewayConfig
     gwy = Gateway(
-        "/dev/ttyMOCK", config=GatewayConfig(engine=EngineConfig(input_file=None))
+        "/dev/ttyMOCK",
+        config=GatewayConfig(engine=EngineConfig(input_file=None)),
     )
 
     with (
         patch("ramses_tx.engine.transport_factory") as mock_transport_factory,
         patch.object(
-            gwy._engine._protocol, "wait_for_connection_made", new_callable=AsyncMock
+            gwy._engine._protocol,
+            "wait_for_connection_made",
+            new_callable=AsyncMock,
         ),
     ):
         # Setup the mock transport

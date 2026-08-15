@@ -13,7 +13,9 @@ sys.path.append("../tests_cli")  # HACK: to access client.py
 try:
     import colorama  # noqa: F401
 except ModuleNotFoundError as err:
-    pytest.skip(f"{err}", allow_module_level=True)  # No module named 'colorama'
+    pytest.skip(
+        f"{err}", allow_module_level=True
+    )  # No module named 'colorama'
 
 
 from ramses_cli import _DBG_FORCE_CLI_DEBUGGING  # noqa: E402
@@ -31,7 +33,9 @@ if _DBG_FORCE_CLI_DEBUGGING:
     )
 
 
-STDIN = io.StringIO("053  I --- 01:123456 --:------ 01:123456 3150 002 FC00\r\n")
+STDIN = io.StringIO(
+    "053  I --- 01:123456 --:------ 01:123456 3150 002 FC00\r\n"
+)
 
 CLI_CONFIG_BASE = {
     "debug_mode": 0,
@@ -63,7 +67,11 @@ CLI_CONFIG_LISTEN_ = CLI_CONFIG_BASE
 CLI_CONFIG_PARSE__ = CLI_CONFIG_BASE
 
 LIB_CONFIG_BASE = {
-    "config": {"reduce_processing": 0, "evofw_flag": None, "disable_discovery": False},
+    "config": {
+        "reduce_processing": 0,
+        "evofw_flag": None,
+        "disable_discovery": False,
+    },
     "serial_port": None,
     "packet_log": None,
 }
@@ -79,12 +87,20 @@ LIB_CONFIG_EXECUTE = {
     "packet_log": None,
 }
 LIB_CONFIG_MONITOR = {
-    "config": {"reduce_processing": 0, "evofw_flag": None, "disable_discovery": False},
+    "config": {
+        "reduce_processing": 0,
+        "evofw_flag": None,
+        "disable_discovery": False,
+    },
     "serial_port": "/dev/ttyUSB0",
     "packet_log": None,
 }
 LIB_CONFIG_LISTEN_ = {
-    "config": {"reduce_processing": 0, "evofw_flag": None, "disable_sending": True},
+    "config": {
+        "reduce_processing": 0,
+        "evofw_flag": None,
+        "disable_sending": True,
+    },
     "serial_port": "/dev/ttyUSB0",
     "packet_log": None,
 }
@@ -94,9 +110,21 @@ LIB_CONFIG_PARSE__ = {
 }
 
 BASIC_TESTS = (  # can't use "-z"
-    (["client.py", "execute", "/dev/ttyUSB0"], CLI_CONFIG_EXECUTE, LIB_CONFIG_EXECUTE),
-    (["client.py", "monitor", "/dev/ttyUSB0"], CLI_CONFIG_MONITOR, LIB_CONFIG_MONITOR),
-    (["client.py", "listen", "/dev/ttyUSB0"], CLI_CONFIG_LISTEN_, LIB_CONFIG_LISTEN_),
+    (
+        ["client.py", "execute", "/dev/ttyUSB0"],
+        CLI_CONFIG_EXECUTE,
+        LIB_CONFIG_EXECUTE,
+    ),
+    (
+        ["client.py", "monitor", "/dev/ttyUSB0"],
+        CLI_CONFIG_MONITOR,
+        LIB_CONFIG_MONITOR,
+    ),
+    (
+        ["client.py", "listen", "/dev/ttyUSB0"],
+        CLI_CONFIG_LISTEN_,
+        LIB_CONFIG_LISTEN_,
+    ),
     (
         ["client.py", "parse", "filename-stand_in"],
         CLI_CONFIG_PARSE__,
@@ -143,7 +171,9 @@ async def test_client_basic(
     if tests[index][0][1] == PARSE:
         input_data = STDIN.getvalue()
 
-    result = await runner.invoke(cli, args, input=input_data, standalone_mode=False)
+    result = await runner.invoke(
+        cli, args, input=input_data, standalone_mode=False
+    )
 
     assert result.exit_code == 0, f"Command failed: {result.exception}"
 

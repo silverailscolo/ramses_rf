@@ -18,7 +18,13 @@ from ramses_rf.address import Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.enums import Action, DevType
-from ramses_tx import ALL_DEVICE_ID, NON_DEVICE_ID, CommandDTO, Priority, QosParams
+from ramses_tx import (
+    ALL_DEVICE_ID,
+    NON_DEVICE_ID,
+    CommandDTO,
+    Priority,
+    QosParams,
+)
 from ramses_tx.typing import DeviceIdT
 
 from . import exceptions as exc
@@ -67,7 +73,9 @@ WAITING_TIMEOUT_SECS: Final[float] = (
 )
 
 # raise a BindTimeoutError if expected Pkt is not received before this number of seconds
-_TENDER_WAIT_TIME: Final[float] = WAITING_TIMEOUT_SECS  # resp. listening for Offer
+_TENDER_WAIT_TIME: Final[float] = (
+    WAITING_TIMEOUT_SECS  # resp. listening for Offer
+)
 _ACCEPT_WAIT_TIME: Final[float] = (
     WAITING_TIMEOUT_SECS  # supp. sent Offer, expecting Accept
 )
@@ -163,10 +171,14 @@ class BindingManagerBase:
 
     _attr_role = BindRole.IS_UNKNOWN
 
-    _is_respondent: bool | None  # if binding, is either: respondent or supplicant
+    _is_respondent: (
+        bool | None
+    )  # if binding, is either: respondent or supplicant
     _state: BindStateBase = None  # type: ignore[assignment]
 
-    def __init__(self, device: DeviceInterface, dispatcher: CommandDispatcher) -> None:
+    def __init__(
+        self, device: DeviceInterface, dispatcher: CommandDispatcher
+    ) -> None:
         """Initialize the binding manager.
 
         :param device: The device interface context for this binding service.
@@ -191,12 +203,18 @@ class BindingManagerBase:
         This should be called during teardown (e.g. gateway.stop()) to ensure
         no ``call_later`` timer handles outlive the binding manager.
         """
-        timer = getattr(self._state, "_timer_handle", None) if self._state else None
+        timer = (
+            getattr(self._state, "_timer_handle", None)
+            if self._state
+            else None
+        )
         if timer:
             timer.cancel()
 
     def set_state(
-        self, state: type[BindStateBase], result: asyncio.Future[Message] | None = None
+        self,
+        state: type[BindStateBase],
+        result: asyncio.Future[Message] | None = None,
     ) -> None:
         """Transition the State of the Manager, and process the result, if any.
 
@@ -213,7 +231,9 @@ class BindingManagerBase:
         #         self._fut.set_result(err)
 
         # Cancel any pending timer from the previous state before transitioning
-        timer = getattr(prev_state, "_timer_handle", None) if prev_state else None
+        timer = (
+            getattr(prev_state, "_timer_handle", None) if prev_state else None
+        )
         if timer:
             timer.cancel()
 
@@ -308,20 +328,26 @@ class BindingManagerRespondent(BindingManagerBase):
         tender = await self._wait_for_offer()
 
         # Step R2: Respondent expects a Confirm after sending an Accept (accepts Offer)
-        accept = await self._accept_offer(tender, accept_codes, zone_index=zone_index)
+        accept = await self._accept_offer(
+            tender, accept_codes, zone_index=zone_index
+        )
         affirm = await self._wait_for_confirm(accept)
 
         # Step R3: Respondent expects an Addenda (optional)
         if require_ratify:  # TODO: not recvd as sent to 63:262142
             self.set_state(RespIsWaitingForAddenda)  # HACK: easiest way
-            ratify = await self._wait_for_addenda(accept)  # may: exc.BindingFlowFailed:
+            ratify = await self._wait_for_addenda(
+                accept
+            )  # may: exc.BindingFlowFailed:
         else:
             ratify = None
 
         # self._set_as_bound(tender, accept, affirm, ratify)
         return tender, accept, affirm, ratify
 
-    async def _wait_for_offer(self, timeout: float = _TENDER_WAIT_TIME) -> Message:
+    async def _wait_for_offer(
+        self, timeout: float = _TENDER_WAIT_TIME
+    ) -> Message:
         """Resp waits timeout seconds for an Offer to arrive & returns it.
 
         :param timeout: Time to wait in seconds.
@@ -348,7 +374,9 @@ class BindingManagerRespondent(BindingManagerBase):
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(command).payload["phase"] == BindPhase.ACCEPT
+            assert (
+                Message._from_cmd(command).payload["phase"] == BindPhase.ACCEPT
+            )
 
         packet: Packet = await self._dispatcher(  # type: ignore[assignment]
             command, priority=Priority.HIGH, qos=BINDING_QOS
@@ -412,7 +440,9 @@ class BindingManagerSupplicant(BindingManagerBase):
             raise exc.BindingFsmError(
                 f"{self}: bad State for binding as a Supplicant (is already binding)"
             )
-        self.set_state(SuppSendOfferWaitForAccept)  # self._is_respondent = False
+        self.set_state(
+            SuppSendOfferWaitForAccept
+        )  # self._is_respondent = False
 
         vendor_code: str | None = None
         if ratify_command:
@@ -469,7 +499,9 @@ class BindingManagerSupplicant(BindingManagerBase):
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(command).payload["phase"] == BindPhase.TENDER
+            assert (
+                Message._from_cmd(command).payload["phase"] == BindPhase.TENDER
+            )
 
         packet: Packet = await self._dispatcher(  # type: ignore[assignment]
             command, priority=Priority.HIGH, qos=BINDING_QOS
@@ -509,7 +541,9 @@ class BindingManagerSupplicant(BindingManagerBase):
         else:
             index = "00"
 
-        target_id = accept.dst.id if accept.src.id == self._dev.id else accept.src.id
+        target_id = (
+            accept.dst.id if accept.src.id == self._dev.id else accept.src.id
+        )
         command = build_dto(
             Intent(
                 src=Address(self._dev.id),
@@ -519,7 +553,9 @@ class BindingManagerSupplicant(BindingManagerBase):
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(command).payload["phase"] == BindPhase.AFFIRM
+            assert (
+                Message._from_cmd(command).payload["phase"] == BindPhase.AFFIRM
+            )
 
         packet: Packet = await self._dispatcher(  # type: ignore[assignment]
             command, priority=Priority.HIGH, qos=BINDING_QOS
@@ -528,7 +564,9 @@ class BindingManagerSupplicant(BindingManagerBase):
         await self.state.cast_confirm_accept()
         return packet
 
-    async def _cast_addenda(self, accept: Message, command: CommandDTO) -> Packet:
+    async def _cast_addenda(
+        self, accept: Message, command: CommandDTO
+    ) -> Packet:
         """Supp casts an Addenda (the final 10E0 command).
 
         :param accept: The previously received accept message.
@@ -558,13 +596,17 @@ class BindStateBase:
     _attr_role = BindRole.IS_UNKNOWN
 
     _cmds_sent: int = 0  # num of bind cmds sent
-    _pkts_rcvd: int = 0  # num of bind pkts rcvd (incl. any echos of sender's own cmd)
+    _pkts_rcvd: int = (
+        0  # num of bind pkts rcvd (incl. any echos of sender's own cmd)
+    )
 
     _has_wait_timer: bool = False
     _retry_limit: int = SENDING_RETRY_LIMIT
     _timer_handle: asyncio.TimerHandle
 
-    _next_ctx_state: type[BindStateBase]  # next state, if successful transition
+    _next_ctx_state: type[
+        BindStateBase
+    ]  # next state, if successful transition
 
     def __init__(self, context: BindingManagerBase) -> None:
         """Initialize the binding state.
@@ -577,7 +619,10 @@ class BindStateBase:
         # Strong typing on Future ensures .result() correctly returns a Message
         self._fut: asyncio.Future[Message] = self._loop.create_future()
         _LOGGER.debug(
-            "%s: Changing state from: %s to: %s", self, self._context.state, self
+            "%s: Changing state from: %s to: %s",
+            self,
+            self._context.state,
+            self,
         )
 
         if self._has_wait_timer:
@@ -637,7 +682,9 @@ class BindStateBase:
         :param next_state: The class representing the next state.
         :raises exc.BindingFsmError: If the future was not yet completed.
         """
-        if not self._fut.done():  # if not BindRetryError, BindTimeoutError, msg
+        if (
+            not self._fut.done()
+        ):  # if not BindRetryError, BindTimeoutError, msg
             raise exc.BindingFsmError  # or: self._fut.set_exception()
         self._context.set_state(next_state, result=self._fut)
 
@@ -687,12 +734,18 @@ class BindStateBase:
             destination = DeviceIdT(addrs[1] if len(addrs) > 1 else source)
 
         if phase == BindPhase.TENDER:
-            return command.verb == I_ and destination in (source, ALL_DEVICE_ID)
+            return command.verb == I_ and destination in (
+                source,
+                ALL_DEVICE_ID,
+            )
         if phase == BindPhase.ACCEPT:
             # Historically, this was `dst is not src` on distinct Address objects, which was always True
             return command.verb == W_
         # if phase == BindPhase.AFFIRM:
-        return command.verb == I_ and destination not in (source, ALL_DEVICE_ID)
+        return command.verb == I_ and destination not in (
+            source,
+            ALL_DEVICE_ID,
+        )
 
     # Respondent State APIs...
     async def wait_for_offer(self, timeout: float | None = None) -> Message:
@@ -732,7 +785,9 @@ class BindStateBase:
             f"{self._context!r}: shouldn't wait_for_accept() from this State"
         )
 
-    async def cast_confirm_accept(self, timeout: float | None = None) -> Message:
+    async def cast_confirm_accept(
+        self, timeout: float | None = None
+    ) -> Message:
         """Send confirmation of accepted offer to respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't confirm_accept() from this State"
@@ -771,7 +826,9 @@ class _DevIsWaitingForMsg(BindStateBase):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the waited-for pkt, transition to the next state."""
-        if not self._fut.done() and self.is_phase(msg, self._expected_pkt_phase):
+        if not self._fut.done() and self.is_phase(
+            msg, self._expected_pkt_phase
+        ):
             self._fut.set_result(msg)
 
 
@@ -841,7 +898,9 @@ class _DevSendCmdUntilReply(_DevIsWaitingForMsg, _DevIsReadyToSendCmd):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the expected reply, transition to the next state."""
-        if not self._fut.done() and self.is_phase(msg, self._expected_pkt_phase):
+        if not self._fut.done() and self.is_phase(
+            msg, self._expected_pkt_phase
+        ):
             self._fut.set_result(msg)
 
 
@@ -956,7 +1015,9 @@ class SuppIsReadyToSendConfirm(
         SuppHasBoundAsSupplicant  # or: SuppIsReadyToSendAddenda
     )
 
-    async def cast_confirm_accept(self, timeout: float | None = None) -> Message:
+    async def cast_confirm_accept(
+        self, timeout: float | None = None
+    ) -> Message:
         """Transmit confirmation command to respondent."""
         return await self._wait_for_fut_result(timeout or _ACCEPT_WAIT_TIME)
 

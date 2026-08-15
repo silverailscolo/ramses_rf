@@ -78,7 +78,9 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
                 data={"message": "Script done."},
             )
         )
-        gateway.send_cmd(finish_command, priority=Priority.LOWEST, num_repeats=3)
+        gateway.send_cmd(
+            finish_command, priority=Priority.LOWEST, num_repeats=3
+        )
 
     return wrapper
 
@@ -97,18 +99,26 @@ def spawn_scripts(gateway: Gateway, **kwargs: Any) -> list[asyncio.Task[None]]:
         tasks.append(asyncio.create_task(exec_cmd(gateway, **kwargs)))
 
     if kwargs.get(GET_FAULTS):
-        tasks.append(asyncio.create_task(get_faults(gateway, kwargs[GET_FAULTS])))
+        tasks.append(
+            asyncio.create_task(get_faults(gateway, kwargs[GET_FAULTS]))
+        )
 
     elif kwargs.get(GET_SCHED) and kwargs[GET_SCHED][0]:
-        tasks.append(asyncio.create_task(get_schedule(gateway, *kwargs[GET_SCHED])))
+        tasks.append(
+            asyncio.create_task(get_schedule(gateway, *kwargs[GET_SCHED]))
+        )
 
     elif kwargs.get(SET_SCHED) and kwargs[SET_SCHED][0]:
-        tasks.append(asyncio.create_task(set_schedule(gateway, *kwargs[SET_SCHED])))
+        tasks.append(
+            asyncio.create_task(set_schedule(gateway, *kwargs[SET_SCHED]))
+        )
 
     elif kwargs.get(EXEC_SCR):
         script = SCRIPTS.get(f"{kwargs[EXEC_SCR][0]}")
         if script is None:
-            _LOGGER.warning("Script: %s() - unknown script", kwargs[EXEC_SCR][0])
+            _LOGGER.warning(
+                "Script: %s() - unknown script", kwargs[EXEC_SCR][0]
+            )
         else:
             _LOGGER.info("Script: %s().- starts...", kwargs[EXEC_SCR][0])
             # script_poll_device returns a list of tasks, others return a coroutine
@@ -133,7 +143,10 @@ async def exec_cmd(gateway: Gateway, **kwargs: Any) -> None:
 
 
 async def get_faults(
-    gateway: Gateway, controller_id: DeviceIdT, start: int = 0, limit: int = 0x3F
+    gateway: Gateway,
+    controller_id: DeviceIdT,
+    start: int = 0,
+    limit: int = 0x3F,
 ) -> None:
     """Retrieve the fault log from a target controller.
 
@@ -142,7 +155,9 @@ async def get_faults(
     :param start: The index to start querying from.
     :param limit: The maximum number of fault entries to return.
     """
-    controller = gateway.device_registry.get_device(controller_id, cls=Controller)
+    controller = gateway.device_registry.get_device(
+        controller_id, cls=Controller
+    )
 
     try:
         if controller.tcs:
@@ -160,7 +175,9 @@ async def get_schedule(
     :param controller_id: The device ID of the controller.
     :param zone_index: The zone index string (e.g. "00" or "HW").
     """
-    controller = gateway.device_registry.get_device(controller_id, cls=Controller)
+    controller = gateway.device_registry.get_device(
+        controller_id, cls=Controller
+    )
     if not controller.tcs:
         _LOGGER.error("get_schedule(): Controller has no TCS active.")
         return
@@ -185,7 +202,9 @@ async def set_schedule(
     schedule_ = json.loads(schedule)
     zone_idx = schedule_.get(SZ_ZONE_INDEX, schedule_.get("zone_idx"))
 
-    controller = gateway.device_registry.get_device(controller_id, cls=Controller)
+    controller = gateway.device_registry.get_device(
+        controller_id, cls=Controller
+    )
     if not controller.tcs:
         _LOGGER.error("set_schedule(): Controller has no TCS active.")
         return
@@ -275,7 +294,9 @@ def script_poll_device(
             code=code,
             payload="00",
         )
-        tasks.append(asyncio.create_task(periodic_send(gateway, command, count=0)))
+        tasks.append(
+            asyncio.create_task(periodic_send(gateway, command, count=0))
+        )
 
     gateway._engine._tasks.extend(tasks)
     return tasks
@@ -675,13 +696,17 @@ async def script_scan_otb_map(gateway: Gateway, device_id: DeviceIdT) -> None:
 
 
 @script_decorator
-async def script_scan_otb_ramses(gateway: Gateway, device_id: DeviceIdT) -> None:
+async def script_scan_otb_ramses(
+    gateway: Gateway, device_id: DeviceIdT
+) -> None:
     """Probe an OpenTherm bridge exclusively for native RAMSES codes.
 
     :param gateway: The gateway instance.
     :param device_id: The device ID to probe.
     """
-    _LOGGER.warning("script_scan_otb_ramses invoked - expect a lot of nonsense")
+    _LOGGER.warning(
+        "script_scan_otb_ramses invoked - expect a lot of nonsense"
+    )
 
     _CODES = (
         Code._042F,
@@ -727,5 +752,7 @@ async def script_scan_otb_ramses(gateway: Gateway, device_id: DeviceIdT) -> None
 
 
 SCRIPTS = {
-    k[7:]: v for k, v in locals().items() if callable(v) and k.startswith("script_")
+    k[7:]: v
+    for k, v in locals().items()
+    if callable(v) and k.startswith("script_")
 }

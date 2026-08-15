@@ -54,7 +54,10 @@ from .heat_actuators import Actuator, HeatDemand
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
 QOS_MID = {SZ_PRIORITY: Priority.HIGH}  # FIXME: deprecate QoS in kwargs
-QOS_MAX = {SZ_PRIORITY: Priority.HIGH, SZ_NUM_REPEATS: 3}  # FIXME: deprecate QoS...
+QOS_MAX = {
+    SZ_PRIORITY: Priority.HIGH,
+    SZ_NUM_REPEATS: 3,
+}  # FIXME: deprecate QoS...
 
 #
 # NOTE: All debug flags should be False for deployment to end-users
@@ -166,7 +169,9 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         """Return maximum relative modulation limit."""
         return self.opentherm_state.max_rel_modulation
 
-    async def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
+    async def oem_code(
+        self,
+    ) -> float | None:  # 3220|73, no known RAMSES equivalent
         """Fetch the OEM diagnostic code directly from the CQRS read-model.
 
         :return: The OEM code if available in the state, otherwise None.
@@ -198,11 +203,15 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         """Return whether central heating is enabled."""
         return self.opentherm_state.flags.ch_enabled
 
-    async def cooling_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def cooling_active(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
         """Return whether cooling is actively running."""
         return self.opentherm_state.flags.cooling_active
 
-    async def cooling_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def cooling_enabled(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
         """Return whether cooling is enabled."""
         return self.opentherm_state.flags.cooling_enabled
 
@@ -212,15 +221,21 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         """Return whether domestic hot water heating is active."""
         return self.opentherm_state.flags.dhw_active
 
-    async def dhw_blocking(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def dhw_blocking(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
         """Return whether domestic hot water blocking is active."""
         return self.opentherm_state.flags.dhw_blocking
 
-    async def dhw_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def dhw_enabled(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
         """Return whether domestic hot water heating is enabled."""
         return self.opentherm_state.flags.dhw_enabled
 
-    async def fault_present(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def fault_present(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
         """Return whether an OpenTherm fault is present."""
         return self.opentherm_state.flags.fault_present
 
@@ -230,11 +245,15 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         """Return whether boiler flame is active."""
         return self.opentherm_state.flags.flame_active
 
-    async def otc_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def otc_active(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
         """Return whether outside temperature compensation is active."""
         return self.opentherm_state.flags.otc_active
 
-    async def summer_mode(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def summer_mode(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
         """Return whether summer mode is active."""
         return self.opentherm_state.flags.summer_mode
 

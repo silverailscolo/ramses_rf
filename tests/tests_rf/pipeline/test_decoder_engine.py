@@ -16,7 +16,9 @@ from ramses_tx.dtos import PacketDTO
 
 # Resolves to: tests/fixtures/regression_packets_sorted.txt
 FIXTURE_PATH = (
-    Path(__file__).parent.parent.parent / "fixtures" / "regression_packets_sorted.txt"
+    Path(__file__).parent.parent.parent
+    / "fixtures"
+    / "regression_packets_sorted.txt"
 )
 
 _PACKET_REGEX = re.compile(

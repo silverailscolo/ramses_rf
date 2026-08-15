@@ -31,10 +31,16 @@ def test_dhw_schema() -> None:
         SCH_TCS_DHW({}),
         {SZ_SENSOR: None, SZ_DHW_VALVE: None, SZ_HTG_VALVE: None},
     ):
-        assert dict_ == {SZ_SENSOR: None, "hotwater_valve": None, "heating_valve": None}
+        assert dict_ == {
+            SZ_SENSOR: None,
+            "hotwater_valve": None,
+            "heating_valve": None,
+        }
 
     for key in (SZ_SENSOR, SZ_DHW_VALVE, SZ_HTG_VALVE):
-        assert_raises(vol.error.MultipleInvalid, SCH_TCS_DHW, {key: "99:000000"})
+        assert_raises(
+            vol.error.MultipleInvalid, SCH_TCS_DHW, {key: "99:000000"}
+        )
         assert SCH_TCS_DHW({key: None}) == {
             SZ_SENSOR: None,
             SZ_DHW_VALVE: None,
@@ -62,7 +68,9 @@ def test_zone_schema() -> None:
         assert dict_ == {SZ_CLASS: None, SZ_SENSOR: None, SZ_ACTUATORS: []}
 
     for key in (SZ_CLASS, SZ_SENSOR):
-        assert_raises(vol.error.MultipleInvalid, SCH_TCS_ZONES_ZON, {key: "99:000000"})
+        assert_raises(
+            vol.error.MultipleInvalid, SCH_TCS_ZONES_ZON, {key: "99:000000"}
+        )
         assert SCH_TCS_ZONES_ZON({key: None}) == {
             SZ_CLASS: None,
             SZ_SENSOR: None,
@@ -86,7 +94,9 @@ def test_zone_schema() -> None:
         "_invalid_",
         "13:111111",
     ):  # NOTE: should be a *list* of device_ids
-        assert_raises(vol.error.MultipleInvalid, SCH_TCS_ZONES_ZON, {SZ_ACTUATORS: val})
+        assert_raises(
+            vol.error.MultipleInvalid, SCH_TCS_ZONES_ZON, {SZ_ACTUATORS: val}
+        )
 
     for xxx in ([], ["13:111111"], ["13:222222", "13:111111"]):
         assert SCH_TCS_ZONES_ZON({SZ_ACTUATORS: xxx}) == {

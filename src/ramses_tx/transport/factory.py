@@ -39,7 +39,8 @@ async def transport_factory(
     port_config: PortConfigT | None = None,
     packet_log: str | None = None,
     packet_dict: dict[str, str] | None = None,
-    transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
+    transport_constructor: Callable[..., Awaitable[RamsesTransportT]]
+    | None = None,
     extra: dict[str, Any] | None = None,
     loop: asyncio.AbstractEventLoop | None = None,
 ) -> RamsesTransportT:
@@ -73,7 +74,9 @@ async def transport_factory(
 
     # If a constructor is provided, delegate entirely to it.
     if transport_constructor:
-        _LOGGER.debug("transport_factory: Delegating to external transport_constructor")
+        _LOGGER.debug(
+            "transport_factory: Delegating to external transport_constructor"
+        )
         return await transport_constructor(
             protocol,
             config=config,
@@ -113,7 +116,9 @@ async def transport_factory(
             ) from err
 
         # FTDI on Posix/Linux would be a common environment for this library...
-        with contextlib.suppress(AttributeError, NotImplementedError, ValueError):
+        with contextlib.suppress(
+            AttributeError, NotImplementedError, ValueError
+        ):
             ser_obj.set_low_latency_mode(True)
 
         return ser_obj
@@ -128,7 +133,10 @@ async def transport_factory(
             "(e.g. linux with a local serial port)"
         )
 
-    if len([x for x in (packet_dict, packet_log, port_name) if x is not None]) != 1:
+    if (
+        len([x for x in (packet_dict, packet_log, port_name) if x is not None])
+        != 1
+    ):
         _LOGGER.warning(
             f"Input: packet_dict: {packet_dict}, packet_log: {packet_log}, port_name: {port_name}"
         )
@@ -155,7 +163,9 @@ async def transport_factory(
             loop=loop,
         )
         try:
-            await protocol.wait_for_connection_made(timeout=_DEFAULT_TIMEOUT_ZIGBEE)
+            await protocol.wait_for_connection_made(
+                timeout=_DEFAULT_TIMEOUT_ZIGBEE
+            )
         except Exception:
             transport.close()
             raise
@@ -190,7 +200,8 @@ async def transport_factory(
     ser_instance = get_serial_instance(port_name, port_config)
 
     if os.name == "nt" or (
-        ser_instance.portstr and ser_instance.portstr[:7] in ("rfc2217", "socket:")
+        ser_instance.portstr
+        and ser_instance.portstr[:7] in ("rfc2217", "socket:")
     ):
         issue_warning()  # TODO: add tests for these...
 

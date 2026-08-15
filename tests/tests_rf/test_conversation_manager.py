@@ -39,7 +39,9 @@ def _create_mock_message(
 async def test_conversation_manager_successful_match() -> None:
     # Arrange
     loop = asyncio.get_running_loop()
-    manager = ConversationManager(loop=loop, default_timeout=1.0, max_retries=2)
+    manager = ConversationManager(
+        loop=loop, default_timeout=1.0, max_retries=2
+    )
     intent = Command(
         src=Address("18:000730"),
         dst=Address("01:078710"),
@@ -52,7 +54,9 @@ async def test_conversation_manager_successful_match() -> None:
     fut = await manager.track_intent(intent, dto)
     assert manager.pending_count == 1
 
-    reply_msg = _create_mock_message(verb=RP, code=dto.code, src_id="01:078710")
+    reply_msg = _create_mock_message(
+        verb=RP, code=dto.code, src_id="01:078710"
+    )
     matched = manager.process_msg(reply_msg)
 
     # Assert
@@ -66,7 +70,9 @@ async def test_conversation_manager_successful_match() -> None:
 async def test_conversation_manager_ignores_mismatched_src() -> None:
     # Arrange
     loop = asyncio.get_running_loop()
-    manager = ConversationManager(loop=loop, default_timeout=1.0, max_retries=2)
+    manager = ConversationManager(
+        loop=loop, default_timeout=1.0, max_retries=2
+    )
     intent = Command(
         src=Address("18:000730"),
         dst=Address("01:078710"),
@@ -77,7 +83,9 @@ async def test_conversation_manager_ignores_mismatched_src() -> None:
 
     # Act
     fut = await manager.track_intent(intent, dto)
-    mismatched_msg = _create_mock_message(verb=RP, code=dto.code, src_id="01:999999")
+    mismatched_msg = _create_mock_message(
+        verb=RP, code=dto.code, src_id="01:999999"
+    )
     matched = manager.process_msg(mismatched_msg)
 
     # Assert
@@ -92,7 +100,9 @@ async def test_conversation_manager_ignores_mismatched_src() -> None:
 async def test_conversation_manager_timeout_and_retries() -> None:
     # Arrange
     loop = asyncio.get_running_loop()
-    manager = ConversationManager(loop=loop, default_timeout=0.05, max_retries=1)
+    manager = ConversationManager(
+        loop=loop, default_timeout=0.05, max_retries=1
+    )
     intent = Command(
         src=Address("18:000730"),
         dst=Address("01:078710"),
@@ -140,7 +150,9 @@ def test_conversation_manager_accepts_i_for_w_commands() -> None:
         needs_reply=True,
         timeout=0.5,
     )
-    fut = loop.run_until_complete(cm.track_intent(intent, timeout=0.5, max_retries=2))
+    fut = loop.run_until_complete(
+        cm.track_intent(intent, timeout=0.5, max_retries=2)
+    )
 
     # Simulate the I 1F41 response from the CTL (broadcast dst)
     mock_msg = MagicMock()
@@ -155,10 +167,14 @@ def test_conversation_manager_accepts_i_for_w_commands() -> None:
 
 
 @pytest.mark.asyncio
-async def test_conversation_manager_idx_matching_prevents_cross_matching() -> None:
+async def test_conversation_manager_idx_matching_prevents_cross_matching() -> (
+    None
+):
     # Arrange
     loop = asyncio.get_running_loop()
-    manager = ConversationManager(loop=loop, default_timeout=1.0, max_retries=2)
+    manager = ConversationManager(
+        loop=loop, default_timeout=1.0, max_retries=2
+    )
     intent1 = Command(
         src=Address("18:000730"),
         dst=Address("01:078710"),
@@ -179,7 +195,9 @@ async def test_conversation_manager_idx_matching_prevents_cross_matching() -> No
     fut1 = await manager.track_intent(intent1, dto1)
     fut2 = await manager.track_intent(intent2, dto2)
 
-    reply_msg2 = _create_mock_message(verb=RP, code=dto2.code, src_id="01:078710")
+    reply_msg2 = _create_mock_message(
+        verb=RP, code=dto2.code, src_id="01:078710"
+    )
     reply_msg2.context.value = "01"
 
     matched2 = manager.process_msg(reply_msg2)
@@ -195,10 +213,14 @@ async def test_conversation_manager_idx_matching_prevents_cross_matching() -> No
 
 
 @pytest.mark.asyncio
-async def test_conversation_manager_superseded_intent_cancels_old_timer() -> None:
+async def test_conversation_manager_superseded_intent_cancels_old_timer() -> (
+    None
+):
     # Arrange
     loop = asyncio.get_running_loop()
-    manager = ConversationManager(loop=loop, default_timeout=1.0, max_retries=2)
+    manager = ConversationManager(
+        loop=loop, default_timeout=1.0, max_retries=2
+    )
     intent = Command(
         src=Address("18:000730"),
         dst=Address("01:078710"),
@@ -236,7 +258,9 @@ async def test_live_gateway_conversation_manager_integration(
     """Verify live Gateway integration with ConversationManager."""
     gwy = Gateway("/dev/null")
     mock_packet = MagicMock(spec=Packet)
-    monkeypatch.setattr(gwy, "async_send_cmd", AsyncMock(return_value=mock_packet))
+    monkeypatch.setattr(
+        gwy, "async_send_cmd", AsyncMock(return_value=mock_packet)
+    )
 
     intent = Command(
         src=Address("18:000730"),
@@ -245,7 +269,9 @@ async def test_live_gateway_conversation_manager_integration(
         data={"zone_idx": "00", "setpoint": 21.0},
     )
 
-    send_task = asyncio.create_task(gwy.dispatcher.send(intent, wait_for_reply=True))
+    send_task = asyncio.create_task(
+        gwy.dispatcher.send(intent, wait_for_reply=True)
+    )
     await asyncio.sleep(0.01)
 
     assert gwy.conversation_manager.pending_count == 1
@@ -270,7 +296,9 @@ async def test_live_dispatcher_process_msg_routes_to_conversation_manager(
     """Verify dispatcher process_msg routes to ConversationManager."""
     gwy = Gateway("/dev/null")
     mock_packet = MagicMock(spec=Packet)
-    monkeypatch.setattr(gwy, "async_send_cmd", AsyncMock(return_value=mock_packet))
+    monkeypatch.setattr(
+        gwy, "async_send_cmd", AsyncMock(return_value=mock_packet)
+    )
 
     intent = Command(
         src=Address("18:000730"),
@@ -279,7 +307,9 @@ async def test_live_dispatcher_process_msg_routes_to_conversation_manager(
         data={"zone_idx": "00", "setpoint": 21.0},
     )
 
-    send_task = asyncio.create_task(gwy.dispatcher.send(intent, wait_for_reply=True))
+    send_task = asyncio.create_task(
+        gwy.dispatcher.send(intent, wait_for_reply=True)
+    )
     await asyncio.sleep(0.01)
     assert gwy.conversation_manager.pending_count == 1
 

@@ -18,7 +18,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     def id_fnc(param: Path) -> str:
         return PurePath(param).name
 
-    metafunc.parametrize("f_name", sorted(Path(WORK_DIR).glob("*.log")), ids=id_fnc)
+    metafunc.parametrize(
+        "f_name", sorted(Path(WORK_DIR).glob("*.log")), ids=id_fnc
+    )
 
 
 def _proc_log_line(log_line: str) -> None:

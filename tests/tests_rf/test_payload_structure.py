@@ -56,7 +56,9 @@ def test_payload_dataclass_specification_compliance(
     )
 
     # Resolve target dataclasses to check (variants if dispatcher, else payload_cls)
-    variants: tuple[type, ...] = getattr(payload_cls, "VARIANTS", (payload_cls,))
+    variants: tuple[type, ...] = getattr(
+        payload_cls, "VARIANTS", (payload_cls,)
+    )
 
     for target_cls in variants:
         target_name = target_cls.__name__
@@ -161,7 +163,9 @@ def test_payload_dataclass_specification_compliance(
         )
 
         # Check BOFM Offset Data Rows (each field row starts with offset specifier `+\d+`)
-        has_offset_row = bool(re.search(r"^\s*\+\d+\s+\S+", docstring, re.MULTILINE))
+        has_offset_row = bool(
+            re.search(r"^\s*\+\d+\s+\S+", docstring, re.MULTILINE)
+        )
         assert has_offset_row, (
             f"\n======================================================================\n"
             f"SPECIFICATION VIOLATION: Missing BOFM Offset Data Rows in Docstring!\n"
@@ -218,7 +222,12 @@ def test_payload_dataclass_specification_compliance(
         # Act & Assert 5: Check struct format string naming compliance & validity
         banned_struct_attrs = [
             attr
-            for attr in ("_STRUCT", f"CODE_{opcode}_STRUCT", "STRUCT_FMT", "STRUCT")
+            for attr in (
+                "_STRUCT",
+                f"CODE_{opcode}_STRUCT",
+                "STRUCT_FMT",
+                "STRUCT",
+            )
             if attr in target_cls.__dict__
         ]
         assert not banned_struct_attrs, (
@@ -236,7 +245,9 @@ def test_payload_dataclass_specification_compliance(
         # If _STRUCT_FMT is defined, verify it is a valid format string
         if "_STRUCT_FMT" in target_cls.__dict__:
             struct_fmt_val = target_cls.__dict__["_STRUCT_FMT"]
-            assert isinstance(struct_fmt_val, str) and struct_fmt_val.strip(), (
+            assert (
+                isinstance(struct_fmt_val, str) and struct_fmt_val.strip()
+            ), (
                 f"\n======================================================================\n"
                 f"SPECIFICATION VIOLATION: Invalid _STRUCT_FMT Value!\n"
                 f"Class: {target_name} (Opcode {opcode})\n"
@@ -285,7 +296,13 @@ def test_all_discovered_payload_dataclasses_specification_compliance() -> None:
     import ramses_rf.payloads.opentherm as opentherm_mod
     import ramses_rf.payloads.system as system_mod
 
-    payload_modules = [dhw_mod, heating_mod, hvac_mod, opentherm_mod, system_mod]
+    payload_modules = [
+        dhw_mod,
+        heating_mod,
+        hvac_mod,
+        opentherm_mod,
+        system_mod,
+    ]
     discovered_classes: list[type] = []
 
     for mod in payload_modules:
@@ -318,12 +335,14 @@ def test_all_discovered_payload_dataclasses_specification_compliance() -> None:
         assert "from_bytes" in target_cls.__dict__ or hasattr(
             target_cls, "from_bytes"
         ), f"Class '{target_name}' in {target_file} missing from_bytes"
-        assert "to_bytes" in target_cls.__dict__ or hasattr(target_cls, "to_bytes"), (
-            f"Class '{target_name}' in {target_file} missing to_bytes"
-        )
+        assert "to_bytes" in target_cls.__dict__ or hasattr(
+            target_cls, "to_bytes"
+        ), f"Class '{target_name}' in {target_file} missing to_bytes"
 
 
-def test_master_dispatcher_variant_subclassing_and_decorator_exclusivity() -> None:
+def test_master_dispatcher_variant_subclassing_and_decorator_exclusivity() -> (
+    None
+):
     """Verify polymorphic Master Dispatcher inheritance and @register_payload exclusivity.
 
     Enforces the PR #1037 / Issue #837 rule:

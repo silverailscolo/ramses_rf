@@ -48,7 +48,9 @@ def build_put_sensor_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_SENSOR_TEMP intent into a CommandDTO."""
     temperature = intent.get("temperature")
     zone_idx = intent.get("zone_idx", 0)
-    payload = TemperaturePayload(zone_index=zone_idx, temperature=temperature).hex()
+    payload = TemperaturePayload(
+        zone_index=zone_idx, temperature=temperature
+    ).hex()
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 

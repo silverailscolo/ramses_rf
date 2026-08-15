@@ -33,7 +33,9 @@ if TYPE_CHECKING:
     from ramses_rf.systems.tcs import _LogbookT
 
 
-FaultTupleT: TypeAlias = tuple[FaultType, FaultDeviceClass, DeviceIdT | None, str]
+FaultTupleT: TypeAlias = tuple[
+    FaultType, FaultDeviceClass, DeviceIdT | None, str
+]
 
 
 DEFAULT_GET_LIMIT = 6
@@ -55,8 +57,12 @@ class FaultLogEntry:
 
     timestamp: str  # #               # 21-12-23T11:59:35 - assume is unique
     fault_state: FaultState  # #      # fault, restore, unknown_c0
-    fault_type: FaultType  # #        # system_fault, battery_low, sensor_fault, etc.
-    domain_index: str = ""  # #       # 00-0F, FC, etc. ? only if dev_class is/not CTL?
+    fault_type: (
+        FaultType  # #        # system_fault, battery_low, sensor_fault, etc.
+    )
+    domain_index: str = (
+        ""  # #       # 00-0F, FC, etc. ? only if dev_class is/not CTL?
+    )
     device_class: FaultDeviceClass  # # controller, actuator, sensor, etc.
     device_id: DeviceIdT | None  # #  # 04:164787
 
@@ -196,13 +202,17 @@ class FaultLog:  # 0418
         if isinstance(event.state, FaultLogState):
             self.state = event.state
 
-    def _insert_into_map(self, index: FaultIdxT, dtm: FaultDtmT | None) -> FaultMapT:
+    def _insert_into_map(
+        self, index: FaultIdxT, dtm: FaultDtmT | None
+    ) -> FaultMapT:
         """Rebuild the map (as best as possible), given the a log entry."""
         new_map: FaultMapT = OrderedDict()
 
         # usu. index == 0, but could be > 0
         new_map |= {
-            k: v for k, v in self._map.items() if k < index and (dtm is None or v > dtm)
+            k: v
+            for k, v in self._map.items()
+            if k < index and (dtm is None or v > dtm)
         }
 
         if dtm is None:  # there are no subsequent log entries
@@ -253,21 +263,31 @@ class FaultLog:  # 0418
         else:
             return  # we can't do anything useful with this message
 
-        if msg.payload[SZ_LOG_ENTRY] is None:  # NOTE: Subsequent entries will be empty
+        if (
+            msg.payload[SZ_LOG_ENTRY] is None
+        ):  # NOTE: Subsequent entries will be empty
             self._map = self._insert_into_map(log_idx, None)
-            self._log = {k: v for k, v in self._log.items() if k in self._map.values()}
+            self._log = {
+                k: v for k, v in self._log.items() if k in self._map.values()
+            }
             return  # If idx != 0, should we also check from idx = 0?
 
-        entry = FaultLogEntry.from_msg(msg)  # if msg.payload[SZ_LOG_ENTRY] else None
+        entry = FaultLogEntry.from_msg(
+            msg
+        )  # if msg.payload[SZ_LOG_ENTRY] else None
         dtm: FaultDtmT = entry.timestamp  # type: ignore[assignment]
 
         if self._map.get(log_idx) == dtm:
             return  # i.e. No evidence anything has changed
 
         if dtm not in self._log:
-            self._log |= {dtm: entry}  # must add entry before _insert_into_map()
+            self._log |= {
+                dtm: entry
+            }  # must add entry before _insert_into_map()
         self._map = self._insert_into_map(log_idx, dtm)  # updates self._map
-        self._log = {k: v for k, v in self._log.items() if k in self._map.values()}
+        self._log = {
+            k: v for k, v in self._log.items() if k in self._map.values()
+        }
 
         # if idx != 0:  # there's other (new/changed) entries above this one?
         #     pass
@@ -281,7 +301,8 @@ class FaultLog:  # 0418
         """
         assert orig_msg.verb == RP and orig_msg.code == Code._0418
         assert (
-            orig_msg._dto.raw_payload == "000000B0000000000000000000007FFFFF7000000000"
+            orig_msg._dto.raw_payload
+            == "000000B0000000000000000000007FFFFF7000000000"
         )
 
         if log_index == "00":  # no need to hack
@@ -321,7 +342,9 @@ class FaultLog:  # 0418
                 return self.faultlog
 
             error_occurred = False
-            for log_idx in range(start, min(start + limit, self._MAX_LOG_IDX + 1)):
+            for log_idx in range(
+                start, min(start + limit, self._MAX_LOG_IDX + 1)
+            ):
                 try:
                     msg = await send_system_intent(
                         self._tcs,
@@ -331,7 +354,9 @@ class FaultLog:  # 0418
                     )
                 except exc.RamsesException as err:
                     _LOGGER.warning(
-                        "Failed to retrieve fault log entry %s: %s", log_idx, err
+                        "Failed to retrieve fault log entry %s: %s",
+                        log_idx,
+                        err,
                     )
                     error_occurred = True
                     self._is_current = False
@@ -344,7 +369,9 @@ class FaultLog:  # 0418
                     msg = self._hack_pkt_idx(
                         msg, f"{log_idx:02X}"
                     )  # RPs for null entries have idx==00
-                    self._process_msg(msg)  # since pkt via dispatcher aint got idx
+                    self._process_msg(
+                        msg
+                    )  # since pkt via dispatcher aint got idx
                     break
 
                 self._process_msg(msg)  # JIC dispatcher doesn't do this for us
@@ -385,7 +412,11 @@ class FaultLog:  # 0418
         if not self._log:
             return None
 
-        faults = [k for k, v in self._log.items() if v.fault_state == FaultState.FAULT]
+        faults = [
+            k
+            for k, v in self._log.items()
+            if v.fault_state == FaultState.FAULT
+        ]
 
         if not faults:
             return None

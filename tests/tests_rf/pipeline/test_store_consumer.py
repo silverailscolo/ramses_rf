@@ -61,7 +61,9 @@ async def test_store_queue_consumer() -> None:
     store.start_consumer(ssot_queue)
 
     # Drop a new state event onto the queue (e.g. from the Dispatcher)
-    test_msg = _mock_message("01:123456", "01:123456", Code._30C9, {"temp": "21.0"})
+    test_msg = _mock_message(
+        "01:123456", "01:123456", Code._30C9, {"temp": "21.0"}
+    )
     ssot_queue.put_nowait(test_msg)
 
     # Wait for the consumer task to empty the queue and process it

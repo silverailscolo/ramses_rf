@@ -214,9 +214,14 @@ class TestQuirks12A0FullList:
         assert results[0][SZ_INDOOR_HUMIDITY] == 0.63
         # idx=01
         assert SZ_REL_HUMIDITY not in results[1]
-        assert "temperature" not in results[1] or results[1].get("supply_temp") is None
+        assert (
+            "temperature" not in results[1]
+            or results[1].get("supply_temp") is None
+        )
         # idx=02: outdoor_humidity passes through, temperature is NOT remapped
-        assert SZ_OUTDOOR_TEMP not in results[2]  # not remapped (31DA is authoritative)
+        assert (
+            SZ_OUTDOOR_TEMP not in results[2]
+        )  # not remapped (31DA is authoritative)
         assert results[2][SZ_OUTDOOR_HUMIDITY] == 0.69
 
     def test_ventura_real_payload_pattern(self) -> None:
@@ -264,8 +269,12 @@ class TestQuirks12A0FullList:
         assert results[1].get(SZ_SUPPLY_TEMP) is None
 
         # idx=02: outdoor (humidity only, temp NOT remapped to outdoor_temp)
-        assert SZ_OUTDOOR_TEMP not in results[2]  # not remapped (31DA is authoritative)
-        assert results[2][SZ_OUTDOOR_HUMIDITY] == pytest.approx(0.271, abs=0.01)
+        assert (
+            SZ_OUTDOOR_TEMP not in results[2]
+        )  # not remapped (31DA is authoritative)
+        assert results[2][SZ_OUTDOOR_HUMIDITY] == pytest.approx(
+            0.271, abs=0.01
+        )
 
 
 class TestQuirks12A0EdgeCases:

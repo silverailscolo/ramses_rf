@@ -3,7 +3,12 @@
 import pytest
 import voluptuous as vol
 
-from ramses_rf.schemas import SCH_DOM_ID, SCH_UFH_IDX, SCH_ZON_IDX, error_renamed_key
+from ramses_rf.schemas import (
+    SCH_DOM_ID,
+    SCH_UFH_IDX,
+    SCH_ZON_IDX,
+    error_renamed_key,
+)
 
 
 def test_sch_dom_id_validation() -> None:
@@ -54,6 +59,7 @@ def test_error_renamed_key_raises() -> None:
     """Verify error_renamed_key validator helper raises voluptuous error."""
     validator = error_renamed_key("new_feature_key")
     with pytest.raises(
-        vol.Invalid, match="the key name has changed: rename it to 'new_feature_key'"
+        vol.Invalid,
+        match="the key name has changed: rename it to 'new_feature_key'",
     ):
         validator("old_val")

@@ -105,7 +105,9 @@ _HEAT_CLASSES = (
     Programmer,
     RfgGateway,
 )
-_HEAT_CLASS_BY_SLUG = {cls._SLUG: cls for cls in _HEAT_CLASSES if hasattr(cls, "_SLUG")}
+_HEAT_CLASS_BY_SLUG = {
+    cls._SLUG: cls for cls in _HEAT_CLASSES if hasattr(cls, "_SLUG")
+}
 
 _HVAC_CLASSES = (
     HvacCarbonDioxideSensor,
@@ -115,7 +117,9 @@ _HVAC_CLASSES = (
     HvacVentilator,
     RfsGateway,
 )
-_HVAC_CLASS_BY_SLUG = {cls._SLUG: cls for cls in _HVAC_CLASSES if hasattr(cls, "_SLUG")}
+_HVAC_CLASS_BY_SLUG = {
+    cls._SLUG: cls for cls in _HVAC_CLASSES if hasattr(cls, "_SLUG")
+}
 
 # Aliases for DevType slugs that have no dedicated device class.  The
 # discovery scan engine labels devices with these slugs (e.g. 34: → RND),
@@ -131,7 +135,10 @@ _SLUG_ALIASES: dict[str, type[Device]] = {
 }
 
 _CLASS_BY_SLUG = (
-    _BASE_CLASS_BY_SLUG | _HEAT_CLASS_BY_SLUG | _HVAC_CLASS_BY_SLUG | _SLUG_ALIASES
+    _BASE_CLASS_BY_SLUG
+    | _HEAT_CLASS_BY_SLUG
+    | _HVAC_CLASS_BY_SLUG
+    | _SLUG_ALIASES
 )
 
 HEAT_DEV_CLASS_BY_SLUG = {
@@ -246,7 +253,9 @@ def device_factory(
             f"{device_address}"
         )
 
-    device: Device = cls.create_from_schema(gateway, device_address, traits=traits)
+    device: Device = cls.create_from_schema(
+        gateway, device_address, traits=traits
+    )
     return device
 
 
@@ -299,7 +308,9 @@ def class_dev_hvac(
         )
 
     if msg is None:
-        raise exc.DeviceNotRecognised(f"No HVAC class for: {device_address} (no msg)")
+        raise exc.DeviceNotRecognised(
+            f"No HVAC class for: {device_address} (no msg)"
+        )
 
     if klass := HVAC_KLASS_BY_VC_PAIR.get((msg.verb, msg.code)):
         return _HVAC_CLASS_BY_SLUG[klass]

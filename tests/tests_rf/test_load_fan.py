@@ -82,7 +82,9 @@ def test_load_fan_source_has_no_todo_marker() -> None:
     )
 
 
-def test_load_fan_processes_remotes_and_sensors(mock_gateway: MagicMock) -> None:
+def test_load_fan_processes_remotes_and_sensors(
+    mock_gateway: MagicMock,
+) -> None:
     """load_fan must process remotes/sensors from the FAN schema."""
     fan = _make_fan(mock_gateway)
 

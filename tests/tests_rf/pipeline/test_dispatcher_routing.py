@@ -72,7 +72,9 @@ async def test_dispatcher_binding_offer_routing() -> None:
     dispatcher = CentralDispatcher(in_q)
     await dispatcher.start()
 
-    msg = _mock_message("04:111111", "04:111111", Code._1FC9, {"phase": "offer"})
+    msg = _mock_message(
+        "04:111111", "04:111111", Code._1FC9, {"phase": "offer"}
+    )
     in_q.put_nowait(msg)
     await in_q.join()
     await dispatcher.stop()

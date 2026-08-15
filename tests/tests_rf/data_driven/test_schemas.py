@@ -13,7 +13,6 @@ from ramses_tx.config import EngineConfig
 
 from .helpers import (
     TEST_DIR,
-    gwy,  # noqa: F401
     shuffle_dict,
 )
 
@@ -29,7 +28,9 @@ async def test_schema_discover_from_log(f_name: str) -> None:
     :param f_name: The stem of the log file to be tested
     """
     path = f"{WORK_DIR}/log_files/{f_name}.log"
-    gwy = Gateway(None, config=GatewayConfig(engine=EngineConfig(input_file=path)))  # noqa: F811
+    gwy = Gateway(
+        None, config=GatewayConfig(engine=EngineConfig(input_file=path))
+    )  # noqa: F811
     await gwy.start()  # this is what we're testing
 
     with open(f"{WORK_DIR}/log_files/{f_name}.json") as f:

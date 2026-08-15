@@ -136,10 +136,14 @@ def test_message_string_representations(patch_parsers: Any) -> None:
     assert Verb.RQ in msg_str
 
 
-def test_startup_empty_payload_reproduction(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_startup_empty_payload_reproduction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test that an empty payload bypasses strict regex and parses safely."""
     # Ensure this test is completely isolated from the global ramses_rf bridge
-    monkeypatch.setattr("ramses_rf.messages.base.decode_packet", lambda dto: {})
+    monkeypatch.setattr(
+        "ramses_rf.messages.base.decode_packet", lambda dto: {}
+    )
 
     dtm = dt.now(tz=UTC)
     packet = Packet(dtm, FRAME_STR_EMPTY)
@@ -163,7 +167,9 @@ def test_message_valid_empty_payload(patch_parsers: Any) -> None:
     """
     dtm = dt.now(tz=UTC)
     # 1FC9 explicitly allows "00" in CODES_SCHEMA. It must successfully parse.
-    packet = Packet(dtm, "045  I --- 18:006402 13:049798 --:------ 1FC9 001 00")
+    packet = Packet(
+        dtm, "045  I --- 18:006402 13:049798 --:------ 1FC9 001 00"
+    )
     message = Message(packet.to_dto())
 
     assert message._has_payload is True

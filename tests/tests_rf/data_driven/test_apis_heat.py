@@ -274,7 +274,9 @@ def _test_api_fail(
         except (AssertionError, TypeError, ValueError):
             cmd = None
         else:
-            assert cmd and cmd.payload == pkt.raw_payload  # aka pkt.raw_payload
+            assert (
+                cmd and cmd.payload == pkt.raw_payload
+            )  # aka pkt.raw_payload
 
         if isinstance(packets, dict) and (payload := packets[pkt_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
@@ -295,7 +297,8 @@ def _test_api_from_msg(api: Callable, msg: Message, pkt: Packet) -> Command:
     kwargs = {k: v for k, v in msg.payload.items() if k[:1] != "_"}
 
     has_varkw = any(
-        p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+        p.kind == inspect.Parameter.VAR_KEYWORD
+        for p in sig.parameters.values()
     )
     if not has_varkw:
         kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
@@ -524,7 +527,9 @@ def test_put_3ef1() -> None:  # NOTE: bespoke: params, ?payload
 
         sig = inspect.signature(_put_actuator_cycle)
         valid_kwargs = {
-            k: v for k, v in kwargs.items() if k[:1] != "_" and k in sig.parameters
+            k: v
+            for k, v in kwargs.items()
+            if k[:1] != "_" and k in sig.parameters
         }
 
         cmd = _put_actuator_cycle(

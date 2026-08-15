@@ -26,7 +26,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     def id_fnc(param: Path) -> str:
         return PurePath(param).name
 
-    metafunc.parametrize("f_name", sorted(Path(WORK_DIR).glob("*.log")), ids=id_fnc)
+    metafunc.parametrize(
+        "f_name", sorted(Path(WORK_DIR).glob("*.log")), ids=id_fnc
+    )
 
 
 def _proc_log_line(log_line: str) -> None:
@@ -66,7 +68,9 @@ def _proc_log_line(log_line: str) -> None:
             raise  # that should be addressed
         return
 
-    if isinstance(pkt_dict, list) or not any(k for k in pkt_dict if k in META_KEYS):
+    if isinstance(pkt_dict, list) or not any(
+        k for k in pkt_dict if k in META_KEYS
+    ):
         payload = msg.payload
 
         keys_to_strip = (
@@ -143,7 +147,9 @@ def _proc_log_line(log_line: str) -> None:
         return
 
 
-def _proc_log_line_pair_4e15(log_line: str, prev_msg: Message | None) -> Message | None:
+def _proc_log_line_pair_4e15(
+    log_line: str, prev_msg: Message | None
+) -> Message | None:
     pkt_line, *_ = list(map(str.strip, log_line.split("#", maxsplit=1) + [""]))
 
     if not pkt_line:

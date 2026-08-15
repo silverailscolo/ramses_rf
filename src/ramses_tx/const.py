@@ -69,7 +69,9 @@ SZ_READER_TASK: Final[str] = "reader_task"
 SZ_RAMSES_GATEWAY: Final[str] = "RAMSES/GATEWAY"
 
 # default values for transmit rate governers...
-DUTY_CYCLE_DURATION = 60  #      time window (seconds) where rate limiting occurs
+DUTY_CYCLE_DURATION = (
+    60  #      time window (seconds) where rate limiting occurs
+)
 MAX_DUTY_CYCLE_RATE = 0.01  #    % bandwidth used per cycle
 MAX_TRANSMIT_RATE_TOKENS = 80  # transmits per cycle
 
@@ -139,7 +141,9 @@ class AttrDict(dict):  # type: ignore[type-arg]
         """Prevent mutation on read-only object."""
         self._readonly()
 
-    def __init__(self, main_table: dict[str, dict], attr_table: dict[str, Any]) -> None:  # type: ignore[type-arg]
+    def __init__(
+        self, main_table: dict[str, dict[str, Any]], attr_table: dict[str, Any]
+    ) -> None:
         """Initialize the AttrDict.
 
         :param main_table: A dictionary mapping keys (usually hex codes) to property dictionaries.
@@ -182,9 +186,13 @@ class AttrDict(dict):  # type: ignore[type-arg]
             v: k
             for table in main_table.values()
             for k, v in table.items()
-            if isinstance(k, str) and k[:1] != "_" and self._SZ_AKA_SLUG not in table
+            if isinstance(k, str)
+            and k[:1] != "_"
+            and self._SZ_AKA_SLUG not in table
         }  # e.g. {'radiator_valve': '00', 'controller': '01', ...}
-        self._forward = dict(sorted(self._forward.items(), key=lambda item: item[0]))
+        self._forward = dict(
+            sorted(self._forward.items(), key=lambda item: item[0])
+        )
 
         super().__init__(self._forward)
 
@@ -203,9 +211,13 @@ class AttrDict(dict):  # type: ignore[type-arg]
                 return result
         elif name in self._attr_table:  # bespoke attrs
             return self._attr_table[name]
-        elif len(name) and name[1:] in self._forward:  # map._0D -> "dhw_sensor"
+        elif (
+            len(name) and name[1:] in self._forward
+        ):  # map._0D -> "dhw_sensor"
             return self._forward[name[1:]]
-        elif name.isupper() and name.lower() in self._reverse:  # map.DHW_SENSOR -> "0D"
+        elif (
+            name.isupper() and name.lower() in self._reverse
+        ):  # map.DHW_SENSOR -> "0D"
             return self[name.lower()]
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute '{name}'"
@@ -219,7 +231,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         :return: The 2-byte hex string identifier.
         """
         if key in self._main_table:
-            return list(self._main_table[key].keys())[0]  # type: ignore[no-any-return]
+            return list(self._main_table[key].keys())[0]
         if key in self._reverse:
             return self._reverse[key]
         raise KeyError(key)

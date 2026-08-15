@@ -63,7 +63,9 @@ async def test_engine_init_port_and_file_ignores_file(
     engine = Engine(
         config=EngineConfig(port_name="/dev/null", input_file="test.log"),
     )
-    assert "Port (/dev/null) specified, so file (test.log) ignored" in caplog.text
+    assert (
+        "Port (/dev/null) specified, so file (test.log) ignored" in caplog.text
+    )
     assert engine._input_file is None
     assert engine.ser_name == "/dev/null"
 
@@ -151,7 +153,9 @@ async def test_engine_start_file(mock_factory: AsyncMock) -> None:
     engine._protocol.wait_for_connection_lost = AsyncMock()
 
     await engine.start()
-    engine._protocol.wait_for_connection_lost.assert_awaited_once_with(timeout=86400)
+    engine._protocol.wait_for_connection_lost.assert_awaited_once_with(
+        timeout=86400
+    )
 
 
 @pytest.mark.asyncio
@@ -219,7 +223,9 @@ async def test_engine_pause_resume(dummy_engine: Engine) -> None:
 
 
 @pytest.mark.asyncio
-async def test_engine_pause_already_paused_raises(dummy_engine: Engine) -> None:
+async def test_engine_pause_already_paused_raises(
+    dummy_engine: Engine,
+) -> None:
     # Pausing an already paused engine raises RuntimeError
     await dummy_engine._pause()
     with pytest.raises(RuntimeError, match="it is already paused"):
@@ -295,7 +301,9 @@ async def test_engine_async_send_cmd(dummy_engine: Engine) -> None:
 
 
 @pytest.mark.asyncio
-async def test_engine_msg_handler(dummy_engine: Engine, mock_dto: PacketDTO) -> None:
+async def test_engine_msg_handler(
+    dummy_engine: Engine, mock_dto: PacketDTO
+) -> None:
     # Validates that engine routes the DTO to the registered handler
     mock_handler = AsyncMock()
     dummy_engine._handle_msg = mock_handler
@@ -353,7 +361,9 @@ def test_application_message_expired_lifespan_true_raises(
 
     with (
         patch.object(app_msg, "_get_lifespan", return_value=True),
-        pytest.raises(NotImplementedError, match="Lifespan True not implemented"),
+        pytest.raises(
+            NotImplementedError, match="Lifespan True not implemented"
+        ),
     ):
         _ = app_msg._expired
 

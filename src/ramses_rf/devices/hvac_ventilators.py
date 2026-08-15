@@ -211,13 +211,17 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
         schema = shrink(SCH_VCS(schema))
         for dev_id in schema.get(SZ_REMOTES, []):
-            child = self._gateway.device_registry.get_device(dev_id)  # ensure exists
+            child = self._gateway.device_registry.get_device(
+                dev_id
+            )  # ensure exists
             self._remote_ids.add(DeviceIdT(dev_id))
             # 6d: set bidirectional parent link on the child
             if hasattr(child, "_parent_fan"):
                 child._parent_fan = self
         for dev_id in schema.get(SZ_SENSORS, []):
-            child = self._gateway.device_registry.get_device(dev_id)  # ensure exists
+            child = self._gateway.device_registry.get_device(
+                dev_id
+            )  # ensure exists
             self._sensor_ids.add(DeviceIdT(dev_id))
             # 6d: set bidirectional parent link on the child
             if hasattr(child, "_parent_fan"):
@@ -238,7 +242,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             result[SZ_SENSORS] = sorted(self._sensor_ids)
         return result
 
-    def set_initialized_callback(self, callback: Callable[[], None] | None) -> None:
+    def set_initialized_callback(
+        self, callback: Callable[[], None] | None
+    ) -> None:
         """Set a callback to be executed when next message is received.
 
         The callback will be used exactly once to indicate that the
@@ -338,7 +344,11 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :return: The HGI device instance, or None if not available
         :rtype: float | None
         """
-        if self._hgi is None and self._gateway and hasattr(self._gateway, "hgi"):
+        if (
+            self._hgi is None
+            and self._gateway
+            and hasattr(self._gateway, "hgi")
+        ):
             self._hgi = self._gateway.hgi
         return self._hgi
 
@@ -403,7 +413,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         :rtype: bool
         """
         if not self._supports_2411:
-            _LOGGER.warning("Device %s doesn't support 2411 parameters", self.id)
+            _LOGGER.warning(
+                "Device %s doesn't support 2411 parameters", self.id
+            )
             return False
 
         self._params_2411[parameter_id] = value
@@ -452,7 +464,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         param_value = msg.payload.get("value")
 
         if not param_id or param_value is None:
-            _LOGGER.debug("Missing parameter ID or value in 2411 message: %s", msg)
+            _LOGGER.debug(
+                "Missing parameter ID or value in 2411 message: %s", msg
+            )
             return
 
         # Normalize param_id: uppercase and strip leading zeros for
@@ -526,7 +540,9 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             return
 
         self._bound_devices[device_id] = device_type
-        _LOGGER.info("Bound %s device %s to FAN %s", device_type, device_id, self.id)
+        _LOGGER.info(
+            "Bound %s device %s to FAN %s", device_type, device_id, self.id
+        )
 
     def remove_bound_device(self, device_id: str) -> None:
         """Remove a bound device from this FAN.

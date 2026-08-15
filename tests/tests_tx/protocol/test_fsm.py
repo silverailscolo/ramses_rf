@@ -10,7 +10,12 @@ import pytest
 from ramses_tx.const import Priority
 from ramses_tx.exceptions import TransportError
 from ramses_tx.packet import Packet
-from ramses_tx.protocol.fsm import Inactive, IsInIdle, ProtocolContext, WantEcho
+from ramses_tx.protocol.fsm import (
+    Inactive,
+    IsInIdle,
+    ProtocolContext,
+    WantEcho,
+)
 
 
 @pytest.fixture
@@ -120,7 +125,9 @@ async def test_fsm_transport_error_in_send_task(
         raise TransportError("Serial port disconnected")
 
     with pytest.raises(TransportError, match="Serial port disconnected"):
-        await fsm_context.send_cmd(failing_send_fnc, mock_cmd, Priority.HIGH, mock_qos)
+        await fsm_context.send_cmd(
+            failing_send_fnc, mock_cmd, Priority.HIGH, mock_qos
+        )
 
     assert isinstance(fsm_context.state, IsInIdle)
 

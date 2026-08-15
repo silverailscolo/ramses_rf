@@ -39,14 +39,18 @@ class Controller(DeviceHeat):  # CTL (01):
         super().__init__(*args, traits=traits, **kwargs)
 
         self.tcs: Evohome | None = None  # TODO: = self?
-        self._make_tcs_controller(**kwargs)  # NOTE: must create_from_schema first
+        self._make_tcs_controller(
+            **kwargs
+        )  # NOTE: must create_from_schema first
 
     def _make_tcs_controller(
         self, *, msg: Message | None = None, **schema: Any
     ) -> None:  # CH/DHW
         """Attach a TCS (create/update as required) after passing it any msg."""
 
-        def get_system(*, msg: Message | None = None, **schema: Any) -> Evohome:
+        def get_system(
+            *, msg: Message | None = None, **schema: Any
+        ) -> Evohome:
             """Return a TCS (temperature control system), create it if required.
 
             Use the schema to create/update it, then pass it any msg to handle.
@@ -109,7 +113,9 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     _child_id = FA
     _iz_controller = True
 
-    childs: list[Child]  # TODO: check (code so complex, not sure if this is true)
+    childs: list[
+        Child
+    ]  # TODO: check (code so complex, not sure if this is true)
 
     # 12:27:24.398 067  I --- 02:000921 --:------ 01:191718 3150 002 0360
     # 12:27:24.546 068  I --- 02:000921 --:------ 01:191718 3150 002 065A
@@ -125,7 +131,9 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
     def _init_ufh_state(self) -> None:
         """Initialize UFH-specific instance attributes (idempotent)."""
-        self.__dict__.setdefault("circuit_by_id", {f"{i:02X}": {} for i in range(8)})
+        self.__dict__.setdefault(
+            "circuit_by_id", {f"{i:02X}": {} for i in range(8)}
+        )
 
     # TODO: should be a private method
     def get_circuit(
@@ -156,7 +164,9 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     # def circuits(self) -> dict:  # 000C
     #     return self.circuit_by_id
 
-    async def heat_demand(self) -> float | None:  # 3150|FC (there is also 3150|FA)
+    async def heat_demand(
+        self,
+    ) -> float | None:  # 3150|FC (there is also 3150|FA)
         """Return the overall heating demand percentage (0.0 to 1.0)."""
         state = getattr(self, "demand_state", None)
         return state.heat_demand if state else None

@@ -12,7 +12,10 @@ from ramses_rf.devices.dev_base import BatteryState, DeviceBase
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.gateway import Gateway
 from ramses_rf.models import DeviceTraits
-from ramses_rf.pipeline.polling import DEFAULT_POLLING_SCHEDULES, PollingManager
+from ramses_rf.pipeline.polling import (
+    DEFAULT_POLLING_SCHEDULES,
+    PollingManager,
+)
 from ramses_rf.schemas import SCH_GLOBAL_CONFIG, strip_and_map_traits
 from ramses_rf.typing import DeviceIdT
 from ramses_tx import CommandDTO
@@ -87,8 +90,12 @@ def test_polling_manager_custom_trait_override(
     mock_gateway: MagicMock,
 ) -> None:
     # ARRANGE
-    custom_traits = DeviceTraits(polling_interval={Code._1F41: 1800, Code._10E0: 43200})
-    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL", traits=custom_traits)
+    custom_traits = DeviceTraits(
+        polling_interval={Code._1F41: 1800, Code._10E0: 43200}
+    )
+    ctl_dev = MockDevice(
+        mock_gateway, "01:111111", slug="CTL", traits=custom_traits
+    )
     poller = PollingManager(mock_gateway, shadow_mode=True)
 
     # ACT
@@ -106,13 +113,18 @@ def test_polling_manager_battery_device_zero_polling(
     # ARRANGE
     battery_dev = MockBatteryDevice(mock_gateway, "04:222222")
     explicit_battery_dev = MockDevice(
-        mock_gateway, "04:333333", slug="TRV", traits=DeviceTraits(is_battery=True)
+        mock_gateway,
+        "04:333333",
+        slug="TRV",
+        traits=DeviceTraits(is_battery=True),
     )
     poller = PollingManager(mock_gateway, shadow_mode=True)
 
     # ACT
     battery_schedule = poller.resolve_schedule_for_device(battery_dev)
-    explicit_schedule = poller.resolve_schedule_for_device(explicit_battery_dev)
+    explicit_schedule = poller.resolve_schedule_for_device(
+        explicit_battery_dev
+    )
 
     # ASSERT
     # Battery devices sleep and do not listen to RF commands; schedule must be empty
@@ -193,7 +205,9 @@ async def test_polling_manager_send_cmd_exception_handling(
     poller = PollingManager(mock_gateway, shadow_mode=False)
     bdr_dev = MockDevice(mock_gateway, "13:222222", slug="BDR")
     mock_gateway.device_registry.devices = [bdr_dev]
-    mock_gateway.async_send_cmd.side_effect = RamsesException("Transmission failure")
+    mock_gateway.async_send_cmd.side_effect = RamsesException(
+        "Transmission failure"
+    )
 
     poller.update_device_tasks(bdr_dev)
     past = dt.now(UTC) - td(seconds=10)
@@ -380,7 +394,8 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
 
     # ASSERT: find the 0004 call and check its payload
     sent_codes = [
-        call.args[0].code for call in mock_gateway.async_send_cmd.call_args_list
+        call.args[0].code
+        for call in mock_gateway.async_send_cmd.call_args_list
     ]
     assert Code._0004 in sent_codes
 

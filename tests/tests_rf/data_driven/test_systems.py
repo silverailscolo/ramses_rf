@@ -94,7 +94,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     def id_fnc(param: Path) -> str:
         return PurePath(param).name
 
-    folders = [f for f in Path(WORK_DIR).iterdir() if f.is_dir() and f.name[:1] != "_"]
+    folders = [
+        f for f in Path(WORK_DIR).iterdir() if f.is_dir() and f.name[:1] != "_"
+    ]
     metafunc.parametrize("dir_name", folders, ids=id_fnc)
 
 
@@ -127,7 +129,9 @@ def test_payload_from_log_file(dir_name: Path) -> None:
             expected = expected[0]
 
         try:
-            msg = Message._from_pkt(Packet.from_file(pkt_line[:26], pkt_line[27:]))
+            msg = Message._from_pkt(
+                Packet.from_file(pkt_line[:26], pkt_line[27:])
+            )
         except exc.PacketInvalid:
             return
 
@@ -160,7 +164,9 @@ def test_payload_from_log_file(dir_name: Path) -> None:
             "is_daylight_saving": "is_dst",
         }
 
-        def _norm_dict(d: dict[str, Any], exp: dict[str, Any]) -> dict[str, Any]:
+        def _norm_dict(
+            d: dict[str, Any], exp: dict[str, Any]
+        ) -> dict[str, Any]:
             if "zone_idx" in exp and "ufx_idx" in d:
                 d["zone_idx"] = d.pop("ufx_idx")
             res = {LEGACY_KEY_MAP.get(k, k): v for k, v in d.items()}
@@ -182,11 +188,17 @@ def test_payload_from_log_file(dir_name: Path) -> None:
 
         actual_shrunk = safe_shrink(actual_payload)
 
-        if isinstance(actual_shrunk, dict) and isinstance(expected_shrunk, dict):
+        if isinstance(actual_shrunk, dict) and isinstance(
+            expected_shrunk, dict
+        ):
             actual_shrunk = _norm_dict(actual_shrunk, expected_shrunk)
-        elif isinstance(actual_shrunk, list) and isinstance(expected_shrunk, list):
+        elif isinstance(actual_shrunk, list) and isinstance(
+            expected_shrunk, list
+        ):
             new_actual = []
-            for act_item, exp_item in zip(actual_shrunk, expected_shrunk, strict=False):
+            for act_item, exp_item in zip(
+                actual_shrunk, expected_shrunk, strict=False
+            ):
                 if isinstance(act_item, dict) and isinstance(exp_item, dict):
                     new_actual.append(_norm_dict(act_item, exp_item))
                 else:

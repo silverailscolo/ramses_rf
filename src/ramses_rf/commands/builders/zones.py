@@ -17,7 +17,9 @@ from ramses_tx.const import DEFAULT_NUM_REPEATS, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 
 
-def _build_zone_rq(intent: Command, code: Code, payload_suffix: str = "") -> CommandDTO:
+def _build_zone_rq(
+    intent: Command, code: Code, payload_suffix: str = ""
+) -> CommandDTO:
     """Construct a standard single-zone RQ CommandDTO."""
     zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     if zone_idx is None:
@@ -53,9 +55,13 @@ def build_set_temperature(intent: Command) -> CommandDTO:
     setpoint = intent.get("setpoint")
 
     if zone_idx is None or setpoint is None:
-        raise ValueError("Missing 'zone_index'/'zone_idx' or 'setpoint' in intent data")
+        raise ValueError(
+            "Missing 'zone_index'/'zone_idx' or 'setpoint' in intent data"
+        )
 
-    payload = ZoneSetpointPayload(zone_index=zone_idx, setpoint_temp=setpoint).hex()
+    payload = ZoneSetpointPayload(
+        zone_index=zone_idx, setpoint_temp=setpoint
+    ).hex()
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
@@ -95,7 +101,9 @@ def build_set_mode(intent: Command) -> CommandDTO:
     mode = normalise_mode(mode, setpoint, until, duration)
 
     if setpoint is not None and not isinstance(setpoint, (float, int)):
-        raise ValueError(f"Invalid args: setpoint={setpoint}, but must be a float")
+        raise ValueError(
+            f"Invalid args: setpoint={setpoint}, but must be a float"
+        )
 
     until, duration = normalise_until(mode, setpoint, until, duration)
 
@@ -136,7 +144,9 @@ def build_set_name(intent: Command) -> CommandDTO:
     name = intent.get("name")
 
     if zone_idx is None or name is None:
-        raise ValueError("Missing 'zone_index'/'zone_idx' or 'name' in intent data")
+        raise ValueError(
+            "Missing 'zone_index'/'zone_idx' or 'name' in intent data"
+        )
 
     payload = ZoneNamePayload(zone_index=zone_idx, name=name).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)

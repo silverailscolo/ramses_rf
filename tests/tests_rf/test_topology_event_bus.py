@@ -62,7 +62,9 @@ async def test_gateway_schema_updated_callback_handshake() -> None:
 
 
 @pytest.mark.asyncio
-async def test_device_registry_topology_event_triggers_schema_callback() -> None:
+async def test_device_registry_topology_event_triggers_schema_callback() -> (
+    None
+):
     # Arrange
     cfg = GatewayConfig(engine=EngineConfig(disable_sending=True))
     gwy = Gateway("/dev/ttyUSB0", config=cfg)
@@ -119,7 +121,12 @@ def test_topology_event_has_event_id() -> None:
 
 def test_topology_action_has_all_values() -> None:
     """TopologyAction enum has all expected values."""
-    expected = {"update_traits", "bind_device", "create_controller", "create_circuit"}
+    expected = {
+        "update_traits",
+        "bind_device",
+        "create_controller",
+        "create_circuit",
+    }
     actual = {str(a) for a in TopologyAction}
     assert expected.issubset(actual), f"missing: {expected - actual}"
     # PR 914 renamed PROMOTE_CLASS to UPDATE_DEVICE_CLASS

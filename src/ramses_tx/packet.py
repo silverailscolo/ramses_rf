@@ -162,7 +162,9 @@ class Packet:
                 self.addr1,
                 self.addr2,
                 self.addr3,
-            ) = pkt_addrs(f"{self._dto.addr1} {self._dto.addr2} {self._dto.addr3}")
+            ) = pkt_addrs(
+                f"{self._dto.addr1} {self._dto.addr2} {self._dto.addr3}"
+            )
             self._addrs = (self.addr1, self.addr2, self.addr3)
         except exc.PacketInvalid as err:
             raise exc.PacketInvalid("Bad frame: Invalid address set") from err
@@ -339,21 +341,29 @@ class Packet:
                 return
 
             if self.addr1 == NON_DEV_ADDR:
-                assert self.verb == I_, "wrong verb or dst addr should be present"
+                assert self.verb == I_, (
+                    "wrong verb or dst addr should be present"
+                )
             elif self.addr3 == NON_DEV_ADDR:
                 assert self.verb == I_ or self.src is not self.dst, (
                     "wrong verb or dst addr should not be src"
                 )
             elif self.addr1 == self.addr3:
-                assert self.verb == I_, "wrong verb or dst addr should not be src"
+                assert self.verb == I_, (
+                    "wrong verb or dst addr should not be src"
+                )
             else:
-                assert self.verb in (I_, W_), "wrong verb or dst addr should be src"
+                assert self.verb in (I_, W_), (
+                    "wrong verb or dst addr should be src"
+                )
 
             if getattr(self, "_frame", "") or self.error_text:
                 PKT_LOGGER.info("", extra=self._pkt_extra)
 
         except AssertionError as err:
-            raise exc.PacketInvalid(f"Bad frame: Invalid address set: {err}") from err
+            raise exc.PacketInvalid(
+                f"Bad frame: Invalid address set: {err}"
+            ) from err
         except exc.PacketInvalid as err:
             if getattr(self, "_frame", "") or self.error_text:
                 PKT_LOGGER.warning("%s", err, extra=self._pkt_extra)
@@ -406,7 +416,9 @@ class Packet:
         """
         if not hasattr(other, "_frame") and not hasattr(other, "_raw_line"):
             return NotImplemented
-        other_line = getattr(other, "_frame", None) or getattr(other, "_raw_line", None)
+        other_line = getattr(other, "_frame", None) or getattr(
+            other, "_raw_line", None
+        )
         return self._frame == other_line
 
     @property
@@ -597,7 +609,9 @@ class Packet:
                 else self.raw_payload[:2]
             )
         elif self.code in (Code._0418, Code._3220):
-            self._ctx_ = self.raw_payload[4:6] if len(self.raw_payload) >= 6 else False
+            self._ctx_ = (
+                self.raw_payload[4:6] if len(self.raw_payload) >= 6 else False
+            )
         elif len(self.raw_payload) >= 2 and self.raw_payload[:2] != "00":
             self._ctx_ = self.raw_payload[:2]
         else:
@@ -640,7 +654,9 @@ class Packet:
 
         result = pkt_header(self)
         self._hdr_ = (
-            result if result is not None else HeaderT(f"{self.code}|{self.verb}")
+            result
+            if result is not None
+            else HeaderT(f"{self.code}|{self.verb}")
         )
         return self._hdr_
 
@@ -794,7 +810,9 @@ class Packet:
             raw_payload_val = raw.get("raw_payload")
             if not isinstance(raw_payload_val, str) or not raw_payload_val:
                 raw_payload_val = (
-                    raw["payload"] if isinstance(raw.get("payload"), str) else ""
+                    raw["payload"]
+                    if isinstance(raw.get("payload"), str)
+                    else ""
                 )
             dto = PacketDTO(
                 timestamp=dt.fromisoformat(raw["timestamp"]),
@@ -876,7 +894,9 @@ def pkt_header(packet: Packet, /) -> HeaderT | None:
     :rtype: HeaderT | None
     """
     if packet.code == Code._1FC9:
-        device_id = ALL_DEV_ADDR.id if packet.src == packet.dst else packet.dst.id
+        device_id = (
+            ALL_DEV_ADDR.id if packet.src == packet.dst else packet.dst.id
+        )
         return HeaderT("|".join((packet.code, packet.verb, device_id)))
 
     if packet.verb in (I_, RP) or packet.src == packet.dst:
@@ -886,7 +906,9 @@ def pkt_header(packet: Packet, /) -> HeaderT | None:
 
     try:
         return HeaderT(
-            f"{header}|{packet._ctx}" if isinstance(packet._ctx, str) else header
+            f"{header}|{packet._ctx}"
+            if isinstance(packet._ctx, str)
+            else header
         )
     except AssertionError:
         return HeaderT(header)

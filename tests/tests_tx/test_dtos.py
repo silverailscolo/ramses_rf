@@ -98,10 +98,26 @@ def test_packet_dto_is_tx_default_and_custom() -> None:
 #   W  directed:   addr1=src, addr2=dst,      addr3=--:------
 
 _PACKET_CASES = [
-    (" I --- 01:150003 --:------ 01:150003 30C9 003 030AC0", "01:150003", "01:150003"),
-    (" I --- 37:168270 32:153289 --:------ 22F1 003 000307", "37:168270", "32:153289"),
-    ("RQ --- 18:001234 01:150000 --:------ 0002 001 00", "18:001234", "01:150000"),
-    ("RP --- 01:150000 18:001234 --:------ 0002 002 0000", "01:150000", "18:001234"),
+    (
+        " I --- 01:150003 --:------ 01:150003 30C9 003 030AC0",
+        "01:150003",
+        "01:150003",
+    ),
+    (
+        " I --- 37:168270 32:153289 --:------ 22F1 003 000307",
+        "37:168270",
+        "32:153289",
+    ),
+    (
+        "RQ --- 18:001234 01:150000 --:------ 0002 001 00",
+        "18:001234",
+        "01:150000",
+    ),
+    (
+        "RP --- 01:150000 18:001234 --:------ 0002 002 0000",
+        "01:150000",
+        "18:001234",
+    ),
     (
         " W --- 18:001234 01:150000 --:------ 2E04 008 00FFFFFFFFFFFF00",
         "18:001234",
@@ -113,7 +129,13 @@ _PACKET_CASES = [
 @pytest.mark.parametrize(
     ("frame", "expected_src", "expected_dst"),
     _PACKET_CASES,
-    ids=["I broadcast", "I directed", "RQ directed", "RP directed", "W directed"],
+    ids=[
+        "I broadcast",
+        "I directed",
+        "RQ directed",
+        "RP directed",
+        "W directed",
+    ],
 )
 def test_packet_from_dict_resolves_src_dst(
     frame: str, expected_src: str, expected_dst: str
@@ -128,6 +150,8 @@ def test_packet_from_dict_resolves_src_dst(
         - RP: addr1=dst, addr2=src (reversed for replies)
         - I broadcast: addr1=src=addr3 (self-announcement)
     """
-    pkt = Packet.from_dict("2026-01-01T00:00:00", {"rssi": "000", "frame": frame})
+    pkt = Packet.from_dict(
+        "2026-01-01T00:00:00", {"rssi": "000", "frame": frame}
+    )
     assert pkt.src.id == expected_src
     assert pkt.dst.id == expected_dst

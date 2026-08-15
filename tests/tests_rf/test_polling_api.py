@@ -7,7 +7,10 @@ import pytest
 from ramses_rf.address import Address
 from ramses_rf.const import Code
 from ramses_rf.devices.dev_base import DeviceBase
-from ramses_rf.pipeline.polling import DEFAULT_POLLING_SCHEDULES, PollingManager
+from ramses_rf.pipeline.polling import (
+    DEFAULT_POLLING_SCHEDULES,
+    PollingManager,
+)
 
 
 def test_device_set_polling_interval_device_level() -> None:

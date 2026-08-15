@@ -67,12 +67,24 @@ class TopologyBuilder:
         # Rules previously held in a flat self._rules list are now encapsulated
         # inside these single-responsibility handler classes.
         self._handlers: list[TopologyHandler] = [
-            BindTopologyHandler(emit_event_cb, enable_eavesdrop=enable_eavesdrop),
-            RadTopologyHandler(emit_event_cb, enable_eavesdrop=enable_eavesdrop),
-            UfhTopologyHandler(emit_event_cb, enable_eavesdrop=enable_eavesdrop),
-            DhwTopologyHandler(emit_event_cb, enable_eavesdrop=enable_eavesdrop),
-            OtbTopologyHandler(emit_event_cb, enable_eavesdrop=enable_eavesdrop),
-            HvacTopologyHandler(emit_event_cb, enable_eavesdrop=enable_eavesdrop),
+            BindTopologyHandler(
+                emit_event_cb, enable_eavesdrop=enable_eavesdrop
+            ),
+            RadTopologyHandler(
+                emit_event_cb, enable_eavesdrop=enable_eavesdrop
+            ),
+            UfhTopologyHandler(
+                emit_event_cb, enable_eavesdrop=enable_eavesdrop
+            ),
+            DhwTopologyHandler(
+                emit_event_cb, enable_eavesdrop=enable_eavesdrop
+            ),
+            OtbTopologyHandler(
+                emit_event_cb, enable_eavesdrop=enable_eavesdrop
+            ),
+            HvacTopologyHandler(
+                emit_event_cb, enable_eavesdrop=enable_eavesdrop
+            ),
         ]
 
     async def consume(self, msg: Message) -> None:
@@ -87,7 +99,9 @@ class TopologyBuilder:
             try:
                 handler.consume(msg)
             except Exception as err:
-                if "changed app_cntrl" in str(err) or "Can't create" in str(err):
+                if "changed app_cntrl" in str(err) or "Can't create" in str(
+                    err
+                ):
                     _LOGGER.debug(
                         "Topology handler %s bypassed: %s",
                         type(handler).__name__,

@@ -34,7 +34,9 @@ class Weather(DeviceHeat):  # 0002
         """Fake the outdoor temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
-        self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
+        self.temp_state = dataclasses.replace(
+            self.temp_state, temperature=value
+        )
         return await send_fake_intent(
             self, Action.PUT_OUTDOOR_TEMP, {"temperature": value}
         )
@@ -61,8 +63,12 @@ class DhwTemperature(DeviceHeat):  # 1260
         """Fake the DHW temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
-        self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
-        return await send_fake_intent(self, Action.PUT_DHW_TEMP, {"temperature": value})
+        self.temp_state = dataclasses.replace(
+            self.temp_state, temperature=value
+        )
+        return await send_fake_intent(
+            self, Action.PUT_DHW_TEMP, {"temperature": value}
+        )
 
     async def status(self) -> dict[str, Any]:
         """Return the current operating status dictionary."""
@@ -87,7 +93,9 @@ class Temperature(DeviceHeat):  # 30C9
         """Fake the indoor temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
-        self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
+        self.temp_state = dataclasses.replace(
+            self.temp_state, temperature=value
+        )
         # Determine the zone_idx from the parent zone (if bound) so that
         # UFH zone sensors emit 30C9 with the correct zone_idx.  Without
         # this, the fake always sends idx 00 and the UFC ignores it.
@@ -97,7 +105,11 @@ class Temperature(DeviceHeat):  # 30C9
         return await send_fake_intent(
             self,
             Action.PUT_SENSOR_TEMP,
-            {"temperature": value, "zone_index": zone_idx, "zone_idx": zone_idx},
+            {
+                "temperature": value,
+                "zone_index": zone_idx,
+                "zone_idx": zone_idx,
+            },
         )
 
     async def status(self) -> dict[str, Any]:
@@ -109,7 +121,9 @@ class Temperature(DeviceHeat):  # 30C9
         }
 
 
-class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
+class DhwSensor(
+    DhwTemperature, BatteryState, Fakeable
+):  # DHW (07): 10A0, 1260
     """The DHW class, such as a CS92."""
 
     DHW_PARAMS: Final = "dhw_params"

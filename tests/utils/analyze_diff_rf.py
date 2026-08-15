@@ -226,7 +226,9 @@ async def generate_actual_state() -> dict[str, Any]:
             "schema": gwy.schema,
             "devices": [
                 serialize_device(d)
-                for d in sorted(gwy.device_registry.devices, key=lambda x: x.id)
+                for d in sorted(
+                    gwy.device_registry.devices, key=lambda x: x.id
+                )
             ],
         }
 
@@ -272,7 +274,8 @@ def load_expected_state() -> dict[str, Any]:
     )
 
     found_snapshots: dict[str, str] = {
-        m.group("key"): m.group("value").strip() for m in pattern.finditer(content)
+        m.group("key"): m.group("value").strip()
+        for m in pattern.finditer(content)
     }
 
     raw_value = found_snapshots.get(TARGET_SNAPSHOT_KEY)
@@ -287,7 +290,9 @@ def load_expected_state() -> dict[str, Any]:
     return cast(dict[str, Any], ast.literal_eval(py_literal))
 
 
-def find_diffs(old: dict[str, Any], new: dict[str, Any]) -> dict[str, list[str]]:
+def find_diffs(
+    old: dict[str, Any], new: dict[str, Any]
+) -> dict[str, list[str]]:
     """Compare two states and identify differences.
 
     :param old: The reference state.
@@ -348,7 +353,9 @@ def extract_packets(target_ids: set[str]) -> dict[str, list[str]]:
     return dict(packet_map)
 
 
-def print_report(diffs: dict[str, list[str]], packets: dict[str, list[str]]) -> None:
+def print_report(
+    diffs: dict[str, list[str]], packets: dict[str, list[str]]
+) -> None:
     """Print the final analysis report in a Gemini-friendly format.
 
     :param diffs: Found differences.
@@ -373,8 +380,12 @@ def print_report(diffs: dict[str, list[str]], packets: dict[str, list[str]]) -> 
     # --- LLM Context Section ---
     print("\n## LLM PROMPT CONTEXT")
     print("This is a diagnostic output from `tests/utils/analyze_diff_rf.py`.")
-    print("It represents a fresh regression analysis run comparing the current")
-    print("in-memory Gateway state (after replaying the packet log) against the")
+    print(
+        "It represents a fresh regression analysis run comparing the current"
+    )
+    print(
+        "in-memory Gateway state (after replaying the packet log) against the"
+    )
     print("official 'Golden Snapshot' (expected state).")
     print("\n**Please use this data to:**")
     print("1.  Verify the success of the most recent code modifications.")

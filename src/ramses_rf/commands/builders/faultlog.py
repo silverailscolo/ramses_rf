@@ -65,7 +65,8 @@ def build_put_faultlog_entry(intent: Command) -> CommandDTO:
 
     if isinstance(fault_state, enum.Enum):
         fault_state = next(
-            (k for k, v in FAULT_STATE.items() if v == fault_state), fault_state
+            (k for k, v in FAULT_STATE.items() if v == fault_state),
+            fault_state,
         )
     if fault_state not in FAULT_STATE:
         raise ValueError(f"Invalid fault_state: {fault_state}")

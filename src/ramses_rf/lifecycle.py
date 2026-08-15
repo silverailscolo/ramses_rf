@@ -14,7 +14,15 @@ from ramses_tx import Packet, protocol_factory, set_pkt_logging_config
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.logger import flush_packet_log
 
-from .const import DONT_CREATE_MESSAGES, HIGH_VOLUME_STATUS_CODES, I_, RP, RQ, W_, Code
+from .const import (
+    DONT_CREATE_MESSAGES,
+    HIGH_VOLUME_STATUS_CODES,
+    I_,
+    RP,
+    RQ,
+    W_,
+    Code,
+)
 from .exceptions import DeviceNotFoundError
 from .messages import Message
 from .pipeline.ingestion import StateProjector
@@ -102,7 +110,9 @@ class GatewayLifecycle:
                     except asyncio.CancelledError:
                         pass
 
-                self.add_task(self._engine._loop.create_task(_periodic_flush()))
+                self.add_task(
+                    self._engine._loop.create_task(_periodic_flush())
+                )
 
         _LOGGER.info("Ramses RF starts central MessageStore")
         self.create_sqlite_message_index()
@@ -269,7 +279,9 @@ class GatewayLifecycle:
         return await self.schema(), dict(sorted(packets_dict.items()))
 
     async def _restore_cached_packets(
-        self, packets: dict[str, dict[str, Any] | str], _clear_state: bool = False
+        self,
+        packets: dict[str, dict[str, Any] | str],
+        _clear_state: bool = False,
     ) -> None:
         """Restore cached packets (may include expired packets)."""
 
@@ -334,7 +346,9 @@ class GatewayLifecycle:
                 packet = Packet.from_dict(dtm, state)
                 tmp_protocol.pkt_received(packet)
             except Exception as err:
-                _LOGGER.debug("Gateway: Failed to restore packet %s: %s", dtm, err)
+                _LOGGER.debug(
+                    "Gateway: Failed to restore packet %s: %s", dtm, err
+                )
 
         # Drain all pending handler tasks so that restored packets are fully
         # processed (including CQRS state projection, e.g. power_state updates

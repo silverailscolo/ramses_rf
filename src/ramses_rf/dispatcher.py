@@ -125,7 +125,9 @@ async def process_msg(gateway: Gateway, msg: Message) -> None:
     except (AttributeError, LookupError, TypeError, ValueError) as err:
         if getattr(gateway.config, "enforce_strict_handling", False):
             raise
-        _LOGGER.warning("%s < %s(%s)", msg, err.__class__.__name__, err, exc_info=True)
+        _LOGGER.warning(
+            "%s < %s(%s)", msg, err.__class__.__name__, err, exc_info=True
+        )
 
     else:
         _log_message(gateway, msg)

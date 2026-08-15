@@ -48,7 +48,9 @@ class DeviceRegistry:
         self,
         device_filter: DeviceFilterInterface,
         config: GatewayConfig,
-        device_factory_cb: Callable[[Address, Message | None, DeviceTraits], Device],
+        device_factory_cb: Callable[
+            [Address, Message | None, DeviceTraits], Device
+        ],
         on_topology_changed_cb: Callable[[], None] | None = None,
     ) -> None:
         """Initialize the DeviceRegistry.
@@ -102,7 +104,9 @@ class DeviceRegistry:
         """
         handler = self._event_routers.get(event.action)
         if not handler:
-            _LOGGER.warning("No registry handler defined for action: %s", event.action)
+            _LOGGER.warning(
+                "No registry handler defined for action: %s", event.action
+            )
             return
 
         try:
@@ -151,7 +155,11 @@ class DeviceRegistry:
                     event.child_id,
                 )
 
-        tcs = getattr(parent, "tcs", parent) if hasattr(parent, "tcs") else parent
+        tcs = (
+            getattr(parent, "tcs", parent)
+            if hasattr(parent, "tcs")
+            else parent
+        )
 
         metadata = event.metadata or {}
 
@@ -165,12 +173,16 @@ class DeviceRegistry:
                 try:
                     tcs._get_zone(zone_idx)
                 except (IndexError, KeyError, TypeError, ValueError) as err:
-                    _LOGGER.debug("Failed to resolve zone %s: %s", zone_idx, err)
+                    _LOGGER.debug(
+                        "Failed to resolve zone %s: %s", zone_idx, err
+                    )
             elif hasattr(tcs, "_get_htg_zone"):
                 try:
                     tcs._get_htg_zone(zone_idx)
                 except (IndexError, KeyError, TypeError, ValueError) as err:
-                    _LOGGER.debug("Failed to resolve htg zone %s: %s", zone_idx, err)
+                    _LOGGER.debug(
+                        "Failed to resolve htg zone %s: %s", zone_idx, err
+                    )
 
             if hasattr(tcs, "get_htg_zone"):
                 parent = tcs.get_htg_zone(zone_idx)
@@ -185,7 +197,11 @@ class DeviceRegistry:
 
         # If we have class metadata for a zone, apply it to the zone via the parent TCS
         child_domain_id = metadata.get("zone_idx") or metadata.get("child_id")
-        if child_domain_id and "class" in metadata and hasattr(tcs, "get_htg_zone"):
+        if (
+            child_domain_id
+            and "class" in metadata
+            and hasattr(tcs, "get_htg_zone")
+        ):
             zone = tcs.get_htg_zone(str(child_domain_id))
             if not zone and hasattr(tcs, "_update_schema"):
                 tcs._update_schema(**{"zones": {str(child_domain_id): {}}})
@@ -205,7 +221,9 @@ class DeviceRegistry:
             # Safely extract is_sensor without coercing None to False,
             # allowing legacy code to correctly deduce actuators.
             raw_is_sensor = metadata.get("is_sensor")
-            is_sensor = bool(raw_is_sensor) if raw_is_sensor is not None else None
+            is_sensor = (
+                bool(raw_is_sensor) if raw_is_sensor is not None else None
+            )
             device_role = metadata.get("device_role")
 
             # NEW: Safe hardware fallback to prevent legacy SchemaInconsistentError
@@ -239,21 +257,29 @@ class DeviceRegistry:
                 child_dev = self.get_device(
                     event.child_id,
                     parent=cast("Parent", parent),
-                    child_id=str(child_id_raw) if child_id_raw is not None else None,
+                    child_id=str(child_id_raw)
+                    if child_id_raw is not None
+                    else None,
                     is_sensor=is_sensor,
                 )
             except DeviceNotFoundError as err:
                 _TRACE.error(
-                    "BIND EXCEPTION: Failed fetching %s: %s", event.child_id, err
+                    "BIND EXCEPTION: Failed fetching %s: %s",
+                    event.child_id,
+                    err,
                 )
 
             # 2. REVERSE BINDING (Native CQRS Shadow State)
             if child_dev:
                 # Dynamically fetch our CQRS shadow maps (bypassing strict Mypy init
                 # checks)
-                cqrs_acts: dict[str, set[str]] = getattr(self, "_cqrs_actuators", {})
+                cqrs_acts: dict[str, set[str]] = getattr(
+                    self, "_cqrs_actuators", {}
+                )
                 cqrs_ufcs: set[str] = getattr(self, "_cqrs_ufcs", set())
-                cqrs_sensors: dict[str, str] = getattr(self, "_cqrs_sensors", {})
+                cqrs_sensors: dict[str, str] = getattr(
+                    self, "_cqrs_sensors", {}
+                )
 
                 dev_type = getattr(child_dev, "type", None)
                 is_actuator_hw = dev_type in (
@@ -265,7 +291,9 @@ class DeviceRegistry:
                     DevType.UFC,
                 )
 
-                is_explicit_sensor = device_role == "sensor" or is_sensor is True
+                is_explicit_sensor = (
+                    device_role == "sensor" or is_sensor is True
+                )
                 is_explicit_actuator = device_role == "actuator"
 
                 if tcs and hasattr(tcs, "id"):
@@ -277,7 +305,9 @@ class DeviceRegistry:
                         if is_explicit_actuator or (
                             not is_explicit_sensor and is_actuator_hw
                         ):
-                            cqrs_acts.setdefault(z_key, set()).add(child_dev.id)
+                            cqrs_acts.setdefault(z_key, set()).add(
+                                child_dev.id
+                            )
 
                         if is_explicit_sensor or (
                             not is_explicit_actuator and not is_actuator_hw
@@ -296,7 +326,9 @@ class DeviceRegistry:
                     f"Bound {event.child_id} to {parent.id} via {event.causation}"
                 )
 
-    def _handle_update_device_traits(self, event: TopologyChangedEvent) -> None:
+    def _handle_update_device_traits(
+        self, event: TopologyChangedEvent
+    ) -> None:
         """Update SSOT configuration known_list when new device class traits are discovered."""
         if not event.device_id or not event.metadata:
             return
@@ -315,7 +347,9 @@ class DeviceRegistry:
 
         # 1. ALWAYS update the configuration traits in the SSOT first
         # This structurally resolves early-packet race conditions via the SSOT.
-        old_traits_dict = dict(self._config.known_list.get(event.device_id, {}))
+        old_traits_dict = dict(
+            self._config.known_list.get(event.device_id, {})
+        )
         traits_dict = dict(old_traits_dict)
         if old_traits_dict.get("class") != new_class_slug:
             traits_dict["class"] = new_class_slug
@@ -331,7 +365,9 @@ class DeviceRegistry:
         device = self.device_by_id.get(event.device_id)
         if device and hasattr(device, "_make_tcs_controller"):
             device._make_tcs_controller()
-            _LOGGER.debug("Created Controller on %s via %s", device.id, event.causation)
+            _LOGGER.debug(
+                "Created Controller on %s via %s", device.id, event.causation
+            )
 
     def _handle_create_circuit(self, event: TopologyChangedEvent) -> None:
         """Instruct a UFH controller to initialize a circuit."""
@@ -349,7 +385,9 @@ class DeviceRegistry:
             # Prevent AttributeError: Only hydrate if the UFC is securely bound to a TCS
             if zone_idx and zone_idx != "None" and tcs and hasattr(tcs, "id"):
                 z_key = f"{tcs.id}_{zone_idx}"
-                cqrs_acts: dict[str, set[str]] = getattr(self, "_cqrs_actuators", {})
+                cqrs_acts: dict[str, set[str]] = getattr(
+                    self, "_cqrs_actuators", {}
+                )
                 cqrs_acts.setdefault(z_key, set()).add(circuit.id)
                 self._cqrs_actuators = cqrs_acts
 
@@ -404,7 +442,10 @@ class DeviceRegistry:
 
                 # Find a match in our temporal cache
                 matched_orphan = None
-                for orphan_id, orphan_payload in self._orphan_telemetry.items():
+                for (
+                    orphan_id,
+                    orphan_payload,
+                ) in self._orphan_telemetry.items():
                     if orphan_payload.get("temperature") == zone_temp:
                         matched_orphan = orphan_id
                         break
@@ -433,8 +474,8 @@ class DeviceRegistry:
         # Handle zone class metadata updates from eavesdropping
         if "class" in event.metadata and "zone_idx" in event.metadata:
             controller = self.device_by_id.get(event.device_id)
-            if controller and getattr(controller, "tcs", None):
-                zone = controller.tcs.get_htg_zone(str(event.metadata["zone_idx"]))  # type: ignore[union-attr]
+            if controller and (tcs := getattr(controller, "tcs", None)):
+                zone = tcs.get_htg_zone(str(event.metadata["zone_idx"]))
                 if zone:
                     zone._update_schema(**{"class": event.metadata["class"]})
 
@@ -447,7 +488,9 @@ class DeviceRegistry:
             the registry.
         """
         if device.id in self.device_by_id:
-            raise SchemaInconsistentError(f"Device already exists: {device.id}")
+            raise SchemaInconsistentError(
+                f"Device already exists: {device.id}"
+            )
 
         self.devices.append(device)
         self.device_by_id[device.id] = device
@@ -533,7 +576,9 @@ class DeviceRegistry:
             traits = DeviceTraits.from_dict(traits_dict)
 
             try:
-                device = self._device_factory_cb(Address(device_id), msg, traits)
+                device = self._device_factory_cb(
+                    Address(device_id), msg, traits
+                )
             except Exception as err:
                 _TRACE.error(
                     "FACTORY EXCEPTION: Failed creating %s: %s", device_id, err
@@ -656,18 +701,24 @@ class DeviceRegistry:
         :raises DeviceNotFaked: If the device cannot be faked.
         """
         if not is_valid_dev_id(device_id):
-            raise SchemaInconsistentError(f"The device id is not valid: {device_id}")
+            raise SchemaInconsistentError(
+                f"The device id is not valid: {device_id}"
+            )
 
         known_list = await self.known_list()
 
         if not create_device and device_id not in self.device_by_id:
-            raise DeviceNotFoundError(f"The device id does not exist: {device_id}")
+            raise DeviceNotFoundError(
+                f"The device id does not exist: {device_id}"
+            )
         elif create_device and device_id not in known_list:
             raise DeviceNotFoundError(
                 f"The device id is not in the known_list: {device_id}"
             )
 
-        if (device := self.get_device(device_id)) and isinstance(device, Fakeable):
+        if (device := self.get_device(device_id)) and isinstance(
+            device, Fakeable
+        ):
             device._make_fake()
             return device
 
@@ -682,17 +733,21 @@ class DeviceRegistry:
         :returns: A dictionary mapping device IDs to their traits.
         :rtype: DeviceListT
         """
-        result: DeviceListT = {k: v for k, v in self._config.known_list.items()}
+        result: DeviceListT = {
+            k: v for k, v in self._config.known_list.items()
+        }
         for device in self.devices:
             if (
                 not self._config.engine.enforce_known_list
                 or device.id in self._config.mac_filter_list
             ):
                 traits = await device.traits()
-                dev_traits = {k: traits.get(k) for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)}
-                if ssot_class := self._config.known_list.get(device.id, {}).get(
-                    "class"
-                ):
+                dev_traits = {
+                    k: traits.get(k) for k in (SZ_CLASS, SZ_ALIAS, SZ_FAKED)
+                }
+                if ssot_class := self._config.known_list.get(
+                    device.id, {}
+                ).get("class"):
                     dev_traits[SZ_CLASS] = ssot_class
                 result[device.id] = dev_traits
         return result
@@ -703,7 +758,9 @@ class DeviceRegistry:
         :returns: A dictionary containing parameters for all devices.
         :rtype: dict[str, Any]
         """
-        return {SZ_DEVICES: {d.id: await d.params() for d in sorted(self.devices)}}
+        return {
+            SZ_DEVICES: {d.id: await d.params() for d in sorted(self.devices)}
+        }
 
     async def status(self) -> dict[str, Any]:
         """Return the status for all devices.
@@ -711,7 +768,9 @@ class DeviceRegistry:
         :returns: A dictionary containing device statuses.
         :rtype: dict[str, Any]
         """
-        return {SZ_DEVICES: {d.id: await d.status() for d in sorted(self.devices)}}
+        return {
+            SZ_DEVICES: {d.id: await d.status() for d in sorted(self.devices)}
+        }
 
     @property
     def system_by_id(self) -> dict[DeviceIdT, Evohome]:
@@ -748,7 +807,9 @@ class DeviceRegistry:
         """
         orphans = []
         for device in self.devices:
-            if not getattr(device, "tcs", None) and isinstance(device, DeviceHeat):
+            if not getattr(device, "tcs", None) and isinstance(
+                device, DeviceHeat
+            ):
                 is_present = (
                     await device._is_present()
                     if hasattr(device, "_is_present")
@@ -825,7 +886,9 @@ class DeviceRegistry:
         if hasattr(old_dev, "temp_state") and hasattr(new_dev, "temp_state"):
             new_dev.temp_state = old_dev.temp_state
 
-        if hasattr(old_dev, "demand_state") and hasattr(new_dev, "demand_state"):
+        if hasattr(old_dev, "demand_state") and hasattr(
+            new_dev, "demand_state"
+        ):
             new_dev.demand_state = old_dev.demand_state
 
         # 4. Swap the reference in the registry
@@ -881,11 +944,15 @@ class DeviceRegistry:
                         self, "_cqrs_actuators", {}
                     )
                     cqrs_ufcs: set[str] = getattr(self, "_cqrs_ufcs", set())
-                    cqrs_sensors: dict[str, str] = getattr(self, "_cqrs_sensors", {})
+                    cqrs_sensors: dict[str, str] = getattr(
+                        self, "_cqrs_sensors", {}
+                    )
 
                     zones_dict = tcs_schema.setdefault("zones", {})
 
-                    for z_key in list(cqrs_acts.keys()) + list(cqrs_sensors.keys()):
+                    for z_key in list(cqrs_acts.keys()) + list(
+                        cqrs_sensors.keys()
+                    ):
                         if z_key.startswith(f"{tcs.id}_"):
                             z_idx = z_key.split("_")[1]
                             if z_idx not in zones_dict:

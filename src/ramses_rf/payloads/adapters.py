@@ -48,7 +48,9 @@ _FIELD_TO_LEGACY_KEY: dict[str, str] = {
 }
 
 
-def payload_to_dict(payload: PayloadBase, *, legacy: bool = False) -> dict[str, Any]:
+def payload_to_dict(
+    payload: PayloadBase, *, legacy: bool = False
+) -> dict[str, Any]:
     """Convert a PayloadBase instance into a dictionary structure.
 
     :param payload: The payload dataclass instance to convert.

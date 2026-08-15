@@ -87,7 +87,9 @@ def sch_global_traits_dict_factory(
     )
 
     heat_slugs = list(
-        str(s) for s in DEV_TYPE_MAP.slugs() if s not in DEV_TYPE_MAP.HVAC_SLUGS
+        str(s)
+        for s in DEV_TYPE_MAP.slugs()
+        if s not in DEV_TYPE_MAP.HVAC_SLUGS
     )
     SCH_TRAITS_HEAT = SCH_TRAITS_BASE.extend(
         {
@@ -363,7 +365,8 @@ class GatewayConfig:
             implicit_hgis = [
                 k
                 for k, v in self.known_list.items()
-                if not v.get(SZ_CLASS) and k[:2] == DEV_TYPE_MAP._hex(DevType.HGI)
+                if not v.get(SZ_CLASS)
+                and k[:2] == DEV_TYPE_MAP._hex(DevType.HGI)
             ]
 
             if explicit_hgis:

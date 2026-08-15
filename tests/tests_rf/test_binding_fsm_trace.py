@@ -66,7 +66,9 @@ async def test_topology_builder_trv_implicit_binding() -> None:
 
     # Verify the Prefix Heuristic fired
     promote_event = next(
-        e for e in emitted_events if e.action == TopologyAction.UPDATE_DEVICE_CLASS
+        e
+        for e in emitted_events
+        if e.action == TopologyAction.UPDATE_DEVICE_CLASS
     )
     assert promote_event.device_id == "04:111111"
 
@@ -120,4 +122,6 @@ async def test_device_registry_topology_ingestion() -> None:
     # by attempting to resolve/instantiate the devices via the factory callback.
     factory_calls = str(mock_factory.call_args_list)
     assert "04:111111" in factory_calls, "Registry did not resolve the TRV"
-    assert "01:123456" in factory_calls, "Registry did not resolve the Controller"
+    assert "01:123456" in factory_calls, (
+        "Registry did not resolve the Controller"
+    )

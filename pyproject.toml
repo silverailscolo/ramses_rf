@@ -271,6 +271,7 @@
 ## ruff ##############################################################################
 
 [tool.ruff]
+  line-length = 79
   exclude = ["tests/deprecated/*.py"]
   src = ["src", "tests"]
   target-version = "py312"
@@ -343,7 +344,7 @@
   combine-as-imports = true
   force-sort-within-sections = false
   known-first-party = ["ramses_cli", "ramses_rf", "ramses_tx"]
-  split-on-trailing-comma = false
+  split-on-trailing-comma = true
 
 
 [tool.ruff.lint.per-file-ignores]

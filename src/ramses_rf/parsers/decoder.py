@@ -9,7 +9,12 @@ import struct
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ramses_rf.const import SZ_DHW_INDEX, SZ_DOMAIN_INDEX, SZ_UFH_INDEX, SZ_ZONE_INDEX
+from ramses_rf.const import (
+    SZ_DHW_INDEX,
+    SZ_DOMAIN_INDEX,
+    SZ_UFH_INDEX,
+    SZ_ZONE_INDEX,
+)
 from ramses_rf.payloads import get_payload_class
 from ramses_rf.protocol.ramses import (
     CODE_IDX_ARE_COMPLEX,
@@ -56,7 +61,9 @@ class _LegacyAddress:
         :param address_string: The raw address string instance.
         """
         self.id = address_string
-        self.type = address_string.split(":")[0] if ":" in address_string else ""
+        self.type = (
+            address_string.split(":")[0] if ":" in address_string else ""
+        )
 
     def __eq__(self, other: Any) -> bool:
         """Evaluate equality based on address ID.
@@ -371,7 +378,9 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
     return {index_name: idx_val}
 
 
-def parse_unknown_payload(raw_payload: str, msg: _LegacyMessage) -> dict[str, Any]:
+def parse_unknown_payload(
+    raw_payload: str, msg: _LegacyMessage
+) -> dict[str, Any]:
     """Apply a generic parser for unrecognized packet codes.
 
     :param raw_payload: The raw hex string of the packet payload.
@@ -405,7 +414,9 @@ def parse_unknown_payload(raw_payload: str, msg: _LegacyMessage) -> dict[str, An
     }
 
 
-def parse_heartbeat_payload(raw_payload: str, msg: _LegacyMessage) -> dict[str, Any]:
+def parse_heartbeat_payload(
+    raw_payload: str, msg: _LegacyMessage
+) -> dict[str, Any]:
     """Parse a 1-byte heartbeat packet (payload '00').
 
     :param raw_payload: The raw packet payload value string.
@@ -458,7 +469,9 @@ class PayloadDecoder(ABC):
         :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
         if self._next_decoder:
-            return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
+            return self._next_decoder.decode(
+                dto, raw_payload, payload_len, msg
+            )
         return {}
 
 
@@ -512,7 +525,9 @@ class HeartbeatDecoder(PayloadDecoder):
             return parse_heartbeat_payload(raw_payload, msg)
 
         if self._next_decoder:
-            return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
+            return self._next_decoder.decode(
+                dto, raw_payload, payload_len, msg
+            )
         return {}
 
 
@@ -589,7 +604,9 @@ class DataclassPayloadDecoder(PayloadDecoder):
 
                 if isinstance(decoded_payload, list):
                     if dto.code == Code._000C:
-                        return self._aggregate_zone_devices(decoded_payload, msg, dto)
+                        return self._aggregate_zone_devices(
+                            decoded_payload, msg, dto
+                        )
 
                     converted_payloads: list[dict[str, Any]] = []
                     for item in decoded_payload:
@@ -597,7 +614,9 @@ class DataclassPayloadDecoder(PayloadDecoder):
                             converted_dict := _convert_to_dict(item, msg), dict
                         ):
                             converted_payloads.append(
-                                _inject_header_metadata(converted_dict, msg, dto)
+                                _inject_header_metadata(
+                                    converted_dict, msg, dto
+                                )
                             )
                         elif converted_dict is not None:
                             converted_payloads.append(converted_dict)
@@ -631,7 +650,9 @@ class DataclassPayloadDecoder(PayloadDecoder):
                 ) from err
 
         if self._next_decoder is not None:
-            return self._next_decoder.decode(dto, raw_payload, payload_len, msg)
+            return self._next_decoder.decode(
+                dto, raw_payload, payload_len, msg
+            )
         return None
 
 
@@ -691,9 +712,13 @@ class PayloadDecoderPipeline:
     def __init__(self) -> None:
         """Initialize pipeline linking specific system validation decoders."""
         self.head = HeartbeatDecoder()
-        self.head.set_next(DataclassPayloadDecoder()).set_next(LegacyParserDecoder())
+        self.head.set_next(DataclassPayloadDecoder()).set_next(
+            LegacyParserDecoder()
+        )
 
-    def decode(self, dto: PacketDTO) -> dict[str, Any] | list[dict[str, Any]] | None:
+    def decode(
+        self, dto: PacketDTO
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
         """Route tracking models cleanly through downstream chain decoders.
 
         :param dto: The network transfer packet state container model.

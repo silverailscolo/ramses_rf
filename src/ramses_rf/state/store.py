@@ -122,7 +122,9 @@ class MessageStore(MessageStoreInterface):
             # We must use a Shared Cache URI so both threads see the same data.
             if db_path == ":memory:":
                 # Unique ID ensures parallel tests don't share the same in-memory DB
-                db_path = f"file:ramses_rf_{uuid.uuid4()}?mode=memory&cache=shared"
+                db_path = (
+                    f"file:ramses_rf_{uuid.uuid4()}?mode=memory&cache=shared"
+                )
 
             # Start the Storage Worker (Write Connection)
             # This thread handles all blocking INSERT/UPDATE operations
@@ -181,7 +183,8 @@ class MessageStore(MessageStoreInterface):
             )
 
             self._housekeeping_task = asyncio.create_task(
-                self._housekeeping_loop(), name=f"{self.__class__.__name__}.housekeeper"
+                self._housekeeping_loop(),
+                name=f"{self.__class__.__name__}.housekeeper",
             )
 
     def stop(self) -> None:
@@ -202,9 +205,13 @@ class MessageStore(MessageStoreInterface):
             # Trigger a final snapshot to ensure no data is lost on shutdown
             self._worker.submit_snapshot()
             self._worker.flush(timeout=5.0)
-            is_stopped = self._worker.stop(timeout=5.0)  # Stop the background thread
+            is_stopped = self._worker.stop(
+                timeout=5.0
+            )  # Stop the background thread
             if not is_stopped:
-                _LOGGER.warning("MessageStore: SQLiteWorker shutdown timed out.")
+                _LOGGER.warning(
+                    "MessageStore: SQLiteWorker shutdown timed out."
+                )
 
         cx = getattr(self, "_cx", None)
         if cx is not None:
@@ -242,10 +249,13 @@ class MessageStore(MessageStoreInterface):
         if c_task and not c_task.done():
             return
         self._consumer_task = asyncio.create_task(
-            self._consume_loop(in_queue), name=f"{self.__class__.__name__}.consumer"
+            self._consume_loop(in_queue),
+            name=f"{self.__class__.__name__}.consumer",
         )
 
-    async def _consume_loop(self, in_queue: asyncio.Queue[CoreMessage]) -> None:
+    async def _consume_loop(
+        self, in_queue: asyncio.Queue[CoreMessage]
+    ) -> None:
         """Continuously ingest messages from the event bus queue.
 
         :param in_queue: The event bus queue.
@@ -267,10 +277,13 @@ class MessageStore(MessageStoreInterface):
                         self.add(legacy_msg)
                     except Exception as err:
                         _LOGGER.debug(
-                            "MessageStore ignored legacy malformed packet: %s", err
+                            "MessageStore ignored legacy malformed packet: %s",
+                            err,
                         )
             except Exception as err:
-                _LOGGER.error("MessageStore consumer failed to add message: %s", err)
+                _LOGGER.error(
+                    "MessageStore consumer failed to add message: %s", err
+                )
             finally:
                 in_queue.task_done()
 
@@ -284,7 +297,9 @@ class MessageStore(MessageStoreInterface):
             return
 
         def _fetch_all(conn: sqlite3.Connection) -> list[Any]:
-            return conn.execute("SELECT * FROM messages ORDER BY dtm ASC").fetchall()
+            return conn.execute(
+                "SELECT * FROM messages ORDER BY dtm ASC"
+            ).fetchall()
 
         try:
             rows = await asyncio.to_thread(_fetch_all, cx)
@@ -325,7 +340,9 @@ class MessageStore(MessageStoreInterface):
                     self._message_log[dtm_str] = msg
                     self._state_cache[msg.state_header] = msg
                 except Exception as err:
-                    _LOGGER.debug("Failed to reconstruct message for %s: %s", hdr, err)
+                    _LOGGER.debug(
+                        "Failed to reconstruct message for %s: %s", hdr, err
+                    )
         finally:
             if has_lock:
                 self._lock.release()
@@ -355,14 +372,17 @@ class MessageStore(MessageStoreInterface):
                 await self._lock.acquire()
                 # Rebuild dict keeping only newer items
                 self._message_log = OrderedDict(
-                    (k, v) for k, v in self._message_log.items() if k >= dtm_iso
+                    (k, v)
+                    for k, v in self._message_log.items()
+                    if k >= dtm_iso
                 )
 
                 valid_dtms = set(self._message_log.keys())
                 self._state_cache = {
                     m.state_header: m
                     for m in self._state_cache.values()
-                    if DtmStrT(m.dtm.isoformat(timespec="microseconds")) in valid_dtms
+                    if DtmStrT(m.dtm.isoformat(timespec="microseconds"))
+                    in valid_dtms
                 }
 
             except Exception as err:
@@ -559,7 +579,9 @@ class MessageStore(MessageStoreInterface):
         else:
             if msgs is not None:
                 for message in msgs:
-                    dtm_val = DtmStrT(message.dtm.isoformat(timespec="microseconds"))
+                    dtm_val = DtmStrT(
+                        message.dtm.isoformat(timespec="microseconds")
+                    )
                     self._message_log.pop(dtm_val, None)
                     self._state_cache.pop(message.state_header, None)
         return msgs
@@ -686,7 +708,9 @@ class MessageStore(MessageStoreInterface):
 
         return [Code(str(c)) for c in codes]
 
-    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
+    async def qry(
+        self, sql: str, parameters: tuple[str, ...]
+    ) -> tuple[Message, ...]:
         """Deprecated: Returns empty for legacy callers."""
         _LOGGER.warning(
             "Legacy qry (SQL) called. Returning empty in CQRS architecture."

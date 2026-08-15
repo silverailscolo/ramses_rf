@@ -93,7 +93,10 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
     dhw_idx = intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0))
     temperature = intent.get("temperature")
 
-    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.DHW, DevType.DHW):
+    if getattr(intent.src, "type", None) not in (
+        DEV_TYPE_MAP.DHW,
+        DevType.DHW,
+    ):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.DHW}:xxxxxx"

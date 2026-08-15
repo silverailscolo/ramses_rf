@@ -23,7 +23,9 @@ from ramses_tx.schemas import (
 SCH_PACKET_LOG_DICT = sch_packet_log_dict_factory(default_backups=7)
 SCH_SERIAL_PORT_DICT = sch_serial_port_dict_factory()
 
-SCH_GATEWAY = vol.Schema(SCH_GATEWAY_DICT | SCH_ENGINE_DICT, extra=vol.PREVENT_EXTRA)
+SCH_GATEWAY = vol.Schema(
+    SCH_GATEWAY_DICT | SCH_ENGINE_DICT, extra=vol.PREVENT_EXTRA
+)
 SCH_GLOBAL_TRAITS = vol.Schema(SCH_GLOBAL_TRAITS_DICT, extra=vol.PREVENT_EXTRA)
 SCH_PACKET_LOG = vol.Schema(SCH_PACKET_LOG_DICT, extra=vol.PREVENT_EXTRA)
 SCH_RESTORE_CACHE = vol.Schema(SCH_RESTORE_CACHE_DICT, extra=vol.PREVENT_EXTRA)
@@ -58,7 +60,9 @@ def no_duplicates_constructor(
 ) -> Any:
     """Check for duplicate keys."""
     mapping: dict[str, Any] = {}
-    _loader: Any = loader  # Bypass PyYAML typing differences between local and CI
+    _loader: Any = (
+        loader  # Bypass PyYAML typing differences between local and CI
+    )
     for key_node, value_node in node.value:
         key = _loader.construct_object(key_node, deep=deep)
         if key in mapping:
@@ -108,7 +112,9 @@ def _test_schema_good(validator: vol.Schema, config: str) -> dict:
         ) from err
     except yaml.YAMLError as err:
         test_schemas_good_failed = True
-        raise TypeError(f"should be valid YAML, but isn't: {config} ({err})") from err
+        raise TypeError(
+            f"should be valid YAML, but isn't: {config} ({err})"
+        ) from err
 
 
 GATEWAY_BAD = (
@@ -175,12 +181,16 @@ GATEWAY_GOOD = (
 
 
 @pytest.mark.parametrize("index", range(len(GATEWAY_BAD)))
-def test_gateway_bad(index: int, configs: tuple[str, ...] = GATEWAY_BAD) -> None:
+def test_gateway_bad(
+    index: int, configs: tuple[str, ...] = GATEWAY_BAD
+) -> None:
     _test_schema_bad(SCH_GATEWAY, configs[index])
 
 
 @pytest.mark.parametrize("index", range(len(GATEWAY_GOOD)))
-def test_gateway_good(index: int, configs: tuple[str, ...] = GATEWAY_GOOD) -> None:
+def test_gateway_good(
+    index: int, configs: tuple[str, ...] = GATEWAY_GOOD
+) -> None:
     _test_schema_good(SCH_GATEWAY, configs[index])
 
 
@@ -274,7 +284,9 @@ KNOWN_LIST_GOOD = (
 
 
 @pytest.mark.parametrize("index", range(len(KNOWN_LIST_BAD)))
-def test_known_list_bad(index: int, configs: tuple[str, ...] = KNOWN_LIST_BAD) -> None:
+def test_known_list_bad(
+    index: int, configs: tuple[str, ...] = KNOWN_LIST_BAD
+) -> None:
     _test_schema_bad(SCH_GLOBAL_TRAITS, configs[index])
 
 
@@ -336,7 +348,9 @@ PACKET_LOG_GOOD = (
 
 
 @pytest.mark.parametrize("index", range(len(PACKET_LOG_BAD)))
-def test_packet_log_bad(index: int, configs: tuple[str, ...] = PACKET_LOG_BAD) -> None:
+def test_packet_log_bad(
+    index: int, configs: tuple[str, ...] = PACKET_LOG_BAD
+) -> None:
     _test_schema_bad(SCH_PACKET_LOG, configs[index])
 
 
@@ -690,7 +704,9 @@ def test_schemas_vcs_good(
     _test_schema_good(SCH_GLOBAL_SCHEMAS, configs[index])
 
 
-SCHEMAS_MIXED_BAD = tuple(x + y for x in SCHEMAS_TCS_GOOD for y in SCHEMAS_VCS_BAD[1:])
+SCHEMAS_MIXED_BAD = tuple(
+    x + y for x in SCHEMAS_TCS_GOOD for y in SCHEMAS_VCS_BAD[1:]
+)
 SCHEMAS_MIXED_BAD += tuple(
     x + y for x in SCHEMAS_TCS_BAD[1:] for y in SCHEMAS_VCS_GOOD[1:]
 )
@@ -844,20 +860,22 @@ ramses_cc:
 )
 
 
-SCH_DOMAIN_CONFIG = vol.All(  # as per ramses_cc.schemas, TODO: add advanced_features
-    vol.Schema(
-        {
-            vol.Optional("ramses_rf", default={}): SCH_GATEWAY,
-            vol.Optional("scan_interval"): int,
-            vol.Optional("advanced_features", default={}): dict,
-        },
-        extra=vol.PREVENT_EXTRA,
+SCH_DOMAIN_CONFIG = (
+    vol.All(  # as per ramses_cc.schemas, TODO: add advanced_features
+        vol.Schema(
+            {
+                vol.Optional("ramses_rf", default={}): SCH_GATEWAY,
+                vol.Optional("scan_interval"): int,
+                vol.Optional("advanced_features", default={}): dict,
+            },
+            extra=vol.PREVENT_EXTRA,
+        )
+        .extend(SCH_GLOBAL_SCHEMAS_DICT)
+        .extend(SCH_GLOBAL_TRAITS_DICT)
+        .extend(SCH_PACKET_LOG_DICT)
+        .extend(SCH_RESTORE_CACHE_DICT)
+        .extend(SCH_SERIAL_PORT_DICT),
     )
-    .extend(SCH_GLOBAL_SCHEMAS_DICT)
-    .extend(SCH_GLOBAL_TRAITS_DICT)
-    .extend(SCH_PACKET_LOG_DICT)
-    .extend(SCH_RESTORE_CACHE_DICT)
-    .extend(SCH_SERIAL_PORT_DICT),
 )
 
 SCH_GLOBAL_HASS = vol.Schema(

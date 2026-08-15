@@ -13,7 +13,9 @@ from ramses_tx import Address
 def test_dhw_handler_promotes_device_class_on_1260() -> None:
     # Arrange
     events: list[TopologyChangedEvent] = []
-    handler = DhwTopologyHandler(emit_event_cb=events.append, enable_eavesdrop=True)
+    handler = DhwTopologyHandler(
+        emit_event_cb=events.append, enable_eavesdrop=True
+    )
 
     mock_header = MagicMock()
     mock_header.code = Code._1260

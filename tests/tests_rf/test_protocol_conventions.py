@@ -48,7 +48,9 @@ class LiteralAuditor(ast.NodeVisitor):
         val = node.value
         line_num = node.lineno
         line_content = (
-            self.lines[line_num - 1].strip() if line_num <= len(self.lines) else ""
+            self.lines[line_num - 1].strip()
+            if line_num <= len(self.lines)
+            else ""
         )
 
         if line_content.startswith('"""') or line_content.startswith("'''"):
@@ -71,7 +73,10 @@ class LiteralAuditor(ast.NodeVisitor):
         elif val in KNOWN_CODES:
             if f"_{val} =" in line_content or f"_{val}=" in line_content:
                 return
-            if "DEVICE_ID_REGEX" in line_content or "RAW_LINE_REGEX" in line_content:
+            if (
+                "DEVICE_ID_REGEX" in line_content
+                or "RAW_LINE_REGEX" in line_content
+            ):
                 return
             if (
                 "hex_to_temp" in line_content

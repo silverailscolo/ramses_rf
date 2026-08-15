@@ -15,7 +15,12 @@ def test_build_set_dhw_params_parity() -> None:
         src=Address("01:123456"),
         dst=Address("01:123456"),
         action=Action.SET_DHW_PARAMS,
-        data={"dhw_idx": "00", "setpoint": 50.0, "overrun": 5, "differential": 1.0},
+        data={
+            "dhw_idx": "00",
+            "setpoint": 50.0,
+            "overrun": 5,
+            "differential": 1.0,
+        },
     )
 
     # Act

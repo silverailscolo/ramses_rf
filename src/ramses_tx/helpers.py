@@ -106,7 +106,10 @@ ReturnValueDictT: TypeAlias = Mapping[str, float | str | None]
 class _FILE_TIME(ctypes.Structure):
     """Data structure for GetSystemTimePreciseAsFileTime()."""
 
-    _fields_ = [("dwLowDateTime", ctypes.c_uint), ("dwHighDateTime", ctypes.c_uint)]
+    _fields_ = [
+        ("dwLowDateTime", ctypes.c_uint),
+        ("dwHighDateTime", ctypes.c_uint),
+    ]
 
 
 file_time = _FILE_TIME()
@@ -124,8 +127,12 @@ def timestamp() -> float:
     # see: https://www.python.org/dev/peps/pep-0564/
     if sys.platform == "win32":
         # Windows uses a different epoch (1601-01-01)
-        ctypes.windll.kernel32.GetSystemTimePreciseAsFileTime(ctypes.byref(file_time))
-        _time = (file_time.dwLowDateTime + (file_time.dwHighDateTime << 32)) / 1e7
+        ctypes.windll.kernel32.GetSystemTimePreciseAsFileTime(
+            ctypes.byref(file_time)
+        )
+        _time = (
+            file_time.dwLowDateTime + (file_time.dwHighDateTime << 32)
+        ) / 1e7
         return float(_time - 134774 * 24 * 60 * 60)
     else:
         # Linux/macOS uses the Unix epoch (1970-01-01)
@@ -201,7 +208,9 @@ def hex_to_date(value: HexStr8) -> str | None:  # YY-MM-DD
     :raises ValueError: If input is not an 8-character hex string.
     """
     if not isinstance(value, str) or len(value) != 8:
-        raise ValueError(f"Invalid value: {value}, is not an 8-char hex string")
+        raise ValueError(
+            f"Invalid value: {value}, is not an 8-char hex string"
+        )
     if value == "FFFFFFFF":
         return None
     return dt(
@@ -250,7 +259,9 @@ def hex_from_double(value: float | None, factor: int = 1) -> HexStr4:
     if value is None:
         return "7FFF"
     if not isinstance(value, float | int):
-        raise ValueError(f"Invalid value: {value}, is not a double (a float/int)")
+        raise ValueError(
+            f"Invalid value: {value}, is not a double (a float/int)"
+        )
     return f"{int(value * factor):04X}"
 
 
@@ -267,7 +278,9 @@ def hex_to_dtm(value: HexStr12 | HexStr14) -> str | None:  # from parsers
     #      0400041C0A07E3  (...HH:MM:SS)    for sync_datetime
 
     if not isinstance(value, str) or len(value) not in (12, 14):
-        raise ValueError(f"Invalid value: {value}, is not a 12/14-char hex string")
+        raise ValueError(
+            f"Invalid value: {value}, is not a 12/14-char hex string"
+        )
     if value[-12:] == "FF" * 6:
         return None
     if len(value) == 12:
@@ -331,7 +344,9 @@ def hex_to_dts(value: HexStr12) -> str | None:
     :raises ValueError: If input is not a 12-character hex string.
     """
     if not isinstance(value, str) or len(value) != 12:
-        raise ValueError(f"Invalid value: {value}, is not a 12-char hex string")
+        raise ValueError(
+            f"Invalid value: {value}, is not a 12-char hex string"
+        )
     if value == "00000000007F":
         return None
     _seqx = int(value, 16)
@@ -391,7 +406,9 @@ def hex_to_flag8(byte: HexByte, lsb: bool = False) -> list[int]:
     :raises ValueError: If input is not a 2-character hex string.
     """
     if not isinstance(byte, str) or len(byte) != 2:
-        raise ValueError(f"Invalid value: '{byte}', is not a 2-char hex string")
+        raise ValueError(
+            f"Invalid value: '{byte}', is not a 2-char hex string"
+        )
     if lsb:  # make LSB is first bit
         return list((int(byte, 16) & (1 << x)) >> x for x in range(8))
     return list((int(byte, 16) & (1 << x)) >> x for x in reversed(range(8)))
@@ -409,9 +426,13 @@ def hex_from_flag8(flags: Iterable[int], lsb: bool = False) -> HexByte:
     :raises ValueError: If flags is not a list or tuple of 8 bits.
     """
     if not isinstance(flags, list | tuple) or len(flags) != 8:
-        raise ValueError(f"Invalid value: '{flags}', is not a list/tuple of 8 bits")
+        raise ValueError(
+            f"Invalid value: '{flags}', is not a list/tuple of 8 bits"
+        )
     if lsb:  # LSB is first bit
-        return f"{sum(x << bit_index for bit_index, x in enumerate(flags)):02X}"
+        return (
+            f"{sum(x << bit_index for bit_index, x in enumerate(flags)):02X}"
+        )
     return f"{sum(x << bit_index for bit_index, x in enumerate(reversed(flags))):02X}"
 
 

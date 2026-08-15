@@ -55,7 +55,9 @@ async def test_dhw_zone_setpoint_and_mode_hydrated() -> None:
         # The OTB (10:047707) also sends 10A0 with setpoint=40.0 — must be
         # ignored for the DhwZone.
         setpoint = await tcs.dhw.setpoint()
-        assert setpoint == 50.0, f"DHW setpoint not hydrated/clobbered: {setpoint!r}"
+        assert setpoint == 50.0, (
+            f"DHW setpoint not hydrated/clobbered: {setpoint!r}"
+        )
 
         # 1260 from the DhwSensor (07:017494) reports temperature=29.27
         # The OTB sends 1260 with temperature=None — must be ignored.
@@ -88,7 +90,9 @@ async def test_dhw_zone_relay_demand_and_failsafe_hydrated() -> None:
 
         # 0008 F914 from the Controller: relay_demand=0.1 for DHW domain
         relay_demand = await tcs.dhw.relay_demand()
-        assert relay_demand == 0.1, f"DHW relay_demand not hydrated: {relay_demand!r}"
+        assert relay_demand == 0.1, (
+            f"DHW relay_demand not hydrated: {relay_demand!r}"
+        )
 
         # 0009 array with F9 domain: failsafe_enabled=False
         relay_failsafe = await tcs.dhw.relay_failsafe()

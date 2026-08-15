@@ -194,7 +194,9 @@ def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
     if not is_dhw_src:
         return None
 
-    tcs = getattr(source_device, "tcs", None) or getattr(source_device, "_tcs", None)
+    tcs = getattr(source_device, "tcs", None) or getattr(
+        source_device, "_tcs", None
+    )
     if tcs is None and hasattr(source_device, "dhw"):
         tcs = source_device
     if tcs is None and hasattr(source_device, "_gateway"):
@@ -287,13 +289,19 @@ def _resolve_logical_targets(
         domain_id = p["domain_id"]
         if domain_id == "FC" and tcs not in targets:
             targets.append(tcs)
-        elif domain_id in ("FA", "F9") and getattr(tcs, "dhw", None) is not None:
+        elif (
+            domain_id in ("FA", "F9") and getattr(tcs, "dhw", None) is not None
+        ):
             if tcs.dhw not in targets:
                 targets.append(tcs.dhw)
 
     # 6. System-level opcodes (2E04/0100/313F) target the TCS directly.
     #    These packets have no domain_id/zone_idx, so steps 4/5 miss them.
-    if msg.code in (Code._2E04, Code._0100, Code._313F) and tcs and tcs not in targets:
+    if (
+        msg.code in (Code._2E04, Code._0100, Code._313F)
+        and tcs
+        and tcs not in targets
+    ):
         targets.append(tcs)
 
     # 7. DHW opcodes (1260/10A0/1F41) carry no domain_id/zone_idx, so steps
@@ -388,7 +396,14 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     :param msg: Message envelope.
     :type msg: Message
     """
-    if getattr(target, "_SLUG", "") in ("CTL", "BDR", "TRV", "OTB", "UFC", "DHW"):
+    if getattr(target, "_SLUG", "") in (
+        "CTL",
+        "BDR",
+        "TRV",
+        "OTB",
+        "UFC",
+        "DHW",
+    ):
         return
 
     hvac_state = getattr(target, "hvac_state", None)
@@ -429,7 +444,9 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         "dewpoint_temp",
     ]
 
-    _NULL_HUMIDITY_FIELDS = frozenset({SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY})
+    _NULL_HUMIDITY_FIELDS = frozenset(
+        {SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY}
+    )
 
     updates: dict[str, Any] = {}
     for field_name in fields:
@@ -466,7 +483,11 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         updates["filter_remaining_days"] = p[SZ_REMAINING_DAYS]
     if SZ_REMAINING_PERCENT in p and p[SZ_REMAINING_PERCENT] is not None:
         updates["filter_remaining_percent"] = p[SZ_REMAINING_PERCENT]
-    if SZ_MINUTES in p and msg.code == Code._22F3 and p[SZ_MINUTES] is not None:
+    if (
+        SZ_MINUTES in p
+        and msg.code == Code._22F3
+        and p[SZ_MINUTES] is not None
+    ):
         updates["boost_timer_mins"] = p[SZ_MINUTES]
     req_speed = p.get(SZ_REQUEST_SPEED, p.get("req_speed"))
     if req_speed is not None:
@@ -542,7 +563,9 @@ def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     target.apply_state_update(event)
 
 
-def _update_temperature_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+def _update_temperature_state(
+    target: Any, p: dict[str, Any], msg: Message
+) -> None:
     """Translate temperature data into a frozen StateUpdatedEvent.
 
     :param target: Target entity to update.
@@ -564,7 +587,10 @@ def _update_temperature_state(target: Any, p: dict[str, Any], msg: Message) -> N
 
         # Legacy Parity: Physical sensors only track their own local sensor readings.
         # We must ignore Zone temperature syncs sent TO them by the Controller.
-        if getattr(target, "_SLUG", "") in ("TRV", "THM") and src_id != target_id:
+        if (
+            getattr(target, "_SLUG", "") in ("TRV", "THM")
+            and src_id != target_id
+        ):
             pass
         else:
             updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
@@ -605,16 +631,24 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if SZ_HEAT_DEMAND in p:
         if slug in ("CTL", "UFC"):
             if (
-                p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx")
+                p.get(SZ_DOMAIN_INDEX)
+                or p.get("domain_id")
+                or p.get("domain_idx")
             ) == "FC":
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-        elif "ufx_idx" not in p and SZ_UFH_INDEX not in p and "ufh_idx" not in p:
+        elif (
+            "ufx_idx" not in p and SZ_UFH_INDEX not in p and "ufh_idx" not in p
+        ):
             updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
     if SZ_RELAY_DEMAND in p:
         if (
             slug == "UFC"
-            and (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx"))
+            and (
+                p.get(SZ_DOMAIN_INDEX)
+                or p.get("domain_id")
+                or p.get("domain_idx")
+            )
             != "FC"
         ):
             pass
@@ -638,7 +672,9 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     target.apply_state_update(event)
 
 
-def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+def _update_faultlog_state(
+    target: Any, p: dict[str, Any], msg: Message
+) -> None:
     """Translate 0418 fault log data into a frozen StateUpdatedEvent.
 
     This handles the immutable tuple appending tracking required by the
@@ -664,7 +700,9 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
         entry = FaultLogEntry.from_msg(msg)
         current_entries = getattr(target.state, "entries", ())
         # Append to the immutable tuple, safely removing stale matching timestamps
-        filtered = [e for e in current_entries if e.timestamp != entry.timestamp]
+        filtered = [
+            e for e in current_entries if e.timestamp != entry.timestamp
+        ]
         new_entries = tuple(filtered) + (entry,)
 
         new_state = dataclasses.replace(target.state, entries=new_entries)
@@ -677,7 +715,9 @@ def _update_faultlog_state(target: Any, p: dict[str, Any], msg: Message) -> None
         )
         target.apply_state_update(event)
     except (AttributeError, KeyError, TypeError, ValueError) as err:
-        _LOGGER.warning("Failed to process fault log entry from msg %s: %s", msg, err)
+        _LOGGER.warning(
+            "Failed to process fault log entry from msg %s: %s", msg, err
+        )
 
 
 def _route_2411_to_fan(gateway: Gateway, msg: Message) -> None:
@@ -725,7 +765,12 @@ def _route_2411_to_fan(gateway: Gateway, msg: Message) -> None:
         try:
             candidate_dev._handle_2411_message(msg)
             candidate_dev._handle_initialized_callback()
-        except (exc.RamsesException, AttributeError, TypeError, ValueError) as err:
+        except (
+            exc.RamsesException,
+            AttributeError,
+            TypeError,
+            ValueError,
+        ) as err:
             _LOGGER.error(
                 "Failed to route 2411 message to ventilator %s: %s",
                 candidate_dev.id,
@@ -733,7 +778,9 @@ def _route_2411_to_fan(gateway: Gateway, msg: Message) -> None:
             )
 
 
-def _update_schedule_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+def _update_schedule_state(
+    target: Any, p: dict[str, Any], msg: Message
+) -> None:
     """Route 0006 version and 0404 fragment packets to Schedule read-models.
 
     :param target: Target entity.
@@ -793,9 +840,15 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
     if msg.code == Code._2411:
         _route_2411_to_fan(gateway, msg)
 
-    raw_payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
-    payloads = [p.to_dict() if hasattr(p, "to_dict") else p for p in raw_payloads]
-    with contextlib.suppress(exc.DeviceNotFoundError, exc.SchemaInconsistentError):
+    raw_payloads = (
+        msg.payload if isinstance(msg.payload, list) else [msg.payload]
+    )
+    payloads = [
+        p.to_dict() if hasattr(p, "to_dict") else p for p in raw_payloads
+    ]
+    with contextlib.suppress(
+        exc.DeviceNotFoundError, exc.SchemaInconsistentError
+    ):
         for payload in payloads:
             if isinstance(payload, dict):
                 await update_topology_schema_state(gateway, payload, msg)

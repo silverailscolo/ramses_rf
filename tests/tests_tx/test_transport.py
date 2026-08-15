@@ -17,7 +17,11 @@ from ramses_tx.typing import SerPortNameT
 
 
 async def _async_callback_factory(
-    protocol: Any, io_writer: Any = None, *, config: TransportConfig, **kwargs: Any
+    protocol: Any,
+    io_writer: Any = None,
+    *,
+    config: TransportConfig,
+    **kwargs: Any,
 ) -> CallbackTransport:
     """Async wrapper for CallbackTransport to satisfy transport_factory signature."""
     return CallbackTransport(protocol, io_writer, config=config, **kwargs)
@@ -28,10 +32,14 @@ async def test_callback_transport_handshake() -> None:
     mock_protocol = Mock()
     mock_writer = AsyncMock()
 
-    transport = CallbackTransport(mock_protocol, mock_writer, config=TransportConfig())
+    transport = CallbackTransport(
+        mock_protocol, mock_writer, config=TransportConfig()
+    )
 
     # Assert handshake called immediately
-    mock_protocol.connection_made.assert_called_once_with(transport, ramses=True)
+    mock_protocol.connection_made.assert_called_once_with(
+        transport, ramses=True
+    )
 
 
 async def test_callback_transport_handshake_idempotency() -> None:
@@ -39,7 +47,9 @@ async def test_callback_transport_handshake_idempotency() -> None:
     mock_protocol = Mock()
     mock_writer = AsyncMock()
 
-    transport = CallbackTransport(mock_protocol, mock_writer, config=TransportConfig())
+    transport = CallbackTransport(
+        mock_protocol, mock_writer, config=TransportConfig()
+    )
 
     # Verify initial call
     mock_protocol.connection_made.assert_called_once()
@@ -68,7 +78,9 @@ async def test_callback_transport_autostart_default() -> None:
     mock_protocol = Mock()
     mock_writer = AsyncMock()
 
-    transport = CallbackTransport(mock_protocol, mock_writer, config=TransportConfig())
+    transport = CallbackTransport(
+        mock_protocol, mock_writer, config=TransportConfig()
+    )
 
     assert transport.is_reading() is False
 
@@ -94,7 +106,9 @@ async def test_factory_routes_autostart_to_custom_constructor() -> None:
     # NOTE: transport_factory awaits the constructor, so we pass an async callable via partial
     transport = await transport_factory(
         mock_protocol,
-        transport_constructor=partial(_async_callback_factory, io_writer=mock_writer),
+        transport_constructor=partial(
+            _async_callback_factory, io_writer=mock_writer
+        ),
         config=TransportConfig(autostart=True),
     )
     assert isinstance(transport, CallbackTransport)
@@ -103,7 +117,9 @@ async def test_factory_routes_autostart_to_custom_constructor() -> None:
     # 2. Test with autostart=False (default)
     transport_paused = await transport_factory(
         mock_protocol,
-        transport_constructor=partial(_async_callback_factory, io_writer=mock_writer),
+        transport_constructor=partial(
+            _async_callback_factory, io_writer=mock_writer
+        ),
         config=TransportConfig(autostart=False),
     )
     assert isinstance(transport_paused, CallbackTransport)
@@ -121,8 +137,12 @@ async def test_factory_passes_config_to_standard_transport() -> None:
 
     # We patch where they are USED (factory.py), not where they are DEFINED
     with (
-        patch("ramses_tx.transport.factory.PortTransport") as MockPortTransport,
-        patch("ramses_tx.transport.factory.serial_for_url") as mock_serial_for_url,
+        patch(
+            "ramses_tx.transport.factory.PortTransport"
+        ) as MockPortTransport,
+        patch(
+            "ramses_tx.transport.factory.serial_for_url"
+        ) as mock_serial_for_url,
     ):
         # Setup the mock serial object to pass validity checks
         mock_serial = Mock()
@@ -155,7 +175,9 @@ async def test_factory_passes_config_to_mqtt_transport() -> None:
     mock_protocol.wait_for_connection_made = AsyncMock()
 
     # We patch where it is USED (factory.py)
-    with patch("ramses_tx.transport.factory.MqttTransport") as MockMqttTransport:
+    with patch(
+        "ramses_tx.transport.factory.MqttTransport"
+    ) as MockMqttTransport:
         # valid-looking config so factory enters the MQTT branch
         # We must provide port_config because transport_factory validates it
         # is not None even for MQTT
@@ -188,7 +210,9 @@ async def test_port_transport_close_robustness() -> None:
 
     # Define a side_effect for SerialTransport.__init__ that sets required attributes
     # PortTransport expects _loop to be set by the parent class
-    def mock_init(self: Any, loop: Any, protocol: Any, serial_instance: Any) -> None:
+    def mock_init(
+        self: Any, loop: Any, protocol: Any, serial_instance: Any
+    ) -> None:
         self._loop = loop or asyncio.get_event_loop()
         self._protocol = protocol
         self._serial = serial_instance  # Set backing attribute directly
@@ -199,7 +223,9 @@ async def test_port_transport_close_robustness() -> None:
         "ramses_tx.transport.port.serial_asyncio.SerialTransport.__init__",
         new=mock_init,
     ):
-        transport = PortTransport(mock_serial, mock_protocol, config=TransportConfig())
+        transport = PortTransport(
+            mock_serial, mock_protocol, config=TransportConfig()
+        )
 
         # Pre-condition: _init_task is created asynchronously, so it shouldn't exist yet
         # because we haven't yielded to the event loop
@@ -219,7 +245,9 @@ async def test_is_hgi80_async_file_check() -> None:
 
     # 1. Test: File exists (should return False due to 'evofw3' in name)
     # We patch os.path.exists where it is used (port.py)
-    with patch("ramses_tx.discovery.os.path.exists", return_value=True) as mock_exists:
+    with patch(
+        "ramses_tx.discovery.os.path.exists", return_value=True
+    ) as mock_exists:
         result = await is_hgi80(test_port)
 
         # Assert: os.path.exists was called with the correct path
@@ -229,7 +257,9 @@ async def test_is_hgi80_async_file_check() -> None:
 
     # 2. Test: File does NOT exist (should raise TransportSerialError)
     # We patch os.path.exists to return False
-    with patch("ramses_tx.discovery.os.path.exists", return_value=False) as mock_exists:
+    with patch(
+        "ramses_tx.discovery.os.path.exists", return_value=False
+    ) as mock_exists:
         with pytest.raises(exc.TransportSerialError):
             await is_hgi80(test_port)
 
@@ -291,7 +321,8 @@ async def test_pkt_read_raises_transport_error_on_runtime_error() -> None:
     from ramses_tx import Packet
 
     pkt = Packet.from_file(
-        "2026-07-13T04:40:36", "045  I --- 18:130140 32:022222 --:------ 22F2 001 00"
+        "2026-07-13T04:40:36",
+        "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
     )
 
     try:
@@ -363,7 +394,9 @@ async def test_write_frame_dispatches_outbound_dto_with_is_tx_true() -> None:
 
     class DummyTransport(_FullTransport):
         def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            super().__init__(
+                config=TransportConfig(disable_sending=False), loop=loop
+            )
             self._protocol = Mock()
 
         async def _write_frame(self, frame: str) -> None:
@@ -383,7 +416,9 @@ async def test_write_frame_dispatches_outbound_dto_with_is_tx_true() -> None:
     assert dto.verb == Verb.RQ
 
 
-async def test_is_recent_tx_matches_hgi80_echo_with_addr_substitution() -> None:
+async def test_is_recent_tx_matches_hgi80_echo_with_addr_substitution() -> (
+    None
+):
     """_is_recent_tx must match HGI80 echoes where addr1 has been substituted.
 
     The HGI80 hardware replaces the placeholder 18:000730 with its real ID in
@@ -395,7 +430,9 @@ async def test_is_recent_tx_matches_hgi80_echo_with_addr_substitution() -> None:
 
     class DummyTransport(_FullTransport):
         def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            super().__init__(
+                config=TransportConfig(disable_sending=False), loop=loop
+            )
             self._protocol = Mock()
 
         async def _write_frame(self, frame: str) -> None:
@@ -411,7 +448,9 @@ async def test_is_recent_tx_matches_hgi80_echo_with_addr_substitution() -> None:
     await transport.write_frame(tx_frame)
 
     # HGI80 echo arrives with the real HGI ID (18:002965) as addr1.
-    echo_frame = f"000  W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
+    echo_frame = (
+        f"000  W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
+    )
     assert transport._is_recent_tx(echo_frame) is True
 
 
@@ -421,7 +460,9 @@ async def test_is_recent_tx_matches_evofw3_echo_directly() -> None:
 
     class DummyTransport(_FullTransport):
         def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            super().__init__(
+                config=TransportConfig(disable_sending=False), loop=loop
+            )
             self._protocol = Mock()
 
         async def _write_frame(self, frame: str) -> None:
@@ -434,7 +475,9 @@ async def test_is_recent_tx_matches_evofw3_echo_directly() -> None:
     tx_frame = f" W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
     await transport.write_frame(tx_frame)
 
-    echo_frame = f"000  W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
+    echo_frame = (
+        f"000  W --- 18:002965 21:057310 --:------ 01FF 026 {_payload}"
+    )
     assert transport._is_recent_tx(echo_frame) is True
 
 
@@ -444,7 +487,9 @@ async def test_is_recent_tx_rejects_unrelated_frame() -> None:
 
     class DummyTransport(_FullTransport):
         def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            super().__init__(
+                config=TransportConfig(disable_sending=False), loop=loop
+            )
             self._protocol = Mock()
 
         async def _write_frame(self, frame: str) -> None:
@@ -458,7 +503,9 @@ async def test_is_recent_tx_rejects_unrelated_frame() -> None:
     await transport.write_frame(tx_frame)
 
     # Completely different frame
-    other_frame = "000  I --- 21:057310 18:002965 --:------ 22C9 006 00086608CA02"
+    other_frame = (
+        "000  I --- 21:057310 18:002965 --:------ 22C9 006 00086608CA02"
+    )
     assert transport._is_recent_tx(other_frame) is False
 
 

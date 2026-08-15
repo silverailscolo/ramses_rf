@@ -91,11 +91,15 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # _FullTransport and _ReadTransport break the cooperative MRO chain by
         # calling their parent classes directly rather than via super(). We
         # therefore initialise both halves of the diamond explicitly.
-        _ZigbeeTransportAbstractor.__init__(self, zigbee_url, protocol, loop=loop)
+        _ZigbeeTransportAbstractor.__init__(
+            self, zigbee_url, protocol, loop=loop
+        )
         _FullTransport.__init__(self, config=config, loop=loop)
 
         self._ieee = self._zigbee_url.netloc
-        path_parts = [p for p in self._zigbee_url.path.strip("/").split("/") if p]
+        path_parts = [
+            p for p in self._zigbee_url.path.strip("/").split("/") if p
+        ]
 
         if not self._ieee or len(path_parts) < 6:
             raise exc.TransportSourceInvalid(
@@ -107,7 +111,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._cluster_id = int(
             path_parts[0], 16 if path_parts[0].startswith("0x") else 10
         )
-        self._attr_id = int(path_parts[1], 16 if path_parts[1].startswith("0x") else 10)
+        self._attr_id = int(
+            path_parts[1], 16 if path_parts[1].startswith("0x") else 10
+        )
         self._endpoint_id = int(float(path_parts[2]))
         self._write_cluster_id = int(
             path_parts[3], 16 if path_parts[3].startswith("0x") else 10
@@ -125,7 +131,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         # URL query; this removes the attribute-path fallback and keeps
         # handling simple and consistent.
         self._use_command_mode = True
-        self._cmd_id = int(command_str, 16 if command_str.startswith("0x") else 10)
+        self._cmd_id = int(
+            command_str, 16 if command_str.startswith("0x") else 10
+        )
 
         # For custom commands, we listen on client-side cluster where Zigbee stack
         # delivers incoming commands from the ESP's client cluster
@@ -173,7 +181,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             from zigpy.types import EUI64
 
             if not self._hass:
-                raise exc.TransportZigbeeError("Home Assistant instance not available")
+                raise exc.TransportZigbeeError(
+                    "Home Assistant instance not available"
+                )
 
             gateway = await self._wait_for_gateway()
             ieee = EUI64.convert(self._ieee)
@@ -186,7 +196,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 device = gateway.application_controller.devices.get(ieee)
 
             if not device:
-                raise exc.TransportZigbeeError(f"Zigbee device {self._ieee} not found")
+                raise exc.TransportZigbeeError(
+                    f"Zigbee device {self._ieee} not found"
+                )
 
             self._zha_gateway = gateway
             self._device = device
@@ -352,7 +364,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             RuntimeError,
             exc.RamsesException,
         ) as err:
-            _LOGGER.exception("Failed to schedule application ACK (cmd): %s", err)
+            _LOGGER.exception(
+                "Failed to schedule application ACK (cmd): %s", err
+            )
 
     async def _write_frame(self, frame: str) -> None:
         """Write a frame to the Zigbee device.
@@ -476,7 +490,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             gateway_proxy = (
                 getattr(zha_data, "gateway_proxy", None) if zha_data else None
             )
-            gateway = getattr(gateway_proxy, "gateway", None) if gateway_proxy else None
+            gateway = (
+                getattr(gateway_proxy, "gateway", None)
+                if gateway_proxy
+                else None
+            )
             if gateway:
                 return gateway
             await asyncio.sleep(self._GATEWAY_POLL_INTERVAL)
@@ -526,10 +544,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         stale_keys = [
             key
             for key, chunk_buffer in self._chunk_buffers.items()
-            if (now - chunk_buffer["timestamp"]).total_seconds() > self._CHUNK_TIMEOUT
+            if (now - chunk_buffer["timestamp"]).total_seconds()
+            > self._CHUNK_TIMEOUT
         ]
         for key in stale_keys:
-            _LOGGER.warning("Dropping stale incomplete chunk buffer for %s", key)
+            _LOGGER.warning(
+                "Dropping stale incomplete chunk buffer for %s", key
+            )
             del self._chunk_buffers[key]
 
     def _parse_chunk(self, payload: str) -> tuple[int, int, str] | None:
@@ -614,7 +635,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 RuntimeError,
                 exc.RamsesException,
             ) as err:
-                _LOGGER.exception("Failed to schedule application ACK: %s", err)
+                _LOGGER.exception(
+                    "Failed to schedule application ACK: %s", err
+                )
 
         if chunk_buffer["received"] < total:
             # Not complete yet
@@ -685,7 +708,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             return cluster
 
         if not hasattr(device, "endpoints"):
-            raise exc.TransportZigbeeError("Zigbee device has no endpoints map")
+            raise exc.TransportZigbeeError(
+                "Zigbee device has no endpoints map"
+            )
 
         endpoint = device.endpoints.get(endpoint_id)
         if endpoint is None:
@@ -740,7 +765,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 ep_map = {}
                 for ep_id, ep_obj in getattr(device, "endpoints", {}).items():
                     try:
-                        in_clusters = list(getattr(ep_obj, "in_clusters", {}).keys())
+                        in_clusters = list(
+                            getattr(ep_obj, "in_clusters", {}).keys()
+                        )
                     except (
                         KeyError,
                         ValueError,
@@ -754,7 +781,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             else []
                         )
                     try:
-                        out_clusters = list(getattr(ep_obj, "out_clusters", {}).keys())
+                        out_clusters = list(
+                            getattr(ep_obj, "out_clusters", {}).keys()
+                        )
                     except (
                         KeyError,
                         ValueError,
@@ -767,9 +796,18 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             if hasattr(ep_obj, "out_clusters")
                             else []
                         )
-                    ep_map[int(ep_id)] = {"in": in_clusters, "out": out_clusters}
+                    ep_map[int(ep_id)] = {
+                        "in": in_clusters,
+                        "out": out_clusters,
+                    }
                 _LOGGER.debug("ZHA device endpoints map: %s", ep_map)
-            except (KeyError, ValueError, TypeError, AttributeError, RuntimeError):
+            except (
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+            ):
                 _LOGGER.debug("Failed to dump device endpoints for debugging")
 
             found = False
@@ -816,7 +854,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 ep_map = {}
                 for ep_id, ep_obj in getattr(device, "endpoints", {}).items():
                     try:
-                        in_clusters = list(getattr(ep_obj, "in_clusters", {}).keys())
+                        in_clusters = list(
+                            getattr(ep_obj, "in_clusters", {}).keys()
+                        )
                     except (
                         KeyError,
                         ValueError,
@@ -830,7 +870,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             else []
                         )
                     try:
-                        out_clusters = list(getattr(ep_obj, "out_clusters", {}).keys())
+                        out_clusters = list(
+                            getattr(ep_obj, "out_clusters", {}).keys()
+                        )
                     except (
                         KeyError,
                         ValueError,
@@ -843,9 +885,18 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             if hasattr(ep_obj, "out_clusters")
                             else []
                         )
-                    ep_map[int(ep_id)] = {"in": in_clusters, "out": out_clusters}
+                    ep_map[int(ep_id)] = {
+                        "in": in_clusters,
+                        "out": out_clusters,
+                    }
                 _LOGGER.debug("ZHA device endpoints map: %s", ep_map)
-            except (KeyError, ValueError, TypeError, AttributeError, RuntimeError):
+            except (
+                KeyError,
+                ValueError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+            ):
                 _LOGGER.debug("Failed to dump device endpoints for debugging")
 
             found = False
@@ -944,7 +995,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._write_cluster = cluster
         return cluster
 
-    def _get_active_write_cluster(self, force_refresh: bool = False) -> Any | None:
+    def _get_active_write_cluster(
+        self, force_refresh: bool = False
+    ) -> Any | None:
         """Return the write cluster, refreshing if explicitly requested or missing.
 
         :param force_refresh: Whether to enforce refreshing the object.
@@ -1034,7 +1087,11 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         if isinstance(args, (bytes, bytearray)):
             raw = bytes(args)
-        elif isinstance(args, list) and args and all(isinstance(x, int) for x in args):
+        elif (
+            isinstance(args, list)
+            and args
+            and all(isinstance(x, int) for x in args)
+        ):
             raw = bytes(args)
         elif isinstance(args, (list, tuple)) and args:
             return self._decode_command_payload(args[0])
@@ -1098,7 +1155,10 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         tried_clusters: list[Any] = []
         candidate_clusters: list[Any] = []
 
-        if command_override is not None and getattr(self, "_cluster", None) is not None:
+        if (
+            command_override is not None
+            and getattr(self, "_cluster", None) is not None
+        ):
             candidate_clusters.append(self._cluster)
         candidate_clusters.append(cluster)
 
@@ -1177,7 +1237,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     # Fallback to generic command API if present
                     if hasattr(candidate, "command"):
                         try:
-                            await candidate.command(use_cmd, chunk, expect_reply=False)
+                            await candidate.command(
+                                use_cmd, chunk, expect_reply=False
+                            )
                             return
                         except asyncio.CancelledError:
                             raise
@@ -1213,7 +1275,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                             server_map,
                         )
                     except (AttributeError, KeyError) as err:
-                        _LOGGER.exception("Failed to dump command maps: %s", err)
+                        _LOGGER.exception(
+                            "Failed to dump command maps: %s", err
+                        )
                 except asyncio.CancelledError:
                     raise
                 except Exception as err:
@@ -1244,9 +1308,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         if last_err is None:
             raise exc.TransportZigbeeError("Failed to send Zigbee command")
-        raise exc.TransportZigbeeError("Failed to send Zigbee command") from last_err
+        raise exc.TransportZigbeeError(
+            "Failed to send Zigbee command"
+        ) from last_err
 
-    async def _send_chunk(self, chunk: str, sequence_number: int, total: int) -> None:
+    async def _send_chunk(
+        self, chunk: str, sequence_number: int, total: int
+    ) -> None:
         """Write a string chunk to a Zigbee attribute.
 
         :param chunk: The string payload.
@@ -1296,7 +1364,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     err,
                 )
                 if attempt == 1:
-                    refreshed = self._get_active_write_cluster(force_refresh=True)
+                    refreshed = self._get_active_write_cluster(
+                        force_refresh=True
+                    )
                     if refreshed and refreshed is not cluster:
                         cluster = refreshed
                         continue
@@ -1304,9 +1374,13 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
         if last_err is None:
             raise exc.TransportZigbeeError("Failed to send Zigbee chunk")
-        raise exc.TransportZigbeeError("Failed to send Zigbee chunk") from last_err
+        raise exc.TransportZigbeeError(
+            "Failed to send Zigbee chunk"
+        ) from last_err
 
-    async def _send_unacked(self, text: str, target_cluster: Any | None = None) -> None:
+    async def _send_unacked(
+        self, text: str, target_cluster: Any | None = None
+    ) -> None:
         """Send a ZCL payload back without expecting an app-level ACK.
 
         When `target_cluster` is provided, the send will use that cluster object and
@@ -1336,7 +1410,9 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     # This respects the cluster role (server/client) under the hood and
                     # avoids relying on presence of `server_command`/`client_command`
                     try:
-                        await target_cluster.command(use_cmd, chunk, expect_reply=False)
+                        await target_cluster.command(
+                            use_cmd, chunk, expect_reply=False
+                        )
                     except asyncio.CancelledError:
                         raise
                     except Exception as err:

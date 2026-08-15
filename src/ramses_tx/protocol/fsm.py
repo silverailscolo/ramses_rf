@@ -93,7 +93,9 @@ class ProtocolContext(StateMachineInterface):
         self._expiry_timer: asyncio.Task[None] | None = None
         self._state: _ProtocolStateT = None  # type: ignore[assignment]
 
-        self._send_fnc: Callable[[CommandDTO], Coroutine[Any, Any, None]] = None  # type: ignore[assignment]
+        self._send_fnc: Callable[[CommandDTO], Coroutine[Any, Any, None]] = (
+            None  # type: ignore[assignment]
+        )
 
         # Track send_fnc_wrapper tasks so they can be cancelled on teardown.
         # These are created by _send_cmd() via loop.create_task() and are NOT
@@ -111,7 +113,10 @@ class ProtocolContext(StateMachineInterface):
             return msg + ">"
         if self._qos_mgr.tx_count == 0:
             return msg + ", tx_count=0/0>"
-        return msg + f", tx_count={self._qos_mgr.tx_count}/{self._qos_mgr.tx_limit}>"
+        return (
+            msg
+            + f", tx_count={self._qos_mgr.tx_count}/{self._qos_mgr.tx_limit}>"
+        )
 
     # Properties to maintain backward compatibility with the test suite
     @property
@@ -209,7 +214,9 @@ class ProtocolContext(StateMachineInterface):
             if isinstance(self._state, IsInIdle):
                 self._loop.call_soon_threadsafe(self._check_buffer_for_cmd)
             elif isinstance(self._state, WantEcho):
-                self._expiry_timer = self._loop.create_task(expire_state_on_timeout())
+                self._expiry_timer = self._loop.create_task(
+                    expire_state_on_timeout()
+                )
 
         if self._expiry_timer is not None:
             self._expiry_timer.cancel("Changing state")
@@ -223,7 +230,9 @@ class ProtocolContext(StateMachineInterface):
             _LOGGER.debug(
                 f"FSM state changed {transition}: no active future (ctx={self})"
             )
-        elif self._qos_mgr.fut.cancelled() and not isinstance(self._state, IsInIdle):
+        elif self._qos_mgr.fut.cancelled() and not isinstance(
+            self._state, IsInIdle
+        ):
             _LOGGER.debug(
                 f"FSM state changed {transition}: future cancelled (expired={expired}, ctx={self})"
             )
@@ -244,14 +253,18 @@ class ProtocolContext(StateMachineInterface):
                 self._qos_mgr.fut.set_result(result)
         elif expired:
             _LOGGER.debug(
-                "FSM state changed %s: timer expired (ctx=%s)", transition, self
+                "FSM state changed %s: timer expired (ctx=%s)",
+                transition,
+                self,
             )
             if not self._qos_mgr.fut.done():
                 self._qos_mgr.fut.set_exception(
                     ProtocolSendFailed(f"{self}: Exceeded maximum retries")
                 )
         else:
-            _LOGGER.debug("FSM state changed %s: successful (ctx=%s)", transition, self)
+            _LOGGER.debug(
+                "FSM state changed %s: successful (ctx=%s)", transition, self
+            )
 
         prev_state = self._state
         self._state = state_class(self)
@@ -320,7 +333,9 @@ class ProtocolContext(StateMachineInterface):
         self._send_fnc = send_fnc
 
         if isinstance(self._state, Inactive):
-            raise ProtocolSendFailed(f"{self}: Send failed (no active transport?)")
+            raise ProtocolSendFailed(
+                f"{self}: Send failed (no active transport?)"
+            )
 
         fut = self._qos_mgr.enqueue(priority, command, qos)
 
@@ -345,7 +360,9 @@ class ProtocolContext(StateMachineInterface):
         try:
             packet = fut.result()
             if packet is None:
-                raise ProtocolSendFailed(f"{self}: Send failed: FSM returned None")
+                raise ProtocolSendFailed(
+                    f"{self}: Send failed: FSM returned None"
+                )
             return packet
         except ProtocolSendFailed:
             raise
@@ -378,13 +395,21 @@ class ProtocolContext(StateMachineInterface):
                 lower = td(seconds=0.010 * 0.8)
                 upper = lower + td(seconds=0.084)
                 p_dtm = (
-                    p.dtm.replace(tzinfo=None) if p.dtm.tzinfo is not None else p.dtm
+                    p.dtm.replace(tzinfo=None)
+                    if p.dtm.tzinfo is not None
+                    else p.dtm
                 )
                 now = dt_now()
-                now_dtm = now.replace(tzinfo=None) if now.tzinfo is not None else now
+                now_dtm = (
+                    now.replace(tzinfo=None) if now.tzinfo is not None else now
+                )
                 return bool(
                     lower
-                    < (p_dtm + td(seconds=int(p.payload[2:6], 16) / 10) - now_dtm)
+                    < (
+                        p_dtm
+                        + td(seconds=int(p.payload[2:6], 16) / 10)
+                        - now_dtm
+                    )
                     < upper
                 )
 
@@ -451,7 +476,9 @@ class ProtocolStateBase:
             self._context.set_state(Inactive)
             return
 
-        self._context.set_state(Inactive, exception=TransportError("Connection lost"))
+        self._context.set_state(
+            Inactive, exception=TransportError("Connection lost")
+        )
 
     def pkt_rcvd(self, packet: Packet) -> None:
         """Raise a NotImplementedError."""
@@ -465,9 +492,13 @@ class ProtocolStateBase:
         """Do nothing."""
         pass
 
-    def cmd_sent(self, command: CommandDTO, is_retry: bool | None = None) -> None:
+    def cmd_sent(
+        self, command: CommandDTO, is_retry: bool | None = None
+    ) -> None:
         """Raise an error as default states cannot send commands."""
-        raise ProtocolFsmError(f"Invalid state to send a command: {self._context}")
+        raise ProtocolFsmError(
+            f"Invalid state to send a command: {self._context}"
+        )
 
 
 class Inactive(ProtocolStateBase):
@@ -480,7 +511,9 @@ class Inactive(ProtocolStateBase):
     def pkt_rcvd(self, packet: Packet) -> None:
         """Raise an exception, as a packet is not expected in this state."""
         if packet.code != Code._PUZZ:
-            _LOGGER.warning("%s: Invalid state to receive a packet", self._context)
+            _LOGGER.warning(
+                "%s: Invalid state to receive a packet", self._context
+            )
 
 
 class IsInIdle(ProtocolStateBase):
@@ -490,7 +523,9 @@ class IsInIdle(ProtocolStateBase):
         """Do nothing as we're not expecting an echo, nor a reply."""
         pass
 
-    def cmd_sent(self, command: CommandDTO, is_retry: bool | None = None) -> None:
+    def cmd_sent(
+        self, command: CommandDTO, is_retry: bool | None = None
+    ) -> None:
         """Transition to WantEcho."""
         self._sent_cmd = command
 
@@ -498,9 +533,15 @@ class IsInIdle(ProtocolStateBase):
             hgi_id = self._context._protocol.hgi_id
             patched_cmd = dataclasses.replace(
                 command,
-                addr1=command.addr1 if command.addr1 != HGI_DEVICE_ID else hgi_id,
-                addr2=command.addr2 if command.addr2 != HGI_DEVICE_ID else hgi_id,
-                addr3=command.addr3 if command.addr3 != HGI_DEVICE_ID else hgi_id,
+                addr1=command.addr1
+                if command.addr1 != HGI_DEVICE_ID
+                else hgi_id,
+                addr2=command.addr2
+                if command.addr2 != HGI_DEVICE_ID
+                else hgi_id,
+                addr3=command.addr3
+                if command.addr3 != HGI_DEVICE_ID
+                else hgi_id,
             )
             self._sent_cmd = patched_cmd  # update the tracked cmd
         self._context.set_state(WantEcho)
@@ -532,7 +573,9 @@ class WantEcho(ProtocolStateBase):
         if HGI_DEVICE_ID in pkt_hdr:
             assert packet._hdr_ is not None
             pkt__hdr = HeaderT(
-                packet._hdr_.replace(HGI_DEVICE_ID, self._context._protocol.hgi_id)
+                packet._hdr_.replace(
+                    HGI_DEVICE_ID, self._context._protocol.hgi_id
+                )
             )
         else:
             pkt__hdr = pkt_hdr
@@ -543,10 +586,14 @@ class WantEcho(ProtocolStateBase):
         self._echo_pkt = packet
         self._context.set_state(IsInIdle, result=packet)
 
-    def cmd_sent(self, command: CommandDTO, is_retry: bool | None = None) -> None:
+    def cmd_sent(
+        self, command: CommandDTO, is_retry: bool | None = None
+    ) -> None:
         """Transition to WantEcho (i.e. a retransmit)."""
         pass
 
 
 _ProtocolStateT: TypeAlias = Inactive | IsInIdle | WantEcho
-_ProtocolStateClassT: TypeAlias = type[Inactive] | type[IsInIdle] | type[WantEcho]
+_ProtocolStateClassT: TypeAlias = (
+    type[Inactive] | type[IsInIdle] | type[WantEcho]
+)

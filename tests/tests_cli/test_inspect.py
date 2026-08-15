@@ -67,7 +67,9 @@ def test_dissect_payload_blocks_with_skip() -> None:
     payload_hex = "000007000000000001000000"
 
     # Act
-    blocks = dissect_payload_blocks(payload_hex, block_size_bytes=4, skip_bytes=3)
+    blocks = dissect_payload_blocks(
+        payload_hex, block_size_bytes=4, skip_bytes=3
+    )
 
     # Assert
     assert "word_1" in blocks
@@ -188,7 +190,9 @@ async def test_cli_decode_command_bare_hex() -> None:
     payload = "0000070000000000010000000000000001000000018A00"
 
     # Act
-    result = await runner.invoke(cli, ["decode", payload, "--code", str(Code._2411)])
+    result = await runner.invoke(
+        cli, ["decode", payload, "--code", str(Code._2411)]
+    )
 
     # Assert
     assert result.exit_code == 0
