@@ -28,7 +28,7 @@ def test_parser_0004_includes_zone_idx() -> None:
     # zone 0B, name "Bedroom 5"
     payload = "0B00426564726F6F6D20350000000000000000000000"
     # Act
-    cls_0004 = get_payload_class("0004")
+    cls_0004 = get_payload_class(Code._0004)
     assert cls_0004 is not None
     p_obj = cls_0004.from_bytes(bytes.fromhex(payload))
     assert isinstance(p_obj, PayloadBase)
@@ -42,7 +42,7 @@ def test_parser_0004_includes_zone_idx() -> None:
 def test_parser_0004_zone_idx_is_first_byte() -> None:
     """Verify zone_idx extraction across multiple zone indices."""
     # Arrange & Act & Assert
-    cls_0004 = get_payload_class("0004")
+    cls_0004 = get_payload_class(Code._0004)
     assert cls_0004 is not None
     for zone_idx in ("00", "01", "05", "0A", "0B"):
         payload = f"{zone_idx}00436F756E67650000000000000000000000000000"
@@ -56,7 +56,7 @@ def test_parser_0004_null_name_returns_empty_dict() -> None:
     """Verify empty dict returned when name payload is null sentinel."""
     # Arrange
     payload = "08007F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F"
-    cls_0004 = get_payload_class("0004")
+    cls_0004 = get_payload_class(Code._0004)
     assert cls_0004 is not None
 
     # Act
@@ -72,7 +72,7 @@ def test_parser_0004_all_zero_name() -> None:
     """Verify empty string returned when name payload is all zeros."""
     # Arrange
     payload = "06000000000000000000000000000000000000000000"
-    cls_0004 = get_payload_class("0004")
+    cls_0004 = get_payload_class(Code._0004)
     assert cls_0004 is not None
 
     # Act
@@ -92,7 +92,7 @@ def test_parser_12c0_parses_celsius_correctly() -> None:
     """Verify parsing of temperature in Celsius."""
     # Arrange
     payload = "002801"
-    cls_12c0 = get_payload_class("12C0")
+    cls_12c0 = get_payload_class(Code._12C0)
     assert cls_12c0 is not None
 
     # Act
@@ -109,7 +109,7 @@ def test_parser_12c0_normalises_fahrenheit_to_celsius() -> None:
     """Verify temperature in Fahrenheit normalises to Celsius."""
     # Arrange
     payload = "004400"
-    cls_12c0 = get_payload_class("12C0")
+    cls_12c0 = get_payload_class(Code._12C0)
     assert cls_12c0 is not None
 
     # Act
@@ -126,7 +126,7 @@ def test_parser_12c0_handles_null_temperature() -> None:
     """Verify null temperature sentinel returns None."""
     # Arrange
     payload = "008001"
-    cls_12c0 = get_payload_class("12C0")
+    cls_12c0 = get_payload_class(Code._12C0)
     assert cls_12c0 is not None
 
     # Act
@@ -175,7 +175,7 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
         ),
     ]
 
-    cls_1fc9 = get_payload_class("1FC9")
+    cls_1fc9 = get_payload_class(Code._1FC9)
     assert cls_1fc9 is not None
 
     for payload_hex, verb, src_id, dst_id, expected_phase in test_cases:

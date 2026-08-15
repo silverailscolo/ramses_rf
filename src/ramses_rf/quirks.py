@@ -29,10 +29,11 @@ from typing import Any
 
 from ramses_rf.const import SZ_REL_HUMIDITY
 from ramses_rf.models import HvacState
+from ramses_tx.const import Code
 
 
 def apply_hvac_quirks(
-    payload: dict[str, Any], current_state: HvacState | None, msg_code: str
+    payload: dict[str, Any], current_state: HvacState | None, msg_code: Code | str
 ) -> dict[str, Any]:
     """Resolve stateful FSM conflicts and structural anomalies for HVAC packets.
 
@@ -45,7 +46,7 @@ def apply_hvac_quirks(
     :param current_state: The existing Read-Model for the device, if any.
     :type current_state: HvacState | None
     :param msg_code: The hex opcode of the incoming message.
-    :type msg_code: str
+    :type msg_code: Code | str
     :return: The safely mutated telemetry dictionary.
     :rtype: dict[str, Any]
     """
@@ -66,7 +67,7 @@ def apply_hvac_quirks(
     # HvacState has no supply_humidity field, so idx=01's rel_humidity is
     # dropped (not in dispatcher field list). idx=02's outdoor_humidity is
     # already correct and needs no remapping.
-    if msg_code == "12A0":
+    if msg_code == Code._12A0:
         index = mutated.get("hvac_idx", "00")
         if index == "00":
             if "temperature" in mutated:
@@ -105,7 +106,7 @@ def apply_hvac_quirks(
     # (physically impossible on Earth). Normalise to None so both
     # ingestion paths (dispatcher and StateProjector) filter it out.
     # See ramses_cc#742.
-    if msg_code == "31DA":
+    if msg_code == Code._31DA:
         if mutated.get("indoor_humidity") == 0.0:
             mutated["indoor_humidity"] = None
         if mutated.get("outdoor_humidity") == 0.0:
@@ -127,7 +128,7 @@ def apply_hvac_quirks(
     # Drop any fan_mode that is a 2-char hex string (raw byte). The
     # authoritative semantic fan_mode comes from 22F4 (polled) or 22F1
     # (command reply). See ramses_cc issue 723.
-    if msg_code == "31D9" and "fan_mode" in mutated:
+    if msg_code == Code._31D9 and "fan_mode" in mutated:
         mode_value = mutated["fan_mode"]
         if isinstance(mode_value, str) and len(mode_value) == 2:
             try:
@@ -142,7 +143,7 @@ def apply_hvac_quirks(
     # QUIRK: Itho 31DA 'exhaust_fan_speed' Overwrite Prevention
     # Itho transmits actual fan speed in 31D9, but transmits 31DA with
     # a default zero byte [38:40]. We drop the zero if valid state exists.
-    if msg_code == "31DA" and "exhaust_fan_speed" in mutated:
+    if msg_code == Code._31DA and "exhaust_fan_speed" in mutated:
         if mutated["exhaust_fan_speed"] == 0.0:
             if (
                 current_state.exhaust_fan_speed is not None
@@ -156,7 +157,7 @@ def apply_hvac_quirks(
     # We must not overwrite a valid, rich string from 22F1/22F4/31D9 with:
     #   - "" or "off"  (blank/null markers)
     #   - "-unknown 0xNN-"  (unrecognised codes, e.g. Ventura's 0x1F)
-    if msg_code == "31DA" and "fan_info" in mutated:
+    if msg_code == Code._31DA and "fan_info" in mutated:
         incoming = mutated["fan_info"]
         if incoming in ("off", "") or (
             isinstance(incoming, str) and incoming.startswith("-unknown")

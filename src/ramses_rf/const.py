@@ -32,7 +32,7 @@ from ramses_tx.const import (
     FaultType as FaultType,
     IndexT as IndexT,
     SystemType as SystemType,
-    VerbT as VerbT,
+    Verb as Verb,
     __dev_mode__ as __dev_mode__,
     attr_dict_factory as attr_dict_factory,
 )

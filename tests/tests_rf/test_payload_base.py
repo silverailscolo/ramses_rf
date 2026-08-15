@@ -54,9 +54,9 @@ def test_payload_registry_registration() -> None:
 
     # Assert
     assert Code._3150 in registry
-    assert "3150" in registry
+    assert Code._3150 in registry
     assert registry.get(Code._3150) is DummyPayload
-    assert registry.get("3150") is DummyPayload
+    assert registry.get(Code._3150) is DummyPayload
     assert registry.get("9999") is None
 
 

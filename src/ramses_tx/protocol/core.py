@@ -17,6 +17,7 @@ from ..const import (
     DEFAULT_NUM_REPEATS,
     MAX_GAP_DURATION,
     MAX_NUM_REPEATS,
+    RQ,
     SZ_ACTIVE_HGI,
     SZ_IS_EVOFW3,
     Priority,
@@ -243,7 +244,7 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         qos = qos or DEFAULT_QOS
 
-        if command.verb.strip() == "RQ" or (qos is not None and qos.max_retries > 0):
+        if command.verb.strip() == RQ or (qos is not None and qos.max_retries > 0):
             num_repeats = 0
 
         if _DBG_DISABLE_QOS:

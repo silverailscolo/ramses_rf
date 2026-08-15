@@ -23,7 +23,7 @@ from .const import (
     W_,
     Code,
     Priority,
-    VerbT,
+    Verb,
 )
 from .dtos import CommandDTO, PacketDTO
 from .packet import Packet
@@ -39,7 +39,6 @@ from .typing import PktLogConfigT, PortConfigT, QosParams
 
 if TYPE_CHECKING:
     from .config import EngineConfig
-    from .const import VerbT
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
     from .typing import DeviceIdT, MsgHandlerT, PayloadT
@@ -325,7 +324,7 @@ class Engine:
 
     @staticmethod
     def create_cmd(
-        verb: VerbT,
+        verb: Verb,
         device_id: DeviceIdT,
         code: Code,
         payload: PayloadT,
@@ -336,7 +335,7 @@ class Engine:
         """Create a CommandDTO with appropriate addressing.
 
         :param verb: Command verb (I, RQ, RP, W).
-        :type verb: VerbT
+        :type verb: Verb
         :param device_id: Target or source device identifier.
         :type device_id: DeviceIdT
         :param code: Two-byte opcode.
@@ -350,7 +349,7 @@ class Engine:
         :returns: Constructed command DTO.
         :rtype: CommandDTO
         """
-        # Normalise plain-string verbs to VerbT so that the frame is formatted
+        # Normalise plain-string verbs to Verb so that the frame is formatted
         # correctly (e.g. "W" → " W").  The old Command._from_attrs did this;
         # the migration to CommandDTO dropped it, causing malformed frames
         # that the HGI80 silently drops (issue 835).

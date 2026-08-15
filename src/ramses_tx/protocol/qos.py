@@ -27,7 +27,7 @@ from ..packet import Packet
 from ..typing import QosParams
 
 if TYPE_CHECKING:
-    from ..const import Code, VerbT
+    from ..const import Code, Verb
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -232,8 +232,18 @@ class Qos:
         )
 
     @classmethod  # constructor from verb|code pair
-    def verb_code(cls, verb: VerbT, code: str | Code, **kwargs: Any) -> Qos:
-        """Constructor to create a QoS based upon the defaults for a verb|code pair."""
+    def verb_code(cls, verb: Verb, code: str | Code, **kwargs: Any) -> Qos:
+        """Create a QoS based upon the defaults for a verb|code pair.
+
+        :param verb: The protocol verb.
+        :type verb: Verb
+        :param code: The protocol command code.
+        :type code: str | Code
+        :param kwargs: Additional QoS parameter overrides.
+        :type kwargs: Any
+        :returns: Configured Qos instance.
+        :rtype: Qos
+        """
         default_qos = cls.DEFAULT_QOS_TABLE.get(
             f"{verb}|{code}",
             (

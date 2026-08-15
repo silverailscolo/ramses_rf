@@ -2,12 +2,12 @@
 """RAMSES RF - Test the various helper APIs."""
 
 # TODO: add test for ramses_tx.frame.pkt_header()
-
 import logging
 from datetime import datetime as dt
 
 import pytest
 
+from ramses_rf.const import Code
 from ramses_rf.messages import Message
 from ramses_rf.systems.zones import _transform
 from ramses_tx.exceptions import CommandInvalid, PacketInvalid
@@ -299,7 +299,7 @@ def test_helper_field_parsers() -> None:
     for val in ("FF", "00", "C8"):
         assert val == hex_from_bool(hex_to_bool(val))
 
-    for val in ("7FFF", "0000", "0001", "0010", "0100", "1000"):
+    for val in (Code._PUZZ, "0000", Code._0001, "0010", Code._0100, "1000"):
         assert val == hex_from_double(hex_to_double(val))
         assert val == hex_from_double(hex_to_double(val, factor=100), factor=100)
 
@@ -329,7 +329,7 @@ def test_helper_field_parsers() -> None:
         assert val == hex_from_flag8(hex_to_flag8(val))
         assert val == hex_from_flag8(hex_to_flag8(val, lsb=True), lsb=True)
 
-    for val in ("7FFF", "7EFF", "0000", "0010", "0200", "D000"):
+    for val in (Code._PUZZ, "7EFF", "0000", "0010", "0200", "D000"):
         assert val == hex_from_temp(hex_to_temp(val))
 
     for tmp in (None, False, -127.99, -100, -22.5, -1.53, 0, 1.53, 22.5, 100, 127.98):

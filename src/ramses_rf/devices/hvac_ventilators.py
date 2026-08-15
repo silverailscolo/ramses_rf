@@ -48,6 +48,7 @@ from ramses_rf.helpers import shrink
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Priority
+from ramses_tx.const import Code, Verb
 from ramses_tx.typing import DeviceIdT
 
 from .dev_base import DeviceHvac
@@ -367,11 +368,11 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
             from_id = self.hgi.id if self.hgi else "18:000730"
             cmd = CommandDTO(
-                verb="RQ",
+                verb=Verb.RQ,
                 addr1=from_id,
                 addr2=self.id,
                 addr3="--:------",
-                code="2411",
+                code=Code._2411,
                 payload="000001",  # Param 0x01 (common across Orcon/Itho)
             )
             await self._gateway.async_send_cmd(cmd)

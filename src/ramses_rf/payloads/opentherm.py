@@ -8,6 +8,8 @@ import struct
 from dataclasses import dataclass
 from typing import Any, ClassVar, Self
 
+from ramses_tx.const import Code
+
 from ..protocol.opentherm import (
     EN,
     SZ_DESCRIPTION,
@@ -23,7 +25,7 @@ from .registry import register_payload
 # ----------------------------------------------------------------------
 
 
-@register_payload("3220")
+@register_payload(Code._3220)
 class OpenThermMsgPayload(PayloadBase):
     """Master payload dispatcher for Opcode 3220.
 
@@ -253,7 +255,7 @@ OpenThermMsgPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("0150")
+@register_payload(Code._0150)
 @dataclass(frozen=True, slots=True)
 class OpenThermStatusPayload(PayloadBase):
     """OpenTherm status payload (Opcode 0150).
@@ -305,7 +307,7 @@ class OpenThermStatusPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1098")
+@register_payload(Code._1098)
 @dataclass(frozen=True, slots=True)
 class OpenThermSetpointPayload(PayloadBase):
     """OpenTherm control setpoint payload (Opcode 1098).
@@ -354,7 +356,7 @@ class OpenThermSetpointPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("10B0")
+@register_payload(Code._10B0)
 @dataclass(frozen=True, slots=True)
 class OpenThermTemperaturePayload(PayloadBase):
     """OpenTherm boiler water temperature payload (Opcode 10B0).
@@ -403,7 +405,7 @@ class OpenThermTemperaturePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1FD0")
+@register_payload(Code._1FD0)
 @dataclass(frozen=True, slots=True)
 class OpenThermDiagnosticsPayload(PayloadBase):
     """OpenTherm diagnostics payload (Opcode 1FD0).
@@ -455,7 +457,7 @@ class OpenThermDiagnosticsPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1FD4")
+@register_payload(Code._1FD4)
 class OpenThermFaultFlagsPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 1FD4.
 
@@ -583,7 +585,7 @@ OpenThermFaultFlagsPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("2400")
+@register_payload(Code._2400)
 @dataclass(frozen=True, slots=True)
 class OpenThermConfigPayload(PayloadBase):
     """OpenTherm configuration parameter payload (Opcode 2400).
@@ -639,7 +641,7 @@ class OpenThermConfigPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2401")
+@register_payload(Code._2401)
 @dataclass(frozen=True, slots=True)
 class OpenThermParamsPayload(PayloadBase):
     """OpenTherm operational parameters payload (Opcode 2401).
@@ -703,7 +705,7 @@ class OpenThermParamsPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2410")
+@register_payload(Code._2410)
 @dataclass(frozen=True, slots=True)
 class OpenThermCapacityPayload(PayloadBase):
     """OpenTherm capacity payload (Opcode 2410).
@@ -759,7 +761,7 @@ class OpenThermCapacityPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2420")
+@register_payload(Code._2420)
 @dataclass(frozen=True, slots=True)
 class OpenThermModulationPayload(PayloadBase):
     """OpenTherm modulation payload (Opcode 2420).
@@ -811,7 +813,7 @@ class OpenThermModulationPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("3221")
+@register_payload(Code._3221)
 @dataclass(frozen=True, slots=True)
 class OpenThermFrameExPayload(PayloadBase):
     """OpenTherm extended frame payload (Opcode 3221).
@@ -878,7 +880,7 @@ class OpenThermFrameExPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("3223")
+@register_payload(Code._3223)
 @dataclass(frozen=True, slots=True)
 class OpenThermBridgeStatusPayload(PayloadBase):
     """OpenTherm bridge operational status payload (Opcode 3223).
@@ -940,7 +942,7 @@ class OpenThermBridgeStatusPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("3210")
+@register_payload(Code._3210)
 @dataclass(frozen=True, slots=True)
 class ReturnTempPayload(PayloadBase):
     """OpenTherm boiler return water temperature payload (Opcode 3210).

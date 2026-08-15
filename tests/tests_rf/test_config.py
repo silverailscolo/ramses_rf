@@ -20,6 +20,7 @@ from ramses_rf.config import (
     strip_and_map_traits,
     strip_traits,
 )
+from ramses_rf.const import Code
 from ramses_rf.gateway import Gateway
 from ramses_rf.typing import DeviceIdT
 
@@ -29,7 +30,7 @@ class TestStripAndMapTraits:
 
     def test_strip_commands(self) -> None:
         """_commands is stripped (ramses_rf doesn't need it)."""
-        traits = {"_commands": {"on": "22F1"}, "class": "FAN"}
+        traits = {"_commands": {"on": Code._22F1}, "class": "FAN"}
         result = strip_and_map_traits(traits)
         assert "_commands" not in result
         assert result["class"] == "FAN"
@@ -99,7 +100,7 @@ class TestStripAndMapTraits:
     def test_mixed_keys(self) -> None:
         """Mixed _ and non-_ keys: strip unknown, map known, pass through rest."""
         traits = {
-            "_commands": {"on": "22F1"},
+            "_commands": {"on": Code._22F1},
             "_bound": "32:153001",
             "_disabled": True,
             "class": "FAN",
@@ -189,7 +190,11 @@ class TestStripAndMapSchema:
         """Schema with device entries: strip+map each device's traits."""
         schema = {
             "main_tcs": "01:145038",
-            "32:153001": {"_commands": {"on": "22F1"}, "_class": "REM", "_faked": True},
+            "32:153001": {
+                "_commands": {"on": Code._22F1},
+                "_class": "REM",
+                "_faked": True,
+            },
             "30:160000": {"_bound": "32:153001", "_scheme": "vasco", "class": "FAN"},
         }
         result = strip_and_map_schema(schema)
@@ -256,7 +261,7 @@ class TestStripTraits:
 
     def test_strips_underscore_keys(self) -> None:
         """All _-prefixed keys are removed."""
-        traits = {"_commands": {"on": "22F1"}, "_name": "My REM", "class": "FAN"}
+        traits = {"_commands": {"on": Code._22F1}, "_name": "My REM", "class": "FAN"}
         result = strip_traits(traits)
         assert result == {"class": "FAN"}
 

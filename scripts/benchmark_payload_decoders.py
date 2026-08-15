@@ -16,6 +16,7 @@ from typing import Any
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
+from ramses_tx.const import RQ
 from ramses_tx.packet import Packet
 
 # Default path to the regression packets fixture file
@@ -80,12 +81,12 @@ def run_benchmark(fixture_path: Path) -> int:
     variant_skips: list[tuple[int, str, str, str, str]] = []
     tested_count: int = 0
 
-    rq_count: int = sum(1 for _num, pkt in packets if pkt.verb == "RQ")
+    rq_count: int = sum(1 for _num, pkt in packets if pkt.verb == RQ)
 
     target_packets: list[tuple[int, Packet]] = [
         (line_num, pkt)
         for line_num, pkt in packets
-        if PAYLOAD_REGISTRY.get(pkt.code) is not None and pkt.verb != "RQ"
+        if PAYLOAD_REGISTRY.get(pkt.code) is not None and pkt.verb != RQ
     ]
 
     # Stage 1: Legacy Dictionary Parser Decoding

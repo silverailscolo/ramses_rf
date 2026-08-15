@@ -22,7 +22,7 @@ from .const import (
     SZ_REPEAT_COUNT,
     IndexT,
     Priority,
-    VerbT,
+    Verb,
 )
 from .discovery import is_hgi80
 from .dtos import CommandDTO, PacketDTO
@@ -75,7 +75,7 @@ __all__ = [
     #
     "DeviceIdT",
     "IndexT",
-    "VerbT",
+    "Verb",
     #
     "Address",
     "Code",

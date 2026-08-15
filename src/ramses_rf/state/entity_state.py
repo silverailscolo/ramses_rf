@@ -18,7 +18,7 @@ from ramses_rf.const import SZ_DHW_INDEX, SZ_DOMAIN_INDEX, SZ_ZONE_INDEX
 from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
-from ramses_tx.const import I_, RP, RQ, Code, VerbT
+from ramses_tx.const import I_, RP, RQ, Code, Verb
 from ramses_tx.typing import PayDictT
 
 from .. import exceptions as exc
@@ -56,7 +56,7 @@ class StateCache:
         return self._cache.get(header)
 
     def get_by_routing_key(
-        self, code: Code | str, verb: VerbT | str, context: Any
+        self, code: Code | str, verb: Verb | str, context: Any
     ) -> Message | None:
         """Fallback O(N) lookup when source_id is unknown."""
         context_str = RoutingContext(context).as_string
@@ -79,7 +79,7 @@ class StateCache:
 
     def get_records(
         self,
-    ) -> list[tuple[Code | str, VerbT | str, Any, Message]]:
+    ) -> list[tuple[Code | str, Verb | str, Any, Message]]:
         """Retrieve all cache records as tuples of (code, verb, ctx, msg)."""
         return [(h.code, h.verb, h.context.value, m) for h, m in self._cache.items()]
 
@@ -222,7 +222,7 @@ class EntityState:
         self,
         device_id: str,
         code: Code | str | None = None,
-        verb: str = " I",
+        verb: Verb | str = I_,
         payload: str = "00",
     ) -> None:
         """Add a (dummy) record to the central SQLite MessageStore."""
@@ -369,7 +369,7 @@ class EntityState:
     async def _msg_value_code(
         self,
         code: Code | str | tuple[Code | str, ...],
-        verb: VerbT | str | None = None,
+        verb: Verb | str | None = None,
         key: str | None = None,
         **kwargs: Any,
     ) -> Any:
@@ -381,7 +381,7 @@ class EntityState:
         self._sync_state()
 
         if verb:
-            if verb == VerbT.RQ or verb == "RQ":
+            if verb == Verb.RQ:
                 assert not isinstance(code, tuple), (
                     f"Unsupported: using a keyword ({key}) with verb RQ"
                 )
@@ -592,9 +592,7 @@ class EntityState:
         dhw_idx = kwargs.get("dhw_idx")
 
         allowed_verbs = (
-            (kwargs.get("verb"),)
-            if kwargs.get("verb") in (" I", "RP")
-            else (" I", "RP")
+            (kwargs.get("verb"),) if kwargs.get("verb") in (I_, RP) else (I_, RP)
         )
 
         cache = await self._build_state_cache()

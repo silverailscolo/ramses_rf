@@ -625,7 +625,7 @@ async def test_controller_discovers_system_mode(mock_gwy: MagicMock) -> None:
 
     # Assert
     # 5. Assert that 2E04 (System Mode) is scheduled for polling
-    assert "2E04" in schedule, (
+    assert Code._2E04 in schedule, (
         "Diagnosis Failed: Controller did not resolve a 2E04 (System Mode) "
         "polling schedule."
     )
@@ -807,7 +807,7 @@ async def test_battery_status_includes_key_when_level_is_known() -> None:
 def test_parser_31d9_orcon_prevents_speed_collision() -> None:
     """Verify Orcon 31D9 payload parses correctly without speed collision with 31DA."""
     payload_hex = "001A040020202020202020202020202008"
-    cls = get_payload_class("31D9")
+    cls = get_payload_class(Code._31D9)
     assert cls is not None
     instance = cls.from_bytes(bytes.fromhex(payload_hex))
     assert instance is not None

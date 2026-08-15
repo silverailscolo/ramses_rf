@@ -5,6 +5,7 @@ from datetime import UTC, datetime as dt, timedelta as td
 
 import pytest
 
+from ramses_rf.const import Code, Verb
 from ramses_rf.pipeline.reassembly import ReassemblyBuffer
 from ramses_tx.dtos import PacketDTO
 
@@ -47,7 +48,7 @@ async def test_passthrough_normal_packet(base_time: dt) -> None:
     buffer = ReassemblyBuffer(in_q, out_q)
     await buffer.start()
     # Send a normal temperature packet (30C9)
-    normal_pkt = create_dto(" I", "30C9", "0001C8", base_time)
+    normal_pkt = create_dto(Verb.I_, Code._30C9, "0001C8", base_time)
 
     # Act
     await in_q.put(normal_pkt)
@@ -55,7 +56,7 @@ async def test_passthrough_normal_packet(base_time: dt) -> None:
 
     # Assert
     # It should appear in the output queue immediately
-    assert out_pkt.code == "30C9"
+    assert out_pkt.code == Code._30C9
     assert out_pkt.payload == "0001C8"
 
     await buffer.stop()
@@ -71,10 +72,10 @@ async def test_successful_stitching(base_time: dt) -> None:
     await buffer.start()
 
     # Send the first fragment (000A)
-    frag1 = create_dto(" I", "000A", "001201F409C4", base_time)
+    frag1 = create_dto(Verb.I_, Code._000A, "001201F409C4", base_time)
     # Send the second fragment 1 second later
     time_2 = base_time + td(seconds=1)
-    frag2 = create_dto(" I", "000A", "081001F409C4", time_2)
+    frag2 = create_dto(Verb.I_, Code._000A, "081001F409C4", time_2)
 
     # Act
     await in_q.put(frag1)
@@ -87,7 +88,7 @@ async def test_successful_stitching(base_time: dt) -> None:
 
     # Assert
     assert is_empty_after_frag1 is True
-    assert out_pkt.code == "000A"
+    assert out_pkt.code == Code._000A
     assert out_pkt.payload == "001201F409C4081001F409C4"
     assert out_pkt.length == "012"
     assert out_pkt.timestamp == time_2
@@ -105,7 +106,7 @@ async def test_timeout_flush(base_time: dt) -> None:
     buffer = ReassemblyBuffer(in_q, out_q, array_timeout=0.1)
     await buffer.start()
     # Send the first fragment
-    frag1 = create_dto(" I", "000A", "001201F4", base_time)
+    frag1 = create_dto(Verb.I_, Code._000A, "001201F4", base_time)
 
     # Act
     await in_q.put(frag1)
@@ -138,11 +139,11 @@ async def test_unrelated_packet_does_not_abort_reassembly(
     await buffer.start()
 
     # Send the first fragment of a 000A array
-    frag1 = create_dto(" I", "000A", "001201F4", base_time)
+    frag1 = create_dto(Verb.I_, Code._000A, "001201F4", base_time)
     # An unrelated 30C9 packet arrives between the two fragments
-    unrelated = create_dto(" I", "30C9", "0001C8", base_time + td(seconds=1))
+    unrelated = create_dto(Verb.I_, Code._30C9, "0001C8", base_time + td(seconds=1))
     # The second 000A fragment now arrives and completes the array
-    frag2 = create_dto(" I", "000A", "081001F409C4", base_time + td(seconds=2))
+    frag2 = create_dto(Verb.I_, Code._000A, "081001F409C4", base_time + td(seconds=2))
 
     # Act
     await in_q.put(frag1)
@@ -161,11 +162,11 @@ async def test_unrelated_packet_does_not_abort_reassembly(
     # Assert
     assert is_empty_after_frag1 is True
 
-    assert out_pkt_unrelated.code == "30C9"
+    assert out_pkt_unrelated.code == Code._30C9
     assert out_pkt_unrelated.payload == "0001C8"
     assert is_empty_after_unrelated is True
 
-    assert out_pkt_stitched.code == "000A"
+    assert out_pkt_stitched.code == Code._000A
     assert out_pkt_stitched.payload == "001201F4081001F409C4"
     assert out_pkt_stitched.length == "010"
 
@@ -187,18 +188,22 @@ async def test_concurrent_arrays_from_different_sources(base_time: dt) -> None:
     await buffer.start()
 
     # Device A starts an array
-    frag_a1 = create_dto(" I", "000A", "001201F4", base_time, addr1="01:158182")
+    frag_a1 = create_dto(Verb.I_, Code._000A, "001201F4", base_time, addr1="01:158182")
     # Device B starts an array (same code, different src) before A completes
     frag_b1 = create_dto(
-        " I", "000A", "00AA00BB", base_time + td(seconds=1), addr1="01:223036"
+        Verb.I_, Code._000A, "00AA00BB", base_time + td(seconds=1), addr1="01:223036"
     )
     # Device A's second fragment arrives
     frag_a2 = create_dto(
-        " I", "000A", "081001F409C4", base_time + td(seconds=2), addr1="01:158182"
+        Verb.I_,
+        Code._000A,
+        "081001F409C4",
+        base_time + td(seconds=2),
+        addr1="01:158182",
     )
     # Device B's second fragment arrives
     frag_b2 = create_dto(
-        " I", "000A", "0810AABBCC", base_time + td(seconds=3), addr1="01:223036"
+        Verb.I_, Code._000A, "0810AABBCC", base_time + td(seconds=3), addr1="01:223036"
     )
 
     # Act
@@ -235,8 +240,8 @@ async def test_timeout_flushes_all_pending(base_time: dt) -> None:
     await buffer.start()
 
     # Two unrelated pending arrays from different sources
-    frag_a = create_dto(" I", "000A", "001201F4", base_time, addr1="01:158182")
-    frag_b = create_dto(" I", "000A", "00AA00BB", base_time, addr1="01:223036")
+    frag_a = create_dto(Verb.I_, Code._000A, "001201F4", base_time, addr1="01:158182")
+    frag_b = create_dto(Verb.I_, Code._000A, "00AA00BB", base_time, addr1="01:223036")
 
     # Act
     await in_q.put(frag_a)
@@ -251,6 +256,6 @@ async def test_timeout_flushes_all_pending(base_time: dt) -> None:
     flushed_codes = sorted(p.addr1 for p in flushed)
     assert flushed_codes == ["01:158182", "01:223036"]
     for p in flushed:
-        assert p.code == "000A"
+        assert p.code == Code._000A
 
     await buffer.stop()

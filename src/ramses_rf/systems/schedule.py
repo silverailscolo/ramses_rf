@@ -38,6 +38,7 @@ from ramses_rf.typing import (
     WeeklySchedule,
     WeeklyScheduleDict,
 )
+from ramses_tx.const import Code
 from ramses_tx.exceptions import ProtocolSendFailed
 
 from ..enums import Action
@@ -488,7 +489,7 @@ class Schedule:  # 0404
         :param msg: Incoming protocol message object.
         :type msg: Message
         """
-        if msg.code == "0006":
+        if msg.code == Code._0006:
             if isinstance(msg.payload, dict):
                 change_counter = msg.payload.get("change_counter")
                 if (
@@ -500,7 +501,7 @@ class Schedule:  # 0404
                         self._set_state(ScheduleIsStale)
             return
 
-        if msg.code != "0404":
+        if msg.code != Code._0404:
             return
 
         payload = msg.payload

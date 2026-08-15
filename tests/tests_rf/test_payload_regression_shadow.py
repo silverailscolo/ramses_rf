@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from ramses_rf.const import Verb
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
@@ -68,7 +69,7 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
 
     # Categorize log packets
     rq_packets_count: int = sum(
-        1 for _line_num, pkt in REGRESSION_PACKETS if pkt.verb == "RQ"
+        1 for _line_num, pkt in REGRESSION_PACKETS if pkt.verb == Verb.RQ
     )
 
     # Target state-bearing packets (RP, I, W) matching registered opcodes
@@ -76,7 +77,7 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
     target_packets: list[tuple[int, Packet]] = [
         (line_num, pkt)
         for line_num, pkt in REGRESSION_PACKETS
-        if PAYLOAD_REGISTRY.get(pkt.code) is not None and pkt.verb != "RQ"
+        if PAYLOAD_REGISTRY.get(pkt.code) is not None and pkt.verb != Verb.RQ
     ]
 
     # Benchmark Stage 1: Legacy Dictionary Parser Decoding

@@ -6,10 +6,9 @@ from __future__ import annotations
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
-from ramses_tx.const import VerbT
+from ramses_tx.const import RP, RQ, W_, Code, Verb
 from ramses_tx.dtos import PacketDTO
 
-from ..const import RQ, Code
 from .base import Message
 
 if TYPE_CHECKING:
@@ -52,7 +51,7 @@ class ApplicationMessage(Message):
 
     def _get_lifespan(self) -> bool | td:
         """Return the lifespan of a packet before it expires."""
-        if self.verb in (RQ, " W"):
+        if self.verb in (RQ, W_):
             return td(seconds=0)
 
         if self.code in (Code._0005, Code._000C):
@@ -71,9 +70,9 @@ class ApplicationMessage(Message):
             return td(minutes=60 * 24)
 
         if self.code == Code._1F09:
-            return td(seconds=360) if self.verb == VerbT.I_ else td(seconds=0)
+            return td(seconds=360) if self.verb == Verb.I_ else td(seconds=0)
 
-        if self.code == Code._1FC9 and self.verb == "RP":
+        if self.code == Code._1FC9 and self.verb == RP:
             return td(minutes=60 * 24)
 
         if self.code in (Code._2309, Code._30C9) and self._has_array:

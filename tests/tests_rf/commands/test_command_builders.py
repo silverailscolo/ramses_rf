@@ -7,7 +7,7 @@ import pytest
 from ramses_rf.address import Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
-from ramses_rf.const import ZON_MODE_MAP
+from ramses_rf.const import ZON_MODE_MAP, Code, Verb
 from ramses_rf.enums import Action
 from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.packet import Packet
@@ -77,8 +77,8 @@ def test_build_set_dhw_params_none_defaults() -> None:
     )
     dto = build_dto(intent)
     # Should not raise — None values fall back to defaults (overrun=5, differential=1.0)
-    assert dto.code == "10A0"
-    assert dto.verb == " W"
+    assert dto.code == Code._10A0
+    assert dto.verb == Verb.W_
 
 
 def test_build_set_dhw_params_only_setpoint() -> None:
@@ -95,7 +95,7 @@ def test_build_set_dhw_params_only_setpoint() -> None:
         },
     )
     dto = build_dto(intent)
-    assert dto.code == "10A0"
+    assert dto.code == Code._10A0
 
 
 def test_build_get_dhw_temp(snapshot: Any) -> None:
@@ -214,7 +214,7 @@ def test_build_get_opentherm_data(snapshot: Any) -> None:
 def test_set_fan_mode_orcon_2byte_default() -> None:
     """Default scheme (orcon) produces a 3-byte payload with mode_max=07."""
     expected_payload = "000107"
-    expected_code = "22F1"
+    expected_code = Code._22F1
 
     intent = Intent(
         src=Address("18:000730"),
@@ -230,7 +230,7 @@ def test_set_fan_mode_orcon_2byte_default() -> None:
 
 def test_set_fan_mode_orcon_2byte_explicit() -> None:
     """Explicit orcon scheme with mode_max='' produces legacy 2-byte payload."""
-    expected_payload = "0001"
+    expected_payload = Code._0001
 
     intent = Intent(
         src=Address("18:000730"),
@@ -375,8 +375,8 @@ def test_build_put_co2_level(snapshot: Any) -> None:
         data={"co2_level": 400.0},
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " I"
-    assert str(dto.code) == "1298"
+    assert str(dto.verb) == Verb.I_
+    assert str(dto.code) == Code._1298
     assert dto.payload == "000190"
 
 
@@ -388,8 +388,8 @@ def test_build_put_indoor_humidity(snapshot: Any) -> None:
         data={"indoor_humidity": 0.5},
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " I"
-    assert str(dto.code) == "12A0"
+    assert str(dto.verb) == Verb.I_
+    assert str(dto.code) == Code._12A0
     assert dto.payload == "0032"
 
 
@@ -401,8 +401,8 @@ def test_build_set_bypass_position(snapshot: Any) -> None:
         data={"bypass_mode": "auto"},
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " W"
-    assert str(dto.code) == "22F7"
+    assert str(dto.verb) == Verb.W_
+    assert str(dto.code) == Code._22F7
     assert dto.payload == "00FF"
 
 
@@ -414,9 +414,9 @@ def test_build_set_program_enabled_true(snapshot: Any) -> None:
         data={"enabled": True},
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " W"
-    assert str(dto.code) == "22B0"
-    assert dto.payload == "0005"
+    assert str(dto.verb) == Verb.W_
+    assert str(dto.code) == Code._22B0
+    assert dto.payload == Code._0005
 
 
 def test_build_set_program_enabled_false(snapshot: Any) -> None:
@@ -427,9 +427,9 @@ def test_build_set_program_enabled_false(snapshot: Any) -> None:
         data={"enabled": False},
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " W"
-    assert str(dto.code) == "22B0"
-    assert dto.payload == "0006"
+    assert str(dto.verb) == Verb.W_
+    assert str(dto.code) == Code._22B0
+    assert dto.payload == Code._0006
 
 
 def test_build_set_program_enabled_missing_raises() -> None:
@@ -462,8 +462,8 @@ def test_build_get_fan_param(snapshot: Any) -> None:
         data={"param_id": "31"},
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == "RQ"
-    assert str(dto.code) == "2411"
+    assert str(dto.verb) == Verb.RQ
+    assert str(dto.code) == Code._2411
     assert dto.payload == "000031"
 
 
@@ -475,8 +475,8 @@ def test_build_set_fan_param(snapshot: Any) -> None:
         data={"param_id": "31", "value": 30},
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " W"
-    assert str(dto.code) == "2411"
+    assert str(dto.verb) == Verb.W_
+    assert str(dto.code) == Code._2411
     assert dto.payload == "00003100100000001E0000000000000708000000010001"
 
 
@@ -510,8 +510,8 @@ def test_build_get_hvac_fan_31da(snapshot: Any) -> None:
         },
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " I"
-    assert str(dto.code) == "31DA"
+    assert str(dto.verb) == Verb.I_
+    assert str(dto.code) == Code._31DA
     assert dto.payload == "0000EF007FFFEFEF7FFF7FFF7FFF7FFF0000EFEFFFFF7FFFEFEF7FFF7FFF"
 
 
@@ -555,10 +555,10 @@ def test_build_set_fan_mode_exhaustive(
         data=data,
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " I"  # wait! I frame? My previous tests used I... wait!
+    assert str(dto.verb) == Verb.I_  # wait! I frame? My previous tests used I... wait!
     # Wait, 22F1 from the old test was: f"000  I --- {REM} {HRU} {NUL} 22F1 003 000007"
     # Wait, the code in build_set_fan_mode defaults to I_.
-    assert str(dto.code) == "22F1"
+    assert str(dto.code) == Code._22F1
     assert dto.payload == expected_payload
 
 
@@ -583,8 +583,8 @@ def test_build_set_bypass_position_exhaustive(
         data=data,
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " W"
-    assert str(dto.code) == "22F7"
+    assert str(dto.verb) == Verb.W_
+    assert str(dto.code) == Code._22F7
     assert dto.payload == expected_payload
 
 
@@ -605,8 +605,8 @@ def test_build_put_indoor_humidity_exhaustive(
         data=data,
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " I"
-    assert str(dto.code) == "12A0"
+    assert str(dto.verb) == Verb.I_
+    assert str(dto.code) == Code._12A0
     assert dto.payload == expected_payload
 
 
@@ -626,8 +626,8 @@ def test_build_put_co2_level_exhaustive(
         data=data,
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " I"
-    assert str(dto.code) == "1298"
+    assert str(dto.verb) == Verb.I_
+    assert str(dto.code) == Code._1298
     assert dto.payload == expected_payload
 
 
@@ -777,8 +777,8 @@ def test_build_get_hvac_fan_31da_exhaustive(
         data=data,
     )
     dto = build_dto(intent)
-    assert str(dto.verb) == " I"
-    assert str(dto.code) == "31DA"
+    assert str(dto.verb) == Verb.I_
+    assert str(dto.code) == Code._31DA
     assert dto.payload == expected_payload
 
 
@@ -992,7 +992,7 @@ def test_build_put_bind_offer(snapshot: Any) -> None:
         src=Address("13:111111"),
         dst=Address("63:262143"),
         action=Action.PUT_BIND,
-        data={"verb": " I", "codes": ["3EF0"], "oem_code": "01"},
+        data={"verb": Verb.I_, "codes": [Code._3EF0], "oem_code": "01"},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -1003,7 +1003,7 @@ def test_build_put_bind_accept(snapshot: Any) -> None:
         src=Address("01:111111"),
         dst=Address("13:111111"),
         action=Action.PUT_BIND,
-        data={"verb": " W", "codes": ["3EF0"]},
+        data={"verb": Verb.W_, "codes": [Code._3EF0]},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -1014,7 +1014,7 @@ def test_build_put_bind_confirm(snapshot: Any) -> None:
         src=Address("13:111111"),
         dst=Address("01:111111"),
         action=Action.PUT_BIND,
-        data={"verb": " I", "codes": ["3EF0"]},
+        data={"verb": Verb.I_, "codes": [Code._3EF0]},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot

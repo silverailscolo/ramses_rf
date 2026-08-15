@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf.config import GatewayConfig
+from ramses_rf.const import Code, Verb
 from ramses_rf.devices.dev_base import BatteryState, DeviceBase
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.gateway import Gateway
@@ -86,7 +87,7 @@ def test_polling_manager_custom_trait_override(
     mock_gateway: MagicMock,
 ) -> None:
     # ARRANGE
-    custom_traits = DeviceTraits(polling_interval={"1F41": 1800, "10E0": 43200})
+    custom_traits = DeviceTraits(polling_interval={Code._1F41: 1800, Code._10E0: 43200})
     ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL", traits=custom_traits)
     poller = PollingManager(mock_gateway, shadow_mode=True)
 
@@ -94,9 +95,9 @@ def test_polling_manager_custom_trait_override(
     schedule = poller.resolve_schedule_for_device(ctl_dev)
 
     # ASSERT
-    assert schedule["1F41"] == 1800
-    assert schedule["10E0"] == 43200
-    assert schedule["313F"] == DEFAULT_POLLING_SCHEDULES["CTL"]["313F"]
+    assert schedule[Code._1F41] == 1800
+    assert schedule[Code._10E0] == 43200
+    assert schedule[Code._313F] == DEFAULT_POLLING_SCHEDULES["CTL"][Code._313F]
 
 
 def test_polling_manager_battery_device_zero_polling(
@@ -264,7 +265,7 @@ async def test_polling_manager_live_dispatch_cutover(
 
     call_args = mock_gateway.async_send_cmd.call_args_list[0][0]
     sent_dto: CommandDTO = call_args[0]
-    assert sent_dto.verb == "RQ"
+    assert sent_dto.verb == Verb.RQ
     assert sent_dto.addr1 == "18:000730"
     assert sent_dto.addr2 == "01:111111"
 
@@ -287,7 +288,7 @@ def test_polling_manager_ctl_without_tcs_creates_device_level_0004(
     # ASSERT
     # 5 device-level tasks: 10E0, 1F41, 2E04, 313F, 0004
     assert len(active_keys) == 5
-    assert ("01:111111", "0004") in active_keys
+    assert ("01:111111", Code._0004) in active_keys
     # No zone-level keys (3-tuples)
     assert all(len(k) == 2 for k in active_keys)
 
@@ -326,20 +327,20 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
     assert len(zone_level) == 2
 
     # Zone-level keys are (device_id, "0004", zone_idx)
-    assert ("01:111111", "0004", "03") in zone_level
-    assert ("01:111111", "0004", "07") in zone_level
+    assert ("01:111111", Code._0004, "03") in zone_level
+    assert ("01:111111", Code._0004, "07") in zone_level
 
     # Verify the 0004 tasks have the correct payload (zone_idx + "00")
-    task_03 = poller._tasks[("01:111111", "0004", "03")]
+    task_03 = poller._tasks[("01:111111", Code._0004, "03")]
     assert task_03.payload == "0300"
-    assert task_03.code == "0004"
+    assert task_03.code == Code._0004
 
-    task_07 = poller._tasks[("01:111111", "0004", "07")]
+    task_07 = poller._tasks[("01:111111", Code._0004, "07")]
     assert task_07.payload == "0700"
-    assert task_07.code == "0004"
+    assert task_07.code == Code._0004
 
     # Device-level tasks have no payload (default "00" in build_rq_cmd)
-    task_10e0 = poller._tasks[("01:111111", "10E0")]
+    task_10e0 = poller._tasks[("01:111111", Code._10E0)]
     assert task_10e0.payload is None
 
 
@@ -381,12 +382,12 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
     sent_codes = [
         call.args[0].code for call in mock_gateway.async_send_cmd.call_args_list
     ]
-    assert "0004" in sent_codes
+    assert Code._0004 in sent_codes
 
     # Find the 0004 call and verify payload contains zone_idx
     for call in mock_gateway.async_send_cmd.call_args_list:
         dto: CommandDTO = call.args[0]
-        if dto.code == "0004":
+        if dto.code == Code._0004:
             assert dto.payload == "0500", (
                 f"Expected 0004 payload '0500' for zone 05, got '{dto.payload}'"
             )
@@ -399,7 +400,7 @@ async def test_polling_schema_traits_parsing() -> None:
     raw_known_list: dict[str, dict[str, Any]] = {
         "01:111111": {
             "class": "CTL",
-            "_polling_interval": {"1F41": 3600, "10E0": 600},
+            "_polling_interval": {Code._1F41: 3600, Code._10E0: 600},
             "_is_battery": False,
         },
         "04:222222": {
@@ -423,7 +424,7 @@ async def test_polling_schema_traits_parsing() -> None:
     trv_dev = gateway.device_registry.get_device(DeviceIdT("04:222222"))
 
     # ASSERT
-    assert ctl_dev.polling_interval == {"1F41": 3600, "10E0": 600}
+    assert ctl_dev.polling_interval == {Code._1F41: 3600, Code._10E0: 600}
     assert ctl_dev.is_battery is False
 
     assert trv_dev.polling_interval is None
@@ -506,8 +507,8 @@ def test_sch_polling_interval_validates_dict() -> None:
     """SCH_POLLING_INTERVAL validates dict[str, int]."""
     from ramses_rf.config import SCH_POLLING_INTERVAL
 
-    validated = SCH_POLLING_INTERVAL({"10E0": 3600, "1F41": 1800})
-    assert validated == {"10E0": 3600, "1F41": 1800}
+    validated = SCH_POLLING_INTERVAL({Code._10E0: 3600, Code._1F41: 1800})
+    assert validated == {Code._10E0: 3600, Code._1F41: 1800}
 
 
 def test_sch_polling_interval_rejects_negative() -> None:
@@ -515,4 +516,4 @@ def test_sch_polling_interval_rejects_negative() -> None:
     from ramses_rf.config import SCH_POLLING_INTERVAL
 
     with pytest.raises(Exception):  # noqa: B017
-        SCH_POLLING_INTERVAL({"10E0": -1})
+        SCH_POLLING_INTERVAL({Code._10E0: -1})

@@ -582,7 +582,7 @@ def test_update_system_state_hydrates_from_2e04_packet() -> None:
     tcs = Evohome(mock_ctl)
 
     mock_msg = MagicMock()
-    mock_msg.code = "2E04"
+    mock_msg.code = Code._2E04
     mock_msg.dtm = None
     mock_msg.timestamp = None
     payload = {SZ_SYSTEM_MODE: "heat_off", "until": None}

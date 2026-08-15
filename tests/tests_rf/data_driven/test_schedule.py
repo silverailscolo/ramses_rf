@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX, SZ_ZONE_INDEX
+from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX, SZ_ZONE_INDEX, Code
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
 from ramses_rf.payloads.heating import ScheduleSwitchpointPayload
@@ -233,7 +233,7 @@ async def test_schedule_handle_msg_version_change() -> None:
     sched._schedule_version = 1
 
     mock_msg = MagicMock(spec=Message)
-    mock_msg.code = "0006"
+    mock_msg.code = Code._0006
     mock_msg.payload = {"change_counter": 2}
 
     # Act

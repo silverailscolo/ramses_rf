@@ -103,7 +103,7 @@ from ramses_rf.models import (
 )
 from ramses_rf.protocol.opentherm import OtDataId
 from ramses_rf.state_projector import _get_dhw_zone_from_msg, _route_2411_to_fan
-from ramses_tx.const import Code
+from ramses_tx.const import I_, RQ, Code
 
 # --- Translation Maps (Static Constant Blocks) ---
 
@@ -214,9 +214,7 @@ class StateProjector:
         :return: None
         :rtype: None
         """
-        if getattr(msg, "verb", "") == "RQ" or not isinstance(
-            msg.payload, (dict, list)
-        ):
+        if getattr(msg, "verb", "") == RQ or not isinstance(msg.payload, (dict, list)):
             return
 
         # 2411 parameter messages are owned by the FAN aggregate root: they
@@ -404,7 +402,7 @@ class StateProjector:
 
         # --- CQRS Reactor Hooks ---
         # Automate the legacy Actuator discovery query (3EF1) in response to 3EF0 (I)
-        if msg.code == Code._3EF0 and getattr(msg, "verb", "") == " I":
+        if msg.code == Code._3EF0 and getattr(msg, "verb", "") == I_:
             src_dev = registry.device_by_id.get(msg.src.id)
             if src_dev and not getattr(src_dev, "is_faked", False):
                 from ramses_rf.devices.helpers import build_rq_cmd
@@ -708,21 +706,21 @@ class StateProjector:
 
     def _update_dhw_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
         """Translate DHW opcodes into DhwState."""
-        if msg.code not in (Code._10A0, Code._1260, Code._1F41, "10A0", "1260", "1F41"):
+        if msg.code not in (Code._10A0, Code._1260, Code._1F41):
             return
 
         updates: dict[str, Any] = {}
-        if msg.code in (Code._10A0, "10A0"):
+        if msg.code == Code._10A0:
             if SZ_SETPOINT in p:
                 updates[SZ_SETPOINT] = p[SZ_SETPOINT]
             if SZ_OVERRUN in p:
                 updates[SZ_OVERRUN] = p[SZ_OVERRUN]
             if SZ_DIFFERENTIAL in p:
                 updates[SZ_DIFFERENTIAL] = p[SZ_DIFFERENTIAL]
-        elif msg.code in (Code._1260, "1260"):
+        elif msg.code == Code._1260:
             if SZ_TEMPERATURE in p:
                 updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
-        elif msg.code in (Code._1F41, "1F41"):
+        elif msg.code == Code._1F41:
             if SZ_MODE in p:
                 updates[SZ_MODE] = p[SZ_MODE]
             if SZ_ACTIVE in p:

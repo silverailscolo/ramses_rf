@@ -27,7 +27,7 @@ from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIS
 from ramses_tx.typing import PayloadT
 
 from .config import GatewayConfig as GatewayConfig, strip_and_map_schema
-from .const import Code, VerbT
+from .const import Code, Verb
 from .devices import (
     DeviceFilter,
     DeviceRegistry,
@@ -508,7 +508,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     @staticmethod
     def create_cmd(
-        verb: VerbT,
+        verb: Verb,
         device_id: DeviceIdT,
         code: Code,
         payload: PayloadT,

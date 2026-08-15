@@ -24,10 +24,11 @@ from ramses_rf.const import (
     SZ_TIMESTAMP,
     SZ_UNTIL,
     SZ_ZONE_INDEX,
+    Code,
 )
 from ramses_rf.enums import DevRole
 from ramses_rf.payloads.helpers import parse_fault_log_entry
-from ramses_tx.const import F9, FA, FC, FaultDeviceClass
+from ramses_tx.const import F9, FA, FC, RQ, FaultDeviceClass, Verb
 from ramses_tx.helpers import hex_from_dtm, hex_to_date, hex_to_dtm, hex_to_dts
 
 from .base import PayloadBase
@@ -36,7 +37,7 @@ from .registry import register_payload
 # ----------------------------------------------------------------------
 
 
-@register_payload("0001")
+@register_payload(Code._0001)
 @dataclass(frozen=True, slots=True)
 class SystemClockPayload(PayloadBase):
     """System clock payload (Opcode 0001).
@@ -73,7 +74,7 @@ class SystemClockPayload(PayloadBase):
     # .I --- 34:021943 34:021943 --:------ 0001 005 000D000003  # every ~20:00
     # 12:39:56.099 061  W --- 12:010740 --:------ 12:010740 0001 005 0000000501
     # 13:48:38.518 080  W --- 12:010740 --:------ 12:010740 0001 005 0000000501
-    # 13:48:45.518 074  W --- 12:010740 --:------ 12:010740 0001 005 0000000505
+    # 13:48:45.518 074  W --- 12:010740 --:------ 12:010740 0001 005 0000000501
     # 16:53:34.635 058  W --- 04:166090 --:------ 01:032820 0001 005 0100000505
     # 00:22:41.540 ---  I --- --:------ --:------ --:------ 0001 005 00FFFF02FF
     # 00:22:41.757 ---  I --- --:------ --:------ --:------ 0001 005 00FFFF0200
@@ -151,7 +152,7 @@ class SystemClockPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0002")
+@register_payload(Code._0002)
 @dataclass(frozen=True, slots=True)
 class SystemDatePayload(PayloadBase):
     """System date payload (Opcode 0002).
@@ -208,7 +209,7 @@ class SystemDatePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0006")
+@register_payload(Code._0006)
 class SystemChangeCounterPayload(PayloadBase):
     """Master payload dispatcher for system change counter (Opcode 0006).
 
@@ -347,7 +348,7 @@ SystemChangeCounterPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("000E")
+@register_payload(Code._000E)
 @dataclass(frozen=True, slots=True)
 class OemCodePayload(PayloadBase):
     """OEM code payload (Opcode 000E).
@@ -449,7 +450,7 @@ class SystemRolePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0016")
+@register_payload(Code._0016)
 @dataclass(frozen=True, slots=True)
 class SystemFlagPayload(PayloadBase):
     """System status flags payload (Opcode 0016).
@@ -528,7 +529,7 @@ class SystemFlagPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0100")
+@register_payload(Code._0100)
 class SystemLanguagePayload(PayloadBase):
     """Master payload dispatcher for system language (Opcode 0100).
 
@@ -680,7 +681,7 @@ SystemLanguagePayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("01D0")
+@register_payload(Code._01D0)
 @dataclass(frozen=True, slots=True)
 class SystemParameterPayload(PayloadBase):
     """System configuration parameter payload (Opcode 01D0).
@@ -737,7 +738,7 @@ class SystemParameterPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("01E9")
+@register_payload(Code._01E9)
 @dataclass(frozen=True, slots=True)
 class SystemFaultPayload(PayloadBase):
     """System fault alert payload (Opcode 01E9).
@@ -794,7 +795,7 @@ class SystemFaultPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0418")
+@register_payload(Code._0418)
 @dataclass(frozen=True, slots=True)
 class SystemFaultLogPayload(PayloadBase):
     """System fault log entry payload (Opcode 0418).
@@ -852,9 +853,9 @@ class SystemFaultLogPayload(PayloadBase):
         raw_hex = (bytes([self.log_index]) + self.log_data).hex().upper()
         log_index_str = raw_hex[4:6] if len(raw_hex) >= 6 else f"{self.log_index:02X}"
 
-        verb = getattr(msg, "verb", "I") if msg is not None else "I"
-        verb_str = getattr(verb, "value", str(verb)).split(".")[-1]
-        if verb_str == "RQ":
+        verb = getattr(msg, "verb", Verb.I_) if msg is not None else Verb.I_
+        verb_str = str(getattr(verb, "value", verb))
+        if verb == Verb.RQ or verb_str == RQ:
             return {SZ_LOG_INDEX: log_index_str}
 
         if len(raw_hex) < 44 or hex_to_dts(raw_hex[18:30]) is None:
@@ -907,7 +908,7 @@ class SystemFaultLogPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("042F")
+@register_payload(Code._042F)
 @dataclass(frozen=True, slots=True)
 class SystemLogIndexPayload(PayloadBase):
     """System log index payload (Opcode 042F).
@@ -987,7 +988,7 @@ class SystemLogIndexPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0B04")
+@register_payload(Code._0B04)
 @dataclass(frozen=True, slots=True)
 class SystemStatusPayload(PayloadBase):
     """System operational status payload (Opcode 0B04).
@@ -1044,7 +1045,7 @@ class SystemStatusPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1060")
+@register_payload(Code._1060)
 @dataclass(frozen=True, slots=True)
 class DeviceBatteryPayload(PayloadBase):
     """Device battery status payload (Opcode 1060).
@@ -1126,10 +1127,8 @@ class DeviceBatteryPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("10E0")
-# ----------------------------------------------------------------------
-
-@register_payload("10E1")
+@register_payload(Code._10E0)
+@register_payload(Code._10E1)
 @dataclass(frozen=True, slots=True)
 class SystemDeviceInfoPayload(PayloadBase):
     """System device information & firmware payload (Opcode 10E0, 10E1).
@@ -1215,7 +1214,7 @@ class SystemDeviceInfoPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1290")
+@register_payload(Code._1290)
 @dataclass(frozen=True, slots=True)
 class SystemOutdoorTempPayload(PayloadBase):
     """System outdoor temperature sensor payload (Opcode 1290).
@@ -1282,7 +1281,7 @@ class SystemOutdoorTempPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1F09")
+@register_payload(Code._1F09)
 class SystemSyncHeartbeatPayload(PayloadBase):
     """Master payload dispatcher for sync heartbeat (Opcode 1F09).
 
@@ -1436,8 +1435,8 @@ SystemSyncHeartbeatPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("2E04")
-@register_payload("2E10")
+@register_payload(Code._2E04)
+@register_payload(Code._2E10)
 class SystemConfigPayload(PayloadBase):
     """Master payload dispatcher for Opcode 2E04 and 2E10.
 
@@ -1634,7 +1633,7 @@ SystemConfigPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("313F")
+@register_payload(Code._313F)
 class SystemDateTimePayload(PayloadBase):
     """Master payload dispatcher for system date and time (Opcode 313F).
 
@@ -1870,7 +1869,7 @@ class SystemActuatorPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("3222")
+@register_payload(Code._3222)
 @dataclass(frozen=True, slots=True)
 class SystemOpenThermBridgePayload(PayloadBase):
     """System OpenTherm bridge status payload (Opcode 3222).
@@ -1936,7 +1935,7 @@ class SystemOpenThermBridgePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("7FFF")
+@register_payload(Code._PUZZ)
 @dataclass(frozen=True, slots=True)
 class PuzzlePayload(PayloadBase):
     """Special puzzle / diagnostic payload (Opcode 7FFF).
@@ -2002,7 +2001,7 @@ class PuzzlePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0009")
+@register_payload(Code._0009)
 @dataclass(frozen=True, slots=True)
 class RelayFailsafePayload(PayloadBase):
     """Relay failsafe mode payload (Opcode 0009).
@@ -2097,7 +2096,7 @@ class RelayFailsafePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0204")
+@register_payload(Code._0204)
 @dataclass(frozen=True, slots=True)
 class SystemFrame0204Payload(PayloadBase):
     """System frame payload (Opcode 0204).

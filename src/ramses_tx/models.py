@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime as dt
 
-from .const import VerbT
+from .const import Verb
 
 
 @dataclass(frozen=True)
@@ -70,7 +70,7 @@ class TransportMessage:
     source_packets: tuple[RawPacket, ...]
 
     rssi: int
-    verb: VerbT
+    verb: Verb
 
     device_id_1: DeviceId
     device_id_2: DeviceId
