@@ -23,6 +23,7 @@ from ramses_rf.protocol.opentherm import (
     decode_frame,
     parity,
 )
+from ramses_tx.const import Code
 
 
 def build_frame(msg_type: int, data_id: int, data_value: str) -> str:
@@ -66,11 +67,11 @@ def test_msg_value_data_types() -> None:
     assert _msg_value("FF", S8) == -1
 
     # U16 and S16
-    assert _msg_value("0100", U16) == 256
+    assert _msg_value(Code._0100, U16) == 256
     assert _msg_value("FF00", S16) == -256
 
     # F8_8 conversion
-    assert _msg_value("0100", F8_8) == 1.0
+    assert _msg_value(Code._0100, F8_8) == 1.0
 
 
 def test_msg_value_value_errors() -> None:
@@ -170,15 +171,15 @@ def test_decode_frame_read_ack_valid_values() -> None:
     assert data_6[SZ_VALUE] == 1.0
 
     # 7. VAL is F8_8 -> SENSOR FLOW_RATE mapping
-    _, _, data_7, _ = decode_frame(build_frame(0b100, 0x13, "0100"))
+    _, _, data_7, _ = decode_frame(build_frame(0b100, 0x13, Code._0100))
     assert data_7[SZ_VALUE] == 1.0
 
     # 8. VAL is F8_8 -> SENSOR PRESSURE mapping
-    _, _, data_8, _ = decode_frame(build_frame(0b100, 0x12, "0100"))
+    _, _, data_8, _ = decode_frame(build_frame(0b100, 0x12, Code._0100))
     assert data_8[SZ_VALUE] == 1.0
 
     # 9. VAL is F8_8 -> SENSOR TEMPERATURE mapping
-    _, _, data_9, _ = decode_frame(build_frame(0b100, 0x18, "0100"))
+    _, _, data_9, _ = decode_frame(build_frame(0b100, 0x18, Code._0100))
     assert data_9[SZ_VALUE] == 1.0
 
     # 10. VAL is F8_8 -> Result resolves to None ("FFFF" bypasses mapping)

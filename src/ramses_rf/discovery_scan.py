@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any
 
-from ramses_rf.const import DevType
+from ramses_rf.const import Code, DevType, Verb
 from ramses_rf.protocol.ramses import HVAC_KLASS_BY_VC_PAIR
 from ramses_tx.const import SZ_ACTIVE_HGI
 
@@ -79,13 +79,15 @@ _VC_TO_TYPE: dict[tuple[str, str], DevType] = {
 # NOTE: 313F (datetime) is only CTL-only when sent as I/RP (broadcasting
 # the time).  TRVs send 313F as RQ (requesting the time), so we track
 # the verb separately.
-_CTL_ONLY_CODES: frozenset[str] = frozenset({"1030", "1F09"})
-_CTL_ONLY_CODES_WITH_VERB: dict[str, frozenset[str]] = {
-    "313F": frozenset({" I", "RP"}),  # I/RP = CTL broadcasts time; RQ = TRV asks
+_CTL_ONLY_CODES: frozenset[Code | str] = frozenset({Code._1030, Code._1F09})
+_CTL_ONLY_CODES_WITH_VERB: dict[Code | str, frozenset[Verb | str]] = {
+    Code._313F: frozenset(
+        {Verb.I_, Verb.RP}
+    ),  # I/RP = CTL broadcasts time; RQ = TRV asks
 }
 
 # Codes that indicate battery-powered devices.
-_BATTERY_CODES: frozenset[str] = frozenset({"1060", "1FC9"})
+_BATTERY_CODES: frozenset[Code | str] = frozenset({Code._1060, Code._1FC9})
 
 # Codes that carry zone_index in the payload (binding telemetry).
 # Used to extract zone assignment from traffic.
@@ -96,8 +98,18 @@ _BATTERY_CODES: frozenset[str] = frozenset({"1060", "1FC9"})
 # e.g. RQ 000A 001 01 means the THM is asking about zone 01 (its zone).
 # The CTL and HGI also send 000A, but the HGI is excluded by is_hgi and
 # the CTL's zone_index is unused (it gets main_tcs, not a zone placement).
-_ZONE_BINDING_CODES: frozenset[str] = frozenset(
-    {"3150", "000C", "2309", "2349", "10A0", "1260", "12B0", "1F09", "000A"}
+_ZONE_BINDING_CODES: frozenset[Code | str] = frozenset(
+    {
+        Code._3150,
+        Code._000C,
+        Code._2309,
+        Code._2349,
+        Code._10A0,
+        Code._1260,
+        Code._12B0,
+        Code._1F09,
+        Code._000A,
+    }
 )
 
 # HVAC codes sent by REMs/CO2s to their parent FAN (32:).  These are
@@ -108,13 +120,13 @@ _ZONE_BINDING_CODES: frozenset[str] = frozenset(
 # IS strong evidence of binding — the FAN is the controller and it's
 # communicating with its paired remote.  See schema_architecture.md:
 # "How HVAC topology COULD be derived from traffic".
-_HVAC_PARENT_INFERENCE_CODES: frozenset[str] = frozenset(
+_HVAC_PARENT_INFERENCE_CODES: frozenset[Code | str] = frozenset(
     {
-        "22F1",  # fan_mode
-        "31E0",  # vent_demand
-        "31DA",  # fan_status
-        "10D0",  # outside_temp
-        "2411",  # fan_params — FAN RP to REM's RQ, most common directed exchange
+        Code._22F1,  # fan_mode
+        Code._31E0,  # vent_demand
+        Code._31DA,  # fan_status
+        Code._10D0,  # outside_temp
+        Code._2411,  # fan_params — FAN RP to REM's RQ, most common directed exchange
     }
 )
 
@@ -134,7 +146,7 @@ _HVAC_PARENT_INFERENCE_CODES: frozenset[str] = frozenset(
 # The 3B00/3EF0 heuristic is used only as a fallback hint when no 000C
 # binding has been seen yet, and is overridden when a 000C binding
 # arrives.
-_APPLIANCE_CONTROL_CODES: frozenset[str] = frozenset({"3B00", "3EF0"})
+_APPLIANCE_CONTROL_CODES: frozenset[Code | str] = frozenset({Code._3B00, Code._3EF0})
 
 # 000C payload roles that map to domain IDs (not zone indices).
 # See ramses_tx/const.py DEV_ROLE_MAP and parsers/heating.py
@@ -230,6 +242,11 @@ class DiscoveryScan:
     """
 
     def __init__(self, gateway: Gateway) -> None:
+        """Initialise the passive discovery scanner.
+
+        :param gateway: The active gateway instance.
+        :type gateway: Gateway
+        """
         self._gateway = gateway
         self._devices: dict[str, DiscoveredDevice] = {}
         self._dirty: bool = False
@@ -378,7 +395,7 @@ class DiscoveryScan:
         # See issue 834 comment 5044906835.
         domain_id: str | None = None
         is_authoritative_domain = False
-        if code == "000C" and dto.payload:
+        if code == Code._000C and dto.payload:
             domain_id = _extract_domain_id_from_000c(dto.payload)
             if domain_id:
                 is_authoritative_domain = True
@@ -607,7 +624,7 @@ class DiscoveryScan:
                     and source
                     and _is_valid_address(source)
                     and source.startswith("32:")
-                    and verb in (" I", "RP")
+                    and verb in (Verb.I_, Verb.RP)
                     and code in _HVAC_PARENT_INFERENCE_CODES
                 ):
                     device.bound_to = source
@@ -685,7 +702,7 @@ class DiscoveryScan:
                 and source
                 and _is_valid_address(source)
                 and source.startswith("32:")
-                and verb in (" I", "RP")
+                and verb in (Verb.I_, Verb.RP)
                 and code in _HVAC_PARENT_INFERENCE_CODES
             ):
                 device.bound_to = source
@@ -775,7 +792,7 @@ class DiscoveryScan:
             and source
             and _is_valid_address(source)
             and source.startswith("32:")
-            and verb in (" I", "RP")
+            and verb in (Verb.I_, Verb.RP)
             and code in _HVAC_PARENT_INFERENCE_CODES
         ):
             device.bound_to = source

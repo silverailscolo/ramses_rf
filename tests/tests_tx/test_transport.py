@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from ramses_tx import exceptions as exc
+from ramses_tx.const import Verb
 from ramses_tx.discovery import is_hgi80
 from ramses_tx.transport import TransportConfig, transport_factory
 from ramses_tx.transport.callback import CallbackTransport
@@ -379,7 +380,7 @@ async def test_write_frame_dispatches_outbound_dto_with_is_tx_true() -> None:
     assert transport._protocol._msg_received.called
     dto: PacketDTO = transport._protocol._msg_received.call_args[0][0]
     assert dto.is_tx is True
-    assert dto.verb == "RQ"
+    assert dto.verb == Verb.RQ
 
 
 async def test_is_recent_tx_matches_hgi80_echo_with_addr_substitution() -> None:

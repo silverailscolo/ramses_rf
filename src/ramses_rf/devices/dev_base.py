@@ -267,7 +267,7 @@ class DeviceBase(Entity):
             self._polling_interval = None
         else:
             eff_schedule = self.effective_polling_interval or {}
-            codes = list(eff_schedule.keys()) or ["10E0"]
+            codes = list(eff_schedule.keys()) or [Code._10E0]
             self._polling_interval = {code: interval for code in codes}
 
         if getattr(self._gateway, "polling_manager", None):

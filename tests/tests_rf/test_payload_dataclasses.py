@@ -8,6 +8,7 @@ import ramses_rf.payloads.heating
 import ramses_rf.payloads.hvac
 import ramses_rf.payloads.system
 import ramses_tx.const as tx_const
+from ramses_rf.const import Code, Verb
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.dhw import (
@@ -425,7 +426,7 @@ def test_dhw_config_payload_12f0_parity() -> None:
 
 def test_dhw_state_payload_1f41_parity() -> None:
     # Arrange
-    raw_hex = "0001"
+    raw_hex = Code._0001
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
@@ -528,7 +529,7 @@ def test_flow_temp_payload_3200_parity() -> None:
 
 def test_hvac_ventilation_status_payload_22e0_parity() -> None:
     # Arrange
-    raw_hex = "0100"
+    raw_hex = Code._0100
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
@@ -637,7 +638,7 @@ def test_system_date_payload_0002_parity() -> None:
 
 def test_opentherm_status_payload_0150_parity() -> None:
     # Arrange
-    raw_hex = "0100"
+    raw_hex = Code._0100
     raw_bytes = bytes.fromhex(raw_hex)
 
     # Act
@@ -673,12 +674,12 @@ def test_pipeline_shadow_parity_execution() -> None:
     dto = PacketDTO(
         timestamp=dt.now(),
         rssi="-70",
-        verb=" I",
+        verb=Verb.I_,
         seq="001",
         addr1="04:123456",
         addr2="--:------",
         addr3="--:------",
-        code="3150",
+        code=Code._3150,
         length="002",
         payload="00C8",
     )
@@ -715,7 +716,7 @@ def test_relay_demand_payload_0008_parity() -> None:
 
 def test_relay_failsafe_payload_0009_parity() -> None:
     # Arrange
-    raw_hex = "0001"
+    raw_hex = Code._0001
     raw_bytes = bytes.fromhex(raw_hex)
     from ramses_rf.payloads.system import RelayFailsafePayload
 
@@ -1109,7 +1110,7 @@ def test_complete_payload_registry_coverage() -> None:
         if a.startswith("_") and len(a) == 5
     ]
 
-    aliases = ["2E10"]
+    aliases = [Code._2E10]
     all_expected = known_codes + aliases
 
     # Assert
@@ -1123,12 +1124,12 @@ def test_pipeline_3150_non_array_preserves_idx() -> None:
     dto = PacketDTO(
         timestamp=dt.now(),
         rssi="-70",
-        verb=" I",
+        verb=Verb.I_,
         seq="001",
         addr1="04:123456",
         addr2="--:------",
         addr3="01:555555",
-        code="3150",
+        code=Code._3150,
         length="002",
         payload="00C8",
     )
@@ -1191,7 +1192,7 @@ def test_hvac_payload_roundtrip_codecs_parity() -> None:
     assert p_12c8.to_bytes() == raw_12c8
 
     # Arrange & Act 3: HvacProgrammeEnabledPayload (22B0)
-    raw_22b0 = bytes.fromhex("0005")
+    raw_22b0 = bytes.fromhex(Code._0005)
     p_22b0 = ramses_rf.payloads.hvac.HvacProgrammeEnabledPayload.from_bytes(raw_22b0)
     assert p_22b0.enabled is True
     assert p_22b0.to_bytes() == raw_22b0
@@ -1211,9 +1212,9 @@ def test_hvac_payload_roundtrip_codecs_parity() -> None:
 
 def test_system_payload_roundtrip_codecs_parity() -> None:
     # Arrange & Act 1: OemCodePayload (000E)
-    raw_000e = bytes.fromhex("0001")
+    raw_000e = bytes.fromhex(Code._0001)
     p_000e = ramses_rf.payloads.system.OemCodePayload.from_bytes(raw_000e)
-    assert p_000e.payload_hex == "0001"
+    assert p_000e.payload_hex == Code._0001
     assert p_000e.to_bytes() == raw_000e
 
     # Arrange & Act 2: DeviceBatteryPayload (1060)
@@ -1345,7 +1346,7 @@ def test_polymorphic_dispatchers_parity_comprehensive() -> None:
     assert payload_to_dict(p_12a0_6b) == {"humidity_percent": 1.0}
 
     # 6. HvacVentilationStatus (22E0, 22E5, 22E9): 2B and 4B
-    p_22e0_2b = HvacVentilationStatusPayload.from_bytes(bytes.fromhex("0100"))
+    p_22e0_2b = HvacVentilationStatusPayload.from_bytes(bytes.fromhex(Code._0100))
     assert isinstance(p_22e0_2b, ramses_rf.payloads.hvac.HvacVentilationStatus2BPayload)
     assert p_22e0_2b.flow_mode == 1
     assert p_22e0_2b.status_flags == 0

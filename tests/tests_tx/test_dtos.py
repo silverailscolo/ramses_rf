@@ -4,6 +4,7 @@ from datetime import UTC, datetime as dt
 
 import pytest
 
+from ramses_tx.const import Code, Verb
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.packet import Packet
 
@@ -23,12 +24,12 @@ def test_packet_to_dto_populates_all_fields_accurately() -> None:
     assert isinstance(dto, PacketDTO)
     assert dto.timestamp == test_dtm
     assert dto.rssi == "045"
-    assert dto.verb == "RQ"
+    assert dto.verb == Verb.RQ
     assert dto.seq == ""
     assert dto.addr1 == "18:000730"
     assert dto.addr2 == "01:145038"
     assert dto.addr3 == "--:------"
-    assert dto.code == "000A"
+    assert dto.code == Code._000A
     assert dto.length == "002"
     assert dto.raw_payload == "0800"
 
@@ -45,11 +46,11 @@ def test_packet_to_dto_enforces_strict_verb_padding() -> None:
     dto = packet.to_dto()
 
     # Assert: Ensure ' I' dynamically right-pads to exactly two characters
-    assert dto.verb == " I"
+    assert dto.verb == Verb.I_
     assert dto.addr1 == "01:145038"
     assert dto.addr2 == "--:------"
     assert dto.addr3 == "01:145038"
-    assert dto.code == "30C9"
+    assert dto.code == Code._30C9
 
 
 def test_packet_dto_is_tx_default_and_custom() -> None:
@@ -60,24 +61,24 @@ def test_packet_dto_is_tx_default_and_custom() -> None:
     inbound_dto = PacketDTO(
         timestamp=test_dtm,
         rssi="045",
-        verb="RQ",
+        verb=Verb.RQ,
         seq="",
         addr1="18:000730",
         addr2="01:145038",
         addr3="--:------",
-        code="000A",
+        code=Code._000A,
         length="002",
         payload="0800",
     )
     outbound_dto = PacketDTO(
         timestamp=test_dtm,
         rssi="045",
-        verb="RQ",
+        verb=Verb.RQ,
         seq="",
         addr1="18:000730",
         addr2="01:145038",
         addr3="--:------",
-        code="000A",
+        code=Code._000A,
         length="002",
         payload="0800",
         is_tx=True,
@@ -119,10 +120,13 @@ def test_packet_from_dict_resolves_src_dst(
 ) -> None:
     """Packet.from_dict resolves positional addr1/addr2/addr3 to logical src/dst.
 
-    The verb determines which positional address is src and which is dst:
-    - I/RQ/W: addr1=src, addr2=dst
-    - RP: addr1=dst, addr2=src (reversed for replies)
-    - I broadcast: addr1=src=addr3 (self-announcement)
+    from ramses_tx.const import Code, Verb
+
+
+        The verb determines which positional address is src and which is dst:
+        - I/RQ/W: addr1=src, addr2=dst
+        - RP: addr1=dst, addr2=src (reversed for replies)
+        - I broadcast: addr1=src=addr3 (self-announcement)
     """
     pkt = Packet.from_dict("2026-01-01T00:00:00", {"rssi": "000", "frame": frame})
     assert pkt.src.id == expected_src

@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import DevType
+from ramses_rf.const import DevType, Verb
 from ramses_rf.devices import HvacVentilator
 from ramses_rf.gateway import Gateway
 from ramses_rf.models.state_base import DeviceTraits
@@ -157,7 +157,7 @@ class TestHvacVentilator:
         msg.src.id = TEST_DEVICE_ID
         msg.dst = MagicMock()
         msg.dst.id = TEST_DEVICE_ID
-        msg.verb = " I"
+        msg.verb = Verb.I_
         msg.payload = {"parameter": TEST_PARAM_ID, "value": TEST_PARAM_VALUE}
 
         # Set up the message store
@@ -193,8 +193,8 @@ class TestHvacVentilator:
         from ramses_rf.pipeline.polling import PollingManager
 
         schedule = PollingManager.resolve_schedule_for_device(hvac_ventilator)
-        assert "10D0" in schedule, "Filter change (10D0) not scheduled for FAN"
-        assert "3150" in schedule, "Fan speed status (3150) not scheduled for FAN"
+        assert Code._10D0 in schedule, "Filter change (10D0) not scheduled for FAN"
+        assert Code._3150 in schedule, "Fan speed status (3150) not scheduled for FAN"
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
@@ -432,7 +432,7 @@ class TestHvacVentilator:
         """
         # Create an invalid message (missing payload)
         msg = MagicMock()
-        msg.verb = " I"
+        msg.verb = Verb.I_
         msg.src = MagicMock()
         msg.src.id = TEST_DEVICE_ID
         msg.dst = MagicMock()
@@ -464,7 +464,7 @@ class TestHvacVentilator:
         # And with a message that would trigger callbacks
         msg = MagicMock()
         msg.code = Code._2411
-        msg.verb = " I"
+        msg.verb = Verb.I_
         msg.src = MagicMock()
         msg.src.id = TEST_DEVICE_ID
         msg.dst = MagicMock()
@@ -495,7 +495,7 @@ class TestHvacVentilator:
         """
         msg = MagicMock()
         msg.code = Code._2411
-        msg.verb = "RP"
+        msg.verb = Verb.RP
         msg.src = MagicMock()
         msg.src.id = TEST_DEVICE_ID
         msg.dst = MagicMock()
@@ -528,7 +528,7 @@ class TestHvacVentilator:
         """
         msg = MagicMock()
         msg.code = Code._2411
-        msg.verb = "RP"
+        msg.verb = Verb.RP
         msg.src = MagicMock()
         msg.src.id = TEST_DEVICE_ID
         msg.dst = MagicMock()

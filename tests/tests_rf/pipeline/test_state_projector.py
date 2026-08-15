@@ -11,7 +11,7 @@ import asyncio
 import uuid
 from typing import Any
 
-from ramses_rf.const import SZ_REMAINING_DAYS, Code, DevType
+from ramses_rf.const import SZ_REMAINING_DAYS, Code, DevType, Verb
 from ramses_rf.messages import Message
 from ramses_rf.models import HvacState, OpenThermState, StateUpdatedEvent
 from ramses_rf.pipeline.ingestion import StateProjector
@@ -117,7 +117,7 @@ def test_worker_opentherm_modulation_parsing() -> None:
 
     mock_msg = MockMessage(
         code=Code._3220,
-        verb="RP",
+        verb=Verb.RP,
         payload={"msg_id": int(OtDataId.REL_MODULATION_LEVEL), "value": 42.5},
         src_id=device.id,
     )
@@ -144,7 +144,7 @@ def test_worker_opentherm_status_flag_parsing() -> None:
     status_array = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0]
     mock_msg = MockMessage(
         code=Code._3220,
-        verb="RP",
+        verb=Verb.RP,
         payload={"msg_id": int(OtDataId.STATUS), "value": status_array},
         src_id=device.id,
     )

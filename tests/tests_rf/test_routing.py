@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf import dispatcher
-from ramses_rf.const import DevType
+from ramses_rf.const import DevType, Verb
 from ramses_rf.devices import HvacVentilator
 from ramses_rf.dispatcher import process_msg
 from ramses_rf.gateway import Gateway
@@ -38,16 +38,16 @@ def test_routing_context_string_formatting() -> None:
 def test_state_header_legacy_formatting() -> None:
     """Test that StateHeader perfectly replicates the legacy _hdr format."""
     hdr = StateHeader.create(
-        code="3220",
-        verb="RP",
+        code=Code._3220,
+        verb=Verb.RP,
         source_id="01:123456",
         context_value="00",
     )
     assert hdr.legacy_hdr == "3220|RP|01:123456|00"
 
     base_hdr = StateHeader.create(
-        code="10A0",
-        verb=" I",
+        code=Code._10A0,
+        verb=Verb.I_,
         source_id="04:654321",
         context_value=True,
     )
@@ -56,9 +56,9 @@ def test_state_header_legacy_formatting() -> None:
 
 def test_state_header_hashing() -> None:
     """Test that StateHeader can be used as an O(1) dictionary key."""
-    hdr1 = StateHeader.create("000C", "RP", "01:111111", "01")
-    hdr2 = StateHeader.create("000C", "RP", "01:111111", "01")
-    hdr3 = StateHeader.create("000C", "RP", "01:111111", "02")
+    hdr1 = StateHeader.create(Code._000C, Verb.RP, "01:111111", "01")
+    hdr2 = StateHeader.create(Code._000C, Verb.RP, "01:111111", "01")
+    hdr3 = StateHeader.create(Code._000C, Verb.RP, "01:111111", "02")
 
     cache = {hdr1: "payload_data"}
 
@@ -68,16 +68,16 @@ def test_state_header_hashing() -> None:
 
 def test_state_header_topic_generation() -> None:
     """Test the Master Plan topic generation logic."""
-    state_hdr = StateHeader.create("30C9", " I", "01:123456", "00")
+    state_hdr = StateHeader.create(Code._30C9, Verb.I_, "01:123456", "00")
     assert state_hdr.topic is EventTopic.INFORMATION
 
-    disc_hdr = StateHeader.create("1FC9", " I", "01:123456", "00")
+    disc_hdr = StateHeader.create(Code._1FC9, Verb.I_, "01:123456", "00")
     assert disc_hdr.topic is EventTopic.TOPOLOGY_DISCOVERY
 
-    req_hdr = StateHeader.create("3220", "RQ", "01:123456", "00")
+    req_hdr = StateHeader.create(Code._3220, Verb.RQ, "01:123456", "00")
     assert req_hdr.topic is EventTopic.REQUEST
 
-    write_hdr = StateHeader.create("2309", " W", "01:123456", "00")
+    write_hdr = StateHeader.create(Code._2309, Verb.W_, "01:123456", "00")
     assert write_hdr.topic is EventTopic.WRITE
 
 
@@ -112,7 +112,7 @@ def _make_fan(gateway: MagicMock) -> HvacVentilator:
     return fan
 
 
-def _make_2411_msg(verb: str = " I") -> MagicMock:
+def _make_2411_msg(verb: str = Verb.I_) -> MagicMock:
     """Create a mock 2411 message whose src/dst resolve to the FAN."""
     msg = MagicMock()
     msg.code = Code._2411
@@ -138,7 +138,7 @@ class TestDispatcher2411Routing:
         callback = MagicMock()
         fan.set_initialized_callback(callback)
 
-        msg = _make_2411_msg(verb=" I")
+        msg = _make_2411_msg(verb=Verb.I_)
         await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411, "supports_2411 was not flipped"
@@ -154,7 +154,7 @@ class TestDispatcher2411Routing:
     async def test_2411_rp_also_routed(self, mock_gateway: MagicMock) -> None:
         """A 2411 ``RP`` reply must also be routed."""
         fan = _make_fan(mock_gateway)
-        msg = _make_2411_msg(verb="RP")
+        msg = _make_2411_msg(verb=Verb.RP)
         await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411
@@ -166,7 +166,7 @@ class TestDispatcher2411Routing:
     async def test_2411_rq_not_routed(self, mock_gateway: MagicMock) -> None:
         """A 2411 ``RQ`` request carries no telemetry and must be skipped."""
         fan = _make_fan(mock_gateway)
-        msg = _make_2411_msg(verb="RQ")
+        msg = _make_2411_msg(verb=Verb.RQ)
         await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert not fan._supports_2411, "RQ must not flip supports_2411"
@@ -184,7 +184,7 @@ class TestDispatcher2411Routing:
         other.id = "01:000001"
         mock_gateway.device_registry.device_by_id["01:000001"] = other
 
-        msg = _make_2411_msg(verb=" I")
+        msg = _make_2411_msg(verb=Verb.I_)
         await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411
@@ -204,7 +204,7 @@ class TestStateProjector2411Routing:
         fan.set_initialized_callback(callback)
 
         projector = StateProjector(mock_gateway, MagicMock())
-        msg = _make_2411_msg(verb=" I")
+        msg = _make_2411_msg(verb=Verb.I_)
         projector._route_2411_to_fan(msg)
 
         assert fan._supports_2411
@@ -221,7 +221,7 @@ class TestStateProjector2411Routing:
         fan = _make_fan(mock_gateway)
         projector = StateProjector(mock_gateway, MagicMock())
 
-        msg = _make_2411_msg(verb=" I")
+        msg = _make_2411_msg(verb=Verb.I_)
         projector.process_message_state(msg)
 
         assert fan._supports_2411

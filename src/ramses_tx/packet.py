@@ -15,7 +15,7 @@ import orjson
 
 from . import exceptions as exc
 from .address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, pkt_addrs
-from .const import I_, RAW_LINE_REGEX, RP, W_, Code, VerbT
+from .const import I_, RAW_LINE_REGEX, RP, W_, Code, Verb
 from .dtos import CommandDTO, PacketDTO
 from .logger import getLogger
 from .typing import HeaderT, PayloadT
@@ -428,11 +428,11 @@ class Packet:
         return self._dto.rssi or "..."
 
     @property
-    def verb(self) -> VerbT:
+    def verb(self) -> Verb:
         """Return the action verb enum/string.
 
         :returns: Action verb instance
-        :rtype: VerbT
+        :rtype: Verb
         """
         return self._dto.verb  # type: ignore[return-value]
 

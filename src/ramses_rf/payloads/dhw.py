@@ -8,7 +8,7 @@ import struct
 from dataclasses import dataclass
 from typing import Any, ClassVar, Self
 
-from ramses_rf.const import SZ_ACTIVE, SZ_DHW_INDEX, SZ_MODE, SZ_UNTIL
+from ramses_rf.const import SZ_ACTIVE, SZ_DHW_INDEX, SZ_MODE, SZ_UNTIL, Code
 from ramses_tx.helpers import hex_to_dtm
 
 from .base import PayloadBase, parse_index
@@ -17,7 +17,7 @@ from .registry import register_payload
 # ----------------------------------------------------------------------
 
 
-@register_payload("1260")
+@register_payload(Code._1260)
 @dataclass(frozen=True, slots=True)
 class DhwTempPayload(PayloadBase):
     """DHW cylinder temperature payload (Opcode 1260).
@@ -91,7 +91,7 @@ class DhwTempPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("12F0")
+@register_payload(Code._12F0)
 @dataclass(frozen=True, slots=True)
 class DhwFlowRatePayload(PayloadBase):
     """DHW flow rate payload (Opcode 12F0).
@@ -216,7 +216,7 @@ class DhwConfigPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("10A0")
+@register_payload(Code._10A0)
 class DhwParamsPayload(PayloadBase):
     """Master payload dispatcher for DHW parameters (Opcode 10A0).
 
@@ -427,7 +427,7 @@ DhwParamsPayload.VARIANTS = (DhwParams3BPayload, DhwParams6BPayload)
 # ----------------------------------------------------------------------
 
 
-@register_payload("1F41")
+@register_payload(Code._1F41)
 class DhwStatePayload(PayloadBase):
     """Master payload dispatcher for DHW state (Opcode 1F41).
 
@@ -682,7 +682,7 @@ DhwStatePayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("11F0")
+@register_payload(Code._11F0)
 @dataclass(frozen=True, slots=True)
 class DhwHeatpumpRelayPayload(PayloadBase):
     """Heatpump relay status payload (Opcode 11F0).

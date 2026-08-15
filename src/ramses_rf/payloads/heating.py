@@ -23,6 +23,8 @@ from ramses_rf.const import (
     SZ_ZONE_INDEX,
     ZON_MODE_MAP,
     ZON_ROLE_MAP,
+    Code,
+    Verb,
 )
 from ramses_tx.address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, hex_id_to_dev_id
 from ramses_tx.helpers import hex_from_dtm, hex_to_dtm, hex_to_percent
@@ -34,7 +36,7 @@ from .registry import register_payload
 # ----------------------------------------------------------------------
 
 
-@register_payload("3150")
+@register_payload(Code._3150)
 class HeatDemandPayload(PayloadBase):
     """Master payload dispatcher for heat demand (Opcode 3150)."""
 
@@ -261,7 +263,7 @@ HeatDemandPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("30C9")
+@register_payload(Code._30C9)
 class TemperaturePayload(PayloadBase):
     """Master payload dispatcher for temperature (Opcode 30C9).
 
@@ -563,7 +565,7 @@ class ScheduleFragmentPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0404")
+@register_payload(Code._0404)
 @dataclass(frozen=True, slots=True)
 class ScheduleSwitchpointPayload(PayloadBase):
     """Schedule switchpoint payload (Opcode 0404).
@@ -678,7 +680,7 @@ class ScheduleSwitchpointPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1030")
+@register_payload(Code._1030)
 class SystemSyncPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 1030."""
 
@@ -951,7 +953,7 @@ SystemSyncPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("1FC9")
+@register_payload(Code._1FC9)
 @dataclass(frozen=True, slots=True)
 class BindingPayload(PayloadBase):
     """Binding payload (Opcode 1FC9).
@@ -1018,7 +1020,7 @@ class BindingPayload(PayloadBase):
         result: dict[str, Any] = {}
 
         if msg is not None:
-            verb = getattr(msg, "verb", " I")
+            verb = getattr(msg, "verb", Verb.I_)
             src_id = str(
                 getattr(getattr(msg, "src", ""), "id", getattr(msg, "src", ""))
             )
@@ -1084,7 +1086,7 @@ class BindingPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("000A")
+@register_payload(Code._000A)
 @dataclass(frozen=True, slots=True)
 class ZoneConfigPayload(PayloadBase):
     """Zone configuration payload (Opcode 000A).
@@ -1214,7 +1216,7 @@ class ZoneConfigPayload(PayloadBase):
         }
 
 
-@register_payload("0004")
+@register_payload(Code._0004)
 class ZoneNamePayload(PayloadBase):
     """Master payload dispatcher for zone name (Opcode 0004)."""
 
@@ -1425,7 +1427,7 @@ ZoneNamePayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("12C0")
+@register_payload(Code._12C0)
 @dataclass(frozen=True, slots=True)
 class OutdoorTempPayload(PayloadBase):
     """Outdoor temperature reading payload (Opcode 12C0, 2249).
@@ -1526,7 +1528,7 @@ class OutdoorTempPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2309")
+@register_payload(Code._2309)
 class ZoneSetpointPayload(PayloadBase):
     """Master payload dispatcher for zone setpoint (Opcode 2309)."""
 
@@ -1672,7 +1674,7 @@ SetPointInfoPayload = ZoneSetpointPayload
 # ----------------------------------------------------------------------
 
 
-@register_payload("3200")
+@register_payload(Code._3200)
 @dataclass(frozen=True, slots=True)
 class FlowTempPayload(PayloadBase):
     """Boiler supply flow temperature payload (Opcode 3200).
@@ -1739,7 +1741,7 @@ class FlowTempPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("0005")
+@register_payload(Code._0005)
 class SystemZonesPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 0005.
 
@@ -1899,7 +1901,7 @@ SystemZonesPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("0008")
+@register_payload(Code._0008)
 class RelayDemandPayload(PayloadBase):
     """Master payload dispatcher for relay demand (Opcode 0008)."""
 
@@ -2021,7 +2023,7 @@ RelayDemandPayload.VARIANTS = (RelayDemand2BPayload,)
 # ----------------------------------------------------------------------
 
 
-@register_payload("000C")
+@register_payload(Code._000C)
 class ZoneDevicesPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 000C.
 
@@ -2307,7 +2309,7 @@ ZoneDevicesPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("1081")
+@register_payload(Code._1081)
 @dataclass(frozen=True, slots=True)
 class MaxChSetpointPayload(PayloadBase):
     """Maximum CH supply setpoint temperature payload (Opcode 1081).
@@ -2365,7 +2367,7 @@ class MaxChSetpointPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1090")
+@register_payload(Code._1090)
 @dataclass(frozen=True, slots=True)
 class Opcode1090Payload(PayloadBase):
     """Dual temperature status payload (Opcode 1090).
@@ -2425,7 +2427,7 @@ class Opcode1090Payload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1100")
+@register_payload(Code._1100)
 class TpiParamsPayload(PayloadBase):
     """Master payload dispatcher for TPI parameters (Opcode 1100).
 
@@ -2681,7 +2683,7 @@ TpiParamsPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("1300")
+@register_payload(Code._1300)
 @dataclass(frozen=True, slots=True)
 class ChPressurePayload(PayloadBase):
     """Central heating system pressure payload (Opcode 1300).
@@ -2744,7 +2746,7 @@ class ChPressurePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2349")
+@register_payload(Code._2349)
 class ZoneModePayload(PayloadBase):
     """Master payload dispatcher for zone mode (Opcode 2349).
 
@@ -3176,7 +3178,7 @@ ZoneModePayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("2389")
+@register_payload(Code._2389)
 @dataclass(frozen=True, slots=True)
 class SetpointOverridePayload(PayloadBase):
     """Target setpoint override payload (Opcode 2389).
@@ -3244,7 +3246,7 @@ class SetpointOverridePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("3B00")
+@register_payload(Code._3B00)
 @dataclass(frozen=True, slots=True)
 class ActuatorSyncPayload(PayloadBase):
     """TPI cycle actuator sync payload (Opcode 3B00).
@@ -3316,7 +3318,7 @@ class ActuatorSyncPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("3EF0")
+@register_payload(Code._3EF0)
 @dataclass(frozen=True, slots=True)
 class ActuatorStatePayload(PayloadBase):
     """Actuator modulation state payload (Opcode 3EF0).
@@ -3486,7 +3488,7 @@ class ActuatorStatePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("3EF1")
+@register_payload(Code._3EF1)
 class ActuatorCyclePayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 3EF1.
 

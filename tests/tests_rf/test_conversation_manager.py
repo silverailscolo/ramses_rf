@@ -12,6 +12,7 @@ import pytest
 from ramses_rf.address import Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command
+from ramses_rf.const import Code, Verb
 from ramses_rf.dispatcher import process_msg
 from ramses_rf.enums import Action
 from ramses_rf.gateway import Gateway
@@ -23,8 +24,8 @@ from ramses_tx.helpers import dt_now
 
 
 def _create_mock_message(
-    verb: str = "RP",
-    code: str = "10A0",
+    verb: str = Verb.RP,
+    code: str = Code._10A0,
     src_id: str = "01:078710",
 ) -> MagicMock:
     msg = MagicMock()
@@ -145,7 +146,7 @@ def test_conversation_manager_accepts_i_for_w_commands() -> None:
     mock_msg = MagicMock()
     mock_msg.verb = I_
     mock_msg.src.id = "01:216136"  # from the device we sent to
-    mock_msg.code.__str__ = lambda self: "1F41"
+    mock_msg.code.__str__ = lambda self: Code._1F41
     mock_msg._pkt = MagicMock()
 
     matched = cm.process_msg(mock_msg)

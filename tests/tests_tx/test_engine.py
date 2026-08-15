@@ -13,7 +13,7 @@ from ramses_rf.gateway import Gateway
 from ramses_rf.messages import ApplicationMessage
 from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.config import EngineConfig
-from ramses_tx.const import Code, Priority
+from ramses_tx.const import Code, Priority, Verb
 from ramses_tx.dtos import CommandDTO as Command, PacketDTO
 from ramses_tx.engine import Engine
 
@@ -24,12 +24,12 @@ def mock_dto() -> PacketDTO:
     return PacketDTO(
         timestamp=dt.now(),
         rssi="045",
-        verb="RQ",
+        verb=Verb.RQ,
         seq="---",
         addr1="18:006402",
         addr2="13:049798",
         addr3="--:------",
-        code="1FC9",
+        code=Code._1FC9,
         length="001",
         payload="00",
     )
@@ -249,12 +249,12 @@ async def test_engine_drop_msg(
     dto = PacketDTO(
         timestamp=dt.now(),
         rssi="045",
-        verb="RQ",
+        verb=Verb.RQ,
         seq="---",
         addr1="18:006402",
         addr2="13:049798",
         addr3="--:------",
-        code="1FC9",
+        code=Code._1FC9,
         length="001",
         payload="00",
     )
@@ -268,10 +268,10 @@ async def test_engine_drop_msg(
 @pytest.mark.asyncio
 async def test_engine_create_cmd() -> None:
     # Engine wraps CommandDTO creation natively
-    cmd = Engine.create_cmd("RQ", "18:006402", Code._1FC9, "00")
+    cmd = Engine.create_cmd(Verb.RQ, "18:006402", Code._1FC9, "00")
     assert isinstance(cmd, Command)
-    assert cmd.code == "1FC9"
-    assert cmd.verb == "RQ"
+    assert cmd.code == Code._1FC9
+    assert cmd.verb == Verb.RQ
 
 
 @pytest.mark.asyncio
@@ -280,7 +280,7 @@ async def test_engine_async_send_cmd(dummy_engine: Engine) -> None:
     from ramses_tx.dtos import CommandDTO
 
     cmd = CommandDTO(
-        verb="RQ",
+        verb=Verb.RQ,
         addr1="18:000730",
         addr2="18:006402",
         addr3="--:------",
@@ -315,7 +315,7 @@ def test_application_message_bind_context(mock_dto: PacketDTO) -> None:
 
 def test_application_message_expired_1f09_logic(mock_dto: PacketDTO) -> None:
     # Payload specific expiration correctly resolves via remaining_seconds
-    modified_dto = replace(mock_dto, verb="RP", code=str(Code._1F09))
+    modified_dto = replace(mock_dto, verb=Verb.RP, code=str(Code._1F09))
 
     app_msg = ApplicationMessage(modified_dto)
     app_msg._payload = {"remaining_seconds": 2}

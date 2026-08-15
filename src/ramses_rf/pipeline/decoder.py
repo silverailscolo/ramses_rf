@@ -11,7 +11,7 @@ from ramses_rf.messages.core import Message
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.routing import StateHeader, extract_context_value
 from ramses_tx import exceptions as exc
-from ramses_tx.const import Code
+from ramses_tx.const import RQ, Code
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.typing import DeviceIdT
 
@@ -56,7 +56,7 @@ class DecoderEngine:
             self._task = None
 
     async def _loop(self) -> None:
-        """Main asynchronous loop consuming the input queue."""
+        """Consume the input queue in an asynchronous loop."""
         while True:
             dto = await self._in_queue.get()
             try:
@@ -154,7 +154,7 @@ class DecoderEngine:
 
         if length == 1:
             return False
-        if str(dto.verb).strip() == "RQ":
-            if length == 2 and dto.code != "0016":
+        if str(dto.verb).strip() == RQ:
+            if length == 2 and dto.code != Code._0016:
                 return False
         return True

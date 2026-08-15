@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta as td
 from typing import Final
 
+from ramses_tx.const import Code, Verb
 from ramses_tx.dtos import PacketDTO
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,11 +41,11 @@ _LOGGER = logging.getLogger(__name__)
 # migration. Until then, the conservative set below matches the legacy
 # detect_array_fragment() behaviour in dispatcher.py without introducing
 # false buffering of routine single-zone packets. See issue #669.
-_ARRAY_CODES: Final[tuple[str, ...]] = (
-    "000A",
-    "22C9",
+_ARRAY_CODES: Final[tuple[Code | str, ...]] = (
+    Code._000A,
+    Code._22C9,
 )
-_VERB_I: Final[str] = " I"
+_VERB_I: Final[Verb | str] = Verb.I_
 
 # A pending array is keyed by (src_id, code) so that an intervening
 # packet from a different source (or a different code) does not abort
@@ -101,7 +102,7 @@ class ReassemblyBuffer:
             self._task = None
 
     async def _loop(self) -> None:
-        """Main asynchronous loop consuming the input queue."""
+        """Consume the input queue in an asynchronous loop."""
         while True:
             try:
                 # Wait for a packet, or timeout if we have any pending

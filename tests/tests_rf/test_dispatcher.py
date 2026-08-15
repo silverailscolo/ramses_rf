@@ -580,7 +580,7 @@ class TestResolveLogicalTargets:
         msg = MagicMock()
         msg.src.id = src_id
         msg.dst.id = src_id
-        msg.code = "30C9"
+        msg.code = Code._30C9
         msg._has_array = False
 
         payload = {"zone_idx": "00", "temperature": 21.0}

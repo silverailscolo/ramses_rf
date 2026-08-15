@@ -307,5 +307,5 @@ def test_opentherm_bridge_polling_schedule() -> None:
     otb = OtbGateway(mock_gwy, mock_addr)
     schedule = PollingManager.resolve_schedule_for_device(otb)
 
-    assert "3EF0" in schedule, "OpenTherm Modulation (3EF0) not in OTB schedule"
-    assert "3220" in schedule, "OpenTherm Data ID (3220) query not in OTB schedule"
+    assert Code._3EF0 in schedule, "OpenTherm Modulation (3EF0) not in OTB schedule"
+    assert Code._3220 in schedule, "OpenTherm Data ID (3220) query not in OTB schedule"

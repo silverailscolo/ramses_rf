@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from ramses_tx import Address, CommandDTO, Packet
 
     from .config import GatewayConfig
-    from .const import IndexT, VerbT
+    from .const import IndexT, Verb
     from .devices import Device
     from .exceptions import CommandInvalid
     from .gateway import Gateway
@@ -69,7 +69,7 @@ __all__ = [
     #
     "Code",
     "IndexT",
-    "VerbT",
+    "Verb",
     #
     "exceptions",
     #

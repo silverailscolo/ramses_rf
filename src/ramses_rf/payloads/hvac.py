@@ -34,6 +34,7 @@ from ramses_rf.const import (
     SZ_TEMPERATURE,
     SZ_UFH_INDEX,
     SZ_ZONE_INDEX,
+    Code,
 )
 from ramses_rf.protocol.ramses import (
     _31DA_FAN_INFO,
@@ -47,7 +48,7 @@ from .registry import register_payload
 # ----------------------------------------------------------------------
 
 
-@register_payload("01FF")
+@register_payload(Code._01FF)
 @dataclass(frozen=True, slots=True)
 class SpiderThermostatPayload(PayloadBase):
     """Spider Thermostat payload (Opcode 01FF).
@@ -156,7 +157,7 @@ class SpiderThermostatPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("10D0")
+@register_payload(Code._10D0)
 @dataclass(frozen=True, slots=True)
 class HvacFilterChangePayload(PayloadBase):
     """HVAC filter change counter payload (Opcode 10D0).
@@ -270,7 +271,7 @@ class HvacFilterChangePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("10E2")
+@register_payload(Code._10E2)
 @dataclass(frozen=True, slots=True)
 class HvacCounterPayload(PayloadBase):
     """HVAC pulse counter payload (Opcode 10E2).
@@ -322,7 +323,7 @@ class HvacCounterPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1280")
+@register_payload(Code._1280)
 @dataclass(frozen=True, slots=True)
 class OutdoorHumidityPayload(PayloadBase):
     """Outdoor humidity reading payload (Opcode 1280).
@@ -380,7 +381,7 @@ class OutdoorHumidityPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1298")
+@register_payload(Code._1298)
 class Co2Payload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 1298."""
 
@@ -511,7 +512,7 @@ Co2Payload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("12A0")
+@register_payload(Code._12A0)
 class RelativeHumidityPayload(PayloadBase):
     """Master payload dispatcher for relative humidity (Opcode 12A0)."""
 
@@ -835,7 +836,7 @@ RelativeHumidityPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("12C8")
+@register_payload(Code._12C8)
 @dataclass(frozen=True, slots=True)
 class AirQualityBasisPayload(PayloadBase):
     """Air quality basis payload (Opcode 12C8).
@@ -906,7 +907,7 @@ class AirQualityBasisPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1470")
+@register_payload(Code._1470)
 @dataclass(frozen=True, slots=True)
 class HvacProgrammeSchemePayload(PayloadBase):
     """HVAC programme schedule scheme payload (Opcode 1470).
@@ -961,7 +962,7 @@ class HvacProgrammeSchemePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1F70")
+@register_payload(Code._1F70)
 @dataclass(frozen=True, slots=True)
 class HvacProgrammeConfigPayload(PayloadBase):
     """HVAC programme schedule configuration payload (Opcode 1F70).
@@ -1019,7 +1020,7 @@ class HvacProgrammeConfigPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("1FCA")
+@register_payload(Code._1FCA)
 @dataclass(frozen=True, slots=True)
 class HvacDevicePairingPayload(PayloadBase):
     """HVAC device pairing configuration payload (Opcode 1FCA).
@@ -1076,7 +1077,7 @@ class HvacDevicePairingPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2210")
+@register_payload(Code._2210)
 @dataclass(frozen=True, slots=True)
 class HvacAutoRequestPayload(PayloadBase):
     """HVAC auto demand request payload (Opcode 2210).
@@ -1185,7 +1186,7 @@ class HvacAutoRequestPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("22B0")
+@register_payload(Code._22B0)
 @dataclass(frozen=True, slots=True)
 class HvacProgrammeEnabledPayload(PayloadBase):
     """HVAC programme enabled status payload (Opcode 22B0).
@@ -1243,9 +1244,9 @@ class HvacProgrammeEnabledPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("22E0")
-@register_payload("22E5")
-@register_payload("22E9")
+@register_payload(Code._22E0)
+@register_payload(Code._22E5)
+@register_payload(Code._22E9)
 class HvacVentilationStatusPayload(PayloadBase):
     """Master payload dispatcher for HVAC status (22E0/22E5/22E9).
 
@@ -1447,7 +1448,7 @@ HvacVentilationStatusPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("22F1")
+@register_payload(Code._22F1)
 @dataclass(frozen=True, slots=True)
 class HvacFanModePayload(PayloadBase):
     """Fan mode setting payload (Opcode 22F1).
@@ -1564,7 +1565,7 @@ FanModePayload = HvacFanModePayload
 # ----------------------------------------------------------------------
 
 
-@register_payload("22F2")
+@register_payload(Code._22F2)
 @dataclass(frozen=True, slots=True)
 class HvacFlowRatePayload(PayloadBase):
     """Flow rate measurement payload (Opcode 22F2).
@@ -1630,10 +1631,7 @@ class HvacFlowRatePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("22F7")
-# ----------------------------------------------------------------------
-
-@register_payload("22F4")
+@register_payload(Code._22F4)
 @dataclass(frozen=True, slots=True)
 class HvacFanRatePayload(PayloadBase):
     """Fan rate payload (Opcode 22F4).
@@ -1723,10 +1721,8 @@ class HvacFanRatePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("22F7")
-# ----------------------------------------------------------------------
-
-@register_payload("22F8")
+@register_payload(Code._22F7)
+@register_payload(Code._22F8)
 @dataclass(frozen=True, slots=True)
 class HvacBypassPositionPayload(PayloadBase):
     """Bypass position payload (Opcode 22F7).
@@ -1798,7 +1794,7 @@ class HvacBypassPositionPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("22F3")
+@register_payload(Code._22F3)
 @dataclass(frozen=True, slots=True)
 class HvacVentilationControlPayload(PayloadBase):
     """HVAC Ventilation Control / Boost payload (Opcode 22F3).
@@ -1939,7 +1935,7 @@ class HvacVentilationControlPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2411")
+@register_payload(Code._2411)
 @dataclass(frozen=True, slots=True)
 class HvacFanParamPayload(PayloadBase):
     """HVAC fan parameters payload (Opcode 2411).
@@ -2096,10 +2092,8 @@ class HvacFanParamPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("3110")
-# ----------------------------------------------------------------------
-
-@register_payload("3120")
+@register_payload(Code._3110)
+@register_payload(Code._3120)
 @dataclass(frozen=True, slots=True)
 class HvacAirQualityPayload(PayloadBase):
     """HVAC indoor air quality sensor payload (Opcode 3110, 3120, 313E).
@@ -2218,7 +2212,7 @@ class HvacAirQualityPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("31D9")
+@register_payload(Code._31D9)
 @dataclass(frozen=True, slots=True)
 class HvacBypassStatePayload(PayloadBase):
     """HVAC bypass damper state payload (Opcode 31D9, 31E0).
@@ -2380,7 +2374,7 @@ class HvacBypassStatePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("31DA")
+@register_payload(Code._31DA)
 @dataclass(frozen=True, slots=True)
 class HvacVentilationStatePayload(PayloadBase):
     """Extended ventilation state payload (Opcode 31DA).
@@ -2651,7 +2645,7 @@ class HvacVentilationStatePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("4401")
+@register_payload(Code._4401)
 @dataclass(frozen=True, slots=True)
 class HvacFaultLogEntryPayload(PayloadBase):
     """HVAC fault log entry payload (Opcode 4401).
@@ -2678,7 +2672,7 @@ class HvacFaultLogEntryPayload(PayloadBase):
     # 2022-07-28T14:22:03.053744 045  I --- 20:257336 37:010188 --:------ 4401 020 10  22-E99E90E0  00-E99E90E0-75FF  BD-00000000-000A
     # 2022-07-28T14:22:20.516363 045 RQ --- 20:255710 20:257400 --:------ 4401 020 10  0B-E99E90F2  00-00000000-0000  00-00000000-000B
     # 2022-07-28T14:22:20.571640 085  I --- 20:255251 20:229597 --:------ 4401 020 10  39-E99E90F1  00-E99E90F1-5CFF  40-00000000-000A
-    # 2022-07-28T14:22:20.648696 058  I --- 20:257400 20:255710 --:------ 4401 020 10  0B-E99E90F2  00-E99E90F1-D4FF  DA-00000000-000B
+    # 2022-07-28T14:22:20.648696 058  I --- 20:257400 20:255710 --:------ 4401 020 10  0B-E99E90F2  00-E99E90F1-D4FF  DA-00000000-000A
     # 2022-11-03T23:00:04.854479 088 RQ --- 20:256717 37:013150 --:------ 4401 020 10  00-00259261  00-00000000-0000  00-00000000-0063
     # 2022-11-03T23:00:05.102491 045  I --- 37:013150 20:256717 --:------ 4401 020 10  00-00259261  00-000C9E4C-1800  00-00000000-0063
     # 2022-11-03T23:00:17.820659 072  I --- 20:256112 20:255825 --:------ 4401 020 10  00-00F1EB91  00-00E8871B-B700  00-00000000-0063
@@ -2720,7 +2714,7 @@ class HvacFaultLogEntryPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("4E01")
+@register_payload(Code._4E01)
 @dataclass(frozen=True, slots=True)
 class HvacSpiderTemperaturesPayload(PayloadBase):
     """Spider HVAC temperatures payload (Opcode 4E01).
@@ -2806,7 +2800,7 @@ class HvacSpiderTemperaturesPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("4E02")
+@register_payload(Code._4E02)
 @dataclass(frozen=True, slots=True)
 class HvacSpiderSetpointBoundsPayload(PayloadBase):
     """Spider HVAC setpoint bounds payload (Opcode 22C9, 4E02).
@@ -2892,7 +2886,7 @@ class HvacSpiderSetpointBoundsPayload(PayloadBase):
         return bytes([self.hdr]) + min_b + bytes([self.mode_code]) + max_b
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert Spider setpoint bounds payload to legacy dictionary layout.
+        """Convert Spider setpoint bounds payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
@@ -2911,7 +2905,7 @@ class HvacSpiderSetpointBoundsPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("4E04")
+@register_payload(Code._4E04)
 @dataclass(frozen=True, slots=True)
 class HvacSpiderModePayload(PayloadBase):
     """Spider HVAC mode payload (Opcode 4E04).
@@ -2982,13 +2976,9 @@ class HvacSpiderModePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("4E0D")
-# ----------------------------------------------------------------------
-
-@register_payload("4E14")
-# ----------------------------------------------------------------------
-
-@register_payload("4E15")
+@register_payload(Code._4E0D)
+@register_payload(Code._4E14)
+@register_payload(Code._4E15)
 @dataclass(frozen=True, slots=True)
 class HvacSpiderStatusPayload(PayloadBase):
     """Spider HVAC status payload (Opcode 4E15).
@@ -3037,7 +3027,7 @@ class HvacSpiderStatusPayload(PayloadBase):
         return struct.pack(self._STRUCT_FMT, self.hdr, self.flags)
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
-        """Convert Spider status payload to legacy dictionary layout.
+        """Convert Spider status payload to legacy dictionary format.
 
         :param msg: Optional message context object.
         :type msg: Any
@@ -3055,13 +3045,9 @@ class HvacSpiderStatusPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("4E16")
-# ----------------------------------------------------------------------
-
-@register_payload("4E20")
-# ----------------------------------------------------------------------
-
-@register_payload("4E21")
+@register_payload(Code._4E16)
+@register_payload(Code._4E20)
+@register_payload(Code._4E21)
 @dataclass(frozen=True, slots=True)
 class HvacFaultStatusPayload(PayloadBase):
     """HVAC fault log status payload (Opcode 4E01, 4E02-4E21).
@@ -3120,7 +3106,7 @@ class HvacFaultStatusPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("12B0")
+@register_payload(Code._12B0)
 class WindowStatePayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 12B0."""
 
@@ -3250,7 +3236,7 @@ WindowStatePayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("31E0")
+@register_payload(Code._31E0)
 class HvacVentilationDemandPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 31E0.
 
@@ -3427,8 +3413,8 @@ HvacVentilationDemandPayload.VARIANTS = (
 # ----------------------------------------------------------------------
 
 
-@register_payload("2209")
-@register_payload("22C9")
+@register_payload(Code._2209)
+@register_payload(Code._22C9)
 @dataclass(frozen=True, slots=True)
 class SetpointBoundsPayload(PayloadBase):
     """Temperature setpoint bounds payload (Opcode 2209, 22C9).
@@ -3551,7 +3537,7 @@ class SetpointBoundsPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2249")
+@register_payload(Code._2249)
 @dataclass(frozen=True, slots=True)
 class NowNextSetpointPayload(PayloadBase):
     """Now/next setpoint payload (Opcode 2249).
@@ -3627,7 +3613,7 @@ class NowNextSetpointPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("22D0")
+@register_payload(Code._22D0)
 @dataclass(frozen=True, slots=True)
 class UfhSystemModePayload(PayloadBase):
     """Underfloor heating system mode payload (Opcode 22D0).
@@ -3712,7 +3698,7 @@ class UfhSystemModePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("22D9")
+@register_payload(Code._22D9)
 @dataclass(frozen=True, slots=True)
 class DesiredBoilerSetpointPayload(PayloadBase):
     """Target boiler setpoint temperature payload (Opcode 22D9).
@@ -3782,7 +3768,7 @@ class DesiredBoilerSetpointPayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("2D49")
+@register_payload(Code._2D49)
 @dataclass(frozen=True, slots=True)
 class CoolingStatePayload(PayloadBase):
     """Cooling relay state payload (Opcode 2D49).
@@ -3846,7 +3832,7 @@ class CoolingStatePayload(PayloadBase):
 # ----------------------------------------------------------------------
 
 
-@register_payload("313E")
+@register_payload(Code._313E)
 @dataclass(frozen=True, slots=True)
 class HvacTimeOffsetPayload(PayloadBase):
     """HVAC Zulu time offset payload (Opcode 313E).

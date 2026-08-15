@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from ramses_rf.protocol.ramses import RQ_IDX_COMPLEX
 from ramses_tx import exceptions as exc
-from ramses_tx.const import RQ, Code
+from ramses_tx.const import I_, RP, RQ, W_, Code
 from ramses_tx.helpers import hex_to_temp
 
 from .registry import get_parser
@@ -249,5 +249,5 @@ def _check_msg_payload(msg: Message, payload: str) -> None:
             f"Packet formatting/evaluation failed: {err}"
         ) from err
 
-    if msg.verb not in ("RQ", "RP", " I", " W"):
+    if msg.verb not in (RQ, RP, I_, W_):
         raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")

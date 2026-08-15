@@ -31,7 +31,7 @@ from ..const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 
 if TYPE_CHECKING:
     # pylint: disable=unused-import
-    from ..const import IndexT, VerbT  # noqa: F401
+    from ..const import IndexT, Verb  # noqa: F401
 
 
 __all__ = ["Message"]
@@ -74,7 +74,7 @@ class Message:
         self.rssi: str = dto.rssi
 
         # Cleanly cast properties
-        self.verb: VerbT = dto.verb  # type: ignore[assignment]
+        self.verb: Verb = dto.verb  # type: ignore[assignment]
         self.seqn: str = dto.seq
 
         try:
@@ -362,17 +362,15 @@ class Message:
         :rtype: bool
         """
         v_str = str(getattr(self.verb, "value", str(self.verb))).split(".")[-1].strip()
-        if v_str not in ("RQ", "RQ_") and self.code in (
+        if v_str not in (RQ, f"{RQ}_") and self.code in (
             Code._1FC9,
-            "1FC9",
             Code._1F09,
-            "1F09",
         ):
             return True
         if self.len == 1:
             return False
-        if str(self.verb).strip() == "RQ":
-            if self.len == 2 and self.code != "0016":
+        if str(self.verb).strip() == RQ:
+            if self.len == 2 and self.code != Code._0016:
                 return False
         return True
 

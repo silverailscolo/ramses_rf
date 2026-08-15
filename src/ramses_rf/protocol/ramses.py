@@ -22,7 +22,7 @@ from ramses_tx.const import (  # noqa: F401, isort: skip, pylint: disable=unused
     RQ,
     W_,
     Code,
-    VerbT,
+    Verb,
 )
 
 from ..enums import DevType
@@ -353,7 +353,7 @@ CODE_IDX_DOMAIN: dict[Code, str] = {
 ########################################################################################
 # CODES_BY_DEV_SLUG - HEAT (CH/DHW) vs HVAC (ventilation)
 # TODO: 34: can 3220 - split out RND from THM/STA
-_DEV_KLASSES_HEAT: dict[str, dict[Code, dict[VerbT, Any]]] = {
+_DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
     DevType.RFG: {  # RFG100: RF to Internet gateway (and others)
         Code._0002: {RQ: {}},
         Code._0004: {I_: {}, RQ: {}},
@@ -630,7 +630,7 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[VerbT, Any]]] = {
     # },
 }
 # TODO: add 1FC9 everywhere?
-_DEV_KLASSES_HVAC: dict[str, dict[Code, dict[VerbT, Any]]] = {
+_DEV_KLASSES_HVAC: dict[str, dict[Code, dict[Verb, Any]]] = {
     DevType.DIS: {  # Orcon RF15 Display: ?a superset of a REM
         Code._0001: {RQ: {}},
         Code._042F: {I_: {}},
@@ -740,7 +740,7 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[VerbT, Any]]] = {
     # },
 }
 
-CODES_BY_DEV_SLUG: dict[str, dict[Code, dict[VerbT, Any]]] = {
+CODES_BY_DEV_SLUG: dict[str, dict[Code, dict[Verb, Any]]] = {
     DevType.HGI: {  # HGI80: RF to (USB) serial gateway interface
         Code._PUZZ: {I_: {}, RQ: {}, W_: {}},
     },  # HGI80s can do what they like
@@ -814,13 +814,13 @@ CODES_ONLY_FROM_CTL: tuple[Code, ...] = (
 # }
 
 
-_HVAC_VC_PAIR_BY_CLASS: dict[DevType, tuple[tuple[VerbT, Code], ...]] = {
+_HVAC_VC_PAIR_BY_CLASS: dict[DevType, tuple[tuple[Verb, Code], ...]] = {
     DevType.CO2: ((I_, Code._1298),),
     DevType.FAN: ((I_, Code._31D9), (I_, Code._31DA), (RP, Code._31DA)),
     DevType.HUM: ((I_, Code._12A0),),
     DevType.REM: ((I_, Code._22F1), (I_, Code._22F3)),
 }
-HVAC_KLASS_BY_VC_PAIR: dict[tuple[VerbT, Code], DevType] = {
+HVAC_KLASS_BY_VC_PAIR: dict[tuple[Verb, Code], DevType] = {
     t: k for k, v in _HVAC_VC_PAIR_BY_CLASS.items() for t in v
 }
 

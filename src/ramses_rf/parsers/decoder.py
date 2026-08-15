@@ -21,7 +21,7 @@ from ramses_rf.protocol.ramses import (
     RQ_NO_PAYLOAD,
 )
 from ramses_tx import exceptions as exc
-from ramses_tx.const import Code
+from ramses_tx.const import I_, RQ, Code
 from ramses_tx.dtos import PacketDTO
 
 from .registry import get_parser
@@ -139,10 +139,10 @@ class _LegacyMessage:
         """
         if self._len == 1:
             return False
-        if self.verb.strip() == "RQ":
+        if self.verb.strip() == RQ:
             if self.code_enum in RQ_NO_PAYLOAD:
                 return False
-            if self._len == 2 and self.code != "0016":
+            if self._len == 2 and self.code != Code._0016:
                 return False
         return True
 
@@ -151,10 +151,10 @@ class _LegacyMessage:
 
         :return: True if payload structure models an array configuration.
         """
-        if self.code == "1FC9":
-            return self.verb.strip() != "RQ"
+        if self.code == Code._1FC9:
+            return self.verb.strip() != RQ
 
-        if self.verb.strip() != "I" or self.code_enum not in CODES_WITH_ARRAYS:
+        if self.verb.strip() != I_ or self.code_enum not in CODES_WITH_ARRAYS:
             return False
 
         element_len = CODES_WITH_ARRAYS[self.code_enum][0]
@@ -165,7 +165,7 @@ class _LegacyMessage:
             return bool(a > 0 and b == 0)
 
         return bool(
-            self.code in ("22C9", "3150")
+            self.code in (Code._22C9, Code._3150)
             and self.src.type == "02"
             and self.src.id == self.dst.id
             and self.payload[:1] != "F"
@@ -185,7 +185,7 @@ class _LegacyMessage:
         elif self.dst.id == self.src.id:
             self._has_ctl_ = any(
                 (
-                    self.code == "3B00" and self.payload[:2] == "FC",
+                    self.code == Code._3B00 and self.payload[:2] == "FC",
                     self.code_enum
                     in tuple(CODES_ONLY_FROM_CTL) + (Code._31D9, Code._31DA),
                 )
@@ -218,13 +218,13 @@ class _LegacyMessage:
         :return: String or boolean representation if index parsing passes constraints.
         :raises exc.PacketPayloadInvalid: If structural legacy checks fail validations.
         """
-        if self.code == "0005":
+        if self.code == Code._0005:
             return self._has_array
 
-        if self.code == "0009" and self.src.type == "10":
+        if self.code == Code._0009 and self.src.type == "10":
             return False
 
-        if self.code == "000C":
+        if self.code == Code._000C:
             if self.payload[2:4] == "000F":
                 return "FC"
             if self.payload[0:4] == "010E":
@@ -233,19 +233,19 @@ class _LegacyMessage:
                 return "FA"
             return self.payload[:2]
 
-        if self.code == "0404":
+        if self.code == Code._0404:
             return "HW" if self.payload[2:4] == "23" else self.payload[:2]
 
-        if self.code == "0418":
+        if self.code == Code._0418:
             return self.payload[4:6]
 
-        if self.code == "1100":
+        if self.code == Code._1100:
             return self.payload[:2] if self.payload[:1] == "F" else False
 
-        if self.code == "3220":
+        if self.code == Code._3220:
             return self.payload[4:6]
 
-        if self.code == "0001" and self.payload[:2] != "00":
+        if self.code == Code._0001 and self.payload[:2] != "00":
             return self.payload[:2]
 
         if self.code_enum in CODE_IDX_ARE_COMPLEX:
@@ -267,7 +267,7 @@ class _LegacyMessage:
         if self._has_ctl:
             return self.payload[:2]
 
-        if self.code in ("31D9", "31DA"):
+        if self.code in (Code._31D9, Code._31DA):
             return self.payload[:2]
 
         # CODE_IDX_ARE_SIMPLE codes have schemas that explicitly permit a
@@ -297,9 +297,9 @@ class _LegacyMessage:
         if self._ctx_ is not None:
             return self._ctx_
 
-        if self.code in ("0005", "000C"):
+        if self.code in (Code._0005, Code._000C):
             self._ctx_ = self.payload[:4]
-        elif self.code == "0404":
+        elif self.code == Code._0404:
             idx_str = str(self._idx) if isinstance(self._idx, str) else ""
             self._ctx_ = idx_str + self.payload[10:12]
         else:
@@ -319,10 +319,10 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
     if msg.code_enum in CODE_IDX_ARE_COMPLEX:
         return {}
 
-    if msg.code in ("31D9", "31DA"):
+    if msg.code in (Code._31D9, Code._31DA):
         return {"hvac_id": str(msg._idx)}
 
-    if msg.code == "3220":
+    if msg.code == Code._3220:
         return {}
 
     # Legacy (AA) logic: Filters strictly for allowed indexed device types
@@ -351,20 +351,20 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
     if msg.src.type == msg.dst.type and not msg._has_ctl:
         return {}
 
-    if msg.code in ("000A", "2309") and msg.src.type == "02":
+    if msg.code in (Code._000A, Code._2309) and msg.src.type == "02":
         return {SZ_UFH_INDEX: str(msg._idx)}
 
     idx_val = str(msg._idx)
     idx_name = SZ_DOMAIN_INDEX if idx_val.startswith("F") else SZ_ZONE_INDEX
 
-    idx_names = {
-        "0002": "other_idx",
-        "10A0": SZ_DHW_INDEX,
-        "1260": SZ_DHW_INDEX,
-        "1F41": SZ_DHW_INDEX,
-        "22C9": SZ_UFH_INDEX,
-        "2389": "other_idx",
-        "2D49": "other_idx",
+    idx_names: dict[Code | str, str] = {
+        Code._0002: "other_idx",
+        Code._10A0: SZ_DHW_INDEX,
+        Code._1260: SZ_DHW_INDEX,
+        Code._1F41: SZ_DHW_INDEX,
+        Code._22C9: SZ_UFH_INDEX,
+        Code._2389: "other_idx",
+        Code._2D49: "other_idx",
     }
 
     index_name = idx_names.get(msg.code, idx_name)
@@ -487,11 +487,11 @@ class HeartbeatDecoder(PayloadDecoder):
         """
         code = _get_code(dto.code)
         if not msg._has_payload and (
-            dto.verb.strip() == "RQ" and code not in RQ_IDX_COMPLEX
+            dto.verb.strip() == RQ and code not in RQ_IDX_COMPLEX
         ):
             return None
 
-        if payload_len == 1 and raw_payload == "00" and dto.code != "1FC9":
+        if payload_len == 1 and raw_payload == "00" and dto.code != Code._1FC9:
             try:
                 parser = get_parser(dto.code) or parse_unknown_payload
                 result = parser(raw_payload, msg)
@@ -588,7 +588,7 @@ class DataclassPayloadDecoder(PayloadDecoder):
                 decoded_payload = payload_cls.from_bytes(raw_bytes)
 
                 if isinstance(decoded_payload, list):
-                    if dto.code == "000C":
+                    if dto.code == Code._000C:
                         return self._aggregate_zone_devices(decoded_payload, msg, dto)
 
                     converted_payloads: list[dict[str, Any]] = []

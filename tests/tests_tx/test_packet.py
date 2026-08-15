@@ -6,6 +6,7 @@ from datetime import datetime as dt, timedelta as td
 import pytest
 
 from ramses_rf.pipeline.lifespan import pkt_lifespan
+from ramses_tx.const import Code, Verb
 from ramses_tx.exceptions import PacketInvalid
 from ramses_tx.packet import Packet
 
@@ -20,11 +21,11 @@ class MockCommand:
 
     def __init__(self) -> None:
         """Initialize the mock command."""
-        self.verb = " I"
+        self.verb = Verb.I_
         self.addr1 = "01:145038"
         self.addr2 = "--:------"
         self.addr3 = "01:145038"
-        self.code = "1F09"
+        self.code = Code._1F09
         self.payload = "0004B5"
         self._frame = " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
 
@@ -40,8 +41,8 @@ def test_packet_properties() -> None:
     assert packet.rssi == "045"
     assert packet.comment == "A test comment"
     assert packet.error_text == ""
-    assert packet.verb == " I"
-    assert packet.code == "1F09"
+    assert packet.verb == Verb.I_
+    assert packet.code == Code._1F09
 
 
 def test_packet_partitioning() -> None:
@@ -92,12 +93,12 @@ def test_packet_constructors() -> None:
     # Test canonical from_raw_line factory
     pkt_line = Packet.from_raw_line(DTM, VALID_FRAME_I)
     assert pkt_line.rssi == "045"
-    assert pkt_line.verb == " I"
+    assert pkt_line.verb == Verb.I_
 
     # Test from_file (delegates to from_raw_line)
     pkt_file_valid = Packet.from_file(dtm_str, VALID_FRAME_I)
     assert pkt_file_valid.rssi == "045"
-    assert pkt_file_valid.verb == " I"
+    assert pkt_file_valid.verb == Verb.I_
 
     # Test from_port (delegates to from_raw_line)
     pkt_port = Packet.from_port(DTM, VALID_FRAME_I)
@@ -109,7 +110,7 @@ def test_packet_constructors() -> None:
 
     # _from_cmd prepends "... " to the frame, simulating a blank RSSI from a command
     assert pkt_cmd.rssi == "..."
-    assert pkt_cmd.verb == " I"
+    assert pkt_cmd.verb == Verb.I_
 
 
 def test_packet_dto_serialization() -> None:
@@ -126,8 +127,8 @@ def test_packet_dto_serialization() -> None:
     expected_dtm = DTM.astimezone().isoformat(timespec="microseconds")
     assert pkt_dict["dtm"] == expected_dtm
 
-    assert pkt_dict["verb"] == " I"
-    assert pkt_dict["code"] == "1F09"
+    assert pkt_dict["verb"] == Verb.I_
+    assert pkt_dict["code"] == Code._1F09
     assert (
         pkt_dict["rssi"] == 45
     )  # Intentionally mapped to int for legacy downstream compatibility
@@ -143,7 +144,7 @@ def test_packet_dto_serialization() -> None:
 
     assert restored_pkt.dtm == DTM.astimezone()
     assert restored_pkt.rssi == "045"  # Automatically padded back to 3 chars
-    assert restored_pkt.verb == " I"
+    assert restored_pkt.verb == Verb.I_
     assert restored_pkt._frame == pkt._frame
 
 
@@ -159,7 +160,7 @@ def test_to_json_from_json_parity() -> None:
     restored_pkt = Packet.from_json(json_bytes)
     assert restored_pkt.dtm == DTM.astimezone()
     assert restored_pkt.rssi == "045"
-    assert restored_pkt.verb == " I"
+    assert restored_pkt.verb == Verb.I_
     assert restored_pkt._frame == pkt._frame
 
 
@@ -176,27 +177,27 @@ def test_from_dict_raw_packet_dict_format() -> None:
     raw_pkt_dict: dict[str, object] = {
         "raw_packet": " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5",
         "rssi": "045",
-        "verb": " I",
+        "verb": Verb.I_,
         "seq": "---",
         "device_id_1": "01:145038",
         "device_id_2": "--:------",
         "device_id_3": "01:145038",
-        "code": "1F09",
+        "code": Code._1F09,
         "payload_len": "003",
         "payload": "0004B5",
     }
 
     pkt = Packet.from_dict(dtm_str, raw_pkt_dict)
     assert pkt.rssi == "045"
-    assert pkt.verb == " I"
-    assert pkt.code == "1F09"
+    assert pkt.verb == Verb.I_
+    assert pkt.code == Code._1F09
     assert pkt._frame == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
 
     # Also test with non-numeric rssi (e.g. "..." from file-based packets)
     raw_pkt_dict["rssi"] = "..."
     pkt2 = Packet.from_dict(dtm_str, raw_pkt_dict)
     assert pkt2.rssi == "..."
-    assert pkt2.code == "1F09"
+    assert pkt2.code == Code._1F09
 
 
 def test_pkt_lifespan(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -231,7 +232,7 @@ def test_packet_representations() -> None:
     # The repr should output the time, the original frame components and the header context
     repr_str = repr(packet)
     assert "2023-01-01T12:00:00.000000" in repr_str
-    assert "1F09" in repr_str
+    assert Code._1F09 in repr_str
 
     # __str__ simply delegates to super().__repr__() which outputs just the formatted frame
     assert str(packet) == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"

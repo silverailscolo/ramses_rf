@@ -24,6 +24,7 @@ from ramses_rf.const import (
     SZ_OUTDOOR_TEMP,
     SZ_REL_HUMIDITY,
     SZ_SUPPLY_TEMP,
+    Code,
 )
 from ramses_rf.models import HvacState
 from ramses_rf.quirks import apply_hvac_quirks
@@ -58,14 +59,14 @@ class TestQuirks12A0Idx00:
             SZ_INDOOR_HUMIDITY: 0.55,
             "temperature": 21.5,
         }
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result["indoor_temp"] == 21.5
         assert result[SZ_INDOOR_HUMIDITY] == 0.55
 
     def test_idx00_without_temperature_passes_through(self) -> None:
         """idx=00 without temperature should pass humidity through."""
         payload = {"hvac_idx": "00", SZ_INDOOR_HUMIDITY: 0.55}
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result[SZ_INDOOR_HUMIDITY] == 0.55
         assert "indoor_temp" not in result
 
@@ -77,7 +78,7 @@ class TestQuirks12A0Idx00:
             "temperature": 21.5,
             "dewpoint_temp": 12.3,
         }
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result["dewpoint_temp"] == 12.3
 
 
@@ -98,7 +99,7 @@ class TestQuirks12A0Idx01:
             SZ_REL_HUMIDITY: 0.60,
             "temperature": 22.0,
         }
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert SZ_REL_HUMIDITY not in result
         assert "indoor_humidity" not in result
 
@@ -109,14 +110,14 @@ class TestQuirks12A0Idx01:
             SZ_REL_HUMIDITY: 0.60,
             "temperature": 22.0,
         }
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result[SZ_SUPPLY_TEMP] == 22.0
         assert "temperature" not in result
 
     def test_idx01_without_temperature_only_drops_humidity(self) -> None:
         """idx=01 with only rel_humidity should just drop it."""
         payload = {"hvac_idx": "01", SZ_REL_HUMIDITY: 0.60}
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert SZ_REL_HUMIDITY not in result
         assert SZ_SUPPLY_TEMP not in result
 
@@ -128,7 +129,7 @@ class TestQuirks12A0Idx01:
             SZ_INDOOR_HUMIDITY: 0.60,
             "temperature": 22.0,
         }
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert SZ_INDOOR_HUMIDITY not in result
         assert result[SZ_SUPPLY_TEMP] == 22.0
 
@@ -157,7 +158,7 @@ class TestQuirks12A0Idx02:
             SZ_OUTDOOR_HUMIDITY: 0.69,
             "temperature": 27.42,
         }
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert SZ_OUTDOOR_TEMP not in result
         assert "temperature" in result  # left as-is, not remapped
 
@@ -168,13 +169,13 @@ class TestQuirks12A0Idx02:
             SZ_OUTDOOR_HUMIDITY: 0.69,
             "temperature": 27.42,
         }
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result[SZ_OUTDOOR_HUMIDITY] == 0.69
 
     def test_idx02_without_temperature_passes_through(self) -> None:
         """idx=02 without temperature should pass humidity through."""
         payload = {"hvac_idx": "02", SZ_OUTDOOR_HUMIDITY: 0.69}
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result[SZ_OUTDOOR_HUMIDITY] == 0.69
         assert SZ_OUTDOOR_TEMP not in result
 
@@ -206,7 +207,7 @@ class TestQuirks12A0FullList:
         ]
 
         # Process each element through quirks (as dispatcher does)
-        results = [_quirk(dict(e), None, "12A0") for e in elements]
+        results = [_quirk(dict(e), None, Code._12A0) for e in elements]
 
         # idx=00
         assert results[0]["indoor_temp"] == 28.42
@@ -251,7 +252,7 @@ class TestQuirks12A0FullList:
             },
         ]
 
-        results = [_quirk(dict(e), None, "12A0") for e in elements]
+        results = [_quirk(dict(e), None, Code._12A0) for e in elements]
 
         # idx=00: indoor
         assert results[0]["indoor_temp"] == 28.42
@@ -273,13 +274,13 @@ class TestQuirks12A0EdgeCases:
     def test_no_hvac_idx_defaults_to_00(self) -> None:
         """Missing hvac_idx should default to idx=00 behavior."""
         payload = {"temperature": 21.0}
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result["indoor_temp"] == 21.0
 
     def test_unknown_idx_passes_through(self) -> None:
         """Unknown hvac_idx (e.g. 03) should pass through unchanged."""
         payload = {"hvac_idx": "03", "temperature": 25.0}
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result["temperature"] == 25.0
         assert "indoor_temp" not in result
 
@@ -287,7 +288,7 @@ class TestQuirks12A0EdgeCases:
         """Short 12A0 payload (single dict, no hvac_idx) should
         be treated as idx=00."""
         payload = {SZ_INDOOR_HUMIDITY: 0.50, "temperature": 20.0}
-        result = _quirk(payload, None, "12A0")
+        result = _quirk(payload, None, Code._12A0)
         assert result["indoor_temp"] == 20.0
         assert result[SZ_INDOOR_HUMIDITY] == 0.50
 
@@ -310,55 +311,55 @@ class TestQuirks31DAFanInfo:
         """'-unknown 0x1F-' from 31DA must not overwrite a valid fan_info."""
         state = _make_state(fan_info="auto")
         payload = {SZ_FAN_INFO: "-unknown 0x1F-"}
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
         assert result[SZ_FAN_INFO] == "auto"
 
     def test_off_fan_info_preserves_existing(self) -> None:
         """'off' from 31DA must not overwrite a valid fan_info."""
         state = _make_state(fan_info="auto")
         payload = {SZ_FAN_INFO: "off"}
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
         assert result[SZ_FAN_INFO] == "auto"
 
     def test_empty_fan_info_preserves_existing(self) -> None:
         """'' from 31DA must not overwrite a valid fan_info."""
         state = _make_state(fan_info="low")
         payload = {SZ_FAN_INFO: ""}
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
         assert result[SZ_FAN_INFO] == "low"
 
     def test_valid_fan_info_overwrites(self) -> None:
         """A valid fan_info from 31DA should overwrite the existing one."""
         state = _make_state(fan_info="low")
         payload = {SZ_FAN_INFO: "auto"}
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
         assert result[SZ_FAN_INFO] == "auto"
 
     def test_unknown_fan_info_does_not_overwrite_unknown(self) -> None:
         """If both current and incoming are unknown, keep the incoming."""
         state = _make_state(fan_info="-unknown 0x1E-")
         payload = {SZ_FAN_INFO: "-unknown 0x1F-"}
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
         # Current is also unknown, so we keep the incoming value
         assert result[SZ_FAN_INFO] == "-unknown 0x1F-"
 
     def test_unknown_fan_info_with_no_current_state(self) -> None:
         """If there is no current state, unknown fan_info passes through."""
         payload = {SZ_FAN_INFO: "-unknown 0x1F-"}
-        result = _quirk(payload, None, "31DA")
+        result = _quirk(payload, None, Code._31DA)
         assert result[SZ_FAN_INFO] == "-unknown 0x1F-"
 
     def test_off_fan_info_with_no_current_state(self) -> None:
         """If there is no current state, 'off' passes through."""
         payload = {SZ_FAN_INFO: "off"}
-        result = _quirk(payload, None, "31DA")
+        result = _quirk(payload, None, Code._31DA)
         assert result[SZ_FAN_INFO] == "off"
 
     def test_off_fan_info_preserves_none_current(self) -> None:
         """If current fan_info is None, 'off' should not be promoted."""
         state = _make_state(fan_info=None)
         payload = {SZ_FAN_INFO: "off"}
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
         # current_state.fan_info is None (falsy), so the quirk doesn't fire
         assert result[SZ_FAN_INFO] == "off"
 
@@ -366,7 +367,7 @@ class TestQuirks31DAFanInfo:
         """The fan_info quirk should only apply to 31DA, not 31D9."""
         state = _make_state(fan_info="auto")
         payload = {SZ_FAN_INFO: "off"}
-        result = _quirk(payload, state, "31D9")
+        result = _quirk(payload, state, Code._31D9)
         # 31D9 is not 31DA, so the quirk doesn't fire
         assert result[SZ_FAN_INFO] == "off"
 
@@ -383,20 +384,20 @@ class TestQuirks31DAExhaustFanSpeed:
         """exhaust_fan_speed=0.0 from 31DA must not overwrite a non-zero value."""
         state = _make_state(exhaust_fan_speed=50.0)
         payload = {"exhaust_fan_speed": 0.0}
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
         assert result["exhaust_fan_speed"] == 50.0
 
     def test_nonzero_exhaust_overwrites(self) -> None:
         """A non-zero exhaust_fan_speed should overwrite."""
         state = _make_state(exhaust_fan_speed=50.0)
         payload = {"exhaust_fan_speed": 75.0}
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
         assert result["exhaust_fan_speed"] == 75.0
 
     def test_zero_exhaust_with_no_current_state(self) -> None:
         """If there is no current state, 0.0 passes through."""
         payload = {"exhaust_fan_speed": 0.0}
-        result = _quirk(payload, None, "31DA")
+        result = _quirk(payload, None, Code._31DA)
         assert result["exhaust_fan_speed"] == 0.0
 
 
@@ -455,7 +456,7 @@ class TestQuirks31DAVenturaIntegration:
             "exhaust_flow": 133.0,
         }
 
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
 
         # Quirks should preserve these values
         assert result[SZ_FAN_INFO] == "auto"  # not '-unknown 0x1F-'
@@ -508,7 +509,7 @@ class TestQuirks31DAVenturaIntegration:
             "exhaust_flow": 133.0,
         }
 
-        result = _quirk(payload, state, "31DA")
+        result = _quirk(payload, state, Code._31DA)
 
         # Quirks should preserve these values
         assert result[SZ_FAN_INFO] == "auto"  # not '-unknown 0x1F-'
@@ -531,7 +532,7 @@ class TestQuirks31DAVenturaIntegration:
             SZ_INDOOR_HUMIDITY: None,
         }
 
-        result = _quirk(payload, None, "31DA")
+        result = _quirk(payload, None, Code._31DA)
 
         # Humidity None passes through
         assert result[SZ_INDOOR_HUMIDITY] is None
@@ -553,21 +554,21 @@ class TestQuirksNonHvacCodes:
         """22F1 payload should pass through unchanged."""
         state = _make_state(fan_info="low")
         payload = {SZ_FAN_INFO: "auto", SZ_BYPASS_POSITION: 0.5}
-        result = _quirk(payload, state, "22F1")
+        result = _quirk(payload, state, Code._22F1)
         assert result == payload
 
     def test_22f7_passes_through(self) -> None:
         """22F7 payload should pass through unchanged."""
         state = _make_state(bypass_position=0.5)
         payload = {SZ_BYPASS_POSITION: 0.0}
-        result = _quirk(payload, state, "22F7")
+        result = _quirk(payload, state, Code._22F7)
         assert result == payload
 
     def test_10d0_passes_through(self) -> None:
         """10D0 payload should pass through unchanged."""
         state = _make_state(fan_info="auto")
         payload = {"days_remaining": 30}
-        result = _quirk(payload, state, "10D0")
+        result = _quirk(payload, state, Code._10D0)
         assert result == payload
 
 
@@ -585,13 +586,13 @@ class TestQuirks31DAHumidityNormalisation:
     def test_valid_humidity_passes_through(self) -> None:
         """A valid humidity value should pass through unchanged."""
         payload = {SZ_INDOOR_HUMIDITY: 0.55}
-        result = _quirk(payload, None, "31DA")
+        result = _quirk(payload, None, Code._31DA)
         assert result[SZ_INDOOR_HUMIDITY] == 0.55
 
     def test_humidity_none_passes_through(self) -> None:
         """None humidity (EF = not implemented) should pass through."""
         payload = {SZ_INDOOR_HUMIDITY: None}
-        result = _quirk(payload, None, "31DA")
+        result = _quirk(payload, None, Code._31DA)
         assert result[SZ_INDOOR_HUMIDITY] is None
 
 
@@ -616,7 +617,7 @@ class TestQuirks31D9FanModeNormalisation:
         from ramses_rf.const import SZ_FAN_MODE
 
         payload = {SZ_FAN_MODE: "auto"}
-        result = _quirk(payload, None, "31D9")
+        result = _quirk(payload, None, Code._31D9)
         assert result[SZ_FAN_MODE] == "auto"
 
     def test_fan_mode_semantic_off_preserved(self) -> None:
@@ -624,7 +625,7 @@ class TestQuirks31D9FanModeNormalisation:
         from ramses_rf.const import SZ_FAN_MODE
 
         payload = {SZ_FAN_MODE: "off"}
-        result = _quirk(payload, None, "31D9")
+        result = _quirk(payload, None, Code._31D9)
         assert result[SZ_FAN_MODE] == "off"
 
     def test_fan_mode_semantic_vasco_speed_preserved(self) -> None:
@@ -632,7 +633,7 @@ class TestQuirks31D9FanModeNormalisation:
         from ramses_rf.const import SZ_FAN_MODE
 
         payload = {SZ_FAN_MODE: "4 (boost)"}
-        result = _quirk(payload, None, "31D9")
+        result = _quirk(payload, None, Code._31D9)
         assert result[SZ_FAN_MODE] == "4 (boost)"
 
 

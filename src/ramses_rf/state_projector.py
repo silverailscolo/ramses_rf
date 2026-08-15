@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Final, cast
 
-from ramses_tx.const import Code
+from ramses_tx.const import RQ, Code
 
 from . import exceptions as exc, quirks
 from .const import (
@@ -153,7 +153,7 @@ class StateProjector:
 
 
 _DHW_OPCODES: Final[frozenset[Code | str]] = frozenset(
-    {Code._1260, Code._10A0, Code._1F41, "1260", "10A0", "1F41"}
+    {Code._1260, Code._10A0, Code._1F41}
 )
 
 
@@ -186,7 +186,7 @@ def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
         msg.src.id[:2] if hasattr(msg.src, "id") and msg.src.id else None
     )
     src_slug = str(getattr(source_device, "_SLUG", ""))
-    if msg.code in (Code._1260, "1260"):
+    if msg.code == Code._1260:
         is_dhw_src = src_type in ("07", "01") or src_slug in ("DHW", "CTL")
     else:  # 10A0 / 1F41 are owned by the Controller
         is_dhw_src = src_type == "01" or "CTL" in src_slug or "PRG" in src_slug
@@ -512,14 +512,14 @@ def _update_dhw_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         return
 
     updates: dict[str, Any] = {}
-    if msg.code in (Code._10A0, "10A0"):
+    if msg.code == Code._10A0:
         if SZ_SETPOINT in p:
             updates[SZ_SETPOINT] = p[SZ_SETPOINT]
         if SZ_OVERRUN in p:
             updates[SZ_OVERRUN] = p[SZ_OVERRUN]
         if SZ_DIFFERENTIAL in p:
             updates[SZ_DIFFERENTIAL] = p[SZ_DIFFERENTIAL]
-    elif msg.code in (Code._1F41, "1F41"):
+    elif msg.code == Code._1F41:
         if SZ_MODE in p:
             updates[SZ_MODE] = p[SZ_MODE]
         if SZ_ACTIVE in p:
@@ -702,7 +702,7 @@ def _route_2411_to_fan(gateway: Gateway, msg: Message) -> None:
     :param msg: Message envelope.
     :type msg: Message
     """
-    if getattr(msg, "verb", "") == "RQ":
+    if getattr(msg, "verb", "") == RQ:
         return
 
     registry = getattr(gateway, "device_registry", None)
@@ -801,7 +801,7 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
                 await update_topology_schema_state(gateway, payload, msg)
 
     # Legacy Parity: Request packets (RQ) do not contain state update telemetry.
-    if getattr(msg, "verb", "") == "RQ":
+    if getattr(msg, "verb", "") == RQ:
         return
 
     for payload in payloads:

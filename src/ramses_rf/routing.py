@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from ramses_tx.const import Code, VerbT
+from ramses_tx.const import Code, Verb
 from ramses_tx.typing import DeviceIdT
 
 
@@ -172,7 +172,7 @@ class StateHeader:
     """
 
     code: Code | str
-    verb: VerbT | str
+    verb: Verb | str
     source_id: DeviceIdT | str
     context: RoutingContext
 
@@ -180,7 +180,7 @@ class StateHeader:
     def create(
         cls,
         code: Code | str,
-        verb: VerbT | str,
+        verb: Verb | str,
         source_id: DeviceIdT | str,
         context_value: str | bool | None,
     ) -> StateHeader:
@@ -188,8 +188,8 @@ class StateHeader:
 
         :param code: The message command code (e.g., '3220' or Code._3220).
         :type code: Code | str
-        :param verb: The message verb (e.g., ' I', 'RP' or VerbT.I_).
-        :type verb: VerbT | str
+        :param verb: The message verb (e.g., ' I', 'RP' or Verb.I_).
+        :type verb: Verb | str
         :param source_id: The source L2 device ID (e.g., '01:123456').
         :type source_id: DeviceIdT | str
         :param context_value: The sub-payload context key.
@@ -205,7 +205,7 @@ class StateHeader:
             safe_code = code
 
         try:
-            safe_verb: VerbT | str = VerbT(verb) if isinstance(verb, str) else verb
+            safe_verb: Verb | str = Verb(verb) if isinstance(verb, str) else verb
         except ValueError:
             safe_verb = verb
 
@@ -243,11 +243,11 @@ class StateHeader:
         if self.code == Code._1FC9:
             return EventTopic.TOPOLOGY_DISCOVERY
 
-        if self.verb == VerbT.I_:
+        if self.verb == Verb.I_:
             return EventTopic.INFORMATION
-        if self.verb == VerbT.RQ:
+        if self.verb == Verb.RQ:
             return EventTopic.REQUEST
-        if self.verb == VerbT.W_:
+        if self.verb == Verb.W_:
             return EventTopic.WRITE
 
         return EventTopic.RESPONSE

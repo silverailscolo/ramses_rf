@@ -10,6 +10,8 @@ Just run it from the terminal as python3 2411_parser.py
 import logging
 from typing import Any
 
+from ramses_tx.const import I_, RP, RQ, W_, Verb
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -63,7 +65,7 @@ def parser_2411(payload: str, msg: Any) -> dict[str, Any]:
         _LOGGER.warning("Unknown parameter ID: %s. Payload: %s", param_id, payload)
 
     # For RQ (request) messages, just return parameter info
-    if hasattr(msg, "verb") and msg.verb == "RQ":
+    if hasattr(msg, "verb") and msg.verb == RQ:
         return result
 
     try:
@@ -442,11 +444,11 @@ def format_result_table(result: dict[str, Any], description: str) -> str:
     return "\n".join(output)
 
 
-def decode_2411_message(raw_message: str, verb: str = "RP") -> dict[str, Any]:
+def decode_2411_message(raw_message: str, verb: Verb | str = RP) -> dict[str, Any]:
     """Convenience function to decode a raw 2411 message.
 
     :param raw_message: Raw 2411 message string
-    :param verb: Message verb (default: "RP")
+    :param verb: Message verb (default: Verb.RP)
     :return: Decoded message dictionary
     """
 
@@ -465,11 +467,11 @@ if __name__ == "__main__":
     # Example:
     #   ("0000070000000000010000000000000001000000018A00", "RP", "Base vent is ON")
     test_messages = [
-        ("00000700000000000000000000000000000000000000", "W", "Base vent set to OFF"),
-        ("00000700000000000100000000000000000000000000", "W", "Base vent set to ON"),
-        ("0000070000000000010000000000000001000000018A00", " I", "Base vent is ON"),
-        ("0000070000000000000000000000000001000000018A00", "RP", "Base vent is OFF"),
-        ("0000070000000000010000000000000001000000018A00", "RP", "Base vent is ON"),
+        ("00000700000000000000000000000000000000000000", W_, "Base vent set to OFF"),
+        ("00000700000000000100000000000000000000000000", W_, "Base vent set to ON"),
+        ("0000070000000000010000000000000001000000018A00", I_, "Base vent is ON"),
+        ("0000070000000000000000000000000001000000018A00", RP, "Base vent is OFF"),
+        ("0000070000000000010000000000000001000000018A00", RP, "Base vent is ON"),
         # ("0000871400000000000000000000000002000000018A00", "RP", "Parameter 0x87"),
         # ("0000DA7F00000000000000000000000003000000018A00", "RP", "Parameter 0xDA"),
         # ("0000881510000002BC000001900000076C000000018A33", "RP", "Timer configuration"),

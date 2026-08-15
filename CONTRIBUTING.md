@@ -91,6 +91,12 @@ All contributions (whether written by human contributors or generated via AI cod
 * **Docstring BOFM Tables**: Public payload dataclasses MUST include Sphinx docstrings containing a Binary Offset Format Map (BOFM) table outlining byte offsets, struct formats, lengths, and sample hex data.
 * **Full Specification**: Refer to [docs/developer_guide/payload_registry_spec.md](docs/developer_guide/payload_registry_spec.md) for the complete architectural specification and candidate opcode reference.
 
+### 7. Protocol Code & Verb Enumerations (Issue #1040 Standard)
+* **Canonical Enum Usage**: Always use `Code` (e.g. `Code._0008`, `Code._30C9`) and `Verb` / shorthand constants (`Verb.I_` / `I_`, `Verb.RQ` / `RQ`, `Verb.RP` / `RP`, `Verb.W_` / `W_`) instead of hardcoded string literals (e.g. `"0008"`, `"30C9"`, `" I"`, `"RQ"`, `"RP"`, `" W"`).
+* **Forbidden Magic Strings**: Never introduce raw 4-character hex strings for known RAMSES command codes or raw 2-character verb strings in logic, handlers, parsers, payloads, builders, routers, or test suites.
+* **New Opcode Registration**: When adding support for a new RAMSES command code, register it in `Code(StrEnum)` in `src/ramses_tx/const.py` with an attribute docstring before referencing it across the codebase.
+* **Type Annotations**: Always annotate command code and verb parameters with `Code | str` (or `Code`) and `Verb | str` (or `Verb`), never bare `str`.
+
 
 
 ---

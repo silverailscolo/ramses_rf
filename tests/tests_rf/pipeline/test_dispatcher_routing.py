@@ -6,6 +6,7 @@ from datetime import datetime as dt
 import pytest
 
 from ramses_rf.address import Address
+from ramses_rf.const import Code, Verb
 from ramses_rf.enums import Topic
 from ramses_rf.messages.core import Message
 from ramses_rf.pipeline.dispatcher import CentralDispatcher
@@ -23,7 +24,7 @@ def _mock_message(
     dto = PacketDTO(
         timestamp=dt.now(),
         rssi="-70",
-        verb=" I",
+        verb=Verb.I_,
         seq="000",
         addr1=src_id,
         addr2=dst_id,
@@ -33,7 +34,7 @@ def _mock_message(
         payload="00",
     )
     mock_header = StateHeader.create(
-        code=code, verb=" I", source_id=src_id, context_value=None
+        code=code, verb=Verb.I_, source_id=src_id, context_value=None
     )
     return Message(
         topic=Topic.RAW_EVENT,
@@ -53,7 +54,7 @@ async def test_dispatcher_standard_routing() -> None:
     dispatcher = CentralDispatcher(in_q)
     await dispatcher.start()
 
-    msg = _mock_message("01:123456", "01:123456", "30C9", {"temp": "21.0"})
+    msg = _mock_message("01:123456", "01:123456", Code._30C9, {"temp": "21.0"})
     in_q.put_nowait(msg)
     await in_q.join()
     await dispatcher.stop()
@@ -71,7 +72,7 @@ async def test_dispatcher_binding_offer_routing() -> None:
     dispatcher = CentralDispatcher(in_q)
     await dispatcher.start()
 
-    msg = _mock_message("04:111111", "04:111111", "1FC9", {"phase": "offer"})
+    msg = _mock_message("04:111111", "04:111111", Code._1FC9, {"phase": "offer"})
     in_q.put_nowait(msg)
     await in_q.join()
     await dispatcher.stop()
@@ -89,7 +90,7 @@ async def test_dispatcher_global_broadcast_routing() -> None:
     dispatcher = CentralDispatcher(in_q)
     await dispatcher.start()
 
-    msg = _mock_message("01:123456", "63:262142", "10E0", {})
+    msg = _mock_message("01:123456", "63:262142", Code._10E0, {})
     in_q.put_nowait(msg)
     await in_q.join()
     await dispatcher.stop()
@@ -107,7 +108,7 @@ async def test_dispatcher_directed_faked_routing() -> None:
     dispatcher = CentralDispatcher(in_q)
     await dispatcher.start()
 
-    msg = _mock_message("01:123456", "04:654321", "2309", {})
+    msg = _mock_message("01:123456", "04:654321", Code._2309, {})
     in_q.put_nowait(msg)
     await in_q.join()
     await dispatcher.stop()
