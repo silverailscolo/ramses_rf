@@ -151,7 +151,7 @@ def split_kwargs(
     return cli_kwargs, lib_kwargs
 
 
-class DeviceIdParamType(click.ParamType):
+class DeviceIdParamType(click.ParamType[str]):
     """A Click parameter type for Device IDs."""
 
     name = "device_id"

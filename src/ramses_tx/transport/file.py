@@ -9,7 +9,7 @@ import logging
 from io import TextIOWrapper
 from typing import Any
 
-import aiofiles  # type: ignore[import-untyped]
+import aiofiles
 
 from ..const import SZ_READER_TASK
 from ..exceptions import RamsesException, TransportSourceInvalid
@@ -119,7 +119,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
         elif isinstance(self._pkt_source, TextIOWrapper):
             # Wrap the synchronous TextIOWrapper for asynchronous iteration
-            async_file = aiofiles.wrap(self._pkt_source)
+            async_file = aiofiles.threadpool.wrap(self._pkt_source)
             async for dtm_pkt_line in async_file:
                 await self._process_line_from_raw(dtm_pkt_line)
 

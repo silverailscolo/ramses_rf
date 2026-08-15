@@ -129,7 +129,6 @@
 ### mypy #############################################################################
 
 [tool.mypy]
-  mypy_path = "typings"
   files = [
     "client.py",
     "src",
@@ -408,3 +407,9 @@ layers = [
     "ramses_tx.transport",
     "ramses_tx.packet",
 ]
+
+## pyright(VSCODE) ###########################################################
+
+[tool.pyright]
+reportIncompatibleVariableOverride = "none"
+reportIncompatibleMethodOverride = "none"
