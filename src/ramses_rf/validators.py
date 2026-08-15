@@ -64,7 +64,8 @@ def validate_addresses(gateway: Gateway, msg: Message) -> bool:
     if (
         msg.src.id != msg.dst.id
         and msg.src.type == msg.dst.type
-        and msg.src.type in DEV_TYPE_MAP.HEAT_DEVICES  # could still be HVAC domain
+        and msg.src.type
+        in DEV_TYPE_MAP.HEAT_DEVICES  # could still be HVAC domain
     ):
         # .I --- 18:013393 18:000730 --:------ 0001 005 00FFFF0200     # invalid
         # .I --- 01:078710 --:------ 01:144246 1F09 003 FF04B5         # invalid
@@ -208,10 +209,14 @@ def validate_slugs(gateway: Gateway, msg: Message) -> bool:
     if slug not in (None, DevType.HGI, DevType.DEV, DevType.HEA, DevType.HVC):
         # TODO: use DEV_TYPE_MAP.PROMOTABLE_SLUGS
         if slug not in CODES_BY_DEV_SLUG:
-            raise exc.PacketInvalid(f"{msg!r} < Unknown src slug ({slug}), is it HVAC?")
+            raise exc.PacketInvalid(
+                f"{msg!r} < Unknown src slug ({slug}), is it HVAC?"
+            )
 
         if msg.code not in CODES_BY_DEV_SLUG[slug]:
-            raise exc.PacketInvalid(f"{msg!r} < Unexpected code for src ({slug}) to Tx")
+            raise exc.PacketInvalid(
+                f"{msg!r} < Unexpected code for src ({slug}) to Tx"
+            )
 
         if msg.verb not in CODES_BY_DEV_SLUG[slug][msg.code]:
             raise exc.PacketInvalid(
@@ -229,7 +234,13 @@ def validate_slugs(gateway: Gateway, msg: Message) -> bool:
         dst_dev = gateway.device_registry.device_by_id.get(msg.dst.id)
         dst_slug = getattr(dst_dev, "_SLUG", None)
 
-        if dst_slug not in (None, DevType.HGI, DevType.DEV, DevType.HEA, DevType.HVC):
+        if dst_slug not in (
+            None,
+            DevType.HGI,
+            DevType.DEV,
+            DevType.HEA,
+            DevType.HVC,
+        ):
             if dst_slug not in CODES_BY_DEV_SLUG:
                 raise exc.PacketInvalid(
                     f"{msg!r} < Unknown dst slug ({dst_slug}), is it HVAC?"
@@ -250,7 +261,10 @@ def validate_slugs(gateway: Gateway, msg: Message) -> bool:
                         )
 
                     expected_verb = {RQ: RP, RP: RQ, W_: I_}[msg.verb]
-                    if expected_verb not in CODES_BY_DEV_SLUG[dst_slug][msg.code]:
+                    if (
+                        expected_verb
+                        not in CODES_BY_DEV_SLUG[dst_slug][msg.code]
+                    ):
                         raise exc.PacketInvalid(
                             f"{msg!r} < Unexpected verb/code for dst ({dst_slug}) to Rx"
                         )

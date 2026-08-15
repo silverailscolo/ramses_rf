@@ -17,7 +17,9 @@ from ramses_tx.const import I_, Verb
 class DummyMsg:
     """A lightweight mock message to accurately track property accesses."""
 
-    def __init__(self, src_id: str, code: Code, payload_dict: dict[str, Any]) -> None:
+    def __init__(
+        self, src_id: str, code: Code, payload_dict: dict[str, Any]
+    ) -> None:
         self.src = MagicMock()
         self.src.id = src_id
         self.dst = MagicMock()

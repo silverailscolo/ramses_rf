@@ -113,7 +113,9 @@ def test_22f1_vasco_directed_mode_max_06_still_vasco() -> None:
     assert result["fan_mode"] == "low"
 
 
-def test_22f3_orcon_mode_set_04_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+def test_22f3_orcon_mode_set_04_no_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     # Arrange
     pkt_str = (
         "2026-07-28T23:49:38.000000 045  I --- 29:162275 32:139370 --:------"
@@ -283,7 +285,10 @@ def test_2411_data_type_91_bypass_valve_signed() -> None:
     )
     result = msg.payload
     assert result["parameter"] == "4B"
-    assert result["description"] == "(Test) Bypass Valve (0=auto, 1=open, 2=closed)"
+    assert (
+        result["description"]
+        == "(Test) Bypass Valve (0=auto, 1=open, 2=closed)"
+    )
     assert result["value"] == 230  # 0x000000E6
     assert result["min_value"] == -200  # 0xFFFFFF38 (two's complement)
     assert result["max_value"] == 500  # 0x000001F4
@@ -301,7 +306,9 @@ def test_helper_field_parsers() -> None:
 
     for val in (Code._PUZZ, "0000", Code._0001, "0010", Code._0100, "1000"):
         assert val == hex_from_double(hex_to_double(val))
-        assert val == hex_from_double(hex_to_double(val, factor=100), factor=100)
+        assert val == hex_from_double(
+            hex_to_double(val, factor=100), factor=100
+        )
 
     for val in (
         "FF" * 6,
@@ -310,7 +317,9 @@ def test_helper_field_parsers() -> None:
         "00110E0507E5",
         "0400041C0A07E3",
     ):
-        assert val == hex_from_dtm(hex_to_dtm(val), incl_seconds=(len(val) == 14))
+        assert val == hex_from_dtm(
+            hex_to_dtm(val), incl_seconds=(len(val) == 14)
+        )
 
     for val in ("00000000007F", "00870853C000"):
         assert val == hex_from_dts(hex_to_dts(val))
@@ -332,7 +341,19 @@ def test_helper_field_parsers() -> None:
     for val in (Code._PUZZ, "7EFF", "0000", "0010", "0200", "D000"):
         assert val == hex_from_temp(hex_to_temp(val))
 
-    for tmp in (None, False, -127.99, -100, -22.5, -1.53, 0, 1.53, 22.5, 100, 127.98):
+    for tmp in (
+        None,
+        False,
+        -127.99,
+        -100,
+        -22.5,
+        -1.53,
+        0,
+        1.53,
+        22.5,
+        100,
+        127.98,
+    ):
         assert tmp == hex_to_temp(hex_from_temp(tmp))
 
     for cent in (None, 0, 0.05, 0.1, 0.5, 0.95, 1.0):
@@ -380,11 +401,18 @@ def test_pkt_addr_sets() -> None:
             pkt = Packet.from_port(dt.now(), f"... {pkt_line[31:].rstrip()}")
             pkt._validate(strict_checking=True)
         except (CommandInvalid, PacketInvalid) as err:
-            assert err.__class__.__name__ in ("CommandInvalid", "PacketInvalid")
+            assert err.__class__.__name__ in (
+                "CommandInvalid",
+                "PacketInvalid",
+            )
             assert err.message and err.message.startswith(expected.message)
             return
 
-        res = {"src": pkt.src.id, "dst": pkt.dst.id, "set": [a.id for a in pkt._addrs]}
+        res = {
+            "src": pkt.src.id,
+            "dst": pkt.dst.id,
+            "set": [a.id for a in pkt._addrs],
+        }
         assert res == expected
 
     with open(f"{WORK_DIR}/pkt_addr_set.log") as f:

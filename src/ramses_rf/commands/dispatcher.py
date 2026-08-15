@@ -48,12 +48,16 @@ class CommandDispatcher:
             rply_fut = await conv_mgr.track_intent(intent, dto)
             await self._gateway.async_send_cmd(
                 dto,
-                priority=priority if priority is not None else Priority(dto.priority),
+                priority=priority
+                if priority is not None
+                else Priority(dto.priority),
             )
             return await rply_fut
 
         packet = await self._gateway.async_send_cmd(
             dto,
-            priority=priority if priority is not None else Priority(dto.priority),
+            priority=priority
+            if priority is not None
+            else Priority(dto.priority),
         )
         return Message._from_pkt(packet)

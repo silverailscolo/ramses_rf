@@ -128,7 +128,9 @@ class MessageStoreInterface(Protocol):
         """Clear all indexed messages."""
         ...
 
-    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Any, ...]:
+    async def qry(
+        self, sql: str, parameters: tuple[str, ...]
+    ) -> tuple[Any, ...]:
         """Execute custom SQL query on store."""
         ...
 

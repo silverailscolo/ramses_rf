@@ -67,7 +67,9 @@ QueueItem = (
 class SQLiteWorker:
     """A worker thread handling blocking storage I/O asynchronously."""
 
-    def __init__(self, db_path: str = ":memory:", disk_path: str | None = None) -> None:
+    def __init__(
+        self, db_path: str = ":memory:", disk_path: str | None = None
+    ) -> None:
         """Initialize the storage worker thread."""
         self._db_path = db_path
         self._disk_path = disk_path
@@ -98,7 +100,9 @@ class SQLiteWorker:
         """Submit a disk snapshot request (Non-blocking)."""
         self._queue.put(SnapshotRequest())
 
-    def submit_delete_message(self, query: str, parameters: tuple[Any, ...]) -> None:
+    def submit_delete_message(
+        self, query: str, parameters: tuple[Any, ...]
+    ) -> None:
         """Submit a request to delete specific messages (Non-blocking)."""
         self._queue.put(DeleteMessageRequest(query, parameters))
 
@@ -121,7 +125,9 @@ class SQLiteWorker:
         # Give the worker a chance to wrap up gracefully
         self._thread.join(timeout=timeout)
         if self._thread.is_alive():
-            _LOGGER.warning("SQLiteWorker thread did not cleanly exit within timeout.")
+            _LOGGER.warning(
+                "SQLiteWorker thread did not cleanly exit within timeout."
+            )
             return False
         return True
 
@@ -146,11 +152,15 @@ class SQLiteWorker:
         )
         # Handle migration for users with the old schema (Phase 2.1 upgrade)
         with contextlib.suppress(sqlite3.OperationalError):
-            cursor.execute("ALTER TABLE messages ADD COLUMN frame TEXT DEFAULT ''")
+            cursor.execute(
+                "ALTER TABLE messages ADD COLUMN frame TEXT DEFAULT ''"
+            )
 
         # Create indexes to speed up future reads
         for col in ("verb", "src", "dst", "code", "ctx", "hdr"):
-            cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_{col} ON messages ({col})")
+            cursor.execute(
+                f"CREATE INDEX IF NOT EXISTS idx_{col} ON messages ({col})"
+            )
         conn.commit()
 
     def _run(self) -> None:
@@ -168,7 +178,10 @@ class SQLiteWorker:
             )
 
             # Enable Write-Ahead Logging for concurrency
-            if self._db_path != ":memory:" and "mode=memory" not in self._db_path:
+            if (
+                self._db_path != ":memory:"
+                and "mode=memory" not in self._db_path
+            ):
                 with contextlib.suppress(sqlite3.Error):
                     conn.execute("PRAGMA journal_mode=WAL")
                     conn.execute("PRAGMA synchronous=NORMAL")
@@ -245,10 +258,13 @@ class SQLiteWorker:
                 elif isinstance(item, PruneRequest):
                     try:
                         conn.execute(
-                            "DELETE FROM messages WHERE dtm < ?", (item.dtm_limit,)
+                            "DELETE FROM messages WHERE dtm < ?",
+                            (item.dtm_limit,),
                         )
                         conn.commit()
-                        _LOGGER.debug("Pruned records older than %s", item.dtm_limit)
+                        _LOGGER.debug(
+                            "Pruned records older than %s", item.dtm_limit
+                        )
                     except sqlite3.Error as err:
                         _LOGGER.error("SQL Prune Failed: %s", err)
 
@@ -266,7 +282,9 @@ class SQLiteWorker:
                             disk_conn = sqlite3.connect(self._disk_path)
                             conn.backup(disk_conn)
                             disk_conn.close()
-                            _LOGGER.debug("Snapshot written to %s", self._disk_path)
+                            _LOGGER.debug(
+                                "Snapshot written to %s", self._disk_path
+                            )
                         except sqlite3.Error as err:
                             _LOGGER.error("SQL Snapshot Failed: %s", err)
 

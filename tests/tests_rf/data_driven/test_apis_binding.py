@@ -14,7 +14,9 @@ from ramses_rf.devices import (  # initiate_binding_process  # initiate_binding_
     HvacRemote,
     Thermostat,
 )
-from ramses_rf.devices.dev_base import Fakeable  # initiate_binding_, wait_for_binding_
+from ramses_rf.devices.dev_base import (
+    Fakeable,  # initiate_binding_, wait_for_binding_
+)
 from ramses_rf.state import MessageStore
 from ramses_tx.address import Address
 from ramses_tx.const import Code
@@ -90,7 +92,9 @@ async def test_initiate_binding_process(dev_class: type[Fakeable]) -> None:
     with unittest.mock.patch.object(
         Fakeable, "_initiate_binding_process", return_value=None
     ) as mocked_method:
-        gwy._engine._include[dev_addr.id] = {}  # this shouldn't be needed? a BUG?
+        gwy._engine._include[
+            dev_addr.id
+        ] = {}  # this shouldn't be needed? a BUG?
 
         dev = dev_class(gwy, dev_addr)
         dev._make_fake()

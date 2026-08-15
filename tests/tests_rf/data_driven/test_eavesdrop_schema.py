@@ -37,7 +37,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     def id_fnc(param: Path) -> str:
         return PurePath(param).name
 
-    folders = [f for f in Path(WORK_DIR).iterdir() if f.is_dir() and f.name[:1] != "_"]
+    folders = [
+        f for f in Path(WORK_DIR).iterdir() if f.is_dir() and f.name[:1] != "_"
+    ]
     folders.sort()
     metafunc.parametrize("dir_name", folders, ids=id_fnc)
 
@@ -79,7 +81,9 @@ async def test_eavesdrop_off(dir_name: Path) -> None:
         if list_path.exists():
             with open(list_path) as f:
                 expected_list = json.load(f).get("known_list")
-            assert_expected(await gwy.device_registry.known_list(), expected_list)
+            assert_expected(
+                await gwy.device_registry.known_list(), expected_list
+            )
 
     finally:
         await gwy.stop()
@@ -121,7 +125,9 @@ async def test_eavesdrop_on_(dir_name: Path) -> None:
         if list_path.exists():
             with open(list_path) as f:
                 expected_list = json.load(f).get("known_list")
-            assert_expected(await gwy.device_registry.known_list(), expected_list)
+            assert_expected(
+                await gwy.device_registry.known_list(), expected_list
+            )
 
     finally:
         await gwy.stop()

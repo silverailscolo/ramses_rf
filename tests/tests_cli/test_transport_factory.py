@@ -31,7 +31,9 @@ async def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     # 1. Run the CLI argument parsing
     # standalone_mode=False ensures we get the return value (command, lib_kwargs, kwargs)
     # instead of a system exit code.
-    result = await runner.invoke(cli, ["listen", mqtt_url], standalone_mode=False)
+    result = await runner.invoke(
+        cli, ["listen", mqtt_url], standalone_mode=False
+    )
 
     assert result.exit_code == 0, f"CLI parsing failed: {result.exception}"
 
@@ -44,7 +46,9 @@ async def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
     mock_gateway.return_value.stop.side_effect = lambda: asyncio.sleep(0)
 
     # Explicitly mock wait_for_connection_lost as an async method on the nested engine
-    mock_gateway.return_value._engine._protocol.wait_for_connection_lost = AsyncMock()
+    mock_gateway.return_value._engine._protocol.wait_for_connection_lost = (
+        AsyncMock()
+    )
 
     # 3. Run the main logic that instantiates Gateway
     # We await the async_main function directly since we are already in an async test
@@ -57,7 +61,9 @@ async def test_cli_uses_transport_factory(mock_gateway: MagicMock) -> None:
 
 @pytest.mark.asyncio
 @patch("ramses_cli.client.Gateway")
-async def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> None:
+async def test_cli_serial_backward_compatibility(
+    mock_gateway: MagicMock,
+) -> None:
     """Check that legacy serial ports still work.
 
     Verifies that standard serial port paths are still accepted and handled
@@ -67,7 +73,9 @@ async def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> Non
     serial_port = "/dev/ttyUSB0"
 
     # 1. Run the CLI argument parsing
-    result = await runner.invoke(cli, ["listen", serial_port], standalone_mode=False)
+    result = await runner.invoke(
+        cli, ["listen", serial_port], standalone_mode=False
+    )
 
     assert result.exit_code == 0, f"CLI parsing failed: {result.exception}"
 
@@ -78,7 +86,9 @@ async def test_cli_serial_backward_compatibility(mock_gateway: MagicMock) -> Non
     mock_gateway.return_value.stop.side_effect = lambda: asyncio.sleep(0)
 
     # Explicitly mock wait_for_connection_lost as an async method on the nested engine
-    mock_gateway.return_value._engine._protocol.wait_for_connection_lost = AsyncMock()
+    mock_gateway.return_value._engine._protocol.wait_for_connection_lost = (
+        AsyncMock()
+    )
 
     # 3. Run the main logic
     await async_main(command, lib_kwargs, **kwargs)

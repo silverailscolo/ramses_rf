@@ -66,7 +66,10 @@ class OpenThermMsgPayload(PayloadBase):
                 raw_value=raw_value,
             )
         return OpenThermMsg4BPayload(
-            opentherm_index=0, msg_id=msg_id, msg_type=msg_type, raw_value=raw_value
+            opentherm_index=0,
+            msg_id=msg_id,
+            msg_type=msg_type,
+            raw_value=raw_value,
         )
 
     def _header_byte(self) -> int:
@@ -134,7 +137,9 @@ class OpenThermMsgPayload(PayloadBase):
     ) -> "OpenThermMsg4BPayload | OpenThermMsg5BPayload":
         """Unpack binary payload, dispatching by length."""
         if len(raw_data) < 4:
-            raise ValueError(f"Invalid payload length for 3220: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 3220: {len(raw_data)}"
+            )
         if len(raw_data) >= 5:
             return OpenThermMsg5BPayload.from_bytes(raw_data)
         return OpenThermMsg4BPayload.from_bytes(raw_data)
@@ -179,9 +184,13 @@ class OpenThermMsg4BPayload(OpenThermMsgPayload):
             raise ValueError(
                 f"Invalid payload length for OpenThermMsg4BPayload: {len(raw_data)}"
             )
-        header_byte, m_id, raw_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        header_byte, m_id, raw_val = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         m_type = (header_byte >> 4) & 0x07
-        return cls(opentherm_index=0, msg_id=m_id, msg_type=m_type, raw_value=raw_val)
+        return cls(
+            opentherm_index=0, msg_id=m_id, msg_type=m_type, raw_value=raw_val
+        )
 
     def to_bytes(self) -> bytes:
         """Pack 4-byte OpenTherm message payload."""
@@ -291,7 +300,9 @@ class OpenThermStatusPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 0150: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 0150: {len(raw_data)}"
+            )
         master, slave = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(master_status=master, slave_status=slave)
 
@@ -301,7 +312,9 @@ class OpenThermStatusPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.master_status, self.slave_status)
+        return struct.pack(
+            self._STRUCT_FMT, self.master_status, self.slave_status
+        )
 
 
 # ----------------------------------------------------------------------
@@ -339,7 +352,9 @@ class OpenThermSetpointPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 1098: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1098: {len(raw_data)}"
+            )
         (sp_raw,) = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(setpoint_temp=sp_raw / 100.0)
 
@@ -388,7 +403,9 @@ class OpenThermTemperaturePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 10B0: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 10B0: {len(raw_data)}"
+            )
         (temp_raw,) = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(temperature=temp_raw / 100.0)
 
@@ -441,7 +458,9 @@ class OpenThermDiagnosticsPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 1FD0: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1FD0: {len(raw_data)}"
+            )
         code, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(diag_code=code, flags=flg)
 
@@ -492,7 +511,9 @@ class OpenThermFaultFlagsPayload(PayloadBase):
     def from_bytes(cls, raw_data: bytes) -> PayloadBase:
         """Unpack binary payload, dispatching by length."""
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 1FD4: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1FD4: {len(raw_data)}"
+            )
         if len(raw_data) >= 3:
             return OpenThermFaultFlags3BPayload.from_bytes(raw_data)
         return OpenThermFaultFlags2BPayload.from_bytes(raw_data)
@@ -572,7 +593,9 @@ class OpenThermFaultFlags3BPayload(OpenThermFaultFlagsPayload):
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte OpenTherm fault flags payload."""
-        return struct.pack(self._STRUCT_FMT, self.hdr, self.fault_code, self.flags)
+        return struct.pack(
+            self._STRUCT_FMT, self.hdr, self.fault_code, self.flags
+        )
 
 
 # Update VARIANTS property after variants are defined
@@ -625,7 +648,9 @@ class OpenThermConfigPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 2400: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2400: {len(raw_data)}"
+            )
         index, value = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(parameter_index=index, parameter_value=value)
 
@@ -635,7 +660,9 @@ class OpenThermConfigPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.parameter_index, self.parameter_value)
+        return struct.pack(
+            self._STRUCT_FMT, self.parameter_index, self.parameter_value
+        )
 
 
 # ----------------------------------------------------------------------
@@ -677,7 +704,9 @@ class OpenThermParamsPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 2401: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2401: {len(raw_data)}"
+            )
         index, value = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(parameter_index=index, parameter_value=value)
 
@@ -687,7 +716,9 @@ class OpenThermParamsPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.parameter_index, self.parameter_value)
+        return struct.pack(
+            self._STRUCT_FMT, self.parameter_index, self.parameter_value
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert OpenTherm parameters payload to legacy dictionary layout.
@@ -745,7 +776,9 @@ class OpenThermCapacityPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 2410: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2410: {len(raw_data)}"
+            )
         index, value = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(capacity_index=index, capacity_value=value)
 
@@ -755,7 +788,9 @@ class OpenThermCapacityPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.capacity_index, self.capacity_value)
+        return struct.pack(
+            self._STRUCT_FMT, self.capacity_index, self.capacity_value
+        )
 
 
 # ----------------------------------------------------------------------
@@ -797,7 +832,9 @@ class OpenThermModulationPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 2420: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2420: {len(raw_data)}"
+            )
         index, pct = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(modulation_index=index, mod_percent=pct)
 
@@ -807,7 +844,9 @@ class OpenThermModulationPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.modulation_index, self.mod_percent)
+        return struct.pack(
+            self._STRUCT_FMT, self.modulation_index, self.mod_percent
+        )
 
 
 # ----------------------------------------------------------------------
@@ -854,7 +893,9 @@ class OpenThermFrameExPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 3221: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 3221: {len(raw_data)}"
+            )
         code, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(frame_code=code, flags=flg)
 
@@ -916,7 +957,9 @@ class OpenThermBridgeStatusPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 3223: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 3223: {len(raw_data)}"
+            )
         code, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(status_code=code, flags=flg)
 
@@ -975,7 +1018,9 @@ class ReturnTempPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 3210: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 3210: {len(raw_data)}"
+            )
         _hdr, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         t_val = None if temp_raw in (0x31FF, 0x7FFF) else temp_raw / 100.0
         return cls(return_temp=t_val)

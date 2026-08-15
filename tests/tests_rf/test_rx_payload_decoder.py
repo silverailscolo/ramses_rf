@@ -32,7 +32,9 @@ def _load_regression_frames() -> list[tuple[int, str]]:
         frame strings.
     """
     if not FIXTURE_PATH.exists():
-        raise FileNotFoundError(f"Could not find regression file at: {FIXTURE_PATH}")
+        raise FileNotFoundError(
+            f"Could not find regression file at: {FIXTURE_PATH}"
+        )
 
     frames: list[tuple[int, str]] = []
     with open(FIXTURE_PATH, encoding="utf-8") as file:
@@ -85,7 +87,9 @@ def test_rx_payload_decoder_regression() -> None:
             continue
         except Exception as err:
             # A genuine code crash occurred (e.g., KeyError, AttributeError)
-            errors.append(f"Line {line_num} | Frame: {raw_frame} | Error: {err}")
+            errors.append(
+                f"Line {line_num} | Frame: {raw_frame} | Error: {err}"
+            )
             continue
 
         # 3. Assert: Verify the decoder produced a valid output (dict, list,
@@ -107,7 +111,9 @@ def test_rx_payload_decoder_regression() -> None:
     # Final Evaluation: Catch genuine code crashes
     if errors:
         error_summary: str = "\n".join(errors)
-        pytest.fail(f"Decoder crashed on {len(errors)} frames:\n{error_summary}")
+        pytest.fail(
+            f"Decoder crashed on {len(errors)} frames:\n{error_summary}"
+        )
 
     # Final Evaluation: Prevent silent regressions on known baselines
     assert skipped_l2_count == EXPECTED_L2_SKIPS, (

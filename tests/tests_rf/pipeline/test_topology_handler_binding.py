@@ -13,7 +13,9 @@ from ramses_tx import Address
 def test_bind_handler_evohome_controller_broadcast() -> None:
     # Arrange
     events: list[TopologyChangedEvent] = []
-    handler = BindTopologyHandler(emit_event_cb=events.append, enable_eavesdrop=True)
+    handler = BindTopologyHandler(
+        emit_event_cb=events.append, enable_eavesdrop=True
+    )
 
     mock_header = MagicMock()
     mock_header.code = Code._1F09
@@ -36,7 +38,9 @@ def test_bind_handler_evohome_controller_broadcast() -> None:
 def test_bind_handler_000c_zone_binding() -> None:
     # Arrange
     events: list[TopologyChangedEvent] = []
-    handler = BindTopologyHandler(emit_event_cb=events.append, enable_eavesdrop=False)
+    handler = BindTopologyHandler(
+        emit_event_cb=events.append, enable_eavesdrop=False
+    )
 
     mock_header = MagicMock()
     mock_header.code = Code._000C

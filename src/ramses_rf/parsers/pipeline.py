@@ -22,7 +22,9 @@ if TYPE_CHECKING:
     from ramses_rf.messages import Message
 
 _LOGGER = logging.getLogger(__name__)
-_INFORM_DEV_MSG = "Support the development of ramses_rf by reporting this packet"
+_INFORM_DEV_MSG = (
+    "Support the development of ramses_rf by reporting this packet"
+)
 
 
 def parser_heartbeat(payload: str, msg: Message) -> dict[str, Any]:
@@ -54,7 +56,9 @@ def parser_unknown(payload: str, msg: Message) -> dict[str, Any]:
     if msg.len == 2 and payload[:2] == "00":
         return {
             "_payload": payload,
-            "_value": {"00": False, "C8": True}.get(payload[2:], int(payload[2:], 16)),
+            "_value": {"00": False, "C8": True}.get(
+                payload[2:], int(payload[2:], 16)
+            ),
         }
 
     if msg.len == 3 and payload[:2] == "00":
@@ -125,7 +129,9 @@ class HeartbeatDecoder(PayloadDecoder):
         :return: The decoded result
         :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
-        if not msg._has_payload and (msg.verb == RQ and msg.code not in RQ_IDX_COMPLEX):
+        if not msg._has_payload and (
+            msg.verb == RQ and msg.code not in RQ_IDX_COMPLEX
+        ):
             return None
 
         if payload_len == 1 and payload_str == "00" and msg.code != Code._1FC9:
@@ -250,4 +256,6 @@ def _check_msg_payload(msg: Message, payload: str) -> None:
         ) from err
 
     if msg.verb not in (RQ, RP, I_, W_):
-        raise exc.PacketInvalid(f"Unknown verb/code pair: {msg.verb}/{msg.code}")
+        raise exc.PacketInvalid(
+            f"Unknown verb/code pair: {msg.verb}/{msg.code}"
+        )

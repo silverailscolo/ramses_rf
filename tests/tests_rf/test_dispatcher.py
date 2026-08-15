@@ -88,7 +88,9 @@ class Test_dispatcher_gateway:
     def test_instantiate_devices(self, mock_gateway: MagicMock) -> None:
         """Test device creation from addresses via pipeline stage."""
         dev1 = Device(mock_gateway, Address(DeviceIdT("04:189078")))
-        mock_gateway.device_registry.device_by_id.get = MagicMock(return_value=dev1)
+        mock_gateway.device_registry.device_by_id.get = MagicMock(
+            return_value=dev1
+        )
         mock_gateway._check_dst_slug = MagicMock(return_value="CTL")
 
         dispatcher.instantiate_devices(mock_gateway, self.msg5)
@@ -134,7 +136,9 @@ class Test_dispatcher_gateway:
 class TestDispatcherErrorHandling:
     """Test Dispatcher exception handling logic."""
 
-    async def test_process_msg_strict_mode(self, mock_gateway: MagicMock) -> None:
+    async def test_process_msg_strict_mode(
+        self, mock_gateway: MagicMock
+    ) -> None:
         """Test process_msg raises exception in strict mode."""
         # Enable strict mode
         mock_gateway.config.enforce_strict_handling = True
@@ -349,7 +353,11 @@ class TestHvacStateNullMarkerFiltering:
         dev = self._make_device()
         # All fields start as None
 
-        payload = {SZ_FAN_MODE: "FF", SZ_INDOOR_HUMIDITY: 0.0, SZ_BYPASS_POSITION: None}
+        payload = {
+            SZ_FAN_MODE: "FF",
+            SZ_INDOOR_HUMIDITY: 0.0,
+            SZ_BYPASS_POSITION: None,
+        }
         msg = self._make_msg(Code._31DA, payload)
 
         dispatcher._update_hvac_state(dev, payload, msg)
@@ -410,7 +418,11 @@ class TestHvacStateNullMarkerFiltering:
         """req_reason must update alongside other fields without error."""
         dev = self._make_device()
 
-        payload = {SZ_REQ_REASON: "CO2", SZ_FAN_MODE: "high", SZ_INDOOR_HUMIDITY: 0.55}
+        payload = {
+            SZ_REQ_REASON: "CO2",
+            SZ_FAN_MODE: "high",
+            SZ_INDOOR_HUMIDITY: 0.55,
+        }
         msg = self._make_msg(Code._2210, payload)
 
         dispatcher._update_hvac_state(dev, payload, msg)
@@ -506,7 +518,9 @@ class TestForeignHgiDispatcher:
             mock_dev._SLUG = DevType.CTL
             return mock_dev
 
-        mock_gateway.device_registry.get_device = MagicMock(side_effect=_get_device)
+        mock_gateway.device_registry.get_device = MagicMock(
+            side_effect=_get_device
+        )
 
         msg = self._make_msg()
         result = dispatcher.instantiate_devices(mock_gateway, msg)
@@ -539,7 +553,9 @@ class TestForeignHgiDispatcher:
         mock_dev = MagicMock(spec=Device)
         mock_dev.id = self._FOREIGN_HGI
         mock_dev._SLUG = DevType.HGI
-        mock_gateway.device_registry.get_device = MagicMock(return_value=mock_dev)
+        mock_gateway.device_registry.get_device = MagicMock(
+            return_value=mock_dev
+        )
 
         msg = self._make_msg()
         result = dispatcher.instantiate_devices(mock_gateway, msg)
@@ -557,7 +573,9 @@ class TestForeignHgiDispatcher:
 class TestResolveLogicalTargets:
     """Test resolution of logical targets from messages."""
 
-    def test_zone_temp_fallback_to_main_tcs(self, mock_gateway: MagicMock) -> None:
+    def test_zone_temp_fallback_to_main_tcs(
+        self, mock_gateway: MagicMock
+    ) -> None:
         """Test _resolve_logical_targets falls back to gwy.tcs for zone targets.
 
         Regression test for #942: zone temp packets from a secondary CTL
@@ -586,7 +604,9 @@ class TestResolveLogicalTargets:
         payload = {"zone_idx": "00", "temperature": 21.0}
 
         # 4. Resolve the targets
-        targets = dispatcher._resolve_logical_targets(mock_gateway, msg, payload)
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
 
         # 5. Assert that the zone from the main TCS was included in the targets
         assert mock_zone in targets, (

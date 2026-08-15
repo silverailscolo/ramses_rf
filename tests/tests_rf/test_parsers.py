@@ -7,7 +7,13 @@ import serial
 
 from ramses_rf import Gateway
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import SZ_BINDINGS, SZ_NAME, SZ_PHASE, SZ_TEMPERATURE, SZ_ZONE_IDX
+from ramses_rf.const import (
+    SZ_BINDINGS,
+    SZ_NAME,
+    SZ_PHASE,
+    SZ_TEMPERATURE,
+    SZ_ZONE_IDX,
+)
 from ramses_rf.messages import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.payloads import PayloadBase, get_payload_class
@@ -190,7 +196,9 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
 
         # Act 2: New Binary Parser execution in TopologyBuilder
         events: list[TopologyChangedEvent] = []
-        builder = TopologyBuilder(emit_event_cb=events.append, enable_eavesdrop=True)
+        builder = TopologyBuilder(
+            emit_event_cb=events.append, enable_eavesdrop=True
+        )
 
         mock_pkt = MagicMock()
         mock_pkt.payload = payload_hex
@@ -220,7 +228,9 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
             assert event.metadata["domain_id"] == exp_domain
             assert event.metadata["opcode"] == exp_opcode
             assert event.metadata["phase"] == expected_phase
-            assert event.child_id == exp_dev_id or event.parent_id == exp_dev_id
+            assert (
+                event.child_id == exp_dev_id or event.parent_id == exp_dev_id
+            )
 
 
 # --- Inbound Regex Parser Tests ---
@@ -266,9 +276,15 @@ async def test_regex_inbound_parsing() -> None:
             expected = Packet.from_port(dt.now(), pkt)
             for _ in range(100):
                 await asyncio.sleep(0.001)
-                if gwy_0._this_msg and gwy_0._this_msg.raw_frame == expected._frame:
+                if (
+                    gwy_0._this_msg
+                    and gwy_0._this_msg.raw_frame == expected._frame
+                ):
                     break
-            assert gwy_0._this_msg and gwy_0._this_msg.raw_frame == expected._frame
+            assert (
+                gwy_0._this_msg
+                and gwy_0._this_msg.raw_frame == expected._frame
+            )
 
     finally:
         await gwy_0.stop()

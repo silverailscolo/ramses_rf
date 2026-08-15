@@ -38,7 +38,9 @@ async def test_gateway_positional_port_name() -> None:
         Gateway("/dev/null")
 
     deprecation_warnings = [
-        w for w in recorded_warnings if issubclass(w.category, DeprecationWarning)
+        w
+        for w in recorded_warnings
+        if issubclass(w.category, DeprecationWarning)
     ]
     assert len(deprecation_warnings) == 0
 
@@ -58,7 +60,9 @@ async def test_gateway_keyword_port_name() -> None:
         Gateway(port_name="/dev/null")
 
     deprecation_warnings = [
-        w for w in recorded_warnings if issubclass(w.category, DeprecationWarning)
+        w
+        for w in recorded_warnings
+        if issubclass(w.category, DeprecationWarning)
     ]
     assert len(deprecation_warnings) == 0
 
@@ -101,7 +105,9 @@ async def test_gateway_with_config() -> None:
     assert gwy.config.gateway_timeout == 15
 
     deprecation_warnings = [
-        w for w in recorded_warnings if issubclass(w.category, DeprecationWarning)
+        w
+        for w in recorded_warnings
+        if issubclass(w.category, DeprecationWarning)
     ]
     assert len(deprecation_warnings) == 0
 
@@ -236,7 +242,8 @@ async def test_gateway_restore_cached_packets_dto() -> None:
 
         # Verify from_dict was called with the correct args
         mock_from_dict.assert_called_once_with(
-            "2023-01-01T12:00:00.000000Z", packets["2023-01-01T12:00:00.000000Z"]
+            "2023-01-01T12:00:00.000000Z",
+            packets["2023-01-01T12:00:00.000000Z"],
         )
 
         # Verify the protocol layer was handed the parsed Packet object directly
@@ -503,7 +510,9 @@ async def test_issue_649_polling_schedule_populated() -> None:
 
     # Assert
     schedule = PollingManager.resolve_schedule_for_device(dev)
-    assert Code._10D0 in schedule, "10D0 filter poll not scheduled in PollingManager"
+    assert Code._10D0 in schedule, (
+        "10D0 filter poll not scheduled in PollingManager"
+    )
 
 
 # --- Stack & Transport Integration Tests ---
@@ -531,7 +540,10 @@ async def _assert_stack_state(
     protocol: RamsesProtocolT, transport: RamsesTransportT
 ) -> None:
     port_transport = cast(PortTransport, transport)
-    assert port_transport._this_pkt and port_transport._this_pkt.code == Code._PUZZ
+    assert (
+        port_transport._this_pkt
+        and port_transport._this_pkt.code == Code._PUZZ
+    )
     if hasattr(port_transport._this_pkt, "addr1"):
         assert port_transport._this_pkt.addr1.id == _STACK_GWY_ID
     else:

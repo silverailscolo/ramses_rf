@@ -42,4 +42,6 @@ async def send_system_intent(
         return await system._gateway.dispatcher.send(
             intent, priority=Priority.HIGH, wait_for_reply=wait_for_reply
         )
-    return await system._gateway.dispatcher.send(intent, priority=Priority.HIGH)
+    return await system._gateway.dispatcher.send(
+        intent, priority=Priority.HIGH
+    )

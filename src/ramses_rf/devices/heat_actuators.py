@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Final
 
-from ramses_rf.const import DOMAIN_TYPE_MAP, SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
+from ramses_rf.const import (
+    DOMAIN_TYPE_MAP,
+    SZ_HEAT_DEMAND,
+    SZ_RELAY_DEMAND,
+    DevType,
+)
 from ramses_rf.models import ActuatorCycleDTO, ActuatorStateDTO, DeviceTraits
 from ramses_tx import Priority
 from ramses_tx.const import SZ_PRIORITY, Code
@@ -62,7 +67,9 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
             return None
 
         flame_status = (
-            state.flame_on if state.flame_on is not None else state.flame_active
+            state.flame_on
+            if state.flame_on is not None
+            else state.flame_active
         )
 
         return ActuatorStateDTO(

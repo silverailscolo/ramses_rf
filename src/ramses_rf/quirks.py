@@ -33,7 +33,9 @@ from ramses_tx.const import Code
 
 
 def apply_hvac_quirks(
-    payload: dict[str, Any], current_state: HvacState | None, msg_code: Code | str
+    payload: dict[str, Any],
+    current_state: HvacState | None,
+    msg_code: Code | str,
 ) -> dict[str, Any]:
     """Resolve stateful FSM conflicts and structural anomalies for HVAC packets.
 

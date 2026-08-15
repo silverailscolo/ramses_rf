@@ -49,7 +49,9 @@ def _extract_sample_hex(target_cls: type[base_mod.PayloadBase]) -> str | None:
             return raw_hex
 
     # 2. Match BOFM Field-spaced hex line
-    field_hex_m = re.search(r"Field-spaced hex\s*:\s*([0-9A-Fa-f\s]+)", docstring)
+    field_hex_m = re.search(
+        r"Field-spaced hex\s*:\s*([0-9A-Fa-f\s]+)", docstring
+    )
     if field_hex_m:
         raw_hex = field_hex_m.group(1).replace(" ", "").strip()
         if raw_hex and len(raw_hex) % 2 == 0:
@@ -57,7 +59,9 @@ def _extract_sample_hex(target_cls: type[base_mod.PayloadBase]) -> str | None:
 
     # 3. Match sample packet log hex strings
     pkt_matches: list[str] = re.findall(
-        r"#.*?\b[0-9A-F]{4}\s+[0-9]{3}\s+([0-9A-F\-]+)", docstring, re.IGNORECASE
+        r"#.*?\b[0-9A-F]{4}\s+[0-9]{3}\s+([0-9A-F\-]+)",
+        docstring,
+        re.IGNORECASE,
     )
     for pkt in pkt_matches:
         raw_hex_str = str(pkt).replace("-", "").replace(" ", "").strip()
@@ -109,7 +113,9 @@ def test_payload_dataclass_dictionary_serialization(
     # Assert
     for item in items:
         as_dict: dict[str, Any] | list[dict[str, Any]] = (
-            item.to_dict() if hasattr(item, "to_dict") else payload_to_dict(item)
+            item.to_dict()
+            if hasattr(item, "to_dict")
+            else payload_to_dict(item)
         )
         assert isinstance(as_dict, (dict, list))
 
@@ -121,7 +127,9 @@ def test_payload_dataclass_immutability(
     # Arrange
     dc_params = getattr(target_cls, "__dataclass_params__", None)
     if dc_params is None or not dc_params.frozen:
-        pytest.skip(f"{target_cls.__name__} is an abstract base/dispatcher class")
+        pytest.skip(
+            f"{target_cls.__name__} is an abstract base/dispatcher class"
+        )
 
     sample_hex = _extract_sample_hex(target_cls)
     assert sample_hex is not None
@@ -162,7 +170,9 @@ def test_payload_dataclass_truncated_bytes_rejection(
         truncated_bytes = raw_bytes[:-1]
         try:
             instance = target_cls.from_bytes(truncated_bytes)
-            assert isinstance(instance, (target_cls, list, base_mod.PayloadBase))
+            assert isinstance(
+                instance, (target_cls, list, base_mod.PayloadBase)
+            )
         except ValueError:
             pass  # Expected rejection for fixed-length struct payloads
 

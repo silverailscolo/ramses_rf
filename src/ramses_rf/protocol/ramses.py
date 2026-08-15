@@ -410,8 +410,14 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
         Code._1FC9: {I_: {}, RQ: {}, RP: {}, W_: {}},
         Code._1F41: {I_: {}, RP: {}},
         Code._2249: {I_: {}},  # Hometronics, not Evohome
-        Code._2209: {I_: {}, W_: {}},  # ADDED: Allow CTL to receive DT4R bounds
-        Code._22C9: {I_: {}, W_: {}},  # ADDED: Allow CTL to receive DT4R bounds
+        Code._2209: {
+            I_: {},
+            W_: {},
+        },  # ADDED: Allow CTL to receive DT4R bounds
+        Code._22C9: {
+            I_: {},
+            W_: {},
+        },  # ADDED: Allow CTL to receive DT4R bounds
         Code._22D9: {RQ: {}},
         Code._2309: {I_: {}, RP: {}},
         Code._2349: {I_: {}, RP: {}},
@@ -455,7 +461,10 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
         Code._12C0: {I_: {}},
         Code._1F09: {I_: {}},
         Code._1FC9: {I_: {}},
-        Code._22C9: {I_: {}, W_: {}},  # DT4R, Spider (I_ for Spider broadcasts)
+        Code._22C9: {
+            I_: {},
+            W_: {},
+        },  # DT4R, Spider (I_ for Spider broadcasts)
         Code._22D0: {W_: {}},  # Spider master THM
         Code._2309: {I_: {}, RQ: {}, W_: {}},
         Code._2349: {RQ: {}, W_: {}},
@@ -488,7 +497,10 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
         Code._3150: {I_: {}},
         Code._4E01: {I_: {}},  # Spider Autotemp Zone controller
         Code._4E02: {I_: {}},  # Added for Phase 2.95 snapshot parity
-        Code._4E04: {I_: {}, W_: {}},  # Added W_ for Phase 2.95 snapshot parity
+        Code._4E04: {
+            I_: {},
+            W_: {},
+        },  # Added W_ for Phase 2.95 snapshot parity
     },
     DevType.TRV: {  # e.g. HR92/HR91: Radiator Controller
         Code._0001: {W_: {r"^0[0-9A-F]"}},
@@ -749,7 +761,8 @@ CODES_BY_DEV_SLUG: dict[str, dict[Code, dict[Verb, Any]]] = {
 }
 
 CODES_OF_HEAT_DOMAIN: tuple[Code] = sorted(  # type: ignore[assignment]
-    tuple({c for k in _DEV_KLASSES_HEAT.values() for c in k}) + (Code._0B04, Code._2389)
+    tuple({c for k in _DEV_KLASSES_HEAT.values() for c in k})
+    + (Code._0B04, Code._2389)
 )
 CODES_OF_HVAC_DOMAIN: tuple[Code] = sorted(  # type: ignore[assignment]
     tuple({c for k in _DEV_KLASSES_HVAC.values() for c in k})
@@ -858,7 +871,9 @@ _22F1_MODE_ORCON: dict[str, str] = {
     "07": "off",
 }
 
-_22F1_MODE_VASCO: dict[str, str] = {  # for VASCO D60 and ClimaRad Minibox remotes
+_22F1_MODE_VASCO: dict[
+    str, str
+] = {  # for VASCO D60 and ClimaRad Minibox remotes
     "00": "off",
     "01": "away",  # 000106 minimum
     "02": "low",  # 000206

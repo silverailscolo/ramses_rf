@@ -24,7 +24,13 @@ from ramses_rf.const import (
     SZ_ZONES,
     DevType,
 )
-from ramses_rf.devices import BdrSwitch, Controller, Device, OtbGateway, UfhController
+from ramses_rf.devices import (
+    BdrSwitch,
+    Controller,
+    Device,
+    OtbGateway,
+    UfhController,
+)
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.enums import Action
 from ramses_rf.exceptions import (
@@ -125,10 +131,14 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         :param controller: The central controller device for this system.
         :type controller: Controller
         """
-        _LOGGER.debug("Creating a TCS for CTL: %s (%s)", controller.id, self.__class__)
+        _LOGGER.debug(
+            "Creating a TCS for CTL: %s (%s)", controller.id, self.__class__
+        )
 
         if controller.id in controller._gateway.device_registry.system_by_id:
-            raise SchemaInconsistentError(f"Duplicate TCS for CTL: {controller.id}")
+            raise SchemaInconsistentError(
+                f"Duplicate TCS for CTL: {controller.id}"
+            )
         if not isinstance(controller, Controller):  # TODO
             raise SchemaInconsistentError(
                 f"Invalid CTL: {controller} (is not a controller)"
@@ -160,7 +170,9 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         """The TCS relay, aka 'appliance control' (BDR or OTB)."""
         if self._app_cntrl:
             return self._app_cntrl
-        app_cntrl = [d for d in self.childs if isinstance(d, (BdrSwitch, OtbGateway))]
+        app_cntrl = [
+            d for d in self.childs if isinstance(d, (BdrSwitch, OtbGateway))
+        ]
         return app_cntrl[0] if len(app_cntrl) == 1 else None
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
@@ -262,7 +274,9 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         :rtype: dict[str, Any]
         """
         params: dict[str, Any] = {SZ_SYSTEM: {}}
-        params[SZ_SYSTEM]["tpi_params"] = await self.entity_state.get_value(Code._1100)
+        params[SZ_SYSTEM]["tpi_params"] = await self.entity_state.get_value(
+            Code._1100
+        )
         return params
 
     async def status(self) -> dict[str, Any]:
@@ -275,7 +289,8 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         status[SZ_SYSTEM]["heat_demand"] = await self.heat_demand()
 
         status[SZ_DEVICES] = {
-            d.id: await d.status() for d in sorted(self.childs, key=lambda x: x.id)
+            d.id: await d.status()
+            for d in sorted(self.childs, key=lambda x: x.id)
         }
 
         return status
@@ -372,7 +387,9 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
 
         self._msg_0006: Message = None  # type: ignore[assignment]
 
-    async def _schedule_version(self, *, force_io: bool = False) -> tuple[int, bool]:
+    async def _schedule_version(
+        self, *, force_io: bool = False
+    ) -> tuple[int, bool]:
         """Return the global schedule version number and an I/O boolean.
 
         If `force_io` is True, request the latest change counter from the
@@ -425,7 +442,9 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         :returns: The current schedule version, or None if unknown.
         :rtype: int | None
         """
-        return await self.entity_state.get_value(Code._0006, key=SZ_CHANGE_COUNTER)
+        return await self.entity_state.get_value(
+            Code._0006, key=SZ_CHANGE_COUNTER
+        )
 
     async def status(self) -> dict[str, Any]:
         """Return the schedule status.
@@ -554,7 +573,9 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         self._dhw: DhwZone = None  # type: ignore[assignment]
 
     # TODO: should be a private method
-    def get_dhw_zone(self, *, msg: Message | None = None, **schema: Any) -> DhwZone:
+    def get_dhw_zone(
+        self, *, msg: Message | None = None, **schema: Any
+    ) -> DhwZone:
         """Return a DHW zone, create it if required.
 
         First, use the schema to create/update it, then pass it any msg
@@ -689,7 +710,9 @@ class SystemMode(SystemBase):  # 2E04
             action=Action.SET_SYSTEM_MODE,
             data={"system_mode": system_mode, "until": until},
         )
-        return await self._gateway.dispatcher.send(intent, priority=Priority.HIGH)
+        return await self._gateway.dispatcher.send(
+            intent, priority=Priority.HIGH
+        )
 
     async def set_auto(self) -> Message:
         """Revert system to Auto, setting zones to FollowSchedule.
@@ -746,7 +769,9 @@ class Datetime(SystemBase):  # 313F
             action=Action.SET_SYSTEM_TIME,
             data={"datetime": date_time},
         )
-        return await self._gateway.dispatcher.send(intent, priority=Priority.HIGH)
+        return await self._gateway.dispatcher.send(
+            intent, priority=Priority.HIGH
+        )
 
 
 class UfHeating(SystemBase):
@@ -839,10 +864,15 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
             return
 
         if _schema := (schema.get(SZ_ZONES)):  # type: ignore[assignment]
-            [self.get_htg_zone(zone_idx, **s) for zone_idx, s in _schema.items()]
+            [
+                self.get_htg_zone(zone_idx, **s)
+                for zone_idx, s in _schema.items()
+            ]
 
     @classmethod
-    def create_from_schema(cls, controller: Controller, **schema: Any) -> System:
+    def create_from_schema(
+        cls, controller: Controller, **schema: Any
+    ) -> System:
         """Create a CH/DHW system for a CTL and set its schema attrs.
 
         The appropriate System class should have been determined by a
@@ -896,7 +926,8 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         if not self._relay_demands:
             return None
         return {
-            k: v.payload.get("relay_demand") for k, v in self._relay_demands.items()
+            k: v.payload.get("relay_demand")
+            for k, v in self._relay_demands.items()
         }
 
     @property
@@ -922,7 +953,9 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         return status
 
 
-class Evohome(ScheduleSync, Language, SystemMode, MultiZone, UfHeating, System):
+class Evohome(
+    ScheduleSync, Language, SystemMode, MultiZone, UfHeating, System
+):
     """The Evohome system class."""
 
     _SLUG: str = SYS_KLASS.TCS  # evohome
@@ -956,7 +989,12 @@ class Hometronics(System):
     #     # will RP to: 0005/configured_zones_alt, but not: configured_zones
     #     # will RP to: 0004
 
-    RQ_SUPPORTED = (Code._0004, Code._000C, Code._2E04, Code._313F)  # TODO: WIP
+    RQ_SUPPORTED = (
+        Code._0004,
+        Code._000C,
+        Code._2E04,
+        Code._313F,
+    )  # TODO: WIP
     RQ_UNSUPPORTED = ("xxxx",)  # 10E0?
 
 

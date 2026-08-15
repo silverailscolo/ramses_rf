@@ -338,7 +338,9 @@ DEV_ROLE_MAP = attr_dict_factory(
         DevRole.HT1: {None: "heating_valve"},  # payload[:4] == 010E
         DevRole.APP: {"0F": "appliance_control"},  # the heat/cool source
         DevRole.RFG: {"10": "remote_gateway"},
-        DevRole.ELE: {"11": "ele_actuator"},  # ELE(VAL) - no RP from older evos
+        DevRole.ELE: {
+            "11": "ele_actuator"
+        },  # ELE(VAL) - no RP from older evos
     },
     {
         "HEAT_DEVICES": ("00", "04", "08", "09", "0A", "0B", "11"),
@@ -357,7 +359,10 @@ DEV_TYPE_MAP = attr_dict_factory(
         # HGI80
         DevType.HGI: {"18": "gateway_interface"},
         # Heat (CH/DHW) devices
-        DevType.TR0: {"00": "radiator_valve", AttrDict._SZ_AKA_SLUG: DevType.TRV},
+        DevType.TR0: {
+            "00": "radiator_valve",
+            AttrDict._SZ_AKA_SLUG: DevType.TRV,
+        },
         DevType.CTL: {"01": "controller"},
         DevType.UFC: {"02": "ufh_controller"},
         DevType.HCW: {"03": "analog_thermostat"},
@@ -368,7 +373,10 @@ DEV_TYPE_MAP = attr_dict_factory(
         DevType.DTS: {"12": "digital_thermostat"},
         DevType.BDR: {"13": "electrical_relay"},
         DevType.OUT: {"17": "outdoor_sensor"},
-        DevType.DT2: {"22": "digital_thermostat", AttrDict._SZ_AKA_SLUG: DevType.DTS},
+        DevType.DT2: {
+            "22": "digital_thermostat",
+            AttrDict._SZ_AKA_SLUG: DevType.DTS,
+        },
         DevType.PRG: {"23": "programmer"},
         DevType.RFG: {"30": "rf_gateway"},
         DevType.RND: {"34": "round_thermostat"},

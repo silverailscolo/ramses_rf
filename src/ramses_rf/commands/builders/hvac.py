@@ -205,7 +205,9 @@ def build_set_fan_mode(intent: Command) -> CommandDTO:
     elif mode in mode_map_r:
         mode = mode_map_r[mode]
     else:
-        raise ValueError(f"fan_mode is not valid for scheme '{scheme}': {fan_mode}")
+        raise ValueError(
+            f"fan_mode is not valid for scheme '{scheme}': {fan_mode}"
+        )
 
     if mode_max is None:
         mode_max = _22F1_MODE_MAX.get(scheme)
@@ -305,7 +307,9 @@ def build_set_fan_param(intent: Command) -> CommandDTO:
     try:
         param_id_stripped = param_id.strip().upper()
         if len(param_id_stripped) != 2:
-            raise ValueError("Parameter ID must be exactly 2 hexadecimal characters")
+            raise ValueError(
+                "Parameter ID must be exactly 2 hexadecimal characters"
+            )
         param_id_int = int(param_id_stripped, 16)
     except ValueError as err:
         raise ValueError(
@@ -345,7 +349,9 @@ def build_set_fan_param(intent: Command) -> CommandDTO:
                         f"to {max_val_scaled / 10}%)"
                     )
             case "0F":  # %
-                value_scaled = int(round((float(value) / 100.0) / float(precision)))
+                value_scaled = int(
+                    round((float(value) / 100.0) / float(precision))
+                )
                 min_val_scaled = int(round(float(min_val) / float(precision)))
                 max_val_scaled = int(round(float(max_val) / float(precision)))
                 precision_scaled = int(round(float(precision) * 200))
@@ -501,7 +507,9 @@ def build_get_hvac_fan_31da(intent: Command) -> CommandDTO:
     extra = intent.get("_extra", "")
 
     payload = hvac_id
-    payload += f"{(int(air_quality * 200)):02X}" if air_quality is not None else "EF"
+    payload += (
+        f"{(int(air_quality * 200)):02X}" if air_quality is not None else "EF"
+    )
     payload += (
         f"{air_quality_code(air_quality_basis)}"
         if air_quality_basis is not None
@@ -518,10 +526,18 @@ def build_get_hvac_fan_31da(intent: Command) -> CommandDTO:
         if outdoor_humidity is not None
         else "EF"
     )
-    payload += hex_from_temp(exhaust_temp) if exhaust_temp is not None else "7FFF"
-    payload += hex_from_temp(supply_temp) if supply_temp is not None else "7FFF"
-    payload += hex_from_temp(indoor_temp) if indoor_temp is not None else "7FFF"
-    payload += hex_from_temp(outdoor_temp) if outdoor_temp is not None else "7FFF"
+    payload += (
+        hex_from_temp(exhaust_temp) if exhaust_temp is not None else "7FFF"
+    )
+    payload += (
+        hex_from_temp(supply_temp) if supply_temp is not None else "7FFF"
+    )
+    payload += (
+        hex_from_temp(indoor_temp) if indoor_temp is not None else "7FFF"
+    )
+    payload += (
+        hex_from_temp(outdoor_temp) if outdoor_temp is not None else "7FFF"
+    )
     payload += (
         f"{capability_bits(speed_capabilities):04X}"
         if speed_capabilities is not None
@@ -547,12 +563,20 @@ def build_get_hvac_fan_31da(intent: Command) -> CommandDTO:
         if supply_fan_speed is not None
         else "FF"
     )
-    payload += f"{remaining_mins:04X}" if remaining_mins is not None else "7FFF"
+    payload += (
+        f"{remaining_mins:04X}" if remaining_mins is not None else "7FFF"
+    )
     payload += f"{int(post_heat * 200):02X}" if post_heat is not None else "EF"
     payload += f"{int(pre_heat * 200):02X}" if pre_heat is not None else "EF"
-    payload += f"{(int(supply_flow * 100)):04X}" if supply_flow is not None else "7FFF"
     payload += (
-        f"{(int(exhaust_flow * 100)):04X}" if exhaust_flow is not None else "7FFF"
+        f"{(int(supply_flow * 100)):04X}"
+        if supply_flow is not None
+        else "7FFF"
+    )
+    payload += (
+        f"{(int(exhaust_flow * 100)):04X}"
+        if exhaust_flow is not None
+        else "7FFF"
     )
     payload += extra
 

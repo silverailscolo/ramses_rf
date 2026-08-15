@@ -84,7 +84,9 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
     },
 }
 
-POLL_INTER_CMD_GAP: Final[float] = 0.5  # Rate limit gap between consecutive TX commands
+POLL_INTER_CMD_GAP: Final[float] = (
+    0.5  # Rate limit gap between consecutive TX commands
+)
 DEFAULT_POLL_CYCLE_SECS: Final[float] = 300.0  # 5 minutes maximum idle sleep
 
 
@@ -292,7 +294,9 @@ class PollingManager:
         self._poller_task = schedule_task(self._poll_loop)
         self._poller_task.set_name("l7_polling_manager")
         self._gateway.add_task(self._poller_task)
-        _LOGGER.info("PollingManager started (shadow_mode=%s)", self.shadow_mode)
+        _LOGGER.info(
+            "PollingManager started (shadow_mode=%s)", self.shadow_mode
+        )
 
     async def stop(self) -> None:
         """Stop the background polling loop gracefully."""
@@ -369,7 +373,9 @@ class PollingManager:
                 task.last_polled = now
                 task.next_due = now + td(seconds=task.interval)
             else:
-                _LOGGER.info("Polling device %s command %s", task.device_id, task.code)
+                _LOGGER.info(
+                    "Polling device %s command %s", task.device_id, task.code
+                )
                 task.last_polled = now
                 task.next_due = now + td(seconds=task.interval)
                 cmd_dto = build_rq_cmd(

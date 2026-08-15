@@ -36,7 +36,9 @@ class ProtocolInterface(ABC, asyncio.Protocol):
     """Interface for the RAMSES-II Protocol layer."""
 
     @abstractmethod
-    def connection_made(self, transport: Any, /, *, ramses: bool = False) -> None:
+    def connection_made(
+        self, transport: Any, /, *, ramses: bool = False
+    ) -> None:
         """Called when a connection is made."""
 
     @abstractmethod

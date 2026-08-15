@@ -164,7 +164,9 @@ def _proc_log_line(log_line: str) -> None:
     assert entry
 
 
-def _proc_null_fault_entry(fault_log: FaultLog, _log_idx: LogIdxT = "00") -> None:
+def _proc_null_fault_entry(
+    fault_log: FaultLog, _log_idx: LogIdxT = "00"
+) -> None:
     """Return a 0418 packet with no entry."""
     cmd = CommandDTO(
         verb=I_,
@@ -228,7 +230,9 @@ def test_faultlog_instantiation_1() -> None:
     for i in reversed(range(len(TEST_FAULTS))):
         _proc_test_fault_entry(fault_log, f"{i:02}", _log_idx=f"{i:02}")
 
-    assert sorted(fault_log._log.keys(), reverse=True) == list(EXPECTED_MAP.values())
+    assert sorted(fault_log._log.keys(), reverse=True) == list(
+        EXPECTED_MAP.values()
+    )
     assert fault_log._map == EXPECTED_MAP
 
 
@@ -244,7 +248,9 @@ def test_faultlog_instantiation_2() -> None:
     for i in numbers:
         _proc_test_fault_entry(fault_log, f"{i:02}", _log_idx=f"{i:02}")
 
-    assert sorted(fault_log._log.keys(), reverse=True) == list(EXPECTED_MAP.values())
+    assert sorted(fault_log._log.keys(), reverse=True) == list(
+        EXPECTED_MAP.values()
+    )
     assert fault_log._map == EXPECTED_MAP
 
 
@@ -328,7 +334,9 @@ def test_faultlog_instantiation_4() -> None:
         2: "21-12-23T00:54:05",
     }
 
-    _proc_test_fault_entry(fault_log, "02", _log_idx="02")  # pushes others down
+    _proc_test_fault_entry(
+        fault_log, "02", _log_idx="02"
+    )  # pushes others down
 
     assert fault_log._map == {
         2: "21-12-23T00:57:02",

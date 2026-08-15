@@ -64,7 +64,9 @@ def patches_for_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "ramses_tx.protocol.core._DBG_DISABLE_IMPERSONATION_ALERTS", True
     )
-    monkeypatch.setattr("ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True)
+    monkeypatch.setattr(
+        "ramses_tx.transport.port._DBG_DISABLE_DUTY_CYCLE_LIMIT", True
+    )
     monkeypatch.setattr("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", 0)
 
 
@@ -101,7 +103,9 @@ async def rf() -> AsyncGenerator[VirtualRf, None]:
 
 
 @pytest.fixture()
-def fake_evofw3_port(request: pytest.FixtureRequest, rf: VirtualRf) -> PortStrT | None:
+def fake_evofw3_port(
+    request: pytest.FixtureRequest, rf: VirtualRf
+) -> PortStrT | None:
     """Utilize a virtual evofw3-compatible gateway.
 
     Requires test to supply the gwy_dev_id fixture.
@@ -115,7 +119,9 @@ def fake_evofw3_port(request: pytest.FixtureRequest, rf: VirtualRf) -> PortStrT 
 
 
 @pytest.fixture()
-def fake_ti3410_port(request: pytest.FixtureRequest, rf: VirtualRf) -> PortStrT | None:
+def fake_ti3410_port(
+    request: pytest.FixtureRequest, rf: VirtualRf
+) -> PortStrT | None:
     """Utilize a virtual HGI80-compatible gateway.
 
     Requires test to supply the gwy_dev_id fixture.
@@ -189,7 +195,9 @@ async def _gateway(gwy_port: PortStrT, gwy_config: _GwyConfigDictT) -> Gateway:
     # objects
     if "config" in kwargs:
         cfg = kwargs.pop("config")
-        cfg_dict = cast(dict[str, Any], cfg if isinstance(cfg, dict) else vars(cfg))
+        cfg_dict = cast(
+            dict[str, Any], cfg if isinstance(cfg, dict) else vars(cfg)
+        )
         # Outer kwargs take precedence over nested config values
         kwargs = {**cfg_dict, **kwargs}
 
@@ -236,7 +244,9 @@ async def _fake_gateway(
     return gwy
 
 
-async def _real_gateway(gwy_port: PortStrT, gwy_config: _GwyConfigDictT) -> Gateway:
+async def _real_gateway(
+    gwy_port: PortStrT, gwy_config: _GwyConfigDictT
+) -> Gateway:
     """Wrapper to instantiate a physical gateway."""
 
     global _global_failed_ports

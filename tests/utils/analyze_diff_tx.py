@@ -54,7 +54,8 @@ def load_expected_state() -> list[str]:
     )
 
     found_snapshots: dict[str, str] = {
-        m.group("key"): m.group("value").strip() for m in pattern.finditer(content)
+        m.group("key"): m.group("value").strip()
+        for m in pattern.finditer(content)
     }
 
     raw_value = found_snapshots.get(TARGET_SNAPSHOT_KEY)
@@ -123,7 +124,9 @@ def generate_actual_state() -> list[tuple[int, str, str]]:
     return results
 
 
-def print_report(expected: list[str], actual: list[tuple[int, str, str]]) -> None:
+def print_report(
+    expected: list[str], actual: list[tuple[int, str, str]]
+) -> None:
     """Print the comparison report with summary statistics.
 
     :param expected: The reference results from the snapshot.

@@ -39,7 +39,9 @@ def check_idx(zone_index: int | str) -> str:
         raise exc.CommandInvalid(f"Invalid value for zone_idx: {zone_index}")
     if isinstance(zone_index, str):
         zone_index = FA if zone_index == "HW" else zone_index
-    result: int = zone_index if isinstance(zone_index, int) else int(zone_index, 16)
+    result: int = (
+        zone_index if isinstance(zone_index, int) else int(zone_index, 16)
+    )
     if 0 > result > 15 and result != 0xFA:
         raise exc.CommandInvalid(f"Invalid value for zone_idx: {result}")
     return f"{result:02X}"
@@ -139,4 +141,7 @@ def normalise_until(
             f"Invalid args: For mode={mode}, until and duration must both be None"
         )
 
-    return until, duration  # TODO return updated mode for ZON_MODE_MAP.TEMPORARY ?
+    return (
+        until,
+        duration,
+    )  # TODO return updated mode for ZON_MODE_MAP.TEMPORARY ?

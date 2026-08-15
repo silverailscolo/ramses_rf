@@ -45,7 +45,9 @@ class TopologyBuilder:
         """
         self._gateway = gateway
 
-    async def update_topology(self, payload: dict[str, Any], msg: Message) -> None:
+    async def update_topology(
+        self, payload: dict[str, Any], msg: Message
+    ) -> None:
         """Process a decoded payload and update topology models.
 
         :param payload: The payload dictionary.
@@ -83,7 +85,9 @@ async def update_topology_schema_state(
             if (devices := p.get("devices")) and isinstance(devices, list):
                 for candidate_device in devices:
                     if (
-                        getattr(candidate_device, "type", str(candidate_device)[:2])
+                        getattr(
+                            candidate_device, "type", str(candidate_device)[:2]
+                        )
                         == "01"
                     ):
                         ctl_id = str(candidate_device)
@@ -102,7 +106,10 @@ async def update_topology_schema_state(
         controllers = [
             d
             for d in list(registry.device_by_id.values())
-            if (getattr(d, "_SLUG", "") == "CTL" or getattr(d, "type", None) == "01")
+            if (
+                getattr(d, "_SLUG", "") == "CTL"
+                or getattr(d, "type", None) == "01"
+            )
             and hasattr(d, "tcs")
             and d.tcs is not None
         ]
@@ -118,7 +125,10 @@ async def update_topology_schema_state(
                 and hasattr(tcs, "get_htg_zone")
             ):
                 z_type = p.get("zone_type")
-                if isinstance(z_type, str) and z_type in ZON_ROLE_MAP.HEAT_ZONES:
+                if (
+                    isinstance(z_type, str)
+                    and z_type in ZON_ROLE_MAP.HEAT_ZONES
+                ):
                     schema: dict[str, Any] = {"class": ZON_ROLE_MAP[z_type]}
                     if zone_mask := p.get("zone_mask"):
                         for bit_index, active in enumerate(zone_mask):
@@ -128,7 +138,9 @@ async def update_topology_schema_state(
                                     exc.SchemaInconsistentError,
                                 ):
                                     z_str = f"{bit_index:02X}"
-                                    ez = getattr(tcs, "zone_by_idx", {}).get(z_str)
+                                    ez = getattr(tcs, "zone_by_idx", {}).get(
+                                        z_str
+                                    )
                                     if (
                                         ez is not None
                                         and getattr(ez, "_heating_type", None)
@@ -145,13 +157,15 @@ async def update_topology_schema_state(
                         )
                     ) is not None:
                         with contextlib.suppress(
-                            exc.DeviceNotFoundError, exc.SchemaInconsistentError
+                            exc.DeviceNotFoundError,
+                            exc.SchemaInconsistentError,
                         ):
                             z_str = str(zone_idx)
                             ez = getattr(tcs, "zone_by_idx", {}).get(z_str)
                             if (
                                 ez is not None
-                                and getattr(ez, "_heating_type", None) is not None
+                                and getattr(ez, "_heating_type", None)
+                                is not None
                             ):
                                 tcs.get_htg_zone(z_str)
                             else:
@@ -168,7 +182,9 @@ async def update_topology_schema_state(
         case Code._000C:
             zone_idx = p.get(SZ_ZONE_INDEX) or p.get("zone_idx")
             domain_id = (
-                p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or p.get("domain_idx")
+                p.get(SZ_DOMAIN_INDEX)
+                or p.get("domain_id")
+                or p.get("domain_idx")
             )
             devices = p.get("devices", [])
             if "device_id" in p and not devices:
@@ -186,7 +202,10 @@ async def update_topology_schema_state(
             ufc_devs: list[Any] = []
             if registry and tcs:
                 for d_id in devices:
-                    if getattr(d_id, "type", str(d_id)[:2]) in ("02", DevType.UFC):
+                    if getattr(d_id, "type", str(d_id)[:2]) in (
+                        "02",
+                        DevType.UFC,
+                    ):
                         with contextlib.suppress(exc.DeviceNotFoundError):
                             ufc = registry.get_device(str(d_id), parent=tcs)
                             if ufc not in ufc_devs:
@@ -210,10 +229,13 @@ async def update_topology_schema_state(
 
             # Route UFH circuit mappings to UFH controllers
             if ufc_devs and ufh_idx is not None:
-                ufh_z_str: str | None = str(zone_idx) if zone_idx is not None else None
+                ufh_z_str: str | None = (
+                    str(zone_idx) if zone_idx is not None else None
+                )
                 ufh_str = (
                     f"{int(str(ufh_idx), 16):02X}"
-                    if isinstance(ufh_idx, (int, str)) and str(ufh_idx).isalnum()
+                    if isinstance(ufh_idx, (int, str))
+                    and str(ufh_idx).isalnum()
                     else str(ufh_idx)
                 )
                 for ufc in ufc_devs:
@@ -240,7 +262,11 @@ async def update_topology_schema_state(
                     and str(d) != "7FFFFFFF"
                 ]
                 zone_cls: str | None = None
-                if valid_devs and zone_type is not None and zone_type in ZON_ROLE_MAP:
+                if (
+                    valid_devs
+                    and zone_type is not None
+                    and zone_type in ZON_ROLE_MAP
+                ):
                     candidate_cls = ZON_ROLE_MAP[zone_type]
                     if candidate_cls in (
                         "radiator_valve",
@@ -254,7 +280,8 @@ async def update_topology_schema_state(
                 existing_zone = tcs.zone_by_idx.get(str(zone_idx))
                 if (
                     existing_zone
-                    and getattr(existing_zone, "_heating_type", None) is not None
+                    and getattr(existing_zone, "_heating_type", None)
+                    is not None
                 ):
                     schema = {}
                 else:
@@ -263,11 +290,13 @@ async def update_topology_schema_state(
                 zone = tcs.get_htg_zone(str(zone_idx), **schema)
                 if zone and valid_devs:
                     has_trv = any(
-                        str(d).startswith(f"{DevType.TRV}:") for d in valid_devs
+                        str(d).startswith(f"{DevType.TRV}:")
+                        for d in valid_devs
                     )
                     if (
                         has_trv
-                        and getattr(zone, "_heating_type", None) != "radiator_valve"
+                        and getattr(zone, "_heating_type", None)
+                        != "radiator_valve"
                     ):
                         with contextlib.suppress(exc.RamsesException):
                             zone._update_schema(**{SZ_CLASS: "radiator_valve"})
@@ -294,7 +323,8 @@ async def update_topology_schema_state(
                         if d_str.startswith(_non_actuator_prefixes):
                             continue
                         with contextlib.suppress(
-                            exc.DeviceNotFoundError, exc.SchemaInconsistentError
+                            exc.DeviceNotFoundError,
+                            exc.SchemaInconsistentError,
                         ):
                             if is_sen:
                                 registry.device_by_id.get(d_str)
@@ -323,7 +353,8 @@ async def update_topology_schema_state(
                             or p.get("device_role") == "dhw_sensor"
                         )
                         with contextlib.suppress(
-                            exc.DeviceNotFoundError, exc.SchemaInconsistentError
+                            exc.DeviceNotFoundError,
+                            exc.SchemaInconsistentError,
                         ):
                             registry.get_device(
                                 str(d_id),
@@ -357,18 +388,23 @@ async def update_topology_schema_state(
             if not ufc_list and tcs and hasattr(tcs, "ufh_controllers"):
                 ufc_list = list(getattr(tcs, "ufh_controllers", {}).values())
 
-            cct_idx = p.get("circuit_idx") or p.get("cct_idx") or p.get("ufx_idx")
+            cct_idx = (
+                p.get("circuit_idx") or p.get("cct_idx") or p.get("ufx_idx")
+            )
             z_idx = p.get(SZ_ZONE_INDEX) or p.get("zone_idx")
             if cct_idx is not None and ufc_list:
                 cct_str = (
                     f"{int(str(cct_idx), 16):02X}"
-                    if isinstance(cct_idx, (int, str)) and str(cct_idx).isalnum()
+                    if isinstance(cct_idx, (int, str))
+                    and str(cct_idx).isalnum()
                     else str(cct_idx)
                 )
                 for ufc in ufc_list:
                     if hasattr(ufc, "circuit_by_id"):
                         ufc.circuit_by_id[cct_str] = {
-                            "zone_idx": str(z_idx) if z_idx is not None else None
+                            "zone_idx": str(z_idx)
+                            if z_idx is not None
+                            else None
                         }
 
         # 5. Code 000A: Zone Parameters & Configuration

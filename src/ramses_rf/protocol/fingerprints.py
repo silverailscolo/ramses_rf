@@ -104,7 +104,9 @@ __DEVICE_INFO_RAW: dict[str, DeviceFingerprint] = {
 
 __DEVICE_INFO: dict[str, list[str]] = {
     t: [k for k, v in __DEVICE_INFO_RAW.items() if v["dev_type"] == t]
-    for t in sorted(dict.fromkeys(v["dev_type"] for v in __DEVICE_INFO_RAW.values()))
+    for t in sorted(
+        dict.fromkeys(v["dev_type"] for v in __DEVICE_INFO_RAW.values())
+    )
 }  # convert to {dev_type: [signature, ...]}
 
 
@@ -191,6 +193,9 @@ __ORCON_WIP = {
     "0001C88E": ("VMD-02RPS66", ""),
     "0001C88F": ("VMD-02RPS07", ""),
     "0001C892": ("VMD-02RPS78", ""),
-    "0001C895": ("VMD-15RMS86", "HRC-EcoSmart/Comfort, HRC-EcoMax/Comfort (from 2021)"),
+    "0001C895": (
+        "VMD-15RMS86",
+        "HRC-EcoSmart/Comfort, HRC-EcoMax/Comfort (from 2021)",
+    ),
     "0001C897": ("VMD-02RMS37", ""),
 }

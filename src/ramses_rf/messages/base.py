@@ -9,7 +9,12 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
 from ramses_rf.address import Address, id_to_address
-from ramses_rf.const import SZ_DHW_INDEX, SZ_DOMAIN_INDEX, SZ_UFH_INDEX, SZ_ZONE_INDEX
+from ramses_rf.const import (
+    SZ_DHW_INDEX,
+    SZ_DOMAIN_INDEX,
+    SZ_UFH_INDEX,
+    SZ_ZONE_INDEX,
+)
 from ramses_rf.payloads.base import PayloadBase
 from ramses_tx import CommandDTO, PacketDTO
 from ramses_tx.models import DeviceId, RawPacket, TransportMessage
@@ -99,7 +104,9 @@ class Message:
         )
 
         valid = [a for a in self._addrs if a.id != "--:------"]
-        self.src: Address = valid[0] if valid else id_to_address(DeviceIdT("--:------"))
+        self.src: Address = (
+            valid[0] if valid else id_to_address(DeviceIdT("--:------"))
+        )
         self.dst: Address = valid[1] if len(valid) > 1 else self.src
 
         # Initialize attributes before parsing to prevent AttributeError
@@ -125,12 +132,16 @@ class Message:
         :rtype: RoutingContext
         """
         context_value = extract_context_value(
-            self._dto.payload, raw_payload=self._dto.raw_payload, code=self.code
+            self._dto.payload,
+            raw_payload=self._dto.raw_payload,
+            code=self.code,
         )
         return RoutingContext(
             context_value
             if context_value is not None
-            else (self._index_value if self._index_value is not False else None)
+            else (
+                self._index_value if self._index_value is not False else None
+            )
         )
 
     @property
@@ -361,7 +372,11 @@ class Message:
         :return: False if there is no payload (may falsely return True).
         :rtype: bool
         """
-        v_str = str(getattr(self.verb, "value", str(self.verb))).split(".")[-1].strip()
+        v_str = (
+            str(getattr(self.verb, "value", str(self.verb)))
+            .split(".")[-1]
+            .strip()
+        )
         if v_str not in (RQ, f"{RQ}_") and self.code in (
             Code._1FC9,
             Code._1F09,
@@ -417,7 +432,10 @@ class Message:
             assert isinstance(self._index_value, str)  # mypy hint
             return {"hvac_id": self._index_value}
 
-        if self._index_value in (True, False) or self.code in CODE_IDX_ARE_COMPLEX:
+        if (
+            self._index_value in (True, False)
+            or self.code in CODE_IDX_ARE_COMPLEX
+        ):
             return {}
 
         if self.code in (Code._3220,):  # FIXME: should be _SIMPLE

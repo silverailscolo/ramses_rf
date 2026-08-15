@@ -13,7 +13,9 @@ from ramses_tx import Address
 def test_rad_handler_heating_prefix_rules() -> None:
     # Arrange
     events: list[TopologyChangedEvent] = []
-    handler = RadTopologyHandler(emit_event_cb=events.append, enable_eavesdrop=True)
+    handler = RadTopologyHandler(
+        emit_event_cb=events.append, enable_eavesdrop=True
+    )
 
     mock_header = MagicMock()
     mock_header.code = Code._30C9

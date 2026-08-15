@@ -110,7 +110,9 @@ async def test_blocking_io_handling(virtual_rf: VirtualRf) -> None:
 async def test_gateway_emulation(virtual_rf: VirtualRf) -> None:
     """Test hardware-specific emulation logic for different firmware types."""
     virtual_rf.set_gateway(virtual_rf.ports[0], "18:111111", HgiFwTypes.EVOFW3)
-    virtual_rf.set_gateway(virtual_rf.ports[1], "18:222222", HgiFwTypes.EVOFW3_FTDI)
+    virtual_rf.set_gateway(
+        virtual_rf.ports[1], "18:222222", HgiFwTypes.EVOFW3_FTDI
+    )
     virtual_rf.set_gateway(virtual_rf.ports[2], "18:333333", HgiFwTypes.HGI_80)
 
     for i in range(2):
@@ -160,7 +162,9 @@ async def assert_code_in_device_msgindex(
         if gwy.message_store:
             return await gwy.message_store.contains(
                 source=dev_id, code=str(code)
-            ) or await gwy.message_store.contains(destination=dev_id, code=str(code))
+            ) or await gwy.message_store.contains(
+                destination=dev_id, code=str(code)
+            )
 
         msgs = await dev.entity_state.get_message_log_flat()
         msgz = await dev.entity_state.get_state_cache_nested()
@@ -189,7 +193,9 @@ async def assert_devices(
 
 
 async def assert_this_pkt(
-    transport: PortTransport, cmd: Command, max_sleep: float = DEFAULT_MAX_SLEEP
+    transport: PortTransport,
+    cmd: Command,
+    max_sleep: float = DEFAULT_MAX_SLEEP,
 ) -> None:
     """Check transport current packet matching expected command."""
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
@@ -216,7 +222,9 @@ async def test_virtual_rf_dev_disc() -> None:
     try:
         gwy_config = GatewayConfig(
             disable_discovery=GWY_CONFIG["disable_discovery"],
-            engine=EngineConfig(enforce_known_list=GWY_CONFIG["enforce_known_list"]),
+            engine=EngineConfig(
+                enforce_known_list=GWY_CONFIG["enforce_known_list"]
+            ),
         )
 
         rf.set_gateway(rf.ports[0], "18:000000")
@@ -238,13 +246,17 @@ async def test_virtual_rf_dev_disc() -> None:
         await assert_devices(gwy_0, ["18:000000", "18:111111"])
         await assert_devices(gwy_1, ["18:000000", "18:111111"])
 
-        cmd = Command.from_cli(" I --- 01:010000 --:------ 01:010000 1F09 003 0004B5")
+        cmd = Command.from_cli(
+            " I --- 01:010000 --:------ 01:010000 1F09 003 0004B5"
+        )
         gwy_0.send_cmd(cmd)
 
         await assert_devices(gwy_0, ["01:010000", "18:000000", "18:111111"])
         await assert_devices(gwy_1, ["01:010000", "18:000000", "18:111111"])
 
-        cmd = Command.from_cli(" I --- 01:011111 --:------ 01:011111 1F09 003 0004B5")
+        cmd = Command.from_cli(
+            " I --- 01:011111 --:------ 01:011111 1F09 003 0004B5"
+        )
         ser_2.write(bytes(f"{cmd}\r\n".encode("ascii")))
 
         await assert_devices(
@@ -281,16 +293,24 @@ async def test_virtual_rf_pkt_flow() -> None:
         await assert_devices(gwy_1, ["18:111111", "41:111111"])
 
         await assert_code_in_device_msgindex(
-            gwy_0, DeviceIdT("01:022222"), Code._1F09, max_sleep=0, test_not=True
+            gwy_0,
+            DeviceIdT("01:022222"),
+            Code._1F09,
+            max_sleep=0,
+            test_not=True,
         )
 
-        cmd = Command.from_cli(" I --- 01:022222 --:------ 01:022222 1F09 003 0004B5")
+        cmd = Command.from_cli(
+            " I --- 01:022222 --:------ 01:022222 1F09 003 0004B5"
+        )
         gwy_0.send_cmd(cmd, num_repeats=1)
 
         await assert_devices(
             gwy_0, ["01:022222", "18:000000", "18:111111", "40:000000"]
         )
-        await assert_code_in_device_msgindex(gwy_0, DeviceIdT("01:022222"), Code._1F09)
+        await assert_code_in_device_msgindex(
+            gwy_0, DeviceIdT("01:022222"), Code._1F09
+        )
 
         await assert_this_pkt(gwy_0._engine._transport, cmd)
         await assert_this_pkt(gwy_1._engine._transport, cmd)
@@ -358,7 +378,9 @@ async def _test_gwy_device(gwy: Gateway, test_idx: int) -> None:
         timeout = 2.0
 
     try:
-        pkt = await gwy._engine._protocol.send_cmd(cmd, qos=QosParams(timeout=timeout))
+        pkt = await gwy._engine._protocol.send_cmd(
+            cmd, qos=QosParams(timeout=timeout)
+        )
     except exc.ProtocolSendFailed:
         if is_hgi80 and cmd_str[7:16] != HGI_DEVICE_ID:
             return

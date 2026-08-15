@@ -71,7 +71,8 @@ class Address:
         :rtype: bool
         """
         return isinstance(value, str) and (
-            value == NON_DEVICE_ID or DEVICE_ID_REGEX.ANY.match(value) is not None
+            value == NON_DEVICE_ID
+            or DEVICE_ID_REGEX.ANY.match(value) is not None
         )
 
     @classmethod
@@ -91,7 +92,9 @@ class Address:
             return NON_DEVICE_ID
 
         _tmp = int(device_hex, 16)
-        return DeviceIdT(f"{(_tmp & 0xFC0000) >> 18:02d}:{_tmp & 0x03FFFF:06d}")
+        return DeviceIdT(
+            f"{(_tmp & 0xFC0000) >> 18:02d}:{_tmp & 0x03FFFF:06d}"
+        )
 
     @classmethod
     @lru_cache(maxsize=256)
@@ -137,7 +140,9 @@ def hex_id_to_dev_id(device_hex: str) -> DeviceIdT:
 @lru_cache(maxsize=2048)
 def is_valid_dev_id(value: str, device_class: None | str = None) -> bool:
     """Return True if a device_id is valid."""
-    return isinstance(value, str) and DEVICE_ID_REGEX.ANY.match(value) is not None
+    return (
+        isinstance(value, str) and DEVICE_ID_REGEX.ANY.match(value) is not None
+    )
 
 
 @lru_cache(maxsize=2048)
@@ -154,7 +159,8 @@ def pkt_addrs(
     """
     try:
         addrs = tuple(
-            id_to_address(address_fragment[i : i + 9]) for i in range(0, 30, 10)
+            id_to_address(address_fragment[i : i + 9])
+            for i in range(0, 30, 10)
         )
     except ValueError as err:
         raise exc.PacketAddrSetInvalid(
@@ -178,7 +184,9 @@ def pkt_addrs(
             and addrs[1] == NON_DEV_ADDR
         )
     ):
-        raise exc.PacketAddrSetInvalid(f"Invalid address set: {address_fragment}")
+        raise exc.PacketAddrSetInvalid(
+            f"Invalid address set: {address_fragment}"
+        )
 
     device_addrs = list(filter(lambda a: a.type != "--", addrs))  # dex
     src_addr = device_addrs[0]

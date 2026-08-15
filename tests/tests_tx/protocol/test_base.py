@@ -42,7 +42,9 @@ async def protocol(mock_msg_handler: AsyncMock) -> DummyProtocol:
 # --- CONNECTION LIFECYCLE TESTS (Issue #560 Fixes) ---
 
 
-async def test_wait_for_connection_lost_no_connection(protocol: DummyProtocol) -> None:
+async def test_wait_for_connection_lost_no_connection(
+    protocol: DummyProtocol,
+) -> None:
     """Test wait_for_connection_lost when no connection was ever made."""
     result = await protocol.wait_for_connection_lost()
     assert result is None
@@ -60,7 +62,9 @@ async def test_wait_for_connection_lost_clean_disconnect(
     assert result is None
 
 
-async def test_wait_for_connection_lost_with_exception(protocol: DummyProtocol) -> None:
+async def test_wait_for_connection_lost_with_exception(
+    protocol: DummyProtocol,
+) -> None:
     """Test wait_for_connection_lost returns (does not raise) transport exceptions."""
     mock_transport = MagicMock()
     protocol.connection_made(mock_transport)
@@ -72,12 +76,16 @@ async def test_wait_for_connection_lost_with_exception(protocol: DummyProtocol) 
     assert result is expected_exc
 
 
-async def test_wait_for_connection_lost_timeout(protocol: DummyProtocol) -> None:
+async def test_wait_for_connection_lost_timeout(
+    protocol: DummyProtocol,
+) -> None:
     """Test wait_for_connection_lost raises TransportError if it times out."""
     mock_transport = MagicMock()
     protocol.connection_made(mock_transport)
 
-    with pytest.raises(TransportError, match="Transport did not unbind from Protocol"):
+    with pytest.raises(
+        TransportError, match="Transport did not unbind from Protocol"
+    ):
         await protocol.wait_for_connection_lost(timeout=0.01)
 
 
@@ -87,7 +95,9 @@ async def test_wait_for_connection_lost_timeout(protocol: DummyProtocol) -> None
 async def test_is_wanted_addrs_empty_filters(protocol: DummyProtocol) -> None:
     """Test default behavior with no filters set."""
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:111111"), DeviceIdT("01:222222"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:111111"), DeviceIdT("01:222222")
+        )
         is True
     )
 
@@ -96,34 +106,46 @@ async def test_is_wanted_addrs_exclude_list(protocol: DummyProtocol) -> None:
     """Test that devices in the exclude list are rejected."""
     protocol._exclude = [DeviceIdT("01:111111")]
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:111111"), DeviceIdT("01:222222"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:111111"), DeviceIdT("01:222222")
+        )
         is False
     )
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:222222"), DeviceIdT("01:111111"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:222222"), DeviceIdT("01:111111")
+        )
         is False
     )
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:333333"), DeviceIdT("01:444444"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:333333"), DeviceIdT("01:444444")
+        )
         is True
     )
 
 
-async def test_is_wanted_addrs_enforce_include(protocol: DummyProtocol) -> None:
+async def test_is_wanted_addrs_enforce_include(
+    protocol: DummyProtocol,
+) -> None:
     """Test enforce_include logic ensures ALL addresses are in the include list."""
     protocol.enforce_include = True
     protocol._include = [DeviceIdT("01:111111")]
 
     # Only one device included, the other isn't -> False
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:111111"), DeviceIdT("01:222222"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:111111"), DeviceIdT("01:222222")
+        )
         is False
     )
 
     # Both devices included -> True
     protocol._include = [DeviceIdT("01:111111"), DeviceIdT("01:222222")]
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:111111"), DeviceIdT("01:222222"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:111111"), DeviceIdT("01:222222")
+        )
         is True
     )
 
@@ -136,7 +158,9 @@ async def test_is_wanted_addrs_active_hgi(protocol: DummyProtocol) -> None:
 
     # 18:999999 is the active HGI, so it should be permitted despite not being in _include
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:111111"), DeviceIdT("18:999999"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:111111"), DeviceIdT("18:999999")
+        )
         is True
     )
 
@@ -148,7 +172,9 @@ async def test_is_wanted_addrs_sending_to_hgi(protocol: DummyProtocol) -> None:
 
     # When sending, HGI_DEV_ADDR (18:000730) is always allowed
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:111111"), HGI_DEV_ADDR.id, sending=True)
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:111111"), HGI_DEV_ADDR.id, sending=True
+        )
         is True
     )
     # But not when receiving
@@ -160,7 +186,9 @@ async def test_is_wanted_addrs_sending_to_hgi(protocol: DummyProtocol) -> None:
     )
 
 
-async def test_is_wanted_addrs_foreign_hgi_not_blocked(protocol: DummyProtocol) -> None:
+async def test_is_wanted_addrs_foreign_hgi_not_blocked(
+    protocol: DummyProtocol,
+) -> None:
     """Foreign HGIs (18:) must not be blocked even if in the exclude list.
 
     A foreign HGI communicates with our controller and the controller's
@@ -173,12 +201,16 @@ async def test_is_wanted_addrs_foreign_hgi_not_blocked(protocol: DummyProtocol) 
 
     # Packet from controller to foreign HGI (e.g. 0004 RP zone name)
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("01:216136"), DeviceIdT("18:072981"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:216136"), DeviceIdT("18:072981")
+        )
         is True
     )
     # Packet from foreign HGI to controller (e.g. 0004 RQ)
     assert (
-        protocol._is_wanted_addrs(DeviceIdT("18:072981"), DeviceIdT("01:216136"))
+        protocol._is_wanted_addrs(
+            DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
         is True
     )
 
@@ -193,7 +225,10 @@ async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
     """
     protocol._exclude = [HGI_DEV_ADDR.id]
 
-    assert protocol._is_wanted_addrs(DeviceIdT("01:216136"), HGI_DEV_ADDR.id) is False
+    assert (
+        protocol._is_wanted_addrs(DeviceIdT("01:216136"), HGI_DEV_ADDR.id)
+        is False
+    )
 
 
 # --- INBOUND PACKET TESTS (_pkt_received) ---
@@ -206,7 +241,9 @@ async def test_pkt_received_included(protocol: DummyProtocol) -> None:
     mock_pkt.dst.id = "01:222222"
 
     # Patch the base class to prevent the mock from triggering validation errors
-    with patch("ramses_tx.protocol.base._BaseProtocol._pkt_received") as mock_base_recv:
+    with patch(
+        "ramses_tx.protocol.base._BaseProtocol._pkt_received"
+    ) as mock_base_recv:
         protocol._pkt_received(mock_pkt)
         mock_base_recv.assert_called_once_with(mock_pkt)
 
@@ -222,7 +259,9 @@ async def test_pkt_received_excluded(
 
     with (
         caplog.at_level(logging.DEBUG),
-        patch("ramses_tx.protocol.base._BaseProtocol._pkt_received") as mock_base_recv,
+        patch(
+            "ramses_tx.protocol.base._BaseProtocol._pkt_received"
+        ) as mock_base_recv,
     ):
         protocol._pkt_received(mock_pkt)
         mock_base_recv.assert_not_called()
@@ -230,7 +269,9 @@ async def test_pkt_received_excluded(
     assert "Packet excluded by device_id filter" in caplog.text
 
 
-async def test_pkt_received_excluded_bypasses_to_dto(protocol: DummyProtocol) -> None:
+async def test_pkt_received_excluded_bypasses_to_dto(
+    protocol: DummyProtocol,
+) -> None:
 
     # Arrange
     protocol._exclude = [DeviceIdT("01:111111")]
@@ -253,7 +294,9 @@ async def test_send_cmd_included(protocol: DummyProtocol) -> None:
     mock_cmd = MagicMock()
     mock_cmd.src.id = "01:111111"
     mock_cmd.dst.id = "01:222222"
-    protocol._is_evofw3 = False  # Avoids triggering deep address parsing on the mock
+    protocol._is_evofw3 = (
+        False  # Avoids triggering deep address parsing on the mock
+    )
 
     result = await protocol.send_cmd(mock_cmd)
 
@@ -267,7 +310,9 @@ async def test_send_cmd_excluded(protocol: DummyProtocol) -> None:
     mock_cmd.addr1 = "01:111111"
     mock_cmd.addr2 = "01:222222"
 
-    with pytest.raises(ProtocolError, match="Command excluded by device_id filter"):
+    with pytest.raises(
+        ProtocolError, match="Command excluded by device_id filter"
+    ):
         await protocol.send_cmd(mock_cmd)
 
 
@@ -276,9 +321,13 @@ async def test_patch_cmd_if_needed_evofw3(protocol: DummyProtocol) -> None:
     from ramses_tx.dtos import CommandDTO as Command
 
     protocol._is_evofw3 = True
-    protocol._known_hgi = DeviceIdT("18:123456")  # Safely sets the hgi_id property
+    protocol._known_hgi = DeviceIdT(
+        "18:123456"
+    )  # Safely sets the hgi_id property
 
-    original_cmd = Command.from_cli("RQ --- 18:000730 01:222222 --:------ 12B0 001 00")
+    original_cmd = Command.from_cli(
+        "RQ --- 18:000730 01:222222 --:------ 12B0 001 00"
+    )
 
     patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
 
@@ -288,7 +337,9 @@ async def test_patch_cmd_if_needed_evofw3(protocol: DummyProtocol) -> None:
     assert original_cmd.addr1 == "18:000730"  # Enforces immutability
 
 
-async def test_patch_cmd_if_needed_hgi80_reverse(protocol: DummyProtocol) -> None:
+async def test_patch_cmd_if_needed_hgi80_reverse(
+    protocol: DummyProtocol,
+) -> None:
     """Test that _patch_cmd_if_needed swaps the real HGI ID back to the
     placeholder for HGI80 (TI 3410).
 
@@ -301,7 +352,9 @@ async def test_patch_cmd_if_needed_hgi80_reverse(protocol: DummyProtocol) -> Non
     protocol._is_evofw3 = False  # HGI80
     protocol._known_hgi = DeviceIdT("18:123456")
 
-    original_cmd = Command.from_cli(" W --- 18:123456 01:222222 --:------ 12B0 001 00")
+    original_cmd = Command.from_cli(
+        " W --- 18:123456 01:222222 --:------ 12B0 001 00"
+    )
 
     patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
 
@@ -321,7 +374,9 @@ async def test_patch_cmd_if_needed_hgi80_no_change_when_placeholder(
     protocol._is_evofw3 = False  # HGI80
     protocol._known_hgi = DeviceIdT("18:123456")
 
-    original_cmd = Command.from_cli(" W --- 18:000730 01:222222 --:------ 12B0 001 00")
+    original_cmd = Command.from_cli(
+        " W --- 18:000730 01:222222 --:------ 12B0 001 00"
+    )
 
     patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
 
@@ -343,7 +398,9 @@ async def test_patch_cmd_if_needed_hgi80_no_change_when_impersonating(
     protocol._is_evofw3 = False  # HGI80
     protocol._known_hgi = DeviceIdT("18:123456")
 
-    original_cmd = Command.from_cli(" W --- 21:057310 01:222222 --:------ 12B0 001 00")
+    original_cmd = Command.from_cli(
+        " W --- 21:057310 01:222222 --:------ 12B0 001 00"
+    )
 
     patched_cmd = protocol._patch_cmd_if_needed(original_cmd)
 

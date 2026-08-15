@@ -49,7 +49,9 @@ def build_get_schedule_fragment(intent: Command) -> CommandDTO:
     if frag_number == 0:
         raise ValueError(f"frag_number={frag_number}, but it is 1-indexed")
     elif frag_number == 1 and total_frags != 0:
-        raise ValueError(f"total_frags={total_frags}, but must be 0 when frag_number=1")
+        raise ValueError(
+            f"total_frags={total_frags}, but must be 0 when frag_number=1"
+        )
     elif frag_number > total_frags and total_frags != 0:
         raise ValueError(
             f"frag_number={frag_number}, but must be <= total_frags={total_frags}"
@@ -93,13 +95,20 @@ def build_set_schedule_fragment(intent: Command) -> CommandDTO:
     )
     fragment = intent.get("fragment")
 
-    if zone_idx is None or frag_num is None or frag_cnt is None or fragment is None:
+    if (
+        zone_idx is None
+        or frag_num is None
+        or frag_cnt is None
+        or fragment is None
+    ):
         raise ValueError("Missing required arguments in intent data")
 
     if frag_num == 0:
         raise ValueError(f"frag_num={frag_num}, but it is 1-indexed")
     elif frag_num > frag_cnt:
-        raise ValueError(f"frag_num={frag_num}, but must be <= frag_cnt={frag_cnt}")
+        raise ValueError(
+            f"frag_num={frag_num}, but must be <= frag_cnt={frag_cnt}"
+        )
 
     frag_bytes = bytes.fromhex(fragment)
     payload = ScheduleFragmentPayload(

@@ -81,7 +81,10 @@ class StateCache:
         self,
     ) -> list[tuple[Code | str, Verb | str, Any, Message]]:
         """Retrieve all cache records as tuples of (code, verb, ctx, msg)."""
-        return [(h.code, h.verb, h.context.value, m) for h, m in self._cache.items()]
+        return [
+            (h.code, h.verb, h.context.value, m)
+            for h, m in self._cache.items()
+        ]
 
 
 class EntityState:
@@ -188,12 +191,15 @@ class EntityState:
                 context_value in ("FC", "FA", "F9", "FA")
                 or (
                     in_dict
-                    and (SZ_DHW_INDEX in msg.payload or "dhw_idx" in msg.payload)
+                    and (
+                        SZ_DHW_INDEX in msg.payload or "dhw_idx" in msg.payload
+                    )
                 )
                 or (
                     in_list
                     and any(
-                        isinstance(d, dict) and (SZ_DHW_INDEX in d or "dhw_idx" in d)
+                        isinstance(d, dict)
+                        and (SZ_DHW_INDEX in d or "dhw_idx" in d)
                         for d in msg.payload
                     )
                 )
@@ -237,7 +243,9 @@ class EntityState:
             await self._gateway.message_store.rem(msg)
         self._pending_deletes.discard(msg.state_header)
 
-    async def _get_msg_by_hdr(self, hdr: HeaderT | StateHeader) -> Message | None:
+    async def _get_msg_by_hdr(
+        self, hdr: HeaderT | StateHeader
+    ) -> Message | None:
         """Return a msg, if any, that matches a given header."""
         if isinstance(hdr, str):
             code_str, verb_str, src_id, *args = hdr.split("|")
@@ -286,7 +294,9 @@ class EntityState:
             )
         return msg
 
-    async def get_flag(self, code: Code | str, key: str, index: int) -> bool | None:
+    async def get_flag(
+        self, code: Code | str, key: str, index: int
+    ) -> bool | None:
         """Get the boolean value of a specific flag within a payload."""
         if flags := await self.get_value(code, key=key):
             return bool(flags[index])
@@ -387,7 +397,9 @@ class EntityState:
                 )
                 key = None
             try:
-                cd = await self.find_latest_code(code, key, **kwargs, verb=verb)
+                cd = await self.find_latest_code(
+                    code, key, **kwargs, verb=verb
+                )
                 if cd:
                     cache = await self._build_state_cache()
 
@@ -483,7 +495,10 @@ class EntityState:
                 return None
         elif filter_idx:
             msg_dict = {
-                k: v for d in payload for k, v in d.items() if _matches_filter(d)
+                k: v
+                for d in payload
+                for k, v in d.items()
+                if _matches_filter(d)
             }
             if not msg_dict:
                 return None
@@ -535,7 +550,10 @@ class EntityState:
                     context_value in ("FC", "FA", "F9", "FA")
                     or (
                         in_dict
-                        and (SZ_DHW_INDEX in msg.payload or "dhw_idx" in msg.payload)
+                        and (
+                            SZ_DHW_INDEX in msg.payload
+                            or "dhw_idx" in msg.payload
+                        )
                     )
                     or (
                         in_list
@@ -555,7 +573,9 @@ class EntityState:
                     or (
                         in_dict
                         and str(
-                            msg.payload.get(SZ_ZONE_INDEX, msg.payload.get("zone_idx"))
+                            msg.payload.get(
+                                SZ_ZONE_INDEX, msg.payload.get("zone_idx")
+                            )
                         )
                         == zone_idx
                     )
@@ -563,7 +583,8 @@ class EntityState:
                         in_list
                         and any(
                             isinstance(d, dict)
-                            and str(d.get(SZ_ZONE_INDEX, d.get("zone_idx"))) == zone_idx
+                            and str(d.get(SZ_ZONE_INDEX, d.get("zone_idx")))
+                            == zone_idx
                             for d in msg.payload
                         )
                     )
@@ -592,7 +613,9 @@ class EntityState:
         dhw_idx = kwargs.get("dhw_idx")
 
         allowed_verbs = (
-            (kwargs.get("verb"),) if kwargs.get("verb") in (I_, RP) else (I_, RP)
+            (kwargs.get("verb"),)
+            if kwargs.get("verb") in (I_, RP)
+            else (I_, RP)
         )
 
         cache = await self._build_state_cache()
@@ -612,7 +635,10 @@ class EntityState:
                 in_list = isinstance(msg.payload, list)
                 if not (
                     str(context_value) == str(zone_idx)
-                    or (in_dict and str(msg.payload.get("zone_idx")) == str(zone_idx))
+                    or (
+                        in_dict
+                        and str(msg.payload.get("zone_idx")) == str(zone_idx)
+                    )
                     or (
                         in_list
                         and any(
@@ -634,7 +660,8 @@ class EntityState:
                     or (
                         in_list
                         and any(
-                            isinstance(d, dict) and "dhw_idx" in d for d in msg.payload
+                            isinstance(d, dict) and "dhw_idx" in d
+                            for d in msg.payload
                         )
                     )
                 ):
@@ -645,7 +672,9 @@ class EntityState:
                     if key not in msg.payload:
                         continue
                 elif isinstance(msg.payload, list):
-                    if not any(isinstance(d, dict) and key in d for d in msg.payload):
+                    if not any(
+                        isinstance(d, dict) and key in d for d in msg.payload
+                    ):
                         continue
                 else:
                     continue

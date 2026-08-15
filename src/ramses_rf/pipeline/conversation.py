@@ -147,10 +147,14 @@ class ConversationManager:
         else:
             effective_timeout = self.default_timeout
 
-        effective_retries = max_retries if max_retries is not None else self.max_retries
+        effective_retries = (
+            max_retries if max_retries is not None else self.max_retries
+        )
 
         fut: asyncio.Future[Message] = self._loop.create_future()
-        fut.add_done_callback(lambda f: f.exception() if not f.cancelled() else None)
+        fut.add_done_callback(
+            lambda f: f.exception() if not f.cancelled() else None
+        )
         key = self._conversation_key(intent, dto)
 
         if key in self._pending:
@@ -159,7 +163,9 @@ class ConversationManager:
                 old_pending.timer_task.cancel()
             if not old_pending.fut.done():
                 old_pending.fut.set_exception(
-                    ProtocolSendFailed(f"Conversation {key} superseded by new request")
+                    ProtocolSendFailed(
+                        f"Conversation {key} superseded by new request"
+                    )
                 )
 
         pending = PendingConversation(
@@ -175,7 +181,9 @@ class ConversationManager:
 
         return fut
 
-    def _schedule_timeout(self, key: str, pending: PendingConversation) -> None:
+    def _schedule_timeout(
+        self, key: str, pending: PendingConversation
+    ) -> None:
         """Schedule a timeout task for a pending conversation.
 
         :param key: The tracking key.
@@ -232,7 +240,9 @@ class ConversationManager:
             if not pending.fut.done():
                 action_str = pending.intent.action.value
                 pending.fut.set_exception(
-                    ProtocolTimeoutError(f"Timeout waiting for reply to {action_str}")
+                    ProtocolTimeoutError(
+                        f"Timeout waiting for reply to {action_str}"
+                    )
                 )
 
     def process_msg(self, msg: Message) -> bool:
@@ -258,12 +268,16 @@ class ConversationManager:
             # Check verb matching: RP is always valid; I is valid for W commands
             # (e.g. Evohome DHW acknowledges W 1F41 with I 1F41, not RP 1F41).
             # See issue 873.
-            if msg.verb != RP and not (msg.verb == I_ and pending.dto.verb == W_):
+            if msg.verb != RP and not (
+                msg.verb == I_ and pending.dto.verb == W_
+            ):
                 continue
 
             # Check sub-payload context (idx/zone/domain/msg_id) matching
             message_context = msg.context.value
-            if message_context is not None and not isinstance(message_context, Mock):
+            if message_context is not None and not isinstance(
+                message_context, Mock
+            ):
                 command_context = extract_context_value(
                     pending.dto.payload,
                     code=pending.dto.code,
@@ -279,7 +293,10 @@ class ConversationManager:
             return False
 
         # Cancel timer task
-        if matched_pending.timer_task and not matched_pending.timer_task.done():
+        if (
+            matched_pending.timer_task
+            and not matched_pending.timer_task.done()
+        ):
             matched_pending.timer_task.cancel()
 
         # Remove from pending

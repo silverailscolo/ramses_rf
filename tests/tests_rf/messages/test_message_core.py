@@ -30,7 +30,10 @@ def test_message_enrichment_and_lineage() -> None:
     # 1. Create the base Message (RAW_EVENT)
 
     mock_header = StateHeader.create(
-        code=Code._30C9, verb=Verb.I_, source_id="01:111111", context_value=None
+        code=Code._30C9,
+        verb=Verb.I_,
+        source_id="01:111111",
+        context_value=None,
     )
 
     msg = Message(

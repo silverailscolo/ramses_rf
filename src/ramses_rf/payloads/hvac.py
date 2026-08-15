@@ -96,7 +96,9 @@ class SpiderThermostatPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 5 bytes.
         """
         if len(raw_data) < 5:
-            raise ValueError(f"Invalid payload length for 01FF: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 01FF: {len(raw_data)}"
+            )
         t_raw = raw_data[2]
         sp_min_raw = raw_data[3]
         sp_max_raw = (
@@ -125,12 +127,18 @@ class SpiderThermostatPayload(PayloadBase):
             return self._raw_bytes
         t_raw = 0x7F if self.temp is None else int(round(self.temp * 2.0))
         sp_min_raw = (
-            0x7F if self.setpoint_min is None else int(round(self.setpoint_min * 2.0))
+            0x7F
+            if self.setpoint_min is None
+            else int(round(self.setpoint_min * 2.0))
         )
         sp_max_raw = (
-            0x7F if self.setpoint_max is None else int(round(self.setpoint_max * 2.0))
+            0x7F
+            if self.setpoint_max is None
+            else int(round(self.setpoint_max * 2.0))
         )
-        return struct.pack(self._STRUCT_FMT, 0, 128, t_raw, sp_min_raw, sp_max_raw)
+        return struct.pack(
+            self._STRUCT_FMT, 0, 128, t_raw, sp_min_raw, sp_max_raw
+        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert Spider thermostat payload to legacy dictionary layout.
@@ -213,8 +221,12 @@ class HvacFilterChangePayload(PayloadBase):
         if len(raw_data) == 2 and raw_data == b"\x00\xff":
             return cls(reset_counter=True)
         if len(raw_data) < 4:
-            raise ValueError(f"Invalid payload length for 10D0: {len(raw_data)}")
-        parse_data = raw_data if len(raw_data) >= 6 else raw_data.ljust(6, b"\x00")
+            raise ValueError(
+                f"Invalid payload length for 10D0: {len(raw_data)}"
+            )
+        parse_data = (
+            raw_data if len(raw_data) >= 6 else raw_data.ljust(6, b"\x00")
+        )
         _hdr, rem_days, life_days, rem_pct_raw, _trailer = struct.unpack_from(
             cls._STRUCT_FMT_6B, parse_data, 0
         )
@@ -307,7 +319,9 @@ class HvacCounterPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 10E2: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 10E2: {len(raw_data)}"
+            )
         _hdr, counter_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(counter=counter_val)
 
@@ -356,7 +370,9 @@ class OutdoorHumidityPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 1280: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1280: {len(raw_data)}"
+            )
         raw_val = raw_data[1]
         # PROTOCOL QUIRK: 0x00, 0xEF, and 0xFF are protocol sentinel
         # null-markers indicating an uninstalled or absent humidity
@@ -409,7 +425,9 @@ class Co2Payload(PayloadBase):
     def from_bytes(cls, raw_data: bytes) -> "Co2Payload":
         """Unpack binary payload, dispatching by length."""
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 1298: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1298: {len(raw_data)}"
+            )
         if len(raw_data) >= 3:
             return Co23BPayload.from_bytes(raw_data)
         return Co22BPayload.from_bytes(raw_data)
@@ -565,11 +583,15 @@ class RelativeHumidityPayload(PayloadBase):
             raise ValueError("Payload data cannot be empty")
         if len(raw_data) > 7 and len(raw_data) % 7 == 0:
             return [
-                RelativeHumidity6BPayload.from_bytes(raw_data[i : i + 7], is_array=True)
+                RelativeHumidity6BPayload.from_bytes(
+                    raw_data[i : i + 7], is_array=True
+                )
                 for i in range(0, len(raw_data), 7)
             ]
         if len(raw_data) >= 6:
-            return RelativeHumidity6BPayload.from_bytes(raw_data, is_array=False)
+            return RelativeHumidity6BPayload.from_bytes(
+                raw_data, is_array=False
+            )
         if len(raw_data) >= 2:
             return RelativeHumidity2BPayload.from_bytes(raw_data)
         return RelativeHumidity1BPayload.from_bytes(raw_data)
@@ -757,7 +779,10 @@ class RelativeHumidity6BPayload(RelativeHumidityPayload):
         hvac_index = f"{raw_data[0]:02X}" if is_array else None
         offset = (
             1
-            if (hvac_index is not None or (raw_data[0] == 0 and len(raw_data) >= 6))
+            if (
+                hvac_index is not None
+                or (raw_data[0] == 0 and len(raw_data) >= 6)
+            )
             else 0
         )
         hum_raw = raw_data[offset]
@@ -794,8 +819,12 @@ class RelativeHumidity6BPayload(RelativeHumidityPayload):
             if self._dewpoint_temp is None
             else int(round(self._dewpoint_temp * 100.0))
         )
-        idx_raw = int(self._hvac_index, 16) if self._hvac_index is not None else 0
-        return struct.pack(self._STRUCT_FMT, idx_raw, hum_raw, temp_raw, dew_raw)
+        idx_raw = (
+            int(self._hvac_index, 16) if self._hvac_index is not None else 0
+        )
+        return struct.pack(
+            self._STRUCT_FMT, idx_raw, hum_raw, temp_raw, dew_raw
+        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert humidity payload to legacy dictionary format.
@@ -872,7 +901,9 @@ class AirQualityBasisPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 12C8: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 12C8: {len(raw_data)}"
+            )
         offset = 1 if len(raw_data) >= 3 else 0
         aq_pct = raw_data[offset] / 200.0
         basis = raw_data[offset + 1]
@@ -946,7 +977,9 @@ class HvacProgrammeSchemePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 1470: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1470: {len(raw_data)}"
+            )
         scheme, setpoints = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(scheme_code=scheme, daily_setpoints=setpoints)
 
@@ -956,7 +989,9 @@ class HvacProgrammeSchemePayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT, self.scheme_code, self.daily_setpoints)
+        return struct.pack(
+            self._STRUCT_FMT, self.scheme_code, self.daily_setpoints
+        )
 
 
 # ----------------------------------------------------------------------
@@ -1002,9 +1037,15 @@ class HvacProgrammeConfigPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 4 bytes.
         """
         if len(raw_data) < 4:
-            raise ValueError(f"Invalid payload length for 1F70: {len(raw_data)}")
-        d_idx, sp_idx, t_mins = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(day_index=d_idx, setpoint_index=sp_idx, start_time_mins=t_mins)
+            raise ValueError(
+                f"Invalid payload length for 1F70: {len(raw_data)}"
+            )
+        d_idx, sp_idx, t_mins = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
+        return cls(
+            day_index=d_idx, setpoint_index=sp_idx, start_time_mins=t_mins
+        )
 
     def to_bytes(self) -> bytes:
         """Pack HVAC programme config data into binary payload.
@@ -1013,7 +1054,10 @@ class HvacProgrammeConfigPayload(PayloadBase):
         :rtype: bytes
         """
         return struct.pack(
-            self._STRUCT_FMT, self.day_index, self.setpoint_index, self.start_time_mins
+            self._STRUCT_FMT,
+            self.day_index,
+            self.setpoint_index,
+            self.start_time_mins,
         )
 
 
@@ -1060,7 +1104,9 @@ class HvacDevicePairingPayload(PayloadBase):
         """
         if not raw_data:
             raise ValueError("Payload data cannot be empty")
-        (pairing_type,) = struct.unpack_from(cls._STRUCT_FMT_HEADER, raw_data, 0)
+        (pairing_type,) = struct.unpack_from(
+            cls._STRUCT_FMT_HEADER, raw_data, 0
+        )
         return cls(pairing_type=pairing_type, device_bytes=raw_data[1:])
 
     def to_bytes(self) -> bytes:
@@ -1070,7 +1116,8 @@ class HvacDevicePairingPayload(PayloadBase):
         :rtype: bytes
         """
         return (
-            struct.pack(self._STRUCT_FMT_HEADER, self.pairing_type) + self.device_bytes
+            struct.pack(self._STRUCT_FMT_HEADER, self.pairing_type)
+            + self.device_bytes
         )
 
 
@@ -1175,7 +1222,10 @@ class HvacAutoRequestPayload(PayloadBase):
                 "unknown_80": self.unknown_80,
                 "unknown_82": self.unknown_82,
             }
-        if self.requested_fan_percent is not None and self.request_reason is not None:
+        if (
+            self.requested_fan_percent is not None
+            and self.request_reason is not None
+        ):
             return {
                 "requested_fan_percent": self.requested_fan_percent,
                 SZ_REQUEST_REASON: self.request_reason,
@@ -1227,7 +1277,9 @@ class HvacProgrammeEnabledPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 22B0: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 22B0: {len(raw_data)}"
+            )
         is_enabled = raw_data[1] == 5
         return cls(enabled=is_enabled)
 
@@ -1417,7 +1469,9 @@ class HvacVentilationStatus4BPayload(HvacVentilationStatusPayload):
         """
         if self.raw_bytes:
             return self.raw_bytes
-        return struct.pack(self._STRUCT_FMT, self.flow_mode, self.status_flags, 0, 0)
+        return struct.pack(
+            self._STRUCT_FMT, self.flow_mode, self.status_flags, 0, 0
+        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert ventilation status to legacy dictionary layout.
@@ -1492,7 +1546,9 @@ class HvacFanModePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 22F1: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 22F1: {len(raw_data)}"
+            )
         hdr, raw_idx, raw_max = struct.unpack_from(">BBB", raw_data, 0)
         mode_index = None if raw_idx in (0xEF, 0xFE, 0xFF) else raw_idx
         mode_max = None if raw_max in (0xEF, 0xFE, 0xFF) else raw_max
@@ -1521,7 +1577,13 @@ class HvacFanModePayload(PayloadBase):
         if self.mode_max == 4:
             mode_map = {0: "off", 1: "auto", 2: "low", 3: "medium", 4: "high"}
         elif self.mode_max == 5:
-            mode_map = {0: "off", 1: "away", 2: "medium", 3: "high", 4: "boost"}
+            mode_map = {
+                0: "off",
+                1: "away",
+                2: "medium",
+                3: "high",
+                4: "boost",
+            }
         elif self.mode_max == 6:
             mode_map = {1: "away", 2: "low", 3: "medium", 4: "high", 5: "auto"}
         elif self.mode_max == 7:
@@ -1536,7 +1598,12 @@ class HvacFanModePayload(PayloadBase):
                 7: "off",
             }
         elif self.mode_max == 10:
-            mode_map = {2: "normal", 3: "boost", 9: "heater_off", 10: "heater_auto"}
+            mode_map = {
+                2: "normal",
+                3: "boost",
+                9: "heater_off",
+                10: "heater_auto",
+            }
         else:
             mode_map = {}
         fan_mode = mode_map.get(self.mode_index, f"{self.mode_index:02X}")
@@ -1554,7 +1621,9 @@ class HvacFanModePayload(PayloadBase):
         return {
             "fan_mode": fan_mode,
             "_mode_idx": f"{self.mode_index:02X}",
-            "_mode_max": f"{self.mode_max:02X}" if self.mode_max is not None else None,
+            "_mode_max": f"{self.mode_max:02X}"
+            if self.mode_max is not None
+            else None,
             "_scheme": scheme,
         }
 
@@ -1596,7 +1665,9 @@ class HvacFlowRatePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3 or len(raw_data) % 3 != 0:
-            raise ValueError(f"Invalid payload length for 22F2: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 22F2: {len(raw_data)}"
+            )
         items: list[tuple[int, float]] = []
         for i in range(0, len(raw_data), 3):
             index, raw_val = struct.unpack_from(">BH", raw_data, i)
@@ -1611,7 +1682,9 @@ class HvacFlowRatePayload(PayloadBase):
         """
         buffer = bytearray()
         for index, measure in self.measures:
-            buffer.extend(struct.pack(">BH", index, int(round(measure * 100.0))))
+            buffer.extend(
+                struct.pack(">BH", index, int(round(measure * 100.0)))
+            )
         return bytes(buffer)
 
     def to_dict(self, msg: Any = None) -> list[dict[str, Any]]:  # type: ignore[override]
@@ -1665,7 +1738,9 @@ class HvacFanRatePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 22F4: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 22F4: {len(raw_data)}"
+            )
         return cls(raw_bytes=raw_data)
 
     def to_bytes(self) -> bytes:
@@ -1691,7 +1766,9 @@ class HvacFanRatePayload(PayloadBase):
             else b[1]
         )
         rate_byte = (
-            b[6] if b[2] == 0x00 and len(b) >= 7 and b[6] not in (0x00, 0xFF) else b[2]
+            b[6]
+            if b[2] == 0x00 and len(b) >= 7 and b[6] not in (0x00, 0xFF)
+            else b[2]
         )
         if mode_byte == 0x60:
             mode_str = "manual"
@@ -1761,7 +1838,9 @@ class HvacBypassPositionPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 22F7: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 22F7: {len(raw_data)}"
+            )
         return cls(raw_bytes=raw_data)
 
     def to_bytes(self) -> bytes:
@@ -1787,8 +1866,16 @@ class HvacBypassPositionPayload(PayloadBase):
         if b2 == 0xEF:
             return {"bypass_mode": mode}
         state = "on" if b2 == 0xC8 else ("off" if b2 == 0x00 else f"{b2:02X}")
-        pos = 1.0 if b2 == 0xC8 else (0.0 if b2 == 0x00 else round(b2 / 200.0, 2))
-        return {"bypass_mode": mode, "bypass_position": pos, "bypass_state": state}
+        pos = (
+            1.0
+            if b2 == 0xC8
+            else (0.0 if b2 == 0x00 else round(b2 / 200.0, 2))
+        )
+        return {
+            "bypass_mode": mode,
+            "bypass_position": pos,
+            "bypass_state": state,
+        }
 
 
 # ----------------------------------------------------------------------
@@ -1846,7 +1933,9 @@ class HvacVentilationControlPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 22F3: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 22F3: {len(raw_data)}"
+            )
         hdr = raw_data[0]
         flg = raw_data[1]
         mins = raw_data[2]
@@ -1873,7 +1962,9 @@ class HvacVentilationControlPayload(PayloadBase):
         :rtype: bytes
         """
         if self.fan_mode_byte is not None:
-            mins = self.minutes // 60 if self.flags_byte & 0x10 else self.minutes
+            mins = (
+                self.minutes // 60 if self.flags_byte & 0x10 else self.minutes
+            )
             fb_fm = (
                 0
                 if self.fallback_fan_mode_byte is None
@@ -1924,10 +2015,15 @@ class HvacVentilationControlPayload(PayloadBase):
             }
             if self.fan_mode_byte in fan_mode_map:
                 result["fan_mode"] = fan_mode_map[self.fan_mode_byte]
-        if self.fallback_fan_mode_byte is not None and self.fallback_fan_mode_byte != 0:
+        if (
+            self.fallback_fan_mode_byte is not None
+            and self.fallback_fan_mode_byte != 0
+        ):
             fb_map = {4: "auto"}
             if self.fallback_fan_mode_byte in fb_map:
-                result["fallback_fan_mode"] = fb_map[self.fallback_fan_mode_byte]
+                result["fallback_fan_mode"] = fb_map[
+                    self.fallback_fan_mode_byte
+                ]
         result["_scheme"] = "orcon"
         return result
 
@@ -2014,7 +2110,9 @@ class HvacFanParamPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 2411: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2411: {len(raw_data)}"
+            )
         if len(raw_data) < 22:
             return cls(
                 parameter_id=raw_data[2] if len(raw_data) >= 3 else 0,
@@ -2161,7 +2259,9 @@ class HvacAirQualityPayload(PayloadBase):
             u0 = raw_data[1:5].hex().upper()
             u5 = raw_data[5:6].hex().upper()
             u2 = raw_data[6:7].hex().upper()
-            return cls(_header=hdr, _unknown_0=u0, _unknown_5=u5, _unknown_2=u2)
+            return cls(
+                _header=hdr, _unknown_0=u0, _unknown_5=u5, _unknown_2=u2
+            )
 
         (aqi,) = struct.unpack_from(">H", raw_data, 0)
         return cls(_header=hdr, air_quality_aqi=aqi)
@@ -2426,7 +2526,9 @@ class HvacVentilationStatePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 31DA: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 31DA: {len(raw_data)}"
+            )
         return cls(raw_bytes=raw_data)
 
     def to_bytes(self) -> bytes:
@@ -2514,7 +2616,9 @@ class HvacVentilationStatePayload(PayloadBase):
                     if key == SZ_BYPASS_POSITION
                     else f"invalid_{hex_str}",
                 }
-                result[f"{key}_fault"] = fault_map.get(b0, f"invalid_{hex_str}")
+                result[f"{key}_fault"] = fault_map.get(
+                    b0, f"invalid_{hex_str}"
+                )
                 return
             val_num = (
                 int(hex_str[:2], 16)
@@ -2541,7 +2645,9 @@ class HvacVentilationStatePayload(PayloadBase):
                 (int(val_36, 16) >> x) & 1 for x in range(7, 4, -1)
             ]
         else:
-            result[SZ_FAN_INFO] = _31DA_FAN_INFO.get(int(val_36, 16) & 0x1F, "off")
+            result[SZ_FAN_INFO] = _31DA_FAN_INFO.get(
+                int(val_36, 16) & 0x1F, "off"
+            )
             result["_unknown_fan_info_flags"] = [
                 (int(val_36, 16) >> x) & 1 for x in range(7, 4, -1)
             ]
@@ -2559,10 +2665,14 @@ class HvacVentilationStatePayload(PayloadBase):
         _parse_val(raw_hex[6:10], SZ_CO2_LEVEL, scale=1.0, null_hex="7FFF")
 
         # 5. Indoor Humidity [10:12] (EF = spec null marker; 0x00 normalisation in quirks.py)
-        _parse_val(raw_hex[10:12], SZ_INDOOR_HUMIDITY, scale=100.0, null_hex="EF")
+        _parse_val(
+            raw_hex[10:12], SZ_INDOOR_HUMIDITY, scale=100.0, null_hex="EF"
+        )
 
         # 6. Outdoor Humidity [12:14] (EF = spec null marker; 0x00 normalisation in quirks.py)
-        _parse_val(raw_hex[12:14], SZ_OUTDOOR_HUMIDITY, scale=100.0, null_hex="EF")
+        _parse_val(
+            raw_hex[12:14], SZ_OUTDOOR_HUMIDITY, scale=100.0, null_hex="EF"
+        )
 
         # 7-10. Temps: Exhaust [14:18], Supply [18:22], Indoor [22:26], Outdoor [26:30]
         _parse_val(
@@ -2619,11 +2729,15 @@ class HvacVentilationStatePayload(PayloadBase):
             }
             cap_val = int(val_30, 16)
             result[SZ_SPEED_CAPABILITIES] = [
-                name for bit, name in abilities_map.items() if cap_val & (1 << bit)
+                name
+                for bit, name in abilities_map.items()
+                if cap_val & (1 << bit)
             ]
 
         # 12. Bypass Position [34:36]
-        _parse_val(raw_hex[34:36], SZ_BYPASS_POSITION, scale=200.0, null_hex="EF")
+        _parse_val(
+            raw_hex[34:36], SZ_BYPASS_POSITION, scale=200.0, null_hex="EF"
+        )
 
         # 13. Supply Fan Speed [40:42]
         val_40 = raw_hex[40:42]
@@ -2646,8 +2760,12 @@ class HvacVentilationStatePayload(PayloadBase):
         _parse_val(raw_hex[48:50], SZ_PRE_HEAT, scale=200.0, null_hex="EF")
 
         # 17-18. Flows: Supply [50:54], Exhaust [54:58]
-        _parse_val(raw_hex[50:54], SZ_SUPPLY_FLOW, scale=100.0, null_hex="7FFF")
-        _parse_val(raw_hex[54:58], SZ_EXHAUST_FLOW, scale=100.0, null_hex="7FFF")
+        _parse_val(
+            raw_hex[50:54], SZ_SUPPLY_FLOW, scale=100.0, null_hex="7FFF"
+        )
+        _parse_val(
+            raw_hex[54:58], SZ_EXHAUST_FLOW, scale=100.0, null_hex="7FFF"
+        )
 
         if len(raw_hex) > 58:
             result["_extra"] = raw_hex[58:]
@@ -2711,7 +2829,9 @@ class HvacFaultLogEntryPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 4401: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 4401: {len(raw_data)}"
+            )
         index, code = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(fault_index=index, fault_code=code)
 
@@ -2777,14 +2897,18 @@ class HvacSpiderTemperaturesPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 4 bytes.
         """
         if len(raw_data) < 4:
-            raise ValueError(f"Invalid payload length for 4E01: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 4E01: {len(raw_data)}"
+            )
         hdr = raw_data[0]
         trailer = raw_data[-1]
         temp_bytes = raw_data[1:-1]
         temps: list[float | None] = []
         for i in range(0, len(temp_bytes), 2):
             (raw_temp,) = struct.unpack_from(">h", temp_bytes, i)
-            temps.append(None if raw_temp in (0x31FF, 0x7FFF) else raw_temp / 100.0)
+            temps.append(
+                None if raw_temp in (0x31FF, 0x7FFF) else raw_temp / 100.0
+            )
         return cls(hdr=hdr, temperatures=tuple(temps), trailer=trailer)
 
     def to_bytes(self) -> bytes:
@@ -2862,7 +2986,9 @@ class HvacSpiderSetpointBoundsPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 7 bytes.
         """
         if len(raw_data) < 6:
-            raise ValueError(f"Invalid payload length for 4E02: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 4E02: {len(raw_data)}"
+            )
         hdr = raw_data[0]
         num_pairs = (len(raw_data) - 2) // 4
         min_bytes = raw_data[1 : 1 + num_pairs * 2]
@@ -2892,8 +3018,12 @@ class HvacSpiderSetpointBoundsPayload(PayloadBase):
             min_temp, max_temp = (
                 bounds_pair if bounds_pair is not None else (None, None)
             )
-            min_val = 0x7FFF if min_temp is None else int(round(min_temp * 100.0))
-            max_val = 0x7FFF if max_temp is None else int(round(max_temp * 100.0))
+            min_val = (
+                0x7FFF if min_temp is None else int(round(min_temp * 100.0))
+            )
+            max_val = (
+                0x7FFF if max_temp is None else int(round(max_temp * 100.0))
+            )
             min_b.extend(struct.pack(">h", min_val))
             max_b.extend(struct.pack(">h", max_val))
         return bytes([self.hdr]) + min_b + bytes([self.mode_code]) + max_b
@@ -2958,7 +3088,9 @@ class HvacSpiderModePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 4E04: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 4E04: {len(raw_data)}"
+            )
         h_val, m_val, u_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(hdr=h_val, mode_code=m_val, unknown_2=f"{u_val:02X}")
 
@@ -3027,7 +3159,9 @@ class HvacSpiderStatusPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 4E15: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 4E15: {len(raw_data)}"
+            )
         h_val, f_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(hdr=h_val, flags=f_val)
 
@@ -3136,7 +3270,9 @@ class WindowStatePayload(PayloadBase):
         """Construct WindowState payload variant dynamically from arguments."""
         if cls is not WindowStatePayload:
             return super().__new__(cls)  # type: ignore[return-value]
-        return WindowState3BPayload(zone_index=zone_index, window_open=window_open)
+        return WindowState3BPayload(
+            zone_index=zone_index, window_open=window_open
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert window state payload to legacy dictionary layout."""
@@ -3149,7 +3285,9 @@ class WindowStatePayload(PayloadBase):
     def from_bytes(cls, raw_data: bytes) -> "WindowStatePayload":
         """Unpack window state binary payload, dispatching by length."""
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 12B0: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 12B0: {len(raw_data)}"
+            )
         if len(raw_data) >= 3:
             return WindowState3BPayload.from_bytes(raw_data)
         return WindowState2BPayload.from_bytes(raw_data)
@@ -3226,8 +3364,12 @@ class WindowState3BPayload(WindowStatePayload):
             raise ValueError(
                 f"Invalid payload length for WindowState3BPayload: {len(raw_data)}"
             )
-        z_idx, open_flag, _trailer = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        open_val = None if (open_flag, _trailer) == (0xFF, 0xFF) else bool(open_flag)
+        z_idx, open_flag, _trailer = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
+        open_val = (
+            None if (open_flag, _trailer) == (0xFF, 0xFF) else bool(open_flag)
+        )
         return cls(zone_index=z_idx, window_open=open_val)
 
     def to_bytes(self) -> bytes:
@@ -3407,7 +3549,9 @@ class HvacVentilationDemand4BPayload(HvacVentilationDemandPayload):
             raise ValueError(
                 f"Invalid payload length for HvacVentilationDemand4BPayload: {len(raw_data)}"
             )
-        _p, flg, demand_raw, _t = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        _p, flg, demand_raw, _t = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         return cls(flags=flg, demand_percent=demand_raw / 200.0)
 
     def to_bytes(self) -> bytes:
@@ -3498,8 +3642,12 @@ class SetpointBoundsPayload(PayloadBase):
             return result
 
         if len(raw_data) < 6:
-            raise ValueError(f"Invalid payload length for 22C9: {len(raw_data)}")
-        ufh_idx, min_raw, max_raw, mode_code = struct.unpack_from(">BhhB", raw_data, 0)
+            raise ValueError(
+                f"Invalid payload length for 22C9: {len(raw_data)}"
+            )
+        ufh_idx, min_raw, max_raw, mode_code = struct.unpack_from(
+            ">BhhB", raw_data, 0
+        )
         return cls(
             ufh_index=ufh_idx,
             min_temp=cls._parse_temp(min_raw),
@@ -3514,10 +3662,14 @@ class SetpointBoundsPayload(PayloadBase):
         :rtype: bytes
         """
         min_temp_raw = (
-            0x7FFF if self.min_temp is None else int(round(self.min_temp * 100.0))
+            0x7FFF
+            if self.min_temp is None
+            else int(round(self.min_temp * 100.0))
         )
         max_temp_raw = (
-            0x7FFF if self.max_temp is None else int(round(self.max_temp * 100.0))
+            0x7FFF
+            if self.max_temp is None
+            else int(round(self.max_temp * 100.0))
         )
         return struct.pack(
             self._STRUCT_FMT,
@@ -3594,7 +3746,9 @@ class NowNextSetpointPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 7 bytes.
         """
         if len(raw_data) < 7:
-            raise ValueError(f"Invalid payload length for 2249: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2249: {len(raw_data)}"
+            )
         # Unpack zone_index, setpoint_now, setpoint_next, mins directly from offset 0
         zone_idx, sp_now, sp_next, mins = struct.unpack_from(
             cls._STRUCT_FMT, raw_data, 0
@@ -3674,7 +3828,9 @@ class UfhSystemModePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 22D0: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 22D0: {len(raw_data)}"
+            )
         ufh_idx, flg = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
             ufh_index=ufh_idx,
@@ -3750,7 +3906,9 @@ class DesiredBoilerSetpointPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 22D9: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 22D9: {len(raw_data)}"
+            )
         index, t_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         t_val = None if t_raw in (0x31FF, 0x7FFF) else t_raw / 100.0
         return cls(
@@ -3765,7 +3923,9 @@ class DesiredBoilerSetpointPayload(PayloadBase):
         :rtype: bytes
         """
         t_raw = (
-            0x7FFF if self.target_temp is None else int(round(self.target_temp * 100.0))
+            0x7FFF
+            if self.target_temp is None
+            else int(round(self.target_temp * 100.0))
         )
         return struct.pack(self._STRUCT_FMT, self.domain_or_zone_index, t_raw)
 
@@ -3824,7 +3984,9 @@ class CoolingStatePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 2D49: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2D49: {len(raw_data)}"
+            )
         index, st_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
             domain_or_zone_index=index,
@@ -3838,7 +4000,9 @@ class CoolingStatePayload(PayloadBase):
         :rtype: bytes
         """
         return struct.pack(
-            self._STRUCT_FMT, self.domain_or_zone_index, 0xC8 if self.state else 0x00
+            self._STRUCT_FMT,
+            self.domain_or_zone_index,
+            0xC8 if self.state else 0x00,
         )
 
 
@@ -3887,10 +4051,14 @@ class HvacTimeOffsetPayload(PayloadBase):
         :raises ValueError: If raw_data length is not 11 bytes.
         """
         if len(raw_data) != 11:
-            raise ValueError(f"Invalid payload length for 313E: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 313E: {len(raw_data)}"
+            )
         prefix, mins, secs, suffix = struct.unpack(cls._STRUCT_FMT, raw_data)
         if prefix != 0 or suffix != b"\x00\x3c\x80\x00\x00":
-            raise ValueError(f"Invalid constant bytes for 313E: {raw_data.hex()}")
+            raise ValueError(
+                f"Invalid constant bytes for 313E: {raw_data.hex()}"
+            )
         return cls(offset_mins=mins, offset_secs=secs, _raw_extra=suffix)
 
     def to_bytes(self) -> bytes:
@@ -3900,7 +4068,11 @@ class HvacTimeOffsetPayload(PayloadBase):
         :rtype: bytes
         """
         return struct.pack(
-            self._STRUCT_FMT, 0, self.offset_mins, self.offset_secs, self._raw_extra
+            self._STRUCT_FMT,
+            0,
+            self.offset_mins,
+            self.offset_secs,
+            self._raw_extra,
         )
 
     def to_dict(self, msg: Any | None = None) -> dict[str, Any]:
@@ -3920,6 +4092,8 @@ class HvacTimeOffsetPayload(PayloadBase):
             "value_12": val_12,
         }
         if msg is not None and getattr(msg, "dtm", None) is not None:
-            zulu_dt = msg.dtm - td(minutes=self.offset_mins, seconds=self.offset_secs)
+            zulu_dt = msg.dtm - td(
+                minutes=self.offset_mins, seconds=self.offset_secs
+            )
             result["zulu"] = zulu_dt.isoformat().split("+")[0]
         return result

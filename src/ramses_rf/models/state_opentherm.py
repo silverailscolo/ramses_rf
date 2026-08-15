@@ -61,7 +61,9 @@ class OpenThermState:
 
     last_updated: dt = field(default_factory=_now_utc)
     flags: OpenThermFlags = field(default_factory=OpenThermFlags)
-    temperatures: OpenThermTemperatures = field(default_factory=OpenThermTemperatures)
+    temperatures: OpenThermTemperatures = field(
+        default_factory=OpenThermTemperatures
+    )
     counters: OpenThermCounters = field(default_factory=OpenThermCounters)
     ch_water_pressure: float | None = None
     dhw_flow_rate: float | None = None

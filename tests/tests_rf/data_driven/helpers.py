@@ -81,7 +81,9 @@ def assert_expected(
     :rtype: None
     """
 
-    def _assert_expected(actual_: dict[str, Any], expect_: dict[str, Any]) -> None:
+    def _assert_expected(
+        actual_: dict[str, Any], expect_: dict[str, Any]
+    ) -> None:
         if actual_ != expect_:
             print("\n--- DIAGNOSTIC OUTPUT ---")
             for k, v in actual_.items():
@@ -116,7 +118,9 @@ async def assert_expected_set(gwy: Gateway, expected: dict[str, Any]) -> None:
     assert_expected(await gwy.schema(), expected.get("schema"))
     assert_expected(await gwy.params(), expected.get("params"))
     assert_expected(await gwy.status(), expected.get("status"))
-    assert_expected(await gwy.device_registry.known_list(), expected.get("known_list"))
+    assert_expected(
+        await gwy.device_registry.known_list(), expected.get("known_list")
+    )
 
 
 def assert_raises(
@@ -206,7 +210,9 @@ async def load_test_gwy(dir_name: Path, **kwargs: Any) -> Gateway:
     :return: The initialized gateway instance.
     :rtype: Gateway
     """
-    kwargs = SCH_GLOBAL_CONFIG({k: v for k, v in kwargs.items() if k[:1] != "_"})
+    kwargs = SCH_GLOBAL_CONFIG(
+        {k: v for k, v in kwargs.items() if k[:1] != "_"}
+    )
 
     try:
         with open(f"{dir_name}/config.json") as f:
@@ -300,7 +306,9 @@ def load_expected_results(dir_name: Path) -> dict[str, Any]:
     except FileNotFoundError:
         known_list = {}
 
-    known_list = SCH_GLOBAL_TRAITS({"known_list": shrink(known_list)})["known_list"]
+    known_list = SCH_GLOBAL_TRAITS({"known_list": shrink(known_list)})[
+        "known_list"
+    ]
 
     try:
         with open(f"{dir_name}/params.json") as f:

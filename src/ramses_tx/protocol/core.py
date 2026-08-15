@@ -23,7 +23,11 @@ from ..const import (
     Priority,
 )
 from ..dtos import CommandDTO
-from ..exceptions import ProtocolError, ProtocolSendFailed, ProtocolTimeoutError
+from ..exceptions import (
+    ProtocolError,
+    ProtocolSendFailed,
+    ProtocolTimeoutError,
+)
 from ..interfaces import TransportInterface
 from ..packet import Packet
 from ..typing import DeviceIdT, MsgHandlerT, QosParams
@@ -215,7 +219,9 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         msg = f"{self}: Impersonating device: {command.addr1}, for pkt: {str(command)}"
         if self._is_evofw3 is False:
-            _LOGGER.error("%s, NB: non-evofw3 gateways can't impersonate!", msg)
+            _LOGGER.error(
+                "%s, NB: non-evofw3 gateways can't impersonate!", msg
+            )
         else:
             _LOGGER.info(msg)
 
@@ -244,7 +250,9 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         qos = qos or DEFAULT_QOS
 
-        if command.verb.strip() == RQ or (qos is not None and qos.max_retries > 0):
+        if command.verb.strip() == RQ or (
+            qos is not None and qos.max_retries > 0
+        ):
             num_repeats = 0
 
         if _DBG_DISABLE_QOS:
@@ -254,7 +262,9 @@ class PortProtocol(_DeviceIdFilterMixin):
         assert self._context
 
         try:
-            return await self._context.send_cmd(send_cmd, command, priority, qos)
+            return await self._context.send_cmd(
+                send_cmd, command, priority, qos
+            )
         except ProtocolTimeoutError as err:
             _LOGGER.warning(
                 "%s: Send timed out for %s|%s: %s",
@@ -299,11 +309,15 @@ class PortProtocol(_DeviceIdFilterMixin):
             ProtocolSendFailed:   tried to Tx Command, but didn't get echo/reply.
             ProtocolError:        didn't attempt to Tx Command for some reason.
         """
-        assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
+        assert 0 <= gap_duration <= MAX_GAP_DURATION, (
+            "Out of range: gap_duration"
+        )
         assert 0 <= num_repeats <= MAX_NUM_REPEATS, "Out of range: num_repeats"
 
         if qos and not self._context:
-            _LOGGER.warning("%s < QoS is currently disabled by this Protocol", command)
+            _LOGGER.warning(
+                "%s < QoS is currently disabled by this Protocol", command
+            )
 
         # Patch command with actual HGI ID if it uses the default placeholder.
         # PortProtocol.send_cmd overrides _BaseProtocol.send_cmd (which does this
@@ -314,9 +328,13 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         # Manual filter check to avoid calling super().send_cmd(), which fails
         if not self._is_wanted_addrs(
-            DeviceIdT(patched_cmd.addr1), DeviceIdT(patched_cmd.addr2), sending=True
+            DeviceIdT(patched_cmd.addr1),
+            DeviceIdT(patched_cmd.addr2),
+            sending=True,
         ):
-            raise ProtocolError(f"Command excluded by device_id filter: {patched_cmd}")
+            raise ProtocolError(
+                f"Command excluded by device_id filter: {patched_cmd}"
+            )
 
         packet = await self._send_cmd(
             patched_cmd,

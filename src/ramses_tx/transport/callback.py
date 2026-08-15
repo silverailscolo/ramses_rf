@@ -20,7 +20,9 @@ _LOGGER = logging.getLogger(__name__)
 class _CallbackTransportAbstractor:
     """Do the bare minimum to abstract a transport from its underlying class."""
 
-    def __init__(self, /, *, loop: asyncio.AbstractEventLoop | None = None) -> None:
+    def __init__(
+        self, /, *, loop: asyncio.AbstractEventLoop | None = None
+    ) -> None:
         """Initialize the callback transport abstractor."""
         self._loop = loop or asyncio.get_event_loop()
         super().__init__()
@@ -72,7 +74,9 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         if config.autostart:
             self.resume_reading()
 
-    async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
+    async def write_frame(
+        self, frame: str, disable_tx_limits: bool = False
+    ) -> None:
         """Process a frame for transmission by passing it to external writer.
 
         :param frame: The raw string frame to be transmitted.
@@ -122,7 +126,9 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         )
 
         if not self._reading:
-            _LOGGER.debug("Dropping received frame (transport paused): %r", frame)
+            _LOGGER.debug(
+                "Dropping received frame (transport paused): %r", frame
+            )
             return
 
         if dtm:
@@ -146,9 +152,13 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         try:
             self._frame_read(dtm, frame.rstrip())
         except exc.TransportError as err:
-            _LOGGER.warning("Transport error processing received frame: %s", err)
+            _LOGGER.warning(
+                "Transport error processing received frame: %s", err
+            )
         except Exception as err:
-            _LOGGER.warning("Error processing received frame (%r): %s", frame, err)
+            _LOGGER.warning(
+                "Error processing received frame (%r): %s", frame, err
+            )
 
     def _close(self, exc: exc.RamsesException | None = None) -> None:
         """Close the transport and unbind callbacks."""

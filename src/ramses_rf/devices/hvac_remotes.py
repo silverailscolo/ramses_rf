@@ -69,7 +69,9 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         # .I --- 37:155617 32:155617 --:------ 1FC9 001 00
 
         return await super()._initiate_binding_process(
-            Code._22F1 if self._scheme == "nuaire" else (Code._22F1, Code._22F3)
+            Code._22F1
+            if self._scheme == "nuaire"
+            else (Code._22F1, Code._22F3)
         )
 
     async def fan_rate(self) -> str | None:
@@ -91,7 +93,9 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         :rtype: Message
         :note: This is a work in progress
         """
-        if not self.is_faked:  # NOTE: some remotes are stateless (i.e. except seqn)
+        if (
+            not self.is_faked
+        ):  # NOTE: some remotes are stateless (i.e. except seqn)
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
         # TODO: num_repeats=2, or wait_for_reply=True ?

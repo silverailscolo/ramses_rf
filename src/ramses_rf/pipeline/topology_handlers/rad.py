@@ -64,7 +64,12 @@ class RadTopologyHandler(TopologyHandler):
                     metadata["class"] = "radiator_valve"
 
                 # Determine Device Role (Fallback to hardware prefix inference)
-                is_actuator = getattr(msg.src, "type", None) in ("04", "08", "13", "02")
+                is_actuator = getattr(msg.src, "type", None) in (
+                    "04",
+                    "08",
+                    "13",
+                    "02",
+                )
                 is_sensor = getattr(msg.src, "type", None) in (
                     "00",
                     "03",
@@ -74,7 +79,12 @@ class RadTopologyHandler(TopologyHandler):
                     "34",
                 )
 
-                if msg.header.code in (Code._3150, Code._0008, Code._2309, Code._000A):
+                if msg.header.code in (
+                    Code._3150,
+                    Code._0008,
+                    Code._2309,
+                    Code._000A,
+                ):
                     metadata["device_role"] = "actuator"
                 elif msg.header.code in (
                     Code._30C9,
@@ -82,11 +92,15 @@ class RadTopologyHandler(TopologyHandler):
                     Code._10A0,
                     Code._12B0,
                 ):
-                    metadata["device_role"] = "sensor" if is_sensor else "actuator"
+                    metadata["device_role"] = (
+                        "sensor" if is_sensor else "actuator"
+                    )
                     if is_sensor:
                         metadata["is_sensor"] = "True"
                 else:
-                    metadata["device_role"] = "actuator" if is_actuator else "sensor"
+                    metadata["device_role"] = (
+                        "actuator" if is_actuator else "sensor"
+                    )
                     if is_sensor:
                         metadata["is_sensor"] = "True"
 

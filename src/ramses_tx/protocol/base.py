@@ -45,7 +45,9 @@ if TYPE_CHECKING:
     from .fsm import ProtocolContext
 
 
-TIP: Final[str] = f", configure the {SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
+TIP: Final[str] = (
+    f", configure the {SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
+)
 
 _DBG_FORCE_LOG_PACKETS: Final[bool] = False
 
@@ -246,7 +248,9 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         else:
             self._wait_connection_lost.set_result(None)
 
-    async def wait_for_connection_lost(self, timeout: float = 1.0) -> Exception | None:
+    async def wait_for_connection_lost(
+        self, timeout: float = 1.0
+    ) -> Exception | None:
         """Wait until connection_lost() has been invoked.
 
         Includes scenarios where neither connection_made() nor
@@ -357,7 +361,9 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             ProtocolError:      didn't attempt to Tx Command for some
                 reason
         """
-        assert 0 <= gap_duration <= MAX_GAP_DURATION, "Out of range: gap_duration"
+        assert 0 <= gap_duration <= MAX_GAP_DURATION, (
+            "Out of range: gap_duration"
+        )
         assert 0 <= num_repeats <= MAX_NUM_REPEATS, "Out of range: num_repeats"
 
         # Patch command with actual HGI ID if it uses the default placeholder
@@ -425,14 +431,22 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             try:
                 # Packet.from_port strictly expects the 3-character RSSI
                 # + space prefix
-                packet = Packet.from_port(packet.dtm, f"{packet.rssi} {hacked_frame}")
+                packet = Packet.from_port(
+                    packet.dtm, f"{packet.rssi} {hacked_frame}"
+                )
             except (ValueError, PacketInvalid) as err:
-                _LOGGER.debug("Regex modified frame is invalid, reverting: %s", err)
+                _LOGGER.debug(
+                    "Regex modified frame is invalid, reverting: %s", err
+                )
                 # Fallback to original packet if regex broke it (packet
                 # remains unchanged)
 
         # Track Sync Cycles
-        if packet.code == Code._1F09 and packet.verb == I_ and packet._len == 3:
+        if (
+            packet.code == Code._1F09
+            and packet.verb == I_
+            and packet._len == 3
+        ):
 
             def is_pending(p: Packet) -> bool:
                 """Check if a packet's sync cycle is still pending.
@@ -442,11 +456,17 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
                     window.
                 """
                 p_dtm = (
-                    p.dtm.replace(tzinfo=None) if p.dtm.tzinfo is not None else p.dtm
+                    p.dtm.replace(tzinfo=None)
+                    if p.dtm.tzinfo is not None
+                    else p.dtm
                 )
                 now = dt_now()
-                now_dtm = now.replace(tzinfo=None) if now.tzinfo is not None else now
-                return bool(p_dtm + td(seconds=int(p.payload[2:6], 16) / 10) > now_dtm)
+                now_dtm = (
+                    now.replace(tzinfo=None) if now.tzinfo is not None else now
+                )
+                return bool(
+                    p_dtm + td(seconds=int(p.payload[2:6], 16) / 10) > now_dtm
+                )
 
             self._tracked_sync_cycles = deque(
                 p
@@ -535,7 +555,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
         return DeviceIdT(hgi or self._known_hgi or HGI_DEV_ADDR.id)
 
-    def _set_active_hgi(self, device_id: DeviceIdT, by_signature: bool = False) -> None:
+    def _set_active_hgi(
+        self, device_id: DeviceIdT, by_signature: bool = False
+    ) -> None:
         """Set the Active Gateway (HGI) device_id.
 
         Send a warning if the include list is configured incorrectly.
@@ -549,10 +571,14 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             self._active_hgi = device_id
 
         if device_id in self._exclude:
-            _LOGGER.error("%s MUST NOT be in the %s%s", msg, SZ_BLOCK_LIST, TIP)
+            _LOGGER.error(
+                "%s MUST NOT be in the %s%s", msg, SZ_BLOCK_LIST, TIP
+            )
 
         elif device_id not in self._include:
-            _LOGGER.warning("%s SHOULD be in the (enforced) %s", msg, SZ_KNOWN_LIST)
+            _LOGGER.warning(
+                "%s SHOULD be in the (enforced) %s", msg, SZ_KNOWN_LIST
+            )
 
         elif not self.enforce_include:
             _LOGGER.info(
@@ -591,7 +617,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             )
             self._foreign_gwys_lst.append(device_id)
 
-        for dev_id in dict.fromkeys((source_id, destination_id)):  # removes duplicates
+        for dev_id in dict.fromkeys(
+            (source_id, destination_id)
+        ):  # removes duplicates
             # HGI devices (18:) are gateways, not sensors/actuators.
             # Foreign HGIs communicate with our controller and the controller's
             # responses (e.g. 0004 zone names, 2349 zone modes) are addressed
@@ -636,7 +664,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             try:
                 dto = packet.to_dto()
             except PacketInvalid as err:
-                _LOGGER.debug("Dropped invalid packet for raw handlers: %s", err)
+                _LOGGER.debug(
+                    "Dropped invalid packet for raw handlers: %s", err
+                )
             else:
                 for handler in self._raw_pkt_handlers:
                     result = handler(dto)
@@ -644,7 +674,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                         self._create_handler_task(result)
 
             if not self._is_wanted_addrs(packet.src.id, packet.dst.id):
-                _LOGGER.debug("%s < Packet excluded by device_id filter", packet)
+                _LOGGER.debug(
+                    "%s < Packet excluded by device_id filter", packet
+                )
                 return
 
         super()._pkt_received(packet)
@@ -662,7 +694,9 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         if not self._is_wanted_addrs(
             DeviceIdT(command.addr1), DeviceIdT(command.addr2), sending=True
         ):
-            raise ProtocolError(f"Command excluded by device_id filter: {command}")
+            raise ProtocolError(
+                f"Command excluded by device_id filter: {command}"
+            )
         return await super().send_cmd(
             command,
             gap_duration=gap_duration,

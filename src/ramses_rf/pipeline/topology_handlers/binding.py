@@ -5,7 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ramses_rf.const import SZ_ACCEPT, SZ_CONFIRM, SZ_OFFER, ZON_ROLE_MAP, DevType
+from ramses_rf.const import (
+    SZ_ACCEPT,
+    SZ_CONFIRM,
+    SZ_OFFER,
+    ZON_ROLE_MAP,
+    DevType,
+)
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -65,10 +71,17 @@ class BindTopologyHandler(TopologyHandler):
 
         dto = getattr(msg, "_dto", None)
         payload_hex: str = getattr(dto, "payload", "") if dto else ""
-        if not payload_hex or len(payload_hex) in (2, 4) or len(payload_hex) % 12 != 0:
+        if (
+            not payload_hex
+            or len(payload_hex) in (2, 4)
+            or len(payload_hex) % 12 != 0
+        ):
             return
 
-        if msg.header.verb == I_ and msg.dst.id in (msg.src.id, ALL_DEV_ADDR.id):
+        if msg.header.verb == I_ and msg.dst.id in (
+            msg.src.id,
+            ALL_DEV_ADDR.id,
+        ):
             bind_phase = SZ_OFFER
         elif msg.header.verb == W_ and msg.src is not msg.dst:
             bind_phase = SZ_ACCEPT
@@ -105,9 +118,9 @@ class BindTopologyHandler(TopologyHandler):
             opcode_hex = chunk[2:6]
             bound_dev_id = hex_id_to_dev_id(chunk[6:12])
 
-            if bound_dev_id.startswith(f"{DevType.CTL}:") or bound_dev_id.startswith(
-                "01:"
-            ):
+            if bound_dev_id.startswith(
+                f"{DevType.CTL}:"
+            ) or bound_dev_id.startswith("01:"):
                 self._emit(
                     TopologyChangedEvent(
                         action=TopologyAction.CREATE_CONTROLLER,
@@ -158,7 +171,10 @@ class BindTopologyHandler(TopologyHandler):
         if (
             getattr(msg, "code", None) == Code._000C
             or getattr(msg.header, "code", None) == Code._000C
-        ) and (msg.src.id.startswith("01:") or getattr(msg.src, "type", None) == "01"):
+        ) and (
+            msg.src.id.startswith("01:")
+            or getattr(msg.src, "type", None) == "01"
+        ):
             for payload in self._get_payloads(msg):
                 zone_idx: str | None = None
                 domain_id: str | None = None
@@ -180,7 +196,9 @@ class BindTopologyHandler(TopologyHandler):
                     device_role = f"{payload.device_role_id:02X}"
                     devices = [payload.device_id_str]
                 elif isinstance(payload, dict):
-                    val_zone = payload.get("zone_index") or payload.get("zone_idx")
+                    val_zone = payload.get("zone_index") or payload.get(
+                        "zone_idx"
+                    )
                     zone_idx = str(val_zone) if val_zone is not None else None
 
                     val_domain = (
@@ -188,10 +206,14 @@ class BindTopologyHandler(TopologyHandler):
                         or payload.get("domain_id")
                         or payload.get("domain_idx")
                     )
-                    domain_id = str(val_domain) if val_domain is not None else None
+                    domain_id = (
+                        str(val_domain) if val_domain is not None else None
+                    )
 
                     val_role = payload.get("device_role")
-                    device_role = str(val_role) if val_role is not None else None
+                    device_role = (
+                        str(val_role) if val_role is not None else None
+                    )
 
                     val_type = payload.get("zone_type")
                     zone_type = str(val_type) if val_type is not None else None
@@ -204,7 +226,9 @@ class BindTopologyHandler(TopologyHandler):
                 # Prepare the base metadata dict, correctly flagging
                 # all types of sensors (e.g., 'sensor', 'dhw_sensor')
                 metadata: dict[str, Any] = {}
-                device_role_str = str(device_role) if device_role is not None else ""
+                device_role_str = (
+                    str(device_role) if device_role is not None else ""
+                )
 
                 if device_role is not None:
                     # 04 is sensor, 08 is actuator, dhw_valve, etc.
@@ -215,13 +239,17 @@ class BindTopologyHandler(TopologyHandler):
                         device_role_str  # Explicit DHW preservation
                     )
 
-                if zone_type is not None and zone_type in ZON_ROLE_MAP.HEAT_ZONES:
+                if (
+                    zone_type is not None
+                    and zone_type in ZON_ROLE_MAP.HEAT_ZONES
+                ):
                     metadata["class"] = ZON_ROLE_MAP[zone_type]
 
                 # Implicit Zone Class Inference: If we bind an actuator, its type implies the zone class
-                if device_role_str in ("08", "rad_actuator") and not metadata.get(
-                    "class"
-                ):
+                if device_role_str in (
+                    "08",
+                    "rad_actuator",
+                ) and not metadata.get("class"):
                     metadata["class"] = ZON_ROLE_MAP["08"]  # radiator_valve
 
                 if domain_id is not None:
@@ -325,7 +353,9 @@ class BindTopologyHandler(TopologyHandler):
                 parent_id=msg.src.id,
                 child_id=msg.dst.id,
                 metadata={
-                    "device_role": "actuator" if dst_type in ("04", "08") else "sensor"
+                    "device_role": "actuator"
+                    if dst_type in ("04", "08")
+                    else "sensor"
                 },
                 causation="Rule_Implicit_Poll_Binding",
             )
@@ -346,7 +376,11 @@ class BindTopologyHandler(TopologyHandler):
 
         # Pure L7 architectural access using the new Domain property
         src_type = getattr(msg.src, "type", None)
-        if getattr(msg.addr3, "type", None) == "01" and src_type in ("00", "04", "08"):
+        if getattr(msg.addr3, "type", None) == "01" and src_type in (
+            "00",
+            "04",
+            "08",
+        ):
             self._emit(
                 TopologyChangedEvent(
                     action=TopologyAction.BIND_DEVICE,

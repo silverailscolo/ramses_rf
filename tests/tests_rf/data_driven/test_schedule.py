@@ -42,11 +42,15 @@ VALID_FULL_SCHEDULE: Final[WeeklyScheduleDict] = {
     SZ_SCHEDULE: [
         {
             "day_of_week": 0,
-            SZ_SWITCHPOINTS: [{SZ_TIME_OF_DAY: "06:00", SZ_HEAT_SETPOINT: 21.0}],
+            SZ_SWITCHPOINTS: [
+                {SZ_TIME_OF_DAY: "06:00", SZ_HEAT_SETPOINT: 21.0}
+            ],
         }
     ],
 }
-VALID_FRAGMENT_HEX: Final[str] = full_schedule_to_fragments(VALID_FULL_SCHEDULE)[0]
+VALID_FRAGMENT_HEX: Final[str] = full_schedule_to_fragments(
+    VALID_FULL_SCHEDULE
+)[0]
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -55,7 +59,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
     if "dir_name" in metafunc.fixturenames:
         folders = [
-            f for f in Path(WORK_DIR).iterdir() if f.is_dir() and f.name[:1] != "_"
+            f
+            for f in Path(WORK_DIR).iterdir()
+            if f.is_dir() and f.name[:1] != "_"
         ]
         metafunc.parametrize("dir_name", folders, ids=id_fnc)
 
@@ -79,7 +85,9 @@ async def test_schedule_helpers(dir_name: Path) -> None:
     if schedule[SZ_ZONE_INDEX] == "HW":
         schedule[SZ_ZONE_INDEX] = "00"
 
-    assert schedule == fragments_to_full_schedule(full_schedule_to_fragments(schedule))
+    assert schedule == fragments_to_full_schedule(
+        full_schedule_to_fragments(schedule)
+    )
 
     if new_schedule[SZ_ZONE_INDEX] == "HW":
         new_schedule[SZ_ZONE_INDEX] = "00"
@@ -87,8 +95,11 @@ async def test_schedule_helpers(dir_name: Path) -> None:
             schedule[SZ_SCHEDULE][-1][SZ_SWITCHPOINTS][-1][SZ_ENABLED]
         )
     else:
-        new_schedule[SZ_SCHEDULE][-1][SZ_SWITCHPOINTS][-1][SZ_HEAT_SETPOINT] = (
-            schedule[SZ_SCHEDULE][-1][SZ_SWITCHPOINTS][-1][SZ_HEAT_SETPOINT] + 1
+        new_schedule[SZ_SCHEDULE][-1][SZ_SWITCHPOINTS][-1][
+            SZ_HEAT_SETPOINT
+        ] = (
+            schedule[SZ_SCHEDULE][-1][SZ_SWITCHPOINTS][-1][SZ_HEAT_SETPOINT]
+            + 1
         )
 
     # The schedule code relies upon the following inequality...
@@ -130,7 +141,9 @@ async def test_schedule_fsm_fetch_state_transitions() -> None:
     # Act & Assert
     with (
         patch.object(
-            sched.tcs, "_schedule_version", new=AsyncMock(return_value=(1, True))
+            sched.tcs,
+            "_schedule_version",
+            new=AsyncMock(return_value=(1, True)),
         ),
         patch.object(
             sched,
@@ -178,7 +191,9 @@ async def test_schedule_fsm_fetch_exponential_backoff() -> None:
     # Act & Assert
     with (
         patch.object(
-            sched.tcs, "_schedule_version", new=AsyncMock(return_value=(1, True))
+            sched.tcs,
+            "_schedule_version",
+            new=AsyncMock(return_value=(1, True)),
         ),
         patch.object(sched, "_fetch_fragment", new=mock_fetch),
         patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
@@ -203,7 +218,9 @@ async def test_schedule_fsm_max_attempts_fault() -> None:
     # Act & Assert
     with (
         patch.object(
-            sched.tcs, "_schedule_version", new=AsyncMock(return_value=(1, True))
+            sched.tcs,
+            "_schedule_version",
+            new=AsyncMock(return_value=(1, True)),
         ),
         patch.object(
             sched,

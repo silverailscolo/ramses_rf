@@ -46,7 +46,11 @@ from ramses_tx.schemas import (
 
 from .debug import SZ_DBG_MODE, start_debugging
 from .discovery import GET_FAULTS, GET_SCHED, SET_SCHED, spawn_scripts
-from .inspect import dissect_payload, extract_packet_details, format_dissection_output
+from .inspect import (
+    dissect_payload,
+    extract_packet_details,
+    format_dissection_output,
+)
 
 if TYPE_CHECKING:
     from _typeshed import SupportsRead
@@ -74,7 +78,9 @@ PRINT_STATE = False  # print engine state
 # SET_STATE = False  # set engine state
 
 # this is called after import colorlog to ensure its handlers wrap correctly
-logging.basicConfig(level=logging.WARNING, format=DEFAULT_FMT, datefmt=DEFAULT_DATEFMT)
+logging.basicConfig(
+    level=logging.WARNING, format=DEFAULT_FMT, datefmt=DEFAULT_DATEFMT
+)
 
 
 EXECUTE: Final = "execute"
@@ -94,7 +100,9 @@ COLORS = {
 CONTEXT_SETTINGS: dict[str, Any] = dict(help_option_names=["-h", "--help"])
 
 LIB_KEYS = tuple(SCH_GLOBAL_CONFIG({}).keys()) + (SZ_SERIAL_PORT,)
-LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (SZ_EVOFW_FLAG,)
+LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (
+    SZ_EVOFW_FLAG,
+)
 
 
 def normalise_config(
@@ -136,7 +144,9 @@ def split_kwargs(
         {k: v for k, v in kwargs.items() if k not in LIB_KEYS + LIB_CFG_KEYS}
     )
     lib_kwargs.update({k: v for k, v in kwargs.items() if k in LIB_KEYS})
-    lib_kwargs[SZ_CONFIG].update({k: v for k, v in kwargs.items() if k in LIB_CFG_KEYS})
+    lib_kwargs[SZ_CONFIG].update(
+        {k: v for k, v in kwargs.items() if k in LIB_CFG_KEYS}
+    )
 
     return cli_kwargs, lib_kwargs
 
@@ -146,7 +156,9 @@ class DeviceIdParamType(click.ParamType):
 
     name = "device_id"
 
-    def convert(self, value: str, parameter: Any, context: click.Context | None) -> str:
+    def convert(
+        self, value: str, parameter: Any, context: click.Context | None
+    ) -> str:
         """Convert the value to a Device ID.
 
         :param value: The value to convert.
@@ -162,15 +174,27 @@ class DeviceIdParamType(click.ParamType):
 
 
 # Args/Params for both RF and file
-@click.group(context_settings=CONTEXT_SETTINGS)  # , invoke_without_command=True)
+@click.group(
+    context_settings=CONTEXT_SETTINGS
+)  # , invoke_without_command=True)
 @click.option("-z", "--debug-mode", count=True, help="enable debugger")
 @click.option("-c", "--config-file", type=click.File("r"))
-@click.option("-rk", "--restore-schema", type=click.File("r"), help="from a HA store")
-@click.option("-rs", "--restore-state", type=click.File("r"), help=" from a HA store")
-@click.option("-r", "--reduce-processing", count=True, help="-rrr will give packets")
-@click.option("-lf", "--long-format", is_flag=True, help="dont truncate STDOUT")
+@click.option(
+    "-rk", "--restore-schema", type=click.File("r"), help="from a HA store"
+)
+@click.option(
+    "-rs", "--restore-state", type=click.File("r"), help=" from a HA store"
+)
+@click.option(
+    "-r", "--reduce-processing", count=True, help="-rrr will give packets"
+)
+@click.option(
+    "-lf", "--long-format", is_flag=True, help="dont truncate STDOUT"
+)
 @click.option("-e/-ne", "--eavesdrop/--no-eavesdrop", default=None)
-@click.option("-g", "--print-state", count=True, help="print state (g=schema, gg=all)")
+@click.option(
+    "-g", "--print-state", count=True, help="print state (g=schema, gg=all)"
+)
 # @click.option("--get-state/--no-get-state", default=GET_STATE, help="get the engine state")
 # @click.option("--set-state/--no-set-state", default=SET_STATE, help="set the engine state")
 @click.option(  # show_schema
@@ -345,8 +369,12 @@ async def parse(
 
 #
 # 2/5: MONITOR (listen to RF, +/- discovery, +/- eavesdrop)
-@click.command(cls=PortCommand)  # (optionally) execute a command/script, then monitor
-@click.option("-d/-nd", "--discover/--no-discover", default=None)  # --no-discover
+@click.command(
+    cls=PortCommand
+)  # (optionally) execute a command/script, then monitor
+@click.option(
+    "-d/-nd", "--discover/--no-discover", default=None
+)  # --no-discover
 @click.option(  # --exec-cmd 'RQ 01:123456 1F09 00'
     "-x", "--exec-cmd", type=click.STRING, help="e.g. 'RQ 01:123456 1F09 00'"
 )
@@ -388,7 +416,9 @@ async def monitor(
 #
 # 3/5: EXECUTE (send cmds to RF, +/- discovery, +/- eavesdrop)
 @click.command(cls=PortCommand)  # execute a (complex) script, then stop
-@click.option("-d/-nd", "--discover/--no-discover", default=None)  # --no-discover
+@click.option(
+    "-d/-nd", "--discover/--no-discover", default=None
+)  # --no-discover
 @click.option(  # --exec-cmd 'RQ 01:123456 1F09 00'
     "-x", "--exec-cmd", type=click.STRING, help="e.g. 'RQ 01:123456 1F09 00'"
 )
@@ -516,7 +546,10 @@ async def scan(
 # DECODE (ad-hoc payload or packet inspection)
 @click.command(cls=DecodeCommand)
 @click.option(
-    "-c", "--code", type=click.STRING, help="RAMSES opcode (e.g. 2411, 10E0, 31DA)."
+    "-c",
+    "--code",
+    type=click.STRING,
+    help="RAMSES opcode (e.g. 2411, 10E0, 31DA).",
 )
 @click.option(
     "-v", "--verb", type=click.STRING, help="Message verb (e.g. RP, I, RQ, W)."
@@ -570,7 +603,9 @@ async def decode(
         print("Error: No payload or packet string provided.", file=sys.stderr)
         return 1
 
-    extracted_code, extracted_verb, payload_hex = extract_packet_details(raw_input)
+    extracted_code, extracted_verb, payload_hex = extract_packet_details(
+        raw_input
+    )
     target_code = code if code else extracted_code
     target_verb = verb if verb else extracted_verb
 
@@ -722,26 +757,38 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
     entity = gateway.tcs or gateway
 
     if kwargs.get("show_schema"):
-        print(f"Schema[{entity}] = {json.dumps(await entity.schema(), indent=4)}\r\n")
+        print(
+            f"Schema[{entity}] = {json.dumps(await entity.schema(), indent=4)}\r\n"
+        )
 
         # schema = {d.id: await d.schema() for d in sorted(gateway.device_registry.devices)}
         # print(f"Schema[devices] = {json.dumps({'schema': schema}, indent=4)}\r\n")
 
     if kwargs.get("show_params"):
-        print(f"Params[{entity}] = {json.dumps(await entity.params(), indent=4)}\r\n")
+        print(
+            f"Params[{entity}] = {json.dumps(await entity.params(), indent=4)}\r\n"
+        )
 
         params = {
-            d.id: await d.params() for d in sorted(gateway.device_registry.devices)
+            d.id: await d.params()
+            for d in sorted(gateway.device_registry.devices)
         }
-        print(f"Params[devices] = {json.dumps({'params': params}, indent=4)}\r\n")
+        print(
+            f"Params[devices] = {json.dumps({'params': params}, indent=4)}\r\n"
+        )
 
     if kwargs.get("show_status"):
-        print(f"Status[{entity}] = {json.dumps(await entity.status(), indent=4)}\r\n")
+        print(
+            f"Status[{entity}] = {json.dumps(await entity.status(), indent=4)}\r\n"
+        )
 
         status = {
-            d.id: await d.status() for d in sorted(gateway.device_registry.devices)
+            d.id: await d.status()
+            for d in sorted(gateway.device_registry.devices)
         }
-        print(f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n")
+        print(
+            f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n"
+        )
 
     if kwargs.get("show_knowns"):  # show device hints (show-knowns)
         known = json.dumps(gateway.config.known_list, indent=4)
@@ -757,7 +804,9 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
 
     if kwargs.get("show_crazys"):
         for device in [
-            d for d in gateway.device_registry.devices if d.type == DEV_TYPE_MAP.CTL
+            d
+            for d in gateway.device_registry.devices
+            if d.type == DEV_TYPE_MAP.CTL
         ]:
             if gateway.message_store:
                 for msg in await gateway.message_store.get(
@@ -779,21 +828,27 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
                                 print(f"{packet}")
             print()
         for device in [
-            d for d in gateway.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
+            d
+            for d in gateway.device_registry.devices
+            if d.type == DEV_TYPE_MAP.UFC
         ]:
             if gateway.message_store:
                 for msg in await gateway.message_store.get(source=device.id):
                     print(f"{msg}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
-                for cd in (await device.entity_state.get_state_cache_nested()).values():
+                for cd in (
+                    await device.entity_state.get_state_cache_nested()
+                ).values():
                     for verb in cd.values():
                         for packet in verb.values():
                             print(f"{packet}")
             print()
 
 
-async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) -> None:
+async def async_main(
+    command: str, lib_kwargs: dict[str, Any], **kwargs: Any
+) -> None:
     """Execute the main asynchronous logic for the CLI.
 
     :param command: The command to execute (e.g., "monitor", "parse").
@@ -821,10 +876,15 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
         if _msg.code == Code._PUZZ:
             print(f"{Style.BRIGHT}{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
         elif _msg.src and _msg.src.type == DEV_TYPE_MAP.HGI:
-            print(f"{Style.BRIGHT}{COLORS.get(_msg.verb)}{dtm} {_msg}"[:con_cols])
+            print(
+                f"{Style.BRIGHT}{COLORS.get(_msg.verb)}{dtm} {_msg}"[:con_cols]
+            )
         elif _msg.code == Code._1F09 and _msg.verb == I_:
             print(f"{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
-        elif _msg.code in (Code._000A, Code._2309, Code._30C9) and _msg._has_array:
+        elif (
+            _msg.code in (Code._000A, Code._2309, Code._30C9)
+            and _msg._has_array
+        ):
             print(f"{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
         else:
             print(f"{COLORS.get(_msg.verb)}{dtm} {_msg}"[:con_cols])
@@ -889,9 +949,13 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
         for k, v in gwy_config_kwargs.items()
         if k in engine_fields and k not in l7_only_keys
     }
-    gwy_kwargs = {k: v for k, v in gwy_config_kwargs.items() if k in gwy_fields}
+    gwy_kwargs = {
+        k: v for k, v in gwy_config_kwargs.items() if k in gwy_fields
+    }
 
-    gwy_config = GatewayConfig(engine=EngineConfig(**engine_kwargs), **gwy_kwargs)
+    gwy_config = GatewayConfig(
+        engine=EngineConfig(**engine_kwargs), **gwy_kwargs
+    )
 
     # Instantiate Gateway
     gwy = Gateway(
@@ -945,7 +1009,9 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
                 await asyncio.sleep(duration)
             else:
                 print(" - scanning until interrupted (Ctrl-C)...")
-                await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
+                await gwy._engine._protocol.wait_for_connection_lost(
+                    timeout=86400
+                )
             scan_engine.stop()
             _print_scan_results(scan_engine, kwargs.get("scan_output"))
 

@@ -32,7 +32,8 @@ class TestAttrDict:
         # This should raise AttributeError immediately.
         # If the bug exists, this would crash with RecursionError.
         with pytest.raises(
-            AttributeError, match=r"'AttrDict' object has no attribute 'missing'"
+            AttributeError,
+            match=r"'AttrDict' object has no attribute 'missing'",
         ):
             _ = attr_dict.missing
 

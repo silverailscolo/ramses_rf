@@ -59,7 +59,9 @@ class CentralDispatcher:
             try:
                 self._dispatch(msg)
             except Exception as err:
-                _LOGGER.exception("CentralDispatcher failed to route message: %s", err)
+                _LOGGER.exception(
+                    "CentralDispatcher failed to route message: %s", err
+                )
             finally:
                 self._in_queue.task_done()
 

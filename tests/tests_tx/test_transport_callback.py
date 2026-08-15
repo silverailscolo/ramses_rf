@@ -39,9 +39,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
 
     async def test_receive_frame_respects_circuit_breaker(self) -> None:
         """Verify inbound frames are gated by pause/resume state."""
-        test_frame = (
-            "059 RP --- 01:195932 04:017982 --:------ 313F 009 00FC2300C4150C07E9"
-        )
+        test_frame = "059 RP --- 01:195932 04:017982 --:------ 313F 009 00FC2300C4150C07E9"
 
         # 1. Test while PAUSED (Initial State)
         self.transport.pause_reading()
@@ -112,7 +110,9 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         ) -> CallbackTransport:
             # Check if 'disable_sending' made it through the DTO
             if not config.disable_sending:
-                raise ValueError("disable_sending flag was lost in the factory!")
+                raise ValueError(
+                    "disable_sending flag was lost in the factory!"
+                )
 
             # Create the transport
             transport = CallbackTransport(
@@ -144,7 +144,9 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         finally:
             await gwy.stop()
 
-    async def test_write_frame_propagates_asyncio_cancelled_error(self) -> None:
+    async def test_write_frame_propagates_asyncio_cancelled_error(
+        self,
+    ) -> None:
         """Verify asyncio.CancelledError is re-raised during task cancellation."""
         # Arrange
         self.mock_writer.side_effect = asyncio.CancelledError()
@@ -153,7 +155,9 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(asyncio.CancelledError):
             await self.transport.write_frame("test_frame")
 
-    async def test_receive_frame_handles_malformed_packets_gracefully(self) -> None:
+    async def test_receive_frame_handles_malformed_packets_gracefully(
+        self,
+    ) -> None:
         """Verify malformed inbound packets do not raise unhandled exceptions."""
         # Arrange
         self.transport.resume_reading()
@@ -172,9 +176,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         # Arrange
         self.transport.resume_reading()
         invalid_timestamp = "NOT-A-VALID-TIMESTAMP"
-        valid_frame = (
-            "059 RP --- 01:195932 04:017982 --:------ 313F 009 00FC2300C4150C07E9"
-        )
+        valid_frame = "059 RP --- 01:195932 04:017982 --:------ 313F 009 00FC2300C4150C07E9"
 
         # Act
         self.transport.receive_frame(valid_frame, dtm=invalid_timestamp)

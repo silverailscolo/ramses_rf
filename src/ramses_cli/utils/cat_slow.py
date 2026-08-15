@@ -10,7 +10,9 @@ from ramses_tx.const import RQ
 # cat packet.log | cut -d ' ' -f 2- | unix2dos | pv --quiet --line-mode --rate-limit 1 | tee /dev/pts/3
 
 parser = argparse.ArgumentParser(description="Echo a file slowly")
-parser.add_argument("-i", "--input-file", type=argparse.FileType("r"), default="-")
+parser.add_argument(
+    "-i", "--input-file", type=argparse.FileType("r"), default="-"
+)
 parser.add_argument("-d", "--delay-in-ms", type=int, default="100")
 args = parser.parse_args()
 

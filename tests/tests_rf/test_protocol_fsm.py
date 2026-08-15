@@ -49,7 +49,9 @@ def _assert_pkt_eq_cmd(pkt: Packet, cmd: Command, msg: str = "") -> None:
 # other constants
 CALL_LATER_DELAY = 0.001  # FIXME: this is hardware-specific
 
-ASSERT_CYCLE_TIME = 0.0005  # max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TIME
+ASSERT_CYCLE_TIME = (
+    0.0005  # max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TIME
+)
 DEFAULT_MAX_SLEEP = 0.1
 
 
@@ -227,11 +229,15 @@ async def _test_flow_30x(protocol: PortProtocol) -> None:
     qos = QosParams()
 
     # STEP 1: Send an I cmd (no reply)...
-    task = rf._loop.create_task(protocol._send_cmd(II_CMD_0, qos=qos), name="send_1")
+    task = rf._loop.create_task(
+        protocol._send_cmd(II_CMD_0, qos=qos), name="send_1"
+    )
     _assert_pkt_eq_cmd(await task, II_CMD_0)  # no reply pkt expected
 
     # STEP 2: Send an RQ cmd (returns echo at L3)...
-    task = rf._loop.create_task(protocol._send_cmd(RQ_CMD_0, qos=qos), name="send_2")
+    task = rf._loop.create_task(
+        protocol._send_cmd(RQ_CMD_0, qos=qos), name="send_2"
+    )
     protocol._loop.call_later(
         CALL_LATER_DELAY,
         ser.write,
@@ -240,14 +246,20 @@ async def _test_flow_30x(protocol: PortProtocol) -> None:
     _assert_pkt_eq_cmd(await task, RQ_CMD_0)
 
     # STEP 3: Send an I cmd (no reply) *twice*...
-    task = rf._loop.create_task(protocol._send_cmd(II_CMD_0, qos=qos), name="send_3A")
+    task = rf._loop.create_task(
+        protocol._send_cmd(II_CMD_0, qos=qos), name="send_3A"
+    )
     _assert_pkt_eq_cmd(await task, II_CMD_0)  # no reply pkt expected
 
-    task = rf._loop.create_task(protocol._send_cmd(II_CMD_0, qos=qos), name="send_3B")
+    task = rf._loop.create_task(
+        protocol._send_cmd(II_CMD_0, qos=qos), name="send_3B"
+    )
     _assert_pkt_eq_cmd(await task, II_CMD_0)  # no reply pkt expected
 
     # STEP 4: Send an RQ cmd (returns echo at L3)...
-    task = rf._loop.create_task(protocol._send_cmd(RQ_CMD_1, qos=qos), name="send_4A")
+    task = rf._loop.create_task(
+        protocol._send_cmd(RQ_CMD_1, qos=qos), name="send_4A"
+    )
 
     # TODO: make these deterministic so ser replies *only after* it receives cmd
     protocol._loop.call_later(
@@ -340,27 +352,39 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
 
     cmd = put_sensor_temp("03:000111", 19.5)
     pkt = await protocol._send_cmd(cmd)  # qos == QosParams()
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there's no reply to wait for")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there's no reply to wait for"
+    )
 
     cmd = put_sensor_temp("03:000222", 19.5)
     pkt = await protocol._send_cmd(cmd, qos=None)  # qos == QosParams()
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there's no reply to wait for")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there's no reply to wait for"
+    )
 
     cmd = put_sensor_temp("03:000333", 19.5)
     pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there's no reply to wait for")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there's no reply to wait for"
+    )
 
     cmd = put_sensor_temp("03:000444", 19.5)
     pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(pkt, cmd, "should be echo as there is no wait_for_reply")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "should be echo as there is no wait_for_reply"
+    )
 
     cmd = put_sensor_temp("03:000555", 19.5)
     pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(pkt, cmd, "should be echo as there is no wait_for_reply")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "should be echo as there is no wait_for_reply"
+    )
 
     cmd = put_sensor_temp("03:000666", 19.5)
     pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there's no reply to wait for")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there's no reply to wait for"
+    )
 
     # # ### Simple test for an RQ (expects an RP)...
 
@@ -373,7 +397,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
         )
     )
     pkt = await protocol._send_cmd(cmd)
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there's no reply to wait for")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there's no reply to wait for"
+    )
 
     cmd = build_dto(
         Intent(
@@ -384,7 +410,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
         )
     )
     pkt = await protocol._send_cmd(cmd, qos=None)
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there's no reply to wait for")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there's no reply to wait for"
+    )
 
     cmd = build_dto(
         Intent(
@@ -395,7 +423,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
         )
     )
     pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there's no reply to wait for")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there's no reply to wait for"
+    )
 
     cmd = build_dto(
         Intent(
@@ -406,7 +436,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
         )
     )
     pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there is no wait_for_reply")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there is no wait_for_reply"
+    )
 
     cmd = build_dto(
         Intent(
@@ -417,7 +449,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
         )
     )
     pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there is no wait_for_reply")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there is no wait_for_reply"
+    )
 
     cmd = build_dto(
         Intent(
@@ -428,7 +462,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
         )
     )
     pkt = await protocol._send_cmd(cmd, qos=QosParams(timeout=0.05))
-    _assert_pkt_eq_cmd(pkt, cmd, "Should be echo as there's no reply to wait for")
+    _assert_pkt_eq_cmd(
+        pkt, cmd, "Should be echo as there's no reply to wait for"
+    )
 
     # # ### Simple test for an I (does not expect any reply)...
 

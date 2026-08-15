@@ -109,6 +109,9 @@ SCHEMA_2: Final[dict[str, Any]] = {
 
 SCHEMA_3: Final[dict[str, Any]] = {
     "orphans_hvac": ["42:333333"],
-    "known_list": {"18:333333": {"class": "HGI"}, "42:333333": {"class": "FAN"}},
+    "known_list": {
+        "18:333333": {"class": "HGI"},
+        "42:333333": {"class": "FAN"},
+    },
 }
 """Schema added for specific HVAC functionality testing."""

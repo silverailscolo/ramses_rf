@@ -26,7 +26,12 @@ from ramses_rf.const import (
     Code,
     Verb,
 )
-from ramses_tx.address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, hex_id_to_dev_id
+from ramses_tx.address import (
+    ALL_DEV_ADDR,
+    NON_DEV_ADDR,
+    Address,
+    hex_id_to_dev_id,
+)
 from ramses_tx.helpers import hex_from_dtm, hex_to_dtm, hex_to_percent
 from ramses_tx.typing import DeviceIdT
 
@@ -206,7 +211,9 @@ class HeatDemand2BPayload(HeatDemandPayload):
             )
         index, demand = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         extra = raw_data[2:] if len(raw_data) > 2 else None
-        return cls(domain_or_zone_index=index, demand_percent=demand, raw_extra=extra)
+        return cls(
+            domain_or_zone_index=index, demand_percent=demand, raw_extra=extra
+        )
 
     def to_bytes(self) -> bytes:
         """Pack 2-byte heat demand binary payload.
@@ -215,7 +222,9 @@ class HeatDemand2BPayload(HeatDemandPayload):
         :rtype: bytes
         """
         buffer = struct.pack(
-            self._STRUCT_FMT, self.domain_or_zone_index, self.demand_percent & 0xFF
+            self._STRUCT_FMT,
+            self.domain_or_zone_index,
+            self.demand_percent & 0xFF,
         )
         if self.raw_extra is not None:
             buffer += self.raw_extra
@@ -243,7 +252,9 @@ class HeatDemand2BPayload(HeatDemandPayload):
             is_ufc = False
             if msg is not None and getattr(msg, "src", None) is not None:
                 src_str = str(getattr(msg.src, "id", msg.src))
-                if src_str.startswith("02:") or getattr(msg.src, "type", "") in (
+                if src_str.startswith("02:") or getattr(
+                    msg.src, "type", ""
+                ) in (
                     "02",
                     "UFC",
                 ):
@@ -285,7 +296,9 @@ class TemperaturePayload(PayloadBase):
         if cls is not TemperaturePayload:
             return super().__new__(cls)  # type: ignore[return-value]
         if zone_index is not None:
-            return Temperature3BPayload(zone_index=zone_index, temperature=temperature)
+            return Temperature3BPayload(
+                zone_index=zone_index, temperature=temperature
+            )
         return Temperature2BPayload(temperature=temperature)
 
     @classmethod
@@ -401,7 +414,9 @@ class Temperature3BPayload(TemperaturePayload):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -485,7 +500,9 @@ class ScheduleFragmentPayload(PayloadBase):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -527,7 +544,9 @@ class ScheduleFragmentPayload(PayloadBase):
             if self._header_prefix is not None
             else (b"\x23\x00\x08" if index == 0xFA else b"\x20\x00\x08")
         )
-        byte_idx = 0x00 if prefix == b"\x23\x00\x08" and index == 0xFA else index
+        byte_idx = (
+            0x00 if prefix == b"\x23\x00\x08" and index == 0xFA else index
+        )
         hdr = struct.pack(
             self._STRUCT_FMT_HEADER,
             byte_idx,
@@ -555,7 +574,9 @@ class ScheduleFragmentPayload(PayloadBase):
         result: dict[str, Any] = {
             SZ_ZONE_INDEX: zone_str,
             SZ_FRAGMENT_NUMBER: self.frag_number,
-            SZ_TOTAL_FRAGMENTS: self.total_frags if self.total_frags != 0 else None,
+            SZ_TOTAL_FRAGMENTS: self.total_frags
+            if self.total_frags != 0
+            else None,
         }
         if self.fragment_bytes:
             result["fragment"] = self.fragment_bytes.hex().upper()
@@ -616,9 +637,13 @@ class ScheduleSwitchpointPayload(PayloadBase):
         if len(raw_data) != 20:
             if len(raw_data) >= 7:
                 return ScheduleFragmentPayload.from_bytes(raw_data)
-            raise ValueError(f"Invalid payload length for 0404: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 0404: {len(raw_data)}"
+            )
 
-        index, dow, tod, setpoint_raw, _ = struct.unpack(cls._STRUCT_FMT, raw_data)
+        index, dow, tod, setpoint_raw, _ = struct.unpack(
+            cls._STRUCT_FMT, raw_data
+        )
         return cls(
             zone_index=index,
             day_of_week=dow,
@@ -906,15 +931,25 @@ class SystemSyncVarPayload(SystemSyncPayload):
                 self._STRUCT_FMT_PARAM, 0xC9, 1, self.min_flow_setpoint
             )
         if self.valve_run_time is not None:
-            result += struct.pack(self._STRUCT_FMT_PARAM, 0xCA, 1, self.valve_run_time)
+            result += struct.pack(
+                self._STRUCT_FMT_PARAM, 0xCA, 1, self.valve_run_time
+            )
         if self.pump_run_time is not None:
-            result += struct.pack(self._STRUCT_FMT_PARAM, 0xCB, 1, self.pump_run_time)
+            result += struct.pack(
+                self._STRUCT_FMT_PARAM, 0xCB, 1, self.pump_run_time
+            )
         if self._boolean_cc is not None:
-            result += struct.pack(self._STRUCT_FMT_PARAM, 0xCC, 1, self._boolean_cc)
+            result += struct.pack(
+                self._STRUCT_FMT_PARAM, 0xCC, 1, self._boolean_cc
+            )
         if self._unknown_20 is not None:
-            result += struct.pack(self._STRUCT_FMT_PARAM, 0x20, 1, self._unknown_20)
+            result += struct.pack(
+                self._STRUCT_FMT_PARAM, 0x20, 1, self._unknown_20
+            )
         if self._unknown_21 is not None:
-            result += struct.pack(self._STRUCT_FMT_PARAM, 0x21, 1, self._unknown_21)
+            result += struct.pack(
+                self._STRUCT_FMT_PARAM, 0x21, 1, self._unknown_21
+            )
         if self._raw_extra and len(result) == 1:
             result += self._raw_extra
         return result
@@ -1006,7 +1041,10 @@ class BindingPayload(PayloadBase):
         :returns: Packed binary payload bytes.
         :rtype: bytes
         """
-        return struct.pack(self._STRUCT_FMT_HDR, self.binding_type) + self.binding_data
+        return (
+            struct.pack(self._STRUCT_FMT_HDR, self.binding_type)
+            + self.binding_data
+        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert 1FC9 binding payload to legacy dictionary representation.
@@ -1016,7 +1054,9 @@ class BindingPayload(PayloadBase):
         :returns: Dictionary representation of binding payload.
         :rtype: dict[str, Any]
         """
-        payload_hex = (bytes([self.binding_type]) + self.binding_data).hex().upper()
+        payload_hex = (
+            (bytes([self.binding_type]) + self.binding_data).hex().upper()
+        )
         result: dict[str, Any] = {}
 
         if msg is not None:
@@ -1027,11 +1067,19 @@ class BindingPayload(PayloadBase):
             dst_id = str(
                 getattr(getattr(msg, "dst", ""), "id", getattr(msg, "dst", ""))
             )
-            v_str = str(getattr(verb, "value", str(verb))).split(".")[-1].strip()
+            v_str = (
+                str(getattr(verb, "value", str(verb))).split(".")[-1].strip()
+            )
 
             if v_str in ("I", "I_") and (
                 dst_id
-                in (src_id, "63:262142", ALL_DEV_ADDR.id, NON_DEV_ADDR.id, "--:------")
+                in (
+                    src_id,
+                    "63:262142",
+                    ALL_DEV_ADDR.id,
+                    NON_DEV_ADDR.id,
+                    "--:------",
+                )
             ):
                 bind_phase = SZ_OFFER
             elif v_str in ("W", "W_") and src_id != dst_id:
@@ -1129,7 +1177,9 @@ class ZoneConfigPayload(PayloadBase):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
 
     @classmethod
     def _from_bytes_single(cls, raw_data: bytes, offset: int = 0) -> Self:
@@ -1165,7 +1215,10 @@ class ZoneConfigPayload(PayloadBase):
         """
         if len(raw_data) == 1:
             return cls(
-                zone_index=raw_data[0], zone_flags=0, min_temp=None, max_temp=None
+                zone_index=raw_data[0],
+                zone_flags=0,
+                min_temp=None,
+                max_temp=None,
             )
         if len(raw_data) == 2:
             return cls(
@@ -1175,10 +1228,13 @@ class ZoneConfigPayload(PayloadBase):
                 max_temp=None,
             )
         if len(raw_data) < 6 or len(raw_data) % 6 != 0:
-            raise ValueError(f"Invalid payload length for 000A: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 000A: {len(raw_data)}"
+            )
         if len(raw_data) > 6:
             return [
-                cls._from_bytes_single(raw_data, i) for i in range(0, len(raw_data), 6)
+                cls._from_bytes_single(raw_data, i)
+                for i in range(0, len(raw_data), 6)
             ]
 
         return cls._from_bytes_single(raw_data, 0)
@@ -1190,8 +1246,16 @@ class ZoneConfigPayload(PayloadBase):
         :rtype: bytes
         """
         index = parse_index(self.zone_index)
-        min_raw = 0x7FFF if self.min_temp is None else int(round(self.min_temp * 100.0))
-        max_raw = 0x7FFF if self.max_temp is None else int(round(self.max_temp * 100.0))
+        min_raw = (
+            0x7FFF
+            if self.min_temp is None
+            else int(round(self.min_temp * 100.0))
+        )
+        max_raw = (
+            0x7FFF
+            if self.max_temp is None
+            else int(round(self.max_temp * 100.0))
+        )
         return struct.pack(
             self._STRUCT_FMT,
             index,
@@ -1294,7 +1358,9 @@ class ZoneName22BPayload(ZoneNamePayload):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1327,7 +1393,9 @@ class ZoneName22BPayload(ZoneNamePayload):
         name_bytes = (
             b"\x7f" * 20
             if self.name is None
-            else self.name.encode("ascii", errors="replace")[:20].ljust(20, b"\x00")
+            else self.name.encode("ascii", errors="replace")[:20].ljust(
+                20, b"\x00"
+            )
         )
         return struct.pack(self._STRUCT_FMT, index, name_bytes)
 
@@ -1374,7 +1442,9 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -1401,7 +1471,9 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
         """
         sp_raw = int(round(self.setpoint_temp * 100.0))
         index = parse_index(self.zone_index)
-        return bytes([index]) + sp_raw.to_bytes(2, byteorder="big", signed=True)
+        return bytes([index]) + sp_raw.to_bytes(
+            2, byteorder="big", signed=True
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert zone setpoint payload to legacy dictionary layout.
@@ -1478,7 +1550,9 @@ class OutdoorTempPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 12C0: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 12C0: {len(raw_data)}"
+            )
         if len(raw_data) >= 3 and raw_data[0] == 0:
             _hdr, raw_temp, unit_byte = struct.unpack_from(
                 cls._STRUCT_FMT_LEGACY, raw_data, 0
@@ -1545,7 +1619,9 @@ class ZoneSetpointPayload(PayloadBase):
         """Construct ZoneSetpoint payload variant dynamically."""
         if cls is not ZoneSetpointPayload:
             return super().__new__(cls)  # type: ignore[return-value]
-        return ZoneSetpoint3BPayload(zone_index=zone_index, setpoint_temp=setpoint_temp)
+        return ZoneSetpoint3BPayload(
+            zone_index=zone_index, setpoint_temp=setpoint_temp
+        )
 
     @classmethod
     def from_bytes(
@@ -1553,7 +1629,9 @@ class ZoneSetpointPayload(PayloadBase):
     ) -> "ZoneSetpointPayload | list[ZoneSetpointPayload]":
         """Unpack zone setpoint payload (single or array entries)."""
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 2309: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2309: {len(raw_data)}"
+            )
         if len(raw_data) > 3 and len(raw_data) % 3 == 0:
             return [
                 ZoneSetpoint3BPayload.from_bytes(raw_data[i : i + 3])
@@ -1604,7 +1682,9 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
 
     @classmethod
     def _parse_sp_val(cls, sp_raw: int) -> float | bool | None:
@@ -1713,7 +1793,9 @@ class FlowTempPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 3200: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 3200: {len(raw_data)}"
+            )
         index, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         temp_val = None if temp_raw in (0x31FF, 0x7FFF) else temp_raw / 100.0
         return cls(domain_index=index, temperature=temp_val)
@@ -1725,7 +1807,9 @@ class FlowTempPayload(PayloadBase):
         :rtype: bytes
         """
         temp_raw = (
-            0x7FFF if self.temperature is None else int(round(self.temperature * 100.0))
+            0x7FFF
+            if self.temperature is None
+            else int(round(self.temperature * 100.0))
         )
         return struct.pack(self._STRUCT_FMT, self.domain_index, temp_raw)
 
@@ -1797,7 +1881,9 @@ class SystemZonesPayload(PayloadBase):
         if len(raw_data) > 4 and len(raw_data) % 4 == 0:
             result: list[PayloadBase] = []
             for i in range(0, len(raw_data), 4):
-                result.append(SystemZones4BPayload.from_bytes(raw_data[i : i + 4]))
+                result.append(
+                    SystemZones4BPayload.from_bytes(raw_data[i : i + 4])
+                )
             return result
         if len(raw_data) == 3:
             return SystemZones3BPayload.from_bytes(raw_data)
@@ -1849,7 +1935,9 @@ class SystemZones3BPayload(SystemZonesPayload):
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte system zones binary payload."""
-        return struct.pack(self._STRUCT_FMT, 0x00, self.zone_type, self.zone_mask)
+        return struct.pack(
+            self._STRUCT_FMT, 0x00, self.zone_type, self.zone_mask
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1886,9 +1974,9 @@ class SystemZones4BPayload(SystemZonesPayload):
 
     def to_bytes(self) -> bytes:
         """Pack 4-byte system zones binary payload."""
-        return struct.pack(self._STRUCT_FMT_HDR, 0x00, self.zone_type) + struct.pack(
-            "<H", self.zone_mask
-        )
+        return struct.pack(
+            self._STRUCT_FMT_HDR, 0x00, self.zone_type
+        ) + struct.pack("<H", self.zone_mask)
 
 
 # Update VARIANTS property after variants are defined
@@ -2002,7 +2090,9 @@ class RelayDemand2BPayload(RelayDemandPayload):
         :rtype: bytes
         """
         demand_raw = min(200, max(0, int(round(self.demand_percent * 200.0))))
-        result = struct.pack(self._STRUCT_FMT, self.domain_or_zone_index, demand_raw)
+        result = struct.pack(
+            self._STRUCT_FMT, self.domain_or_zone_index, demand_raw
+        )
         if self.raw_extra is not None:
             result += self.raw_extra
         return result
@@ -2075,7 +2165,11 @@ class ZoneDevicesPayload(PayloadBase):
             return None
         sub = getattr(self, "sub_index", 0)
         z_raw = getattr(self, "zone_index_raw", 0)
-        return sub if getattr(self, "device_role_id", 0) == 0x09 and sub else z_raw
+        return (
+            sub
+            if getattr(self, "device_role_id", 0) == 0x09 and sub
+            else z_raw
+        )
 
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert zone devices payload to legacy dictionary layout."""
@@ -2099,7 +2193,9 @@ class ZoneDevicesPayload(PayloadBase):
             is_ufc_device = False
             if msg is not None and getattr(msg, "src", None) is not None:
                 source_id_str = str(getattr(msg.src, "id", msg.src))
-                if source_id_str.startswith("02:") or getattr(msg.src, "type", "") in (
+                if source_id_str.startswith("02:") or getattr(
+                    msg.src, "type", ""
+                ) in (
                     "02",
                     "UFC",
                 ):
@@ -2146,7 +2242,9 @@ class ZoneDevicesPayload(PayloadBase):
     def from_bytes(cls, raw_data: bytes) -> PayloadBase | list[PayloadBase]:
         """Unpack zone devices binary payload, dispatching by length."""
         if len(raw_data) < 5:
-            raise ValueError(f"Invalid payload length for 000C: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 000C: {len(raw_data)}"
+            )
 
         if (
             len(raw_data) >= 11
@@ -2166,7 +2264,9 @@ class ZoneDevicesPayload(PayloadBase):
                         zone_index_raw=zone_index,
                         device_role_id=role_id_seq,
                         sub_index=sub_idx_seq,
-                        device_id_raw=int.from_bytes(dev_bytes_seq, byteorder="big"),
+                        device_id_raw=int.from_bytes(
+                            dev_bytes_seq, byteorder="big"
+                        ),
                     )
                 )
             return res_list
@@ -2342,7 +2442,9 @@ class MaxChSetpointPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 1081: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1081: {len(raw_data)}"
+            )
         _hdr, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(setpoint_temp=temp_raw / 100.0)
 
@@ -2409,7 +2511,9 @@ class Opcode1090Payload(PayloadBase):
         :raises ValueError: If raw_data length is less than 5 bytes.
         """
         if len(raw_data) < 5:
-            raise ValueError(f"Invalid payload length for 1090: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1090: {len(raw_data)}"
+            )
         _hdr, t0_raw, t1_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(temp_0=t0_raw / 100.0, temp_1=t1_raw / 100.0)
 
@@ -2458,7 +2562,9 @@ class TpiParamsPayload(PayloadBase):
     proportional_band_width: float | None = None
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> "TpiParams4BPayload | TpiParams8BPayload":
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "TpiParams4BPayload | TpiParams8BPayload":
         """Unpack TPI params binary payload, dispatching by length."""
         if len(raw_data) >= 8:
             return TpiParams8BPayload.from_bytes(raw_data)
@@ -2724,7 +2830,9 @@ class ChPressurePayload(PayloadBase):
                 f"Invalid payload length for ChPressurePayload: {len(raw_data)}"
             )
         _hdr, p_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        p_val = None if p_raw in (0x09F6, 0x31FF, 0x7FFF, 32767) else p_raw / 100.0
+        p_val = (
+            None if p_raw in (0x09F6, 0x31FF, 0x7FFF, 32767) else p_raw / 100.0
+        )
         return cls(pressure_bar=p_val)
 
     def to_bytes(self) -> bytes:
@@ -2849,7 +2957,9 @@ class ZoneMode4BPayload(ZoneModePayload):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
 
@@ -2867,7 +2977,9 @@ class ZoneMode4BPayload(ZoneModePayload):
             raise ValueError(
                 f"Invalid payload length for ZoneMode4BPayload: {len(raw_data)}"
             )
-        raw_idx, sp_raw, mode = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        raw_idx, sp_raw, mode = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         setpoint = None if sp_raw in (0x31FF, 0x7FFF) else sp_raw / 100.0
         return cls(zone_index=raw_idx, setpoint_temp=setpoint, mode_code=mode)
 
@@ -2951,7 +3063,9 @@ class ZoneMode7BPayload(ZoneModePayload):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
 
@@ -2969,7 +3083,9 @@ class ZoneMode7BPayload(ZoneModePayload):
             raise ValueError(
                 f"Invalid payload length for ZoneMode7BPayload: {len(raw_data)}"
             )
-        raw_idx, sp_raw, mode = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        raw_idx, sp_raw, mode = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         setpoint = None if sp_raw in (0x31FF, 0x7FFF) else sp_raw / 100.0
         dur = None
         if raw_data[4:7] != b"\xff\xff\xff":
@@ -3070,7 +3186,9 @@ class ZoneMode13BPayload(ZoneModePayload):
     def __post_init__(self) -> None:
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
-            object.__setattr__(self, "zone_index", parse_index(self.zone_index))
+            object.__setattr__(
+                self, "zone_index", parse_index(self.zone_index)
+            )
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
 
@@ -3088,7 +3206,9 @@ class ZoneMode13BPayload(ZoneModePayload):
             raise ValueError(
                 f"Invalid payload length for ZoneMode13BPayload: {len(raw_data)}"
             )
-        raw_idx, sp_raw, mode = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        raw_idx, sp_raw, mode = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         setpoint = None if sp_raw in (0x31FF, 0x7FFF) else sp_raw / 100.0
         dur = None
         if raw_data[4:7] != b"\xff\xff\xff":
@@ -3218,7 +3338,9 @@ class SetpointOverridePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 2389: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 2389: {len(raw_data)}"
+            )
         index, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
             domain_or_zone_index=index,
@@ -3232,7 +3354,9 @@ class SetpointOverridePayload(PayloadBase):
         :rtype: bytes
         """
         temp_raw = int(round(self.target_temp * 100.0))
-        return struct.pack(self._STRUCT_FMT, self.domain_or_zone_index, temp_raw)
+        return struct.pack(
+            self._STRUCT_FMT, self.domain_or_zone_index, temp_raw
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert setpoint override payload to legacy dictionary layout.
@@ -3294,7 +3418,9 @@ class ActuatorSyncPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 2 bytes.
         """
         if len(raw_data) < 2:
-            raise ValueError(f"Invalid payload length for 3B00: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 3B00: {len(raw_data)}"
+            )
         domain_id, sync_flag = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(domain_id=domain_id, sync_flag=sync_flag)
 
@@ -3406,8 +3532,12 @@ class ActuatorStatePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 3EF0: {len(raw_data)}")
-        domain_id, mod_raw, f2 = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+            raise ValueError(
+                f"Invalid payload length for 3EF0: {len(raw_data)}"
+            )
+        domain_id, mod_raw, f2 = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         f3 = raw_data[3] if len(raw_data) >= 4 else None
 
         u4, u5, f6, ch_setpoint, max_rel_mod = None, None, None, None, None
@@ -3436,7 +3566,9 @@ class ActuatorStatePayload(PayloadBase):
         :rtype: bytes
         """
         mod_raw = min(200, max(0, int(round(self.modulation_level * 200.0))))
-        result = struct.pack(self._STRUCT_FMT, self.domain_id, mod_raw, self.flags_2)
+        result = struct.pack(
+            self._STRUCT_FMT, self.domain_id, mod_raw, self.flags_2
+        )
         if self.flags_3 is not None:
             result += bytes([self.flags_3])
         if (
@@ -3446,7 +3578,9 @@ class ActuatorStatePayload(PayloadBase):
             and self.ch_setpoint is not None
             and self.max_rel_modulation is not None
         ):
-            max_mod_raw = min(200, max(0, int(round(self.max_rel_modulation * 200.0))))
+            max_mod_raw = min(
+                200, max(0, int(round(self.max_rel_modulation * 200.0)))
+            )
             result += struct.pack(
                 self._STRUCT_FMT_EXT,
                 self.unknown_4,
@@ -3531,7 +3665,9 @@ class ActuatorCyclePayload(PayloadBase):
         """Convert actuator cycle payload to legacy dictionary layout."""
         return {
             "cycle_countdown": getattr(self, "cycle_countdown_sec", None),
-            "actuator_countdown": getattr(self, "actuator_countdown_sec", None),
+            "actuator_countdown": getattr(
+                self, "actuator_countdown_sec", None
+            ),
             "modulation_level": getattr(self, "modulation_level", None),
         }
 
@@ -3539,7 +3675,9 @@ class ActuatorCyclePayload(PayloadBase):
     def from_bytes(cls, raw_data: bytes) -> PayloadBase:
         """Unpack actuator cycle binary payload, dispatching by length."""
         if len(raw_data) < 6:
-            raise ValueError(f"Invalid payload length for 3EF1: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 3EF1: {len(raw_data)}"
+            )
         if len(raw_data) >= 7:
             return ActuatorCycle7BPayload.from_bytes(raw_data)
         return ActuatorCycle6BPayload.from_bytes(raw_data)
@@ -3583,7 +3721,9 @@ class ActuatorCycle6BPayload(ActuatorCyclePayload):
             raise ValueError(
                 f"Invalid payload length for ActuatorCycle6BPayload: {len(raw_data)}"
             )
-        c_raw, a_raw, _flag, mod_byte = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        c_raw, a_raw, _flag, mod_byte = struct.unpack_from(
+            cls._STRUCT_FMT, raw_data, 0
+        )
         c_down = None if c_raw == 0x7FFF else c_raw
         a_down = c_down if (a_raw < 0 or a_raw == 0x7FFF) else a_raw
         mod = hex_to_percent(f"{mod_byte:02X}")
@@ -3595,7 +3735,11 @@ class ActuatorCycle6BPayload(ActuatorCyclePayload):
 
     def to_bytes(self) -> bytes:
         """Pack 6-byte actuator cycle binary payload."""
-        c_raw = 0x7FFF if self.cycle_countdown_sec is None else self.cycle_countdown_sec
+        c_raw = (
+            0x7FFF
+            if self.cycle_countdown_sec is None
+            else self.cycle_countdown_sec
+        )
         a_raw = (
             0x7FFF
             if self.actuator_countdown_sec is None
@@ -3604,7 +3748,9 @@ class ActuatorCycle6BPayload(ActuatorCyclePayload):
         if self.modulation_level is None:
             mod_raw = 0xFF
         else:
-            mod_raw = min(200, max(0, int(round(self.modulation_level * 200.0))))
+            mod_raw = min(
+                200, max(0, int(round(self.modulation_level * 200.0)))
+            )
         return struct.pack(self._STRUCT_FMT, c_raw, a_raw, 0x10, mod_raw)
 
 
@@ -3654,7 +3800,11 @@ class ActuatorCycle7BPayload(ActuatorCyclePayload):
 
     def to_bytes(self) -> bytes:
         """Pack 7-byte actuator cycle binary payload."""
-        c_raw = 0x7FFF if self.cycle_countdown_sec is None else self.cycle_countdown_sec
+        c_raw = (
+            0x7FFF
+            if self.cycle_countdown_sec is None
+            else self.cycle_countdown_sec
+        )
         a_raw = (
             0x7FFF
             if self.actuator_countdown_sec is None
@@ -3663,7 +3813,9 @@ class ActuatorCycle7BPayload(ActuatorCyclePayload):
         if self.modulation_level is None:
             mod_raw = 0xFF
         else:
-            mod_raw = min(200, max(0, int(round(self.modulation_level * 200.0))))
+            mod_raw = min(
+                200, max(0, int(round(self.modulation_level * 200.0)))
+            )
         return struct.pack(
             self._STRUCT_FMT, self.domain_index, c_raw, a_raw, mod_raw, 0xFF
         )

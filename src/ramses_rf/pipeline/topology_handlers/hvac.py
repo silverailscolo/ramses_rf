@@ -26,7 +26,10 @@ class HvacTopologyHandler(TopologyHandler):
         msg_code = str(msg.header.code)
 
         dev_class = None
-        for (schema_verb, schema_code), dev_class_name in HVAC_KLASS_BY_VC_PAIR.items():
+        for (
+            schema_verb,
+            schema_code,
+        ), dev_class_name in HVAC_KLASS_BY_VC_PAIR.items():
             if (schema_verb is None or schema_verb == msg_verb) and str(
                 schema_code
             ) == msg_code:
@@ -34,7 +37,9 @@ class HvacTopologyHandler(TopologyHandler):
                 break
 
         if dev_class:
-            if msg.src.id != "--:------" and getattr(msg.src, "type", None) not in (
+            if msg.src.id != "--:------" and getattr(
+                msg.src, "type", None
+            ) not in (
                 "01",
                 DevType.CTL,
             ):

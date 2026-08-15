@@ -86,7 +86,9 @@ async def rf_factory(
     """
 
     if len(schemas) > MAX_NUM_PORTS:
-        raise TypeError(f"Only a maximum of {MAX_NUM_PORTS} ports is supported")
+        raise TypeError(
+            f"Only a maximum of {MAX_NUM_PORTS} ports is supported"
+        )
 
     gwys = []
 

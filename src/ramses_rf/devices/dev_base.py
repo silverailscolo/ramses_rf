@@ -52,8 +52,12 @@ if TYPE_CHECKING:
 
 
 BIND_WAITING_TIMEOUT = 300  # how long to wait, listening for an offer
-BIND_REQUEST_TIMEOUT = 5  # how long to wait for an accept after sending an offer
-BIND_CONFIRM_TIMEOUT = 5  # how long to wait for a confirm after sending an accept
+BIND_REQUEST_TIMEOUT = (
+    5  # how long to wait for an accept after sending an offer
+)
+BIND_CONFIRM_TIMEOUT = (
+    5  # how long to wait for a confirm after sending an accept
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -96,7 +100,9 @@ class DeviceBase(Entity):
         self.id: DeviceIdT = device_address.id
 
         self.addr = device_address
-        self.type = device_address.type  # DEX  # TODO: remove this attr? use SLUG?
+        self.type = (
+            device_address.type
+        )  # DEX  # TODO: remove this attr? use SLUG?
 
         self._scheme: str | None = traits.scheme if traits else None
         self._polling_interval: PollingIntervalsT | None = (
@@ -197,7 +203,9 @@ class DeviceBase(Entity):
             device._update_traits(traits)
         return device
 
-    def _send_cmd(self, command: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
+    def _send_cmd(
+        self, command: CommandDTO, **kwargs: Any
+    ) -> asyncio.Task[Any] | None:
         """Send a command from this device."""
         if (
             isinstance(self, BatteryState)
@@ -257,7 +265,9 @@ class DeviceBase(Entity):
         :raises ValueError: If interval is negative or if setting a battery device below 300s.
         """
         if interval is not None and interval < 0:
-            raise ValueError(f"Polling interval cannot be negative: {interval}")
+            raise ValueError(
+                f"Polling interval cannot be negative: {interval}"
+            )
         if self.is_battery and interval is not None and 0 < interval < 300:
             raise ValueError(
                 f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
@@ -273,7 +283,9 @@ class DeviceBase(Entity):
         if getattr(self._gateway, "polling_manager", None):
             self._gateway.polling_manager.update_device_tasks(self)
 
-    def set_command_polling_interval(self, code: str, interval: int | None) -> None:
+    def set_command_polling_interval(
+        self, code: str, interval: int | None
+    ) -> None:
         """Set or update the polling interval for a specific packet code.
 
         :param code: The hex code string for the packet type.
@@ -283,7 +295,9 @@ class DeviceBase(Entity):
         :raises ValueError: If interval is negative or if setting a battery device below 300s.
         """
         if interval is not None and interval < 0:
-            raise ValueError(f"Polling interval cannot be negative: {interval}")
+            raise ValueError(
+                f"Polling interval cannot be negative: {interval}"
+            )
         if self.is_battery and interval is not None and 0 < interval < 300:
             raise ValueError(
                 f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
@@ -325,7 +339,9 @@ class DeviceBase(Entity):
     @property
     def _is_binding(self) -> bool:
         """Return True if the (faked) device is actively binding."""
-        return bool(self._binding_manager and self._binding_manager.is_binding is True)
+        return bool(
+            self._binding_manager and self._binding_manager.is_binding is True
+        )
 
     async def _is_present(self) -> bool:
         """Exclude ghost devices from corrupt packet addresses.
@@ -335,7 +351,9 @@ class DeviceBase(Entity):
         """
         msgs = await self.entity_state.get_message_log_flat()
         return any(
-            m.src == self for m in msgs.values() if not getattr(m, "_expired", False)
+            m.src == self
+            for m in msgs.values()
+            if not getattr(m, "_expired", False)
         )  # TODO: needs addressing
 
     async def schema(self) -> dict[str, Any]:
@@ -455,7 +473,9 @@ class DeviceInfo(DeviceBase):  # 10E0
         result = await super().traits()
         msgs = await self.entity_state.get_message_log_flat()
 
-        if Code._10E0 in msgs or Code._10E0 in CODES_BY_DEV_SLUG.get(self._SLUG, []):
+        if Code._10E0 in msgs or Code._10E0 in CODES_BY_DEV_SLUG.get(
+            self._SLUG, []
+        ):
             result.update({"_info": await self.device_info()})
 
         return result
@@ -514,7 +534,9 @@ class Fakeable(DeviceBase):
         self._binding_manager = BindingManager(self, self._async_send_cmd)
         if self.id not in self._gateway.config.known_list:
             self._gateway.config.known_list[self.id] = {}
-        self._gateway.config.known_list[self.id][SZ_FAKED] = True  # TODO: remove this
+        self._gateway.config.known_list[self.id][SZ_FAKED] = (
+            True  # TODO: remove this
+        )
         _LOGGER.info("Faking now enabled for: %s", self)
 
     async def _async_send_cmd(
@@ -526,9 +548,13 @@ class Fakeable(DeviceBase):
         """Send a command and forward to the binding context if binding."""
         if self._binding_manager and self._binding_manager.is_binding:
             # cmd.code in (Code._1FC9, Code._10E0)
-            self._binding_manager.sent_cmd(command)  # other codes needed for edge cases
+            self._binding_manager.sent_cmd(
+                command
+            )  # other codes needed for edge cases
 
-        return await super()._async_send_cmd(command, priority=priority, qos=qos)
+        return await super()._async_send_cmd(
+            command, priority=priority, qos=qos
+        )
 
     async def _wait_for_binding_request(
         self,
@@ -649,7 +675,9 @@ class Fakeable(DeviceBase):
         """
         traits = await self.traits()
         if not traits.get(SZ_OEM_CODE):
-            result = await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE)
+            result = await self.entity_state.get_value(
+                Code._10E0, key=SZ_OEM_CODE
+            )
             return str(result) if result is not None else None
         oem = traits.get(SZ_OEM_CODE)
         return str(oem) if oem is not None else None
@@ -677,7 +705,9 @@ class Device(Child, DeviceBase):
         :param kwargs: Additional arguments for the base initialiser.
         :type kwargs: Any
         """
-        _LOGGER.debug("Creating a Device: %s (%s)", device_address.id, self.__class__)
+        _LOGGER.debug(
+            "Creating a Device: %s (%s)", device_address.id, self.__class__
+        )
         super().__init__(gateway, device_address, traits=traits, **kwargs)
 
         gateway.device_registry._add_device(self)
@@ -733,7 +763,11 @@ class HgiGateway(Device):  # HGI (18:)
             return False
 
         dtm: dt = last_msg.timestamp
-        now = dt.now(UTC).astimezone(dtm.tzinfo) if dtm.tzinfo is not None else dt.now()
+        now = (
+            dt.now(UTC).astimezone(dtm.tzinfo)
+            if dtm.tzinfo is not None
+            else dt.now()
+        )
 
         # Compare against our new dynamic property
         return bool((now - dtm) < self.message_timeout)
@@ -779,7 +813,9 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         self, *, msg: Message | None = None, **schema: Any
     ) -> None:  # CH/DHW
         """Attach a TCS (create/update as required) after passing it any msg."""
-        if self.type not in DEV_TYPE_MAP.CONTROLLERS:  # potentially can be controllers
+        if (
+            self.type not in DEV_TYPE_MAP.CONTROLLERS
+        ):  # potentially can be controllers
             raise SchemaInconsistentError(
                 f"Invalid device type to be a controller: {self}"
             )
@@ -814,7 +850,9 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
 class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
     """The Device base class for the HVAC domain (ventilation, PIV, MV/HR)."""
 
-    _SLUG: str = DevType.HVC  # these may be instantiated, and promoted later on
+    _SLUG: str = (
+        DevType.HVC
+    )  # these may be instantiated, and promoted later on
 
     def __init__(
         self,

@@ -41,9 +41,13 @@ async def test_zone_temperature_hydrated_from_sensor_30c9() -> None:
         zone = tcs.zone_by_idx.get("00")
         assert zone is not None, "no zone 00 loaded"
         assert zone.sensor is not None, "zone has no sensor"
-        assert zone.sensor.id == "22:017762", f"unexpected sensor: {zone.sensor.id}"
+        assert zone.sensor.id == "22:017762", (
+            f"unexpected sensor: {zone.sensor.id}"
+        )
 
         temp = await zone.temperature()
-        assert temp == 27.1, f"Zone temperature not hydrated from sensor 30C9: {temp!r}"
+        assert temp == 27.1, (
+            f"Zone temperature not hydrated from sensor 30C9: {temp!r}"
+        )
     finally:
         await gwy.stop()

@@ -263,7 +263,9 @@ async def test_abort_and_close_cancels_tasks() -> None:
     mock_leaker_task.cancel.assert_called_once()
 
     # Patch the _abort method residing on the _PortTransportAbstractor class
-    with patch("ramses_tx.transport.port._PortTransportAbstractor._abort", create=True):
+    with patch(
+        "ramses_tx.transport.port._PortTransportAbstractor._abort", create=True
+    ):
         transport._abort(SerialException("Fatal"))
 
     assert mock_init_task.cancel.call_count == 2

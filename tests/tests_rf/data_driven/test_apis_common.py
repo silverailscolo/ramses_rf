@@ -24,7 +24,12 @@ def put_bind(
             src=Address(src_id),
             dst=Address(dst_id or src_id),
             action=Action.PUT_BIND,
-            data={"verb": verb, "codes": codes, "idx": idx, "oem_code": oem_code},
+            data={
+                "verb": verb,
+                "codes": codes,
+                "idx": idx,
+                "oem_code": oem_code,
+            },
         )
     )
 
@@ -33,7 +38,9 @@ def test_1fc9_constructors_fail() -> None:
     """Check the 1FC9 Command constructors behave as expected when given bad params."""
 
     try:
-        _ = put_bind(Verb.I_, "29:156898", None)  # should have codes, or dst_id
+        _ = put_bind(
+            Verb.I_, "29:156898", None
+        )  # should have codes, or dst_id
     except (exc.CommandInvalid, ValueError):
         pass
     else:
@@ -46,11 +53,15 @@ def test_1fc9_constructors_good() -> None:
     #
     # SWI switch (22F1/3) binding to a FAN (31D9/A)?
     frame = " I --- 37:155617 --:------ 37:155617 1FC9 024 0022F1965FE10022F3965FE16710E0965FE1001FC9965FE1"
-    cmd = put_bind(Verb.I_, "37:155617", (Code._22F1, Code._22F3), oem_code="67")
+    cmd = put_bind(
+        Verb.I_, "37:155617", (Code._22F1, Code._22F3), oem_code="67"
+    )
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     frame = " W --- 32:132125 29:156898 --:------ 1FC9 012 0031D982041D0031DA82041D"
-    cmd = put_bind(Verb.W_, "32:132125", (Code._31D9, Code._31DA), dst_id="29:156898")
+    cmd = put_bind(
+        Verb.W_, "32:132125", (Code._31D9, Code._31DA), dst_id="29:156898"
+    )
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     frame = " I --- 29:156898 32:132125 --:------ 1FC9 001 00"
@@ -61,12 +72,17 @@ def test_1fc9_constructors_good() -> None:
     # CO2 remote (1298/31E0, 2E10) binding to a FAN (31D9/A)
     frame = " I --- 37:154011 --:------ 37:154011 1FC9 030 0031E096599B00129896599B002E1096599B0110E096599B001FC996599B"
     cmd = put_bind(
-        Verb.I_, "37:154011", (Code._31E0, Code._1298, Code._2E10), oem_code="01"
+        Verb.I_,
+        "37:154011",
+        (Code._31E0, Code._1298, Code._2E10),
+        oem_code="01",
     )
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     frame = " W --- 18:126620 37:154011 --:------ 1FC9 012 0031D949EE9C0031DA49EE9C"
-    cmd = put_bind(Verb.W_, "18:126620", (Code._31D9, Code._31DA), dst_id="37:154011")
+    cmd = put_bind(
+        Verb.W_, "18:126620", (Code._31D9, Code._31DA), dst_id="37:154011"
+    )
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     frame = " I --- 37:154011 18:126620 --:------ 1FC9 001 00"
@@ -80,7 +96,9 @@ def test_1fc9_constructors_good() -> None:
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     frame = " W --- 01:145038 12:010740 --:------ 1FC9 006 08230906368E"
-    cmd = put_bind(Verb.W_, "01:145038", (Code._2309,), dst_id="12:010740", idx="08")
+    cmd = put_bind(
+        Verb.W_, "01:145038", (Code._2309,), dst_id="12:010740", idx="08"
+    )
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     frame = " I --- 12:010740 01:145038 --:------ 1FC9 006 0023093029F4"
@@ -117,4 +135,6 @@ def test_1fc9_constructors_good() -> None:
 
     frame = " I --- 01:145038 04:189076 --:------ 1FC9 006 00FFFF06368E"
     cmd = put_bind(Verb.I_, "01:145038", "FFFF", dst_id="04:189076")
-    assert str(Packet._from_cmd(cmd)._frame) == frame  # using SENTINEL str for codes
+    assert (
+        str(Packet._from_cmd(cmd)._frame) == frame
+    )  # using SENTINEL str for codes

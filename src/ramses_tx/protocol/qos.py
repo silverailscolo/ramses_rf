@@ -203,7 +203,9 @@ class Qos:
     # tx (from sent to gwy, to get back from gwy) seems to takes approx. 0.025s
     TX_RETRIES_DEFAULT: ClassVar[int] = 2
     TX_RETRIES_MAX: ClassVar[int] = 5
-    TX_TIMEOUT_DEFAULT: ClassVar[td] = td(seconds=0.2)  # 0.20 OK, but too high?
+    TX_TIMEOUT_DEFAULT: ClassVar[td] = td(
+        seconds=0.2
+    )  # 0.20 OK, but too high?
 
     RX_TIMEOUT_DEFAULT: ClassVar[td] = td(
         seconds=0.50
@@ -257,9 +259,13 @@ class Qos:
         priority = default_qos[0]
         retry_limit = default_qos[1]
         rx_timeout = (
-            default_qos[2] if default_qos[2] is not None else cls.RX_TIMEOUT_DEFAULT
+            default_qos[2]
+            if default_qos[2] is not None
+            else cls.RX_TIMEOUT_DEFAULT
         )
-        disable_backoff = not default_qos[3] if default_qos[3] is not None else False
+        disable_backoff = (
+            not default_qos[3] if default_qos[3] is not None else False
+        )
 
         valid_kwargs = {
             k: v for k, v in kwargs.items() if k in cls.__dataclass_fields__
@@ -269,5 +275,7 @@ class Qos:
             priority=valid_kwargs.get("priority", priority),
             retry_limit=valid_kwargs.get("retry_limit", retry_limit),
             rx_timeout=valid_kwargs.get("rx_timeout", rx_timeout),
-            disable_backoff=valid_kwargs.get("disable_backoff", disable_backoff),
+            disable_backoff=valid_kwargs.get(
+                "disable_backoff", disable_backoff
+            ),
         )

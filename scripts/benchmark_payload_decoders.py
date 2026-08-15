@@ -117,7 +117,9 @@ def run_benchmark(fixture_path: Path) -> int:
         try:
             payload_obj: Any = payload_cls.from_bytes(raw_bytes)
         except (ValueError, struct.error) as err:
-            variant_skips.append((line_num, pkt.code, pkt.verb, pkt.payload, str(err)))
+            variant_skips.append(
+                (line_num, pkt.code, pkt.verb, pkt.payload, str(err))
+            )
             continue
         except Exception as err:
             parse_errors.append(f"Line {line_num} (Opcode {pkt.code}): {err}")
@@ -127,7 +129,9 @@ def run_benchmark(fixture_path: Path) -> int:
         t0_enc = time.perf_counter()
         try:
             if isinstance(payload_obj, list):
-                reencoded: bytes = b"".join(item.to_bytes() for item in payload_obj)
+                reencoded: bytes = b"".join(
+                    item.to_bytes() for item in payload_obj
+                )
             else:
                 reencoded = payload_obj.to_bytes()
             if not reencoded:
@@ -136,7 +140,9 @@ def run_benchmark(fixture_path: Path) -> int:
                     "Produced empty re-encoded byte string"
                 )
         except Exception as err:
-            reencode_errors.append(f"Line {line_num} (Opcode {pkt.code}): {err}")
+            reencode_errors.append(
+                f"Line {line_num} (Opcode {pkt.code}): {err}"
+            )
         t_reencode_acc += time.perf_counter() - t0_enc
 
         # 3. Test payload_to_dict adapter
@@ -146,7 +152,9 @@ def run_benchmark(fixture_path: Path) -> int:
             else:
                 _dict_res = payload_to_dict(payload_obj)
         except Exception as err:
-            adapter_errors.append(f"Line {line_num} (Opcode {pkt.code}): {err}")
+            adapter_errors.append(
+                f"Line {line_num} (Opcode {pkt.code}): {err}"
+            )
 
         tested_count += 1
 
@@ -154,9 +162,13 @@ def run_benchmark(fixture_path: Path) -> int:
     new_time: float = (t1_new - t0_new) - t_reencode_acc
 
     # Metrics calculation
-    legacy_rate: float = legacy_decoded_count / legacy_time if legacy_time > 0 else 0.0
+    legacy_rate: float = (
+        legacy_decoded_count / legacy_time if legacy_time > 0 else 0.0
+    )
     new_rate: float = tested_count / new_time if new_time > 0 else 0.0
-    reencode_rate: float = tested_count / t_reencode_acc if t_reencode_acc > 0 else 0.0
+    reencode_rate: float = (
+        tested_count / t_reencode_acc if t_reencode_acc > 0 else 0.0
+    )
     speedup: float = legacy_time / new_time if new_time > 0 else 0.0
 
     print(

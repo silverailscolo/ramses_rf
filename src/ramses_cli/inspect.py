@@ -70,11 +70,15 @@ def parse_hex_value(hex_str: str) -> dict[str, Any]:
         clean_hex[i : i + 2] for i in range(len(clean_hex) - 2, -2, -2)
     )
     result["swapped_hex"] = f"0x{swapped_hex}"
-    result["le_dec"] = int.from_bytes(raw_bytes, byteorder="little", signed=False)
+    result["le_dec"] = int.from_bytes(
+        raw_bytes, byteorder="little", signed=False
+    )
 
     # Signed decimal conversions for standard integer sizes
     if byte_count in (1, 2, 4, 8):
-        result["signed_dec"] = int.from_bytes(raw_bytes, byteorder="big", signed=True)
+        result["signed_dec"] = int.from_bytes(
+            raw_bytes, byteorder="big", signed=True
+        )
         result["le_signed_dec"] = int.from_bytes(
             raw_bytes, byteorder="little", signed=True
         )
@@ -84,12 +88,16 @@ def parse_hex_value(hex_str: str) -> dict[str, Any]:
         val_f = struct.unpack(">f", raw_bytes)[0]
         le_val_f = struct.unpack("<f", raw_bytes)[0]
         result["float"] = None if math.isnan(val_f) else round(val_f, 6)
-        result["le_float"] = None if math.isnan(le_val_f) else round(le_val_f, 6)
+        result["le_float"] = (
+            None if math.isnan(le_val_f) else round(le_val_f, 6)
+        )
     elif byte_count == 8:
         val_d = struct.unpack(">d", raw_bytes)[0]
         le_val_d = struct.unpack("<d", raw_bytes)[0]
         result["float"] = None if math.isnan(val_d) else round(val_d, 6)
-        result["le_float"] = None if math.isnan(le_val_d) else round(le_val_d, 6)
+        result["le_float"] = (
+            None if math.isnan(le_val_d) else round(le_val_d, 6)
+        )
 
     # Binary string representation
     result["bin"] = f"0b{dec:0{len(clean_hex) * 4}b}"
@@ -365,7 +373,9 @@ def format_dissection_output(dissection: dict[str, Any]) -> str:
     if dissection.get("verb"):
         output.append(f"Verb        : {dissection['verb']}")
     if dissection.get("skip_bytes"):
-        output.append(f"Skipped     : {dissection['skip_bytes']} leading bytes")
+        output.append(
+            f"Skipped     : {dissection['skip_bytes']} leading bytes"
+        )
 
     if "schema_decoded" in dissection:
         output.append("-" * 70)
@@ -380,13 +390,17 @@ def format_dissection_output(dissection: dict[str, Any]) -> str:
 
     if "schema_decode_error" in dissection:
         output.append("-" * 70)
-        output.append(f"Schema Decode Error: {dissection['schema_decode_error']}")
+        output.append(
+            f"Schema Decode Error: {dissection['schema_decode_error']}"
+        )
 
     blocks = dissection.get("blocks", {})
     for block_name, block_dict in blocks.items():
         size_label = block_name.replace("block_", "").replace("byte", "-Byte")
         output.append(
-            format_dissection_table(block_dict, title=f"Word Breakdown ({size_label})")
+            format_dissection_table(
+                block_dict, title=f"Word Breakdown ({size_label})"
+            )
         )
 
     output.append("=" * 70)

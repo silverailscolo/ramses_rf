@@ -84,4 +84,6 @@ async def test_trace_trv_3150_directed_telemetry() -> None:
         print(f"Metadata: {e.metadata}")
         print(f"Rule:     {e.causation}\n")
 
-    assert len(events) > 0, "Directed Telemetry Rule failed to emit any events!"
+    assert len(events) > 0, (
+        "Directed Telemetry Rule failed to emit any events!"
+    )

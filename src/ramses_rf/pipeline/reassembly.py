@@ -108,7 +108,9 @@ class ReassemblyBuffer:
                 # Wait for a packet, or timeout if we have any pending
                 # arrays
                 timeout = self._array_timeout if self._pending else None
-                dto = await asyncio.wait_for(self._in_queue.get(), timeout=timeout)
+                dto = await asyncio.wait_for(
+                    self._in_queue.get(), timeout=timeout
+                )
                 await self._process_packet(dto)
                 self._in_queue.task_done()
 
@@ -204,7 +206,9 @@ class ReassemblyBuffer:
             return False
         if this.addr1 != prev.addr1:
             return False
-        return this.timestamp < prev.timestamp + td(seconds=self._array_timeout)
+        return this.timestamp < prev.timestamp + td(
+            seconds=self._array_timeout
+        )
 
     def _stitch_dtos(self, prev: PacketDTO, this: PacketDTO) -> PacketDTO:
         """Combine two array fragments into a single PacketDTO.

@@ -15,7 +15,10 @@ from ramses_rf.dispatcher import (
     _update_demand_state,
     _update_system_state,
 )
-from ramses_rf.exceptions import SchemaInconsistentError, SystemSchemaInconsistent
+from ramses_rf.exceptions import (
+    SchemaInconsistentError,
+    SystemSchemaInconsistent,
+)
 from ramses_rf.messages import Message
 from ramses_rf.pipeline.polling import DEFAULT_POLLING_SCHEDULES
 from ramses_rf.systems.tcs import Evohome, SystemBase
@@ -37,7 +40,9 @@ from ramses_tx.exceptions import ProtocolTimeoutError
 # 3150 002 FCC8 -> domain_id=FC (System), demand=C8 (100%)
 # NOTE: Must use double space after RSSI (064) for ' I' verb parsing
 # by Packet.from_port
-PKT_3150: Final = f"064  I --- 01:145038 --:------ 01:145038 {Code._3150} 002 FCC8"
+PKT_3150: Final = (
+    f"064  I --- 01:145038 --:------ 01:145038 {Code._3150} 002 FCC8"
+)
 
 
 # --- Fixtures required for fake_evofw3 ---
@@ -84,7 +89,9 @@ def create_mock_message(tcs: SystemBase, payload: Any) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_system_handle_msg_3150_real_packet(fake_evofw3: Gateway) -> None:
+async def test_system_handle_msg_3150_real_packet(
+    fake_evofw3: Gateway,
+) -> None:
     """Check that a real 3150 packet is handled correctly.
 
     If this passes, it means the current parser produces a payload (likely
@@ -206,7 +213,9 @@ async def test_logbook_setup_discovery_creates_task(
     tcs = gwy.tcs
     assert tcs is not None
 
-    with patch.object(tcs, "get_faultlog", new_callable=AsyncMock) as mock_fault:
+    with patch.object(
+        tcs, "get_faultlog", new_callable=AsyncMock
+    ) as mock_fault:
         await tcs.get_faultlog()
         mock_fault.assert_called_once()
 
@@ -345,7 +354,9 @@ def test_dhw_zone_schema_updates(mock_tcs: MagicMock) -> None:
     ]
 
     dhw._update_schema(
-        sensor="07:123456", hotwater_valve="13:123456", heating_valve="13:654321"
+        sensor="07:123456",
+        hotwater_valve="13:123456",
+        heating_valve="13:654321",
     )
     assert dhw.sensor is not None
     assert dhw.sensor.id == "07:123456"

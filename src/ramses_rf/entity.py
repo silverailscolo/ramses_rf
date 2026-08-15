@@ -51,9 +51,15 @@ def class_by_attr(name: str, attr: str) -> dict[str, Any]:
     """
 
     def predicate(m: Any) -> bool:
-        return isclass(m) and m.__module__ == name and bool(getattr(m, attr, None))
+        return (
+            isclass(m)
+            and m.__module__ == name
+            and bool(getattr(m, attr, None))
+        )
 
-    return {getattr(c[1], attr): c[1] for c in getmembers(modules[name], predicate)}
+    return {
+        getattr(c[1], attr): c[1] for c in getmembers(modules[name], predicate)
+    }
 
 
 class _Entity:
@@ -117,11 +123,17 @@ class _Entity:
         :return: None
         :rtype: None
         """
-        if isinstance(event.state, TemperatureState) and hasattr(self, "temp_state"):
+        if isinstance(event.state, TemperatureState) and hasattr(
+            self, "temp_state"
+        ):
             setattr(self, "temp_state", event.state)  # noqa: B010
-        elif isinstance(event.state, DemandState) and hasattr(self, "demand_state"):
+        elif isinstance(event.state, DemandState) and hasattr(
+            self, "demand_state"
+        ):
             setattr(self, "demand_state", event.state)  # noqa: B010
-        elif isinstance(event.state, ScheduleState) and hasattr(self, "schedule_state"):
+        elif isinstance(event.state, ScheduleState) and hasattr(
+            self, "schedule_state"
+        ):
             setattr(self, "schedule_state", event.state)  # noqa: B010
         elif isinstance(event.state, FaultLogState) and hasattr(self, "state"):
             setattr(self, "state", event.state)  # noqa: B010
@@ -129,14 +141,22 @@ class _Entity:
             self, "opentherm_state"
         ):
             setattr(self, "opentherm_state", event.state)  # noqa: B010
-        elif isinstance(event.state, HvacState) and hasattr(self, "hvac_state"):
+        elif isinstance(event.state, HvacState) and hasattr(
+            self, "hvac_state"
+        ):
             setattr(self, "hvac_state", event.state)  # noqa: B010
-        elif isinstance(event.state, ZoneState) and hasattr(self, "zone_state"):
+        elif isinstance(event.state, ZoneState) and hasattr(
+            self, "zone_state"
+        ):
             setattr(self, "zone_state", event.state)  # noqa: B010
-        elif isinstance(event.state, PowerState) and hasattr(self, "power_state"):
+        elif isinstance(event.state, PowerState) and hasattr(
+            self, "power_state"
+        ):
             setattr(self, "power_state", event.state)  # noqa: B010
 
-    def _send_cmd(self, command: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
+    def _send_cmd(
+        self, command: CommandDTO, **kwargs: Any
+    ) -> asyncio.Task[Any] | None:
         """Proxy command sending to the Gateway.
 
         :param command: The command to send.
@@ -170,7 +190,9 @@ class _Entity:
         :rtype: Packet | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.warning("%s < Sending was deprecated for %s", command, self)
+            _LOGGER.warning(
+                "%s < Sending was deprecated for %s", command, self
+            )
             return None
 
         # Build kwargs dynamically to prevent passing `None` to strict Gateway args

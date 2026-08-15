@@ -167,7 +167,9 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         original_frame = original_msg.raw_frame
 
         # 6. Hydration Verification
-        idx2 = MessageStore(db_path=":memory:", disk_path=str(disk_path), maintain=True)
+        idx2 = MessageStore(
+            db_path=":memory:", disk_path=str(disk_path), maintain=True
+        )
         if idx2._hydration_task:
             await idx2._hydration_task
 
@@ -180,7 +182,9 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         # won't fail
         hydrated_msg = idx2.log_by_dtm[0]
         hydrated_frame = hydrated_msg.raw_frame
-        assert hydrated_frame == original_frame, "Lossless frame hydration failed!"
+        assert hydrated_frame == original_frame, (
+            "Lossless frame hydration failed!"
+        )
 
         # 7. Cleanup
         idx.stop()

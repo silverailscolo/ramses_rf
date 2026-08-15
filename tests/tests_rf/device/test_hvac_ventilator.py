@@ -125,7 +125,9 @@ class TestHvacVentilator:
 
         assert hvac_ventilator._initialized_callback is mock_callback
 
-    def test_set_param_update_callback(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_set_param_update_callback(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test setting the parameter update callback.
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -143,7 +145,9 @@ class TestHvacVentilator:
         # Check that the callback was set
         assert hvac_ventilator._param_update_callback is mock_callback
 
-    def test_handle_2411_message(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_handle_2411_message(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test handling a 2411 message.
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -183,7 +187,9 @@ class TestHvacVentilator:
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
-    async def test_setup_discovery_cmds(self, hvac_ventilator: HvacVentilator) -> None:
+    async def test_setup_discovery_cmds(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test that discovery commands are set up correctly.
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -193,8 +199,12 @@ class TestHvacVentilator:
         from ramses_rf.pipeline.polling import PollingManager
 
         schedule = PollingManager.resolve_schedule_for_device(hvac_ventilator)
-        assert Code._10D0 in schedule, "Filter change (10D0) not scheduled for FAN"
-        assert Code._3150 in schedule, "Fan speed status (3150) not scheduled for FAN"
+        assert Code._10D0 in schedule, (
+            "Filter change (10D0) not scheduled for FAN"
+        )
+        assert Code._3150 in schedule, (
+            "Fan speed status (3150) not scheduled for FAN"
+        )
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
@@ -220,7 +230,9 @@ class TestHvacVentilator:
             logger.removeHandler(handler)
 
         # Add a bound device
-        hvac_ventilator.add_bound_device(TEST_BOUND_DEVICE_ID, TEST_BOUND_DEVICE_TYPE)
+        hvac_ventilator.add_bound_device(
+            TEST_BOUND_DEVICE_ID, TEST_BOUND_DEVICE_TYPE
+        )
 
         # Verify it was added
         assert TEST_BOUND_DEVICE_ID in hvac_ventilator._bound_devices
@@ -241,27 +253,35 @@ class TestHvacVentilator:
         expected_message = f"Cannot bind device {invalid_device_id} of type INVALID_TYPE to FAN {hvac_ventilator.id}: must be REM or DIS"
 
         # Print debug info if the test fails
-        if not any(expected_message in record.message for record in caplog.records):
+        if not any(
+            expected_message in record.message for record in caplog.records
+        ):
             print("\nCaptured log records:")
             for i, record in enumerate(caplog.records):
                 print(f"  {i}: {record.levelname}: {record.message}")
 
         # Check if the warning was logged
-        assert any(expected_message in record.message for record in caplog.records), (
+        assert any(
+            expected_message in record.message for record in caplog.records
+        ), (
             f"Expected warning message not found in logs. Expected: {expected_message}"
         )
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
-    def test_remove_bound_device(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_remove_bound_device(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test removing a bound device.
 
         :param hvac_ventilator: The HvacVentilator fixture.
         :type hvac_ventilator: HvacVentilator
         """
         # Add then remove a device
-        hvac_ventilator.add_bound_device(TEST_BOUND_DEVICE_ID, TEST_BOUND_DEVICE_TYPE)
+        hvac_ventilator.add_bound_device(
+            TEST_BOUND_DEVICE_ID, TEST_BOUND_DEVICE_TYPE
+        )
         hvac_ventilator.remove_bound_device(TEST_BOUND_DEVICE_ID)
 
         # Verify it was removed
@@ -295,7 +315,9 @@ class TestHvacVentilator:
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
-    def test_get_fan_param_supported(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_get_fan_param_supported(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test getting a supported fan parameter.
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -335,7 +357,9 @@ class TestHvacVentilator:
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
-    def test_get_fan_param_normalization(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_get_fan_param_normalization(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test parameter ID normalization.
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -354,7 +378,9 @@ class TestHvacVentilator:
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
-    def test_initialized_callback(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_initialized_callback(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test the initialized callback behaviour.
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -424,7 +450,9 @@ class TestHvacVentilator:
         assert hvac_ventilator.hgi is new_hgi
         assert hvac_ventilator._hgi is new_hgi  # Check the cache was updated
 
-    def test_invalid_message_handling(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_invalid_message_handling(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test handling of invalid messages.
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -487,7 +515,9 @@ class TestHvacVentilator:
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
 
-    def test_2411_param_01_data_type_20(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_2411_param_01_data_type_20(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test parsing of 2411 parameter 01 with data type 20 (GitHub issue #342).
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -520,7 +550,9 @@ class TestHvacVentilator:
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()
 
-    def test_2411_param_3e_data_type_90(self, hvac_ventilator: HvacVentilator) -> None:
+    def test_2411_param_3e_data_type_90(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
         """Test parsing of 2411 parameter 3E with data type 90 (GitHub issue #317).
 
         :param hvac_ventilator: The HvacVentilator fixture.
@@ -622,7 +654,8 @@ async def test_set_fan_mode_no_src_id_raises() -> None:
 
     # Verify it raises the expected custom library exception
     with pytest.raises(
-        exc.CommandInvalid, match="Cannot set fan mode without a bound REM or HGI"
+        exc.CommandInvalid,
+        match="Cannot set fan mode without a bound REM or HGI",
     ):
         await HvacVentilator.set_fan_mode(dev, "auto")
 
@@ -691,7 +724,9 @@ async def test_hvac_ventilator_status_shim_unboxes_list_of_enums() -> None:
 
     ventilator = HvacVentilator(mock_gwy, Address("32:123456"))
     ventilator.hvac_state = HvacState(
-        speed_capabilities=cast(list[str], [MockEnum.TEST_VAL, MockEnum.TEST_VAL])
+        speed_capabilities=cast(
+            list[str], [MockEnum.TEST_VAL, MockEnum.TEST_VAL]
+        )
     )
 
     # Act

@@ -62,7 +62,9 @@ class DecoderEngine:
             try:
                 await self._process_packet(dto)
             except Exception as err:
-                _LOGGER.exception("DecoderEngine failed to process packet: %s", err)
+                _LOGGER.exception(
+                    "DecoderEngine failed to process packet: %s", err
+                )
             finally:
                 self._in_queue.task_done()
 
@@ -86,7 +88,9 @@ class DecoderEngine:
 
         # Ensure strict adherence to dict[str, Any] L7 constraints
         data: dict[str, Any] = (
-            {"_array": raw_data} if isinstance(raw_data, list) else dict(raw_data)
+            {"_array": raw_data}
+            if isinstance(raw_data, list)
+            else dict(raw_data)
         )
 
         # Safe L2 positional MAC resolution matching legacy routing

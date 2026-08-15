@@ -146,7 +146,9 @@ _HVAC_PARENT_INFERENCE_CODES: frozenset[Code | str] = frozenset(
 # The 3B00/3EF0 heuristic is used only as a fallback hint when no 000C
 # binding has been seen yet, and is overridden when a 000C binding
 # arrives.
-_APPLIANCE_CONTROL_CODES: frozenset[Code | str] = frozenset({Code._3B00, Code._3EF0})
+_APPLIANCE_CONTROL_CODES: frozenset[Code | str] = frozenset(
+    {Code._3B00, Code._3EF0}
+)
 
 # 000C payload roles that map to domain IDs (not zone indices).
 # See ramses_tx/const.py DEV_ROLE_MAP and parsers/heating.py
@@ -177,8 +179,12 @@ _UNAMBIGUOUS_HVAC_PREFIXES: frozenset[str] = frozenset({"18", "32"})
 # be FAN, REM, CO2, HUM, or DIS depending on the VC pair.  32: is unambiguous
 # (always FAN) and handled in _UNAMBIGUOUS_HVAC_PREFIXES above.
 _AMBIGUOUS_HVAC_PREFIX_TYPES: dict[str, frozenset[DevType]] = {
-    "29": frozenset({DevType.FAN, DevType.CO2, DevType.HUM, DevType.REM, DevType.DIS}),
-    "37": frozenset({DevType.FAN, DevType.REM, DevType.CO2, DevType.HUM, DevType.DIS}),
+    "29": frozenset(
+        {DevType.FAN, DevType.CO2, DevType.HUM, DevType.REM, DevType.DIS}
+    ),
+    "37": frozenset(
+        {DevType.FAN, DevType.REM, DevType.CO2, DevType.HUM, DevType.DIS}
+    ),
 }
 
 
@@ -222,7 +228,9 @@ class DiscoveredDevice:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DiscoveredDevice:
         """Deserialize from a plain dict (for JSON import/resume)."""
-        return cls(**{k: data[k] for k in data if k in cls.__dataclass_fields__})
+        return cls(
+            **{k: data[k] for k in data if k in cls.__dataclass_fields__}
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +272,9 @@ class DiscoveryScan:
         if self._remove_handler is not None:
             _LOGGER.warning("DiscoveryScan.start(): already running")
             return
-        self._remove_handler = self._gateway.add_raw_pkt_handler(self._on_packet)
+        self._remove_handler = self._gateway.add_raw_pkt_handler(
+            self._on_packet
+        )
         _LOGGER.info("DiscoveryScan: started (passive observer)")
 
     def stop(self) -> None:
@@ -345,7 +355,10 @@ class DiscoveryScan:
             if not isinstance(entry, dict):
                 continue
             dhw = entry.get("stored_hotwater")
-            if isinstance(dhw, dict) and dhw.get("hotwater_valve") == device_id:
+            if (
+                isinstance(dhw, dict)
+                and dhw.get("hotwater_valve") == device_id
+            ):
                 return True
         return False
 
@@ -360,7 +373,9 @@ class DiscoveryScan:
         try:
             self._process_packet(dto)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("DiscoveryScan: error processing packet %s: %s", dto, err)
+            _LOGGER.error(
+                "DiscoveryScan: error processing packet %s: %s", dto, err
+            )
 
     def _process_packet(self, dto: PacketDTO) -> None:
         """Classify packet, update in-memory dict. No disk I/O.
@@ -443,7 +458,11 @@ class DiscoveryScan:
             )
 
         # addr3: lowest-confidence (broadcast target or relay)
-        if addr3 and _is_valid_address(addr3) and addr3 not in (source, destination):
+        if (
+            addr3
+            and _is_valid_address(addr3)
+            and addr3 not in (source, destination)
+        ):
             self._process_device(
                 addr3,
                 code=code,
@@ -533,7 +552,9 @@ class DiscoveryScan:
                 # entry so codes_seen is accumulated (needed for DHW valve
                 # inference via 1100 code, etc.)
                 now = dt.now().isoformat(timespec="seconds")
-                likely_type = _classify(device_id, code, verb, is_source=is_source)
+                likely_type = _classify(
+                    device_id, code, verb, is_source=is_source
+                )
                 device = DiscoveredDevice(
                     device_id=device_id,
                     first_seen=now,
@@ -547,7 +568,9 @@ class DiscoveryScan:
                     destination_count=0 if is_source else 1,
                     domain_id=domain_id if domain_id and is_source else None,
                     is_authoritative_domain=(
-                        is_authoritative_domain and bool(domain_id) and is_source
+                        is_authoritative_domain
+                        and bool(domain_id)
+                        and is_source
                     ),
                 )
                 self._devices[device_id] = device
@@ -572,7 +595,11 @@ class DiscoveryScan:
                     else:
                         device.rssi = (device.rssi + rssi) / 2
                     self._dirty = True
-                if zone_index and is_source and not device_id.startswith("01:"):
+                if (
+                    zone_index
+                    and is_source
+                    and not device_id.startswith("01:")
+                ):
                     # Skip CTL (01:) — it sends 000A with zone config for
                     # multiple zones, not its own zone binding.  Setting
                     # zone_index on the CTL corrupts its comment and schema
@@ -676,7 +703,9 @@ class DiscoveryScan:
                     and destination != device_id
                 ):
                     device.bound_to = destination
-                device.confidence = "high"  # binding telemetry = high confidence
+                device.confidence = (
+                    "high"  # binding telemetry = high confidence
+                )
             # Domain_id from 000C binding (authoritative) or 3B00/3EF0
             # (hint).  See issue 834: a 000C FA binding must override a
             # previous 3B00/3EF0 FC hint (the BDR is hotwater_valve, not
@@ -805,7 +834,9 @@ class DiscoveryScan:
             changed = True
 
         # Re-classify if we have more info now
-        new_type = _classify(device_id, code, verb, is_source=is_source, device=device)
+        new_type = _classify(
+            device_id, code, verb, is_source=is_source, device=device
+        )
         if new_type != device.likely_type and new_type != DevType.DEV:
             device.likely_type = new_type
             changed = True
@@ -838,7 +869,9 @@ class DiscoveryScan:
         if min_confidence:
             order = {"low": 0, "medium": 1, "high": 2}
             min_val = order.get(min_confidence, 0)
-            result = [d for d in result if order.get(d.confidence, 0) >= min_val]
+            result = [
+                d for d in result if order.get(d.confidence, 0) >= min_val
+            ]
 
         return result
 
@@ -867,7 +900,9 @@ class DiscoveryScan:
             "exported_at": dt.now().isoformat(timespec="seconds"),
             "devices": [
                 d.to_dict()
-                for d in sorted(self._devices.values(), key=lambda d: d.device_id)
+                for d in sorted(
+                    self._devices.values(), key=lambda d: d.device_id
+                )
             ],
         }
         return json.dumps(data, indent=2, sort_keys=False)

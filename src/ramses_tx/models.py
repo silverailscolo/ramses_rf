@@ -28,7 +28,11 @@ class DeviceId:
     @classmethod
     def from_string(cls, address_str: str) -> DeviceId:
         """Safely parse a raw string into a DeviceId object."""
-        if not address_str or ":" not in address_str or address_str == "--:------":
+        if (
+            not address_str
+            or ":" not in address_str
+            or address_str == "--:------"
+        ):
             return cls(63, 262142)
 
         dev_type_str, dev_id_str = address_str.split(":", 1)

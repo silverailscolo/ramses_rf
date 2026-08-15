@@ -23,7 +23,11 @@ from ramses_tx.const import (
 )
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.exceptions import PacketInvalid, ProtocolSendFailed
-from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
+from ramses_tx.schemas import (
+    SZ_BLOCK_LIST,
+    SZ_ENFORCE_KNOWN_LIST,
+    SZ_KNOWN_LIST,
+)
 from ramses_tx.typing import PayloadT
 
 from .config import GatewayConfig as GatewayConfig, strip_and_map_schema
@@ -99,7 +103,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         *,
         config: GatewayConfig | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
-        transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
+        transport_constructor: Callable[..., Awaitable[RamsesTransportT]]
+        | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the Gateway instance."""
@@ -146,8 +151,12 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         # Override EngineConfig with the stripped-down L7 properties
         self._gwy_config.engine.hgi_id = self._gwy_config.hgi_id
-        self._gwy_config.engine.known_list = list(self._gwy_config.known_list.keys())
-        self._gwy_config.engine.block_list = list(self._gwy_config.block_list.keys())
+        self._gwy_config.engine.known_list = list(
+            self._gwy_config.known_list.keys()
+        )
+        self._gwy_config.engine.block_list = list(
+            self._gwy_config.block_list.keys()
+        )
 
         self._engine = Engine(
             self._gwy_config.engine,
@@ -212,7 +221,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         # 1. Controller Knowledge Bridge
         def is_controller(device_id: str) -> bool:
-            device = self._device_registry.device_by_id.get(DeviceIdT(device_id))
+            device = self._device_registry.device_by_id.get(
+                DeviceIdT(device_id)
+            )
             if device:
                 return getattr(device, "_is_controller", True)
             return True
@@ -301,7 +312,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
-            SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self.config.engine.enforce_known_list},
+            SZ_CONFIG: {
+                SZ_ENFORCE_KNOWN_LIST: self.config.engine.enforce_known_list
+            },
             SZ_KNOWN_LIST: await self.device_registry.known_list(),
             SZ_BLOCK_LIST: self.config.engine.block_list or [],
             "_unwanted": sorted(self._engine._unwanted),
@@ -345,7 +358,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     async def schema(self) -> dict[str, Any]:
         """Return the entire gateway and device topology schema."""
-        schema: dict[str, Any] = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}
+        schema: dict[str, Any] = {
+            SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None
+        }
         for tcs in self.device_registry.systems:
             schema[tcs.ctl.id] = await tcs.schema()
         # Include FAN/VCS topology (remotes/sensors membership) so that
@@ -355,8 +370,12 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 device._remote_ids or device._sensor_ids
             ):
                 schema[device.id] = await device.schema()
-        schema[f"{SZ_ORPHANS}_heat"] = await self.device_registry.get_heat_orphans()
-        schema[f"{SZ_ORPHANS}_hvac"] = await self.device_registry.get_hvac_orphans()
+        schema[
+            f"{SZ_ORPHANS}_heat"
+        ] = await self.device_registry.get_heat_orphans()
+        schema[
+            f"{SZ_ORPHANS}_hvac"
+        ] = await self.device_registry.get_hvac_orphans()
         return schema
 
     async def params(self) -> dict[str, Any]:

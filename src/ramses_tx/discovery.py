@@ -101,7 +101,9 @@ else:
         # the type-checker that every branch of comports() ultimately returns
         # something satisfying _PortInfo.
         result: list[SysFS] = [
-            d for d in map(SysFS, devices) if d.subsystem not in _hide_subsystems
+            d
+            for d in map(SysFS, devices)
+            if d.subsystem not in _hide_subsystems
         ]
         return cast(list[_PortInfo], result)
 
@@ -135,7 +137,9 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
             None, partial(comports, include_links=True)
         )
     except ImportError as err:
-        raise exc.TransportSerialError(f"Unable to find {serial_port}: {err}") from err
+        raise exc.TransportSerialError(
+            f"Unable to find {serial_port}: {err}"
+        ) from err
 
     vid = {x.device: x.vid for x in komports}.get(serial_port)
 
@@ -146,7 +150,9 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
     elif vid in (0x0403, 0x1B4F):  # FTDI, SparkFun
         return False
 
-    product = {x.device: getattr(x, "product", None) for x in komports}.get(serial_port)
+    product = {x.device: getattr(x, "product", None) for x in komports}.get(
+        serial_port
+    )
 
     if not product:
         pass

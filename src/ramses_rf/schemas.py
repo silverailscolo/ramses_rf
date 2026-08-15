@@ -115,7 +115,9 @@ HEAT_ZONES_STRS = tuple(ZON_ROLE_MAP[t] for t in ZON_ROLE_MAP.HEAT_ZONES)
 
 SCH_DOM_ID = vol.Match(r"^[0-9A-F]{2}$")
 SCH_UFH_IDX = vol.Match(r"^0[0-8]$")
-SCH_ZON_IDX = vol.Match(r"^0[0-9AB]$")  # TODO: what if > 12 zones? (e.g. hometronics)
+SCH_ZON_IDX = vol.Match(
+    r"^0[0-9AB]$"
+)  # TODO: what if > 12 zones? (e.g. hometronics)
 
 
 def error_renamed_key(new_key: str) -> Callable[[Any], None]:
@@ -128,29 +130,43 @@ def error_renamed_key(new_key: str) -> Callable[[Any], None]:
     """
 
     def renamed_key(node_value: Any) -> None:
-        raise vol.Invalid(f"the key name has changed: rename it to '{new_key}'")
+        raise vol.Invalid(
+            f"the key name has changed: rename it to '{new_key}'"
+        )
 
     return renamed_key
 
 
 #
 # 1/7: Schemas for CH/DHW systems, aka Heat/TCS (temp control systems)
-SCH_TCS_SYS_CLASS = (SystemType.EVOHOME, SystemType.HOMETRONICS, SystemType.SUNDIAL)
+SCH_TCS_SYS_CLASS = (
+    SystemType.EVOHOME,
+    SystemType.HOMETRONICS,
+    SystemType.SUNDIAL,
+)
 SCH_TCS_SYS = vol.Schema(
     {
         vol.Required(SZ_APPLIANCE_CONTROL, default=None): vol.Any(
             None, SCH_DEVICE_ID_APP
         ),
-        vol.Optional("heating_control"): error_renamed_key(SZ_APPLIANCE_CONTROL),
+        vol.Optional("heating_control"): error_renamed_key(
+            SZ_APPLIANCE_CONTROL
+        ),
     },
     extra=vol.PREVENT_EXTRA,
 )
 
 SCH_TCS_DHW = vol.Schema(
     {
-        vol.Optional(SZ_SENSOR, default=None): vol.Any(None, SCH_DEVICE_ID_DHW),
-        vol.Optional(SZ_DHW_VALVE, default=None): vol.Any(None, SCH_DEVICE_ID_BDR),
-        vol.Optional(SZ_HTG_VALVE, default=None): vol.Any(None, SCH_DEVICE_ID_BDR),
+        vol.Optional(SZ_SENSOR, default=None): vol.Any(
+            None, SCH_DEVICE_ID_DHW
+        ),
+        vol.Optional(SZ_DHW_VALVE, default=None): vol.Any(
+            None, SCH_DEVICE_ID_BDR
+        ),
+        vol.Optional(SZ_HTG_VALVE, default=None): vol.Any(
+            None, SCH_DEVICE_ID_BDR
+        ),
         vol.Optional(SZ_DHW_SENSOR): error_renamed_key(SZ_SENSOR),
     },
     extra=vol.PREVENT_EXTRA,
@@ -182,7 +198,9 @@ SCH_TCS_UFH = vol.All(
 SCH_TCS_ZONES_ZON = vol.Schema(
     {
         vol.Optional(SZ_CLASS, default=None): vol.Any(None, *HEAT_ZONES_STRS),
-        vol.Optional(SZ_SENSOR, default=None): vol.Any(None, SCH_DEVICE_ID_SEN),
+        vol.Optional(SZ_SENSOR, default=None): vol.Any(
+            None, SCH_DEVICE_ID_SEN
+        ),
         vol.Optional(SZ_DEVICES): error_renamed_key(SZ_ACTUATORS),
         vol.Optional(SZ_ACTUATORS, default=[]): vol.All(
             [SCH_DEVICE_ID_ANY], vol.Length(min=0)
@@ -254,14 +272,20 @@ SCH_VCS = vol.All(SCH_VCS_KEYS, SCH_VCS_DATA)
 SCH_GLOBAL_SCHEMAS_DICT = {  # System schemas - can be 0-many Heat/HVAC schemas
     # orphans are devices to create that won't be in a (cached) schema...
     vol.Optional(SZ_MAIN_TCS): vol.Any(None, SCH_DEVICE_ID_CTL),
-    vol.Optional(vol.Remove("main_controller")): vol.Any(None, SCH_DEVICE_ID_CTL),
+    vol.Optional(vol.Remove("main_controller")): vol.Any(
+        None, SCH_DEVICE_ID_CTL
+    ),
     vol.Optional(SCH_DEVICE_ID_CTL): vol.Any(SCH_TCS, SCH_VCS),
-    vol.Optional(SCH_DEVICE_ID_ANY): SCH_VCS,  # must be after SCH_DEVICE_ID_CTL
+    vol.Optional(
+        SCH_DEVICE_ID_ANY
+    ): SCH_VCS,  # must be after SCH_DEVICE_ID_CTL
     vol.Optional(SZ_ORPHANS_HEAT): vol.All([SCH_DEVICE_ID_ANY], vol.Unique()),
     vol.Optional(SZ_ORPHANS_HVAC): vol.All([SCH_DEVICE_ID_ANY], vol.Unique()),
     vol.Optional("transport_constructor"): vol.Any(callable, None),
 }
-SCH_GLOBAL_SCHEMAS = vol.Schema(SCH_GLOBAL_SCHEMAS_DICT, extra=vol.PREVENT_EXTRA)
+SCH_GLOBAL_SCHEMAS = vol.Schema(
+    SCH_GLOBAL_SCHEMAS_DICT, extra=vol.PREVENT_EXTRA
+)
 
 #
 # 4/7: Gateway (parser/state) configuration
@@ -269,7 +293,9 @@ SZ_ENABLE_EAVESDROP: Final = "enable_eavesdrop"
 SZ_ENFORCE_STRICT_HANDLING: Final = "enforce_strict_handling"
 SZ_MAX_ZONES: Final = "max_zones"  # TODO: move to TCS-attr from GWY-layer
 SZ_REDUCE_PROCESSING: Final = "reduce_processing"
-SZ_USE_ALIASES: Final = "use_aliases"  # use friendly device names from known_list
+SZ_USE_ALIASES: Final = (
+    "use_aliases"  # use friendly device names from known_list
+)
 SZ_USE_NATIVE_OT: Final = "use_native_ot"  # favour OT (3220s) over RAMSES
 
 SCH_GATEWAY_DICT = {
@@ -297,7 +323,8 @@ SCH_GLOBAL_CONFIG = (
     vol.Schema(
         {
             # Gateway/engine Configuration, incl. packet_log, serial_port params...
-            vol.Optional(SZ_CONFIG, default={}): SCH_GATEWAY_DICT | SCH_ENGINE_DICT
+            vol.Optional(SZ_CONFIG, default={}): SCH_GATEWAY_DICT
+            | SCH_ENGINE_DICT
         },
         extra=vol.PREVENT_EXTRA,
     )
@@ -309,7 +336,9 @@ SCH_GLOBAL_CONFIG = (
 
 #
 # 6/7: External Schemas, to be used by clients of this library
-def normalise_restore_cache() -> Callable[[bool | dict[str, bool]], dict[str, bool]]:
+def normalise_restore_cache() -> Callable[
+    [bool | dict[str, bool]], dict[str, bool]
+]:
     """Convert a shorthand restore_cache bool to a dict.
 
     restore_cache: bool ->  restore_cache:
@@ -366,11 +395,15 @@ def _get_device(
             gateway._engine._enforce_known_list
             and device_id not in gateway._engine._include
         ):
-            err_msg = f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"
+            err_msg = (
+                f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"
+            )
         # issue ramses_cc #296: if enforce_known_list is turned on, error on any "unknown" dev_id
         # fix: delete from schema?
         if device_id in gateway._engine._exclude:
-            err_msg = f"it is in the {SZ_SCHEMA}, but also in the {SZ_BLOCK_LIST}"
+            err_msg = (
+                f"it is in the {SZ_SCHEMA}, but also in the {SZ_BLOCK_LIST}"
+            )
 
         if err_msg:
             raise exc.DeviceNotFoundError(
@@ -433,7 +466,9 @@ def load_schema(
                 device._make_fake()
 
 
-def load_fan(gateway: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]) -> Device:
+def load_fan(
+    gateway: Gateway, fan_id: DeviceIdT, schema: dict[str, Any]
+) -> Device:
     """Create a FAN using its schema (i.e. with remotes, sensors).
 
     :param gateway: The Gateway instance managing the device.

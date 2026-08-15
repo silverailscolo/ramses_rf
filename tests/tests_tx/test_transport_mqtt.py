@@ -209,7 +209,9 @@ async def test_on_connect_failure_code_schedules_reconnect(
 
         with patch.object(transport, "_schedule_reconnect") as mock_reconnect:
             # Act
-            transport._on_connect(transport.client, None, {}, mock_reason, None)
+            transport._on_connect(
+                transport.client, None, {}, mock_reason, None
+            )
 
             # Assert
             assert transport._connecting is False
@@ -300,7 +302,9 @@ async def test_on_disconnect_pauses_writing_and_schedules_reconnect(
         mock_reason.getName.return_value = "Keepalive timeout"
 
         with (
-            patch.object(transport._loop, "call_soon_threadsafe") as mock_call_soon,
+            patch.object(
+                transport._loop, "call_soon_threadsafe"
+            ) as mock_call_soon,
             patch.object(transport, "_schedule_reconnect") as mock_reconnect,
         ):
             # Act
@@ -377,12 +381,16 @@ async def test_create_connection_resumes_writing_when_sub_already_present(
         mock_msg.payload = b"online"
         mock_msg.topic = "RAMSES/GATEWAY/01:123456"
 
-        with patch.object(transport._loop, "call_soon_threadsafe") as mock_call_soon:
+        with patch.object(
+            transport._loop, "call_soon_threadsafe"
+        ) as mock_call_soon:
             # Act
             transport._create_connection(mock_msg)
 
             # Assert
-            mock_call_soon.assert_called_once_with(mock_protocol.resume_writing)
+            mock_call_soon.assert_called_once_with(
+                mock_protocol.resume_writing
+            )
 
         # Clean up
         transport.close()
@@ -408,7 +416,9 @@ async def test_on_message_lwt_offline_pauses_writing(
         mock_msg.topic = "RAMSES/GATEWAY/01:123456"
         mock_msg.payload = b"offline"
 
-        with patch.object(transport._loop, "call_soon_threadsafe") as mock_call_soon:
+        with patch.object(
+            transport._loop, "call_soon_threadsafe"
+        ) as mock_call_soon:
             # Act
             transport._on_message(transport.client, None, mock_msg)
 
@@ -439,7 +449,9 @@ async def test_on_message_closing_drops_inbound_messages(
         mock_msg.topic = "RAMSES/GATEWAY/01:123456/rx"
         mock_msg.payload = b'{"ts": "2026-08-14T10:00:00", "msg": "..."}'
 
-        with patch.object(transport._loop, "call_soon_threadsafe") as mock_call_soon:
+        with patch.object(
+            transport._loop, "call_soon_threadsafe"
+        ) as mock_call_soon:
             # Act
             transport._on_message(transport.client, None, mock_msg)
 
@@ -685,7 +697,9 @@ async def test_on_message_invalid_json_payload_ignored(
         mock_msg.topic = "RAMSES/GATEWAY/01:123456/rx"
         mock_msg.payload = b"NOT_JSON_DATA"
 
-        with patch.object(transport._loop, "call_soon_threadsafe") as mock_call_soon:
+        with patch.object(
+            transport._loop, "call_soon_threadsafe"
+        ) as mock_call_soon:
             # Act
             transport._on_message(transport.client, None, mock_msg)
 
@@ -751,7 +765,9 @@ async def test_create_connection_when_disconnected_establishes(
         mock_msg.payload = b"online"
         mock_msg.topic = "RAMSES/GATEWAY/01:123456"
 
-        with patch.object(transport._loop, "call_soon_threadsafe") as mock_call_soon:
+        with patch.object(
+            transport._loop, "call_soon_threadsafe"
+        ) as mock_call_soon:
             # Act
             transport._create_connection(mock_msg)
 
@@ -880,7 +896,9 @@ async def test_publish_when_disconnected_raises_state_error(
         transport._connected = False
 
         # Act & Assert
-        with pytest.raises(exc.TransportStateError, match="MQTT not connected"):
+        with pytest.raises(
+            exc.TransportStateError, match="MQTT not connected"
+        ):
             transport._publish('{"msg": "test"}')
 
         # Clean up

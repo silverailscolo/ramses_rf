@@ -86,7 +86,11 @@ def extract_context_value(
 
     if getattr(payload, "msg_id", None) is not None:
         msg_id_val = payload.msg_id
-        return f"{msg_id_val:02X}" if isinstance(msg_id_val, int) else str(msg_id_val)
+        return (
+            f"{msg_id_val:02X}"
+            if isinstance(msg_id_val, int)
+            else str(msg_id_val)
+        )
 
     if getattr(payload, "data_id", None) is not None:
         return str(payload.data_id)
@@ -127,7 +131,9 @@ def extract_context_value(
     if getattr(payload, "dhw_idx", None) is not None:
         dhw_idx_val = payload.dhw_idx
         return (
-            f"{dhw_idx_val:02X}" if isinstance(dhw_idx_val, int) else str(dhw_idx_val)
+            f"{dhw_idx_val:02X}"
+            if isinstance(dhw_idx_val, int)
+            else str(dhw_idx_val)
         )
 
     if getattr(payload, "ufh_index", None) is not None:
@@ -141,7 +147,9 @@ def extract_context_value(
     if getattr(payload, "ufh_idx", None) is not None:
         ufh_idx_val = payload.ufh_idx
         return (
-            f"{ufh_idx_val:02X}" if isinstance(ufh_idx_val, int) else str(ufh_idx_val)
+            f"{ufh_idx_val:02X}"
+            if isinstance(ufh_idx_val, int)
+            else str(ufh_idx_val)
         )
 
     if isinstance(payload, dict):
@@ -155,10 +163,14 @@ def extract_context_value(
             return str(d_idx)
         dhw_idx = payload.get("dhw_index", payload.get("dhw_idx"))
         if dhw_idx is not None:
-            return f"{dhw_idx:02X}" if isinstance(dhw_idx, int) else str(dhw_idx)
+            return (
+                f"{dhw_idx:02X}" if isinstance(dhw_idx, int) else str(dhw_idx)
+            )
         ufh_idx = payload.get("ufh_index", payload.get("ufh_idx"))
         if ufh_idx is not None:
-            return f"{ufh_idx:02X}" if isinstance(ufh_idx, int) else str(ufh_idx)
+            return (
+                f"{ufh_idx:02X}" if isinstance(ufh_idx, int) else str(ufh_idx)
+            )
 
     return None
 
@@ -200,16 +212,22 @@ class StateHeader:
         # Safely promote strings to rich types, gracefully falling back to
         # strings for unregistered OEM/Debug hardware codes.
         try:
-            safe_code: Code | str = Code(code) if isinstance(code, str) else code
+            safe_code: Code | str = (
+                Code(code) if isinstance(code, str) else code
+            )
         except ValueError:
             safe_code = code
 
         try:
-            safe_verb: Verb | str = Verb(verb) if isinstance(verb, str) else verb
+            safe_verb: Verb | str = (
+                Verb(verb) if isinstance(verb, str) else verb
+            )
         except ValueError:
             safe_verb = verb
 
-        safe_src = DeviceIdT(source_id) if isinstance(source_id, str) else source_id
+        safe_src = (
+            DeviceIdT(source_id) if isinstance(source_id, str) else source_id
+        )
 
         return cls(
             code=safe_code,

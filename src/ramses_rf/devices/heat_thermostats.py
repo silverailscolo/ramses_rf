@@ -89,7 +89,9 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint):  # TRV (04):
         """Return current heat demand percentage (0.0 to 1.0)."""
         if (heat_demand := self.demand_state.heat_demand) is None:
             if await self.setpoint() is False:
-                return 0  # instead of None (no 3150s sent when setpoint is False)
+                return (
+                    0  # instead of None (no 3150s sent when setpoint is False)
+                )
         return heat_demand
 
     async def window_open(self) -> bool | None:  # 12B0

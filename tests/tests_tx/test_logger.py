@@ -110,7 +110,9 @@ async def test_logging_lifecycle(tmp_path: Path) -> None:
         # 3. Verify Wiring
         handlers = PKT_LOGGER.handlers
         assert len(handlers) == 1
-        assert isinstance(handlers[0], QueueHandler), "Logger should use QueueHandler"
+        assert isinstance(handlers[0], QueueHandler), (
+            "Logger should use QueueHandler"
+        )
         assert isinstance(listener, QueueListener)
 
         # 4. Emit Log
@@ -206,12 +208,17 @@ async def test_flight_recorder_auto_flush(tmp_path: Path) -> None:
         # Poll for the flush to hit the disk
         for _ in range(100):
             await asyncio.sleep(0.01)
-            if log_file.exists() and "TRIGGER_WARNING_LOG" in log_file.read_text():
+            if (
+                log_file.exists()
+                and "TRIGGER_WARNING_LOG" in log_file.read_text()
+            ):
                 break
 
         content = log_file.read_text()
         assert "BUFFERED_INFO_LOG" in content, "Buffered INFO log was lost"
-        assert "TRIGGER_WARNING_LOG" in content, "WARNING log failed to trigger flush"
+        assert "TRIGGER_WARNING_LOG" in content, (
+            "WARNING log failed to trigger flush"
+        )
 
     finally:
         await gwy.stop()
@@ -275,7 +282,10 @@ async def test_flight_recorder_manual_flush(tmp_path: Path) -> None:
 
         for _ in range(100):
             await asyncio.sleep(0.01)
-            if log_file.exists() and "MANUAL_FLUSH_TARGET" in log_file.read_text():
+            if (
+                log_file.exists()
+                and "MANUAL_FLUSH_TARGET" in log_file.read_text()
+            ):
                 break
 
         assert "MANUAL_FLUSH_TARGET" in log_file.read_text()
@@ -341,7 +351,10 @@ async def test_flight_recorder_time_flush(tmp_path: Path) -> None:
         # Wait for timer to trigger naturally (after 200ms)
         for _ in range(100):
             await asyncio.sleep(0.05)
-            if log_file.exists() and "TIMER_FLUSH_TARGET" in log_file.read_text():
+            if (
+                log_file.exists()
+                and "TIMER_FLUSH_TARGET" in log_file.read_text()
+            ):
                 break
 
         assert "TIMER_FLUSH_TARGET" in log_file.read_text()
@@ -360,7 +373,9 @@ async def test_hardware_echo_logging_suppressed() -> None:
 
     class DummyTransport(_FullTransport):
         def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            super().__init__(
+                config=TransportConfig(disable_sending=False), loop=loop
+            )
             self._protocol = MagicMock()
 
         async def _write_frame(self, frame: str) -> None:
@@ -397,7 +412,9 @@ async def test_hardware_echo_logging_suppressed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_hardware_echo_logging_suppressed_hgi80_addr_substitution() -> None:
+async def test_hardware_echo_logging_suppressed_hgi80_addr_substitution() -> (
+    None
+):
     """HGI80 echoes arrive with the real HGI ID as addr1, but the TX frame
     used the placeholder 18:000730.  _is_recent_tx must still recognise the
     echo as a recent transmission (issue 835, cc 864).
@@ -409,7 +426,9 @@ async def test_hardware_echo_logging_suppressed_hgi80_addr_substitution() -> Non
 
     class DummyTransport(_FullTransport):
         def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
-            super().__init__(config=TransportConfig(disable_sending=False), loop=loop)
+            super().__init__(
+                config=TransportConfig(disable_sending=False), loop=loop
+            )
             self._protocol = MagicMock()
 
         async def _write_frame(self, frame: str) -> None:

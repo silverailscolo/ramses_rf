@@ -61,7 +61,9 @@ class DhwTempPayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 1260: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 1260: {len(raw_data)}"
+            )
         index, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         temp_val = None if temp_raw in (0x31FF, 0x7FFF) else temp_raw / 100.0
         return cls(dhw_index=index, temperature=temp_val)
@@ -132,7 +134,9 @@ class DhwFlowRatePayload(PayloadBase):
         :raises ValueError: If raw_data length is less than 3 bytes.
         """
         if len(raw_data) < 3:
-            raise ValueError(f"Invalid payload length for 12F0: {len(raw_data)}")
+            raise ValueError(
+                f"Invalid payload length for 12F0: {len(raw_data)}"
+            )
         index, flow_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         flow_val = None if flow_raw in (0x31FF, 0x7FFF) else flow_raw / 100.0
         return cls(dhw_index=index, dhw_flow_rate=flow_val)
@@ -276,7 +280,9 @@ class DhwParamsPayload(PayloadBase):
         return DhwParams3BPayload(dhw_index=index, setpoint=setpoint)
 
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> "DhwParams3BPayload | DhwParams6BPayload":
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "DhwParams3BPayload | DhwParams6BPayload":
         """Unpack DHW parameters binary payload, dispatching by length."""
         if len(raw_data) >= 6:
             return DhwParams6BPayload.from_bytes(raw_data)
@@ -342,7 +348,11 @@ class DhwParams3BPayload(DhwParamsPayload):
     def to_bytes(self) -> bytes:
         """Pack 3-byte DHW parameters into binary payload."""
         index = parse_index(self.dhw_index)
-        sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
+        sp_raw = (
+            0x7FFF
+            if self.setpoint is None
+            else int(round(self.setpoint * 100.0))
+        )
         return struct.pack(self._STRUCT_FMT, index, sp_raw)
 
     def to_dict(self) -> dict[str, Any]:
@@ -408,9 +418,15 @@ class DhwParams6BPayload(DhwParamsPayload):
     def to_bytes(self) -> bytes:
         """Pack 6-byte DHW parameters into binary payload."""
         index = parse_index(self.dhw_index)
-        sp_raw = 0x7FFF if self.setpoint is None else int(round(self.setpoint * 100.0))
+        sp_raw = (
+            0x7FFF
+            if self.setpoint is None
+            else int(round(self.setpoint * 100.0))
+        )
         diff_raw = int(round(self.differential * 100.0))
-        return struct.pack(self._STRUCT_FMT, index, sp_raw, self.overrun, diff_raw)
+        return struct.pack(
+            self._STRUCT_FMT, index, sp_raw, self.overrun, diff_raw
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert 6-byte DHW parameters payload to legacy dictionary layout."""
@@ -460,7 +476,9 @@ class DhwStatePayload(PayloadBase):
             )
         if mode_value is not None:
             return DhwState3BPayload(
-                dhw_index=dhw_index, active_flag=active_flag, mode_value=mode_value
+                dhw_index=dhw_index,
+                active_flag=active_flag,
+                mode_value=mode_value,
             )
         return DhwState2BPayload(dhw_index=dhw_index, active_flag=active_flag)
 
@@ -637,7 +655,10 @@ class DhwStateOverridePayload(DhwStatePayload):
             raise ValueError(msg)
         index, active, mode = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
-            dhw_index=index, active_flag=active, mode_value=mode, raw_bytes=raw_data
+            dhw_index=index,
+            active_flag=active,
+            mode_value=mode,
+            raw_bytes=raw_data,
         )
 
     def to_bytes(self) -> bytes:

@@ -24,7 +24,9 @@ def suppress_asyncio_warnings(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.CRITICAL, logger="asyncio")
 
 
-@pytest.fixture(params=[LOG_STANDARD, LOG_OPENTHERM], ids=["standard", "opentherm"])
+@pytest.fixture(
+    params=[LOG_STANDARD, LOG_OPENTHERM], ids=["standard", "opentherm"]
+)
 def log_file_path(request: pytest.FixtureRequest) -> Path:
     """Provide the packet log file path for topology snapshot testing."""
     return cast(Path, request.param)
@@ -37,21 +39,29 @@ async def drain_cqrs_queues(gwy_cqrs: Gateway) -> None:
     if dispatcher:
         if hasattr(dispatcher, "discovery_queue"):
             with contextlib.suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(dispatcher.discovery_queue.join(), timeout=10)
+                await asyncio.wait_for(
+                    dispatcher.discovery_queue.join(), timeout=10
+                )
 
         if hasattr(dispatcher, "ssot_queue"):
             with contextlib.suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(dispatcher.ssot_queue.join(), timeout=10)
+                await asyncio.wait_for(
+                    dispatcher.ssot_queue.join(), timeout=10
+                )
 
         if hasattr(dispatcher, "binding_fsm_queue"):
             with contextlib.suppress(asyncio.TimeoutError):
-                await asyncio.wait_for(dispatcher.binding_fsm_queue.join(), timeout=10)
+                await asyncio.wait_for(
+                    dispatcher.binding_fsm_queue.join(), timeout=10
+                )
 
     await asyncio.sleep(0)
 
 
 @pytest.mark.asyncio
-async def test_topology_builder_snapshot(log_file_path: Path, snapshot: Any) -> None:
+async def test_topology_builder_snapshot(
+    log_file_path: Path, snapshot: Any
+) -> None:
     """Test that the async TopologyBuilder yields a consistent schema over time."""
     # Arrange
     from ramses_rf.gateway import GatewayConfig
@@ -64,9 +74,13 @@ async def test_topology_builder_snapshot(log_file_path: Path, snapshot: Any) -> 
     # Act
     await async_gwy.start()
     if async_gwy._engine._transport:
-        reader_task = async_gwy._engine._transport.get_extra_info("reader_task")
+        reader_task = async_gwy._engine._transport.get_extra_info(
+            "reader_task"
+        )
         if reader_task:
-            with contextlib.suppress(asyncio.TimeoutError, asyncio.CancelledError):
+            with contextlib.suppress(
+                asyncio.TimeoutError, asyncio.CancelledError
+            ):
                 await asyncio.wait_for(reader_task, timeout=30)
 
     await drain_cqrs_queues(async_gwy)

@@ -93,7 +93,9 @@ class PayloadBase(ABC):
         """
         result_dict = self.to_dict()
         return (
-            result_dict.get(key, default) if isinstance(result_dict, dict) else default
+            result_dict.get(key, default)
+            if isinstance(result_dict, dict)
+            else default
         )
 
     def keys(self) -> KeysView[str]:
@@ -103,7 +105,9 @@ class PayloadBase(ABC):
         :rtype: KeysView[str]
         """
         result_dict = self.to_dict()
-        return result_dict.keys() if isinstance(result_dict, dict) else {}.keys()
+        return (
+            result_dict.keys() if isinstance(result_dict, dict) else {}.keys()
+        )
 
     def values(self) -> ValuesView[Any]:
         """Return dictionary values view for legacy compatibility.
@@ -112,7 +116,11 @@ class PayloadBase(ABC):
         :rtype: ValuesView[Any]
         """
         result_dict = self.to_dict()
-        return result_dict.values() if isinstance(result_dict, dict) else {}.values()
+        return (
+            result_dict.values()
+            if isinstance(result_dict, dict)
+            else {}.values()
+        )
 
     def items(self) -> ItemsView[str, Any]:
         """Return dictionary items view for legacy compatibility.
@@ -121,7 +129,11 @@ class PayloadBase(ABC):
         :rtype: ItemsView[str, Any]
         """
         result_dict = self.to_dict()
-        return result_dict.items() if isinstance(result_dict, dict) else {}.items()
+        return (
+            result_dict.items()
+            if isinstance(result_dict, dict)
+            else {}.items()
+        )
 
     def hex(self) -> str:
         """Return uppercase ASCII hex representation of binary payload.

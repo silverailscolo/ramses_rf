@@ -72,7 +72,9 @@ class TestDeviceBase:
         dev._last_msg_dtm = expired_dtm
         assert not dev.is_available
 
-    def test_device_promotion_prevention(self, mock_gateway: MagicMock) -> None:
+    def test_device_promotion_prevention(
+        self, mock_gateway: MagicMock
+    ) -> None:
         """Test that non-promotable slugs don't trigger promotion.
 
         :param mock_gateway: The mock gateway fixture.
@@ -105,7 +107,9 @@ class TestBatteryState:
     """Test the BatteryState mixin class logic."""
 
     @pytest.mark.asyncio
-    async def test_battery_methods_when_faked(self, mock_gateway: MagicMock) -> None:
+    async def test_battery_methods_when_faked(
+        self, mock_gateway: MagicMock
+    ) -> None:
         """Test battery_low and battery_state return defaults if faked.
 
         :param mock_gateway: The mock gateway fixture.
@@ -161,7 +165,9 @@ class TestHgiGateway:
         assert await hgi_gateway.is_active()
 
     @pytest.mark.asyncio
-    async def test_is_active_expired_msg(self, hgi_gateway: HgiGateway) -> None:
+    async def test_is_active_expired_msg(
+        self, hgi_gateway: HgiGateway
+    ) -> None:
         """Test is_active returns False when the latest message is too
         old.
 
@@ -176,7 +182,9 @@ class TestHgiGateway:
         assert not await hgi_gateway.is_active()
 
     @pytest.mark.asyncio
-    async def test_is_active_naive_datetime(self, hgi_gateway: HgiGateway) -> None:
+    async def test_is_active_naive_datetime(
+        self, hgi_gateway: HgiGateway
+    ) -> None:
         """Test is_active handles naive datetimes gracefully.
 
         :param hgi_gateway: The gateway fixture.
@@ -200,7 +208,9 @@ class TestHgiGateway:
         assert hgi_gateway.message_timeout == td(minutes=15)
 
     @pytest.mark.asyncio
-    async def test_is_active_custom_timeout(self, hgi_gateway: HgiGateway) -> None:
+    async def test_is_active_custom_timeout(
+        self, hgi_gateway: HgiGateway
+    ) -> None:
         """Test is_active evaluates correctly against a custom timeout.
 
         :param hgi_gateway: The gateway fixture.
