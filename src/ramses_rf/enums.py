@@ -167,3 +167,12 @@ class ThermalMode(StrEnum):
     HEAT = "heat"
     COOL = "cool"
     OFF = "off"
+
+
+@verify(EnumCheck.UNIQUE)
+class PumpRelayState(StrEnum):
+    """Actuator pump relay state for underfloor heating/cooling systems (Opcode 3EF0)."""
+
+    HEATING = "heating"
+    COOLING = "cooling"
+    OFF = "off"

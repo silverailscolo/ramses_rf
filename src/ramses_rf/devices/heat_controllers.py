@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from ramses_rf.const import SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
 from ramses_rf.entity import Entity
+from ramses_rf.enums import PumpRelayState
 from ramses_rf.helpers import shrink
 from ramses_rf.models import DeviceTraits, UfhCircuitDemandDTO
 from ramses_rf.schemas import SCH_TCS, SZ_CIRCUITS
@@ -36,6 +37,15 @@ class Controller(DeviceHeat):  # CTL (01):
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialise the Controller device.
+
+        :param args: Positional arguments passed to parent class.
+        :type args: Any
+        :param traits: Optional device traits metadata.
+        :type traits: DeviceTraits | None
+        :param kwargs: Keyword arguments passed to parent class.
+        :type kwargs: Any
+        """
         super().__init__(*args, traits=traits, **kwargs)
 
         self.tcs: Evohome | None = None  # TODO: = self?
@@ -126,6 +136,15 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialise the UfhController device.
+
+        :param args: Positional arguments passed to parent class.
+        :type args: Any
+        :param traits: Optional device traits metadata.
+        :type traits: DeviceTraits | None
+        :param kwargs: Keyword arguments passed to parent class.
+        :type kwargs: Any
+        """
         super().__init__(*args, traits=traits, **kwargs)
         self._init_ufh_state()
 
@@ -203,6 +222,17 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         state = getattr(self, "ufh_state", None)
         return state.relay_demand_fa if state else None
 
+    async def pump_relay_state(self) -> PumpRelayState | None:  # 3EF0
+        """Return the UFC pump heating/cooling relay state.
+
+        :returns: 'cooling', 'heating', 'off', or None.
+        :rtype: PumpRelayState | None
+        """
+        state = getattr(self, "act_state", None) or getattr(
+            self, "demand_state", None
+        )
+        return getattr(state, "pump_relay_state", None)
+
     async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_idx array
         """Return the UFH setpoints.
 
@@ -255,6 +285,13 @@ class UfhCircuit(Child, Entity):  # FIXME
     _STATE_ATTR: str | None = None
 
     def __init__(self, ufc: UfhController, ufh_index: str) -> None:
+        """Initialise the UFH circuit entity.
+
+        :param ufc: Parent UFH controller device.
+        :type ufc: UfhController
+        :param ufh_index: 2-character hexadecimal circuit index string.
+        :type ufh_index: str
+        """
         super().__init__(ufc._gateway)
 
         # FIXME: gwy.message_store entities must know their parent device ID

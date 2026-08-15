@@ -14,6 +14,7 @@ from ramses_rf.const import (
     SZ_AIR_QUALITY_BASIS,
     SZ_BYPASS_POSITION,
     SZ_CO2_LEVEL,
+    SZ_COOLING_DEMAND,
     SZ_DEWPOINT_TEMP,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
@@ -3942,9 +3943,62 @@ class DesiredBoilerSetpointPayload(PayloadBase):
 
 
 @register_payload(Code._2D49)
-@dataclass(frozen=True, slots=True)
 class CoolingStatePayload(PayloadBase):
     """Cooling relay state payload (Opcode 2D49).
+
+    Master payload dispatcher supporting 2-byte and 3-byte variants.
+    """
+
+    VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
+
+    domain_or_zone_index: int
+    state: bool
+
+    @classmethod
+    def from_bytes(
+        cls, raw_data: bytes
+    ) -> "CoolingState2BPayload | CoolingState3BPayload":
+        """Unpack cooling state binary payload, dispatching by length.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Concrete CoolingStatePayload variant instance.
+        :rtype: CoolingState2BPayload | CoolingState3BPayload
+        :raises ValueError: If raw_data length is not 2 or 3 bytes.
+        """
+        if len(raw_data) == 2:
+            return CoolingState2BPayload.from_bytes(raw_data)
+        if len(raw_data) == 3:
+            return CoolingState3BPayload.from_bytes(raw_data)
+        raise ValueError(f"Invalid payload length for 2D49: {len(raw_data)}")
+
+    def to_bytes(self) -> bytes:
+        """Pack cooling state data into binary payload.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        :raises NotImplementedError: Master dispatcher must dispatch to
+            variant sub-dataclass.
+        """
+        raise NotImplementedError("Use concrete variant sub-dataclass")
+
+    def to_dict(self, msg: Any = None) -> dict[str, Any]:
+        """Convert cooling state payload to dictionary format.
+
+        :param msg: Optional legacy message context.
+        :type msg: Any
+        :returns: Decoded dictionary format.
+        :rtype: dict[str, Any]
+        """
+        return {
+            SZ_ZONE_INDEX: f"{self.domain_or_zone_index:02X}",
+            SZ_COOLING_DEMAND: self.state,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CoolingState2BPayload(CoolingStatePayload):
+    """2-byte Cooling relay state payload (Opcode 2D49).
 
     2-byte Cooling State binary layout:
       Offset  Format  Len  Description                    Sample Hex
@@ -3956,10 +4010,6 @@ class CoolingStatePayload(PayloadBase):
       Payload hex      : 00C8
 
     Protocol Notes:
-      # 10:14:08.526 045  I --- 01:023389 --:------ 01:023389 2D49 003 010000
-      # 10:14:12.253 047  I --- 01:023389 --:------ 01:023389 2D49 003 00C800
-      # 10:14:12.272 047  I --- 01:023389 --:------ 01:023389 2D49 003 01C800
-      # 10:14:12.390 049  I --- 01:023389 --:------ 01:023389 2D49 003 880000
       # Seen with Hometronic systems and BDR91T in heatpump mode.
 
     :param domain_or_zone_index: Domain or zone index byte.
@@ -3975,13 +4025,13 @@ class CoolingStatePayload(PayloadBase):
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
-        """Unpack cooling state binary payload.
+        """Unpack 2-byte cooling state binary payload.
 
         :param raw_data: Raw binary byte string.
         :type raw_data: bytes
-        :returns: Unpacked CoolingStatePayload instance.
+        :returns: Unpacked CoolingState2BPayload instance.
         :rtype: Self
-        :raises ValueError: If raw_data length is less than 2 bytes.
+        :raises ValueError: If raw_data length is not 2 bytes.
         """
         if len(raw_data) < 2:
             raise ValueError(
@@ -3994,7 +4044,7 @@ class CoolingStatePayload(PayloadBase):
         )
 
     def to_bytes(self) -> bytes:
-        """Pack cooling state data into binary payload.
+        """Pack 2-byte cooling state data into binary payload.
 
         :returns: Packed binary payload bytes.
         :rtype: bytes
@@ -4004,6 +4054,84 @@ class CoolingStatePayload(PayloadBase):
             self.domain_or_zone_index,
             0xC8 if self.state else 0x00,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CoolingState3BPayload(CoolingStatePayload):
+    """3-byte HCC100 cooling-demand payload (Opcode 2D49).
+
+    3-byte HCC100 Cooling Demand binary layout:
+      Offset  Format  Len  Description                    Sample Hex
+      --------------------------------------------------------------
+      +0       B      1B   Zone Index                   : 1E
+      +1       B      1B   Cooling Demand (00/C8)       : C8
+      +2       B      1B   Reserved                     : 00
+      --------------------------------------------------------------
+      Field-spaced hex : 1E C8 00
+      Payload hex      : 1EC800
+
+    Protocol Notes:
+      # 10:14:08.526 045  I --- 01:023389 --:------ 01:023389 2D49 003 010000
+      # 10:14:12.253 047  I --- 01:023389 --:------ 01:023389 2D49 003 00C800
+      # 10:14:12.272 047  I --- 01:023389 --:------ 01:023389 2D49 003 01C800
+      # 10:14:12.390 049  I --- 01:023389 --:------ 01:023389 2D49 003 880000
+      # Seen with Hometronic systems and HCC100/BDR91T in heatpump mode.
+      # The HCC100 encodes active cooling demand as 0xC8 (100%).
+      # Unknown demand bytes are conservatively treated as inactive (False).
+
+    :param domain_or_zone_index: Domain or zone index byte.
+    :type domain_or_zone_index: int
+    :param state: Cooling state boolean (True if 0xC8, False if 0x00).
+    :type state: bool
+    :param reserved: Reserved trailing status byte (normally 0x00).
+    :type reserved: int
+    """
+
+    _STRUCT_FMT: ClassVar[str] = ">BBB"
+
+    domain_or_zone_index: int
+    state: bool
+    reserved: int = 0
+
+    @classmethod
+    def from_bytes(cls, raw_data: bytes) -> Self:
+        """Unpack 3-byte HCC100 cooling-demand binary payload.
+
+        :param raw_data: Raw binary byte string.
+        :type raw_data: bytes
+        :returns: Unpacked CoolingState3BPayload instance.
+        :rtype: Self
+        :raises ValueError: If raw_data length is not 3 bytes.
+        """
+        if len(raw_data) != 3:
+            raise ValueError(
+                f"Invalid payload length for 2D49 3B: {len(raw_data)}"
+            )
+        index, demand_raw, reserved = struct.unpack(cls._STRUCT_FMT, raw_data)
+        return cls(
+            domain_or_zone_index=index,
+            state=demand_raw == 0xC8,
+            reserved=reserved,
+        )
+
+    def to_bytes(self) -> bytes:
+        """Pack 3-byte HCC100 cooling-demand payload into binary bytes.
+
+        :returns: Packed binary payload bytes.
+        :rtype: bytes
+        """
+        return struct.pack(
+            self._STRUCT_FMT,
+            self.domain_or_zone_index,
+            0xC8 if self.state else 0x00,
+            self.reserved,
+        )
+
+
+CoolingStatePayload.VARIANTS = (
+    CoolingState2BPayload,
+    CoolingState3BPayload,
+)
 
 
 # ----------------------------------------------------------------------

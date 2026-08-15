@@ -33,7 +33,7 @@ from ramses_rf.devices import (
     TrvActuator,
 )
 from ramses_rf.entity import Entity, class_by_attr
-from ramses_rf.enums import Action, DevType
+from ramses_rf.enums import Action, DevType, ThermalMode
 from ramses_rf.helpers import shrink
 from ramses_rf.models import (
     DemandState,
@@ -145,12 +145,21 @@ class ZoneBase(Child, Parent, Entity):
         """Compare two zones by their zone index."""
         if not isinstance(other, ZoneBase):
             return NotImplemented
-        return self.idx < other.idx
+        return self.index < other.index
+
+    @property
+    def index(self) -> str:
+        """Return the zone index string.
+
+        :returns: Hexadecimal zone index string.
+        :rtype: str
+        """
+        return self._child_id
 
     @property
     def idx(self) -> str:
-        """Return the zone index string."""
-        return self._child_id
+        """Return the zone index string (legacy alias for index)."""
+        return self.index
 
     async def schema(self) -> dict[str, Any]:
         """Return the schema (fixed at instantiation)."""
@@ -347,17 +356,30 @@ class DhwZone(ZoneSchedule):  # CS92A
         """Return current hot water temperature in degrees Celsius."""
         return self.temp_state.temperature
 
+    async def thermal_mode(self) -> ThermalMode | None:
+        """Return the active thermal mode of the zone.
+
+        :returns: Active ThermalMode or None.
+        :rtype: ThermalMode | None
+        """
+        if self.tcs:
+            return await self.tcs.thermal_mode()
+        return ThermalMode.HEAT
+
     async def thermal_demand(self) -> ThermalDemandDTO | None:
         """Return zone thermal demand as a CQRS DTO.
 
         :returns: ThermalDemandDTO or None.
         :rtype: ThermalDemandDTO | None
         """
-        heat_demand_val = self.demand_state.heat_demand
-        if heat_demand_val is None:
+        heat_demand_value = self.demand_state.heat_demand
+        if heat_demand_value is None:
             return None
+        mode = await self.thermal_mode() or ThermalMode.HEAT
         return ThermalDemandDTO(
-            thermal_demand=heat_demand_val, ufh_index=str(self.idx)
+            thermal_demand=heat_demand_value,
+            mode=mode,
+            ufh_index=str(self.index),
         )
 
     async def heat_demand(self) -> float | None:  # 3150
