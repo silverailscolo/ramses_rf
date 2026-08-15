@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime as dt
 
+from ramses_rf.enums import PumpRelayState
+
 from .state_base import _now_utc
 
 # --- Compositional State Blocks ---
@@ -60,6 +62,7 @@ class SystemState:
     until: dt | str | None = None
     datetime: str | None = None
     language: str | None = None
+    cooling_mode: bool | None = None
     last_updated: dt = field(default_factory=_now_utc)
 
 
@@ -113,6 +116,7 @@ class ActuatorState:
     cool_active: bool | None = None
     flame_on: bool | None = None
     max_rel_modulation: float | None = None
+    pump_relay_state: PumpRelayState | None = None
     actuator_countdown: int | None = None
     cycle_countdown: int | None = None
     last_updated: dt = field(default_factory=_now_utc)

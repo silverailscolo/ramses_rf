@@ -51,7 +51,9 @@ class DeviceTraits:
         """
         result: dict[str, Any] = {}
         if self.device_class is not None:
-            result["class"] = getattr(self.device_class, "value", self.device_class)
+            result["class"] = getattr(
+                self.device_class, "value", self.device_class
+            )
         if self.alias is not None:
             result["alias"] = self.alias
         if self.faked is not None:
@@ -81,9 +83,7 @@ def _now_utc() -> dt:
 
 @dataclass(frozen=True, slots=True)
 class TopologyChangedEvent:
-    """Immutable event representing a structural change in the network
-    graph.
-    """
+    """Immutable event for a structural network graph change."""
 
     # The structural action to perform
     action: TopologyAction

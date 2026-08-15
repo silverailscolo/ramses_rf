@@ -38,7 +38,9 @@ async def _send_hvac_sensor_intent(
         action=action,
         data=data,
     )
-    return await device._gwy.dispatcher.send(intent, priority=Priority.HIGH)
+    return await device._gateway.dispatcher.send(
+        intent, priority=Priority.HIGH
+    )
 
 
 class HvacSensorBase(DeviceHvac):
@@ -160,7 +162,9 @@ class PresenceDetect(HvacSensorBase):  # 2E10
         """
         return self.hvac_state.presence_detected
 
-    async def set_presence_detected(self, value: bool | None) -> Message | None:
+    async def set_presence_detected(
+        self, value: bool | None
+    ) -> Message | None:
         """Set a fake presence detection state for the sensor.
 
         :param value: The presence state to set (True/False), or None to clear the fake value
@@ -169,7 +173,6 @@ class PresenceDetect(HvacSensorBase):  # 2E10
         :return: The sent message, or None if no response was returned
         :rtype: Message | None
         """
-
         if not self.is_faked:
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
@@ -179,7 +182,9 @@ class PresenceDetect(HvacSensorBase):  # 2E10
             action=Action.PUT_PRESENCE_DETECTED,
             data={"presence_detected": value},
         )
-        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
+        return await self._gateway.dispatcher.send(
+            intent, priority=Priority.HIGH
+        )
 
     async def status(self) -> dict[str, Any]:
         """Return the status of the presence sensor.
@@ -194,7 +199,9 @@ class PresenceDetect(HvacSensorBase):  # 2E10
         }
 
 
-class HvacHumiditySensor(BatteryState, IndoorHumidity, Fakeable):  # HUM: I/12A0
+class HvacHumiditySensor(
+    BatteryState, IndoorHumidity, Fakeable
+):  # HUM: I/12A0
     """The class for a humidity sensor.
 
     The cardinal code is 12A0.

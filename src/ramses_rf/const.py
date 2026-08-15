@@ -32,7 +32,7 @@ from ramses_tx.const import (
     FaultType as FaultType,
     IndexT as IndexT,
     SystemType as SystemType,
-    VerbT as VerbT,
+    Verb as Verb,
     __dev_mode__ as __dev_mode__,
     attr_dict_factory as attr_dict_factory,
 )
@@ -53,8 +53,11 @@ SZ_DATETIME: Final = "datetime"
 SZ_BYPASS_POSITION: Final = "bypass_position"
 SZ_CH_ACTIVE: Final = "ch_active"
 SZ_CH_ENABLED: Final = "ch_enabled"
+SZ_COOL_MODE: Final = "cool_mode"
 SZ_COOLING_ACTIVE: Final = "cooling_active"
+SZ_COOLING_DEMAND: Final = "cooling_demand"
 SZ_COOLING_ENABLED: Final = "cooling_enabled"
+SZ_COOLING_MODE: Final = "cooling_mode"
 SZ_DHW_ACTIVE: Final = "dhw_active"
 SZ_DHW_BLOCKING: Final = "dhw_blocking"
 SZ_DHW_ENABLED: Final = "dhw_enabled"
@@ -65,13 +68,18 @@ SZ_DEMAND: Final = "demand"
 SZ_DEVICE_ID: Final = "device_id"
 SZ_DEVICE_ROLE: Final = "device_role"
 SZ_DEVICES: Final = "devices"
-SZ_DHW_IDX: Final = "dhw_idx"
+SZ_DHW_INDEX: Final = "dhw_index"
+SZ_DHW_IDX: Final = SZ_DHW_INDEX
 SZ_DIFFERENTIAL: Final = "differential"
-SZ_DOMAIN_ID: Final = "domain_id"
+SZ_DOMAIN_INDEX: Final = "domain_index"
+SZ_DOMAIN_ID: Final = SZ_DOMAIN_INDEX
+SZ_DOMAIN_IDX: Final = SZ_DOMAIN_INDEX
 SZ_DURATION: Final = "duration"
 SZ_FLAME_ON: Final = "flame_on"
 SZ_HEAT_DEMAND: Final = "heat_demand"
-SZ_IS_DST: Final = "is_dst"
+SZ_HEAT_MODE: Final = "heat_mode"
+SZ_IS_DAYLIGHT_SAVING: Final = "is_daylight_saving"
+SZ_IS_DST: Final = SZ_IS_DAYLIGHT_SAVING
 SZ_LANGUAGE: Final = "language"
 SZ_LOCAL_OVERRIDE: Final = "local_override"
 SZ_MAX_TEMP: Final = "max_temp"
@@ -84,37 +92,54 @@ SZ_NAME: Final = "name"
 SZ_OEM_CODE: Final = "oem_code"
 SZ_OPENWINDOW_FUNCTION: Final = "openwindow_function"
 SZ_OVERRUN: Final = "overrun"
+SZ_PARAMETER_ID: Final = "parameter_id"
+SZ_PARAM_ID: Final = SZ_PARAMETER_ID
+SZ_PARAMETER_INDEX: Final = "parameter_index"
+SZ_PARAM_IDX: Final = SZ_PARAMETER_INDEX
+SZ_PARAMETER_VALUE: Final = "parameter_value"
+SZ_PARAM_VAL: Final = SZ_PARAMETER_VALUE
 SZ_PAYLOAD: Final = "payload"
 # SZ_PERCENTAGE: Final = "percentage"  # obsolete?
 SZ_PRESSURE: Final = "pressure"
+SZ_PUMP_RELAY_STATE: Final = "pump_relay_state"
 SZ_RELAY_DEMAND: Final = "relay_demand"
 SZ_RELAY_FAILSAFE: Final = "relay_failsafe"
 SZ_SENSOR: Final = "sensor"
 SZ_SETPOINT: Final = "setpoint"
 SZ_SETPOINT_BOUNDS: Final = "setpoint_bounds"
+SZ_SETPOINT_INDEX: Final = "setpoint_index"
+SZ_SETPOINT_IDX: Final = SZ_SETPOINT_INDEX
 # SZ_SLUG: Final = "_SLUG"  # obsolete?
 SZ_SYSTEM_MODE: Final = "system_mode"
 SZ_TEMPERATURE: Final = "temperature"
 # SZ_TEMP_HIGH: Final = "temp_high"  # obsolete?
 # SZ_TEMP_LOW: Final = "temp_low"  # obsolete?
-SZ_UFH_IDX: Final = "ufh_idx"
+SZ_THERMAL_DEMAND: Final = "thermal_demand"
+SZ_THERMAL_DEMANDS: Final = "thermal_demands"
+SZ_UFH_INDEX: Final = "ufh_index"
+SZ_UFH_IDX: Final = SZ_UFH_INDEX
 SZ_UNKNOWN: Final = "unknown"
 SZ_UNTIL: Final = "until"
 SZ_VALUE: Final = "value"
 SZ_WINDOW_OPEN: Final = "window_open"
 SZ_ZONE_CLASS: Final = "zone_class"
-SZ_ZONE_IDX: Final = "zone_idx"
+SZ_ZONE_INDEX: Final = "zone_index"
+SZ_ZONE_IDX: Final = SZ_ZONE_INDEX
 SZ_ZONE_MASK: Final = "zone_mask"
 SZ_ZONE_TYPE: Final = "zone_type"
 SZ_ZONES: Final = "zones"
 
 # used in 0418 only?
+SZ_CONFIG_INDEX: Final = "config_index"
+SZ_CONFIG_IDX: Final = SZ_CONFIG_INDEX
+SZ_CONFIG_VALUE: Final = "config_value"
+SZ_CONFIG_VAL: Final = SZ_CONFIG_VALUE
 SZ_DEVICE_CLASS: Final = "device_class"
-SZ_DOMAIN_IDX: Final = "domain_idx"
 SZ_FAULT_STATE: Final = "fault_state"
 SZ_FAULT_TYPE: Final = "fault_type"
 SZ_LOG_ENTRY: Final = "log_entry"
-SZ_LOG_IDX: Final = "log_idx"
+SZ_LOG_INDEX: Final = "log_index"
+SZ_LOG_IDX: Final = SZ_LOG_INDEX
 SZ_TIMESTAMP: Final = "timestamp"
 
 # used in 1FC9
@@ -125,9 +150,12 @@ SZ_PHASE: Final = "phase"
 
 # used by schedule.py...
 SZ_FRAGMENT: Final = "fragment"
-SZ_FRAG_NUMBER: Final = "frag_number"
-SZ_FRAG_LENGTH: Final = "frag_length"
-SZ_TOTAL_FRAGS: Final = "total_frags"
+SZ_FRAGMENT_NUMBER: Final = "fragment_number"
+SZ_FRAG_NUMBER: Final = SZ_FRAGMENT_NUMBER
+SZ_FRAGMENT_LENGTH: Final = "fragment_length"
+SZ_FRAG_LENGTH: Final = SZ_FRAGMENT_LENGTH
+SZ_TOTAL_FRAGMENTS: Final = "total_fragments"
+SZ_TOTAL_FRAGS: Final = SZ_TOTAL_FRAGMENTS
 
 SZ_SCHEDULE: Final = "schedule"
 SZ_CHANGE_COUNTER: Final = "change_counter"
@@ -162,12 +190,15 @@ SZ_OUTDOOR_TEMP: Final = "outdoor_temp"
 SZ_POST_HEAT: Final = "post_heat"
 SZ_PRE_HEAT: Final = "pre_heat"
 SZ_PRESENCE_DETECTED: Final = "presence_detected"
-SZ_REL_HUMIDITY: Final = "rel_humidity"
+SZ_RELATIVE_HUMIDITY: Final = "relative_humidity"
+SZ_REL_HUMIDITY: Final = SZ_RELATIVE_HUMIDITY
 SZ_REMAINING_DAYS: Final = "days_remaining"
 SZ_REMAINING_MINS: Final = "remaining_mins"
 SZ_REMAINING_PERCENT: Final = "percent_remaining"
-SZ_REQ_REASON: Final = "req_reason"
-SZ_REQ_SPEED: Final = "req_speed"
+SZ_REQUEST_REASON: Final = "request_reason"
+SZ_REQ_REASON: Final = SZ_REQUEST_REASON
+SZ_REQUEST_SPEED: Final = "request_speed"
+SZ_REQ_SPEED: Final = SZ_REQUEST_SPEED
 SZ_SUPPLY_FAN_SPEED: Final = "supply_fan_speed"
 SZ_SUPPLY_FLOW: Final = "supply_flow"
 SZ_SUPPLY_TEMP: Final = "supply_temp"
@@ -289,6 +320,9 @@ WB_STATUS_CODES: Final[dict[str, str]] = {
 
 # Device Availability Timeouts
 HEARTBEAT_TIMEOUT_DEFAULT = td(hours=1)
+HEARTBEAT_TIMEOUT_DHW = td(
+    hours=24
+)  # CS92A: battery DHW sensor, polled every 24h by CTL
 HEARTBEAT_TIMEOUT_FILTER = td(hours=24)
 HEARTBEAT_TIMEOUT_OTB = td(hours=24)
 HEARTBEAT_TIMEOUT_TRV = td(hours=12)
@@ -311,7 +345,9 @@ DEV_ROLE_MAP = attr_dict_factory(
         DevRole.HT1: {None: "heating_valve"},  # payload[:4] == 010E
         DevRole.APP: {"0F": "appliance_control"},  # the heat/cool source
         DevRole.RFG: {"10": "remote_gateway"},
-        DevRole.ELE: {"11": "ele_actuator"},  # ELE(VAL) - no RP from older evos
+        DevRole.ELE: {
+            "11": "ele_actuator"
+        },  # ELE(VAL) - no RP from older evos
     },
     {
         "HEAT_DEVICES": ("00", "04", "08", "09", "0A", "0B", "11"),
@@ -330,7 +366,10 @@ DEV_TYPE_MAP = attr_dict_factory(
         # HGI80
         DevType.HGI: {"18": "gateway_interface"},
         # Heat (CH/DHW) devices
-        DevType.TR0: {"00": "radiator_valve", AttrDict._SZ_AKA_SLUG: DevType.TRV},
+        DevType.TR0: {
+            "00": "radiator_valve",
+            AttrDict._SZ_AKA_SLUG: DevType.TRV,
+        },
         DevType.CTL: {"01": "controller"},
         DevType.UFC: {"02": "ufh_controller"},
         DevType.HCW: {"03": "analog_thermostat"},
@@ -341,7 +380,10 @@ DEV_TYPE_MAP = attr_dict_factory(
         DevType.DTS: {"12": "digital_thermostat"},
         DevType.BDR: {"13": "electrical_relay"},
         DevType.OUT: {"17": "outdoor_sensor"},
-        DevType.DT2: {"22": "digital_thermostat", AttrDict._SZ_AKA_SLUG: DevType.DTS},
+        DevType.DT2: {
+            "22": "digital_thermostat",
+            AttrDict._SZ_AKA_SLUG: DevType.DTS,
+        },
         DevType.PRG: {"23": "programmer"},
         DevType.RFG: {"30": "rf_gateway"},
         DevType.RND: {"34": "round_thermostat"},

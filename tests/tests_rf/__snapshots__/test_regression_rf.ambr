@@ -4,6 +4,22 @@
     'devices': list([
       dict({
         'battery_low': None,
+        'id': '00:000001',
+        'is_alive': None,
+        'tcs_id': None,
+        'type': 'TrvActuator',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': None,
+        'id': '00:000018',
+        'is_alive': None,
+        'tcs_id': '01:059885',
+        'type': 'TrvActuator',
+        'zone_idx': '00',
+      }),
+      dict({
+        'battery_low': None,
         'id': '00:000558',
         'is_alive': None,
         'tcs_id': None,
@@ -13,11 +29,11 @@
       }),
       dict({
         'battery_low': None,
-        'id': '00:004249',
+        'id': '00:004635',
         'is_alive': None,
-        'tcs_id': '01:239700',
+        'tcs_id': '01:059885',
         'type': 'TrvActuator',
-        'zone_idx': '07',
+        'zone_idx': '00',
       }),
       dict({
         'battery_low': None,
@@ -245,14 +261,6 @@
       }),
       dict({
         'battery_low': None,
-        'id': '01:133120',
-        'is_alive': None,
-        'tcs_id': '01:133120',
-        'type': 'Controller',
-        'zone_idx': None,
-      }),
-      dict({
-        'battery_low': None,
         'id': '01:133689',
         'is_alive': None,
         'tcs_id': '01:133689',
@@ -381,14 +389,6 @@
       }),
       dict({
         'battery_low': None,
-        'id': '01:198656',
-        'is_alive': None,
-        'tcs_id': '01:198656',
-        'type': 'Controller',
-        'zone_idx': None,
-      }),
-      dict({
-        'battery_low': None,
         'id': '01:201047',
         'is_alive': None,
         'tcs_id': '01:201047',
@@ -469,19 +469,11 @@
       }),
       dict({
         'battery_low': None,
-        'id': '02:000016',
-        'is_alive': None,
-        'tcs_id': '01:239700',
-        'type': 'UfhController',
-        'zone_idx': None,
-      }),
-      dict({
-        'battery_low': None,
         'heat_demands': list([
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.98,
-            'ufx_idx': '06',
+            'ufh_index': '06',
           }),
         ]),
         'id': '02:000921',
@@ -532,12 +524,12 @@
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '00',
+            'ufh_index': '00',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.31,
-            'ufx_idx': '01',
+            'ufh_index': '01',
           }),
         ]),
         'id': '02:001786',
@@ -563,22 +555,22 @@
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '00',
+            'ufh_index': '00',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '01',
+            'ufh_index': '01',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '0B',
+            'ufh_index': '0B',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '02',
+            'ufh_index': '02',
           }),
         ]),
         'id': '02:007533',
@@ -617,7 +609,7 @@
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.59,
-            'ufx_idx': '00',
+            'ufh_index': '00',
           }),
         ]),
         'id': '02:017205',
@@ -714,32 +706,32 @@
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.57,
-            'ufx_idx': '00',
+            'ufh_index': '00',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '01',
+            'ufh_index': '01',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '02',
+            'ufh_index': '02',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.74,
-            'ufx_idx': '08',
+            'ufh_index': '08',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '07',
+            'ufh_index': '07',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '03',
+            'ufh_index': '03',
           }),
         ]),
         'id': '02:044328',
@@ -769,17 +761,17 @@
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.95,
-            'ufx_idx': '00',
+            'ufh_index': '00',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.85,
-            'ufx_idx': '01',
+            'ufh_index': '01',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.64,
-            'ufx_idx': '02',
+            'ufh_index': '02',
           }),
         ]),
         'id': '02:044435',
@@ -810,37 +802,37 @@
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.82,
-            'ufx_idx': '00',
+            'ufh_index': '00',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '01',
+            'ufh_index': '01',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '02',
+            'ufh_index': '02',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.0,
-            'ufx_idx': '03',
+            'ufh_index': '03',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.23,
-            'ufx_idx': '04',
+            'ufh_index': '04',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.39,
-            'ufx_idx': '05',
+            'ufh_index': '05',
           }),
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 1.0,
-            'ufx_idx': '06',
+            'ufh_index': '06',
           }),
         ]),
         'id': '02:044446',
@@ -893,7 +885,7 @@
           dict({
             'mode': <ThermalMode.HEAT: 'heat'>,
             'thermal_demand': 0.81,
-            'ufx_idx': '00',
+            'ufh_index': '00',
           }),
         ]),
         'id': '02:123456',
@@ -1096,6 +1088,14 @@
         'setpoint': 22.0,
         'tcs_id': None,
         'temperature': 19.2,
+        'type': 'Thermostat',
+        'zone_idx': None,
+      }),
+      dict({
+        'battery_low': False,
+        'id': '03:196196',
+        'is_alive': None,
+        'tcs_id': None,
         'type': 'Thermostat',
         'zone_idx': None,
       }),
@@ -3935,6 +3935,7 @@
         'battery_low': None,
         'id': '21:052764',
         'is_alive': None,
+        'setpoint': 15.0,
         'tcs_id': None,
         'temperature': 19.0,
         'type': 'Thermostat',
@@ -5787,19 +5788,13 @@
       }),
       dict({
         'battery_low': None,
-        'id': '38:113926',
-        'is_alive': None,
-        'type': 'DeviceHvac',
-      }),
-      dict({
-        'battery_low': None,
-        'id': '38:115975',
-        'is_alive': None,
-        'type': 'DeviceHvac',
-      }),
-      dict({
-        'battery_low': None,
         'id': '39:159057',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
+        'id': '40:000000',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
@@ -5841,19 +5836,7 @@
       }),
       dict({
         'battery_low': None,
-        'id': '47:132616',
-        'is_alive': None,
-        'type': 'DeviceHvac',
-      }),
-      dict({
-        'battery_low': None,
         'id': '47:777777',
-        'is_alive': None,
-        'type': 'DeviceHvac',
-      }),
-      dict({
-        'battery_low': None,
-        'id': '48:198408',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
@@ -5866,6 +5849,18 @@
       dict({
         'battery_low': None,
         'id': '49:999999',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
+        'id': '59:102912',
+        'is_alive': None,
+        'type': 'DeviceHvac',
+      }),
+      dict({
+        'battery_low': None,
+        'id': '99:000001',
         'is_alive': None,
         'type': 'DeviceHvac',
       }),
@@ -5998,6 +5993,8 @@
           '00': dict({
             '_name': None,
             'actuators': list([
+              '00:000018',
+              '00:004635',
               '04:105119',
               '04:105167',
               '04:105255',
@@ -6313,6 +6310,20 @@
             ]),
             'class': 'underfloor_heating',
             'sensor': '03:256004',
+          }),
+          '09': dict({
+            '_name': None,
+            'actuators': list([
+            ]),
+            'class': None,
+            'sensor': None,
+          }),
+          '0A': dict({
+            '_name': None,
+            'actuators': list([
+            ]),
+            'class': None,
+            'sensor': None,
           }),
         }),
       }),
@@ -6700,19 +6711,6 @@
         }),
       }),
       '01:130735': dict({
-        'orphans': list([
-        ]),
-        'stored_hotwater': dict({
-        }),
-        'system': dict({
-          'appliance_control': None,
-        }),
-        'underfloor_heating': dict({
-        }),
-        'zones': dict({
-        }),
-      }),
-      '01:133120': dict({
         'orphans': list([
         ]),
         'stored_hotwater': dict({
@@ -7158,19 +7156,6 @@
         'zones': dict({
         }),
       }),
-      '01:198656': dict({
-        'orphans': list([
-        ]),
-        'stored_hotwater': dict({
-        }),
-        'system': dict({
-          'appliance_control': None,
-        }),
-        'underfloor_heating': dict({
-        }),
-        'zones': dict({
-        }),
-      }),
       '01:201047': dict({
         'orphans': list([
         ]),
@@ -7300,32 +7285,11 @@
           'appliance_control': None,
         }),
         'underfloor_heating': dict({
-          '02:000016': dict({
-            'circuits': dict({
-              '00': dict({
-              }),
-              '01': dict({
-              }),
-              '02': dict({
-              }),
-              '03': dict({
-              }),
-              '04': dict({
-              }),
-              '05': dict({
-              }),
-              '06': dict({
-              }),
-              '07': dict({
-              }),
-            }),
-          }),
         }),
         'zones': dict({
           '07': dict({
             '_name': None,
             'actuators': list([
-              '00:004249',
               '04:039359',
               '04:039363',
               '04:039365',
@@ -7370,10 +7334,9 @@
       }),
       'main_tcs': '01:145038',
       'orphans_heat': list([
-        '04:017810',
-        '13:027756',
       ]),
       'orphans_hvac': list([
+        '99:000001',
       ]),
     }),
     'tcs': dict({

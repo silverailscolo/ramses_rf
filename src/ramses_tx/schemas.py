@@ -33,12 +33,12 @@ SZ_RPLY_TIMEOUT: Final = "reply_timeout"
 
 SCH_COMMS_PARAMS = vol.Schema(
     {
-        vol.Required(SZ_DUTY_CYCLE_LIMIT, default=MAX_DUTY_CYCLE_RATE): vol.All(
-            float, vol.Range(min=0.005, max=0.2)
-        ),
-        vol.Required(SZ_GAP_BETWEEN_WRITES, default=MIN_INTER_WRITE_GAP): vol.All(
-            float, vol.Range(min=0.05, max=1.0)
-        ),
+        vol.Required(
+            SZ_DUTY_CYCLE_LIMIT, default=MAX_DUTY_CYCLE_RATE
+        ): vol.All(float, vol.Range(min=0.005, max=0.2)),
+        vol.Required(
+            SZ_GAP_BETWEEN_WRITES, default=MIN_INTER_WRITE_GAP
+        ): vol.All(float, vol.Range(min=0.05, max=1.0)),
         vol.Required(SZ_ECHO_TIMEOUT, default=DEFAULT_ECHO_TIMEOUT): vol.All(
             float, vol.Range(min=0.01, max=1.0)
         ),
@@ -70,10 +70,7 @@ def sch_packet_log_dict_factory(
     default_backups: int | None = None,
     default_retention_days: int = 7,
 ) -> dict[vol.Required, vol.Any]:
-    """
-    :return: a packet log dict with a configurable default rotation policy.
-    """
-
+    """Return packet log dict with default rotation policy."""
     if default_backups is not None:
         default_retention_days = default_backups
 
@@ -85,7 +82,9 @@ def sch_packet_log_dict_factory(
                 SZ_PACKET_LOG_RETENTION_DAYS, default=default_retention_days
             ): vol.Any(None, int),
             vol.Optional(SZ_ROTATE_BYTES): vol.Any(None, int),
-            vol.Optional(SZ_FLUSH_INTERVAL, default=60): vol.Any(None, int, float),
+            vol.Optional(SZ_FLUSH_INTERVAL, default=60): vol.Any(
+                None, int, float
+            ),
             vol.Optional(SZ_BUFFER_CAPACITY, default=0): vol.Any(None, int),
             vol.Optional("flush_level"): vol.Any(None, int, str),
         },
@@ -94,7 +93,7 @@ def sch_packet_log_dict_factory(
 
     SCH_PACKET_LOG_NAME = str
 
-    def NormalisePacketLog(
+    def normalise_packet_log_factory(
         retention_days: int = 7,
     ) -> Callable[[str | PktLogConfigT], PktLogConfigT]:
         def normalise_packet_log(
@@ -118,7 +117,9 @@ def sch_packet_log_dict_factory(
             None,
             vol.All(
                 SCH_PACKET_LOG_NAME,
-                NormalisePacketLog(retention_days=default_retention_days),
+                normalise_packet_log_factory(
+                    retention_days=default_retention_days
+                ),
             ),
             SCH_PACKET_LOG_CONFIG,
         )
@@ -159,10 +160,11 @@ SCH_SERIAL_PORT_CONFIG = vol.Schema(
 
 def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     """Return a serial port dict."""
-
     SCH_SERIAL_PORT_NAME = str
 
-    def NormaliseSerialPort() -> Callable[[str | PortConfigT], PortConfigT]:
+    def normalise_serial_port_factory() -> Callable[
+        [str | PortConfigT], PortConfigT
+    ]:
         def normalise_serial_port(
             node_value: str | PortConfigT,
         ) -> PortConfigT:
@@ -179,7 +181,7 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
         vol.Required(SZ_SERIAL_PORT): vol.Any(
             vol.All(
                 SCH_SERIAL_PORT_NAME,
-                NormaliseSerialPort(),
+                normalise_serial_port_factory(),
             ),
             SCH_SERIAL_PORT_CONFIG.extend(
                 {vol.Required(SZ_PORT_NAME): SCH_SERIAL_PORT_NAME}
@@ -188,12 +190,14 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     }
 
 
-def extract_serial_port(ser_port_dict: dict[str, Any]) -> tuple[str, PortConfigT]:
-    """Extract a serial port, port_config_dict tuple from a
-    sch_serial_port_dict."""
-    port_name = str(ser_port_dict.get(SZ_PORT_NAME, ""))
+def extract_serial_port(
+    serial_port_dict: dict[str, Any],
+) -> tuple[str, PortConfigT]:
+    """Extract serial port and port config tuple from schema."""
+    port_name = str(serial_port_dict.get(SZ_PORT_NAME, ""))
     port_config = cast(
-        "PortConfigT", {k: v for k, v in ser_port_dict.items() if k != SZ_PORT_NAME}
+        "PortConfigT",
+        {k: v for k, v in serial_port_dict.items() if k != SZ_PORT_NAME},
     )
     return port_name, port_config
 
@@ -211,13 +215,8 @@ def select_device_filter_mode(
     block_list: list[str],
 ) -> bool:
     """Determine which device filter to use, if any."""
-
-    known_warn_line2: Final = (
-        "In Ramses RF Config, turn On 'Accept packets from known device IDs only'. "
-    )
-    known_warn_line3: str = (
-        f"For CLI, add `configure: enforce_{SZ_KNOWN_LIST} = True` to a config file."
-    )
+    known_warn_line2: Final = "In Ramses RF Config, turn On 'Accept packets from known device IDs only'. "
+    known_warn_line3: str = f"For CLI, add `configure: enforce_{SZ_KNOWN_LIST} = True` to a config file."
 
     if enforce_known_list and not known_list:
         _LOGGER.warning(

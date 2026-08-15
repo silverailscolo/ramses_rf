@@ -11,14 +11,36 @@ from functools import partial
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
-from .address import ALL_DEV_ADDR, ALL_DEVICE_ID, NON_DEV_ADDR, NON_DEVICE_ID, Address
-from .const import F9, FA, FC, FF, SZ_ACTIVE_HGI, IndexT, Priority, VerbT
+from .address import (
+    ALL_DEV_ADDR,
+    ALL_DEVICE_ID,
+    NON_DEV_ADDR,
+    NON_DEVICE_ID,
+    Address,
+)
+from .const import (
+    F9,
+    FA,
+    FC,
+    FF,
+    SZ_ACTIVE_GATEWAY,
+    SZ_ACTIVE_HGI,
+    SZ_REPEAT_COUNT,
+    IndexT,
+    Priority,
+    Verb,
+)
 from .discovery import is_hgi80
 from .dtos import CommandDTO, PacketDTO
 from .engine import Engine
 from .logger import set_pkt_logging
 from .packet import PKT_LOGGER, Packet
-from .protocol import PortProtocol, RamsesProtocolT, ReadProtocol, protocol_factory
+from .protocol import (
+    PortProtocol,
+    RamsesProtocolT,
+    ReadProtocol,
+    protocol_factory,
+)
 from .schemas import SZ_SERIAL_PORT
 from .transport import RamsesTransportT, ZigbeeTransport, transport_factory
 from .typing import DeviceIdT, QosParams
@@ -37,9 +59,11 @@ __all__ = [
     "VERSION",
     "Engine",
     #
+    "SZ_ACTIVE_GATEWAY",
     "SZ_ACTIVE_HGI",
     "SZ_DEVICE_ROLE",
     "SZ_DOMAIN_ID",
+    "SZ_REPEAT_COUNT",
     "SZ_SERIAL_PORT",
     "SZ_ZONE_CLASS",
     "SZ_ZONE_IDX",
@@ -62,7 +86,7 @@ __all__ = [
     #
     "DeviceIdT",
     "IndexT",
-    "VerbT",
+    "Verb",
     #
     "Address",
     "Code",
@@ -93,7 +117,9 @@ if TYPE_CHECKING:
     from logging import Logger
 
 
-async def set_pkt_logging_config(**config: Any) -> tuple[Logger, QueueListener | None]:
+async def set_pkt_logging_config(
+    **config: Any,
+) -> tuple[Logger, QueueListener | None]:
     """Set up ramses packet logging to a file or port.
 
     Must run async in executor to prevent HA blocking call opening packet log file.

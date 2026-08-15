@@ -7,10 +7,9 @@ from ramses_rf.commands.builders.helpers import (
     resolve_addrs,
 )
 from ramses_rf.commands.core import Command
-from ramses_rf.const import SZ_DHW_IDX, ZON_MODE_MAP
+from ramses_rf.const import SZ_DHW_INDEX, ZON_MODE_MAP
 from ramses_rf.enums import DevType
-from ramses_rf.payloads.dhw import DhwParamsPayload
-from ramses_rf.payloads.heating import DhwTemperaturePayload
+from ramses_rf.payloads.dhw import DhwParamsPayload, DhwTempPayload
 from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import hex_from_dtm
@@ -18,7 +17,7 @@ from ramses_tx.helpers import hex_from_dtm
 
 def build_get_dhw_params(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_PARAMS intent into a CommandDTO."""
-    dhw_idx = check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = check_idx(intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0)))
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -34,7 +33,7 @@ def build_get_dhw_params(intent: Command) -> CommandDTO:
 
 def build_set_dhw_params(intent: Command) -> CommandDTO:
     """Translate a SET_DHW_PARAMS intent into a CommandDTO."""
-    dhw_idx = intent.get(SZ_DHW_IDX, 0)
+    dhw_idx = intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0))
     setpoint = intent.get("setpoint")
     if setpoint is None:
         setpoint = 50.0
@@ -54,7 +53,7 @@ def build_set_dhw_params(intent: Command) -> CommandDTO:
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     payload = DhwParamsPayload(
-        dhw_idx=dhw_idx,
+        dhw_index=dhw_idx,
         setpoint=setpoint,
         overrun=overrun,
         differential=differential,
@@ -73,7 +72,7 @@ def build_set_dhw_params(intent: Command) -> CommandDTO:
 
 def build_get_dhw_temp(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_TEMP intent into a CommandDTO."""
-    dhw_idx = check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = check_idx(intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0)))
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -91,10 +90,13 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_DHW_TEMP intent into a CommandDTO."""
     from ramses_rf.const import DEV_TYPE_MAP
 
-    dhw_idx = intent.get(SZ_DHW_IDX, 0)
+    dhw_idx = intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0))
     temperature = intent.get("temperature")
 
-    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.DHW, DevType.DHW):
+    if getattr(intent.src, "type", None) not in (
+        DEV_TYPE_MAP.DHW,
+        DevType.DHW,
+    ):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.DHW}:xxxxxx"
@@ -102,7 +104,7 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 
     # I_ requires addr0=src, addr2=dst (which are the same for put_dhw_temp)
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.src)
-    payload = DhwTemperaturePayload(dhw_idx=dhw_idx, temperature=temperature).hex()
+    payload = DhwTempPayload(dhw_index=dhw_idx, temperature=temperature).hex()
 
     return CommandDTO(
         verb=I_,
@@ -118,7 +120,7 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 
 def build_get_dhw_mode(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_MODE intent into a CommandDTO."""
-    dhw_idx = check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = check_idx(intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0)))
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -134,7 +136,7 @@ def build_get_dhw_mode(intent: Command) -> CommandDTO:
 
 def build_set_dhw_mode(intent: Command) -> CommandDTO:
     """Translate a SET_DHW_MODE intent into a CommandDTO."""
-    dhw_idx = check_idx(intent.get(SZ_DHW_IDX, 0))
+    dhw_idx = check_idx(intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0)))
     mode = intent.get("mode")
     active = intent.get("active")
     until = intent.get("until")

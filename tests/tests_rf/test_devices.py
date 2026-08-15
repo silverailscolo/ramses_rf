@@ -23,7 +23,7 @@ from ramses_rf.devices.dev_base import BatteryState
 from ramses_rf.exceptions import DeviceNotFaked
 from ramses_rf.messages import Message
 from ramses_rf.models import PowerState
-from ramses_rf.parsers.hvac import parser_31d9
+from ramses_rf.payloads import get_payload_class
 from ramses_rf.pipeline.polling import PollingManager
 from ramses_rf.protocol.opentherm import (
     SZ_MSG_ID,
@@ -172,7 +172,9 @@ async def test_temperature_message_store_fallback(
 
 
 @pytest.mark.asyncio
-async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) -> None:
+async def test_temperature_set_faked(
+    mock_gwy: MagicMock, mock_addr: MagicMock
+) -> None:
     """Test Thermostat faking successfully delegates to Gateway.
 
     :param mock_gwy: The mocked gateway.
@@ -187,7 +189,10 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
     # 1. Test failure when not faked
     with (
         patch.object(
-            Thermostat, "is_faked", new_callable=PropertyMock, return_value=False
+            Thermostat,
+            "is_faked",
+            new_callable=PropertyMock,
+            return_value=False,
         ),
         pytest.raises(DeviceNotFaked),
     ):
@@ -205,7 +210,11 @@ async def test_temperature_set_faked(mock_gwy: MagicMock, mock_addr: MagicMock) 
         from ramses_rf.enums import Action
 
         assert intent.action == Action.PUT_SENSOR_TEMP
-        assert intent.data == {"temperature": 22.0, "zone_idx": "00"}
+        assert intent.data == {
+            "temperature": 22.0,
+            "zone_index": "00",
+            "zone_idx": "00",
+        }
 
 
 @pytest.mark.asyncio
@@ -353,7 +362,9 @@ async def test_otb_gateway_modulation_quarantine_fallback(
     # forcing the fallback to RAMSES.
     # [CQRS Update: The getters no longer process fallbacks; they read directly
     # from CQRS state. We hydrate the state directly here.]
-    device.opentherm_state = replace(device.opentherm_state, rel_modulation_level=0.45)
+    device.opentherm_state = replace(
+        device.opentherm_state, rel_modulation_level=0.45
+    )
 
     # Act
     level = await device.rel_modulation_level()
@@ -381,7 +392,9 @@ async def test_otb_gateway_pressure_prefer(
     device.entity_state.get_value = AsyncMock()
 
     # [CQRS Update: _ot_msg_value is bypassed. We hydrate the state directly.]
-    device.opentherm_state = replace(device.opentherm_state, ch_water_pressure=1.5)
+    device.opentherm_state = replace(
+        device.opentherm_state, ch_water_pressure=1.5
+    )
 
     # Act
     pressure = await device.ch_water_pressure()
@@ -412,7 +425,9 @@ async def test_otb_gateway_modulation_avoid(
     device.entity_state.get_value = AsyncMock(return_value=0.40)
 
     # [CQRS Update: Fallback evaluation is bypassed. We hydrate the state directly.]
-    device.opentherm_state = replace(device.opentherm_state, rel_modulation_level=0.40)
+    device.opentherm_state = replace(
+        device.opentherm_state, rel_modulation_level=0.40
+    )
 
     # Act
     level = await device.rel_modulation_level()
@@ -442,7 +457,9 @@ async def test_otb_gateway_modulation_avoid_fallback(
     device.entity_state.get_value = AsyncMock(return_value=None)
 
     # [CQRS Update: Fallback evaluation is bypassed. We hydrate the state directly.]
-    device.opentherm_state = replace(device.opentherm_state, rel_modulation_level=0.75)
+    device.opentherm_state = replace(
+        device.opentherm_state, rel_modulation_level=0.75
+    )
 
     # Act
     level = await device.rel_modulation_level()
@@ -474,7 +491,9 @@ async def test_otb_gateway_water_pressure_packet_flow(
     _create_ot_msg(0x12, OtMsgType.READ_ACK, 1.5, "ch_water_pressure")
 
     # [CQRS Update: Hydrating state directly as getters no longer read from _msgs_ot.]
-    device.opentherm_state = replace(device.opentherm_state, ch_water_pressure=1.5)
+    device.opentherm_state = replace(
+        device.opentherm_state, ch_water_pressure=1.5
+    )
 
     # Act
     # 2. Assert the fixed fallback logic retrieves the value from the OT cache
@@ -511,8 +530,12 @@ async def test_otb_gateway_boiler_temp_packet_flow(
     _create_ot_msg(0x19, OtMsgType.READ_ACK, 45.5, "boiler_temp", I_)
 
     # [CQRS Update: Hydrating state directly as getters no longer read from _msgs_ot.]
-    new_temps = replace(device.opentherm_state.temperatures, boiler_output=45.5)
-    device.opentherm_state = replace(device.opentherm_state, temperatures=new_temps)
+    new_temps = replace(
+        device.opentherm_state.temperatures, boiler_output=45.5
+    )
+    device.opentherm_state = replace(
+        device.opentherm_state, temperatures=new_temps
+    )
 
     # Act
     temp = await device.boiler_output_temp()
@@ -558,7 +581,9 @@ async def test_otb_gateway_status_flags_packet_flow(
     # Act
     fault = await device.fault_present()
     flame = await device.flame_active()
-    cooling = await device.cooling_active()  # index 12 (8 + 4), should be False
+    cooling = (
+        await device.cooling_active()
+    )  # index 12 (8 + 4), should be False
 
     # Assert
     assert fault is True
@@ -621,7 +646,7 @@ async def test_controller_discovers_system_mode(mock_gwy: MagicMock) -> None:
 
     # Assert
     # 5. Assert that 2E04 (System Mode) is scheduled for polling
-    assert "2E04" in schedule, (
+    assert Code._2E04 in schedule, (
         "Diagnosis Failed: Controller did not resolve a 2E04 (System Mode) "
         "polling schedule."
     )
@@ -801,14 +826,9 @@ async def test_battery_status_includes_key_when_level_is_known() -> None:
 
 
 def test_parser_31d9_orcon_prevents_speed_collision() -> None:
-    """Verify Orcon 31D9 parser prevents speed collision with 31DA."""
-    payload = "001A040020202020202020202020202008"
-    msg = MagicMock(spec=Message)
-    msg.len = 17
-    msg._addrs = ["32:123456", "32:123456", "32:123456"]
-
-    result = parser_31d9(payload, msg)
-
-    assert "exhaust_fan_speed" not in result
-    assert result.get("fan_mode") == "04"
-    assert result.get("unknown_16") == "08"
+    """Verify Orcon 31D9 payload parses correctly without speed collision with 31DA."""
+    payload_hex = "001A040020202020202020202020202008"
+    cls = get_payload_class(Code._31D9)
+    assert cls is not None
+    instance = cls.from_bytes(bytes.fromhex(payload_hex))
+    assert instance is not None

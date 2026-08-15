@@ -27,7 +27,7 @@ from ..packet import Packet
 from ..typing import QosParams
 
 if TYPE_CHECKING:
-    from ..const import Code, VerbT
+    from ..const import Code, Verb
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,13 +89,15 @@ class QosManager:
         """Return the number of commands currently in the queue."""
         return self._que.qsize()
 
-    def enqueue(self, priority: Priority, cmd: CommandDTO, qos: QosParams) -> _FutureT:
+    def enqueue(
+        self, priority: Priority, command: CommandDTO, qos: QosParams
+    ) -> _FutureT:
         """Add a command to the queue and return its future.
 
         :param priority: The transmission priority.
         :type priority: Priority
-        :param cmd: The command to transmit.
-        :type cmd: CommandDTO
+        :param command: The command to transmit.
+        :type command: CommandDTO
         :param qos: Quality of Service parameters.
         :type qos: QosParams
         :return: The future representing the expected response.
@@ -104,7 +106,7 @@ class QosManager:
         """
         fut: _FutureT = self._loop.create_future()
         try:
-            self._que.put_nowait((priority, dt.now(), cmd, qos, fut))
+            self._que.put_nowait((priority, dt.now(), command, qos, fut))
         except asyncio.QueueFull as err:
             fut.cancel("Send buffer overflow")
             raise ProtocolSendFailed("Send buffer overflow") from err
@@ -163,13 +165,13 @@ class QosManager:
         self._multiplier = max(0, self._multiplier - 1)
         return delay, old_val
 
-    def restore_multiplier(self, old_val: int) -> None:
+    def restore_multiplier(self, old_value: int) -> None:
         """Restore and increment the multiplier after a timeout sleep.
 
-        :param old_val: The previous multiplier value.
-        :type old_val: int
+        :param old_value: The previous multiplier value.
+        :type old_value: int
         """
-        self._multiplier = min(3, old_val + 1)
+        self._multiplier = min(3, old_value + 1)
 
 
 @dataclass(frozen=True)
@@ -201,7 +203,9 @@ class Qos:
     # tx (from sent to gwy, to get back from gwy) seems to takes approx. 0.025s
     TX_RETRIES_DEFAULT: ClassVar[int] = 2
     TX_RETRIES_MAX: ClassVar[int] = 5
-    TX_TIMEOUT_DEFAULT: ClassVar[td] = td(seconds=0.2)  # 0.20 OK, but too high?
+    TX_TIMEOUT_DEFAULT: ClassVar[td] = td(
+        seconds=0.2
+    )  # 0.20 OK, but too high?
 
     RX_TIMEOUT_DEFAULT: ClassVar[td] = td(
         seconds=0.50
@@ -230,9 +234,18 @@ class Qos:
         )
 
     @classmethod  # constructor from verb|code pair
-    def verb_code(cls, verb: VerbT, code: str | Code, **kwargs: Any) -> Qos:
-        """Constructor to create a QoS based upon the defaults for a verb|code pair."""
+    def verb_code(cls, verb: Verb, code: str | Code, **kwargs: Any) -> Qos:
+        """Create a QoS based upon the defaults for a verb|code pair.
 
+        :param verb: The protocol verb.
+        :type verb: Verb
+        :param code: The protocol command code.
+        :type code: str | Code
+        :param kwargs: Additional QoS parameter overrides.
+        :type kwargs: Any
+        :returns: Configured Qos instance.
+        :rtype: Qos
+        """
         default_qos = cls.DEFAULT_QOS_TABLE.get(
             f"{verb}|{code}",
             (
@@ -246,9 +259,13 @@ class Qos:
         priority = default_qos[0]
         retry_limit = default_qos[1]
         rx_timeout = (
-            default_qos[2] if default_qos[2] is not None else cls.RX_TIMEOUT_DEFAULT
+            default_qos[2]
+            if default_qos[2] is not None
+            else cls.RX_TIMEOUT_DEFAULT
         )
-        disable_backoff = not default_qos[3] if default_qos[3] is not None else False
+        disable_backoff = (
+            not default_qos[3] if default_qos[3] is not None else False
+        )
 
         valid_kwargs = {
             k: v for k, v in kwargs.items() if k in cls.__dataclass_fields__
@@ -258,5 +275,7 @@ class Qos:
             priority=valid_kwargs.get("priority", priority),
             retry_limit=valid_kwargs.get("retry_limit", retry_limit),
             rx_timeout=valid_kwargs.get("rx_timeout", rx_timeout),
-            disable_backoff=valid_kwargs.get("disable_backoff", disable_backoff),
+            disable_backoff=valid_kwargs.get(
+                "disable_backoff", disable_backoff
+            ),
         )

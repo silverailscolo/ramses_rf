@@ -18,7 +18,13 @@ from ramses_rf.address import Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.enums import Action, DevType
-from ramses_tx import ALL_DEVICE_ID, NON_DEVICE_ID, CommandDTO, Priority, QosParams
+from ramses_tx import (
+    ALL_DEVICE_ID,
+    NON_DEVICE_ID,
+    CommandDTO,
+    Priority,
+    QosParams,
+)
 from ramses_tx.typing import DeviceIdT
 
 from . import exceptions as exc
@@ -67,7 +73,9 @@ WAITING_TIMEOUT_SECS: Final[float] = (
 )
 
 # raise a BindTimeoutError if expected Pkt is not received before this number of seconds
-_TENDER_WAIT_TIME: Final[float] = WAITING_TIMEOUT_SECS  # resp. listening for Offer
+_TENDER_WAIT_TIME: Final[float] = (
+    WAITING_TIMEOUT_SECS  # resp. listening for Offer
+)
 _ACCEPT_WAIT_TIME: Final[float] = (
     WAITING_TIMEOUT_SECS  # supp. sent Offer, expecting Accept
 )
@@ -163,16 +171,20 @@ class BindingManagerBase:
 
     _attr_role = BindRole.IS_UNKNOWN
 
-    _is_respondent: bool | None  # if binding, is either: respondent or supplicant
+    _is_respondent: (
+        bool | None
+    )  # if binding, is either: respondent or supplicant
     _state: BindStateBase = None  # type: ignore[assignment]
 
-    def __init__(self, dev: DeviceInterface, dispatcher: CommandDispatcher) -> None:
+    def __init__(
+        self, device: DeviceInterface, dispatcher: CommandDispatcher
+    ) -> None:
         """Initialize the binding manager.
 
-        :param dev: The device interface context for this binding service.
+        :param device: The device interface context for this binding service.
         :param dispatcher: The command dispatcher callback.
         """
-        self._dev = dev
+        self._dev = device
         self._dispatcher = dispatcher
         self._loop = asyncio.get_running_loop()
         self._fut: asyncio.Future[Message] | None = None
@@ -191,12 +203,18 @@ class BindingManagerBase:
         This should be called during teardown (e.g. gateway.stop()) to ensure
         no ``call_later`` timer handles outlive the binding manager.
         """
-        timer = getattr(self._state, "_timer_handle", None) if self._state else None
+        timer = (
+            getattr(self._state, "_timer_handle", None)
+            if self._state
+            else None
+        )
         if timer:
             timer.cancel()
 
     def set_state(
-        self, state: type[BindStateBase], result: asyncio.Future[Message] | None = None
+        self,
+        state: type[BindStateBase],
+        result: asyncio.Future[Message] | None = None,
     ) -> None:
         """Transition the State of the Manager, and process the result, if any.
 
@@ -213,7 +231,9 @@ class BindingManagerBase:
         #         self._fut.set_result(err)
 
         # Cancel any pending timer from the previous state before transitioning
-        timer = getattr(prev_state, "_timer_handle", None) if prev_state else None
+        timer = (
+            getattr(prev_state, "_timer_handle", None) if prev_state else None
+        )
         if timer:
             timer.cancel()
 
@@ -265,13 +285,13 @@ class BindingManagerBase:
         if msg.code in (Code._1FC9, Code._10E0):
             self.state.rcvd_msg(msg)
 
-    def sent_cmd(self, cmd: CommandDTO) -> None:
+    def sent_cmd(self, command: CommandDTO) -> None:
         """Pass relevant Commands through to the state processor.
 
-        :param cmd: The outgoing command to process.
+        :param command: The outgoing command to process.
         """
-        if cmd.code in (Code._1FC9, Code._10E0):
-            self.state.send_cmd(cmd)
+        if command.code in (Code._1FC9, Code._10E0):
+            self.state.send_cmd(command)
 
 
 class BindingManagerRespondent(BindingManagerBase):
@@ -284,7 +304,7 @@ class BindingManagerRespondent(BindingManagerBase):
         accept_codes: Iterable[Code],
         /,
         *,
-        idx: IndexT = "00",
+        zone_index: IndexT = "00",
         require_ratify: bool = False,
     ) -> tuple[Message, Packet, Message, Message | None]:
         """Device starts binding as a Respondent, by listening for an Offer.
@@ -293,12 +313,11 @@ class BindingManagerRespondent(BindingManagerBase):
         unsuccessful (BindError).
 
         :param accept_codes: An iterable of codes this device accepts.
-        :param idx: The index to bind to, defaults to '00'.
+        :param zone_index: The index to bind to, defaults to '00'.
         :param require_ratify: If True, require an addenda stage.
         :return: A tuple containing the (tender, accept, affirm, ratify) objects.
         :raises exc.BindingFsmError: If already binding.
         """
-
         if self.is_binding:
             raise exc.BindingFsmError(
                 f"{self}: bad State for bindings as a Respondent (is already binding)"
@@ -309,20 +328,26 @@ class BindingManagerRespondent(BindingManagerBase):
         tender = await self._wait_for_offer()
 
         # Step R2: Respondent expects a Confirm after sending an Accept (accepts Offer)
-        accept = await self._accept_offer(tender, accept_codes, idx=idx)
+        accept = await self._accept_offer(
+            tender, accept_codes, zone_index=zone_index
+        )
         affirm = await self._wait_for_confirm(accept)
 
         # Step R3: Respondent expects an Addenda (optional)
         if require_ratify:  # TODO: not recvd as sent to 63:262142
             self.set_state(RespIsWaitingForAddenda)  # HACK: easiest way
-            ratify = await self._wait_for_addenda(accept)  # may: exc.BindingFlowFailed:
+            ratify = await self._wait_for_addenda(
+                accept
+            )  # may: exc.BindingFlowFailed:
         else:
             ratify = None
 
         # self._set_as_bound(tender, accept, affirm, ratify)
         return tender, accept, affirm, ratify
 
-    async def _wait_for_offer(self, timeout: float = _TENDER_WAIT_TIME) -> Message:
+    async def _wait_for_offer(
+        self, timeout: float = _TENDER_WAIT_TIME
+    ) -> Message:
         """Resp waits timeout seconds for an Offer to arrive & returns it.
 
         :param timeout: Time to wait in seconds.
@@ -331,33 +356,34 @@ class BindingManagerRespondent(BindingManagerBase):
         return await self.state.wait_for_offer(timeout)
 
     async def _accept_offer(
-        self, tender: Message, codes: Iterable[Code], idx: IndexT = "00"
+        self, tender: Message, codes: Iterable[Code], zone_index: IndexT = "00"
     ) -> Packet:
         """Resp sends an Accept on the basis of a rcvd Offer & returns the Confirm.
 
         :param tender: The received offer message.
         :param codes: Iterable of codes accepted.
-        :param idx: The bound index.
+        :param zone_index: The bound index.
         :return: The sent accept packet.
         """
-
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=Address(self._dev.id),
                 dst=Address(tender.src.id),
                 action=Action.PUT_BIND,
-                data={"verb": W_, "codes": codes, "idx": idx},
+                data={"verb": W_, "codes": codes, "idx": zone_index},
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(cmd).payload["phase"] == BindPhase.ACCEPT
+            assert (
+                Message._from_cmd(command).payload["phase"] == BindPhase.ACCEPT
+            )
 
-        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
-            cmd, priority=Priority.HIGH, qos=BINDING_QOS
+        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
+            command, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
         self.state.cast_accept_offer()
-        return pkt
+        return packet
 
     async def _wait_for_confirm(
         self,
@@ -397,7 +423,7 @@ class BindingManagerSupplicant(BindingManagerBase):
         /,
         *,
         confirm_code: Code | None = None,
-        ratify_cmd: CommandDTO | None = None,
+        ratify_command: CommandDTO | None = None,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
         """Device starts binding as a Supplicant, by sending an Offer.
 
@@ -406,23 +432,27 @@ class BindingManagerSupplicant(BindingManagerBase):
 
         :param offer_codes: An iterable of codes to offer.
         :param confirm_code: An optional confirm code override.
-        :param ratify_cmd: An optional ratification command to finalize binding.
+        :param ratify_command: An optional ratification command to finalize binding.
         :return: A tuple containing the (tender, accept, affirm, ratify) objects.
         :raises exc.BindingFsmError: If already binding.
         """
-
         if self.is_binding:
             raise exc.BindingFsmError(
                 f"{self}: bad State for binding as a Supplicant (is already binding)"
             )
-        self.set_state(SuppSendOfferWaitForAccept)  # self._is_respondent = False
+        self.set_state(
+            SuppSendOfferWaitForAccept
+        )  # self._is_respondent = False
 
         vendor_code: str | None = None
-        if ratify_cmd:
-            if hasattr(ratify_cmd.payload, "vendor_code"):
-                vendor_code = str(ratify_cmd.payload.vendor_code)
-            elif isinstance(ratify_cmd.payload, str) and len(ratify_cmd.payload) >= 16:
-                vendor_code = ratify_cmd.payload[14:16]
+        if ratify_command:
+            if hasattr(ratify_command.payload, "vendor_code"):
+                vendor_code = str(ratify_command.payload.vendor_code)
+            elif (
+                isinstance(ratify_command.payload, str)
+                and len(ratify_command.payload) >= 16
+            ):
+                vendor_code = ratify_command.payload[14:16]
 
         # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
         tender = await self._make_offer(offer_codes, vendor_code=vendor_code)
@@ -434,7 +464,7 @@ class BindingManagerSupplicant(BindingManagerBase):
         # Step S3: Supplicant sends an Addenda (optional)
         if vendor_code:
             self.set_state(SuppIsReadyToSendAddenda)  # HACK: easiest way
-            ratify = await self._cast_addenda(accept, ratify_cmd)  # type: ignore[arg-type]
+            ratify = await self._cast_addenda(accept, ratify_command)  # type: ignore[arg-type]
         else:
             ratify = None
 
@@ -455,7 +485,7 @@ class BindingManagerSupplicant(BindingManagerBase):
         # if vendor_code, send an 10E0
 
         # state = self.state
-        cmd = build_dto(
+        command = build_dto(
             Intent(
                 src=Address(self._dev.id),
                 dst=Address(self._dev.id),
@@ -469,15 +499,17 @@ class BindingManagerSupplicant(BindingManagerBase):
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(cmd).payload["phase"] == BindPhase.TENDER
+            assert (
+                Message._from_cmd(command).payload["phase"] == BindPhase.TENDER
+            )
 
-        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
-            cmd, priority=Priority.HIGH, qos=BINDING_QOS
+        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
+            command, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
         # await state._fut
         self.state.cast_offer()
-        return pkt
+        return packet
 
     async def _wait_for_accept(
         self,
@@ -503,44 +535,50 @@ class BindingManagerSupplicant(BindingManagerBase):
         """
         # HACK assumes all idx same
         if accept.payload and hasattr(accept.payload, "idx"):
-            idx = str(accept.payload.idx)
+            index = str(accept.payload.idx)
         elif accept._dto.raw_payload:
-            idx = accept._dto.raw_payload[:2]
+            index = accept._dto.raw_payload[:2]
         else:
-            idx = "00"
+            index = "00"
 
-        cmd = build_dto(
+        target_id = (
+            accept.dst.id if accept.src.id == self._dev.id else accept.src.id
+        )
+        command = build_dto(
             Intent(
                 src=Address(self._dev.id),
-                dst=Address(accept.src.id),
+                dst=Address(target_id),
                 action=Action.PUT_BIND,
-                data={"verb": I_, "codes": confirm_code, "idx": idx},
+                data={"verb": I_, "codes": confirm_code, "idx": index},
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert Message._from_cmd(cmd).payload["phase"] == BindPhase.AFFIRM
+            assert (
+                Message._from_cmd(command).payload["phase"] == BindPhase.AFFIRM
+            )
 
-        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
-            cmd, priority=Priority.HIGH, qos=BINDING_QOS
+        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
+            command, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
         await self.state.cast_confirm_accept()
-        return pkt
+        return packet
 
-    async def _cast_addenda(self, accept: Message, cmd: CommandDTO) -> Packet:
+    async def _cast_addenda(
+        self, accept: Message, command: CommandDTO
+    ) -> Packet:
         """Supp casts an Addenda (the final 10E0 command).
 
         :param accept: The previously received accept message.
-        :param cmd: The ratify command to cast.
+        :param command: The ratify command to cast.
         :return: The sent addenda packet.
         """
-
-        pkt: Packet = await self._dispatcher(  # type: ignore[assignment]
-            cmd, priority=Priority.HIGH, qos=BINDING_QOS
+        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
+            command, priority=Priority.HIGH, qos=BINDING_QOS
         )
 
         await self.state.cast_addenda()
-        return pkt
+        return packet
 
 
 class BindingManager(BindingManagerRespondent, BindingManagerSupplicant):
@@ -558,13 +596,17 @@ class BindStateBase:
     _attr_role = BindRole.IS_UNKNOWN
 
     _cmds_sent: int = 0  # num of bind cmds sent
-    _pkts_rcvd: int = 0  # num of bind pkts rcvd (incl. any echos of sender's own cmd)
+    _pkts_rcvd: int = (
+        0  # num of bind pkts rcvd (incl. any echos of sender's own cmd)
+    )
 
     _has_wait_timer: bool = False
     _retry_limit: int = SENDING_RETRY_LIMIT
     _timer_handle: asyncio.TimerHandle
 
-    _next_ctx_state: type[BindStateBase]  # next state, if successful transition
+    _next_ctx_state: type[
+        BindStateBase
+    ]  # next state, if successful transition
 
     def __init__(self, context: BindingManagerBase) -> None:
         """Initialize the binding state.
@@ -577,7 +619,10 @@ class BindStateBase:
         # Strong typing on Future ensures .result() correctly returns a Message
         self._fut: asyncio.Future[Message] = self._loop.create_future()
         _LOGGER.debug(
-            "%s: Changing state from: %s to: %s", self, self._context.state, self
+            "%s: Changing state from: %s to: %s",
+            self,
+            self._context.state,
+            self,
         )
 
         if self._has_wait_timer:
@@ -637,14 +682,16 @@ class BindStateBase:
         :param next_state: The class representing the next state.
         :raises exc.BindingFsmError: If the future was not yet completed.
         """
-        if not self._fut.done():  # if not BindRetryError, BindTimeoutError, msg
+        if (
+            not self._fut.done()
+        ):  # if not BindRetryError, BindTimeoutError, msg
             raise exc.BindingFsmError  # or: self._fut.set_exception()
         self._context.set_state(next_state, result=self._fut)
 
-    def send_cmd(self, cmd: CommandDTO) -> None:
+    def send_cmd(self, command: CommandDTO) -> None:
         """Abstract method to handle an outgoing command.
 
-        :param cmd: The command that is being sent.
+        :param command: The command that is being sent.
         """
         raise NotImplementedError
 
@@ -656,74 +703,98 @@ class BindStateBase:
         raise NotImplementedError
 
     @staticmethod
-    def is_phase(cmd: CommandDTO | Message, phase: BindPhase) -> bool:
+    def is_phase(command: CommandDTO | Message, phase: BindPhase) -> bool:
         """Evaluate if the given command or message corresponds to the specified binding phase.
 
-        :param cmd: The command or message object.
+        :param command: The command or message object.
         :param phase: The binding phase to test against.
         :return: True if the command is aligned with the phase, False otherwise.
         """
         if phase == BindPhase.RATIFY:
-            return cmd.verb == I_ and cmd.code == Code._10E0
-        if cmd.code != Code._1FC9:
+            return command.verb == I_ and command.code == Code._10E0
+        if command.code != Code._1FC9:
             return False
 
-        if isinstance(cmd, Message):
-            addr1, addr2, addr3 = cmd._addrs[0].id, cmd._addrs[1].id, cmd._addrs[2].id
-            src = addr1
+        if isinstance(command, Message):
+            addr1, addr2, addr3 = (
+                command._addrs[0].id,
+                command._addrs[1].id,
+                command._addrs[2].id,
+            )
+            source = addr1
             # For 1FC9, addr3 is often the actual destination or equal to src
-            dst = addr2 if addr2 != NON_DEVICE_ID else addr3
+            destination = addr2 if addr2 != NON_DEVICE_ID else addr3
         else:
-            addrs = [a for a in (cmd.addr1, cmd.addr2, cmd.addr3) if a != NON_DEVICE_ID]
-            src = DeviceIdT(addrs[0] if addrs else NON_DEVICE_ID)
-            dst = DeviceIdT(addrs[1] if len(addrs) > 1 else src)
+            addrs = [
+                a
+                for a in (command.addr1, command.addr2, command.addr3)
+                if a != NON_DEVICE_ID
+            ]
+            source = DeviceIdT(addrs[0] if addrs else NON_DEVICE_ID)
+            destination = DeviceIdT(addrs[1] if len(addrs) > 1 else source)
 
         if phase == BindPhase.TENDER:
-            return cmd.verb == I_ and dst in (src, ALL_DEVICE_ID)
+            return command.verb == I_ and destination in (
+                source,
+                ALL_DEVICE_ID,
+            )
         if phase == BindPhase.ACCEPT:
             # Historically, this was `dst is not src` on distinct Address objects, which was always True
-            return cmd.verb == W_
+            return command.verb == W_
         # if phase == BindPhase.AFFIRM:
-        return cmd.verb == I_ and dst not in (src, ALL_DEVICE_ID)
+        return command.verb == I_ and destination not in (
+            source,
+            ALL_DEVICE_ID,
+        )
 
     # Respondent State APIs...
     async def wait_for_offer(self, timeout: float | None = None) -> Message:
+        """Wait for an offer message from a supplicant."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't wait_for_offer() from this State"
         )
 
     def cast_accept_offer(self) -> None:
+        """Cast accept offer command to supplicant."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't accept_offer() from this State"
         )
 
     async def wait_for_confirm(self, timeout: float | None = None) -> Message:
+        """Wait for a confirmation message from supplicant."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't wait_for_confirm() from this State"
         )
 
     async def wait_for_addenda(self, timeout: float | None = None) -> Message:
+        """Wait for an optional addenda message from supplicant."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't wait_for_addenda() from this State"
         )
 
     # Supplicant State APIs...
     def cast_offer(self, timeout: float | None = None) -> None:
+        """Cast binding offer command to respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't make_offer() from this State"
         )
 
     async def wait_for_accept(self, timeout: float | None = None) -> Message:
+        """Wait for an accept message from respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't wait_for_accept() from this State"
         )
 
-    async def cast_confirm_accept(self, timeout: float | None = None) -> Message:
+    async def cast_confirm_accept(
+        self, timeout: float | None = None
+    ) -> Message:
+        """Send confirmation of accepted offer to respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't confirm_accept() from this State"
         )
 
     async def cast_addenda(self, timeout: float | None = None) -> Message:
+        """Send optional addenda message to respondent."""
         raise exc.BindingFsmError(
             f"{self._context!r}: shouldn't cast_addenda() from this State"
         )
@@ -755,7 +826,9 @@ class _DevIsWaitingForMsg(BindStateBase):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the waited-for pkt, transition to the next state."""
-        if not self._fut.done() and self.is_phase(msg, self._expected_pkt_phase):
+        if not self._fut.done() and self.is_phase(
+            msg, self._expected_pkt_phase
+        ):
             self._fut.set_result(msg)
 
 
@@ -778,7 +851,6 @@ class _DevIsReadyToSendCmd(BindStateBase):
 
     def _retries_exceeded(self) -> None:
         """Process an overrun of the retry limit when sending a Command."""
-
         msg = (
             f"{self._context}: Failed to transition to {self._next_ctx_state}: "
             f"{self._expected_cmd_phase} command echo not received after "
@@ -790,16 +862,15 @@ class _DevIsReadyToSendCmd(BindStateBase):
             self._fut.set_exception(exc.BindingFlowFailed(msg))
         self._set_context_state(DevHasFailedBinding)
 
-    def send_cmd(self, cmd: CommandDTO) -> None:
+    def send_cmd(self, command: CommandDTO) -> None:
         """If sending a cmd, expect the corresponding echo."""
-
-        if not self.is_phase(cmd, self._expected_cmd_phase):
+        if not self.is_phase(command, self._expected_cmd_phase):
             return
 
         if self._cmds_sent > self._send_retry_limit:
             self._retries_exceeded()
         self._cmds_sent += 1
-        self._cmd = self._cmd or cmd
+        self._cmd = self._cmd or command
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the echo of the sent cmd, transition to the next state."""
@@ -827,7 +898,9 @@ class _DevSendCmdUntilReply(_DevIsWaitingForMsg, _DevIsReadyToSendCmd):
 
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the expected reply, transition to the next state."""
-        if not self._fut.done() and self.is_phase(msg, self._expected_pkt_phase):
+        if not self._fut.done() and self.is_phase(
+            msg, self._expected_pkt_phase
+        ):
             self._fut.set_result(msg)
 
 
@@ -865,6 +938,7 @@ class RespIsWaitingForAddenda(_DevIsWaitingForMsg, BindStateBase):
     _next_ctx_state: type[BindStateBase] = RespHasBoundAsRespondent
 
     async def wait_for_addenda(self, timeout: float | None = None) -> Message:
+        """Wait for addenda message from supplicant."""
         return await self._wait_for_fut_result(timeout or _RATIFY_WAIT_TIME)
 
 
@@ -884,6 +958,7 @@ class RespSendAcceptWaitForConfirm(_DevSendCmdUntilReply, BindStateBase):
         pass
 
     async def wait_for_confirm(self, timeout: float | None = None) -> Message:
+        """Wait for confirmation message from supplicant."""
         return await self._wait_for_fut_result(timeout or _AFFIRM_WAIT_TIME)
 
 
@@ -896,6 +971,7 @@ class RespIsWaitingForOffer(_DevIsWaitingForMsg, BindStateBase):
     _next_ctx_state: type[BindStateBase] = RespSendAcceptWaitForConfirm
 
     async def wait_for_offer(self, timeout: float | None = None) -> Message:
+        """Wait for binding offer message from supplicant."""
         return await self._wait_for_fut_result(timeout or _TENDER_WAIT_TIME)
 
 
@@ -923,6 +999,7 @@ class SuppIsReadyToSendAddenda(
     _next_ctx_state: type[BindStateBase] = SuppHasBoundAsSupplicant
 
     async def cast_addenda(self, timeout: float | None = None) -> Message:
+        """Transmit addenda command to respondent."""
         return await self._wait_for_fut_result(timeout or _ACCEPT_WAIT_TIME)
 
 
@@ -938,7 +1015,10 @@ class SuppIsReadyToSendConfirm(
         SuppHasBoundAsSupplicant  # or: SuppIsReadyToSendAddenda
     )
 
-    async def cast_confirm_accept(self, timeout: float | None = None) -> Message:
+    async def cast_confirm_accept(
+        self, timeout: float | None = None
+    ) -> Message:
+        """Transmit confirmation command to respondent."""
         return await self._wait_for_fut_result(timeout or _ACCEPT_WAIT_TIME)
 
 
@@ -952,9 +1032,11 @@ class SuppSendOfferWaitForAccept(_DevSendCmdUntilReply, BindStateBase):
     _next_ctx_state: type[BindStateBase] = SuppIsReadyToSendConfirm
 
     def cast_offer(self, timeout: float | None = None) -> None:
+        """Transmit offer command to respondent."""
         pass
 
     async def wait_for_accept(self, timeout: float | None = None) -> Message:
+        """Wait for accept response from respondent."""
         return await self._wait_for_fut_result(timeout or _ACCEPT_WAIT_TIME)
 
 

@@ -116,7 +116,9 @@ class TestZigbeeTransportUrlParsing(unittest.TestCase):
         self.assertEqual(t._cmd_id, 0x05)
 
     def test_missing_url_parts_raises(self) -> None:
-        bad_url = f"zigbee://{_IEEE}/0xFC00/0x0000/1/0xFC00"  # only 4 path parts
+        bad_url = (
+            f"zigbee://{_IEEE}/0xFC00/0x0000/1/0xFC00"  # only 4 path parts
+        )
         with self.assertRaises(exc.TransportSourceInvalid):
             _make_transport(bad_url)
 
@@ -560,7 +562,9 @@ class TestAttachClusters(unittest.TestCase):
     ) -> MagicMock:
         """Create a mock device that hands back clusters via endpoints map."""
         read_ep = MagicMock()
-        read_ep.out_clusters = {0xFC00: read_cluster}  # command-mode reads "out"
+        read_ep.out_clusters = {
+            0xFC00: read_cluster
+        }  # command-mode reads "out"
         read_ep.in_clusters = {}
         device = MagicMock(spec=["endpoints"])
 
@@ -680,7 +684,9 @@ class TestWriteFrame(unittest.IsolatedAsyncioTestCase):
         await t._write_frame("X" * 200)
         self.assertGreater(t._write_cluster.client_command.await_count, 1)
 
-    async def test_write_cluster_not_ready_logs_warning_and_continues(self) -> None:
+    async def test_write_cluster_not_ready_logs_warning_and_continues(
+        self,
+    ) -> None:
         """A missing write cluster should not raise but log a warning."""
         t = await self._make()
         t._write_cluster = None
@@ -773,7 +779,9 @@ class TestSendCommand(unittest.IsolatedAsyncioTestCase):
         t, cluster = await self._make_with_cluster()
         cluster.client_command.side_effect = RuntimeError("fail")
         if hasattr(cluster, "server_command"):
-            cluster.server_command = AsyncMock(side_effect=RuntimeError("fail"))
+            cluster.server_command = AsyncMock(
+                side_effect=RuntimeError("fail")
+            )
         if hasattr(cluster, "command"):
             cluster.command = AsyncMock(side_effect=RuntimeError("fail"))
         # Should raise TransportError after retries exhausted
@@ -833,7 +841,9 @@ class TestClusterBinding(unittest.TestCase):
     def setUp(self) -> None:
         self.t = _make_transport()
 
-    def test_ensure_read_cluster_bound_no_device_returns_silently(self) -> None:
+    def test_ensure_read_cluster_bound_no_device_returns_silently(
+        self,
+    ) -> None:
         self.t._device = None
         self.t._ensure_read_cluster_bound()  # must not raise
 
@@ -862,19 +872,27 @@ class TestClusterBinding(unittest.TestCase):
         result = self.t._refresh_write_cluster()
         self.assertIs(result, self.t._write_cluster)
 
-    def test_refresh_write_cluster_get_cluster_failure_returns_none(self) -> None:
+    def test_refresh_write_cluster_get_cluster_failure_returns_none(
+        self,
+    ) -> None:
         self.t._device = MagicMock()
-        self.t._get_cluster = MagicMock(side_effect=exc.TransportZigbeeError("missing"))
+        self.t._get_cluster = MagicMock(
+            side_effect=exc.TransportZigbeeError("missing")
+        )
         result = self.t._refresh_write_cluster()
         self.assertIsNone(result)
 
-    def test_get_active_write_cluster_returns_existing_without_force(self) -> None:
+    def test_get_active_write_cluster_returns_existing_without_force(
+        self,
+    ) -> None:
         mock_cluster = MagicMock()
         self.t._write_cluster = mock_cluster
         result = self.t._get_active_write_cluster(force_refresh=False)
         self.assertIs(result, mock_cluster)
 
-    def test_get_active_write_cluster_force_refresh_calls_refresh(self) -> None:
+    def test_get_active_write_cluster_force_refresh_calls_refresh(
+        self,
+    ) -> None:
         new_cluster = MagicMock()
         self.t._device = MagicMock()
         self.t._get_cluster = MagicMock(return_value=new_cluster)
@@ -904,7 +922,9 @@ class TestBindAndConfigure(unittest.IsolatedAsyncioTestCase):
         await t._bind_and_configure()
         mock_cluster.bind.assert_not_called()
 
-    async def test_non_command_mode_calls_bind_and_configure_reporting(self) -> None:
+    async def test_non_command_mode_calls_bind_and_configure_reporting(
+        self,
+    ) -> None:
         t = _make_transport()
         t._use_command_mode = False
         mock_cluster = AsyncMock()
@@ -1082,7 +1102,9 @@ _DIFF_WRITE_URL = f"zigbee://{_IEEE}/0xFC00/0x0000/1/0xFC01/0x0001/2"
 class TestAttachClustersFallback(unittest.TestCase):
     """Fallback-search tests for ``_attach_clusters``."""
 
-    def _device_no_cluster_on_ep1_cluster_on_ep2(self) -> tuple[MagicMock, MagicMock]:
+    def _device_no_cluster_on_ep1_cluster_on_ep2(
+        self,
+    ) -> tuple[MagicMock, MagicMock]:
         mock_cluster = MagicMock()
         ep1 = MagicMock()
         ep1.in_clusters = {}
@@ -1221,7 +1243,9 @@ class TestSendChunk(unittest.IsolatedAsyncioTestCase):
 
         t = _make_transport()
         mock_cluster = AsyncMock()
-        mock_cluster.write_attributes = AsyncMock(side_effect=RuntimeError("IO"))
+        mock_cluster.write_attributes = AsyncMock(
+            side_effect=RuntimeError("IO")
+        )
         t._write_cluster = mock_cluster
         t._device = None  # prevent write-cluster refresh on retry
 
@@ -1301,8 +1325,12 @@ class TestMaybeHandleChunkErrorDelivery(unittest.TestCase):
         self.t = _make_transport()
         self.t._loop.create_task = _mock_create_task()
 
-    def test_frame_read_exception_during_assembly_does_not_propagate(self) -> None:
-        self.t._frame_read = MagicMock(side_effect=RuntimeError("protocol error"))
+    def test_frame_read_exception_during_assembly_does_not_propagate(
+        self,
+    ) -> None:
+        self.t._frame_read = MagicMock(
+            side_effect=RuntimeError("protocol error")
+        )
         # 1/1 triggers immediate delivery
         result = self.t._maybe_handle_incoming_chunk("1/1|hello")
         self.assertTrue(result)  # must still return True (chunk was handled)

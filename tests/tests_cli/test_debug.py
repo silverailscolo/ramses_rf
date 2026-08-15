@@ -18,7 +18,9 @@ def test_start_debugging_no_wait(capsys: pytest.CaptureFixture[str]) -> None:
         start_debugging(wait_for_client=False)
 
     # Verify listen was called correctly
-    mock_debugpy.listen.assert_called_once_with(address=(DEBUG_ADDR, DEBUG_PORT))
+    mock_debugpy.listen.assert_called_once_with(
+        address=(DEBUG_ADDR, DEBUG_PORT)
+    )
 
     # Verify wait_for_client was NOT called
     mock_debugpy.wait_for_client.assert_not_called()
@@ -26,7 +28,8 @@ def test_start_debugging_no_wait(capsys: pytest.CaptureFixture[str]) -> None:
     # Verify console output
     captured = capsys.readouterr()
     assert (
-        f"Debugging is enabled, listening on: {DEBUG_ADDR}:{DEBUG_PORT}" in captured.out
+        f"Debugging is enabled, listening on: {DEBUG_ADDR}:{DEBUG_PORT}"
+        in captured.out
     )
     assert "execution paused" not in captured.out
 
@@ -39,7 +42,9 @@ def test_start_debugging_wait(capsys: pytest.CaptureFixture[str]) -> None:
         start_debugging(wait_for_client=True)
 
     # Verify listen was called
-    mock_debugpy.listen.assert_called_once_with(address=(DEBUG_ADDR, DEBUG_PORT))
+    mock_debugpy.listen.assert_called_once_with(
+        address=(DEBUG_ADDR, DEBUG_PORT)
+    )
 
     # Verify wait_for_client WAS called
     mock_debugpy.wait_for_client.assert_called_once()
@@ -47,7 +52,10 @@ def test_start_debugging_wait(capsys: pytest.CaptureFixture[str]) -> None:
     # Verify console output
     captured = capsys.readouterr()
     assert (
-        f"Debugging is enabled, listening on: {DEBUG_ADDR}:{DEBUG_PORT}" in captured.out
+        f"Debugging is enabled, listening on: {DEBUG_ADDR}:{DEBUG_PORT}"
+        in captured.out
     )
-    assert "execution paused, waiting for debugger to attach..." in captured.out
+    assert (
+        "execution paused, waiting for debugger to attach..." in captured.out
+    )
     assert "debugger is now attached, continuing execution." in captured.out

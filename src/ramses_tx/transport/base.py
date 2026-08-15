@@ -82,7 +82,9 @@ class _ReadTransport(_BaseTransport, TransportInterface):
     _protocol: RamsesProtocolT = None  # type: ignore[assignment]
     _loop: asyncio.AbstractEventLoop
 
-    _is_hgi80: bool | None = None  # NOTE: None (unknown) is as False (is_evofw3)
+    _is_hgi80: bool | None = (
+        None  # NOTE: None (unknown) is as False (is_evofw3)
+    )
 
     def __init__(
         self,
@@ -148,7 +150,9 @@ class _ReadTransport(_BaseTransport, TransportInterface):
                 functools.partial(self._protocol.connection_lost, exc)
             )
         except RuntimeError:
-            _LOGGER.debug("Event loop closed during _close(), cannot notify protocol")
+            _LOGGER.debug(
+                "Event loop closed during _close(), cannot notify protocol"
+            )
 
     def close(self) -> None:
         """Close the transport gracefully."""
@@ -166,16 +170,18 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         """Resume the receiving end."""
         self._reading = True
 
-    def _make_connection(self, gwy_id: DeviceIdT | None) -> None:
+    def _make_connection(self, gateway_id: DeviceIdT | None) -> None:
         """Register the connection with the protocol."""
-        self._extra[SZ_ACTIVE_HGI] = gwy_id  # or HGI_DEV_ADDR.id
+        self._extra[SZ_ACTIVE_HGI] = gateway_id  # or HGI_DEV_ADDR.id
 
         if self.loop.is_closed():
             _LOGGER.debug("Event loop closed, cannot make connection")
             return
         try:
             self.loop.call_soon_threadsafe(
-                functools.partial(self._protocol.connection_made, self, ramses=True)
+                functools.partial(
+                    self._protocol.connection_made, self, ramses=True
+                )
             )
         except RuntimeError:
             _LOGGER.debug("Event loop closed during _make_connection()")
@@ -241,7 +247,7 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         is_echo = self._is_recent_tx(frame)
 
         try:
-            pkt = Packet.from_file(dtm_str, frame, is_echo=is_echo)
+            packet = Packet.from_file(dtm_str, frame, is_echo=is_echo)
         except ValueError as err:
             _LOGGER.debug("%s < PacketInvalid(%s)", frame, err)
             return
@@ -250,14 +256,14 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             return
 
         try:
-            self._pkt_read(pkt)
+            self._pkt_read(packet)
         except exc.TransportError as err:
-            _LOGGER.debug("%s < Transport Error(%s)", pkt, err)
+            _LOGGER.debug("%s < Transport Error(%s)", packet, err)
             return
 
-    def _pkt_read(self, pkt: Packet) -> None:
+    def _pkt_read(self, packet: Packet) -> None:
         """Pass any valid Packets to the protocol's callback."""
-        self._this_pkt, self._prev_pkt = pkt, self._this_pkt
+        self._this_pkt, self._prev_pkt = packet, self._this_pkt
 
         if self._closing is True:
             raise exc.TransportError("Transport is closing or has closed")
@@ -266,21 +272,23 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             raise exc.TransportError("Event loop is closed")
 
         try:
-            self.loop.call_soon_threadsafe(self._protocol.pkt_received, pkt)
+            self.loop.call_soon_threadsafe(self._protocol.pkt_received, packet)
         except RuntimeError as err:
             # Event loop may close between the is_closed() check and this
             # call when the paho-mqtt thread races asyncio teardown (issue 802)
             raise exc.TransportError(f"Event loop is closed: {err}") from err
         except AssertionError as err:
-            _LOGGER.exception("%s < exception from msg layer: %s", pkt, err)
+            _LOGGER.exception("%s < exception from msg layer: %s", packet, err)
         except exc.ProtocolError as err:
-            _LOGGER.error("%s < exception from msg layer: %s", pkt, err)
+            _LOGGER.error("%s < exception from msg layer: %s", packet, err)
 
     async def send_frame(self, frame: str) -> None:
         """Send a frame (alias for write_frame)."""
         await self.write_frame(frame)
 
-    async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
+    async def write_frame(
+        self, frame: str, disable_tx_limits: bool = False
+    ) -> None:
         """Transmit a frame via the underlying handler."""
         raise exc.TransportSerialError("This transport is read only")
 
@@ -299,7 +307,9 @@ class _FullTransport(_ReadTransport):
         """Initialize the bidirectional transport."""
         _ReadTransport.__init__(self, config=config, extra=extra, loop=loop)
         self._transmit_times: deque[dt] = deque(
-            maxlen=int(config.timeout) if config.timeout else _MAX_TRACKED_TRANSMITS
+            maxlen=int(config.timeout)
+            if config.timeout
+            else _MAX_TRACKED_TRANSMITS
         )
         self._disable_sending: bool = config.disable_sending
 
@@ -336,13 +346,19 @@ class _FullTransport(_ReadTransport):
     def _track_transmit_rate(self) -> None:
         """Track the Tx rate as period of seconds per x transmits."""
         self._transmit_times.append(dt.now())
-        _LOGGER.debug("Current Tx rate: %.2f pkts/min", self._report_transmit_rate())
+        _LOGGER.debug(
+            "Current Tx rate: %.2f pkts/min", self._report_transmit_rate()
+        )
 
     def write(self, data: bytes) -> None:
         """Write the data to the underlying handler."""
-        raise exc.TransportError("write() not implemented, use write_frame() instead")
+        raise exc.TransportError(
+            "write() not implemented, use write_frame() instead"
+        )
 
-    async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
+    async def write_frame(
+        self, frame: str, disable_tx_limits: bool = False
+    ) -> None:
         """Transmit a frame via the underlying handler."""
         if self._disable_sending is True:
             raise exc.TransportError("Sending has been disabled")
@@ -377,8 +393,8 @@ class _FullTransport(_ReadTransport):
 
         try:
             now = self._dt_now()
-            pkt = Packet(now, frame_clean, is_tx=True)
-            dto = pkt.to_dto()
+            packet = Packet(now, frame_clean, is_tx=True)
+            dto = packet.to_dto()
             tx_key: _TxKeyT = (
                 dto.verb,
                 dto.code,
@@ -388,7 +404,9 @@ class _FullTransport(_ReadTransport):
                 dto.raw_payload,
             )
             self._recent_tx_queue.append((now, tx_key))
-            self._recent_tx_counts[tx_key] = self._recent_tx_counts.get(tx_key, 0) + 1
+            self._recent_tx_counts[tx_key] = (
+                self._recent_tx_counts.get(tx_key, 0) + 1
+            )
 
             if self._protocol and hasattr(self._protocol, "_msg_received"):
                 try:

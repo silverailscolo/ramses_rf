@@ -50,8 +50,8 @@ class TopologyHandler(abc.ABC):
         if not raw:
             raw = getattr(msg, "payload", None)
         if isinstance(raw, dict):
-            res = raw.get("_array", [raw])
-            return res if isinstance(res, list) else [res]
+            result = raw.get("_array", [raw])
+            return result if isinstance(result, list) else [result]
         if isinstance(raw, list):
             return raw
         if raw is not None:

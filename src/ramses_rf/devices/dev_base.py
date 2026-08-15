@@ -26,7 +26,12 @@ from ramses_rf.const import (
 )
 from ramses_rf.entity import Entity, class_by_attr
 from ramses_rf.exceptions import DeviceNotFaked, SchemaInconsistentError
-from ramses_rf.models import DemandState, PowerState, TemperatureState
+from ramses_rf.models import (
+    ActuatorState,
+    DemandState,
+    PowerState,
+    TemperatureState,
+)
 from ramses_rf.schemas import (
     SZ_ALIAS,
     SZ_CLASS,
@@ -48,13 +53,16 @@ if TYPE_CHECKING:
     from ramses_rf.systems import Zone
     from ramses_rf.typing import PollingIntervalsT
     from ramses_tx.const import IndexT
-    from ramses_tx.dtos import PacketDTO
     from ramses_tx.typing import DeviceIdT
 
 
 BIND_WAITING_TIMEOUT = 300  # how long to wait, listening for an offer
-BIND_REQUEST_TIMEOUT = 5  # how long to wait for an accept after sending an offer
-BIND_CONFIRM_TIMEOUT = 5  # how long to wait for a confirm after sending an accept
+BIND_REQUEST_TIMEOUT = (
+    5  # how long to wait for an accept after sending an offer
+)
+BIND_CONFIRM_TIMEOUT = (
+    5  # how long to wait for a confirm after sending an accept
+)
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,34 +78,36 @@ class DeviceBase(Entity):
 
     def __init__(
         self,
-        gwy: Gateway,
-        dev_addr: Address,
+        gateway: Gateway,
+        device_address: Address,
         *,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise the device base class.
 
-        :param gwy: The gateway instance managing this device.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway instance managing this device.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: Optional traits to apply during initialisation.
         :type traits: DeviceTraits | None
         :param kwargs: Additional arguments for the underlying entity.
         :type kwargs: Any
         """
-        super().__init__(gwy, **kwargs)
+        super().__init__(gateway, **kwargs)
 
         # FIXME: gwy.message_store entities must know their parent device ID
         # and their own idx
-        self._z_id = dev_addr.id  # the responsible device is itself
+        self._z_id = device_address.id  # the responsible device is itself
         self._z_idx = None  # depends upon its location in the schema
 
-        self.id: DeviceIdT = dev_addr.id
+        self.id: DeviceIdT = device_address.id
 
-        self.addr = dev_addr
-        self.type = dev_addr.type  # DEX  # TODO: remove this attr? use SLUG?
+        self.addr = device_address
+        self.type = (
+            device_address.type
+        )  # DEX  # TODO: remove this attr? use SLUG?
 
         self._scheme: str | None = traits.scheme if traits else None
         self._polling_interval: PollingIntervalsT | None = (
@@ -170,7 +180,11 @@ class DeviceBase(Entity):
 
     @classmethod
     def create_from_schema(
-        cls, gwy: Gateway, dev_addr: Address, *, traits: DeviceTraits | None = None
+        cls,
+        gateway: Gateway,
+        device_address: Address,
+        *,
+        traits: DeviceTraits | None = None,
     ) -> Self:
         """Create a device (for a GWY) and set its schema attrs (aka traits).
 
@@ -180,41 +194,46 @@ class DeviceBase(Entity):
         The appropriate Device class should have been determined by a
         factory. Schema attrs include: class (SLUG), alias, and faked.
 
-        :param gwy: The gateway to attach the device to.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway to attach the device to.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: The traits to apply to the newly created device.
         :type traits: DeviceTraits | None
         :return: The fully initialised device instance.
         :rtype: DeviceBase
         """
-        dev = cls(gwy, dev_addr, traits=traits)
+        device = cls(gateway, device_address, traits=traits)
         if traits:
-            dev._update_traits(traits)
-        return dev
+            device._update_traits(traits)
+        return device
 
-    def _send_cmd(self, cmd: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
+    def _send_cmd(
+        self, command: CommandDTO, **kwargs: Any
+    ) -> asyncio.Task[Any] | None:
         """Send a command from this device."""
         if (
             isinstance(self, BatteryState)
             and not self.is_faked
-            and cmd.addr2 == self.id
+            and command.addr2 == self.id
         ):
             _LOGGER.info(
-                "%s < Sending inadvisable for %s (it has a battery)", cmd, self
+                "%s < Sending inadvisable for %s (it has a battery)",
+                command,
+                self,
             )
 
-        return super()._send_cmd(cmd, **kwargs)
+        return super()._send_cmd(command, **kwargs)
 
     async def has_battery(self) -> None | bool:  # 1060
-        """Return True if the device is battery powered (excludes
-        battery-backup).
+        """Return True if the device is battery powered.
+
+        Excludes battery-backup devices.
 
         :return: True if the device has a battery, False otherwise.
         :rtype: None | bool
         """
-        if self._gwy.message_store:
+        if self._gateway.message_store:
             code_list = await self.entity_state._msg_dev_qry()
             return isinstance(self, BatteryState) or (
                 code_list is not None and Code._1060 in code_list
@@ -238,8 +257,9 @@ class DeviceBase(Entity):
         :returns: A dictionary mapping active command codes to interval seconds.
         :rtype: PollingIntervalsT | None
         """
-        if getattr(self._gwy, "polling_manager", None):
-            return self._gwy.polling_manager.resolve_schedule_for_device(self)
+        if getattr(self._gateway, "polling_manager", None):
+            mgr = self._gateway.polling_manager
+            return mgr.resolve_schedule_for_device(self)
         return self._polling_interval
 
     def set_polling_interval(self, interval: int | None) -> None:
@@ -250,7 +270,9 @@ class DeviceBase(Entity):
         :raises ValueError: If interval is negative or if setting a battery device below 300s.
         """
         if interval is not None and interval < 0:
-            raise ValueError(f"Polling interval cannot be negative: {interval}")
+            raise ValueError(
+                f"Polling interval cannot be negative: {interval}"
+            )
         if self.is_battery and interval is not None and 0 < interval < 300:
             raise ValueError(
                 f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
@@ -260,13 +282,15 @@ class DeviceBase(Entity):
             self._polling_interval = None
         else:
             eff_schedule = self.effective_polling_interval or {}
-            codes = list(eff_schedule.keys()) or ["10E0"]
+            codes = list(eff_schedule.keys()) or [Code._10E0]
             self._polling_interval = {code: interval for code in codes}
 
-        if getattr(self._gwy, "polling_manager", None):
-            self._gwy.polling_manager.update_device_tasks(self)
+        if getattr(self._gateway, "polling_manager", None):
+            self._gateway.polling_manager.update_device_tasks(self)
 
-    def set_command_polling_interval(self, code: str, interval: int | None) -> None:
+    def set_command_polling_interval(
+        self, code: str, interval: int | None
+    ) -> None:
         """Set or update the polling interval for a specific packet code.
 
         :param code: The hex code string for the packet type.
@@ -276,7 +300,9 @@ class DeviceBase(Entity):
         :raises ValueError: If interval is negative or if setting a battery device below 300s.
         """
         if interval is not None and interval < 0:
-            raise ValueError(f"Polling interval cannot be negative: {interval}")
+            raise ValueError(
+                f"Polling interval cannot be negative: {interval}"
+            )
         if self.is_battery and interval is not None and 0 < interval < 300:
             raise ValueError(
                 f"Battery-powered device {self.id} polling interval cannot be set below 300s (got {interval}s)"
@@ -290,8 +316,8 @@ class DeviceBase(Entity):
         else:
             self._polling_interval[code] = interval
 
-        if getattr(self._gwy, "polling_manager", None):
-            self._gwy.polling_manager.update_device_tasks(self)
+        if getattr(self._gateway, "polling_manager", None):
+            self._gateway.polling_manager.update_device_tasks(self)
 
     @property
     def is_battery(self) -> bool | None:
@@ -318,15 +344,21 @@ class DeviceBase(Entity):
     @property
     def _is_binding(self) -> bool:
         """Return True if the (faked) device is actively binding."""
-        return bool(self._binding_manager and self._binding_manager.is_binding is True)
+        return bool(
+            self._binding_manager and self._binding_manager.is_binding is True
+        )
 
     async def _is_present(self) -> bool:
-        """Try to exclude ghost devices (as caused by corrupt packet
-        addresses).
+        """Exclude ghost devices from corrupt packet addresses.
+
+        Inspects the active message log flat cache to verify if any
+        unexpired packets have been received from this device.
         """
         msgs = await self.entity_state.get_message_log_flat()
         return any(
-            m.src == self for m in msgs.values() if not getattr(m, "_expired", False)
+            m.src == self
+            for m in msgs.values()
+            if not getattr(m, "_expired", False)
         )  # TODO: needs addressing
 
     async def schema(self) -> dict[str, Any]:
@@ -361,7 +393,7 @@ class DeviceBase(Entity):
         """
         result = await self.entity_state.traits()
 
-        known_dev = self._gwy.config.known_list.get(self.id)
+        known_dev = self._gateway.config.known_list.get(self.id)
 
         result.update(
             {
@@ -434,8 +466,8 @@ class DeviceInfo(DeviceBase):  # 10E0
         :return: A dictionary of device information.
         :rtype: dict[str, Any] | None
         """
-        res = await self.entity_state.get_value(Code._10E0)
-        return res if isinstance(res, dict) else None
+        result = await self.entity_state.get_value(Code._10E0)
+        return result if isinstance(result, dict) else None
 
     async def traits(self) -> dict[str, Any]:
         """Return the traits of the device.
@@ -446,7 +478,9 @@ class DeviceInfo(DeviceBase):  # 10E0
         result = await super().traits()
         msgs = await self.entity_state.get_message_log_flat()
 
-        if Code._10E0 in msgs or Code._10E0 in CODES_BY_DEV_SLUG.get(self._SLUG, []):
+        if Code._10E0 in msgs or Code._10E0 in CODES_BY_DEV_SLUG.get(
+            self._SLUG, []
+        ):
             result.update({"_info": await self.device_info()})
 
         return result
@@ -469,15 +503,15 @@ class Fakeable(DeviceBase):
 
     def __init__(
         self,
-        gwy: Gateway,
+        gateway: Gateway,
         *args: Any,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise a device capable of being faked or impersonated.
 
-        :param gwy: The gateway managing the faked device.
-        :type gwy: Gateway
+        :param gateway: The gateway managing the faked device.
+        :type gateway: Gateway
         :param args: Positional arguments for the base device.
         :type args: Any
         :param traits: Optional traits establishing faking context.
@@ -485,13 +519,13 @@ class Fakeable(DeviceBase):
         :param kwargs: Keyword arguments for the underlying entity.
         :type kwargs: Any
         """
-        super().__init__(gwy, *args, traits=traits, **kwargs)
+        super().__init__(gateway, *args, traits=traits, **kwargs)
 
         self._binding_manager: BindingManager | None = None
 
-        if self.id in gwy.config.known_list and gwy.config.known_list[self.id].get(
-            SZ_FAKED
-        ):
+        if self.id in gateway.config.known_list and gateway.config.known_list[
+            self.id
+        ].get(SZ_FAKED):
             self._make_fake()
 
         if traits and traits.faked:
@@ -503,38 +537,44 @@ class Fakeable(DeviceBase):
             return
 
         self._binding_manager = BindingManager(self, self._async_send_cmd)
-        if self.id not in self._gwy.config.known_list:
-            self._gwy.config.known_list[self.id] = {}
-        self._gwy.config.known_list[self.id][SZ_FAKED] = True  # TODO: remove this
+        if self.id not in self._gateway.config.known_list:
+            self._gateway.config.known_list[self.id] = {}
+        self._gateway.config.known_list[self.id][SZ_FAKED] = (
+            True  # TODO: remove this
+        )
         _LOGGER.info("Faking now enabled for: %s", self)
 
     async def _async_send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         priority: Priority | None = None,
         qos: QosParams | None = None,
     ) -> Packet | None:
         """Send a command and forward to the binding context if binding."""
         if self._binding_manager and self._binding_manager.is_binding:
             # cmd.code in (Code._1FC9, Code._10E0)
-            self._binding_manager.sent_cmd(cmd)  # other codes needed for edge cases
+            self._binding_manager.sent_cmd(
+                command
+            )  # other codes needed for edge cases
 
-        return await super()._async_send_cmd(cmd, priority=priority, qos=qos)
+        return await super()._async_send_cmd(
+            command, priority=priority, qos=qos
+        )
 
     async def _wait_for_binding_request(
         self,
         accept_codes: Iterable[Code],
         /,
         *,
-        idx: IndexT = "00",
+        zone_index: IndexT = "00",
         require_ratify: bool = False,
     ) -> tuple[Message, Packet, Message, Message | None]:
         """Listen for a binding and return the Offer packets.
 
         :param accept_codes: The codes allowed for this binding.
         :type accept_codes: Iterable[Code]
-        :param idx: The index to bind to, defaults to "00".
-        :type idx: IndexT
+        :param zone_index: The index to bind to, defaults to "00".
+        :type zone_index: IndexT
         :param require_ratify: Whether ratification is required.
         :type require_ratify: bool
         :return: A tuple of the four binding transaction packets.
@@ -544,7 +584,7 @@ class Fakeable(DeviceBase):
             raise DeviceNotFaked(f"Device is not fakeable: {self}")
 
         return await self._binding_manager.wait_for_binding_request(
-            accept_codes, idx=idx, require_ratify=require_ratify
+            accept_codes, zone_index=zone_index, require_ratify=require_ratify
         )
 
     async def wait_for_binding_request(
@@ -552,15 +592,15 @@ class Fakeable(DeviceBase):
         accept_codes: Iterable[Code],
         /,
         *,
-        idx: IndexT = "00",
+        zone_index: IndexT = "00",
         require_ratify: bool = False,
     ) -> tuple[Message, Packet, Message, Message | None]:
         """Listen for a binding and return the Offer packets.
 
         :param accept_codes: The codes allowed for this binding.
         :type accept_codes: Iterable[Code]
-        :param idx: The index to bind to, defaults to "00".
-        :type idx: IndexT
+        :param zone_index: The index to bind to, defaults to "00".
+        :type zone_index: IndexT
         :param require_ratify: Whether ratification is required.
         :type require_ratify: bool
         :return: A tuple of the four binding transaction packets.
@@ -575,7 +615,7 @@ class Fakeable(DeviceBase):
         /,
         *,
         confirm_code: Code | None = None,
-        ratify_cmd: CommandDTO | None = None,
+        ratify_command: CommandDTO | None = None,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
         """Start a binding and return the Accept, or raise an exception.
 
@@ -583,8 +623,8 @@ class Fakeable(DeviceBase):
         :type offer_codes: Code | Iterable[Code]
         :param confirm_code: The code required to confirm the bind.
         :type confirm_code: Code | None
-        :param ratify_cmd: An optional ratification command to send.
-        :type ratify_cmd: CommandDTO | None
+        :param ratify_command: An optional ratification command to send.
+        :type ratify_command: CommandDTO | None
         :return: A tuple of the binding transaction packets.
         :rtype: tuple[Packet, Message, Packet, Packet | None]
         :raises DeviceNotFaked: If faking is not enabled.
@@ -600,7 +640,7 @@ class Fakeable(DeviceBase):
             codes = tuple(offer_codes)
 
         return await self._binding_manager.initiate_binding_process(
-            codes, confirm_code=confirm_code, ratify_cmd=ratify_cmd
+            codes, confirm_code=confirm_code, ratify_command=ratify_command
         )
 
     async def initiate_binding_process(
@@ -615,14 +655,14 @@ class Fakeable(DeviceBase):
         raise NotImplementedError
 
     async def _wait_for_binding_accept(
-        self, offer: Message, /, *, idx: IndexT = "00"
+        self, offer: Message, /, *, zone_index: IndexT = "00"
     ) -> tuple[Packet, Message, Packet, Packet | None]:
         """Listen for a binding accept packet.
 
         :param offer: The binding offer message.
         :type offer: Message
-        :param idx: The index to bind to, defaults to "00".
-        :type idx: IndexT
+        :param zone_index: The index to bind to, defaults to "00".
+        :type zone_index: IndexT
         :return: A tuple of the binding transaction packets.
         :rtype: tuple[Packet, Message, Packet, Packet | None]
         :raises NotImplementedError: Subclasses must implement this.
@@ -630,16 +670,20 @@ class Fakeable(DeviceBase):
         raise NotImplementedError
 
     async def oem_code(self) -> str | None:
-        """Return the OEM code (a 2-char ascii str) for this device, if
-        there is one.
+        """Return the device Original Equipment Manufacturer code.
+
+        Returns the 2-character ASCII OEM string for this device, if one
+        is present in traits or message state.
 
         :return: The Original Equipment Manufacturer code string.
         :rtype: str | None
         """
         traits = await self.traits()
         if not traits.get(SZ_OEM_CODE):
-            res = await self.entity_state.get_value(Code._10E0, key=SZ_OEM_CODE)
-            return str(res) if res is not None else None
+            result = await self.entity_state.get_value(
+                Code._10E0, key=SZ_OEM_CODE
+            )
+            return str(result) if result is not None else None
         oem = traits.get(SZ_OEM_CODE)
         return str(oem) if oem is not None else None
 
@@ -649,27 +693,29 @@ class Device(Child, DeviceBase):
 
     def __init__(
         self,
-        gwy: Gateway,
-        dev_addr: Address,
+        gateway: Gateway,
+        device_address: Address,
         *,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise a standard child device within the topology.
 
-        :param gwy: The gateway managing this device.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway managing this device.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: Optional traits outlining class and aliases.
         :type traits: DeviceTraits | None
         :param kwargs: Additional arguments for the base initialiser.
         :type kwargs: Any
         """
-        _LOGGER.debug("Creating a Device: %s (%s)", dev_addr.id, self.__class__)
-        super().__init__(gwy, dev_addr, traits=traits, **kwargs)
+        _LOGGER.debug(
+            "Creating a Device: %s (%s)", device_address.id, self.__class__
+        )
+        super().__init__(gateway, device_address, traits=traits, **kwargs)
 
-        gwy.device_registry._add_device(self)
+        gateway.device_registry._add_device(self)
 
 
 class HgiGateway(Device):  # HGI (18:)
@@ -701,7 +747,7 @@ class HgiGateway(Device):  # HGI (18:)
         :rtype: td
         """
         # Safely extract the custom timeout from the GatewayConfig
-        custom_timeout = getattr(self._gwy.config, "gateway_timeout", None)
+        custom_timeout = getattr(self._gateway.config, "gateway_timeout", None)
 
         if custom_timeout is not None:
             return td(minutes=int(custom_timeout))
@@ -714,23 +760,26 @@ class HgiGateway(Device):  # HGI (18:)
         :return: The active operational status of the gateway interface.
         :rtype: bool
         """
-        msg: PacketDTO | None = getattr(
-            getattr(self._gwy._engine, "_protocol", None), "_this_msg", None
-        )
+        # Ensure that this message is safely extracted
+        protocol = getattr(self._gateway._engine, "_protocol", None)
+        last_msg = getattr(protocol, "_this_msg", None)
 
-        if not msg or not hasattr(msg, "timestamp"):
+        if not last_msg or not hasattr(last_msg, "timestamp"):
             return False
 
-        dtm: dt = msg.timestamp
-        now = dt.now(UTC).astimezone(dtm.tzinfo) if dtm.tzinfo is not None else dt.now()
+        dtm: dt = last_msg.timestamp
+        now = (
+            dt.now(UTC).astimezone(dtm.tzinfo)
+            if dtm.tzinfo is not None
+            else dt.now()
+        )
 
         # Compare against our new dynamic property
         return bool((now - dtm) < self.message_timeout)
 
 
 class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
-    """The base class for the heat domain (Honeywell CH/DHW-compatible
-    devices).
+    """Base class for Honeywell CH/DHW-compatible heating devices.
 
     Includes UFH and heatpumps (which can also cool).
     """
@@ -739,24 +788,24 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
 
     def __init__(
         self,
-        gwy: Gateway,
-        dev_addr: Address,
+        gateway: Gateway,
+        device_address: Address,
         *,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise a device within the heating domain.
 
-        :param gwy: The gateway managing this heating device.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway managing this heating device.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: Optional traits detailing structural schemas.
         :type traits: DeviceTraits | None
         :param kwargs: Additional arguments for the base initialiser.
         :type kwargs: Any
         """
-        super().__init__(gwy, dev_addr, traits=traits, **kwargs)
+        super().__init__(gateway, device_address, traits=traits, **kwargs)
 
         self._child_id = None  # domain_id, or zone_idx
 
@@ -764,12 +813,15 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
 
         self.temp_state = TemperatureState()
         self.demand_state = DemandState()
+        self.act_state: ActuatorState | None = None
 
     def _make_tcs_controller(
         self, *, msg: Message | None = None, **schema: Any
     ) -> None:  # CH/DHW
         """Attach a TCS (create/update as required) after passing it any msg."""
-        if self.type not in DEV_TYPE_MAP.CONTROLLERS:  # potentially can be controllers
+        if (
+            self.type not in DEV_TYPE_MAP.CONTROLLERS
+        ):  # potentially can be controllers
             raise SchemaInconsistentError(
                 f"Invalid device type to be a controller: {self}"
             )
@@ -804,28 +856,30 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
 class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
     """The Device base class for the HVAC domain (ventilation, PIV, MV/HR)."""
 
-    _SLUG: str = DevType.HVC  # these may be instantiated, and promoted later on
+    _SLUG: str = (
+        DevType.HVC
+    )  # these may be instantiated, and promoted later on
 
     def __init__(
         self,
-        gwy: Gateway,
-        dev_addr: Address,
+        gateway: Gateway,
+        device_address: Address,
         *,
         traits: DeviceTraits | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialise a device within the HVAC ventilation domain.
 
-        :param gwy: The gateway managing this HVAC device.
-        :type gwy: Gateway
-        :param dev_addr: The physical address of the device.
-        :type dev_addr: Address
+        :param gateway: The gateway managing this HVAC device.
+        :type gateway: Gateway
+        :param device_address: The physical address of the device.
+        :type device_address: Address
         :param traits: Optional traits detailing structural schemas.
         :type traits: DeviceTraits | None
         :param kwargs: Additional arguments for the base initialiser.
         :type kwargs: Any
         """
-        super().__init__(gwy, dev_addr, traits=traits, **kwargs)
+        super().__init__(gateway, device_address, traits=traits, **kwargs)
 
         self._child_id = "hv"  # TODO: domain_id/deprecate
         # 6d: bidirectional parent link — set by HvacVentilator._update_schema()

@@ -33,7 +33,9 @@ def gwy_config() -> dict[str, Any]:
         ),
         "disable_qos": False,  # QoS is required for this test
         "enforce_known_list": False,
-        "known_list": {HGI_DEVICE_ID: {}},  # req'd to thwart foreign HGI blacklisting
+        "known_list": {
+            HGI_DEVICE_ID: {}
+        },  # req'd to thwart foreign HGI blacklisting
     }
 
 
@@ -46,12 +48,16 @@ def gwy_dev_id() -> DeviceIdT:
 
 
 @pytest.mark.xdist_group(name="virt_serial")
-async def _test_get_schedule(gwy: Gateway, ctl_id: DeviceIdT, idx: str) -> None:
+async def _test_get_schedule(
+    gwy: Gateway, ctl_id: DeviceIdT, idx: str
+) -> None:
     """Test obtaining the version and schedule."""
 
     assert gwy._engine._loop is asyncio.get_running_loop()  # scope BUG is here
     assert isinstance(gwy._engine._protocol, PortProtocol)  # mypy
-    assert gwy._engine._protocol._disable_qos is False  # QoS is required for this test
+    assert (
+        gwy._engine._protocol._disable_qos is False
+    )  # QoS is required for this test
 
     _: Controller = gwy.device_registry.get_device(ctl_id, cls=Controller)
 

@@ -14,11 +14,12 @@ from typing import TYPE_CHECKING, Any, Final, Self
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
-    SZ_FRAG_NUMBER,
     SZ_FRAGMENT,
+    SZ_FRAGMENT_NUMBER,
     SZ_SCHEDULE,
-    SZ_TOTAL_FRAGS,
+    SZ_TOTAL_FRAGMENTS,
     SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
 )
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
@@ -37,6 +38,7 @@ from ramses_rf.typing import (
     WeeklySchedule,
     WeeklyScheduleDict,
 )
+from ramses_tx.const import Code
 from ramses_tx.exceptions import ProtocolSendFailed
 
 from ..enums import Action
@@ -157,13 +159,19 @@ class Switchpoint:
             ) from err
 
         if t.minute % 5 != 0 or t.second != 0 or t.microsecond != 0:
-            raise ValueError(f"Time {self.time_of_day!r} must be in 5-minute intervals")
+            raise ValueError(
+                f"Time {self.time_of_day!r} must be in 5-minute intervals"
+            )
 
         if self.heat_setpoint is not None:
             if not (5.0 <= self.heat_setpoint <= 35.0):
-                raise ValueError(f"Out of range heat_setpoint: {self.heat_setpoint}")
+                raise ValueError(
+                    f"Out of range heat_setpoint: {self.heat_setpoint}"
+                )
         elif self.enabled is None:
-            raise ValueError("Switchpoint must define 'heat_setpoint' or 'enabled'")
+            raise ValueError(
+                "Switchpoint must define 'heat_setpoint' or 'enabled'"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,23 +199,25 @@ class DaySchedule:
 class ScheduleData:
     """Complete 7-day schedule for a zone or DHW.
 
-    :param zone_idx: Zone or domain index ('00'-'0F' or 'HW').
-    :type zone_idx: str
+    :param zone_index: Zone or domain index ('00'-'0F' or 'HW').
+    :type zone_index: str
     :param days: Tuple of daily schedules.
     :type days: tuple[DaySchedule, ...]
     """
 
-    zone_idx: str
+    zone_index: str
     days: tuple[DaySchedule, ...]
 
     def __post_init__(self) -> None:
         """Validate zone index and day array bounds."""
-        if self.zone_idx != "HW" and not (
-            len(self.zone_idx) == 2 and 0 <= int(self.zone_idx, 16) <= 15
+        if self.zone_index != "HW" and not (
+            len(self.zone_index) == 2 and 0 <= int(self.zone_index, 16) <= 15
         ):
-            raise ValueError(f"Invalid zone_idx: {self.zone_idx!r}")
+            raise ValueError(f"Invalid zone_index: {self.zone_index!r}")
         if len(self.days) > 7:
-            raise ValueError(f"Schedule cannot exceed 7 days: {len(self.days)}")
+            raise ValueError(
+                f"Schedule cannot exceed 7 days: {len(self.days)}"
+            )
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Self:
@@ -219,7 +229,11 @@ class ScheduleData:
         :rtype: Self
         :raises ValueError: If dictionary structures or values are invalid.
         """
-        zone_idx = str(data[SZ_ZONE_IDX])
+        zone_index = str(
+            data.get(
+                SZ_ZONE_INDEX, data.get(SZ_ZONE_IDX, data.get("zone_idx", ""))
+            )
+        )
         raw_schedule = data.get(SZ_SCHEDULE)
         if not isinstance(raw_schedule, (list, tuple)):
             raise ValueError(f"Invalid schedule structure: {raw_schedule}")
@@ -245,7 +259,9 @@ class ScheduleData:
                     if isinstance(heat_setpoint, (int, float))
                     else None
                 )
-                enabled_val = bool(enabled) if isinstance(enabled, bool) else None
+                enabled_val = (
+                    bool(enabled) if isinstance(enabled, bool) else None
+                )
                 switchpoints.append(
                     Switchpoint(
                         time_of_day=time_of_day,
@@ -255,10 +271,12 @@ class ScheduleData:
                 )
 
             days.append(
-                DaySchedule(day_of_week=day_of_week, switchpoints=tuple(switchpoints))
+                DaySchedule(
+                    day_of_week=day_of_week, switchpoints=tuple(switchpoints)
+                )
             )
 
-        return cls(zone_idx=zone_idx, days=tuple(days))
+        return cls(zone_index=zone_index, days=tuple(days))
 
     def to_dict(self) -> WeeklyScheduleDict:
         """Serialize ScheduleData dataclass back into dictionary layout.
@@ -289,12 +307,15 @@ class ScheduleData:
             schedule.append(day_dict)
 
         return {
-            SZ_ZONE_IDX: self.zone_idx,
+            SZ_ZONE_INDEX: self.zone_index,
+            SZ_ZONE_IDX: self.zone_index,
             SZ_SCHEDULE: schedule,
         }
 
 
-def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> WeeklyScheduleDict:
+def fragments_to_full_schedule(
+    fragments: Iterable[FragmentT],
+) -> WeeklyScheduleDict:
     """Convert a tuple of fragments strs (a blob) into a schedule.
 
     :param fragments: An iterable of hexadecimal string fragments.
@@ -319,19 +340,24 @@ def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> WeeklySchedule
                 f"Invalid schedule switchpoint binary block: {raw_schedule[i : i + SWITCHPOINT_STRUCT_SIZE]!r}"
             )
 
-        zone_index = switchpoint_payload.zone_idx
+        zone_index = switchpoint_payload.zone_index
         day_of_week = switchpoint_payload.day_of_week
         time_of_day = switchpoint_payload.time_of_day_mins
         value = switchpoint_payload.setpoint_value
 
         if day_of_week > current_day_of_week:
             schedule.append(
-                {SZ_DAY_OF_WEEK: current_day_of_week, SZ_SWITCHPOINTS: switchpoints}
+                {
+                    SZ_DAY_OF_WEEK: current_day_of_week,
+                    SZ_SWITCHPOINTS: switchpoints,
+                }
             )
             current_day_of_week, switchpoints = day_of_week, []
 
         hours, mins = divmod(time_of_day, 60)
-        time_str = dtm_time(hour=hours, minute=mins).isoformat(timespec="minutes")
+        time_str = dtm_time(hour=hours, minute=mins).isoformat(
+            timespec="minutes"
+        )
         if value in (0, 1):
             switchpoint_dhw: SwitchPointDhw = {
                 SZ_TIME_OF_DAY: time_str,
@@ -348,7 +374,11 @@ def fragments_to_full_schedule(fragments: Iterable[FragmentT]) -> WeeklySchedule
     schedule.append(
         {SZ_DAY_OF_WEEK: current_day_of_week, SZ_SWITCHPOINTS: switchpoints}
     )
-    return {SZ_ZONE_IDX: f"{zone_index:02X}", SZ_SCHEDULE: schedule}
+    return {
+        SZ_ZONE_INDEX: f"{zone_index:02X}",
+        SZ_ZONE_IDX: f"{zone_index:02X}",
+        SZ_SCHEDULE: schedule,
+    }
 
 
 def full_schedule_to_fragments(
@@ -367,7 +397,9 @@ def full_schedule_to_fragments(
 
     schedule_data = ScheduleData.from_dict(full_schedule)
     zone_index = (
-        int(schedule_data.zone_idx, 16) if schedule_data.zone_idx != "HW" else 0xFA
+        int(schedule_data.zone_index, 16)
+        if schedule_data.zone_index != "HW"
+        else 0xFA
     )
     for day in schedule_data.days:
         for switchpoint in day.switchpoints:
@@ -379,7 +411,7 @@ def full_schedule_to_fragments(
                 else switchpoint.enabled
             )
             switchpoint_payload = ScheduleSwitchpointPayload.from_switchpoint(
-                zone_idx=zone_index,
+                zone_index=zone_index,
                 day_of_week=day.day_of_week,
                 time_of_day_mins=time_of_day_mins,
                 setpoint=setpoint,
@@ -401,17 +433,17 @@ def full_schedule_to_fragments(
     ]
 
 
-def _to_protocol_zone_idx(zone_idx: str) -> str:
+def _to_protocol_zone_idx(zone_index: str) -> str:
     """Translate domain zone index string to RAMSES RF protocol index.
 
     DHW uses domain identifier 'HW' externally, which translates to '00' in protocol.
 
-    :param zone_idx: Domain zone index string ('HW' or '00'-'0F').
-    :type zone_idx: str
+    :param zone_index: Domain zone index string ('HW' or '00'-'0F').
+    :type zone_index: str
     :returns: RAMSES RF protocol zone index ('00'-'0F').
     :rtype: str
     """
-    return "00" if zone_idx == "HW" else zone_idx
+    return "00" if zone_index == "HW" else zone_index
 
 
 class Schedule:  # 0404
@@ -431,9 +463,11 @@ class Schedule:  # 0404
 
         self.ctl = zone.ctl
         self.tcs = zone.tcs
-        self._gwy = zone._gwy
+        self._gateway = zone._gateway
 
-        self._full_schedule: WeeklyScheduleDict | EmptySchedule | EmptyDictT = {}
+        self._full_schedule: (
+            WeeklyScheduleDict | EmptySchedule | EmptyDictT
+        ) = {}
 
         self._payload_set: PayloadSetT = [None]  # Rx'd
         self._fragments: FragmentSetT = []  # to Tx
@@ -467,7 +501,9 @@ class Schedule:  # 0404
         """
         old_state = self._state
         self._state = state_cls(self)
-        _LOGGER.debug("%s: FSM transition %s -> %s", self, old_state, self._state)
+        _LOGGER.debug(
+            "%s: FSM transition %s -> %s", self, old_state, self._state
+        )
 
         if isinstance(self._state, ScheduleIsSynchronised):
             self._sync_event.set()
@@ -480,7 +516,7 @@ class Schedule:  # 0404
         :param msg: Incoming protocol message object.
         :type msg: Message
         """
-        if msg.code == "0006":
+        if msg.code == Code._0006:
             if isinstance(msg.payload, dict):
                 change_counter = msg.payload.get("change_counter")
                 if (
@@ -492,21 +528,25 @@ class Schedule:  # 0404
                         self._set_state(ScheduleIsStale)
             return
 
-        if msg.code != "0404":
+        if msg.code != Code._0404:
             return
 
         payload = msg.payload
         if not isinstance(payload, dict):
             return
 
-        pkt_zone_idx = payload.get(SZ_ZONE_IDX)
+        pkt_zone_idx = payload.get(
+            SZ_ZONE_INDEX, payload.get(SZ_ZONE_IDX, payload.get("zone_idx"))
+        )
         if pkt_zone_idx is not None:
             translated_idx = _to_protocol_zone_idx(self.idx)
             if pkt_zone_idx != translated_idx and pkt_zone_idx != self.idx:
                 return
 
         try:
-            self._payload_set = self._update_payload_set(self._payload_set, payload)
+            self._payload_set = self._update_payload_set(
+                self._payload_set, payload
+            )
         except exc.ScheduleError as err:
             _LOGGER.warning(
                 "%s: Dropped corrupted schedule fragments: %s",
@@ -549,7 +589,10 @@ class Schedule:  # 0404
         if (
             not force_io
             and not self._schedule_version
-            or (self._global_version and self._global_version > self._schedule_version)
+            or (
+                self._global_version
+                and self._global_version > self._schedule_version
+            )
         ):
             return True, False  # is_dated, did_io
 
@@ -605,7 +648,9 @@ class Schedule:  # 0404
             # Silently drop the background request if the transport is
             # inactive (e.g., during cache restoration prior to gateway
             # startup).
-            _LOGGER.debug("%s: Dropped request: gateway transport is inactive.", self)
+            _LOGGER.debug(
+                "%s: Dropped request: gateway transport is inactive.", self
+            )
             return None
 
         return self.schedule
@@ -623,9 +668,9 @@ class Schedule:  # 0404
             self,
             Action.GET_SCHEDULE_FRAGMENT,
             data={
-                "zone_idx": self.idx,
-                "frag_number": frag_num,
-                "total_frags": frag_set_size,
+                SZ_ZONE_INDEX: self.idx,
+                SZ_FRAGMENT_NUMBER: frag_num,
+                SZ_TOTAL_FRAGMENTS: frag_set_size,
             },
             wait_for_reply=True,
         )
@@ -660,7 +705,11 @@ class Schedule:  # 0404
                 self._payload_set = self._update_payload_set(
                     self._payload_set, fragment
                 )
-            except (TimeoutError, exc.ScheduleError, ProtocolSendFailed) as err:
+            except (
+                TimeoutError,
+                exc.ScheduleError,
+                ProtocolSendFailed,
+            ) as err:
                 _LOGGER.warning(
                     "%s: Fragment %s fetch retry %s failed: %s",
                     self,
@@ -684,13 +733,21 @@ class Schedule:  # 0404
         if is_dated:
             self._full_schedule = {}  # keep frags, maybe only other scheds have changed
 
-        if self._full_schedule and isinstance(self._state, ScheduleIsSynchronised):
+        if self._full_schedule and isinstance(
+            self._state, ScheduleIsSynchronised
+        ):
             return
 
-        if not did_io:  # must know the version of the schedule about to be RQ'd
-            self._global_version, _ = await self.tcs._schedule_version(force_io=True)
+        if (
+            not did_io
+        ):  # must know the version of the schedule about to be RQ'd
+            self._global_version, _ = await self.tcs._schedule_version(
+                force_io=True
+            )
 
-        self._payload_set[0] = None  # if 1st frag valid: schedule very likely unchanged
+        self._payload_set[0] = (
+            None  # if 1st frag valid: schedule very likely unchanged
+        )
 
         await self._fetch_schedule()
 
@@ -700,7 +757,7 @@ class Schedule:  # 0404
         """Process a payload set and return the full schedule.
 
         Sets `self._full_schedule`. If the schedule is for DHW, set the
-        `zone_idx` key to 'HW' (to avoid confusing with zone '00').
+        `zone_index` key to 'HW' (to avoid confusing with zone '00').
 
         :param payload_set: The completed array of fragment payloads.
         :type payload_set: PayloadSetT
@@ -711,7 +768,10 @@ class Schedule:  # 0404
             if the fragment set is incomplete.
         """
         if payload_set == [None]:
-            self._full_schedule = {SZ_ZONE_IDX: self.idx}
+            self._full_schedule = {
+                SZ_ZONE_INDEX: self.idx,
+                SZ_ZONE_IDX: self.idx,
+            }
             return self._full_schedule
 
         if None in payload_set:
@@ -726,9 +786,12 @@ class Schedule:  # 0404
                 if payload and SZ_FRAGMENT in payload
             )
         except zlib.error as err:
-            raise exc.ScheduleError("Failed to decompress schedule fragments") from err
+            raise exc.ScheduleError(
+                "Failed to decompress schedule fragments"
+            ) from err
 
         if self.idx == "HW":
+            schedule[SZ_ZONE_INDEX] = "HW"
             schedule[SZ_ZONE_IDX] = "HW"
         self._full_schedule = schedule
         self._set_state(ScheduleIsSynchronised)
@@ -744,8 +807,10 @@ class Schedule:  # 0404
         :returns: Initialised array for expected fragments.
         :rtype: PayloadSetT
         """
-        total_frags = payload.get(SZ_TOTAL_FRAGS)
-        frag_num = payload.get(SZ_FRAG_NUMBER)
+        total_frags = payload.get(
+            SZ_TOTAL_FRAGMENTS, payload.get("total_frags")
+        )
+        frag_num = payload.get(SZ_FRAGMENT_NUMBER, payload.get("frag_number"))
 
         if total_frags is None or frag_num is None:
             return [None]
@@ -771,15 +836,18 @@ class Schedule:  # 0404
         :returns: Updated fragment payload collection.
         :rtype: PayloadSetT
         """
-        if payload.get(SZ_TOTAL_FRAGS) is None:  # zone has no schedule
+        total_frags = payload.get(
+            SZ_TOTAL_FRAGMENTS, payload.get("total_frags")
+        )
+        if total_frags is None:  # zone has no schedule
             payload_set = [None]
             self._proc_payload_set(payload_set)
             return payload_set
 
-        if payload.get(SZ_TOTAL_FRAGS) != len(payload_set):  # sched has changed
+        if total_frags != len(payload_set):  # sched has changed
             return self._init_payload_set(payload)
 
-        frag_num = payload.get(SZ_FRAG_NUMBER)
+        frag_num = payload.get(SZ_FRAGMENT_NUMBER, payload.get("frag_number"))
         if frag_num is not None and 0 < frag_num <= len(payload_set):
             payload_set[frag_num - 1] = payload
 
@@ -790,13 +858,15 @@ class Schedule:  # 0404
 
         return self._init_payload_set(payload)
 
-    async def _send_fragment(self, frag_num: int, frag_cnt: int, fragment: str) -> None:
+    async def _send_fragment(
+        self, fragment_number: int, total_fragments: int, fragment: str
+    ) -> None:
         """Send a schedule fragment to the controller.
 
-        :param frag_num: Current fragment number (1-based).
-        :type frag_num: int
-        :param frag_cnt: Total fragment count.
-        :type frag_cnt: int
+        :param fragment_number: Current fragment number (1-based).
+        :type fragment_number: int
+        :param total_fragments: Total fragment count.
+        :type total_fragments: int
         :param fragment: Hexadecimal fragment payload string.
         :type fragment: str
         """
@@ -804,15 +874,17 @@ class Schedule:  # 0404
             self,
             Action.SET_SCHEDULE_FRAGMENT,
             data={
-                "zone_idx": self.idx,
-                "frag_num": frag_num,
-                "frag_cnt": frag_cnt,
+                SZ_ZONE_INDEX: self.idx,
+                SZ_FRAGMENT_NUMBER: fragment_number,
+                SZ_TOTAL_FRAGMENTS: total_fragments,
                 "fragment": fragment,
             },
             wait_for_reply=True,
         )
 
-    def _normalise_and_validate(self, schedule: WeeklySchedule) -> WeeklyScheduleDict:
+    def _normalise_and_validate(
+        self, schedule: WeeklySchedule
+    ) -> WeeklyScheduleDict:
         """Normalise and validate schedule dictionary structure.
 
         :param schedule: 7-day schedule array to validate.
@@ -822,6 +894,7 @@ class Schedule:  # 0404
         :raises exc.ScheduleError: On validation failure.
         """
         full_schedule: WeeklyScheduleDict = {
+            SZ_ZONE_INDEX: self.idx,
             SZ_ZONE_IDX: self.idx,
             SZ_SCHEDULE: schedule,
         }
@@ -834,6 +907,7 @@ class Schedule:  # 0404
 
         if self.idx == "HW":
             # Translate DHW domain index 'HW' to protocol zone index '00'
+            validated[SZ_ZONE_INDEX] = _to_protocol_zone_idx(self.idx)
             validated[SZ_ZONE_IDX] = _to_protocol_zone_idx(self.idx)
 
         return validated
@@ -865,7 +939,9 @@ class Schedule:  # 0404
                 await self._send_fragment(num, frag_cnt, frag)
         except TimeoutError as err:
             self._set_state(ScheduleIsFaulted)
-            raise exc.ScheduleFlowError(f"failed to set schedule: {err}") from err
+            raise exc.ScheduleFlowError(
+                f"failed to set schedule: {err}"
+            ) from err
         else:
             if not force_refresh:
                 self._global_version, _ = await self.tcs._schedule_version(

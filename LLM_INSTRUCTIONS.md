@@ -28,6 +28,12 @@ For all general coding, typing, docstring, and architectural standards, you **mu
 * **Sphinx Docstring BOFM Tables**: Always document payload dataclasses with a Binary Offset Format Map (BOFM) table detailing field offsets, struct formats, byte lengths, and sample hex representations.
 * **Architecture Spec Reference**: Consult [docs/developer_guide/payload_registry_spec.md](docs/developer_guide/payload_registry_spec.md) for detailed guidelines and opcode struct specifications.
 
+## 4. Protocol Code & Verb Enumerations (Issue #1040 Standard)
+
+* **Use Canonical Enums**: Always use `Code` and `Verb` (or `I_`, `RQ`, `RP`, `W_`) constants instead of hardcoded hex code strings or verb literals.
+* **No Raw Magic Strings**: Never introduce raw 4-character hex strings for known RAMSES opcodes or 2-character verb strings.
+
+## 5. Tooling & Execution Protocols
 
 * **Tooling Execution**: Use project virtual environment binaries (e.g., `.venv/bin/pytest`, `.venv/bin/prek run -a`). Do not invent custom runner scripts or bypass existing quality checks.
 * **Cross-Repository References**: Fully qualify cross-repository issue and PR references (e.g., `ramses-rf/ramses_cc#123`).

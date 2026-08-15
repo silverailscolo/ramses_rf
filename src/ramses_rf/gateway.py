@@ -23,11 +23,15 @@ from ramses_tx.const import (
 )
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.exceptions import PacketInvalid, ProtocolSendFailed
-from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_ENFORCE_KNOWN_LIST, SZ_KNOWN_LIST
+from ramses_tx.schemas import (
+    SZ_BLOCK_LIST,
+    SZ_ENFORCE_KNOWN_LIST,
+    SZ_KNOWN_LIST,
+)
 from ramses_tx.typing import PayloadT
 
 from .config import GatewayConfig as GatewayConfig, strip_and_map_schema
-from .const import Code, VerbT
+from .const import Code, Verb
 from .devices import (
     DeviceFilter,
     DeviceRegistry,
@@ -64,6 +68,27 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
+def _payload_to_serialisable(payload: Any) -> Any:
+    """Convert a payload object to a JSON-serialisable form.
+
+    Payload dataclasses may contain ``bytes`` fields (e.g.
+    ``PuzzlePayload``) that HA's storage layer cannot JSON-encode.
+    If the payload has a ``to_dict()`` method, use it; otherwise
+    return the payload as-is (legacy behaviour for plain dicts/strings).
+
+    :param payload: The payload object from an ``ApplicationMessage``.
+    :type payload: Any
+    :returns: A JSON-serialisable representation of the payload.
+    :rtype: Any
+    """
+    if hasattr(payload, "to_dict"):
+        try:
+            return payload.to_dict()
+        except Exception:  # noqa: BLE001
+            return str(payload)
+    return payload
+
+
 class Gateway(GatewayLifecycle, GatewayInterface):
     """The gateway class.
 
@@ -78,7 +103,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         *,
         config: GatewayConfig | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
-        transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
+        transport_constructor: Callable[..., Awaitable[RamsesTransportT]]
+        | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the Gateway instance."""
@@ -125,8 +151,12 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         # Override EngineConfig with the stripped-down L7 properties
         self._gwy_config.engine.hgi_id = self._gwy_config.hgi_id
-        self._gwy_config.engine.known_list = list(self._gwy_config.known_list.keys())
-        self._gwy_config.engine.block_list = list(self._gwy_config.block_list.keys())
+        self._gwy_config.engine.known_list = list(
+            self._gwy_config.known_list.keys()
+        )
+        self._gwy_config.engine.block_list = list(
+            self._gwy_config.block_list.keys()
+        )
 
         self._engine = Engine(
             self._gwy_config.engine,
@@ -168,7 +198,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             device_filter=self._device_filter,
             config=self._gwy_config,
             device_factory_cb=lambda addr, msg, traits: device_factory(
-                gwy=self, dev_addr=addr, msg=msg, traits=traits
+                gateway=self, device_address=addr, msg=msg, traits=traits
             ),
             on_topology_changed_cb=self._on_topology_changed,
         )
@@ -191,9 +221,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         # 1. Controller Knowledge Bridge
         def is_controller(device_id: str) -> bool:
-            dev = self._device_registry.device_by_id.get(DeviceIdT(device_id))
-            if dev:
-                return getattr(dev, "_is_controller", True)
+            device = self._device_registry.device_by_id.get(
+                DeviceIdT(device_id)
+            )
+            if device:
+                return getattr(device, "_is_controller", True)
             return True
 
         rf_msg._IS_CONTROLLER_CB = is_controller
@@ -216,6 +248,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     @property
     def device_registry(self) -> DeviceRegistryInterface:
+        """Return the active device registry instance."""
         return self._device_registry
 
     @property
@@ -230,14 +263,17 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     @property
     def dispatcher(self) -> CommandDispatcher:
+        """Return the command dispatcher instance."""
         return self._dispatcher
 
     @property
     def config(self) -> GatewayConfig:
+        """Return the gateway configuration."""
         return self._gwy_config
 
     @property
     def message_store(self) -> MessageStoreInterface | None:
+        """Return the SQLite message store instance or None."""
         return self._message_store
 
     @message_store.setter
@@ -246,6 +282,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     @property
     def hgi(self) -> HgiGateway | None:
+        """Return the HGI gateway device interface or None."""
         if not self._engine._transport:
             return None
         if device_id := self._engine._transport.get_extra_info(SZ_ACTIVE_HGI):
@@ -253,17 +290,20 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return None
 
     def update_message_history(self, msg: ApplicationMessage) -> None:
+        """Update current and previous message tracking references."""
         with self._history_lock:
             self._prev_msg = self._this_msg
             self._this_msg = msg
 
     def clear_message_history(self) -> None:
+        """Clear the tracked message history references."""
         with self._history_lock:
             self._prev_msg = None
             self._this_msg = None
 
     @property
     def tcs(self) -> Evohome | None:
+        """Return the primary Evohome system or None."""
         if self._tcs is None and self.device_registry.systems:
             self._tcs = self.device_registry.systems[0]
         return self._tcs
@@ -272,7 +312,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
-            SZ_CONFIG: {SZ_ENFORCE_KNOWN_LIST: self.config.engine.enforce_known_list},
+            SZ_CONFIG: {
+                SZ_ENFORCE_KNOWN_LIST: self.config.engine.enforce_known_list
+            },
             SZ_KNOWN_LIST: await self.device_registry.known_list(),
             SZ_BLOCK_LIST: self.config.engine.block_list or [],
             "_unwanted": sorted(self._engine._unwanted),
@@ -310,27 +352,38 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         if self._schema_updated_callback is None:
             return
         schema_dict = await self.schema()
-        res = self._schema_updated_callback(schema_dict)
-        if asyncio.iscoroutine(res):
-            await res
+        result = self._schema_updated_callback(schema_dict)
+        if asyncio.iscoroutine(result):
+            await result
 
     async def schema(self) -> dict[str, Any]:
-        schema: dict[str, Any] = {SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None}
+        """Return the entire gateway and device topology schema."""
+        schema: dict[str, Any] = {
+            SZ_MAIN_TCS: self.tcs.ctl.id if self.tcs else None
+        }
         for tcs in self.device_registry.systems:
             schema[tcs.ctl.id] = await tcs.schema()
         # Include FAN/VCS topology (remotes/sensors membership) so that
         # HVAC structure round-trips across restarts via load_fan()
-        for dev in self.device_registry.devices:
-            if isinstance(dev, HvacVentilator) and (dev._remote_ids or dev._sensor_ids):
-                schema[dev.id] = await dev.schema()
-        schema[f"{SZ_ORPHANS}_heat"] = await self.device_registry.get_heat_orphans()
-        schema[f"{SZ_ORPHANS}_hvac"] = await self.device_registry.get_hvac_orphans()
+        for device in self.device_registry.devices:
+            if isinstance(device, HvacVentilator) and (
+                device._remote_ids or device._sensor_ids
+            ):
+                schema[device.id] = await device.schema()
+        schema[
+            f"{SZ_ORPHANS}_heat"
+        ] = await self.device_registry.get_heat_orphans()
+        schema[
+            f"{SZ_ORPHANS}_hvac"
+        ] = await self.device_registry.get_hvac_orphans()
         return schema
 
     async def params(self) -> dict[str, Any]:
+        """Return parameters across all registered devices."""
         return await self.device_registry.params()
 
     async def status(self) -> dict[str, Any]:
+        """Return operational status across all registered devices."""
         status_dict = await self.device_registry.status()
         tx_rate = (
             self._engine._transport.get_extra_info("tx_rate")
@@ -374,7 +427,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                     "addr2": msg._addrs[1].id,  # <-- Exact raw addr2
                     "addr3": msg._addrs[2].id,  # <-- Exact raw addr3
                     "code": str(msg.code),
-                    "payload": msg.payload,
+                    "payload": _payload_to_serialisable(msg.payload),
                     # Frame string is required by _restore_cached_packets /
                     # Packet.from_dict to reconstruct the Packet on warm restart.
                     # Without it, from_dict gets an empty frame body and raises
@@ -453,6 +506,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         *,
         msg_filter: Callable[[PacketDTO], bool] | None = None,
     ) -> Callable[[], None]:
+        """Register an asynchronous packet message handler callback."""
         return self._engine.add_msg_handler(msg_handler, msg_filter=msg_filter)
 
     def add_raw_pkt_handler(
@@ -468,16 +522,18 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return self._engine.add_raw_pkt_handler(msg_handler)
 
     def add_task(self, task: asyncio.Task[Any]) -> None:
+        """Register a tracked asyncio task on the transport engine."""
         self._engine.add_task(task)
 
     @staticmethod
     def create_cmd(
-        verb: VerbT,
+        verb: Verb,
         device_id: DeviceIdT,
         code: Code,
         payload: PayloadT,
         **kwargs: Any,
     ) -> CommandDTO:
+        """Create a standardized CommandDTO packet command."""
         return Engine.create_cmd(
             verb,
             device_id,
@@ -488,7 +544,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     def send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -497,8 +553,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         timeout: float = DEFAULT_SEND_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> asyncio.Task[Packet]:
+        """Schedule command transmission as a background task."""
         coro = self.async_send_cmd(
-            cmd,
+            command,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
@@ -517,7 +574,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     async def async_send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -526,9 +583,10 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         timeout: float = DEFAULT_SEND_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> Packet:
+        """Transmit a command and wait for response packet."""
         try:
             return await self._engine.async_send_cmd(
-                cmd,
+                command,
                 gap_duration=gap_duration,
                 num_repeats=num_repeats,
                 priority=priority,

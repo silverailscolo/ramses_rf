@@ -51,9 +51,15 @@ def class_by_attr(name: str, attr: str) -> dict[str, Any]:
     """
 
     def predicate(m: Any) -> bool:
-        return isclass(m) and m.__module__ == name and bool(getattr(m, attr, None))
+        return (
+            isclass(m)
+            and m.__module__ == name
+            and bool(getattr(m, attr, None))
+        )
 
-    return {getattr(c[1], attr): c[1] for c in getmembers(modules[name], predicate)}
+    return {
+        getattr(c[1], attr): c[1] for c in getmembers(modules[name], predicate)
+    }
 
 
 class _Entity:
@@ -65,18 +71,18 @@ class _Entity:
 
     _SLUG: str = None  # type: ignore[assignment]
 
-    def __init__(self, gwy: Gateway) -> None:
+    def __init__(self, gateway: Gateway) -> None:
         """Initialize the base entity and its composed components.
 
-        :param gwy: The gateway orchestrator.
-        :type gwy: Gateway
+        :param gateway: The gateway orchestrator.
+        :type gateway: Gateway
         """
-        self._gwy = gwy
+        self._gateway = gateway
         self.id: DeviceIdT = None  # type: ignore[assignment]
         self._qos_tx_count = 0
 
         # Specialized components via Composition
-        self.entity_state: EntityState = EntityState(self, self._gwy)
+        self.entity_state: EntityState = EntityState(self, self._gateway)
 
         # Context required by children (Zones/Devices)
         self._z_id: DeviceIdT = None  # type: ignore[assignment]
@@ -87,11 +93,11 @@ class _Entity:
     def __repr__(self) -> str:
         return f"{self.id} ({self._SLUG})"
 
-    def deprecate_device(self, pkt: Packet, reset: bool = False) -> None:
+    def deprecate_device(self, packet: Packet, reset: bool = False) -> None:
         """If an entity is deprecated enough times, stop sending to it.
 
-        :param pkt: The packet triggering deprecation.
-        :type pkt: Packet
+        :param packet: The packet triggering deprecation.
+        :type packet: Packet
         :param reset: If True, reset the deprecation counter, defaults to False.
         :type reset: bool, optional
         """
@@ -102,7 +108,7 @@ class _Entity:
         self._qos_tx_count += 1
         if self._qos_tx_count == _QOS_TX_LIMIT:
             _LOGGER.warning(
-                f"{pkt} < Sending now deprecated for {self} "
+                f"{packet} < Sending now deprecated for {self} "
                 "(consider adjusting device_id filters)"
             )
 
@@ -117,11 +123,17 @@ class _Entity:
         :return: None
         :rtype: None
         """
-        if isinstance(event.state, TemperatureState) and hasattr(self, "temp_state"):
+        if isinstance(event.state, TemperatureState) and hasattr(
+            self, "temp_state"
+        ):
             setattr(self, "temp_state", event.state)  # noqa: B010
-        elif isinstance(event.state, DemandState) and hasattr(self, "demand_state"):
+        elif isinstance(event.state, DemandState) and hasattr(
+            self, "demand_state"
+        ):
             setattr(self, "demand_state", event.state)  # noqa: B010
-        elif isinstance(event.state, ScheduleState) and hasattr(self, "schedule_state"):
+        elif isinstance(event.state, ScheduleState) and hasattr(
+            self, "schedule_state"
+        ):
             setattr(self, "schedule_state", event.state)  # noqa: B010
         elif isinstance(event.state, FaultLogState) and hasattr(self, "state"):
             setattr(self, "state", event.state)  # noqa: B010
@@ -129,39 +141,47 @@ class _Entity:
             self, "opentherm_state"
         ):
             setattr(self, "opentherm_state", event.state)  # noqa: B010
-        elif isinstance(event.state, HvacState) and hasattr(self, "hvac_state"):
+        elif isinstance(event.state, HvacState) and hasattr(
+            self, "hvac_state"
+        ):
             setattr(self, "hvac_state", event.state)  # noqa: B010
-        elif isinstance(event.state, ZoneState) and hasattr(self, "zone_state"):
+        elif isinstance(event.state, ZoneState) and hasattr(
+            self, "zone_state"
+        ):
             setattr(self, "zone_state", event.state)  # noqa: B010
-        elif isinstance(event.state, PowerState) and hasattr(self, "power_state"):
+        elif isinstance(event.state, PowerState) and hasattr(
+            self, "power_state"
+        ):
             setattr(self, "power_state", event.state)  # noqa: B010
 
-    def _send_cmd(self, cmd: CommandDTO, **kwargs: Any) -> asyncio.Task[Any] | None:
+    def _send_cmd(
+        self, command: CommandDTO, **kwargs: Any
+    ) -> asyncio.Task[Any] | None:
         """Proxy command sending to the Gateway.
 
-        :param cmd: The command to send.
-        :type cmd: CommandDTO
+        :param command: The command to send.
+        :type command: CommandDTO
         :param kwargs: Optional sending parameters (e.g., priority).
         :type kwargs: Any
         :returns: The corresponding asyncio Task or None.
         :rtype: asyncio.Task[Any] | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.info("%s < Sending was deprecated for %s", cmd, self)
+            _LOGGER.info("%s < Sending was deprecated for %s", command, self)
             return None
 
-        return self._gwy.send_cmd(cmd, **kwargs)
+        return self._gateway.send_cmd(command, **kwargs)
 
     async def _async_send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         priority: Priority | None = None,
         qos: QosParams | None = None,
     ) -> Packet | None:
         """Proxy asynchronous command sending to the Gateway.
 
-        :param cmd: The command to send.
-        :type cmd: CommandDTO
+        :param command: The command to send.
+        :type command: CommandDTO
         :param priority: Transmission priority, defaults to None.
         :type priority: Priority | None, optional
         :param qos: Quality of Service parameters, defaults to None.
@@ -170,7 +190,9 @@ class _Entity:
         :rtype: Packet | None
         """
         if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.warning("%s < Sending was deprecated for %s", cmd, self)
+            _LOGGER.warning(
+                "%s < Sending was deprecated for %s", command, self
+            )
             return None
 
         # Build kwargs dynamically to prevent passing `None` to strict Gateway args
@@ -184,7 +206,7 @@ class _Entity:
             if hasattr(qos, "timeout") and qos.timeout is not None:
                 kwargs["timeout"] = qos.timeout
 
-        return await self._gwy.async_send_cmd(cmd, **kwargs)
+        return await self._gateway.async_send_cmd(command, **kwargs)
 
 
 class Entity(_Entity):

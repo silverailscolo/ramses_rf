@@ -88,14 +88,24 @@ async def test_ramses_rf_isolated_topology() -> None:
     print(f"Device IDs: {list(devices.keys())}")
 
     # Assert the Gateway / HGI exists
-    assert "18:006402" in devices, "CRITICAL: The Gateway (HGI) was not registered!"
+    assert "18:006402" in devices, (
+        "CRITICAL: The Gateway (HGI) was not registered!"
+    )
 
     # Assert the Controller exists
-    assert "01:145038" in devices, "CRITICAL: The Controller was not registered!"
+    assert "01:145038" in devices, (
+        "CRITICAL: The Controller was not registered!"
+    )
 
     # Assert the Evohome system was instantiated
-    assert len(systems) > 0, "CRITICAL: The TopologyBuilder failed to create a System!"
+    assert len(systems) > 0, (
+        "CRITICAL: The TopologyBuilder failed to create a System!"
+    )
 
     # Assert specific bound devices actually found in system_1.log
-    assert "13:120241" in devices, "CRITICAL: The BDR91 (13:120241) was not registered!"
-    assert "04:056053" in devices, "CRITICAL: The TRV (04:056053) was not registered!"
+    assert "13:120241" in devices, (
+        "CRITICAL: The BDR91 (13:120241) was not registered!"
+    )
+    assert "04:056053" in devices, (
+        "CRITICAL: The TRV (04:056053) was not registered!"
+    )

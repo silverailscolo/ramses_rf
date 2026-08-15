@@ -13,7 +13,7 @@ from ramses_rf.gateway import Gateway
 from ramses_rf.messages import ApplicationMessage
 from ramses_tx.address import HGI_DEV_ADDR
 from ramses_tx.config import EngineConfig
-from ramses_tx.const import Code, Priority
+from ramses_tx.const import Code, Priority, Verb
 from ramses_tx.dtos import CommandDTO as Command, PacketDTO
 from ramses_tx.engine import Engine
 
@@ -24,12 +24,12 @@ def mock_dto() -> PacketDTO:
     return PacketDTO(
         timestamp=dt.now(),
         rssi="045",
-        verb="RQ",
+        verb=Verb.RQ,
         seq="---",
         addr1="18:006402",
         addr2="13:049798",
         addr3="--:------",
-        code="1FC9",
+        code=Code._1FC9,
         length="001",
         payload="00",
     )
@@ -63,7 +63,9 @@ async def test_engine_init_port_and_file_ignores_file(
     engine = Engine(
         config=EngineConfig(port_name="/dev/null", input_file="test.log"),
     )
-    assert "Port (/dev/null) specified, so file (test.log) ignored" in caplog.text
+    assert (
+        "Port (/dev/null) specified, so file (test.log) ignored" in caplog.text
+    )
     assert engine._input_file is None
     assert engine.ser_name == "/dev/null"
 
@@ -151,7 +153,9 @@ async def test_engine_start_file(mock_factory: AsyncMock) -> None:
     engine._protocol.wait_for_connection_lost = AsyncMock()
 
     await engine.start()
-    engine._protocol.wait_for_connection_lost.assert_awaited_once_with(timeout=86400)
+    engine._protocol.wait_for_connection_lost.assert_awaited_once_with(
+        timeout=86400
+    )
 
 
 @pytest.mark.asyncio
@@ -219,7 +223,9 @@ async def test_engine_pause_resume(dummy_engine: Engine) -> None:
 
 
 @pytest.mark.asyncio
-async def test_engine_pause_already_paused_raises(dummy_engine: Engine) -> None:
+async def test_engine_pause_already_paused_raises(
+    dummy_engine: Engine,
+) -> None:
     # Pausing an already paused engine raises RuntimeError
     await dummy_engine._pause()
     with pytest.raises(RuntimeError, match="it is already paused"):
@@ -249,12 +255,12 @@ async def test_engine_drop_msg(
     dto = PacketDTO(
         timestamp=dt.now(),
         rssi="045",
-        verb="RQ",
+        verb=Verb.RQ,
         seq="---",
         addr1="18:006402",
         addr2="13:049798",
         addr3="--:------",
-        code="1FC9",
+        code=Code._1FC9,
         length="001",
         payload="00",
     )
@@ -268,10 +274,10 @@ async def test_engine_drop_msg(
 @pytest.mark.asyncio
 async def test_engine_create_cmd() -> None:
     # Engine wraps CommandDTO creation natively
-    cmd = Engine.create_cmd("RQ", "18:006402", Code._1FC9, "00")
+    cmd = Engine.create_cmd(Verb.RQ, "18:006402", Code._1FC9, "00")
     assert isinstance(cmd, Command)
-    assert cmd.code == "1FC9"
-    assert cmd.verb == "RQ"
+    assert cmd.code == Code._1FC9
+    assert cmd.verb == Verb.RQ
 
 
 @pytest.mark.asyncio
@@ -280,7 +286,7 @@ async def test_engine_async_send_cmd(dummy_engine: Engine) -> None:
     from ramses_tx.dtos import CommandDTO
 
     cmd = CommandDTO(
-        verb="RQ",
+        verb=Verb.RQ,
         addr1="18:000730",
         addr2="18:006402",
         addr3="--:------",
@@ -295,7 +301,9 @@ async def test_engine_async_send_cmd(dummy_engine: Engine) -> None:
 
 
 @pytest.mark.asyncio
-async def test_engine_msg_handler(dummy_engine: Engine, mock_dto: PacketDTO) -> None:
+async def test_engine_msg_handler(
+    dummy_engine: Engine, mock_dto: PacketDTO
+) -> None:
     # Validates that engine routes the DTO to the registered handler
     mock_handler = AsyncMock()
     dummy_engine._handle_msg = mock_handler
@@ -308,14 +316,14 @@ async def test_engine_msg_handler(dummy_engine: Engine, mock_dto: PacketDTO) -> 
 def test_application_message_bind_context(mock_dto: PacketDTO) -> None:
     # Bind context successfully sets arbitrary properties
     app_msg = ApplicationMessage(mock_dto)
-    mock_gwy = object()
-    app_msg.bind_context(mock_gwy)
-    assert app_msg._gwy is mock_gwy
+    mock_gateway = object()
+    app_msg.bind_context(mock_gateway)
+    assert app_msg._gateway is mock_gateway
 
 
 def test_application_message_expired_1f09_logic(mock_dto: PacketDTO) -> None:
     # Payload specific expiration correctly resolves via remaining_seconds
-    modified_dto = replace(mock_dto, verb="RP", code=str(Code._1F09))
+    modified_dto = replace(mock_dto, verb=Verb.RP, code=str(Code._1F09))
 
     app_msg = ApplicationMessage(modified_dto)
     app_msg._payload = {"remaining_seconds": 2}
@@ -353,7 +361,9 @@ def test_application_message_expired_lifespan_true_raises(
 
     with (
         patch.object(app_msg, "_get_lifespan", return_value=True),
-        pytest.raises(NotImplementedError, match="Lifespan True not implemented"),
+        pytest.raises(
+            NotImplementedError, match="Lifespan True not implemented"
+        ),
     ):
         _ = app_msg._expired
 

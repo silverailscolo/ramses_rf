@@ -6,6 +6,7 @@ from datetime import datetime as dt
 import pytest
 
 from ramses_rf.address import Address
+from ramses_rf.const import Code, Verb
 from ramses_rf.enums import Topic
 from ramses_rf.messages.base import Message as LegacyMessage
 from ramses_rf.messages.core import Message as CoreMessage
@@ -24,7 +25,7 @@ def _mock_message(
     dto = PacketDTO(
         timestamp=dt.now(),
         rssi="-70",
-        verb=" I",
+        verb=Verb.I_,
         seq="000",
         addr1=src_id,
         addr2=dst_id,
@@ -34,7 +35,7 @@ def _mock_message(
         payload="0001C8",  # A realistic hex string to pass validation checks
     )
     mock_header = StateHeader.create(
-        code=code, verb=" I", source_id=src_id, context_val=None
+        code=code, verb=Verb.I_, source_id=src_id, context_value=None
     )
     return CoreMessage(
         topic=Topic.RAW_EVENT,
@@ -60,7 +61,9 @@ async def test_store_queue_consumer() -> None:
     store.start_consumer(ssot_queue)
 
     # Drop a new state event onto the queue (e.g. from the Dispatcher)
-    test_msg = _mock_message("01:123456", "01:123456", "30C9", {"temp": "21.0"})
+    test_msg = _mock_message(
+        "01:123456", "01:123456", Code._30C9, {"temp": "21.0"}
+    )
     ssot_queue.put_nowait(test_msg)
 
     # Wait for the consumer task to empty the queue and process it

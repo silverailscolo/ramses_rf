@@ -12,6 +12,7 @@ from typing import Any, Final
 
 import pytest
 
+from ramses_rf.const import Code, Verb
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.decoder import DecoderEngine
 from ramses_rf.pipeline.dispatcher import CentralDispatcher
@@ -22,12 +23,12 @@ from ramses_tx.dtos import PacketDTO
 PKT_3150: Final = PacketDTO(
     timestamp=dt.now(),
     rssi="-64",
-    verb=" I",
+    verb=Verb.I_,
     seq="---",
     addr1="01:145038",
     addr2="--:------",
     addr3="01:145038",
-    code="3150",
+    code=Code._3150,
     length="002",
     raw_payload="FCC8",
 )
@@ -36,12 +37,12 @@ PKT_3150: Final = PacketDTO(
 PKT_30C9_TRV: Final = PacketDTO(
     timestamp=dt.now(),
     rssi="-64",
-    verb=" I",
+    verb=Verb.I_,
     seq="---",
     addr1="04:023226",
     addr2="--:------",
     addr3="04:023226",
-    code="30C9",
+    code=Code._30C9,
     length="003",
     raw_payload="000834",
 )
@@ -50,12 +51,12 @@ PKT_30C9_TRV: Final = PacketDTO(
 PKT_3220_RP: Final = PacketDTO(
     timestamp=dt.now(),
     rssi="-65",
-    verb="RP",
+    verb=Verb.RP,
     seq="---",
     addr1="10:067219",
     addr2="01:078710",
     addr3="--:------",
-    code="3220",
+    code=Code._3220,
     length="005",
     raw_payload="00C00500FF",
 )

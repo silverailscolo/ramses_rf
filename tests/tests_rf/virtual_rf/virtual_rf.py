@@ -112,11 +112,15 @@ class VirtualRfBase:
         self._log: deque[tuple[_PN, str, bytes]] = deque([], log_size)
         self._replies: dict[str, bytes] = {}
 
-    def _create_port(self, port_idx: int, dev_type: HgiFwTypes | None = None) -> None:
+    def _create_port(
+        self, port_idx: int, dev_type: HgiFwTypes | None = None
+    ) -> None:
         """Create a port without a HGI80 attached."""
         master_fd, slave_fd = pty.openpty()  # pty, tty
 
-        tty.setraw(master_fd)  # requires termios module, so: works only on *nix
+        tty.setraw(
+            master_fd
+        )  # requires termios module, so: works only on *nix
         os.set_blocking(master_fd, False)  # make non-blocking
 
         port_name = os.ttyname(slave_fd)
@@ -144,7 +148,9 @@ class VirtualRfBase:
     ) -> VirtualComPortInfo:
         """Add comport info to the list (won't fail if the entry already exists)."""
         self._port_info_list.pop(port_name, None)
-        self._port_info_list[port_name] = VirtualComPortInfo(port_name, dev_type)
+        self._port_info_list[port_name] = VirtualComPortInfo(
+            port_name, dev_type
+        )
         return self._port_info_list[port_name]
 
     @property
@@ -159,7 +165,9 @@ class VirtualRfBase:
         Registers asyncio readers for all master file descriptors.
         """
         for master_fd in self._master_to_port:
-            self._loop.add_reader(master_fd, self._handle_data_ready, master_fd)
+            self._loop.add_reader(
+                master_fd, self._handle_data_ready, master_fd
+            )
 
     async def stop(self) -> None:
         """Stop distributing data and cleanup resources.
@@ -214,7 +222,9 @@ class VirtualRfBase:
                 fp.close()
             except (OSError, ValueError) as err:
                 # Log at DEBUG because this is often a side-effect of PTY closure
-                _LOGGER.debug("Note: Master FP for %s closure: %s", port_name, err)
+                _LOGGER.debug(
+                    "Note: Master FP for %s closure: %s", port_name, err
+                )
 
         # 2. Close slave FDs
         for port_name, fd in self._port_to_slave_.items():
@@ -229,7 +239,9 @@ class VirtualRfBase:
                         err,
                     )
             except ValueError as err:
-                _LOGGER.error("ValueError closing slave FD for %s: %s", port_name, err)
+                _LOGGER.error(
+                    "ValueError closing slave FD for %s: %s", port_name, err
+                )
 
         # 3. Clear maps so _handle_data_ready safely exits if called late
         self._master_to_port.clear()
@@ -255,7 +267,9 @@ class VirtualRfBase:
         :param src_port: The port name to read from.
         """
         try:
-            data = self._port_to_object[src_port].read(1024)  # read the Tx'd data
+            data = self._port_to_object[src_port].read(
+                1024
+            )  # read the Tx'd data
         except OSError as err:
             _LOGGER.warning("Read error on %s: %s", src_port, err)
             return
@@ -331,7 +345,9 @@ class VirtualRfBase:
                 # Handle BlockingIOError (buffer full)
                 self._port_to_object[dst_port].write(data)
             except BlockingIOError:
-                _LOGGER.warning("Buffer full writing to %s, dropping packet", dst_port)
+                _LOGGER.warning(
+                    "Buffer full writing to %s, dropping packet", dst_port
+                )
             except OSError as err:
                 _LOGGER.error("Write error to %s: %s", dst_port, err)
 
@@ -361,7 +377,9 @@ class VirtualRf(VirtualRfBase):
     is transmitting (addr0) / receiving (RSSI) it.
     """
 
-    def __init__(self, num_ports: int, log_size: int = 100, start: bool = True) -> None:
+    def __init__(
+        self, num_ports: int, log_size: int = 100, start: bool = True
+    ) -> None:
         """Create a number of virtual serial ports.
 
         Each port has the option of a HGI80 or evofw3-based gateway device.
@@ -405,7 +423,11 @@ class VirtualRf(VirtualRfBase):
         if port_name not in self.ports:
             raise LookupError(f"Port does not exist: {port_name}")
 
-        if [v for k, v in self.gateways.items() if k != port_name and v == device_id]:
+        if [
+            v
+            for k, v in self.gateways.items()
+            if k != port_name and v == device_id
+        ]:
             raise LookupError(f"Gateway exists on another port: {device_id}")
 
         if fw_type not in HgiFwTypes:
@@ -430,7 +452,9 @@ class VirtualRf(VirtualRfBase):
 
         for data in pkts:
             self._log.append(("/dev/mock", "SENT", data))
-            self._cast_frame_to_all_ports("/dev/mock", data)  # is not echo only
+            self._cast_frame_to_all_ports(
+                "/dev/mock", data
+            )  # is not echo only
 
         # Deterministic-ish Yield:
         # Yield control repeatedly to ensure all micro-tasks generated by the write
@@ -463,7 +487,9 @@ class VirtualRf(VirtualRfBase):
             return None
 
         if frame == b"!V":
-            return b"# evofw3 0.7.1\r\n"  # self._fxle_objs[port_name].write(data)
+            return (
+                b"# evofw3 0.7.1\r\n"  # self._fxle_objs[port_name].write(data)
+            )
         return None  # TODO: return the ! response
 
     def _proc_before_tx(self, src_port: _PN, frame: bytes) -> bytes | None:
@@ -483,7 +509,9 @@ class VirtualRf(VirtualRfBase):
         gwy: _GatewaysT | None = self._gateways.get(src_port)
 
         # Handle trace flags (evofw3 only)
-        if frame[:1] == b"!":  # never to be cast, but may be echo'd, or other response
+        if (
+            frame[:1] == b"!"
+        ):  # never to be cast, but may be echo'd, or other response
             if gwy is None or gwy.get(FW_TYPE) not in (
                 HgiFwTypes.EVOFW3,
                 HgiFwTypes.EVOFW3_FTDI,
@@ -512,7 +540,9 @@ async def main() -> None:
     async with VirtualRf(num_ports) as rf:
         print(f"Ports are: {rf.ports}")
 
-        sers: list[Serial] = [serial_for_url(rf.ports[i]) for i in range(num_ports)]
+        sers: list[Serial] = [
+            serial_for_url(rf.ports[i]) for i in range(num_ports)
+        ]
 
         for i in range(num_ports):
             sers[i].write(bytes(f"Hello World {i}! ", "utf-8"))

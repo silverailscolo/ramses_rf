@@ -25,12 +25,16 @@ if TYPE_CHECKING:
 
 
 class Setpoint(Temperature):  # 2309
+    """Mixin class for devices providing a temperature setpoint."""
+
     SETPOINT: Final = SZ_SETPOINT  # degrees Celsius
 
     async def setpoint(self) -> float | None:  # 2309
+        """Return the target setpoint temperature in degrees Celsius."""
         return self.temp_state.setpoint
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -52,6 +56,7 @@ class Thermostat(BatteryState, Setpoint, Fakeable):  # THM (..):
     async def initiate_binding_process(
         self,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
+        """Initiate the RF binding handshake for the thermostat."""
         return await super()._initiate_binding_process(
             (Code._2309, Code._30C9, Code._0008)
         )
@@ -81,15 +86,20 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint):  # TRV (04):
         return HEARTBEAT_TIMEOUT_TRV
 
     async def heat_demand(self) -> float | None:  # 3150
+        """Return current heat demand percentage (0.0 to 1.0)."""
         if (heat_demand := self.demand_state.heat_demand) is None:
             if await self.setpoint() is False:
-                return 0  # instead of None (no 3150s sent when setpoint is False)
+                return (
+                    0  # instead of None (no 3150s sent when setpoint is False)
+                )
         return heat_demand
 
     async def window_open(self) -> bool | None:  # 12B0
+        """Return whether open-window detection is currently active."""
         return self.trv_state.window_open
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,

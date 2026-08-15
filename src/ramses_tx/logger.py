@@ -34,7 +34,9 @@ try:
     import colorlog
 except ModuleNotFoundError:
     _use_color_ = False
-    _LOGGER.warning("Consider installing the colorlog library for colored logging")
+    _LOGGER.warning(
+        "Consider installing the colorlog library for colored logging"
+    )
 else:
     _use_color_ = True
     # logging.basicConfig(format=DEFAULT_FMT, datefmt=DEFAULT_DATEFMT)  # Causes issues
@@ -43,7 +45,9 @@ DEFAULT_FMT = "%(asctime)s.%(msecs)03d %(message)s"
 DEFAULT_DATEFMT = "%H:%M:%S"
 
 # TODO: make account for the non-printing characters
-CONSOLE_COLS = int(shutil.get_terminal_size(fallback=(int(2e3), 24)).columns - 1)
+CONSOLE_COLS = int(
+    shutil.get_terminal_size(fallback=(int(2e3), 24)).columns - 1
+)
 
 if DEV_MODE:  # Do this to have longer-format console messages
     # HH:MM:SS.sss vs YYYY-MM-DDTHH:MM:SS.ssssss, shorter format for the console
@@ -88,7 +92,6 @@ class _Logger(logging.Logger):  # use pkt.dtm for the log record timestamp
 
         Will overwrite created and msecs (and thus asctime), but not relativeCreated.
         """
-
         extra = dict(extra or {})  # work with a copy
         extra["frame"] = extra.pop("_frame", "")
         if extra["frame"]:
@@ -122,7 +125,9 @@ class _Formatter:  # format asctime with configurable precision
     default_time_format = "%Y-%m-%dT%H:%M:%S.%f"
     precision = 6
 
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+    def formatTime(
+        self, record: logging.LogRecord, datefmt: str | None = None
+    ) -> str:
         """Return the creation time (asctime) of the LogRecord as formatted text.
 
         Allows for sub-millisecond precision, using datetime instead of time objects.
@@ -137,14 +142,16 @@ class _Formatter:  # format asctime with configurable precision
 
 
 class ColoredFormatter(_Formatter, colorlog.ColoredFormatter):  # type: ignore[misc]
-    pass
+    """Color-formatted log message formatter."""
 
 
 class Formatter(_Formatter, logging.Formatter):  # type: ignore[misc]
-    pass
+    """Standard log message formatter."""
 
 
-class PktLogFilter(logging.Filter):  # record.levelno in (logging.INFO, logging.WARNING)
+class PktLogFilter(
+    logging.Filter
+):  # record.levelno in (logging.INFO, logging.WARNING)
     """For packet log files, process only wanted packets."""
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -181,6 +188,8 @@ class BlockMqttFilter(logging.Filter):
 
 
 class TimedRotatingFileHandler(_TimedRotatingFileHandler):
+    """Timed rotating log file handler with midnight rollover."""
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         assert self.when == "MIDNIGHT"
@@ -188,13 +197,13 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
 
 
 def getLogger(  # permits a bespoke Logger class
-    name: str | None = None, pkt_log: bool = False
+    name: str | None = None, packet_log: bool = False
 ) -> logging.Logger:
     """Return a logger with the specified name, creating it if necessary.
 
     Used to set record timestamps to its packet timestamp instead of the current time.
     """
-    if name is None or not pkt_log:
+    if name is None or not packet_log:
         return logging.getLogger(name)
 
     # Acquire lock, so no-one else uses our Logger class
@@ -249,26 +258,39 @@ def set_pkt_logging(
     flush_level: int = logging.ERROR,
     flush_interval: float = 60.0,
 ) -> QueueListener | None:
-    """Create/configure handlers, formatters, etc.
+    """Create and configure packet log handlers and formatters.
 
-    Parameters:
-    - logger:         The logger to configure.
-    - cc_console:     If True, output to stdout/stderr.
-    - packet_log_path: base path to store packet logs in, from root
-    - packet_log_prefix: prefix of file to store packet logs in
-    - packet_log_retention_days: keep copies, rotate at midnight unless:
-    - rotate_bytes: rotate log files when log > rotate_size
-    - buffer_capacity: If > 0, buffer logs in memory up to this capacity.
-    - flush_level: The logging level that triggers the buffer to flush.
-    - flush_interval: Accepted here to satisfy kwargs unpacked
-      from config (unused locally).
+    :param logger: The logger instance to configure.
+    :type logger: logging.Logger
+    :param cc_console: If True, output to stdout/stderr.
+    :type cc_console: bool
+    :param packet_log_path: Base directory path to store packet logs in.
+    :type packet_log_path: str | None
+    :param packet_log_prefix: Prefix filename for packet logs.
+    :type packet_log_prefix: str | None
+    :param packet_log_retention_days: Number of days to retain rotated
+        logs.
+    :type packet_log_retention_days: int
+    :param rotate_bytes: Maximum size in bytes before rotating log file.
+    :type rotate_bytes: int | None
+    :param buffer_capacity: Memory buffer size in records before
+        flushing.
+    :type buffer_capacity: int
+    :param flush_level: Log level threshold to immediately trigger
+        flush.
+    :type flush_level: int
+    :param flush_interval: Maximum interval in seconds before flushing.
+    :type flush_interval: float
+    :returns: Configured QueueListener instance if async, or None.
+    :rtype: QueueListener | None
     """
-
     logger.propagate = False  # log file is distinct from any app/debug logging
     logger.setLevel(logging.DEBUG)  # must be at least .INFO
 
     # as set_pkt_logging() may be called several times: to avoid duplicates in logs...
-    for handler in logger.handlers:  # dont use logger.hasHandlers() as not propagating
+    for (
+        handler
+    ) in logger.handlers:  # dont use logger.hasHandlers() as not propagating
         logger.removeHandler(handler)
 
     handlers: list[logging.Handler] = []
@@ -277,7 +299,9 @@ def set_pkt_logging(
     if packet_log_prefix:
         if packet_log_path:
             os.makedirs(packet_log_path, exist_ok=True)
-            file_name = os.path.join(packet_log_path, f"{packet_log_prefix}.log")
+            file_name = os.path.join(
+                packet_log_path, f"{packet_log_prefix}.log"
+            )
         else:
             file_name = f"{packet_log_prefix}.log"
 
@@ -304,7 +328,9 @@ def set_pkt_logging(
 
         file_handler.setFormatter(logfile_fmt)
         file_handler.setLevel(logging.INFO)  # .INFO (usually), or .DEBUG
-        file_handler.addFilter(PktLogFilter())  # record.levelno in (.INFO, .WARNING)
+        file_handler.addFilter(
+            PktLogFilter()
+        )  # record.levelno in (.INFO, .WARNING)
 
         if buffer_capacity > 0:
             mem_handler = MemoryHandler(
@@ -350,7 +376,9 @@ def set_pkt_logging(
     # Use QueueHandler to decouple logging I/O from the main loop (see Issue #397)
     if handlers:
         log_queue: Queue[Any] = Queue(-1)
-        listener = QueueListener(log_queue, *handlers, respect_handler_level=True)
+        listener = QueueListener(
+            log_queue, *handlers, respect_handler_level=True
+        )
         queue_handler = QueueHandler(log_queue)
         logger.addHandler(queue_handler)
     else:

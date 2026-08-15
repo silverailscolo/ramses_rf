@@ -13,7 +13,9 @@ from ramses_tx import Address
 def test_hvac_handler_promotes_source_device_class() -> None:
     # Arrange
     events: list[TopologyChangedEvent] = []
-    handler = HvacTopologyHandler(emit_event_cb=events.append, enable_eavesdrop=True)
+    handler = HvacTopologyHandler(
+        emit_event_cb=events.append, enable_eavesdrop=True
+    )
 
     mock_header = MagicMock()
     mock_header.verb = I_

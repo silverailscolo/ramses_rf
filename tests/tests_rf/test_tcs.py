@@ -17,7 +17,9 @@ from ramses_tx.address import HGI_DEVICE_ID, Address
 from ramses_tx.typing import DeviceIdT
 
 TST_ID_ = Address("18:123456").id
-PKT_3150: Final = f"064  I --- 01:145038 --:------ 01:145038 {Code._3150} 002 FCC8"
+PKT_3150: Final = (
+    f"064  I --- 01:145038 --:------ 01:145038 {Code._3150} 002 FCC8"
+)
 
 pytestmark = pytest.mark.asyncio()
 
@@ -60,8 +62,12 @@ async def test_tcs_lockless_concurrent_schedules(fake_evofw3: Gateway) -> None:
 
     # Act & Assert
     with (
-        patch.object(zone0._schedule, "get_schedule", new=AsyncMock(return_value=[])),
-        patch.object(zone1._schedule, "get_schedule", new=AsyncMock(return_value=[])),
+        patch.object(
+            zone0._schedule, "get_schedule", new=AsyncMock(return_value=[])
+        ),
+        patch.object(
+            zone1._schedule, "get_schedule", new=AsyncMock(return_value=[])
+        ),
         patch.object(
             type(zone0._schedule),
             "schedule",

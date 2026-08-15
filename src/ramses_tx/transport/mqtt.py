@@ -112,7 +112,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         :param loop: Asyncio event loop instance, defaults to None.
         :type loop: asyncio.AbstractEventLoop | None
         """
-        _MqttTransportAbstractor.__init__(self, broker_url, protocol, loop=loop)
+        _MqttTransportAbstractor.__init__(
+            self, broker_url, protocol, loop=loop
+        )
         _FullTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._username = unquote(self._broker_url.username or "")
@@ -243,7 +245,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if hasattr(self, "_topic_sub") and self._topic_sub:
             self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
-            _LOGGER.debug("Re-subscribed to specific topic: %s", self._topic_sub)
+            _LOGGER.debug(
+                "Re-subscribed to specific topic: %s", self._topic_sub
+            )
             if getattr(self, "_data_wildcard_topic", ""):
                 try:
                     self.client.unsubscribe(self._data_wildcard_topic)
@@ -252,7 +256,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                         self._data_wildcard_topic,
                     )
                 except (ValueError, MQTTException) as err:
-                    _LOGGER.exception("Error unsubscribing data wildcard: %s", err)
+                    _LOGGER.exception(
+                        "Error unsubscribing data wildcard: %s", err
+                    )
                 finally:
                     self._data_wildcard_topic = ""
 
@@ -285,7 +291,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                     if not self._topic_pub:
                         self._topic_pub = self._topic_base + "/tx"
                         self._topic_sub = self._topic_base + "/rx"
-                        self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
+                        self.client.subscribe(
+                            self._topic_sub, qos=self._mqtt_qos
+                        )
                         _LOGGER.debug(
                             "Pre-set topic_pub/sub from topic_base: %s, %s",
                             self._topic_pub,
@@ -307,7 +315,7 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         if not self._closing:
             self._schedule_reconnect()
 
-    def _establish_connection(self, gwy_id: DeviceIdT | None) -> None:
+    def _establish_connection(self, gateway_id: DeviceIdT | None) -> None:
         """Establish the protocol connection (call connection_made).
 
         Called from _on_connect (broker connected) or _create_connection
@@ -317,8 +325,8 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         """
         if self._connection_established:
             # Already connected — just update the HGI ID if we now have one
-            if gwy_id is not None:
-                self._extra[SZ_ACTIVE_HGI] = gwy_id
+            if gateway_id is not None:
+                self._extra[SZ_ACTIVE_HGI] = gateway_id
             return
 
         self._connected = True
@@ -326,7 +334,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if not self._loop.is_closed():
             try:
-                self._loop.call_soon_threadsafe(self._make_connection, gwy_id)
+                self._loop.call_soon_threadsafe(
+                    self._make_connection, gateway_id
+                )
             except RuntimeError:
                 _LOGGER.debug("Event loop closed, cannot establish connection")
         else:
@@ -354,11 +364,15 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
 
         if was_connected and hasattr(self, "_topic_sub") and self._topic_sub:
             device_topic = self._topic_sub[:-3]
-            _LOGGER.warning("%s: the MQTT device is offline: %s", self, device_topic)
+            _LOGGER.warning(
+                "%s: the MQTT device is offline: %s", self, device_topic
+            )
 
             if hasattr(self, "_protocol") and not self._loop.is_closed():
                 try:
-                    self._loop.call_soon_threadsafe(self._protocol.pause_writing)
+                    self._loop.call_soon_threadsafe(
+                        self._protocol.pause_writing
+                    )
                 except RuntimeError:
                     _LOGGER.debug("Event loop closed, cannot pause writing")
 
@@ -393,16 +407,22 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                             self._data_wildcard_topic,
                         )
                     except (ValueError, MQTTException) as err:
-                        _LOGGER.exception("Error unsubscribing data wildcard: %s", err)
+                        _LOGGER.exception(
+                            "Error unsubscribing data wildcard: %s", err
+                        )
                     finally:
                         self._data_wildcard_topic = ""
             else:
                 _LOGGER.info("MQTT device came back online - resuming writing")
                 if not self._loop.is_closed():
                     try:
-                        self._loop.call_soon_threadsafe(self._protocol.resume_writing)
+                        self._loop.call_soon_threadsafe(
+                            self._protocol.resume_writing
+                        )
                     except RuntimeError:
-                        _LOGGER.debug("Event loop closed, cannot resume writing")
+                        _LOGGER.debug(
+                            "Event loop closed, cannot resume writing"
+                        )
             return
 
         _LOGGER.info("MQTT device is online - establishing connection")
@@ -430,7 +450,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         if not self._connection_established:
             self._establish_connection(DeviceIdT(msg.topic[-9:]))
         else:
-            _LOGGER.info("MQTT reconnected - protocol connection already established")
+            _LOGGER.info(
+                "MQTT reconnected - protocol connection already established"
+            )
             # Update HGI ID now that we know it from the online message
             self._extra[SZ_ACTIVE_HGI] = msg.topic[-9:]
 
@@ -460,13 +482,18 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                         self,
                         msg.topic,
                     )
-                    if hasattr(self, "_protocol") and not self._loop.is_closed():
+                    if (
+                        hasattr(self, "_protocol")
+                        and not self._loop.is_closed()
+                    ):
                         try:
                             self._loop.call_soon_threadsafe(
                                 self._protocol.pause_writing
                             )
                         except RuntimeError:
-                            _LOGGER.debug("Event loop closed, cannot pause writing")
+                            _LOGGER.debug(
+                                "Event loop closed, cannot pause writing"
+                            )
 
             elif msg.payload == b"online":
                 _LOGGER.info(
@@ -492,9 +519,13 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                         gateway_id,
                     )
                     try:
-                        self.client.subscribe(self._topic_sub, qos=self._mqtt_qos)
+                        self.client.subscribe(
+                            self._topic_sub, qos=self._mqtt_qos
+                        )
                     except (ValueError, MQTTException) as err:
-                        _LOGGER.exception("Error subscribing specific topic: %s", err)
+                        _LOGGER.exception(
+                            "Error subscribing specific topic: %s", err
+                        )
                     if getattr(self, "_data_wildcard_topic", ""):
                         try:
                             self.client.unsubscribe(self._data_wildcard_topic)
@@ -503,7 +534,9 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
                                 self._data_wildcard_topic,
                             )
                         except (ValueError, MQTTException) as err:
-                            _LOGGER.exception("Error unsubscribing wildcard: %s", err)
+                            _LOGGER.exception(
+                                "Error unsubscribing wildcard: %s", err
+                            )
                         finally:
                             self._data_wildcard_topic = ""
 
@@ -528,15 +561,21 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         if not self._loop.is_closed():
             try:
                 self._loop.call_soon_threadsafe(
-                    self._frame_read, dtm.isoformat(), _normalise(payload["msg"])
+                    self._frame_read,
+                    dtm.isoformat(),
+                    _normalise(payload["msg"]),
                 )
             except RuntimeError:
                 _LOGGER.debug("Event loop closed, cannot read frame")
 
-    async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
+    async def write_frame(
+        self, frame: str, disable_tx_limits: bool = False
+    ) -> None:
         """Transmit a frame via the underlying handler (e.g. serial port, MQTT)."""
         if not self._connected:
-            raise exc.TransportStateError("Cannot write frame: MQTT not connected")
+            raise exc.TransportStateError(
+                "Cannot write frame: MQTT not connected"
+            )
 
         timestamp = perf_counter()
         elapsed, self._timestamp = timestamp - self._timestamp, timestamp
@@ -629,7 +668,11 @@ class MqttTransport(_FullTransport, _MqttTransportAbstractor):
         # guard in _on_message ensures the old transport won't process messages
         # even if the thread hasn't fully exited when the new transport starts.
         try:
-            if hasattr(self, "_topic_sub") and self._topic_sub and self._connected:
+            if (
+                hasattr(self, "_topic_sub")
+                and self._topic_sub
+                and self._connected
+            ):
                 self.client.unsubscribe(self._topic_sub)
             self.client.disconnect()
             threading.Thread(target=self.client.loop_stop, daemon=True).start()

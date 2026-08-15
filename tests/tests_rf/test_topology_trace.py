@@ -10,7 +10,7 @@ from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_builder import TopologyBuilder
 from ramses_rf.routing import StateHeader
-from ramses_tx.const import Code
+from ramses_tx.const import Code, Verb
 
 
 @pytest.mark.asyncio
@@ -25,7 +25,7 @@ async def test_trace_ufh_000C_binding() -> None:
 
     # Simulate UFC 000C payload (List of dicts)
     payload = [{"ufh_idx": "00", "zone_idx": "0B"}]
-    hdr = StateHeader.create(Code._000C, " I", "02:007533", "00")
+    hdr = StateHeader.create(Code._000C, Verb.I_, "02:007533", "00")
 
     msg = Message(
         topic=Topic.RAW_EVENT,
@@ -62,7 +62,7 @@ async def test_trace_trv_3150_directed_telemetry() -> None:
 
     # Simulate TRV 3150 directed telemetry payload
     payload = {"domain_id": "02", "heat_demand": 0.0}
-    hdr = StateHeader.create(Code._3150, " I", "04:034726", "02")
+    hdr = StateHeader.create(Code._3150, Verb.I_, "04:034726", "02")
 
     msg = Message(
         topic=Topic.RAW_EVENT,
@@ -84,4 +84,6 @@ async def test_trace_trv_3150_directed_telemetry() -> None:
         print(f"Metadata: {e.metadata}")
         print(f"Rule:     {e.causation}\n")
 
-    assert len(events) > 0, "Directed Telemetry Rule failed to emit any events!"
+    assert len(events) > 0, (
+        "Directed Telemetry Rule failed to emit any events!"
+    )

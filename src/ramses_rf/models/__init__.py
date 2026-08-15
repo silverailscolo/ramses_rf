@@ -9,7 +9,12 @@ from .dto import (
     UfhCircuitDemandDTO,
     ZoneScheduleDTO,
 )
-from .state_base import DeviceTraits, StateUpdatedEvent, TopologyChangedEvent, _now_utc
+from .state_base import (
+    DeviceTraits,
+    StateUpdatedEvent,
+    TopologyChangedEvent,
+    _now_utc,
+)
 from .state_climate import (
     ActuatorState,
     DemandState,

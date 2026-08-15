@@ -63,12 +63,15 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
     async def initiate_binding_process(
         self,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
+        """Initiate the RF binding handshake for the HVAC remote."""
         # .I --- 37:155617 --:------ 37:155617 1FC9 024 00-22F1-965FE1 00-22F3-965FE1 67-10E09-65FE1 00-1FC9-965FE1
         # .W --- 32:155617 37:155617 --:------ 1FC9 012 00-31D9-825FE1 00-31DA-825FE1
         # .I --- 37:155617 32:155617 --:------ 1FC9 001 00
 
         return await super()._initiate_binding_process(
-            Code._22F1 if self._scheme == "nuaire" else (Code._22F1, Code._22F3)
+            Code._22F1
+            if self._scheme == "nuaire"
+            else (Code._22F1, Code._22F3)
         )
 
     async def fan_rate(self) -> str | None:
@@ -90,8 +93,9 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         :rtype: Message
         :note: This is a work in progress
         """
-
-        if not self.is_faked:  # NOTE: some remotes are stateless (i.e. except seqn)
+        if (
+            not self.is_faked
+        ):  # NOTE: some remotes are stateless (i.e. except seqn)
             raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
 
         # TODO: num_repeats=2, or wait_for_reply=True ?
@@ -121,6 +125,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         return self.hvac_state.boost_timer_mins
 
     async def status(self) -> dict[str, Any]:
+        """Return current operating status and state of remote."""
         base_status = await super().status()
         return {
             **base_status,

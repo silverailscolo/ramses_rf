@@ -9,7 +9,16 @@ from ramses_rf.commands.core import Command
 from ramses_rf.const import DEV_TYPE_MAP, SYS_MODE_MAP
 from ramses_rf.enums import DevType
 from ramses_tx.address import ALL_DEV_ADDR, dev_id_to_hex_id
-from ramses_tx.const import DEFAULT_NUM_REPEATS, FF, I_, RP, RQ, W_, Code, Priority
+from ramses_tx.const import (
+    DEFAULT_NUM_REPEATS,
+    FF,
+    I_,
+    RP,
+    RQ,
+    W_,
+    Code,
+    Priority,
+)
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import (
     hex_from_bool,
@@ -25,7 +34,10 @@ def build_put_weather_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_WEATHER_TEMP intent into a CommandDTO."""
     temperature = intent.get("temperature")
 
-    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.OUT, DevType.OUT):
+    if getattr(intent.src, "type", None) not in (
+        DEV_TYPE_MAP.OUT,
+        DevType.OUT,
+    ):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.OUT}:xxxxxx"
@@ -111,9 +123,13 @@ def build_set_mix_valve_params(intent: Command) -> CommandDTO:
     zon_idx = check_idx(zone_idx)
 
     if not (0 <= max_flow_setpoint <= 99):
-        raise ValueError(f"Out of range, max_flow_setpoint: {max_flow_setpoint}")
+        raise ValueError(
+            f"Out of range, max_flow_setpoint: {max_flow_setpoint}"
+        )
     if not (0 <= min_flow_setpoint <= 50):
-        raise ValueError(f"Out of range, min_flow_setpoint: {min_flow_setpoint}")
+        raise ValueError(
+            f"Out of range, min_flow_setpoint: {min_flow_setpoint}"
+        )
     if not (0 <= valve_run_time <= 240):
         raise ValueError(f"Out of range, valve_run_time: {valve_run_time}")
     if not (0 <= pump_run_time <= 99):
@@ -152,7 +168,8 @@ def build_get_tpi_params(intent: Command) -> CommandDTO:
 
         domain_id = (
             "00"
-            if getattr(intent.dst, "type", None) in (DEV_TYPE_MAP.BDR, DevType.BDR)
+            if getattr(intent.dst, "type", None)
+            in (DEV_TYPE_MAP.BDR, DevType.BDR)
             else FC
         )
 
@@ -208,7 +225,7 @@ def build_put_bind(intent: Command) -> CommandDTO:
     verb = intent.get("verb")
     codes = intent.get("codes")
     oem_code = intent.get("oem_code")
-    idx = intent.get("idx")
+    index = intent.get("idx")
 
     kodes: list[str] = []
     if not codes:
@@ -235,8 +252,10 @@ def build_put_bind(intent: Command) -> CommandDTO:
             payload += f"{oem_code}{Code._10E0}{hex_id}"
         payload += f"00{Code._1FC9}{hex_id}"
 
-        dst = intent.dst if intent.dst.id != ALL_DEV_ADDR.id else intent.src
-        addr1, addr2, addr3 = resolve_addrs(intent.src, dst)
+        destination = (
+            intent.dst if intent.dst.id != ALL_DEV_ADDR.id else intent.src
+        )
+        addr1, addr2, addr3 = resolve_addrs(intent.src, destination)
         return CommandDTO(
             verb=I_,
             addr1=addr1,
@@ -253,7 +272,7 @@ def build_put_bind(intent: Command) -> CommandDTO:
         if not kodes:
             raise ValueError(f"Invalid codes for a bind accept: {codes}")
         hex_id = dev_id_to_hex_id(intent.src.id)
-        payload = "".join(f"{idx or '00'}{c}{hex_id}" for c in kodes)
+        payload = "".join(f"{index or '00'}{c}{hex_id}" for c in kodes)
         addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
         return CommandDTO(
             verb=W_,
@@ -269,10 +288,10 @@ def build_put_bind(intent: Command) -> CommandDTO:
     elif verb == I_:
         # put_bind_confirm
         if not kodes:
-            payload = idx or "00"
+            payload = index or "00"
         else:
             hex_id = dev_id_to_hex_id(intent.src.id)
-            payload = f"{idx or '00'}{kodes[0]}{hex_id}"
+            payload = f"{index or '00'}{kodes[0]}{hex_id}"
         addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
         return CommandDTO(
             verb=I_,
@@ -285,7 +304,9 @@ def build_put_bind(intent: Command) -> CommandDTO:
             num_repeats=DEFAULT_NUM_REPEATS,
         )
 
-    raise ValueError(f"Invalid verb|dst_id for a bind command: {verb}|{intent.dst.id}")
+    raise ValueError(
+        f"Invalid verb|dst_id for a bind command: {verb}|{intent.dst.id}"
+    )
 
 
 def build_get_system_mode(intent: Command) -> CommandDTO:
@@ -382,7 +403,9 @@ def build_set_system_time(intent: Command) -> CommandDTO:
     datetime = intent.get("datetime")
     is_dst = intent.get("is_dst", False)
 
-    dt_str = hex_from_dtm(datetime, is_dst=is_dst, incl_seconds=True)
+    dt_str = hex_from_dtm(
+        datetime, is_daylight_saving=is_dst, incl_seconds=True
+    )
     payload = f"0060{dt_str}"
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
@@ -401,7 +424,10 @@ def build_put_actuator_state(intent: Command) -> CommandDTO:
     """Translate a PUT_ACTUATOR_STATE intent into a CommandDTO."""
     modulation_level = intent.get("modulation_level")
 
-    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.BDR, DevType.BDR):
+    if getattr(intent.src, "type", None) not in (
+        DEV_TYPE_MAP.BDR,
+        DevType.BDR,
+    ):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.BDR}:xxxxxx"
@@ -431,14 +457,19 @@ def build_put_actuator_cycle(intent: Command) -> CommandDTO:
     actuator_countdown = intent.get("actuator_countdown")
     cycle_countdown = intent.get("cycle_countdown")
 
-    if getattr(intent.src, "type", None) not in (DEV_TYPE_MAP.BDR, DevType.BDR):
+    if getattr(intent.src, "type", None) not in (
+        DEV_TYPE_MAP.BDR,
+        DevType.BDR,
+    ):
         raise ValueError(
             f"Faked device {intent.src.id} has an unsupported device type: "
             f"device_id should be like {DEV_TYPE_MAP.BDR}:xxxxxx"
         )
 
     payload = "00"
-    payload += f"{cycle_countdown:04X}" if cycle_countdown is not None else "7FFF"
+    payload += (
+        f"{cycle_countdown:04X}" if cycle_countdown is not None else "7FFF"
+    )
     payload += f"{actuator_countdown:04X}"
     payload += hex_from_percent(modulation_level)
     payload += "FF"

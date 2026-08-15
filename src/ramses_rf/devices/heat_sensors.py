@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from datetime import timedelta as td
 from typing import Any, Final
 
-from ramses_rf.const import SZ_TEMPERATURE, DevType
+from ramses_rf.const import HEARTBEAT_TIMEOUT_DHW, SZ_TEMPERATURE, DevType
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
@@ -21,21 +22,27 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class Weather(DeviceHeat):  # 0002
+    """Outdoor weather / temperature sensor base class."""
+
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 0002
+        """Return the current outdoor temperature in degrees Celsius."""
         return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the outdoor temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
-        self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
+        self.temp_state = dataclasses.replace(
+            self.temp_state, temperature=value
+        )
         return await send_fake_intent(
             self, Action.PUT_OUTDOOR_TEMP, {"temperature": value}
         )
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -44,19 +51,27 @@ class Weather(DeviceHeat):  # 0002
 
 
 class DhwTemperature(DeviceHeat):  # 1260
+    """Domestic hot water temperature sensor mixin class."""
+
     TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 1260
+        """Return the current DHW temperature in degrees Celsius."""
         return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the DHW temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
-        self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
-        return await send_fake_intent(self, Action.PUT_DHW_TEMP, {"temperature": value})
+        self.temp_state = dataclasses.replace(
+            self.temp_state, temperature=value
+        )
+        return await send_fake_intent(
+            self, Action.PUT_DHW_TEMP, {"temperature": value}
+        )
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -65,17 +80,22 @@ class DhwTemperature(DeviceHeat):  # 1260
 
 
 class Temperature(DeviceHeat):  # 30C9
+    """Indoor temperature sensor base class."""
+
     # .I --- 34:145039 --:------ 34:145039 1FC9 012 00-30C9-8A368F 00-1FC9-8A368F
     # .W --- 01:054173 34:145039 --:------ 1FC9 006 03-2309-04D39D  # real CTL
     # .I --- 34:145039 01:054173 --:------ 1FC9 006 00-30C9-8A368F
     async def temperature(self) -> float | None:  # 30C9
+        """Return the current indoor temperature in degrees Celsius."""
         return self.temp_state.temperature
 
     async def set_temperature(self, value: float | None) -> Message | None:
         """Fake the indoor temperature of the sensor."""
         # Update local state immediately so the temperature is available
         # even if the RF command times out (e.g. faked devices on a simulator)
-        self.temp_state = dataclasses.replace(self.temp_state, temperature=value)
+        self.temp_state = dataclasses.replace(
+            self.temp_state, temperature=value
+        )
         # Determine the zone_idx from the parent zone (if bound) so that
         # UFH zone sensors emit 30C9 with the correct zone_idx.  Without
         # this, the fake always sends idx 00 and the UFC ignores it.
@@ -85,10 +105,15 @@ class Temperature(DeviceHeat):  # 30C9
         return await send_fake_intent(
             self,
             Action.PUT_SENSOR_TEMP,
-            {"temperature": value, "zone_idx": zone_idx},
+            {
+                "temperature": value,
+                "zone_index": zone_idx,
+                "zone_idx": zone_idx,
+            },
         )
 
     async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
         base_status = await super().status()
         return {
             **base_status,
@@ -96,13 +121,27 @@ class Temperature(DeviceHeat):  # 30C9
         }
 
 
-class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
+class DhwSensor(
+    DhwTemperature, BatteryState, Fakeable
+):  # DHW (07): 10A0, 1260
     """The DHW class, such as a CS92."""
 
     DHW_PARAMS: Final = "dhw_params"
 
     _SLUG: str = DevType.DHW
     _STATE_ATTR = DhwTemperature.TEMPERATURE
+
+    @property
+    def heartbeat_timeout(self) -> td:
+        """Return the timeout before the device is considered unavailable.
+
+        DHW sensors (e.g. CS92) are battery-powered and only transmit on
+        temperature changes, not on a regular heartbeat schedule.  The
+        CTL polls them for 10A0 (DHW params) every 24 hours, so the
+        default 1-hour timeout is far too short — use 24 hours to match
+        the CTL's polling interval (issue 925).
+        """
+        return HEARTBEAT_TIMEOUT_DHW
 
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
@@ -114,12 +153,15 @@ class DhwSensor(DhwTemperature, BatteryState, Fakeable):  # DHW (07): 10A0, 1260
     async def initiate_binding_process(
         self,
     ) -> tuple[Packet, Message, Packet, Packet | None]:
+        """Initiate the RF binding handshake for the DHW sensor."""
         return await super()._initiate_binding_process(Code._1260)
 
     async def dhw_params(self) -> PayDictT._10A0 | None:
+        """Return the DHW parameters (10A0) payload or None."""
         return await self.entity_state.get_value(Code._10A0)
 
     async def params(self) -> dict[str, Any]:
+        """Return the device parameter dictionary."""
         base_params = await super().params()
         return {
             **base_params,

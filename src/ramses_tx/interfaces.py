@@ -36,11 +36,13 @@ class ProtocolInterface(ABC, asyncio.Protocol):
     """Interface for the RAMSES-II Protocol layer."""
 
     @abstractmethod
-    def connection_made(self, transport: Any, /, *, ramses: bool = False) -> None:
+    def connection_made(
+        self, transport: Any, /, *, ramses: bool = False
+    ) -> None:
         """Called when a connection is made."""
 
     @abstractmethod
-    def connection_lost(self, err: Exception | None) -> None:
+    def connection_lost(self, error: Exception | None) -> None:
         """Called when the connection is lost."""
 
     @abstractmethod
@@ -48,7 +50,7 @@ class ProtocolInterface(ABC, asyncio.Protocol):
         """Pause writing."""
 
     @abstractmethod
-    def pkt_received(self, pkt: "Packet") -> None:
+    def pkt_received(self, packet: "Packet") -> None:
         """Receive a packet."""
 
     @abstractmethod
@@ -58,7 +60,7 @@ class ProtocolInterface(ABC, asyncio.Protocol):
     @abstractmethod
     async def send_cmd(
         self,
-        cmd: "CommandDTO",
+        command: "CommandDTO",
         /,
         *,
         qos: "QosParams | None" = None,
@@ -84,18 +86,18 @@ class StateMachineInterface(ABC):
         """Called when a connection is made."""
 
     @abstractmethod
-    def connection_lost(self, err: Exception | None) -> None:
+    def connection_lost(self, error: Exception | None) -> None:
         """Called when the connection is lost."""
 
     @abstractmethod
-    def pkt_received(self, pkt: "Packet") -> None:
+    def pkt_received(self, packet: "Packet") -> None:
         """Called when a packet is received."""
 
     @abstractmethod
     async def send_cmd(
         self,
         send_fnc: Any,
-        cmd: "CommandDTO",
+        command: "CommandDTO",
         priority: "Priority",
         qos: "QosParams",
     ) -> "Packet":

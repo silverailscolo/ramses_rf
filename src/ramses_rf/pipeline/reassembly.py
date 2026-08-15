@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta as td
 from typing import Final
 
+from ramses_tx.const import Code, Verb
 from ramses_tx.dtos import PacketDTO
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,11 +41,11 @@ _LOGGER = logging.getLogger(__name__)
 # migration. Until then, the conservative set below matches the legacy
 # detect_array_fragment() behaviour in dispatcher.py without introducing
 # false buffering of routine single-zone packets. See issue #669.
-_ARRAY_CODES: Final[tuple[str, ...]] = (
-    "000A",
-    "22C9",
+_ARRAY_CODES: Final[tuple[Code | str, ...]] = (
+    Code._000A,
+    Code._22C9,
 )
-_VERB_I: Final[str] = " I"
+_VERB_I: Final[Verb | str] = Verb.I_
 
 # A pending array is keyed by (src_id, code) so that an intervening
 # packet from a different source (or a different code) does not abort
@@ -101,13 +102,15 @@ class ReassemblyBuffer:
             self._task = None
 
     async def _loop(self) -> None:
-        """Main asynchronous loop consuming the input queue."""
+        """Consume the input queue in an asynchronous loop."""
         while True:
             try:
                 # Wait for a packet, or timeout if we have any pending
                 # arrays
                 timeout = self._array_timeout if self._pending else None
-                dto = await asyncio.wait_for(self._in_queue.get(), timeout=timeout)
+                dto = await asyncio.wait_for(
+                    self._in_queue.get(), timeout=timeout
+                )
                 await self._process_packet(dto)
                 self._in_queue.task_done()
 
@@ -203,7 +206,9 @@ class ReassemblyBuffer:
             return False
         if this.addr1 != prev.addr1:
             return False
-        return this.timestamp < prev.timestamp + td(seconds=self._array_timeout)
+        return this.timestamp < prev.timestamp + td(
+            seconds=self._array_timeout
+        )
 
     def _stitch_dtos(self, prev: PacketDTO, this: PacketDTO) -> PacketDTO:
         """Combine two array fragments into a single PacketDTO.

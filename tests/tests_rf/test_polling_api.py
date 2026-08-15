@@ -5,8 +5,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from ramses_rf.address import Address
+from ramses_rf.const import Code
 from ramses_rf.devices.dev_base import DeviceBase
-from ramses_rf.pipeline.polling import DEFAULT_POLLING_SCHEDULES, PollingManager
+from ramses_rf.pipeline.polling import (
+    DEFAULT_POLLING_SCHEDULES,
+    PollingManager,
+)
 
 
 def test_device_set_polling_interval_device_level() -> None:
@@ -30,10 +34,10 @@ def test_device_set_command_polling_interval() -> None:
     dev = DeviceBase(gwy, dev_addr)
 
     # Act
-    dev.set_command_polling_interval("3EF0", 900)
+    dev.set_command_polling_interval(Code._3EF0, 900)
 
     # Assert
-    assert dev.polling_interval == {"3EF0": 900}
+    assert dev.polling_interval == {Code._3EF0: 900}
 
 
 def test_device_set_polling_interval_reset() -> None:
@@ -62,7 +66,7 @@ def test_device_battery_safeguard_raises_exception() -> None:
         dev.set_polling_interval(120)
 
     with pytest.raises(ValueError, match="cannot be set below 300s"):
-        dev.set_command_polling_interval("10E0", 120)
+        dev.set_command_polling_interval(Code._10E0, 120)
 
 
 def test_polling_manager_battery_device_returns_empty_schedule() -> None:

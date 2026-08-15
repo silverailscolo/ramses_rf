@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from ramses_rf.messages import ApplicationMessage, Message
+from ramses_tx.const import Code, Verb
 from ramses_tx.packet import Packet
 
 # Constants for testing frames
@@ -59,8 +60,8 @@ def test_message_attributes(patch_parsers: Any) -> None:
     assert message.dtm == dtm
 
     # Validate payload properties
-    assert message.verb == "RQ"
-    assert message.code == "1FC9"
+    assert message.verb == Verb.RQ
+    assert message.code == Code._1FC9
     assert message.len == 1
     assert message.src.id == "18:006402"
     assert message.dst.id == "13:049798"
@@ -79,8 +80,8 @@ def test_message_parsing_and_rssi(patch_parsers: Any) -> None:
     message = Message(packet.to_dto())
 
     assert message.rssi == "095"
-    assert message.verb == " I"
-    assert message.code == "1F09"
+    assert message.verb == Verb.I_
+    assert message.code == Code._1F09
     assert message.len == 3
     assert message._has_payload is True
 
@@ -132,13 +133,17 @@ def test_message_string_representations(patch_parsers: Any) -> None:
     msg_str = str(message)
     assert "18:006402" in msg_str
     assert "13:049798" in msg_str
-    assert "RQ" in msg_str
+    assert Verb.RQ in msg_str
 
 
-def test_startup_empty_payload_reproduction(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_startup_empty_payload_reproduction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test that an empty payload bypasses strict regex and parses safely."""
     # Ensure this test is completely isolated from the global ramses_rf bridge
-    monkeypatch.setattr("ramses_rf.messages.base.decode_packet", lambda dto: {})
+    monkeypatch.setattr(
+        "ramses_rf.messages.base.decode_packet", lambda dto: {}
+    )
 
     dtm = dt.now(tz=UTC)
     packet = Packet(dtm, FRAME_STR_EMPTY)
@@ -154,7 +159,7 @@ def test_startup_empty_payload_reproduction(monkeypatch: pytest.MonkeyPatch) -> 
 def test_message_valid_empty_payload(patch_parsers: Any) -> None:
     """Test that a valid empty payload is accurately parsed and NOT dropped.
 
-    Some protocol commands (like 1FC9 ' I') legitimately use a "00" payload
+    Some protocol commands (like 1FC9 Verb.I_) legitimately use a "00" payload
     as actionable data (e.g., the "Confirm" phase of a binding process).
     This ensures they are routed to the parser rather than fallback logic.
 
@@ -162,10 +167,12 @@ def test_message_valid_empty_payload(patch_parsers: Any) -> None:
     """
     dtm = dt.now(tz=UTC)
     # 1FC9 explicitly allows "00" in CODES_SCHEMA. It must successfully parse.
-    packet = Packet(dtm, "045  I --- 18:006402 13:049798 --:------ 1FC9 001 00")
+    packet = Packet(
+        dtm, "045  I --- 18:006402 13:049798 --:------ 1FC9 001 00"
+    )
     message = Message(packet.to_dto())
 
-    assert message._has_payload is False
+    assert message._has_payload is True
     assert message.payload.get("phase") == "confirm"
     assert "bindings" in message.payload
 
@@ -207,9 +214,9 @@ def test_application_message_factory(patch_parsers: Any) -> None:
     assert app_msg.verb == base_msg.verb
 
     # 2. Test Context Binding
-    mock_gwy = object()
-    app_msg.bind_context(mock_gwy)
-    assert app_msg._gwy is mock_gwy
+    mock_gateway = object()
+    app_msg.bind_context(mock_gateway)
+    assert app_msg._gateway is mock_gateway
 
     # 3. Test Expiration (Fresh Packet)
     # Should not be expired because (now - dtm) is ~0 seconds

@@ -17,7 +17,7 @@ from asyncclick.exceptions import ClickException, Exit
 from colorama import Fore, Style, init as colorama_init
 
 from ramses_rf import Gateway, GracefulExit, Message, exceptions as exc
-from ramses_rf.const import DEV_TYPE_MAP, DONT_CREATE_MESSAGES, SZ_ZONE_IDX
+from ramses_rf.const import DEV_TYPE_MAP, DONT_CREATE_MESSAGES, SZ_ZONE_INDEX
 from ramses_rf.discovery_scan import DiscoveryScan
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import deep_merge
@@ -46,6 +46,11 @@ from ramses_tx.schemas import (
 
 from .debug import SZ_DBG_MODE, start_debugging
 from .discovery import GET_FAULTS, GET_SCHED, SET_SCHED, spawn_scripts
+from .inspect import (
+    dissect_payload,
+    extract_packet_details,
+    format_dissection_output,
+)
 
 if TYPE_CHECKING:
     from _typeshed import SupportsRead
@@ -73,7 +78,9 @@ PRINT_STATE = False  # print engine state
 # SET_STATE = False  # set engine state
 
 # this is called after import colorlog to ensure its handlers wrap correctly
-logging.basicConfig(level=logging.WARNING, format=DEFAULT_FMT, datefmt=DEFAULT_DATEFMT)
+logging.basicConfig(
+    level=logging.WARNING, format=DEFAULT_FMT, datefmt=DEFAULT_DATEFMT
+)
 
 
 EXECUTE: Final = "execute"
@@ -93,7 +100,9 @@ COLORS = {
 CONTEXT_SETTINGS: dict[str, Any] = dict(help_option_names=["-h", "--help"])
 
 LIB_KEYS = tuple(SCH_GLOBAL_CONFIG({}).keys()) + (SZ_SERIAL_PORT,)
-LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (SZ_EVOFW_FLAG,)
+LIB_CFG_KEYS = tuple(SCH_GLOBAL_CONFIG({})[SZ_CONFIG].keys()) + (
+    SZ_EVOFW_FLAG,
+)
 
 
 def normalise_config(
@@ -104,7 +113,6 @@ def normalise_config(
     :param lib_config: The configuration dictionary from Home Assistant.
     :return: A tuple containing the serial port and normalized config.
     """
-
     serial_port = lib_config.pop(SZ_SERIAL_PORT, None)
 
     # fix for: https://github.com/ramses-rf/ramses_rf/issues/96
@@ -136,7 +144,9 @@ def split_kwargs(
         {k: v for k, v in kwargs.items() if k not in LIB_KEYS + LIB_CFG_KEYS}
     )
     lib_kwargs.update({k: v for k, v in kwargs.items() if k in LIB_KEYS})
-    lib_kwargs[SZ_CONFIG].update({k: v for k, v in kwargs.items() if k in LIB_CFG_KEYS})
+    lib_kwargs[SZ_CONFIG].update(
+        {k: v for k, v in kwargs.items() if k in LIB_CFG_KEYS}
+    )
 
     return cli_kwargs, lib_kwargs
 
@@ -146,31 +156,45 @@ class DeviceIdParamType(click.ParamType):
 
     name = "device_id"
 
-    def convert(self, value: str, param: Any, ctx: click.Context | None) -> str:
+    def convert(
+        self, value: str, parameter: Any, context: click.Context | None
+    ) -> str:
         """Convert the value to a Device ID.
 
         :param value: The value to convert.
-        :param param: The parameter being converted.
-        :param ctx: The Click context.
+        :param parameter: The parameter being converted.
+        :param context: The Click context.
         :return: The converted Device ID.
         :raises click.BadParameter: If value is not a valid Device ID.
         """
         if is_valid_dev_id(value):
             return value.upper()
-        self.fail(f"{value!r} is not a valid device_id", param, ctx)
+        self.fail(f"{value!r} is not a valid device_id", parameter, context)
         assert False  # satisfy mypy
 
 
 # Args/Params for both RF and file
-@click.group(context_settings=CONTEXT_SETTINGS)  # , invoke_without_command=True)
+@click.group(
+    context_settings=CONTEXT_SETTINGS
+)  # , invoke_without_command=True)
 @click.option("-z", "--debug-mode", count=True, help="enable debugger")
 @click.option("-c", "--config-file", type=click.File("r"))
-@click.option("-rk", "--restore-schema", type=click.File("r"), help="from a HA store")
-@click.option("-rs", "--restore-state", type=click.File("r"), help=" from a HA store")
-@click.option("-r", "--reduce-processing", count=True, help="-rrr will give packets")
-@click.option("-lf", "--long-format", is_flag=True, help="dont truncate STDOUT")
+@click.option(
+    "-rk", "--restore-schema", type=click.File("r"), help="from a HA store"
+)
+@click.option(
+    "-rs", "--restore-state", type=click.File("r"), help=" from a HA store"
+)
+@click.option(
+    "-r", "--reduce-processing", count=True, help="-rrr will give packets"
+)
+@click.option(
+    "-lf", "--long-format", is_flag=True, help="dont truncate STDOUT"
+)
 @click.option("-e/-ne", "--eavesdrop/--no-eavesdrop", default=None)
-@click.option("-g", "--print-state", count=True, help="print state (g=schema, gg=all)")
+@click.option(
+    "-g", "--print-state", count=True, help="print state (g=schema, gg=all)"
+)
 # @click.option("--get-state/--no-get-state", default=GET_STATE, help="get the engine state")
 # @click.option("--set-state/--no-set-state", default=SET_STATE, help="set the engine state")
 @click.option(  # show_schema
@@ -217,14 +241,13 @@ async def cli(
     eavesdrop: None | bool = None,
     **kwargs: Any,
 ) -> None:
-    """A CLI for the ramses_rf library.
+    """Initialise the CLI client for the ramses_rf library.
 
     :param ctx: The Click context.
     :param config_file: An optional configuration file to load.
     :param eavesdrop: Whether to enable eavesdropping mode.
     :param kwargs: Additional keyword arguments.
     """
-
     if kwargs[SZ_DBG_MODE] > 0:  # Do first
         start_debugging(kwargs[SZ_DBG_MODE] == 1)
 
@@ -246,6 +269,11 @@ class FileCommand(click.Command):  # client.py parse <file>
     """A Click Command class for file-based operations."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise FileCommand and configure input-file argument.
+
+        :param args: Positional arguments for Click Command.
+        :param kwargs: Keyword arguments for Click Command.
+        """
         super().__init__(*args, **kwargs)
         self.params.insert(  # input_file name/path only
             0, click.Argument(("input-file",))
@@ -260,6 +288,23 @@ class FileCommand(click.Command):  # client.py parse <file>
         # )
 
 
+# Args/Params for decode operations
+class DecodeCommand(click.Command):  # client.py decode [payload]
+    """A Click Command class for payload decoding operations."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise DecodeCommand and configure optional payload argument.
+
+        :param args: Positional arguments for Click Command.
+        :param kwargs: Keyword arguments for Click Command.
+        """
+        super().__init__(*args, **kwargs)
+        self.params.insert(
+            0,
+            click.Argument(("payload",), required=False),
+        )
+
+
 # Args/Params for RF packets only
 class PortCommand(
     click.Command
@@ -267,6 +312,11 @@ class PortCommand(
     """A Click Command class for serial port operations."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialise PortCommand and configure serial-port argument.
+
+        :param args: Positional arguments for Click Command.
+        :param kwargs: Keyword arguments for Click Command.
+        """
         super().__init__(*args, **kwargs)
         self.params.insert(0, click.Argument(("serial-port",)))
         """ # self.params.insert(  # --no-discover
@@ -319,8 +369,12 @@ async def parse(
 
 #
 # 2/5: MONITOR (listen to RF, +/- discovery, +/- eavesdrop)
-@click.command(cls=PortCommand)  # (optionally) execute a command/script, then monitor
-@click.option("-d/-nd", "--discover/--no-discover", default=None)  # --no-discover
+@click.command(
+    cls=PortCommand
+)  # (optionally) execute a command/script, then monitor
+@click.option(
+    "-d/-nd", "--discover/--no-discover", default=None
+)  # --no-discover
 @click.option(  # --exec-cmd 'RQ 01:123456 1F09 00'
     "-x", "--exec-cmd", type=click.STRING, help="e.g. 'RQ 01:123456 1F09 00'"
 )
@@ -362,7 +416,9 @@ async def monitor(
 #
 # 3/5: EXECUTE (send cmds to RF, +/- discovery, +/- eavesdrop)
 @click.command(cls=PortCommand)  # execute a (complex) script, then stop
-@click.option("-d/-nd", "--discover/--no-discover", default=None)  # --no-discover
+@click.option(
+    "-d/-nd", "--discover/--no-discover", default=None
+)  # --no-discover
 @click.option(  # --exec-cmd 'RQ 01:123456 1F09 00'
     "-x", "--exec-cmd", type=click.STRING, help="e.g. 'RQ 01:123456 1F09 00'"
 )
@@ -487,6 +543,99 @@ async def scan(
     return SCAN, lib_config, config
 
 
+# DECODE (ad-hoc payload or packet inspection)
+@click.command(cls=DecodeCommand)
+@click.option(
+    "-c",
+    "--code",
+    type=click.STRING,
+    help="RAMSES opcode (e.g. 2411, 10E0, 31DA).",
+)
+@click.option(
+    "-v", "--verb", type=click.STRING, help="Message verb (e.g. RP, I, RQ, W)."
+)
+@click.option(
+    "-b",
+    "--block-size",
+    "block_size",
+    type=click.STRING,
+    default="all",
+    help="Word block size in bytes (1, 2, 4, 6, 8, or all; default: all).",
+)
+@click.option(
+    "-s",
+    "--skip",
+    type=int,
+    default=0,
+    help="Number of leading bytes to skip.",
+)
+@click.option(
+    "-j",
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Output structured dissection as JSON.",
+)
+async def decode(
+    payload: str | None = None,
+    code: str | None = None,
+    verb: str | None = None,
+    block_size: str = "all",
+    skip: int = 0,
+    json_output: bool = False,
+) -> int:
+    """Dissect and analyze an ad-hoc payload or packet string.
+
+    :param payload: Raw hex payload string or full packet log line.
+    :param code: Optional RAMSES opcode override.
+    :param verb: Optional message verb override.
+    :param block_size: Block size filter ('1', '2', '4', '6', '8', 'all').
+    :param skip: Number of leading payload bytes to skip.
+    :param json_output: Whether to output raw structured JSON.
+    :return: Exit code integer.
+    """
+    raw_input = payload
+    if not raw_input or raw_input == "-":
+        if not sys.stdin.isatty():
+            raw_input = sys.stdin.read().strip()
+
+    if not raw_input:
+        print("Error: No payload or packet string provided.", file=sys.stderr)
+        return 1
+
+    extracted_code, extracted_verb, payload_hex = extract_packet_details(
+        raw_input
+    )
+    target_code = code if code else extracted_code
+    target_verb = verb if verb else extracted_verb
+
+    if not payload_hex:
+        print(
+            f"Error: Could not extract hex payload from: {raw_input}",
+            file=sys.stderr,
+        )
+        return 1
+
+    block_sizes: tuple[int, ...] = (
+        (1, 2, 4, 6, 8) if block_size == "all" else (int(block_size),)
+    )
+
+    dissection = dissect_payload(
+        payload_hex,
+        block_sizes=block_sizes,
+        skip_bytes=skip,
+        opcode=target_code,
+        verb=target_verb,
+    )
+
+    if json_output:
+        print(json.dumps(dissection, indent=2, default=str))
+    else:
+        print(format_dissection_output(dissection))
+
+    return 0
+
+
 def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
     """Print discovered devices and optionally export to JSON file.
 
@@ -501,18 +650,22 @@ def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
     print(f"\nFound {len(devices)} device(s):\n")
     print(f"  {'Device ID':<12} {'Type':<6} {'Conf':<7} {'RSSI':>6}  Details")
     print(f"  {'-' * 12} {'-' * 6} {'-' * 7} {'-' * 6}  {'-' * 30}")
-    for dev in sorted(devices, key=lambda d: d.device_id):
-        rssi_str = f"{dev.rssi:.0f}" if dev.rssi is not None else "-"
+    for discovered_device in sorted(devices, key=lambda d: d.device_id):
+        rssi_str = (
+            f"{discovered_device.rssi:.0f}"
+            if discovered_device.rssi is not None
+            else "-"
+        )
         details = ""
-        if dev.zone_idx:
-            details += f"zone={dev.zone_idx}  "
-        if dev.bound_to:
-            details += f"bound to {dev.bound_to}"
-        if dev.is_battery:
+        if discovered_device.zone_index:
+            details += f"zone={discovered_device.zone_index}  "
+        if discovered_device.bound_to:
+            details += f"bound to {discovered_device.bound_to}"
+        if discovered_device.is_battery:
             details += "  battery" if details else "battery"
         print(
-            f"  {dev.device_id:<12} {dev.likely_type:<6} "
-            f"{dev.confidence:<7} {rssi_str:>6}  {details}".rstrip()
+            f"  {discovered_device.device_id:<12} {discovered_device.likely_type:<6} "
+            f"{discovered_device.confidence:<7} {rssi_str:>6}  {details}".rstrip()
         )
 
     if output_path:
@@ -522,37 +675,38 @@ def _print_scan_results(scan: DiscoveryScan, output_path: str | None) -> None:
         print(f"\nExported to {output_path}")
 
 
-def print_results(gwy: Gateway, **kwargs: Any) -> None:
+def print_results(gateway: Gateway, **kwargs: Any) -> None:
     """Print the results of execution commands (faults, schedules).
 
-    :param gwy: The gateway instance.
+    :param gateway: The gateway instance.
     :param kwargs: The command arguments.
     """
     if kwargs[GET_FAULTS]:
-        fault_log = gwy.device_registry.system_by_id[
+        fault_log = gateway.device_registry.system_by_id[
             kwargs[GET_FAULTS]
         ]._faultlog.faultlog
 
         if fault_log:
-            for k, v in fault_log.items():
-                print(f"{k:02X}", v)
+            for log_idx, entry in fault_log.items():
+                print(f"{log_idx:02X}", entry)
         else:
             print("No fault log, or failed to get the fault log.")
 
     if kwargs[GET_SCHED][0]:
         system_id, zone_idx = kwargs[GET_SCHED]
         if zone_idx == "HW":
-            dhw = gwy.device_registry.system_by_id[system_id].dhw
+            dhw = gateway.device_registry.system_by_id[system_id].dhw
             zone: Any = dhw
         else:
-            zone = gwy.device_registry.system_by_id[system_id].zone_by_idx[zone_idx]
+            sys_entry = gateway.device_registry.system_by_id[system_id]
+            zone = sys_entry.zone_by_idx[zone_idx]
         assert zone
         schedule = zone.schedule
 
         if schedule is None:
             print("Failed to get the schedule.")
         else:
-            result = {SZ_ZONE_IDX: zone_idx, "schedule": schedule}
+            result = {SZ_ZONE_INDEX: zone_idx, "schedule": schedule}
             print(">>> Schedule JSON begins <<<")
             print(json.dumps(result, indent=4))
             print(">>> Schedule JSON ended <<<")
@@ -564,29 +718,29 @@ def print_results(gwy: Gateway, **kwargs: Any) -> None:
 def _write_state(schema: dict[str, Any], msgs: dict[str, str]) -> None:
     """Write the state to the file system (blocking)."""
     with open("state_msgs.log", "w") as f:
-        for dtm, pkt in msgs.items():
-            f.write(f"{dtm} {pkt}\r\n")  # if not m._expired
+        for dtm, packet_data in msgs.items():
+            f.write(f"{dtm} {packet_data}\r\n")  # if not m._expired
 
     with open("state_schema.json", "w") as f:
         f.write(json.dumps(schema, indent=4))
 
 
-async def _save_state(gwy: Gateway) -> None:
+async def _save_state(gateway: Gateway) -> None:
     """Save the gateway state to files.
 
-    :param gwy: The gateway instance.
+    :param gateway: The gateway instance.
     """
-    schema, msgs = await gwy.get_state()
+    schema, msgs = await gateway.get_state()
     await asyncio.to_thread(_write_state, schema, msgs)
 
 
-async def _print_engine_state(gwy: Gateway, **kwargs: Any) -> None:
+async def _print_engine_state(gateway: Gateway, **kwargs: Any) -> None:
     """Print the current engine state (schema and packets).
 
-    :param gwy: The gateway instance.
+    :param gateway: The gateway instance.
     :param kwargs: Command arguments to determine verbosity.
     """
-    (schema, packets) = await gwy.get_state(include_expired=True)
+    (schema, packets) = await gateway.get_state(include_expired=True)
 
     if kwargs["print_state"] > 0:
         print(f"schema: {json.dumps(schema, indent=4)}\r\n")
@@ -594,51 +748,74 @@ async def _print_engine_state(gwy: Gateway, **kwargs: Any) -> None:
         print(f"packets: {json.dumps(packets, indent=4)}\r\n")
 
 
-async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
+async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
     """Print a summary of the system state, schema, params, and status.
 
-    :param gwy: The gateway instance.
+    :param gateway: The gateway instance.
     :param kwargs: Command arguments to determine what to display.
     """
-    entity = gwy.tcs or gwy
+    entity = gateway.tcs or gateway
 
     if kwargs.get("show_schema"):
-        print(f"Schema[{entity}] = {json.dumps(await entity.schema(), indent=4)}\r\n")
+        print(
+            f"Schema[{entity}] = {json.dumps(await entity.schema(), indent=4)}\r\n"
+        )
 
-        # schema = {d.id: await d.schema() for d in sorted(gwy.device_registry.devices)}
+        # schema = {d.id: await d.schema() for d in sorted(gateway.device_registry.devices)}
         # print(f"Schema[devices] = {json.dumps({'schema': schema}, indent=4)}\r\n")
 
     if kwargs.get("show_params"):
-        print(f"Params[{entity}] = {json.dumps(await entity.params(), indent=4)}\r\n")
+        print(
+            f"Params[{entity}] = {json.dumps(await entity.params(), indent=4)}\r\n"
+        )
 
-        params = {d.id: await d.params() for d in sorted(gwy.device_registry.devices)}
-        print(f"Params[devices] = {json.dumps({'params': params}, indent=4)}\r\n")
+        params = {
+            d.id: await d.params()
+            for d in sorted(gateway.device_registry.devices)
+        }
+        print(
+            f"Params[devices] = {json.dumps({'params': params}, indent=4)}\r\n"
+        )
 
     if kwargs.get("show_status"):
-        print(f"Status[{entity}] = {json.dumps(await entity.status(), indent=4)}\r\n")
+        print(
+            f"Status[{entity}] = {json.dumps(await entity.status(), indent=4)}\r\n"
+        )
 
-        status = {d.id: await d.status() for d in sorted(gwy.device_registry.devices)}
-        print(f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n")
+        status = {
+            d.id: await d.status()
+            for d in sorted(gateway.device_registry.devices)
+        }
+        print(
+            f"Status[devices] = {json.dumps({'status': status}, indent=4)}\r\n"
+        )
 
     if kwargs.get("show_knowns"):  # show device hints (show-knowns)
-        print(f"allow_list (hints) = {json.dumps(gwy.config.known_list, indent=4)}\r\n")
+        known = json.dumps(gateway.config.known_list, indent=4)
+        print(f"allow_list (hints) = {known}\r\n")
 
     if kwargs.get("show_traits"):  # show device traits
         result = {
             # {k: v for k, v in (await d.traits()).items() if k[:1] == "_"}
             d.id: await d.traits()
-            for d in sorted(gwy.device_registry.devices)
+            for d in sorted(gateway.device_registry.devices)
         }
         print(json.dumps(result, indent=4), "\r\n")
 
     if kwargs.get("show_crazys"):
         for device in [
-            d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.CTL
+            d
+            for d in gateway.device_registry.devices
+            if d.type == DEV_TYPE_MAP.CTL
         ]:
-            if gwy.message_store:
-                for msg in await gwy.message_store.get(src=device.id, code=Code._0005):
+            if gateway.message_store:
+                for msg in await gateway.message_store.get(
+                    source=device.id, code=Code._0005
+                ):
                     print(f"{msg}")
-                for msg in await gwy.message_store.get(src=device.id, code=Code._000C):
+                for msg in await gateway.message_store.get(
+                    source=device.id, code=Code._000C
+                ):
                     print(f"{msg}")
             else:  # TODO(eb): replace next block by
                 #  raise NotImplementedError
@@ -647,25 +824,31 @@ async def print_summary(gwy: Gateway, **kwargs: Any) -> None:
                 ).items():
                     if msg_code in (Code._0005, Code._000C):
                         for verb in verbs.values():
-                            for pkt in verb.values():
-                                print(f"{pkt}")
+                            for packet in verb.values():
+                                print(f"{packet}")
             print()
         for device in [
-            d for d in gwy.device_registry.devices if d.type == DEV_TYPE_MAP.UFC
+            d
+            for d in gateway.device_registry.devices
+            if d.type == DEV_TYPE_MAP.UFC
         ]:
-            if gwy.message_store:
-                for msg in await gwy.message_store.get(src=device.id):
+            if gateway.message_store:
+                for msg in await gateway.message_store.get(source=device.id):
                     print(f"{msg}")
             else:  # TODO(eb): Q1 2026 replace next legacy block by
                 #  raise NotImplementedError
-                for cd in (await device.entity_state.get_state_cache_nested()).values():
+                for cd in (
+                    await device.entity_state.get_state_cache_nested()
+                ).values():
                     for verb in cd.values():
-                        for pkt in verb.values():
-                            print(f"{pkt}")
+                        for packet in verb.values():
+                            print(f"{packet}")
             print()
 
 
-async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) -> None:
+async def async_main(
+    command: str, lib_kwargs: dict[str, Any], **kwargs: Any
+) -> None:
     """Execute the main asynchronous logic for the CLI.
 
     :param command: The command to execute (e.g., "monitor", "parse").
@@ -693,10 +876,15 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
         if _msg.code == Code._PUZZ:
             print(f"{Style.BRIGHT}{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
         elif _msg.src and _msg.src.type == DEV_TYPE_MAP.HGI:
-            print(f"{Style.BRIGHT}{COLORS.get(_msg.verb)}{dtm} {_msg}"[:con_cols])
+            print(
+                f"{Style.BRIGHT}{COLORS.get(_msg.verb)}{dtm} {_msg}"[:con_cols]
+            )
         elif _msg.code == Code._1F09 and _msg.verb == I_:
             print(f"{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
-        elif _msg.code in (Code._000A, Code._2309, Code._30C9) and _msg._has_array:
+        elif (
+            _msg.code in (Code._000A, Code._2309, Code._30C9)
+            and _msg._has_array
+        ):
             print(f"{Fore.YELLOW}{dtm} {_msg}"[:con_cols])
         else:
             print(f"{COLORS.get(_msg.verb)}{dtm} {_msg}"[:con_cols])
@@ -719,11 +907,11 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
     gwy_config_kwargs: dict[str, Any] = {}
 
     # 1. Map inner SZ_CONFIG keys
-    for key, val in config_dict.items():
-        if key == SZ_REDUCE_PROCESSING and val is not None:
-            gwy_config_kwargs[key] = int(val)
+    for key, config_val in config_dict.items():
+        if key == SZ_REDUCE_PROCESSING and config_val is not None:
+            gwy_config_kwargs[key] = int(config_val)
         else:
-            gwy_config_kwargs[key] = val
+            gwy_config_kwargs[key] = config_val
 
     # 2. Extract known GatewayConfig keys from lib_kwargs
     known_config_keys = {
@@ -761,9 +949,13 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
         for k, v in gwy_config_kwargs.items()
         if k in engine_fields and k not in l7_only_keys
     }
-    gwy_kwargs = {k: v for k, v in gwy_config_kwargs.items() if k in gwy_fields}
+    gwy_kwargs = {
+        k: v for k, v in gwy_config_kwargs.items() if k in gwy_fields
+    }
 
-    gwy_config = GatewayConfig(engine=EngineConfig(**engine_kwargs), **gwy_kwargs)
+    gwy_config = GatewayConfig(
+        engine=EngineConfig(**engine_kwargs), **gwy_kwargs
+    )
 
     # Instantiate Gateway
     gwy = Gateway(
@@ -817,7 +1009,9 @@ async def async_main(command: str, lib_kwargs: dict[str, Any], **kwargs: Any) ->
                 await asyncio.sleep(duration)
             else:
                 print(" - scanning until interrupted (Ctrl-C)...")
-                await gwy._engine._protocol.wait_for_connection_lost(timeout=86400)
+                await gwy._engine._protocol.wait_for_connection_lost(
+                    timeout=86400
+                )
             scan_engine.stop()
             _print_scan_results(scan_engine, kwargs.get("scan_output"))
 
@@ -856,6 +1050,7 @@ cli.add_command(monitor)
 cli.add_command(execute)
 cli.add_command(listen)
 cli.add_command(scan)
+cli.add_command(decode)
 
 
 def _run_cli() -> None:

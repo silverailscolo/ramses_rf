@@ -16,7 +16,8 @@ def is_subset(inner: _SchemaT, outer: _SchemaT) -> bool:
     """Return True is one dict (or list) is a subset of another."""
 
     def _is_subset(
-        a: dict[str, Any] | list[Any] | Any, b: dict[str, Any] | list[Any] | Any
+        a: dict[str, Any] | list[Any] | Any,
+        b: dict[str, Any] | list[Any] | Any,
     ) -> bool:
         if isinstance(a, dict):
             return isinstance(b, dict) and all(
@@ -31,7 +32,9 @@ def is_subset(inner: _SchemaT, outer: _SchemaT) -> bool:
     return _is_subset(inner, outer)
 
 
-def deep_merge(src: _SchemaT, dst: _SchemaT, _dc: bool = False) -> _SchemaT:
+def deep_merge(
+    source: _SchemaT, destination: _SchemaT, _dc: bool = False
+) -> _SchemaT:
     """Deep merge a src dict (precedent) into a dst dict and return the result.
 
     run me with nosetests --with-doctest file.py
@@ -41,9 +44,13 @@ def deep_merge(src: _SchemaT, dst: _SchemaT, _dc: bool = False) -> _SchemaT:
     >>> merge(s, d) == {'data': {'rows': {'pass': 'dog', 'fail': 'cat', 'num': '1'}}}
     True
     """
-
-    new_dst = dst if _dc else deepcopy(dst)  # start with copy of dst, merge src into it
-    for key, value in src.items():  # values are only: dict, list, value or None
+    new_dst = (
+        destination if _dc else deepcopy(destination)
+    )  # start with copy of dst, merge src into it
+    for (
+        key,
+        value,
+    ) in source.items():  # values are only: dict, list, value or None
         if isinstance(value, dict):  # is dict
             node = new_dst.setdefault(key, {})  # get node or create one
             deep_merge(value, node, _dc=True)
@@ -51,11 +58,13 @@ def deep_merge(src: _SchemaT, dst: _SchemaT, _dc: bool = False) -> _SchemaT:
         elif not isinstance(value, list):  # is value
             new_dst[key] = value  # src takes precedence, assert will fail
 
-        elif key not in new_dst or not isinstance(new_dst[key], list):  # is list
-            new_dst[key] = src[key]  # not expected, but maybe
+        elif key not in new_dst or not isinstance(
+            new_dst[key], list
+        ):  # is list
+            new_dst[key] = source[key]  # not expected, but maybe
 
         else:
-            new_dst[key] = list(set(src[key] + new_dst[key]))  # will sort
+            new_dst[key] = list(set(source[key] + new_dst[key]))  # will sort
 
     # assert _is_subset(shrink(src), shrink(new_dst))
     return new_dst

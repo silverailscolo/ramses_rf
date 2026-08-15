@@ -45,7 +45,7 @@ class _HasZones(Protocol):
 
     def get_dhw_zone(self) -> Parent: ...
 
-    def get_htg_zone(self, zone_idx: str) -> Parent: ...
+    def get_htg_zone(self, zone_index: str) -> Parent: ...
 
 
 if TYPE_CHECKING:
@@ -75,7 +75,9 @@ class Parent:
     _dhw_valve: Any
     _htg_valve: Any
 
-    def __init__(self, *args: Any, child_id: str | None = None, **kwargs: Any) -> None:
+    def __init__(
+        self, *args: Any, child_id: str | None = None, **kwargs: Any
+    ) -> None:
         """Initialize the Parent relationship manager.
 
         :param child_id: The domain or zone index for this parent.
@@ -106,7 +108,11 @@ class Parent:
         self._child_id = value
 
     def _add_child(
-        self, child: Any, *, child_id: str | None = None, is_sensor: bool | None = None
+        self,
+        child: Any,
+        *,
+        child_id: str | None = None,
+        is_sensor: bool | None = None,
     ) -> None:
         """Add a child device to this Parent, validating the association.
 
@@ -159,19 +165,28 @@ class Parent:
                     self.circuit_by_id[child.id] = child
 
             elif hasattr(self, SZ_ACTUATORS):
-                if child not in self.actuators and child.id not in self.actuator_by_id:
+                if (
+                    child not in self.actuators
+                    and child.id not in self.actuator_by_id
+                ):
                     self.actuators.append(child)
                     self.actuator_by_id[child.id] = child
 
             elif child_id == F9:
-                if self._htg_valve and getattr(self._htg_valve, "id", None) != child.id:
+                if (
+                    self._htg_valve
+                    and getattr(self._htg_valve, "id", None) != child.id
+                ):
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed htg_valve (from {self._htg_valve} to {child})"
                     )
                 self._htg_valve = child
 
             elif child_id == FA:
-                if self._dhw_valve and getattr(self._dhw_valve, "id", None) != child.id:
+                if (
+                    self._dhw_valve
+                    and getattr(self._dhw_valve, "id", None) != child.id
+                ):
                     raise exc.SystemSchemaInconsistent(
                         f"{self} changed dhw_valve (from {self._dhw_valve} to {child})"
                     )
@@ -192,7 +207,10 @@ class Parent:
                     f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
                 )
 
-        except (exc.SchemaInconsistentError, exc.SystemSchemaInconsistent) as err:
+        except (
+            exc.SchemaInconsistentError,
+            exc.SystemSchemaInconsistent,
+        ) as err:
             _TRACE.error(
                 f"ADD_CHILD EXCEPTION: Validating {child} to parent {self} "
                 f"failed: {err}"
@@ -225,9 +243,14 @@ class Parent:
             self._htg_valve = None
         elif getattr(self, "_app_cntrl", None) is child:
             self._app_cntrl = None
-        elif hasattr(self, SZ_SENSOR) and getattr(self, "_sensor", None) is child:
+        elif (
+            hasattr(self, SZ_SENSOR)
+            and getattr(self, "_sensor", None) is child
+        ):
             self._sensor = None
-        elif hasattr(self, SZ_ACTUATORS) and child in getattr(self, "actuators", []):
+        elif hasattr(self, SZ_ACTUATORS) and child in getattr(
+            self, "actuators", []
+        ):
             self.actuators.remove(child)
             if child_id_ is not None:
                 self.actuator_by_id.pop(child_id_, None)
@@ -311,7 +334,9 @@ class Child:
                 parent = parent.tcs
                 parent_class = parent.__class__.__name__
                 _TRACE.info(
-                    "SUB-CONTROLLER: %s shifted parent to %s", self, parent_class
+                    "SUB-CONTROLLER: %s shifted parent to %s",
+                    self,
+                    parent_class,
                 )
             else:
                 raise exc.SchemaInconsistentError(
@@ -324,14 +349,19 @@ class Child:
                     parent = parent.get_dhw_zone()
                     parent_class = parent.__class__.__name__
                     _TRACE.info(
-                        "DHW SHIFT: %s shifted parent to %s", self, parent_class
+                        "DHW SHIFT: %s shifted parent to %s",
+                        self,
+                        parent_class,
                     )
             elif (
-                isinstance(parent, _HasZones) and int(child_id, 16) < parent._max_zones
+                isinstance(parent, _HasZones)
+                and int(child_id, 16) < parent._max_zones
             ):
                 parent = parent.get_htg_zone(child_id)
                 parent_class = parent.__class__.__name__
-                _TRACE.info("ZONE SHIFT: %s shifted parent to %s", self, parent_class)
+                _TRACE.info(
+                    "ZONE SHIFT: %s shifted parent to %s", self, parent_class
+                )
 
         elif (
             parent_class
@@ -350,7 +380,10 @@ class Child:
 
         if self._parent and self._parent != parent:
             prev_parent_class = self._parent.__class__.__name__
-            if prev_parent_class in ("System", "Evohome") and parent_class not in (
+            if prev_parent_class in (
+                "System",
+                "Evohome",
+            ) and parent_class not in (
                 "System",
                 "Evohome",
             ):
@@ -381,7 +414,10 @@ class Child:
                 raise exc.SystemSchemaInconsistent(err_msg)
 
         PARENT_RULES: dict[str, dict[str, tuple[str, ...]]] = {
-            "DhwZone": {SZ_ACTUATORS: ("BdrSwitch",), SZ_SENSOR: ("DhwSensor",)},
+            "DhwZone": {
+                SZ_ACTUATORS: ("BdrSwitch",),
+                SZ_SENSOR: ("DhwSensor",),
+            },
             "System": {
                 SZ_ACTUATORS: ("BdrSwitch", "OtbGateway", "UfhController"),
                 SZ_SENSOR: ("OutSensor",),
@@ -419,7 +455,9 @@ class Child:
 
         rules = PARENT_RULES.get(parent_class)
         if not rules:
-            _TRACE.error("PARENT RULES EXCEPTION: %s is not a valid parent.", parent)
+            _TRACE.error(
+                "PARENT RULES EXCEPTION: %s is not a valid parent.", parent
+            )
             raise exc.SchemaInconsistentError(
                 f"for Parent {parent}: not a valid parent"
             )
@@ -473,27 +511,32 @@ class Child:
             parent, child_id = self._get_parent(
                 parent, child_id=child_id, is_sensor=is_sensor
             )
-            ctl = (
+            controller = (
                 parent
                 if parent.__class__.__name__ == "UfhController"
                 else getattr(parent, "ctl", None)
             )
 
-            if self.ctl and self.ctl is not ctl:
+            if self.ctl and self.ctl is not controller:
                 raise exc.SystemSchemaInconsistent(
-                    f"{self} can't change controller: {self.ctl} to {ctl}"
+                    f"{self} can't change controller: {self.ctl} to {controller}"
                 )
 
             parent._add_child(self, child_id=child_id, is_sensor=is_sensor)
 
-        except (exc.SchemaInconsistentError, exc.SystemSchemaInconsistent) as err:
-            _TRACE.error("LINK EXCEPTION: Failed applying link for %s: %s", self, err)
+        except (
+            exc.SchemaInconsistentError,
+            exc.SystemSchemaInconsistent,
+        ) as err:
+            _TRACE.error(
+                "LINK EXCEPTION: Failed applying link for %s: %s", self, err
+            )
             raise
 
         self._child_id = child_id
         self._parent = parent
 
-        self.ctl = ctl
-        self.tcs = getattr(ctl, "tcs", None)
+        self.ctl = controller
+        self.tcs = getattr(controller, "tcs", None)
 
         return parent

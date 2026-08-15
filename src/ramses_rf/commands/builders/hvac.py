@@ -12,16 +12,97 @@ from ramses_rf.models.hvac_schemas import (
     _22F1_SCHEMES,
     _2411_PARAMS_SCHEMA,
 )
-from ramses_rf.parsers.helpers import (
-    air_quality_code,
-    capability_bits,
-    fan_info_flags,
-    fan_info_to_byte,
-)
+from ramses_rf.protocol.ramses import _31DA_FAN_INFO
 from ramses_tx.address import NON_DEV_ADDR
 from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.helpers import hex_from_double, hex_from_percent, hex_from_temp
+
+AIR_QUALITY_BASIS: dict[str, str] = {
+    "10": "voc",  # volatile compounds
+    "20": "co2",  # carbon dioxide
+    "40": "rel_humidity",  # relative humidity
+}
+
+ABILITIES: dict[int, str] = {
+    15: "off",
+    14: "low_med_high",  # 3,2,1 = high,med,low?
+    13: "timer",
+    12: "boost",
+    11: "auto",
+    10: "speed_4",
+    9: "speed_5",
+    8: "speed_6",
+    7: "speed_7",
+    6: "speed_8",
+    5: "speed_9",
+    4: "speed_10",
+    3: "auto_night",
+    2: "reserved",
+    1: "post_heater",
+    0: "pre_heater",
+}
+
+
+def air_quality_code(description: str) -> str:
+    """Return 2-character hex code for given air quality basis description.
+
+    :param description: Description of air quality basis (e.g. voc, co2).
+    :type description: str
+    :return: 2-character hex string representing the basis.
+    :rtype: str
+    """
+    for key, value in AIR_QUALITY_BASIS.items():
+        if value == description:
+            return key
+    return "00"
+
+
+def capability_bits(capability_list: list[str]) -> int:
+    """Convert capability string list into bitmask integer representation.
+
+    :param capability_list: List of capability names.
+    :type capability_list: list[str]
+    :return: Bitmask integer representing speed capabilities.
+    :rtype: int
+    """
+    # 0xF800 = 0b1111100000000000
+    capability_result: int = 0
+    for capability in capability_list:
+        for bit_offset, name in ABILITIES.items():
+            if name == capability:
+                capability_result |= 2**bit_offset  # set bit
+    return capability_result
+
+
+def fan_info_to_byte(info: str) -> int:
+    """Return fan_info byte value matching the descriptive fan_info string.
+
+    :param info: Description string of fan info state.
+    :type info: str
+    :return: Integer byte value (masked to 0x1F).
+    :rtype: int
+    """
+    for key, value in _31DA_FAN_INFO.items():
+        if value == info:
+            return int(key) & 0x1F
+    return 0x0000
+
+
+def fan_info_flags(flags_list: list[int]) -> int:
+    """Convert list of 3 flag values into bit-shifted integer flags.
+
+    :param flags_list: List of flag values for bits 7, 6, and 5.
+    :type flags_list: list[int]
+    :return: Bit-shifted flag integer.
+    :rtype: int
+    """
+    flag_result: int = 0
+    for index, shift in enumerate(range(7, 4, -1)):  # index = 7, 6 and 5
+        if flags_list[index] == 1:
+            flag_result |= 1 << shift  # set bits
+    return flag_result
+
 
 # Command 2411 payload binary layout (Big-Endian):
 #   Offset  Format  Len  Description                    Sample Hex
@@ -98,8 +179,8 @@ def build_set_fan_mode(intent: Command) -> CommandDTO:
     """
     fan_mode = intent.get("fan_mode")
     scheme = intent.get("scheme", "orcon")
-    seqn = intent.get("seqn")
-    idx = intent.get("idx", "00")
+    sequence_number = intent.get("seqn")
+    index = intent.get("idx", "00")
     mode_max = intent.get("mode_max")
     legacy_format = intent.get("legacy_format", False)
 
@@ -124,24 +205,26 @@ def build_set_fan_mode(intent: Command) -> CommandDTO:
     elif mode in mode_map_r:
         mode = mode_map_r[mode]
     else:
-        raise ValueError(f"fan_mode is not valid for scheme '{scheme}': {fan_mode}")
+        raise ValueError(
+            f"fan_mode is not valid for scheme '{scheme}': {fan_mode}"
+        )
 
     if mode_max is None:
         mode_max = _22F1_MODE_MAX.get(scheme)
 
     if legacy_format or not mode_max:
-        payload = f"{idx}{mode}"
+        payload = f"{index}{mode}"
     else:
-        payload = f"{idx}{mode}{mode_max}"
+        payload = f"{index}{mode}{mode_max}"
 
-    if intent.src.id and seqn:
+    if intent.src.id and sequence_number:
         # Actually in intent world, src is always there, but seqn is custom
         # logic. For parity, we'll map addr2=fan_id and use intent.dst for
         # fan_id if seqn is present
         pass
 
     # legacy from_attrs mapping
-    if seqn:
+    if sequence_number:
         # I_, addr2=fan_id, seqn=seqn
         # CommandDTO doesn't accept seqn yet? Wait, CommandDTO has no seqn.
         # Oh, legacy builder took seqn and placed it. Wait, how do I set seqn in CommandDTO?
@@ -224,7 +307,9 @@ def build_set_fan_param(intent: Command) -> CommandDTO:
     try:
         param_id_stripped = param_id.strip().upper()
         if len(param_id_stripped) != 2:
-            raise ValueError("Parameter ID must be exactly 2 hexadecimal characters")
+            raise ValueError(
+                "Parameter ID must be exactly 2 hexadecimal characters"
+            )
         param_id_int = int(param_id_stripped, 16)
     except ValueError as err:
         raise ValueError(
@@ -238,8 +323,8 @@ def build_set_fan_param(intent: Command) -> CommandDTO:
             "This parameter is not defined in the device schema"
         )
 
-    min_val = param_schema.min_val
-    max_val = param_schema.max_val
+    min_val = param_schema.min_value
+    max_val = param_schema.max_value
     precision = param_schema.precision
     data_type = param_schema.data_type
 
@@ -264,7 +349,9 @@ def build_set_fan_param(intent: Command) -> CommandDTO:
                         f"to {max_val_scaled / 10}%)"
                     )
             case "0F":  # %
-                value_scaled = int(round((float(value) / 100.0) / float(precision)))
+                value_scaled = int(
+                    round((float(value) / 100.0) / float(precision))
+                )
                 min_val_scaled = int(round(float(min_val) / float(precision)))
                 max_val_scaled = int(round(float(max_val) / float(precision)))
                 precision_scaled = int(round(float(precision) * 200))
@@ -420,7 +507,9 @@ def build_get_hvac_fan_31da(intent: Command) -> CommandDTO:
     extra = intent.get("_extra", "")
 
     payload = hvac_id
-    payload += f"{(int(air_quality * 200)):02X}" if air_quality is not None else "EF"
+    payload += (
+        f"{(int(air_quality * 200)):02X}" if air_quality is not None else "EF"
+    )
     payload += (
         f"{air_quality_code(air_quality_basis)}"
         if air_quality_basis is not None
@@ -437,10 +526,18 @@ def build_get_hvac_fan_31da(intent: Command) -> CommandDTO:
         if outdoor_humidity is not None
         else "EF"
     )
-    payload += hex_from_temp(exhaust_temp) if exhaust_temp is not None else "7FFF"
-    payload += hex_from_temp(supply_temp) if supply_temp is not None else "7FFF"
-    payload += hex_from_temp(indoor_temp) if indoor_temp is not None else "7FFF"
-    payload += hex_from_temp(outdoor_temp) if outdoor_temp is not None else "7FFF"
+    payload += (
+        hex_from_temp(exhaust_temp) if exhaust_temp is not None else "7FFF"
+    )
+    payload += (
+        hex_from_temp(supply_temp) if supply_temp is not None else "7FFF"
+    )
+    payload += (
+        hex_from_temp(indoor_temp) if indoor_temp is not None else "7FFF"
+    )
+    payload += (
+        hex_from_temp(outdoor_temp) if outdoor_temp is not None else "7FFF"
+    )
     payload += (
         f"{capability_bits(speed_capabilities):04X}"
         if speed_capabilities is not None
@@ -466,12 +563,20 @@ def build_get_hvac_fan_31da(intent: Command) -> CommandDTO:
         if supply_fan_speed is not None
         else "FF"
     )
-    payload += f"{remaining_mins:04X}" if remaining_mins is not None else "7FFF"
+    payload += (
+        f"{remaining_mins:04X}" if remaining_mins is not None else "7FFF"
+    )
     payload += f"{int(post_heat * 200):02X}" if post_heat is not None else "EF"
     payload += f"{int(pre_heat * 200):02X}" if pre_heat is not None else "EF"
-    payload += f"{(int(supply_flow * 100)):04X}" if supply_flow is not None else "7FFF"
     payload += (
-        f"{(int(exhaust_flow * 100)):04X}" if exhaust_flow is not None else "7FFF"
+        f"{(int(supply_flow * 100)):04X}"
+        if supply_flow is not None
+        else "7FFF"
+    )
+    payload += (
+        f"{(int(exhaust_flow * 100)):04X}"
+        if exhaust_flow is not None
+        else "7FFF"
     )
     payload += extra
 

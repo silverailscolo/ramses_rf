@@ -11,7 +11,7 @@ from ramses_rf.messages.core import Message
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.routing import StateHeader, extract_context_value
 from ramses_tx import exceptions as exc
-from ramses_tx.const import Code
+from ramses_tx.const import RQ, Code
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.typing import DeviceIdT
 
@@ -56,13 +56,15 @@ class DecoderEngine:
             self._task = None
 
     async def _loop(self) -> None:
-        """Main asynchronous loop consuming the input queue."""
+        """Consume the input queue in an asynchronous loop."""
         while True:
             dto = await self._in_queue.get()
             try:
                 await self._process_packet(dto)
             except Exception as err:
-                _LOGGER.exception("DecoderEngine failed to process packet: %s", err)
+                _LOGGER.exception(
+                    "DecoderEngine failed to process packet: %s", err
+                )
             finally:
                 self._in_queue.task_done()
 
@@ -86,7 +88,9 @@ class DecoderEngine:
 
         # Ensure strict adherence to dict[str, Any] L7 constraints
         data: dict[str, Any] = (
-            {"_array": raw_data} if isinstance(raw_data, list) else dict(raw_data)
+            {"_array": raw_data}
+            if isinstance(raw_data, list)
+            else dict(raw_data)
         )
 
         # Safe L2 positional MAC resolution matching legacy routing
@@ -123,7 +127,7 @@ class DecoderEngine:
             code=dto.code,
             verb=dto.verb,
             source_id=src_id,
-            context_val=context_val,
+            context_value=context_val,
         )
 
         # Instantiate the immutable historical fact at the pipeline's edge
@@ -154,7 +158,7 @@ class DecoderEngine:
 
         if length == 1:
             return False
-        if str(dto.verb).strip() == "RQ":
-            if length == 2 and dto.code != "0016":
+        if str(dto.verb).strip() == RQ:
+            if length == 2 and dto.code != Code._0016:
                 return False
         return True

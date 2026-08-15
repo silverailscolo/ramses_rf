@@ -6,11 +6,9 @@ from __future__ import annotations
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any
 
-from ramses_tx.const import VerbT
+from ramses_tx.const import RP, RQ, W_, Code, Verb
 from ramses_tx.dtos import PacketDTO
 
-from ..const import RQ, Code
-from ..protocol.ramses import CODES_SCHEMA, SZ_LIFESPAN
 from .base import Message
 
 if TYPE_CHECKING:
@@ -18,9 +16,7 @@ if TYPE_CHECKING:
 
 
 class ApplicationMessage(Message):
-    """Application-level message extended with gateway context and
-    expiration.
-    """
+    """Application message extended with gateway context and expiry."""
 
     CANT_EXPIRE: float = -1.0  # sentinel value for fraction_expired
     HAS_EXPIRED: float = 2.0  # fraction_expired >= HAS_EXPIRED
@@ -28,36 +24,34 @@ class ApplicationMessage(Message):
 
     _engine: Engine | None = None
     _fraction_expired: float | None = None
-    _gwy: Any | None = None
+    _gateway: Any | None = None
     _delete_task_queued: bool = False
 
     @classmethod
     def from_dto(cls, dto: PacketDTO) -> ApplicationMessage:
-        """Factory to safely promote a transport Message to an
-        ApplicationMessage.
-        """
+        """Promote a transport Message to an ApplicationMessage."""
         # Initialize the subclass identically to how the base class initializes
         return cls(dto)
 
-    def bind_context(self, gwy: Any) -> None:
+    def bind_context(self, gateway: Any) -> None:
         """Explicitly assign the application context (gateway).
 
-        :param gwy: The application context (gateway) to associate.
-        :type gwy: Any
+        :param gateway: The application context (gateway) to associate.
+        :type gateway: Any
         """
-        self._gwy = gwy
+        self._gateway = gateway
 
-    def set_gateway(self, gwy: Engine) -> None:
+    def set_gateway(self, gateway: Engine) -> None:
         """Set the gateway (engine) instance for this message.
 
-        :param gwy: The gateway (engine) instance to associate.
-        :type gwy: Engine
+        :param gateway: The gateway (engine) instance to associate.
+        :type gateway: Engine
         """
-        self._engine = gwy
+        self._engine = gateway
 
     def _get_lifespan(self) -> bool | td:
         """Return the lifespan of a packet before it expires."""
-        if self.verb in (RQ, " W"):
+        if self.verb in (RQ, W_):
             return td(seconds=0)
 
         if self.code in (Code._0005, Code._000C):
@@ -76,9 +70,9 @@ class ApplicationMessage(Message):
             return td(minutes=60 * 24)
 
         if self.code == Code._1F09:
-            return td(seconds=360) if self.verb == VerbT.I_ else td(seconds=0)
+            return td(seconds=360) if self.verb == Verb.I_ else td(seconds=0)
 
-        if self.code == Code._1FC9 and self.verb == "RP":
+        if self.code == Code._1FC9 and self.verb == RP:
             return td(minutes=60 * 24)
 
         if self.code in (Code._2309, Code._30C9) and self._has_array:
@@ -86,11 +80,6 @@ class ApplicationMessage(Message):
 
         if self.code == Code._3220:
             return td(minutes=5) * 2.1
-
-        if (code_schema := CODES_SCHEMA.get(self.code)) and SZ_LIFESPAN in code_schema:
-            result = code_schema[SZ_LIFESPAN]
-            if isinstance(result, td):
-                return result
 
         return td(minutes=60)
 

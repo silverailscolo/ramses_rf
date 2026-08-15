@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ramses_rf.const import SZ_DOMAIN_ID, SZ_ZONE_IDX, DevType
+from ramses_rf.const import SZ_DOMAIN_INDEX, SZ_ZONE_INDEX, DevType
 from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -46,12 +46,15 @@ class RadTopologyHandler(TopologyHandler):
             ctl_id = msg.addr3.id
 
         if msg.header.verb == I_ and ctl_id and msg.src.id != ctl_id:
-            for p in self._get_payloads(msg):
-                if not isinstance(p, dict):
+            for payload in self._get_payloads(msg):
+                if not isinstance(payload, dict):
                     continue
 
-                zone_idx = p.get(SZ_ZONE_IDX)
-                domain_id = p.get(SZ_DOMAIN_ID)
+                zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+                domain_id = payload.get(
+                    SZ_DOMAIN_INDEX,
+                    payload.get("domain_id", payload.get("domain_idx")),
+                )
 
                 if zone_idx is None and domain_id is None:
                     continue
@@ -61,7 +64,12 @@ class RadTopologyHandler(TopologyHandler):
                     metadata["class"] = "radiator_valve"
 
                 # Determine Device Role (Fallback to hardware prefix inference)
-                is_actuator = getattr(msg.src, "type", None) in ("04", "08", "13", "02")
+                is_actuator = getattr(msg.src, "type", None) in (
+                    "04",
+                    "08",
+                    "13",
+                    "02",
+                )
                 is_sensor = getattr(msg.src, "type", None) in (
                     "00",
                     "03",
@@ -71,7 +79,12 @@ class RadTopologyHandler(TopologyHandler):
                     "34",
                 )
 
-                if msg.header.code in (Code._3150, Code._0008, Code._2309, Code._000A):
+                if msg.header.code in (
+                    Code._3150,
+                    Code._0008,
+                    Code._2309,
+                    Code._000A,
+                ):
                     metadata["device_role"] = "actuator"
                 elif msg.header.code in (
                     Code._30C9,
@@ -79,11 +92,15 @@ class RadTopologyHandler(TopologyHandler):
                     Code._10A0,
                     Code._12B0,
                 ):
-                    metadata["device_role"] = "sensor" if is_sensor else "actuator"
+                    metadata["device_role"] = (
+                        "sensor" if is_sensor else "actuator"
+                    )
                     if is_sensor:
                         metadata["is_sensor"] = "True"
                 else:
-                    metadata["device_role"] = "actuator" if is_actuator else "sensor"
+                    metadata["device_role"] = (
+                        "actuator" if is_actuator else "sensor"
+                    )
                     if is_sensor:
                         metadata["is_sensor"] = "True"
 

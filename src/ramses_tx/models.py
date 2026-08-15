@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime as dt
 
-from .const import VerbT
+from .const import Verb
 
 
 @dataclass(frozen=True)
@@ -28,7 +28,11 @@ class DeviceId:
     @classmethod
     def from_string(cls, address_str: str) -> DeviceId:
         """Safely parse a raw string into a DeviceId object."""
-        if not address_str or ":" not in address_str or address_str == "--:------":
+        if (
+            not address_str
+            or ":" not in address_str
+            or address_str == "--:------"
+        ):
             return cls(63, 262142)
 
         dev_type_str, dev_id_str = address_str.split(":", 1)
@@ -70,7 +74,7 @@ class TransportMessage:
     source_packets: tuple[RawPacket, ...]
 
     rssi: int
-    verb: VerbT
+    verb: Verb
 
     device_id_1: DeviceId
     device_id_2: DeviceId

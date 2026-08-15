@@ -80,11 +80,12 @@ class Test_entity_base:
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
-        assert dev._gwy.message_store is not None
-        dev._gwy.message_store.add(self.msg5)
-        dev._gwy.message_store.add(self.msg6)
-        dev._gwy.message_store.add(self.msg7)
-        assert len(await dev._gwy.message_store.all()) == 3, "len(msg_db.all) wrong"
+        assert dev._gateway.message_store is not None
+        dev._gateway.message_store.add(self.msg5)
+        dev._gateway.message_store.add(self.msg6)
+        dev._gateway.message_store.add(self.msg7)
+        msgs = await dev._gateway.message_store.all()
+        assert len(msgs) == 3, "len(msg_db.all) wrong"
 
         # start tests
         assert dev.id == "04:189078"
@@ -117,15 +118,21 @@ class Test_entity_base:
         # create _msgz - use StateHeader objects for lookups
         cache = await dev.entity_state._build_state_cache()
         assert (
-            cache.get_message(StateHeader.create(Code._12B0, I_, "04:189078", "01"))
+            cache.get_message(
+                StateHeader.create(Code._12B0, I_, "04:189078", "01")
+            )
             == self.msg7
         )
         assert (
-            cache.get_message(StateHeader.create(Code._3150, I_, "04:189078", "01"))
+            cache.get_message(
+                StateHeader.create(Code._3150, I_, "04:189078", "01")
+            )
             == self.msg5
         )
         assert (
-            cache.get_message(StateHeader.create(Code._3220, RP, "01:145038", "11"))
+            cache.get_message(
+                StateHeader.create(Code._3220, RP, "01:145038", "11")
+            )
             == self.msg6
         )
         assert len(cache.get_all()) == 3, "base state_cache wrong"
@@ -139,10 +146,10 @@ class Test_entity_base:
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
-        assert dev._gwy.message_store is not None
-        dev._gwy.message_store.add(self.msg5)
-        dev._gwy.message_store.add(self.msg6)
-        dev._gwy.message_store.add(self.msg7)
+        assert dev._gateway.message_store is not None
+        dev._gateway.message_store.add(self.msg5)
+        dev._gateway.message_store.add(self.msg6)
+        dev._gateway.message_store.add(self.msg7)
 
         # start tests
         assert dev.id == "04:189078_01"
@@ -172,11 +179,15 @@ class Test_entity_base:
         # create _msgz
         cache = await dev.entity_state._build_state_cache()
         assert (
-            cache.get_message(StateHeader.create(Code._12B0, I_, "04:189078", "01"))
+            cache.get_message(
+                StateHeader.create(Code._12B0, I_, "04:189078", "01")
+            )
             == self.msg7
         )
         assert (
-            cache.get_message(StateHeader.create(Code._3150, I_, "04:189078", "01"))
+            cache.get_message(
+                StateHeader.create(Code._3150, I_, "04:189078", "01")
+            )
             == self.msg5
         )
         assert len(cache.get_all()) == 2, "zone state_cache wrong"
@@ -204,15 +215,14 @@ class Test_entity_base:
         dev._z_id = dev.id
 
         # put messages in the message_store (bypass proxy)
-        assert dev._gwy.message_store is not None
-        dev._gwy.message_store.add(self.msg8)
-        dev._gwy.message_store.add(self.msg9)
+        assert dev._gateway.message_store is not None
+        dev._gateway.message_store.add(self.msg8)
+        dev._gateway.message_store.add(self.msg9)
 
         # start tests
         assert dev.id == "01:145038_HW"
-        assert await dev._gwy.message_store.all() == (self.msg8, self.msg9), (
-            "wrong dhw all"
-        )
+        msgs = await dev._gateway.message_store.all()
+        assert msgs == (self.msg8, self.msg9), "wrong dhw all"
 
         # create _msgs
         assert await dev.entity_state.get_message_log_flat() == {
@@ -239,11 +249,15 @@ class Test_entity_base:
         # create _msgz
         cache = await dev.entity_state._build_state_cache()
         assert (
-            cache.get_message(StateHeader.create(Code._1260, RP, "01:145038", "00"))
+            cache.get_message(
+                StateHeader.create(Code._1260, RP, "01:145038", "00")
+            )
             == self.msg9
         )
         assert (
-            cache.get_message(StateHeader.create(Code._3150, I_, "01:145038", "FC"))
+            cache.get_message(
+                StateHeader.create(Code._3150, I_, "01:145038", "FC")
+            )
             == self.msg8
         )
         assert len(cache.get_all()) == 2, "dhw state_cache wrong"
@@ -288,7 +302,9 @@ class Test_entity_base:
         assert val == 10  # from index 0 ('00')
 
         # Case 4: Correct filtering when zone_idx is provided
-        val = dev.entity_state._msg_value_msg(msg_list, key="val", zone_idx="01")
+        val = dev.entity_state._msg_value_msg(
+            msg_list, key="val", zone_index="01"
+        )
         assert val == 20
 
 
@@ -307,5 +323,9 @@ def test_opentherm_bridge_polling_schedule() -> None:
     otb = OtbGateway(mock_gwy, mock_addr)
     schedule = PollingManager.resolve_schedule_for_device(otb)
 
-    assert "3EF0" in schedule, "OpenTherm Modulation (3EF0) not in OTB schedule"
-    assert "3220" in schedule, "OpenTherm Data ID (3220) query not in OTB schedule"
+    assert Code._3EF0 in schedule, (
+        "OpenTherm Modulation (3EF0) not in OTB schedule"
+    )
+    assert Code._3220 in schedule, (
+        "OpenTherm Data ID (3220) query not in OTB schedule"
+    )

@@ -9,35 +9,39 @@ from ramses_tx import exceptions as exc
 from ramses_tx.const import FA
 
 
-def resolve_addrs(src: Address | str, dst: Address | str) -> tuple[str, str, str]:
+def resolve_addrs(
+    source: Address | str, destination: Address | str
+) -> tuple[str, str, str]:
     """Resolve logical source and destination to positional MAC addresses.
 
-    :param src: Logical source of the command.
-    :param dst: Logical target of the command.
+    :param source: Logical source of the command.
+    :param destination: Logical target of the command.
     :return: A tuple of (addr1, addr2, addr3) for the L3 CommandDTO.
     """
-    src_id = src if isinstance(src, str) else src.id
-    dst_id = dst if isinstance(dst, str) else dst.id
+    src_id = source if isinstance(source, str) else source.id
+    dst_id = destination if isinstance(destination, str) else destination.id
 
     if src_id == dst_id:
         return src_id, "--:------", dst_id
     return src_id, dst_id, "--:------"
 
 
-def check_idx(zone_idx: int | str) -> str:
+def check_idx(zone_index: int | str) -> str:
     """Validate and normalise a zone index or DHW index byte.
 
-    :param zone_idx: Zone index integer or hex string representation.
-    :type zone_idx: int | str
+    :param zone_index: Zone index integer or hex string representation.
+    :type zone_index: int | str
     :returns: Uppercase 2-character hex string index.
     :rtype: str
-    :raises CommandInvalid: If zone_idx is invalid.
+    :raises CommandInvalid: If zone_index is invalid.
     """
-    if not isinstance(zone_idx, int | str):
-        raise exc.CommandInvalid(f"Invalid value for zone_idx: {zone_idx}")
-    if isinstance(zone_idx, str):
-        zone_idx = FA if zone_idx == "HW" else zone_idx
-    result: int = zone_idx if isinstance(zone_idx, int) else int(zone_idx, 16)
+    if not isinstance(zone_index, int | str):
+        raise exc.CommandInvalid(f"Invalid value for zone_idx: {zone_index}")
+    if isinstance(zone_index, str):
+        zone_index = FA if zone_index == "HW" else zone_index
+    result: int = (
+        zone_index if isinstance(zone_index, int) else int(zone_index, 16)
+    )
     if 0 > result > 15 and result != 0xFA:
         raise exc.CommandInvalid(f"Invalid value for zone_idx: {result}")
     return f"{result:02X}"
@@ -137,4 +141,7 @@ def normalise_until(
             f"Invalid args: For mode={mode}, until and duration must both be None"
         )
 
-    return until, duration  # TODO return updated mode for ZON_MODE_MAP.TEMPORARY ?
+    return (
+        until,
+        duration,
+    )  # TODO return updated mode for ZON_MODE_MAP.TEMPORARY ?

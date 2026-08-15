@@ -7,11 +7,16 @@ import serial
 
 from ramses_rf import Gateway
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import SZ_BINDINGS, SZ_NAME, SZ_PHASE, SZ_TEMPERATURE, SZ_ZONE_IDX
+from ramses_rf.const import (
+    SZ_BINDINGS,
+    SZ_NAME,
+    SZ_PHASE,
+    SZ_TEMPERATURE,
+    SZ_ZONE_IDX,
+)
 from ramses_rf.messages import Message
 from ramses_rf.models import TopologyChangedEvent
-from ramses_rf.parsers.heating import parser_0004, parser_12c0
-from ramses_rf.parsers.system import parser_1fc9
+from ramses_rf.payloads import PayloadBase, get_payload_class
 from ramses_rf.pipeline.topology_builder import TopologyBuilder
 from ramses_tx import Packet
 from ramses_tx.address import Address
@@ -28,10 +33,12 @@ def test_parser_0004_includes_zone_idx() -> None:
     # Arrange
     # zone 0B, name "Bedroom 5"
     payload = "0B00426564726F6F6D20350000000000000000000000"
-    mock_msg = MagicMock(spec=Message)
-
     # Act
-    result = parser_0004(payload, mock_msg)
+    cls_0004 = get_payload_class(Code._0004)
+    assert cls_0004 is not None
+    p_obj = cls_0004.from_bytes(bytes.fromhex(payload))
+    assert isinstance(p_obj, PayloadBase)
+    result = p_obj.to_dict()
 
     # Assert
     assert result[SZ_ZONE_IDX] == "0B"
@@ -41,9 +48,13 @@ def test_parser_0004_includes_zone_idx() -> None:
 def test_parser_0004_zone_idx_is_first_byte() -> None:
     """Verify zone_idx extraction across multiple zone indices."""
     # Arrange & Act & Assert
+    cls_0004 = get_payload_class(Code._0004)
+    assert cls_0004 is not None
     for zone_idx in ("00", "01", "05", "0A", "0B"):
         payload = f"{zone_idx}00436F756E67650000000000000000000000000000"
-        result = parser_0004(payload, MagicMock(spec=Message))
+        p_obj = cls_0004.from_bytes(bytes.fromhex(payload))
+        assert isinstance(p_obj, PayloadBase)
+        result = p_obj.to_dict()
         assert result[SZ_ZONE_IDX] == zone_idx
 
 
@@ -51,9 +62,13 @@ def test_parser_0004_null_name_returns_empty_dict() -> None:
     """Verify empty dict returned when name payload is null sentinel."""
     # Arrange
     payload = "08007F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F7F"
+    cls_0004 = get_payload_class(Code._0004)
+    assert cls_0004 is not None
 
     # Act
-    result = parser_0004(payload, MagicMock(spec=Message))
+    p_obj = cls_0004.from_bytes(bytes.fromhex(payload))
+    assert isinstance(p_obj, PayloadBase)
+    result = p_obj.to_dict()
 
     # Assert
     assert result == {}
@@ -63,9 +78,13 @@ def test_parser_0004_all_zero_name() -> None:
     """Verify empty string returned when name payload is all zeros."""
     # Arrange
     payload = "06000000000000000000000000000000000000000000"
+    cls_0004 = get_payload_class(Code._0004)
+    assert cls_0004 is not None
 
     # Act
-    result = parser_0004(payload, MagicMock(spec=Message))
+    p_obj = cls_0004.from_bytes(bytes.fromhex(payload))
+    assert isinstance(p_obj, PayloadBase)
+    result = p_obj.to_dict()
 
     # Assert
     assert result[SZ_ZONE_IDX] == "06"
@@ -78,12 +97,14 @@ def test_parser_0004_all_zero_name() -> None:
 def test_parser_12c0_parses_celsius_correctly() -> None:
     """Verify parsing of temperature in Celsius."""
     # Arrange
-    # Prefix: 00 | Temp: 28 (40 dec, 20.0C) | Units: 01 (Celsius)
     payload = "002801"
-    mock_msg = MagicMock(spec=Message)
+    cls_12c0 = get_payload_class(Code._12C0)
+    assert cls_12c0 is not None
 
     # Act
-    result = parser_12c0(payload, mock_msg)
+    p_obj = cls_12c0.from_bytes(bytes.fromhex(payload))
+    assert isinstance(p_obj, PayloadBase)
+    result = p_obj.to_dict()
 
     # Assert
     assert result[SZ_TEMPERATURE] == 20.0
@@ -93,12 +114,14 @@ def test_parser_12c0_parses_celsius_correctly() -> None:
 def test_parser_12c0_normalises_fahrenheit_to_celsius() -> None:
     """Verify temperature in Fahrenheit normalises to Celsius."""
     # Arrange
-    # Prefix: 00 | Temp: 44 (68 dec, 68F) | Units: 00 (Fahrenheit)
     payload = "004400"
-    mock_msg = MagicMock(spec=Message)
+    cls_12c0 = get_payload_class(Code._12C0)
+    assert cls_12c0 is not None
 
     # Act
-    result = parser_12c0(payload, mock_msg)
+    p_obj = cls_12c0.from_bytes(bytes.fromhex(payload))
+    assert isinstance(p_obj, PayloadBase)
+    result = p_obj.to_dict()
 
     # Assert
     assert result[SZ_TEMPERATURE] == 20.0
@@ -108,12 +131,14 @@ def test_parser_12c0_normalises_fahrenheit_to_celsius() -> None:
 def test_parser_12c0_handles_null_temperature() -> None:
     """Verify null temperature sentinel returns None."""
     # Arrange
-    # Prefix: 00 | Temp: 80 (Null sentinel) | Units: 01 (Celsius)
     payload = "008001"
-    mock_msg = MagicMock(spec=Message)
+    cls_12c0 = get_payload_class(Code._12C0)
+    assert cls_12c0 is not None
 
     # Act
-    result = parser_12c0(payload, mock_msg)
+    p_obj = cls_12c0.from_bytes(bytes.fromhex(payload))
+    assert isinstance(p_obj, PayloadBase)
+    result = p_obj.to_dict()
 
     # Assert
     assert result[SZ_TEMPERATURE] is None
@@ -156,19 +181,24 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
         ),
     ]
 
+    cls_1fc9 = get_payload_class(Code._1FC9)
+    assert cls_1fc9 is not None
+
     for payload_hex, verb, src_id, dst_id, expected_phase in test_cases:
-        # Act 1: Legacy parser execution
+        # Act 1: Payload dataclass execution
         mock_msg = MagicMock(spec=Message)
         mock_msg.verb = verb
         mock_msg.src = Address(src_id)
         mock_msg.dst = Address(dst_id)
-        mock_msg.len = len(payload_hex) // 2
-
-        legacy_result = parser_1fc9(payload_hex, mock_msg)
+        payload_obj = cls_1fc9.from_bytes(bytes.fromhex(payload_hex))
+        assert isinstance(payload_obj, PayloadBase)
+        legacy_result = payload_obj.to_dict(mock_msg)
 
         # Act 2: New Binary Parser execution in TopologyBuilder
         events: list[TopologyChangedEvent] = []
-        builder = TopologyBuilder(emit_event_cb=events.append, enable_eavesdrop=True)
+        builder = TopologyBuilder(
+            emit_event_cb=events.append, enable_eavesdrop=True
+        )
 
         mock_pkt = MagicMock()
         mock_pkt.payload = payload_hex
@@ -198,7 +228,9 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
             assert event.metadata["domain_id"] == exp_domain
             assert event.metadata["opcode"] == exp_opcode
             assert event.metadata["phase"] == expected_phase
-            assert event.child_id == exp_dev_id or event.parent_id == exp_dev_id
+            assert (
+                event.child_id == exp_dev_id or event.parent_id == exp_dev_id
+            )
 
 
 # --- Inbound Regex Parser Tests ---
@@ -244,9 +276,15 @@ async def test_regex_inbound_parsing() -> None:
             expected = Packet.from_port(dt.now(), pkt)
             for _ in range(100):
                 await asyncio.sleep(0.001)
-                if gwy_0._this_msg and gwy_0._this_msg.raw_frame == expected._frame:
+                if (
+                    gwy_0._this_msg
+                    and gwy_0._this_msg.raw_frame == expected._frame
+                ):
                     break
-            assert gwy_0._this_msg and gwy_0._this_msg.raw_frame == expected._frame
+            assert (
+                gwy_0._this_msg
+                and gwy_0._this_msg.raw_frame == expected._frame
+            )
 
     finally:
         await gwy_0.stop()

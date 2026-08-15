@@ -38,7 +38,9 @@ async def test_gateway_positional_port_name() -> None:
         Gateway("/dev/null")
 
     deprecation_warnings = [
-        w for w in recorded_warnings if issubclass(w.category, DeprecationWarning)
+        w
+        for w in recorded_warnings
+        if issubclass(w.category, DeprecationWarning)
     ]
     assert len(deprecation_warnings) == 0
 
@@ -58,7 +60,9 @@ async def test_gateway_keyword_port_name() -> None:
         Gateway(port_name="/dev/null")
 
     deprecation_warnings = [
-        w for w in recorded_warnings if issubclass(w.category, DeprecationWarning)
+        w
+        for w in recorded_warnings
+        if issubclass(w.category, DeprecationWarning)
     ]
     assert len(deprecation_warnings) == 0
 
@@ -101,7 +105,9 @@ async def test_gateway_with_config() -> None:
     assert gwy.config.gateway_timeout == 15
 
     deprecation_warnings = [
-        w for w in recorded_warnings if issubclass(w.category, DeprecationWarning)
+        w
+        for w in recorded_warnings
+        if issubclass(w.category, DeprecationWarning)
     ]
     assert len(deprecation_warnings) == 0
 
@@ -236,7 +242,8 @@ async def test_gateway_restore_cached_packets_dto() -> None:
 
         # Verify from_dict was called with the correct args
         mock_from_dict.assert_called_once_with(
-            "2023-01-01T12:00:00.000000Z", packets["2023-01-01T12:00:00.000000Z"]
+            "2023-01-01T12:00:00.000000Z",
+            packets["2023-01-01T12:00:00.000000Z"],
         )
 
         # Verify the protocol layer was handed the parsed Packet object directly
@@ -367,7 +374,7 @@ async def test_get_state_parity() -> None:
         _mock_addr("--:------"),
         _mock_addr("01:123456"),
     )
-    msg_i.code = "1F09"
+    msg_i.code = Code._1F09
     msg_i.payload = {"temp": 21.0}
     msg_i.raw_frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
 
@@ -381,7 +388,7 @@ async def test_get_state_parity() -> None:
         _mock_addr("01:123456"),
         _mock_addr("01:123456"),
     )
-    msg_rp.code = "2309"
+    msg_rp.code = Code._2309
     msg_rp.payload = {"sync": True}
     msg_rp.raw_frame = "RP --- 04:111111 01:123456 04:111111 2309 003 0004B5"
 
@@ -395,7 +402,7 @@ async def test_get_state_parity() -> None:
         _mock_addr("04:111111"),
         _mock_addr("04:111111"),
     )
-    msg_rq.code = "2309"
+    msg_rq.code = Code._2309
     msg_rq.payload = {}
 
     gwy.message_store.state_cache = {
@@ -423,7 +430,7 @@ async def test_get_state_parity() -> None:
         "addr1": "01:123456",
         "addr2": "--:------",
         "addr3": "01:123456",
-        "code": "1F09",
+        "code": Code._1F09,
         "payload": {"temp": 21.0},
         "frame": " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5",
     }
@@ -435,7 +442,7 @@ async def test_get_state_parity() -> None:
         "addr1": "04:111111",
         "addr2": "01:123456",
         "addr3": "01:123456",
-        "code": "2309",
+        "code": Code._2309,
         "payload": {"sync": True},
         "frame": "RP --- 04:111111 01:123456 04:111111 2309 003 0004B5",
     }
@@ -458,7 +465,7 @@ async def test_get_state_frame_key_enables_restore() -> None:
         _mock_addr("--:------"),
         _mock_addr("01:123456"),
     )
-    msg.code = "1F09"
+    msg.code = Code._1F09
     msg.payload = {"temp": 21.0}
     msg.raw_frame = " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
 
@@ -473,7 +480,7 @@ async def test_get_state_frame_key_enables_restore() -> None:
     # Assert
     json_roundtrip = json.loads(json.dumps(state))
     pkt = Packet.from_dict(dtm_str, json_roundtrip[dtm_str])
-    assert pkt.code == "1F09"
+    assert pkt.code == Code._1F09
     assert pkt._frame == " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
 
 
@@ -503,7 +510,9 @@ async def test_issue_649_polling_schedule_populated() -> None:
 
     # Assert
     schedule = PollingManager.resolve_schedule_for_device(dev)
-    assert "10D0" in schedule, "10D0 filter poll not scheduled in PollingManager"
+    assert Code._10D0 in schedule, (
+        "10D0 filter poll not scheduled in PollingManager"
+    )
 
 
 # --- Stack & Transport Integration Tests ---
@@ -531,7 +540,10 @@ async def _assert_stack_state(
     protocol: RamsesProtocolT, transport: RamsesTransportT
 ) -> None:
     port_transport = cast(PortTransport, transport)
-    assert port_transport._this_pkt and port_transport._this_pkt.code == Code._PUZZ
+    assert (
+        port_transport._this_pkt
+        and port_transport._this_pkt.code == Code._PUZZ
+    )
     if hasattr(port_transport._this_pkt, "addr1"):
         assert port_transport._this_pkt.addr1.id == _STACK_GWY_ID
     else:

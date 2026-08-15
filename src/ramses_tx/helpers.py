@@ -11,84 +11,84 @@ from datetime import date, datetime as dt
 from typing import Any, Literal, TypeAlias, TypeGuard, overload
 
 
-def is_hex_byte(val: Any) -> TypeGuard[HexByte]:
-    """Return True if val is a 2-character hex string (1 byte).
+def is_hex_byte(value: Any) -> TypeGuard[HexByte]:
+    """Return True if value is a 2-character hex string (1 byte).
 
-    :param val: Value to validate.
-    :type val: Any
+    :param value: Value to validate.
+    :type value: Any
     :returns: True if value is a 2-character hex string.
     :rtype: TypeGuard[HexByte]
     """
     return (
-        isinstance(val, str)
-        and len(val) == 2
-        and all(c in "0123456789abcdefABCDEF" for c in val)
+        isinstance(value, str)
+        and len(value) == 2
+        and all(c in "0123456789abcdefABCDEF" for c in value)
     )
 
 
-def is_hex_str4(val: Any) -> TypeGuard[HexStr4]:
-    """Return True if val is a 4-character hex string (2 bytes).
+def is_hex_str4(value: Any) -> TypeGuard[HexStr4]:
+    """Return True if value is a 4-character hex string (2 bytes).
 
-    :param val: Value to validate.
-    :type val: Any
+    :param value: Value to validate.
+    :type value: Any
     :returns: True if value is a 4-character hex string.
     :rtype: TypeGuard[HexStr4]
     """
     return (
-        isinstance(val, str)
-        and len(val) == 4
-        and all(c in "0123456789abcdefABCDEF" for c in val)
+        isinstance(value, str)
+        and len(value) == 4
+        and all(c in "0123456789abcdefABCDEF" for c in value)
     )
 
 
-def is_hex_str8(val: Any) -> TypeGuard[HexStr8]:
-    """Return True if val is an 8-character hex string (4 bytes).
+def is_hex_str8(value: Any) -> TypeGuard[HexStr8]:
+    """Return True if value is an 8-character hex string (4 bytes).
 
-    :param val: Value to validate.
-    :type val: Any
+    :param value: Value to validate.
+    :type value: Any
     :returns: True if value is an 8-character hex string.
     :rtype: TypeGuard[HexStr8]
     """
     return (
-        isinstance(val, str)
-        and len(val) == 8
-        and all(c in "0123456789abcdefABCDEF" for c in val)
+        isinstance(value, str)
+        and len(value) == 8
+        and all(c in "0123456789abcdefABCDEF" for c in value)
     )
 
 
-def is_hex_str12(val: Any) -> TypeGuard[HexStr12]:
-    """Return True if val is a 12-character hex string (6 bytes).
+def is_hex_str12(value: Any) -> TypeGuard[HexStr12]:
+    """Return True if value is a 12-character hex string (6 bytes).
 
-    :param val: Value to validate.
-    :type val: Any
+    :param value: Value to validate.
+    :type value: Any
     :returns: True if value is a 12-character hex string.
     :rtype: TypeGuard[HexStr12]
     """
     return (
-        isinstance(val, str)
-        and len(val) == 12
-        and all(c in "0123456789abcdefABCDEF" for c in val)
+        isinstance(value, str)
+        and len(value) == 12
+        and all(c in "0123456789abcdefABCDEF" for c in value)
     )
 
 
 # fmt: off
 HexByteAlt = Literal[
-    '00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '0A', '0B', '0C', '0D', '0E', '0F',
-    '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '1A', '1B', '1C', '1D', '1E', '1F',
-    '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '2A', '2B', '2C', '2D', '2E', '2F',
-    '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '3A', '3B', '3C', '3D', '3E', '3F',
-    '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '4A', '4B', '4C', '4D', '4E', '4F',
-    '50', '51', '52', '53', '54', '55', '56', '57', '58', '59', '5A', '5B', '5C', '5D', '5E', '5F',
-    '60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '6A', '6B', '6C', '6D', '6E', '6F',
-    '70', '71', '72', '73', '74', '75', '76', '77', '78', '79', '7A', '7B', '7C', '7D', '7E', '7F',
-    '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '8A', '8B', '8C', '8D', '8E', '8F',
-    '90', '91', '92', '93', '94', '95', '96', '97', '98', '99', '9A', '9B', '9C', '9D', '9E', '9F',
-    'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF',
-    'B0', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'BA', 'BB', 'BC', 'BD', 'BE', 'BF',
-    'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9', 'CA', 'CB', 'CC', 'CD', 'CE', 'CF',
-    'D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9', 'DA', 'DB', 'DC', 'DD', 'DE', 'DF',
-    'E0', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'E8', 'E9', 'EA', 'EB', 'EC', 'ED', 'EE', 'EF',
-    'F0', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'FA', 'FB', 'FC', 'FD', 'FE', 'FF'
+    "00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0A", "0B", "0C", "0D", "0E", "0F",
+    "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "1A", "1B", "1C", "1D", "1E", "1F",
+    "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "2A", "2B", "2C", "2D", "2E", "2F",
+    "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "3A", "3B", "3C", "3D", "3E", "3F",
+    "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "4A", "4B", "4C", "4D", "4E", "4F",
+    "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "5A", "5B", "5C", "5D", "5E", "5F",
+    "60", "61", "62", "63", "64", "65", "66", "67", "68", "69", "6A", "6B", "6C", "6D", "6E", "6F",
+    "70", "71", "72", "73", "74", "75", "76", "77", "78", "79", "7A", "7B", "7C", "7D", "7E", "7F",
+    "80", "81", "82", "83", "84", "85", "86", "87", "88", "89", "8A", "8B", "8C", "8D", "8E", "8F",
+    "90", "91", "92", "93", "94", "95", "96", "97", "98", "99", "9A", "9B", "9C", "9D", "9E", "9F",
+    "A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "AA", "AB", "AC", "AD", "AE", "AF",
+    "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B9", "BA", "BB", "BC", "BD", "BE", "BF",
+    "C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "CA", "CB", "CC", "CD", "CE", "CF",
+    "D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "DA", "DB", "DC", "DD", "DE", "DF",
+    "E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7", "E8", "E9", "EA", "EB", "EC", "ED", "EE", "EF",
+    "F0", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "FA", "FB", "FC", "FD", "FE", "FF"
 ]
 # fmt: on
 
@@ -106,7 +106,10 @@ ReturnValueDictT: TypeAlias = Mapping[str, float | str | None]
 class _FILE_TIME(ctypes.Structure):
     """Data structure for GetSystemTimePreciseAsFileTime()."""
 
-    _fields_ = [("dwLowDateTime", ctypes.c_uint), ("dwHighDateTime", ctypes.c_uint)]
+    _fields_ = [
+        ("dwLowDateTime", ctypes.c_uint),
+        ("dwHighDateTime", ctypes.c_uint),
+    ]
 
 
 file_time = _FILE_TIME()
@@ -124,8 +127,12 @@ def timestamp() -> float:
     # see: https://www.python.org/dev/peps/pep-0564/
     if sys.platform == "win32":
         # Windows uses a different epoch (1601-01-01)
-        ctypes.windll.kernel32.GetSystemTimePreciseAsFileTime(ctypes.byref(file_time))
-        _time = (file_time.dwLowDateTime + (file_time.dwHighDateTime << 32)) / 1e7
+        ctypes.windll.kernel32.GetSystemTimePreciseAsFileTime(
+            ctypes.byref(file_time)
+        )
+        _time = (
+            file_time.dwLowDateTime + (file_time.dwHighDateTime << 32)
+        ) / 1e7
         return float(_time - 134774 * 24 * 60 * 60)
     else:
         # Linux/macOS uses the Unix epoch (1970-01-01)
@@ -201,7 +208,9 @@ def hex_to_date(value: HexStr8) -> str | None:  # YY-MM-DD
     :raises ValueError: If input is not an 8-character hex string.
     """
     if not isinstance(value, str) or len(value) != 8:
-        raise ValueError(f"Invalid value: {value}, is not an 8-char hex string")
+        raise ValueError(
+            f"Invalid value: {value}, is not an 8-char hex string"
+        )
     if value == "FFFFFFFF":
         return None
     return dt(
@@ -250,7 +259,9 @@ def hex_from_double(value: float | None, factor: int = 1) -> HexStr4:
     if value is None:
         return "7FFF"
     if not isinstance(value, float | int):
-        raise ValueError(f"Invalid value: {value}, is not a double (a float/int)")
+        raise ValueError(
+            f"Invalid value: {value}, is not a double (a float/int)"
+        )
     return f"{int(value * factor):04X}"
 
 
@@ -267,7 +278,9 @@ def hex_to_dtm(value: HexStr12 | HexStr14) -> str | None:  # from parsers
     #      0400041C0A07E3  (...HH:MM:SS)    for sync_datetime
 
     if not isinstance(value, str) or len(value) not in (12, 14):
-        raise ValueError(f"Invalid value: {value}, is not a 12/14-char hex string")
+        raise ValueError(
+            f"Invalid value: {value}, is not a 12/14-char hex string"
+        )
     if value[-12:] == "FF" * 6:
         return None
     if len(value) == 12:
@@ -283,22 +296,32 @@ def hex_to_dtm(value: HexStr12 | HexStr14) -> str | None:  # from parsers
 
 
 def hex_from_dtm(
-    dtm: date | dt | str | None, is_dst: bool = False, incl_seconds: bool = False
+    dtm: date | dt | str | None,
+    is_daylight_saving: bool = False,
+    incl_seconds: bool = False,
 ) -> HexStr12 | HexStr14:
     """Convert a datetime to a 12/14-character hex string.
 
     :param dtm: The datetime object, date, ISO format string, or None.
     :type dtm: date | dt | str | None
-    :param is_dst: Explicitly set Daylight Saving Time flag, defaults to False.
-    :type is_dst: bool
+    :param is_daylight_saving: Explicitly set Daylight Saving Time flag, defaults to False.
+    :type is_daylight_saving: bool
     :param incl_seconds: Include seconds byte (14-char output), defaults to False.
     :type incl_seconds: bool
     :returns: The 12 or 14 character hex string representation.
     :rtype: HexStr12 | HexStr14
     """
 
-    def _dtm_to_hex(year, mon, mday, hour, min, sec, *args: int) -> str:  # type: ignore[no-untyped-def]
-        return f"{sec:02X}{min:02X}{hour:02X}{mday:02X}{mon:02X}{year:04X}"
+    def _dtm_to_hex(
+        year: int,
+        month: int,
+        mday: int,
+        hour: int,
+        minute: int,
+        second: int,
+        *args: int,
+    ) -> str:
+        return f"{second:02X}{minute:02X}{hour:02X}{mday:02X}{month:02X}{year:04X}"
 
     if dtm is None:
         return "FF" * (7 if incl_seconds else 6)
@@ -306,7 +329,7 @@ def hex_from_dtm(
         dtm = dt.fromisoformat(dtm)
     t_tuple = dtm.timetuple()
     dtm_str = _dtm_to_hex(*t_tuple)
-    if is_dst or t_tuple[8] > 0:
+    if is_daylight_saving or t_tuple[8] > 0:
         dtm_str = f"{int(dtm_str[:2], 16) | 0x80:02X}" + dtm_str[2:]
     return dtm_str if incl_seconds else dtm_str[2:]
 
@@ -321,7 +344,9 @@ def hex_to_dts(value: HexStr12) -> str | None:
     :raises ValueError: If input is not a 12-character hex string.
     """
     if not isinstance(value, str) or len(value) != 12:
-        raise ValueError(f"Invalid value: {value}, is not a 12-char hex string")
+        raise ValueError(
+            f"Invalid value: {value}, is not a 12-char hex string"
+        )
     if value == "00000000007F":
         return None
     _seqx = int(value, 16)
@@ -381,7 +406,9 @@ def hex_to_flag8(byte: HexByte, lsb: bool = False) -> list[int]:
     :raises ValueError: If input is not a 2-character hex string.
     """
     if not isinstance(byte, str) or len(byte) != 2:
-        raise ValueError(f"Invalid value: '{byte}', is not a 2-char hex string")
+        raise ValueError(
+            f"Invalid value: '{byte}', is not a 2-char hex string"
+        )
     if lsb:  # make LSB is first bit
         return list((int(byte, 16) & (1 << x)) >> x for x in range(8))
     return list((int(byte, 16) & (1 << x)) >> x for x in reversed(range(8)))
@@ -399,10 +426,14 @@ def hex_from_flag8(flags: Iterable[int], lsb: bool = False) -> HexByte:
     :raises ValueError: If flags is not a list or tuple of 8 bits.
     """
     if not isinstance(flags, list | tuple) or len(flags) != 8:
-        raise ValueError(f"Invalid value: '{flags}', is not a list/tuple of 8 bits")
+        raise ValueError(
+            f"Invalid value: '{flags}', is not a list/tuple of 8 bits"
+        )
     if lsb:  # LSB is first bit
-        return f"{sum(x << idx for idx, x in enumerate(flags)):02X}"
-    return f"{sum(x << idx for idx, x in enumerate(reversed(flags))):02X}"
+        return (
+            f"{sum(x << bit_index for bit_index, x in enumerate(flags)):02X}"
+        )
+    return f"{sum(x << bit_index for bit_index, x in enumerate(reversed(flags))):02X}"
 
 
 # TODO: add a wrapper for EF, & 0xF0

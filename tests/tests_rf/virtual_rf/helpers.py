@@ -29,7 +29,7 @@ def ensure_fakeable(dev: Device, make_fake: bool = True) -> None:
     assert isinstance(dev, Fakeable)
 
     # Initialize the BindingManager requiring both the device and a dispatcher
-    dispatcher = dev._gwy.async_send_cmd
+    dispatcher = dev._gateway.async_send_cmd
     setattr(dev, "_bind_context", BindingManager(dev, dispatcher))  # noqa: B010
 
     if make_fake:

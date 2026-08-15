@@ -120,7 +120,9 @@ async def test_spawn_scripts_exec_scr_valid(mock_gateway: MagicMock) -> None:
     # This prevents spawn_scripts from running the REAL decorated script (which returns None),
     # ensuring it receives a valid awaitable as it expects.
     mock_script = AsyncMock()
-    with patch.dict("ramses_cli.discovery.SCRIPTS", {"scan_disc": mock_script}):
+    with patch.dict(
+        "ramses_cli.discovery.SCRIPTS", {"scan_disc": mock_script}
+    ):
         script_name = "scan_disc"
         kwargs = {EXEC_SCR: (script_name, DEV_ID)}
 
@@ -200,7 +202,9 @@ async def test_script_scan_disc(mock_gateway: MagicMock) -> None:
     """Test script_scan_disc."""
     await script_scan_disc(mock_gateway, DEV_ID)
     mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
-    mock_gateway.polling_manager.update_device_tasks.assert_called_once_with(mock_dev)
+    mock_gateway.polling_manager.update_device_tasks.assert_called_once_with(
+        mock_dev
+    )
 
 
 @pytest.mark.asyncio
@@ -250,7 +254,9 @@ async def test_script_binding(mock_gateway: MagicMock) -> None:
     class MockFakeable:
         pass
 
-    mock_gateway.device_registry.get_device.return_value.__class__ = MockFakeable
+    mock_gateway.device_registry.get_device.return_value.__class__ = (
+        MockFakeable
+    )
 
     with patch("ramses_cli.discovery.Fakeable", MockFakeable):
         await script_bind_req(mock_gateway, DEV_ID)  # type: ignore[arg-type]

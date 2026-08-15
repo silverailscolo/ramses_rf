@@ -16,7 +16,8 @@ SchemaUpdatedCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
 
 if TYPE_CHECKING:
     from .commands.dispatcher import CommandDispatcher as CQRSDispatcher
-    from .devices.dev_base import Device
+    from .config import GatewayConfig
+    from .devices.dev_base import Device, Fakeable
     from .models import TopologyChangedEvent
     from .routing import StateHeader
     from .topology import Parent
@@ -30,7 +31,7 @@ class CommandDispatcher(Protocol):
 
     async def __call__(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         *,
         priority: Priority | None = None,
         qos: QosParams | None = None,
@@ -49,14 +50,24 @@ class ConversationManagerInterface(Protocol):
         *,
         timeout: float | None = None,
         max_retries: int | None = None,
-    ) -> asyncio.Future[Message]: ...
+    ) -> asyncio.Future[Message]:
+        """Track an intent transaction until resolution."""
+        ...
 
 
 class MessageStoreInterface(Protocol):
-    def add(self, msg: Any) -> Any: ...
+    """Protocol interface for central message store."""
+
+    def add(self, msg: Message) -> Message | None:
+        """Add message to store index."""
+        ...
+
     def add_record(
-        self, src: str, code: str = "", verb: str = "", payload: str = "00"
-    ) -> None: ...
+        self, source: str, code: str = "", verb: str = "", payload: str = "00"
+    ) -> None:
+        """Add record without message contents."""
+        ...
+
     def start_consumer(self, in_queue: asyncio.Queue[Any]) -> None:
         """Start the asynchronous queue consumer task for SSOT ingestion."""
         ...
@@ -66,50 +77,86 @@ class MessageStoreInterface(Protocol):
         msg: Any | None = None,
         *,
         dtm: Any | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
         hdr: str | StateHeader | None = None,
-    ) -> tuple[Message, ...] | list[Message]: ...
+    ) -> tuple[Message, ...] | list[Message]:
+        """Query matching messages from store."""
+        ...
+
     async def rem(
         self,
         msg: Any | None = None,
         *,
         dtm: Any | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
         hdr: str | None = None,
-    ) -> tuple[Any, ...] | None: ...
+    ) -> tuple[Any, ...] | None:
+        """Remove matching messages from store."""
+        ...
+
     async def contains(
         self,
         *,
         dtm: Any | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
         hdr: str | None = None,
-    ) -> bool: ...
-    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Any]: ...
-    async def all(self, include_expired: bool = False) -> tuple[Any, ...]: ...
-    async def clr(self) -> None: ...
-    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Any, ...]: ...
+    ) -> bool:
+        """Return True if store contains matching record."""
+        ...
+
+    async def get_rp_codes(self, parameters: tuple[str, ...]) -> list[Any]:
+        """Query response opcode codes."""
+        ...
+
+    async def all(self, include_expired: bool = False) -> tuple[Any, ...]:
+        """Return all indexed messages."""
+        ...
+
+    async def clr(self) -> None:
+        """Clear all indexed messages."""
+        ...
+
+    async def qry(
+        self, sql: str, parameters: tuple[str, ...]
+    ) -> tuple[Any, ...]:
+        """Execute custom SQL query on store."""
+        ...
+
     async def qry_field(
         self, sql: str, parameters: tuple[str, ...]
-    ) -> list[tuple[Any, ...]]: ...
+    ) -> list[tuple[Any, ...]]:
+        """Execute custom SQL query returning field values."""
+        ...
 
     @property
-    def log_by_dtm(self) -> Any: ...
+    def log_by_dtm(self) -> tuple[Message, ...]:
+        """Return in-memory log dictionary keyed by timestamp."""
+        ...
+
     @property
-    def state_cache(self) -> Any: ...
-    def flush(self) -> None: ...
-    def stop(self) -> None: ...
+    def state_cache(self) -> dict[StateHeader, Message]:
+        """Return in-memory state cache dictionary."""
+        ...
+
+    def flush(self) -> None:
+        """Flush pending disk writes."""
+        ...
+
+    def stop(self) -> None:
+        """Stop background tasks and close database."""
+        ...
 
 
 class EntityInterface(Protocol):
@@ -142,10 +189,10 @@ class DeviceInterface(Protocol):
 class DeviceFilterInterface(Protocol):
     """Interface for the Device Filter service."""
 
-    def check_filter_lists(self, dev_id: DeviceIdT) -> None:
+    def check_filter_lists(self, device_id: DeviceIdT) -> None:
         """Raise a DeviceNotFoundError if a device_id is filtered out.
 
-        :param dev_id: The device identifier to evaluate.
+        :param device_id: The device identifier to evaluate.
         """
         ...
 
@@ -173,7 +220,7 @@ class DeviceRegistryInterface(Protocol):
         """Return a list of all identified systems."""
         ...
 
-    def _add_device(self, dev: Any) -> None:
+    def _add_device(self, device: Any) -> None:
         """Add a device to the registry."""
         ...
 
@@ -218,7 +265,7 @@ class DeviceRegistryInterface(Protocol):
         self,
         device_id: DeviceIdT,
         create_device: bool = False,
-    ) -> Any:
+    ) -> Device | Fakeable:
         """Create a faked device."""
         ...
 
@@ -266,13 +313,15 @@ class GatewayInterface(Protocol):
         ...
 
     @property
-    def message_store(self) -> MessageStoreInterface | None: ...
+    def message_store(self) -> MessageStoreInterface | None:
+        """Return the SQLite message store instance or None."""
+        ...
 
     @message_store.setter
     def message_store(self, value: MessageStoreInterface | None) -> None: ...
 
     @property
-    def config(self) -> Any:
+    def config(self) -> GatewayConfig:
         """Return the gateway configuration."""
         ...
 
@@ -294,7 +343,7 @@ class GatewayInterface(Protocol):
 
     async def async_send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         priority: Priority = Priority.DEFAULT,

@@ -54,7 +54,10 @@ from .heat_actuators import Actuator, HeatDemand
 
 QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
 QOS_MID = {SZ_PRIORITY: Priority.HIGH}  # FIXME: deprecate QoS in kwargs
-QOS_MAX = {SZ_PRIORITY: Priority.HIGH, SZ_NUM_REPEATS: 3}  # FIXME: deprecate QoS...
+QOS_MAX = {
+    SZ_PRIORITY: Priority.HIGH,
+    SZ_NUM_REPEATS: 3,
+}  # FIXME: deprecate QoS...
 
 #
 # NOTE: All debug flags should be False for deployment to end-users
@@ -78,6 +81,10 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
     _SLUG = DevType.OTB
     _STATE_ATTR = SZ_REL_MODULATION_LEVEL
 
+    # NOTE: MsgId._0E (max_rel_modulation) and MsgId._11 (rel_modulation)
+    # were historically quarantined via QUARANTINED_OT_MSG_IDS because
+    # real-world OTB hardware transmits unreliable telemetry for these IDs.
+    # See ramses_rf issue #556.
     OT_TO_RAMSES: dict[MsgId, Code] = {  # TODO: move to opentherm.py
         MsgId._00: Code._3EF0,  # master/slave status (actuator_state)
         MsgId._01: Code._22D9,  # boiler_setpoint
@@ -121,38 +128,50 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return HEARTBEAT_TIMEOUT_OTB
 
     async def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
+        """Return boiler output temperature in degrees Celsius."""
         return self.opentherm_state.temperatures.boiler_output
 
     async def boiler_return_temp(self) -> float | None:  # 3220|1C, or 3210
+        """Return boiler return temperature in degrees Celsius."""
         return self.opentherm_state.temperatures.boiler_return
 
     async def boiler_setpoint(self) -> float | None:  # 3220|01, or 22D9
+        """Return target boiler setpoint in degrees Celsius."""
         return self.opentherm_state.temperatures.boiler_setpoint
 
     async def ch_max_setpoint(self) -> float | None:  # 3220|39, or 1081
+        """Return maximum central heating setpoint limit."""
         return self.opentherm_state.temperatures.ch_max_setpoint
 
     async def ch_setpoint(self) -> float | None:  # 3EF0 (byte 7, only R8820A?)
+        """Return central heating setpoint in degrees Celsius."""
         return self.opentherm_state.temperatures.ch_setpoint
 
     async def ch_water_pressure(self) -> float | None:  # 3220|12, or 1300
+        """Return central heating water pressure in bar."""
         return self.opentherm_state.ch_water_pressure
 
     async def dhw_flow_rate(self) -> float | None:  # 3220|13, or 12F0
+        """Return domestic hot water flow rate in litres per minute."""
         return self.opentherm_state.dhw_flow_rate
 
     async def dhw_setpoint(self) -> float | None:  # 3220|38, or 10A0
+        """Return domestic hot water temperature setpoint."""
         return self.opentherm_state.temperatures.dhw_setpoint
 
     async def dhw_temp(self) -> float | None:  # 3220|1A, or 1260
+        """Return domestic hot water temperature in degrees Celsius."""
         return self.opentherm_state.temperatures.dhw
 
     async def max_rel_modulation(
         self,
     ) -> float | None:  # 3220|0E, or 3EF0 (byte 8) NOTE: not reliable?
+        """Return maximum relative modulation limit."""
         return self.opentherm_state.max_rel_modulation
 
-    async def oem_code(self) -> float | None:  # 3220|73, no known RAMSES equivalent
+    async def oem_code(
+        self,
+    ) -> float | None:  # 3220|73, no known RAMSES equivalent
         """Fetch the OEM diagnostic code directly from the CQRS read-model.
 
         :return: The OEM code if available in the state, otherwise None.
@@ -163,58 +182,87 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         return None
 
     async def outside_temp(self) -> float | None:  # 3220|1B, 1290
+        """Return outside air temperature in degrees Celsius."""
         return self.opentherm_state.temperatures.outside
 
     async def rel_modulation_level(
         self,
     ) -> float | None:  # 3220|11, or 3EF0/3EF1 NOTE: not reliable?
+        """Return relative modulation percentage (0.0 to 1.0)."""
         return self.opentherm_state.rel_modulation_level
 
     async def ch_active(
         self,
     ) -> bool | None:  # 3220|00, or 3EF0 (byte 3) NOTE: not reliable?
+        """Return whether central heating is actively running."""
         return self.opentherm_state.flags.ch_active
 
     async def ch_enabled(
         self,
     ) -> bool | None:  # 3220|00, or 3EF0 (byte 6) NOTE: not reliable?
+        """Return whether central heating is enabled."""
         return self.opentherm_state.flags.ch_enabled
 
-    async def cooling_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def cooling_active(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
+        """Return whether cooling is actively running."""
         return self.opentherm_state.flags.cooling_active
 
-    async def cooling_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def cooling_enabled(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
+        """Return whether cooling is enabled."""
         return self.opentherm_state.flags.cooling_enabled
 
     async def dhw_active(
         self,
     ) -> bool | None:  # 3220|00, or 3EF0 (byte 3) NOTE: not reliable?
+        """Return whether domestic hot water heating is active."""
         return self.opentherm_state.flags.dhw_active
 
-    async def dhw_blocking(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def dhw_blocking(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
+        """Return whether domestic hot water blocking is active."""
         return self.opentherm_state.flags.dhw_blocking
 
-    async def dhw_enabled(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def dhw_enabled(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
+        """Return whether domestic hot water heating is enabled."""
         return self.opentherm_state.flags.dhw_enabled
 
-    async def fault_present(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def fault_present(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
+        """Return whether an OpenTherm fault is present."""
         return self.opentherm_state.flags.fault_present
 
     async def flame_active(
         self,
     ) -> bool | None:  # 3220|00, or 3EF0 (byte 3) NOTE: not reliable?
+        """Return whether boiler flame is active."""
         return self.opentherm_state.flags.flame_active
 
-    async def otc_active(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def otc_active(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
+        """Return whether outside temperature compensation is active."""
         return self.opentherm_state.flags.otc_active
 
-    async def summer_mode(self) -> bool | None:  # 3220|00, TODO: no known RAMSES
+    async def summer_mode(
+        self,
+    ) -> bool | None:  # 3220|00, TODO: no known RAMSES
+        """Return whether summer mode is active."""
         return self.opentherm_state.flags.summer_mode
 
     async def opentherm_schema(self) -> dict[str, Any]:
+        """Return OpenTherm topology configuration schema."""
         return {}
 
     async def opentherm_counters(self) -> dict[str, Any]:  # all are U16
+        """Return OpenTherm diagnostic runtime counters."""
         return {
             SZ_BURNER_HOURS: self.opentherm_state.counters.burner_hours,
             SZ_BURNER_STARTS: self.opentherm_state.counters.burner_starts,
@@ -231,20 +279,25 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
     async def opentherm_params(
         self,
     ) -> dict[str, Any]:  # F8_8, U8, {"hb": S8, "lb": S8}
+        """Return OpenTherm configuration parameter dictionary."""
         return {}
 
     async def ramses_schema(self) -> PayDictT.EMPTY:
+        """Return RAMSES-II schema configuration dictionary."""
         return {}
 
     async def ramses_params(self) -> dict[str, float | None]:
+        """Return RAMSES-II parameter configuration dictionary."""
         return {
             SZ_MAX_REL_MODULATION: await self.max_rel_modulation(),
         }
 
     async def traits(self) -> dict[str, Any]:
+        """Return device traits dictionary."""
         return await super().traits()
 
     async def schema(self) -> dict[str, Any]:
+        """Return combined device configuration schema."""
         base_schema = await super().schema()
         return {
             **base_schema,
@@ -253,6 +306,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         }
 
     async def params(self) -> dict[str, Any]:
+        """Return combined device parameters dictionary."""
         base_params = await super().params()
         return {
             **base_params,
@@ -261,6 +315,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         }
 
     async def status(self) -> dict[str, Any]:
+        """Return combined operational status dictionary."""
         base_status = await super().status()
         return {
             **base_status,  # incl. actuator_cycle, actuator_state

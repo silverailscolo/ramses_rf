@@ -38,7 +38,9 @@ DEFAULT_MAX_RETRIES = 0  # #                ramses_tx.protocol
 MAINTAIN_STATE_CHAIN = False  # #           ramses_tx.protocol_fsm
 
 # other constants
-ASSERT_CYCLE_TIME = 0.0005  # max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TIME
+ASSERT_CYCLE_TIME = (
+    0.0005  # max_cycles_per_assert = max_sleep / ASSERT_CYCLE_TIME
+)
 DEFAULT_MAX_SLEEP = 0.1
 
 PKT_FLOW = "packets"
@@ -180,7 +182,9 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 # ######################################################################################
 
 
-def _build_gateway_config(test_set: dict[str, Any], role: str) -> dict[str, Any]:
+def _build_gateway_config(
+    test_set: dict[str, Any], role: str
+) -> dict[str, Any]:
     """Build the gateway configuration for a specific role.
 
     Strips the 'faked' trait from the known_list to prevent DeviceNotFaked
@@ -195,7 +199,9 @@ def _build_gateway_config(test_set: dict[str, Any], role: str) -> dict[str, Any]
     known_list: dict[str, Any] = {"18:000000": {"class": "HGI"}}
     for d in devices:
         for k, v in d.items():
-            known_list[k] = {key: val for key, val in v.items() if key != "faked"}
+            known_list[k] = {
+                key: val for key, val in v.items() if key != "faked"
+            }
 
     return {
         "config": GatewayConfig(disable_discovery=True),
@@ -238,14 +244,18 @@ def _setup_fakeable_device(gwy: Gateway, device_id: str) -> Fakeable:
 
             return await gwy.async_send_cmd(cmd, **kwargs)
 
-        setattr(fake_dev, "_binding_manager", BindingManager(fake_dev, _dispatcher))  # noqa: B010
+        setattr(  # noqa: B010
+            fake_dev, "_binding_manager", BindingManager(fake_dev, _dispatcher)
+        )
 
     fake_dev._make_fake()
     return fake_dev
 
 
 async def assert_context_state(
-    device: Fakeable, state: type[BindStateBase], max_sleep: float = DEFAULT_MAX_SLEEP
+    device: Fakeable,
+    state: type[BindStateBase],
+    max_sleep: float = DEFAULT_MAX_SLEEP,
 ) -> None:
     """Assert that the device's context state transitions correctly within max_sleep."""
     assert device._binding_manager
@@ -404,8 +414,12 @@ async def _test_flow_20x(
     respondent = _setup_fakeable_device(gwy_r, resp_id)
     supplicant = _setup_fakeable_device(gwy_s, supp_id)
 
-    assert respondent.id == pkt_flow_expected[_ACCEPT][7:16], "bad test suite config"
-    assert supplicant.id == pkt_flow_expected[_TENDER][7:16], "bad test suite config"
+    assert respondent.id == pkt_flow_expected[_ACCEPT][7:16], (
+        "bad test suite config"
+    )
+    assert supplicant.id == pkt_flow_expected[_TENDER][7:16], (
+        "bad test suite config"
+    )
 
     # Step R1: Respondent expects an Offer
     payload = pkt_flow_expected[_ACCEPT][46:]
@@ -415,7 +429,7 @@ async def _test_flow_20x(
     require_ratify = len(pkt_flow_expected) > _RATIFY
 
     resp_coro = respondent._wait_for_binding_request(
-        accept_codes, idx=idx, require_ratify=require_ratify
+        accept_codes, zone_index=idx, require_ratify=require_ratify
     )
 
     # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
@@ -432,7 +446,7 @@ async def _test_flow_20x(
         ratify_cmd = None
 
     supp_coro = supplicant._initiate_binding_process(
-        offer_codes, confirm_code=confirm_code, ratify_cmd=ratify_cmd
+        offer_codes, confirm_code=confirm_code, ratify_command=ratify_cmd
     )
 
     # Step 2: Wait until flow is completed (or timeout)

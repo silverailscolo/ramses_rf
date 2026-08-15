@@ -22,7 +22,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from ramses_rf.const import DevType
+from ramses_rf.const import Code, DevType, Verb
 from ramses_rf.discovery_scan import (
     DiscoveredDevice,
     DiscoveryScan,
@@ -46,8 +46,8 @@ def make_dto(
     src: str = "04:056053",
     dst: str = "01:145038",
     addr3: str = "--:------",
-    code: str = "3150",
-    verb: str = " I",
+    code: str = Code._3150,
+    verb: str = Verb.I_,
     payload: str = "02C8",
     rssi: str = "-72",
 ) -> PacketDTO:
@@ -172,36 +172,81 @@ class TestIsApplianceControlSignal:
 
     def test_bdr_3b00_i_is_appliance(self) -> None:
         # BDR broadcasting 3B00 as I — classic TPI loop signature
-        assert _is_appliance_control_signal("13:121025", "3B00", " I", True) is True
+        assert (
+            _is_appliance_control_signal(
+                "13:121025", Code._3B00, Verb.I_, True
+            )
+            is True
+        )
 
     def test_bdr_3ef0_i_is_appliance(self) -> None:
-        assert _is_appliance_control_signal("13:121025", "3EF0", " I", True) is True
+        assert (
+            _is_appliance_control_signal(
+                "13:121025", Code._3EF0, Verb.I_, True
+            )
+            is True
+        )
 
     def test_otb_3b00_i_is_appliance(self) -> None:
         # OTB (10:) also broadcasts 3B00 as the boiler relay
-        assert _is_appliance_control_signal("10:067219", "3B00", " I", True) is True
+        assert (
+            _is_appliance_control_signal(
+                "10:067219", Code._3B00, Verb.I_, True
+            )
+            is True
+        )
 
     def test_bdr_3b00_rp_not_appliance(self) -> None:
         # RP is a directed reply, not the broadcast TPI signature
-        assert _is_appliance_control_signal("13:121025", "3B00", "RP", True) is False
+        assert (
+            _is_appliance_control_signal(
+                "13:121025", Code._3B00, Verb.RP, True
+            )
+            is False
+        )
 
     def test_bdr_3b00_rq_not_appliance(self) -> None:
-        assert _is_appliance_control_signal("13:121025", "3B00", "RQ", True) is False
+        assert (
+            _is_appliance_control_signal(
+                "13:121025", Code._3B00, Verb.RQ, True
+            )
+            is False
+        )
 
     def test_bdr_3ef1_not_appliance(self) -> None:
         # 3EF1 is a directed RP from the relay to the HGI, not the TPI broadcast
-        assert _is_appliance_control_signal("13:121025", "3EF1", "RP", True) is False
+        assert (
+            _is_appliance_control_signal(
+                "13:121025", Code._3EF1, Verb.RP, True
+            )
+            is False
+        )
 
     def test_trv_3b00_not_appliance(self) -> None:
         # Only 13: and 10: can be appliance controls
-        assert _is_appliance_control_signal("04:056053", "3B00", " I", True) is False
+        assert (
+            _is_appliance_control_signal(
+                "04:056053", Code._3B00, Verb.I_, True
+            )
+            is False
+        )
 
     def test_bdr_3b00_as_dst_not_appliance(self) -> None:
         # Must be the src (sender), not dst
-        assert _is_appliance_control_signal("13:121025", "3B00", " I", False) is False
+        assert (
+            _is_appliance_control_signal(
+                "13:121025", Code._3B00, Verb.I_, False
+            )
+            is False
+        )
 
     def test_bdr_other_code_not_appliance(self) -> None:
-        assert _is_appliance_control_signal("13:121025", "1100", " I", True) is False
+        assert (
+            _is_appliance_control_signal(
+                "13:121025", Code._1100, Verb.I_, True
+            )
+            is False
+        )
 
 
 class TestExtractDomainIdFrom000C:
@@ -243,27 +288,46 @@ class TestShouldUpdateDomainId:
 
     def test_authoritative_overrides_existing(self) -> None:
         # 000C FA binding must override a previous 3B00/3EF0 FC hint
-        assert _should_update_domain_id("FC", "FA", is_authoritative=True) is True
+        assert (
+            _should_update_domain_id("FC", "FA", is_authoritative=True) is True
+        )
 
     def test_authoritative_same_value_no_update(self) -> None:
-        assert _should_update_domain_id("FC", "FC", is_authoritative=True) is False
+        assert (
+            _should_update_domain_id("FC", "FC", is_authoritative=True)
+            is False
+        )
 
     def test_authoritative_overrides_none(self) -> None:
-        assert _should_update_domain_id(None, "FA", is_authoritative=True) is True
+        assert (
+            _should_update_domain_id(None, "FA", is_authoritative=True) is True
+        )
 
     def test_hint_does_not_override_existing(self) -> None:
         # 3B00/3EF0 hint must NOT override an existing 000C domain_id
-        assert _should_update_domain_id("FA", "FC", is_authoritative=False) is False
+        assert (
+            _should_update_domain_id("FA", "FC", is_authoritative=False)
+            is False
+        )
 
     def test_hint_sets_none(self) -> None:
         # 3B00/3EF0 hint can set domain_id if none exists yet
-        assert _should_update_domain_id(None, "FC", is_authoritative=False) is True
+        assert (
+            _should_update_domain_id(None, "FC", is_authoritative=False)
+            is True
+        )
 
     def test_hint_same_as_existing_no_update(self) -> None:
-        assert _should_update_domain_id("FC", "FC", is_authoritative=False) is False
+        assert (
+            _should_update_domain_id("FC", "FC", is_authoritative=False)
+            is False
+        )
 
     def test_none_new_returns_false(self) -> None:
-        assert _should_update_domain_id("FC", None, is_authoritative=True) is False
+        assert (
+            _should_update_domain_id("FC", None, is_authoritative=True)
+            is False
+        )
 
 
 class TestDiscoveryScanDomainId:
@@ -279,8 +343,8 @@ class TestDiscoveryScanDomainId:
             make_dto(
                 src=ctl_id,
                 dst="18:001234",
-                code="000C",
-                verb="RP",
+                code=Code._000C,
+                verb=Verb.RP,
                 payload="000F003545C8",
             )
         )
@@ -299,8 +363,8 @@ class TestDiscoveryScanDomainId:
             make_dto(
                 src=ctl_id,
                 dst="18:001234",
-                code="000C",
-                verb="RP",
+                code=Code._000C,
+                verb=Verb.RP,
                 payload="000E003545C8",
             )
         )
@@ -324,8 +388,8 @@ class TestDiscoveryScanDomainId:
             make_dto(
                 src=ctl_id,
                 dst="18:001234",
-                code="000C",
-                verb="RP",
+                code=Code._000C,
+                verb=Verb.RP,
                 payload="000E003545C8",
             )
         )
@@ -338,8 +402,8 @@ class TestDiscoveryScanDomainId:
             make_dto(
                 src="13:042605",
                 dst="--:------",
-                code="3B00",
-                verb=" I",
+                code=Code._3B00,
+                verb=Verb.I_,
                 payload="00C8",
             )
         )
@@ -353,41 +417,74 @@ class TestClassify:
     """Tests for _classify."""
 
     def test_prefix_ctl(self) -> None:
-        assert _classify("01:145038", "2E04", " I", is_src=True) == DevType.CTL
+        assert (
+            _classify("01:145038", Code._2E04, Verb.I_, is_source=True)
+            == DevType.CTL
+        )
 
     def test_prefix_trv(self) -> None:
-        assert _classify("04:056053", "3150", " I", is_src=True) == DevType.TRV
+        assert (
+            _classify("04:056053", Code._3150, Verb.I_, is_source=True)
+            == DevType.TRV
+        )
 
     def test_prefix_dhw(self) -> None:
-        assert _classify("07:046947", "10A0", " I", is_src=True) == DevType.DHW
+        assert (
+            _classify("07:046947", Code._10A0, Verb.I_, is_source=True)
+            == DevType.DHW
+        )
 
     def test_prefix_otb(self) -> None:
-        assert _classify("10:067219", "0008", " I", is_src=True) == DevType.OTB
+        assert (
+            _classify("10:067219", Code._0008, Verb.I_, is_source=True)
+            == DevType.OTB
+        )
 
     def test_prefix_bdr(self) -> None:
-        assert _classify("13:042605", "1100", " I", is_src=True) == DevType.BDR
+        assert (
+            _classify("13:042605", Code._1100, Verb.I_, is_source=True)
+            == DevType.BDR
+        )
 
     def test_prefix_fan(self) -> None:
-        assert _classify("32:157747", "31DA", " I", is_src=True) == DevType.FAN
+        assert (
+            _classify("32:157747", Code._31DA, Verb.I_, is_source=True)
+            == DevType.FAN
+        )
 
     def test_prefix_rem(self) -> None:
-        assert _classify("37:179540", "22F1", " I", is_src=True) == DevType.REM
+        assert (
+            _classify("37:179540", Code._22F1, Verb.I_, is_source=True)
+            == DevType.REM
+        )
 
     def test_vc_pair_fan(self) -> None:
         """I 31DA → FAN (from HVAC_KLASS_BY_VC_PAIR)."""
-        assert _classify("32:157747", "31DA", " I", is_src=True) == DevType.FAN
+        assert (
+            _classify("32:157747", Code._31DA, Verb.I_, is_source=True)
+            == DevType.FAN
+        )
 
     def test_vc_pair_rem(self) -> None:
         """I 22F1 → REM."""
-        assert _classify("37:179540", "22F1", " I", is_src=True) == DevType.REM
+        assert (
+            _classify("37:179540", Code._22F1, Verb.I_, is_source=True)
+            == DevType.REM
+        )
 
     def test_vc_pair_co2(self) -> None:
         """I 1298 → CO2."""
-        assert _classify("37:123456", "1298", " I", is_src=True) == DevType.CO2
+        assert (
+            _classify("37:123456", Code._1298, Verb.I_, is_source=True)
+            == DevType.CO2
+        )
 
     def test_hvac_prefix_wins_over_vc_pair(self) -> None:
         """A FAN (32:) sending 22F1 should stay FAN, not become REM."""
-        assert _classify("32:157747", "22F1", " I", is_src=True) == DevType.FAN
+        assert (
+            _classify("32:157747", Code._22F1, Verb.I_, is_source=True)
+            == DevType.FAN
+        )
 
     def test_vc_pair_for_non_hvac_prefix(self) -> None:
         """A non-HVAC prefix sending an HVAC code should use the VC pair.
@@ -397,21 +494,30 @@ class TestClassify:
         prefix to test VC pair override on non-HVAC prefixes.
         """
         # 30: is RFG, but if it sends I 31DA the VC pair should win → FAN
-        assert _classify("30:123456", "31DA", " I", is_src=True) == DevType.FAN
+        assert (
+            _classify("30:123456", Code._31DA, Verb.I_, is_source=True)
+            == DevType.FAN
+        )
 
     def test_ctl_only_code(self) -> None:
         """A device sending 1030 (CTL-only code) is classified as CTL."""
-        assert _classify("01:145038", "1030", " I", is_src=True) == DevType.CTL
+        assert (
+            _classify("01:145038", Code._1030, Verb.I_, is_source=True)
+            == DevType.CTL
+        )
 
     def test_ctl_only_code_not_from_dst(self) -> None:
         """CTL-only code from dst (not src) should not classify as CTL."""
-        result = _classify("01:145038", "1030", " I", is_src=False)
+        result = _classify("01:145038", Code._1030, Verb.I_, is_source=False)
         # Falls back to prefix
         assert result == DevType.CTL  # prefix 01 = CTL anyway
 
     def test_unknown_prefix(self) -> None:
         """Unknown prefix with no VC match returns DEV."""
-        assert _classify("99:999999", "0001", " I", is_src=True) == DevType.DEV
+        assert (
+            _classify("99:999999", Code._0001, Verb.I_, is_source=True)
+            == DevType.DEV
+        )
 
     def test_reclassify_with_dev(self) -> None:
         """Re-classify using accumulated codes_seen."""
@@ -420,33 +526,41 @@ class TestClassify:
             first_seen="2026-07-01T10:00:00",
             last_seen="2026-07-01T10:00:00",
             likely_type="DEV",
-            codes_seen=["1030", "2E04"],
+            codes_seen=[Code._1030, Code._2E04],
         )
-        result = _classify("01:145038", "0001", " I", is_src=True, dev=dev)
+        result = _classify(
+            "01:145038", Code._0001, Verb.I_, is_source=True, device=dev
+        )
         assert result == DevType.CTL
 
     def test_313f_i_is_ctl(self) -> None:
         """313F I (datetime broadcast) is CTL-only."""
-        assert _classify("01:145038", "313F", " I", is_src=True) == DevType.CTL
+        assert (
+            _classify("01:145038", Code._313F, Verb.I_, is_source=True)
+            == DevType.CTL
+        )
 
     def test_313f_rp_is_ctl(self) -> None:
         """313F RP (datetime reply) is CTL-only."""
-        assert _classify("01:145038", "313F", "RP", is_src=True) == DevType.CTL
+        assert (
+            _classify("01:145038", Code._313F, Verb.RP, is_source=True)
+            == DevType.CTL
+        )
 
     def test_313f_rq_is_not_ctl(self) -> None:
         """313F RQ (datetime request) is NOT CTL-only — TRVs send RQ too."""
         # A 04: TRV sending 313F RQ should stay TRV, not become CTL
-        result = _classify("04:056053", "313F", "RQ", is_src=True)
+        result = _classify("04:056053", Code._313F, Verb.RQ, is_source=True)
         assert result == DevType.TRV
 
     def test_313f_rq_unknown_prefix_is_not_ctl(self) -> None:
         """313F RQ from unknown prefix should not be classified as CTL."""
-        result = _classify("99:999999", "313F", "RQ", is_src=True)
+        result = _classify("99:999999", Code._313F, Verb.RQ, is_source=True)
         assert result == DevType.DEV
 
     def test_37_313f_rq_is_not_ctl(self) -> None:
         """313F RQ from 37: should not be CTL — falls back to REM (prefix)."""
-        result = _classify("37:154519", "313F", "RQ", is_src=True)
+        result = _classify("37:154519", Code._313F, Verb.RQ, is_source=True)
         assert result == DevType.REM
 
     def test_37_31d9_is_fan(self) -> None:
@@ -455,46 +569,76 @@ class TestClassify:
         31D9 I maps to FAN in HVAC_KLASS_BY_VC_PAIR, and 37: is ambiguous
         (FAN/REM/CO2/HUM/DIS) so FAN is a valid type for 37:.
         """
-        result = _classify("37:154519", "31D9", " I", is_src=True)
+        result = _classify("37:154519", Code._31D9, Verb.I_, is_source=True)
         assert result == DevType.FAN
 
     def test_32_31d9_is_fan(self) -> None:
         """32: sending 31D9 I should be FAN (unambiguous prefix)."""
-        assert _classify("32:153289", "31D9", " I", is_src=True) == DevType.FAN
+        assert (
+            _classify("32:153289", Code._31D9, Verb.I_, is_source=True)
+            == DevType.FAN
+        )
 
     def test_37_22f1_is_rem(self) -> None:
         """37: sending 22F1 I should be REM (VC pair matches valid type)."""
-        assert _classify("37:168270", "22F1", " I", is_src=True) == DevType.REM
+        assert (
+            _classify("37:168270", Code._22F1, Verb.I_, is_source=True)
+            == DevType.REM
+        )
 
     def test_29_31d9_is_fan(self) -> None:
         """29: sending 31D9 I should be FAN (VC pair matches valid type)."""
-        assert _classify("29:146052", "31D9", " I", is_src=True) == DevType.FAN
+        assert (
+            _classify("29:146052", Code._31D9, Verb.I_, is_source=True)
+            == DevType.FAN
+        )
 
     def test_29_22f1_is_rem(self) -> None:
         """29: sending 22F1 I should be REM (VC pair matches valid type)."""
-        assert _classify("29:181813", "22F1", " I", is_src=True) == DevType.REM
+        assert (
+            _classify("29:181813", Code._22F1, Verb.I_, is_source=True)
+            == DevType.REM
+        )
 
     def test_29_1298_is_co2(self) -> None:
         """29: sending 1298 I should be CO2 (VC pair matches valid type)."""
-        assert _classify("29:123456", "1298", " I", is_src=True) == DevType.CO2
+        assert (
+            _classify("29:123456", Code._1298, Verb.I_, is_source=True)
+            == DevType.CO2
+        )
 
     def test_29_no_vc_falls_back_to_fan(self) -> None:
         """29: with no matching VC pair should default to FAN (prefix fallback)."""
         # 2411 is not in HVAC_KLASS_BY_VC_PAIR
-        assert _classify("29:123150", "2411", " I", is_src=True) == DevType.FAN
+        assert (
+            _classify("29:123150", Code._2411, Verb.I_, is_source=True)
+            == DevType.FAN
+        )
 
     def test_37_1298_is_co2(self) -> None:
         """37: sending 1298 I should be CO2 (VC pair matches valid type)."""
-        assert _classify("37:123456", "1298", " I", is_src=True) == DevType.CO2
+        assert (
+            _classify("37:123456", Code._1298, Verb.I_, is_source=True)
+            == DevType.CO2
+        )
 
     def test_18_is_hgi_regardless_of_codes(self) -> None:
         """18: is always HGI — it relays packets from all device types."""
         # 22F1 I maps to REM, but 18: is a gateway, not a REM
-        assert _classify("18:130236", "22F1", " I", is_src=True) == DevType.HGI
+        assert (
+            _classify("18:130236", Code._22F1, Verb.I_, is_source=True)
+            == DevType.HGI
+        )
         # 31DA I maps to FAN, but 18: is a gateway, not a FAN
-        assert _classify("18:130236", "31DA", " I", is_src=True) == DevType.HGI
+        assert (
+            _classify("18:130236", Code._31DA, Verb.I_, is_source=True)
+            == DevType.HGI
+        )
         # 31D9 I maps to FAN, but 18: is a gateway, not a FAN
-        assert _classify("18:130236", "31D9", " I", is_src=True) == DevType.HGI
+        assert (
+            _classify("18:130236", Code._31D9, Verb.I_, is_source=True)
+            == DevType.HGI
+        )
 
     def test_37_rq_31da_is_not_fan(self) -> None:
         """37: sending RQ 31DA should NOT be FAN — it's a DIS requesting status.
@@ -504,7 +648,7 @@ class TestClassify:
         for fan status — it's not a FAN broadcasting its own status.
         """
         # Direct RQ 31DA — not in _VC_TO_TYPE (only I and RP are)
-        result = _classify("37:169161", "31DA", "RQ", is_src=True)
+        result = _classify("37:169161", Code._31DA, Verb.RQ, is_source=True)
         assert result != DevType.FAN
 
     def test_37_rq_31da_with_accumulated_codes_not_fan(self) -> None:
@@ -519,14 +663,16 @@ class TestClassify:
             first_seen="2026-07-01T10:00:00",
             last_seen="2026-07-01T10:00:00",
             likely_type="DEV",
-            codes_seen=["31DA", "1470", "313F"],
+            codes_seen=[Code._31DA, Code._1470, Code._313F],
         )
-        result = _classify("37:169161", "31DA", "RQ", is_src=True, dev=dev)
+        result = _classify(
+            "37:169161", Code._31DA, Verb.RQ, is_source=True, device=dev
+        )
         assert result != DevType.FAN
 
     def test_37_i_31da_is_fan(self) -> None:
         """37: sending I 31DA (broadcast) IS FAN — it's broadcasting status."""
-        result = _classify("37:169161", "31DA", " I", is_src=True)
+        result = _classify("37:169161", Code._31DA, Verb.I_, is_source=True)
         assert result == DevType.FAN
 
 
@@ -534,13 +680,13 @@ class TestConfidence:
     """Tests for confidence scoring."""
 
     def test_initial_high_for_binding_code(self) -> None:
-        assert _initial_confidence(True, "3150", " I") == "high"
+        assert _initial_confidence(True, Code._3150, Verb.I_) == "high"
 
     def test_initial_medium_for_src(self) -> None:
-        assert _initial_confidence(True, "0001", " I") == "medium"
+        assert _initial_confidence(True, Code._0001, Verb.I_) == "medium"
 
     def test_initial_low_for_dst(self) -> None:
-        assert _initial_confidence(False, "0001", " I") == "low"
+        assert _initial_confidence(False, Code._0001, Verb.I_) == "low"
 
     def test_recompute_high_with_binding(self) -> None:
         dev = DiscoveredDevice(
@@ -548,7 +694,7 @@ class TestConfidence:
             first_seen="",
             last_seen="",
             likely_type="TRV",
-            zone_idx="02",
+            zone_index="02",
             bound_to="01:145038",
         )
         assert _recompute_confidence(dev) == "high"
@@ -559,7 +705,7 @@ class TestConfidence:
             first_seen="",
             last_seen="",
             likely_type="CTL",
-            codes_seen=["1030"],
+            codes_seen=[Code._1030],
         )
         assert _recompute_confidence(dev) == "high"
 
@@ -569,7 +715,7 @@ class TestConfidence:
             first_seen="",
             last_seen="",
             likely_type="TRV",
-            src_count=3,
+            source_count=3,
         )
         assert _recompute_confidence(dev) == "medium"
 
@@ -579,8 +725,8 @@ class TestConfidence:
             first_seen="",
             last_seen="",
             likely_type="TRV",
-            dst_count=5,
-            src_count=0,
+            destination_count=5,
+            source_count=0,
         )
         assert _recompute_confidence(dev) == "low"
 
@@ -599,18 +745,18 @@ class TestDiscoveredDevice:
             first_seen="2026-07-01T10:00:00",
             last_seen="2026-07-01T10:01:00",
             likely_type="TRV",
-            codes_seen=["1060", "3150"],
+            codes_seen=[Code._1060, Code._3150],
             bound_to="01:145038",
-            zone_idx="02",
+            zone_index="02",
             rssi=-72.0,
             confidence="high",
         )
         d = dev.to_dict()
         assert d["device_id"] == "04:056053"
         assert d["likely_type"] == "TRV"
-        assert d["codes_seen"] == ["1060", "3150"]
+        assert d["codes_seen"] == [Code._1060, Code._3150]
         assert d["bound_to"] == "01:145038"
-        assert d["zone_idx"] == "02"
+        assert d["zone_index"] == "02"
 
     def test_from_dict(self) -> None:
         data = {
@@ -618,7 +764,7 @@ class TestDiscoveredDevice:
             "first_seen": "2026-07-01T10:00:00",
             "last_seen": "2026-07-01T10:01:00",
             "likely_type": "TRV",
-            "codes_seen": ["1060", "3150"],
+            "codes_seen": [Code._1060, Code._3150],
             "bound_to": "01:145038",
             "zone_idx": "02",
             "rssi": -72.0,
@@ -653,7 +799,7 @@ class TestDiscoveredDevice:
             first_seen="2026-07-01T10:00:00",
             last_seen="2026-07-01T10:01:00",
             likely_type="TRV",
-            codes_seen=["1060", "3150"],
+            codes_seen=[Code._1060, Code._3150],
             rssi=-72.0,
             confidence="medium",
         )
@@ -707,22 +853,26 @@ class TestDiscoveryScanPacketHandling:
     def test_new_device_from_src(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
         dev = scan.get_device("04:056053")
         assert dev is not None
         assert dev.likely_type == "TRV"
         assert dev.confidence == "high"  # 3150 is a binding code
-        assert dev.src_count == 1
-        assert "3150" in dev.codes_seen
+        assert dev.source_count == 1
+        assert Code._3150 in dev.codes_seen
 
     def test_new_device_from_dst(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
         # dst (01:145038) should also be recorded
         dev = scan.get_device("01:145038")
         assert dev is not None
-        assert dev.dst_count == 1
+        assert dev.destination_count == 1
         assert dev.confidence == "low"  # only seen as dst
 
     def test_known_device_skipped(self) -> None:
@@ -734,11 +884,11 @@ class TestDiscoveryScanPacketHandling:
         """
         gwy = make_mock_gateway(known_list={"04:056053": {}})
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
         # Should be tracked (codes_seen accumulated)
         dev = scan.get_device("04:056053")
         assert dev is not None
-        assert dev.codes_seen == ["3150"]
+        assert dev.codes_seen == [Code._3150]
         assert dev.confidence == "high"  # known device, high confidence
 
     def test_known_hgi_not_rediscovered(self) -> None:
@@ -751,17 +901,17 @@ class TestDiscoveryScanPacketHandling:
         """
         gwy = make_mock_gateway(known_list={"18:130236": {"class": "HGI"}})
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="18:130236", code="22F1"))
+        scan._process_packet(make_dto(src="18:130236", code=Code._22F1))
         # Should be tracked (appears in scan results)
         dev = scan.get_device("18:130236")
         assert dev is not None
         assert dev.likely_type == DevType.HGI
         # Second packet — should update, not re-create
         scan.clear_dirty()
-        scan._process_packet(make_dto(src="18:130236", code="10E0"))
+        scan._process_packet(make_dto(src="18:130236", code=Code._10E0))
         assert scan.get_device("18:130236") is dev  # same object
-        assert dev.src_count == 2
-        assert "10E0" in dev.codes_seen
+        assert dev.source_count == 2
+        assert Code._10E0 in dev.codes_seen
 
     def test_unknown_hgi_tracked(self) -> None:
         """An unknown HGI (e.g. neighbour's) should be tracked but not
@@ -769,28 +919,28 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         # First packet — should create a discovery entry
-        scan._process_packet(make_dto(src="18:999999", code="22F1"))
+        scan._process_packet(make_dto(src="18:999999", code=Code._22F1))
         dev = scan.get_device("18:999999")
         assert dev is not None
         assert dev.likely_type == DevType.HGI
         first_seen = dev.first_seen
         # Second packet — should update, not re-create
-        scan._process_packet(make_dto(src="18:999999", code="10E0"))
+        scan._process_packet(make_dto(src="18:999999", code=Code._10E0))
         dev2 = scan.get_device("18:999999")
         assert dev2 is not None
         assert dev2.first_seen == first_seen  # same entry, not re-created
-        assert dev2.src_count == 2
+        assert dev2.source_count == 2
 
     def test_known_in_schema_skipped(self) -> None:
         """Known devices in schema should be tracked for codes_seen but
         not re-discovered (no discovery notification)."""
         gwy = make_mock_gateway(schema={"01:145038": {}})
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="01:145038", code="2E04"))
+        scan._process_packet(make_dto(src="01:145038", code=Code._2E04))
         # Should be tracked (codes_seen accumulated)
         dev = scan.get_device("01:145038")
         assert dev is not None
-        assert dev.codes_seen == ["2E04"]
+        assert dev.codes_seen == [Code._2E04]
 
     def test_known_in_registry_only_not_skipped(self) -> None:
         """A device in the device_registry but NOT in known_list/schema
@@ -799,7 +949,7 @@ class TestDiscoveryScanPacketHandling:
         wins."""
         gwy = make_mock_gateway(device_by_id={"04:056053": MagicMock()})
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
         # Registry-only device → NOT known → should be discovered
         assert scan.get_device("04:056053") is not None
 
@@ -807,19 +957,25 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         # First packet
-        scan._process_packet(make_dto(src="04:056053", code="3150", rssi="-70"))
+        scan._process_packet(
+            make_dto(src="04:056053", code=Code._3150, rssi="-70")
+        )
         dev = scan.get_device("04:056053")
         assert dev is not None
         assert dev.rssi == -70.0
         # Second packet — should average
-        scan._process_packet(make_dto(src="04:056053", code="30C9", rssi="-80"))
+        scan._process_packet(
+            make_dto(src="04:056053", code=Code._30C9, rssi="-80")
+        )
         assert dev.rssi == -75.0
 
     def test_rssi_not_updated_from_dst(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan._process_packet(
-            make_dto(src="04:056053", dst="01:145038", code="3150", rssi="-70")
+            make_dto(
+                src="04:056053", dst="01:145038", code=Code._3150, rssi="-70"
+            )
         )
         # dst device should not get rssi from this packet
         dst_dev = scan.get_device("01:145038")
@@ -830,11 +986,16 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan._process_packet(
-            make_dto(src="04:056053", dst="01:145038", code="3150", payload="02C8")
+            make_dto(
+                src="04:056053",
+                dst="01:145038",
+                code=Code._3150,
+                payload="02C8",
+            )
         )
         dev = scan.get_device("04:056053")
         assert dev is not None
-        assert dev.zone_idx == "02"
+        assert dev.zone_index == "02"
         assert dev.bound_to == "01:145038"
         assert dev.confidence == "high"
 
@@ -848,11 +1009,13 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan._process_packet(
-            make_dto(src="22:012299", dst="01:216136", code="000A", payload="01")
+            make_dto(
+                src="22:012299", dst="01:216136", code=Code._000A, payload="01"
+            )
         )
         dev = scan.get_device("22:012299")
         assert dev is not None
-        assert dev.zone_idx == "01"
+        assert dev.zone_index == "01"
         assert dev.bound_to == "01:216136"
         assert dev.confidence == "high"
 
@@ -868,12 +1031,14 @@ class TestDiscoveryScanPacketHandling:
         scan = DiscoveryScan(gwy)
         # CTL sends 000A to HGI with zone 02 config
         scan._process_packet(
-            make_dto(src="01:216136", dst="18:072981", code="000A", payload="02")
+            make_dto(
+                src="01:216136", dst="18:072981", code=Code._000A, payload="02"
+            )
         )
         dev = scan.get_device("01:216136")
         assert dev is not None
         # CTL must NOT have zone_idx set
-        assert dev.zone_idx is None
+        assert dev.zone_index is None
         assert dev.bound_to is None
 
     def test_bdr_3b00_sets_domain_id_fc(self) -> None:
@@ -886,7 +1051,12 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan._process_packet(
-            make_dto(src="13:121025", dst="--:------", code="3B00", payload="00C8")
+            make_dto(
+                src="13:121025",
+                dst="--:------",
+                code=Code._3B00,
+                payload="00C8",
+            )
         )
         dev = scan.get_device("13:121025")
         assert dev is not None
@@ -899,7 +1069,12 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan._process_packet(
-            make_dto(src="13:121025", dst="--:------", code="3EF0", payload="0000FF")
+            make_dto(
+                src="13:121025",
+                dst="--:------",
+                code=Code._3EF0,
+                payload="0000FF",
+            )
         )
         dev = scan.get_device("13:121025")
         assert dev is not None
@@ -913,8 +1088,8 @@ class TestDiscoveryScanPacketHandling:
             make_dto(
                 src="13:121025",
                 dst="18:203273",
-                code="3EF1",
-                verb="RP",
+                code=Code._3EF1,
+                verb=Verb.RP,
                 payload="00011D011D00FF",
             )
         )
@@ -934,7 +1109,7 @@ class TestDiscoveryScanPacketHandling:
             make_dto(
                 src="13:121025",
                 dst="--:------",
-                code="1100",
+                code=Code._1100,
                 payload="00180400007FFF01",
             )
         )
@@ -953,7 +1128,12 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway(known_list={"13:121025": {}})
         scan = DiscoveryScan(gwy)
         scan._process_packet(
-            make_dto(src="13:121025", dst="--:------", code="3B00", payload="00C8")
+            make_dto(
+                src="13:121025",
+                dst="--:------",
+                code=Code._3B00,
+                payload="00C8",
+            )
         )
         dev = scan.get_device("13:121025")
         assert dev is not None
@@ -976,17 +1156,19 @@ class TestDiscoveryScanPacketHandling:
     def test_codes_seen_deduplicated_and_sorted(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
-        scan._process_packet(make_dto(src="04:056053", code="1060"))
-        scan._process_packet(make_dto(src="04:056053", code="3150"))  # duplicate
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
+        scan._process_packet(make_dto(src="04:056053", code=Code._1060))
+        scan._process_packet(
+            make_dto(src="04:056053", code=Code._3150)
+        )  # duplicate
         dev = scan.get_device("04:056053")
         assert dev is not None
-        assert dev.codes_seen == ["1060", "3150"]  # sorted, no dupes
+        assert dev.codes_seen == [Code._1060, Code._3150]  # sorted, no dupes
 
     def test_battery_flag_set(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="1060"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._1060))
         dev = scan.get_device("04:056053")
         assert dev is not None
         assert dev.is_battery is True
@@ -999,17 +1181,19 @@ class TestDiscoveryScanPacketHandling:
                 src="01:145038",
                 dst="18:006402",
                 addr3="04:056053",
-                code="000C",
+                code=Code._000C,
             )
         )
         dev = scan.get_device("04:056053")
         assert dev is not None
-        assert dev.dst_count == 1  # addr3 treated as non-src
+        assert dev.destination_count == 1  # addr3 treated as non-src
 
     def test_broadcast_address_skipped(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="01:145038", dst="18:73030", code="2E04"))
+        scan._process_packet(
+            make_dto(src="01:145038", dst="18:73030", code=Code._2E04)
+        )
         # 18:73030 is broadcast — should not be in discovery list
         assert scan.get_device("18:73030") is None
 
@@ -1017,7 +1201,9 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan._process_packet(
-            make_dto(src="32:157747", dst="18:006402", code="31DA", verb=" I")
+            make_dto(
+                src="32:157747", dst="18:006402", code=Code._31DA, verb=Verb.I_
+            )
         )
         dev = scan.get_device("32:157747")
         assert dev is not None
@@ -1027,7 +1213,9 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan._process_packet(
-            make_dto(src="37:179540", dst="32:157747", code="22F1", verb=" I")
+            make_dto(
+                src="37:179540", dst="32:157747", code=Code._22F1, verb=Verb.I_
+            )
         )
         dev = scan.get_device("37:179540")
         assert dev is not None
@@ -1037,13 +1225,13 @@ class TestDiscoveryScanPacketHandling:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         assert scan.is_dirty is False
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
         assert scan.is_dirty is True
 
     def test_clear_dirty(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
         scan.clear_dirty()
         assert scan.is_dirty is False
 
@@ -1054,15 +1242,15 @@ class TestDiscoveryScanGetDevices:
     def test_get_all_devices(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
-        scan._process_packet(make_dto(src="01:145038", code="2E04"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
+        scan._process_packet(make_dto(src="01:145038", code=Code._2E04))
         assert len(scan.get_devices()) == 2
 
     def test_filter_by_type(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
-        scan._process_packet(make_dto(src="01:145038", code="2E04"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
+        scan._process_packet(make_dto(src="01:145038", code=Code._2E04))
         trvs = scan.get_devices(likely_type="TRV")
         assert len(trvs) == 1
         assert trvs[0].device_id == "04:056053"
@@ -1071,7 +1259,9 @@ class TestDiscoveryScanGetDevices:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         # 04:056053 sends binding code → high
-        scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
         # 01:145038 only seen as dst → low
         high_only = scan.get_devices(min_confidence="high")
         assert len(high_only) == 1
@@ -1081,7 +1271,7 @@ class TestDiscoveryScanGetDevices:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         assert scan.device_count() == 0
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
         assert scan.device_count() == 2  # src + dst both recorded
 
 
@@ -1091,7 +1281,7 @@ class TestDiscoveryScanRemoveDevice:
     def test_remove_existing(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
         assert scan.remove_device("04:056053") is True
         assert scan.get_device("04:056053") is None
 
@@ -1107,7 +1297,9 @@ class TestDiscoveryScanExportImport:
     def test_export_json_structure(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
         data = json.loads(scan.export_json())
         assert "version" in data
         assert "devices" in data
@@ -1116,8 +1308,10 @@ class TestDiscoveryScanExportImport:
     def test_export_import_round_trip(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
-        scan._process_packet(make_dto(src="04:056053", code="1060"))
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
+        scan._process_packet(make_dto(src="04:056053", code=Code._1060))
         exported = scan.export_json()
 
         # New scan, import the data
@@ -1127,13 +1321,13 @@ class TestDiscoveryScanExportImport:
         dev = scan2.get_device("04:056053")
         assert dev is not None
         assert dev.likely_type == "TRV"
-        assert "3150" in dev.codes_seen
-        assert "1060" in dev.codes_seen
+        assert Code._3150 in dev.codes_seen
+        assert Code._1060 in dev.codes_seen
 
     def test_import_clears_dirty(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
         assert scan.is_dirty is True
         scan.import_json(scan.export_json())
         assert scan.is_dirty is False
@@ -1141,8 +1335,8 @@ class TestDiscoveryScanExportImport:
     def test_export_sorted_by_device_id(self) -> None:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
-        scan._process_packet(make_dto(src="01:145038", code="2E04"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
+        scan._process_packet(make_dto(src="01:145038", code=Code._2E04))
         data = json.loads(scan.export_json())
         ids = [d["device_id"] for d in data["devices"]]
         assert ids == sorted(ids)
@@ -1160,8 +1354,8 @@ class TestNoTopologyMutation:
         """The scan should never call get_device on the registry."""
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", code="3150"))
-        scan._process_packet(make_dto(src="01:145038", code="2E04"))
+        scan._process_packet(make_dto(src="04:056053", code=Code._3150))
+        scan._process_packet(make_dto(src="01:145038", code=Code._2E04))
         # get_device should never have been called
         gwy.device_registry.get_device.assert_not_called()
 
@@ -1170,7 +1364,9 @@ class TestNoTopologyMutation:
         original_schema: dict[str, Any] = {"01:145038": {}}
         gwy = make_mock_gateway(schema=original_schema)
         scan = DiscoveryScan(gwy)
-        scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
         # Schema should be unchanged
         assert gwy._gwy_config.schema == original_schema
 
@@ -1191,12 +1387,14 @@ class TestOutOfOrderDiscovery:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         # TRV sends to CTL — CTL is dst
-        scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
         # TRV should be discovered with binding info
         trv = scan.get_device("04:056053")
         assert trv is not None
         assert trv.bound_to == "01:145038"
-        assert trv.zone_idx == "02"
+        assert trv.zone_index == "02"
         # CTL should also be recorded (as dst)
         ctl = scan.get_device("01:145038")
         assert ctl is not None
@@ -1207,15 +1405,19 @@ class TestOutOfOrderDiscovery:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         # Phase 1: TRV seen, CTL only as dst
-        scan._process_packet(make_dto(src="04:056053", dst="01:145038", code="3150"))
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
         ctl = scan.get_device("01:145038")
         assert ctl is not None
         assert ctl.confidence == "low"
 
         # Phase 2: CTL sends its own traffic
-        scan._process_packet(make_dto(src="01:145038", dst="18:006402", code="2E04"))
-        assert ctl.src_count == 1
-        assert "2E04" in ctl.codes_seen
+        scan._process_packet(
+            make_dto(src="01:145038", dst="18:006402", code=Code._2E04)
+        )
+        assert ctl.source_count == 1
+        assert Code._2E04 in ctl.codes_seen
         # Confidence should upgrade to medium (src_count >= 1 + codes >= 2)
         assert ctl.confidence in ("medium", "high")
 
@@ -1350,7 +1552,7 @@ class TestVirtualRfIntegration:
 
             # Verify TRV has zone binding
             trv = discovered[TRV_ID]
-            assert trv.zone_idx == "02"
+            assert trv.zone_index == "02"
             assert trv.bound_to == CTL_ID
             assert trv.confidence == "high"
             assert trv.is_battery is True
@@ -1358,12 +1560,12 @@ class TestVirtualRfIntegration:
             # Verify FAN is classified as FAN (not REM, despite 22F1)
             fan = discovered[FAN_ID]
             assert fan.likely_type == "FAN"
-            assert "31DA" in fan.codes_seen
+            assert Code._31DA in fan.codes_seen
 
             # Verify REM is classified as REM
             rem = discovered[REM_ID]
             assert rem.likely_type == "REM"
-            assert "22F1" in rem.codes_seen
+            assert Code._22F1 in rem.codes_seen
 
             await gwy.stop()
         finally:
@@ -1550,7 +1752,10 @@ class TestVirtualRfIntegration:
             )
 
             # Both are 37: prefix but different types — VC pair disambiguates
-            assert discovered[CO2_ID].likely_type != discovered[REM_ID].likely_type
+            assert (
+                discovered[CO2_ID].likely_type
+                != discovered[REM_ID].likely_type
+            )
 
             await gwy.stop()
         finally:
@@ -1581,15 +1786,15 @@ class TestHvacParentInference:
     async def test_fan_reply_infers_parent(self) -> None:
         """A FAN (32:) replying RP to a REM should set bound_to on the
         REM."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             # REM sends RQ to FAN
             dto1 = make_dto(
                 src=REM_29,
                 dst=FAN_ID,
-                code="31DA",
-                verb="RQ",
+                code=Code._31DA,
+                verb=Verb.RQ,
                 payload="00",
             )
             scan._process_packet(dto1)
@@ -1601,8 +1806,8 @@ class TestHvacParentInference:
             dto2 = make_dto(
                 src=FAN_ID,
                 dst=REM_29,
-                code="31DA",
-                verb="RP",
+                code=Code._31DA,
+                verb=Verb.RP,
                 payload="00EF007FFF424A084807A8082E075E6800C803C8C80000EFEF208A208A00",
             )
             scan._process_packet(dto2)
@@ -1615,14 +1820,14 @@ class TestHvacParentInference:
     async def test_rem_sending_to_fan_does_not_infer(self) -> None:
         """A REM sending I|22F1 to a FAN should NOT set bound_to — the
         FAN hasn't confirmed the binding."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             dto = make_dto(
                 src=REM_29,
                 dst=FAN_ID,
-                code="22F1",
-                verb=" I",
+                code=Code._22F1,
+                verb=Verb.I_,
                 payload="000404",
             )
             scan._process_packet(dto)
@@ -1634,15 +1839,15 @@ class TestHvacParentInference:
 
     async def test_fan_reply_to_co2_infers_parent(self) -> None:
         """A FAN (32:) replying RP to a CO2 should set bound_to."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             # FAN replies RP to CO2
             dto = make_dto(
                 src=FAN_ID,
                 dst=CO2_37,
-                code="31DA",
-                verb="RP",
+                code=Code._31DA,
+                verb=Verb.RP,
                 payload="00EF007FFF424A084807A8082E075E6800C803C8C80000EFEF208A208A00",
             )
             scan._process_packet(dto)
@@ -1660,14 +1865,14 @@ class TestHvacParentInference:
         its paired remote.  This is different from a REM broadcasting to a
         FAN (which doesn't prove binding).
         """
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             dto = make_dto(
                 src=FAN_ID,
                 dst=REM_29,
-                code="31DA",
-                verb=" I",  # directed I from FAN
+                code=Code._31DA,
+                verb=Verb.I_,  # directed I from FAN
                 payload="00EF007FFF424A",
             )
             scan._process_packet(dto)
@@ -1679,14 +1884,14 @@ class TestHvacParentInference:
 
     async def test_non_32_src_does_not_infer(self) -> None:
         """A non-FAN (not 32:) replying RP should NOT infer bound_to."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             dto = make_dto(
                 src="37:168270",  # not a FAN
                 dst=REM_29,
-                code="31DA",
-                verb="RP",
+                code=Code._31DA,
+                verb=Verb.RP,
                 payload="00EF007FFF424A",
             )
             scan._process_packet(dto)
@@ -1699,15 +1904,15 @@ class TestHvacParentInference:
     async def test_zone_binding_takes_precedence(self) -> None:
         """If zone binding sets bound_to first, HVAC inference must not
         overwrite it."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             # First: zone binding to a different FAN
             dto1 = make_dto(
                 src=REM_29,
                 dst="32:999999",
-                code="000C",
-                verb=" I",
+                code=Code._000C,
+                verb=Verb.I_,
                 payload="00FFFF02C8",
             )
             scan._process_packet(dto1)
@@ -1719,8 +1924,8 @@ class TestHvacParentInference:
             dto2 = make_dto(
                 src=FAN_ID,
                 dst=REM_29,
-                code="31DA",
-                verb="RP",
+                code=Code._31DA,
+                verb=Verb.RP,
                 payload="00EF007FFF424A",
             )
             scan._process_packet(dto2)
@@ -1733,15 +1938,15 @@ class TestHvacParentInference:
     async def test_fan_reply_enriches_existing_device(self) -> None:
         """If a REM is discovered without bound_to, a later FAN reply
         should enrich it with bound_to."""
-        scan = DiscoveryScan(gwy=make_mock_gateway())
+        scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
             # First: REM discovered via a non-HVAC code (no bound_to)
             dto1 = make_dto(
                 src=REM_29,
                 dst="63:262142",
-                code="10E0",
-                verb=" I",
+                code=Code._10E0,
+                verb=Verb.I_,
                 payload="00",
             )
             scan._process_packet(dto1)
@@ -1753,8 +1958,8 @@ class TestHvacParentInference:
             dto2 = make_dto(
                 src=FAN_ID,
                 dst=REM_29,
-                code="31DA",
-                verb="RP",
+                code=Code._31DA,
+                verb=Verb.RP,
                 payload="00EF007FFF424A",
             )
             scan._process_packet(dto2)

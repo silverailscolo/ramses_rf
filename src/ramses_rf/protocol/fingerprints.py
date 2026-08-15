@@ -104,18 +104,20 @@ __DEVICE_INFO_RAW: dict[str, DeviceFingerprint] = {
 
 __DEVICE_INFO: dict[str, list[str]] = {
     t: [k for k, v in __DEVICE_INFO_RAW.items() if v["dev_type"] == t]
-    for t in sorted(dict.fromkeys(v["dev_type"] for v in __DEVICE_INFO_RAW.values()))
+    for t in sorted(
+        dict.fromkeys(v["dev_type"] for v in __DEVICE_INFO_RAW.values())
+    )
 }  # convert to {dev_type: [signature, ...]}
 
 
-def check_signature(dev_type: str, signature: str) -> None:
+def check_signature(device_type: str, signature: str) -> None:
     """Raise ValueError if the device type is not known to have the signature.
 
     e.g. '01' can imply '0002FF0119FFFFFFFF', but not '0001C8820C006AFEFF'
     """
-    if not (sigs := __DEVICE_INFO.get(dev_type)) or signature not in sigs:
+    if not (sigs := __DEVICE_INFO.get(device_type)) or signature not in sigs:
         raise ValueError(
-            f"device type {dev_type} not known to have signature: {signature}"
+            f"device type {device_type} not known to have signature: {signature}"
         )
 
 
@@ -191,6 +193,9 @@ __ORCON_WIP = {
     "0001C88E": ("VMD-02RPS66", ""),
     "0001C88F": ("VMD-02RPS07", ""),
     "0001C892": ("VMD-02RPS78", ""),
-    "0001C895": ("VMD-15RMS86", "HRC-EcoSmart/Comfort, HRC-EcoMax/Comfort (from 2021)"),
+    "0001C895": (
+        "VMD-15RMS86",
+        "HRC-EcoSmart/Comfort, HRC-EcoMax/Comfort (from 2021)",
+    ),
     "0001C897": ("VMD-02RMS37", ""),
 }

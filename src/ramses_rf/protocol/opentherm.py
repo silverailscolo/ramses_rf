@@ -1053,9 +1053,11 @@ def parity(x: int) -> int:
     return x & 1
 
 
-def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
+def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
     """Make this the docstring."""
-    assert len(val_seqx) in (2, 4), f"Invalid value sequence: {val_seqx}"
+    assert len(value_sequence) in (2, 4), (
+        f"Invalid value sequence: {value_sequence}"
+    )
 
     # based upon: https://github.com/mvn23/pyotgw/blob/master/pyotgw/protocol.py
 
@@ -1081,7 +1083,10 @@ def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
 
     def f8_8(high_byte: str, low_byte: str) -> float | None:
         """Convert 2 bytes (as strs) into an OpenTherm f8_8 value."""
-        if high_byte == low_byte == "FF" or high_byte + low_byte == "47AB":
+        if high_byte == low_byte == "FF" or high_byte + low_byte in (
+            "47AB",
+            "1980",
+        ):
             return None
         return float(s16(high_byte, low_byte) / 256)
 
@@ -1095,7 +1100,9 @@ def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
         """Convert 2 bytes (as strs) into a signed int."""
         if high_byte == low_byte == "FF":  # TODO: move up to parser?
             raise ValueError()
-        return int.from_bytes(bytes.fromhex(high_byte + low_byte), "big", signed=True)
+        return int.from_bytes(
+            bytes.fromhex(high_byte + low_byte), "big", signed=True
+        )
 
     DATA_TYPES: dict[str, Callable[..., _DataValueT]] = {
         FLAG8: flag8,
@@ -1115,21 +1122,25 @@ def _msg_value(val_seqx: str, val_type: str) -> _DataValueT:
     # ], "Corrupt OPENTHERM_MESSAGES schema"
 
     try:
-        fnc = DATA_TYPES[val_type]
+        fnc = DATA_TYPES[value_type]
     except KeyError:
-        return val_seqx
+        return value_sequence
 
     try:
-        result: _DataValueT = fnc(val_seqx[:2], val_seqx[2:])
+        result: _DataValueT = fnc(value_sequence[:2], value_sequence[2:])
         return result
     except ValueError:
         return None
 
 
 # FIXME: this is not finished...
-def _decode_flags(data_id: OtDataId, flags: str) -> _FlagsSchemaT:  # TBA: list[str]:
+def _decode_flags(
+    data_id: OtDataId, flags: str
+) -> _FlagsSchemaT:  # TBA: list[str]:
     try:  # FIXME: don't use _OT_FLAG_LOOKUP
-        flag_schema: _FlagsSchemaT = _OT_FLAG_LOOKUP[OPENTHERM_MESSAGES[data_id][FLAGS]]
+        flag_schema: _FlagsSchemaT = _OT_FLAG_LOOKUP[
+            OPENTHERM_MESSAGES[data_id][FLAGS]
+        ]
 
     except KeyError as err:
         raise KeyError(f"Invalid data-id: 0x{data_id}: has no flags") from err
@@ -1149,7 +1160,9 @@ def decode_frame(
         raise ValueError(f"Invalid parity bit: 0b{int(frame[:2], 16) // 0x80}")
 
     if int(frame[:2], 16) & 0x0F != 0x00:
-        raise ValueError(f"Invalid spare bits: 0b{int(frame[:2], 16) & 0x0F:04b}")
+        raise ValueError(
+            f"Invalid spare bits: 0b{int(frame[:2], 16) & 0x0F:04b}"
+        )
 
     msg_type = (int(frame[:2], 16) & 0x70) >> 4
 
@@ -1192,8 +1205,12 @@ def decode_frame(
         data_value[SZ_VALUE] = _msg_value(frame[4:8], U16)
 
     elif isinstance(msg_schema[VAL], dict):
-        value_hb = _msg_value(frame[4:6], msg_schema[VAL].get(HB, msg_schema[VAL]))
-        value_lb = _msg_value(frame[6:8], msg_schema[VAL].get(LB, msg_schema[VAL]))
+        value_hb = _msg_value(
+            frame[4:6], msg_schema[VAL].get(HB, msg_schema[VAL])
+        )
+        value_lb = _msg_value(
+            frame[6:8], msg_schema[VAL].get(LB, msg_schema[VAL])
+        )
 
         if isinstance(value_hb, list) and isinstance(value_lb, list):  # FLAG8
             data_value[SZ_VALUE] = value_hb + value_lb  # only data_id 0x00
@@ -1221,7 +1238,9 @@ def decode_frame(
             data_value[SZ_VALUE] = result
         elif msg_schema.get(SENSOR) == Sensor.PERCENTAGE:
             # NOTE: OT defines % as 0.0-100.0, but (this) ramses uses 0.0-1.0 elsewhere
-            data_value[SZ_VALUE] = int(result * 2) / 200  # seems precision of 1%
+            data_value[SZ_VALUE] = (
+                int(result * 2) / 200
+            )  # seems precision of 1%
         elif msg_schema.get(SENSOR) == Sensor.FLOW_RATE:
             data_value[SZ_VALUE] = int(result * 100) / 100
         elif msg_schema.get(SENSOR) == Sensor.PRESSURE:

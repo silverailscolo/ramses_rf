@@ -24,9 +24,15 @@ from ramses_rf.const import (
     SZ_ZONES,
     DevType,
 )
-from ramses_rf.devices import BdrSwitch, Controller, Device, OtbGateway, UfhController
+from ramses_rf.devices import (
+    BdrSwitch,
+    Controller,
+    Device,
+    OtbGateway,
+    UfhController,
+)
 from ramses_rf.entity import Entity, class_by_attr
-from ramses_rf.enums import Action
+from ramses_rf.enums import Action, ThermalMode
 from ramses_rf.exceptions import (
     DeviceNotFoundError,
     SchemaInconsistentError,
@@ -74,6 +80,7 @@ from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused
 )
 
 from ramses_rf.const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
+    HEARTBEAT_TIMEOUT_DHW,
     I_,
     RP,
     RQ,
@@ -91,7 +98,9 @@ _TRACE = logging.getLogger("ramses_rf.legacy_trace")
 # explicitly poll their state to hydrate the system. To preserve the
 # battery life of wireless sensors, this interval defaults to 24 hours.
 # Users can decrease this value if more frequent updates are desired.
-DHW_POLLING_INTERVAL_SECS: int = 60 * 60 * 24
+# Kept as seconds (int) for backward compat; HEARTBEAT_TIMEOUT_DHW is the
+# timedelta equivalent used by DhwSensor.heartbeat_timeout.
+DHW_POLLING_INTERVAL_SECS: int = int(HEARTBEAT_TIMEOUT_DHW.total_seconds())
 
 
 _SystemT = TypeVar("_SystemT", bound="Evohome")
@@ -116,28 +125,34 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
     # TODO: check (code so complex, not sure if this is true)
     childs: list[Device]  # type: ignore[assignment]
 
-    def __init__(self, ctl: Controller) -> None:
+    def __init__(self, controller: Controller) -> None:
         """Initialise the TCS base class.
 
-        :param ctl: The central controller device for this system.
-        :type ctl: Controller
+        :param controller: The central controller device for this system.
+        :type controller: Controller
         """
-        _LOGGER.debug("Creating a TCS for CTL: %s (%s)", ctl.id, self.__class__)
+        _LOGGER.debug(
+            "Creating a TCS for CTL: %s (%s)", controller.id, self.__class__
+        )
 
-        if ctl.id in ctl._gwy.device_registry.system_by_id:
-            raise SchemaInconsistentError(f"Duplicate TCS for CTL: {ctl.id}")
-        if not isinstance(ctl, Controller):  # TODO
-            raise SchemaInconsistentError(f"Invalid CTL: {ctl} (is not a controller)")
+        if controller.id in controller._gateway.device_registry.system_by_id:
+            raise SchemaInconsistentError(
+                f"Duplicate TCS for CTL: {controller.id}"
+            )
+        if not isinstance(controller, Controller):  # TODO
+            raise SchemaInconsistentError(
+                f"Invalid CTL: {controller} (is not a controller)"
+            )
 
-        super().__init__(ctl._gwy)
+        super().__init__(controller._gateway)
 
         # FIXME: ZZZ entities must know their parent device ID and their own idx
-        self._z_id = ctl.id  # the responsible device is the controller
+        self._z_id = controller.id  # the responsible device is the controller
         self._z_idx = None  # ? True (sentinel value to pick up arrays?)
 
-        self.id: DeviceIdT = ctl.id
+        self.id: DeviceIdT = controller.id
 
-        self.ctl: Controller = ctl
+        self.ctl: Controller = controller
         self.tcs: Evohome = self  # type: ignore[assignment]
         self._child_id = FF  # NOTE: domain_id
 
@@ -155,7 +170,9 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         """The TCS relay, aka 'appliance control' (BDR or OTB)."""
         if self._app_cntrl:
             return self._app_cntrl
-        app_cntrl = [d for d in self.childs if isinstance(d, (BdrSwitch, OtbGateway))]
+        app_cntrl = [
+            d for d in self.childs if isinstance(d, (BdrSwitch, OtbGateway))
+        ]
         return app_cntrl[0] if len(app_cntrl) == 1 else None
 
     async def tpi_params(self) -> PayDictT._1100 | None:  # 1100
@@ -173,6 +190,30 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         :rtype: float | None
         """
         return self.demand_state.heat_demand
+
+    async def thermal_mode(self) -> ThermalMode | None:  # 2D49
+        """Return the current thermal operating mode of the system.
+
+        :returns: ThermalMode.COOL if in cooling mode, ThermalMode.HEAT if heating,
+            or None if unhydrated.
+        :rtype: ThermalMode | None
+        """
+        if self.system_state.cooling_mode is True:
+            return ThermalMode.COOL
+        if self.system_state.cooling_mode is False:
+            return ThermalMode.HEAT
+        return None
+
+    async def cooling_mode(self) -> bool | None:  # 2D49
+        """Return the cooling mode active state (from 2D49).
+
+        :returns: True if cooling mode is active, False if inactive, or None if unknown.
+        :rtype: bool | None
+        """
+        mode = await self.thermal_mode()
+        if mode is None:
+            return None
+        return mode == ThermalMode.COOL
 
     async def is_calling_for_heat(self) -> NoReturn:
         """Check if the system is actively calling for heat (Deprecated)."""
@@ -224,7 +265,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             result[SZ_SYSTEM] = {SZ_APPLIANCE_CONTROL: None}
 
         zones = {}
-        for idx, zone in schema[SZ_ZONES].items():
+        for zone_idx, zone in schema[SZ_ZONES].items():
             _zone = {}
             if zone[SZ_SENSOR] and Address(zone[SZ_SENSOR]).type in (
                 DEV_TYPE_MAP.CTL,
@@ -238,7 +279,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             ]:  # DEX
                 _zone.update({SZ_ACTUATORS: devices})
             if _zone:
-                zones[idx] = _zone
+                zones[zone_idx] = _zone
         if zones:
             result[SZ_ZONES] = zones
 
@@ -257,7 +298,9 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         :rtype: dict[str, Any]
         """
         params: dict[str, Any] = {SZ_SYSTEM: {}}
-        params[SZ_SYSTEM]["tpi_params"] = await self.entity_state.get_value(Code._1100)
+        params[SZ_SYSTEM]["tpi_params"] = await self.entity_state.get_value(
+            Code._1100
+        )
         return params
 
     async def status(self) -> dict[str, Any]:
@@ -270,7 +313,8 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         status[SZ_SYSTEM]["heat_demand"] = await self.heat_demand()
 
         status[SZ_DEVICES] = {
-            d.id: await d.status() for d in sorted(self.childs, key=lambda x: x.id)
+            d.id: await d.status()
+            for d in sorted(self.childs, key=lambda x: x.id)
         }
 
         return status
@@ -286,19 +330,19 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         self.zones: list[Zone] = []
         self.zone_by_idx: dict[str, Zone] = {}  # should not include HW
         self._max_zones: int = getattr(
-            self._gwy.config, SZ_MAX_ZONES, DEFAULT_MAX_ZONES
+            self._gateway.config, SZ_MAX_ZONES, DEFAULT_MAX_ZONES
         )
 
     def get_htg_zone(
-        self, zone_idx: str, *, msg: Message | None = None, **schema: Any
+        self, zone_index: str, *, msg: Message | None = None, **schema: Any
     ) -> Zone:
         """Return a heating zone, create it if required.
 
-        Heating zones are uniquely identified by a tcs_id and zone_idx pair.
+        Heating zones are uniquely identified by a tcs_id and zone_index pair.
         If created, attach it to this TCS.
 
-        :param zone_idx: The hexadecimal string identifier for the zone.
-        :type zone_idx: str
+        :param zone_index: The hexadecimal string identifier for the zone.
+        :type zone_index: str
         :param msg: An optional message to handle upon creation.
         :type msg: Message | None, optional
         :param schema: Keyword arguments defining the zone schema.
@@ -310,9 +354,9 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         # Zone._update_schema for hydration (ramses-rf/ramses_cc#919).
         schema = shrink(SCH_TCS_ZONES_ZON(schema), keep_hints=True)
 
-        zon: Zone = self.zone_by_idx.get(zone_idx)  # type: ignore[assignment]
+        zon: Zone = self.zone_by_idx.get(zone_index)  # type: ignore[assignment]
         if zon is None:  # not found in tcs, create it
-            zon = zone_factory(self, zone_idx, msg=msg, **schema)  # type: ignore[unreachable]
+            zon = zone_factory(self, zone_index, msg=msg, **schema)  # type: ignore[unreachable]
             self.zone_by_idx[zon.idx] = zon
             self.zones.append(zon)
 
@@ -367,7 +411,9 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
 
         self._msg_0006: Message = None  # type: ignore[assignment]
 
-    async def _schedule_version(self, *, force_io: bool = False) -> tuple[int, bool]:
+    async def _schedule_version(
+        self, *, force_io: bool = False
+    ) -> tuple[int, bool]:
         """Return the global schedule version number and an I/O boolean.
 
         If `force_io` is True, request the latest change counter from the
@@ -379,7 +425,6 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         :returns: A tuple containing the version number and an I/O flag.
         :rtype: tuple[int, bool]
         """
-
         # RQ --- 30:185469 01:037519 --:------ 0006 001 00
         # RP --- 01:037519 30:185469 --:------ 0006 004 000500E6
 
@@ -393,11 +438,11 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
                 False,
             )  # global_ver, did_io
 
-        pkt = await send_system_intent(
+        packet = await send_system_intent(
             self, Action.GET_SCHEDULE_VERSION, data={}, wait_for_reply=True
         )
-        if pkt:
-            self._msg_0006 = Message._from_pkt(pkt)
+        if packet:
+            self._msg_0006 = Message._from_pkt(packet)
 
         return (
             self._msg_0006.payload[SZ_CHANGE_COUNTER],
@@ -410,10 +455,10 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
 
         for zone in getattr(self, SZ_ZONES, []):
             task = asyncio.create_task(zone.get_schedule(force_io=True))
-            self._gwy.add_task(task)
+            self._gateway.add_task(task)
         if isinstance(self, StoredHw) and self.dhw:
             task = asyncio.create_task(self.dhw.get_schedule(force_io=True))
-            self._gwy.add_task(task)
+            self._gateway.add_task(task)
 
     async def schedule_version(self) -> int | None:
         """Return the current global schedule version.
@@ -421,7 +466,9 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         :returns: The current schedule version, or None if unknown.
         :rtype: int | None
         """
-        return await self.entity_state.get_value(Code._0006, key=SZ_CHANGE_COUNTER)
+        return await self.entity_state.get_value(
+            Code._0006, key=SZ_CHANGE_COUNTER
+        )
 
     async def status(self) -> dict[str, Any]:
         """Return the schedule status.
@@ -550,7 +597,9 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         self._dhw: DhwZone = None  # type: ignore[assignment]
 
     # TODO: should be a private method
-    def get_dhw_zone(self, *, msg: Message | None = None, **schema: Any) -> DhwZone:
+    def get_dhw_zone(
+        self, *, msg: Message | None = None, **schema: Any
+    ) -> DhwZone:
         """Return a DHW zone, create it if required.
 
         First, use the schema to create/update it, then pass it any msg
@@ -564,7 +613,6 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         :returns: The created or retrieved DHW zone.
         :rtype: DhwZone
         """
-
         schema = shrink(SCH_TCS_DHW(schema))
 
         if not self._dhw:
@@ -686,7 +734,9 @@ class SystemMode(SystemBase):  # 2E04
             action=Action.SET_SYSTEM_MODE,
             data={"system_mode": system_mode, "until": until},
         )
-        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
+        return await self._gateway.dispatcher.send(
+            intent, priority=Priority.HIGH
+        )
 
     async def set_auto(self) -> Message:
         """Revert system to Auto, setting zones to FollowSchedule.
@@ -726,14 +776,14 @@ class Datetime(SystemBase):  # 313F
             action=Action.GET_SYSTEM_TIME,
             data={},
         )
-        msg = await self._gwy.dispatcher.send(intent)
+        msg = await self._gateway.dispatcher.send(intent)
         return dt.fromisoformat(msg.payload[SZ_DATETIME])
 
-    async def set_datetime(self, dtm: dt) -> Message:
+    async def set_datetime(self, date_time: dt) -> Message:
         """Set the date and time of the system.
 
-        :param dtm: The datetime object to set.
-        :type dtm: dt
+        :param date_time: The datetime object to set.
+        :type date_time: dt
         :returns: The resulting message.
         :rtype: Message
         """
@@ -741,9 +791,11 @@ class Datetime(SystemBase):  # 313F
             src=HGI_DEV_ADDR,
             dst=Address(self.id),
             action=Action.SET_SYSTEM_TIME,
-            data={"datetime": dtm},
+            data={"datetime": date_time},
         )
-        return await self._gwy.dispatcher.send(intent, priority=Priority.HIGH)
+        return await self._gateway.dispatcher.send(
+            intent, priority=Priority.HIGH
+        )
 
 
 class UfHeating(SystemBase):
@@ -783,15 +835,15 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
 
     _SLUG: str = SYS_KLASS.SYS
 
-    def __init__(self, ctl: Controller, **kwargs: Any) -> None:
+    def __init__(self, controller: Controller, **kwargs: Any) -> None:
         """Initialise the TCS system.
 
-        :param ctl: The central controller device.
-        :type ctl: Controller
+        :param controller: The central controller device.
+        :type controller: Controller
         :param kwargs: Additional keyword arguments for the system.
         :type kwargs: Any
         """
-        super().__init__(ctl, **kwargs)
+        super().__init__(controller, **kwargs)
 
         self._heat_demands: dict[str, Any] = {}
         self._relay_demands: dict[str, Any] = {}
@@ -803,7 +855,6 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         Raise an exception if the new schema is not a superset of the
         existing schema.
         """
-
         _schema: dict[str, Any]
         # Use keep_hints=True so that _name in zone entries survives
         # shrink() and reaches Zone._update_schema for hydration
@@ -816,11 +867,11 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
             dev_id := schema[SZ_SYSTEM].get(SZ_APPLIANCE_CONTROL)
         ):
             try:
-                dev = self._gwy.device_registry.get_device(
+                device = self._gateway.device_registry.get_device(
                     dev_id, parent=self, child_id=FC
                 )
-                assert isinstance(dev, (BdrSwitch, OtbGateway))
-                self._app_cntrl = dev
+                assert isinstance(device, (BdrSwitch, OtbGateway))
+                self._app_cntrl = device
             except (
                 DeviceNotFoundError,
                 SchemaInconsistentError,
@@ -837,24 +888,28 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
             return
 
         if _schema := (schema.get(SZ_ZONES)):  # type: ignore[assignment]
-            [self.get_htg_zone(idx, **s) for idx, s in _schema.items()]
+            [
+                self.get_htg_zone(zone_idx, **s)
+                for zone_idx, s in _schema.items()
+            ]
 
     @classmethod
-    def create_from_schema(cls, ctl: Controller, **schema: Any) -> System:
+    def create_from_schema(
+        cls, controller: Controller, **schema: Any
+    ) -> System:
         """Create a CH/DHW system for a CTL and set its schema attrs.
 
         The appropriate System class should have been determined by a
         factory. Schema attrs include: class (klass) & others.
 
-        :param ctl: The central controller device.
-        :type ctl: Controller
+        :param controller: The central controller device.
+        :type controller: Controller
         :param schema: Schema attributes for the system.
         :type schema: Any
         :returns: The configured system instance.
         :rtype: System
         """
-
-        tcs = cls(ctl)
+        tcs = cls(controller)
         tcs._update_schema(**schema)
         return tcs
 
@@ -871,9 +926,15 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         # FC: 00-C8 (no F9, FA), TODO: deprecate as FC only?
         if not self._heat_demands:
             return None
+        mode = (
+            ThermalMode.COOL
+            if self.system_state.cooling_mode
+            else ThermalMode.HEAT
+        )
         return {
             k: ThermalDemandDTO(
                 thermal_demand=v.payload.get("heat_demand"),
+                mode=mode,
                 domain_id=k,
             )
             for k, v in self._heat_demands.items()
@@ -895,7 +956,8 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         if not self._relay_demands:
             return None
         return {
-            k: v.payload.get("relay_demand") for k, v in self._relay_demands.items()
+            k: v.payload.get("relay_demand")
+            for k, v in self._relay_demands.items()
         }
 
     @property
@@ -921,7 +983,9 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         return status
 
 
-class Evohome(ScheduleSync, Language, SystemMode, MultiZone, UfHeating, System):
+class Evohome(
+    ScheduleSync, Language, SystemMode, MultiZone, UfHeating, System
+):
     """The Evohome system class."""
 
     _SLUG: str = SYS_KLASS.TCS  # evohome
@@ -955,7 +1019,12 @@ class Hometronics(System):
     #     # will RP to: 0005/configured_zones_alt, but not: configured_zones
     #     # will RP to: 0004
 
-    RQ_SUPPORTED = (Code._0004, Code._000C, Code._2E04, Code._313F)  # TODO: WIP
+    RQ_SUPPORTED = (
+        Code._0004,
+        Code._000C,
+        Code._2E04,
+        Code._313F,
+    )  # TODO: WIP
     RQ_UNSUPPORTED = ("xxxx",)  # 10E0?
 
 
@@ -976,12 +1045,12 @@ SYS_CLASS_BY_SLUG: dict[str, type[System]] = class_by_attr(__name__, "_SLUG")
 
 
 def system_factory(
-    ctl: Controller, *, msg: Message | None = None, **schema: Any
+    controller: Controller, *, msg: Message | None = None, **schema: Any
 ) -> System:
     """Return the system class for a given controller/schema.
 
-    :param ctl: The central controller device.
-    :type ctl: Controller
+    :param controller: The central controller device.
+    :type controller: Controller
     :param msg: An optional message to handle.
     :type msg: Message | None, optional
     :param schema: Additional schema attributes.
@@ -991,7 +1060,7 @@ def system_factory(
     """
 
     def best_tcs_class(
-        ctl_addr: Address,
+        controller_address: Address,
         *,
         msg: Message | None = None,
         eavesdrop: bool = False,
@@ -999,8 +1068,8 @@ def system_factory(
     ) -> type[System]:
         """Return the best system class for a given CTL/schema.
 
-        :param ctl_addr: The central controller address.
-        :type ctl_addr: Address
+        :param controller_address: The central controller address.
+        :type controller_address: Address
         :param msg: An optional message.
         :type msg: Message | None, optional
         :param eavesdrop: Whether eavesdropping is enabled.
@@ -1010,26 +1079,27 @@ def system_factory(
         :returns: The appropriate system class type.
         :rtype: type[System]
         """
-
         klass: str = schema.get(SZ_CLASS)  # type: ignore[assignment]
 
         # a specified system class always takes precedence (even if it is wrong)...
         if klass and (cls := SYS_CLASS_BY_SLUG.get(klass)):
             _LOGGER.debug(
-                f"Using an explicitly-defined system class for: {ctl_addr} "
+                f"Using an explicitly-defined system class for: {controller_address} "
                 f"({cls._SLUG})"
             )
             return cls
 
         # otherwise, use the default system class...
         _LOGGER.debug(
-            "Using a generic system class for: %s (%s)", ctl_addr, Device._SLUG
+            "Using a generic system class for: %s (%s)",
+            controller_address,
+            Evohome._SLUG,
         )
         return Evohome
 
     return best_tcs_class(
-        ctl.addr,
+        controller.addr,
         msg=msg,
-        eavesdrop=ctl._gwy.config.enable_eavesdrop,
+        eavesdrop=controller._gateway.config.enable_eavesdrop,
         **schema,
-    ).create_from_schema(ctl, **schema)
+    ).create_from_schema(controller, **schema)

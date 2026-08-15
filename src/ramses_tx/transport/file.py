@@ -24,14 +24,14 @@ class _FileTransportAbstractor:
 
     def __init__(
         self,
-        pkt_source: dict[str, str] | str | TextIOWrapper,
+        packet_source: dict[str, str] | str | TextIOWrapper,
         protocol: RamsesProtocolT,
         /,
         *,
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the file transport abstractor."""
-        self._pkt_source = pkt_source
+        self._pkt_source = packet_source
         self._protocol = protocol
         self._loop = loop or asyncio.get_event_loop()
 
@@ -41,7 +41,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
     def __init__(
         self,
-        pkt_source: dict[str, str] | str | TextIOWrapper,
+        packet_source: dict[str, str] | str | TextIOWrapper,
         protocol: RamsesProtocolT,
         /,
         *,
@@ -53,13 +53,17 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         if not config.disable_sending:
             raise TransportSourceInvalid("This Transport cannot send packets")
 
-        _FileTransportAbstractor.__init__(self, pkt_source, protocol, loop=loop)
+        _FileTransportAbstractor.__init__(
+            self, packet_source, protocol, loop=loop
+        )
         _ReadTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._evt_reading = asyncio.Event()
 
-        self._extra[SZ_READER_TASK] = self._reader_task = self._loop.create_task(
-            self._start_reader(), name="FileTransport._start_reader()"
+        self._extra[SZ_READER_TASK] = self._reader_task = (
+            self._loop.create_task(
+                self._start_reader(), name="FileTransport._start_reader()"
+            )
         )
 
         self._make_connection(None)
@@ -105,7 +109,9 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
         elif isinstance(self._pkt_source, str):
             try:
                 # Removed redundant mode="r" to satisfy Ruff UP015
-                async with aiofiles.open(self._pkt_source, encoding="utf-8") as file:
+                async with aiofiles.open(
+                    self._pkt_source, encoding="utf-8"
+                ) as file:
                     async for dtm_pkt_line in file:
                         await self._process_line_from_raw(dtm_pkt_line)
             except FileNotFoundError as err:

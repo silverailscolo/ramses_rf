@@ -23,6 +23,7 @@ from ramses_rf.protocol.opentherm import (
     decode_frame,
     parity,
 )
+from ramses_tx.const import Code
 
 
 def build_frame(msg_type: int, data_id: int, data_value: str) -> str:
@@ -66,11 +67,11 @@ def test_msg_value_data_types() -> None:
     assert _msg_value("FF", S8) == -1
 
     # U16 and S16
-    assert _msg_value("0100", U16) == 256
+    assert _msg_value(Code._0100, U16) == 256
     assert _msg_value("FF00", S16) == -256
 
     # F8_8 conversion
-    assert _msg_value("0100", F8_8) == 1.0
+    assert _msg_value(Code._0100, F8_8) == 1.0
 
 
 def test_msg_value_value_errors() -> None:
@@ -135,7 +136,9 @@ def test_decode_frame_read_data_null_injection() -> None:
     assert data_4[SZ_VALUE] is None
 
     # 5. Empty / corrupt schema fallback mapping (SZ_VALUE injected as None)
-    with patch.dict("ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES", {0x3E: {}}):
+    with patch.dict(
+        "ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES", {0x3E: {}}
+    ):
         _, _, data_5, _ = decode_frame(build_frame(0b000, 0x3E, "0000"))
         assert data_5[SZ_VALUE] is None
 
@@ -170,15 +173,15 @@ def test_decode_frame_read_ack_valid_values() -> None:
     assert data_6[SZ_VALUE] == 1.0
 
     # 7. VAL is F8_8 -> SENSOR FLOW_RATE mapping
-    _, _, data_7, _ = decode_frame(build_frame(0b100, 0x13, "0100"))
+    _, _, data_7, _ = decode_frame(build_frame(0b100, 0x13, Code._0100))
     assert data_7[SZ_VALUE] == 1.0
 
     # 8. VAL is F8_8 -> SENSOR PRESSURE mapping
-    _, _, data_8, _ = decode_frame(build_frame(0b100, 0x12, "0100"))
+    _, _, data_8, _ = decode_frame(build_frame(0b100, 0x12, Code._0100))
     assert data_8[SZ_VALUE] == 1.0
 
     # 9. VAL is F8_8 -> SENSOR TEMPERATURE mapping
-    _, _, data_9, _ = decode_frame(build_frame(0b100, 0x18, "0100"))
+    _, _, data_9, _ = decode_frame(build_frame(0b100, 0x18, Code._0100))
     assert data_9[SZ_VALUE] == 1.0
 
     # 10. VAL is F8_8 -> Result resolves to None ("FFFF" bypasses mapping)
@@ -189,12 +192,15 @@ def test_decode_frame_read_ack_valid_values() -> None:
 def test_decode_frame_fallback_values() -> None:
     # 1. Unrecognized VAL string string falls back to U16 processing
     with patch.dict(
-        "ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES", {0x3E: {"val": "UNKNOWN"}}
+        "ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES",
+        {0x3E: {"val": "UNKNOWN"}},
     ):
         _, _, data_1, _ = decode_frame(build_frame(0b100, 0x3E, "0305"))
         assert data_1[SZ_VALUE] == 773
 
     # 2. Corrupt / empty schema dictionary falls back to U16 processing
-    with patch.dict("ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES", {0x3E: {}}):
+    with patch.dict(
+        "ramses_rf.protocol.opentherm.OPENTHERM_MESSAGES", {0x3E: {}}
+    ):
         _, _, data_2, _ = decode_frame(build_frame(0b100, 0x3E, "0305"))
         assert data_2[SZ_VALUE] == 773

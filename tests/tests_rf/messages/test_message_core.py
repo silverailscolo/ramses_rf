@@ -3,6 +3,7 @@
 from datetime import UTC, datetime as dt
 
 from ramses_rf.address import Address
+from ramses_rf.const import Code, Verb
 from ramses_rf.enums import Topic
 from ramses_rf.messages.core import Message
 from ramses_rf.routing import StateHeader
@@ -16,12 +17,12 @@ def test_message_enrichment_and_lineage() -> None:
     pkt = PacketDTO(
         timestamp=dt.now(tz=UTC),
         rssi="-70",
-        verb=" I",
+        verb=Verb.I_,
         seq="000",
         addr1="01:111111",
         addr2="--:------",
         addr3="04:222222",
-        code="30C9",
+        code=Code._30C9,
         length="003",
         raw_payload="0001C8",
     )
@@ -29,7 +30,10 @@ def test_message_enrichment_and_lineage() -> None:
     # 1. Create the base Message (RAW_EVENT)
 
     mock_header = StateHeader.create(
-        code="30C9", verb=" I", source_id="01:111111", context_val=None
+        code=Code._30C9,
+        verb=Verb.I_,
+        source_id="01:111111",
+        context_value=None,
     )
 
     msg = Message(

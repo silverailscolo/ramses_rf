@@ -7,6 +7,7 @@ import pytest
 
 from ramses_rf.address import Address
 from ramses_rf.config import GatewayConfig
+from ramses_rf.const import Code, Verb
 from ramses_rf.devices.dev_registry import DeviceRegistry
 from ramses_rf.enums import Topic, TopologyAction
 from ramses_rf.messages.core import Message
@@ -31,12 +32,12 @@ async def test_topology_builder_trv_implicit_binding() -> None:
     # 3. Arrange: The L7 Fact (The TRV Broadcast with addr3 Controller)
     mock_packet = PacketDTO(
         rssi="-70",
-        verb=" I",
+        verb=Verb.I_,
         seq="000",
         addr1="04:111111",
         addr2="--:------",
         addr3="01:123456",
-        code="1060",
+        code=Code._1060,
         length="003",
         raw_payload="01FF01",
         timestamp=dt.now(),
@@ -45,10 +46,10 @@ async def test_topology_builder_trv_implicit_binding() -> None:
     msg = Message(
         topic=Topic.TOPOLOGY_DISCOVERY,
         header=StateHeader.create(
-            code="1060",
-            verb=" I",
+            code=Code._1060,
+            verb=Verb.I_,
             source_id="04:111111",
-            context_val=None,
+            context_value=None,
         ),
         src=Address("04:111111"),
         dst=Address("--:------"),
@@ -65,7 +66,9 @@ async def test_topology_builder_trv_implicit_binding() -> None:
 
     # Verify the Prefix Heuristic fired
     promote_event = next(
-        e for e in emitted_events if e.action == TopologyAction.UPDATE_DEVICE_CLASS
+        e
+        for e in emitted_events
+        if e.action == TopologyAction.UPDATE_DEVICE_CLASS
     )
     assert promote_event.device_id == "04:111111"
 
@@ -119,4 +122,6 @@ async def test_device_registry_topology_ingestion() -> None:
     # by attempting to resolve/instantiate the devices via the factory callback.
     factory_calls = str(mock_factory.call_args_list)
     assert "04:111111" in factory_calls, "Registry did not resolve the TRV"
-    assert "01:123456" in factory_calls, "Registry did not resolve the Controller"
+    assert "01:123456" in factory_calls, (
+        "Registry did not resolve the Controller"
+    )

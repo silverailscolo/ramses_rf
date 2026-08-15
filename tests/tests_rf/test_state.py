@@ -11,13 +11,15 @@ from ramses_rf.messages import Message
 from ramses_rf.routing import RoutingContext, StateHeader
 from ramses_rf.state import EntityState, MessageStore
 from ramses_tx import Code, Packet
-from ramses_tx.const import I_
+from ramses_tx.const import I_, Verb
 
 
 class DummyMsg:
     """A lightweight mock message to accurately track property accesses."""
 
-    def __init__(self, src_id: str, code: Code, payload_dict: dict[str, Any]) -> None:
+    def __init__(
+        self, src_id: str, code: Code, payload_dict: dict[str, Any]
+    ) -> None:
         self.src = MagicMock()
         self.src.id = src_id
         self.dst = MagicMock()
@@ -69,7 +71,7 @@ def test_message_store_initialization() -> None:
 def test_message_store_state_cache_indexing() -> None:
     """Verify header indexing and lookups in MessageStore state_cache."""
     store = MessageStore(maintain=False)
-    hdr = StateHeader.create("1F09", " I", "01:123456", "00")
+    hdr = StateHeader.create(Code._1F09, Verb.I_, "01:123456", "00")
     mock_msg = MagicMock()
     mock_msg.dtm.isoformat.return_value = "2023-01-01T12:00:00.000000"
 
@@ -140,7 +142,7 @@ async def test_expired_message_deletion_queued_once(
 
     mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
     mock_loop.create_task = MagicMock(side_effect=lambda coro: coro.close())
-    cast(Any, zone_entity._gwy)._loop = mock_loop
+    cast(Any, zone_entity._gateway)._loop = mock_loop
 
     await zone_entity.get_value(Code._30C9)
     await zone_entity.get_value(Code._30C9)
@@ -212,7 +214,7 @@ class TestMessageStore:
 
         ret = msg_db.add(self.msg1)
         assert ret is None
-        assert await msg_db.contains(code="1298")
+        assert await msg_db.contains(code=Code._1298)
         assert len(await msg_db.all()) == 1
 
         ret = msg_db.add(self.msg2)
@@ -245,36 +247,38 @@ class TestMessageStore:
         msg_db.add(self.msg5)
         msg_db.add(self.msg6)
 
-        assert await msg_db.contains(code="2309")
-        assert await msg_db.contains(code="3150")
-        assert await msg_db.contains(src="01:087939", dst="01:087939", code="2309")
-        assert not await msg_db.contains(src="01:12345", code="2309")
+        assert await msg_db.contains(code=Code._2309)
+        assert await msg_db.contains(code=Code._3150)
+        assert await msg_db.contains(
+            source="01:087939", destination="01:087939", code=Code._2309
+        )
+        assert not await msg_db.contains(source="01:12345", code=Code._2309)
         assert not await msg_db.contains(code="1234")
-        assert await msg_db.contains(dst="01:087939")
+        assert await msg_db.contains(destination="01:087939")
 
-        res = await msg_db.get(src=self._SRC2)
+        res = await msg_db.get(source=self._SRC2)
         assert len(res) == 1
         assert res[0].code == Code._2309
 
-        res = await msg_db.get(dst=self._SRC2)
+        res = await msg_db.get(destination=self._SRC2)
         assert len(res) == 2
         assert res[0].code == Code._2309
         assert res[1].code == Code._3220
 
-        res = await msg_db.get(src=self._SRC1)
+        res = await msg_db.get(source=self._SRC1)
         assert len(res) == 3
         assert res[0].code == Code._1298
         assert res[1].code == Code._1298
         assert res[2].code == Code._31DA
 
-        res = await msg_db.get(src="04:189078")
+        res = await msg_db.get(source="04:189078")
         assert len(res) == 1
         assert res[0].code == Code._3150
 
         assert len(await msg_db.all()) == 6
 
         msg_db.add(self.msg7)
-        res = await msg_db.get(src="04:189078")
+        res = await msg_db.get(source="04:189078")
         assert len(res) == 2
 
         msg_db.stop()
@@ -292,9 +296,9 @@ class TestMessageStore:
         assert len(await msg_db.all()) == 2
         assert not await msg_db.contains(dtm=self.msg1.dtm)
 
-        await msg_db.rem(code="2309")
+        await msg_db.rem(code=Code._2309)
         assert len(await msg_db.all()) == 1
-        assert not await msg_db.contains(code="2309")
+        assert not await msg_db.contains(code=Code._2309)
 
         msg_db.stop()
 
@@ -303,7 +307,7 @@ class TestMessageStore:
         msg_db = MessageStore(maintain=False, disk_path=None)
         msg_db.add(self.msg4)
 
-        res = await msg_db.get(code="31DA")
+        res = await msg_db.get(code=Code._31DA)
         assert len(res) == 1
         assert res[0].payload == self.msg4.payload
 

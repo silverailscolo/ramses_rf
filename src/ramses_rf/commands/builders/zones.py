@@ -17,11 +17,13 @@ from ramses_tx.const import DEFAULT_NUM_REPEATS, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
 
 
-def _build_zone_rq(intent: Command, code: Code, payload_suffix: str = "") -> CommandDTO:
+def _build_zone_rq(
+    intent: Command, code: Code, payload_suffix: str = ""
+) -> CommandDTO:
     """Construct a standard single-zone RQ CommandDTO."""
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+        raise ValueError("Missing 'zone_index'/'zone_idx' in intent data")
 
     payload = f"{check_idx(zone_idx)}{payload_suffix}"
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
@@ -49,13 +51,17 @@ def build_set_temperature(intent: Command) -> CommandDTO:
     :rtype: CommandDTO
     :raises ValueError: If 'zone_idx' or 'setpoint' is missing.
     """
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     setpoint = intent.get("setpoint")
 
     if zone_idx is None or setpoint is None:
-        raise ValueError("Missing 'zone_idx' or 'setpoint' in intent data")
+        raise ValueError(
+            "Missing 'zone_index'/'zone_idx' or 'setpoint' in intent data"
+        )
 
-    payload = ZoneSetpointPayload(zone_idx=zone_idx, setpoint_temp=setpoint).hex()
+    payload = ZoneSetpointPayload(
+        zone_index=zone_idx, setpoint_temp=setpoint
+    ).hex()
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
@@ -83,9 +89,9 @@ def build_set_mode(intent: Command) -> CommandDTO:
     :rtype: CommandDTO
     :raises ValueError: If 'zone_idx' is missing or parameters are invalid.
     """
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+        raise ValueError("Missing 'zone_index'/'zone_idx' in intent data")
 
     mode = intent.get("mode")
     setpoint = intent.get("setpoint")
@@ -95,12 +101,14 @@ def build_set_mode(intent: Command) -> CommandDTO:
     mode = normalise_mode(mode, setpoint, until, duration)
 
     if setpoint is not None and not isinstance(setpoint, (float, int)):
-        raise ValueError(f"Invalid args: setpoint={setpoint}, but must be a float")
+        raise ValueError(
+            f"Invalid args: setpoint={setpoint}, but must be a float"
+        )
 
     until, duration = normalise_until(mode, setpoint, until, duration)
 
     payload = ZoneModePayload(
-        zone_idx=zone_idx,
+        zone_index=zone_idx,
         setpoint_temp=setpoint,
         mode_code=mode,
         duration_minutes=duration,
@@ -132,13 +140,15 @@ def build_set_name(intent: Command) -> CommandDTO:
     :rtype: CommandDTO
     :raises ValueError: If 'zone_idx' or 'name' is missing.
     """
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     name = intent.get("name")
 
     if zone_idx is None or name is None:
-        raise ValueError("Missing 'zone_idx' or 'name' in intent data")
+        raise ValueError(
+            "Missing 'zone_index'/'zone_idx' or 'name' in intent data"
+        )
 
-    payload = ZoneNamePayload(zone_idx=zone_idx, name=name).hex()
+    payload = ZoneNamePayload(zone_index=zone_idx, name=name).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -166,9 +176,9 @@ def build_set_config(intent: Command) -> CommandDTO:
     :rtype: CommandDTO
     :raises ValueError: If required parameters are missing or out of range.
     """
-    zone_idx = intent.get("zone_idx")
+    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
     if zone_idx is None:
-        raise ValueError("Missing 'zone_idx' in intent data")
+        raise ValueError("Missing 'zone_index'/'zone_idx' in intent data")
 
     min_temp = intent.get("min_temp", 5.0)
     max_temp = intent.get("max_temp", 35.0)
@@ -198,7 +208,7 @@ def build_set_config(intent: Command) -> CommandDTO:
         zone_flags |= 0x10
 
     payload = ZoneConfigPayload(
-        zone_idx=zone_idx,
+        zone_index=zone_idx,
         zone_flags=zone_flags,
         min_temp=min_temp,
         max_temp=max_temp,

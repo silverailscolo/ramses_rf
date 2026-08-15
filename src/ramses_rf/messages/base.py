@@ -5,12 +5,17 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
 from ramses_rf.address import Address, id_to_address
-from ramses_rf.const import SZ_DHW_IDX, SZ_DOMAIN_ID, SZ_UFH_IDX, SZ_ZONE_IDX
+from ramses_rf.const import (
+    SZ_DHW_INDEX,
+    SZ_DOMAIN_INDEX,
+    SZ_UFH_INDEX,
+    SZ_ZONE_INDEX,
+)
+from ramses_rf.payloads.base import PayloadBase
 from ramses_tx import CommandDTO, PacketDTO
 from ramses_tx.models import DeviceId, RawPacket, TransportMessage
 from ramses_tx.typing import DeviceIdT
@@ -31,7 +36,7 @@ from ..const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
 
 if TYPE_CHECKING:
     # pylint: disable=unused-import
-    from ..const import IndexT, VerbT  # noqa: F401
+    from ..const import IndexT, Verb  # noqa: F401
 
 
 __all__ = ["Message"]
@@ -41,17 +46,6 @@ MSG_FORMAT_10: str = "|| {:10s} | {:10s} | {:2s} | {:16s} | {:^4s} || {}"
 
 
 _LOGGER = logging.getLogger(__name__)
-
-
-@dataclass
-class PayloadBase:
-    """Base Data Transfer Object for parsed payloads.
-
-    Acts as the foundation for the strict DTO migration, replacing raw
-    dicts.
-    """
-
-    pass
 
 
 # Transition alias for typing until full payload migration is complete
@@ -70,7 +64,7 @@ class Message:
     _GET_CODE_NAME_CB: Callable[[Code | str], str] | None = None
     _GET_MSG_IDX_CB: Callable[[Any], dict[str, str]] | None = None
 
-    _gwy: Any | None = None
+    _gateway: Any | None = None
 
     def __init__(self, dto: PacketDTO) -> None:
         """Create a message from a valid packet.
@@ -85,7 +79,7 @@ class Message:
         self.rssi: str = dto.rssi
 
         # Cleanly cast properties
-        self.verb: VerbT = dto.verb  # type: ignore[assignment]
+        self.verb: Verb = dto.verb  # type: ignore[assignment]
         self.seqn: str = dto.seq
 
         try:
@@ -110,7 +104,9 @@ class Message:
         )
 
         valid = [a for a in self._addrs if a.id != "--:------"]
-        self.src: Address = valid[0] if valid else id_to_address(DeviceIdT("--:------"))
+        self.src: Address = (
+            valid[0] if valid else id_to_address(DeviceIdT("--:------"))
+        )
         self.dst: Address = valid[1] if len(valid) > 1 else self.src
 
         # Initialize attributes before parsing to prevent AttributeError
@@ -136,12 +132,16 @@ class Message:
         :rtype: RoutingContext
         """
         context_value = extract_context_value(
-            self._dto.payload, raw_payload=self._dto.raw_payload, code=self.code
+            self._dto.payload,
+            raw_payload=self._dto.raw_payload,
+            code=self.code,
         )
         return RoutingContext(
             context_value
             if context_value is not None
-            else (self._index_value if self._index_value is not False else None)
+            else (
+                self._index_value if self._index_value is not False else None
+            )
         )
 
     @property
@@ -155,18 +155,18 @@ class Message:
             code=self.code,
             verb=self.verb,
             source_id=self.src.id,
-            context_val=self.context.value,
+            context_value=self.context.value,
         )
 
-    def _format_frame(self, seqn: str | None = None) -> str:
+    def _format_frame(self, sequence_number: str | None = None) -> str:
         """Format the message into a standard ASCII RAMSES RF packet frame.
 
-        :param seqn: Optional sequence number string. Defaults to "---".
-        :type seqn: str | None
+        :param sequence_number: Optional sequence number string. Defaults to "---".
+        :type sequence_number: str | None
         :returns: The formatted ASCII frame string.
         :rtype: str
         """
-        seq_str = seqn if seqn else "---"
+        seq_str = sequence_number if sequence_number else "---"
         dto = self._dto
         return f"{dto.verb} {seq_str} {dto.addr1} {dto.addr2} {dto.addr3} {dto.code} {dto.length} {dto.payload}"
 
@@ -198,29 +198,29 @@ class Message:
         return self._format_frame(getattr(self, "seqn", None))
 
     @classmethod
-    def _from_pkt(cls: type[_MessageT], pkt: Any) -> _MessageT:
+    def _from_pkt(cls: type[_MessageT], packet: Any) -> _MessageT:
         """Create a Message (or subclass) from a legacy Packet.
 
-        :param pkt: The legacy packet object.
-        :type pkt: Any
+        :param packet: The legacy packet object.
+        :type packet: Any
         :return: The generated message.
         :rtype: Message
         """
-        if isinstance(pkt, cls):
-            return pkt
-        msg = getattr(pkt, "_msg", None)
+        if isinstance(packet, cls):
+            return packet
+        msg = getattr(packet, "_msg", None)
         if isinstance(msg, cls):
             return msg
-        return cls(pkt.to_dto())
+        return cls(packet.to_dto())
 
     @classmethod
     def _from_cmd(
-        cls: type[_MessageT], cmd: CommandDTO, dtm: dt | None = None
+        cls: type[_MessageT], command: CommandDTO, dtm: dt | None = None
     ) -> _MessageT:
         """Create a Message (or subclass) from a Command.
 
-        :param cmd: The command.
-        :type cmd: CommandDTO
+        :param command: The command.
+        :type command: CommandDTO
         :param dtm: Datetime overrides.
         :type dtm: dt | None
         :return: The generated message.
@@ -229,8 +229,8 @@ class Message:
         # Temporary shim bridging backwards logic during Phase 2
         from ramses_tx.packet import Packet
 
-        pkt = Packet._from_cmd(cmd, dtm=dtm)
-        return cls(pkt.to_dto())
+        packet = Packet._from_cmd(command, dtm=dtm)
+        return cls(packet.to_dto())
 
     def __str__(self) -> str:
         """Return a human-readable string representation of this object.
@@ -241,23 +241,23 @@ class Message:
 
         def format_context(dto: PacketDTO) -> str:
             """Extract the context string from the packet safely."""
-            val: str = ""
+            context_val: str = ""
             if self._index_value is True:
-                val = "[..]"
+                context_val = "[..]"
             elif self._index_value is False:
-                val = ""
+                context_val = ""
             elif self._index_value is None:
-                val = "??"  # type: ignore[unreachable]
+                context_val = "??"  # type: ignore[unreachable]
             else:
-                val = str(self._index_value)
+                context_val = str(self._index_value)
 
             if (
-                not val
+                not context_val
                 and isinstance(dto.raw_payload, str)
                 and dto.raw_payload[:2] not in ("00", "FF")
             ):
                 return f"({dto.raw_payload[:2]})"
-            return val
+            return context_val
 
         if self._str is not None:
             return self._str
@@ -295,9 +295,9 @@ class Message:
         addr1 = self._addrs[0].id
         addr2 = self._addrs[1].id
         addr3 = self._addrs[2].id
-        seqn = self.seqn if self.seqn else "---"
+        sequence_number = self.seqn if self.seqn else "---"
         return (
-            f"{self.verb} {seqn} {addr1} {addr2} {addr3} "
+            f"{self.verb} {sequence_number} {addr1} {addr2} {addr3} "
             f"{self.code} {self.len:03d} {raw_payload}"
         )
 
@@ -325,24 +325,42 @@ class Message:
             return NotImplemented
         return self.dtm < other.dtm
 
-    def _name(self, addr: Address) -> str:
+    def _name(self, address: Address) -> str:
         """Return a friendly name for an Address, or a Device.
 
-        :param addr: The address to identify.
-        :type addr: Address
+        :param address: The address to identify.
+        :type address: Address
         :return: A friendly name for an Address, or a Device.
         :rtype: str
         """
         # can't do 'CTL:123456' instead of ' 01:123456'
-        return f" {addr.id}"
+        return f" {address.id}"
 
     @property
     def payload(self) -> PayloadT:
-        """Return the parsed payload, preferably as a strongly-typed DTO.
+        """Return the parsed payload, preferably as legacy dictionary or list.
 
         :return: The payload.
         :rtype: PayloadT
         """
+        if not self._has_payload:
+            return {}
+        if isinstance(self._payload, PayloadBase):
+            try:
+                return self._payload.to_dict(msg=self)
+            except TypeError:
+                return self._payload.to_dict()
+        if isinstance(self._payload, list):
+            result = []
+            for item in self._payload:
+                if isinstance(item, PayloadBase):
+                    try:
+                        result.append(item.to_dict(msg=self))
+                    except TypeError:
+                        result.append(item.to_dict())
+                else:
+                    result.append(item)
+            return result
         return self._payload
 
     @property
@@ -354,10 +372,20 @@ class Message:
         :return: False if there is no payload (may falsely return True).
         :rtype: bool
         """
+        v_str = (
+            str(getattr(self.verb, "value", str(self.verb)))
+            .split(".")[-1]
+            .strip()
+        )
+        if v_str not in (RQ, f"{RQ}_") and self.code in (
+            Code._1FC9,
+            Code._1F09,
+        ):
+            return True
         if self.len == 1:
             return False
-        if str(self.verb).strip() == "RQ":
-            if self.len == 2 and self.code != "0016":
+        if str(self.verb).strip() == RQ:
+            if self.len == 2 and self.code != Code._0016:
                 return False
         return True
 
@@ -376,8 +404,8 @@ class Message:
 
     @property
     def _idx(self) -> dict[str, str]:
-        """Get the domain_id/zone_idx/other_idx of a message payload,
-        if any.
+        """Get the domain_id/zone_idx/other_idx of a message payload.
+
         Used to identify the zone/domain that a message applies to.
 
         :return: an empty dict if there is none such, or None if
@@ -389,22 +417,25 @@ class Message:
 
         IDX_NAMES = {
             Code._0002: "other_idx",
-            Code._10A0: SZ_DHW_IDX,
-            Code._1260: SZ_DHW_IDX,
-            Code._1F41: SZ_DHW_IDX,
-            Code._22C9: SZ_UFH_IDX,
+            Code._10A0: SZ_DHW_INDEX,
+            Code._1260: SZ_DHW_INDEX,
+            Code._1F41: SZ_DHW_INDEX,
+            Code._22C9: SZ_UFH_INDEX,
             Code._2389: "other_idx",
             Code._2D49: "other_idx",
             Code._31D9: "hvac_id",
             Code._31DA: "hvac_id",
             Code._3220: "msg_id",
-        }  # ALSO: SZ_DOMAIN_ID, SZ_ZONE_IDX
+        }  # ALSO: SZ_DOMAIN_INDEX, SZ_ZONE_INDEX
 
         if self.code in (Code._31D9, Code._31DA):
             assert isinstance(self._index_value, str)  # mypy hint
             return {"hvac_id": self._index_value}
 
-        if self._index_value in (True, False) or self.code in CODE_IDX_ARE_COMPLEX:
+        if (
+            self._index_value in (True, False)
+            or self.code in CODE_IDX_ARE_COMPLEX
+        ):
             return {}
 
         if self.code in (Code._3220,):  # FIXME: should be _SIMPLE
@@ -458,7 +489,7 @@ class Message:
 
         assert isinstance(self._index_value, str)  # mypy hint
         default_index_name = (
-            SZ_DOMAIN_ID if self._index_value[:1] == "F" else SZ_ZONE_IDX
+            SZ_DOMAIN_INDEX if self._index_value[:1] == "F" else SZ_ZONE_INDEX
         )
         index_name = IDX_NAMES.get(self.code, default_index_name)
 
@@ -466,8 +497,7 @@ class Message:
 
     @property
     def dto(self) -> TransportMessage:
-        """Generate a strictly-typed TransportMessage DTO from this
-        legacy Message.
+        """Generate a TransportMessage DTO from this legacy Message.
 
         This acts as a safe, passive bridge to validate the new Data
         Transfer Objects against the legacy snapshot tests before fully

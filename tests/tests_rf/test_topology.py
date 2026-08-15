@@ -148,7 +148,9 @@ async def test_ramses_rf_isolated_topology() -> None:
     )
 
     # Assert the Evohome system was instantiated
-    assert len(systems) > 0, "CRITICAL: TopologyBuilder failed to create a System!"
+    assert len(systems) > 0, (
+        "CRITICAL: TopologyBuilder failed to create a System!"
+    )
 
 
 # --- Unit Tests for Topology Parent Promotion & Re-binding ---

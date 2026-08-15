@@ -6,11 +6,12 @@ import logging
 from typing import Final
 
 from ramses_rf.messages.core import Message
+from ramses_tx.const import Code
 
 _LOGGER = logging.getLogger(__name__)
 
 _ALL_DEVICE_ID: Final[str] = "63:262142"
-_CODE_BINDING: Final[str] = "1FC9"
+_CODE_BINDING: Final[Code] = Code._1FC9
 _PHASE_OFFER: Final[str] = "offer"
 
 
@@ -52,13 +53,15 @@ class CentralDispatcher:
             self._task = None
 
     async def _loop(self) -> None:
-        """Main asynchronous loop consuming the input queue."""
+        """Consume the input queue in an asynchronous loop."""
         while True:
             msg = await self._in_queue.get()
             try:
                 self._dispatch(msg)
             except Exception as err:
-                _LOGGER.exception("CentralDispatcher failed to route message: %s", err)
+                _LOGGER.exception(
+                    "CentralDispatcher failed to route message: %s", err
+                )
             finally:
                 self._in_queue.task_done()
 

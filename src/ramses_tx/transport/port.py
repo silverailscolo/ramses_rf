@@ -2,7 +2,7 @@
 """RAMSES RF - Serial port packet transport.
 
 For ser2net, use the following YAML with:
-``ser2net -c misc/ser2net.yaml``
+``ser2net -c examples/ser2net.yaml``
 
 .. code-block::
 
@@ -107,7 +107,10 @@ def limit_duty_cycle(
             self: PortTransport, frame: str, *args: Any, **kwargs: Any
         ) -> None:
             # Lazy initialize the instance-bound duty cycle variables
-            if self._tx_bits_in_bucket is None or self._tx_last_time_bit_added is None:
+            if (
+                self._tx_bits_in_bucket is None
+                or self._tx_last_time_bit_added is None
+            ):
                 self._tx_bits_in_bucket = BUCKET_CAPACITY
                 self._tx_last_time_bit_added = perf_counter()
 
@@ -162,7 +165,9 @@ class _PortTransportAbstractor(serial_asyncio.SerialTransport):
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the port transport abstractor."""
-        super().__init__(loop or asyncio.get_event_loop(), protocol, serial_instance)
+        super().__init__(
+            loop or asyncio.get_event_loop(), protocol, serial_instance
+        )
 
 
 class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[misc]
@@ -190,7 +195,9 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the port transport."""
-        _PortTransportAbstractor.__init__(self, serial_instance, protocol, loop=loop)
+        _PortTransportAbstractor.__init__(
+            self, serial_instance, protocol, loop=loop
+        )
         _FullTransport.__init__(self, config=config, extra=extra, loop=loop)
 
         self._tx_bits_in_bucket = None
@@ -214,18 +221,17 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         self._is_hgi80 = await is_hgi80(SerPortNameT(self.serial.name or ""))
 
         async def connect_sans_signature() -> None:
-            """Call connection_made() without sending/waiting for a
-            signature.
-            """
+            """Call connection_made() without waiting for signature."""
             self._init_fut.set_result(None)
-            self._make_connection(gwy_id=None)
+            self._make_connection(gateway_id=None)
 
         async def connect_with_signature() -> None:
-            """Poll port with signatures, call connection_made() after
-            first echo.
-            """
-
-            payload = f"0010{int(time() * 1000):012X}{hex_from_str(f'v{VERSION}')}"[:48]
+            """Poll with signatures; connect after first echo."""
+            payload = (
+                f"0010{int(time() * 1000):012X}{hex_from_str(f'v{VERSION}')}"[
+                    :48
+                ]
+            )
             sig = CommandDTO(
                 verb=I_,
                 addr1=HGI_DEV_ADDR.id,
@@ -244,14 +250,16 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
                 await asyncio.sleep(_SIGNATURE_GAP_SECS)
 
                 if self._init_fut.done():
-                    pkt = self._init_fut.result()
-                    self._make_connection(gwy_id=pkt.src.id if pkt else None)
+                    packet = self._init_fut.result()
+                    self._make_connection(
+                        gateway_id=packet.src.id if packet else None
+                    )
                     return
 
             if not self._init_fut.done():
                 self._init_fut.set_result(None)
 
-            self._make_connection(gwy_id=None)
+            self._make_connection(gateway_id=None)
             return
 
         if self._disable_sending:
@@ -273,7 +281,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
             ) from err
 
     async def _leak_sem(self) -> None:
-        """Used to enforce a minimum time between calls to self.write()."""
+        """Enforce a minimum time between calls to self.write()."""
         while True:
             await asyncio.sleep(MIN_INTER_WRITE_GAP)
             with contextlib.suppress(ValueError):
@@ -311,22 +319,22 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
                 _normalise(_str(raw_line)),
             )
 
-    def _pkt_read(self, pkt: Packet) -> None:
+    def _pkt_read(self, packet: Packet) -> None:
         if (
             not self._init_fut.done()
-            and pkt.code == Code._PUZZ
-            and pkt.payload == self._extra.get(SZ_SIGNATURE)
+            and packet.code == Code._PUZZ
+            and packet.payload == self._extra.get(SZ_SIGNATURE)
         ):
-            self._extra[SZ_ACTIVE_HGI] = pkt.src.id
-            self._init_fut.set_result(pkt)
+            self._extra[SZ_ACTIVE_HGI] = packet.src.id
+            self._init_fut.set_result(packet)
 
-        super()._pkt_read(pkt)
+        super()._pkt_read(packet)
 
     @limit_duty_cycle(MAX_DUTY_CYCLE_RATE)
-    async def write_frame(self, frame: str, disable_tx_limits: bool = False) -> None:
-        """Transmit a frame via the underlying handler (e.g. serial port,
-        MQTT).
-        """
+    async def write_frame(
+        self, frame: str, disable_tx_limits: bool = False
+    ) -> None:
+        """Transmit a frame via the underlying transport handler."""
         await self._leaker_sem.acquire()
         await super().write_frame(frame)
 

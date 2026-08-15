@@ -46,7 +46,9 @@ def protocol_factory(
         )
 
     if disable_qos:
-        _LOGGER.debug("PortProtocol: QoS has been disabled (will wait_for echos)")
+        _LOGGER.debug(
+            "PortProtocol: QoS has been disabled (will wait_for echos)"
+        )
 
     return PortProtocol(
         msg_handler,
@@ -64,7 +66,8 @@ async def create_stack(
     *,
     transport_config: TransportConfig,
     protocol_factory_: Callable[..., RamsesProtocolT] | None = None,
-    transport_factory_: Callable[..., Awaitable[RamsesTransportT]] | None = None,
+    transport_factory_: Callable[..., Awaitable[RamsesTransportT]]
+    | None = None,
     port_name: SerPortNameT | None = None,
     port_config: PortConfigT | None = None,
     packet_log: str | None = None,
@@ -97,7 +100,9 @@ async def create_stack(
         hgi_id=hgi_id,
     )
 
-    transport: RamsesTransportT = await (transport_factory_ or transport_factory)(
+    transport: RamsesTransportT = await (
+        transport_factory_ or transport_factory
+    )(
         protocol,
         config=transport_config,
         port_name=port_name,
@@ -112,6 +117,8 @@ async def create_stack(
         # Safely extract the transport's mocked clock (e.g., FileTransport) without breaking the interface
         timesource: Callable[[], dt] = getattr(transport, "_dt_now", dt_now)
         set_logger_timesource(timesource)
-        _LOGGER.warning("Logger datetimes maintained as most recent packet timestamp")
+        _LOGGER.warning(
+            "Logger datetimes maintained as most recent packet timestamp"
+        )
 
     return protocol, transport

@@ -52,14 +52,15 @@ MAX_NUM_REPEATS: Final[int] = 5  # used in ramses_cc Action schema
 
 # SZ_CALLBACK: Final = "callback"  # obsolete?
 # SZ_GAP_DURATION: Final = "gap_duration"  # obsolete?
-# SZ_MAX_RETRIES: Final = "max_retries"  # obsolete?
-SZ_NUM_REPEATS: Final = "num_repeats"
+SZ_REPEAT_COUNT: Final = "repeat_count"
+SZ_NUM_REPEATS: Final = SZ_REPEAT_COUNT
 SZ_PRIORITY: Final = "priority"
 SZ_TIMEOUT: Final = "timeout"
 
 
 # used by transport...
-SZ_ACTIVE_HGI: Final = "active_gwy"
+SZ_ACTIVE_GATEWAY: Final = "active_gwy"
+SZ_ACTIVE_HGI: Final = SZ_ACTIVE_GATEWAY
 SZ_SIGNATURE: Final = "signature"
 SZ_IS_EVOFW3: Final = "is_evofw3"
 SZ_READER_TASK: Final[str] = "reader_task"
@@ -68,7 +69,9 @@ SZ_READER_TASK: Final[str] = "reader_task"
 SZ_RAMSES_GATEWAY: Final[str] = "RAMSES/GATEWAY"
 
 # default values for transmit rate governers...
-DUTY_CYCLE_DURATION = 60  #      time window (seconds) where rate limiting occurs
+DUTY_CYCLE_DURATION = (
+    60  #      time window (seconds) where rate limiting occurs
+)
 MAX_DUTY_CYCLE_RATE = 0.01  #    % bandwidth used per cycle
 MAX_TRANSMIT_RATE_TOKENS = 80  # transmits per cycle
 
@@ -119,21 +122,28 @@ class AttrDict(dict):  # type: ignore[type-arg]
         self._readonly()
 
     def clear(self) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def pop(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def popitem(self) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def setdefault(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
     def update(self, *args: Any, **kwargs: Any) -> NoReturn:
+        """Prevent mutation on read-only object."""
         self._readonly()
 
-    def __init__(self, main_table: dict[str, dict], attr_table: dict[str, Any]) -> None:  # type: ignore[type-arg]
+    def __init__(
+        self, main_table: dict[str, dict[str, Any]], attr_table: dict[str, Any]
+    ) -> None:
         """Initialize the AttrDict.
 
         :param main_table: A dictionary mapping keys (usually hex codes) to property dictionaries.
@@ -176,9 +186,13 @@ class AttrDict(dict):  # type: ignore[type-arg]
             v: k
             for table in main_table.values()
             for k, v in table.items()
-            if isinstance(k, str) and k[:1] != "_" and self._SZ_AKA_SLUG not in table
+            if isinstance(k, str)
+            and k[:1] != "_"
+            and self._SZ_AKA_SLUG not in table
         }  # e.g. {'radiator_valve': '00', 'controller': '01', ...}
-        self._forward = dict(sorted(self._forward.items(), key=lambda item: item[0]))
+        self._forward = dict(
+            sorted(self._forward.items(), key=lambda item: item[0])
+        )
 
         super().__init__(self._forward)
 
@@ -197,9 +211,13 @@ class AttrDict(dict):  # type: ignore[type-arg]
                 return result
         elif name in self._attr_table:  # bespoke attrs
             return self._attr_table[name]
-        elif len(name) and name[1:] in self._forward:  # map._0D -> "dhw_sensor"
+        elif (
+            len(name) and name[1:] in self._forward
+        ):  # map._0D -> "dhw_sensor"
             return self._forward[name[1:]]
-        elif name.isupper() and name.lower() in self._reverse:  # map.DHW_SENSOR -> "0D"
+        elif (
+            name.isupper() and name.lower() in self._reverse
+        ):  # map.DHW_SENSOR -> "0D"
             return self[name.lower()]
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute '{name}'"
@@ -213,7 +231,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         :return: The 2-byte hex string identifier.
         """
         if key in self._main_table:
-            return list(self._main_table[key].keys())[0]  # type: ignore[no-any-return]
+            return list(self._main_table[key].keys())[0]
         if key in self._reverse:
             return self._reverse[key]
         raise KeyError(key)
@@ -456,19 +474,23 @@ FAN_RATE: Final = "fan_rate"  # percentage, 0.0 - 1.0  # deprecated, use SZ_FAN_
 
 # Below, verbs & codes - can use Verb/Code/Index for mypy type checking
 @verify(EnumCheck.UNIQUE)
-class VerbT(StrEnum):
+class Verb(StrEnum):
     """Protocol verbs (message types)."""
 
     I_ = " I"
+    """Information / broadcast transmission."""
     RQ = "RQ"
+    """Request / query transmission."""
     RP = "RP"
+    """Response to request transmission."""
     W_ = " W"
+    """Write / command transmission."""
 
 
-I_: Final = VerbT.I_
-RQ: Final = VerbT.RQ
-RP: Final = VerbT.RP
-W_: Final = VerbT.W_
+I_: Final = Verb.I_
+RQ: Final = Verb.RQ
+RP: Final = Verb.RP
+W_: Final = Verb.W_
 
 
 @verify(EnumCheck.UNIQUE)
@@ -513,110 +535,221 @@ class Code(StrEnum):
     """Protocol command codes."""
 
     _0001 = "0001"
+    """RF binding / unknown."""
     _0002 = "0002"
+    """Outdoor temperature sensor."""
     _0004 = "0004"
+    """Zone name."""
     _0005 = "0005"
+    """System zones / zone list."""
     _0006 = "0006"
+    """System controller device ID / schedule version."""
     _0008 = "0008"
+    """Relay demand / heat demand."""
     _0009 = "0009"
+    """System fault status / fault log index."""
     _000A = "000A"
+    """Zone configuration."""
     _000C = "000C"
+    """Zone device binding / zone devices."""
     _000E = "000E"
+    """OEM code."""
     _0016 = "0016"
+    """System operating mode / heat/cool state."""
     _0100 = "0100"
+    """Controller language configuration."""
     _0150 = "0150"
+    """OpenTherm controller configuration."""
     _01D0 = "01D0"
+    """RF binding (DHW)."""
     _01E9 = "01E9"
+    """RF binding (zone sensor)."""
     _01FF = "01FF"
+    """HVAC unknown configuration."""
     _0204 = "0204"
+    """OpenTherm parameters."""
     _0404 = "0404"
+    """Zone heating schedule."""
     _0418 = "0418"
+    """System fault log entry."""
     _042F = "042F"
+    """System fault log index."""
     _0B04 = "0B04"
+    """RF binding (remote sensor)."""
     _1030 = "1030"
+    """System synchronization cycle."""
     _1060 = "1060"
+    """Domestic hot water (DHW) temperature."""
     _1081 = "1081"
+    """Heating cycle parameters."""
     _1090 = "1090"
+    """Boiler controller parameters."""
     _1098 = "1098"
+    """OpenTherm boiler data."""
     _10A0 = "10A0"
+    """Domestic hot water (DHW) parameters."""
     _10B0 = "10B0"
+    """OpenTherm status."""
     _10D0 = "10D0"
+    """HVAC configuration."""
     _10E0 = "10E0"
+    """RF device binding (actuator)."""
     _10E1 = "10E1"
+    """RF device binding (sensor)."""
     _10E2 = "10E2"
+    """HVAC binding state."""
     _1100 = "1100"
+    """RF binding (heating zone)."""
     _11F0 = "11F0"
+    """Domestic hot water (DHW) temperature sensors."""
     _1260 = "1260"
+    """Domestic hot water (DHW) measured temperature."""
     _1280 = "1280"
+    """Outdoor relative humidity."""
     _1290 = "1290"
+    """Outdoor temperature."""
     _1298 = "1298"
+    """Carbon dioxide (CO2) concentration."""
     _12A0 = "12A0"
+    """Indoor relative humidity."""
     _12B0 = "12B0"
+    """Window / door contact switch state."""
     _12C0 = "12C0"
+    """Indoor temperature."""
     _12C8 = "12C8"
+    """Indoor air quality."""
     _12F0 = "12F0"
+    """Domestic hot water (DHW) setpoint temperature."""
     _1300 = "1300"
+    """Heating circuit configuration."""
     _1470 = "1470"
+    """HVAC damper position."""
     _1F09 = "1F09"
+    """Controller sync cycle / tick."""
     _1F41 = "1F41"
+    """Domestic hot water (DHW) operating mode."""
     _1F70 = "1F70"
+    """HVAC remote control state."""
     _1FC9 = "1FC9"
+    """RF binding handshake."""
     _1FCA = "1FCA"
+    """RF binding accept."""
     _1FD0 = "1FD0"
+    """OpenTherm diagnostic data."""
     _1FD4 = "1FD4"
+    """OpenTherm system status."""
     _2209 = "2209"
+    """HVAC ventilation setpoint bounds."""
     _2210 = "2210"
+    """Exhaust fan speed / power."""
     _2249 = "2249"
+    """Current / next scheduled setpoint."""
     _22C9 = "22C9"
+    """Underfloor heating (UFH) demand / setpoint bounds."""
     _22D0 = "22D0"
+    """Underfloor heating (UFH) system mode."""
     _22D9 = "22D9"
+    """Boiler target setpoint temperature."""
     _22E0 = "22E0"
+    """HVAC fan status."""
     _22E5 = "22E5"
+    """HVAC fan parameters."""
     _22E9 = "22E9"
+    """HVAC fan mode."""
     _22F1 = "22F1"
+    """HVAC ventilation fan mode / speed."""
     _22F2 = "22F2"
+    """HVAC ventilation timer."""
     _22F3 = "22F3"
+    """HVAC ventilation boost mode."""
     _22F4 = "22F4"
+    """HVAC ventilation flow rate."""
     _22F7 = "22F7"
+    """HVAC bypass damper mode."""
     _22F8 = "22F8"
+    """HVAC filter status."""
     _22B0 = "22B0"
+    """HVAC operating parameters."""
     _2309 = "2309"
+    """Zone setpoint temperature."""
     _2349 = "2349"
+    """Heating zone control parameters."""
     _2389 = "2389"
+    """Auxiliary heating demand."""
     _2400 = "2400"
+    """OpenTherm transparent slave data."""
     _2401 = "2401"
+    """OpenTherm transparent master data."""
     _2410 = "2410"
+    """OpenTherm fault flags."""
     _2411 = "2411"
+    """HVAC device parameters."""
     _2420 = "2420"
+    """OpenTherm modulation level."""
     _2D49 = "2D49"
+    """Cooling relay control state."""
     _2E04 = "2E04"
+    """System operating mode (legacy)."""
     _2E10 = "2E10"
+    """HVAC status flags."""
     _30C9 = "30C9"
+    """Zone measured temperature."""
     _3110 = "3110"
+    """HVAC indoor air quality / VOC level."""
     _3120 = "3120"
+    """HVAC indoor air quality."""
     _313E = "313E"
+    """HVAC Zulu time offset."""
     _313F = "313F"
+    """System datetime / clock synchronization."""
     _3150 = "3150"
+    """Zone heat demand percentage."""
     _31D9 = "31D9"
+    """HVAC bypass damper state."""
     _31DA = "31DA"
+    """HVAC extended ventilation state."""
     _31E0 = "31E0"
+    """HVAC ventilation demand."""
     _3200 = "3200"
+    """Heating system flame / fault status."""
     _3210 = "3210"
+    """OpenTherm boiler temperature."""
     _3220 = "3220"
+    """OpenTherm raw message frame."""
     _3221 = "3221"
+    """OpenTherm extended parameters."""
     _3222 = "3222"
+    """RF binding (OpenTherm bridge)."""
     _3223 = "3223"
+    """OpenTherm boiler status."""
     _3B00 = "3B00"
+    """Actuator relay state / duty cycle."""
     _3EF0 = "3EF0"
+    """Actuator modulation state."""
     _3EF1 = "3EF1"
+    """Actuator electrical status."""
     _4401 = "4401"
+    """HVAC fault log entry."""
     _4E01 = "4E01"
+    """Spider HVAC temperature sensors."""
     _4E02 = "4E02"
+    """Spider HVAC setpoint bounds."""
     _4E04 = "4E04"
+    """Spider HVAC operating mode."""
     _4E0D = "4E0D"
+    """Spider HVAC status (Autotemp)."""
+    _4E14 = "4E14"
+    """Spider HVAC status."""
     _4E15 = "4E15"
+    """Spider HVAC status flags."""
     _4E16 = "4E16"
+    """HVAC fault log status (Spider/Autotemp)."""
+    _4E20 = "4E20"
+    """HVAC fault status."""
+    _4E21 = "4E21"
+    """HVAC fault status flags."""
     _PUZZ = "7FFF"  # for internal use: not to be a RAMSES II code
+    """Internal puzzle / unrecognised packet placeholder."""
 
 
 # fmt: off

@@ -20,6 +20,7 @@ from ramses_rf.config import (
     strip_and_map_traits,
     strip_traits,
 )
+from ramses_rf.const import Code
 from ramses_rf.gateway import Gateway
 from ramses_rf.typing import DeviceIdT
 
@@ -29,7 +30,7 @@ class TestStripAndMapTraits:
 
     def test_strip_commands(self) -> None:
         """_commands is stripped (ramses_rf doesn't need it)."""
-        traits = {"_commands": {"on": "22F1"}, "class": "FAN"}
+        traits = {"_commands": {"on": Code._22F1}, "class": "FAN"}
         result = strip_and_map_traits(traits)
         assert "_commands" not in result
         assert result["class"] == "FAN"
@@ -41,10 +42,17 @@ class TestStripAndMapTraits:
         SCH_TCS_ZONES_ZON accepts it for zone name hydration
         (ramses-rf/ramses_cc#919: zone names lost after 24h).
         """
-        traits = {"_disabled": True, "_name": "My REM", "_owner": "me", "alias": "test"}
+        traits = {
+            "_disabled": True,
+            "_name": "My REM",
+            "_owner": "me",
+            "alias": "test",
+        }
         result = strip_and_map_traits(traits)
         assert "_disabled" not in result
-        assert "_name" in result  # preserved for zone name hydration (issue 919)
+        assert (
+            "_name" in result
+        )  # preserved for zone name hydration (issue 919)
         assert result["_name"] == "My REM"
         assert "_owner" not in result
         assert result["alias"] == "test"
@@ -99,7 +107,7 @@ class TestStripAndMapTraits:
     def test_mixed_keys(self) -> None:
         """Mixed _ and non-_ keys: strip unknown, map known, pass through rest."""
         traits = {
-            "_commands": {"on": "22F1"},
+            "_commands": {"on": Code._22F1},
             "_bound": "32:153001",
             "_disabled": True,
             "class": "FAN",
@@ -125,7 +133,9 @@ class TestStripAndMapTraits:
         }
         result = strip_and_map_traits(traits)
         assert result["zones"]["01"]["setpoint"] == 20.0
-        assert result["zones"]["01"]["_name"] == "Living Room"  # preserved (issue 919)
+        assert (
+            result["zones"]["01"]["_name"] == "Living Room"
+        )  # preserved (issue 919)
 
     def test_recursive_nested_dict_maps_underscore(self) -> None:
         """_bound inside a nested dict is mapped to bound."""
@@ -149,7 +159,9 @@ class TestStripAndMapTraits:
             },
         }
         result = strip_and_map_traits(traits)
-        assert result["zones"]["01"]["_name"] == "Zone 1"  # preserved (issue 919)
+        assert (
+            result["zones"]["01"]["_name"] == "Zone 1"
+        )  # preserved (issue 919)
         assert "_disabled" not in result["zones"]["01"]["sub"]
         assert result["zones"]["01"]["sub"] == {"ok": 1}
 
@@ -177,7 +189,9 @@ class TestStripAndMapTraits:
         assert "zones" in result
         assert result["zones"]["03"]["sensor"] == "01:150003"
         assert result["zones"]["03"]["actuators"] == ["04:150003"]
-        assert result["zones"]["03"]["_name"] == "Lounge"  # preserved (issue 919)
+        assert (
+            result["zones"]["03"]["_name"] == "Lounge"
+        )  # preserved (issue 919)
         assert "stored_hotwater" in result
         assert result["stored_hotwater"]["sensor"] == "07:150000"
 
@@ -189,8 +203,16 @@ class TestStripAndMapSchema:
         """Schema with device entries: strip+map each device's traits."""
         schema = {
             "main_tcs": "01:145038",
-            "32:153001": {"_commands": {"on": "22F1"}, "_class": "REM", "_faked": True},
-            "30:160000": {"_bound": "32:153001", "_scheme": "vasco", "class": "FAN"},
+            "32:153001": {
+                "_commands": {"on": Code._22F1},
+                "_class": "REM",
+                "_faked": True,
+            },
+            "30:160000": {
+                "_bound": "32:153001",
+                "_scheme": "vasco",
+                "class": "FAN",
+            },
         }
         result = strip_and_map_schema(schema)
         assert result["main_tcs"] == "01:145038"
@@ -215,13 +237,19 @@ class TestSchTraitsHvacBound:
 
     def test_string_bound(self) -> None:
         """Single string bound (backward compat)."""
-        result = SCH_TRAITS({"class": "FAN", "bound": "32:153001", "scheme": "vasco"})
+        result = SCH_TRAITS(
+            {"class": "FAN", "bound": "32:153001", "scheme": "vasco"}
+        )
         assert result["bound"] == "32:153001"
 
     def test_list_bound(self) -> None:
         """List bound (multi-REM binding)."""
         result = SCH_TRAITS(
-            {"class": "FAN", "bound": ["32:153001", "32:153002"], "scheme": "itho"}
+            {
+                "class": "FAN",
+                "bound": ["32:153001", "32:153002"],
+                "scheme": "itho",
+            }
         )
         assert result["bound"] == ["32:153001", "32:153002"]
 
@@ -256,7 +284,11 @@ class TestStripTraits:
 
     def test_strips_underscore_keys(self) -> None:
         """All _-prefixed keys are removed."""
-        traits = {"_commands": {"on": "22F1"}, "_name": "My REM", "class": "FAN"}
+        traits = {
+            "_commands": {"on": Code._22F1},
+            "_name": "My REM",
+            "class": "FAN",
+        }
         result = strip_traits(traits)
         assert result == {"class": "FAN"}
 
@@ -290,7 +322,9 @@ class TestStripTraits:
         """Recursion works at arbitrary depth."""
         traits = {
             "class": "TCS",
-            "zones": {"01": {"_name": "Z1", "sub": {"_disabled": True, "ok": 1}}},
+            "zones": {
+                "01": {"_name": "Z1", "sub": {"_disabled": True, "ok": 1}}
+            },
         }
         result = strip_traits(traits)
         assert result == {"class": "TCS", "zones": {"01": {"sub": {"ok": 1}}}}

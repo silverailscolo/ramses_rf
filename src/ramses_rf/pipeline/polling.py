@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Final
 
-from ramses_rf.const import DevType
+from ramses_rf.const import Code, DevType
 from ramses_rf.devices.helpers import build_rq_cmd
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.helpers import schedule_task
@@ -33,58 +33,60 @@ INTERVAL_DAILY: Final[int] = 86400  # 24 hours in seconds
 # Master default polling schedules table for all device classes.
 # Battery-powered devices (TRV, THM, DHW, REM, HUM) set intervals to None
 # to explicitly indicate that polling is disabled for those command codes.
-DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[str, int | None]]] = {
+DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
     # Evohome Controller
     DevType.CTL: {
-        "10E0": INTERVAL_DAILY,  # Device Specification / Info
-        "1F41": INTERVAL_HOURLY,  # DHW System Mode / Operating State
-        "2E04": INTERVAL_DAILY,  # Evohome System Mode
-        "313F": INTERVAL_EVERY_12_HOURS,  # System Time & Date Sync
+        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
+        Code._1F41: INTERVAL_HOURLY,  # DHW System Mode / Operating State
+        Code._2E04: INTERVAL_DAILY,  # Evohome System Mode
+        Code._313F: INTERVAL_EVERY_12_HOURS,  # System Time & Date Sync
         # 0004 (zone name) is polled per-zone, not per-device — see
         # update_device_tasks for the zone-level expansion.  The interval
         # here is a marker; actual tasks are keyed by (device_id, "0004",
         # zone_idx).  Issue 947: zone names lost after cache clear because
         # the CTL does not broadcast 0004 unless queried.
-        "0004": INTERVAL_EVERY_6_HOURS,  # Zone Name (per-zone, expanded below)
+        Code._0004: INTERVAL_EVERY_6_HOURS,  # Zone Name (per-zone, expanded below)
     },
     # Boiler Relay / Switch
     DevType.BDR: {
-        "10E0": INTERVAL_DAILY,  # Device Specification / Info
+        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
     },
     # OpenTherm Bridge
     DevType.OTB: {
-        "10E0": INTERVAL_DAILY,  # Device Specification / Info
-        "3EF0": INTERVAL_HOURLY,  # OpenTherm Modulation State
-        "3220": INTERVAL_HOURLY,  # OpenTherm Data ID Query
+        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
+        Code._3EF0: INTERVAL_HOURLY,  # OpenTherm Modulation State
+        Code._3220: INTERVAL_HOURLY,  # OpenTherm Data ID Query
     },
     # Underfloor Heating Controller
     DevType.UFC: {
-        "10E0": INTERVAL_DAILY,  # Device Specification / Info
-        "1F09": INTERVAL_HOURLY,  # UFH Controller Status
+        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
+        Code._1F09: INTERVAL_HOURLY,  # UFH Controller Status
     },
     # HVAC Ventilation Fan
     DevType.FAN: {
-        "10E0": INTERVAL_DAILY,  # Device Specification / Info
-        "10D0": INTERVAL_DAILY,  # Filter Change Sensor Status
-        "3150": INTERVAL_HOURLY,  # Fan Speed / Airflow Status
+        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
+        Code._10D0: INTERVAL_DAILY,  # Filter Change Sensor Status
+        Code._3150: INTERVAL_HOURLY,  # Fan Speed / Airflow Status
     },
     # HVAC Carbon Dioxide Sensor (mains-powered)
     DevType.CO2: {
-        "10E0": INTERVAL_DAILY,  # Device Specification / Info
+        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
     },
     # Battery-Powered Devices - Polling disabled to preserve battery life
-    DevType.TRV: {"10E0": None, "1060": None},
-    DevType.THM: {"10E0": None, "1060": None},
-    DevType.DHW: {"10E0": None, "1060": None},
-    DevType.REM: {"10E0": None, "1060": None},
-    DevType.HUM: {"10E0": None, "1060": None},
+    DevType.TRV: {Code._10E0: None, Code._1060: None},
+    DevType.THM: {Code._10E0: None, Code._1060: None},
+    DevType.DHW: {Code._10E0: None, Code._1060: None},
+    DevType.REM: {Code._10E0: None, Code._1060: None},
+    DevType.HUM: {Code._10E0: None, Code._1060: None},
     # Fallback Default
     "DEFAULT": {
-        "10E0": INTERVAL_DAILY,  # Device Specification / Info
+        Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
     },
 }
 
-POLL_INTER_CMD_GAP: Final[float] = 0.5  # Rate limit gap between consecutive TX commands
+POLL_INTER_CMD_GAP: Final[float] = (
+    0.5  # Rate limit gap between consecutive TX commands
+)
 DEFAULT_POLL_CYCLE_SECS: Final[float] = 300.0  # 5 minutes maximum idle sleep
 
 
@@ -140,21 +142,21 @@ class PollingManager:
 
     def __init__(
         self,
-        gwy: Gateway,
+        gateway: Gateway,
         *,
         shadow_mode: bool = True,
         cycle_interval: float = DEFAULT_POLL_CYCLE_SECS,
     ) -> None:
         """Initialize the PollingManager.
 
-        :param gwy: The Gateway instance managing the device registry.
-        :type gwy: Gateway
+        :param gateway: The Gateway instance managing the device registry.
+        :type gateway: Gateway
         :param shadow_mode: If True, log schedules without dispatching RF commands.
         :type shadow_mode: bool
         :param cycle_interval: Maximum loop sleep interval in seconds.
         :type cycle_interval: float
         """
-        self._gwy = gwy
+        self._gateway = gateway
         self.shadow_mode: bool = shadow_mode
         self._cycle_interval: float = cycle_interval
 
@@ -232,14 +234,14 @@ class PollingManager:
         # Collect zone indices for per-zone code expansion (0004).
         # CTL devices have a .tcs attribute with .zones list.
         zone_idxs: list[str] = []
-        if "0004" in schedule:
+        if Code._0004 in schedule:
             tcs = getattr(device, "tcs", None)
             if tcs is not None:
                 zones = getattr(tcs, "zones", [])
                 zone_idxs = [z.idx for z in zones if hasattr(z, "idx")]
 
         for code, interval in schedule.items():
-            if code == "0004" and zone_idxs:
+            if code == Code._0004 and zone_idxs:
                 # Expand into per-zone tasks
                 for zone_idx in zone_idxs:
                     zkey = (device.id, code, zone_idx)
@@ -284,15 +286,17 @@ class PollingManager:
         if self._running:
             return
 
-        if getattr(self._gwy.config, "disable_polling", False):
+        if getattr(self._gateway.config, "disable_polling", False):
             _LOGGER.info("PollingManager: Polling disabled by GatewayConfig.")
             return
 
         self._running = True
         self._poller_task = schedule_task(self._poll_loop)
         self._poller_task.set_name("l7_polling_manager")
-        self._gwy.add_task(self._poller_task)
-        _LOGGER.info("PollingManager started (shadow_mode=%s)", self.shadow_mode)
+        self._gateway.add_task(self._poller_task)
+        _LOGGER.info(
+            "PollingManager started (shadow_mode=%s)", self.shadow_mode
+        )
 
     async def stop(self) -> None:
         """Stop the background polling loop gracefully."""
@@ -335,13 +339,13 @@ class PollingManager:
         :returns: Number of tasks processed during this cycle.
         :rtype: int
         """
-        if getattr(self._gwy.config, "disable_polling", False):
+        if getattr(self._gateway.config, "disable_polling", False):
             return 0
 
         # Refresh tasks for all devices currently in registry and prune stale tasks
         active_keys: set[tuple[str, ...]] = set()
-        for dev in list(self._gwy.device_registry.devices):
-            active_keys.update(self.update_device_tasks(dev))
+        for device in list(self._gateway.device_registry.devices):
+            active_keys.update(self.update_device_tasks(device))
 
         for key in list(self._tasks):
             if key not in active_keys:
@@ -369,14 +373,16 @@ class PollingManager:
                 task.last_polled = now
                 task.next_due = now + td(seconds=task.interval)
             else:
-                _LOGGER.info("Polling device %s command %s", task.device_id, task.code)
+                _LOGGER.info(
+                    "Polling device %s command %s", task.device_id, task.code
+                )
                 task.last_polled = now
                 task.next_due = now + td(seconds=task.interval)
                 cmd_dto = build_rq_cmd(
                     task.device_id, task.code, payload=task.payload or "00"
                 )
                 try:
-                    await self._gwy.async_send_cmd(cmd_dto)
+                    await self._gateway.async_send_cmd(cmd_dto)
                 except (RamsesException, TimeoutError) as err:
                     _LOGGER.warning(
                         "PollingManager failed to send command %s to %s: %s",

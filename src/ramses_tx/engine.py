@@ -23,7 +23,7 @@ from .const import (
     W_,
     Code,
     Priority,
-    VerbT,
+    Verb,
 )
 from .dtos import CommandDTO, PacketDTO
 from .packet import Packet
@@ -39,7 +39,6 @@ from .typing import PktLogConfigT, PortConfigT, QosParams
 
 if TYPE_CHECKING:
     from .config import EngineConfig
-    from .const import VerbT
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
     from .typing import DeviceIdT, MsgHandlerT, PayloadT
@@ -62,7 +61,8 @@ class Engine:
         config: EngineConfig,
         loop: asyncio.AbstractEventLoop | None = None,
         *,
-        transport_constructor: Callable[..., Awaitable[RamsesTransportT]] | None = None,
+        transport_constructor: Callable[..., Awaitable[RamsesTransportT]]
+        | None = None,
     ) -> None:
         self.config = config
 
@@ -78,7 +78,9 @@ class Engine:
         if self.config.input_file:
             self._disable_sending = True
         elif not self.config.port_name:
-            raise TypeError("Either a port_name or an input_file must be specified")
+            raise TypeError(
+                "Either a port_name or an input_file must be specified"
+            )
 
         self.ser_name = self.config.port_name
         self._input_file = self.config.input_file
@@ -144,7 +146,9 @@ class Engine:
         return f"{device_id} ({self.ser_name})"
 
     def _dt_now(self) -> dt:
-        timesource: Callable[[], dt] = getattr(self._transport, "_dt_now", dt.now)
+        timesource: Callable[[], dt] = getattr(
+            self._transport, "_dt_now", dt.now
+        )
         return timesource()
 
     def _set_msg_handler(self, msg_handler: MsgHandlerT) -> None:
@@ -226,9 +230,9 @@ class Engine:
 
         # Shutdown Safety - securely lock the task registry to clean up
         with self._tasks_lock:
-            tasks = [t for t in self._tasks if not t.done()]
-            for t in tasks:
-                t.cancel()
+            tasks = [task for task in self._tasks if not task.done()]
+            for task in tasks:
+                task.cancel()
 
         if tasks:
             await asyncio.wait(tasks)
@@ -239,10 +243,10 @@ class Engine:
                 if task.done() and not task.cancelled():
                     if exc := task.exception():
                         _LOGGER.debug(
-                            "Background task %s failed: %s",
-                            task.get_name(),
+                            "Unhandled exception in background worker task: %s",
                             exc,
                         )
+            self._tasks.clear()
 
         if self._transport:
             self._transport.close()
@@ -257,12 +261,16 @@ class Engine:
     async def _pause(self, *args: Any) -> None:
         """Pause the (active) engine or raise a RuntimeError."""
         if self._engine_lock.locked():
-            raise RuntimeError("Unable to pause engine, failed to acquire lock")
+            raise RuntimeError(
+                "Unable to pause engine, failed to acquire lock"
+            )
 
         await self._engine_lock.acquire()
         try:
             if self._engine_state is not None:
-                raise RuntimeError("Unable to pause engine, it is already paused")
+                raise RuntimeError(
+                    "Unable to pause engine, it is already paused"
+                )
 
             # Secure state transition within lock
             self._engine_state = (None, None, tuple())
@@ -298,7 +306,9 @@ class Engine:
 
         try:
             if self._engine_state is None:
-                raise RuntimeError("Unable to resume engine, it was not paused")
+                raise RuntimeError(
+                    "Unable to resume engine, it was not paused"
+                )
 
             # Atomic restoration of state inside the lock
             self._protocol._msg_handler, self._disable_sending, *args = (
@@ -326,15 +336,32 @@ class Engine:
 
     @staticmethod
     def create_cmd(
-        verb: VerbT,
+        verb: Verb,
         device_id: DeviceIdT,
         code: Code,
         payload: PayloadT,
         *,
         from_id: str | None = None,
-        seqn: str | None = None,
+        sequence_number: str | None = None,
     ) -> CommandDTO:
-        # Normalise plain-string verbs to VerbT so that the frame is formatted
+        """Create a CommandDTO with appropriate addressing.
+
+        :param verb: Command verb (I, RQ, RP, W).
+        :type verb: Verb
+        :param device_id: Target or source device identifier.
+        :type device_id: DeviceIdT
+        :param code: Two-byte opcode.
+        :type code: Code
+        :param payload: Command payload hex string or bytes.
+        :type payload: PayloadT
+        :param from_id: Optional source device ID override.
+        :type from_id: str | None
+        :param sequence_number: Optional sequence number.
+        :type sequence_number: str | None
+        :returns: Constructed command DTO.
+        :rtype: CommandDTO
+        """
+        # Normalise plain-string verbs to Verb so that the frame is formatted
         # correctly (e.g. "W" → " W").  The old Command._from_attrs did this;
         # the migration to CommandDTO dropped it, causing malformed frames
         # that the HGI80 silently drops (issue 835).
@@ -360,7 +387,7 @@ class Engine:
 
     async def async_send_cmd(
         self,
-        cmd: CommandDTO,
+        command: CommandDTO,
         /,
         *,
         gap_duration: float = DEFAULT_GAP_DURATION,
@@ -376,7 +403,7 @@ class Engine:
         )
 
         return await self._protocol.send_cmd(
-            cmd,
+            command,
             gap_duration=gap_duration,
             num_repeats=num_repeats,
             priority=priority,
@@ -388,6 +415,6 @@ class Engine:
         # Safely pass execution to Gateway's extended handling logic
         handler = getattr(self, "_handle_msg", None)
         if handler:
-            res = handler(msg)
-            if asyncio.iscoroutine(res):
-                await res
+            result = handler(msg)
+            if asyncio.iscoroutine(result):
+                await result

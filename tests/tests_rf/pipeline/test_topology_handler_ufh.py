@@ -14,7 +14,9 @@ from ramses_tx.const import Code
 def test_ufh_handler_creates_circuit_event_on_000c() -> None:
     # Arrange
     events: list[TopologyChangedEvent] = []
-    handler = UfhTopologyHandler(emit_event_cb=events.append, enable_eavesdrop=False)
+    handler = UfhTopologyHandler(
+        emit_event_cb=events.append, enable_eavesdrop=False
+    )
 
     mock_header = MagicMock()
     mock_header.code = Code._000C
@@ -41,7 +43,9 @@ def test_ufh_handler_creates_circuit_event_on_000c() -> None:
 def test_ufh_handler_conversational_binding() -> None:
     # Arrange
     events: list[TopologyChangedEvent] = []
-    handler = UfhTopologyHandler(emit_event_cb=events.append, enable_eavesdrop=True)
+    handler = UfhTopologyHandler(
+        emit_event_cb=events.append, enable_eavesdrop=True
+    )
 
     mock_header = MagicMock()
     mock_header.code = Code._3150

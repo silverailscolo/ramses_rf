@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf import dispatcher
-from ramses_rf.const import DevType
+from ramses_rf.const import DevType, Verb
 from ramses_rf.devices import HvacVentilator
 from ramses_rf.dispatcher import process_msg
 from ramses_rf.gateway import Gateway
@@ -38,27 +38,27 @@ def test_routing_context_string_formatting() -> None:
 def test_state_header_legacy_formatting() -> None:
     """Test that StateHeader perfectly replicates the legacy _hdr format."""
     hdr = StateHeader.create(
-        code="3220",
-        verb="RP",
+        code=Code._3220,
+        verb=Verb.RP,
         source_id="01:123456",
-        context_val="00",
+        context_value="00",
     )
     assert hdr.legacy_hdr == "3220|RP|01:123456|00"
 
     base_hdr = StateHeader.create(
-        code="10A0",
-        verb=" I",
+        code=Code._10A0,
+        verb=Verb.I_,
         source_id="04:654321",
-        context_val=True,
+        context_value=True,
     )
     assert base_hdr.legacy_hdr == "10A0| I|04:654321|True"
 
 
 def test_state_header_hashing() -> None:
     """Test that StateHeader can be used as an O(1) dictionary key."""
-    hdr1 = StateHeader.create("000C", "RP", "01:111111", "01")
-    hdr2 = StateHeader.create("000C", "RP", "01:111111", "01")
-    hdr3 = StateHeader.create("000C", "RP", "01:111111", "02")
+    hdr1 = StateHeader.create(Code._000C, Verb.RP, "01:111111", "01")
+    hdr2 = StateHeader.create(Code._000C, Verb.RP, "01:111111", "01")
+    hdr3 = StateHeader.create(Code._000C, Verb.RP, "01:111111", "02")
 
     cache = {hdr1: "payload_data"}
 
@@ -68,16 +68,16 @@ def test_state_header_hashing() -> None:
 
 def test_state_header_topic_generation() -> None:
     """Test the Master Plan topic generation logic."""
-    state_hdr = StateHeader.create("30C9", " I", "01:123456", "00")
+    state_hdr = StateHeader.create(Code._30C9, Verb.I_, "01:123456", "00")
     assert state_hdr.topic is EventTopic.INFORMATION
 
-    disc_hdr = StateHeader.create("1FC9", " I", "01:123456", "00")
+    disc_hdr = StateHeader.create(Code._1FC9, Verb.I_, "01:123456", "00")
     assert disc_hdr.topic is EventTopic.TOPOLOGY_DISCOVERY
 
-    req_hdr = StateHeader.create("3220", "RQ", "01:123456", "00")
+    req_hdr = StateHeader.create(Code._3220, Verb.RQ, "01:123456", "00")
     assert req_hdr.topic is EventTopic.REQUEST
 
-    write_hdr = StateHeader.create("2309", " W", "01:123456", "00")
+    write_hdr = StateHeader.create(Code._2309, Verb.W_, "01:123456", "00")
     assert write_hdr.topic is EventTopic.WRITE
 
 
@@ -112,7 +112,7 @@ def _make_fan(gateway: MagicMock) -> HvacVentilator:
     return fan
 
 
-def _make_2411_msg(verb: str = " I") -> MagicMock:
+def _make_2411_msg(verb: str = Verb.I_) -> MagicMock:
     """Create a mock 2411 message whose src/dst resolve to the FAN."""
     msg = MagicMock()
     msg.code = Code._2411
@@ -138,7 +138,7 @@ class TestDispatcher2411Routing:
         callback = MagicMock()
         fan.set_initialized_callback(callback)
 
-        msg = _make_2411_msg(verb=" I")
+        msg = _make_2411_msg(verb=Verb.I_)
         await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411, "supports_2411 was not flipped"
@@ -147,36 +147,38 @@ class TestDispatcher2411Routing:
         callback.assert_called_once()
         assert fan._initialized_callback is None
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
     @pytest.mark.asyncio
     async def test_2411_rp_also_routed(self, mock_gateway: MagicMock) -> None:
         """A 2411 ``RP`` reply must also be routed."""
         fan = _make_fan(mock_gateway)
-        msg = _make_2411_msg(verb="RP")
+        msg = _make_2411_msg(verb=Verb.RP)
         await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
     @pytest.mark.asyncio
     async def test_2411_rq_not_routed(self, mock_gateway: MagicMock) -> None:
         """A 2411 ``RQ`` request carries no telemetry and must be skipped."""
         fan = _make_fan(mock_gateway)
-        msg = _make_2411_msg(verb="RQ")
+        msg = _make_2411_msg(verb=Verb.RQ)
         await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert not fan._supports_2411, "RQ must not flip supports_2411"
         assert fan._params_2411 == {}
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
     @pytest.mark.asyncio
-    async def test_non_fan_target_not_affected(self, mock_gateway: MagicMock) -> None:
+    async def test_non_fan_target_not_affected(
+        self, mock_gateway: MagicMock
+    ) -> None:
         """A non-FAN device in registry must not be touched by 2411 routing."""
         fan = _make_fan(mock_gateway)
         other = MagicMock()
@@ -184,35 +186,37 @@ class TestDispatcher2411Routing:
         other.id = "01:000001"
         mock_gateway.device_registry.device_by_id["01:000001"] = other
 
-        msg = _make_2411_msg(verb=" I")
+        msg = _make_2411_msg(verb=Verb.I_)
         await dispatcher._cqrs_ingestion_engine(mock_gateway, msg)
 
         assert fan._supports_2411
         other._handle_2411_message.assert_not_called()
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
 
 class TestStateProjector2411Routing:
     """Verify StateProjector._route_2411_to_fan mirrors the dispatcher path."""
 
-    def test_state_projector_routes_2411(self, mock_gateway: MagicMock) -> None:
+    def test_state_projector_routes_2411(
+        self, mock_gateway: MagicMock
+    ) -> None:
         """The ingestion StateProjector must also route 2411 to the FAN."""
         fan = _make_fan(mock_gateway)
         callback = MagicMock()
         fan.set_initialized_callback(callback)
 
         projector = StateProjector(mock_gateway, MagicMock())
-        msg = _make_2411_msg(verb=" I")
+        msg = _make_2411_msg(verb=Verb.I_)
         projector._route_2411_to_fan(msg)
 
         assert fan._supports_2411
         assert fan._params_2411.get(TEST_PARAM_ID) == TEST_PARAM_VALUE
         callback.assert_called_once()
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
     def test_state_projector_process_message_state_routes_2411(
         self, mock_gateway: MagicMock
@@ -221,13 +225,13 @@ class TestStateProjector2411Routing:
         fan = _make_fan(mock_gateway)
         projector = StateProjector(mock_gateway, MagicMock())
 
-        msg = _make_2411_msg(verb=" I")
+        msg = _make_2411_msg(verb=Verb.I_)
         projector.process_message_state(msg)
 
         assert fan._supports_2411
 
-        if fan._gwy.message_store:
-            fan._gwy.message_store.stop()
+        if fan._gateway.message_store:
+            fan._gateway.message_store.stop()
 
 
 @pytest.mark.asyncio
@@ -240,7 +244,7 @@ async def test_l7_routing_avoids_stranglers_knot() -> None:
 
     tcs = MagicMock()
     tcs.id = "01:145038"
-    tcs._gwy = gwy_mock
+    tcs._gateway = gwy_mock
     tcs.ctl = MagicMock()
     tcs.ctl.id = "01:145038"
     tcs.zone_by_idx = {}

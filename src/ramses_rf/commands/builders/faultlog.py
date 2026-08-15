@@ -10,13 +10,13 @@ def build_get_faultlog_entry(intent: Command) -> CommandDTO:
     """Translate a GET_FAULTLOG_ENTRY intent into a CommandDTO.
 
     :param intent: The GET_FAULTLOG_ENTRY intent. It is expected to
-        contain the `log_idx` key (int | str) in its data dictionary.
+        contain the `log_index` / `log_idx` key (int | str) in its data dictionary.
     :return: A populated CommandDTO.
     """
-    log_idx = intent.get("log_idx")
+    log_idx = intent.get("log_index", intent.get("log_idx"))
 
     if log_idx is None:
-        raise ValueError("Missing 'log_idx' in intent data")
+        raise ValueError("Missing 'log_index'/'log_idx' in intent data")
 
     log_idx_int = log_idx if isinstance(log_idx, int) else int(log_idx, 16)
     payload = f"{log_idx_int:06X}"
@@ -47,8 +47,12 @@ def build_put_faultlog_entry(intent: Command) -> CommandDTO:
     fault_type = intent.get("fault_type")
     device_class = intent.get("device_class")
     device_id = intent.get("device_id")
-    domain_idx = intent.get("domain_idx", "00")
-    log_idx = intent.get("log_idx", 0)
+    domain_idx = intent.get("domain_index", intent.get("domain_idx", "00"))
+    if domain_idx is None:
+        domain_idx = "00"
+    log_idx = intent.get("log_index", intent.get("log_idx", 0))
+    if log_idx is None:
+        log_idx = 0
     timestamp = intent.get("timestamp")
 
     if isinstance(device_class, enum.Enum):
@@ -61,7 +65,8 @@ def build_put_faultlog_entry(intent: Command) -> CommandDTO:
 
     if isinstance(fault_state, enum.Enum):
         fault_state = next(
-            (k for k, v in FAULT_STATE.items() if v == fault_state), fault_state
+            (k for k, v in FAULT_STATE.items() if v == fault_state),
+            fault_state,
         )
     if fault_state not in FAULT_STATE:
         raise ValueError(f"Invalid fault_state: {fault_state}")

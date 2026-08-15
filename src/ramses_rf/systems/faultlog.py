@@ -10,9 +10,9 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, NewType, TypeAlias
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import SZ_LOG_ENTRY, SZ_LOG_IDX
+from ramses_rf.const import SZ_LOG_ENTRY, SZ_LOG_IDX, SZ_LOG_INDEX
 from ramses_rf.models import FaultLogState, StateUpdatedEvent
-from ramses_rf.parsers.helpers import parse_fault_log_entry
+from ramses_rf.payloads.helpers import parse_fault_log_entry
 from ramses_tx import Packet
 from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.typing import DeviceIdT
@@ -33,7 +33,9 @@ if TYPE_CHECKING:
     from ramses_rf.systems.tcs import _LogbookT
 
 
-FaultTupleT: TypeAlias = tuple[FaultType, FaultDeviceClass, DeviceIdT | None, str]
+FaultTupleT: TypeAlias = tuple[
+    FaultType, FaultDeviceClass, DeviceIdT | None, str
+]
 
 
 DEFAULT_GET_LIMIT = 6
@@ -55,24 +57,52 @@ class FaultLogEntry:
 
     timestamp: str  # #               # 21-12-23T11:59:35 - assume is unique
     fault_state: FaultState  # #      # fault, restore, unknown_c0
-    fault_type: FaultType  # #        # system_fault, battery_low, sensor_fault, etc.
-    domain_idx: str  # #              # 00-0F, FC, etc. ? only if dev_class is/not CTL?
+    fault_type: (
+        FaultType  # #        # system_fault, battery_low, sensor_fault, etc.
+    )
+    domain_index: str = (
+        ""  # #       # 00-0F, FC, etc. ? only if dev_class is/not CTL?
+    )
     device_class: FaultDeviceClass  # # controller, actuator, sensor, etc.
     device_id: DeviceIdT | None  # #  # 04:164787
 
-    # def __post_init__(self):
-    #     def modify(device_id: DeviceIdT) -> DeviceIdT:
-    #     object.__setattr__(self, "device_id", modify(self.device_id))
+    def __init__(
+        self,
+        *,
+        timestamp: str,
+        fault_state: FaultState,
+        fault_type: FaultType,
+        device_class: FaultDeviceClass,
+        device_id: DeviceIdT | None,
+        domain_index: str = "",
+        domain_idx: str | None = None,
+    ) -> None:
+        """Initialize a FaultLogEntry instance."""
+        object.__setattr__(self, "timestamp", timestamp)
+        object.__setattr__(self, "fault_state", fault_state)
+        object.__setattr__(self, "fault_type", fault_type)
+        object.__setattr__(self, "device_class", device_class)
+        object.__setattr__(self, "device_id", device_id)
+        object.__setattr__(
+            self,
+            "domain_index",
+            domain_index if domain_index else (domain_idx or ""),
+        )
+
+    @property
+    def domain_idx(self) -> str:
+        """Deprecated alias for domain_index."""
+        return self.domain_index
 
     def __str__(self) -> str:
+        """Return the string representation of the fault log entry."""
         return (
             f"{self.timestamp}, {(self.fault_state + ','):<8} {self.fault_type}, "
-            f"{self.device_id}, {self.domain_idx}, {self.device_class}"
+            f"{self.device_id}, {self.domain_index}, {self.device_class}"
         )
 
     def _is_matching_pair(self, other: object) -> bool:
         """Return True if the other entry could be a matching pair (fault/restore)."""
-
         if not isinstance(other, FaultLogEntry):
             raise exc.SystemInconsistent(f"{other} is not a FaultLogEntry")
 
@@ -94,31 +124,35 @@ class FaultLogEntry:
 
     def _as_tuple(self) -> FaultTupleT:  # only for use within this class
         """Return the log entry as a tuple, excluding dtm & state (fault/restore)."""
-
         return (
             self.fault_type,
             self.device_class,
             self.device_id,
-            self.domain_idx,
+            self.domain_index,
         )
 
     @classmethod
     def from_msg(cls, msg: Message) -> FaultLogEntry:
         """Create a fault log entry from a message's payload."""
         log_entry = parse_fault_log_entry(msg._dto.raw_payload)
-        if log_entry is None:
+        if log_entry is None or "timestamp" not in log_entry:
             raise exc.PacketPayloadInvalid("Invalid fault log entry payload")
-        return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
+        kwargs = {k: v for k, v in log_entry.items() if k[:1] != "_"}
+        if "domain_idx" in kwargs and "domain_index" not in kwargs:
+            kwargs["domain_index"] = kwargs.pop("domain_idx")
+        return cls(**kwargs)  # type: ignore[arg-type]
 
     @classmethod
-    def from_pkt(cls, pkt: Packet) -> FaultLogEntry:
+    def from_pkt(cls, packet: Packet) -> FaultLogEntry:
         """Create a fault log entry from a packet's payload."""
-
-        log_entry = parse_fault_log_entry(pkt.raw_payload)
-        if log_entry is None:
+        log_entry = parse_fault_log_entry(packet.raw_payload)
+        if log_entry is None or "timestamp" not in log_entry:
             raise exc.SystemInconsistent("Null fault log entry")
 
-        return cls(**{k: v for k, v in log_entry.items() if k[:1] != "_"})  # type: ignore[arg-type]
+        kwargs = {k: v for k, v in log_entry.items() if k[:1] != "_"}
+        if "domain_idx" in kwargs and "domain_index" not in kwargs:
+            kwargs["domain_index"] = kwargs.pop("domain_idx")
+        return cls(**kwargs)  # type: ignore[arg-type]
 
 
 FaultDtmT = NewType("FaultDtmT", str)
@@ -145,9 +179,10 @@ class FaultLog:  # 0418
     _MAX_LOG_IDX = 0x3F  # evohome controller only keeps most recent 64 entries
 
     def __init__(self, tcs: _LogbookT) -> None:
+        """Initialize the FaultLog with a parent TCS controller."""
         self._tcs: _LogbookT = tcs
         self.id = tcs.id
-        self._gwy = tcs._gwy
+        self._gateway = tcs._gateway
 
         self.state = FaultLogState()
 
@@ -167,42 +202,44 @@ class FaultLog:  # 0418
         if isinstance(event.state, FaultLogState):
             self.state = event.state
 
-    def _insert_into_map(self, idx: FaultIdxT, dtm: FaultDtmT | None) -> FaultMapT:
+    def _insert_into_map(
+        self, index: FaultIdxT, dtm: FaultDtmT | None
+    ) -> FaultMapT:
         """Rebuild the map (as best as possible), given the a log entry."""
-
         new_map: FaultMapT = OrderedDict()
 
-        # usu. idx == 0, but could be > 0
+        # usu. index == 0, but could be > 0
         new_map |= {
-            k: v for k, v in self._map.items() if k < idx and (dtm is None or v > dtm)
+            k: v
+            for k, v in self._map.items()
+            if k < index and (dtm is None or v > dtm)
         }
 
         if dtm is None:  # there are no subsequent log entries
             return new_map
 
-        new_map |= {idx: dtm}
+        new_map |= {index: dtm}
 
         if not (idxs := [k for k, v in self._map.items() if v < dtm]):
             return new_map
 
-        if (next_idx := min(idxs)) > idx:
+        if (next_idx := min(idxs)) > index:
             diff = 0
-        elif next_idx == idx:
-            diff = 1  # next - idx + 1
+        elif next_idx == index:
+            diff = 1  # next - index + 1
         else:
-            diff = idx + 1  # 1 if self._map.get(idx) else 0
+            diff = index + 1  # 1 if self._map.get(index) else 0
 
         new_map |= {
             k + diff: v  # type: ignore[misc]
             for k, v in self._map.items()
-            if (k >= idx or v < dtm) and k + diff <= self._MAX_LOG_IDX
+            if (k >= index or v < dtm) and k + diff <= self._MAX_LOG_IDX
         }
 
         return new_map
 
     def handle_msg(self, msg: Message) -> None:
         """Handle a fault log message (some valid payloads should be ignored)."""
-
         assert msg.code == Code._0418 and msg.verb in (I_, RP), "Coding error"
 
         if msg.verb == RP and msg.payload[SZ_LOG_ENTRY] is None:
@@ -214,35 +251,48 @@ class FaultLog:  # 0418
 
     def _process_msg(self, msg: Message) -> None:
         """Handle a processable fault log message."""
-
         if msg.verb == I_:
             self._is_current = False
 
-        if SZ_LOG_IDX not in msg.payload:
+        if SZ_LOG_INDEX in msg.payload:
+            log_idx = FaultIdxT(int(msg.payload[SZ_LOG_INDEX], 16))
+        elif SZ_LOG_IDX in msg.payload:
+            log_idx = FaultIdxT(int(msg.payload[SZ_LOG_IDX], 16))
+        elif msg.payload.get(SZ_LOG_ENTRY) is None:
+            log_idx = FaultIdxT(0)
+        else:
             return  # we can't do anything useful with this message
 
-        idx: FaultIdxT = int(msg.payload[SZ_LOG_IDX], 16)  # type: ignore[assignment]
-
-        if msg.payload[SZ_LOG_ENTRY] is None:  # NOTE: Subsequent entries will be empty
-            self._map = self._insert_into_map(idx, None)
-            self._log = {k: v for k, v in self._log.items() if k in self._map.values()}
+        if (
+            msg.payload[SZ_LOG_ENTRY] is None
+        ):  # NOTE: Subsequent entries will be empty
+            self._map = self._insert_into_map(log_idx, None)
+            self._log = {
+                k: v for k, v in self._log.items() if k in self._map.values()
+            }
             return  # If idx != 0, should we also check from idx = 0?
 
-        entry = FaultLogEntry.from_msg(msg)  # if msg.payload[SZ_LOG_ENTRY] else None
+        entry = FaultLogEntry.from_msg(
+            msg
+        )  # if msg.payload[SZ_LOG_ENTRY] else None
         dtm: FaultDtmT = entry.timestamp  # type: ignore[assignment]
 
-        if self._map.get(idx) == dtm:
+        if self._map.get(log_idx) == dtm:
             return  # i.e. No evidence anything has changed
 
         if dtm not in self._log:
-            self._log |= {dtm: entry}  # must add entry before _insert_into_map()
-        self._map = self._insert_into_map(idx, dtm)  # updates self._map
-        self._log = {k: v for k, v in self._log.items() if k in self._map.values()}
+            self._log |= {
+                dtm: entry
+            }  # must add entry before _insert_into_map()
+        self._map = self._insert_into_map(log_idx, dtm)  # updates self._map
+        self._log = {
+            k: v for k, v in self._log.items() if k in self._map.values()
+        }
 
         # if idx != 0:  # there's other (new/changed) entries above this one?
         #     pass
 
-    def _hack_pkt_idx(self, orig_msg: Message, idx: str) -> Message:
+    def _hack_pkt_idx(self, orig_msg: Message, log_index: str) -> Message:
         """Modify the Message so that it has the expected log index.
 
         If there is no log entry for log_idx=<idx>, then the headers won't match:
@@ -251,31 +301,33 @@ class FaultLog:  # 0418
         """
         assert orig_msg.verb == RP and orig_msg.code == Code._0418
         assert (
-            orig_msg._dto.raw_payload == "000000B0000000000000000000007FFFFF7000000000"
+            orig_msg._dto.raw_payload
+            == "000000B0000000000000000000007FFFFF7000000000"
         )
 
-        if idx == "00":  # no need to hack
+        if log_index == "00":  # no need to hack
             return orig_msg
 
         # Replace payload in an immutable PacketDTO copy rather than mutating raw Packet state
         new_dto = dataclasses.replace(
             orig_msg._dto,
-            raw_payload=f"0000{idx}B0000000000000000000007FFFFF7000000000",
+            raw_payload=f"0000{log_index}B0000000000000000000007FFFFF7000000000",
         )
         msg = Message(new_dto)
-        msg._payload = {SZ_LOG_IDX: idx, SZ_LOG_ENTRY: None}  # PayDictT._0418_NULL
+        msg._payload = {
+            SZ_LOG_INDEX: log_index,
+            SZ_LOG_IDX: log_index,
+            SZ_LOG_ENTRY: None,
+        }  # PayDictT._0418_NULL
         return msg
 
     async def get_faultlog(
         self,
-        /,
-        *,
         start: int = 0,
         limit: int | None = DEFAULT_GET_LIMIT,
         force_refresh: bool = False,
     ) -> dict[FaultIdxT, FaultLogEntry]:
         """Retrieve the fault log from the controller."""
-
         # Short-circuit: Return instantly from memory if already current and no refresh forced
         if not force_refresh and self._is_current:
             return self.faultlog
@@ -290,17 +342,21 @@ class FaultLog:  # 0418
                 return self.faultlog
 
             error_occurred = False
-            for idx in range(start, min(start + limit, self._MAX_LOG_IDX + 1)):
+            for log_idx in range(
+                start, min(start + limit, self._MAX_LOG_IDX + 1)
+            ):
                 try:
                     msg = await send_system_intent(
                         self._tcs,
                         Action.GET_FAULTLOG_ENTRY,
-                        data={"log_idx": idx},
+                        data={SZ_LOG_INDEX: log_idx},
                         wait_for_reply=True,
                     )
                 except exc.RamsesException as err:
                     _LOGGER.warning(
-                        "Failed to retrieve fault log entry %s: %s", idx, err
+                        "Failed to retrieve fault log entry %s: %s",
+                        log_idx,
+                        err,
                     )
                     error_occurred = True
                     self._is_current = False
@@ -311,9 +367,11 @@ class FaultLog:  # 0418
                     == "000000B0000000000000000000007FFFFF7000000000"
                 ):
                     msg = self._hack_pkt_idx(
-                        msg, f"{idx:02X}"
+                        msg, f"{log_idx:02X}"
                     )  # RPs for null entries have idx==00
-                    self._process_msg(msg)  # since pkt via dispatcher aint got idx
+                    self._process_msg(
+                        msg
+                    )  # since pkt via dispatcher aint got idx
                     break
 
                 self._process_msg(msg)  # JIC dispatcher doesn't do this for us
@@ -327,11 +385,10 @@ class FaultLog:  # 0418
     @property
     def faultlog(self) -> dict[FaultIdxT, FaultLogEntry]:
         """Return the fault log of a system."""
-
         # if self._faultlog:
         #     return self._faultlog
 
-        return {idx: self._log[dtm] for idx, dtm in self._map.items()}
+        return {log_idx: self._log[dtm] for log_idx, dtm in self._map.items()}
 
     @property
     def is_current(self) -> bool:
@@ -344,7 +401,6 @@ class FaultLog:  # 0418
     @property
     def latest_event(self) -> FaultLogEntry | None:
         """Return the most recently logged event (fault or restore), if any."""
-
         if not self._log:
             return None
 
@@ -353,11 +409,14 @@ class FaultLog:  # 0418
     @property
     def latest_fault(self) -> FaultLogEntry | None:
         """Return the most recently logged fault, if any."""
-
         if not self._log:
             return None
 
-        faults = [k for k, v in self._log.items() if v.fault_state == FaultState.FAULT]
+        faults = [
+            k
+            for k, v in self._log.items()
+            if v.fault_state == FaultState.FAULT
+        ]
 
         if not faults:
             return None
@@ -367,7 +426,6 @@ class FaultLog:  # 0418
     @property
     def active_faults(self) -> tuple[FaultLogEntry, ...] | None:
         """Return a list of all faults outstanding (i.e. no corresponding restore)."""
-
         if not self._log:
             return None
 

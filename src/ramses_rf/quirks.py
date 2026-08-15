@@ -25,26 +25,17 @@ KNOWN EXCEPTIONS:
 
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Any
 
-from ramses_rf.const import (
-    SZ_FAN_MODE,
-    SZ_INDOOR_HUMIDITY,
-    SZ_OUTDOOR_HUMIDITY,
-    SZ_REL_HUMIDITY,
-    DevType,
-)
+from ramses_rf.const import SZ_REL_HUMIDITY
 from ramses_rf.models import HvacState
-from ramses_tx.const import MsgId
-
-# Map of device types to sets of OpenTherm MsgIds that are known to be unreliable
-QUARANTINED_OT_MSG_IDS: Final[dict[str, set[MsgId]]] = {
-    DevType.OTB: {MsgId._0E, MsgId._11},
-}
+from ramses_tx.const import Code
 
 
 def apply_hvac_quirks(
-    payload: dict[str, Any], current_state: HvacState | None, msg_code: str
+    payload: dict[str, Any],
+    current_state: HvacState | None,
+    msg_code: Code | str,
 ) -> dict[str, Any]:
     """Resolve stateful FSM conflicts and structural anomalies for HVAC packets.
 
@@ -57,92 +48,94 @@ def apply_hvac_quirks(
     :param current_state: The existing Read-Model for the device, if any.
     :type current_state: HvacState | None
     :param msg_code: The hex opcode of the incoming message.
-    :type msg_code: str
+    :type msg_code: Code | str
     :return: The safely mutated telemetry dictionary.
     :rtype: dict[str, Any]
     """
     mutated = dict(payload)
 
     # STRUCTURAL QUIRK: 12A0 Array Elements (Ventura V1x, Orcon, etc.)
-    # The parser returns list elements with an 'hvac_idx'. We must map these
-    # generic keys to their specific domain locations.
+    # The parser returns list elements with an 'hvac_idx'. We must map
+    # these generic keys to their specific domain locations.
     # idx=00: indoor sensor  → indoor_humidity, indoor_temp
-    # idx=01: supply sensor   → rel_humidity (parser key), supply_temp
-    # idx=02: outdoor sensor  → outdoor_humidity, outdoor_temp
+    # idx=01: supply sensor  → rel_humidity (parser key), supply_temp
+    # idx=02: outdoor sensor → outdoor_humidity, outdoor_temp
     #
     # parse_humidity_element returns different key names per idx:
     #   idx=00 → SZ_INDOOR_HUMIDITY ("indoor_humidity")
-    #   idx=01 → SZ_REL_HUMIDITY ("rel_humidity")  — NOT "indoor_humidity"!
+    #   idx=01 → SZ_REL_HUMIDITY ("rel_humidity") — NOT "indoor_humidity"!
     #   idx=02 → SZ_OUTDOOR_HUMIDITY ("outdoor_humidity")
     #
     # HvacState has no supply_humidity field, so idx=01's rel_humidity is
-    # dropped (not in the dispatcher's field list).  idx=02's outdoor_humidity
-    # is already correct and needs no remapping.
-    if msg_code == "12A0":
-        idx = mutated.get("hvac_idx", "00")
-        if idx == "00":
+    # dropped (not in dispatcher field list). idx=02's outdoor_humidity is
+    # already correct and needs no remapping.
+    if msg_code == Code._12A0:
+        index = mutated.get("hvac_idx", "00")
+        if index == "00":
             if "temperature" in mutated:
                 mutated["indoor_temp"] = mutated["temperature"]
-        elif idx == "01":
+        elif index == "01":
             # parse_humidity_element returns "rel_humidity", not
             # "indoor_humidity" — the old code checked the wrong key.
-            # There is no supply_humidity field in HvacState, so we
-            # pop the key to prevent it overwriting indoor_humidity
-            # from idx=00 via the dispatcher's "temperature" fallback.
+            # There is no supply_humidity field in HvacState, so we pop
+            # the key to prevent it overwriting indoor_humidity from
+            # idx=00 via the dispatcher's "temperature" fallback.
             if SZ_REL_HUMIDITY in mutated:
                 mutated.pop(SZ_REL_HUMIDITY)
-            if "indoor_humidity" in mutated:  # safety: old parser path
+            if "indoor_humidity" in mutated:
                 mutated.pop("indoor_humidity")
             if "temperature" in mutated:
                 mutated["supply_temp"] = mutated.pop("temperature")
-        elif idx == "02":
-            # parse_humidity_element already returns outdoor_humidity for
-            # idx=02, so no humidity remapping is needed.
+        elif index == "02":
+            # parse_humidity_element already returns outdoor_humidity
+            # for idx=02, so no humidity remapping is needed.
             #
-            # NOTE: idx=02 also includes a temperature field, but we do NOT
-            # remap it to outdoor_temp.  The 12A0 array comes from a separate
-            # HUM sensor, and the dispatcher routes it to the FAN's hvac_state
-            # (as dst target).  If we remap temperature → outdoor_temp here,
-            # it creates a second outdoor_temp source that conflicts with
-            # 31DA's outdoor_temp, causing the sensor to bounce between the
-            # two values every polling cycle.  31DA is the authoritative
-            # source for outdoor_temp; 12A0 idx=02 only contributes
-            # outdoor_humidity.  See ramses_cc#742.
+            # NOTE: idx=02 also includes a temperature field, but we do
+            # NOT remap it to outdoor_temp. The 12A0 array comes from a
+            # separate HUM sensor, and the dispatcher routes it to the
+            # FAN's hvac_state (as dst target). If we remap temperature →
+            # outdoor_temp here, it creates a second outdoor_temp source
+            # that conflicts with 31DA's outdoor_temp, causing the sensor
+            # to bounce between the two values every polling cycle. 31DA
+            # is the authoritative source for outdoor_temp; 12A0 idx=02
+            # only contributes outdoor_humidity. See ramses_cc#742.
             pass
         return mutated
 
     # QUIRK: 31DA humidity 0.0 → None (null-marker normalisation)
-    # Some devices (e.g. Ventura V1x) send 0x00 for indoor/outdoor humidity in
-    # 31DA when no sensor is present.  This parses as 0.0 (physically impossible
-    # on Earth).  Normalise to None so both ingestion paths (dispatcher and
-    # StateProjector) filter it out.  See ramses_cc#742.
-    if msg_code == "31DA":
-        for key in (SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY):
-            if key in mutated and mutated[key] == 0.0:
-                mutated[key] = None
+    # Some devices (e.g. Ventura V1x) send 0x00 for indoor/outdoor
+    # humidity in 31DA when no sensor is present. This parses as 0.0
+    # (physically impossible on Earth). Normalise to None so both
+    # ingestion paths (dispatcher and StateProjector) filter it out.
+    # See ramses_cc#742.
+    if msg_code == Code._31DA:
+        if mutated.get("indoor_humidity") == 0.0:
+            mutated["indoor_humidity"] = None
+        if mutated.get("outdoor_humidity") == 0.0:
+            mutated["outdoor_humidity"] = None
 
     # QUIRK: 31D9 raw-hex fan_mode → None (semantic-value preservation)
-    # For long-payload devices (Orcon, Brofer, etc.), the 31D9 parser sets
-    # fan_mode = raw_payload[4:6] — a raw hex byte like "04", "C8", "FF".  These
-    # are NOT semantic names and conflict with the semantic fan_mode from
-    # 22F4 ("off", "paused", "auto", "manual") or 22F1 (scheme-specific
-    # names like "away", "low", "high", "boost").  The raw hex overwrites
-    # the good semantic value every 31D9 broadcast cycle, causing fan_mode
-    # to toggle (e.g. "auto" ↔ "04").
+    # For long-payload devices (Orcon, Brofer, etc.), the 31D9 parser
+    # sets fan_mode = raw_payload[4:6] — a raw hex byte like "04", "C8",
+    # "FF". These are NOT semantic names and conflict with the semantic
+    # fan_mode from 22F4 ("off", "paused", "auto", "manual") or 22F1
+    # (scheme-specific names like "away", "low", "high", "boost"). The raw
+    # hex overwrites the good semantic value every 31D9 broadcast cycle,
+    # causing fan_mode to toggle (e.g. "auto" ↔ "04").
     #
-    # Vasco/ClimaRad short payloads (msg.len == 3) are already converted to
-    # semantic strings by the parser's _31D9_FAN_INFO_VASCO lookup, so they
-    # won't match the hex pattern and are preserved.
+    # Vasco/ClimaRad short payloads (msg.len == 3) are already converted
+    # to semantic strings by the parser's _31D9_FAN_INFO_VASCO lookup,
+    # so they won't match the hex pattern and are preserved.
     #
-    # Drop any fan_mode that is a 2-char hex string (raw byte).  The
+    # Drop any fan_mode that is a 2-char hex string (raw byte). The
     # authoritative semantic fan_mode comes from 22F4 (polled) or 22F1
-    # (command reply).  See ramses_cc issue 723.
-    if msg_code == "31D9" and SZ_FAN_MODE in mutated:
-        val = mutated[SZ_FAN_MODE]
-        if isinstance(val, str) and len(val) == 2:
+    # (command reply). See ramses_cc issue 723.
+    if msg_code == Code._31D9 and "fan_mode" in mutated:
+        mode_value = mutated["fan_mode"]
+        if isinstance(mode_value, str) and len(mode_value) == 2:
             try:
-                int(val, 16)  # is it a raw hex byte?
-                mutated[SZ_FAN_MODE] = None
+                int(mode_value, 16)  # is it a raw hex byte?
+                mutated["fan_mode"] = None
             except ValueError:
                 pass  # semantic string, keep it
 
@@ -152,7 +145,7 @@ def apply_hvac_quirks(
     # QUIRK: Itho 31DA 'exhaust_fan_speed' Overwrite Prevention
     # Itho transmits actual fan speed in 31D9, but transmits 31DA with
     # a default zero byte [38:40]. We drop the zero if valid state exists.
-    if msg_code == "31DA" and "exhaust_fan_speed" in mutated:
+    if msg_code == Code._31DA and "exhaust_fan_speed" in mutated:
         if mutated["exhaust_fan_speed"] == 0.0:
             if (
                 current_state.exhaust_fan_speed is not None
@@ -166,7 +159,7 @@ def apply_hvac_quirks(
     # We must not overwrite a valid, rich string from 22F1/22F4/31D9 with:
     #   - "" or "off"  (blank/null markers)
     #   - "-unknown 0xNN-"  (unrecognised codes, e.g. Ventura's 0x1F)
-    if msg_code == "31DA" and "fan_info" in mutated:
+    if msg_code == Code._31DA and "fan_info" in mutated:
         incoming = mutated["fan_info"]
         if incoming in ("off", "") or (
             isinstance(incoming, str) and incoming.startswith("-unknown")

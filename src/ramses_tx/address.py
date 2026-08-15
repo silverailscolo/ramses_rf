@@ -35,7 +35,6 @@ class Address:
         :type device_id: DeviceIdT
         :raises ValueError: If the device_id is not a valid format.
         """
-
         self.id = device_id
         self.type = device_id[:2]  # dex, drops 2nd part, incl. ":"
         self._hex_id: str = None  # type: ignore[assignment]
@@ -56,6 +55,7 @@ class Address:
 
     @property
     def hex_id(self) -> str:
+        """Return 6-character hex representation of device ID."""
         if self._hex_id is not None:
             return self._hex_id
         self._hex_id = self.convert_to_hex(self.id)  # type: ignore[unreachable]
@@ -63,8 +63,16 @@ class Address:
 
     @staticmethod
     def is_valid(value: str) -> bool:
+        """Return True if value is a valid device ID string.
+
+        :param value: The device ID string to validate.
+        :type value: str
+        :returns: True if valid, False otherwise.
+        :rtype: bool
+        """
         return isinstance(value, str) and (
-            value == NON_DEVICE_ID or DEVICE_ID_REGEX.ANY.match(value) is not None
+            value == NON_DEVICE_ID
+            or DEVICE_ID_REGEX.ANY.match(value) is not None
         )
 
     @classmethod
@@ -77,7 +85,6 @@ class Address:
         :return: The formatted device ID string
         :rtype: str
         """
-
         if device_hex == "FFFFFE":  # aka '63:262142'
             return ALL_DEVICE_ID
 
@@ -85,13 +92,14 @@ class Address:
             return NON_DEVICE_ID
 
         _tmp = int(device_hex, 16)
-        return DeviceIdT(f"{(_tmp & 0xFC0000) >> 18:02d}:{_tmp & 0x03FFFF:06d}")
+        return DeviceIdT(
+            f"{(_tmp & 0xFC0000) >> 18:02d}:{_tmp & 0x03FFFF:06d}"
+        )
 
     @classmethod
     @lru_cache(maxsize=256)
     def convert_to_hex(cls, device_id: DeviceIdT) -> str:
         """Convert '01:145038' to '06368E'."""
-
         if not cls.is_valid(device_id):
             raise TypeError
 
@@ -130,28 +138,33 @@ def hex_id_to_dev_id(device_hex: str) -> DeviceIdT:
 
 
 @lru_cache(maxsize=2048)
-def is_valid_dev_id(value: str, dev_class: None | str = None) -> bool:
+def is_valid_dev_id(value: str, device_class: None | str = None) -> bool:
     """Return True if a device_id is valid."""
-    return isinstance(value, str) and DEVICE_ID_REGEX.ANY.match(value) is not None
+    return (
+        isinstance(value, str) and DEVICE_ID_REGEX.ANY.match(value) is not None
+    )
 
 
 @lru_cache(maxsize=2048)
 def pkt_addrs(
-    addr_fragment: str,
+    address_fragment: str,
 ) -> tuple[Address, Address, Address, Address, Address]:
     """Parse address fields from a 30-character address fragment.
 
-    :param addr_fragment: The 30-char fragment
-    :type addr_fragment: str
+    :param address_fragment: The 30-char fragment
+    :type address_fragment: str
     :return: A tuple of (src_addr, dst_addr, addr_0, addr_1, addr_2)
     :rtype: tuple[Address, Address, Address, Address, Address]
     :raises PacketAddrSetInvalid: If the address fields are not valid.
     """
     try:
-        addrs = tuple(id_to_address(addr_fragment[i : i + 9]) for i in range(0, 30, 10))
+        addrs = tuple(
+            id_to_address(address_fragment[i : i + 9])
+            for i in range(0, 30, 10)
+        )
     except ValueError as err:
         raise exc.PacketAddrSetInvalid(
-            f"Invalid address set: {addr_fragment}: {err}"
+            f"Invalid address set: {address_fragment}: {err}"
         ) from None
 
     if not _DBG_DISABLE_STRICT_CHECKING and (
@@ -171,7 +184,9 @@ def pkt_addrs(
             and addrs[1] == NON_DEV_ADDR
         )
     ):
-        raise exc.PacketAddrSetInvalid(f"Invalid address set: {addr_fragment}")
+        raise exc.PacketAddrSetInvalid(
+            f"Invalid address set: {address_fragment}"
+        )
 
     device_addrs = list(filter(lambda a: a.type != "--", addrs))  # dex
     src_addr = device_addrs[0]

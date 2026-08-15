@@ -40,7 +40,9 @@ from ramses_tx import exceptions as exc
 from ramses_tx.const import I_, Code
 from ramses_tx.schemas import SZ_PACKET_LOG, SZ_SERIAL_PORT
 
-STDIN = io.StringIO("053  I --- 01:123456 --:------ 01:123456 3150 002 FC00\r\n")
+STDIN = io.StringIO(
+    "053  I --- 01:123456 --:------ 01:123456 3150 002 FC00\r\n"
+)
 CMD = "RQ 01:123456 1F09 00"
 
 
@@ -171,7 +173,9 @@ async def test_monitor(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_monitor_no_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test monitor with explicit no-discovery flag."""
     runner = CliRunner()
-    result = await runner.invoke(cli, ["monitor", "nullmodem", "--no-discover"])
+    result = await runner.invoke(
+        cli, ["monitor", "nullmodem", "--no-discover"]
+    )
     assert result.exit_code == 0
     assert "discovery is enabled" not in result.output
 
@@ -331,7 +335,9 @@ async def test_print_engine_state(
     mock_gateway: MagicMock, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Test _print_engine_state."""
-    kwargs: dict[str, Any] = {"print_state": 2}  # 2 implies print packets as well
+    kwargs: dict[str, Any] = {
+        "print_state": 2
+    }  # 2 implies print packets as well
     await _print_engine_state(mock_gateway, **kwargs)
 
     out = capsys.readouterr().out
@@ -364,8 +370,13 @@ async def test_async_main_kwargs_separation(mock_gateway: MagicMock) -> None:
 
     # ACT
     with (
-        patch("ramses_cli.client.Gateway", return_value=mock_gateway) as mock_gwy_class,
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.Gateway", return_value=mock_gateway
+        ) as mock_gwy_class,
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
     ):
         await async_main(PARSE, lib_kwargs, **kwargs)
 
@@ -374,7 +385,9 @@ async def test_async_main_kwargs_separation(mock_gateway: MagicMock) -> None:
 
         # ASSERT - L7 receives the dictionary
         assert isinstance(config_obj, GatewayConfig)
-        assert config_obj.known_list == {"18:123456": {"class": "HGI", "faked": True}}
+        assert config_obj.known_list == {
+            "18:123456": {"class": "HGI", "faked": True}
+        }
         assert config_obj.hgi_id == "18:123456"
 
         # ASSERT - L3 does NOT receive the nested dict from the kwargs unpacker
@@ -400,8 +413,13 @@ async def test_async_main_parse(mock_gateway: MagicMock) -> None:
     }
 
     with (
-        patch("ramses_cli.client.Gateway", return_value=mock_gateway) as mock_gwy_class,
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.Gateway", return_value=mock_gateway
+        ) as mock_gwy_class,
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
     ):
         await async_main(PARSE, lib_kwargs, **kwargs)
 
@@ -439,9 +457,16 @@ async def test_async_main_real_gateway_init() -> None:
     }
 
     with (
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
-        patch("ramses_rf.gateway.Gateway.start", new_callable=AsyncMock) as mock_start,
-        patch("ramses_rf.gateway.Gateway.stop", new_callable=AsyncMock) as mock_stop,
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
+        patch(
+            "ramses_rf.gateway.Gateway.start", new_callable=AsyncMock
+        ) as mock_start,
+        patch(
+            "ramses_rf.gateway.Gateway.stop", new_callable=AsyncMock
+        ) as mock_stop,
     ):
         await async_main(PARSE, lib_kwargs, **kwargs)
 
@@ -477,7 +502,10 @@ async def test_async_main_execute(mock_gateway: MagicMock) -> None:
     with (
         patch("ramses_cli.client.Gateway", return_value=mock_gateway),
         patch("ramses_cli.client.spawn_scripts", return_value=[mock_task()]),
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
     ):
         await async_main(EXECUTE, lib_kwargs, **kwargs)
 
@@ -503,7 +531,10 @@ async def test_async_main_monitor(mock_gateway: MagicMock) -> None:
     with (
         patch("ramses_cli.client.Gateway", return_value=mock_gateway),
         patch("ramses_cli.client.spawn_scripts", return_value=[]),
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
     ):
         await async_main(MONITOR, lib_kwargs, **kwargs)
 
@@ -519,7 +550,14 @@ async def test_async_main_restore_schema(mock_gateway: MagicMock) -> None:
     # Mock a file object for restore_schema
     mock_file = MagicMock()
     mock_file.read.return_value = json.dumps(
-        {"data": {"client_state": {"schema": {"restored": "value"}, "packets": []}}}
+        {
+            "data": {
+                "client_state": {
+                    "schema": {"restored": "value"},
+                    "packets": [],
+                }
+            }
+        }
     )
     # Make json.load work on the mock
     mock_file.__enter__.return_value = mock_file
@@ -535,9 +573,14 @@ async def test_async_main_restore_schema(mock_gateway: MagicMock) -> None:
         patch("ramses_cli.client.Gateway", return_value=mock_gateway),
         patch(
             "json.load",
-            return_value={"data": {"client_state": {"schema": {}, "packets": []}}},
+            return_value={
+                "data": {"client_state": {"schema": {}, "packets": []}}
+            },
         ),
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
     ):
         await async_main(LISTEN, lib_kwargs, **kwargs)
         # Verify gateway initialized (implicit in logic)
@@ -680,7 +723,10 @@ async def test_async_main_exceptions(
 
     with (
         patch("ramses_cli.client.Gateway", return_value=mock_gateway),
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
     ):
         # Test CancelledError
         mock_gateway.start.side_effect = asyncio.CancelledError
@@ -789,7 +835,9 @@ async def test_parse_command_passes_input_file() -> None:
     fake_log_file = "test_capture.log"
 
     # standalone_mode=False allows us to see the return value of the command
-    result = await runner.invoke(cli, ["parse", fake_log_file], standalone_mode=False)
+    result = await runner.invoke(
+        cli, ["parse", fake_log_file], standalone_mode=False
+    )
 
     assert result.exit_code == 0, f"Command failed: {result.exception}"
 
@@ -844,7 +892,9 @@ def test_run_cli_valid() -> None:
 
     with (
         patch("sys.argv", ["client.py", "parse", "dummy.log"]),
-        patch("ramses_cli.client.async_main", side_effect=dummy_main) as mock_main,
+        patch(
+            "ramses_cli.client.async_main", side_effect=dummy_main
+        ) as mock_main,
         patch("sys.exit", side_effect=SystemExit) as mock_exit,
     ):
         _run_cli()
@@ -879,7 +929,10 @@ async def test_async_main_scan(mock_gateway: MagicMock) -> None:
 
     with (
         patch("ramses_cli.client.Gateway", return_value=mock_gateway),
-        patch("ramses_cli.client.normalise_config", return_value=(None, lib_kwargs)),
+        patch(
+            "ramses_cli.client.normalise_config",
+            return_value=(None, lib_kwargs),
+        ),
         patch("ramses_cli.client.DiscoveryScan") as mock_scan_cls,
     ):
         mock_scan_engine = MagicMock()
@@ -901,7 +954,9 @@ async def test_async_main_scan(mock_gateway: MagicMock) -> None:
         mock_gateway.stop.assert_awaited_once()
 
 
-def test_print_scan_results_with_devices(capsys: pytest.CaptureFixture[str]) -> None:
+def test_print_scan_results_with_devices(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Test _print_scan_results formats device output correctly."""
     from ramses_cli.client import _print_scan_results
     from ramses_rf.discovery_scan import DiscoveredDevice
@@ -912,28 +967,28 @@ def test_print_scan_results_with_devices(capsys: pytest.CaptureFixture[str]) -> 
             first_seen="2026-01-01T00:00:00",
             last_seen="2026-01-01T00:00:01",
             likely_type="CTL",
-            codes_seen=["2E04", "000C"],
+            codes_seen=[Code._2E04, Code._000C],
             bound_to=None,
-            zone_idx="0A",
+            zone_index="0A",
             rssi=-68.0,
             confidence="high",
             is_battery=False,
-            src_count=5,
-            dst_count=2,
+            source_count=5,
+            destination_count=2,
         ),
         DiscoveredDevice(
             device_id="04:056053",
             first_seen="2026-01-01T00:00:00",
             last_seen="2026-01-01T00:00:01",
             likely_type="TRV",
-            codes_seen=["3150"],
+            codes_seen=[Code._3150],
             bound_to="01:145038",
-            zone_idx="02",
+            zone_index="02",
             rssi=-72.0,
             confidence="high",
             is_battery=True,
-            src_count=3,
-            dst_count=0,
+            source_count=3,
+            destination_count=0,
         ),
     ]
 
@@ -953,7 +1008,9 @@ def test_print_scan_results_with_devices(capsys: pytest.CaptureFixture[str]) -> 
     assert "battery" in captured.out
 
 
-def test_print_scan_results_no_devices(capsys: pytest.CaptureFixture[str]) -> None:
+def test_print_scan_results_no_devices(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     """Test _print_scan_results when no devices are found."""
     from ramses_cli.client import _print_scan_results
 
@@ -979,14 +1036,14 @@ def test_print_scan_results_export_to_file(
             first_seen="2026-01-01T00:00:00",
             last_seen="2026-01-01T00:00:01",
             likely_type="FAN",
-            codes_seen=["31DA"],
+            codes_seen=[Code._31DA],
             bound_to=None,
-            zone_idx=None,
+            zone_index=None,
             rssi=-70.0,
             confidence="medium",
             is_battery=False,
-            src_count=2,
-            dst_count=0,
+            source_count=2,
+            destination_count=0,
         ),
     ]
 
@@ -1012,11 +1069,20 @@ async def test_scan_command_disables_sending_and_discovery() -> None:
     cli_config: dict[str, Any] = {}
 
     runner = CliRunner()
-    with patch("ramses_cli.client.split_kwargs", return_value=(cli_config, lib_config)):
+    with patch(
+        "ramses_cli.client.split_kwargs", return_value=(cli_config, lib_config)
+    ):
         # standalone_mode=False returns the command's return value
         result = await runner.invoke(
             cli,
-            ["scan", "/dev/ttyUSB0", "--file", "found.json", "--duration", "60"],
+            [
+                "scan",
+                "/dev/ttyUSB0",
+                "--file",
+                "found.json",
+                "--duration",
+                "60",
+            ],
             standalone_mode=False,
         )
 

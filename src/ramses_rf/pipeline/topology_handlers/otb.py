@@ -22,7 +22,10 @@ class OtbTopologyHandler(TopologyHandler):
         if not self._enable_eavesdrop:
             return
 
-        if msg.header.code == Code._3220 and getattr(msg.src, "type", None) == "10":
+        if (
+            msg.header.code == Code._3220
+            and getattr(msg.src, "type", None) == "10"
+        ):
             event = TopologyChangedEvent(
                 action=TopologyAction.UPDATE_DEVICE_CLASS,
                 device_id=msg.src.id,

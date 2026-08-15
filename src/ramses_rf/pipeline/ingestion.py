@@ -33,13 +33,16 @@ from ramses_rf.const import (
     SZ_CH_SETPOINT,
     SZ_CO2_LEVEL,
     SZ_COOL_ACTIVE,
+    SZ_COOLING_DEMAND,
+    SZ_COOLING_MODE,
     SZ_CYCLE_COUNTDOWN,
     SZ_DATETIME,
     SZ_DEWPOINT_TEMP,
     SZ_DHW_ACTIVE,
     SZ_DHW_FLOW_RATE,
+    SZ_DHW_INDEX,
     SZ_DIFFERENTIAL,
-    SZ_DOMAIN_ID,
+    SZ_DOMAIN_INDEX,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
     SZ_EXHAUST_TEMP,
@@ -63,14 +66,15 @@ from ramses_rf.const import (
     SZ_PRE_HEAT,
     SZ_PRESENCE_DETECTED,
     SZ_PRESSURE,
+    SZ_PUMP_RELAY_STATE,
     SZ_REL_MODULATION_LEVEL,
     SZ_RELAY_DEMAND,
     SZ_RELAY_FAILSAFE,
     SZ_REMAINING_DAYS,
     SZ_REMAINING_MINS,
     SZ_REMAINING_PERCENT,
-    SZ_REQ_REASON,
-    SZ_REQ_SPEED,
+    SZ_REQUEST_REASON,
+    SZ_REQUEST_SPEED,
     SZ_SETPOINT,
     SZ_SETPOINT_BOUNDS,
     SZ_SPEED_CAPABILITIES,
@@ -79,10 +83,10 @@ from ramses_rf.const import (
     SZ_SUPPLY_TEMP,
     SZ_SYSTEM_MODE,
     SZ_TEMPERATURE,
-    SZ_UFH_IDX,
+    SZ_UFH_INDEX,
     SZ_UNTIL,
     SZ_WINDOW_OPEN,
-    SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
 )
 from ramses_rf.enums import Action
 from ramses_rf.messages import Message
@@ -101,8 +105,11 @@ from ramses_rf.models import (
     ZoneState,
 )
 from ramses_rf.protocol.opentherm import OtDataId
-from ramses_rf.state_projector import _get_dhw_zone_from_msg, _route_2411_to_fan
-from ramses_tx.const import Code
+from ramses_rf.state_projector import (
+    _get_dhw_zone_from_msg,
+    _route_2411_to_fan,
+)
+from ramses_tx.const import I_, RQ, Code
 
 # --- Translation Maps (Static Constant Blocks) ---
 
@@ -147,20 +154,20 @@ _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 
 
 class StateProjector:
-    """Projector task that transforms incoming telemetry into immutable
-    states.
-    """
+    """Projector task that transforms incoming telemetry into immutable states."""
 
-    def __init__(self, gwy: Any, ssot_queue: asyncio.Queue[Message]) -> None:
+    def __init__(
+        self, gateway: Any, ssot_queue: asyncio.Queue[Message]
+    ) -> None:
         """Initialize the state projector background worker.
 
-        :param gwy: The active Gateway facade instance.
-        :type gwy: Any
+        :param gateway: The active Gateway facade instance.
+        :type gateway: Any
         :param ssot_queue: Single Source of Truth Queue from
             CentralDispatcher.
         :type ssot_queue: asyncio.Queue[Message]
         """
-        self._gwy = gwy
+        self._gateway = gateway
         self._queue = ssot_queue
         self._task: asyncio.Task[None] | None = None
 
@@ -205,18 +212,17 @@ class StateProjector:
 
         Delegates to the shared helper in ``dispatcher.py``.
         """
-        _route_2411_to_fan(self._gwy, msg)
+        _route_2411_to_fan(self._gateway, msg)
 
     def process_message_state(self, msg: Message) -> None:
-        """Route valid inbound message envelopes to their respective
-        engines.
+        """Route valid inbound message envelopes to their respective engines.
 
         :param msg: The message envelope containing raw telemetry.
         :type msg: Message
         :return: None
         :rtype: None
         """
-        if getattr(msg, "verb", "") == "RQ" or not isinstance(
+        if getattr(msg, "verb", "") == RQ or not isinstance(
             msg.payload, (dict, list)
         ):
             return
@@ -228,53 +234,60 @@ class StateProjector:
         # the StateProjector path to keep parity with the dispatcher path.
         # See ramses_cc issue 851.
         if msg.code == Code._2411:
-            _route_2411_to_fan(self._gwy, msg)
+            _route_2411_to_fan(self._gateway, msg)
 
-        payloads = msg.payload if isinstance(msg.payload, list) else [msg.payload]
+        payloads = (
+            msg.payload if isinstance(msg.payload, list) else [msg.payload]
+        )
 
         # Unfold dict-of-dicts arrays (e.g. {'00': {'temp_low': 10}})
         unfolded_payloads: list[dict[str, Any]] = []
-        for p in payloads:
-            if not isinstance(p, dict):
+        for payload in payloads:
+            if not isinstance(payload, dict):
                 continue
 
             if (
-                SZ_UFH_IDX not in p
-                and SZ_ZONE_IDX not in p
-                and "ufx_idx" not in p
-                and SZ_DOMAIN_ID not in p
-                and all(isinstance(v, dict) for v in p.values())
+                SZ_UFH_INDEX not in payload
+                and "ufh_idx" not in payload
+                and SZ_ZONE_INDEX not in payload
+                and "zone_idx" not in payload
+                and "ufx_idx" not in payload
+                and SZ_DOMAIN_INDEX not in payload
+                and "domain_id" not in payload
+                and all(
+                    isinstance(dict_val, dict) for dict_val in payload.values()
+                )
             ):
-                for k, v in p.items():
-                    if isinstance(v, dict):
+                for key, value in payload.items():
+                    if isinstance(value, dict):
                         # Inject the outer index key so it isn't lost during unfold
-                        v_copy = dict(v)
-                        v_copy[SZ_UFH_IDX] = k
-                        unfolded_payloads.append(v_copy)
+                        value_copy = dict(value)
+                        value_copy[SZ_UFH_INDEX] = key
+                        unfolded_payloads.append(value_copy)
             else:
-                unfolded_payloads.append(p)
+                unfolded_payloads.append(payload)
 
-        registry = getattr(self._gwy, "device_registry", None)
+        registry = getattr(self._gateway, "device_registry", None)
         if not registry:
             return
 
         systems = getattr(registry, "systems", [])
         system_by_id = {s.id: s for s in systems}
 
-        for p in unfolded_payloads:
+        for payload in unfolded_payloads:
             # Hexagonal Boundary Enforcement: Route telemetry to Source
             src_dev = registry.device_by_id.get(msg.src.id)
             if src_dev:
                 try:
-                    self._update_opentherm_state(src_dev, p, msg)
-                    self._update_hvac_state(src_dev, p, msg)
-                    self._update_power_state(src_dev, p, msg)
-                    self._update_dhw_state(src_dev, p, msg)
-                    self._update_system_state(src_dev, p, msg)
-                    self._update_temperature_state(src_dev, p, msg)
-                    self._update_demand_state(src_dev, p, msg)
-                    self._update_ufh_state(src_dev, p, msg)
-                    self._update_actuator_state(src_dev, p, msg)
+                    self._update_opentherm_state(src_dev, payload, msg)
+                    self._update_hvac_state(src_dev, payload, msg)
+                    self._update_power_state(src_dev, payload, msg)
+                    self._update_dhw_state(src_dev, payload, msg)
+                    self._update_system_state(src_dev, payload, msg)
+                    self._update_temperature_state(src_dev, payload, msg)
+                    self._update_demand_state(src_dev, payload, msg)
+                    self._update_ufh_state(src_dev, payload, msg)
+                    self._update_actuator_state(src_dev, payload, msg)
                 except Exception as err:
                     _LOGGER.error(
                         "CQRS extraction failed for src %s: %s",
@@ -287,15 +300,15 @@ class StateProjector:
                 dst_dev = registry.device_by_id.get(msg.dst.id)
                 if dst_dev:
                     try:
-                        self._update_opentherm_state(dst_dev, p, msg)
-                        self._update_hvac_state(dst_dev, p, msg)
-                        self._update_power_state(dst_dev, p, msg)
-                        self._update_dhw_state(dst_dev, p, msg)
-                        self._update_system_state(dst_dev, p, msg)
-                        self._update_temperature_state(dst_dev, p, msg)
-                        self._update_demand_state(dst_dev, p, msg)
-                        self._update_ufh_state(dst_dev, p, msg)
-                        self._update_actuator_state(dst_dev, p, msg)
+                        self._update_opentherm_state(dst_dev, payload, msg)
+                        self._update_hvac_state(dst_dev, payload, msg)
+                        self._update_power_state(dst_dev, payload, msg)
+                        self._update_dhw_state(dst_dev, payload, msg)
+                        self._update_system_state(dst_dev, payload, msg)
+                        self._update_temperature_state(dst_dev, payload, msg)
+                        self._update_demand_state(dst_dev, payload, msg)
+                        self._update_ufh_state(dst_dev, payload, msg)
+                        self._update_actuator_state(dst_dev, payload, msg)
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS extraction failed for dst %s: %s",
@@ -304,22 +317,52 @@ class StateProjector:
                         )
 
             # Route CQRS state to Systems (TCS) and Zones
-            if SZ_ZONE_IDX in p and msg.src.id in system_by_id:
+            zone_val = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+            if zone_val is not None and msg.src.id in system_by_id:
                 tcs = system_by_id[msg.src.id]
-                zone = tcs.zone_by_idx.get(str(p[SZ_ZONE_IDX]))
+                zone = tcs.zone_by_idx.get(str(zone_val))
                 if zone:
                     try:
-                        self._update_zone_state(zone, p, msg)
+                        self._update_zone_state(zone, payload, msg)
                         # 2309/2349 also carry a setpoint that the Zone's
                         # `setpoint` property reads from temp_state.  Without
                         # this, the zone climate entity's target_temperature
                         # stays None (issue 843).
-                        if msg.code in (Code._2309, Code._2349):
-                            self._update_temperature_state(zone, p, msg)
+                        # 30C9 carries the zone temperature that the Zone's
+                        # `temperature` property reads from temp_state.
+                        # Without this, the zone climate entity's
+                        # current_temperature stays None (issue 927).
+                        if msg.code in (Code._2309, Code._2349, Code._30C9):
+                            self._update_temperature_state(zone, payload, msg)
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS extraction failed for zone %s: %s",
                             zone.id,
+                            err,
+                        )
+
+            # Route 30C9 from a sensor to its parent zone.  Sensor-sourced
+            # 30C9 packets have no zone_idx in the decoded payload (the
+            # sensor is not a controller, so _build_idx_dict injects no
+            # zone_idx), so the zone routing path above is not reached.
+            # Without this, the zone's current_temperature stays None when
+            # only the sensor broadcasts 30C9 (issue 927).
+            if (
+                msg.code == Code._30C9
+                and src_dev
+                and SZ_TEMPERATURE in payload
+                and getattr(src_dev, "_parent", None) is not None
+            ):
+                parent = src_dev._parent
+                if hasattr(parent, "temp_state") and hasattr(
+                    parent, "zone_state"
+                ):
+                    try:
+                        self._update_temperature_state(parent, payload, msg)
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for parent zone %s: %s",
+                            getattr(parent, "id", "unknown"),
                             err,
                         )
 
@@ -329,12 +372,19 @@ class StateProjector:
             # neither src nor dst.  Without this, demand_state on the DhwZone
             # is never hydrated (relay_demand, relay_failsafe, heat_demand).
             # See: https://github.com/ramses-rf/ramses_cc/issues/843
-            if SZ_DOMAIN_ID in p and src_dev and msg.src.id in system_by_id:
+            domain_val = payload.get(
+                SZ_DOMAIN_INDEX,
+                payload.get("domain_id", payload.get("domain_idx")),
+            )
+            if (
+                domain_val is not None
+                and src_dev
+                and msg.src.id in system_by_id
+            ):
                 tcs = system_by_id[msg.src.id]
-                domain_id = p[SZ_DOMAIN_ID]
-                if domain_id == "FC" and tcs is not None:
+                if domain_val == "FC" and tcs is not None:
                     try:
-                        self._update_demand_state(tcs, p, msg)
+                        self._update_demand_state(tcs, payload, msg)
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS extraction failed for TCS %s: %s",
@@ -342,10 +392,11 @@ class StateProjector:
                             err,
                         )
                 elif (
-                    domain_id in ("FA", "F9") and getattr(tcs, "dhw", None) is not None
+                    domain_val in ("FA", "F9")
+                    and getattr(tcs, "dhw", None) is not None
                 ):
                     try:
-                        self._update_demand_state(tcs.dhw, p, msg)
+                        self._update_demand_state(tcs.dhw, payload, msg)
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS extraction failed for DHW %s: %s",
@@ -361,8 +412,8 @@ class StateProjector:
             dhw = _get_dhw_zone_from_msg(msg, src_dev)
             if dhw is not None:
                 try:
-                    self._update_dhw_state(dhw, p, msg)
-                    self._update_temperature_state(dhw, p, msg)
+                    self._update_dhw_state(dhw, payload, msg)
+                    self._update_temperature_state(dhw, payload, msg)
                 except Exception as err:
                     _LOGGER.error(
                         "CQRS extraction failed for DHW %s: %s",
@@ -372,15 +423,15 @@ class StateProjector:
 
         # --- CQRS Reactor Hooks ---
         # Automate the legacy Actuator discovery query (3EF1) in response to 3EF0 (I)
-        if msg.code == Code._3EF0 and getattr(msg, "verb", "") == " I":
+        if msg.code == Code._3EF0 and getattr(msg, "verb", "") == I_:
             src_dev = registry.device_by_id.get(msg.src.id)
             if src_dev and not getattr(src_dev, "is_faked", False):
                 from ramses_rf.devices.helpers import build_rq_cmd
                 from ramses_tx import Priority
 
                 try:
-                    cmd = build_rq_cmd(msg.src.id, Code._3EF1, "00")
-                    self._gwy.send_cmd(cmd, priority=Priority.LOW)
+                    command = build_rq_cmd(msg.src.id, Code._3EF1, "00")
+                    self._gateway.send_cmd(command, priority=Priority.LOW)
                 except Exception as err:
                     _LOGGER.error(
                         "Failed to trigger CQRS 3EF1 reactor for %s: %s",
@@ -398,10 +449,10 @@ class StateProjector:
                             src=HGI_DEV_ADDR,
                             dst=Address(src_dev.ctl.id),
                             action=Action.GET_DHW_TEMP,
-                            data={"dhw_idx": 0},
+                            data={SZ_DHW_INDEX: 0},
                         )
                     )
-                    self._gwy.send_cmd(dto)
+                    self._gateway.send_cmd(dto)
                 except Exception as err:
                     _LOGGER.error(
                         "Failed to trigger CQRS 1260 reactor for %s: %s",
@@ -412,9 +463,7 @@ class StateProjector:
     def _update_opentherm_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate OpenTherm frames or parallel opcodes into
-        OpenThermState.
-        """
+        """Translate OpenTherm frames or parallel opcodes into OpenThermState."""
         current_state = getattr(target, "opentherm_state", None)
         if current_state is None:
             if getattr(target, "_SLUG", "") == "OTB":
@@ -429,7 +478,7 @@ class StateProjector:
 
         if msg.code == Code._3220:
             raw_id = p.get("msg_id")
-            val = p.get("value")
+            value = p.get("value")
 
             if raw_id is None:
                 return
@@ -441,34 +490,34 @@ class StateProjector:
 
             if (
                 msg_id == OtDataId.STATUS
-                and isinstance(val, (list, tuple))
-                and len(val) >= 13
+                and isinstance(value, (list, tuple))
+                and len(value) >= 13
             ):
                 upd_flag.update(
                     {
-                        "ch_enabled": bool(val[0]),
-                        "dhw_enabled": bool(val[1]),
-                        "cooling_enabled": bool(val[2]),
-                        "otc_active": bool(val[3]),
-                        "summer_mode": bool(val[5]),
-                        "dhw_blocking": bool(val[6]),
-                        "fault_present": bool(val[8]),
-                        "ch_active": bool(val[9]),
-                        "dhw_active": bool(val[10]),
-                        "flame_active": bool(val[11]),
-                        "cooling_active": bool(val[12]),
+                        "ch_enabled": bool(value[0]),
+                        "dhw_enabled": bool(value[1]),
+                        "cooling_enabled": bool(value[2]),
+                        "otc_active": bool(value[3]),
+                        "summer_mode": bool(value[5]),
+                        "dhw_blocking": bool(value[6]),
+                        "fault_present": bool(value[8]),
+                        "ch_active": bool(value[9]),
+                        "dhw_active": bool(value[10]),
+                        "flame_active": bool(value[11]),
+                        "cooling_active": bool(value[12]),
                     }
                 )
-            elif val is not None and msg_id in OPENTHERM_FIELD_MAP:
+            elif value is not None and msg_id in OPENTHERM_FIELD_MAP:
                 category, field_key = OPENTHERM_FIELD_MAP[msg_id]
                 if category == "base":
-                    upd_base[field_key] = val
+                    upd_base[field_key] = value
                 elif category == "temperatures":
-                    upd_temp[field_key] = val
+                    upd_temp[field_key] = value
                 elif category == "counters":
-                    upd_count[field_key] = val
+                    upd_count[field_key] = value
                 elif category == "flags":
-                    upd_flag[field_key] = val
+                    upd_flag[field_key] = value
         else:
             if msg.code in RAMSES_HEATING_MAP:
                 data = RAMSES_HEATING_MAP[msg.code]
@@ -480,7 +529,9 @@ class StateProjector:
                         upd_temp[state_field] = p[payload_key]
             elif msg.code in (Code._3EF0, Code._3EF1):
                 if SZ_REL_MODULATION_LEVEL in p:
-                    upd_base["rel_modulation_level"] = p[SZ_REL_MODULATION_LEVEL]
+                    upd_base["rel_modulation_level"] = p[
+                        SZ_REL_MODULATION_LEVEL
+                    ]
                 if SZ_MAX_REL_MODULATION in p:
                     upd_base["max_rel_modulation"] = p[SZ_MAX_REL_MODULATION]
                 if SZ_CH_SETPOINT in p:
@@ -532,9 +583,10 @@ class StateProjector:
         if hasattr(target, "apply_state_update"):
             target.apply_state_update(event)
 
-    def _update_hvac_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
-        """Translate complex multi-opcode ventilation payloads into
-        HvacState.
+    def _update_hvac_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
+        """Translate complex multi-opcode ventilation payloads into HvacState.
 
         Applies hardware-specific stateful FSM rules (via the Quirks
         middleware) prior to hydration.
@@ -588,28 +640,34 @@ class StateProjector:
         # (~10 min) overwrites good telemetry from 22F1/12A0/22F7 with null
         # markers, causing sensors to bounce to None/FF/0.  See issue #742.
         # This must mirror the filtering in dispatcher._update_hvac_state.
-        _NULL_HUMIDITY_FIELDS = frozenset({SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY})
+        _NULL_HUMIDITY_FIELDS = frozenset(
+            {SZ_INDOOR_HUMIDITY, SZ_OUTDOOR_HUMIDITY}
+        )
 
-        for f in fields:
-            if f not in p:
+        for field_name in fields:
+            if field_name not in p:
                 continue
-            val = p[f]
+            field_val = p[field_name]
             # None = "not implemented" (e.g. EF in bypass_position)
-            if val is None:
+            if field_val is None:
                 continue
             # Raw hex (e.g. "FF", "04") = non-semantic fan_mode from 31D9
             # long-payload devices; the quirk normalises these to None, but
             # filter here as belt-and-suspenders.  See ramses_cc issue 723.
-            if f == SZ_FAN_MODE and isinstance(val, str) and len(val) == 2:
+            if (
+                field_name == SZ_FAN_MODE
+                and isinstance(field_val, str)
+                and len(field_val) == 2
+            ):
                 try:
-                    int(val, 16)
+                    int(field_val, 16)
                     continue
                 except ValueError:
                     pass
             # 0.0 for humidity = "no sensor" (00 parses as 0%, physically impossible)
-            if f in _NULL_HUMIDITY_FIELDS and val == 0:
+            if field_name in _NULL_HUMIDITY_FIELDS and field_val == 0:
                 continue
-            updates[f] = val
+            updates[field_name] = field_val
 
         # Handle non-standard names passed by the semantic parsers
         if SZ_REMAINING_DAYS in p:
@@ -618,10 +676,12 @@ class StateProjector:
             updates["filter_remaining_percent"] = p[SZ_REMAINING_PERCENT]
         if SZ_MINUTES in p and msg.code == Code._22F3:
             updates["boost_timer_mins"] = p[SZ_MINUTES]
-        if SZ_REQ_SPEED in p:
-            updates["request_fan_speed"] = p[SZ_REQ_SPEED]
-        if SZ_REQ_REASON in p:
-            updates["request_reason"] = p[SZ_REQ_REASON]
+        req_speed = p.get(SZ_REQUEST_SPEED, p.get("req_speed"))
+        if req_speed is not None:
+            updates["request_fan_speed"] = req_speed
+        req_reason = p.get(SZ_REQUEST_REASON, p.get("req_reason"))
+        if req_reason is not None:
+            updates["request_reason"] = req_reason
 
         if not updates:
             return
@@ -642,7 +702,9 @@ class StateProjector:
         if hasattr(target, "apply_state_update"):
             target.apply_state_update(event)
 
-    def _update_power_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
+    def _update_power_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
         """Translate battery opcodes into PowerState."""
         updates: dict[str, Any] = {}
         if msg.code == Code._1060:
@@ -671,7 +733,9 @@ class StateProjector:
         if hasattr(target, "apply_state_update"):
             target.apply_state_update(event)
 
-    def _update_dhw_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
+    def _update_dhw_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
         """Translate DHW opcodes into DhwState."""
         if msg.code not in (Code._10A0, Code._1260, Code._1F41):
             return
@@ -719,7 +783,7 @@ class StateProjector:
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
         """Translate system configuration opcodes into SystemState."""
-        if msg.code not in (Code._0100, Code._2E04, Code._313F):
+        if msg.code not in (Code._0100, Code._2E04, Code._313F, Code._2D49):
             return
 
         updates: dict[str, Any] = {}
@@ -734,6 +798,9 @@ class StateProjector:
         elif msg.code == Code._313F:
             if SZ_DATETIME in p:
                 updates[SZ_DATETIME] = p[SZ_DATETIME]
+        elif msg.code == Code._2D49:
+            if SZ_COOLING_DEMAND in p:
+                updates[SZ_COOLING_MODE] = p[SZ_COOLING_DEMAND]
 
         if not updates:
             return
@@ -758,9 +825,7 @@ class StateProjector:
     def _update_temperature_state(
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
-        """Translate temperature/TRV opcodes into TrvState &
-        TemperatureState.
-        """
+        """Translate temperature/TRV opcodes into TrvState & TemperatureState."""
         dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
 
         if msg.code == Code._12B0 and SZ_WINDOW_OPEN in p:
@@ -812,14 +877,18 @@ class StateProjector:
                 if dtm:
                     updates["last_updated"] = dtm
 
-                current_temp = getattr(target, "temp_state", None) or TemperatureState()
+                current_temp = (
+                    getattr(target, "temp_state", None) or TemperatureState()
+                )
                 new_temp = dataclasses.replace(current_temp, **updates)
                 target.temp_state = new_temp
 
                 event = StateUpdatedEvent(
                     entity_id=getattr(target, "id", "unknown"),
                     state=new_temp,
-                    correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+                    correlation_id=getattr(
+                        msg, "correlation_id", uuid.uuid4()
+                    ),
                     causation_id=getattr(msg, "message_id", uuid.uuid4()),
                 )
                 if hasattr(target, "apply_state_update"):
@@ -839,14 +908,30 @@ class StateProjector:
             # Prevent flattened array payloads (e.g., UFH circuit demands)
             # from overwriting the controller's aggregate FC heat demand.
             if slug in ("CTL", "UFC"):
-                if p.get(SZ_DOMAIN_ID) == "FC":
+                if (
+                    p.get(SZ_DOMAIN_INDEX)
+                    or p.get("domain_id")
+                    or p.get("domain_idx")
+                ) == "FC":
                     updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-            elif SZ_UFH_IDX not in p and "ufx_idx" not in p:
+            elif (
+                SZ_UFH_INDEX not in p
+                and "ufh_idx" not in p
+                and "ufx_idx" not in p
+            ):
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
         elif msg.code == Code._0008 and SZ_RELAY_DEMAND in p:
             # Prevent FA (UFH) relay demands from overwriting FC relay demand
-            if slug == "UFC" and p.get(SZ_DOMAIN_ID) != "FC":
+            if (
+                slug == "UFC"
+                and (
+                    p.get(SZ_DOMAIN_INDEX)
+                    or p.get("domain_id")
+                    or p.get("domain_idx")
+                )
+                != "FC"
+            ):
                 pass
             else:
                 updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
@@ -874,7 +959,9 @@ class StateProjector:
         if hasattr(target, "apply_state_update"):
             target.apply_state_update(event)
 
-    def _update_ufh_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
+    def _update_ufh_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
         """Translate UFH circuit arrays and bounds into UfhState."""
         if msg.code not in (Code._3150, Code._0008, Code._22C9):
             return
@@ -886,21 +973,37 @@ class StateProjector:
         updates: dict[str, Any] = {}
 
         # Safely extract index matching legacy typo "ufx_idx"
-        idx = p.get("ufx_idx") or p.get(SZ_UFH_IDX) or p.get(SZ_ZONE_IDX)
+        ufh_index = (
+            p.get("ufx_idx")
+            or p.get(SZ_UFH_INDEX)
+            or p.get("ufh_idx")
+            or p.get(SZ_ZONE_INDEX)
+            or p.get("zone_idx")
+        )
 
-        if msg.code == Code._3150 and idx is not None and SZ_HEAT_DEMAND in p:
+        if (
+            msg.code == Code._3150
+            and ufh_index is not None
+            and SZ_HEAT_DEMAND in p
+        ):
             new_demands = dict(current_state.heat_demands)
-            new_demands[str(idx)] = p[SZ_HEAT_DEMAND]
+            new_demands[str(ufh_index)] = p[SZ_HEAT_DEMAND]
             updates["heat_demands"] = new_demands
+
         elif (
             msg.code == Code._0008
-            and p.get(SZ_DOMAIN_ID) == "FA"
+            and (
+                p.get(SZ_DOMAIN_INDEX)
+                or p.get("domain_id")
+                or p.get("domain_idx")
+            )
+            == "FA"
             and SZ_RELAY_DEMAND in p
         ):
             updates["relay_demand_fa"] = p[SZ_RELAY_DEMAND]
-        elif msg.code == Code._22C9 and idx is not None:
+        elif msg.code == Code._22C9 and ufh_index is not None:
             new_sp = dict(current_state.setpoints)
-            sp_data = dict(new_sp.get(str(idx), {}))
+            sp_data = dict(new_sp.get(str(ufh_index), {}))
 
             # Legacy parsers return an empty dict if no bounds exist.
             # Only populate the bounds if they are explicitly present.
@@ -909,7 +1012,7 @@ class StateProjector:
                 sp_data["temp_low"] = bounds[0]
                 sp_data["temp_high"] = bounds[1]
 
-            new_sp[str(idx)] = sp_data
+            new_sp[str(ufh_index)] = sp_data
             updates["setpoints"] = new_sp
 
         if not updates:
@@ -969,6 +1072,8 @@ class StateProjector:
             updates[SZ_ACTUATOR_COUNTDOWN] = p[SZ_ACTUATOR_COUNTDOWN]
         if SZ_CYCLE_COUNTDOWN in p:
             updates[SZ_CYCLE_COUNTDOWN] = p[SZ_CYCLE_COUNTDOWN]
+        if SZ_PUMP_RELAY_STATE in p:
+            updates[SZ_PUMP_RELAY_STATE] = p[SZ_PUMP_RELAY_STATE]
 
         if not updates:
             return
@@ -990,7 +1095,9 @@ class StateProjector:
         if hasattr(target, "apply_state_update"):
             target.apply_state_update(event)
 
-    def _update_zone_state(self, target: Any, p: dict[str, Any], msg: Message) -> None:
+    def _update_zone_state(
+        self, target: Any, p: dict[str, Any], msg: Message
+    ) -> None:
         """Translate zone configuration opcodes into ZoneState.
 
         Handles:

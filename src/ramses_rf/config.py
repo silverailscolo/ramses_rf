@@ -20,19 +20,19 @@ from .typing import DeviceListT
 _T = TypeVar("_T")
 
 
-def ConvertNullToDict() -> Callable[[_T | None], _T | dict[Never, Never]]:
-    """Return a validator that converts a null node value to an empty dictionary.
+def convert_null_to_dict() -> Callable[[_T | None], _T | dict[Never, Never]]:
+    """Return validator converting a null node value to an empty dict.
 
     :returns: A callable validator function for voluptuous schemas.
     :rtype: Callable[[_T | None], _T | dict[Never, Never]]
     """
 
-    def convert_null_to_dict(node_value: _T | None) -> _T | dict[Never, Never]:
+    def _convert(node_value: _T | None) -> _T | dict[Never, Never]:
         if node_value is None:
             return {}
         return node_value
 
-    return convert_null_to_dict
+    return _convert
 
 
 SZ_ALIAS: Final = "alias"
@@ -87,7 +87,9 @@ def sch_global_traits_dict_factory(
     )
 
     heat_slugs = list(
-        str(s) for s in DEV_TYPE_MAP.slugs() if s not in DEV_TYPE_MAP.HVAC_SLUGS
+        str(s)
+        for s in DEV_TYPE_MAP.slugs()
+        if s not in DEV_TYPE_MAP.HVAC_SLUGS
     )
     SCH_TRAITS_HEAT = SCH_TRAITS_BASE.extend(
         {
@@ -132,7 +134,7 @@ def sch_global_traits_dict_factory(
     )
 
     SCH_TRAITS = vol.Any(
-        vol.All(None, ConvertNullToDict()),
+        vol.All(None, convert_null_to_dict()),
         vol.Any(SCH_TRAITS_HEAT, SCH_TRAITS_HVAC),
         extra=vol.PREVENT_EXTRA,
     )
@@ -143,11 +145,11 @@ def sch_global_traits_dict_factory(
 
     global_traits_dict = {
         vol.Optional(SZ_KNOWN_LIST, default={}): vol.Any(
-            vol.All(None, ConvertNullToDict()),
+            vol.All(None, convert_null_to_dict()),
             vol.All(SCH_DEVICE, vol.Length(min=0)),
         ),
         vol.Optional(SZ_BLOCK_LIST, default={}): vol.Any(
-            vol.All(None, ConvertNullToDict()),
+            vol.All(None, convert_null_to_dict()),
             vol.All(SCH_DEVICE, vol.Length(min=0)),
         ),
     }
@@ -363,7 +365,8 @@ class GatewayConfig:
             implicit_hgis = [
                 k
                 for k, v in self.known_list.items()
-                if not v.get(SZ_CLASS) and k[:2] == DEV_TYPE_MAP._hex(DevType.HGI)
+                if not v.get(SZ_CLASS)
+                and k[:2] == DEV_TYPE_MAP._hex(DevType.HGI)
             ]
 
             if explicit_hgis:

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-RAMSES RF - Message database and index.
+"""RAMSES RF - Message database and index.
 
 .. table:: Database Query Methods
    :widths: auto
@@ -34,7 +33,6 @@ from ramses_tx import RP, RQ, Code, Packet
 from ..exceptions import DatabaseQueryError
 from ..messages.base import Message
 from ..messages.core import Message as CoreMessage
-from ..protocol.ramses import CODES_SCHEMA
 from ..routing import StateHeader
 from ..sqlite_worker import PacketLogEntry, SQLiteWorker
 
@@ -49,24 +47,21 @@ _LOGGER = logging.getLogger(__name__)
 def _setup_db_adapters() -> None:
     """Set up the database adapters and converters."""
 
-    def adapt_datetime_iso(val: dt) -> str:
-        """Adapt datetime.datetime to timezone-naive ISO 8601 datetime to
-        match _message_log dtm keys."""
-        return val.isoformat(timespec="microseconds")
+    def adapt_datetime_iso(value: dt) -> str:
+        """Adapt datetime to timezone-naive ISO 8601 string."""
+        return value.isoformat(timespec="microseconds")
 
     sqlite3.register_adapter(dt, adapt_datetime_iso)
 
-    def convert_datetime(val: bytes) -> dt:
-        """Convert ISO 8601 datetime to datetime.datetime object to import
-        dtm in msg_db."""
-        return dt.fromisoformat(val.decode())
+    def convert_datetime(value: bytes) -> dt:
+        """Convert ISO 8601 string to datetime object."""
+        return dt.fromisoformat(value.decode())
 
     sqlite3.register_converter("DTM", convert_datetime)
 
 
 def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
-    """
-    Copy payload keys for fast query check.
+    """Copy payload keys for fast query check.
 
     :param parsed_payload: pre-parsed message payload dict
     :return: string of payload keys, separated by the | char
@@ -75,25 +70,27 @@ def payload_keys(parsed_payload: list[dict[str, Any]] | dict[str, Any]) -> str:
 
     def append_keys(ppl: dict[str, Any]) -> str:
         _ks: str = ""
-        for k, v in ppl.items():
+        for key, value in ppl.items():
             if (
-                k not in _ks and k not in _keys and v is not None
+                key not in _ks and key not in _keys and value is not None
             ):  # ignore keys with None value
-                _ks += k + "|"
+                _ks += key + "|"
         return _ks
 
     if isinstance(parsed_payload, list):
-        for d in parsed_payload:
-            _keys += append_keys(d)
+        for item in parsed_payload:
+            _keys += append_keys(item)
     elif isinstance(parsed_payload, dict):
         _keys += append_keys(parsed_payload)
     return _keys
 
 
 class MessageStore(MessageStoreInterface):
-    """A central in-memory SQLite3 database for indexing RF messages.
-    Index holds all the latest messages to & from all devices by `dtm`
-    (timestamp) and strictly-typed `StateHeader` DTOs."""
+    """Central SQLite database for indexing RF message envelopes.
+
+    Holds the latest messages to & from all devices by timestamp (dtm)
+    and strictly-typed StateHeader DTOs.
+    """
 
     _housekeeping_task: asyncio.Task[None] | None
     _hydration_task: asyncio.Task[None] | None
@@ -105,7 +102,6 @@ class MessageStore(MessageStoreInterface):
         disk_path: str | None = "ramses.db",
     ) -> None:
         """Instantiate a message database/index."""
-
         self.maintain = maintain
         # In-memory RAM caches (Filled & cleaned up in housekeeping_loop)
         # stores all messages for retrieval.
@@ -126,7 +122,9 @@ class MessageStore(MessageStoreInterface):
             # We must use a Shared Cache URI so both threads see the same data.
             if db_path == ":memory:":
                 # Unique ID ensures parallel tests don't share the same in-memory DB
-                db_path = f"file:ramses_rf_{uuid.uuid4()}?mode=memory&cache=shared"
+                db_path = (
+                    f"file:ramses_rf_{uuid.uuid4()}?mode=memory&cache=shared"
+                )
 
             # Start the Storage Worker (Write Connection)
             # This thread handles all blocking INSERT/UPDATE operations
@@ -173,7 +171,6 @@ class MessageStore(MessageStoreInterface):
 
     def start(self) -> None:
         """Start the housekeeper loop."""
-
         if self.maintain:
             if (
                 self._housekeeping_task is not None
@@ -186,12 +183,12 @@ class MessageStore(MessageStoreInterface):
             )
 
             self._housekeeping_task = asyncio.create_task(
-                self._housekeeping_loop(), name=f"{self.__class__.__name__}.housekeeper"
+                self._housekeeping_loop(),
+                name=f"{self.__class__.__name__}.housekeeper",
             )
 
     def stop(self) -> None:
         """Stop the housekeeper loop and resources."""
-
         c_task = getattr(self, "_consumer_task", None)
         if c_task and not c_task.done():
             c_task.cancel()  # stop the SSOT queue consumer
@@ -208,9 +205,13 @@ class MessageStore(MessageStoreInterface):
             # Trigger a final snapshot to ensure no data is lost on shutdown
             self._worker.submit_snapshot()
             self._worker.flush(timeout=5.0)
-            is_stopped = self._worker.stop(timeout=5.0)  # Stop the background thread
+            is_stopped = self._worker.stop(
+                timeout=5.0
+            )  # Stop the background thread
             if not is_stopped:
-                _LOGGER.warning("MessageStore: SQLiteWorker shutdown timed out.")
+                _LOGGER.warning(
+                    "MessageStore: SQLiteWorker shutdown timed out."
+                )
 
         cx = getattr(self, "_cx", None)
         if cx is not None:
@@ -248,10 +249,13 @@ class MessageStore(MessageStoreInterface):
         if c_task and not c_task.done():
             return
         self._consumer_task = asyncio.create_task(
-            self._consume_loop(in_queue), name=f"{self.__class__.__name__}.consumer"
+            self._consume_loop(in_queue),
+            name=f"{self.__class__.__name__}.consumer",
         )
 
-    async def _consume_loop(self, in_queue: asyncio.Queue[CoreMessage]) -> None:
+    async def _consume_loop(
+        self, in_queue: asyncio.Queue[CoreMessage]
+    ) -> None:
         """Continuously ingest messages from the event bus queue.
 
         :param in_queue: The event bus queue.
@@ -273,10 +277,13 @@ class MessageStore(MessageStoreInterface):
                         self.add(legacy_msg)
                     except Exception as err:
                         _LOGGER.debug(
-                            "MessageStore ignored legacy malformed packet: %s", err
+                            "MessageStore ignored legacy malformed packet: %s",
+                            err,
                         )
             except Exception as err:
-                _LOGGER.error("MessageStore consumer failed to add message: %s", err)
+                _LOGGER.error(
+                    "MessageStore consumer failed to add message: %s", err
+                )
             finally:
                 in_queue.task_done()
 
@@ -290,7 +297,9 @@ class MessageStore(MessageStoreInterface):
             return
 
         def _fetch_all(conn: sqlite3.Connection) -> list[Any]:
-            return conn.execute("SELECT * FROM messages ORDER BY dtm ASC").fetchall()
+            return conn.execute(
+                "SELECT * FROM messages ORDER BY dtm ASC"
+            ).fetchall()
 
         try:
             rows = await asyncio.to_thread(_fetch_all, cx)
@@ -306,8 +315,8 @@ class MessageStore(MessageStoreInterface):
             for row in rows:
                 dtm_val = row[0]
                 verb = row[1]
-                src = row[2]
-                dst = row[3]
+                source = row[2]
+                destination = row[3]
                 code = row[4]
                 hdr = row[6]
                 payload_blob = row[8]
@@ -316,7 +325,7 @@ class MessageStore(MessageStoreInterface):
                 frame = (
                     row[9]
                     if len(row) > 9 and row[9]
-                    else f"{verb} --- {src} {dst} --:------ {code} 001 00"
+                    else f"{verb} --- {source} {destination} --:------ {code} 001 00"
                 )
                 dtm_str = DtmStrT(dtm_val.isoformat(timespec="microseconds"))
 
@@ -324,14 +333,16 @@ class MessageStore(MessageStoreInterface):
                 # so we pad with `... ` to satisfy Packet logic.
                 pkt_line = f"... {frame}"
                 try:
-                    pkt = Packet(dtm_val, pkt_line)
-                    msg = Message._from_pkt(pkt)
+                    packet = Packet(dtm_val, pkt_line)
+                    msg = Message._from_pkt(packet)
                     msg._payload = orjson.loads(payload_blob)
 
                     self._message_log[dtm_str] = msg
                     self._state_cache[msg.state_header] = msg
                 except Exception as err:
-                    _LOGGER.debug("Failed to reconstruct message for %s: %s", hdr, err)
+                    _LOGGER.debug(
+                        "Failed to reconstruct message for %s: %s", hdr, err
+                    )
         finally:
             if has_lock:
                 self._lock.release()
@@ -339,16 +350,13 @@ class MessageStore(MessageStoreInterface):
         _LOGGER.info("Hydrated %d messages into RAM cache", len(rows))
 
     async def _housekeeping_loop(self) -> None:
-        """Periodically remove stale messages from the index,
-        unless `self.maintain` is False - as in (most) tests."""
+        """Periodically remove stale messages from index."""
 
         async def housekeeping(dt_now: dt, _cutoff: td = td(days=1)) -> None:
-            """
-            Deletes all messages older than a given delta from the dict
-            using the MessageStore.
-            :param dt_now: current timestamp
-            :param _cutoff: the oldest timestamp to retain, default is 24
-                hours ago
+            """Delete messages older than cutoff delta.
+
+            :param dt_now: Current timestamp.
+            :param _cutoff: Oldest delta to retain (default 24 hours).
             """
             dtm = dt_now - _cutoff
 
@@ -364,14 +372,17 @@ class MessageStore(MessageStoreInterface):
                 await self._lock.acquire()
                 # Rebuild dict keeping only newer items
                 self._message_log = OrderedDict(
-                    (k, v) for k, v in self._message_log.items() if k >= dtm_iso
+                    (k, v)
+                    for k, v in self._message_log.items()
+                    if k >= dtm_iso
                 )
 
                 valid_dtms = set(self._message_log.keys())
                 self._state_cache = {
                     m.state_header: m
                     for m in self._state_cache.values()
-                    if DtmStrT(m.dtm.isoformat(timespec="microseconds")) in valid_dtms
+                    if DtmStrT(m.dtm.isoformat(timespec="microseconds"))
+                    in valid_dtms
                 }
 
             except Exception as err:
@@ -394,11 +405,11 @@ class MessageStore(MessageStoreInterface):
                 self._worker.submit_snapshot()
 
     def add(self, msg: Message) -> Message | None:
-        """
-        Add a single message to the MessageStore.
+        """Add a single message to the MessageStore.
+
         Logs a warning if there is a duplicate dtm.
 
-        :returns: any message that was removed because it had the same header
+        :returns: Any message removed because it had the same header.
         """
         dup: tuple[Message, ...] = ()
         old: Message | None = None
@@ -434,46 +445,45 @@ class MessageStore(MessageStoreInterface):
         return old
 
     def add_record(
-        self, src: str, code: str = "", verb: str = "", payload: str = "00"
+        self, source: str, code: str = "", verb: str = "", payload: str = "00"
     ) -> None:
-        """
-        Add a single record to the MessageStore with timestamp `now()`
-        and no Message contents.
+        """Add single record with timestamp now() and no payload.
 
-        :param src: device id to use as source address
-        :param code: device id to use as destination address (can be
-            identical)
-        :param verb: two letter verb str to use
-        :param payload: payload str to use
+        :param source: Device ID to use as source address.
+        :param code: Two-byte opcode hex string.
+        :param verb: Two-letter verb string.
+        :param payload: Payload hex string.
         """
         _now: dt = dt.now()
         dtm = DtmStrT(_now.isoformat(timespec="microseconds"))
-        hdr = f"{code}|{verb}|{src}|{payload}"
+        hdr = f"{code}|{verb}|{source}|{payload}"
 
         if self._worker:
             data = PacketLogEntry(
                 dtm=_now,
                 verb=verb,
-                src=src,
-                dst=src,
+                src=source,
+                dst=source,
                 code=code,
                 ctx=None,
                 hdr=hdr,
                 plk="|",
                 payload_blob=orjson.dumps({"payload": payload}),
-                frame=f"{verb} --- {src} {src} --:------ {code} 001 {payload}",
+                frame=f"{verb} --- {source} {source} --:------ {code} 001 {payload}",
             )
             self._worker.submit_packet(data)
 
         msg: Message = Message._from_pkt(
-            Packet(_now, f"... {verb} --- {src} --:------ {src} {code} 005 0000000000")
+            Packet(
+                _now,
+                f"... {verb} --- {source} --:------ {source} {code} 005 0000000000",
+            )
         )
         self._message_log[dtm] = msg
         self._state_cache[msg.state_header] = msg
 
     def _insert_into(self, msg: Message) -> Message | None:
-        """
-        Insert a message into the index.
+        """Insert a message into the index.
 
         :returns: any message replaced (by same hdr)
         """
@@ -506,8 +516,8 @@ class MessageStore(MessageStoreInterface):
         msg: Message | None = None,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
@@ -518,8 +528,8 @@ class MessageStore(MessageStoreInterface):
             k: v
             for k, v in {
                 "dtm": dtm,
-                "src": src,
-                "dst": dst,
+                "src": source,
+                "dst": destination,
                 "verb": verb,
                 "code": code,
                 "ctx": context,
@@ -539,8 +549,8 @@ class MessageStore(MessageStoreInterface):
             msgs_to_remove = await self.get(
                 msg=msg,
                 dtm=dtm,
-                src=src,
-                dst=dst,
+                source=source,
+                destination=destination,
                 verb=verb,
                 code=code,
                 context=context,
@@ -568,10 +578,12 @@ class MessageStore(MessageStoreInterface):
 
         else:
             if msgs is not None:
-                for m in msgs:
-                    dtm_val = DtmStrT(m.dtm.isoformat(timespec="microseconds"))
+                for message in msgs:
+                    dtm_val = DtmStrT(
+                        message.dtm.isoformat(timespec="microseconds")
+                    )
                     self._message_log.pop(dtm_val, None)
-                    self._state_cache.pop(m.state_header, None)
+                    self._state_cache.pop(message.state_header, None)
         return msgs
 
     async def get(
@@ -579,8 +591,8 @@ class MessageStore(MessageStoreInterface):
         msg: Message | None = None,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
@@ -591,8 +603,8 @@ class MessageStore(MessageStoreInterface):
             k: v
             for k, v in {
                 "dtm": dtm,
-                "src": src,
-                "dst": dst,
+                "src": source,
+                "dst": destination,
                 "verb": verb,
                 "code": code,
                 "ctx": context,
@@ -618,62 +630,61 @@ class MessageStore(MessageStoreInterface):
             else:
                 kwargs["ctx"] = "False"
 
-        res: list[Message] = []
-        for m in self.log_by_dtm:
+        result: list[Message] = []
+        for message in self.log_by_dtm:
             match = True
-            for k, v in kwargs.items():
-                if k == "dtm" and m.dtm != v:
+            for filter_key, filter_val in kwargs.items():
+                if filter_key == "dtm" and message.dtm != filter_val:
                     match = False
                     break
-                elif k == "verb" and str(m.verb) != v:
+                elif filter_key == "verb" and str(message.verb) != filter_val:
                     match = False
                     break
-                elif k == "src" and m.src.id != v:
+                elif filter_key == "src" and message.src.id != filter_val:
                     match = False
                     break
-                elif k == "dst" and m.dst.id != v:
+                elif filter_key == "dst" and message.dst.id != filter_val:
                     match = False
                     break
-                elif k == "code" and str(m.code) != v:
+                elif filter_key == "code" and str(message.code) != filter_val:
                     match = False
                     break
-                elif k == "hdr":
-                    if isinstance(v, StateHeader):
-                        if m.state_header != v:
+                elif filter_key == "hdr":
+                    if isinstance(filter_val, StateHeader):
+                        if message.state_header != filter_val:
                             match = False
                             break
                     else:
-                        if m.state_header.legacy_hdr != v:
+                        if message.state_header.legacy_hdr != filter_val:
                             match = False
                             break
-                elif k == "ctx":
-                    if m.context.as_string != str(v):
+                elif filter_key == "ctx":
+                    if message.context.as_string != str(filter_val):
                         match = False
                         break
             if match:
-                res.append(m)
+                result.append(message)
 
-        return tuple(res)
+        return tuple(result)
 
     async def contains(
         self,
         *,
         dtm: dt | str | None = None,
-        src: str | None = None,
-        dst: str | None = None,
+        source: str | None = None,
+        destination: str | None = None,
         verb: str | None = None,
         code: str | None = None,
         context: Any | None = None,
         hdr: str | StateHeader | None = None,
     ) -> bool:
-        """Check if the MessageStore contains at least 1 record that
-        matches the provided fields."""
+        """Return True if matching records exist for given fields."""
         return (
             len(
                 await self.get(
                     dtm=dtm,
-                    src=src,
-                    dst=dst,
+                    source=source,
+                    destination=destination,
                     verb=verb,
                     code=code,
                     context=context,
@@ -689,19 +700,17 @@ class MessageStore(MessageStoreInterface):
         dst_id = parameters[1] if len(parameters) > 1 else None
 
         codes = set()
-        for m in self._state_cache.values():
-            if m.verb == RP and (m.src.id == src_id or m.dst.id == dst_id):
-                codes.add(m.code)
+        for message in self._state_cache.values():
+            if message.verb == RP and (
+                message.src.id == src_id or message.dst.id == dst_id
+            ):
+                codes.add(message.code)
 
-        def get_code(c: str) -> Code:
-            for Cd in CODES_SCHEMA:
-                if c == Cd:
-                    return Cd
-            return Code(c)
+        return [Code(str(c)) for c in codes]
 
-        return [get_code(str(c)) for c in codes]
-
-    async def qry(self, sql: str, parameters: tuple[str, ...]) -> tuple[Message, ...]:
+    async def qry(
+        self, sql: str, parameters: tuple[str, ...]
+    ) -> tuple[Message, ...]:
         """Deprecated: Returns empty for legacy callers."""
         _LOGGER.warning(
             "Legacy qry (SQL) called. Returning empty in CQRS architecture."
