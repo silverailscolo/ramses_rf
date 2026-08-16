@@ -584,7 +584,7 @@ class TestResolveLogicalTargets:
         # 1. Setup the Gateway with a main TCS and one zone
         mock_tcs = MagicMock()
         mock_zone = MagicMock()
-        mock_tcs.zone_by_idx = {"00": mock_zone}
+        mock_tcs.zone_by_index = {"00": mock_zone}
         mock_gateway.tcs = mock_tcs
 
         # 2. Setup the source device (CTL) which has no TCS property set
@@ -601,7 +601,7 @@ class TestResolveLogicalTargets:
         msg.code = Code._30C9
         msg._has_array = False
 
-        payload = {"zone_idx": "00", "temperature": 21.0}
+        payload = {"zone_index": "00", "temperature": 21.0}
 
         # 4. Resolve the targets
         targets = dispatcher._resolve_logical_targets(

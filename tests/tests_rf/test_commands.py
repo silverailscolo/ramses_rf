@@ -21,19 +21,19 @@ def test_command_dataclass_creation() -> None:
         src=src,
         dst=dst,
         action=Action.GET_DHW_PARAMS,
-        data={"dhw_idx": "00"},
+        data={"dhw_index": "00"},
     )
 
     # Act & Assert
     assert cmd.src == src
     assert cmd.dst == dst
-    assert cmd.get("dhw_idx") == "00"
+    assert cmd.get("dhw_index") == "00"
     assert cmd.get("missing_key", "default") == "default"
 
     new_cmd = cmd.with_data(setpoint=55.0)
     assert new_cmd is not cmd
     assert new_cmd.get("setpoint") == 55.0
-    assert new_cmd.get("dhw_idx") == "00"
+    assert new_cmd.get("dhw_index") == "00"
 
 
 def test_build_get_dhw_params_builder() -> None:
@@ -43,7 +43,7 @@ def test_build_get_dhw_params_builder() -> None:
         src=Address("01:123456"),
         dst=Address("01:123456"),
         action=Action.GET_DHW_PARAMS,
-        data={"dhw_idx": "00"},
+        data={"dhw_index": "00"},
     )
 
     # Act

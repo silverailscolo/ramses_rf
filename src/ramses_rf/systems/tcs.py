@@ -146,9 +146,9 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
 
         super().__init__(controller._gateway)
 
-        # FIXME: ZZZ entities must know their parent device ID and their own idx
+        # FIXME: ZZZ entities must know their parent device ID and their own index
         self._z_id = controller.id  # the responsible device is the controller
-        self._z_idx = None  # ? True (sentinel value to pick up arrays?)
+        self._z_index = None  # ? True (sentinel value to pick up arrays?)
 
         self.id: DeviceIdT = controller.id
 
@@ -265,7 +265,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             result[SZ_SYSTEM] = {SZ_APPLIANCE_CONTROL: None}
 
         zones = {}
-        for zone_idx, zone in schema[SZ_ZONES].items():
+        for zone_index, zone in schema[SZ_ZONES].items():
             _zone = {}
             if zone[SZ_SENSOR] and Address(zone[SZ_SENSOR]).type in (
                 DEV_TYPE_MAP.CTL,
@@ -279,7 +279,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
             ]:  # DEX
                 _zone.update({SZ_ACTUATORS: devices})
             if _zone:
-                zones[zone_idx] = _zone
+                zones[zone_index] = _zone
         if zones:
             result[SZ_ZONES] = zones
 
@@ -328,7 +328,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         super().__init__(*args, **kwargs)
 
         self.zones: list[Zone] = []
-        self.zone_by_idx: dict[str, Zone] = {}  # should not include HW
+        self.zone_by_index: dict[str, Zone] = {}  # should not include HW
         self._max_zones: int = getattr(
             self._gateway.config, SZ_MAX_ZONES, DEFAULT_MAX_ZONES
         )
@@ -354,10 +354,10 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         # Zone._update_schema for hydration (ramses-rf/ramses_cc#919).
         schema = shrink(SCH_TCS_ZONES_ZON(schema), keep_hints=True)
 
-        zon: Zone = self.zone_by_idx.get(zone_index)  # type: ignore[assignment]
+        zon: Zone = self.zone_by_index.get(zone_index)  # type: ignore[assignment]
         if zon is None:  # not found in tcs, create it
             zon = zone_factory(self, zone_index, msg=msg, **schema)  # type: ignore[unreachable]
-            self.zone_by_idx[zon.idx] = zon
+            self.zone_by_index[zon.index] = zon
             self.zones.append(zon)
 
         elif schema:
@@ -374,7 +374,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         base_schema = await super().schema()
         return {
             **base_schema,
-            SZ_ZONES: {z.idx: await z.schema() for z in sorted(self.zones)},
+            SZ_ZONES: {z.index: await z.schema() for z in sorted(self.zones)},
         }
 
     async def params(self) -> dict[str, Any]:
@@ -386,7 +386,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         base_params = await super().params()
         return {
             **base_params,
-            SZ_ZONES: {z.idx: await z.params() for z in sorted(self.zones)},
+            SZ_ZONES: {z.index: await z.params() for z in sorted(self.zones)},
         }
 
     async def status(self) -> dict[str, Any]:
@@ -398,7 +398,7 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         base_status = await super().status()
         return {
             **base_status,
-            SZ_ZONES: {z.idx: await z.status() for z in sorted(self.zones)},
+            SZ_ZONES: {z.index: await z.status() for z in sorted(self.zones)},
         }
 
 
@@ -889,8 +889,8 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
 
         if _schema := (schema.get(SZ_ZONES)):  # type: ignore[assignment]
             [
-                self.get_htg_zone(zone_idx, **s)
-                for zone_idx, s in _schema.items()
+                self.get_htg_zone(zone_index, **s)
+                for zone_index, s in _schema.items()
             ]
 
     @classmethod

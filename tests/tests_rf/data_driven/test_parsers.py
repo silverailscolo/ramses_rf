@@ -16,10 +16,10 @@ from .helpers import TEST_DIR
 WORK_DIR = f"{TEST_DIR}/parsers"
 
 HAS_ARRAY = "has_array"
-HAS_IDX = "has_idx"
+HAS_INDEX = "has_index"
 HAS_PAYLOAD = "has_payload"
 IS_FRAGMENT = "is_fragment"
-META_KEYS = (HAS_ARRAY, HAS_IDX, HAS_PAYLOAD, IS_FRAGMENT)
+META_KEYS = (HAS_ARRAY, HAS_INDEX, HAS_PAYLOAD, IS_FRAGMENT)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -56,7 +56,7 @@ def _proc_log_line(log_line: str) -> None:
         raise
 
     # assert bool(msg._is_fragment) == pkt._is_fragment
-    # assert bool(msg._idx): dict == pkt._idx: Optional[bool | str]
+    # assert bool(msg._index): dict == pkt._index: Optional[bool | str]
     # not useful
 
     if not pkt_eval:
@@ -74,20 +74,15 @@ def _proc_log_line(log_line: str) -> None:
         payload = msg.payload
 
         keys_to_strip = (
-            "zone_idx",
             "zone_index",
             "domain_id",
-            "domain_idx",
             "domain_index",
-            "dhw_idx",
             "dhw_index",
             "hvac_id",
-            "ufh_idx",
             "ufh_index",
-            "ufx_idx",
-            "log_idx",
+            "ufx_index",
             "log_index",
-            "other_idx",
+            "other_index",
         )
 
         # Safely align single-element lists with dicts

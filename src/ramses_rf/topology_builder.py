@@ -138,7 +138,7 @@ async def update_topology_schema_state(
                                     exc.SchemaInconsistentError,
                                 ):
                                     z_str = f"{bit_index:02X}"
-                                    ez = getattr(tcs, "zone_by_idx", {}).get(
+                                    ez = getattr(tcs, "zone_by_index", {}).get(
                                         z_str
                                     )
                                     if (
@@ -150,9 +150,9 @@ async def update_topology_schema_state(
                                     else:
                                         tcs.get_htg_zone(z_str, **schema)
                     elif (
-                        zone_idx := (
+                        zone_index := (
                             p.get(SZ_ZONE_INDEX)
-                            or p.get("zone_idx")
+                            or p.get("zone_index")
                             or p.get("child_id")
                         )
                     ) is not None:
@@ -160,8 +160,8 @@ async def update_topology_schema_state(
                             exc.DeviceNotFoundError,
                             exc.SchemaInconsistentError,
                         ):
-                            z_str = str(zone_idx)
-                            ez = getattr(tcs, "zone_by_idx", {}).get(z_str)
+                            z_str = str(zone_index)
+                            ez = getattr(tcs, "zone_by_index", {}).get(z_str)
                             if (
                                 ez is not None
                                 and getattr(ez, "_heating_type", None)
@@ -175,27 +175,27 @@ async def update_topology_schema_state(
                 for bit_index, flag in enumerate(p.get(SZ_ZONE_MASK, [])):
                     if flag == 1:
                         z_id = f"{bit_index:02X}"
-                        if z_id not in tcs.zone_by_idx:
+                        if z_id not in tcs.zone_by_index:
                             tcs.get_htg_zone(z_id)
 
         # 2. Code 000C: Device Role Bindings, Zone Types & UFH Circuit Mappings
         case Code._000C:
-            zone_idx = p.get(SZ_ZONE_INDEX) or p.get("zone_idx")
+            zone_index = p.get(SZ_ZONE_INDEX) or p.get("zone_index")
             domain_id = (
                 p.get(SZ_DOMAIN_INDEX)
                 or p.get("domain_id")
-                or p.get("domain_idx")
+                or p.get("domain_index")
             )
             devices = p.get("devices", [])
             if "device_id" in p and not devices:
                 devices = [p["device_id"]]
 
             zone_type = p.get("zone_type")
-            ufh_idx = (
+            ufh_index = (
                 p.get(SZ_UFH_INDEX)
-                or p.get("ufh_idx")
-                or p.get("circuit_idx")
-                or p.get("cct_idx")
+                or p.get("ufh_index")
+                or p.get("circuit_index")
+                or p.get("cct_index")
             )
 
             # Instantiate any 02: UFH Controller devices and link as children of TCS
@@ -228,23 +228,23 @@ async def update_topology_schema_state(
                 ]
 
             # Route UFH circuit mappings to UFH controllers
-            if ufc_devs and ufh_idx is not None:
+            if ufc_devs and ufh_index is not None:
                 ufh_z_str: str | None = (
-                    str(zone_idx) if zone_idx is not None else None
+                    str(zone_index) if zone_index is not None else None
                 )
                 ufh_str = (
-                    f"{int(str(ufh_idx), 16):02X}"
-                    if isinstance(ufh_idx, (int, str))
-                    and str(ufh_idx).isalnum()
-                    else str(ufh_idx)
+                    f"{int(str(ufh_index), 16):02X}"
+                    if isinstance(ufh_index, (int, str))
+                    and str(ufh_index).isalnum()
+                    else str(ufh_index)
                 )
                 for ufc in ufc_devs:
                     if hasattr(ufc, "circuit_by_id"):
-                        ufc.circuit_by_id[ufh_str] = {"zone_idx": ufh_z_str}
+                        ufc.circuit_by_id[ufh_str] = {"zone_index": ufh_z_str}
 
             # Map Zone Bindings & Classes
             if (
-                zone_idx is not None
+                zone_index is not None
                 and tcs
                 and hasattr(tcs, "get_htg_zone")
                 and getattr(msg.src, "type", None) not in ("02", DevType.UFC)
@@ -277,7 +277,7 @@ async def update_topology_schema_state(
                     ):
                         zone_cls = candidate_cls
 
-                existing_zone = tcs.zone_by_idx.get(str(zone_idx))
+                existing_zone = tcs.zone_by_index.get(str(zone_index))
                 if (
                     existing_zone
                     and getattr(existing_zone, "_heating_type", None)
@@ -287,7 +287,7 @@ async def update_topology_schema_state(
                 else:
                     schema = {"class": zone_cls} if zone_cls else {}
 
-                zone = tcs.get_htg_zone(str(zone_idx), **schema)
+                zone = tcs.get_htg_zone(str(zone_index), **schema)
                 if zone and valid_devs:
                     has_trv = any(
                         str(d).startswith(f"{DevType.TRV}:")
@@ -366,10 +366,10 @@ async def update_topology_schema_state(
         # 3. Code 0004: Zone Naming & Creation
         case Code._0004:
             if tcs:
-                zone_idx = p.get(SZ_ZONE_INDEX) or p.get("zone_idx")
+                zone_index = p.get(SZ_ZONE_INDEX) or p.get("zone_index")
                 name = p.get("name")
-                if zone_idx is not None and name:
-                    zone = tcs.get_htg_zone(str(zone_idx))
+                if zone_index is not None and name:
+                    zone = tcs.get_htg_zone(str(zone_index))
                     if zone:
                         zone.zone_state = dataclasses.replace(
                             zone.zone_state, name=name
@@ -388,22 +388,24 @@ async def update_topology_schema_state(
             if not ufc_list and tcs and hasattr(tcs, "ufh_controllers"):
                 ufc_list = list(getattr(tcs, "ufh_controllers", {}).values())
 
-            cct_idx = (
-                p.get("circuit_idx") or p.get("cct_idx") or p.get("ufx_idx")
+            cct_index = (
+                p.get("circuit_index")
+                or p.get("cct_index")
+                or p.get("ufx_index")
             )
-            z_idx = p.get(SZ_ZONE_INDEX) or p.get("zone_idx")
-            if cct_idx is not None and ufc_list:
+            z_index = p.get(SZ_ZONE_INDEX) or p.get("zone_index")
+            if cct_index is not None and ufc_list:
                 cct_str = (
-                    f"{int(str(cct_idx), 16):02X}"
-                    if isinstance(cct_idx, (int, str))
-                    and str(cct_idx).isalnum()
-                    else str(cct_idx)
+                    f"{int(str(cct_index), 16):02X}"
+                    if isinstance(cct_index, (int, str))
+                    and str(cct_index).isalnum()
+                    else str(cct_index)
                 )
                 for ufc in ufc_list:
                     if hasattr(ufc, "circuit_by_id"):
                         ufc.circuit_by_id[cct_str] = {
-                            "zone_idx": str(z_idx)
-                            if z_idx is not None
+                            "zone_index": str(z_index)
+                            if z_index is not None
                             else None
                         }
 

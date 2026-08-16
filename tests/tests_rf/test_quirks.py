@@ -50,12 +50,12 @@ def _quirk(payload: dict, current_state: HvacState | None, code: str) -> dict:
 
 
 class TestQuirks12A0Idx00:
-    """12A0 idx=00: indoor sensor."""
+    """12A0 index=00: indoor sensor."""
 
-    def test_idx00_remaps_temperature_to_indoor_temp(self) -> None:
-        """idx=00 temperature should be remapped to indoor_temp."""
+    def test_index00_remaps_temperature_to_indoor_temp(self) -> None:
+        """index=00 temperature should be remapped to indoor_temp."""
         payload = {
-            "hvac_idx": "00",
+            "hvac_index": "00",
             SZ_INDOOR_HUMIDITY: 0.55,
             "temperature": 21.5,
         }
@@ -63,17 +63,17 @@ class TestQuirks12A0Idx00:
         assert result["indoor_temp"] == 21.5
         assert result[SZ_INDOOR_HUMIDITY] == 0.55
 
-    def test_idx00_without_temperature_passes_through(self) -> None:
-        """idx=00 without temperature should pass humidity through."""
-        payload = {"hvac_idx": "00", SZ_INDOOR_HUMIDITY: 0.55}
+    def test_index00_without_temperature_passes_through(self) -> None:
+        """index=00 without temperature should pass humidity through."""
+        payload = {"hvac_index": "00", SZ_INDOOR_HUMIDITY: 0.55}
         result = _quirk(payload, None, Code._12A0)
         assert result[SZ_INDOOR_HUMIDITY] == 0.55
         assert "indoor_temp" not in result
 
-    def test_idx00_preserves_dewpoint(self) -> None:
-        """idx=00 should preserve dewpoint_temp if present."""
+    def test_index00_preserves_dewpoint(self) -> None:
+        """index=00 should preserve dewpoint_temp if present."""
         payload = {
-            "hvac_idx": "00",
+            "hvac_index": "00",
             SZ_INDOOR_HUMIDITY: 0.55,
             "temperature": 21.5,
             "dewpoint_temp": 12.3,
@@ -83,19 +83,19 @@ class TestQuirks12A0Idx00:
 
 
 class TestQuirks12A0Idx01:
-    """12A0 idx=01: supply sensor.
+    """12A0 index=01: supply sensor.
 
     parse_humidity_element returns ``rel_humidity`` (not ``indoor_humidity``)
-    for idx=01.  The old quirks code checked the wrong key and the supply
+    for index=01.  The old quirks code checked the wrong key and the supply
     humidity was never remapped.  Since HvacState has no supply_humidity
     field, the rel_humidity key is now explicitly dropped to prevent it
     leaking through as a stray field.
     """
 
-    def test_idx01_pops_rel_humidity(self) -> None:
-        """idx=01 should drop rel_humidity (no supply_humidity field)."""
+    def test_index01_pops_rel_humidity(self) -> None:
+        """index=01 should drop rel_humidity (no supply_humidity field)."""
         payload = {
-            "hvac_idx": "01",
+            "hvac_index": "01",
             SZ_REL_HUMIDITY: 0.60,
             "temperature": 22.0,
         }
@@ -103,10 +103,10 @@ class TestQuirks12A0Idx01:
         assert SZ_REL_HUMIDITY not in result
         assert "indoor_humidity" not in result
 
-    def test_idx01_remaps_temperature_to_supply_temp(self) -> None:
-        """idx=01 temperature should be remapped to supply_temp."""
+    def test_index01_remaps_temperature_to_supply_temp(self) -> None:
+        """index=01 temperature should be remapped to supply_temp."""
         payload = {
-            "hvac_idx": "01",
+            "hvac_index": "01",
             SZ_REL_HUMIDITY: 0.60,
             "temperature": 22.0,
         }
@@ -114,18 +114,18 @@ class TestQuirks12A0Idx01:
         assert result[SZ_SUPPLY_TEMP] == 22.0
         assert "temperature" not in result
 
-    def test_idx01_without_temperature_only_drops_humidity(self) -> None:
-        """idx=01 with only rel_humidity should just drop it."""
-        payload = {"hvac_idx": "01", SZ_REL_HUMIDITY: 0.60}
+    def test_index01_without_temperature_only_drops_humidity(self) -> None:
+        """index=01 with only rel_humidity should just drop it."""
+        payload = {"hvac_index": "01", SZ_REL_HUMIDITY: 0.60}
         result = _quirk(payload, None, Code._12A0)
         assert SZ_REL_HUMIDITY not in result
         assert SZ_SUPPLY_TEMP not in result
 
-    def test_idx01_old_key_indoor_humidity_also_dropped(self) -> None:
-        """If the parser ever returns 'indoor_humidity' for idx=01,
+    def test_index01_old_key_indoor_humidity_also_dropped(self) -> None:
+        """If the parser ever returns 'indoor_humidity' for index=01,
         it should also be dropped (safety net)."""
         payload = {
-            "hvac_idx": "01",
+            "hvac_index": "01",
             SZ_INDOOR_HUMIDITY: 0.60,
             "temperature": 22.0,
         }
@@ -135,9 +135,9 @@ class TestQuirks12A0Idx01:
 
 
 class TestQuirks12A0Idx02:
-    """12A0 idx=02: outdoor sensor.
+    """12A0 index=02: outdoor sensor.
 
-    parse_humidity_element already returns ``outdoor_humidity`` for idx=02,
+    parse_humidity_element already returns ``outdoor_humidity`` for index=02,
     so no humidity remapping is needed.
 
     The temperature field is NOT remapped to outdoor_temp — 12A0 comes from
@@ -146,15 +146,15 @@ class TestQuirks12A0Idx02:
     See ramses_cc#742.
     """
 
-    def test_idx02_does_not_remap_temperature_to_outdoor_temp(self) -> None:
-        """idx=02 temperature should NOT be remapped to outdoor_temp.
+    def test_index02_does_not_remap_temperature_to_outdoor_temp(self) -> None:
+        """index=02 temperature should NOT be remapped to outdoor_temp.
 
         31DA is the authoritative source for outdoor_temp.  Remapping 12A0
-        idx=02 temperature causes outdoor_temp to bounce between the HUM
+        index=02 temperature causes outdoor_temp to bounce between the HUM
         sensor reading (12A0) and the FAN snapshot (31DA).
         """
         payload = {
-            "hvac_idx": "02",
+            "hvac_index": "02",
             SZ_OUTDOOR_HUMIDITY: 0.69,
             "temperature": 27.42,
         }
@@ -162,19 +162,19 @@ class TestQuirks12A0Idx02:
         assert SZ_OUTDOOR_TEMP not in result
         assert "temperature" in result  # left as-is, not remapped
 
-    def test_idx02_preserves_outdoor_humidity(self) -> None:
-        """idx=02 outdoor_humidity should pass through unchanged."""
+    def test_index02_preserves_outdoor_humidity(self) -> None:
+        """index=02 outdoor_humidity should pass through unchanged."""
         payload = {
-            "hvac_idx": "02",
+            "hvac_index": "02",
             SZ_OUTDOOR_HUMIDITY: 0.69,
             "temperature": 27.42,
         }
         result = _quirk(payload, None, Code._12A0)
         assert result[SZ_OUTDOOR_HUMIDITY] == 0.69
 
-    def test_idx02_without_temperature_passes_through(self) -> None:
-        """idx=02 without temperature should pass humidity through."""
-        payload = {"hvac_idx": "02", SZ_OUTDOOR_HUMIDITY: 0.69}
+    def test_index02_without_temperature_passes_through(self) -> None:
+        """index=02 without temperature should pass humidity through."""
+        payload = {"hvac_index": "02", SZ_OUTDOOR_HUMIDITY: 0.69}
         result = _quirk(payload, None, Code._12A0)
         assert result[SZ_OUTDOOR_HUMIDITY] == 0.69
         assert SZ_OUTDOOR_TEMP not in result
@@ -188,18 +188,18 @@ class TestQuirks12A0FullList:
         the final merged state has correct indoor/outdoor/supply values."""
         elements: list[dict[str, Any]] = [
             {
-                "hvac_idx": "00",
+                "hvac_index": "00",
                 SZ_INDOOR_HUMIDITY: 0.63,
                 "temperature": 28.42,
                 "dewpoint_temp": 21.0,
             },
             {
-                "hvac_idx": "01",
+                "hvac_index": "01",
                 SZ_REL_HUMIDITY: None,  # EF = not implemented
                 "temperature": None,  # 7FFF = not implemented
             },
             {
-                "hvac_idx": "02",
+                "hvac_index": "02",
                 SZ_OUTDOOR_HUMIDITY: 0.69,
                 "temperature": 27.42,
                 "dewpoint_temp": 21.36,
@@ -209,16 +209,16 @@ class TestQuirks12A0FullList:
         # Process each element through quirks (as dispatcher does)
         results = [_quirk(dict(e), None, Code._12A0) for e in elements]
 
-        # idx=00
+        # index=00
         assert results[0]["indoor_temp"] == 28.42
         assert results[0][SZ_INDOOR_HUMIDITY] == 0.63
-        # idx=01
+        # index=01
         assert SZ_REL_HUMIDITY not in results[1]
         assert (
             "temperature" not in results[1]
             or results[1].get("supply_temp") is None
         )
-        # idx=02: outdoor_humidity passes through, temperature is NOT remapped
+        # index=02: outdoor_humidity passes through, temperature is NOT remapped
         assert (
             SZ_OUTDOOR_TEMP not in results[2]
         )  # not remapped (31DA is authoritative)
@@ -229,27 +229,27 @@ class TestQuirks12A0FullList:
 
         Payload: 003F0B1A7FFF0001EF7FFF7FFF0002450AB6085800
         Elements (14 hex chars each):
-          idx=00: humidity=3F, temp=0B1A, dewpoint=7FFF
-          idx=01: humidity=EF (None), temp=7FFF (None)
-          idx=02: humidity=45, temp=0AB6, dewpoint=0858
+          index=00: humidity=3F, temp=0B1A, dewpoint=7FFF
+          index=01: humidity=EF (None), temp=7FFF (None)
+          index=02: humidity=45, temp=0AB6, dewpoint=0858
         """
         # Simulate what the parser would return for this payload
         elements: list[dict[str, Any]] = [
             {
-                "hvac_idx": "00",
+                "hvac_index": "00",
                 SZ_INDOOR_HUMIDITY: 0.247,  # 3F/255
                 "temperature": 28.42,  # 0B1A/100
                 "dewpoint_temp": None,  # 7FFF
                 "_unknown_12": "FF",
             },
             {
-                "hvac_idx": "01",
+                "hvac_index": "01",
                 SZ_REL_HUMIDITY: None,  # EF = not implemented
                 "temperature": None,  # 7FFF
                 "_unknown_12": "FF",
             },
             {
-                "hvac_idx": "02",
+                "hvac_index": "02",
                 SZ_OUTDOOR_HUMIDITY: 0.271,  # 45/255
                 "temperature": 27.42,  # 0AB6/100
                 "dewpoint_temp": 21.36,  # 0858/100
@@ -259,16 +259,16 @@ class TestQuirks12A0FullList:
 
         results = [_quirk(dict(e), None, Code._12A0) for e in elements]
 
-        # idx=00: indoor
+        # index=00: indoor
         assert results[0]["indoor_temp"] == 28.42
         assert results[0][SZ_INDOOR_HUMIDITY] == pytest.approx(0.247, abs=0.01)
 
-        # idx=01: supply (humidity dropped, temp None → supply_temp=None)
+        # index=01: supply (humidity dropped, temp None → supply_temp=None)
         assert SZ_REL_HUMIDITY not in results[1]
         # temperature=None gets popped into supply_temp
         assert results[1].get(SZ_SUPPLY_TEMP) is None
 
-        # idx=02: outdoor (humidity only, temp NOT remapped to outdoor_temp)
+        # index=02: outdoor (humidity only, temp NOT remapped to outdoor_temp)
         assert (
             SZ_OUTDOOR_TEMP not in results[2]
         )  # not remapped (31DA is authoritative)
@@ -280,22 +280,22 @@ class TestQuirks12A0FullList:
 class TestQuirks12A0EdgeCases:
     """Edge cases for 12A0 quirks."""
 
-    def test_no_hvac_idx_defaults_to_00(self) -> None:
-        """Missing hvac_idx should default to idx=00 behavior."""
+    def test_no_hvac_index_defaults_to_00(self) -> None:
+        """Missing hvac_index should default to index=00 behavior."""
         payload = {"temperature": 21.0}
         result = _quirk(payload, None, Code._12A0)
         assert result["indoor_temp"] == 21.0
 
-    def test_unknown_idx_passes_through(self) -> None:
-        """Unknown hvac_idx (e.g. 03) should pass through unchanged."""
-        payload = {"hvac_idx": "03", "temperature": 25.0}
+    def test_unknown_index_passes_through(self) -> None:
+        """Unknown hvac_index (e.g. 03) should pass through unchanged."""
+        payload = {"hvac_index": "03", "temperature": 25.0}
         result = _quirk(payload, None, Code._12A0)
         assert result["temperature"] == 25.0
         assert "indoor_temp" not in result
 
     def test_short_payload_single_dict(self) -> None:
-        """Short 12A0 payload (single dict, no hvac_idx) should
-        be treated as idx=00."""
+        """Short 12A0 payload (single dict, no hvac_index) should
+        be treated as index=00."""
         payload = {SZ_INDOOR_HUMIDITY: 0.50, "temperature": 20.0}
         result = _quirk(payload, None, Code._12A0)
         assert result["indoor_temp"] == 20.0

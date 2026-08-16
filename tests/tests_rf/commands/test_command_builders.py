@@ -29,7 +29,7 @@ def test_build_get_dhw_params(snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.GET_DHW_PARAMS,
-        data={"dhw_idx": 0},
+        data={"dhw_index": 0},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -52,7 +52,7 @@ def test_build_set_dhw_params_parity(
         dst=Address("01:111111"),
         action=Action.SET_DHW_PARAMS,
         data={
-            "dhw_idx": 0,
+            "dhw_index": 0,
             "setpoint": setpoint,
             "overrun": overrun,
             "differential": differential,
@@ -69,7 +69,7 @@ def test_build_set_dhw_params_none_defaults() -> None:
         dst=Address("01:111111"),
         action=Action.SET_DHW_PARAMS,
         data={
-            "dhw_idx": 0,
+            "dhw_index": 0,
             "setpoint": 55.0,
             "overrun": None,
             "differential": None,
@@ -88,7 +88,7 @@ def test_build_set_dhw_params_only_setpoint() -> None:
         dst=Address("01:111111"),
         action=Action.SET_DHW_PARAMS,
         data={
-            "dhw_idx": 0,
+            "dhw_index": 0,
             "setpoint": 50.0,
             "overrun": None,
             "differential": None,
@@ -103,7 +103,7 @@ def test_build_get_dhw_temp(snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.GET_DHW_TEMP,
-        data={"dhw_idx": 0},
+        data={"dhw_index": 0},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -114,7 +114,7 @@ def test_build_put_dhw_temp(snapshot: Any) -> None:
         src=Address("07:111111"),
         dst=Address("07:111111"),
         action=Action.PUT_DHW_TEMP,
-        data={"dhw_idx": 0, "temperature": 50.5},
+        data={"dhw_index": 0, "temperature": 50.5},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -125,7 +125,7 @@ def test_build_get_dhw_mode(snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.GET_DHW_MODE,
-        data={"dhw_idx": 0},
+        data={"dhw_index": 0},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -156,7 +156,7 @@ def test_build_set_dhw_mode_parity(
         dst=Address("01:111111"),
         action=Action.SET_DHW_MODE,
         data={
-            "dhw_idx": 0,
+            "dhw_index": 0,
             "mode": mode,
             "active": active,
             "until": until,
@@ -172,7 +172,7 @@ def test_build_get_schedule_fragment(snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.GET_SCHEDULE_FRAGMENT,
-        data={"zone_idx": 0, "frag_number": 1, "total_frags": 0},
+        data={"zone_index": 0, "frag_number": 1, "total_frags": 0},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -184,7 +184,7 @@ def test_build_set_schedule_fragment(snapshot: Any) -> None:
         dst=Address("01:111111"),
         action=Action.SET_SCHEDULE_FRAGMENT,
         data={
-            "zone_idx": 0,
+            "zone_index": 0,
             "frag_num": 1,
             "frag_cnt": 3,
             "fragment": "0011223344",
@@ -199,7 +199,7 @@ def test_build_get_faultlog_entry(snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.GET_FAULTLOG_ENTRY,
-        data={"log_idx": 5},
+        data={"log_index": 5},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -821,7 +821,7 @@ def test_build_set_zone_setpoint_parity(
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": 0, "setpoint": setpoint},
+        data={"zone_index": 0, "setpoint": setpoint},
     )
 
     dto = build_dto(intent)
@@ -845,7 +845,7 @@ def test_build_set_zone_name_parity(name: str, snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.SET_ZONE_NAME,
-        data={"zone_idx": 1, "name": name},
+        data={"zone_index": 1, "name": name},
     )
 
     dto = build_dto(intent)
@@ -874,7 +874,7 @@ def test_build_set_zone_config_parity(
         dst=Address("01:111111"),
         action=Action.SET_ZONE_CONFIG,
         data={
-            "zone_idx": 2,
+            "zone_index": 2,
             "min_temp": min_temp,
             "max_temp": max_temp,
             "local_override": local_override,
@@ -914,7 +914,7 @@ def test_build_set_zone_mode_parity(
         dst=Address("01:111111"),
         action=Action.SET_MODE,
         data={
-            "zone_idx": 0,
+            "zone_index": 0,
             "mode": mode,
             "setpoint": setpoint,
             "until": until,
@@ -943,7 +943,7 @@ def test_build_get_relay_demand(snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("13:111111"),
         action=Action.GET_RELAY_DEMAND,
-        data={"zone_idx": 0},
+        data={"zone_index": 0},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -965,7 +965,7 @@ def test_build_get_mix_valve_params(snapshot: Any) -> None:
         src=Address("18:000730"),
         dst=Address("01:111111"),
         action=Action.GET_MIX_VALVE_PARAMS,
-        data={"zone_idx": 0},
+        data={"zone_index": 0},
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
@@ -977,7 +977,7 @@ def test_build_set_mix_valve_params(snapshot: Any) -> None:
         dst=Address("01:111111"),
         action=Action.SET_MIX_VALVE_PARAMS,
         data={
-            "zone_idx": 0,
+            "zone_index": 0,
             "max_flow_setpoint": 55,
             "min_flow_setpoint": 15,
             "valve_run_time": 150,
@@ -1156,7 +1156,7 @@ def test_build_put_faultlog_entry(snapshot: Any) -> None:
             "fault_type": FaultType.COMMS_FAULT,
             "device_class": FaultDeviceClass.CONTROLLER,
             "device_id": "01:111111",
-            "log_idx": 1,
+            "log_index": 1,
             "timestamp": dt(2026, 7, 18, 12, 0),
         },
     )

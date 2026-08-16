@@ -98,9 +98,9 @@ class DeviceBase(Entity):
         super().__init__(gateway, **kwargs)
 
         # FIXME: gwy.message_store entities must know their parent device ID
-        # and their own idx
+        # and their own index
         self._z_id = device_address.id  # the responsible device is itself
-        self._z_idx = None  # depends upon its location in the schema
+        self._z_index = None  # depends upon its location in the schema
 
         self.id: DeviceIdT = device_address.id
 
@@ -807,7 +807,7 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         """
         super().__init__(gateway, device_address, traits=traits, **kwargs)
 
-        self._child_id = None  # domain_id, or zone_idx
+        self._child_id = None  # domain_id, or zone_index
 
         self._iz_controller: None | bool | Message = None
 

@@ -219,8 +219,8 @@ class TestChunkPayload(unittest.TestCase):
     def test_chunk_sequence_numbers_are_correct(self) -> None:
         payload = "B" * 200
         chunks = self.t._chunk_payload(payload)
-        for idx, (seq, total, _) in enumerate(chunks):
-            self.assertEqual(seq, idx + 1)
+        for index, (seq, total, _) in enumerate(chunks):
+            self.assertEqual(seq, index + 1)
             self.assertEqual(total, len(chunks))
 
     def test_chunk_strings_within_max_length(self) -> None:

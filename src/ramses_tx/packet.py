@@ -48,7 +48,7 @@ class Packet:
         "_raw_line",
         "_ctx_",
         "_hdr_",
-        "_idx_",
+        "_index_",
         "_repr",
         "_lifespan",
         "_is_echo",
@@ -71,7 +71,7 @@ class Packet:
 
     _ctx_: str | bool | None
     _hdr_: HeaderT | None
-    _idx_: str | bool | None
+    _index_: str | bool | None
     _repr: str | None
     _lifespan: bool | td
     _is_echo: bool
@@ -133,7 +133,7 @@ class Packet:
             self._raw_line = getattr(constructed, "_raw_line", None)
             self._ctx_ = None
             self._hdr_ = None
-            self._idx_ = None
+            self._index_ = None
             self._repr = None
             self._lifespan = False
             return
@@ -171,7 +171,7 @@ class Packet:
 
         self._ctx_ = None
         self._hdr_ = None
-        self._idx_ = None
+        self._index_ = None
         self._repr = None
         self._lifespan = False
 
@@ -301,7 +301,7 @@ class Packet:
 
         packet._ctx_ = None
         packet._hdr_ = None
-        packet._idx_ = None
+        packet._index_ = None
         packet._repr = None
         packet._lifespan = False
 
@@ -592,7 +592,7 @@ class Packet:
 
     @property
     def _ctx(self) -> str | bool:
-        """Return the payload's context (e.g. zone_idx or domain_id).
+        """Return the payload's context (e.g. zone_index or domain_id).
 
         :returns: Context index string or False if unavailable
         :rtype: str | bool
@@ -620,18 +620,18 @@ class Packet:
         return self._ctx_
 
     @property
-    def _idx(self) -> str | bool:
+    def _index(self) -> str | bool:
         """Return the payload's index, if any.
 
         :returns: Index string or False
         :rtype: str | bool
         """
-        if self._idx_ is not None:
-            return self._idx_
+        if self._index_ is not None:
+            return self._index_
 
         result = self._ctx
-        self._idx_ = result if isinstance(result, str) else False
-        return self._idx_
+        self._index_ = result if isinstance(result, str) else False
+        return self._index_
 
     @property
     def _has_payload(self) -> bool:

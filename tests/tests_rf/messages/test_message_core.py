@@ -59,10 +59,10 @@ def test_message_enrichment_and_lineage() -> None:
     assert msg_parsed.lineage[0] is msg
 
     # 3. Second Enrichment (e.g., SSOT tracking)
-    msg_final = msg_parsed.enrich(Topic.TOPOLOGY_DISCOVERY, zone_idx="01")
+    msg_final = msg_parsed.enrich(Topic.TOPOLOGY_DISCOVERY, zone_index="01")
 
     assert msg_final.topic == Topic.TOPOLOGY_DISCOVERY
-    assert msg_final.get("zone_idx") == "01"
+    assert msg_final.get("zone_index") == "01"
     assert len(msg_final.lineage) == 2
     assert msg_final.lineage[0] is msg
     assert msg_final.lineage[1] is msg_parsed

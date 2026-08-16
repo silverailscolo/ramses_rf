@@ -159,7 +159,7 @@ class SQLiteWorker:
         # Create indexes to speed up future reads
         for col in ("verb", "src", "dst", "code", "ctx", "hdr"):
             cursor.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{col} ON messages ({col})"
+                f"CREATE INDEX IF NOT EXISTS index_{col} ON messages ({col})"
             )
         conn.commit()
 

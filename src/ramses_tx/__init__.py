@@ -66,7 +66,7 @@ __all__ = [
     "SZ_REPEAT_COUNT",
     "SZ_SERIAL_PORT",
     "SZ_ZONE_CLASS",
-    "SZ_ZONE_IDX",
+    "SZ_ZONE_INDEX",
     "SZ_ZONE_MASK",
     "SZ_ZONE_TYPE",
     #

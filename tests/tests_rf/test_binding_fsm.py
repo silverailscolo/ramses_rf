@@ -425,11 +425,11 @@ async def _test_flow_20x(
     payload = pkt_flow_expected[_ACCEPT][46:]
     accept_codes = [payload[i : i + 4] for i in range(2, len(payload), 12)]
 
-    idx = payload[:2]
+    index = payload[:2]
     require_ratify = len(pkt_flow_expected) > _RATIFY
 
     resp_coro = respondent._wait_for_binding_request(
-        accept_codes, zone_index=idx, require_ratify=require_ratify
+        accept_codes, zone_index=index, require_ratify=require_ratify
     )
 
     # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept

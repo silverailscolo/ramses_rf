@@ -46,7 +46,7 @@ async def test_conversation_manager_successful_match() -> None:
         src=Address("18:000730"),
         dst=Address("01:078710"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "00", "setpoint": 21.0},
+        data={"zone_index": "00", "setpoint": 21.0},
     )
     dto = build_dto(intent)
 
@@ -77,7 +77,7 @@ async def test_conversation_manager_ignores_mismatched_src() -> None:
         src=Address("18:000730"),
         dst=Address("01:078710"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "00", "setpoint": 21.0},
+        data={"zone_index": "00", "setpoint": 21.0},
     )
     dto = build_dto(intent)
 
@@ -107,7 +107,7 @@ async def test_conversation_manager_timeout_and_retries() -> None:
         src=Address("18:000730"),
         dst=Address("01:078710"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "00", "setpoint": 21.0},
+        data={"zone_index": "00", "setpoint": 21.0},
     )
     dto = build_dto(intent)
 
@@ -167,7 +167,7 @@ def test_conversation_manager_accepts_i_for_w_commands() -> None:
 
 
 @pytest.mark.asyncio
-async def test_conversation_manager_idx_matching_prevents_cross_matching() -> (
+async def test_conversation_manager_index_matching_prevents_cross_matching() -> (
     None
 ):
     # Arrange
@@ -179,7 +179,7 @@ async def test_conversation_manager_idx_matching_prevents_cross_matching() -> (
         src=Address("18:000730"),
         dst=Address("01:078710"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "00", "setpoint": 21.0},
+        data={"zone_index": "00", "setpoint": 21.0},
     )
     dto1 = build_dto(intent1)
 
@@ -187,7 +187,7 @@ async def test_conversation_manager_idx_matching_prevents_cross_matching() -> (
         src=Address("18:000730"),
         dst=Address("01:078710"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "01", "setpoint": 19.0},
+        data={"zone_index": "01", "setpoint": 19.0},
     )
     dto2 = build_dto(intent2)
 
@@ -225,7 +225,7 @@ async def test_conversation_manager_superseded_intent_cancels_old_timer() -> (
         src=Address("18:000730"),
         dst=Address("01:078710"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "00", "setpoint": 21.0},
+        data={"zone_index": "00", "setpoint": 21.0},
     )
     dto = build_dto(intent)
 
@@ -266,7 +266,7 @@ async def test_live_gateway_conversation_manager_integration(
         src=Address("18:000730"),
         dst=Address("01:078710"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "00", "setpoint": 21.0},
+        data={"zone_index": "00", "setpoint": 21.0},
     )
 
     send_task = asyncio.create_task(
@@ -304,7 +304,7 @@ async def test_live_dispatcher_process_msg_routes_to_conversation_manager(
         src=Address("18:000730"),
         dst=Address("01:078710"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "00", "setpoint": 21.0},
+        data={"zone_index": "00", "setpoint": 21.0},
     )
 
     send_task = asyncio.create_task(

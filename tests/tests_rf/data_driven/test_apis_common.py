@@ -16,7 +16,7 @@ def put_bind(
     src_id: str,
     codes: tuple | str | None,
     dst_id: str | None = None,
-    idx: str = "00",
+    index: str = "00",
     oem_code: str | None = None,
 ) -> Command:
     return build_dto(
@@ -27,7 +27,7 @@ def put_bind(
             data={
                 "verb": verb,
                 "codes": codes,
-                "idx": idx,
+                "index": index,
                 "oem_code": oem_code,
             },
         )
@@ -90,14 +90,14 @@ def test_1fc9_constructors_good() -> None:
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     #
-    # STA binding to a CTL as a thermostat (2309, 30C9, 0008, 1FC9): zone idx 08
+    # STA binding to a CTL as a thermostat (2309, 30C9, 0008, 1FC9): zone index 08
     frame = " I --- 12:010740 --:------ 12:010740 1FC9 024 0023093029F40030C93029F40000083029F4001FC93029F4"
     cmd = put_bind(Verb.I_, "12:010740", (Code._2309, Code._30C9, Code._0008))
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     frame = " W --- 01:145038 12:010740 --:------ 1FC9 006 08230906368E"
     cmd = put_bind(
-        Verb.W_, "01:145038", (Code._2309,), dst_id="12:010740", idx="08"
+        Verb.W_, "01:145038", (Code._2309,), dst_id="12:010740", index="08"
     )
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
@@ -106,7 +106,7 @@ def test_1fc9_constructors_good() -> None:
     assert str(Packet._from_cmd(cmd)._frame) == frame
 
     #
-    # DHW sensor binding to a CTL (1260, 1FC9): dhw_idx 00
+    # DHW sensor binding to a CTL (1260, 1FC9): dhw_index 00
     frame = " I --- 07:045960 --:------ 07:045960 1FC9 012 0012601CB388001FC91CB388"
     cmd = put_bind(Verb.I_, "07:045960", Code._1260)
     assert str(Packet._from_cmd(cmd)._frame) == frame  # using str for codes
@@ -120,13 +120,13 @@ def test_1fc9_constructors_good() -> None:
     assert str(Packet._from_cmd(cmd)._frame) == frame  # using str for codes
 
     # NOTE: the APIs are not (yet) intended for these edge-case packets
-    # TRV binding to a CTL (2309, 30C9, 1FC9): zone idx 07 - NOTE: counter-offer pkt!
+    # TRV binding to a CTL (2309, 30C9, 1FC9): zone index 07 - NOTE: counter-offer pkt!
     # # frame = " I --- 04:189076 63:262142 --:------ 1FC9 006 0030C912E294"
     # # cmd = put_bind(" I", "04:189076", ("30C9",), dst_id="63:262142")
     # # assert str(Packet._from_cmd(cmd)._frame) == frame  # NOTE: NUL-ADDR, and there is no 1FC9 in the payload!
 
     # # frame = " I --- 01:145038 --:------ 01:145038 1FC9 018 07230906368E0730C906368E071FC906368E"
-    # # cmd = put_bind(" I", "01:145038", ("2309", "30C9"), idx="07")
+    # # cmd = put_bind(" I", "01:145038", ("2309", "30C9"), index="07")
     # # assert str(Packet._from_cmd(cmd)._frame) == frame  # NOTE: this is the counter-offer
 
     frame = " W --- 04:189076 01:145038 --:------ 1FC9 006 0030C912E294"

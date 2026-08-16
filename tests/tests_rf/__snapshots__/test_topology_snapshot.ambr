@@ -145,28 +145,28 @@
         '02:007533': dict({
           'circuits': dict({
             '00': dict({
-              'zone_idx': '00',
+              'zone_index': '00',
             }),
             '01': dict({
-              'zone_idx': '01',
+              'zone_index': '01',
             }),
             '02': dict({
-              'zone_idx': '0B',
+              'zone_index': '0B',
             }),
             '03': dict({
-              'zone_idx': None,
+              'zone_index': None,
             }),
             '04': dict({
-              'zone_idx': None,
+              'zone_index': None,
             }),
             '05': dict({
-              'zone_idx': None,
+              'zone_index': None,
             }),
             '06': dict({
-              'zone_idx': None,
+              'zone_index': None,
             }),
             '07': dict({
-              'zone_idx': None,
+              'zone_index': None,
             }),
           }),
         }),

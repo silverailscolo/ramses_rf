@@ -47,7 +47,7 @@ def _proc_log_line(log_line: str) -> None:
         assert False, f"{pkt} < {err}"
 
     # assert bool(msg._is_fragment) == pkt._is_fragment
-    # assert bool(msg._idx): dict == pkt._idx: Optional[bool | str]
+    # assert bool(msg._index): dict == pkt._index: Optional[bool | str]
     # not useful
 
     if not pkt_eval:

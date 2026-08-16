@@ -26,7 +26,7 @@ def resolve_addrs(
     return src_id, dst_id, "--:------"
 
 
-def check_idx(zone_index: int | str) -> str:
+def check_index(zone_index: int | str) -> str:
     """Validate and normalise a zone index or DHW index byte.
 
     :param zone_index: Zone index integer or hex string representation.
@@ -36,14 +36,14 @@ def check_idx(zone_index: int | str) -> str:
     :raises CommandInvalid: If zone_index is invalid.
     """
     if not isinstance(zone_index, int | str):
-        raise exc.CommandInvalid(f"Invalid value for zone_idx: {zone_index}")
+        raise exc.CommandInvalid(f"Invalid value for zone_index: {zone_index}")
     if isinstance(zone_index, str):
         zone_index = FA if zone_index == "HW" else zone_index
     result: int = (
         zone_index if isinstance(zone_index, int) else int(zone_index, 16)
     )
     if 0 > result > 15 and result != 0xFA:
-        raise exc.CommandInvalid(f"Invalid value for zone_idx: {result}")
+        raise exc.CommandInvalid(f"Invalid value for zone_index: {result}")
     return f"{result:02X}"
 
 

@@ -370,7 +370,7 @@ class BindingManagerRespondent(BindingManagerBase):
                 src=Address(self._dev.id),
                 dst=Address(tender.src.id),
                 action=Action.PUT_BIND,
-                data={"verb": W_, "codes": codes, "idx": zone_index},
+                data={"verb": W_, "codes": codes, "index": zone_index},
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
@@ -533,9 +533,9 @@ class BindingManagerSupplicant(BindingManagerBase):
         :param confirm_code: The code to confirm with.
         :return: The sent confirm packet.
         """
-        # HACK assumes all idx same
-        if accept.payload and hasattr(accept.payload, "idx"):
-            index = str(accept.payload.idx)
+        # HACK assumes all index same
+        if accept.payload and hasattr(accept.payload, "index"):
+            index = str(accept.payload.index)
         elif accept._dto.raw_payload:
             index = accept._dto.raw_payload[:2]
         else:
@@ -549,7 +549,7 @@ class BindingManagerSupplicant(BindingManagerBase):
                 src=Address(self._dev.id),
                 dst=Address(target_id),
                 action=Action.PUT_BIND,
-                data={"verb": I_, "codes": confirm_code, "idx": index},
+                data={"verb": I_, "codes": confirm_code, "index": index},
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite

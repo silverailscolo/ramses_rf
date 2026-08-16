@@ -213,7 +213,6 @@ async def test_temperature_set_faked(
         assert intent.data == {
             "temperature": 22.0,
             "zone_index": "00",
-            "zone_idx": "00",
         }
 
 

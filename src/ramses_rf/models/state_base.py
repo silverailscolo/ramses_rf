@@ -99,7 +99,7 @@ class TopologyChangedEvent:
 
     # -- Context & Observability --
 
-    # Flexible domain-specific metadata (e.g., {"zone_idx": "01",
+    # Flexible domain-specific metadata (e.g., {"zone_index": "01",
     # "is_sensor": True})
     metadata: dict[str, str | int | float | bool] = field(default_factory=dict)
 

@@ -89,7 +89,7 @@ def serialize_device(dev: Any) -> dict[str, Any]:
         data.update(
             {
                 "tcs_id": tcs.id if tcs else None,
-                "zone_idx": getattr(zone, "idx", None),
+                "zone_index": getattr(zone, "index", None),
             }
         )
 
@@ -237,13 +237,13 @@ async def generate_actual_state() -> dict[str, Any]:
             system_state["tcs"] = {
                 "id": gwy.tcs.id,
                 "zones": {
-                    z.idx: {
+                    z.index: {
                         "name": z.name,
                         "type": type(z).__name__,
                         "sensor": z.sensor.id if z.sensor else None,
                         "actuators": sorted([a.id for a in z.actuators]),
                     }
-                    for z in sorted(gwy.tcs.zones, key=lambda x: x.idx)
+                    for z in sorted(gwy.tcs.zones, key=lambda x: x.index)
                 },
             }
 

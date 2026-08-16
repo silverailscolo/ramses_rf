@@ -87,7 +87,7 @@ async def test_o1_push_model_ingest(zone_entity: EntityState) -> None:
     msg = DummyMsg(
         "04:123456",
         Code._30C9,
-        {"temperature": 21.0, "zone_idx": "00"},
+        {"temperature": 21.0, "zone_index": "00"},
     )
 
     zone_entity.update_state(msg)
@@ -108,14 +108,14 @@ async def test_o1_get_value_eliminates_cpu_thrashing(
         noise_msg = DummyMsg(
             "04:123456",
             Code._30C9,
-            {"temperature": 19.0, "zone_idx": "00"},
+            {"temperature": 19.0, "zone_index": "00"},
         )
         zone_entity.update_state(noise_msg)
 
     final_msg = DummyMsg(
         "04:123456",
         Code._30C9,
-        {"temperature": 21.0, "zone_idx": "00"},
+        {"temperature": 21.0, "zone_index": "00"},
     )
     zone_entity.update_state(final_msg)
     final_msg.payload_access_count = 0
@@ -134,7 +134,7 @@ async def test_expired_message_deletion_queued_once(
     msg = DummyMsg(
         "04:123456",
         Code._30C9,
-        {"temperature": 21.0, "zone_idx": "00"},
+        {"temperature": 21.0, "zone_index": "00"},
     )
     msg._expired = True
 

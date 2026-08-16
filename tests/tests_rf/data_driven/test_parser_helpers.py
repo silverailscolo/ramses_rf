@@ -63,7 +63,7 @@ def test_22f1_itho_directed_mode_max_04() -> None:
     result = msg.payload
     assert result["_scheme"] == "itho"
     assert result["fan_mode"] == "low"
-    assert result["_mode_idx"] == "02"
+    assert result["_mode_index"] == "02"
     assert result["_mode_max"] == "04"
 
     # High:   37:198669 → 37:019136, 22F1 003 000404

@@ -12,7 +12,7 @@ from ramses_rf.const import (
     SZ_NAME,
     SZ_PHASE,
     SZ_TEMPERATURE,
-    SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
 )
 from ramses_rf.messages import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -28,8 +28,8 @@ from tests_rf.virtual_rf import VirtualRf
 # --- Parser 0004 Tests ---
 
 
-def test_parser_0004_includes_zone_idx() -> None:
-    """Verify that parser_0004 returns both zone_idx and name."""
+def test_parser_0004_includes_zone_index() -> None:
+    """Verify that parser_0004 returns both zone_index and name."""
     # Arrange
     # zone 0B, name "Bedroom 5"
     payload = "0B00426564726F6F6D20350000000000000000000000"
@@ -41,21 +41,21 @@ def test_parser_0004_includes_zone_idx() -> None:
     result = p_obj.to_dict()
 
     # Assert
-    assert result[SZ_ZONE_IDX] == "0B"
+    assert result[SZ_ZONE_INDEX] == "0B"
     assert result[SZ_NAME] == "Bedroom 5"
 
 
-def test_parser_0004_zone_idx_is_first_byte() -> None:
-    """Verify zone_idx extraction across multiple zone indices."""
+def test_parser_0004_zone_index_is_first_byte() -> None:
+    """Verify zone_index extraction across multiple zone indices."""
     # Arrange & Act & Assert
     cls_0004 = get_payload_class(Code._0004)
     assert cls_0004 is not None
-    for zone_idx in ("00", "01", "05", "0A", "0B"):
-        payload = f"{zone_idx}00436F756E67650000000000000000000000000000"
+    for zone_index in ("00", "01", "05", "0A", "0B"):
+        payload = f"{zone_index}00436F756E67650000000000000000000000000000"
         p_obj = cls_0004.from_bytes(bytes.fromhex(payload))
         assert isinstance(p_obj, PayloadBase)
         result = p_obj.to_dict()
-        assert result[SZ_ZONE_IDX] == zone_idx
+        assert result[SZ_ZONE_INDEX] == zone_index
 
 
 def test_parser_0004_null_name_returns_empty_dict() -> None:
@@ -87,7 +87,7 @@ def test_parser_0004_all_zero_name() -> None:
     result = p_obj.to_dict()
 
     # Assert
-    assert result[SZ_ZONE_IDX] == "06"
+    assert result[SZ_ZONE_INDEX] == "06"
     assert result[SZ_NAME] == ""
 
 

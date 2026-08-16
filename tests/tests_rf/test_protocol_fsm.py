@@ -325,17 +325,17 @@ async def _test_flow_60x(protocol: PortProtocol, num_cmds: int = 1) -> None:
     #
     # Setup...
     tasks = list()
-    for idx in range(num_cmds):
+    for index in range(num_cmds):
         cmd = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
                 dst=Address("01:123456"),
                 action=Action.GET_ZONE_TEMP,
-                data={"zone_idx": f"{idx:02X}"},
+                data={"zone_index": f"{index:02X}"},
             )
         )
         coro = protocol._send_cmd(cmd, qos=QosParams())
-        tasks.append(protocol._loop.create_task(coro, name=f"cmd_{idx:02X}"))
+        tasks.append(protocol._loop.create_task(coro, name=f"cmd_{index:02X}"))
 
     assert await asyncio.gather(*tasks)
 

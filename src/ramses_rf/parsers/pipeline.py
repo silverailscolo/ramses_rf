@@ -11,7 +11,7 @@ import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from ramses_rf.protocol.ramses import RQ_IDX_COMPLEX
+from ramses_rf.protocol.ramses import RQ_INDEX_COMPLEX
 from ramses_tx import exceptions as exc
 from ramses_tx.const import I_, RP, RQ, W_, Code
 from ramses_tx.helpers import hex_to_temp
@@ -130,7 +130,7 @@ class HeartbeatDecoder(PayloadDecoder):
         :rtype: dict[str, Any] | list[dict[str, Any]] | None
         """
         if not msg._has_payload and (
-            msg.verb == RQ and msg.code not in RQ_IDX_COMPLEX
+            msg.verb == RQ and msg.code not in RQ_INDEX_COMPLEX
         ):
             return None
 

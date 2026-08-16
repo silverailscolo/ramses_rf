@@ -558,8 +558,8 @@ def _noop_msg_handler(msg: Message) -> None:
 
 
 @pytest.mark.xdist_group(name="virt_serial")
-@pytest.mark.parametrize("idx", _TEST_SUITE_GOOD)
-async def test_create_stack_integration(idx: str) -> None:
+@pytest.mark.parametrize("index", _TEST_SUITE_GOOD)
+async def test_create_stack_integration(index: str) -> None:
     """Check that Transport calls Protocol.connection_made() correctly."""
     rf = VirtualRf(2, start=True)
     rf.set_gateway(rf.ports[0], _STACK_GWY_ID, fw_type=HgiFwTypes.EVOFW3)
@@ -574,7 +574,7 @@ async def test_create_stack_integration(idx: str) -> None:
         protocol, transport = await create_stack(
             _noop_msg_handler,
             transport_config=TransportConfig(disable_sending=False),
-            **_TEST_SUITE_GOOD[idx],
+            **_TEST_SUITE_GOOD[index],
             **kwargs,
         )
         await _assert_stack_state(protocol, transport)

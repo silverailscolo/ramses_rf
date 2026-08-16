@@ -95,21 +95,27 @@ class UfhTopologyHandler(TopologyHandler):
                 if not isinstance(payload, dict):
                     continue
 
-                ufh_idx = payload.get(SZ_UFH_INDEX, payload.get("ufh_idx"))
-                zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+                ufh_index = payload.get(SZ_UFH_INDEX, payload.get("ufh_index"))
+                zone_index = payload.get(
+                    SZ_ZONE_INDEX, payload.get("zone_index")
+                )
 
-                if ufh_idx is not None:
+                if ufh_index is not None:
                     event_circuit = TopologyChangedEvent(
                         action=TopologyAction.CREATE_CIRCUIT,
                         device_id=ufc_id,
                         metadata={
-                            SZ_UFH_INDEX: str(ufh_idx),
-                            SZ_ZONE_INDEX: str(zone_idx)
-                            if zone_idx
+                            SZ_UFH_INDEX: str(ufh_index),
+                            SZ_ZONE_INDEX: str(zone_index)
+                            if zone_index
                             else "None",
-                            "ufh_idx": str(ufh_idx),
-                            "zone_idx": str(zone_idx) if zone_idx else "None",
-                            "child_id": str(zone_idx) if zone_idx else "None",
+                            "ufh_index": str(ufh_index),
+                            "zone_index": str(zone_index)
+                            if zone_index
+                            else "None",
+                            "child_id": str(zone_index)
+                            if zone_index
+                            else "None",
                         },
                         causation="Rule_UFH_000C_Circuit",
                     )

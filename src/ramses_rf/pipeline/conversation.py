@@ -113,7 +113,7 @@ class ConversationManager:
         :returns: A unique lookup key.
         :rtype: str
         """
-        # Key based on target device ID, code, and correlation ID or payload idx
+        # Key based on target device ID, code, and correlation ID or payload index
         return f"{intent.dst.id}:{dto.code}:{intent.correlation_id}"
 
     async def track_intent(
@@ -273,7 +273,7 @@ class ConversationManager:
             ):
                 continue
 
-            # Check sub-payload context (idx/zone/domain/msg_id) matching
+            # Check sub-payload context (index/zone/domain/msg_id) matching
             message_context = msg.context.value
             if message_context is not None and not isinstance(
                 message_context, Mock

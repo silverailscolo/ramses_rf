@@ -95,9 +95,9 @@ async def initiate_binding_process(self, offer_codes, confirm_code=None, ratify_
 
 ### Respondent Flow (Device responding to binding)
 ```python
-async def wait_for_binding_request(self, accept_codes, idx="00", require_ratify=False):
+async def wait_for_binding_request(self, accept_codes, index="00", require_ratify=False):
     1. _wait_for_offer()                            # Wait for Offer packet
-    2. _accept_offer(tender, accept_codes, idx)     # Send Accept packet
+    2. _accept_offer(tender, accept_codes, index)     # Send Accept packet
     3. _wait_for_confirm(accept)                    # Wait for Confirm packet
     4. _wait_for_addenda(accept)                    # Optional: Wait for Addenda
 

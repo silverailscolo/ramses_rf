@@ -44,7 +44,7 @@ def parse_fault_log_entry(
     """
     assert len(payload) == 44
 
-    # NOTE: the log_index will increment as the entry moves down the log, hence '_log_idx'
+    # NOTE: the log_index will increment as the entry moves down the log, hence '_log_index'
     log_index_str: str = payload[4:6]
 
     # these are only useful for I_, not RP

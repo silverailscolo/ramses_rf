@@ -152,7 +152,7 @@ _APPLIANCE_CONTROL_CODES: frozenset[Code | str] = frozenset(
 
 # 000C payload roles that map to domain IDs (not zone indices).
 # See ramses_tx/const.py DEV_ROLE_MAP and parsers/heating.py
-# complex_idx.
+# complex_index.
 #   payload[2:4] == "0E" (HTG) -> FA (hotwater_valve) if index == "00",
 #                                 F9 if "01"
 #   payload[2:4] == "0F" (APP) -> FC (appliance_control)
@@ -398,7 +398,7 @@ class DiscoveryScan:
 
         # Extract zone_index from payload if this is a binding code
         zone_index = (
-            _extract_zone_idx_from_payload(dto.payload or dto.raw_payload)
+            _extract_zone_index_from_payload(dto.payload or dto.raw_payload)
             if code in _ZONE_BINDING_CODES
             else None
         )
@@ -1074,7 +1074,7 @@ def _recompute_confidence(device: DiscoveredDevice) -> str:
     return "low"
 
 
-def _extract_zone_idx_from_payload(payload: Any | str) -> str | None:
+def _extract_zone_index_from_payload(payload: Any | str) -> str | None:
     """Extract and validate the zone_index from a packet payload.
 
     Zone index is typically the first 2 hex chars of a raw payload string or
@@ -1092,17 +1092,17 @@ def _extract_zone_idx_from_payload(payload: Any | str) -> str | None:
     """
     if isinstance(payload, list):
         for item in payload:
-            result = _extract_zone_idx_from_payload(item)
+            result = _extract_zone_index_from_payload(item)
             if result is not None:
                 return result
         return None
     if hasattr(payload, "zone_index"):
-        zone_idx_val = payload.zone_index
-        if isinstance(zone_idx_val, int):
-            if zone_idx_val > 0x0B:
+        zone_index_val = payload.zone_index
+        if isinstance(zone_index_val, int):
+            if zone_index_val > 0x0B:
                 return None
-            return f"{zone_idx_val:02X}"
-        index_str = str(zone_idx_val).upper()
+            return f"{zone_index_val:02X}"
+        index_str = str(zone_index_val).upper()
     elif isinstance(payload, str) and len(payload) >= 2:
         index_str = payload[:2].upper()
     else:

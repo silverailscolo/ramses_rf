@@ -62,7 +62,7 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
     try:
         # 2. Initialize MessageStore (starts the background StorageWorker)
         # We pass the path as a string, as expected by the class
-        idx = MessageStore(db_path=str(db_path), disk_path=str(disk_path))
+        index = MessageStore(db_path=str(db_path), disk_path=str(disk_path))
 
         # Allow a tiny moment for the worker thread to initialize tables
         # using a deterministic polling loop instead of a flaky hardcoded
@@ -89,8 +89,8 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         # running in Pytest.
         # We must explicitly disable this for THIS specific test to verify
         # async speed.
-        real_flush = idx.flush
-        idx.flush = lambda: None  # type: ignore[method-assign]
+        real_flush = index.flush
+        index.flush = lambda: None  # type: ignore[method-assign]
 
         # 3. Burst Write Test (Non-blocking verification)
         MSG_COUNT = 500
@@ -98,18 +98,18 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
 
         for i in range(MSG_COUNT):
             msg = create_dummy_message(i)
-            idx.add(msg)
+            index.add(msg)
 
         duration = time.perf_counter() - start_time
 
         # Assertion: RAM-First Write-Behind Cache
         # The in-memory dictionary MUST be populated instantly.
-        assert len(idx.log_by_dtm) == MSG_COUNT, (
+        assert len(index.log_by_dtm) == MSG_COUNT, (
             "Phase 2.3 Fail: RAM cache was not instantly populated!"
         )
 
         # Restore flush for the verification step
-        idx.flush = real_flush  # type: ignore[method-assign]
+        index.flush = real_flush  # type: ignore[method-assign]
 
         # Performance Assertion:
         # If this were blocking SQLite, 500 inserts might take ~0.5s to
@@ -156,39 +156,39 @@ async def test_storage_worker_persistence(tmp_path: Path) -> None:
         )
 
         # Trigger and wait for disk snapshot explicitly
-        assert idx._worker is not None
-        idx._worker.submit_snapshot()
-        idx.flush()
+        assert index._worker is not None
+        index._worker.submit_snapshot()
+        index.flush()
 
         assert disk_path.exists(), "Snapshot file was not created on disk!"
 
         # Keep a reference to the original frame string for validation
-        original_msg = idx.log_by_dtm[0]
+        original_msg = index.log_by_dtm[0]
         original_frame = original_msg.raw_frame
 
         # 6. Hydration Verification
-        idx2 = MessageStore(
+        index2 = MessageStore(
             db_path=":memory:", disk_path=str(disk_path), maintain=True
         )
-        if idx2._hydration_task:
-            await idx2._hydration_task
+        if index2._hydration_task:
+            await index2._hydration_task
 
-        assert len(idx2.log_by_dtm) == MSG_COUNT, (
+        assert len(index2.log_by_dtm) == MSG_COUNT, (
             f"Hydration failed! Expected {MSG_COUNT} cached items, "
-            f"got {len(idx2.log_by_dtm)}."
+            f"got {len(index2.log_by_dtm)}."
         )
 
         # Ensure the frame was retained properly, meaning DTO conversion
         # won't fail
-        hydrated_msg = idx2.log_by_dtm[0]
+        hydrated_msg = index2.log_by_dtm[0]
         hydrated_frame = hydrated_msg.raw_frame
         assert hydrated_frame == original_frame, (
             "Lossless frame hydration failed!"
         )
 
         # 7. Cleanup
-        idx.stop()
-        idx2.stop()
+        index.stop()
+        index2.stop()
 
     finally:
         # Restore the Pytest environment variable for all subsequent tests
@@ -206,7 +206,7 @@ async def test_storage_worker_delete(tmp_path: Path) -> None:
 
     pytest_env = os.environ.pop("PYTEST_CURRENT_TEST", None)
     try:
-        idx = MessageStore(db_path=str(db_path), disk_path=str(disk_path))
+        index = MessageStore(db_path=str(db_path), disk_path=str(disk_path))
 
         # Allow tables to initialize
         for _ in range(50):
@@ -216,11 +216,11 @@ async def test_storage_worker_delete(tmp_path: Path) -> None:
 
         # 1. Insert a test message
         msg = create_dummy_message(1)
-        idx.add(msg)
+        index.add(msg)
 
         # Flush queue to disk so we can read it directly
-        assert idx._worker is not None
-        idx._worker.flush()
+        assert index._worker is not None
+        index._worker.flush()
 
         # Check DB row count == 1
         conn = sqlite3.connect(str(db_path))
@@ -229,16 +229,16 @@ async def test_storage_worker_delete(tmp_path: Path) -> None:
         assert cursor.fetchone()[0] == 1, "Failed to persist single insert."
 
         # 2. Delete the message via the async queue pattern
-        await idx.rem(msg=msg)
+        await index.rem(msg=msg)
         # Force wait until delete transaction is processed
-        idx._worker.flush()
+        index._worker.flush()
 
         # Check DB row count == 0
         cursor.execute("SELECT COUNT(*) FROM messages")
         assert cursor.fetchone()[0] == 0, "Failed to async delete record."
 
         conn.close()
-        idx.stop()
+        index.stop()
 
     finally:
         if pytest_env is not None:

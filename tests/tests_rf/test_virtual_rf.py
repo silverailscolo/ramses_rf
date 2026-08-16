@@ -351,7 +351,7 @@ def patch_strict_checking(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-async def _test_gwy_device(gwy: Gateway, test_idx: int) -> None:
+async def _test_gwy_device(gwy: Gateway, test_index: int) -> None:
     """Check GWY address/type detection, and behaviour of its treatment of addr0."""
     assert gwy._engine._loop is asyncio.get_running_loop()
 
@@ -363,7 +363,7 @@ async def _test_gwy_device(gwy: Gateway, test_idx: int) -> None:
 
     assert gwy.hgi
 
-    cmd_str = TEST_CMDS[test_idx].replace(TST_ID_, gwy.hgi.id)
+    cmd_str = TEST_CMDS[test_index].replace(TST_ID_, gwy.hgi.id)
     cmd = Command.from_cli(cmd_str)
     assert str(cmd) == cmd_str
 
@@ -417,7 +417,7 @@ def gwy_dev_id() -> DeviceIdT:
 
 
 @pytest.mark.xdist_group(name="virt_serial")
-@pytest.mark.parametrize("test_idx", list(TEST_CMDS.keys()))
-async def test_fake_evofw3(fake_evofw3: Gateway, test_idx: int) -> None:
+@pytest.mark.parametrize("test_index", list(TEST_CMDS.keys()))
+async def test_fake_evofw3(fake_evofw3: Gateway, test_index: int) -> None:
     """Check the behaviour of the fake (virtual) evofw3 against GWY test."""
-    await _test_gwy_device(fake_evofw3, test_idx)
+    await _test_gwy_device(fake_evofw3, test_index)

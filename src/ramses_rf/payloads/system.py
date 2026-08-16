@@ -913,7 +913,7 @@ class SystemFaultLogPayload(PayloadBase):
 
             dev_class = log_entry_dict.get(SZ_DEVICE_CLASS)
             domain_index = log_entry_dict.get(
-                SZ_DOMAIN_INDEX, log_entry_dict.get("domain_idx")
+                SZ_DOMAIN_INDEX, log_entry_dict.get("domain_index")
             )
             dev_id = log_entry_dict.get(SZ_DEVICE_ID)
 
@@ -1566,8 +1566,8 @@ class SystemConfig2BPayload(SystemConfigPayload):
             raise ValueError(
                 f"Invalid payload length for SystemConfig2BPayload: {len(raw_data)}"
             )
-        c_idx, c_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        return cls(config_index=c_idx, config_value=c_val)
+        c_index, c_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        return cls(config_index=c_index, config_value=c_val)
 
     def to_bytes(self) -> bytes:
         """Pack 2-byte system config into binary payload.
@@ -1601,7 +1601,7 @@ class SystemConfig2BPayload(SystemConfigPayload):
             return result
 
         return {
-            "config_idx": self.config_index,
+            "config_index": self.config_index,
             "config_val": self.config_value,
         }
 
@@ -1648,9 +1648,9 @@ class SystemConfigVarPayload(SystemConfigPayload):
             raise ValueError(
                 f"Invalid payload length for SystemConfigVarPayload: {len(raw_data)}"
             )
-        c_idx, c_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        c_index, c_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         return cls(
-            config_index=c_idx, config_value=c_val, raw_extra=raw_data[2:]
+            config_index=c_index, config_value=c_val, raw_extra=raw_data[2:]
         )
 
     def to_bytes(self) -> bytes:
@@ -1689,7 +1689,7 @@ class SystemConfigVarPayload(SystemConfigPayload):
             return result
 
         return {
-            "config_idx": self.config_index,
+            "config_index": self.config_index,
             "config_val": self.config_value,
         }
 
@@ -2168,9 +2168,9 @@ class RelayFailsafePayload(PayloadBase):
         :returns: Decoded relay failsafe dictionary.
         :rtype: dict[str, Any]
         """
-        idx_str = f"{self.domain_or_zone_index:02X}"
+        index_str = f"{self.domain_or_zone_index:02X}"
         result: dict[str, Any] = {
-            SZ_DOMAIN_INDEX: idx_str,
+            SZ_DOMAIN_INDEX: index_str,
             "failsafe_enabled": self.failsafe_enabled,
         }
         if self._unknown_0 is not None:

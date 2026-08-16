@@ -59,7 +59,7 @@ I__0404_OTHER_EXPECTED = 66
 I__0404_FINAL_RECEIVED = 69
 
 
-def track_packet_flow(msg, tcs_id, zone_idx=None):
+def track_packet_flow(msg, tcs_id, zone_index=None):
     """Test the flow of packets (messages)."""
 
     global _global_flow_marker
@@ -77,11 +77,11 @@ def track_packet_flow(msg, tcs_id, zone_idx=None):
         _global_flow_marker = RP_0006_RECEIVED  # RQ_0404_FIRST_EXPECTED
 
     # get the first schedule fragment, is possibly the last fragment too
-    elif msg._pkt._hdr == f"0404|RQ|{tcs_id}|{zone_idx}01":
+    elif msg._pkt._hdr == f"0404|RQ|{tcs_id}|{zone_index}01":
         assert _global_flow_marker in (RQ_0404_FIRST_EXPECTED, RP_0006_RECEIVED)
         _global_flow_marker = RP_0404_FIRST_EXPECTED
 
-    elif msg._pkt._hdr == f"0404|RP|{tcs_id}|{zone_idx}01":
+    elif msg._pkt._hdr == f"0404|RP|{tcs_id}|{zone_index}01":
         assert _global_flow_marker == RP_0404_FIRST_EXPECTED
         if msg.payload["frag_number"] < msg.payload["total_frags"]:
             _global_flow_marker = RQ_0404_OTHER_EXPECTED
@@ -89,11 +89,11 @@ def track_packet_flow(msg, tcs_id, zone_idx=None):
             _global_flow_marker = RP_0404_FINAL_RECEIVED
 
     # get the subsequent schedule fragments, until the last fragment
-    elif msg._pkt._hdr[:20] == f"0404|RQ|{tcs_id}|{zone_idx}":
+    elif msg._pkt._hdr[:20] == f"0404|RQ|{tcs_id}|{zone_index}":
         assert _global_flow_marker == RQ_0404_OTHER_EXPECTED
         _global_flow_marker = RP_0404_OTHER_EXPECTED
 
-    elif msg._pkt._hdr[:20] == f"0404|RP|{tcs_id}|{zone_idx}":
+    elif msg._pkt._hdr[:20] == f"0404|RP|{tcs_id}|{zone_index}":
         assert _global_flow_marker == RP_0404_OTHER_EXPECTED
         if msg.payload["frag_number"] < msg.payload["total_frags"]:
             _global_flow_marker = RQ_0404_OTHER_EXPECTED
@@ -101,7 +101,7 @@ def track_packet_flow(msg, tcs_id, zone_idx=None):
             _global_flow_marker = RP_0404_FINAL_RECEIVED
 
     # set the first schedule fragment, is possibly the last fragment too
-    elif msg._pkt._hdr == f"0404| W|{tcs_id}|{zone_idx}01":
+    elif msg._pkt._hdr == f"0404| W|{tcs_id}|{zone_index}01":
         assert _global_flow_marker in (
             W__0404_FIRST_EXPECTED,
             RP_0006_RECEIVED,
@@ -109,7 +109,7 @@ def track_packet_flow(msg, tcs_id, zone_idx=None):
         )
         _global_flow_marker = I__0404_FIRST_EXPECTED
 
-    elif msg._pkt._hdr == f"0404| I|{tcs_id}|{zone_idx}01":
+    elif msg._pkt._hdr == f"0404| I|{tcs_id}|{zone_index}01":
         assert _global_flow_marker == I__0404_FIRST_EXPECTED
         if msg.payload["frag_number"] < msg.payload["total_frags"]:
             _global_flow_marker = W__0404_OTHER_EXPECTED
@@ -117,11 +117,11 @@ def track_packet_flow(msg, tcs_id, zone_idx=None):
             _global_flow_marker = I__0404_FINAL_RECEIVED
 
     # set the subsequent schedule fragments, until the last fragment
-    elif msg._pkt._hdr[:20] == f"0404| W|{tcs_id}|{zone_idx}":
+    elif msg._pkt._hdr[:20] == f"0404| W|{tcs_id}|{zone_index}":
         assert _global_flow_marker == W__0404_OTHER_EXPECTED
         _global_flow_marker = I__0404_OTHER_EXPECTED
 
-    elif msg._pkt._hdr[:20] == f"0404| I|{tcs_id}|{zone_idx}":
+    elif msg._pkt._hdr[:20] == f"0404| I|{tcs_id}|{zone_index}":
         assert _global_flow_marker == I__0404_OTHER_EXPECTED
         if msg.payload["frag_number"] < msg.payload["total_frags"]:
             _global_flow_marker = W__0404_OTHER_EXPECTED
@@ -135,7 +135,7 @@ def track_packet_flow(msg, tcs_id, zone_idx=None):
 def assert_schedule_dict(zone: DhwZone | Zone):
     schedule_full = zone._schedule._full_schedule
 
-    assert schedule_full[SZ_ZONE_IDX] == zone.idx
+    assert schedule_full[SZ_ZONE_IDX] == zone.index
     assert schedule_full[SZ_SCHEDULE] == zone.schedule
 
     if schedule_full[SZ_ZONE_IDX] == "HW":
@@ -147,9 +147,9 @@ def assert_schedule_dict(zone: DhwZone | Zone):
     # assert isinstance(schedule, list)
     assert len(schedule) == 7
 
-    for idx, day_of_week in enumerate(schedule):
+    for index, day_of_week in enumerate(schedule):
         # assert isinstance(day_of_week, dict)
-        assert day_of_week[SZ_DAY_OF_WEEK] == idx
+        assert day_of_week[SZ_DAY_OF_WEEK] == index
 
         # assert isinstance(day_of_week[SWITCHPOINTS], dict)
         for switchpoint in day_of_week[SZ_SWITCHPOINTS]:
@@ -248,7 +248,7 @@ async def write_schedule(zone: DhwZone | Zone) -> None:  # uses: flow_marker
 
     # if zone._gateway.pkt_transport.serial.port == MOCKED_PORT:
     #     # change the schedule (doesn't matter to what)
-    #     if zone.idx == "HW":
+    #     if zone.index == "HW":
     #         sch_new[0][SWITCHPOINTS][0][ENABLED] = not (
     #             sch_new[0][SWITCHPOINTS][0][ENABLED]
     #         )
@@ -304,7 +304,7 @@ async def test_rq_0404_dhw(test_port):
     """Test the dhw.get_schedule() method."""
 
     def track_packet_flow_wrapper(msg: Message, *args, **kwargs):
-        track_packet_flow(msg, tcs.id, dhw.idx)
+        track_packet_flow(msg, tcs.id, dhw.index)
 
     gwy = await load_test_gwy(*test_port, f"{WORK_DIR}/{CONFIG_FILE}")
     gwy.create_client(track_packet_flow_wrapper)
@@ -325,7 +325,7 @@ async def test_rq_0404_zon(test_port):
     """Test the zone.get_schedule() method."""
 
     def track_packet_flow_wrapper(msg: Message, *args, **kwargs):
-        track_packet_flow(msg, tcs.id, zon.idx)
+        track_packet_flow(msg, tcs.id, zon.index)
 
     gwy = await load_test_gwy(*test_port, f"{WORK_DIR}/{CONFIG_FILE}")
     gwy.create_client(track_packet_flow_wrapper)
@@ -346,7 +346,7 @@ async def test_ww_0404_dhw(test_port):
     """Test the dhw.set_schedule() method (uses get_schedule)."""
 
     def track_packet_flow_wrapper(msg: Message, *args, **kwargs):
-        track_packet_flow(msg, tcs.id, dhw.idx)
+        track_packet_flow(msg, tcs.id, dhw.index)
 
     gwy = await load_test_gwy(*test_port, f"{WORK_DIR}/{CONFIG_FILE}")
     gwy.create_client(track_packet_flow_wrapper)
@@ -367,7 +367,7 @@ async def test_ww_0404_zon(test_port):
     """Test the zone.set_schedule() method (uses get_schedule)."""
 
     def track_packet_flow_wrapper(msg: Message, *args, **kwargs):
-        track_packet_flow(msg, tcs.id, zon.idx)
+        track_packet_flow(msg, tcs.id, zon.index)
 
     gwy = await load_test_gwy(*test_port, f"{WORK_DIR}/{CONFIG_FILE}")
     gwy.create_client(track_packet_flow_wrapper)

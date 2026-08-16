@@ -165,38 +165,43 @@ class DeviceRegistry:
 
         # INTERCEPT: If the metadata targets a specific zone, the true
         # parent is the Zone object, not the main Controller.
-        if parent and "zone_idx" in metadata:
-            zone_idx = str(metadata["zone_idx"])
+        if parent and "zone_index" in metadata:
+            zone_index = str(metadata["zone_index"])
 
             # ROUTING INTERCEPT: Target the correct sub-domain
             if hasattr(tcs, "_get_zone"):
                 try:
-                    tcs._get_zone(zone_idx)
+                    tcs._get_zone(zone_index)
                 except (IndexError, KeyError, TypeError, ValueError) as err:
                     _LOGGER.debug(
-                        "Failed to resolve zone %s: %s", zone_idx, err
+                        "Failed to resolve zone %s: %s", zone_index, err
                     )
             elif hasattr(tcs, "_get_htg_zone"):
                 try:
-                    tcs._get_htg_zone(zone_idx)
+                    tcs._get_htg_zone(zone_index)
                 except (IndexError, KeyError, TypeError, ValueError) as err:
                     _LOGGER.debug(
-                        "Failed to resolve htg zone %s: %s", zone_idx, err
+                        "Failed to resolve htg zone %s: %s", zone_index, err
                     )
 
             if hasattr(tcs, "get_htg_zone"):
-                parent = tcs.get_htg_zone(zone_idx)
+                parent = tcs.get_htg_zone(zone_index)
             elif hasattr(tcs, "get_zone"):
-                parent = tcs.get_zone(zone_idx)
-            elif hasattr(tcs, "zone_by_idx") and zone_idx in tcs.zone_by_idx:
-                parent = tcs.zone_by_idx[zone_idx]
+                parent = tcs.get_zone(zone_index)
+            elif (
+                hasattr(tcs, "zone_by_index")
+                and zone_index in tcs.zone_by_index
+            ):
+                parent = tcs.zone_by_index[zone_index]
 
         elif parent and metadata.get("domain_id") in ("FA", "F9"):
             if hasattr(tcs, "dhw") and tcs.dhw:
                 parent = tcs.dhw
 
         # If we have class metadata for a zone, apply it to the zone via the parent TCS
-        child_domain_id = metadata.get("zone_idx") or metadata.get("child_id")
+        child_domain_id = metadata.get("zone_index") or metadata.get(
+            "child_id"
+        )
         if (
             child_domain_id
             and "class" in metadata
@@ -297,8 +302,8 @@ class DeviceRegistry:
                 is_explicit_actuator = device_role == "actuator"
 
                 if tcs and hasattr(tcs, "id"):
-                    if "zone_idx" in metadata:
-                        z_key = f"{tcs.id}_{metadata['zone_idx']}"
+                    if "zone_index" in metadata:
+                        z_key = f"{tcs.id}_{metadata['zone_index']}"
 
                         # Prevent hardware double-booking: Only default to actuator if
                         # the device wasn't explicitly flagged as the zone sensor.
@@ -375,16 +380,21 @@ class DeviceRegistry:
             return
         ufc = self.device_by_id.get(event.device_id)
         if ufc and hasattr(ufc, "get_circuit"):
-            ufh_idx = str(event.metadata.get("ufh_idx"))
-            circuit = ufc.get_circuit(ufh_idx)
+            ufh_index = str(event.metadata.get("ufh_index"))
+            circuit = ufc.get_circuit(ufh_index)
 
             # REVERSE BINDING: Hydrate the Zone Read-Model with the circuit actuator!
-            zone_idx = event.metadata.get("zone_idx")
+            zone_index = event.metadata.get("zone_index")
             tcs = getattr(ufc, "tcs", None)
 
             # Prevent AttributeError: Only hydrate if the UFC is securely bound to a TCS
-            if zone_idx and zone_idx != "None" and tcs and hasattr(tcs, "id"):
-                z_key = f"{tcs.id}_{zone_idx}"
+            if (
+                zone_index
+                and zone_index != "None"
+                and tcs
+                and hasattr(tcs, "id")
+            ):
+                z_key = f"{tcs.id}_{zone_index}"
                 cqrs_acts: dict[str, set[str]] = getattr(
                     self, "_cqrs_actuators", {}
                 )
@@ -392,7 +402,7 @@ class DeviceRegistry:
                 self._cqrs_actuators = cqrs_acts
 
             _LOGGER.debug(
-                f"Created Circuit {ufh_idx} on {ufc.id} via {event.causation}"
+                f"Created Circuit {ufh_index} on {ufc.id} via {event.causation}"
             )
 
     def _handle_update_traits(self, event: TopologyChangedEvent) -> None:
@@ -435,9 +445,9 @@ class DeviceRegistry:
                     continue
 
                 zone_temp = payload_item.get("temperature")
-                zone_idx = payload_item.get("zone_idx")
+                zone_index = payload_item.get("zone_index")
 
-                if zone_temp is None or zone_idx is None:
+                if zone_temp is None or zone_index is None:
                     continue
 
                 # Find a match in our temporal cache
@@ -458,13 +468,12 @@ class DeviceRegistry:
                         causation="Correlated via Passive Telemetry Matching",
                         metadata={
                             "tcs_id": event.device_id,
-                            "zone_index": zone_idx,
-                            "zone_idx": zone_idx,
+                            "zone_index": zone_index,
                         },
                     )
                     _LOGGER.info(
                         f"Correlator: Successfully correlated orphan {matched_orphan} "
-                        f"to Zone {zone_idx} on Controller {event.device_id}!"
+                        f"to Zone {zone_index} on Controller {event.device_id}!"
                     )
                     self._handle_bind_device(bind_event)
 
@@ -472,10 +481,10 @@ class DeviceRegistry:
                     del self._orphan_telemetry[matched_orphan]
 
         # Handle zone class metadata updates from eavesdropping
-        if "class" in event.metadata and "zone_idx" in event.metadata:
+        if "class" in event.metadata and "zone_index" in event.metadata:
             controller = self.device_by_id.get(event.device_id)
             if controller and (tcs := getattr(controller, "tcs", None)):
-                zone = tcs.get_htg_zone(str(event.metadata["zone_idx"]))
+                zone = tcs.get_htg_zone(str(event.metadata["zone_index"]))
                 if zone:
                     zone._update_schema(**{"class": event.metadata["class"]})
 
@@ -954,12 +963,12 @@ class DeviceRegistry:
                         cqrs_sensors.keys()
                     ):
                         if z_key.startswith(f"{tcs.id}_"):
-                            z_idx = z_key.split("_")[1]
-                            if z_idx not in zones_dict:
-                                zones_dict[z_idx] = {}
+                            z_index = z_key.split("_")[1]
+                            if z_index not in zones_dict:
+                                zones_dict[z_index] = {}
 
-                    for z_idx, z_dict in zones_dict.items():
-                        z_key = f"{tcs.id}_{z_idx}"
+                    for z_index, z_dict in zones_dict.items():
+                        z_key = f"{tcs.id}_{z_index}"
 
                         if z_key in cqrs_acts:
                             current = set(z_dict.get("actuators", []))

@@ -16,7 +16,7 @@ def test_build_set_dhw_params_parity() -> None:
         dst=Address("01:123456"),
         action=Action.SET_DHW_PARAMS,
         data={
-            "dhw_idx": "00",
+            "dhw_index": "00",
             "setpoint": 50.0,
             "overrun": 5,
             "differential": 1.0,
@@ -59,7 +59,7 @@ def test_build_put_dhw_temp_parity() -> None:
         src=Address("07:123456"),
         dst=Address("07:123456"),
         action=Action.PUT_DHW_TEMP,
-        data={"dhw_idx": "00", "temperature": 45.0},
+        data={"dhw_index": "00", "temperature": 45.0},
     )
 
     # Act
@@ -97,7 +97,7 @@ def test_build_put_sensor_temp_parity() -> None:
         src=Address("01:123456"),
         dst=Address("01:123456"),
         action=Action.PUT_SENSOR_TEMP,
-        data={"zone_idx": "01", "temperature": 21.0},
+        data={"zone_index": "01", "temperature": 21.0},
     )
 
     # Act
@@ -116,7 +116,7 @@ def test_build_set_temperature_parity() -> None:
         src=Address("01:123456"),
         dst=Address("01:123456"),
         action=Action.SET_TEMPERATURE,
-        data={"zone_idx": "02", "setpoint": 20.0},
+        data={"zone_index": "02", "setpoint": 20.0},
     )
 
     # Act
@@ -155,7 +155,7 @@ def test_build_get_schedule_fragment_parity() -> None:
         src=Address("01:123456"),
         dst=Address("01:123456"),
         action=Action.GET_SCHEDULE_FRAGMENT,
-        data={"zone_idx": "01", "frag_number": 1, "total_frags": 0},
+        data={"zone_index": "01", "frag_number": 1, "total_frags": 0},
     )
 
     # Act
@@ -174,7 +174,7 @@ def test_build_set_mode_parity() -> None:
         src=Address("01:123456"),
         dst=Address("01:123456"),
         action=Action.SET_MODE,
-        data={"zone_idx": "00", "mode": 0, "setpoint": 21.0},
+        data={"zone_index": "00", "mode": 0, "setpoint": 21.0},
     )
 
     # Act
@@ -193,7 +193,7 @@ def test_build_set_name_parity() -> None:
         src=Address("01:123456"),
         dst=Address("01:123456"),
         action=Action.SET_ZONE_NAME,
-        data={"zone_idx": "00", "name": "Lounge"},
+        data={"zone_index": "00", "name": "Lounge"},
     )
 
     # Act
@@ -213,7 +213,7 @@ def test_build_set_config_parity() -> None:
         dst=Address("01:123456"),
         action=Action.SET_ZONE_CONFIG,
         data={
-            "zone_idx": "00",
+            "zone_index": "00",
             "min_temp": 5.0,
             "max_temp": 35.0,
             "local_override": False,

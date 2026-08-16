@@ -96,19 +96,18 @@ class Temperature(DeviceHeat):  # 30C9
         self.temp_state = dataclasses.replace(
             self.temp_state, temperature=value
         )
-        # Determine the zone_idx from the parent zone (if bound) so that
-        # UFH zone sensors emit 30C9 with the correct zone_idx.  Without
-        # this, the fake always sends idx 00 and the UFC ignores it.
-        zone_idx = "00"
-        if self._parent is not None and hasattr(self._parent, "idx"):
-            zone_idx = self._parent.idx
+        # Determine the zone_index from the parent zone (if bound) so that
+        # UFH zone sensors emit 30C9 with the correct zone_index.  Without
+        # this, the fake always sends index 00 and the UFC ignores it.
+        zone_index = "00"
+        if self._parent is not None and hasattr(self._parent, "index"):
+            zone_index = self._parent.index
         return await send_fake_intent(
             self,
             Action.PUT_SENSOR_TEMP,
             {
                 "temperature": value,
-                "zone_index": zone_idx,
-                "zone_idx": zone_idx,
+                "zone_index": zone_index,
             },
         )
 

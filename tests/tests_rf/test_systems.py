@@ -267,7 +267,7 @@ def mock_tcs(mock_system_gwy: MagicMock) -> MagicMock:
     tcs.ctl.id = "01:123456"
     tcs.ctl.addr = MagicMock()
     tcs.dhw = None
-    tcs.zone_by_idx = {}
+    tcs.zone_by_index = {}
     tcs._max_zones = 12
     return tcs
 
@@ -284,7 +284,7 @@ def test_transform_function() -> None:
 async def test_zone_base(mock_tcs: MagicMock) -> None:
     """Test the ZoneBase initialization and base methods."""
     zon = ZoneBase(mock_tcs, "00")
-    assert zon.idx == "00"
+    assert zon.index == "00"
     assert zon.id == "01:123456_00"
     assert repr(zon) == "01:123456_00 (None)"
 
@@ -327,7 +327,7 @@ async def test_zone_schedule(mock_tcs: MagicMock) -> None:
 async def test_dhw_zone_initialization(mock_tcs: MagicMock) -> None:
     """Test the DhwZone initialization constraints."""
     dhw = DhwZone(mock_tcs, "HW")
-    assert dhw.idx == "HW"
+    assert dhw.index == "HW"
 
     mock_tcs.dhw = dhw
     with pytest.raises(SchemaInconsistentError):
@@ -386,13 +386,13 @@ async def test_dhw_commands(mock_tcs: MagicMock) -> None:
 async def test_zone_initialization(mock_tcs: MagicMock) -> None:
     """Test standard Zone initialisation and validation rules."""
     zon = Zone(mock_tcs, "00")
-    assert zon.idx == "00"
+    assert zon.index == "00"
 
-    mock_tcs.zone_by_idx = {"00": zon}
+    mock_tcs.zone_by_index = {"00": zon}
     with pytest.raises(SchemaInconsistentError):
         Zone(mock_tcs, "00")
 
-    mock_tcs.zone_by_idx = {}
+    mock_tcs.zone_by_index = {}
     with pytest.raises(SchemaInconsistentError):
         Zone(mock_tcs, "0C")
 
@@ -469,7 +469,7 @@ def _create_mock_zone() -> Zone:
     mock_tcs = MagicMock()
     mock_tcs.id = "01:123456"
     mock_tcs._gateway = MagicMock()
-    mock_tcs.zone_by_idx = {}
+    mock_tcs.zone_by_index = {}
     mock_tcs._max_zones = 12
     mock_tcs.ctl = MagicMock()
     return Zone(mock_tcs, "00")
@@ -627,7 +627,7 @@ def test_update_demand_state_ufc_ufh_circuit_demand_ignored() -> None:
     target = MockTarget()
     msg = MagicMock()
     msg.code = Code._3150
-    payload = {"heat_demand": 0.81, "ufx_idx": "00"}
+    payload = {"heat_demand": 0.81, "ufx_index": "00"}
 
     # Act
     _update_demand_state(target, payload, msg)

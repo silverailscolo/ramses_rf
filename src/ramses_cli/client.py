@@ -425,13 +425,13 @@ async def monitor(
 @click.option(  # --get-faults ctl_id
     "--get-faults", type=DeviceIdParamType(), help="controller_id"
 )
-@click.option(  # --get-schedule ctl_id zone_idx|HW
+@click.option(  # --get-schedule ctl_id zone_index|HW
     "--get-schedule",
     default=[None, None],
     type=(DeviceIdParamType(), str),
-    help="controller_id, zone_idx (e.g. '0A', 'HW')",
+    help="controller_id, zone_index (e.g. '0A', 'HW')",
 )
-@click.option(  # --set-schedule ctl_id zone_idx|HW
+@click.option(  # --set-schedule ctl_id zone_index|HW
     "--set-schedule",
     default=[None, None],
     type=(DeviceIdParamType(), click.File("r")),
@@ -687,26 +687,26 @@ def print_results(gateway: Gateway, **kwargs: Any) -> None:
         ]._faultlog.faultlog
 
         if fault_log:
-            for log_idx, entry in fault_log.items():
-                print(f"{log_idx:02X}", entry)
+            for log_index, entry in fault_log.items():
+                print(f"{log_index:02X}", entry)
         else:
             print("No fault log, or failed to get the fault log.")
 
     if kwargs[GET_SCHED][0]:
-        system_id, zone_idx = kwargs[GET_SCHED]
-        if zone_idx == "HW":
+        system_id, zone_index = kwargs[GET_SCHED]
+        if zone_index == "HW":
             dhw = gateway.device_registry.system_by_id[system_id].dhw
             zone: Any = dhw
         else:
             sys_entry = gateway.device_registry.system_by_id[system_id]
-            zone = sys_entry.zone_by_idx[zone_idx]
+            zone = sys_entry.zone_by_index[zone_index]
         assert zone
         schedule = zone.schedule
 
         if schedule is None:
             print("Failed to get the schedule.")
         else:
-            result = {SZ_ZONE_INDEX: zone_idx, "schedule": schedule}
+            result = {SZ_ZONE_INDEX: zone_index, "schedule": schedule}
             print(">>> Schedule JSON begins <<<")
             print(json.dumps(result, indent=4))
             print(">>> Schedule JSON ended <<<")

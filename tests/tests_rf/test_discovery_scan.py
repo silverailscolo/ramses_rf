@@ -28,7 +28,7 @@ from ramses_rf.discovery_scan import (
     DiscoveryScan,
     _classify,
     _extract_domain_id_from_000c,
-    _extract_zone_idx_from_payload,
+    _extract_zone_index_from_payload,
     _initial_confidence,
     _is_appliance_control_signal,
     _is_valid_address,
@@ -128,43 +128,43 @@ class TestIsValidAddress:
 
 
 class TestExtractZoneIdx:
-    """Tests for _extract_zone_idx_from_payload."""
+    """Tests for _extract_zone_index_from_payload."""
 
-    def test_valid_zone_idx(self) -> None:
-        assert _extract_zone_idx_from_payload("02C8") == "02"
+    def test_valid_zone_index(self) -> None:
+        assert _extract_zone_index_from_payload("02C8") == "02"
 
     def test_hw_zone(self) -> None:
         # "HW" is not valid hex — should return None
-        assert _extract_zone_idx_from_payload("HW...") is None
+        assert _extract_zone_index_from_payload("HW...") is None
 
     def test_empty_payload(self) -> None:
-        assert _extract_zone_idx_from_payload("") is None
+        assert _extract_zone_index_from_payload("") is None
 
     def test_short_payload(self) -> None:
-        assert _extract_zone_idx_from_payload("0") is None
+        assert _extract_zone_index_from_payload("0") is None
 
     def test_zone_fc_rejected(self) -> None:
         # FC is the appliance_control domain, not a zone index
-        assert _extract_zone_idx_from_payload("FC00") is None
+        assert _extract_zone_index_from_payload("FC00") is None
 
     def test_zone_7f_rejected(self) -> None:
         # 7F is broadcast, not a zone index
-        assert _extract_zone_idx_from_payload("7F00") is None
+        assert _extract_zone_index_from_payload("7F00") is None
 
     def test_zone_0c_rejected(self) -> None:
         # 0C is above the 12-zone max (00-0B)
-        assert _extract_zone_idx_from_payload("0C00") is None
+        assert _extract_zone_index_from_payload("0C00") is None
 
     def test_zone_0b_accepted(self) -> None:
         # 0B is the highest valid zone index
-        assert _extract_zone_idx_from_payload("0B00") == "0B"
+        assert _extract_zone_index_from_payload("0B00") == "0B"
 
     def test_zone_00_accepted(self) -> None:
-        assert _extract_zone_idx_from_payload("0000") == "00"
+        assert _extract_zone_index_from_payload("0000") == "00"
 
     def test_zone_lowercase(self) -> None:
         # Should normalise to uppercase
-        assert _extract_zone_idx_from_payload("0a00") == "0A"
+        assert _extract_zone_index_from_payload("0a00") == "0A"
 
 
 class TestIsApplianceControlSignal:
@@ -253,22 +253,22 @@ class TestExtractDomainIdFrom000C:
     """Tests for _extract_domain_id_from_000c (issue 834 regression)."""
 
     def test_app_role_returns_fc(self) -> None:
-        # 000C payload: 00 (idx) + 0F (APP) + 00 (pad) + hex_id
+        # 000C payload: 00 (index) + 0F (APP) + 00 (pad) + hex_id
         # → domain FC (appliance_control)
         assert _extract_domain_id_from_000c("000F003545C8") == "FC"
 
-    def test_htg_role_idx_00_returns_fa(self) -> None:
-        # 000C payload: 00 (idx) + 0E (HTG) + 00 (pad) + hex_id
+    def test_htg_role_index_00_returns_fa(self) -> None:
+        # 000C payload: 00 (index) + 0E (HTG) + 00 (pad) + hex_id
         # → domain FA (hotwater_valve)
         assert _extract_domain_id_from_000c("000E003545C8") == "FA"
 
-    def test_htg_role_idx_01_returns_f9(self) -> None:
-        # 000C payload: 01 (idx) + 0E (HTG) + 00 (pad) + hex_id
+    def test_htg_role_index_01_returns_f9(self) -> None:
+        # 000C payload: 01 (index) + 0E (HTG) + 00 (pad) + hex_id
         # → domain F9 (heating_valve)
         assert _extract_domain_id_from_000c("010E003545C8") == "F9"
 
-    def test_dhw_role_idx_00_returns_fa(self) -> None:
-        # 000C payload: 00 (idx) + 0D (DHW) + 00 (pad) + hex_id
+    def test_dhw_role_index_00_returns_fa(self) -> None:
+        # 000C payload: 00 (index) + 0D (DHW) + 00 (pad) + hex_id
         # → domain FA (dhw_sensor)
         assert _extract_domain_id_from_000c("000D003545C8") == "FA"
 
@@ -766,7 +766,7 @@ class TestDiscoveredDevice:
             "likely_type": "TRV",
             "codes_seen": [Code._1060, Code._3150],
             "bound_to": "01:145038",
-            "zone_idx": "02",
+            "zone_index": "02",
             "rssi": -72.0,
             "confidence": "high",
             "is_battery": True,
@@ -1000,11 +1000,11 @@ class TestDiscoveryScanPacketHandling:
         assert dev.confidence == "high"
 
     def test_thm_zone_binding_via_000a(self) -> None:
-        """THM (22:) sends RQ 000A with its zone_idx as payload (issue 813).
+        """THM (22:) sends RQ 000A with its zone_index as payload (issue 813).
 
         A room thermostat like 22:012299 sends ``RQ 000A 001 01`` to the CTL,
         where ``01`` is the zone index.  The scan engine should extract this
-        and set zone_idx on the THM.
+        and set zone_index on the THM.
         """
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
@@ -1020,11 +1020,11 @@ class TestDiscoveryScanPacketHandling:
         assert dev.confidence == "high"
 
     def test_ctl_no_zone_binding_from_000a(self) -> None:
-        """CTL (01:) must not get zone_idx from its own 000A packets (issue 813).
+        """CTL (01:) must not get zone_index from its own 000A packets (issue 813).
 
         The CTL sends 000A with zone config for multiple zones.  The first
-        2 hex chars are the zone_idx of the zone being configured, NOT the
-        CTL's own zone.  Setting zone_idx on the CTL corrupts its comment
+        2 hex chars are the zone_index of the zone being configured, NOT the
+        CTL's own zone.  Setting zone_index on the CTL corrupts its comment
         and schema entry.
         """
         gwy = make_mock_gateway(known_list={"01:216136": {}})
@@ -1037,7 +1037,7 @@ class TestDiscoveryScanPacketHandling:
         )
         dev = scan.get_device("01:216136")
         assert dev is not None
-        # CTL must NOT have zone_idx set
+        # CTL must NOT have zone_index set
         assert dev.zone_index is None
         assert dev.bound_to is None
 

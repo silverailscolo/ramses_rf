@@ -279,8 +279,8 @@ class Test_entity_base:
 
         # Case 2: Payload is a list, key='*' (should return full list)
         payload_list = [
-            {"zone_idx": "00", "val": 10},
-            {"zone_idx": "01", "val": 20},
+            {"zone_index": "00", "val": 10},
+            {"zone_index": "01", "val": 20},
         ]
         msg_list = MagicMock(spec=Message)
         msg_list.payload = payload_list
@@ -296,12 +296,12 @@ class Test_entity_base:
         val = dev.entity_state._msg_value_msg(msg_list)
         assert val == payload_list
 
-        # Case 3: Legacy Fallback - Payload is list, specific key requested, no zone_idx
+        # Case 3: Legacy Fallback - Payload is list, specific key requested, no zone_index
         # Should return value from index 0
         val = dev.entity_state._msg_value_msg(msg_list, key="val")
         assert val == 10  # from index 0 ('00')
 
-        # Case 4: Correct filtering when zone_idx is provided
+        # Case 4: Correct filtering when zone_index is provided
         val = dev.entity_state._msg_value_msg(
             msg_list, key="val", zone_index="01"
         )

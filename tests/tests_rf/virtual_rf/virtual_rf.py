@@ -106,14 +106,14 @@ class VirtualRfBase:
         # Buffer for incoming data to handle fragmentation
         self._rx_buffer: dict[_PN, bytes] = {}
 
-        for idx in range(num_ports):
-            self._create_port(idx)
+        for index in range(num_ports):
+            self._create_port(index)
 
         self._log: deque[tuple[_PN, str, bytes]] = deque([], log_size)
         self._replies: dict[str, bytes] = {}
 
     def _create_port(
-        self, port_idx: int, dev_type: HgiFwTypes | None = None
+        self, port_index: int, dev_type: HgiFwTypes | None = None
     ) -> None:
         """Create a port without a HGI80 attached."""
         master_fd, slave_fd = pty.openpty()  # pty, tty

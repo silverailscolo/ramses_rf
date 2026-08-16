@@ -49,7 +49,7 @@ def gwy_dev_id() -> DeviceIdT:
 
 @pytest.mark.xdist_group(name="virt_serial")
 async def _test_get_schedule(
-    gwy: Gateway, ctl_id: DeviceIdT, idx: str
+    gwy: Gateway, ctl_id: DeviceIdT, index: str
 ) -> None:
     """Test obtaining the version and schedule."""
 
@@ -67,7 +67,7 @@ async def _test_get_schedule(
     global_ver, did_io = await tcs._schedule_version()
     assert isinstance(global_ver, int) and did_io
 
-    zon: Zone = tcs.get_htg_zone(idx)
+    zon: Zone = tcs.get_htg_zone(index)
     schedule: WeeklySchedule | None = await zon.get_schedule()
 
     assert schedule is not None

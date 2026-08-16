@@ -90,7 +90,7 @@ class Parent:
         self.childs: list[Child] = []
 
     @property
-    def zone_idx(self) -> str:
+    def zone_index(self) -> str:
         """Return the domain or zone index.
 
         :returns: The index string.
@@ -98,8 +98,8 @@ class Parent:
         """
         return self._child_id
 
-    @zone_idx.setter
-    def zone_idx(self, value: str) -> None:
+    @zone_index.setter
+    def zone_index(self, value: str) -> None:
         """Set the domain or zone index after validation.
 
         :param value: The new index.
@@ -376,7 +376,7 @@ class Child:
             )
             and not child_id
         ):
-            child_id = child_id or getattr(parent, "idx", None)
+            child_id = child_id or getattr(parent, "index", None)
 
         if self._parent and self._parent != parent:
             prev_parent_class = self._parent.__class__.__name__

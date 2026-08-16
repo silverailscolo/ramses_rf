@@ -226,17 +226,17 @@ class _Temperature(TypedDict):
 class FaultLogEntryNull(TypedDict):
     """Empty fault log entry payload schema."""
 
-    _log_idx: LogIdxT
+    _log_index: LogIdxT
 
 
 class FaultLogEntry(TypedDict):
     """Fault log entry payload schema."""
 
-    _log_idx: LogIdxT
+    _log_index: LogIdxT
     timestamp: str
     fault_state: FaultState
     fault_type: FaultType
-    domain_idx: str
+    domain_index: str
     device_class: FaultDeviceClass
     device_id: DeviceIdT | None
     _unknown_3: str
@@ -394,7 +394,7 @@ class _empty(TypedDict):
 
 
 class _0004(TypedDict):
-    zone_idx: NotRequired[str | None]
+    zone_index: NotRequired[str | None]
     name: NotRequired[str | None]
 
 
@@ -407,7 +407,7 @@ class _0008(TypedDict):
 
 
 class _000a(TypedDict):
-    zone_idx: NotRequired[str]
+    zone_index: NotRequired[str]
     min_temp: float | None
     max_temp: float | None
     local_override: bool
@@ -429,12 +429,12 @@ class _0404(TypedDict):
 
 
 class _0418_NULL(TypedDict):
-    log_idx: NotRequired[LogIdxT]
+    log_index: NotRequired[LogIdxT]
     log_entry: None
 
 
 class _0418(TypedDict):
-    log_idx: LogIdxT
+    log_index: LogIdxT
     log_entry: tuple[str, ...]
 
 
@@ -482,12 +482,12 @@ class _1100(TypedDict):
     _unknown_1: NotRequired[str | None]
 
 
-class _1100_IDX(TypedDict):
+class _1100_INDEX(TypedDict):
     domain_id: str
 
 
 class _12a0(TypedDict):
-    hvac_idx: str
+    hvac_index: str
     indoor_humidity: NotRequired[_HexToTempT | None]
     outdoor_humidity: NotRequired[_HexToTempT | None]
     relative_humidity: NotRequired[_HexToTempT | None]
@@ -543,7 +543,7 @@ class _22f4(TypedDict):
 
 
 class _2309(TypedDict):
-    zone_idx: NotRequired[str]
+    zone_index: NotRequired[str]
     setpoint: float | None
 
 
@@ -656,7 +656,7 @@ class PayDictT:
     _10D0: TypeAlias = _10d0
     _10E1: TypeAlias = _10e1
     _1100: TypeAlias = _1100
-    _1100_IDX: TypeAlias = _1100_IDX
+    _1100_INDEX: TypeAlias = _1100_INDEX
     _1260: TypeAlias = _Temperature
     _1280: TypeAlias = OutdoorHumidity
     _1290: TypeAlias = OutdoorTemp

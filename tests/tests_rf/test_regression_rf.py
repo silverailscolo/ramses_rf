@@ -96,7 +96,7 @@ async def serialize_device(dev: Any) -> dict[str, Any]:
         data.update(
             {
                 "tcs_id": tcs.id if tcs else None,
-                "zone_idx": getattr(zone, "idx", None),
+                "zone_index": getattr(zone, "index", None),
             }
         )
 
@@ -269,8 +269,8 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
         # Add specific System (TCS) details if a TCS was discovered
         if gwy.tcs:
             zones_data = {}
-            for z in sorted(gwy.tcs.zones, key=lambda x: x.idx):
-                zones_data[z.idx] = {
+            for z in sorted(gwy.tcs.zones, key=lambda x: x.index):
+                zones_data[z.index] = {
                     "name": await z.name(),
                     "type": type(z).__name__,
                     "sensor": z.sensor.id if z.sensor else None,

@@ -23,7 +23,7 @@ from ramses_tx.typing import DeviceIdT
 from .. import exceptions as exc
 from ..const import DEV_TYPE_MAP
 from ..parsers.decoder import decode_packet
-from ..protocol.ramses import CODE_IDX_ARE_COMPLEX
+from ..protocol.ramses import CODE_INDEX_ARE_COMPLEX
 from ..routing import RoutingContext, StateHeader, extract_context_value
 
 from ..const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
@@ -62,7 +62,7 @@ class Message:
     # Domain Bridges (Injected by Gateway)
     _IS_CONTROLLER_CB: Callable[[str], bool] | None = None
     _GET_CODE_NAME_CB: Callable[[Code | str], str] | None = None
-    _GET_MSG_IDX_CB: Callable[[Any], dict[str, str]] | None = None
+    _GET_MSG_INDEX_CB: Callable[[Any], dict[str, str]] | None = None
 
     _gateway: Any | None = None
 
@@ -367,7 +367,7 @@ class Message:
     def _has_payload(self) -> bool:
         """Return False if there is no payload (may falsely return True).
 
-        The message (i.e. the raw payload) may still have an idx.
+        The message (i.e. the raw payload) may still have an index.
 
         :return: False if there is no payload (may falsely return True).
         :rtype: bool
@@ -403,8 +403,8 @@ class Message:
         self._has_array_ = True
 
     @property
-    def _idx(self) -> dict[str, str]:
-        """Get the domain_id/zone_idx/other_idx of a message payload.
+    def _index(self) -> dict[str, str]:
+        """Get the domain_id/zone_index/other_index of a message payload.
 
         Used to identify the zone/domain that a message applies to.
 
@@ -412,17 +412,17 @@ class Message:
             undetermined.
         :rtype: dict[str, str]
         """
-        if Message._GET_MSG_IDX_CB is not None:
-            return Message._GET_MSG_IDX_CB(self)
+        if Message._GET_MSG_INDEX_CB is not None:
+            return Message._GET_MSG_INDEX_CB(self)
 
-        IDX_NAMES = {
-            Code._0002: "other_idx",
+        INDEX_NAMES = {
+            Code._0002: "other_index",
             Code._10A0: SZ_DHW_INDEX,
             Code._1260: SZ_DHW_INDEX,
             Code._1F41: SZ_DHW_INDEX,
             Code._22C9: SZ_UFH_INDEX,
-            Code._2389: "other_idx",
-            Code._2D49: "other_idx",
+            Code._2389: "other_index",
+            Code._2D49: "other_index",
             Code._31D9: "hvac_id",
             Code._31DA: "hvac_id",
             Code._3220: "msg_id",
@@ -434,7 +434,7 @@ class Message:
 
         if (
             self._index_value in (True, False)
-            or self.code in CODE_IDX_ARE_COMPLEX
+            or self.code in CODE_INDEX_ARE_COMPLEX
         ):
             return {}
 
@@ -485,13 +485,13 @@ class Message:
             self.src.type == DEV_TYPE_MAP.UFC
         ):
             assert isinstance(self._index_value, str)  # mypy hint
-            return {IDX_NAMES[Code._22C9]: self._index_value}
+            return {INDEX_NAMES[Code._22C9]: self._index_value}
 
         assert isinstance(self._index_value, str)  # mypy hint
         default_index_name = (
             SZ_DOMAIN_INDEX if self._index_value[:1] == "F" else SZ_ZONE_INDEX
         )
-        index_name = IDX_NAMES.get(self.code, default_index_name)
+        index_name = INDEX_NAMES.get(self.code, default_index_name)
 
         return {index_name: self._index_value}
 

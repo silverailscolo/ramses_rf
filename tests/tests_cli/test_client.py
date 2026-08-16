@@ -125,7 +125,7 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     # Mock system_by_id for print_results
     mock_sys = MagicMock()
     mock_sys.dhw.schedule = [{"day": "Monday"}]
-    mock_sys.zone_by_idx = {"01": MagicMock(schedule=[{"day": "Tuesday"}])}
+    mock_sys.zone_by_index = {"01": MagicMock(schedule=[{"day": "Tuesday"}])}
     # Fix: Use integer key for faultlog to match expectations of print_results
     mock_sys._faultlog.faultlog = {0: "fault_data"}
     gateway.device_registry.system_by_id = {"01:123456": mock_sys}

@@ -116,9 +116,9 @@ async def test_get_faultlog_fake(fake_evofw3: Gateway) -> None:
         rf.add_reply_for_cmd(k, v)
 
     # we'll need null replies for all the other fault log slots (max 64?)
-    for idx in range(len(TEST_SUITE), 64):
+    for index in range(len(TEST_SUITE), 64):
         rf.add_reply_for_cmd(
-            list(TEST_SUITE.keys())[-1][:-2] + f"{idx:02X}",
+            list(TEST_SUITE.keys())[-1][:-2] + f"{index:02X}",
             list(TEST_SUITE.values())[-1],
         )
 
@@ -152,9 +152,9 @@ async def test_get_faultlog_empty(fake_evofw3: Gateway) -> None:
 
     # Prime the virtual RF with entirely empty (null) replies...
     rf: VirtualRf = fake_evofw3._engine._transport.get_extra_info("virtual_rf")
-    for idx in range(0, 64):
-        rq = f"RQ --- {TST_ID_} 01:145038 --:------ 0418 003 0000{idx:02X}"
-        # A real controller always replies with idx 00 for empty slots:
+    for index in range(0, 64):
+        rq = f"RQ --- {TST_ID_} 01:145038 --:------ 0418 003 0000{index:02X}"
+        # A real controller always replies with index 00 for empty slots:
         rp = f"RP --- 01:145038 {TST_ID_} --:------ 0418 022 000000B0000000000000000000007FFFFF7000000000"
         rf.add_reply_for_cmd(rq, rp)
 
