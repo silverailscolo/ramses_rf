@@ -60,6 +60,7 @@ from .const import (
     SZ_TEMPERATURE,
     SZ_UFH_INDEX,
     SZ_UNTIL,
+    DevType,
 )
 from .devices.hvac_ventilators import HvacVentilator
 from .messages import Message
@@ -271,10 +272,19 @@ def _resolve_logical_targets(
             targets.append(dst_dev)
 
     # 4. Virtual twins (Zones) get updates if explicitly addressed by index.
+    # For 30C9, only Controller/UFC broadcasts carry authoritative zone
+    # addressing; non-controller 30C9 (sensor broadcasts) is handled in step 8.
     if "zone_index" in p and tcs:
-        if zone := tcs.zone_by_index.get(p["zone_index"]):
-            if zone not in targets:
-                targets.append(zone)
+        is_ctrl_src = src_type in (
+            "01",
+            "02",
+            DevType.CTL,
+            DevType.UFC,
+        ) or getattr(msg.src, "id", "") == getattr(tcs, "id", "")
+        if msg.code != Code._30C9 or is_ctrl_src:
+            if zone := tcs.zone_by_index.get(p["zone_index"]):
+                if zone not in targets:
+                    targets.append(zone)
 
     # 5. Domain twins (TCS, DHW) get updates.
     if "domain_id" in p and tcs:
@@ -305,9 +315,10 @@ def _resolve_logical_targets(
 
     # 8. Sensor-sourced 30C9 has no zone_index (the sensor is not a controller,
     #    so _build_index_dict injects no zone_index), so step 4 misses the parent
-    #    zone.  Route 30C9 from a sensor to its parent zone so the zone's
+    #    zone. Route 30C9 from a sensor to its parent zone so the zone's
     #    current_temperature is hydrated even when the controller doesn't
     #    broadcast 30C9 for that zone.
+    #    Restricted to designated sensor or sole actuator (issue #976).
     #    See: https://github.com/ramses-rf/ramses_cc/issues/927
     if msg.code == Code._30C9 and src_dev and "temperature" in p:
         parent = getattr(src_dev, "_parent", None)
@@ -317,7 +328,14 @@ def _resolve_logical_targets(
             and hasattr(parent, "zone_state")
             and parent not in targets
         ):
-            targets.append(parent)
+            parent_sensor = getattr(parent, "sensor", None)
+            parent_actuators = getattr(parent, "actuators", [])
+            if src_dev is parent_sensor or (
+                parent_sensor is None
+                and len(parent_actuators) == 1
+                and src_dev in parent_actuators
+            ):
+                targets.append(parent)
 
     return targets
 

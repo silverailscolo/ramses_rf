@@ -613,6 +613,179 @@ class TestResolveLogicalTargets:
             "Zone target was not resolved using fallback gwy.tcs"
         )
 
+    def test_zone_temp_routes_to_designated_sensor(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify 30C9 routes to parent zone when src is the designated sensor."""
+        # Arrange
+        mock_zone = MagicMock()
+        mock_zone.temp_state = MagicMock()
+        mock_zone.zone_state = MagicMock()
+
+        mock_sensor = MagicMock()
+        mock_sensor.id = "22:017762"
+        mock_sensor.type = "22"
+        mock_sensor._parent = mock_zone
+        mock_sensor.tcs = None
+
+        mock_trv = MagicMock()
+        mock_trv.id = "04:005646"
+        mock_trv.type = "04"
+        mock_trv._parent = mock_zone
+        mock_trv.tcs = None
+
+        mock_zone.sensor = mock_sensor
+        mock_zone.actuators = [mock_trv]
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_sensor.id: mock_sensor,
+            mock_trv.id: mock_trv,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_sensor.id
+        msg.dst.id = mock_sensor.id
+        msg.code = Code._30C9
+        msg._has_array = False
+        payload = {"temperature": 21.5}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_zone in targets
+        assert mock_sensor in targets
+
+    def test_zone_temp_ignores_non_sensor_trv_when_sensor_present(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify 30C9 from TRV does not route to zone when separate sensor is set."""
+        # Arrange
+        mock_zone = MagicMock()
+        mock_zone.temp_state = MagicMock()
+        mock_zone.zone_state = MagicMock()
+
+        mock_sensor = MagicMock()
+        mock_sensor.id = "22:017762"
+        mock_sensor.type = "22"
+        mock_sensor._parent = mock_zone
+        mock_sensor.tcs = None
+
+        mock_trv = MagicMock()
+        mock_trv.id = "04:005646"
+        mock_trv.type = "04"
+        mock_trv._parent = mock_zone
+        mock_trv.tcs = None
+
+        mock_zone.sensor = mock_sensor
+        mock_zone.actuators = [mock_trv]
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_sensor.id: mock_sensor,
+            mock_trv.id: mock_trv,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_trv.id
+        msg.dst.id = mock_trv.id
+        msg.code = Code._30C9
+        msg._has_array = False
+        payload = {"temperature": 19.5}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_zone not in targets
+        assert mock_trv in targets
+
+    def test_zone_temp_routes_to_sole_actuator_when_no_sensor(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify 30C9 routes to parent zone when sole actuator is the only device."""
+        # Arrange
+        mock_zone = MagicMock()
+        mock_zone.temp_state = MagicMock()
+        mock_zone.zone_state = MagicMock()
+
+        mock_trv = MagicMock()
+        mock_trv.id = "04:005646"
+        mock_trv.type = "04"
+        mock_trv._parent = mock_zone
+        mock_trv.tcs = None
+
+        mock_zone.sensor = None
+        mock_zone.actuators = [mock_trv]
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_trv.id: mock_trv,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_trv.id
+        msg.dst.id = mock_trv.id
+        msg.code = Code._30C9
+        msg._has_array = False
+        payload = {"temperature": 20.0}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_zone in targets
+        assert mock_trv in targets
+
+    def test_zone_temp_ignores_trvs_when_multiple_actuators_and_no_sensor(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify 30C9 from TRV does not route to zone when multiple TRVs have no designated sensor."""
+        # Arrange
+        mock_zone = MagicMock()
+        mock_zone.temp_state = MagicMock()
+        mock_zone.zone_state = MagicMock()
+
+        mock_trv1 = MagicMock()
+        mock_trv1.id = "04:005646"
+        mock_trv1.type = "04"
+        mock_trv1._parent = mock_zone
+        mock_trv1.tcs = None
+
+        mock_trv2 = MagicMock()
+        mock_trv2.id = "04:005647"
+        mock_trv2.type = "04"
+        mock_trv2._parent = mock_zone
+        mock_trv2.tcs = None
+
+        mock_zone.sensor = None
+        mock_zone.actuators = [mock_trv1, mock_trv2]
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_trv1.id: mock_trv1,
+            mock_trv2.id: mock_trv2,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_trv1.id
+        msg.dst.id = mock_trv1.id
+        msg.code = Code._30C9
+        msg._has_array = False
+        payload = {"temperature": 19.0}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_zone not in targets
+        assert mock_trv1 in targets
+
 
 class TestCommandDispatcherSend:
     """Test CommandDispatcher.send returns Message instances consistently."""
