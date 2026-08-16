@@ -664,6 +664,34 @@ class DiscoveryScan:
                         code,
                         verb.strip(),
                     )
+                # DHW topology inference for known devices: directed interaction
+                # between a CTL (01:/23:) and a DHW sensor (07:) confirms binding.
+                elif (
+                    not is_hgi
+                    and device_id.startswith("07:")
+                    and not is_source
+                    and source
+                    and _is_valid_address(source)
+                    and source.startswith(("01:", "23:"))
+                    and code in (Code._10A0, Code._1260, Code._000C)
+                ):
+                    if device.bound_to != source:
+                        device.bound_to = source
+                        device.confidence = "high"
+                        self._dirty = True
+                elif (
+                    not is_hgi
+                    and device_id.startswith("07:")
+                    and is_source
+                    and destination
+                    and _is_valid_address(destination)
+                    and destination.startswith(("01:", "23:"))
+                    and code in (Code._10A0, Code._1260)
+                ):
+                    if device.bound_to != destination:
+                        device.bound_to = destination
+                        device.confidence = "high"
+                        self._dirty = True
             return
 
         now = dt.now().isoformat(timespec="seconds")
@@ -735,6 +763,29 @@ class DiscoveryScan:
                 and code in _HVAC_PARENT_INFERENCE_CODES
             ):
                 device.bound_to = source
+            # DHW topology inference: directed interaction between CTL and DHW sensor
+            elif (
+                not is_hgi
+                and device_id.startswith("07:")
+                and not is_source
+                and source
+                and _is_valid_address(source)
+                and source.startswith(("01:", "23:"))
+                and code in (Code._10A0, Code._1260, Code._000C)
+            ):
+                device.bound_to = source
+                device.confidence = "high"
+            elif (
+                not is_hgi
+                and device_id.startswith("07:")
+                and is_source
+                and destination
+                and _is_valid_address(destination)
+                and destination.startswith(("01:", "23:"))
+                and code in (Code._10A0, Code._1260)
+            ):
+                device.bound_to = destination
+                device.confidence = "high"
             self._devices[device_id] = device
             self._dirty = True
             _LOGGER.info(
@@ -826,6 +877,33 @@ class DiscoveryScan:
         ):
             device.bound_to = source
             changed = True
+        # DHW topology inference for existing devices
+        elif (
+            not is_hgi
+            and device_id.startswith("07:")
+            and not is_source
+            and source
+            and _is_valid_address(source)
+            and source.startswith(("01:", "23:"))
+            and code in (Code._10A0, Code._1260, Code._000C)
+        ):
+            if device.bound_to != source:
+                device.bound_to = source
+                device.confidence = "high"
+                changed = True
+        elif (
+            not is_hgi
+            and device_id.startswith("07:")
+            and is_source
+            and destination
+            and _is_valid_address(destination)
+            and destination.startswith(("01:", "23:"))
+            and code in (Code._10A0, Code._1260)
+        ):
+            if device.bound_to != destination:
+                device.bound_to = destination
+                device.confidence = "high"
+                changed = True
 
         # Upgrade confidence based on accumulated evidence
         new_conf = _recompute_confidence(device)

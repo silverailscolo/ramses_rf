@@ -199,19 +199,11 @@ def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
     )
     if tcs is None and hasattr(source_device, "dhw"):
         tcs = source_device
-    if tcs is None and hasattr(source_device, "_gateway"):
-        tcs = getattr(source_device._gateway, "tcs", None)
-    if tcs is None and getattr(msg, "_gateway", None) is not None:
-        tcs = getattr(msg._gateway, "tcs", None)
 
     if tcs is None:
         return None
 
-    if getattr(tcs, "dhw", None) is not None:
-        return cast(DhwZone | None, tcs.dhw)
-    if hasattr(tcs, "get_dhw_zone"):
-        return cast(DhwZone | None, tcs.get_dhw_zone(msg=msg))
-    return None
+    return cast(DhwZone | None, getattr(tcs, "dhw", None))
 
 
 def _resolve_logical_targets(
