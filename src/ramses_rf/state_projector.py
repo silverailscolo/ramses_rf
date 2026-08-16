@@ -60,6 +60,7 @@ from .const import (
     SZ_TEMPERATURE,
     SZ_UFH_INDEX,
     SZ_UNTIL,
+    DevType,
 )
 from .devices.hvac_ventilators import HvacVentilator
 from .messages import Message
@@ -160,7 +161,7 @@ _DHW_OPCODES: Final[frozenset[Code | str]] = frozenset(
 def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
     """Resolve the DhwZone that should ingest a DHW opcode (1260/10A0/1F41).
 
-    These payloads carry no ``zone_idx``/``domain_id``, so standard target
+    These payloads carry no ``zone_index``/``domain_id``, so standard target
     resolution in ``_resolve_logical_targets`` misses the DhwZone.
 
     ``1260`` is sent by the DhwSensor (or relayed by the Controller as an
@@ -199,19 +200,11 @@ def _get_dhw_zone_from_msg(msg: Message, source_device: Any) -> DhwZone | None:
     )
     if tcs is None and hasattr(source_device, "dhw"):
         tcs = source_device
-    if tcs is None and hasattr(source_device, "_gateway"):
-        tcs = getattr(source_device._gateway, "tcs", None)
-    if tcs is None and getattr(msg, "_gateway", None) is not None:
-        tcs = getattr(msg._gateway, "tcs", None)
 
     if tcs is None:
         return None
 
-    if getattr(tcs, "dhw", None) is not None:
-        return cast(DhwZone | None, tcs.dhw)
-    if hasattr(tcs, "get_dhw_zone"):
-        return cast(DhwZone | None, tcs.get_dhw_zone(msg=msg))
-    return None
+    return cast(DhwZone | None, getattr(tcs, "dhw", None))
 
 
 def _resolve_logical_targets(
@@ -278,11 +271,20 @@ def _resolve_logical_targets(
         ):
             targets.append(dst_dev)
 
-    # 4. Virtual twins (Zones) get updates if explicitly addressed by idx.
-    if "zone_idx" in p and tcs:
-        if zone := tcs.zone_by_idx.get(p["zone_idx"]):
-            if zone not in targets:
-                targets.append(zone)
+    # 4. Virtual twins (Zones) get updates if explicitly addressed by index.
+    # For 30C9, only Controller/UFC broadcasts carry authoritative zone
+    # addressing; non-controller 30C9 (sensor broadcasts) is handled in step 8.
+    if "zone_index" in p and tcs:
+        is_ctrl_src = src_type in (
+            "01",
+            "02",
+            DevType.CTL,
+            DevType.UFC,
+        ) or getattr(msg.src, "id", "") == getattr(tcs, "id", "")
+        if msg.code != Code._30C9 or is_ctrl_src:
+            if zone := tcs.zone_by_index.get(p["zone_index"]):
+                if zone not in targets:
+                    targets.append(zone)
 
     # 5. Domain twins (TCS, DHW) get updates.
     if "domain_id" in p and tcs:
@@ -296,7 +298,7 @@ def _resolve_logical_targets(
                 targets.append(tcs.dhw)
 
     # 6. System-level opcodes (2E04/0100/313F) target the TCS directly.
-    #    These packets have no domain_id/zone_idx, so steps 4/5 miss them.
+    #    These packets have no domain_id/zone_index, so steps 4/5 miss them.
     if (
         msg.code in (Code._2E04, Code._0100, Code._313F)
         and tcs
@@ -304,18 +306,19 @@ def _resolve_logical_targets(
     ):
         targets.append(tcs)
 
-    # 7. DHW opcodes (1260/10A0/1F41) carry no domain_id/zone_idx, so steps
+    # 7. DHW opcodes (1260/10A0/1F41) carry no domain_id/zone_index, so steps
     #    4/5 miss the DhwZone.  Route them via the shared helper.
     #    See: https://github.com/ramses-rf/ramses_cc/issues/843
     dhw = _get_dhw_zone_from_msg(msg, src_dev)
     if dhw is not None and dhw not in targets:
         targets.append(dhw)
 
-    # 8. Sensor-sourced 30C9 has no zone_idx (the sensor is not a controller,
-    #    so _build_idx_dict injects no zone_idx), so step 4 misses the parent
-    #    zone.  Route 30C9 from a sensor to its parent zone so the zone's
+    # 8. Sensor-sourced 30C9 has no zone_index (the sensor is not a controller,
+    #    so _build_index_dict injects no zone_index), so step 4 misses the parent
+    #    zone. Route 30C9 from a sensor to its parent zone so the zone's
     #    current_temperature is hydrated even when the controller doesn't
     #    broadcast 30C9 for that zone.
+    #    Restricted to designated sensor or sole actuator (issue #976).
     #    See: https://github.com/ramses-rf/ramses_cc/issues/927
     if msg.code == Code._30C9 and src_dev and "temperature" in p:
         parent = getattr(src_dev, "_parent", None)
@@ -325,7 +328,14 @@ def _resolve_logical_targets(
             and hasattr(parent, "zone_state")
             and parent not in targets
         ):
-            targets.append(parent)
+            parent_sensor = getattr(parent, "sensor", None)
+            parent_actuators = getattr(parent, "actuators", [])
+            if src_dev is parent_sensor or (
+                parent_sensor is None
+                and len(parent_actuators) == 1
+                and src_dev in parent_actuators
+            ):
+                targets.append(parent)
 
     return targets
 
@@ -633,11 +643,13 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
             if (
                 p.get(SZ_DOMAIN_INDEX)
                 or p.get("domain_id")
-                or p.get("domain_idx")
+                or p.get("domain_index")
             ) == "FC":
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
         elif (
-            "ufx_idx" not in p and SZ_UFH_INDEX not in p and "ufh_idx" not in p
+            "ufx_index" not in p
+            and SZ_UFH_INDEX not in p
+            and "ufh_index" not in p
         ):
             updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
@@ -647,7 +659,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
             and (
                 p.get(SZ_DOMAIN_INDEX)
                 or p.get("domain_id")
-                or p.get("domain_idx")
+                or p.get("domain_index")
             )
             != "FC"
         ):
@@ -693,7 +705,7 @@ def _update_faultlog_state(
         return
 
     # Guard: Ensure the entry index exists in the parsed payload
-    if "log_idx" not in p:
+    if "log_index" not in p:
         return
 
     try:

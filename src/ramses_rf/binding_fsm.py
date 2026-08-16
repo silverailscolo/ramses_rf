@@ -69,7 +69,7 @@ CONFIRM_TIMEOUT_SECS: Final[float] = (
     3  # automatically Bound, from BoundAccepted > this # of seconds
 )
 WAITING_TIMEOUT_SECS: Final[float] = (
-    5  # fail Listen/Offer/Accept if no pkt rcvd > this # of seconds
+    5  # fail Listen/Offer/Accept if no packet rcvd > this # of seconds
 )
 
 # raise a BindTimeoutError if expected Pkt is not received before this number of seconds
@@ -192,9 +192,11 @@ class BindingManagerBase:
         self.set_state(DevIsNotBinding)
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         return f"{self._dev.id} ({self.role}): {self.state!r}"
 
     def __str__(self) -> str:
+        """Return a human-readable string representation."""
         return f"{self._dev.id}: {self.state}"
 
     def cancel(self) -> None:
@@ -370,7 +372,7 @@ class BindingManagerRespondent(BindingManagerBase):
                 src=Address(self._dev.id),
                 dst=Address(tender.src.id),
                 action=Action.PUT_BIND,
-                data={"verb": W_, "codes": codes, "idx": zone_index},
+                data={"verb": W_, "codes": codes, "index": zone_index},
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
@@ -533,9 +535,9 @@ class BindingManagerSupplicant(BindingManagerBase):
         :param confirm_code: The code to confirm with.
         :return: The sent confirm packet.
         """
-        # HACK assumes all idx same
-        if accept.payload and hasattr(accept.payload, "idx"):
-            index = str(accept.payload.idx)
+        # HACK assumes all index same
+        if accept.payload and hasattr(accept.payload, "index"):
+            index = str(accept.payload.index)
         elif accept._dto.raw_payload:
             index = accept._dto.raw_payload[:2]
         else:
@@ -549,7 +551,7 @@ class BindingManagerSupplicant(BindingManagerBase):
                 src=Address(self._dev.id),
                 dst=Address(target_id),
                 action=Action.PUT_BIND,
-                data={"verb": I_, "codes": confirm_code, "idx": index},
+                data={"verb": I_, "codes": confirm_code, "index": index},
             )
         )
         if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
@@ -596,8 +598,8 @@ class BindStateBase:
     _attr_role = BindRole.IS_UNKNOWN
 
     _cmds_sent: int = 0  # num of bind cmds sent
-    _pkts_rcvd: int = (
-        0  # num of bind pkts rcvd (incl. any echos of sender's own cmd)
+    _packets_rcvd: int = (
+        0  # num of bind packets rcvd (incl. any echos of sender's own cmd)
     )
 
     _has_wait_timer: bool = False
@@ -633,9 +635,11 @@ class BindStateBase:
             )
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         return f"{self.__class__.__name__} (tx={self._cmds_sent})"
 
     def __str__(self) -> str:
+        """Return a human-readable string representation."""
         return self.__class__.__name__
 
     @property
@@ -806,7 +810,7 @@ class _DevIsWaitingForMsg(BindStateBase):
     Failure occurs when the timer expires (timeout) before receiving the Packet.
     """
 
-    _expected_pkt_phase: BindPhase
+    _expected_packet_phase: BindPhase
 
     _wait_timer_limit: float = 5.1  # WAITING_TIMEOUT_SECS
 
@@ -825,9 +829,9 @@ class _DevIsWaitingForMsg(BindStateBase):
         super()._set_context_state(next_state)
 
     def rcvd_msg(self, msg: Message) -> None:
-        """If the msg is the waited-for pkt, transition to the next state."""
+        """If the msg is the waited-for packet, transition to the next state."""
         if not self._fut.done() and self.is_phase(
-            msg, self._expected_pkt_phase
+            msg, self._expected_packet_phase
         ):
             self._fut.set_result(msg)
 
@@ -899,7 +903,7 @@ class _DevSendCmdUntilReply(_DevIsWaitingForMsg, _DevIsReadyToSendCmd):
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the expected reply, transition to the next state."""
         if not self._fut.done() and self.is_phase(
-            msg, self._expected_pkt_phase
+            msg, self._expected_packet_phase
         ):
             self._fut.set_result(msg)
 
@@ -925,6 +929,7 @@ class RespHasBoundAsRespondent(BindStateBase):
     _attr_role = BindRole.IS_DORMANT
 
     def __init__(self, context: BindingManagerBase) -> None:
+        """Initialize the respondent bound state."""
         super().__init__(context)
         _LOGGER.info("%s: Binding completed as respondent", context._dev.id)
 
@@ -934,7 +939,7 @@ class RespIsWaitingForAddenda(_DevIsWaitingForMsg, BindStateBase):
 
     _attr_role = BindRole.RESPONDENT
 
-    _expected_pkt_phase: BindPhase = BindPhase.RATIFY
+    _expected_packet_phase: BindPhase = BindPhase.RATIFY
     _next_ctx_state: type[BindStateBase] = RespHasBoundAsRespondent
 
     async def wait_for_addenda(self, timeout: float | None = None) -> Message:
@@ -948,7 +953,7 @@ class RespSendAcceptWaitForConfirm(_DevSendCmdUntilReply, BindStateBase):
     _attr_role = BindRole.RESPONDENT
 
     _expected_cmd_phase: BindPhase = BindPhase.ACCEPT
-    _expected_pkt_phase: BindPhase = BindPhase.AFFIRM
+    _expected_packet_phase: BindPhase = BindPhase.AFFIRM
     _next_ctx_state: type[BindStateBase] = (
         RespHasBoundAsRespondent  # or: RespIsWaitingForAddenda
     )
@@ -967,7 +972,7 @@ class RespIsWaitingForOffer(_DevIsWaitingForMsg, BindStateBase):
 
     _attr_role = BindRole.RESPONDENT
 
-    _expected_pkt_phase: BindPhase = BindPhase.TENDER
+    _expected_packet_phase: BindPhase = BindPhase.TENDER
     _next_ctx_state: type[BindStateBase] = RespSendAcceptWaitForConfirm
 
     async def wait_for_offer(self, timeout: float | None = None) -> Message:
@@ -984,6 +989,7 @@ class SuppHasBoundAsSupplicant(BindStateBase):
     _attr_role = BindRole.IS_DORMANT
 
     def __init__(self, context: BindingManagerBase) -> None:
+        """Initialize the supplicant bound state."""
         super().__init__(context)
         _LOGGER.info("%s: Binding completed as supplicant", context._dev.id)
 
@@ -1028,7 +1034,7 @@ class SuppSendOfferWaitForAccept(_DevSendCmdUntilReply, BindStateBase):
     _attr_role = BindRole.SUPPLICANT
 
     _expected_cmd_phase: BindPhase = BindPhase.TENDER
-    _expected_pkt_phase: BindPhase = BindPhase.ACCEPT
+    _expected_packet_phase: BindPhase = BindPhase.ACCEPT
     _next_ctx_state: type[BindStateBase] = SuppIsReadyToSendConfirm
 
     def cast_offer(self, timeout: float | None = None) -> None:

@@ -1,7 +1,7 @@
 """RAMSES RF - DHW command intent to L3 payload translation."""
 
 from ramses_rf.commands.builders.helpers import (
-    check_idx,
+    check_index,
     normalise_mode,
     normalise_until,
     resolve_addrs,
@@ -17,7 +17,9 @@ from ramses_tx.helpers import hex_from_dtm
 
 def build_get_dhw_params(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_PARAMS intent into a CommandDTO."""
-    dhw_idx = check_idx(intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0)))
+    dhw_index = check_index(
+        intent.get(SZ_DHW_INDEX, intent.get("dhw_index", 0))
+    )
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -25,7 +27,7 @@ def build_get_dhw_params(intent: Command) -> CommandDTO:
         addr2=addr2,
         addr3=addr3,
         code=Code._10A0,
-        payload=dhw_idx,
+        payload=dhw_index,
         priority=Priority.DEFAULT,
         num_repeats=DEFAULT_NUM_REPEATS,
     )
@@ -33,7 +35,7 @@ def build_get_dhw_params(intent: Command) -> CommandDTO:
 
 def build_set_dhw_params(intent: Command) -> CommandDTO:
     """Translate a SET_DHW_PARAMS intent into a CommandDTO."""
-    dhw_idx = intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0))
+    dhw_index = intent.get(SZ_DHW_INDEX, intent.get("dhw_index", 0))
     setpoint = intent.get("setpoint")
     if setpoint is None:
         setpoint = 50.0
@@ -53,7 +55,7 @@ def build_set_dhw_params(intent: Command) -> CommandDTO:
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     payload = DhwParamsPayload(
-        dhw_index=dhw_idx,
+        dhw_index=dhw_index,
         setpoint=setpoint,
         overrun=overrun,
         differential=differential,
@@ -72,7 +74,9 @@ def build_set_dhw_params(intent: Command) -> CommandDTO:
 
 def build_get_dhw_temp(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_TEMP intent into a CommandDTO."""
-    dhw_idx = check_idx(intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0)))
+    dhw_index = check_index(
+        intent.get(SZ_DHW_INDEX, intent.get("dhw_index", 0))
+    )
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -80,7 +84,7 @@ def build_get_dhw_temp(intent: Command) -> CommandDTO:
         addr2=addr2,
         addr3=addr3,
         code=Code._1260,
-        payload=dhw_idx,
+        payload=dhw_index,
         priority=Priority.DEFAULT,
         num_repeats=DEFAULT_NUM_REPEATS,
     )
@@ -90,7 +94,7 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_DHW_TEMP intent into a CommandDTO."""
     from ramses_rf.const import DEV_TYPE_MAP
 
-    dhw_idx = intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0))
+    dhw_index = intent.get(SZ_DHW_INDEX, intent.get("dhw_index", 0))
     temperature = intent.get("temperature")
 
     if getattr(intent.src, "type", None) not in (
@@ -104,7 +108,9 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 
     # I_ requires addr0=src, addr2=dst (which are the same for put_dhw_temp)
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.src)
-    payload = DhwTempPayload(dhw_index=dhw_idx, temperature=temperature).hex()
+    payload = DhwTempPayload(
+        dhw_index=dhw_index, temperature=temperature
+    ).hex()
 
     return CommandDTO(
         verb=I_,
@@ -120,7 +126,9 @@ def build_put_dhw_temp(intent: Command) -> CommandDTO:
 
 def build_get_dhw_mode(intent: Command) -> CommandDTO:
     """Translate a GET_DHW_MODE intent into a CommandDTO."""
-    dhw_idx = check_idx(intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0)))
+    dhw_index = check_index(
+        intent.get(SZ_DHW_INDEX, intent.get("dhw_index", 0))
+    )
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=RQ,
@@ -128,7 +136,7 @@ def build_get_dhw_mode(intent: Command) -> CommandDTO:
         addr2=addr2,
         addr3=addr3,
         code=Code._1F41,
-        payload=dhw_idx,
+        payload=dhw_index,
         priority=Priority.DEFAULT,
         num_repeats=DEFAULT_NUM_REPEATS,
     )
@@ -136,7 +144,9 @@ def build_get_dhw_mode(intent: Command) -> CommandDTO:
 
 def build_set_dhw_mode(intent: Command) -> CommandDTO:
     """Translate a SET_DHW_MODE intent into a CommandDTO."""
-    dhw_idx = check_idx(intent.get(SZ_DHW_INDEX, intent.get("dhw_idx", 0)))
+    dhw_index = check_index(
+        intent.get(SZ_DHW_INDEX, intent.get("dhw_index", 0))
+    )
     mode = intent.get("mode")
     active = intent.get("active")
     until = intent.get("until")
@@ -153,7 +163,7 @@ def build_set_dhw_mode(intent: Command) -> CommandDTO:
 
     payload = "".join(
         (
-            dhw_idx,
+            dhw_index,
             "FF" if active is None else "01" if bool(active) else "00",
             mode,
             "FFFFFF" if duration is None else f"{duration:06X}",

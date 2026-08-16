@@ -50,8 +50,8 @@ async def test_tcs_lockless_concurrent_schedules(fake_evofw3: Gateway) -> None:
     """
 
     # Arrange: Bootstrap TCS via packet ingestion
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    fake_evofw3._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    fake_evofw3._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
 
     tcs: Evohome | None = fake_evofw3.tcs

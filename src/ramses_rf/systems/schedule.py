@@ -231,7 +231,8 @@ class ScheduleData:
         """
         zone_index = str(
             data.get(
-                SZ_ZONE_INDEX, data.get(SZ_ZONE_IDX, data.get("zone_idx", ""))
+                SZ_ZONE_INDEX,
+                data.get(SZ_ZONE_IDX, data.get("zone_index", "")),
             )
         )
         raw_schedule = data.get(SZ_SCHEDULE)
@@ -433,7 +434,7 @@ def full_schedule_to_fragments(
     ]
 
 
-def _to_protocol_zone_idx(zone_index: str) -> str:
+def _to_protocol_zone_index(zone_index: str) -> str:
     """Translate domain zone index string to RAMSES RF protocol index.
 
     DHW uses domain identifier 'HW' externally, which translates to '00' in protocol.
@@ -459,7 +460,7 @@ class Schedule:  # 0404
 
         self.id = zone.id
         self._zone = zone
-        self.idx = zone.idx
+        self.index = zone.index
 
         self.ctl = zone.ctl
         self.tcs = zone.tcs
@@ -535,12 +536,15 @@ class Schedule:  # 0404
         if not isinstance(payload, dict):
             return
 
-        pkt_zone_idx = payload.get(
-            SZ_ZONE_INDEX, payload.get(SZ_ZONE_IDX, payload.get("zone_idx"))
+        packet_zone_index = payload.get(
+            SZ_ZONE_INDEX, payload.get(SZ_ZONE_IDX, payload.get("zone_index"))
         )
-        if pkt_zone_idx is not None:
-            translated_idx = _to_protocol_zone_idx(self.idx)
-            if pkt_zone_idx != translated_idx and pkt_zone_idx != self.idx:
+        if packet_zone_index is not None:
+            translated_index = _to_protocol_zone_index(self.index)
+            if (
+                packet_zone_index != translated_index
+                and packet_zone_index != self.index
+            ):
                 return
 
         try:
@@ -668,7 +672,7 @@ class Schedule:  # 0404
             self,
             Action.GET_SCHEDULE_FRAGMENT,
             data={
-                SZ_ZONE_INDEX: self.idx,
+                SZ_ZONE_INDEX: self.index,
                 SZ_FRAGMENT_NUMBER: frag_num,
                 SZ_TOTAL_FRAGMENTS: frag_set_size,
             },
@@ -691,7 +695,7 @@ class Schedule:  # 0404
             if attempts > MAX_FETCH_ATTEMPTS:
                 self._set_state(ScheduleIsFaulted)
                 raise exc.ScheduleFlowError(
-                    f"Exceeded max fragment fetch attempts for zone {self.idx}"
+                    f"Exceeded max fragment fetch attempts for zone {self.index}"
                 )
 
             frag_num = next(
@@ -769,8 +773,8 @@ class Schedule:  # 0404
         """
         if payload_set == [None]:
             self._full_schedule = {
-                SZ_ZONE_INDEX: self.idx,
-                SZ_ZONE_IDX: self.idx,
+                SZ_ZONE_INDEX: self.index,
+                SZ_ZONE_IDX: self.index,
             }
             return self._full_schedule
 
@@ -790,7 +794,7 @@ class Schedule:  # 0404
                 "Failed to decompress schedule fragments"
             ) from err
 
-        if self.idx == "HW":
+        if self.index == "HW":
             schedule[SZ_ZONE_INDEX] = "HW"
             schedule[SZ_ZONE_IDX] = "HW"
         self._full_schedule = schedule
@@ -874,7 +878,7 @@ class Schedule:  # 0404
             self,
             Action.SET_SCHEDULE_FRAGMENT,
             data={
-                SZ_ZONE_INDEX: self.idx,
+                SZ_ZONE_INDEX: self.index,
                 SZ_FRAGMENT_NUMBER: fragment_number,
                 SZ_TOTAL_FRAGMENTS: total_fragments,
                 "fragment": fragment,
@@ -894,8 +898,8 @@ class Schedule:  # 0404
         :raises exc.ScheduleError: On validation failure.
         """
         full_schedule: WeeklyScheduleDict = {
-            SZ_ZONE_INDEX: self.idx,
-            SZ_ZONE_IDX: self.idx,
+            SZ_ZONE_INDEX: self.index,
+            SZ_ZONE_IDX: self.index,
             SZ_SCHEDULE: schedule,
         }
 
@@ -905,10 +909,10 @@ class Schedule:  # 0404
         except (ValueError, KeyError, TypeError) as err:
             raise exc.ScheduleError(f"failed to set schedule: {err}") from err
 
-        if self.idx == "HW":
+        if self.index == "HW":
             # Translate DHW domain index 'HW' to protocol zone index '00'
-            validated[SZ_ZONE_INDEX] = _to_protocol_zone_idx(self.idx)
-            validated[SZ_ZONE_IDX] = _to_protocol_zone_idx(self.idx)
+            validated[SZ_ZONE_INDEX] = _to_protocol_zone_index(self.index)
+            validated[SZ_ZONE_IDX] = _to_protocol_zone_index(self.index)
 
         return validated
 

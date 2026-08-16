@@ -31,11 +31,11 @@ def build_get_schedule_fragment(intent: Command) -> CommandDTO:
     """Translate a GET_SCHEDULE_FRAGMENT intent into a CommandDTO.
 
     :param intent: The GET_SCHEDULE_FRAGMENT intent. It is expected to
-        contain `zone_index` / `zone_idx` (str | int), `fragment_number` / `frag_number` (int, default 1),
+        contain `zone_index` / `zone_index` (str | int), `fragment_number` / `frag_number` (int, default 1),
         and `total_fragments` / `total_frags` (int, default 0) in its data dictionary.
     :return: A populated CommandDTO.
     """
-    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
+    zone_index = intent.get("zone_index", intent.get("zone_index"))
     frag_number = intent.get(
         "fragment_number", intent.get("frag_number", intent.get("frag_num", 1))
     )
@@ -43,8 +43,8 @@ def build_get_schedule_fragment(intent: Command) -> CommandDTO:
         "total_fragments", intent.get("total_frags", intent.get("frag_cnt", 0))
     )
 
-    if zone_idx is None:
-        raise ValueError("Missing 'zone_index'/'zone_idx' in intent data")
+    if zone_index is None:
+        raise ValueError("Missing 'zone_index'/'zone_index' in intent data")
 
     if frag_number == 0:
         raise ValueError(f"frag_number={frag_number}, but it is 1-indexed")
@@ -58,7 +58,7 @@ def build_get_schedule_fragment(intent: Command) -> CommandDTO:
         )
 
     payload = ScheduleFragmentPayload(
-        zone_index=zone_idx,
+        zone_index=zone_index,
         frag_number=frag_number,
         total_frags=total_frags,
         fragment_bytes=b"",
@@ -82,11 +82,11 @@ def build_set_schedule_fragment(intent: Command) -> CommandDTO:
     """Translate a SET_SCHEDULE_FRAGMENT intent into a CommandDTO.
 
     :param intent: The SET_SCHEDULE_FRAGMENT intent. It is expected to
-        contain `zone_index` / `zone_idx` (str | int), `fragment_number` / `frag_num` (int),
+        contain `zone_index` / `zone_index` (str | int), `fragment_number` / `frag_num` (int),
         `total_fragments` / `frag_cnt` (int), and `fragment` (str) in its data dictionary.
     :return: A populated CommandDTO.
     """
-    zone_idx = intent.get("zone_index", intent.get("zone_idx"))
+    zone_index = intent.get("zone_index", intent.get("zone_index"))
     frag_num = intent.get(
         "fragment_number", intent.get("frag_num", intent.get("frag_number"))
     )
@@ -96,7 +96,7 @@ def build_set_schedule_fragment(intent: Command) -> CommandDTO:
     fragment = intent.get("fragment")
 
     if (
-        zone_idx is None
+        zone_index is None
         or frag_num is None
         or frag_cnt is None
         or fragment is None
@@ -112,7 +112,7 @@ def build_set_schedule_fragment(intent: Command) -> CommandDTO:
 
     frag_bytes = bytes.fromhex(fragment)
     payload = ScheduleFragmentPayload(
-        zone_index=zone_idx,
+        zone_index=zone_index,
         frag_number=frag_num,
         total_frags=frag_cnt,
         fragment_bytes=frag_bytes,

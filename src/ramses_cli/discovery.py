@@ -200,7 +200,7 @@ async def set_schedule(
     :param schedule: A JSON string describing the full schedule dictionary.
     """
     schedule_ = json.loads(schedule)
-    zone_idx = schedule_.get(SZ_ZONE_INDEX, schedule_.get("zone_idx"))
+    zone_index = schedule_.get(SZ_ZONE_INDEX, schedule_.get("zone_index"))
 
     controller = gateway.device_registry.get_device(
         controller_id, cls=Controller
@@ -209,7 +209,7 @@ async def set_schedule(
         _LOGGER.error("set_schedule(): Controller has no TCS active.")
         return
 
-    zone = controller.tcs.get_htg_zone(zone_idx)
+    zone = controller.tcs.get_htg_zone(zone_index)
 
     try:
         await zone.set_schedule(schedule_[SZ_SCHEDULE])  # 0404
@@ -353,7 +353,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                 )
 
         elif code == Code._000C:
-            for zone_idx in range(16):  # also: FA-FF?
+            for zone_index in range(16):  # also: FA-FF?
                 gateway.send_cmd(
                     CommandDTO(
                         verb=RQ,
@@ -361,7 +361,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         addr2=device_id,
                         addr3=NON_DEV_ADDR.id,
                         code=code,
-                        payload=f"{zone_idx:02X}00",
+                        payload=f"{zone_index:02X}00",
                     )
                 )
 
@@ -369,7 +369,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
             continue
 
         elif code in (Code._01D0, Code._01E9):
-            for str_zone_idx in ("00", "01", "FC"):
+            for str_zone_index in ("00", "01", "FC"):
                 gateway.send_cmd(
                     CommandDTO(
                         verb=W_,
@@ -377,7 +377,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         addr2=device_id,
                         addr3=NON_DEV_ADDR.id,
                         code=code,
-                        payload=f"{str_zone_idx}00",
+                        payload=f"{str_zone_index}00",
                     )
                 )
                 gateway.send_cmd(
@@ -387,7 +387,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         addr2=device_id,
                         addr3=NON_DEV_ADDR.id,
                         code=code,
-                        payload=f"{str_zone_idx}03",
+                        payload=f"{str_zone_index}03",
                     )
                 )
 
@@ -420,13 +420,13 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
             gateway.send_cmd(cmd2)
 
         elif code == Code._0418:
-            for log_idx in range(2):
+            for log_index in range(2):
                 cmd3 = build_dto(
                     Intent(
                         src=HGI_DEV_ADDR,
                         dst=Address(device_id),
                         action=Action.GET_FAULTLOG_ENTRY,
-                        data={SZ_LOG_INDEX: log_idx},
+                        data={SZ_LOG_INDEX: log_index},
                     )
                 )
                 gateway.send_cmd(cmd3)

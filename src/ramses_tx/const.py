@@ -19,11 +19,11 @@ DEV_MODE = __dev_mode__
 DEFAULT_DISABLE_QOS: Final[bool | None] = None
 DEFAULT_WAIT_FOR_REPLY: Final[bool | None] = None
 
-#: Waiting for echo pkt after cmd sent (seconds)
+#: Waiting for echo packet after cmd sent (seconds)
 # NOTE: Increased to 3.0s to support high-latency transports (e.g., MQTT)
 DEFAULT_ECHO_TIMEOUT: Final[float] = 3.00
 
-#: Waiting for reply pkt after echo pkt rcvd (seconds)
+#: Waiting for reply packet after echo packet rcvd (seconds)
 # NOTE: Increased to 3.0s to support high-latency transports (e.g., MQTT)
 DEFAULT_RPLY_TIMEOUT: Final[float] = 3.00
 DEFAULT_BUFFER_SIZE: Final[int] = 32
@@ -116,9 +116,11 @@ class AttrDict(dict):  # type: ignore[type-arg]
         raise TypeError(f"'{self.__class__.__name__}' object is read only")
 
     def __setitem__(self, key: Any, value: Any) -> NoReturn:
+        """Prevent item assignment on read-only dictionary."""
         self._readonly()
 
     def __delitem__(self, key: Any) -> NoReturn:
+        """Prevent item deletion on read-only dictionary."""
         self._readonly()
 
     def clear(self) -> NoReturn:
@@ -197,6 +199,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         super().__init__(self._forward)
 
     def __getitem__(self, key: str) -> Any:
+        """Retrieve an item by key from the mapping."""
         if key in self._main_table:  # map[ZON_ROLE.DHW] -> "dhw_sensor"
             return list(self._main_table[key].values())[0]
         # if key in self._forward:  # map["0D"] -> "dhw_sensor"
@@ -206,6 +209,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         return super().__getitem__(key)
 
     def __getattr__(self, name: str) -> Any:
+        """Retrieve an attribute by name from the table."""
         if name in self._main_table:  # map.DHW -> "0D" (using slug)
             if (result := list(self._main_table[name].keys())[0]) is not None:
                 return result
@@ -763,7 +767,7 @@ IndexT = Literal[
 
 LOOKUP_PUZZ = {
     "10": "engine",  # .    # version str, e.g. v0.14.0
-    "11": "impersonating",  # pkt header, e.g. 30C9| I|03:123001 (15 characters, packed)
+    "11": "impersonating",  # packet header, e.g. 30C9| I|03:123001 (15 characters, packed)
     "12": "message",  # .   # message only, max len is 16 ascii characters
     "13": "message",  # .   # message only, but without a timestamp, max len 22 chars
     "20": "engine",  # .    # version str, e.g. v0.50.0, has higher-precision timestamp

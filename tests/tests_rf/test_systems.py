@@ -67,7 +67,7 @@ def create_mock_message(tcs: SystemBase, payload: Any) -> MagicMock:
     """Create a mock message that looks like it came from the TCS
     controller.
 
-    Includes internal structures (_pkt, _ctx) required for logging/caching.
+    Includes internal structures (_packet, _ctx) required for logging/caching.
     """
     mock_msg = MagicMock(spec=Message)
     mock_msg.code = Code._3150
@@ -79,8 +79,8 @@ def create_mock_message(tcs: SystemBase, payload: Any) -> MagicMock:
     mock_msg.payload = payload
 
     # Mock the internal packet structure required by Entity logging
-    mock_msg._pkt = MagicMock()
-    mock_msg._pkt._ctx = f"{dt.now().isoformat()}_{tcs.id}"
+    mock_msg._packet = MagicMock()
+    mock_msg._packet._ctx = f"{dt.now().isoformat()}_{tcs.id}"
 
     return mock_msg
 
@@ -98,8 +98,8 @@ async def test_system_handle_msg_3150_real_packet(
     a dict) that the current code can handle.
     """
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
 
     tcs = gwy.tcs
@@ -116,8 +116,8 @@ async def test_system_handle_msg_3150_force_list(fake_evofw3: Gateway) -> None:
     gwy = fake_evofw3
 
     # Bootstrap TCS
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
     tcs = gwy.tcs
     assert tcs is not None  # Ensure TCS exists for Mypy
@@ -144,8 +144,8 @@ async def test_system_handle_msg_3150_force_dict(fake_evofw3: Gateway) -> None:
     gwy = fake_evofw3
 
     # Bootstrap TCS
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
     tcs = gwy.tcs
     assert tcs is not None  # Ensure TCS exists for Mypy
@@ -168,8 +168,8 @@ async def test_system_handle_msg_3150_list_no_match(
 ) -> None:
     """Verify list payload ignores unrelated domains."""
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
     tcs = gwy.tcs
     assert tcs is not None
@@ -187,8 +187,8 @@ async def test_system_handle_msg_3150_dict_no_match(
 ) -> None:
     """Verify dict payload ignores unrelated domains."""
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
     tcs = gwy.tcs
     assert tcs is not None
@@ -206,8 +206,8 @@ async def test_logbook_setup_discovery_creates_task(
 ) -> None:
     """Verify Logbook actively schedules fault log retrieval on discovery."""
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
 
     tcs = gwy.tcs
@@ -226,8 +226,8 @@ async def test_sysmode_system_mode_async_cache_lookup(
 ) -> None:
     """Verify system_mode retrieves state asynchronously from CQRS read-model."""
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
 
     tcs = gwy.tcs
@@ -267,7 +267,7 @@ def mock_tcs(mock_system_gwy: MagicMock) -> MagicMock:
     tcs.ctl.id = "01:123456"
     tcs.ctl.addr = MagicMock()
     tcs.dhw = None
-    tcs.zone_by_idx = {}
+    tcs.zone_by_index = {}
     tcs._max_zones = 12
     return tcs
 
@@ -284,7 +284,7 @@ def test_transform_function() -> None:
 async def test_zone_base(mock_tcs: MagicMock) -> None:
     """Test the ZoneBase initialization and base methods."""
     zon = ZoneBase(mock_tcs, "00")
-    assert zon.idx == "00"
+    assert zon.index == "00"
     assert zon.id == "01:123456_00"
     assert repr(zon) == "01:123456_00 (None)"
 
@@ -327,7 +327,7 @@ async def test_zone_schedule(mock_tcs: MagicMock) -> None:
 async def test_dhw_zone_initialization(mock_tcs: MagicMock) -> None:
     """Test the DhwZone initialization constraints."""
     dhw = DhwZone(mock_tcs, "HW")
-    assert dhw.idx == "HW"
+    assert dhw.index == "HW"
 
     mock_tcs.dhw = dhw
     with pytest.raises(SchemaInconsistentError):
@@ -386,13 +386,13 @@ async def test_dhw_commands(mock_tcs: MagicMock) -> None:
 async def test_zone_initialization(mock_tcs: MagicMock) -> None:
     """Test standard Zone initialisation and validation rules."""
     zon = Zone(mock_tcs, "00")
-    assert zon.idx == "00"
+    assert zon.index == "00"
 
-    mock_tcs.zone_by_idx = {"00": zon}
+    mock_tcs.zone_by_index = {"00": zon}
     with pytest.raises(SchemaInconsistentError):
         Zone(mock_tcs, "00")
 
-    mock_tcs.zone_by_idx = {}
+    mock_tcs.zone_by_index = {}
     with pytest.raises(SchemaInconsistentError):
         Zone(mock_tcs, "0C")
 
@@ -469,7 +469,7 @@ def _create_mock_zone() -> Zone:
     mock_tcs = MagicMock()
     mock_tcs.id = "01:123456"
     mock_tcs._gateway = MagicMock()
-    mock_tcs.zone_by_idx = {}
+    mock_tcs.zone_by_index = {}
     mock_tcs._max_zones = 12
     mock_tcs.ctl = MagicMock()
     return Zone(mock_tcs, "00")
@@ -627,7 +627,7 @@ def test_update_demand_state_ufc_ufh_circuit_demand_ignored() -> None:
     target = MockTarget()
     msg = MagicMock()
     msg.code = Code._3150
-    payload = {"heat_demand": 0.81, "ufx_idx": "00"}
+    payload = {"heat_demand": 0.81, "ufx_index": "00"}
 
     # Act
     _update_demand_state(target, payload, msg)

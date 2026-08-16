@@ -17,12 +17,12 @@ from ramses_rf.const import (
 )
 from ramses_rf.payloads import get_payload_class
 from ramses_rf.protocol.ramses import (
-    CODE_IDX_ARE_COMPLEX,
-    CODE_IDX_ARE_NONE,
-    CODE_IDX_ARE_SIMPLE,
+    CODE_INDEX_ARE_COMPLEX,
+    CODE_INDEX_ARE_NONE,
+    CODE_INDEX_ARE_SIMPLE,
     CODES_ONLY_FROM_CTL,
     CODES_WITH_ARRAYS,
-    RQ_IDX_COMPLEX,
+    RQ_INDEX_COMPLEX,
     RQ_NO_PAYLOAD,
 )
 from ramses_tx import exceptions as exc
@@ -123,7 +123,7 @@ class _LegacyMessage:
             self.dtm = self.dtm.replace(tzinfo=None)
 
         self._has_ctl_: bool | None = None
-        self._idx_: bool | str | None = None
+        self._index_: bool | str | None = None
         self._ctx_: bool | str | None = None
 
         self._has_array = self._calculate_has_array()
@@ -207,19 +207,19 @@ class _LegacyMessage:
         return self._has_ctl_
 
     @property
-    def _idx(self) -> bool | str:
+    def _index(self) -> bool | str:
         """Return the payload's index, if any.
 
         :return: String value of index parameter or boolean flag state.
         """
-        if self._idx_ is not None:
-            return self._idx_
+        if self._index_ is not None:
+            return self._index_
 
-        result = self._pkt_idx()
-        self._idx_ = result if result is not None else False
-        return self._idx_
+        result = self._packet_index()
+        self._index_ = result if result is not None else False
+        return self._index_
 
-    def _pkt_idx(self) -> bool | str | None:
+    def _packet_index(self) -> bool | str | None:
         """Extract the exact index leveraging protocol.ramses definitions.
 
         :return: String or boolean representation if index parsing passes constraints.
@@ -255,13 +255,13 @@ class _LegacyMessage:
         if self.code == Code._0001 and self.payload[:2] != "00":
             return self.payload[:2]
 
-        if self.code_enum in CODE_IDX_ARE_COMPLEX:
+        if self.code_enum in CODE_INDEX_ARE_COMPLEX:
             pass
 
-        if self.code_enum in CODE_IDX_ARE_NONE:
+        if self.code_enum in CODE_INDEX_ARE_NONE:
             if self.payload[:2] != "00":
                 raise exc.PacketPayloadInvalid(
-                    f"Packet idx is {self.payload[:2]}, but expecting no idx (00) (0xAA)"
+                    f"Packet index is {self.payload[:2]}, but expecting no index (00) (0xAA)"
                 )
             return False
 
@@ -277,20 +277,20 @@ class _LegacyMessage:
         if self.code in (Code._31D9, Code._31DA):
             return self.payload[:2]
 
-        # CODE_IDX_ARE_SIMPLE codes have schemas that explicitly permit a
-        # non-zero idx (e.g. 30C9 from a 03:/04:/12: sensor uses its zone_idx).
-        # Accept the packet without raising — the idx simply won't be injected
-        # into the result dict by _build_idx_dict (which has its own _has_ctl
+        # CODE_INDEX_ARE_SIMPLE codes have schemas that explicitly permit a
+        # non-zero index (e.g. 30C9 from a 03:/04:/12: sensor uses its zone_index).
+        # Accept the packet without raising — the index simply won't be injected
+        # into the result dict by _build_index_dict (which has its own _has_ctl
         # gate).  This must be checked *before* the 0xAB guard below, which
         # would otherwise reject valid non-controller packets with a non-zero
-        # idx (see issue ramses_cc#929 — faking Zone THM broken).
-        if self.code_enum in CODE_IDX_ARE_SIMPLE:
+        # index (see issue ramses_cc#929 — faking Zone THM broken).
+        if self.code_enum in CODE_INDEX_ARE_SIMPLE:
             return None
 
         # Explicit legacy guard (0xAB block) - non-controllers cannot send non-zero indices here
         if self.payload[:2] != "00":
             raise exc.PacketPayloadInvalid(
-                f"Packet idx is {self.payload[:2]}, but expecting no idx (00) (0xAB)"
+                f"Packet index is {self.payload[:2]}, but expecting no index (00) (0xAB)"
             )
 
         return None
@@ -307,10 +307,12 @@ class _LegacyMessage:
         if self.code in (Code._0005, Code._000C):
             self._ctx_ = self.payload[:4]
         elif self.code == Code._0404:
-            idx_str = str(self._idx) if isinstance(self._idx, str) else ""
-            self._ctx_ = idx_str + self.payload[10:12]
+            index_str = (
+                str(self._index) if isinstance(self._index, str) else ""
+            )
+            self._ctx_ = index_str + self.payload[10:12]
         else:
-            self._ctx_ = self._idx
+            self._ctx_ = self._index
         return self._ctx_
 
 
@@ -320,14 +322,14 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
     :param msg: The _LegacyMessage instance being processed.
     :return: Generated payload structural dictionary mappings.
     """
-    if not isinstance(msg._idx, str):
+    if not isinstance(msg._index, str):
         return {}
 
-    if msg.code_enum in CODE_IDX_ARE_COMPLEX:
+    if msg.code_enum in CODE_INDEX_ARE_COMPLEX:
         return {}
 
     if msg.code in (Code._31D9, Code._31DA):
-        return {"hvac_id": str(msg._idx)}
+        return {"hvac_id": str(msg._index)}
 
     if msg.code == Code._3220:
         return {}
@@ -359,23 +361,25 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
         return {}
 
     if msg.code in (Code._000A, Code._2309) and msg.src.type == "02":
-        return {SZ_UFH_INDEX: str(msg._idx)}
+        return {SZ_UFH_INDEX: str(msg._index)}
 
-    idx_val = str(msg._idx)
-    idx_name = SZ_DOMAIN_INDEX if idx_val.startswith("F") else SZ_ZONE_INDEX
+    index_val = str(msg._index)
+    index_name = (
+        SZ_DOMAIN_INDEX if index_val.startswith("F") else SZ_ZONE_INDEX
+    )
 
-    idx_names: dict[Code | str, str] = {
-        Code._0002: "other_idx",
+    index_names: dict[Code | str, str] = {
+        Code._0002: "other_index",
         Code._10A0: SZ_DHW_INDEX,
         Code._1260: SZ_DHW_INDEX,
         Code._1F41: SZ_DHW_INDEX,
         Code._22C9: SZ_UFH_INDEX,
-        Code._2389: "other_idx",
-        Code._2D49: "other_idx",
+        Code._2389: "other_index",
+        Code._2D49: "other_index",
     }
 
-    index_name = idx_names.get(msg.code, idx_name)
-    return {index_name: idx_val}
+    index_name = index_names.get(msg.code, index_name)
+    return {index_name: index_val}
 
 
 def parse_unknown_payload(
@@ -500,7 +504,7 @@ class HeartbeatDecoder(PayloadDecoder):
         """
         code = _get_code(dto.code)
         if not msg._has_payload and (
-            dto.verb.strip() == RQ and code not in RQ_IDX_COMPLEX
+            dto.verb.strip() == RQ and code not in RQ_INDEX_COMPLEX
         ):
             return None
 
@@ -759,8 +763,8 @@ class PayloadDecoderPipeline:
 
         # 3. Index Injection Phase (Errors raised here will bypass the null-payload swallow)
         try:
-            idx_dict = _build_index_dict(msg)
-            return {**idx_dict, **result}
+            index_dict = _build_index_dict(msg)
+            return {**index_dict, **result}
         except exc.PacketInvalid as err:
             raise err
 

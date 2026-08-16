@@ -16,10 +16,10 @@ from .helpers import TEST_DIR
 WORK_DIR = f"{TEST_DIR}/parsers"
 
 HAS_ARRAY = "has_array"
-HAS_IDX = "has_idx"
+HAS_INDEX = "has_index"
 HAS_PAYLOAD = "has_payload"
 IS_FRAGMENT = "is_fragment"
-META_KEYS = (HAS_ARRAY, HAS_IDX, HAS_PAYLOAD, IS_FRAGMENT)
+META_KEYS = (HAS_ARRAY, HAS_INDEX, HAS_PAYLOAD, IS_FRAGMENT)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -32,77 +32,72 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 def _proc_log_line(log_line: str) -> None:
-    pkt_line, pkt_eval, *_ = list(
+    packet_line, packet_eval, *_ = list(
         map(str.strip, log_line.split("#", maxsplit=1) + [""])
     )
 
-    if not pkt_line:
+    if not packet_line:
         return
 
-    pkt = Packet.from_file(pkt_line[:26], pkt_line[27:])
+    packet = Packet.from_file(packet_line[:26], packet_line[27:])
 
     try:
-        msg = Message(pkt.to_dto())
+        msg = Message(packet.to_dto())
     except PacketInvalid:
         # If the log line didn't expect a valid payload (wip logs), ignore it
-        if not pkt_eval:
+        if not packet_eval:
             return
 
         # The new L7 strict decoding raises PacketInvalid instead of returning
         # a payload dictionary with a "_parse_error" key.
-        if "_parse_error" in pkt_eval:
+        if "_parse_error" in packet_eval:
             return
 
         raise
 
-    # assert bool(msg._is_fragment) == pkt._is_fragment
-    # assert bool(msg._idx): dict == pkt._idx: Optional[bool | str]
+    # assert bool(msg._is_fragment) == packet._is_fragment
+    # assert bool(msg._index): dict == packet._index: Optional[bool | str]
     # not useful
 
-    if not pkt_eval:
+    if not packet_eval:
         return
     try:
-        pkt_dict = eval(pkt_eval)
+        packet_dict = eval(packet_eval)
     except SyntaxError:
-        if "{" in pkt_eval:  # if so, there is an issue with the log line
+        if "{" in packet_eval:  # if so, there is an issue with the log line
             raise  # that should be addressed
         return
 
-    if isinstance(pkt_dict, list) or not any(
-        k for k in pkt_dict if k in META_KEYS
+    if isinstance(packet_dict, list) or not any(
+        k for k in packet_dict if k in META_KEYS
     ):
         payload = msg.payload
 
         keys_to_strip = (
-            "zone_idx",
             "zone_index",
             "domain_id",
-            "domain_idx",
             "domain_index",
-            "dhw_idx",
             "dhw_index",
             "hvac_id",
-            "ufh_idx",
             "ufh_index",
-            "ufx_idx",
-            "log_idx",
+            "ufx_index",
             "log_index",
-            "other_idx",
+            "other_index",
         )
 
         # Safely align single-element lists with dicts
         if (
             isinstance(payload, dict)
-            and isinstance(pkt_dict, list)
-            and len(pkt_dict) == 1
-            and isinstance(pkt_dict[0], dict)
+            and isinstance(packet_dict, list)
+            and len(packet_dict) == 1
+            and isinstance(packet_dict[0], dict)
         ):
-            pkt_dict = pkt_dict[0]
+            packet_dict = packet_dict[0]
         elif (
             isinstance(payload, list)
             and len(payload) == 1
             and isinstance(payload[0], dict)
-            and isinstance(pkt_dict, dict)
+            and isinstance(packet_dict, dict)
         ):
             payload = payload[0]
 
@@ -120,45 +115,47 @@ def _proc_log_line(log_line: str) -> None:
             }
 
         # Safely align the payload for comparison against legacy logs
-        if isinstance(payload, dict) and isinstance(pkt_dict, dict):
+        if isinstance(payload, dict) and isinstance(packet_dict, dict):
             payload = _normalize_dict(payload)
-            pkt_dict = _normalize_dict(pkt_dict)
+            packet_dict = _normalize_dict(packet_dict)
 
         # Apply the same stripping logic if the payload is an array of dicts
-        elif isinstance(payload, list) and isinstance(pkt_dict, list):
+        elif isinstance(payload, list) and isinstance(packet_dict, list):
             new_payload: list[Any] = []
-            new_pkt_dict: list[Any] = []
-            for item, pkt_item in zip(payload, pkt_dict, strict=False):
-                if isinstance(item, dict) and isinstance(pkt_item, dict):
+            new_packet_dict: list[Any] = []
+            for item, packet_item in zip(payload, packet_dict, strict=False):
+                if isinstance(item, dict) and isinstance(packet_item, dict):
                     new_payload.append(_normalize_dict(item))
-                    new_pkt_dict.append(_normalize_dict(pkt_item))
+                    new_packet_dict.append(_normalize_dict(packet_item))
                 else:
                     new_payload.append(item)
-                    new_pkt_dict.append(pkt_item)
+                    new_packet_dict.append(packet_item)
             payload = new_payload
-            pkt_dict = new_pkt_dict
+            packet_dict = new_packet_dict
 
         # NOTE: For compatibility with legacy test logs where 1-byte "00"
         # was `{}`.
-        if pkt_dict == {} and payload == {"heartbeat": True}:
+        if packet_dict == {} and payload == {"heartbeat": True}:
             return
 
-        assert payload == pkt_dict, pkt_line
+        assert payload == packet_dict, packet_line
         return
 
 
 def _proc_log_line_pair_4e15(
     log_line: str, prev_msg: Message | None
 ) -> Message | None:
-    pkt_line, *_ = list(map(str.strip, log_line.split("#", maxsplit=1) + [""]))
+    packet_line, *_ = list(
+        map(str.strip, log_line.split("#", maxsplit=1) + [""])
+    )
 
-    if not pkt_line:
+    if not packet_line:
         return None
 
-    pkt = Packet.from_file(pkt_line[:26], pkt_line[27:])
+    packet = Packet.from_file(packet_line[:26], packet_line[27:])
 
     try:
-        this_msg = Message(pkt.to_dto())
+        this_msg = Message(packet.to_dto())
     except PacketInvalid:
         return None
 

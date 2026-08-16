@@ -150,8 +150,8 @@ def test_packet_from_dict_resolves_src_dst(
         - RP: addr1=dst, addr2=src (reversed for replies)
         - I broadcast: addr1=src=addr3 (self-announcement)
     """
-    pkt = Packet.from_dict(
+    packet = Packet.from_dict(
         "2026-01-01T00:00:00", {"rssi": "000", "frame": frame}
     )
-    assert pkt.src.id == expected_src
-    assert pkt.dst.id == expected_dst
+    assert packet.src.id == expected_src
+    assert packet.dst.id == expected_dst

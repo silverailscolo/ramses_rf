@@ -222,7 +222,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._close(exc.TransportZigbeeError(str(err)))
 
     def attribute_updated(self, attrid: int, value: Any) -> None:
-        """Callback invoked when a bound cluster attribute updates.
+        """Handle updates to a bound cluster attribute.
 
         :param attrid: The ID of the updated attribute.
         :type attrid: int
@@ -297,7 +297,7 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         *_args: Any,
         **_kwargs: Any,
     ) -> None:
-        """Callback invoked when a ZCL command is received on the bound cluster.
+        """Handle incoming ZCL command on the bound cluster.
 
         :param tsn: The transaction sequence number.
         :type tsn: int

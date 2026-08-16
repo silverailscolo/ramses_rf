@@ -13,22 +13,22 @@ from .mocked_devices.command import MockCommand as Command
 def _test_api_good(api, packets):  # NOTE: incl. addr_set check
     """Test a verb|code pair that has a Command constructor."""
 
-    for pkt_line in packets:
-        pkt = _assert_pkt_from_frame(pkt_line.split("#")[0].rstrip())
-        msg = Message(pkt)
+    for packet_line in packets:
+        packet = _assert_packet_from_frame(packet_line.split("#")[0].rstrip())
+        msg = Message(packet)
 
         _assert_cmd_from_msg(api, msg)
 
-        if isinstance(packets, dict) and (payload := packets[pkt_line]):
+        if isinstance(packets, dict) and (payload := packets[packet_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
 
 
-def _assert_pkt_from_frame(pkt_line: str) -> Packet:
-    """Create a pkt from a pkt_line and assert their frames match."""
+def _assert_packet_from_frame(packet_line: str) -> Packet:
+    """Create a packet from a packet_line and assert their frames match."""
 
-    pkt = Packet.from_port(dt.now(), pkt_line)
-    assert str(pkt) == pkt_line[4:]
-    return pkt
+    packet = Packet.from_port(dt.now(), packet_line)
+    assert str(packet) == packet_line[4:]
+    return packet
 
 
 def _assert_cmd_from_msg(api, msg) -> None:
@@ -38,11 +38,11 @@ def _assert_cmd_from_msg(api, msg) -> None:
         dst_id=msg.dst.id,
     )
 
-    assert cmd == msg._pkt  # assert str(cmd) == str(pkt)
-    assert cmd.dst.id == msg._pkt.dst.id
-    assert cmd.verb == msg._pkt.verb
-    assert cmd.code == msg._pkt.code
-    assert cmd.payload == msg._pkt.payload
+    assert cmd == msg._packet  # assert str(cmd) == str(packet)
+    assert cmd.dst.id == msg._packet.dst.id
+    assert cmd.verb == msg._packet.verb
+    assert cmd.code == msg._packet.code
+    assert cmd.payload == msg._packet.payload
 
     return cmd
 

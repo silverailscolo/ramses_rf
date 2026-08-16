@@ -35,7 +35,7 @@ SZ_LIFESPAN: Final = "lifespan"  # WIP
 # CODES_SCHEMA - HEAT (CH/DHW, Honeywell/Resideo) vs HVAC (ventilation, Itho/Orcon/etc.)
 
 # The master list - all known codes are here, even if there's no corresponding parser
-# Anything with a zone-idx should start: ^0[0-9A-F], ^(0[0-9A-F], or ^((0[0-9A-F]
+# Anything with a zone-index should start: ^0[0-9A-F], ^(0[0-9A-F], or ^((0[0-9A-F]
 
 #
 CODE_NAME_LOOKUP: dict[Code, str] = {
@@ -146,7 +146,7 @@ CODES_WITH_ARRAYS: dict[Code, list[int | tuple[str, ...]]] = {
     Code._3150: [2, ("02",)],
 }
 
-RQ_IDX_COMPLEX: list[Code] = [
+RQ_INDEX_COMPLEX: list[Code] = [
     Code._0005,
     Code._000A,
     Code._000C,
@@ -239,7 +239,7 @@ RQ_NO_PAYLOAD: list[Code] = [
     Code._4E16,
 ]
 
-CODE_IDX_ARE_COMPLEX: set[Code] = {
+CODE_INDEX_ARE_COMPLEX: set[Code] = {
     Code._0005,
     Code._000C,
     Code._0418,
@@ -247,7 +247,7 @@ CODE_IDX_ARE_COMPLEX: set[Code] = {
     Code._3220,
 }
 
-CODE_IDX_ARE_SIMPLE: set[Code] = {
+CODE_INDEX_ARE_SIMPLE: set[Code] = {
     Code._0002,
     Code._0004,
     Code._0008,
@@ -329,16 +329,16 @@ CODE_IDX_ARE_SIMPLE: set[Code] = {
     Code._PUZZ,
 }
 
-CODE_IDX_ARE_NONE: set[Code] = {
+CODE_INDEX_ARE_NONE: set[Code] = {
     Code._0001,
     Code._0006,
     Code._0016,
     Code._0100,
 }
-CODE_IDX_ARE_NONE |= {Code._2389, Code._4401}
+CODE_INDEX_ARE_NONE |= {Code._2389, Code._4401}
 
-# CODE_IDX_DOMAIN - NOTE: not necc. mutex with other 3
-CODE_IDX_DOMAIN: dict[Code, str] = {
+# CODE_INDEX_DOMAIN - NOTE: not necc. mutex with other 3
+CODE_INDEX_DOMAIN: dict[Code, str] = {
     Code._0001: "^F[ACF])",
     Code._0008: "^F[9AC]",
     Code._0009: "^F[9AC]",
@@ -418,7 +418,7 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
             I_: {},
             W_: {},
         },  # ADDED: Allow CTL to receive DT4R bounds
-        Code._22D9: {RQ: {}},
+        Code._22D9: {I_: {}, RQ: {}},
         Code._2309: {I_: {}, RP: {}},
         Code._2349: {I_: {}, RP: {}},
         Code._2D49: {I_: {}},
@@ -428,7 +428,7 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
         Code._3150: {I_: {}},
         Code._3220: {RQ: {}},
         Code._3B00: {I_: {}},
-        Code._3EF0: {RQ: {}},
+        Code._3EF0: {I_: {}, RQ: {}},
     },
     DevType.PRG: {  # e.g. HCF82/HCW82: Room Temperature Sensor
         Code._0009: {I_: {}},

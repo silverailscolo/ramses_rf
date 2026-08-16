@@ -166,4 +166,4 @@ def parse_index(index: int | str) -> int:
     return result
 
 
-parse_idx = parse_index
+parse_index = parse_index

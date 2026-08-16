@@ -106,10 +106,10 @@ class ZoneBase(Child, Parent, Entity):
         self.zone_state = ZoneState()
 
         # FIXME: ZZZ entities must know their parent device ID and their
-        # own idx
+        # own index
         self._z_id = tcs.id  # the responsible device is the controller
-        # the zone idx (ctx), 00-0B (or 0F), HW (FA)
-        self._z_idx: DevIndexT = DevIndexT(zone_index)
+        # the zone index (ctx), 00-0B (or 0F), HW (FA)
+        self._z_index: DevIndexT = DevIndexT(zone_index)
 
         self.id: DeviceIdT = DeviceIdT(f"{tcs.id}_{zone_index}")
 
@@ -128,7 +128,7 @@ class ZoneBase(Child, Parent, Entity):
 
         The appropriate Zone class should have been determined by a
         factory. Can be a heating zone (of a klass), or the DHW
-        subsystem (idx must be 'HW').
+        subsystem (index must be 'HW').
         """
         zon = cls(tcs, zone_index)  # type: ignore[arg-type]
         zon._update_schema(**schema)
@@ -155,11 +155,6 @@ class ZoneBase(Child, Parent, Entity):
         :rtype: str
         """
         return self._child_id
-
-    @property
-    def idx(self) -> str:
-        """Return the zone index string (legacy alias for index)."""
-        return self.index
 
     async def schema(self) -> dict[str, Any]:
         """Return the schema (fixed at instantiation)."""
@@ -201,7 +196,7 @@ class ZoneSchedule(ZoneBase):  # 0404
         """Return the latest schedule (not guaranteed to be up to date)."""
         # inner: [{"day_of_week": 0, "switchpoints": [...],
         # {"day_of_week": 1, ...
-        # outer: {"zone_idx": "01", "schedule": <inner>
+        # outer: {"zone_index": "01", "schedule": <inner>
 
         return self._schedule.schedule
 
@@ -234,7 +229,7 @@ class DhwZone(ZoneSchedule):  # CS92A
             )
         if zone_index not in (None, "HW"):
             raise exc.SchemaInconsistentError(
-                f"Invalid zone idx for DHW: {zone_index} (not 'HW'/null)"
+                f"Invalid zone index for DHW: {zone_index} (not 'HW'/null)"
             )
 
         super().__init__(tcs, "HW")
@@ -499,13 +494,13 @@ class Zone(ZoneSchedule):
             "Creating a Zone: %s_%s (%s)", tcs.id, zone_index, self.__class__
         )
 
-        if zone_index in tcs.zone_by_idx:
+        if zone_index in tcs.zone_by_index:
             raise exc.SchemaInconsistentError(
                 f"Duplicate ZON for TCS: {tcs.id}_{zone_index}"
             )
         if int(zone_index, 16) >= tcs._max_zones:
             raise exc.SchemaInconsistentError(
-                f"Invalid zone_idx: {zone_index} (exceeds max_zones)"
+                f"Invalid zone_index: {zone_index} (exceeds max_zones)"
             )
 
         super().__init__(tcs, zone_index)
@@ -685,7 +680,7 @@ class Zone(ZoneSchedule):
                 if isinstance(p_load, dict):
                     if (
                         str(p_load.get(SZ_ZONE_INDEX, p_load.get(SZ_ZONE_IDX)))
-                        == self.idx
+                        == self.index
                         and SZ_NAME in p_load
                     ):
                         self.zone_state = dataclasses.replace(
@@ -701,7 +696,7 @@ class Zone(ZoneSchedule):
                                         SZ_ZONE_INDEX, item.get(SZ_ZONE_IDX)
                                     )
                                 )
-                                == self.idx
+                                == self.index
                                 and SZ_NAME in item
                             ):
                                 self.zone_state = dataclasses.replace(
@@ -742,7 +737,7 @@ class Zone(ZoneSchedule):
     async def setpoint_bounds(self) -> dict[str, Any] | None:  # 22C9, 2209
         """Return zone setpoint bounds if defined by thermostat."""
         result = await self.entity_state.get_value(
-            (Code._22C9, Code._2209), zone_idx=self.idx
+            (Code._22C9, Code._2209), zone_index=self.index
         )
         return result if isinstance(result, dict) else None
 
@@ -756,7 +751,7 @@ class Zone(ZoneSchedule):
         return await send_system_intent(
             self,
             Action.SET_TEMPERATURE,
-            {SZ_ZONE_INDEX: self.idx, "setpoint": value},
+            {SZ_ZONE_INDEX: self.index, "setpoint": value},
         )
 
     async def temperature(self) -> float | None:  # 30C9
@@ -794,7 +789,7 @@ class Zone(ZoneSchedule):
             return await send_system_intent(
                 self,
                 Action.GET_ZONE_TEMP,
-                {SZ_ZONE_INDEX: self.idx},
+                {SZ_ZONE_INDEX: self.index},
             )
         except ProtocolTimeoutError as err:
             _LOGGER.warning("%s: _get_temp timed out: %s", self, err)
@@ -826,7 +821,7 @@ class Zone(ZoneSchedule):
             self,
             Action.SET_ZONE_CONFIG,
             {
-                SZ_ZONE_INDEX: self.idx,
+                SZ_ZONE_INDEX: self.index,
                 "min_temp": min_temp,
                 "max_temp": max_temp,
                 "local_override": local_override,
@@ -861,7 +856,7 @@ class Zone(ZoneSchedule):
                 self,
                 Action.SET_MODE,
                 {
-                    SZ_ZONE_INDEX: self.idx,
+                    SZ_ZONE_INDEX: self.index,
                     "mode": mode,
                     "setpoint": setpoint,
                     "until": until,
@@ -873,7 +868,7 @@ class Zone(ZoneSchedule):
                 self,
                 Action.SET_TEMPERATURE,
                 {
-                    SZ_ZONE_INDEX: self.idx,
+                    SZ_ZONE_INDEX: self.index,
                     "setpoint": setpoint,
                 },
             )
@@ -886,7 +881,7 @@ class Zone(ZoneSchedule):
             self,
             Action.SET_ZONE_NAME,
             {
-                SZ_ZONE_INDEX: self.idx,
+                SZ_ZONE_INDEX: self.index,
                 "name": name,
             },
         )
@@ -1054,7 +1049,7 @@ def zone_factory(
             )
             return cls
 
-        # or, is it a DHW zone, derived from the zone idx...
+        # or, is it a DHW zone, derived from the zone index...
         if zone_index == "HW":
             _LOGGER.debug(
                 f"Using the default class for: {controller_address}_{zone_index} ({DhwZone._SLUG})"

@@ -162,7 +162,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
 
         First, use the schema to create/update it, then pass it any msg to handle.
 
-        Circuits are uniquely identified by a UFH controller ID|cct_idx pair.
+        Circuits are uniquely identified by a UFH controller ID|cct_index pair.
         If a circuit is created, attach it to this UFC.
         """
         schema = {}  # shrink(SCH_CCT(schema))
@@ -233,7 +233,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
         )
         return getattr(state, "pump_relay_state", None)
 
-    async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_idx array
+    async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_index array
         """Return the UFH setpoints.
 
         # TODO: Refactor for #714 (CQRS API Boundaries).
@@ -295,9 +295,9 @@ class UfhCircuit(Child, Entity):  # FIXME
         super().__init__(ufc._gateway)
 
         # FIXME: gwy.message_store entities must know their parent device ID
-        # and their own idx
+        # and their own index
         self._z_id = ufc.id
-        self._z_idx = DevIndexT(ufh_index)
+        self._z_index = DevIndexT(ufh_index)
 
         self.id: DeviceIdT = DeviceIdT(f"{ufc.id}_{ufh_index}")
 
@@ -312,12 +312,12 @@ class UfhCircuit(Child, Entity):  # FIXME
         raise NotImplementedError
 
     @property
-    def ufx_idx(self) -> str:
+    def ufx_index(self) -> str:
         """Return the UFH circuit index string."""
         return str(self._child_id)
 
     @property
-    def zone_idx(self) -> str | None:
+    def zone_index(self) -> str | None:
         """Return the associated zone index string or None."""
         if self._zone:
             return str(self._zone._child_id)

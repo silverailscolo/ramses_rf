@@ -100,16 +100,16 @@ async def test_fsm_send_cmd_success(
     mock_send_fnc.assert_called_once_with(mock_cmd)
 
     # Simulate receiving the echo packet
-    echo_pkt = MagicMock(spec=Packet)
-    echo_pkt._hdr = mock_cmd.tx_header
-    fsm_context.pkt_received(echo_pkt)
+    echo_packet = MagicMock(spec=Packet)
+    echo_packet._hdr = mock_cmd.tx_header
+    fsm_context.packet_received(echo_packet)
 
     # Should resolve and go back to Idle
     await asyncio.sleep(0.01)
     assert isinstance(fsm_context.state, IsInIdle)
 
     result = await send_task
-    assert result == echo_pkt
+    assert result == echo_packet
 
 
 @pytest.mark.asyncio

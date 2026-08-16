@@ -19,7 +19,6 @@ from ramses_rf.const import (
     SZ_DEVICES as SZ_DEVICES,
     SZ_NAME,
     SZ_SENSOR as SZ_SENSOR,
-    SZ_ZONE_IDX as SZ_ZONE_IDX,
     SZ_ZONE_INDEX,
     SZ_ZONE_TYPE,
     SZ_ZONES,
@@ -114,8 +113,8 @@ SZ_CIRCUITS: Final = "circuits"
 HEAT_ZONES_STRS = tuple(ZON_ROLE_MAP[t] for t in ZON_ROLE_MAP.HEAT_ZONES)
 
 SCH_DOM_ID = vol.Match(r"^[0-9A-F]{2}$")
-SCH_UFH_IDX = vol.Match(r"^0[0-8]$")
-SCH_ZON_IDX = vol.Match(
+SCH_UFH_INDEX = vol.Match(r"^0[0-8]$")
+SCH_ZON_INDEX = vol.Match(
     r"^0[0-9AB]$"
 )  # TODO: what if > 12 zones? (e.g. hometronics)
 
@@ -174,10 +173,9 @@ SCH_TCS_DHW = vol.Schema(
 
 _CH_TCS_UFH_CIRCUIT = vol.Schema(
     {
-        vol.Required(SCH_UFH_IDX): vol.Schema(
+        vol.Required(SCH_UFH_INDEX): vol.Schema(
             {
-                vol.Optional(SZ_ZONE_INDEX): SCH_ZON_IDX,
-                vol.Optional(SZ_ZONE_IDX): SCH_ZON_IDX,
+                vol.Optional(SZ_ZONE_INDEX): SCH_ZON_INDEX,
             },
         ),
     },
@@ -213,7 +211,7 @@ SCH_TCS_ZONES_ZON = vol.Schema(
     extra=vol.PREVENT_EXTRA,
 )
 SCH_TCS_ZONES = vol.All(
-    vol.Schema({vol.Required(SCH_ZON_IDX): SCH_TCS_ZONES_ZON}),
+    vol.Schema({vol.Required(SCH_ZON_INDEX): SCH_TCS_ZONES_ZON}),
     vol.Length(min=1, max=12),
     extra=vol.PREVENT_EXTRA,
 )

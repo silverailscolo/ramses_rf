@@ -80,9 +80,9 @@ async def create_stack(
     include_list: list[str] | None = None,
     hgi_id: str | None = None,
 ) -> tuple[RamsesProtocolT, RamsesTransportT]:
-    """Utility function to provide a Protocol / Transport pair.
+    """Provide a configured Protocol and Transport pair.
 
-    Architecture: gwy (client) -> msg (Protocol) -> pkt (Transport) -> HGI/log (or dict)
+    Architecture: gwy (client) -> msg (Protocol) -> packet (Transport) -> HGI/log (or dict)
     - send Commands via awaitable Protocol.send_cmd(cmd)
     - receive Messages via msg_handler callback
     """

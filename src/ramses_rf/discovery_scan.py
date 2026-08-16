@@ -152,7 +152,7 @@ _APPLIANCE_CONTROL_CODES: frozenset[Code | str] = frozenset(
 
 # 000C payload roles that map to domain IDs (not zone indices).
 # See ramses_tx/const.py DEV_ROLE_MAP and parsers/heating.py
-# complex_idx.
+# complex_index.
 #   payload[2:4] == "0E" (HTG) -> FA (hotwater_valve) if index == "00",
 #                                 F9 if "01"
 #   payload[2:4] == "0F" (APP) -> FC (appliance_control)
@@ -265,14 +265,14 @@ class DiscoveryScan:
     def start(self) -> None:
         """Register as a raw packet handler on the gateway.
 
-        Uses ``add_raw_pkt_handler`` (not ``add_msg_handler``) so the scan
+        Uses ``add_raw_packet_handler`` (not ``add_msg_handler``) so the scan
         sees packets from unknown devices even when ``enforce_known_list=True``.
         The raw handler fires before the device ID filter.
         """
         if self._remove_handler is not None:
             _LOGGER.warning("DiscoveryScan.start(): already running")
             return
-        self._remove_handler = self._gateway.add_raw_pkt_handler(
+        self._remove_handler = self._gateway.add_raw_packet_handler(
             self._on_packet
         )
         _LOGGER.info("DiscoveryScan: started (passive observer)")
@@ -398,7 +398,7 @@ class DiscoveryScan:
 
         # Extract zone_index from payload if this is a binding code
         zone_index = (
-            _extract_zone_idx_from_payload(dto.payload or dto.raw_payload)
+            _extract_zone_index_from_payload(dto.payload or dto.raw_payload)
             if code in _ZONE_BINDING_CODES
             else None
         )
@@ -664,6 +664,34 @@ class DiscoveryScan:
                         code,
                         verb.strip(),
                     )
+                # DHW topology inference for known devices: directed interaction
+                # between a CTL (01:/23:) and a DHW sensor (07:) confirms binding.
+                elif (
+                    not is_hgi
+                    and device_id.startswith("07:")
+                    and not is_source
+                    and source
+                    and _is_valid_address(source)
+                    and source.startswith(("01:", "23:"))
+                    and code in (Code._10A0, Code._1260, Code._000C)
+                ):
+                    if device.bound_to != source:
+                        device.bound_to = source
+                        device.confidence = "high"
+                        self._dirty = True
+                elif (
+                    not is_hgi
+                    and device_id.startswith("07:")
+                    and is_source
+                    and destination
+                    and _is_valid_address(destination)
+                    and destination.startswith(("01:", "23:"))
+                    and code in (Code._10A0, Code._1260)
+                ):
+                    if device.bound_to != destination:
+                        device.bound_to = destination
+                        device.confidence = "high"
+                        self._dirty = True
             return
 
         now = dt.now().isoformat(timespec="seconds")
@@ -735,6 +763,29 @@ class DiscoveryScan:
                 and code in _HVAC_PARENT_INFERENCE_CODES
             ):
                 device.bound_to = source
+            # DHW topology inference: directed interaction between CTL and DHW sensor
+            elif (
+                not is_hgi
+                and device_id.startswith("07:")
+                and not is_source
+                and source
+                and _is_valid_address(source)
+                and source.startswith(("01:", "23:"))
+                and code in (Code._10A0, Code._1260, Code._000C)
+            ):
+                device.bound_to = source
+                device.confidence = "high"
+            elif (
+                not is_hgi
+                and device_id.startswith("07:")
+                and is_source
+                and destination
+                and _is_valid_address(destination)
+                and destination.startswith(("01:", "23:"))
+                and code in (Code._10A0, Code._1260)
+            ):
+                device.bound_to = destination
+                device.confidence = "high"
             self._devices[device_id] = device
             self._dirty = True
             _LOGGER.info(
@@ -826,6 +877,33 @@ class DiscoveryScan:
         ):
             device.bound_to = source
             changed = True
+        # DHW topology inference for existing devices
+        elif (
+            not is_hgi
+            and device_id.startswith("07:")
+            and not is_source
+            and source
+            and _is_valid_address(source)
+            and source.startswith(("01:", "23:"))
+            and code in (Code._10A0, Code._1260, Code._000C)
+        ):
+            if device.bound_to != source:
+                device.bound_to = source
+                device.confidence = "high"
+                changed = True
+        elif (
+            not is_hgi
+            and device_id.startswith("07:")
+            and is_source
+            and destination
+            and _is_valid_address(destination)
+            and destination.startswith(("01:", "23:"))
+            and code in (Code._10A0, Code._1260)
+        ):
+            if device.bound_to != destination:
+                device.bound_to = destination
+                device.confidence = "high"
+                changed = True
 
         # Upgrade confidence based on accumulated evidence
         new_conf = _recompute_confidence(device)
@@ -1074,7 +1152,7 @@ def _recompute_confidence(device: DiscoveredDevice) -> str:
     return "low"
 
 
-def _extract_zone_idx_from_payload(payload: Any | str) -> str | None:
+def _extract_zone_index_from_payload(payload: Any | str) -> str | None:
     """Extract and validate the zone_index from a packet payload.
 
     Zone index is typically the first 2 hex chars of a raw payload string or
@@ -1092,17 +1170,17 @@ def _extract_zone_idx_from_payload(payload: Any | str) -> str | None:
     """
     if isinstance(payload, list):
         for item in payload:
-            result = _extract_zone_idx_from_payload(item)
+            result = _extract_zone_index_from_payload(item)
             if result is not None:
                 return result
         return None
     if hasattr(payload, "zone_index"):
-        zone_idx_val = payload.zone_index
-        if isinstance(zone_idx_val, int):
-            if zone_idx_val > 0x0B:
+        zone_index_val = payload.zone_index
+        if isinstance(zone_index_val, int):
+            if zone_index_val > 0x0B:
                 return None
-            return f"{zone_idx_val:02X}"
-        index_str = str(zone_idx_val).upper()
+            return f"{zone_index_val:02X}"
+        index_str = str(zone_index_val).upper()
     elif isinstance(payload, str) and len(payload) >= 2:
         index_str = payload[:2].upper()
     else:

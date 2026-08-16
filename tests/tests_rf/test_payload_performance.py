@@ -19,7 +19,7 @@ def test_hvac_fan_mode_to_dict_performance_and_parity() -> None:
     payload = HvacFanModePayload.from_bytes(payload_bytes)
     expected_dict = {
         "fan_mode": "low",
-        "_mode_idx": "02",
+        "_mode_index": "02",
         "_mode_max": "04",
         "_scheme": "itho",
     }

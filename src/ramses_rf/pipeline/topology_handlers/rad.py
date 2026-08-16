@@ -50,13 +50,15 @@ class RadTopologyHandler(TopologyHandler):
                 if not isinstance(payload, dict):
                     continue
 
-                zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+                zone_index = payload.get(
+                    SZ_ZONE_INDEX, payload.get("zone_index")
+                )
                 domain_id = payload.get(
                     SZ_DOMAIN_INDEX,
-                    payload.get("domain_id", payload.get("domain_idx")),
+                    payload.get("domain_id", payload.get("domain_index")),
                 )
 
-                if zone_idx is None and domain_id is None:
+                if zone_index is None and domain_id is None:
                     continue
 
                 metadata: dict[str, Any] = {}
@@ -104,15 +106,15 @@ class RadTopologyHandler(TopologyHandler):
                     if is_sensor:
                         metadata["is_sensor"] = "True"
 
-                if zone_idx is not None:
-                    metadata["zone_idx"] = str(zone_idx)
-                    metadata["child_id"] = str(zone_idx)
+                if zone_index is not None:
+                    metadata["zone_index"] = str(zone_index)
+                    metadata["child_id"] = str(zone_index)
                 elif domain_id is not None:
                     if domain_id in ("F9", "FA", "FC"):
                         metadata["domain_id"] = str(domain_id)
                         metadata["child_id"] = str(domain_id)
                     else:
-                        metadata["zone_idx"] = str(domain_id)
+                        metadata["zone_index"] = str(domain_id)
                         metadata["domain_id"] = str(domain_id)
                         metadata["child_id"] = str(domain_id)
 
@@ -151,7 +153,7 @@ class RadTopologyHandler(TopologyHandler):
             "34": DevType.THM,
         }
 
-        # Safe L7 extraction (dropping the legacy _pkt._addrs shim).
+        # Safe L7 extraction (dropping the legacy _packet._addrs shim).
         addrs = [msg.src]
         if msg.dst.id != "--:------" and msg.dst.id != msg.src.id:
             addrs.append(msg.dst)

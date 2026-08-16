@@ -5,7 +5,7 @@ from datetime import datetime as dt, timedelta as td
 
 import pytest
 
-from ramses_rf.pipeline.lifespan import pkt_lifespan
+from ramses_rf.pipeline.lifespan import packet_lifespan
 from ramses_tx.const import Code, Verb
 from ramses_tx.exceptions import PacketInvalid
 from ramses_tx.packet import Packet
@@ -87,32 +87,32 @@ def test_packet_constructors() -> None:
     dtm_str = DTM.isoformat()
 
     # Test from_dict with legacy string (backward compatibility)
-    pkt_dict = Packet.from_dict(dtm_str, f"{VALID_FRAME_I} # my comment")
-    assert pkt_dict.dtm == DTM
-    assert pkt_dict.rssi == "045"
-    assert pkt_dict.comment == "my comment"
+    packet_dict = Packet.from_dict(dtm_str, f"{VALID_FRAME_I} # my comment")
+    assert packet_dict.dtm == DTM
+    assert packet_dict.rssi == "045"
+    assert packet_dict.comment == "my comment"
 
     # Test canonical from_raw_line factory
-    pkt_line = Packet.from_raw_line(DTM, VALID_FRAME_I)
-    assert pkt_line.rssi == "045"
-    assert pkt_line.verb == Verb.I_
+    packet_line = Packet.from_raw_line(DTM, VALID_FRAME_I)
+    assert packet_line.rssi == "045"
+    assert packet_line.verb == Verb.I_
 
     # Test from_file (delegates to from_raw_line)
-    pkt_file_valid = Packet.from_file(dtm_str, VALID_FRAME_I)
-    assert pkt_file_valid.rssi == "045"
-    assert pkt_file_valid.verb == Verb.I_
+    packet_file_valid = Packet.from_file(dtm_str, VALID_FRAME_I)
+    assert packet_file_valid.rssi == "045"
+    assert packet_file_valid.verb == Verb.I_
 
     # Test from_port (delegates to from_raw_line)
-    pkt_port = Packet.from_port(DTM, VALID_FRAME_I)
-    assert pkt_port.rssi == "045"
+    packet_port = Packet.from_port(DTM, VALID_FRAME_I)
+    assert packet_port.rssi == "045"
 
     # Test _from_cmd
     cmd = MockCommand()
-    pkt_cmd = Packet._from_cmd(cmd, DTM)
+    packet_cmd = Packet._from_cmd(cmd, DTM)
 
     # _from_cmd prepends "... " to the frame, simulating a blank RSSI from a command
-    assert pkt_cmd.rssi == "..."
-    assert pkt_cmd.verb == Verb.I_
+    assert packet_cmd.rssi == "..."
+    assert packet_cmd.verb == Verb.I_
 
 
 def test_packet_dto_serialization() -> None:
@@ -120,53 +120,55 @@ def test_packet_dto_serialization() -> None:
 
     :return: None
     """
-    pkt = Packet(DTM, VALID_FRAME_I, comment="1060| I|01:145038")
+    packet = Packet(DTM, VALID_FRAME_I, comment="1060| I|01:145038")
 
     # 1. Test to_dict (Serialization)
-    pkt_dict = pkt.to_dict()
+    packet_dict = packet.to_dict()
 
     # Calculate the expected timezone-aware string dynamically to pass on any system
     expected_dtm = DTM.astimezone().isoformat(timespec="microseconds")
-    assert pkt_dict["dtm"] == expected_dtm
+    assert packet_dict["dtm"] == expected_dtm
 
-    assert pkt_dict["verb"] == Verb.I_
-    assert pkt_dict["code"] == Code._1F09
+    assert packet_dict["verb"] == Verb.I_
+    assert packet_dict["code"] == Code._1F09
     assert (
-        pkt_dict["rssi"] == 45
+        packet_dict["rssi"] == 45
     )  # Intentionally mapped to int for legacy downstream compatibility
     assert (
-        pkt_dict["frame"]
+        packet_dict["frame"]
         == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
     )
 
     # Check Address resolution strictly maps to the primitive DTO strings
-    assert pkt_dict["addr1"] == "01:145038"
-    assert pkt_dict["addr2"] == "--:------"
-    assert pkt_dict["addr3"] == "01:145038"
+    assert packet_dict["addr1"] == "01:145038"
+    assert packet_dict["addr2"] == "--:------"
+    assert packet_dict["addr3"] == "01:145038"
 
     # 2. Test from_dict with a structured dictionary (Deserialization)
-    restored_pkt = Packet.from_dict(pkt_dict["dtm"], pkt_dict)
+    restored_packet = Packet.from_dict(packet_dict["dtm"], packet_dict)
 
-    assert restored_pkt.dtm == DTM.astimezone()
-    assert restored_pkt.rssi == "045"  # Automatically padded back to 3 chars
-    assert restored_pkt.verb == Verb.I_
-    assert restored_pkt._frame == pkt._frame
+    assert restored_packet.dtm == DTM.astimezone()
+    assert (
+        restored_packet.rssi == "045"
+    )  # Automatically padded back to 3 chars
+    assert restored_packet.verb == Verb.I_
+    assert restored_packet._frame == packet._frame
 
 
 def test_to_json_from_json_parity() -> None:
     """Test serializing a Packet to JSON via orjson and deserializing it back."""
-    pkt = Packet.from_raw_line(DTM, VALID_FRAME_I)
+    packet = Packet.from_raw_line(DTM, VALID_FRAME_I)
 
     # 1. Test to_json (Serialization to bytes)
-    json_bytes = pkt.to_json()
+    json_bytes = packet.to_json()
     assert isinstance(json_bytes, bytes)
 
     # 2. Test from_json (Deserialization back to Packet)
-    restored_pkt = Packet.from_json(json_bytes)
-    assert restored_pkt.dtm == DTM.astimezone()
-    assert restored_pkt.rssi == "045"
-    assert restored_pkt.verb == Verb.I_
-    assert restored_pkt._frame == pkt._frame
+    restored_packet = Packet.from_json(json_bytes)
+    assert restored_packet.dtm == DTM.astimezone()
+    assert restored_packet.rssi == "045"
+    assert restored_packet.verb == Verb.I_
+    assert restored_packet._frame == packet._frame
 
 
 def test_from_dict_raw_packet_dict_format() -> None:
@@ -179,7 +181,7 @@ def test_from_dict_raw_packet_dict_format() -> None:
     dtm_str = DTM.isoformat()
 
     # Simulate what lifecycle.get_state saves: msg.dto.source_packets[0].__dict__
-    raw_pkt_dict: dict[str, object] = {
+    raw_packet_dict: dict[str, object] = {
         "raw_packet": " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5",
         "rssi": "045",
         "verb": Verb.I_,
@@ -192,41 +194,43 @@ def test_from_dict_raw_packet_dict_format() -> None:
         "payload": "0004B5",
     }
 
-    pkt = Packet.from_dict(dtm_str, raw_pkt_dict)
-    assert pkt.rssi == "045"
-    assert pkt.verb == Verb.I_
-    assert pkt.code == Code._1F09
-    assert pkt._frame == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    packet = Packet.from_dict(dtm_str, raw_packet_dict)
+    assert packet.rssi == "045"
+    assert packet.verb == Verb.I_
+    assert packet.code == Code._1F09
+    assert (
+        packet._frame == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    )
 
     # Also test with non-numeric rssi (e.g. "..." from file-based packets)
-    raw_pkt_dict["rssi"] = "..."
-    pkt2 = Packet.from_dict(dtm_str, raw_pkt_dict)
-    assert pkt2.rssi == "..."
-    assert pkt2.code == Code._1F09
+    raw_packet_dict["rssi"] = "..."
+    packet2 = Packet.from_dict(dtm_str, raw_packet_dict)
+    assert packet2.rssi == "..."
+    assert packet2.code == Code._1F09
 
 
-def test_pkt_lifespan(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_packet_lifespan(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test the packet lifespan calculation logic.
 
     :param monkeypatch: The pytest monkeypatch fixture.
     :return: None
     """
     # RQ packets should have 0 lifespan
-    pkt_rq = Packet(DTM, VALID_FRAME_RQ)
-    assert pkt_lifespan(pkt_rq) == td(seconds=0)
+    packet_rq = Packet(DTM, VALID_FRAME_RQ)
+    assert packet_lifespan(packet_rq) == td(seconds=0)
 
     # 1F09 ' I' packet has 360 seconds
-    pkt_1f09 = Packet(DTM, VALID_FRAME_I)
-    assert pkt_lifespan(pkt_1f09) == td(seconds=360)
+    packet_1f09 = Packet(DTM, VALID_FRAME_I)
+    assert packet_lifespan(packet_1f09) == td(seconds=360)
 
     # Force an array scenario for 000A logic paths
     valid_000a = (
         "045  I --- 01:145038 --:------ 01:145038 000A 006 001122334455"
     )
-    pkt_000a = Packet(DTM, valid_000a)
+    packet_000a = Packet(DTM, valid_000a)
 
     # The internal property cache was removed in Phase 3.1; length logic applies natively
-    assert pkt_lifespan(pkt_000a) == td(minutes=60)
+    assert packet_lifespan(packet_000a) == td(minutes=60)
 
 
 def test_packet_representations() -> None:

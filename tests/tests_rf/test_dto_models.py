@@ -60,11 +60,11 @@ def test_thermal_demand_dto_none_magnitude() -> None:
 
 def test_ufh_circuit_demand_dto() -> None:
     # Arrange
-    idx = "00"
+    index = "00"
     demand = 0.85
 
     # Act
-    dto = UfhCircuitDemandDTO(ufh_index=idx, thermal_demand=demand)
+    dto = UfhCircuitDemandDTO(ufh_index=index, thermal_demand=demand)
 
     # Assert
     assert dto.ufh_index == "00"
@@ -116,11 +116,11 @@ def test_actuator_cycle_dto() -> None:
 
 def test_zone_schedule_dto() -> None:
     # Arrange
-    zone_idx = "01"
+    zone_index = "01"
     raw_schedule = [{"day_of_week": 0, "switchpoints": []}]
 
     # Act
-    dto = ZoneScheduleDTO(zone_index=zone_idx, schedule=raw_schedule)
+    dto = ZoneScheduleDTO(zone_index=zone_index, schedule=raw_schedule)
 
     # Assert
     assert dto.zone_index == "01"

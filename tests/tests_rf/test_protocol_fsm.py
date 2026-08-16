@@ -38,11 +38,11 @@ from ramses_tx.typing import QosParams
 from .virtual_rf import VirtualRf
 
 
-def _assert_pkt_eq_cmd(pkt: Packet, cmd: Command, msg: str = "") -> None:
+def _assert_packet_eq_cmd(packet: Packet, cmd: Command, msg: str = "") -> None:
     # We compare the string components directly
     expected_frame = f"{cmd.verb} --- {cmd.addr1} {cmd.addr2} {cmd.addr3} {cmd.code} {int(len(cmd.payload) / 2):03d} {cmd.payload}"
-    assert str(pkt._frame).endswith(expected_frame), (
-        f"{msg} | Expected: {expected_frame}, got: {pkt._frame}"
+    assert str(packet._frame).endswith(expected_frame), (
+        f"{msg} | Expected: {expected_frame}, got: {packet._frame}"
     )
 
 
@@ -184,9 +184,9 @@ def assert_protocol_state_detail(
     assert bool(cmd) is isinstance(protocol._context.state, WantEcho)
 
 
-async def async_pkt_received(
+async def async_packet_received(
     protocol: PortProtocol,
-    pkt: Packet,
+    packet: Packet,
     method: int = 0,
     ser: None | serial.Serial = None,
 ) -> None:
@@ -194,15 +194,15 @@ async def async_pkt_received(
     # assert_state_temp(protocol, None, 0)
 
     if method == 0:
-        protocol.pkt_received(pkt)
+        protocol.packet_received(packet)
         return
 
     if method == 1:
-        protocol._loop.call_soon(protocol.pkt_received, pkt)
+        protocol._loop.call_soon(protocol.packet_received, packet)
         return
 
     assert ser is not None
-    frame = bytes(str(pkt).encode("ascii")) + b"\r\n"
+    frame = bytes(str(packet).encode("ascii")) + b"\r\n"
 
     if method == 2:
         ser.write(frame)
@@ -232,7 +232,7 @@ async def _test_flow_30x(protocol: PortProtocol) -> None:
     task = rf._loop.create_task(
         protocol._send_cmd(II_CMD_0, qos=qos), name="send_1"
     )
-    _assert_pkt_eq_cmd(await task, II_CMD_0)  # no reply pkt expected
+    _assert_packet_eq_cmd(await task, II_CMD_0)  # no reply packet expected
 
     # STEP 2: Send an RQ cmd (returns echo at L3)...
     task = rf._loop.create_task(
@@ -243,18 +243,18 @@ async def _test_flow_30x(protocol: PortProtocol) -> None:
         ser.write,
         bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n",
     )
-    _assert_pkt_eq_cmd(await task, RQ_CMD_0)
+    _assert_packet_eq_cmd(await task, RQ_CMD_0)
 
     # STEP 3: Send an I cmd (no reply) *twice*...
     task = rf._loop.create_task(
         protocol._send_cmd(II_CMD_0, qos=qos), name="send_3A"
     )
-    _assert_pkt_eq_cmd(await task, II_CMD_0)  # no reply pkt expected
+    _assert_packet_eq_cmd(await task, II_CMD_0)  # no reply packet expected
 
     task = rf._loop.create_task(
         protocol._send_cmd(II_CMD_0, qos=qos), name="send_3B"
     )
-    _assert_pkt_eq_cmd(await task, II_CMD_0)  # no reply pkt expected
+    _assert_packet_eq_cmd(await task, II_CMD_0)  # no reply packet expected
 
     # STEP 4: Send an RQ cmd (returns echo at L3)...
     task = rf._loop.create_task(
@@ -273,7 +273,7 @@ async def _test_flow_30x(protocol: PortProtocol) -> None:
         bytes(str(RP_PKT_1).encode("ascii")) + b"\r\n",
     )
 
-    _assert_pkt_eq_cmd(await task, RQ_CMD_1)
+    _assert_packet_eq_cmd(await task, RQ_CMD_1)
 
 
 async def _test_flow_401(protocol: PortProtocol) -> None:
@@ -289,8 +289,8 @@ async def _test_flow_401(protocol: PortProtocol) -> None:
     assert await asyncio.gather(*tasks.values())
 
     for i in numbers:
-        pkt = tasks[i].result()
-        _assert_pkt_eq_cmd(pkt, put_sensor_temp("03:123456", i))
+        packet = tasks[i].result()
+        _assert_packet_eq_cmd(packet, put_sensor_temp("03:123456", i))
 
 
 async def _test_flow_402(protocol: PortProtocol) -> None:
@@ -306,8 +306,8 @@ async def _test_flow_402(protocol: PortProtocol) -> None:
     random.shuffle(numbers)
 
     for i in numbers:
-        pkt = await tasks[i]
-        _assert_pkt_eq_cmd(pkt, put_sensor_temp("03:123456", i))
+        packet = await tasks[i]
+        _assert_packet_eq_cmd(packet, put_sensor_temp("03:123456", i))
 
 
 async def _test_flow_qos_helper(
@@ -325,17 +325,17 @@ async def _test_flow_60x(protocol: PortProtocol, num_cmds: int = 1) -> None:
     #
     # Setup...
     tasks = list()
-    for idx in range(num_cmds):
+    for index in range(num_cmds):
         cmd = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
                 dst=Address("01:123456"),
                 action=Action.GET_ZONE_TEMP,
-                data={"zone_idx": f"{idx:02X}"},
+                data={"zone_index": f"{index:02X}"},
             )
         )
         coro = protocol._send_cmd(cmd, qos=QosParams())
-        tasks.append(protocol._loop.create_task(coro, name=f"cmd_{idx:02X}"))
+        tasks.append(protocol._loop.create_task(coro, name=f"cmd_{index:02X}"))
 
     assert await asyncio.gather(*tasks)
 
@@ -351,39 +351,39 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
     # ### Simple test for an I (does not expect any reply)...
 
     cmd = put_sensor_temp("03:000111", 19.5)
-    pkt = await protocol._send_cmd(cmd)  # qos == QosParams()
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there's no reply to wait for"
+    packet = await protocol._send_cmd(cmd)  # qos == QosParams()
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there's no reply to wait for"
     )
 
     cmd = put_sensor_temp("03:000222", 19.5)
-    pkt = await protocol._send_cmd(cmd, qos=None)  # qos == QosParams()
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there's no reply to wait for"
+    packet = await protocol._send_cmd(cmd, qos=None)  # qos == QosParams()
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there's no reply to wait for"
     )
 
     cmd = put_sensor_temp("03:000333", 19.5)
-    pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there's no reply to wait for"
+    packet = await protocol._send_cmd(cmd, qos=QosParams())
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there's no reply to wait for"
     )
 
     cmd = put_sensor_temp("03:000444", 19.5)
-    pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "should be echo as there is no wait_for_reply"
+    packet = await protocol._send_cmd(cmd, qos=QosParams())
+    _assert_packet_eq_cmd(
+        packet, cmd, "should be echo as there is no wait_for_reply"
     )
 
     cmd = put_sensor_temp("03:000555", 19.5)
-    pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "should be echo as there is no wait_for_reply"
+    packet = await protocol._send_cmd(cmd, qos=QosParams())
+    _assert_packet_eq_cmd(
+        packet, cmd, "should be echo as there is no wait_for_reply"
     )
 
     cmd = put_sensor_temp("03:000666", 19.5)
-    pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there's no reply to wait for"
+    packet = await protocol._send_cmd(cmd, qos=QosParams())
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there's no reply to wait for"
     )
 
     # # ### Simple test for an RQ (expects an RP)...
@@ -396,9 +396,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
             data={},
         )
     )
-    pkt = await protocol._send_cmd(cmd)
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there's no reply to wait for"
+    packet = await protocol._send_cmd(cmd)
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there's no reply to wait for"
     )
 
     cmd = build_dto(
@@ -409,9 +409,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
             data={},
         )
     )
-    pkt = await protocol._send_cmd(cmd, qos=None)
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there's no reply to wait for"
+    packet = await protocol._send_cmd(cmd, qos=None)
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there's no reply to wait for"
     )
 
     cmd = build_dto(
@@ -422,9 +422,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
             data={},
         )
     )
-    pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there's no reply to wait for"
+    packet = await protocol._send_cmd(cmd, qos=QosParams())
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there's no reply to wait for"
     )
 
     cmd = build_dto(
@@ -435,9 +435,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
             data={},
         )
     )
-    pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there is no wait_for_reply"
+    packet = await protocol._send_cmd(cmd, qos=QosParams())
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there is no wait_for_reply"
     )
 
     cmd = build_dto(
@@ -448,9 +448,9 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
             data={},
         )
     )
-    pkt = await protocol._send_cmd(cmd, qos=QosParams())
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there is no wait_for_reply"
+    packet = await protocol._send_cmd(cmd, qos=QosParams())
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there is no wait_for_reply"
     )
 
     cmd = build_dto(
@@ -461,16 +461,16 @@ async def _test_flow_qos(protocol: PortProtocol) -> None:
             data={},
         )
     )
-    pkt = await protocol._send_cmd(cmd, qos=QosParams(timeout=0.05))
-    _assert_pkt_eq_cmd(
-        pkt, cmd, "Should be echo as there's no reply to wait for"
+    packet = await protocol._send_cmd(cmd, qos=QosParams(timeout=0.05))
+    _assert_packet_eq_cmd(
+        packet, cmd, "Should be echo as there's no reply to wait for"
     )
 
     # # ### Simple test for an I (does not expect any reply)...
 
     cmd = put_sensor_temp("03:000999", 19.5)
-    pkt = await protocol._send_cmd(cmd)
-    _assert_pkt_eq_cmd(pkt, cmd)
+    packet = await protocol._send_cmd(cmd)
+    _assert_packet_eq_cmd(packet, cmd)
 
 
 # ######################################################################################

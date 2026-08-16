@@ -17,6 +17,10 @@ from ramses_rf.const import Code, DevType
 from ramses_rf.devices.helpers import build_rq_cmd
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.helpers import schedule_task
+from ramses_rf.protocol.opentherm import (
+    OTB_POLL_DATA_IDS,
+    encode_opentherm_payload,
+)
 from ramses_rf.typing import DeviceIdT, PollingIntervalsT
 
 if TYPE_CHECKING:
@@ -43,7 +47,7 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
         # 0004 (zone name) is polled per-zone, not per-device — see
         # update_device_tasks for the zone-level expansion.  The interval
         # here is a marker; actual tasks are keyed by (device_id, "0004",
-        # zone_idx).  Issue 947: zone names lost after cache clear because
+        # zone_index).  Issue 947: zone names lost after cache clear because
         # the CTL does not broadcast 0004 unless queried.
         Code._0004: INTERVAL_EVERY_6_HOURS,  # Zone Name (per-zone, expanded below)
     },
@@ -119,7 +123,7 @@ class PollingTask:
     :type last_polled: dt | None
     :param failures: Count of consecutive polling failures.
     :type failures: int
-    :param payload: Optional payload suffix (e.g., zone_idx for 0004).
+    :param payload: Optional payload suffix (e.g., zone_index for 0004).
     :type payload: str | None
     """
 
@@ -161,7 +165,7 @@ class PollingManager:
         self._cycle_interval: float = cycle_interval
 
         # Keys are (device_id, code) for device-level tasks, or
-        # (device_id, code, zone_idx) for zone-level tasks (e.g., 0004).
+        # (device_id, code, zone_index) for zone-level tasks (e.g., 0004).
         self._tasks: dict[tuple[str, ...], PollingTask] = {}
         self._poller_task: asyncio.Task[None] | None = None
         self._running: bool = False
@@ -218,9 +222,15 @@ class PollingManager:
 
         For CTL devices with zones, the ``0004`` (zone name) code is
         expanded into one task per zone, keyed by
-        ``(device_id, "0004", zone_idx)``.  This restores the per-zone
+        ``(device_id, "0004", zone_index)``.  This restores the per-zone
         zone-name polling that was lost when the legacy DiscoveryService
         was removed (issue 947 / ramses-rf/ramses_cc#947).
+
+        For OTB devices, the ``3220`` (OpenTherm Data ID) code is
+        expanded into individual tasks per Data ID, keyed by
+        ``(device_id, "3220", data_id_hex)``.  This queries status
+        and parameter Data IDs with valid parity-encoded 5-byte payloads
+        (ramses-rf/ramses_cc#975).
 
         :param device: The device entity to register or refresh.
         :type device: DeviceBase
@@ -233,20 +243,22 @@ class PollingManager:
 
         # Collect zone indices for per-zone code expansion (0004).
         # CTL devices have a .tcs attribute with .zones list.
-        zone_idxs: list[str] = []
+        zone_indexs: list[str] = []
         if Code._0004 in schedule:
             tcs = getattr(device, "tcs", None)
             if tcs is not None:
                 zones = getattr(tcs, "zones", [])
-                zone_idxs = [z.idx for z in zones if hasattr(z, "idx")]
+                zone_indexs = [z.index for z in zones if hasattr(z, "index")]
+
+        slug = getattr(device, "_SLUG", None)
 
         for code, interval in schedule.items():
-            if code == Code._0004 and zone_idxs:
+            if code == Code._0004 and zone_indexs:
                 # Expand into per-zone tasks
-                for zone_idx in zone_idxs:
-                    zkey = (device.id, code, zone_idx)
+                for zone_index in zone_indexs:
+                    zkey = (device.id, code, zone_index)
                     active_keys.add(zkey)
-                    payload = f"{zone_idx}00"
+                    payload = f"{zone_index}00"
                     if zkey not in self._tasks:
                         self._tasks[zkey] = PollingTask(
                             device_id=device.id,
@@ -258,6 +270,23 @@ class PollingManager:
                     else:
                         self._tasks[zkey].interval = interval
                         self._tasks[zkey].payload = payload
+            elif code == Code._3220 and slug == DevType.OTB:
+                # Expand into per-Data-ID OpenTherm query tasks
+                for data_id in OTB_POLL_DATA_IDS:
+                    ot_key = (device.id, code, f"{data_id:02X}")
+                    active_keys.add(ot_key)
+                    payload = encode_opentherm_payload(data_id)
+                    if ot_key not in self._tasks:
+                        self._tasks[ot_key] = PollingTask(
+                            device_id=device.id,
+                            code=code,
+                            interval=interval,
+                            next_due=now + td(seconds=interval),
+                            payload=payload,
+                        )
+                    else:
+                        self._tasks[ot_key].interval = interval
+                        self._tasks[ot_key].payload = payload
             else:
                 dkey = (device.id, code)
                 active_keys.add(dkey)

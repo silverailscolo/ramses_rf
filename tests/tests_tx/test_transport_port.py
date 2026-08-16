@@ -118,8 +118,8 @@ async def test_create_connection_with_signature_success() -> None:
     transport._make_connection = MagicMock()
     transport._write_frame = AsyncMock()
 
-    mock_pkt = MagicMock()
-    mock_pkt.src.id = "18:123456"
+    mock_packet = MagicMock()
+    mock_packet.src.id = "18:123456"
 
     mock_sig = MagicMock()
     mock_sig.payload = "00"
@@ -128,7 +128,7 @@ async def test_create_connection_with_signature_success() -> None:
     # Simulate the packet echo being received immediately after write
     async def delayed_resolve(*args: Any, **kwargs: Any) -> None:
         if not transport._init_fut.done():
-            transport._init_fut.set_result(mock_pkt)
+            transport._init_fut.set_result(mock_packet)
 
     transport._write_frame.side_effect = delayed_resolve
 
@@ -143,7 +143,7 @@ async def test_create_connection_with_signature_success() -> None:
         await transport._init_task  # Await the actual initialization task
 
     assert transport._init_fut.done()
-    assert transport._init_fut.result() == mock_pkt
+    assert transport._init_fut.result() == mock_packet
     transport._make_connection.assert_called_once_with(gateway_id="18:123456")
     transport._close()
 
@@ -200,21 +200,21 @@ async def test_read_ready_handles_serial_exception() -> None:
     transport._close.assert_not_called()
 
 
-async def test_pkt_read_resolves_init_fut_on_signature_echo() -> None:
+async def test_packet_read_resolves_init_fut_on_signature_echo() -> None:
     # Test packet inspection successfully resolving the signature
     transport = _get_transport()
     transport._extra[SZ_SIGNATURE] = "00"
 
-    mock_pkt = MagicMock()
-    mock_pkt.code = Code._PUZZ
-    mock_pkt.payload = "00"
-    mock_pkt.src.id = "18:000000"
+    mock_packet = MagicMock()
+    mock_packet.code = Code._PUZZ
+    mock_packet.payload = "00"
+    mock_packet.src.id = "18:000000"
 
-    with patch("ramses_tx.transport.base._FullTransport._pkt_read"):
-        transport._pkt_read(mock_pkt)
+    with patch("ramses_tx.transport.base._FullTransport._packet_read"):
+        transport._packet_read(mock_packet)
 
     assert transport._init_fut.done()
-    assert transport._init_fut.result() == mock_pkt
+    assert transport._init_fut.result() == mock_packet
     assert transport._extra.get(SZ_ACTIVE_HGI) == "18:000000"
     transport._close()
 

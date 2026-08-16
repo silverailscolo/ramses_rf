@@ -10,7 +10,7 @@ from datetime import UTC, datetime as dt, timedelta as td
 from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
-from ramses_tx import Packet, protocol_factory, set_pkt_logging_config
+from ramses_tx import Packet, protocol_factory, set_packet_logging_config
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.logger import flush_packet_log
 
@@ -58,7 +58,7 @@ class GatewayLifecycle:
 
         _engine: Engine
         _message_store: MessageStoreInterface | None
-        _pkt_log_listener: QueueListener | None
+        _packet_log_listener: QueueListener | None
         _schema: dict[str, Any]
         _tcs: Evohome | None
         state_projector: StateProjector | None
@@ -89,23 +89,25 @@ class GatewayLifecycle:
         cached_packets: dict[str, dict[str, Any] | str] | None = None,
     ) -> None:
         """Start the Gateway."""
-        _, self._pkt_log_listener = await set_pkt_logging_config(
+        _, self._packet_log_listener = await set_packet_logging_config(
             cc_console=(self.config.reduce_processing >= DONT_CREATE_MESSAGES),
             **self._engine._packet_log,
         )  # type: ignore[arg-type]
 
-        if self._pkt_log_listener:
-            self._pkt_log_listener.start()
+        if self._packet_log_listener:
+            self._packet_log_listener.start()
 
-            pkt_log_config: dict[str, Any] = dict(self._engine._packet_log)
-            if flush_interval := pkt_log_config.get("flush_interval", 0):
+            packet_log_config: dict[str, Any] = dict(self._engine._packet_log)
+            if flush_interval := packet_log_config.get("flush_interval", 0):
 
                 async def _periodic_flush() -> None:
                     try:
                         while True:
                             await asyncio.sleep(flush_interval)
                             await self._engine._loop.run_in_executor(
-                                None, flush_packet_log, self._pkt_log_listener
+                                None,
+                                flush_packet_log,
+                                self._packet_log_listener,
                             )
                     except asyncio.CancelledError:
                         pass
@@ -199,7 +201,7 @@ class GatewayLifecycle:
         if self.state_projector is not None:
             await self.state_projector.stop()
 
-        if self._pkt_log_listener:
+        if self._packet_log_listener:
 
             def _stop_listener(listener: QueueListener) -> None:
                 listener.stop()
@@ -207,9 +209,9 @@ class GatewayLifecycle:
                     handler.close()
 
             await self._engine._loop.run_in_executor(
-                None, _stop_listener, self._pkt_log_listener
+                None, _stop_listener, self._packet_log_listener
             )
-            self._pkt_log_listener = None
+            self._packet_log_listener = None
 
         if self._message_store:
             self._message_store.stop()
@@ -318,10 +320,10 @@ class GatewayLifecycle:
 
             try:
                 clean_dtm = dtm.replace("Z", "+00:00")
-                pkt_dtm = dt.fromisoformat(clean_dtm)
-                if pkt_dtm.tzinfo is None:
-                    pkt_dtm = pkt_dtm.replace(tzinfo=UTC)
-                is_old = pkt_dtm < cutoff_dtm
+                packet_dtm = dt.fromisoformat(clean_dtm)
+                if packet_dtm.tzinfo is None:
+                    packet_dtm = packet_dtm.replace(tzinfo=UTC)
+                is_old = packet_dtm < cutoff_dtm
             except (TypeError, ValueError):
                 is_old = False
 
@@ -344,7 +346,7 @@ class GatewayLifecycle:
 
             try:
                 packet = Packet.from_dict(dtm, state)
-                tmp_protocol.pkt_received(packet)
+                tmp_protocol.packet_received(packet)
             except Exception as err:
                 _LOGGER.debug(
                     "Gateway: Failed to restore packet %s: %s", dtm, err

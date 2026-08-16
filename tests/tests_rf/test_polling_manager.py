@@ -16,6 +16,12 @@ from ramses_rf.pipeline.polling import (
     DEFAULT_POLLING_SCHEDULES,
     PollingManager,
 )
+from ramses_rf.protocol.opentherm import (
+    OTB_PARAMS_DATA_IDS,
+    OTB_POLL_DATA_IDS,
+    OTB_STATUS_DATA_IDS,
+    encode_opentherm_payload,
+)
 from ramses_rf.schemas import SCH_GLOBAL_CONFIG, strip_and_map_traits
 from ramses_rf.typing import DeviceIdT
 from ramses_tx import CommandDTO
@@ -315,7 +321,7 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
     This restores the per-zone zone-name polling that was lost when the
     legacy DiscoveryService was removed (issue 947 /
     ramses-rf/ramses_cc#947).  Each zone gets its own 0004 task with
-    the zone_idx in the payload.
+    the zone_index in the payload.
     """
     # ARRANGE
     poller = PollingManager(mock_gateway, shadow_mode=True)
@@ -323,9 +329,9 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
 
     # Mock a TCS with zones
     zone_03 = MagicMock()
-    zone_03.idx = "03"
+    zone_03.index = "03"
     zone_07 = MagicMock()
-    zone_07.idx = "07"
+    zone_07.index = "07"
     mock_tcs = MagicMock()
     mock_tcs.zones = [zone_03, zone_07]
     ctl_dev.tcs = mock_tcs
@@ -340,11 +346,11 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
     assert len(device_level) == 4
     assert len(zone_level) == 2
 
-    # Zone-level keys are (device_id, "0004", zone_idx)
+    # Zone-level keys are (device_id, "0004", zone_index)
     assert ("01:111111", Code._0004, "03") in zone_level
     assert ("01:111111", Code._0004, "07") in zone_level
 
-    # Verify the 0004 tasks have the correct payload (zone_idx + "00")
+    # Verify the 0004 tasks have the correct payload (zone_index + "00")
     task_03 = poller._tasks[("01:111111", Code._0004, "03")]
     assert task_03.payload == "0300"
     assert task_03.code == Code._0004
@@ -363,9 +369,9 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
     mock_gateway: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When polling 0004 for a zone, the RQ payload includes the zone_idx.
+    """When polling 0004 for a zone, the RQ payload includes the zone_index.
 
-    The old DiscoveryService sent GET_ZONE_NAME with the zone_idx in the
+    The old DiscoveryService sent GET_ZONE_NAME with the zone_index in the
     payload.  The PollingManager must do the same — payload "00" would
     only query zone 00, not the target zone.
     """
@@ -376,7 +382,7 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
 
     # Mock a TCS with one zone
     zone_05 = MagicMock()
-    zone_05.idx = "05"
+    zone_05.index = "05"
     mock_tcs = MagicMock()
     mock_tcs.zones = [zone_05]
     ctl_dev.tcs = mock_tcs
@@ -399,7 +405,7 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
     ]
     assert Code._0004 in sent_codes
 
-    # Find the 0004 call and verify payload contains zone_idx
+    # Find the 0004 call and verify payload contains zone_index
     for call in mock_gateway.async_send_cmd.call_args_list:
         dto: CommandDTO = call.args[0]
         if dto.code == Code._0004:
@@ -532,3 +538,107 @@ def test_sch_polling_interval_rejects_negative() -> None:
 
     with pytest.raises(Exception):  # noqa: B017
         SCH_POLLING_INTERVAL({Code._10E0: -1})
+
+
+def test_encode_opentherm_payload_parity() -> None:
+    # Arrange & Act & Assert
+    assert OTB_STATUS_DATA_IDS == (0x00, 0x19, 0x1C, 0x01)
+    assert OTB_PARAMS_DATA_IDS == (0x38, 0x39)
+    assert OTB_POLL_DATA_IDS == (0x00, 0x19, 0x1C, 0x01, 0x38, 0x39)
+
+    assert encode_opentherm_payload(0x00) == "0000000000"
+    assert encode_opentherm_payload(0x19) == "0080190000"
+    assert encode_opentherm_payload(0x1C) == "00801C0000"
+    assert encode_opentherm_payload(0x01) == "0080010000"
+    assert encode_opentherm_payload(0x38) == "0080380000"
+    assert encode_opentherm_payload(0x39) == "0000390000"
+
+
+def test_polling_manager_otb_expands_3220_data_id_tasks(
+    mock_gateway: MagicMock,
+) -> None:
+    # Arrange
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    otb_dev = MockDevice(mock_gateway, "10:048122", slug="OTB")
+
+    # Act
+    active_keys = poller.update_device_tasks(otb_dev)
+
+    # Assert
+    # 2 device-level tasks (10E0, 3EF0) + 6 Data-ID 3220 tasks
+    device_level = {k for k in active_keys if len(k) == 2}
+    ot_level = {k for k in active_keys if len(k) == 3}
+
+    assert len(device_level) == 2
+    assert ("10:048122", Code._10E0) in device_level
+    assert ("10:048122", Code._3EF0) in device_level
+
+    assert len(ot_level) == 6
+    expected_data_ids = ("00", "19", "1C", "01", "38", "39")
+    for data_id_hex in expected_data_ids:
+        assert ("10:048122", Code._3220, data_id_hex) in ot_level
+
+    # Verify task payloads match parity-encoded 5-byte strings
+    assert (
+        poller._tasks[("10:048122", Code._3220, "00")].payload == "0000000000"
+    )
+    assert (
+        poller._tasks[("10:048122", Code._3220, "19")].payload == "0080190000"
+    )
+    assert (
+        poller._tasks[("10:048122", Code._3220, "1C")].payload == "00801C0000"
+    )
+    assert (
+        poller._tasks[("10:048122", Code._3220, "01")].payload == "0080010000"
+    )
+    assert (
+        poller._tasks[("10:048122", Code._3220, "38")].payload == "0080380000"
+    )
+    assert (
+        poller._tasks[("10:048122", Code._3220, "39")].payload == "0000390000"
+    )
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_otb_live_dispatch_transmits_data_id_payloads(
+    mock_gateway: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    otb_dev = MockDevice(mock_gateway, "10:048122", slug="OTB")
+    mock_gateway.device_registry.devices = [otb_dev]
+
+    poller.update_device_tasks(otb_dev)
+    past = dt.now(UTC) - td(seconds=10)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+
+    # Act
+    processed_count = await poller.poll_due_commands()
+
+    # Assert
+    # 2 device-level tasks + 6 Data-ID tasks = 8 total
+    assert processed_count == 8
+    assert mock_gateway.async_send_cmd.call_count == 8
+
+    # Extract all 3220 commands sent
+    sent_3220_payloads: set[str] = set()
+    for call in mock_gateway.async_send_cmd.call_args_list:
+        dto: CommandDTO = call.args[0]
+        assert dto.addr2 == "10:048122"
+        assert dto.verb == Verb.RQ
+        if dto.code == Code._3220:
+            assert dto.payload is not None
+            sent_3220_payloads.add(dto.payload)
+
+    expected_payloads = {
+        "0000000000",
+        "0080190000",
+        "00801C0000",
+        "0080010000",
+        "0080380000",
+        "0000390000",
+    }
+    assert sent_3220_payloads == expected_payloads

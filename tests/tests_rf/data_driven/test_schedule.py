@@ -76,10 +76,10 @@ async def test_schedule_helpers(dir_name: Path) -> None:
     new_schedule = deepcopy(schedule)
 
     # Act & Assert
-    if "zone_idx" in schedule:
-        schedule[SZ_ZONE_INDEX] = schedule.pop("zone_idx")
-    if "zone_idx" in new_schedule:
-        new_schedule[SZ_ZONE_INDEX] = new_schedule.pop("zone_idx")
+    if "zone_index" in schedule:
+        schedule[SZ_ZONE_INDEX] = schedule.pop("zone_index")
+    if "zone_index" in new_schedule:
+        new_schedule[SZ_ZONE_INDEX] = new_schedule.pop("zone_index")
 
     ScheduleData.from_dict(schedule)
     if schedule[SZ_ZONE_INDEX] == "HW":
@@ -117,7 +117,7 @@ async def test_schedule_fsm_initial_state() -> None:
     # Arrange
     mock_zone = MagicMock()
     mock_zone.id = "01:123456_00"
-    mock_zone.idx = "00"
+    mock_zone.index = "00"
 
     # Act
     sched = Schedule(mock_zone)
@@ -134,7 +134,7 @@ async def test_schedule_fsm_fetch_state_transitions() -> None:
     # Arrange
     mock_zone = MagicMock()
     mock_zone.id = "01:123456_00"
-    mock_zone.idx = "00"
+    mock_zone.index = "00"
 
     sched = Schedule(mock_zone)
 
@@ -150,7 +150,7 @@ async def test_schedule_fsm_fetch_state_transitions() -> None:
             "_fetch_fragment",
             new=AsyncMock(
                 return_value={
-                    "zone_idx": "00",
+                    "zone_index": "00",
                     "frag_number": 1,
                     "total_frags": 1,
                     "fragment": VALID_FRAGMENT_HEX,
@@ -171,7 +171,7 @@ async def test_schedule_fsm_fetch_exponential_backoff() -> None:
     # Arrange
     mock_zone = MagicMock()
     mock_zone.id = "01:123456_00"
-    mock_zone.idx = "00"
+    mock_zone.index = "00"
 
     sched = Schedule(mock_zone)
 
@@ -180,7 +180,7 @@ async def test_schedule_fsm_fetch_exponential_backoff() -> None:
         side_effect=[
             TimeoutError("Mock timeout"),
             {
-                "zone_idx": "00",
+                "zone_index": "00",
                 "frag_number": 1,
                 "total_frags": 1,
                 "fragment": VALID_FRAGMENT_HEX,
@@ -211,7 +211,7 @@ async def test_schedule_fsm_max_attempts_fault() -> None:
     # Arrange
     mock_zone = MagicMock()
     mock_zone.id = "01:123456_00"
-    mock_zone.idx = "00"
+    mock_zone.index = "00"
 
     sched = Schedule(mock_zone)
 
@@ -243,7 +243,7 @@ async def test_schedule_handle_msg_version_change() -> None:
     # Arrange
     mock_zone = MagicMock()
     mock_zone.id = "01:123456_00"
-    mock_zone.idx = "00"
+    mock_zone.index = "00"
 
     sched = Schedule(mock_zone)
     sched._set_state(ScheduleIsSynchronised)
@@ -268,7 +268,7 @@ async def test_schedule_apply_state_update_cqrs() -> None:
     # Arrange
     mock_zone = MagicMock()
     mock_zone.id = "01:123456_00"
-    mock_zone.idx = "00"
+    mock_zone.index = "00"
     mock_zone.schedule_state = None
 
     sched = Schedule(mock_zone)

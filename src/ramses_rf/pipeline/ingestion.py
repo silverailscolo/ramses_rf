@@ -248,10 +248,10 @@ class StateProjector:
 
             if (
                 SZ_UFH_INDEX not in payload
-                and "ufh_idx" not in payload
+                and "ufh_index" not in payload
                 and SZ_ZONE_INDEX not in payload
-                and "zone_idx" not in payload
-                and "ufx_idx" not in payload
+                and "zone_index" not in payload
+                and "ufx_index" not in payload
                 and SZ_DOMAIN_INDEX not in payload
                 and "domain_id" not in payload
                 and all(
@@ -317,10 +317,10 @@ class StateProjector:
                         )
 
             # Route CQRS state to Systems (TCS) and Zones
-            zone_val = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+            zone_val = payload.get(SZ_ZONE_INDEX, payload.get("zone_index"))
             if zone_val is not None and msg.src.id in system_by_id:
                 tcs = system_by_id[msg.src.id]
-                zone = tcs.zone_by_idx.get(str(zone_val))
+                zone = tcs.zone_by_index.get(str(zone_val))
                 if zone:
                     try:
                         self._update_zone_state(zone, payload, msg)
@@ -342,11 +342,12 @@ class StateProjector:
                         )
 
             # Route 30C9 from a sensor to its parent zone.  Sensor-sourced
-            # 30C9 packets have no zone_idx in the decoded payload (the
-            # sensor is not a controller, so _build_idx_dict injects no
-            # zone_idx), so the zone routing path above is not reached.
+            # 30C9 packets have no zone_index in the decoded payload (the
+            # sensor is not a controller, so _build_index_dict injects no
+            # zone_index), so the zone routing path above is not reached.
             # Without this, the zone's current_temperature stays None when
             # only the sensor broadcasts 30C9 (issue 927).
+            # Restricted to designated sensor or sole actuator (issue 976).
             if (
                 msg.code == Code._30C9
                 and src_dev
@@ -357,14 +358,23 @@ class StateProjector:
                 if hasattr(parent, "temp_state") and hasattr(
                     parent, "zone_state"
                 ):
-                    try:
-                        self._update_temperature_state(parent, payload, msg)
-                    except Exception as err:
-                        _LOGGER.error(
-                            "CQRS extraction failed for parent zone %s: %s",
-                            getattr(parent, "id", "unknown"),
-                            err,
-                        )
+                    parent_sensor = getattr(parent, "sensor", None)
+                    parent_actuators = getattr(parent, "actuators", [])
+                    if src_dev is parent_sensor or (
+                        parent_sensor is None
+                        and len(parent_actuators) == 1
+                        and src_dev in parent_actuators
+                    ):
+                        try:
+                            self._update_temperature_state(
+                                parent, payload, msg
+                            )
+                        except Exception as err:
+                            _LOGGER.error(
+                                "CQRS extraction failed for parent zone %s: %s",
+                                getattr(parent, "id", "unknown"),
+                                err,
+                            )
 
             # Route domain-id opcodes (0008/0009/3150) to the DhwZone (F9/FA)
             # or TCS (FC).  The ingestion path above only routes to src_dev
@@ -374,7 +384,7 @@ class StateProjector:
             # See: https://github.com/ramses-rf/ramses_cc/issues/843
             domain_val = payload.get(
                 SZ_DOMAIN_INDEX,
-                payload.get("domain_id", payload.get("domain_idx")),
+                payload.get("domain_id", payload.get("domain_index")),
             )
             if (
                 domain_val is not None
@@ -405,7 +415,7 @@ class StateProjector:
                         )
 
             # Route DHW opcodes (1260/10A0/1F41) to the DhwZone.
-            # These payloads carry no zone_idx/domain_id, so the block above
+            # These payloads carry no zone_index/domain_id, so the block above
             # misses the DhwZone.  The shared helper in dispatcher.py
             # encapsulates the routing logic (src_slug check, OTB exclusion).
             # See: https://github.com/ramses-rf/ramses_cc/issues/843
@@ -420,6 +430,33 @@ class StateProjector:
                         dhw.id,
                         err,
                     )
+
+            # Route 22D9 and 3EF0 broadcasts from controller to
+            # appliance_control.  Controller broadcasts to --:------ are
+            # routed to src_dev (01:), which drops them because _SLUG !=
+            # "OTB".  When the TCS has an appliance_control (e.g.
+            # OtbGateway), route 22D9 (setpoint) and 3EF0 (modulation)
+            # to it.  See: https://github.com/ramses-rf/ramses_cc/issues/975
+            if (
+                msg.code in (Code._22D9, Code._3EF0)
+                and msg.src.id in system_by_id
+            ):
+                tcs = system_by_id[msg.src.id]
+                appliance_control = getattr(tcs, "appliance_control", None)
+                if appliance_control is not None:
+                    try:
+                        self._update_opentherm_state(
+                            appliance_control, payload, msg
+                        )
+                        self._update_actuator_state(
+                            appliance_control, payload, msg
+                        )
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for appliance_control %s: %s",
+                            getattr(appliance_control, "id", "unknown"),
+                            err,
+                        )
 
         # --- CQRS Reactor Hooks ---
         # Automate the legacy Actuator discovery query (3EF1) in response to 3EF0 (I)
@@ -528,7 +565,9 @@ class StateProjector:
                     elif category == "temperatures":
                         upd_temp[state_field] = p[payload_key]
             elif msg.code in (Code._3EF0, Code._3EF1):
-                if SZ_REL_MODULATION_LEVEL in p:
+                if SZ_MODULATION_LEVEL in p:
+                    upd_base["rel_modulation_level"] = p[SZ_MODULATION_LEVEL]
+                elif SZ_REL_MODULATION_LEVEL in p:
                     upd_base["rel_modulation_level"] = p[
                         SZ_REL_MODULATION_LEVEL
                     ]
@@ -911,13 +950,13 @@ class StateProjector:
                 if (
                     p.get(SZ_DOMAIN_INDEX)
                     or p.get("domain_id")
-                    or p.get("domain_idx")
+                    or p.get("domain_index")
                 ) == "FC":
                     updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
             elif (
                 SZ_UFH_INDEX not in p
-                and "ufh_idx" not in p
-                and "ufx_idx" not in p
+                and "ufh_index" not in p
+                and "ufx_index" not in p
             ):
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
@@ -928,7 +967,7 @@ class StateProjector:
                 and (
                     p.get(SZ_DOMAIN_INDEX)
                     or p.get("domain_id")
-                    or p.get("domain_idx")
+                    or p.get("domain_index")
                 )
                 != "FC"
             ):
@@ -972,13 +1011,13 @@ class StateProjector:
         current_state = getattr(target, "ufh_state", None) or UfhState()
         updates: dict[str, Any] = {}
 
-        # Safely extract index matching legacy typo "ufx_idx"
+        # Safely extract index matching legacy typo "ufx_index"
         ufh_index = (
-            p.get("ufx_idx")
+            p.get("ufx_index")
             or p.get(SZ_UFH_INDEX)
-            or p.get("ufh_idx")
+            or p.get("ufh_index")
             or p.get(SZ_ZONE_INDEX)
-            or p.get("zone_idx")
+            or p.get("zone_index")
         )
 
         if (
@@ -995,7 +1034,7 @@ class StateProjector:
             and (
                 p.get(SZ_DOMAIN_INDEX)
                 or p.get("domain_id")
-                or p.get("domain_idx")
+                or p.get("domain_index")
             )
             == "FA"
             and SZ_RELAY_DEMAND in p

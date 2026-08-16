@@ -271,7 +271,7 @@ async def test_is_hgi80_async_file_check() -> None:
 
 
 def _make_read_transport(loop: asyncio.AbstractEventLoop) -> Any:
-    """Create a minimal _ReadTransport for testing _pkt_read/_close."""
+    """Create a minimal _ReadTransport for testing _packet_read/_close."""
     from ramses_tx.transport.base import _ReadTransport
 
     transport = _ReadTransport.__new__(_ReadTransport)
@@ -279,15 +279,15 @@ def _make_read_transport(loop: asyncio.AbstractEventLoop) -> Any:
     transport._protocol = Mock()
     transport._closing = False
     transport._reading = False
-    transport._this_pkt = None
-    transport._prev_pkt = None
+    transport._this_packet = None
+    transport._prev_packet = None
     transport._extra = {}
     transport._evofw_flag = None
     return transport
 
 
-async def test_pkt_read_raises_transport_error_when_loop_closed() -> None:
-    """_pkt_read raises TransportError (not RuntimeError) when loop is closed.
+async def test_packet_read_raises_transport_error_when_loop_closed() -> None:
+    """_packet_read raises TransportError (not RuntimeError) when loop is closed.
 
     This is the fix for issue 802: the paho-mqtt thread receives a message
     after the asyncio loop has been closed, and call_soon_threadsafe would
@@ -300,16 +300,16 @@ async def test_pkt_read_raises_transport_error_when_loop_closed() -> None:
     with patch.object(type(loop), "is_closed", return_value=True):
         from ramses_tx import Packet
 
-        pkt = Packet.from_file(
+        packet = Packet.from_file(
             "2026-07-13T04:40:36",
             "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
         )
         with pytest.raises(exc.TransportError, match="Event loop is closed"):
-            transport._pkt_read(pkt)
+            transport._packet_read(packet)
 
 
-async def test_pkt_read_raises_transport_error_on_runtime_error() -> None:
-    """_pkt_read catches RuntimeError from call_soon_threadsafe and wraps it.
+async def test_packet_read_raises_transport_error_on_runtime_error() -> None:
+    """_packet_read catches RuntimeError from call_soon_threadsafe and wraps it.
 
     Even if is_closed() returns False, the loop may close between the check
     and the call (race condition). The RuntimeError is caught and re-raised
@@ -320,7 +320,7 @@ async def test_pkt_read_raises_transport_error_on_runtime_error() -> None:
 
     from ramses_tx import Packet
 
-    pkt = Packet.from_file(
+    packet = Packet.from_file(
         "2026-07-13T04:40:36",
         "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
     )
@@ -336,7 +336,7 @@ async def test_pkt_read_raises_transport_error_on_runtime_error() -> None:
             ),
             pytest.raises(exc.TransportError, match="Event loop is closed"),
         ):
-            transport._pkt_read(pkt)
+            transport._packet_read(packet)
     finally:
         await asyncio.sleep(0.01)
 

@@ -261,7 +261,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
                     "UFC",
                 ):
                     is_ufc = True
-            index_name = "ufx_idx" if is_ufc else SZ_ZONE_INDEX
+            index_name = "ufx_index" if is_ufc else SZ_ZONE_INDEX
             result[index_name] = f"{index:02X}"
         return result
 
@@ -443,12 +443,12 @@ class Temperature3BPayload(TemperaturePayload):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert 3-byte temperature payload to legacy dictionary layout."""
-        idx_str = (
+        index_str = (
             f"{self.zone_index:02X}"
             if isinstance(self.zone_index, int)
             else str(self.zone_index)
         )
-        return {SZ_ZONE_INDEX: idx_str, "temperature": self.temperature}
+        return {SZ_ZONE_INDEX: index_str, "temperature": self.temperature}
 
 
 # Update VARIANTS property after variants are defined
@@ -520,11 +520,11 @@ class ScheduleFragmentPayload(PayloadBase):
             raise ValueError(
                 f"Invalid fragment payload length for 0404: {len(raw_data)}"
             )
-        raw_idx, prefix, _frag_len, frag_num, total_frags = struct.unpack_from(
-            cls._STRUCT_FMT_HEADER, raw_data, 0
+        raw_index, prefix, _frag_len, frag_num, total_frags = (
+            struct.unpack_from(cls._STRUCT_FMT_HEADER, raw_data, 0)
         )
         zone_index: int | str = (
-            "HW" if raw_idx == 0 and prefix == b"\x23\x00\x08" else raw_idx
+            "HW" if raw_index == 0 and prefix == b"\x23\x00\x08" else raw_index
         )
         return cls(
             zone_index=zone_index,
@@ -546,12 +546,12 @@ class ScheduleFragmentPayload(PayloadBase):
             if self._header_prefix is not None
             else (b"\x23\x00\x08" if index == 0xFA else b"\x20\x00\x08")
         )
-        byte_idx = (
+        byte_index = (
             0x00 if prefix == b"\x23\x00\x08" and index == 0xFA else index
         )
         hdr = struct.pack(
             self._STRUCT_FMT_HEADER,
-            byte_idx,
+            byte_index,
             prefix,
             len(self.fragment_bytes),
             self.frag_number,
@@ -1113,7 +1113,7 @@ class BindingPayload(PayloadBase):
         return result
 
     @property
-    def idx(self) -> str:
+    def index(self) -> str:
         """Return two-character hex index string for binding type.
 
         :returns: Two-character uppercase hex index string.
@@ -1409,12 +1409,12 @@ class ZoneName22BPayload(ZoneNamePayload):
         """
         if self.name is None:
             return {}
-        idx_str = (
+        index_str = (
             f"{self.zone_index:02X}"
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
-        return {SZ_ZONE_INDEX: idx_str, "name": self.name}
+        return {SZ_ZONE_INDEX: index_str, "name": self.name}
 
 
 @dataclass(frozen=True, slots=True)
@@ -1483,12 +1483,12 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
         :returns: Decoded zone setpoint dictionary.
         :rtype: dict[str, Any]
         """
-        idx_str = (
+        index_str = (
             f"{self.zone_index:02X}"
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
-        return {SZ_ZONE_INDEX: idx_str, "setpoint": self.setpoint_temp}
+        return {SZ_ZONE_INDEX: index_str, "setpoint": self.setpoint_temp}
 
 
 # Update VARIANTS property after variants are defined
@@ -1735,13 +1735,13 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
         :returns: Decoded setpoint info dictionary.
         :rtype: dict[str, Any]
         """
-        idx_str = (
+        index_str = (
             f"{self.zone_index:02X}"
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
         return {
-            SZ_ZONE_INDEX: idx_str,
+            SZ_ZONE_INDEX: index_str,
             "setpoint": self.setpoint_temp,
         }
 
@@ -2120,10 +2120,10 @@ class ZoneDevicesPayload(PayloadBase):
     """Master payload dispatcher and base class for Opcode 000C.
 
     Protocol & Heuristic Notes:
-      # TODO: 000C to a UFC should be ufh_idx, not zone_index
+      # TODO: 000C to a UFC should be ufh_index, not zone_index
       # NOTE: Both len=5 and len=6 elements are valid! So collision when len = 036!
-      # Note: 000C sent to a UFC device represents ufh_idx rather than zone_index
-      # If sent to/from a UFC device, byte 0 is ufh_idx and sub_index is zone_index
+      # Note: 000C sent to a UFC device represents ufh_index rather than zone_index
+      # If sent to/from a UFC device, byte 0 is ufh_index and sub_index is zone_index
       # Sample Packet Logs:
       # .I --- 34:092243 --:------ 34:092243 000C 018 00-0A-7F-FFFFFF
       # RP --- 01:145038 18:013393 --:------ 000C 006 00-00-00-10DAFD
@@ -2258,14 +2258,14 @@ class ZoneDevicesPayload(PayloadBase):
             ]
             zone_index = raw_data[0]
             for i in range(6, len(raw_data), 5):
-                role_id_seq, sub_idx_seq, dev_bytes_seq = struct.unpack_from(
+                role_id_seq, sub_index_seq, dev_bytes_seq = struct.unpack_from(
                     ">BB3s", raw_data, i
                 )
                 res_list.append(
                     ZoneDevices6BPayload(
                         zone_index_raw=zone_index,
                         device_role_id=role_id_seq,
-                        sub_index=sub_idx_seq,
+                        sub_index=sub_index_seq,
                         device_id_raw=int.from_bytes(
                             dev_bytes_seq, byteorder="big"
                         ),
@@ -2979,11 +2979,13 @@ class ZoneMode4BPayload(ZoneModePayload):
             raise ValueError(
                 f"Invalid payload length for ZoneMode4BPayload: {len(raw_data)}"
             )
-        raw_idx, sp_raw, mode = struct.unpack_from(
+        raw_index, sp_raw, mode = struct.unpack_from(
             cls._STRUCT_FMT, raw_data, 0
         )
         setpoint = None if sp_raw in (0x31FF, 0x7FFF) else sp_raw / 100.0
-        return cls(zone_index=raw_idx, setpoint_temp=setpoint, mode_code=mode)
+        return cls(
+            zone_index=raw_index, setpoint_temp=setpoint, mode_code=mode
+        )
 
     def to_bytes(self) -> bytes:
         """Pack 4-byte zone mode data into binary payload.
@@ -3015,13 +3017,13 @@ class ZoneMode4BPayload(ZoneModePayload):
             else str(self.mode_code)
         )
         mode_str = ZON_MODE_MAP.get(mode_code_hex, mode_code_hex)
-        idx_str = (
+        index_str = (
             f"{self.zone_index:02X}"
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
         return {
-            SZ_ZONE_INDEX: idx_str,
+            SZ_ZONE_INDEX: index_str,
             "mode": mode_str,
             "setpoint": self.setpoint_temp,
         }
@@ -3085,7 +3087,7 @@ class ZoneMode7BPayload(ZoneModePayload):
             raise ValueError(
                 f"Invalid payload length for ZoneMode7BPayload: {len(raw_data)}"
             )
-        raw_idx, sp_raw, mode = struct.unpack_from(
+        raw_index, sp_raw, mode = struct.unpack_from(
             cls._STRUCT_FMT, raw_data, 0
         )
         setpoint = None if sp_raw in (0x31FF, 0x7FFF) else sp_raw / 100.0
@@ -3093,7 +3095,7 @@ class ZoneMode7BPayload(ZoneModePayload):
         if raw_data[4:7] != b"\xff\xff\xff":
             dur = int.from_bytes(raw_data[4:7], byteorder="big")
         return cls(
-            zone_index=raw_idx,
+            zone_index=raw_index,
             setpoint_temp=setpoint,
             mode_code=mode,
             duration_minutes=dur,
@@ -3134,13 +3136,13 @@ class ZoneMode7BPayload(ZoneModePayload):
             else str(self.mode_code)
         )
         mode_str = ZON_MODE_MAP.get(mode_code_hex, mode_code_hex)
-        idx_str = (
+        index_str = (
             f"{self.zone_index:02X}"
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
         result: dict[str, Any] = {
-            SZ_ZONE_INDEX: idx_str,
+            SZ_ZONE_INDEX: index_str,
             "mode": mode_str,
             "setpoint": self.setpoint_temp,
         }
@@ -3208,7 +3210,7 @@ class ZoneMode13BPayload(ZoneModePayload):
             raise ValueError(
                 f"Invalid payload length for ZoneMode13BPayload: {len(raw_data)}"
             )
-        raw_idx, sp_raw, mode = struct.unpack_from(
+        raw_index, sp_raw, mode = struct.unpack_from(
             cls._STRUCT_FMT, raw_data, 0
         )
         setpoint = None if sp_raw in (0x31FF, 0x7FFF) else sp_raw / 100.0
@@ -3217,7 +3219,7 @@ class ZoneMode13BPayload(ZoneModePayload):
             dur = int.from_bytes(raw_data[4:7], byteorder="big")
         until_raw = hex_to_dtm(raw_data[7:13].hex().upper())
         return cls(
-            zone_index=raw_idx,
+            zone_index=raw_index,
             setpoint_temp=setpoint,
             mode_code=mode,
             duration_minutes=dur,
@@ -3272,13 +3274,13 @@ class ZoneMode13BPayload(ZoneModePayload):
             else str(self.mode_code)
         )
         mode_str = ZON_MODE_MAP.get(mode_code_hex, mode_code_hex)
-        idx_str = (
+        index_str = (
             f"{self.zone_index:02X}"
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
         result: dict[str, Any] = {
-            SZ_ZONE_INDEX: idx_str,
+            SZ_ZONE_INDEX: index_str,
             "mode": mode_str,
             "setpoint": self.setpoint_temp,
         }

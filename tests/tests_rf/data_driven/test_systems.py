@@ -103,7 +103,7 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 def test_payload_from_log_file(dir_name: Path) -> None:
     """Assert that each message payload is as expected."""
     # RP --- 02:044328 18:200214 --:------ 2309 003 0007D0
-    # {'ufh_idx': '00', 'setpoint': 20.0}
+    # {'ufh_index': '00', 'setpoint': 20.0}
 
     def safe_shrink(obj: Any) -> Any:
         if isinstance(obj, dict):
@@ -115,7 +115,7 @@ def test_payload_from_log_file(dir_name: Path) -> None:
     def proc_log_line(log_line: str) -> None:
         if "#" not in log_line:
             return
-        pkt_line, dict_str = log_line.split("#", maxsplit=1)
+        packet_line, dict_str = log_line.split("#", maxsplit=1)
 
         if not dict_str.strip():
             return
@@ -129,8 +129,8 @@ def test_payload_from_log_file(dir_name: Path) -> None:
             expected = expected[0]
 
         try:
-            msg = Message._from_pkt(
-                Packet.from_file(pkt_line[:26], pkt_line[27:])
+            msg = Message._from_packet(
+                Packet.from_file(packet_line[:26], packet_line[27:])
             )
         except exc.PacketInvalid:
             return
@@ -156,30 +156,27 @@ def test_payload_from_log_file(dir_name: Path) -> None:
             actual_payload = _to_dict(actual_payload)
 
         LEGACY_KEY_MAP = {
-            "zone_index": "zone_idx",
+            "zone_index": "zone_index",
             "domain_index": "domain_id",
-            "dhw_index": "dhw_idx",
-            "ufh_index": "ufh_idx",
-            "log_index": "log_idx",
+            "dhw_index": "dhw_index",
+            "ufh_index": "ufh_index",
+            "log_index": "log_index",
             "is_daylight_saving": "is_dst",
         }
 
         def _norm_dict(
             d: dict[str, Any], exp: dict[str, Any]
         ) -> dict[str, Any]:
-            if "zone_idx" in exp and "ufx_idx" in d:
-                d["zone_idx"] = d.pop("ufx_idx")
+            if "zone_index" in exp and "ufx_index" in d:
+                d["zone_index"] = d.pop("ufx_index")
             res = {LEGACY_KEY_MAP.get(k, k): v for k, v in d.items()}
             for key in (
-                "zone_idx",
                 "zone_index",
                 "domain_id",
                 "domain_index",
-                "dhw_idx",
                 "dhw_index",
                 "msg_id",
-                "ufx_idx",
-                "ufh_idx",
+                "ufx_index",
                 "ufh_index",
             ):
                 if key not in exp:

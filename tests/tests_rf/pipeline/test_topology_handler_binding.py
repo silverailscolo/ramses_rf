@@ -48,7 +48,7 @@ def test_bind_handler_000c_zone_binding() -> None:
 
     payload = [
         {
-            "zone_idx": "00",
+            "zone_index": "00",
             "device_role": "04",
             "zone_type": "00",
             "devices": ["04:111111"],
@@ -68,5 +68,5 @@ def test_bind_handler_000c_zone_binding() -> None:
     assert events[0].action == TopologyAction.BIND_DEVICE
     assert events[0].parent_id == "01:123456"
     assert events[0].child_id == "04:111111"
-    assert events[0].metadata["zone_idx"] == "00"
+    assert events[0].metadata["zone_index"] == "00"
     assert events[0].causation == "Rule_000C_Zone_Binding"

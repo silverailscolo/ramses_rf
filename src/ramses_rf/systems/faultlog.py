@@ -10,7 +10,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, NewType, TypeAlias
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import SZ_LOG_ENTRY, SZ_LOG_IDX, SZ_LOG_INDEX
+from ramses_rf.const import SZ_LOG_ENTRY, SZ_LOG_INDEX
 from ramses_rf.models import FaultLogState, StateUpdatedEvent
 from ramses_rf.payloads.helpers import parse_fault_log_entry
 from ramses_tx import Packet
@@ -44,14 +44,14 @@ DEFAULT_GET_LIMIT = 6
 _LOGGER = logging.getLogger(__name__)
 
 
-#  {'log_idx': '00', 'log_entry': ('21-12-23T11:59:35', 'restore', 'battery_low', 'actuator', '00', '04:164787', 'B0', '0000', 'FFFF7000')}
+#  {'log_index': '00', 'log_entry': ('21-12-23T11:59:35', 'restore', 'battery_low', 'actuator', '00', '04:164787', 'B0', '0000', 'FFFF7000')}
 
 
 @dataclasses.dataclass(frozen=True, kw_only=True, order=True)
 class FaultLogEntry:
     """A fault log entry of an evohome fault log.
 
-    Fault log entries do have a log_idx attr, but this is merely their current location
+    Fault log entries do have a log_index attr, but this is merely their current location
     in the system's fault log.
     """
 
@@ -74,8 +74,7 @@ class FaultLogEntry:
         fault_type: FaultType,
         device_class: FaultDeviceClass,
         device_id: DeviceIdT | None,
-        domain_index: str = "",
-        domain_idx: str | None = None,
+        domain_index: str | None = None,
     ) -> None:
         """Initialize a FaultLogEntry instance."""
         object.__setattr__(self, "timestamp", timestamp)
@@ -86,13 +85,8 @@ class FaultLogEntry:
         object.__setattr__(
             self,
             "domain_index",
-            domain_index if domain_index else (domain_idx or ""),
+            domain_index if domain_index else (domain_index or ""),
         )
-
-    @property
-    def domain_idx(self) -> str:
-        """Deprecated alias for domain_index."""
-        return self.domain_index
 
     def __str__(self) -> str:
         """Return the string representation of the fault log entry."""
@@ -138,20 +132,20 @@ class FaultLogEntry:
         if log_entry is None or "timestamp" not in log_entry:
             raise exc.PacketPayloadInvalid("Invalid fault log entry payload")
         kwargs = {k: v for k, v in log_entry.items() if k[:1] != "_"}
-        if "domain_idx" in kwargs and "domain_index" not in kwargs:
-            kwargs["domain_index"] = kwargs.pop("domain_idx")
+        if "domain_index" in kwargs and "domain_index" not in kwargs:
+            kwargs["domain_index"] = kwargs.pop("domain_index")
         return cls(**kwargs)  # type: ignore[arg-type]
 
     @classmethod
-    def from_pkt(cls, packet: Packet) -> FaultLogEntry:
+    def from_packet(cls, packet: Packet) -> FaultLogEntry:
         """Create a fault log entry from a packet's payload."""
         log_entry = parse_fault_log_entry(packet.raw_payload)
         if log_entry is None or "timestamp" not in log_entry:
             raise exc.SystemInconsistent("Null fault log entry")
 
         kwargs = {k: v for k, v in log_entry.items() if k[:1] != "_"}
-        if "domain_idx" in kwargs and "domain_index" not in kwargs:
-            kwargs["domain_index"] = kwargs.pop("domain_idx")
+        if "domain_index" in kwargs and "domain_index" not in kwargs:
+            kwargs["domain_index"] = kwargs.pop("domain_index")
         return cls(**kwargs)  # type: ignore[arg-type]
 
 
@@ -169,14 +163,16 @@ class FaultLog:  # 0418
 
     Null entries do not have a timestamp. All subsequent entries will also be null.
 
-    The `log_idx` is not an identifier: it is merely the current position of a log entry
+    The `log_index` is not an identifier: it is merely the current position of a log entry
     in the system log.
 
-    New entries are added to the top of the log (log_idx=0), and the log_idx is
+    New entries are added to the top of the log (log_index=0), and the log_index is
     incremented for all existing log entries.
     """
 
-    _MAX_LOG_IDX = 0x3F  # evohome controller only keeps most recent 64 entries
+    _MAX_LOG_INDEX = (
+        0x3F  # evohome controller only keeps most recent 64 entries
+    )
 
     def __init__(self, tcs: _LogbookT) -> None:
         """Initialize the FaultLog with a parent TCS controller."""
@@ -220,12 +216,12 @@ class FaultLog:  # 0418
 
         new_map |= {index: dtm}
 
-        if not (idxs := [k for k, v in self._map.items() if v < dtm]):
+        if not (indices := [k for k, v in self._map.items() if v < dtm]):
             return new_map
 
-        if (next_idx := min(idxs)) > index:
+        if (next_index := min(indices)) > index:
             diff = 0
-        elif next_idx == index:
+        elif next_index == index:
             diff = 1  # next - index + 1
         else:
             diff = index + 1  # 1 if self._map.get(index) else 0
@@ -233,7 +229,7 @@ class FaultLog:  # 0418
         new_map |= {
             k + diff: v  # type: ignore[misc]
             for k, v in self._map.items()
-            if (k >= index or v < dtm) and k + diff <= self._MAX_LOG_IDX
+            if (k >= index or v < dtm) and k + diff <= self._MAX_LOG_INDEX
         }
 
         return new_map
@@ -243,8 +239,8 @@ class FaultLog:  # 0418
         assert msg.code == Code._0418 and msg.verb in (I_, RP), "Coding error"
 
         if msg.verb == RP and msg.payload[SZ_LOG_ENTRY] is None:
-            # such payloads have idx == "00" (is sentinel for null), so can't know the
-            # corresponding RQ's log_idx, but if verb == I_, safely assume log_idx is 0
+            # such payloads have index == "00" (is sentinel for null), so can't know the
+            # corresponding RQ's log_index, but if verb == I_, safely assume log_index is 0
             return
 
         self._process_msg(msg)
@@ -255,49 +251,49 @@ class FaultLog:  # 0418
             self._is_current = False
 
         if SZ_LOG_INDEX in msg.payload:
-            log_idx = FaultIdxT(int(msg.payload[SZ_LOG_INDEX], 16))
-        elif SZ_LOG_IDX in msg.payload:
-            log_idx = FaultIdxT(int(msg.payload[SZ_LOG_IDX], 16))
+            log_index = FaultIdxT(int(msg.payload[SZ_LOG_INDEX], 16))
+        elif SZ_LOG_INDEX in msg.payload:
+            log_index = FaultIdxT(int(msg.payload[SZ_LOG_INDEX], 16))
         elif msg.payload.get(SZ_LOG_ENTRY) is None:
-            log_idx = FaultIdxT(0)
+            log_index = FaultIdxT(0)
         else:
             return  # we can't do anything useful with this message
 
         if (
             msg.payload[SZ_LOG_ENTRY] is None
         ):  # NOTE: Subsequent entries will be empty
-            self._map = self._insert_into_map(log_idx, None)
+            self._map = self._insert_into_map(log_index, None)
             self._log = {
                 k: v for k, v in self._log.items() if k in self._map.values()
             }
-            return  # If idx != 0, should we also check from idx = 0?
+            return  # If index != 0, should we also check from index = 0?
 
         entry = FaultLogEntry.from_msg(
             msg
         )  # if msg.payload[SZ_LOG_ENTRY] else None
         dtm: FaultDtmT = entry.timestamp  # type: ignore[assignment]
 
-        if self._map.get(log_idx) == dtm:
+        if self._map.get(log_index) == dtm:
             return  # i.e. No evidence anything has changed
 
         if dtm not in self._log:
             self._log |= {
                 dtm: entry
             }  # must add entry before _insert_into_map()
-        self._map = self._insert_into_map(log_idx, dtm)  # updates self._map
+        self._map = self._insert_into_map(log_index, dtm)  # updates self._map
         self._log = {
             k: v for k, v in self._log.items() if k in self._map.values()
         }
 
-        # if idx != 0:  # there's other (new/changed) entries above this one?
+        # if index != 0:  # there's other (new/changed) entries above this one?
         #     pass
 
-    def _hack_pkt_idx(self, orig_msg: Message, log_index: str) -> Message:
+    def _hack_packet_index(self, orig_msg: Message, log_index: str) -> Message:
         """Modify the Message so that it has the expected log index.
 
-        If there is no log entry for log_idx=<idx>, then the headers won't match:
-        - expected rx_hdr is 0418|RP|<ctl_id>|<idx>
-        - pkt hdr will  0418|RP|<ctl_id>|00    (response from controller)
+        If there is no log entry for log_index=<index>, then the headers won't match:
+        - expected rx_hdr is 0418|RP|<ctl_id>|<index>
+        - packet hdr will  0418|RP|<ctl_id>|00    (response from controller)
         """
         assert orig_msg.verb == RP and orig_msg.code == Code._0418
         assert (
@@ -316,7 +312,6 @@ class FaultLog:  # 0418
         msg = Message(new_dto)
         msg._payload = {
             SZ_LOG_INDEX: log_index,
-            SZ_LOG_IDX: log_index,
             SZ_LOG_ENTRY: None,
         }  # PayDictT._0418_NULL
         return msg
@@ -342,20 +337,20 @@ class FaultLog:  # 0418
                 return self.faultlog
 
             error_occurred = False
-            for log_idx in range(
-                start, min(start + limit, self._MAX_LOG_IDX + 1)
+            for log_index in range(
+                start, min(start + limit, self._MAX_LOG_INDEX + 1)
             ):
                 try:
                     msg = await send_system_intent(
                         self._tcs,
                         Action.GET_FAULTLOG_ENTRY,
-                        data={SZ_LOG_INDEX: log_idx},
+                        data={SZ_LOG_INDEX: log_index},
                         wait_for_reply=True,
                     )
                 except exc.RamsesException as err:
                     _LOGGER.warning(
                         "Failed to retrieve fault log entry %s: %s",
-                        log_idx,
+                        log_index,
                         err,
                     )
                     error_occurred = True
@@ -366,12 +361,12 @@ class FaultLog:  # 0418
                     msg._dto.raw_payload
                     == "000000B0000000000000000000007FFFFF7000000000"
                 ):
-                    msg = self._hack_pkt_idx(
-                        msg, f"{log_idx:02X}"
-                    )  # RPs for null entries have idx==00
+                    msg = self._hack_packet_index(
+                        msg, f"{log_index:02X}"
+                    )  # RPs for null entries have index==00
                     self._process_msg(
                         msg
-                    )  # since pkt via dispatcher aint got idx
+                    )  # since packet via dispatcher aint got index
                     break
 
                 self._process_msg(msg)  # JIC dispatcher doesn't do this for us
@@ -388,7 +383,9 @@ class FaultLog:  # 0418
         # if self._faultlog:
         #     return self._faultlog
 
-        return {log_idx: self._log[dtm] for log_idx, dtm in self._map.items()}
+        return {
+            log_index: self._log[dtm] for log_index, dtm in self._map.items()
+        }
 
     @property
     def is_current(self) -> bool:

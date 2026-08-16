@@ -43,12 +43,15 @@ class Address:
             raise ValueError(f"Invalid device_id: {device_id}")
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         return str(self.id)
 
     def __str__(self) -> str:
+        """Return a human-readable string representation."""
         return self.id
 
     def __eq__(self, other: object) -> bool:
+        """Return True if both addresses are equal."""
         if not hasattr(other, "id"):  # can compare Address with Device
             return NotImplemented
         return self.id == other.id  # type: ignore[no-any-return]
@@ -109,7 +112,7 @@ class Address:
 
 @lru_cache(maxsize=2048)
 def id_to_address(device_id: DeviceIdT) -> Address:
-    """Factory method to cache & return device Address from device ID."""
+    """Return cached Address instance for a device ID."""
     return Address(device_id=device_id)
 
 
@@ -146,7 +149,7 @@ def is_valid_dev_id(value: str, device_class: None | str = None) -> bool:
 
 
 @lru_cache(maxsize=2048)
-def pkt_addrs(
+def packet_addrs(
     address_fragment: str,
 ) -> tuple[Address, Address, Address, Address, Address]:
     """Parse address fields from a 30-character address fragment.

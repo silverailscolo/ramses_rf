@@ -52,21 +52,21 @@ class Test_entity_base:
     _NONA = "--:------"
     _NOW = dt.now().replace(microsecond=0)
 
-    msg5: Message = Message._from_pkt(
+    msg5: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=40),
             "...  I --- 04:189078 --:------ 01:145038 3150 002 0100",  # heat_demand
         )
     )
 
-    msg6: Message = Message._from_pkt(
+    msg6: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=50),
             "061 RP --- 01:145038 04:189078 --:------ 3220 005 00C0110000",  # OTB
         )
     )
 
-    msg7: Message = Message._from_pkt(
+    msg7: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=60),
             "...  I --- 04:189078 --:------ 01:145038 12B0 003 010000",  # window_open
@@ -194,14 +194,14 @@ class Test_entity_base:
 
         mock_gateway.message_store.stop()  # close sqlite3 connection
 
-    msg8: Message = Message._from_pkt(
+    msg8: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=70),
             "045  I --- 01:145038 --:------ 01:145038 3150 002 FC90",  # heat_demand
         )
     )
 
-    msg9: Message = Message._from_pkt(
+    msg9: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=80),
             "045 RP --- 01:145038 18:006402 --:------ 1260 003 00182B",  # setpoint
@@ -279,8 +279,8 @@ class Test_entity_base:
 
         # Case 2: Payload is a list, key='*' (should return full list)
         payload_list = [
-            {"zone_idx": "00", "val": 10},
-            {"zone_idx": "01", "val": 20},
+            {"zone_index": "00", "val": 10},
+            {"zone_index": "01", "val": 20},
         ]
         msg_list = MagicMock(spec=Message)
         msg_list.payload = payload_list
@@ -296,12 +296,12 @@ class Test_entity_base:
         val = dev.entity_state._msg_value_msg(msg_list)
         assert val == payload_list
 
-        # Case 3: Legacy Fallback - Payload is list, specific key requested, no zone_idx
+        # Case 3: Legacy Fallback - Payload is list, specific key requested, no zone_index
         # Should return value from index 0
         val = dev.entity_state._msg_value_msg(msg_list, key="val")
         assert val == 10  # from index 0 ('00')
 
-        # Case 4: Correct filtering when zone_idx is provided
+        # Case 4: Correct filtering when zone_index is provided
         val = dev.entity_state._msg_value_msg(
             msg_list, key="val", zone_index="01"
         )

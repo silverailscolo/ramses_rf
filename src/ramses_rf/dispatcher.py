@@ -138,7 +138,7 @@ async def process_msg(gateway: Gateway, msg: Message) -> None:
 
 # TODO: this needs cleaning up (e.g. handle intervening packet)
 def detect_array_fragment(this: Message, prev: Message) -> bool:  # _PayloadT
-    """Return True if this pkt is the latter half of an array.
+    """Return True if this packet is the latter half of an array.
 
     :param this: The current message being evaluated.
     :type this: Message
@@ -147,7 +147,7 @@ def detect_array_fragment(this: Message, prev: Message) -> bool:  # _PayloadT
     :return: True if the packet is part of a merged array, False otherwise.
     :rtype: bool
     """
-    # This will work, even if the 2nd pkt._is_array == False as 1st == True
+    # This will work, even if the 2nd packet._is_array == False as 1st == True
     # .I --- 01:158182 --:------ 01:158182 000A 048 001201F409C4011101F409C40...
     # .I --- 01:158182 --:------ 01:158182 000A 006 081001F409C4
 

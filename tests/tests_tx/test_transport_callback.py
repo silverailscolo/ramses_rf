@@ -49,7 +49,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
 
         # Protocol should NOT have received data
-        self.mock_protocol.pkt_received.assert_not_called()
+        self.mock_protocol.packet_received.assert_not_called()
 
         # 2. Test while RESUMED
         self.transport.resume_reading()
@@ -59,8 +59,8 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
 
         # Protocol SHOULD receive data now
-        # Note: pkt_received is called with a Packet object, so we verify call count
-        self.assertEqual(self.mock_protocol.pkt_received.call_count, 1)
+        # Note: packet_received is called with a Packet object, so we verify call count
+        self.assertEqual(self.mock_protocol.packet_received.call_count, 1)
 
     async def test_write_error_handling(self) -> None:
         """Verify writer exceptions are wrapped in TransportError."""
@@ -183,7 +183,7 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         await asyncio.sleep(0)
 
         # Assert
-        self.assertEqual(self.mock_protocol.pkt_received.call_count, 1)
+        self.assertEqual(self.mock_protocol.packet_received.call_count, 1)
 
     async def test_callback_transport_teardown_cleans_up_writer(self) -> None:
         """Verify _close resets state and clears io_writer reference."""

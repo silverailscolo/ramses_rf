@@ -108,8 +108,8 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     mock_dev.entity_state = MagicMock()
     mock_dev.entity_state.get_state_cache_nested = AsyncMock(
         return_value={
-            Code._0005: {"verb": {"pkt": "msg_0005"}},
-            Code._000C: {"verb": {"pkt": "msg_000C"}},
+            Code._0005: {"verb": {"packet": "msg_0005"}},
+            Code._000C: {"verb": {"packet": "msg_000C"}},
         }
     )
 
@@ -125,7 +125,7 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     # Mock system_by_id for print_results
     mock_sys = MagicMock()
     mock_sys.dhw.schedule = [{"day": "Monday"}]
-    mock_sys.zone_by_idx = {"01": MagicMock(schedule=[{"day": "Tuesday"}])}
+    mock_sys.zone_by_index = {"01": MagicMock(schedule=[{"day": "Tuesday"}])}
     # Fix: Use integer key for faultlog to match expectations of print_results
     mock_sys._faultlog.faultlog = {0: "fault_data"}
     gateway.device_registry.system_by_id = {"01:123456": mock_sys}
@@ -811,7 +811,7 @@ async def test__save_state(mock_gateway: MagicMock) -> None:
     # Setup mock gateway state
     mock_gateway.get_state.return_value = (
         {"schema_key": "schema_data"},
-        {"2023-01-01T00:00:00": "pkt_line"},
+        {"2023-01-01T00:00:00": "packet_line"},
     )
 
     with patch("builtins.open", new_callable=mock_open) as mock_file:

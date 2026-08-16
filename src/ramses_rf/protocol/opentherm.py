@@ -174,6 +174,33 @@ STATUS_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = {
     #
     OtDataId._73: "OEM diagnostic code",  # .                                             # 115
 }
+
+OTB_STATUS_DATA_IDS: Final[tuple[int, ...]] = (
+    int(OtDataId.STATUS),
+    int(OtDataId.BOILER_OUTPUT_TEMP),
+    int(OtDataId.BOILER_RETURN_TEMP),
+    int(OtDataId.CONTROL_SETPOINT),
+)
+"""OpenTherm status and telemetry Data-IDs queried for bridge devices.
+
+Includes Master/Slave status (0x00), Boiler Flow Temp (0x19),
+Return Temp (0x1C), and CH Water Temp Setpoint (0x01).
+"""
+
+OTB_PARAMS_DATA_IDS: Final[tuple[int, ...]] = (
+    int(OtDataId.DHW_SETPOINT),
+    int(OtDataId.CH_MAX_SETPOINT),
+)
+"""OpenTherm configuration parameter Data-IDs queried for bridge devices.
+
+Includes DHW Setpoint (0x38) and Max CH Setpoint (0x39).
+"""
+
+OTB_POLL_DATA_IDS: Final[tuple[int, ...]] = (
+    OTB_STATUS_DATA_IDS + OTB_PARAMS_DATA_IDS
+)
+"""Combined tuple of all periodic OpenTherm Data-IDs polled for bridge devices."""
+
 WRITE_DATA_IDS: Final[
     dict[_OtDataIdT, _MsgStrT]
 ] = {  # Write-Data, NB: some are also Read-Data
@@ -1051,6 +1078,23 @@ def parity(x: int) -> int:
         x ^= x >> shiftamount
         shiftamount <<= 1
     return x & 1
+
+
+def encode_opentherm_payload(data_id: int) -> str:
+    """Encode a 5-byte OpenTherm Read-Data request payload with parity bit.
+
+    Generates a 10-character hexadecimal string representing an
+    OpenTherm Read-Data (msg-type 0) command frame formatted with
+    leading header, MSB parity check on lower bits, Data-ID, and empty
+    data bytes.
+
+    :param data_id: OpenTherm Data-ID (0x00 to 0xFF).
+    :type data_id: int
+    :returns: 10-character hex payload string (e.g. ``"0080190000"``).
+    :rtype: str
+    """
+    header = 0x80 if parity(data_id) == 1 else 0x00
+    return f"00{header:02X}{data_id:02X}0000"
 
 
 def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:

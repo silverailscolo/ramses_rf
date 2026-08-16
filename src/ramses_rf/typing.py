@@ -85,7 +85,6 @@ class WeeklyScheduleDict(TypedDict, total=False):
     """A dictionary representing a full schedule payload."""
 
     zone_index: str
-    zone_idx: str
     schedule: WeeklySchedule
 
 
@@ -93,7 +92,6 @@ class EmptySchedule(TypedDict, total=False):
     """A dictionary representing an empty schedule payload."""
 
     zone_index: str
-    zone_idx: str
     schedule: NotRequired[EmptyDictT | None]
 
 

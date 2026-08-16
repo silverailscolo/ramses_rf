@@ -145,9 +145,9 @@ async def transport_factory(
         )
 
     # File
-    if (pkt_source := packet_log or packet_dict) is not None:
+    if (packet_source := packet_log or packet_dict) is not None:
         return FileTransport(
-            pkt_source, protocol, config=config, extra=extra, loop=loop
+            packet_source, protocol, config=config, extra=extra, loop=loop
         )
 
     assert port_name is not None  # mypy check

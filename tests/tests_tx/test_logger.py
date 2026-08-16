@@ -45,11 +45,11 @@ async def test_packet_logging_outputs_formatted_frame(tmp_path: Path) -> None:
     await gwy.start()
 
     raw_packet_line = "...  I --- 01:161591 --:------ 01:161591 3150 002 0000"
-    pkt = Packet.from_file("2026-07-31T10:00:00.000000", raw_packet_line)
+    packet = Packet.from_file("2026-07-31T10:00:00.000000", raw_packet_line)
 
     try:
         # Act
-        PKT_LOGGER.info("", extra=pkt._pkt_extra)
+        PKT_LOGGER.info("", extra=packet._packet_extra)
 
         for _ in range(100):
             await asyncio.sleep(0.01)
@@ -104,7 +104,7 @@ async def test_logging_lifecycle(tmp_path: Path) -> None:
     )
     await gwy.start()
 
-    listener = gwy._pkt_log_listener
+    listener = gwy._packet_log_listener
 
     try:
         # 3. Verify Wiring
@@ -138,7 +138,7 @@ async def test_logging_lifecycle(tmp_path: Path) -> None:
         # 5. Stop
         await gwy.stop()
         # Verify the listener cleanly stopped
-        assert gwy._pkt_log_listener is None
+        assert gwy._packet_log_listener is None
 
 
 @pytest.mark.asyncio
@@ -258,7 +258,7 @@ async def test_flight_recorder_manual_flush(tmp_path: Path) -> None:
         ),
     )
     await gwy.start()
-    listener = gwy._pkt_log_listener
+    listener = gwy._packet_log_listener
 
     try:
         # Emit an INFO log; verify it stays in memory
@@ -406,7 +406,7 @@ async def test_hardware_echo_logging_suppressed() -> None:
 
         # Assert: Only 1 log entry created (Tx), duplicate echo suppressed
         assert len(handler.records) == 1
-        assert transport._protocol.pkt_received.called
+        assert transport._protocol.packet_received.called
     finally:
         PKT_LOGGER.removeHandler(handler)
 
@@ -462,6 +462,6 @@ async def test_hardware_echo_logging_suppressed_hgi80_addr_substitution() -> (
 
         # Assert: Only 1 log entry (Tx), echo suppressed despite addr1 mismatch
         assert len(handler.records) == 1
-        assert transport._protocol.pkt_received.called
+        assert transport._protocol.packet_received.called
     finally:
         PKT_LOGGER.removeHandler(handler)

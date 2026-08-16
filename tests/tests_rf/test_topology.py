@@ -165,10 +165,10 @@ class System(Parent):
 
 
 class Zone(Parent):
-    def __init__(self, idx: str) -> None:
+    def __init__(self, index: str) -> None:
         super().__init__()
-        self.idx = idx
-        self.id = idx
+        self.index = index
+        self.id = index
         self.actuators: list[Any] = []
         self.actuator_by_id: dict[DeviceIdT, Any] = {}
 

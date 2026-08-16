@@ -1125,7 +1125,7 @@ def test_complete_payload_registry_coverage() -> None:
     assert len(PAYLOAD_REGISTRY._registry) == 108
 
 
-def test_pipeline_3150_non_array_preserves_idx() -> None:
+def test_pipeline_3150_non_array_preserves_index() -> None:
     # Arrange
     dto = PacketDTO(
         timestamp=dt.now(),
@@ -1146,7 +1146,7 @@ def test_pipeline_3150_non_array_preserves_idx() -> None:
     # Assert
     assert isinstance(result, dict)
     assert result.get("heat_demand") == 1.0
-    assert result.get("zone_index") == "00" or result.get("zone_idx") == "00"
+    assert result.get("zone_index") == "00" or result.get("zone_index") == "00"
 
 
 def test_opentherm_msg_payload_replace_recalculates_parity() -> None:

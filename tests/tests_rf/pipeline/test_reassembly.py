@@ -48,16 +48,16 @@ async def test_passthrough_normal_packet(base_time: dt) -> None:
     buffer = ReassemblyBuffer(in_q, out_q)
     await buffer.start()
     # Send a normal temperature packet (30C9)
-    normal_pkt = create_dto(Verb.I_, Code._30C9, "0001C8", base_time)
+    normal_packet = create_dto(Verb.I_, Code._30C9, "0001C8", base_time)
 
     # Act
-    await in_q.put(normal_pkt)
-    out_pkt = await asyncio.wait_for(out_q.get(), timeout=1.0)
+    await in_q.put(normal_packet)
+    out_packet = await asyncio.wait_for(out_q.get(), timeout=1.0)
 
     # Assert
     # It should appear in the output queue immediately
-    assert out_pkt.code == Code._30C9
-    assert out_pkt.payload == "0001C8"
+    assert out_packet.code == Code._30C9
+    assert out_packet.payload == "0001C8"
 
     await buffer.stop()
 
@@ -84,14 +84,14 @@ async def test_successful_stitching(base_time: dt) -> None:
 
     await in_q.put(frag2)
     # Receive the stitched packet
-    out_pkt = await asyncio.wait_for(out_q.get(), timeout=1.0)
+    out_packet = await asyncio.wait_for(out_q.get(), timeout=1.0)
 
     # Assert
     assert is_empty_after_frag1 is True
-    assert out_pkt.code == Code._000A
-    assert out_pkt.payload == "001201F409C4081001F409C4"
-    assert out_pkt.length == "012"
-    assert out_pkt.timestamp == time_2
+    assert out_packet.code == Code._000A
+    assert out_packet.payload == "001201F409C4081001F409C4"
+    assert out_packet.length == "012"
+    assert out_packet.timestamp == time_2
 
     await buffer.stop()
 
@@ -111,11 +111,11 @@ async def test_timeout_flush(base_time: dt) -> None:
     # Act
     await in_q.put(frag1)
     # Wait just past our injected 0.1s timeout for the flush to happen
-    out_pkt = await asyncio.wait_for(out_q.get(), timeout=0.2)
+    out_packet = await asyncio.wait_for(out_q.get(), timeout=0.2)
 
     # Assert
     # We should get the unmodified original packet back
-    assert out_pkt.payload == "001201F4"
+    assert out_packet.payload == "001201F4"
 
     await buffer.stop()
 
@@ -156,23 +156,23 @@ async def test_unrelated_packet_does_not_abort_reassembly(
 
     await in_q.put(unrelated)
     # The unrelated packet passes straight through immediately...
-    out_pkt_unrelated = await asyncio.wait_for(out_q.get(), timeout=1.0)
+    out_packet_unrelated = await asyncio.wait_for(out_q.get(), timeout=1.0)
     # ...and the 000A fragment is STILL buffered (not flushed)
     is_empty_after_unrelated = out_q.empty()
 
     await in_q.put(frag2)
-    out_pkt_stitched = await asyncio.wait_for(out_q.get(), timeout=1.0)
+    out_packet_stitched = await asyncio.wait_for(out_q.get(), timeout=1.0)
 
     # Assert
     assert is_empty_after_frag1 is True
 
-    assert out_pkt_unrelated.code == Code._30C9
-    assert out_pkt_unrelated.payload == "0001C8"
+    assert out_packet_unrelated.code == Code._30C9
+    assert out_packet_unrelated.payload == "0001C8"
     assert is_empty_after_unrelated is True
 
-    assert out_pkt_stitched.code == Code._000A
-    assert out_pkt_stitched.payload == "001201F4081001F409C4"
-    assert out_pkt_stitched.length == "010"
+    assert out_packet_stitched.code == Code._000A
+    assert out_packet_stitched.payload == "001201F4081001F409C4"
+    assert out_packet_stitched.length == "010"
 
     await buffer.stop()
 

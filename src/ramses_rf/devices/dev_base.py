@@ -98,9 +98,9 @@ class DeviceBase(Entity):
         super().__init__(gateway, **kwargs)
 
         # FIXME: gwy.message_store entities must know their parent device ID
-        # and their own idx
+        # and their own index
         self._z_id = device_address.id  # the responsible device is itself
-        self._z_idx = None  # depends upon its location in the schema
+        self._z_index = None  # depends upon its location in the schema
 
         self.id: DeviceIdT = device_address.id
 
@@ -494,7 +494,7 @@ class Fakeable(DeviceBase):
 
     Impersonation of physical devices simply means sending packets on
     their behalf. This is straight-forward for sensors and remotes
-    (they do not usually receive pkts).
+    (they do not usually receive packets).
 
     Faked (virtual) devices must have any packet addressed to them sent
     to their handle_msg() method by the dispatcher. Impersonated
@@ -807,7 +807,7 @@ class DeviceHeat(Device):  # Heat domain: Honeywell CH/DHW or compatible
         """
         super().__init__(gateway, device_address, traits=traits, **kwargs)
 
-        self._child_id = None  # domain_id, or zone_idx
+        self._child_id = None  # domain_id, or zone_index
 
         self._iz_controller: None | bool | Message = None
 
