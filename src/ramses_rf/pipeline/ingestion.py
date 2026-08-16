@@ -431,6 +431,33 @@ class StateProjector:
                         err,
                     )
 
+            # Route 22D9 and 3EF0 broadcasts from controller to
+            # appliance_control.  Controller broadcasts to --:------ are
+            # routed to src_dev (01:), which drops them because _SLUG !=
+            # "OTB".  When the TCS has an appliance_control (e.g.
+            # OtbGateway), route 22D9 (setpoint) and 3EF0 (modulation)
+            # to it.  See: https://github.com/ramses-rf/ramses_cc/issues/975
+            if (
+                msg.code in (Code._22D9, Code._3EF0)
+                and msg.src.id in system_by_id
+            ):
+                tcs = system_by_id[msg.src.id]
+                appliance_control = getattr(tcs, "appliance_control", None)
+                if appliance_control is not None:
+                    try:
+                        self._update_opentherm_state(
+                            appliance_control, payload, msg
+                        )
+                        self._update_actuator_state(
+                            appliance_control, payload, msg
+                        )
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for appliance_control %s: %s",
+                            getattr(appliance_control, "id", "unknown"),
+                            err,
+                        )
+
         # --- CQRS Reactor Hooks ---
         # Automate the legacy Actuator discovery query (3EF1) in response to 3EF0 (I)
         if msg.code == Code._3EF0 and getattr(msg, "verb", "") == I_:
@@ -538,7 +565,9 @@ class StateProjector:
                     elif category == "temperatures":
                         upd_temp[state_field] = p[payload_key]
             elif msg.code in (Code._3EF0, Code._3EF1):
-                if SZ_REL_MODULATION_LEVEL in p:
+                if SZ_MODULATION_LEVEL in p:
+                    upd_base["rel_modulation_level"] = p[SZ_MODULATION_LEVEL]
+                elif SZ_REL_MODULATION_LEVEL in p:
                     upd_base["rel_modulation_level"] = p[
                         SZ_REL_MODULATION_LEVEL
                     ]

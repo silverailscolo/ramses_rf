@@ -17,6 +17,10 @@ from ramses_rf.const import Code, DevType
 from ramses_rf.devices.helpers import build_rq_cmd
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.helpers import schedule_task
+from ramses_rf.protocol.opentherm import (
+    OTB_POLL_DATA_IDS,
+    encode_opentherm_payload,
+)
 from ramses_rf.typing import DeviceIdT, PollingIntervalsT
 
 if TYPE_CHECKING:
@@ -222,6 +226,12 @@ class PollingManager:
         zone-name polling that was lost when the legacy DiscoveryService
         was removed (issue 947 / ramses-rf/ramses_cc#947).
 
+        For OTB devices, the ``3220`` (OpenTherm Data ID) code is
+        expanded into individual tasks per Data ID, keyed by
+        ``(device_id, "3220", data_id_hex)``.  This queries status
+        and parameter Data IDs with valid parity-encoded 5-byte payloads
+        (ramses-rf/ramses_cc#975).
+
         :param device: The device entity to register or refresh.
         :type device: DeviceBase
         :returns: Set of active task keys for the device.
@@ -239,6 +249,8 @@ class PollingManager:
             if tcs is not None:
                 zones = getattr(tcs, "zones", [])
                 zone_indexs = [z.index for z in zones if hasattr(z, "index")]
+
+        slug = getattr(device, "_SLUG", None)
 
         for code, interval in schedule.items():
             if code == Code._0004 and zone_indexs:
@@ -258,6 +270,23 @@ class PollingManager:
                     else:
                         self._tasks[zkey].interval = interval
                         self._tasks[zkey].payload = payload
+            elif code == Code._3220 and slug == DevType.OTB:
+                # Expand into per-Data-ID OpenTherm query tasks
+                for data_id in OTB_POLL_DATA_IDS:
+                    ot_key = (device.id, code, f"{data_id:02X}")
+                    active_keys.add(ot_key)
+                    payload = encode_opentherm_payload(data_id)
+                    if ot_key not in self._tasks:
+                        self._tasks[ot_key] = PollingTask(
+                            device_id=device.id,
+                            code=code,
+                            interval=interval,
+                            next_due=now + td(seconds=interval),
+                            payload=payload,
+                        )
+                    else:
+                        self._tasks[ot_key].interval = interval
+                        self._tasks[ot_key].payload = payload
             else:
                 dkey = (device.id, code)
                 active_keys.add(dkey)

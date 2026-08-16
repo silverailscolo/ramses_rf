@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from datetime import UTC, datetime as dt
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -13,12 +14,15 @@ from ramses_rf.const import DevType, Verb
 from ramses_rf.devices import HvacVentilator
 from ramses_rf.dispatcher import process_msg
 from ramses_rf.gateway import Gateway
+from ramses_rf.messages import Message
+from ramses_rf.models import ActuatorState, OpenThermState
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.routing import EventTopic, RoutingContext, StateHeader
 from ramses_rf.state import MessageStore
 from ramses_rf.systems.zones import Zone
 from ramses_tx import Address
 from ramses_tx.const import I_, Code
+from ramses_tx.packet import Packet
 from ramses_tx.typing import DeviceIdT
 
 TEST_DEVICE_ID = "32:153289"
@@ -280,3 +284,62 @@ async def test_l7_routing_avoids_stranglers_knot() -> None:
 
     demand = await zone_02.heat_demand()
     assert demand == 0.44
+
+
+@pytest.mark.asyncio
+async def test_l7_routing_controller_broadcasts_to_appliance_control() -> None:
+    """Verify that controller 22D9 and 3EF0 broadcasts route to appliance_control."""
+    # Arrange
+    gwy_mock = MagicMock()
+    gwy_mock.config.enable_eavesdrop = False
+    gwy_mock.config.reduce_processing = 0
+    gwy_mock.async_send_cmd = AsyncMock()
+
+    otb_dev = MagicMock()
+    otb_dev.id = "10:048122"
+    otb_dev._SLUG = DevType.OTB
+    otb_dev.opentherm_state = OpenThermState()
+    otb_dev.act_state = ActuatorState()
+
+    tcs = MagicMock()
+    tcs.id = "01:054173"
+    tcs.appliance_control = otb_dev
+    tcs.zone_by_index = {}
+
+    ctl_dev = MagicMock()
+    ctl_dev.id = "01:054173"
+    ctl_dev._SLUG = DevType.CTL
+    ctl_dev.tcs = tcs
+
+    gwy_mock.device_by_id = {"01:054173": ctl_dev, "10:048122": otb_dev}
+    gwy_mock.system_by_id = {"01:054173": tcs}
+    gwy_mock.device_registry = MagicMock()
+    gwy_mock.device_registry.device_by_id = gwy_mock.device_by_id
+    gwy_mock.device_registry.systems = [tcs]
+
+    projector = StateProjector(gwy_mock, MagicMock())
+
+    # Act 1: Controller broadcasts 22D9 (Boiler Setpoint 50.0C)
+    msg_22d9 = Message(
+        Packet(
+            dt.now(UTC),
+            "...  I --- 01:054173 --:------ 01:054173 22D9 003 001388",
+        ).to_dto()
+    )
+    projector.process_message_state(msg_22d9)
+
+    # Assert 1
+    assert otb_dev.opentherm_state.temperatures.boiler_setpoint == 50.0
+
+    # Act 2: Controller broadcasts 3EF0 (Modulation 50%)
+    msg_3ef0 = Message(
+        Packet(
+            dt.now(UTC),
+            "...  I --- 01:054173 --:------ 01:054173 3EF0 003 0064FF",
+        ).to_dto()
+    )
+    projector.process_message_state(msg_3ef0)
+
+    # Assert 2
+    assert otb_dev.opentherm_state.rel_modulation_level == 0.5
+    assert otb_dev.act_state.modulation_level == 0.5
