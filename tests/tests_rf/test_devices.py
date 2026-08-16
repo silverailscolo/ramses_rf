@@ -98,7 +98,7 @@ def _create_ot_msg(
         SZ_VALUE: value,
         SZ_MSG_NAME: name,
     }
-    msg._pkt = MagicMock()
+    msg._packet = MagicMock()
     # Topology validation checks the source and destination
     msg.src = MagicMock()
     msg.dst = MagicMock()
@@ -213,7 +213,6 @@ async def test_temperature_set_faked(
         assert intent.data == {
             "temperature": 22.0,
             "zone_index": "00",
-            "zone_idx": "00",
         }
 
 

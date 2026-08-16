@@ -105,8 +105,8 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         self._closing: bool = False
         self._reading: bool = False
 
-        self._this_pkt: Packet | None = None
-        self._prev_pkt: Packet | None = None
+        self._this_packet: Packet | None = None
+        self._prev_packet: Packet | None = None
 
         for key in (SZ_ACTIVE_HGI, SZ_SIGNATURE):
             self._extra.setdefault(key, None)
@@ -117,7 +117,7 @@ class _ReadTransport(_BaseTransport, TransportInterface):
     def _dt_now(self) -> dt:
         """Return a precise datetime, using last packet's dtm field."""
         try:
-            return self._this_pkt.dtm  # type: ignore[union-attr]
+            return self._this_packet.dtm  # type: ignore[union-attr]
         except AttributeError:
             return dt_now()
 
@@ -163,7 +163,7 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         return self._reading
 
     def pause_reading(self) -> None:
-        """Pause the receiving end (no data to protocol.pkt_received())."""
+        """Pause the receiving end (no data to protocol.packet_received())."""
         self._reading = False
 
     def resume_reading(self) -> None:
@@ -214,8 +214,8 @@ class _ReadTransport(_BaseTransport, TransportInterface):
                     self._recent_tx_counts[old_key] -= 1
 
         try:
-            rx_pkt = Packet.from_port(now, frame, is_echo=True)
-            rx_dto = rx_pkt.to_dto()
+            rx_packet = Packet.from_port(now, frame, is_echo=True)
+            rx_dto = rx_packet.to_dto()
         except Exception:
             return False
 
@@ -256,14 +256,14 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             return
 
         try:
-            self._pkt_read(packet)
+            self._packet_read(packet)
         except exc.TransportError as err:
             _LOGGER.debug("%s < Transport Error(%s)", packet, err)
             return
 
-    def _pkt_read(self, packet: Packet) -> None:
+    def _packet_read(self, packet: Packet) -> None:
         """Pass any valid Packets to the protocol's callback."""
-        self._this_pkt, self._prev_pkt = packet, self._this_pkt
+        self._this_packet, self._prev_packet = packet, self._this_packet
 
         if self._closing is True:
             raise exc.TransportError("Transport is closing or has closed")
@@ -272,7 +272,9 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             raise exc.TransportError("Event loop is closed")
 
         try:
-            self.loop.call_soon_threadsafe(self._protocol.pkt_received, packet)
+            self.loop.call_soon_threadsafe(
+                self._protocol.packet_received, packet
+            )
         except RuntimeError as err:
             # Event loop may close between the is_closed() check and this
             # call when the paho-mqtt thread races asyncio teardown (issue 802)
@@ -347,7 +349,7 @@ class _FullTransport(_ReadTransport):
         """Track the Tx rate as period of seconds per x transmits."""
         self._transmit_times.append(dt.now())
         _LOGGER.debug(
-            "Current Tx rate: %.2f pkts/min", self._report_transmit_rate()
+            "Current Tx rate: %.2f packets/min", self._report_transmit_rate()
         )
 
     def write(self, data: bytes) -> None:

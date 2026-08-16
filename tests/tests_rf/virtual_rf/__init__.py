@@ -33,7 +33,7 @@ _DEFAULT_GWY_CONFIG = {
 
 
 def _get_hgi_id_for_schema(
-    schema: dict[str, Any] | GatewayConfig, port_idx: int
+    schema: dict[str, Any] | GatewayConfig, port_index: int
 ) -> tuple[str, HgiFwTypes]:
     """Return the Gateway's device_id for a schema (if required, construct
     an id).
@@ -64,12 +64,12 @@ def _get_hgi_id_for_schema(
         return gwy_ids[0], HgiFwTypes.EVOFW3
 
     # Fallback assignment mirroring the original behavior
-    if port_idx == 0:
+    if port_index == 0:
         return GWY_ID_0, HgiFwTypes.EVOFW3
-    elif port_idx == 1:
+    elif port_index == 1:
         return GWY_ID_1, HgiFwTypes.EVOFW3
 
-    return f"18:{port_idx:06d}", HgiFwTypes.EVOFW3
+    return f"18:{port_index:06d}", HgiFwTypes.EVOFW3
 
 
 @patch("ramses_tx.transport.port.MIN_INTER_WRITE_GAP", MIN_INTER_WRITE_GAP)
@@ -94,13 +94,13 @@ async def rf_factory(
 
     rf = VirtualRf(len(schemas))
 
-    for idx, schema in enumerate(schemas):
+    for index, schema in enumerate(schemas):
         if schema is None:  # assume no gateway device
             continue
 
-        hgi_id, fw_type = _get_hgi_id_for_schema(schema, idx)
+        hgi_id, fw_type = _get_hgi_id_for_schema(schema, index)
 
-        rf.set_gateway(rf.ports[idx], hgi_id, fw_type=fw_type)
+        rf.set_gateway(rf.ports[index], hgi_id, fw_type=fw_type)
 
         with patch("ramses_tx.discovery.comports", rf.comports):
             if isinstance(schema, GatewayConfig):
@@ -142,7 +142,7 @@ async def rf_factory(
 
                 gwy_config = GatewayConfig(**gwy_kwargs)
 
-            gwy = Gateway(rf.ports[idx], config=gwy_config)
+            gwy = Gateway(rf.ports[index], config=gwy_config)
 
             if start_gwys:
                 await gwy.start()

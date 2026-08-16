@@ -206,18 +206,18 @@ class PortProtocol(_DeviceIdFilterMixin):
         if self._context:
             self._context.resume_writing()
 
-    def _pkt_received(self, packet: Packet) -> None:
+    def _packet_received(self, packet: Packet) -> None:
         """Pass any valid/wanted packets to the callback."""
-        super()._pkt_received(packet)
+        super()._packet_received(packet)
         if self._context:
-            self._context.pkt_received(packet)
+            self._context.packet_received(packet)
 
     async def _send_impersonation_alert(self, command: CommandDTO) -> None:
         """Send a puzzle packet warning that impersonation is occurring."""
         if _DBG_DISABLE_IMPERSONATION_ALERTS:
             return
 
-        msg = f"{self}: Impersonating device: {command.addr1}, for pkt: {str(command)}"
+        msg = f"{self}: Impersonating device: {command.addr1}, for packet: {str(command)}"
         if self._is_evofw3 is False:
             _LOGGER.error(
                 "%s, NB: non-evofw3 gateways can't impersonate!", msg

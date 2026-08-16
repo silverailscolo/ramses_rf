@@ -288,7 +288,7 @@ async def _test_flow_10x(
     gwy_r: Gateway,
     gwy_s: Gateway,
     test_set: dict[str, Any],
-    pkt_flow_expected: list[str],
+    packet_flow_expected: list[str],
 ) -> None:
     """Check the change of state during a binding at context layer."""
 
@@ -327,13 +327,13 @@ async def _test_flow_10x(
 
         #
         # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
-        pkt_str = "000 " + pkt_flow_expected[_TENDER]
-        msg = Message(Packet(dt.now(tz=UTC), pkt_str).to_dto())
+        packet_str = "000 " + packet_flow_expected[_TENDER]
+        msg = Message(Packet(dt.now(tz=UTC), packet_str).to_dto())
         codes = [b[1] for b in msg.payload["bindings"] if b[1] != Code._1FC9]
 
-        pkt = await supp_bm._make_offer(codes)
+        packet = await supp_bm._make_offer(codes)
         await assert_context_state(supplicant, _BindStates.NEEDING_ACCEPT)
-        assert pkt is not None
+        assert packet is not None
 
         await resp_task
         await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
@@ -345,53 +345,53 @@ async def _test_flow_10x(
             pytest.skip("QoS protocol not enabled")
 
         tender = resp_task.result()
-        _assert_l7_parity(tender, pkt)
+        _assert_l7_parity(tender, packet)
 
         supp_task = tg.create_task(supp_bm._wait_for_accept(tender))
 
         #
         # Step R2: Respondent expects a Confirm after sending an Accept (accepts Offer)
-        pkt_str = "000 " + pkt_flow_expected[_ACCEPT]
-        msg = Message(Packet(dt.now(tz=UTC), pkt_str).to_dto())
+        packet_str = "000 " + packet_flow_expected[_ACCEPT]
+        msg = Message(Packet(dt.now(tz=UTC), packet_str).to_dto())
         codes = [b[1] for b in msg.payload["bindings"]]
 
-        pkt = await resp_bm._accept_offer(tender, codes)
+        packet = await resp_bm._accept_offer(tender, codes)
         await assert_context_state(respondent, _BindStates.NEEDING_AFFIRM)
-        assert pkt is not None
+        assert packet is not None
 
         await supp_task
         await assert_context_state(supplicant, _BindStates.TO_SEND_AFFIRM)
 
         accept = supp_task.result()
-        _assert_l7_parity(accept, pkt)
+        _assert_l7_parity(accept, packet)
 
         resp_task = tg.create_task(resp_bm._wait_for_confirm(accept))
 
         #
         # Step S2: Supplicant sends a Confirm (confirms Accept)
-        pkt_str = "000 " + pkt_flow_expected[_AFFIRM]
-        msg = Message(Packet(dt.now(tz=UTC), pkt_str).to_dto())
+        packet_str = "000 " + packet_flow_expected[_AFFIRM]
+        msg = Message(Packet(dt.now(tz=UTC), packet_str).to_dto())
         codes = [b[1] for b in msg.payload["bindings"] if len(b) > 1]
 
-        pkt = await supp_bm._confirm_accept(accept, confirm_code=codes)
+        packet = await supp_bm._confirm_accept(accept, confirm_code=codes)
         await assert_context_state(supplicant, _BindStates.HAS_BOUND_SUPP)
-        assert pkt is not None
+        assert packet is not None
 
-        if len(pkt_flow_expected) > _RATIFY:  # FIXME
+        if len(packet_flow_expected) > _RATIFY:  # FIXME
             supp_bm.set_state(_BindStates.TO_SEND_RATIFY)  # HACK: easiest way
 
         await resp_task
         await assert_context_state(respondent, _BindStates.HAS_BOUND_RESP)
 
-        if len(pkt_flow_expected) > _RATIFY:  # FIXME
+        if len(packet_flow_expected) > _RATIFY:  # FIXME
             resp_bm.set_state(_BindStates.NEEDING_RATIFY)  # HACK: easiest way
 
         affirm = resp_task.result()
-        _assert_l7_parity(affirm, pkt)
+        _assert_l7_parity(affirm, packet)
 
         #
         # Some bindings don't include an Addenda...
-        if len(pkt_flow_expected) <= _RATIFY:  # i.e. no addenda  FIXME
+        if len(packet_flow_expected) <= _RATIFY:  # i.e. no addenda  FIXME
             return
 
         await assert_context_state(respondent, _BindStates.NEEDING_RATIFY)
@@ -403,7 +403,7 @@ async def _test_flow_20x(
     gwy_r: Gateway,
     gwy_s: Gateway,
     test_set: dict[str, Any],
-    pkt_flow_expected: list[str],
+    packet_flow_expected: list[str],
 ) -> None:
     """Check the change of state during a binding at device layer."""
 
@@ -414,32 +414,32 @@ async def _test_flow_20x(
     respondent = _setup_fakeable_device(gwy_r, resp_id)
     supplicant = _setup_fakeable_device(gwy_s, supp_id)
 
-    assert respondent.id == pkt_flow_expected[_ACCEPT][7:16], (
+    assert respondent.id == packet_flow_expected[_ACCEPT][7:16], (
         "bad test suite config"
     )
-    assert supplicant.id == pkt_flow_expected[_TENDER][7:16], (
+    assert supplicant.id == packet_flow_expected[_TENDER][7:16], (
         "bad test suite config"
     )
 
     # Step R1: Respondent expects an Offer
-    payload = pkt_flow_expected[_ACCEPT][46:]
+    payload = packet_flow_expected[_ACCEPT][46:]
     accept_codes = [payload[i : i + 4] for i in range(2, len(payload), 12)]
 
-    idx = payload[:2]
-    require_ratify = len(pkt_flow_expected) > _RATIFY
+    index = payload[:2]
+    require_ratify = len(packet_flow_expected) > _RATIFY
 
     resp_coro = respondent._wait_for_binding_request(
-        accept_codes, zone_index=idx, require_ratify=require_ratify
+        accept_codes, zone_index=index, require_ratify=require_ratify
     )
 
     # Step S1: Supplicant sends an Offer (makes Offer) and expects an Accept
-    payload = pkt_flow_expected[_TENDER][46:]
+    payload = packet_flow_expected[_TENDER][46:]
     offer_codes = [payload[i : i + 4] for i in range(2, len(payload), 12)]
     offer_codes = [c for c in offer_codes if c != Code._1FC9]
 
-    confirm_code = pkt_flow_expected[_AFFIRM][48:52] or None
-    if len(pkt_flow_expected) > _RATIFY:
-        raw = pkt_flow_expected[_RATIFY]
+    confirm_code = packet_flow_expected[_AFFIRM][48:52] or None
+    if len(packet_flow_expected) > _RATIFY:
+        raw = packet_flow_expected[_RATIFY]
         clean_raw = raw[:46] + raw[46:].replace("-", "")
         ratify_cmd = CommandDTO.from_cli(clean_raw)
     else:
@@ -457,9 +457,9 @@ async def _test_flow_20x(
     resp_flow = resp_task.result()
     supp_flow = supp_task.result()
 
-    for i in range(len(pkt_flow_expected)):
+    for i in range(len(packet_flow_expected)):
         # We only want to remove hyphens in the payload, which is from character 46 onwards
-        raw = pkt_flow_expected[i]
+        raw = packet_flow_expected[i]
         clean_raw = raw[:46] + raw[46:].replace("-", "")
         expected_cmd = CommandDTO.from_cli(clean_raw)
 
@@ -467,13 +467,13 @@ async def _test_flow_20x(
         if isinstance(r_obj, Message):
             _assert_l7_parity(r_obj, expected_cmd)
         else:
-            assert str(r_obj) == pkt_flow_expected[i]
+            assert str(r_obj) == packet_flow_expected[i]
 
         s_obj = cast(Any, supp_flow[i])
         if isinstance(s_obj, Message):
             _assert_l7_parity(s_obj, expected_cmd)
         else:
-            assert str(s_obj) == pkt_flow_expected[i]
+            assert str(s_obj) == packet_flow_expected[i]
 
 
 @pytest.mark.xdist_group(name="virt_serial")
@@ -485,7 +485,7 @@ async def test_flow_100(test_set: dict[str, Any]) -> None:
         for role in (SZ_RESPONDENT, SZ_SUPPLICANT)
     }
 
-    pkt_flow = [
+    packet_flow = [
         x[:46] + x[46:].replace(" ", "").replace("-", "")
         for x in test_set.get(PKT_FLOW, [])
     ]
@@ -494,7 +494,7 @@ async def test_flow_100(test_set: dict[str, Any]) -> None:
     rf, gwys = await rf_factory([config[SZ_RESPONDENT], config[SZ_SUPPLICANT]])
 
     try:
-        await _test_flow_10x(gwys[0], gwys[1], test_set, pkt_flow)
+        await _test_flow_10x(gwys[0], gwys[1], test_set, packet_flow)
     finally:
         # Cancel any pending binding FSM timers before stopping gateways.
         for gwy in gwys:
@@ -519,7 +519,7 @@ async def test_flow_200(test_set: dict[str, Any]) -> None:
         for role in (SZ_RESPONDENT, SZ_SUPPLICANT)
     }
 
-    pkt_flow = [
+    packet_flow = [
         x[:46] + x[46:].replace(" ", "").replace("-", "")
         for x in test_set.get(PKT_FLOW, [])
     ]
@@ -528,7 +528,7 @@ async def test_flow_200(test_set: dict[str, Any]) -> None:
     rf, gwys = await rf_factory([config[SZ_RESPONDENT], config[SZ_SUPPLICANT]])
 
     try:
-        await _test_flow_20x(gwys[0], gwys[1], test_set, pkt_flow)
+        await _test_flow_20x(gwys[0], gwys[1], test_set, packet_flow)
     finally:
         # Cancel any pending binding FSM timers before stopping gateways.
         for gwy in gwys:

@@ -86,7 +86,7 @@ class _Entity:
 
         # Context required by children (Zones/Devices)
         self._z_id: DeviceIdT = None  # type: ignore[assignment]
-        self._z_idx: DevIndexT | None = None
+        self._z_index: DevIndexT | None = None
         self.ctl: Controller | None = None
         self.tcs: Evohome | None = None
 

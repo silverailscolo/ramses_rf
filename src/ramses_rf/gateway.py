@@ -209,7 +209,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         )
 
         self._message_store: MessageStoreInterface | None = None
-        self._pkt_log_listener: QueueListener | None = None
+        self._packet_log_listener: QueueListener | None = None
         self._schema_updated_callback: SchemaUpdatedCallback | None = None
 
         # Initialize placeholder for the CQRS StateProjector
@@ -239,6 +239,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._polling_manager = PollingManager(self, shadow_mode=False)
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         if not self._engine.ser_name:
             return f"Gateway(input_file={self._engine._input_file})"
         return (
@@ -509,7 +510,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         """Register an asynchronous packet message handler callback."""
         return self._engine.add_msg_handler(msg_handler, msg_filter=msg_filter)
 
-    def add_raw_pkt_handler(
+    def add_raw_packet_handler(
         self,
         msg_handler: Callable[[PacketDTO], Awaitable[None]],
         /,
@@ -519,7 +520,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         Used by the passive scan engine to see packets from unknown devices
         even when ``enforce_known_list=True``.
         """
-        return self._engine.add_raw_pkt_handler(msg_handler)
+        return self._engine.add_raw_packet_handler(msg_handler)
 
     def add_task(self, task: asyncio.Task[Any]) -> None:
         """Register a tracked asyncio task on the transport engine."""

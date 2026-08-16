@@ -176,19 +176,19 @@ class BindTopologyHandler(TopologyHandler):
             or getattr(msg.src, "type", None) == "01"
         ):
             for payload in self._get_payloads(msg):
-                zone_idx: str | None = None
+                zone_index: str | None = None
                 domain_id: str | None = None
                 device_role: str | None = None
                 zone_type: str | None = None
                 devices: list[str] = []
 
                 if hasattr(payload, "device_id_str"):
-                    zone_idx = (
-                        f"{payload.zone_idx:02X}"
-                        if isinstance(payload.zone_idx, int)
+                    zone_index = (
+                        f"{payload.zone_index:02X}"
+                        if isinstance(payload.zone_index, int)
                         else (
-                            str(payload.zone_idx)
-                            if payload.zone_idx is not None
+                            str(payload.zone_index)
+                            if payload.zone_index is not None
                             else None
                         )
                     )
@@ -197,14 +197,16 @@ class BindTopologyHandler(TopologyHandler):
                     devices = [payload.device_id_str]
                 elif isinstance(payload, dict):
                     val_zone = payload.get("zone_index") or payload.get(
-                        "zone_idx"
+                        "zone_index"
                     )
-                    zone_idx = str(val_zone) if val_zone is not None else None
+                    zone_index = (
+                        str(val_zone) if val_zone is not None else None
+                    )
 
                     val_domain = (
                         payload.get("domain_index")
                         or payload.get("domain_id")
-                        or payload.get("domain_idx")
+                        or payload.get("domain_index")
                     )
                     domain_id = (
                         str(val_domain) if val_domain is not None else None
@@ -266,12 +268,12 @@ class BindTopologyHandler(TopologyHandler):
                                 causation="Rule_000C_Domain_Binding",
                             )
                         )
-                elif zone_idx is not None:
+                elif zone_index is not None:
                     # Clone metadata to avoid cross-iteration pollution
                     event_meta = dict(metadata)
-                    event_meta["zone_idx"] = str(zone_idx)
+                    event_meta["zone_index"] = str(zone_index)
                     # Bridging quirk: DeviceRegistry expects domain index under child_id
-                    event_meta["child_id"] = str(zone_idx)
+                    event_meta["child_id"] = str(zone_index)
                     for child_id in devices:
                         if (
                             child_id.startswith(f"{DevType.CTL}:")

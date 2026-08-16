@@ -104,9 +104,9 @@ def test_topology_event_has_metadata() -> None:
         action=TopologyAction.BIND_DEVICE,
         parent_id=DeviceIdT("01:111111"),
         child_id=DeviceIdT("04:222222"),
-        metadata={"zone_idx": "01"},
+        metadata={"zone_index": "01"},
     )
-    assert "zone_idx" in event.metadata
+    assert "zone_index" in event.metadata
 
 
 def test_topology_event_has_event_id() -> None:

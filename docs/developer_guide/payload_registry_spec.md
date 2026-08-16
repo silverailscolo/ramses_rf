@@ -95,15 +95,15 @@ class TemperaturePayload(PayloadBase):
       Field-spaced hex : 00 0834
       Payload hex      : 000834
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int
+    :param zone_index: Zone index byte.
+    :type zone_index: int
     :param temperature: Temperature in °C.
     :type temperature: float | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    zone_idx: int
+    zone_index: int
     temperature: float | None
 
     @classmethod
@@ -113,9 +113,9 @@ class TemperaturePayload(PayloadBase):
             raise ValueError(
                 f"Invalid payload length for TemperaturePayload: {len(raw_data)}"
             )
-        idx, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        index, temp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         temp_val = None if temp_raw in (0x7FFF, 0x31FF) else temp_raw / 100.0
-        return cls(zone_idx=idx, temperature=temp_val)
+        return cls(zone_index=index, temperature=temp_val)
 
     def to_bytes(self) -> bytes:
         """Pack payload instance into raw binary bytes."""
@@ -124,12 +124,12 @@ class TemperaturePayload(PayloadBase):
             if self.temperature is None
             else int(round(self.temperature * 100.0))
         )
-        return struct.pack(self._STRUCT_FMT, self.zone_idx, temp_raw)
+        return struct.pack(self._STRUCT_FMT, self.zone_index, temp_raw)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert payload to legacy dictionary representation."""
         return {
-            "zone_idx": f"{self.zone_idx:02X}",
+            "zone_index": f"{self.zone_index:02X}",
             "temperature": self.temperature,
         }
 ```
@@ -148,7 +148,7 @@ class DhwParamsPayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    dhw_idx: int
+    dhw_index: int
     setpoint: float | None
     overrun: int | None = None
     differential: float | None = None
@@ -188,15 +188,15 @@ class DhwParams3BPayload(DhwParamsPayload):
       Field-spaced hex : 00 1388
       Payload hex      : 001388
 
-    :param dhw_idx: DHW index byte.
-    :type dhw_idx: int
+    :param dhw_index: DHW index byte.
+    :type dhw_index: int
     :param setpoint: Target setpoint temperature in °C.
     :type setpoint: float | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">Bh"
 
-    dhw_idx: int
+    dhw_index: int
     setpoint: float | None
 
     @classmethod
@@ -206,9 +206,9 @@ class DhwParams3BPayload(DhwParamsPayload):
             raise ValueError(
                 f"Invalid payload length for DhwParams3BPayload: {len(raw_data)}"
             )
-        idx, sp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
+        index, sp_raw = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
         sp_val = None if sp_raw in (0x31FF, 0x7FFF, 0x639C) else sp_raw / 100.0
-        return cls(dhw_idx=idx, setpoint=sp_val)
+        return cls(dhw_index=index, setpoint=sp_val)
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte DHW parameters into binary payload."""
@@ -217,7 +217,7 @@ class DhwParams3BPayload(DhwParamsPayload):
             if self.setpoint is None
             else int(round(self.setpoint * 100.0))
         )
-        return struct.pack(self._STRUCT_FMT, self.dhw_idx, sp_raw)
+        return struct.pack(self._STRUCT_FMT, self.dhw_index, sp_raw)
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,8 +235,8 @@ class DhwParams6BPayload(DhwParamsPayload):
       Field-spaced hex : 00 1388 00 03E4
       Payload hex      : 0013880003E4
 
-    :param dhw_idx: DHW index byte.
-    :type dhw_idx: int
+    :param dhw_index: DHW index byte.
+    :type dhw_index: int
     :param setpoint: Target setpoint temperature in °C.
     :type setpoint: float | None
     :param overrun: Overrun time in minutes.
@@ -247,7 +247,7 @@ class DhwParams6BPayload(DhwParamsPayload):
 
     _STRUCT_FMT: ClassVar[str] = ">BhBh"
 
-    dhw_idx: int
+    dhw_index: int
     setpoint: float | None
     overrun: int
     differential: float
@@ -259,12 +259,12 @@ class DhwParams6BPayload(DhwParamsPayload):
             raise ValueError(
                 f"Invalid payload length for DhwParams6BPayload: {len(raw_data)}"
             )
-        idx, sp_raw, overrun, diff_raw = struct.unpack_from(
+        index, sp_raw, overrun, diff_raw = struct.unpack_from(
             cls._STRUCT_FMT, raw_data, 0
         )
         sp_val = None if sp_raw in (0x31FF, 0x7FFF, 0x639C) else sp_raw / 100.0
         return cls(
-            dhw_idx=idx,
+            dhw_index=index,
             setpoint=sp_val,
             overrun=overrun,
             differential=diff_raw / 100.0,
@@ -279,7 +279,7 @@ class DhwParams6BPayload(DhwParamsPayload):
         )
         diff_raw = int(round(self.differential * 100.0))
         return struct.pack(
-            self._STRUCT_FMT, self.dhw_idx, sp_raw, self.overrun, diff_raw
+            self._STRUCT_FMT, self.dhw_index, sp_raw, self.overrun, diff_raw
         )
 
 
@@ -314,8 +314,8 @@ class ZoneConfigPayload(PayloadBase):
       Field-spaced hex : 00 0A 01F4 0DAC
       Payload hex      : 000A01F40DAC
 
-    :param zone_idx: Zone index byte.
-    :type zone_idx: int
+    :param zone_index: Zone index byte.
+    :type zone_index: int
     :param zone_flags: Zone flags byte.
     :type zone_flags: int
     :param min_temp: Minimum zone temperature setting in °C.
@@ -326,7 +326,7 @@ class ZoneConfigPayload(PayloadBase):
 
     _STRUCT_FMT: ClassVar[str] = ">BBhh"
 
-    zone_idx: int
+    zone_index: int
     zone_flags: int
     min_temp: float | None
     max_temp: float | None
@@ -334,11 +334,11 @@ class ZoneConfigPayload(PayloadBase):
     @classmethod
     def _from_bytes_single(cls, raw_data: bytes, offset: int = 0) -> Self:
         """Unpack a single 6-byte zone config from offset."""
-        idx, flags, min_raw, max_raw = struct.unpack_from(
+        index, flags, min_raw, max_raw = struct.unpack_from(
             cls._STRUCT_FMT, raw_data, offset
         )
         return cls(
-            zone_idx=idx,
+            zone_index=index,
             zone_flags=flags,
             min_temp=None if min_raw in (0x7FFF, 0x31FF) else min_raw / 100.0,
             max_temp=None if max_raw in (0x7FFF, 0x31FF) else max_raw / 100.0,
@@ -371,7 +371,11 @@ class ZoneConfigPayload(PayloadBase):
             else int(round(self.max_temp * 100.0))
         )
         return struct.pack(
-            self._STRUCT_FMT, self.zone_idx, self.zone_flags, min_raw, max_raw
+            self._STRUCT_FMT,
+            self.zone_index,
+            self.zone_flags,
+            min_raw,
+            max_raw,
         )
 ```
 

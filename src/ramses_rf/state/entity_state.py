@@ -158,16 +158,16 @@ class EntityState:
         context_value = msg.context.value
 
         if is_zone:
-            zone_idx = entity_id[_ID_SLICE + 1 :]
+            zone_index = entity_id[_ID_SLICE + 1 :]
             in_dict = isinstance(msg.payload, dict)
             in_list = isinstance(msg.payload, list)
             if not (
-                context_value == zone_idx
+                context_value == zone_index
                 or (
                     in_dict
                     and (
-                        str(msg.payload.get(SZ_ZONE_INDEX)) == zone_idx
-                        or str(msg.payload.get("zone_idx")) == zone_idx
+                        str(msg.payload.get(SZ_ZONE_INDEX)) == zone_index
+                        or str(msg.payload.get("zone_index")) == zone_index
                     )
                 )
                 or (
@@ -175,8 +175,8 @@ class EntityState:
                     and any(
                         isinstance(d, dict)
                         and (
-                            str(d.get(SZ_ZONE_INDEX)) == zone_idx
-                            or str(d.get("zone_idx")) == zone_idx
+                            str(d.get(SZ_ZONE_INDEX)) == zone_index
+                            or str(d.get("zone_index")) == zone_index
                         )
                         for d in msg.payload
                     )
@@ -192,14 +192,15 @@ class EntityState:
                 or (
                     in_dict
                     and (
-                        SZ_DHW_INDEX in msg.payload or "dhw_idx" in msg.payload
+                        SZ_DHW_INDEX in msg.payload
+                        or "dhw_index" in msg.payload
                     )
                 )
                 or (
                     in_list
                     and any(
                         isinstance(d, dict)
-                        and (SZ_DHW_INDEX in d or "dhw_idx" in d)
+                        and (SZ_DHW_INDEX in d or "dhw_index" in d)
                         for d in msg.payload
                     )
                 )
@@ -408,11 +409,11 @@ class EntityState:
                     is_dhw = entity_id[_ID_SLICE:] == "_HW"
                     is_zone = len(entity_id) > 9 and not is_dhw
                     context_value = kwargs.get(
-                        "zone_idx",
+                        "zone_index",
                         entity_id[_ID_SLICE + 1 :] if is_zone else None,
                     )
                     if not context_value and is_dhw:
-                        context_value = kwargs.get("dhw_idx", "HW")
+                        context_value = kwargs.get("dhw_index", "HW")
 
                     msg = cache.get_by_routing_key(cd, verb, context_value)
                     if msg is None:
@@ -466,34 +467,34 @@ class EntityState:
         if msg.code == Code._1FC9:
             return [x[1] for x in payload]
 
-        filter_idx: str | None = None
+        filter_index: str | None = None
         filter_val: str | None = None
 
         if domain_id:
-            filter_idx, filter_val = SZ_DOMAIN_INDEX, domain_id
+            filter_index, filter_val = SZ_DOMAIN_INDEX, domain_id
         elif zone_index:
-            filter_idx, filter_val = SZ_ZONE_INDEX, zone_index
+            filter_index, filter_val = SZ_ZONE_INDEX, zone_index
 
         def _matches_filter(d: dict[str, Any]) -> bool:
-            if not filter_idx:
+            if not filter_index:
                 return True
-            val = d.get(filter_idx)
+            val = d.get(filter_index)
             if val is None:
-                if filter_idx == SZ_ZONE_INDEX:
-                    val = d.get("zone_idx")
-                elif filter_idx == SZ_DOMAIN_INDEX:
-                    val = d.get("domain_id", d.get("domain_idx"))
+                if filter_index == SZ_ZONE_INDEX:
+                    val = d.get("zone_index")
+                elif filter_index == SZ_DOMAIN_INDEX:
+                    val = d.get("domain_id", d.get("domain_index"))
             return val == filter_val
 
         if isinstance(payload, dict):
             msg_dict = payload
             if (
-                filter_idx
-                and filter_idx != SZ_DOMAIN_INDEX
+                filter_index
+                and filter_index != SZ_DOMAIN_INDEX
                 and not _matches_filter(msg_dict)
             ):
                 return None
-        elif filter_idx:
+        elif filter_index:
             msg_dict = {
                 k: v
                 for d in payload
@@ -516,12 +517,12 @@ class EntityState:
                 if k
                 not in (
                     "dhw_index",
-                    "dhw_idx",
+                    "dhw_index",
                     "domain_index",
                     "domain_id",
-                    "domain_idx",
+                    "domain_index",
                     "zone_index",
-                    "zone_idx",
+                    "zone_index",
                     SZ_DHW_INDEX,
                     SZ_DOMAIN_INDEX,
                     SZ_ZONE_INDEX,
@@ -536,7 +537,7 @@ class EntityState:
         entity_id = self._entity.id
         is_dhw = entity_id[_ID_SLICE:] == "_HW"
         is_zone = len(entity_id) > 9 and not is_dhw
-        zone_idx = entity_id[_ID_SLICE + 1 :] if is_zone else None
+        zone_index = entity_id[_ID_SLICE + 1 :] if is_zone else None
 
         cache = await self._build_state_cache()
 
@@ -552,14 +553,14 @@ class EntityState:
                         in_dict
                         and (
                             SZ_DHW_INDEX in msg.payload
-                            or "dhw_idx" in msg.payload
+                            or "dhw_index" in msg.payload
                         )
                     )
                     or (
                         in_list
                         and any(
                             isinstance(d, dict)
-                            and (SZ_DHW_INDEX in d or "dhw_idx" in d)
+                            and (SZ_DHW_INDEX in d or "dhw_index" in d)
                             for d in msg.payload
                         )
                     )
@@ -569,22 +570,22 @@ class EntityState:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
                 if (
-                    context_value == zone_idx
+                    context_value == zone_index
                     or (
                         in_dict
                         and str(
                             msg.payload.get(
-                                SZ_ZONE_INDEX, msg.payload.get("zone_idx")
+                                SZ_ZONE_INDEX, msg.payload.get("zone_index")
                             )
                         )
-                        == zone_idx
+                        == zone_index
                     )
                     or (
                         in_list
                         and any(
                             isinstance(d, dict)
-                            and str(d.get(SZ_ZONE_INDEX, d.get("zone_idx")))
-                            == zone_idx
+                            and str(d.get(SZ_ZONE_INDEX, d.get("zone_index")))
+                            == zone_index
                             for d in msg.payload
                         )
                     )
@@ -607,10 +608,10 @@ class EntityState:
         entity_id = self._entity.id
         is_dhw = entity_id[_ID_SLICE:] == "_HW"
         is_zone = len(entity_id) > 9 and not is_dhw
-        zone_idx = kwargs.get(
-            "zone_idx", entity_id[_ID_SLICE + 1 :] if is_zone else None
+        zone_index = kwargs.get(
+            "zone_index", entity_id[_ID_SLICE + 1 :] if is_zone else None
         )
-        dhw_idx = kwargs.get("dhw_idx")
+        dhw_index = kwargs.get("dhw_index")
 
         allowed_verbs = (
             (kwargs.get("verb"),)
@@ -630,37 +631,38 @@ class EntityState:
             if verb not in allowed_verbs:
                 continue
 
-            if zone_idx is not None:
+            if zone_index is not None:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
                 if not (
-                    str(context_value) == str(zone_idx)
+                    str(context_value) == str(zone_index)
                     or (
                         in_dict
-                        and str(msg.payload.get("zone_idx")) == str(zone_idx)
+                        and str(msg.payload.get("zone_index"))
+                        == str(zone_index)
                     )
                     or (
                         in_list
                         and any(
                             isinstance(d, dict)
-                            and str(d.get("zone_idx")) == str(zone_idx)
+                            and str(d.get("zone_index")) == str(zone_index)
                             for d in msg.payload
                         )
                     )
                 ):
                     continue
 
-            if dhw_idx is not None:
+            if dhw_index is not None:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
                 if not (
-                    str(context_value) == str(dhw_idx)
+                    str(context_value) == str(dhw_index)
                     or context_value in ("FC", "FA", "F9", "FA")
-                    or (in_dict and "dhw_idx" in msg.payload)
+                    or (in_dict and "dhw_index" in msg.payload)
                     or (
                         in_list
                         and any(
-                            isinstance(d, dict) and "dhw_idx" in d
+                            isinstance(d, dict) and "dhw_index" in d
                             for d in msg.payload
                         )
                     )
@@ -701,7 +703,7 @@ class EntityState:
         self._sync_state()
         _msg_dict: dict[Code | str, Message] = {}
 
-        # Build from _build_state_cache to guarantee strict zone_idx isolation
+        # Build from _build_state_cache to guarantee strict zone_index isolation
         cache = await self._build_state_cache()
 
         for code, verb, _ctx, msg in cache.get_records():

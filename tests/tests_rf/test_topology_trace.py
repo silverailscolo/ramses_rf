@@ -24,7 +24,7 @@ async def test_trace_ufh_000C_binding() -> None:
     builder = TopologyBuilder(emit_event_cb=mock_emit, enable_eavesdrop=True)
 
     # Simulate UFC 000C payload (List of dicts)
-    payload = [{"ufh_idx": "00", "zone_idx": "0B"}]
+    payload = [{"ufh_index": "00", "zone_index": "0B"}]
     hdr = StateHeader.create(Code._000C, Verb.I_, "02:007533", "00")
 
     msg = Message(

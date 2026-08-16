@@ -319,7 +319,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
                 _normalise(_str(raw_line)),
             )
 
-    def _pkt_read(self, packet: Packet) -> None:
+    def _packet_read(self, packet: Packet) -> None:
         if (
             not self._init_fut.done()
             and packet.code == Code._PUZZ
@@ -328,7 +328,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
             self._extra[SZ_ACTIVE_HGI] = packet.src.id
             self._init_fut.set_result(packet)
 
-        super()._pkt_read(packet)
+        super()._packet_read(packet)
 
     @limit_duty_cycle(MAX_DUTY_CYCLE_RATE)
     async def write_frame(

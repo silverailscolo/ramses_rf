@@ -231,59 +231,59 @@ async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
     )
 
 
-# --- INBOUND PACKET TESTS (_pkt_received) ---
+# --- INBOUND PACKET TESTS (_packet_received) ---
 
 
-async def test_pkt_received_included(protocol: DummyProtocol) -> None:
+async def test_packet_received_included(protocol: DummyProtocol) -> None:
     """Test that wanted packets are passed up to the parent class."""
-    mock_pkt = MagicMock()
-    mock_pkt.src.id = "01:111111"
-    mock_pkt.dst.id = "01:222222"
+    mock_packet = MagicMock()
+    mock_packet.src.id = "01:111111"
+    mock_packet.dst.id = "01:222222"
 
     # Patch the base class to prevent the mock from triggering validation errors
     with patch(
-        "ramses_tx.protocol.base._BaseProtocol._pkt_received"
+        "ramses_tx.protocol.base._BaseProtocol._packet_received"
     ) as mock_base_recv:
-        protocol._pkt_received(mock_pkt)
-        mock_base_recv.assert_called_once_with(mock_pkt)
+        protocol._packet_received(mock_packet)
+        mock_base_recv.assert_called_once_with(mock_packet)
 
 
-async def test_pkt_received_excluded(
+async def test_packet_received_excluded(
     protocol: DummyProtocol, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Test that unwanted packets are dropped and logged."""
     protocol._exclude = [DeviceIdT("01:111111")]
-    mock_pkt = MagicMock()
-    mock_pkt.src.id = "01:111111"
-    mock_pkt.dst.id = "01:222222"
+    mock_packet = MagicMock()
+    mock_packet.src.id = "01:111111"
+    mock_packet.dst.id = "01:222222"
 
     with (
         caplog.at_level(logging.DEBUG),
         patch(
-            "ramses_tx.protocol.base._BaseProtocol._pkt_received"
+            "ramses_tx.protocol.base._BaseProtocol._packet_received"
         ) as mock_base_recv,
     ):
-        protocol._pkt_received(mock_pkt)
+        protocol._packet_received(mock_packet)
         mock_base_recv.assert_not_called()
 
     assert "Packet excluded by device_id filter" in caplog.text
 
 
-async def test_pkt_received_excluded_bypasses_to_dto(
+async def test_packet_received_excluded_bypasses_to_dto(
     protocol: DummyProtocol,
 ) -> None:
 
     # Arrange
     protocol._exclude = [DeviceIdT("01:111111")]
-    mock_pkt = MagicMock()
-    mock_pkt.src.id = "01:111111"
-    mock_pkt.dst.id = "01:222222"
+    mock_packet = MagicMock()
+    mock_packet.src.id = "01:111111"
+    mock_packet.dst.id = "01:222222"
 
     # Act
-    protocol._pkt_received(mock_pkt)
+    protocol._packet_received(mock_packet)
 
     # Assert
-    mock_pkt.to_dto.assert_not_called()
+    mock_packet.to_dto.assert_not_called()
 
 
 # --- OUTBOUND COMMAND TESTS (send_cmd) ---

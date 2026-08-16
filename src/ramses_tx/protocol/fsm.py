@@ -296,9 +296,9 @@ class ProtocolContext(StateMachineInterface):
 
         self._state.connection_lost()
 
-    def pkt_received(self, packet: Packet) -> None:
+    def packet_received(self, packet: Packet) -> None:
         """Process a received packet (echo or reply)."""
-        self._state.pkt_rcvd(packet)
+        self._state.packet_rcvd(packet)
 
     def pause_writing(self) -> None:
         """Handle the transport pausing writing."""
@@ -449,16 +449,16 @@ class ProtocolStateBase:
         """Initialize the state with the protocol context."""
         self._context = context
         self._sent_cmd: CommandDTO | None = None
-        self._echo_pkt: Packet | None = None
-        self._rply_pkt: Packet | None = None
+        self._echo_packet: Packet | None = None
+        self._rply_packet: Packet | None = None
 
     def __repr__(self) -> str:
         """Return an unambiguous string representation of this state."""
         msg = f"<ProtocolState state={self.__class__.__name__}"
-        if self._rply_pkt:
-            return msg + f" rply={self._rply_pkt._hdr}>"
-        if self._echo_pkt:
-            return msg + f" echo={self._echo_pkt._hdr}>"
+        if self._rply_packet:
+            return msg + f" rply={self._rply_packet._hdr}>"
+        if self._echo_packet:
+            return msg + f" echo={self._echo_packet._hdr}>"
         if self._sent_cmd:
             return msg + f" cmd_={self._sent_cmd.tx_header}>"
         return msg + ">"
@@ -480,7 +480,7 @@ class ProtocolStateBase:
             Inactive, exception=TransportError("Connection lost")
         )
 
-    def pkt_rcvd(self, packet: Packet) -> None:
+    def packet_rcvd(self, packet: Packet) -> None:
         """Raise a NotImplementedError."""
         raise NotImplementedError("Invalid state to receive a packet")
 
@@ -508,7 +508,7 @@ class Inactive(ProtocolStateBase):
         """Transition to IsInIdle."""
         self._context.set_state(IsInIdle)
 
-    def pkt_rcvd(self, packet: Packet) -> None:
+    def packet_rcvd(self, packet: Packet) -> None:
         """Raise an exception, as a packet is not expected in this state."""
         if packet.code != Code._PUZZ:
             _LOGGER.warning(
@@ -519,7 +519,7 @@ class Inactive(ProtocolStateBase):
 class IsInIdle(ProtocolStateBase):
     """The Protocol is not in the process of sending a CommandDTO."""
 
-    def pkt_rcvd(self, packet: Packet) -> None:
+    def packet_rcvd(self, packet: Packet) -> None:
         """Do nothing as we're not expecting an echo, nor a reply."""
         pass
 
@@ -555,8 +555,8 @@ class WantEcho(ProtocolStateBase):
         super().__init__(context)
         self._sent_cmd = context._state._sent_cmd
 
-    def pkt_rcvd(self, packet: Packet) -> None:
-        """If the pkt is the expected Echo, transition to IsInIdle."""
+    def packet_rcvd(self, packet: Packet) -> None:
+        """If the packet is the expected Echo, transition to IsInIdle."""
         if self._sent_cmd is None:
             _LOGGER.debug(
                 "%s: received packet while _sent_cmd is None "
@@ -566,24 +566,24 @@ class WantEcho(ProtocolStateBase):
             return
 
         try:
-            pkt_hdr = packet._hdr
+            packet_hdr = packet._hdr
         except PacketPayloadInvalid:
             return  # malformed packet, ignore
 
-        if HGI_DEVICE_ID in pkt_hdr:
+        if HGI_DEVICE_ID in packet_hdr:
             assert packet._hdr_ is not None
-            pkt__hdr = HeaderT(
+            packet__hdr = HeaderT(
                 packet._hdr_.replace(
                     HGI_DEVICE_ID, self._context._protocol.hgi_id
                 )
             )
         else:
-            pkt__hdr = pkt_hdr
+            packet__hdr = packet_hdr
 
-        if pkt__hdr != self._sent_cmd.tx_header:
+        if packet__hdr != self._sent_cmd.tx_header:
             return
 
-        self._echo_pkt = packet
+        self._echo_packet = packet
         self._context.set_state(IsInIdle, result=packet)
 
     def cmd_sent(

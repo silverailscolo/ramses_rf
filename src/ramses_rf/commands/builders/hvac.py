@@ -180,7 +180,7 @@ def build_set_fan_mode(intent: Command) -> CommandDTO:
     fan_mode = intent.get("fan_mode")
     scheme = intent.get("scheme", "orcon")
     sequence_number = intent.get("seqn")
-    index = intent.get("idx", "00")
+    index = intent.get("index", "00")
     mode_max = intent.get("mode_max")
     legacy_format = intent.get("legacy_format", False)
 

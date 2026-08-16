@@ -202,13 +202,15 @@ class EavesdropEngine:
                 if not isinstance(payload, dict):
                     continue
 
-                zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
+                zone_index = payload.get(
+                    SZ_ZONE_INDEX, payload.get("zone_index")
+                )
                 domain_id = payload.get(
                     SZ_DOMAIN_INDEX,
-                    payload.get("domain_id", payload.get("domain_idx")),
+                    payload.get("domain_id", payload.get("domain_index")),
                 )
 
-                if zone_idx is None and domain_id is None:
+                if zone_index is None and domain_id is None:
                     continue
 
                 metadata: dict[str, Any] = {}
@@ -253,15 +255,15 @@ class EavesdropEngine:
                     if is_sensor:
                         metadata["is_sensor"] = "True"
 
-                if zone_idx is not None:
-                    metadata["zone_idx"] = str(zone_idx)
-                    metadata["child_id"] = str(zone_idx)
+                if zone_index is not None:
+                    metadata["zone_index"] = str(zone_index)
+                    metadata["child_id"] = str(zone_index)
                 elif domain_id is not None:
                     if domain_id in ("F9", "FA", "FC"):
                         metadata["domain_id"] = str(domain_id)
                         metadata["child_id"] = str(domain_id)
                     else:
-                        metadata["zone_idx"] = str(domain_id)
+                        metadata["zone_index"] = str(domain_id)
                         metadata["domain_id"] = str(domain_id)
                         metadata["child_id"] = str(domain_id)
 
@@ -472,8 +474,8 @@ class EavesdropEngine:
             if not isinstance(payload, dict):
                 continue
 
-            zone_idx = payload.get(SZ_ZONE_INDEX, payload.get("zone_idx"))
-            if zone_idx is None:
+            zone_index = payload.get(SZ_ZONE_INDEX, payload.get("zone_index"))
+            if zone_index is None:
                 continue
 
             zone_class: str | None = None
@@ -496,8 +498,7 @@ class EavesdropEngine:
                             action=TopologyAction.UPDATE_TRAITS,
                             device_id=ctl_id,
                             metadata={
-                                "zone_index": str(zone_idx),
-                                "zone_idx": str(zone_idx),
+                                "zone_index": str(zone_index),
                                 "class": zone_class,
                             },
                             causation="Rule_Legacy_Zone_Type_Eavesdrop",
@@ -574,7 +575,9 @@ class EavesdropEngine:
             return
 
         changed_zones: dict[str, float] = {
-            (z.get(SZ_ZONE_INDEX) or z.get("zone_idx")): z.get(SZ_TEMPERATURE)
+            (z.get(SZ_ZONE_INDEX) or z.get("zone_index")): z.get(
+                SZ_TEMPERATURE
+            )
             for z in msg.payload
             if z not in prev.payload and z.get(SZ_TEMPERATURE) is not None
         }
@@ -584,7 +587,7 @@ class EavesdropEngine:
         def _testable_zones(chg_zones: dict[str, float]) -> dict[float, str]:
             result: dict[float, str] = {}
             for i1, t1 in chg_zones.items():
-                zone = tcs.zone_by_idx.get(i1) or (
+                zone = tcs.zone_by_index.get(i1) or (
                     tcs.get_htg_zone(i1)
                     if hasattr(tcs, "get_htg_zone")
                     else None
@@ -631,14 +634,14 @@ class EavesdropEngine:
             return
 
         matched_pairs = {
-            sensor: zone_idx
-            for temp_z, zone_idx in testable_zones.items()
+            sensor: zone_index
+            for temp_z, zone_index in testable_zones.items()
             for temp_s, sensor in unique_sensors.items()
             if temp_z == temp_s
         }
 
-        for sensor, zone_idx in matched_pairs.items():
-            zone = tcs.zone_by_idx[zone_idx]
+        for sensor, zone_index in matched_pairs.items():
+            zone = tcs.zone_by_index[zone_index]
             if getattr(sensor, "_parent", None) is not None and getattr(
                 sensor._parent, "id", None
             ) != getattr(zone, "id", None):
@@ -659,10 +662,10 @@ class EavesdropEngine:
         if len(remaining_zones) != 1:
             return
 
-        temp, zone_idx = tuple(remaining_zones.items())[0]
+        temp, zone_index = tuple(remaining_zones.items())[0]
 
         if not [s for s in unique_sensors if s == temp]:
-            zone = tcs.zone_by_idx[zone_idx]
+            zone = tcs.zone_by_index[zone_index]
             with contextlib.suppress(
                 exc.DeviceNotFoundError,
                 exc.SchemaInconsistentError,

@@ -110,7 +110,7 @@ async def serialize_logical_entity(
     :rtype: dict[str, Any]
     """
     data: dict[str, Any] = {
-        "id": getattr(entity, "id", None) or getattr(entity, "idx", None),
+        "id": getattr(entity, "id", None) or getattr(entity, "index", None),
         "type": type(entity).__name__,
     }
 
@@ -377,7 +377,7 @@ async def test_read_model_baseline_snapshot(
             api_state["system"] = await serialize_logical_entity(gwy.tcs)
 
             zones_data = []
-            for z in sorted(gwy.tcs.zones, key=lambda x: x.idx):
+            for z in sorted(gwy.tcs.zones, key=lambda x: x.index):
                 zones_data.append(await serialize_logical_entity(z))
 
             if zones_data:

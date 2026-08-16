@@ -1,5 +1,5 @@
 {
-    "zone_idx": "01",
+    "zone_index": "01",
     "schedule": [
         {"day_of_week": 0, "switchpoints": [
             {"time_of_day": "06:30", "heat_setpoint": 21.0},

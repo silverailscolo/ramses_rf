@@ -247,21 +247,21 @@ async def test_l7_routing_avoids_stranglers_knot() -> None:
     tcs._gateway = gwy_mock
     tcs.ctl = MagicMock()
     tcs.ctl.id = "01:145038"
-    tcs.zone_by_idx = {}
+    tcs.zone_by_index = {}
     tcs._max_zones = 12
 
     zone_02 = Zone(tcs, "02")
     zone_02._SLUG = "RAD"
-    tcs.zone_by_idx["02"] = zone_02
+    tcs.zone_by_index["02"] = zone_02
 
     zone_0a = Zone(tcs, "0A")
     zone_0a._SLUG = "RAD"
-    tcs.zone_by_idx["0A"] = zone_0a
+    tcs.zone_by_index["0A"] = zone_0a
 
     msg = MagicMock()
     msg.code = Code._3150
     msg.verb = I_
-    msg.payload = {"zone_idx": "02", "heat_demand": 0.44}
+    msg.payload = {"zone_index": "02", "heat_demand": 0.44}
     msg._has_array = False
     msg.src = MagicMock()
     msg.src.id = "04:056053"

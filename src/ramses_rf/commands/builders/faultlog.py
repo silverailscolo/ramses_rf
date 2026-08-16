@@ -10,16 +10,18 @@ def build_get_faultlog_entry(intent: Command) -> CommandDTO:
     """Translate a GET_FAULTLOG_ENTRY intent into a CommandDTO.
 
     :param intent: The GET_FAULTLOG_ENTRY intent. It is expected to
-        contain the `log_index` / `log_idx` key (int | str) in its data dictionary.
+        contain the `log_index` / `log_index` key (int | str) in its data dictionary.
     :return: A populated CommandDTO.
     """
-    log_idx = intent.get("log_index", intent.get("log_idx"))
+    log_index = intent.get("log_index", intent.get("log_index"))
 
-    if log_idx is None:
-        raise ValueError("Missing 'log_index'/'log_idx' in intent data")
+    if log_index is None:
+        raise ValueError("Missing 'log_index'/'log_index' in intent data")
 
-    log_idx_int = log_idx if isinstance(log_idx, int) else int(log_idx, 16)
-    payload = f"{log_idx_int:06X}"
+    log_index_int = (
+        log_index if isinstance(log_index, int) else int(log_index, 16)
+    )
+    payload = f"{log_index_int:06X}"
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -47,12 +49,12 @@ def build_put_faultlog_entry(intent: Command) -> CommandDTO:
     fault_type = intent.get("fault_type")
     device_class = intent.get("device_class")
     device_id = intent.get("device_id")
-    domain_idx = intent.get("domain_index", intent.get("domain_idx", "00"))
-    if domain_idx is None:
-        domain_idx = "00"
-    log_idx = intent.get("log_index", intent.get("log_idx", 0))
-    if log_idx is None:
-        log_idx = 0
+    domain_index = intent.get("domain_index", intent.get("domain_index", "00"))
+    if domain_index is None:
+        domain_index = "00"
+    log_index = intent.get("log_index", intent.get("log_index", 0))
+    if log_index is None:
+        log_index = 0
     timestamp = intent.get("timestamp")
 
     if isinstance(device_class, enum.Enum):
@@ -78,12 +80,14 @@ def build_put_faultlog_entry(intent: Command) -> CommandDTO:
     if fault_type not in FAULT_TYPE:
         raise ValueError(f"Invalid fault_type: {fault_type}")
 
-    if not isinstance(domain_idx, str) or len(domain_idx) != 2:
-        raise ValueError(f"Invalid domain_idx: {domain_idx}")
+    if not isinstance(domain_index, str) or len(domain_index) != 2:
+        raise ValueError(f"Invalid domain_index: {domain_index}")
 
-    log_idx_str = f"{log_idx:02X}" if not isinstance(log_idx, str) else log_idx
-    if not (0 <= int(log_idx_str, 16) <= 0x3F):
-        raise ValueError(f"Invalid log_idx: {log_idx_str}")
+    log_index_str = (
+        f"{log_index:02X}" if not isinstance(log_index, str) else log_index
+    )
+    if not (0 <= int(log_index_str, 16) <= 0x3F):
+        raise ValueError(f"Invalid log_index: {log_index_str}")
 
     if timestamp is None:
         timestamp = dt.now()
@@ -95,10 +99,10 @@ def build_put_faultlog_entry(intent: Command) -> CommandDTO:
         (
             "00",
             fault_state,
-            log_idx_str,
+            log_index_str,
             "B0",
             fault_type,
-            domain_idx,
+            domain_index,
             device_class,
             "0000",
             ts,

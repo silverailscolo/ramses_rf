@@ -167,6 +167,7 @@ class MessageStore(MessageStoreInterface):
         self.start()
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         return f"MessageStore({len(self._message_log)} messages)"
 
     def start(self) -> None:
@@ -331,10 +332,10 @@ class MessageStore(MessageStoreInterface):
 
                 # Reconstruct exactly as received. RSSI is stripped natively,
                 # so we pad with `... ` to satisfy Packet logic.
-                pkt_line = f"... {frame}"
+                packet_line = f"... {frame}"
                 try:
-                    packet = Packet(dtm_val, pkt_line)
-                    msg = Message._from_pkt(packet)
+                    packet = Packet(dtm_val, packet_line)
+                    msg = Message._from_packet(packet)
                     msg._payload = orjson.loads(payload_blob)
 
                     self._message_log[dtm_str] = msg
@@ -473,7 +474,7 @@ class MessageStore(MessageStoreInterface):
             )
             self._worker.submit_packet(data)
 
-        msg: Message = Message._from_pkt(
+        msg: Message = Message._from_packet(
             Packet(
                 _now,
                 f"... {verb} --- {source} --:------ {source} {code} 005 0000000000",
@@ -711,7 +712,7 @@ class MessageStore(MessageStoreInterface):
     async def qry(
         self, sql: str, parameters: tuple[str, ...]
     ) -> tuple[Message, ...]:
-        """Deprecated: Returns empty for legacy callers."""
+        """Return empty tuple for legacy callers (deprecated)."""
         _LOGGER.warning(
             "Legacy qry (SQL) called. Returning empty in CQRS architecture."
         )
@@ -720,7 +721,7 @@ class MessageStore(MessageStoreInterface):
     async def qry_field(
         self, sql: str, parameters: tuple[str, ...]
     ) -> list[tuple[dt | str, str]]:
-        """Deprecated: Returns empty for legacy callers."""
+        """Return empty list for legacy callers (deprecated)."""
         _LOGGER.warning(
             "Legacy qry_field (SQL) called. Returning empty in CQRS architecture."
         )

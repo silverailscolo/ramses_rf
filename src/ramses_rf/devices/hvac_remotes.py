@@ -167,19 +167,19 @@ _REMOTES = {
     "545-7550": {
         "name": "RFT-PIR",
     },
-    "536-0124": {  # idx="00"
+    "536-0124": {  # index="00"
         "name": "RFT",
         "mode": "1,2,3,T",
         "CVE": False,  # not clear
         "HRV": True,
     },
-    "536-0146": {  # idx="??"
+    "536-0146": {  # index="??"
         "name": "RFT-DF",
         "mode": "",
         "CVE": True,
         "HRV": False,
     },
-    "536-0150": {  # idx = "63"
+    "536-0150": {  # index = "63"
         "name": "RFT-AUTO",
         "mode": "1,Auto,3,T",
         "CVE": True,
@@ -209,7 +209,7 @@ CVE/HRU remote (536-0124) RFT W: 3 modes, timer
     "timer_3":  (Code._22F3, 00, 00|1E"),  30 minutes full speed
    ===========  =========================  ================================================
 
-RFT-AUTO (536-0150) RFT CAR: 2 modes, auto, timer: idx = 63, essentially same as above, but also...
+RFT-AUTO (536-0150) RFT CAR: 2 modes, auto, timer: index = 63, essentially same as above, but also...
 -----------------------------------------------------------------------------------------------------
 
 .. table:: 536-0150

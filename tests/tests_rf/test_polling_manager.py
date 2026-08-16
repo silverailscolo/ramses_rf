@@ -315,7 +315,7 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
     This restores the per-zone zone-name polling that was lost when the
     legacy DiscoveryService was removed (issue 947 /
     ramses-rf/ramses_cc#947).  Each zone gets its own 0004 task with
-    the zone_idx in the payload.
+    the zone_index in the payload.
     """
     # ARRANGE
     poller = PollingManager(mock_gateway, shadow_mode=True)
@@ -323,9 +323,9 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
 
     # Mock a TCS with zones
     zone_03 = MagicMock()
-    zone_03.idx = "03"
+    zone_03.index = "03"
     zone_07 = MagicMock()
-    zone_07.idx = "07"
+    zone_07.index = "07"
     mock_tcs = MagicMock()
     mock_tcs.zones = [zone_03, zone_07]
     ctl_dev.tcs = mock_tcs
@@ -340,11 +340,11 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
     assert len(device_level) == 4
     assert len(zone_level) == 2
 
-    # Zone-level keys are (device_id, "0004", zone_idx)
+    # Zone-level keys are (device_id, "0004", zone_index)
     assert ("01:111111", Code._0004, "03") in zone_level
     assert ("01:111111", Code._0004, "07") in zone_level
 
-    # Verify the 0004 tasks have the correct payload (zone_idx + "00")
+    # Verify the 0004 tasks have the correct payload (zone_index + "00")
     task_03 = poller._tasks[("01:111111", Code._0004, "03")]
     assert task_03.payload == "0300"
     assert task_03.code == Code._0004
@@ -363,9 +363,9 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
     mock_gateway: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When polling 0004 for a zone, the RQ payload includes the zone_idx.
+    """When polling 0004 for a zone, the RQ payload includes the zone_index.
 
-    The old DiscoveryService sent GET_ZONE_NAME with the zone_idx in the
+    The old DiscoveryService sent GET_ZONE_NAME with the zone_index in the
     payload.  The PollingManager must do the same — payload "00" would
     only query zone 00, not the target zone.
     """
@@ -376,7 +376,7 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
 
     # Mock a TCS with one zone
     zone_05 = MagicMock()
-    zone_05.idx = "05"
+    zone_05.index = "05"
     mock_tcs = MagicMock()
     mock_tcs.zones = [zone_05]
     ctl_dev.tcs = mock_tcs
@@ -399,7 +399,7 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
     ]
     assert Code._0004 in sent_codes
 
-    # Find the 0004 call and verify payload contains zone_idx
+    # Find the 0004 call and verify payload contains zone_index
     for call in mock_gateway.async_send_cmd.call_args_list:
         dto: CommandDTO = call.args[0]
         if dto.code == Code._0004:

@@ -31,7 +31,7 @@ class _FileTransportAbstractor:
         loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize the file transport abstractor."""
-        self._pkt_source = packet_source
+        self._packet_source = packet_source
         self._protocol = protocol
         self._loop = loop or asyncio.get_event_loop()
 
@@ -91,7 +91,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
             )
 
     def pause_reading(self) -> None:
-        """Pause the receiving end (no data to protocol.pkt_received())."""
+        """Pause the receiving end (no data to protocol.packet_received())."""
         self._reading = False
         self._evt_reading.clear()  # Puts the loop to sleep efficiently
 
@@ -102,34 +102,34 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
 
     async def _producer_loop(self) -> None:
         """Loop through the packet source for Frames and process them."""
-        if isinstance(self._pkt_source, dict):
-            for dtm_str, pkt_line in self._pkt_source.items():
-                await self._process_line(dtm_str, pkt_line)
+        if isinstance(self._packet_source, dict):
+            for dtm_str, packet_line in self._packet_source.items():
+                await self._process_line(dtm_str, packet_line)
 
-        elif isinstance(self._pkt_source, str):
+        elif isinstance(self._packet_source, str):
             try:
                 # Removed redundant mode="r" to satisfy Ruff UP015
                 async with aiofiles.open(
-                    self._pkt_source, encoding="utf-8"
+                    self._packet_source, encoding="utf-8"
                 ) as file:
-                    async for dtm_pkt_line in file:
-                        await self._process_line_from_raw(dtm_pkt_line)
+                    async for dtm_packet_line in file:
+                        await self._process_line_from_raw(dtm_packet_line)
             except FileNotFoundError as err:
                 _LOGGER.warning("Correct the packet file name; %s", err)
 
-        elif isinstance(self._pkt_source, TextIOWrapper):
+        elif isinstance(self._packet_source, TextIOWrapper):
             # Wrap the synchronous TextIOWrapper for asynchronous iteration
-            async_file = aiofiles.threadpool.wrap(self._pkt_source)
-            async for dtm_pkt_line in async_file:
-                await self._process_line_from_raw(dtm_pkt_line)
+            async_file = aiofiles.threadpool.wrap(self._packet_source)
+            async for dtm_packet_line in async_file:
+                await self._process_line_from_raw(dtm_packet_line)
 
         else:
             raise TransportSourceInvalid(
-                f"Packet source is not dict, TextIOWrapper or str: {self._pkt_source!r}"
+                f"Packet source is not dict, TextIOWrapper or str: {self._packet_source!r}"
             )
 
     async def _process_line_from_raw(self, line: str) -> None:
-        """Helper to process raw lines."""
+        """Process a raw line from the packet source."""
         if (line := line.strip()) and line[:1] != "#":
             await self._process_line(line[:26], line[27:])
 

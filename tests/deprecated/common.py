@@ -84,9 +84,9 @@ async def load_test_gwy(
     #     await gwy.start(start_discovery=False)  # may: SerialException
 
     if hasattr(  # TODO: move out of this routine
-        gwy.pkt_transport.serial, "mock_devices"
+        gwy.packet_transport.serial, "mock_devices"
     ):  # needs ser instance, so after gwy.start()
-        gwy.pkt_transport.serial.mock_devices = (
+        gwy.packet_transport.serial.mock_devices = (
             [MockDeviceCtl(gwy, CTL_ID)] if devices is None else devices
         )
 

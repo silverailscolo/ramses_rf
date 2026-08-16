@@ -60,4 +60,4 @@ class CommandDispatcher:
             if priority is not None
             else Priority(dto.priority),
         )
-        return Message._from_pkt(packet)
+        return Message._from_packet(packet)

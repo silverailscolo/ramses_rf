@@ -63,14 +63,14 @@ def test_rx_payload_decoder_regression() -> None:
 
     for line_num, raw_frame in RAW_FRAMES:
         if raw_frame[10] == " ":
-            date_str, time_str, pkt_line = raw_frame.split(" ", 2)
+            date_str, time_str, packet_line = raw_frame.split(" ", 2)
             dtm_str: str = f"{date_str}T{time_str}"
         else:
-            dtm_str, pkt_line = raw_frame.split(" ", 1)
+            dtm_str, packet_line = raw_frame.split(" ", 1)
 
         # 1. Arrange: Construct the raw packet to simulate L2/L3 reception.
         try:
-            pkt: Any = Packet.from_file(dtm_str, pkt_line)
+            packet: Any = Packet.from_file(dtm_str, packet_line)
         except Exception:
             # Skipped due to L2 packet instantiation failure
             skipped_l2_count += 1
@@ -79,7 +79,7 @@ def test_rx_payload_decoder_regression() -> None:
         # 2. Act: Translate to DTO and push across the boundary to the L7
         # Decoder.
         try:
-            dto: Any = pkt.to_dto()
+            dto: Any = packet.to_dto()
             new_payload: Any = decode_packet(dto)
         except PacketPayloadInvalid:
             # The L7 decoder successfully caught a malformed/corrupt RF payload
@@ -130,9 +130,9 @@ def test_rx_payload_decoder_regression() -> None:
 # Regression: ramses_cc issue 929 — faking Zone THM broken
 #
 # 30C9 packets from non-controller devices (03:/04:/12:) with a non-zero
-# zone_idx must be accepted by the decoder.  The 0xAB guard in _pkt_idx
+# zone_index must be accepted by the decoder.  The 0xAB guard in _packet_index
 # was rejecting them because those device types are not in {01, 02, 23}.
-# Real THM sensors send 30C9 with their zone_idx, and faked THM sensors
+# Real THM sensors send 30C9 with their zone_index, and faked THM sensors
 # (introduced in 0.59.2 via commit 5b9abbe4) do the same.
 # ---------------------------------------------------------------------------
 
@@ -142,28 +142,28 @@ _DTM = "2026-08-09T19:09:23.000000"
 @pytest.mark.parametrize(
     "frame",
     [
-        # 03: analog_thermostat, zone_idx 05 (the issue's faked sensor)
+        # 03: analog_thermostat, zone_index 05 (the issue's faked sensor)
         "000  I --- 03:055486 --:------ 03:055486 30C9 003 050AA0",
-        # 03: analog_thermostat, zone_idx 01 (real sensor from fixture)
+        # 03: analog_thermostat, zone_index 01 (real sensor from fixture)
         "044  I 007 03:201565 --:------ 03:201565 30C9 003 01073A",
-        # 04: radiator_valve, zone_idx 03
+        # 04: radiator_valve, zone_index 03
         "000  I --- 04:055480 --:------ 04:055480 30C9 003 030A28",
     ],
 )
-def test_30c9_non_controller_with_zone_idx_accepted(frame: str) -> None:
-    """30C9 from a non-controller with a non-zero idx must not raise."""
-    pkt: Any = Packet.from_file(_DTM, frame)
-    dto: Any = pkt.to_dto()
+def test_30c9_non_controller_with_zone_index_accepted(frame: str) -> None:
+    """30C9 from a non-controller with a non-zero index must not raise."""
+    packet: Any = Packet.from_file(_DTM, frame)
+    dto: Any = packet.to_dto()
     result: Any = decode_packet(dto)  # must not raise PacketPayloadInvalid
     assert isinstance(result, dict)
     assert "temperature" in result
 
 
-def test_30c9_controller_still_injects_zone_idx() -> None:
-    """30C9 from a controller (01:) must still inject zone_idx into the result."""
-    pkt: Any = Packet.from_file(
+def test_30c9_controller_still_injects_zone_index() -> None:
+    """30C9 from a controller (01:) must still inject zone_index into the result."""
+    packet: Any = Packet.from_file(
         _DTM, "000  I --- 01:050858 --:------ 01:050858 30C9 003 050AA0"
     )
-    result: Any = decode_packet(pkt.to_dto())
-    assert result.get(SZ_ZONE_INDEX, result.get("zone_idx")) == "05"
+    result: Any = decode_packet(packet.to_dto())
+    assert result.get(SZ_ZONE_INDEX, result.get("zone_index")) == "05"
     assert result.get("temperature") is not None

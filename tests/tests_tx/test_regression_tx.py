@@ -41,12 +41,12 @@ def test_packet_parsing_regression(snapshot: SnapshotAssertion) -> None:
             continue
 
         dtm_str = line[:26]
-        pkt_str = line[27:]
+        packet_str = line[27:]
 
         try:
-            pkt = Packet.from_file(dtm_str, pkt_str)
+            packet = Packet.from_file(dtm_str, packet_str)
             # Snapshot the deterministic string representation
-            results.append(f"VALID:   {pkt}")
+            results.append(f"VALID:   {packet}")
         except PacketInvalid as err:
             # Catch expected invalid packets so we verify they STAY invalid
             results.append(f"INVALID: {type(err).__name__}: {err}")

@@ -40,12 +40,12 @@ def _load_regression_packets() -> list[tuple[int, Packet]]:
 
             try:
                 if raw_frame[10] == " ":
-                    date_str, time_str, pkt_line = raw_frame.split(" ", 2)
+                    date_str, time_str, packet_line = raw_frame.split(" ", 2)
                     dtm_str: str = f"{date_str}T{time_str}"
                 else:
-                    dtm_str, pkt_line = raw_frame.split(" ", 1)
-                pkt = Packet.from_file(dtm_str, pkt_line)
-                packets.append((line_num, pkt))
+                    dtm_str, packet_line = raw_frame.split(" ", 1)
+                packet = Packet.from_file(dtm_str, packet_line)
+                packets.append((line_num, packet))
             except Exception:
                 continue
 
@@ -69,23 +69,24 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
 
     # Categorize log packets
     rq_packets_count: int = sum(
-        1 for _line_num, pkt in REGRESSION_PACKETS if pkt.verb == Verb.RQ
+        1 for _line_num, packet in REGRESSION_PACKETS if packet.verb == Verb.RQ
     )
 
     # Target state-bearing packets (RP, I, W) matching registered opcodes
     # Note: RQ packets carry empty or header-only query bytes (e.g. 00) and contain no state payload structures.
     target_packets: list[tuple[int, Packet]] = [
-        (line_num, pkt)
-        for line_num, pkt in REGRESSION_PACKETS
-        if PAYLOAD_REGISTRY.get(pkt.code) is not None and pkt.verb != Verb.RQ
+        (line_num, packet)
+        for line_num, packet in REGRESSION_PACKETS
+        if PAYLOAD_REGISTRY.get(packet.code) is not None
+        and packet.verb != Verb.RQ
     ]
 
     # Benchmark Stage 1: Legacy Dictionary Parser Decoding
     t0_legacy = time.perf_counter()
     legacy_decoded_count: int = 0
-    for _line_num, pkt in target_packets:
+    for _line_num, packet in target_packets:
         try:
-            dto = pkt.to_dto()
+            dto = packet.to_dto()
             _legacy_res = decode_packet(dto)
             legacy_decoded_count += 1
         except Exception:
@@ -97,19 +98,19 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
     t0_new = time.perf_counter()
     t_reencode_acc: float = 0.0
 
-    for line_num, pkt in target_packets:
-        payload_cls = PAYLOAD_REGISTRY.get(pkt.code)
+    for line_num, packet in target_packets:
+        payload_cls = PAYLOAD_REGISTRY.get(packet.code)
         if payload_cls is None:
             continue
 
-        raw_bytes: bytes = bytes.fromhex(pkt.payload)
+        raw_bytes: bytes = bytes.fromhex(packet.payload)
 
         # 1. Test from_bytes decoding
         try:
             payload_obj = payload_cls.from_bytes(raw_bytes)
         except (ValueError, struct.error) as err:
             try:
-                dto = pkt.to_dto()
+                dto = packet.to_dto()
                 legacy_res_str = str(decode_packet(dto))
             except Exception as leg_err:
                 legacy_res_str = f"Legacy Error: {leg_err}"
@@ -117,16 +118,18 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
             variant_skips.append(
                 (
                     line_num,
-                    pkt.code,
-                    pkt.verb,
-                    pkt.payload,
+                    packet.code,
+                    packet.verb,
+                    packet.payload,
                     str(err),
                     legacy_res_str,
                 )
             )
             continue
         except Exception as err:
-            parse_errors.append(f"Line {line_num} (Opcode {pkt.code}): {err}")
+            parse_errors.append(
+                f"Line {line_num} (Opcode {packet.code}): {err}"
+            )
             continue
 
         # 2. Test to_bytes symmetrical encoding
@@ -140,12 +143,12 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
                 reencoded = payload_obj.to_bytes()
             if not reencoded:
                 reencode_errors.append(
-                    f"Line {line_num} (Opcode {pkt.code}): "
+                    f"Line {line_num} (Opcode {packet.code}): "
                     "Produced empty re-encoded byte string"
                 )
         except Exception as err:
             reencode_errors.append(
-                f"Line {line_num} (Opcode {pkt.code}): {err}"
+                f"Line {line_num} (Opcode {packet.code}): {err}"
             )
         t_reencode_acc += time.perf_counter() - t0_enc
 
@@ -157,7 +160,7 @@ def test_payload_dataclass_regression_roundtrip_parity() -> None:
                 _as_dict = payload_to_dict(payload_obj)
         except Exception as err:
             adapter_errors.append(
-                f"Line {line_num} (Opcode {pkt.code}): {err}"
+                f"Line {line_num} (Opcode {packet.code}): {err}"
             )
 
         tested_count += 1

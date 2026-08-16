@@ -29,7 +29,7 @@ from ramses_cli.discovery import (
     set_schedule,
     spawn_scripts,
 )
-from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX
+from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_INDEX
 from ramses_rf.gateway import Gateway
 
 # Constants for testing
@@ -107,7 +107,7 @@ async def test_spawn_scripts_get_schedule(mock_gateway: MagicMock) -> None:
 @pytest.mark.asyncio
 async def test_spawn_scripts_set_schedule(mock_gateway: MagicMock) -> None:
     """Test spawning set_schedule."""
-    sched_json = f'{{"{SZ_ZONE_IDX}": "01", "{SZ_SCHEDULE}": []}}'
+    sched_json = f'{{"{SZ_ZONE_INDEX}": "01", "{SZ_SCHEDULE}": []}}'
     kwargs = {SET_SCHED: (DEV_ID, sched_json)}
     tasks = spawn_scripts(mock_gateway, **kwargs)
     assert len(tasks) == 1
@@ -169,7 +169,7 @@ async def test_execution_of_get_schedule(mock_gateway: MagicMock) -> None:
 @pytest.mark.asyncio
 async def test_execution_of_set_schedule(mock_gateway: MagicMock) -> None:
     """Test execution of set_schedule logic."""
-    sched_json = f'{{"{SZ_ZONE_IDX}": "01", "{SZ_SCHEDULE}": []}}'
+    sched_json = f'{{"{SZ_ZONE_INDEX}": "01", "{SZ_SCHEDULE}": []}}'
     await set_schedule(mock_gateway, DEV_ID, sched_json)  # type: ignore[arg-type]
     mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
     mock_zone = mock_dev.tcs.get_htg_zone("01")

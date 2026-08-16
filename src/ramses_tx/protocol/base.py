@@ -71,7 +71,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         super().__init__()
         self._msg_handler = msg_handler
         self._msg_handlers: list[tuple[MsgHandlerT, MsgFilterT | None]] = []
-        self._raw_pkt_handlers: list[MsgHandlerT] = []
+        self._raw_packet_handlers: list[MsgHandlerT] = []
         self._handler_tasks: set[asyncio.Task[Any]] = set()
 
         self._transport: TransportInterface | None = None
@@ -166,7 +166,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         return del_handler
 
-    def add_raw_pkt_handler(
+    def add_raw_packet_handler(
         self,
         msg_handler: MsgHandlerT,
         /,
@@ -180,19 +180,19 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         :param msg_handler: The handler function to add.
         :return: A callable to remove the handler.
         """
-        self._raw_pkt_handlers.append(msg_handler)
+        self._raw_packet_handlers.append(msg_handler)
 
         def del_handler() -> None:
-            if msg_handler in self._raw_pkt_handlers:
-                self._raw_pkt_handlers.remove(msg_handler)
+            if msg_handler in self._raw_packet_handlers:
+                self._raw_packet_handlers.remove(msg_handler)
 
         return del_handler
 
     def connection_made(self, transport: TransportInterface) -> None:  # type: ignore[override]
-        """Called when the connection to the Transport is established.
+        """Establish connection to the Transport.
 
         The argument is the transport representing the pipe connection.
-        To receive data, wait for pkt_received() calls. When the
+        To receive data, wait for packet_received() calls. When the
         connection is closed, connection_lost() is called.
         """
         if self._wait_connection_made.done():
@@ -218,7 +218,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             ) from err
 
     def connection_lost(self, error: Exception | None) -> None:
-        """Called when the connection to the Transport is lost or closed.
+        """Handle lost or closed Transport connection.
 
         The argument is an exception object or None (the latter meaning
         a regular EOF is received or the connection was aborted or
@@ -277,11 +277,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             return err
 
     def pause_writing(self) -> None:
-        """Called when transport buffer exceeds high-water mark."""
+        """Pause writing when transport buffer exceeds high-water mark."""
         self._pause_writing = True
 
     def resume_writing(self) -> None:
-        """Called when transport buffer drains below low-water mark."""
+        """Resume writing when transport buffer drains below low-water mark."""
         self._pause_writing = False
 
     async def _send_impersonation_alert(self, command: CommandDTO) -> None:
@@ -414,8 +414,8 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             await asyncio.sleep(gap_duration)
             await self._transport.write_frame(frame)
 
-    def pkt_received(self, packet: Packet) -> None:
-        """Wrap self._pkt_received(packet).
+    def packet_received(self, packet: Packet) -> None:
+        """Wrap self._packet_received(packet).
 
         Applies inbound regex modifications and tracks synchronization
         cycles before passing the packet to the internal receiver.
@@ -482,10 +482,10 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         else:
             _LOGGER.debug("Recv'd: %s %s", packet.rssi, packet)
 
-        self._pkt_received(packet)
+        self._packet_received(packet)
 
-    def _pkt_received(self, packet: Packet) -> None:
-        """Called by the Transport when a Packet is received."""
+    def _packet_received(self, packet: Packet) -> None:
+        """Handle received Packet from the Transport."""
         try:
             msg = packet.to_dto()  # should log all invalid msgs appropriately
         except PacketInvalid as err:
@@ -651,16 +651,16 @@ class _DeviceIdFilterMixin(_BaseProtocol):
 
         return True
 
-    def _pkt_received(self, packet: Packet) -> None:
+    def _packet_received(self, packet: Packet) -> None:
         # Fast early-exit: check device filter before invoking to_dto() if no raw handlers
-        if not self._raw_pkt_handlers and not self._is_wanted_addrs(
+        if not self._raw_packet_handlers and not self._is_wanted_addrs(
             packet.src.id, packet.dst.id
         ):
             _LOGGER.debug("%s < Packet excluded by device_id filter", packet)
             return
 
         # Fire raw handlers before the device ID filter (for the scan engine)
-        if self._raw_pkt_handlers:
+        if self._raw_packet_handlers:
             try:
                 dto = packet.to_dto()
             except PacketInvalid as err:
@@ -668,7 +668,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                     "Dropped invalid packet for raw handlers: %s", err
                 )
             else:
-                for handler in self._raw_pkt_handlers:
+                for handler in self._raw_packet_handlers:
                     result = handler(dto)
                     if asyncio.iscoroutine(result):
                         self._create_handler_task(result)
@@ -679,7 +679,7 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                 )
                 return
 
-        super()._pkt_received(packet)
+        super()._packet_received(packet)
 
     async def send_cmd(
         self,

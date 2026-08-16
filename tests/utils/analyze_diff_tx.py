@@ -109,11 +109,11 @@ def generate_actual_state() -> list[tuple[int, str, str]]:
             continue
 
         dtm_str = clean_line[:26]
-        pkt_str = clean_line[27:]
+        packet_str = clean_line[27:]
 
         try:
-            pkt = Packet.from_file(dtm_str, pkt_str)
-            res = f"VALID:   {pkt}"
+            packet = Packet.from_file(dtm_str, packet_str)
+            res = f"VALID:   {packet}"
         except PacketInvalid as err:
             res = f"INVALID: {type(err).__name__}: {err}"
         except ValueError as err:

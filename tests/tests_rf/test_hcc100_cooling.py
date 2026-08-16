@@ -299,7 +299,7 @@ def test_3ef0_standard_opentherm_payload_is_preserved() -> None:
 def test_30c9_ufc_multi_zone_array_decoding() -> None:
     # Arrange
     indexes = [0x01, 0x02, 0x1E, 0x20, 0x23]
-    raw_bytes = b"".join(bytes((idx, 0x08, 0x34)) for idx in indexes)
+    raw_bytes = b"".join(bytes((index, 0x08, 0x34)) for index in indexes)
 
     # Act
     temperatures = TemperaturePayload.from_bytes(raw_bytes)
@@ -307,7 +307,7 @@ def test_30c9_ufc_multi_zone_array_decoding() -> None:
     # Assert
     assert isinstance(temperatures, list)
     assert [item.to_dict()[SZ_ZONE_INDEX] for item in temperatures] == [
-        f"{idx:02X}" for idx in indexes
+        f"{index:02X}" for index in indexes
     ]
 
 

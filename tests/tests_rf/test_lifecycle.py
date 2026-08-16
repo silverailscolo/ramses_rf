@@ -85,10 +85,10 @@ async def test_entity_state_delete_tasks_cancelled_on_log_reset() -> None:
             self.verb = I_
             self.code = Code._30C9
             self.dtm = dt.now()
-            self._pkt = MagicMock()
-            self._pkt._ctx = False
+            self._packet = MagicMock()
+            self._packet._ctx = False
             self._expired = False
-            self.payload = {"temperature": 21.0, "zone_idx": "00"}
+            self.payload = {"temperature": 21.0, "zone_index": "00"}
 
             # state_header property
             ctx = RoutingContext("00")

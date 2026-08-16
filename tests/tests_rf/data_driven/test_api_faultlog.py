@@ -33,8 +33,8 @@ def _put_system_log_entry(
     fault_type: str,
     device_class: str,
     device_id: DeviceIdT | str | None = None,
-    domain_idx: int | str = "00",
-    _log_idx: int | str | None = None,
+    domain_index: int | str = "00",
+    _log_index: int | str | None = None,
     timestamp: dt | str | None = None,
     **kwargs: Any,
 ) -> Command:
@@ -49,8 +49,8 @@ def _put_system_log_entry(
                 "fault_type": fault_type,
                 "device_class": device_class,
                 "device_id": device_id,
-                "domain_idx": domain_idx,
-                "log_idx": _log_idx,
+                "domain_index": domain_index,
+                "log_index": _log_index,
                 "timestamp": timestamp,
             },
         )
@@ -76,7 +76,7 @@ def _fault_log_entry(
         timestamp=timestamp,
         fault_state=args[0],
         fault_type=args[1],
-        domain_idx=kwargs.get("domain_idx", "00"),
+        domain_index=kwargs.get("domain_index", "00"),
         device_class=args[2],
         device_id=kwargs.get("device_id"),
     )
@@ -103,7 +103,7 @@ TEST_FAULTS["02"] = _fault_log_entry(
     FaultDeviceClass.ACTUATOR,
     timestamp="21-12-23T00:57:02",
     device_id="04:111111",
-    domain_idx="03",
+    domain_index="03",
 )
 TEST_FAULTS["03"] = _fault_log_entry(
     FaultState.FAULT,
@@ -111,7 +111,7 @@ TEST_FAULTS["03"] = _fault_log_entry(
     FaultDeviceClass.ACTUATOR,
     timestamp="21-12-23T00:56:03",
     device_id="04:111111",
-    domain_idx="03",
+    domain_index="03",
 )
 TEST_FAULTS["04"] = _fault_log_entry(
     FaultState.RESTORE,
@@ -119,7 +119,7 @@ TEST_FAULTS["04"] = _fault_log_entry(
     FaultDeviceClass.SETPOINT,
     timestamp="21-12-23T00:55:04",
     device_id="03:123456",
-    domain_idx="06",
+    domain_index="06",
 )
 TEST_FAULTS["05"] = _fault_log_entry(
     FaultState.FAULT,
@@ -127,7 +127,7 @@ TEST_FAULTS["05"] = _fault_log_entry(
     FaultDeviceClass.SETPOINT,
     timestamp="21-12-23T00:54:05",
     device_id="03:123456",
-    domain_idx="06",
+    domain_index="06",
 )
 
 EXPECTED_MAP = {
@@ -151,12 +151,12 @@ class EvohomeStub:
 
 def _proc_log_line(log_line: str) -> None:
     try:
-        pkt = Packet.from_file(log_line[:26], log_line[27:])
+        packet = Packet.from_file(log_line[:26], log_line[27:])
     except ValueError:
         return
 
     # Utilize the correct shim to cast directly to PacketDTO
-    msg = Message._from_pkt(pkt)
+    msg = Message._from_packet(packet)
     if msg.code != Code._0418 or not msg.payload.get(SZ_LOG_ENTRY):
         return
 
@@ -165,7 +165,7 @@ def _proc_log_line(log_line: str) -> None:
 
 
 def _proc_null_fault_entry(
-    fault_log: FaultLog, _log_idx: LogIdxT = "00"
+    fault_log: FaultLog, _log_index: LogIdxT = "00"
 ) -> None:
     """Return a 0418 packet with no entry."""
     cmd = CommandDTO(
@@ -174,15 +174,15 @@ def _proc_null_fault_entry(
         addr2=NON_DEV_ADDR.id,
         addr3=CTL_ID,
         code=Code._0418,
-        payload=f"0000{_log_idx}B0000000000000000000007FFFFF7000000000",
+        payload=f"0000{_log_index}B0000000000000000000007FFFFF7000000000",
     )
     fault_log.handle_msg(Message._from_cmd(cmd))
 
 
 def _proc_test_fault_entry(
-    fault_log: FaultLog, text_idx: LogIdxT, _log_idx: LogIdxT = "00"
+    fault_log: FaultLog, text_index: LogIdxT, _log_index: LogIdxT = "00"
 ) -> None:
-    entry: FaultLogEntry = TEST_FAULTS[text_idx]
+    entry: FaultLogEntry = TEST_FAULTS[text_index]
 
     cmd = _put_system_log_entry(
         CTL_ID,
@@ -190,8 +190,8 @@ def _proc_test_fault_entry(
         entry.fault_type,
         entry.device_class,
         device_id=entry.device_id,
-        domain_idx=entry.domain_idx,
-        _log_idx=_log_idx,
+        domain_index=entry.domain_index,
+        _log_index=_log_index,
         timestamp=entry.timestamp,
     )
     fault_log.handle_msg(Message._from_cmd(cmd))
@@ -215,20 +215,20 @@ def test_faultlog_instantiation_0() -> None:
 
     # log entries arrive in order of timestamp (i.e. as they'd occur)
     for i in reversed(range(len(TEST_FAULTS))):
-        _proc_test_fault_entry(fault_log, f"{i:02}")  # _log_idx="00")
+        _proc_test_fault_entry(fault_log, f"{i:02}")  # _log_index="00")
 
     # assert sorted(fault_log._log.keys(), reverse=True) == list(EXPECTED_MAP.values())
     assert fault_log._map == EXPECTED_MAP
 
 
 def test_faultlog_instantiation_1() -> None:
-    """Log entries arrive in order of log_idx (e.g. enumerating the log via RQs)."""
+    """Log entries arrive in order of log_index (e.g. enumerating the log via RQs)."""
 
     fault_log = FaultLog(EvohomeStub(CTL_ID))  # type: ignore[type-var]
 
-    # log entries arrive in order of log_idx (e.g. enumerating the log via RQs)
+    # log entries arrive in order of log_index (e.g. enumerating the log via RQs)
     for i in reversed(range(len(TEST_FAULTS))):
-        _proc_test_fault_entry(fault_log, f"{i:02}", _log_idx=f"{i:02}")
+        _proc_test_fault_entry(fault_log, f"{i:02}", _log_index=f"{i:02}")
 
     assert sorted(fault_log._log.keys(), reverse=True) == list(
         EXPECTED_MAP.values()
@@ -237,16 +237,16 @@ def test_faultlog_instantiation_1() -> None:
 
 
 def test_faultlog_instantiation_2() -> None:
-    """Log entries arrive in random order albeit with their correct log_idx."""
+    """Log entries arrive in random order albeit with their correct log_index."""
 
     fault_log = FaultLog(EvohomeStub(CTL_ID))  # type: ignore[type-var]
 
-    # log entries arrive in random order albeit with their correct log_idx
+    # log entries arrive in random order albeit with their correct log_index
     numbers = list(range(len(TEST_FAULTS)))
     random.shuffle(numbers)
 
     for i in numbers:
-        _proc_test_fault_entry(fault_log, f"{i:02}", _log_idx=f"{i:02}")
+        _proc_test_fault_entry(fault_log, f"{i:02}", _log_index=f"{i:02}")
 
     assert sorted(fault_log._log.keys(), reverse=True) == list(
         EXPECTED_MAP.values()
@@ -269,8 +269,8 @@ def test_faultlog_instantiation_3() -> None:
     }
 
     # the two entries arrives out of order
-    _proc_test_fault_entry(fault_log, "05", _log_idx="01")
-    _proc_test_fault_entry(fault_log, "04", _log_idx="00")
+    _proc_test_fault_entry(fault_log, "05", _log_index="01")
+    _proc_test_fault_entry(fault_log, "04", _log_index="00")
 
     assert fault_log._map == {
         0: "21-12-23T00:55:04",
@@ -283,9 +283,9 @@ def test_faultlog_instantiation_3() -> None:
     assert fault_log._map == {}
 
     # a log with three entries is enumerated, kinda
-    _proc_test_fault_entry(fault_log, "03", _log_idx="00")
-    # roc_fault_entry(fault_log, "04", _log_idx="01")  # went missing
-    _proc_test_fault_entry(fault_log, "05", _log_idx="02")
+    _proc_test_fault_entry(fault_log, "03", _log_index="00")
+    # roc_fault_entry(fault_log, "04", _log_index="01")  # went missing
+    _proc_test_fault_entry(fault_log, "05", _log_index="02")
 
     assert fault_log._map == {
         0: "21-12-23T00:56:03",
@@ -295,8 +295,8 @@ def test_faultlog_instantiation_3() -> None:
     # the missing entry arrives, only after a new entry
     _proc_test_fault_entry(fault_log, "02")  # pushes others down
     _proc_test_fault_entry(fault_log, "01")  # pushes others down
-    # _log_idx was 01, above
-    _proc_test_fault_entry(fault_log, "04", _log_idx="03")
+    # _log_index was 01, above
+    _proc_test_fault_entry(fault_log, "04", _log_index="03")
 
     assert fault_log._map == {
         0: "21-12-23T00:58:01",
@@ -325,9 +325,9 @@ def test_faultlog_instantiation_4() -> None:
     fault_log = FaultLog(EvohomeStub(CTL_ID))  # type: ignore[type-var]
 
     # a log with three entries is enumerated, kinda
-    _proc_test_fault_entry(fault_log, "03", _log_idx="00")
-    # roc_fault_entry(fault_log, "04", _log_idx="01")  # went missing
-    _proc_test_fault_entry(fault_log, "05", _log_idx="02")
+    _proc_test_fault_entry(fault_log, "03", _log_index="00")
+    # roc_fault_entry(fault_log, "04", _log_index="01")  # went missing
+    _proc_test_fault_entry(fault_log, "05", _log_index="02")
 
     assert fault_log._map == {
         0: "21-12-23T00:56:03",
@@ -335,7 +335,7 @@ def test_faultlog_instantiation_4() -> None:
     }
 
     _proc_test_fault_entry(
-        fault_log, "02", _log_idx="02"
+        fault_log, "02", _log_index="02"
     )  # pushes others down
 
     assert fault_log._map == {
@@ -353,7 +353,7 @@ def test_faultlog_instantiation_4() -> None:
         5: "21-12-23T00:54:05",
     }
 
-    _proc_test_fault_entry(fault_log, "01", _log_idx="01")
+    _proc_test_fault_entry(fault_log, "01", _log_index="01")
 
     assert fault_log._map == {
         1: "21-12-23T00:58:01",
@@ -362,8 +362,8 @@ def test_faultlog_instantiation_4() -> None:
         5: "21-12-23T00:54:05",
     }
 
-    # _log_idx was 01, above
-    _proc_test_fault_entry(fault_log, "04", _log_idx="04")
+    # _log_index was 01, above
+    _proc_test_fault_entry(fault_log, "04", _log_index="04")
 
     assert fault_log._map == {
         1: "21-12-23T00:58:01",

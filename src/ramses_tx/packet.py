@@ -14,7 +14,7 @@ from typing import Any
 import orjson
 
 from . import exceptions as exc
-from .address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, pkt_addrs
+from .address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, packet_addrs
 from .const import I_, RAW_LINE_REGEX, RP, W_, Code, Verb
 from .dtos import CommandDTO, PacketDTO
 from .logger import getLogger
@@ -48,7 +48,7 @@ class Packet:
         "_raw_line",
         "_ctx_",
         "_hdr_",
-        "_idx_",
+        "_index_",
         "_repr",
         "_lifespan",
         "_is_echo",
@@ -71,7 +71,7 @@ class Packet:
 
     _ctx_: str | bool | None
     _hdr_: HeaderT | None
-    _idx_: str | bool | None
+    _index_: str | bool | None
     _repr: str | None
     _lifespan: bool | td
     _is_echo: bool
@@ -133,7 +133,7 @@ class Packet:
             self._raw_line = getattr(constructed, "_raw_line", None)
             self._ctx_ = None
             self._hdr_ = None
-            self._idx_ = None
+            self._index_ = None
             self._repr = None
             self._lifespan = False
             return
@@ -162,7 +162,7 @@ class Packet:
                 self.addr1,
                 self.addr2,
                 self.addr3,
-            ) = pkt_addrs(
+            ) = packet_addrs(
                 f"{self._dto.addr1} {self._dto.addr2} {self._dto.addr3}"
             )
             self._addrs = (self.addr1, self.addr2, self.addr3)
@@ -171,7 +171,7 @@ class Packet:
 
         self._ctx_ = None
         self._hdr_ = None
-        self._idx_ = None
+        self._index_ = None
         self._repr = None
         self._lifespan = False
 
@@ -294,14 +294,14 @@ class Packet:
                 packet.addr1,
                 packet.addr2,
                 packet.addr3,
-            ) = pkt_addrs(f"{dto.addr1} {dto.addr2} {dto.addr3}")
+            ) = packet_addrs(f"{dto.addr1} {dto.addr2} {dto.addr3}")
             packet._addrs = (packet.addr1, packet.addr2, packet.addr3)
         except exc.PacketInvalid as err:
             raise exc.PacketInvalid("Bad frame: Invalid address set") from err
 
         packet._ctx_ = None
         packet._hdr_ = None
-        packet._idx_ = None
+        packet._index_ = None
         packet._repr = None
         packet._lifespan = False
 
@@ -309,7 +309,7 @@ class Packet:
         return packet
 
     @property
-    def _pkt_extra(self) -> dict[str, Any]:
+    def _packet_extra(self) -> dict[str, Any]:
         """Return extra dictionary attributes for PKT_LOGGER logging."""
         return {
             "_frame": getattr(self, "_frame", ""),
@@ -337,7 +337,7 @@ class Packet:
 
             if not strict_checking:
                 if getattr(self, "_frame", "") or self.error_text:
-                    PKT_LOGGER.info("", extra=self._pkt_extra)
+                    PKT_LOGGER.info("", extra=self._packet_extra)
                 return
 
             if self.addr1 == NON_DEV_ADDR:
@@ -358,7 +358,7 @@ class Packet:
                 )
 
             if getattr(self, "_frame", "") or self.error_text:
-                PKT_LOGGER.info("", extra=self._pkt_extra)
+                PKT_LOGGER.info("", extra=self._packet_extra)
 
         except AssertionError as err:
             raise exc.PacketInvalid(
@@ -366,7 +366,7 @@ class Packet:
             ) from err
         except exc.PacketInvalid as err:
             if getattr(self, "_frame", "") or self.error_text:
-                PKT_LOGGER.warning("%s", err, extra=self._pkt_extra)
+                PKT_LOGGER.warning("%s", err, extra=self._packet_extra)
             raise err
 
     def __repr__(self) -> str:
@@ -592,7 +592,7 @@ class Packet:
 
     @property
     def _ctx(self) -> str | bool:
-        """Return the payload's context (e.g. zone_idx or domain_id).
+        """Return the payload's context (e.g. zone_index or domain_id).
 
         :returns: Context index string or False if unavailable
         :rtype: str | bool
@@ -620,18 +620,18 @@ class Packet:
         return self._ctx_
 
     @property
-    def _idx(self) -> str | bool:
+    def _index(self) -> str | bool:
         """Return the payload's index, if any.
 
         :returns: Index string or False
         :rtype: str | bool
         """
-        if self._idx_ is not None:
-            return self._idx_
+        if self._index_ is not None:
+            return self._index_
 
         result = self._ctx
-        self._idx_ = result if isinstance(result, str) else False
-        return self._idx_
+        self._index_ = result if isinstance(result, str) else False
+        return self._index_
 
     @property
     def _has_payload(self) -> bool:
@@ -652,7 +652,7 @@ class Packet:
         if self._hdr_ is not None:
             return self._hdr_
 
-        result = pkt_header(self)
+        result = packet_header(self)
         self._hdr_ = (
             result
             if result is not None
@@ -671,9 +671,9 @@ class Packet:
         """
         fragment, _, comment = raw_line.partition("#")
         fragment, _, error_message = fragment.partition("*")
-        pkt_str, _, _ = fragment.partition("<")  # discard any parser hints
+        packet_str, _, _ = fragment.partition("<")  # discard any parser hints
 
-        parts = tuple(map(str.strip, (pkt_str, error_message, comment)))
+        parts = tuple(map(str.strip, (packet_str, error_message, comment)))
         return parts[0], parts[1], parts[2]
 
     @classmethod
@@ -885,7 +885,7 @@ class Packet:
         )
 
 
-def pkt_header(packet: Packet, /) -> HeaderT | None:
+def packet_header(packet: Packet, /) -> HeaderT | None:
     """Return the QoS header fingerprint of a packet.
 
     :param packet: Packet instance to evaluate

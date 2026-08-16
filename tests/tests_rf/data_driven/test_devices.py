@@ -24,38 +24,38 @@ def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
 
 
 def _proc_log_line(log_line: str) -> None:
-    pkt_line, pkt_eval, *_ = list(
+    packet_line, packet_eval, *_ = list(
         map(str.strip, log_line.split("#", maxsplit=1) + [""])
     )
 
-    if not pkt_line:
+    if not packet_line:
         return
 
     try:
-        pkt = Packet.from_file(pkt_line[:26], pkt_line[27:])
+        packet = Packet.from_file(packet_line[:26], packet_line[27:])
     except exc.PacketInvalid as err:
-        assert False, f"{pkt_line[27:]} < {err}"
+        assert False, f"{packet_line[27:]} < {err}"
 
     try:
-        _ = Message(pkt.to_dto())
+        _ = Message(packet.to_dto())
     except exc.PacketPayloadInvalid as err:
-        assert False, f"{pkt} < {err}"
+        assert False, f"{packet} < {err}"
     except exc.PacketInvalid as err:
         # The new L7 strict decoding may raise PacketInvalid
-        if not pkt_eval or "_parse_error" in pkt_eval:
+        if not packet_eval or "_parse_error" in packet_eval:
             return
-        assert False, f"{pkt} < {err}"
+        assert False, f"{packet} < {err}"
 
-    # assert bool(msg._is_fragment) == pkt._is_fragment
-    # assert bool(msg._idx): dict == pkt._idx: Optional[bool | str]
+    # assert bool(msg._is_fragment) == packet._is_fragment
+    # assert bool(msg._index): dict == packet._index: Optional[bool | str]
     # not useful
 
-    if not pkt_eval:
+    if not packet_eval:
         return
     try:
-        _ = eval(pkt_eval)
+        _ = eval(packet_eval)
     except SyntaxError:
-        if "{" in pkt_eval:
+        if "{" in packet_eval:
             raise
         return
 

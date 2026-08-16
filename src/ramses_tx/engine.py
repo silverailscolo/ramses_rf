@@ -64,6 +64,7 @@ class Engine:
         transport_constructor: Callable[..., Awaitable[RamsesTransportT]]
         | None = None,
     ) -> None:
+        """Initialize the Engine instance."""
         self.config = config
 
         if self.config.port_name and self.config.input_file:
@@ -134,6 +135,7 @@ class Engine:
         self._set_msg_handler(self._msg_handler)
 
     def __str__(self) -> str:
+        """Return a human-readable string representation."""
         if self._hgi_id:
             return f"{self._hgi_id} ({self.ser_name})"
 
@@ -173,28 +175,28 @@ class Engine:
         """Add a Message handler to the underlying Protocol."""
         return self._protocol.add_handler(msg_handler, msg_filter=msg_filter)
 
-    def add_raw_pkt_handler(
+    def add_raw_packet_handler(
         self,
         msg_handler: MsgHandlerT,
         /,
     ) -> Callable[[], None]:
         """Add a raw packet handler that fires before the device ID filter.
 
-        See ``_BaseProtocol.add_raw_pkt_handler`` for details.
+        See ``_BaseProtocol.add_raw_packet_handler`` for details.
         """
-        return self._protocol.add_raw_pkt_handler(msg_handler)
+        return self._protocol.add_raw_packet_handler(msg_handler)
 
     async def start(self) -> None:
         """Create a suitable transport for the specified packet source.
 
         Initiate receiving (Messages) and sending (Commands).
         """
-        pkt_source: dict[str, Any] = {}
+        packet_source: dict[str, Any] = {}
         if self.ser_name:
-            pkt_source[SZ_PORT_NAME] = self.ser_name
-            pkt_source[SZ_PORT_CONFIG] = self._port_config
+            packet_source[SZ_PORT_NAME] = self.ser_name
+            packet_source[SZ_PORT_CONFIG] = self._port_config
         else:
-            pkt_source[SZ_PACKET_LOG] = self._input_file
+            packet_source[SZ_PACKET_LOG] = self._input_file
 
         transport_config = TransportConfig(
             disable_sending=bool(self._disable_sending),
@@ -214,7 +216,7 @@ class Engine:
             loop=self._loop,
             transport_constructor=self._transport_constructor,
             extra=extra_info if extra_info else None,
-            **pkt_source,
+            **packet_source,
         )
 
         await self._protocol.wait_for_connection_made()

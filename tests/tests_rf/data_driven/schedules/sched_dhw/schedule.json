@@ -1,5 +1,5 @@
 {
-    "zone_idx": "HW",
+    "zone_index": "HW",
     "schedule": [
         {"day_of_week": 0, "switchpoints": [
             {"time_of_day": "06:30", "enabled": true},
