@@ -347,6 +347,7 @@ class StateProjector:
             # zone_index), so the zone routing path above is not reached.
             # Without this, the zone's current_temperature stays None when
             # only the sensor broadcasts 30C9 (issue 927).
+            # Restricted to designated sensor or sole actuator (issue 976).
             if (
                 msg.code == Code._30C9
                 and src_dev
@@ -357,14 +358,23 @@ class StateProjector:
                 if hasattr(parent, "temp_state") and hasattr(
                     parent, "zone_state"
                 ):
-                    try:
-                        self._update_temperature_state(parent, payload, msg)
-                    except Exception as err:
-                        _LOGGER.error(
-                            "CQRS extraction failed for parent zone %s: %s",
-                            getattr(parent, "id", "unknown"),
-                            err,
-                        )
+                    parent_sensor = getattr(parent, "sensor", None)
+                    parent_actuators = getattr(parent, "actuators", [])
+                    if src_dev is parent_sensor or (
+                        parent_sensor is None
+                        and len(parent_actuators) == 1
+                        and src_dev in parent_actuators
+                    ):
+                        try:
+                            self._update_temperature_state(
+                                parent, payload, msg
+                            )
+                        except Exception as err:
+                            _LOGGER.error(
+                                "CQRS extraction failed for parent zone %s: %s",
+                                getattr(parent, "id", "unknown"),
+                                err,
+                            )
 
             # Route domain-id opcodes (0008/0009/3150) to the DhwZone (F9/FA)
             # or TCS (FC).  The ingestion path above only routes to src_dev
