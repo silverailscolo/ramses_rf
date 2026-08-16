@@ -418,7 +418,7 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
             I_: {},
             W_: {},
         },  # ADDED: Allow CTL to receive DT4R bounds
-        Code._22D9: {RQ: {}},
+        Code._22D9: {I_: {}, RQ: {}},
         Code._2309: {I_: {}, RP: {}},
         Code._2349: {I_: {}, RP: {}},
         Code._2D49: {I_: {}},
@@ -428,7 +428,7 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
         Code._3150: {I_: {}},
         Code._3220: {RQ: {}},
         Code._3B00: {I_: {}},
-        Code._3EF0: {RQ: {}},
+        Code._3EF0: {I_: {}, RQ: {}},
     },
     DevType.PRG: {  # e.g. HCF82/HCW82: Room Temperature Sensor
         Code._0009: {I_: {}},
