@@ -164,7 +164,7 @@ class SQLiteWorker:
         conn.commit()
 
     def _run(self) -> None:
-        """The main loop running in the background thread."""
+        """Run the main loop in the background thread."""
         _LOGGER.debug("SQLiteWorker thread started.")
 
         # Setup SQLite connection in this thread

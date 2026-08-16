@@ -129,7 +129,7 @@ class FileTransport(_ReadTransport, _FileTransportAbstractor):
             )
 
     async def _process_line_from_raw(self, line: str) -> None:
-        """Helper to process raw lines."""
+        """Process a raw line from the packet source."""
         if (line := line.strip()) and line[:1] != "#":
             await self._process_line(line[:26], line[27:])
 

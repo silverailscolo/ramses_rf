@@ -167,6 +167,7 @@ class MessageStore(MessageStoreInterface):
         self.start()
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         return f"MessageStore({len(self._message_log)} messages)"
 
     def start(self) -> None:
@@ -711,7 +712,7 @@ class MessageStore(MessageStoreInterface):
     async def qry(
         self, sql: str, parameters: tuple[str, ...]
     ) -> tuple[Message, ...]:
-        """Deprecated: Returns empty for legacy callers."""
+        """Return empty tuple for legacy callers (deprecated)."""
         _LOGGER.warning(
             "Legacy qry (SQL) called. Returning empty in CQRS architecture."
         )
@@ -720,7 +721,7 @@ class MessageStore(MessageStoreInterface):
     async def qry_field(
         self, sql: str, parameters: tuple[str, ...]
     ) -> list[tuple[dt | str, str]]:
-        """Deprecated: Returns empty for legacy callers."""
+        """Return empty list for legacy callers (deprecated)."""
         _LOGGER.warning(
             "Legacy qry_field (SQL) called. Returning empty in CQRS architecture."
         )

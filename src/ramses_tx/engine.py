@@ -64,6 +64,7 @@ class Engine:
         transport_constructor: Callable[..., Awaitable[RamsesTransportT]]
         | None = None,
     ) -> None:
+        """Initialize the Engine instance."""
         self.config = config
 
         if self.config.port_name and self.config.input_file:
@@ -134,6 +135,7 @@ class Engine:
         self._set_msg_handler(self._msg_handler)
 
     def __str__(self) -> str:
+        """Return a human-readable string representation."""
         if self._hgi_id:
             return f"{self._hgi_id} ({self.ser_name})"
 

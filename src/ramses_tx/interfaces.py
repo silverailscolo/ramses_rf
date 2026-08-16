@@ -39,11 +39,11 @@ class ProtocolInterface(ABC, asyncio.Protocol):
     def connection_made(
         self, transport: Any, /, *, ramses: bool = False
     ) -> None:
-        """Called when a connection is made."""
+        """Handle connection made event."""
 
     @abstractmethod
     def connection_lost(self, error: Exception | None) -> None:
-        """Called when the connection is lost."""
+        """Handle connection lost event."""
 
     @abstractmethod
     def pause_writing(self) -> None:
@@ -83,15 +83,15 @@ class StateMachineInterface(ABC):
 
     @abstractmethod
     def connection_made(self, transport: TransportInterface) -> None:
-        """Called when a connection is made."""
+        """Handle connection made event."""
 
     @abstractmethod
     def connection_lost(self, error: Exception | None) -> None:
-        """Called when the connection is lost."""
+        """Handle connection lost event."""
 
     @abstractmethod
     def packet_received(self, packet: "Packet") -> None:
-        """Called when a packet is received."""
+        """Handle received packet event."""
 
     @abstractmethod
     async def send_cmd(

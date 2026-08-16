@@ -239,6 +239,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._polling_manager = PollingManager(self, shadow_mode=False)
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         if not self._engine.ser_name:
             return f"Gateway(input_file={self._engine._input_file})"
         return (

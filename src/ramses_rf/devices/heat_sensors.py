@@ -145,6 +145,7 @@ class DhwSensor(
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the DHW sensor device."""
         super().__init__(*args, traits=traits, **kwargs)
 
         self._child_id = FA  # NOTE: domain_id
@@ -180,6 +181,7 @@ class OutSensor(Weather, Fakeable):  # OUT: 17
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the outdoor sensor device."""
         super().__init__(*args, traits=traits, **kwargs)
 
     # async def initiate_binding_process(self) -> tuple[Packet, Message, Packet, Packet | None]:

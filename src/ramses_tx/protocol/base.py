@@ -189,7 +189,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         return del_handler
 
     def connection_made(self, transport: TransportInterface) -> None:  # type: ignore[override]
-        """Called when the connection to the Transport is established.
+        """Establish connection to the Transport.
 
         The argument is the transport representing the pipe connection.
         To receive data, wait for packet_received() calls. When the
@@ -218,7 +218,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             ) from err
 
     def connection_lost(self, error: Exception | None) -> None:
-        """Called when the connection to the Transport is lost or closed.
+        """Handle lost or closed Transport connection.
 
         The argument is an exception object or None (the latter meaning
         a regular EOF is received or the connection was aborted or
@@ -277,11 +277,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             return err
 
     def pause_writing(self) -> None:
-        """Called when transport buffer exceeds high-water mark."""
+        """Pause writing when transport buffer exceeds high-water mark."""
         self._pause_writing = True
 
     def resume_writing(self) -> None:
-        """Called when transport buffer drains below low-water mark."""
+        """Resume writing when transport buffer drains below low-water mark."""
         self._pause_writing = False
 
     async def _send_impersonation_alert(self, command: CommandDTO) -> None:
@@ -485,7 +485,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._packet_received(packet)
 
     def _packet_received(self, packet: Packet) -> None:
-        """Called by the Transport when a Packet is received."""
+        """Handle received Packet from the Transport."""
         try:
             msg = packet.to_dto()  # should log all invalid msgs appropriately
         except PacketInvalid as err:

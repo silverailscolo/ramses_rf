@@ -229,6 +229,7 @@ class Qos:
     }  # The long timeout for the OTB is for total RTT to slave (boiler)
 
     def __post_init__(self) -> None:
+        """Clamp retry limit after initialization."""
         object.__setattr__(
             self, "retry_limit", min(self.retry_limit, self.TX_RETRIES_MAX)
         )

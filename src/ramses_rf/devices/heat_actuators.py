@@ -161,6 +161,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the BDR switch device."""
         super().__init__(*args, traits=traits, **kwargs)
 
     async def active(self) -> bool | None:  # 3EF0, 3EF1
@@ -233,6 +234,7 @@ class JimDevice(Actuator):  # BDR (08):
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the JIM device."""
         super().__init__(*args, traits=traits, **kwargs)
 
 
@@ -245,4 +247,5 @@ class JstDevice(RelayDemand):  # BDR (31):
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the JST device."""
         super().__init__(*args, traits=traits, **kwargs)

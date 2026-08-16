@@ -192,9 +192,11 @@ class BindingManagerBase:
         self.set_state(DevIsNotBinding)
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         return f"{self._dev.id} ({self.role}): {self.state!r}"
 
     def __str__(self) -> str:
+        """Return a human-readable string representation."""
         return f"{self._dev.id}: {self.state}"
 
     def cancel(self) -> None:
@@ -633,9 +635,11 @@ class BindStateBase:
             )
 
     def __repr__(self) -> str:
+        """Return an unambiguous string representation."""
         return f"{self.__class__.__name__} (tx={self._cmds_sent})"
 
     def __str__(self) -> str:
+        """Return a human-readable string representation."""
         return self.__class__.__name__
 
     @property
@@ -925,6 +929,7 @@ class RespHasBoundAsRespondent(BindStateBase):
     _attr_role = BindRole.IS_DORMANT
 
     def __init__(self, context: BindingManagerBase) -> None:
+        """Initialize the respondent bound state."""
         super().__init__(context)
         _LOGGER.info("%s: Binding completed as respondent", context._dev.id)
 
@@ -984,6 +989,7 @@ class SuppHasBoundAsSupplicant(BindStateBase):
     _attr_role = BindRole.IS_DORMANT
 
     def __init__(self, context: BindingManagerBase) -> None:
+        """Initialize the supplicant bound state."""
         super().__init__(context)
         _LOGGER.info("%s: Binding completed as supplicant", context._dev.id)
 

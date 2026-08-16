@@ -116,9 +116,11 @@ class AttrDict(dict):  # type: ignore[type-arg]
         raise TypeError(f"'{self.__class__.__name__}' object is read only")
 
     def __setitem__(self, key: Any, value: Any) -> NoReturn:
+        """Prevent item assignment on read-only dictionary."""
         self._readonly()
 
     def __delitem__(self, key: Any) -> NoReturn:
+        """Prevent item deletion on read-only dictionary."""
         self._readonly()
 
     def clear(self) -> NoReturn:
@@ -197,6 +199,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         super().__init__(self._forward)
 
     def __getitem__(self, key: str) -> Any:
+        """Retrieve an item by key from the mapping."""
         if key in self._main_table:  # map[ZON_ROLE.DHW] -> "dhw_sensor"
             return list(self._main_table[key].values())[0]
         # if key in self._forward:  # map["0D"] -> "dhw_sensor"
@@ -206,6 +209,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         return super().__getitem__(key)
 
     def __getattr__(self, name: str) -> Any:
+        """Retrieve an attribute by name from the table."""
         if name in self._main_table:  # map.DHW -> "0D" (using slug)
             if (result := list(self._main_table[name].keys())[0]) is not None:
                 return result

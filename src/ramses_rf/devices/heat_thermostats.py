@@ -51,6 +51,7 @@ class Thermostat(BatteryState, Setpoint, Fakeable):  # THM (..):
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the thermostat device."""
         super().__init__(*args, traits=traits, **kwargs)
 
     async def initiate_binding_process(
@@ -73,6 +74,7 @@ class TrvActuator(BatteryState, HeatDemand, Setpoint):  # TRV (04):
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
     ) -> None:
+        """Initialize the TRV actuator device."""
         super().__init__(*args, traits=traits, **kwargs)
         self.trv_state = TrvState()
 

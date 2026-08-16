@@ -177,7 +177,7 @@ class StdOutFilter(logging.Filter):  # record.levelno < logging.WARNING
 
 
 class BlockMqttFilter(logging.Filter):
-    """Block mqtt and Sent traffic"""
+    """Block MQTT and sent traffic."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Return True if the record is to be processed."""
@@ -191,6 +191,7 @@ class TimedRotatingFileHandler(_TimedRotatingFileHandler):
     """Timed rotating log file handler with midnight rollover."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the timed rotating file handler."""
         super().__init__(*args, **kwargs)
         assert self.when == "MIDNIGHT"
         self.extMatch = re.compile(r"^\d{4}-\d{2}-\d{2}$", re.ASCII)
