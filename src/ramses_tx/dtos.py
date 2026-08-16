@@ -143,7 +143,7 @@ class CommandDTO:
     @property
     def tx_header(self) -> str:
         """Return the QoS header of this (request) packet."""
-        from .packet import Packet, pkt_header
+        from .packet import Packet, packet_header
 
         packet = Packet._from_cmd(self)
-        return str(pkt_header(packet))
+        return str(packet_header(packet))

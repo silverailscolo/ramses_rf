@@ -13,7 +13,7 @@ TD_MINS_060: Final[td] = td(minutes=60)
 TD_DAYS_001: Final[td] = td(minutes=60 * 24)
 
 
-def pkt_lifespan(packet: Packet) -> td:
+def packet_lifespan(packet: Packet) -> td:
     """Return the duration before packet state payload data expires.
 
     :param packet: Packet instance to evaluate

@@ -82,8 +82,8 @@ class QosParams:
 
         self._timeout = timeout or DEFAULT_SEND_TIMEOUT
 
-        self._echo_pkt: Packet | None = None
-        self._rply_pkt: Packet | None = None
+        self._echo_packet: Packet | None = None
+        self._rply_packet: Packet | None = None
 
         self._dt_cmd_sent: dt | None = None
         self._dt_echo_rcvd: dt | None = None

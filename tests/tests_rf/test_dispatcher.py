@@ -68,7 +68,7 @@ class Test_dispatcher_gateway:
     _NONA = "--:------"
     _NOW = dt.now().replace(microsecond=0)
 
-    msg5: Message = Message._from_pkt(
+    msg5: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=40),
             # heat_demand
@@ -76,7 +76,7 @@ class Test_dispatcher_gateway:
         )
     )
 
-    msg6: Message = Message._from_pkt(
+    msg6: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=50),
             # OTB
@@ -108,20 +108,20 @@ class Test_dispatcher_gateway:
 
     def test_detect_array_fragment(self) -> None:
         """Test detection of array fragments."""
-        msg1: Message = Message._from_pkt(
+        msg1: Message = Message._from_packet(
             Packet(
                 self._NOW,
                 "...  I --- 01:158182 --:------ 01:158182 000A 048 001001F40BB8011101F40BB8021101F40BB8031001F40BB8041101F40BB8051101F40BB8061101F40BB8071001F40BB8",
             )
         )
-        msg2: Message = Message._from_pkt(
+        msg2: Message = Message._from_packet(
             Packet(
                 # delta dtm < 3 secs
                 self._NOW + td(seconds=1),
                 "...  I --- 01:158182 --:------ 01:158182 000A 006 081001F409C4",
             )
         )
-        msg3: Message = Message._from_pkt(
+        msg3: Message = Message._from_packet(
             Packet(
                 # delta dtm > 3 secs
                 self._NOW + td(seconds=10),
@@ -144,7 +144,7 @@ class TestDispatcherErrorHandling:
         mock_gateway.config.enforce_strict_handling = True
 
         # Create a message with a valid payload for code 0001
-        msg = Message._from_pkt(
+        msg = Message._from_packet(
             Packet(
                 dt.now(),
                 "...  I --- 01:000001 --:------ 01:000001 0001 005 00FFFF0200",
@@ -169,7 +169,7 @@ class TestDispatcherErrorHandling:
         # Disable strict mode (safe mode)
         mock_gateway.config.enforce_strict_handling = False
 
-        msg = Message._from_pkt(
+        msg = Message._from_packet(
             Packet(
                 dt.now(),
                 "...  I --- 01:000001 --:------ 01:000001 0001 005 00FFFF0200",
@@ -201,7 +201,7 @@ class TestDispatcherHeartbeats:
     """
 
     @pytest.mark.parametrize(
-        ("pkt_line", "src_id", "dev_type"),
+        ("packet_line", "src_id", "dev_type"),
         [
             # TRV sending a 3150 heat demand heartbeat (1-byte "00"
             # payload, I verb)
@@ -236,7 +236,7 @@ class TestDispatcherHeartbeats:
     async def test_heartbeat_dispatch(
         self,
         mock_gateway: MagicMock,
-        pkt_line: str,
+        packet_line: str,
         src_id: str,
         dev_type: str,
     ) -> None:
@@ -247,7 +247,7 @@ class TestDispatcherHeartbeats:
         # This confirms that message.py correctly validates and bypasses
         # empty heartbeats
         dtm = dt.now()
-        packet = Packet(dtm, pkt_line)
+        packet = Packet(dtm, packet_line)
         msg = Message(packet.to_dto())
 
         # Confirm it safely processed as an empty heartbeat message
@@ -481,7 +481,7 @@ class TestForeignHgiDispatcher:
 
     def _make_msg(self) -> Message:
         """Create a message from a foreign HGI to the controller."""
-        return Message._from_pkt(
+        return Message._from_packet(
             Packet(
                 self._NOW,
                 f"... RQ --- {self._FOREIGN_HGI} {self._CTL_ID} --:------ 0004 001 00",
@@ -637,11 +637,11 @@ class TestCommandDispatcherSend:
             data={},
         )
 
-        pkt = Packet.from_port(
+        packet = Packet.from_port(
             dt.now(),
             "000 RP --- 01:078710 18:000730 --:------ 313F 009 00000400041C0A07E3",
         )
-        expected_msg = Message._from_pkt(pkt)
+        expected_msg = Message._from_packet(packet)
 
         fut: asyncio.Future[Message] = asyncio.Future()
         fut.set_result(expected_msg)
@@ -649,7 +649,7 @@ class TestCommandDispatcherSend:
         mock_conv_mgr = MagicMock()
         mock_conv_mgr.track_intent = AsyncMock(return_value=fut)
         mock_gateway.conversation_manager = mock_conv_mgr
-        mock_gateway.async_send_cmd = AsyncMock(return_value=pkt)
+        mock_gateway.async_send_cmd = AsyncMock(return_value=packet)
 
         # Act
         result = await cmd_dispatcher.send(intent, wait_for_reply=True)
@@ -676,12 +676,12 @@ class TestCommandDispatcherSend:
             data={},
         )
 
-        pkt = Packet.from_port(
+        packet = Packet.from_port(
             dt.now(),
             "000  I --- 18:000730 01:078710 --:------ 313F 009 00000400041C0A07E3",
         )
         mock_gateway.conversation_manager = None
-        mock_gateway.async_send_cmd = AsyncMock(return_value=pkt)
+        mock_gateway.async_send_cmd = AsyncMock(return_value=packet)
 
         # Act
         result = await cmd_dispatcher.send(intent, wait_for_reply=False)

@@ -120,7 +120,7 @@ def test_1fc9_constructors_good() -> None:
     assert str(Packet._from_cmd(cmd)._frame) == frame  # using str for codes
 
     # NOTE: the APIs are not (yet) intended for these edge-case packets
-    # TRV binding to a CTL (2309, 30C9, 1FC9): zone index 07 - NOTE: counter-offer pkt!
+    # TRV binding to a CTL (2309, 30C9, 1FC9): zone index 07 - NOTE: counter-offer packet!
     # # frame = " I --- 04:189076 63:262142 --:------ 1FC9 006 0030C912E294"
     # # cmd = put_bind(" I", "04:189076", ("30C9",), dst_id="63:262142")
     # # assert str(Packet._from_cmd(cmd)._frame) == frame  # NOTE: NUL-ADDR, and there is no 1FC9 in the payload!

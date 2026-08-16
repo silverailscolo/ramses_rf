@@ -33,7 +33,7 @@ from .const import (
 from .discovery import is_hgi80
 from .dtos import CommandDTO, PacketDTO
 from .engine import Engine
-from .logger import set_pkt_logging
+from .logger import set_packet_logging
 from .packet import PKT_LOGGER, Packet
 from .protocol import (
     PortProtocol,
@@ -107,7 +107,7 @@ __all__ = [
     "transport_factory",
     #
     "is_valid_dev_id",
-    "set_pkt_logging_config",
+    "set_packet_logging_config",
 ]
 
 
@@ -117,7 +117,7 @@ if TYPE_CHECKING:
     from logging import Logger
 
 
-async def set_pkt_logging_config(
+async def set_packet_logging_config(
     **config: Any,
 ) -> tuple[Logger, QueueListener | None]:
     """Set up ramses packet logging to a file or port.
@@ -129,6 +129,6 @@ async def set_pkt_logging_config(
     """
     loop = asyncio.get_running_loop()
     listener = await loop.run_in_executor(
-        None, partial(set_pkt_logging, PKT_LOGGER, **config)
+        None, partial(set_packet_logging, PKT_LOGGER, **config)
     )
     return PKT_LOGGER, listener

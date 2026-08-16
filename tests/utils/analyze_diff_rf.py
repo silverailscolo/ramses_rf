@@ -32,6 +32,7 @@ Usage:
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import contextlib
 import datetime
@@ -41,7 +42,7 @@ import sys
 from collections import defaultdict
 from importlib import metadata
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import Any, Final, cast
 from unittest.mock import AsyncMock, patch
 
 from ramses_rf import Gateway
@@ -49,9 +50,6 @@ from ramses_rf.devices import DeviceHeat, DeviceHvac
 from ramses_rf.gateway import GatewayConfig
 from ramses_tx.const import SZ_READER_TASK
 from ramses_tx.exceptions import TransportError
-
-if TYPE_CHECKING:
-    pass
 
 # --- Configuration ---
 PACKET_LOG: Final[Path] = Path("tests/fixtures/regression_packets_sorted.txt")
@@ -264,8 +262,6 @@ def load_expected_state() -> dict[str, Any]:
         print(f"Error: Snapshot file not found: {SNAPSHOT_FILE}")
         sys.exit(1)
 
-    import ast
-
     content = SNAPSHOT_FILE.read_text(encoding="utf-8")
 
     pattern = re.compile(
@@ -422,12 +418,12 @@ def print_report(
         for change in diffs[entity_id]:
             print(f"- {change}")
 
-        pkts = packets.get(entity_id, [])
-        if pkts:
+        entity_packets = packets.get(entity_id, [])
+        if entity_packets:
             print("\n#### Relevant Packets (Context):")
             print("```text")
-            for p in pkts[-15:]:
-                print(p)
+            for packet in entity_packets[-15:]:
+                print(packet)
             print("```")
         print("---")
 

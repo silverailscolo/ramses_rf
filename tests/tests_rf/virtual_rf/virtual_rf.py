@@ -314,9 +314,9 @@ class VirtualRfBase:
     def add_reply_for_cmd(self, cmd: str, reply: str) -> None:
         """Add a reply packet for a given command frame (for a mocked device).
 
-        For example (note no RSSI, \r\n in reply pkt):
+        For example (note no RSSI, \r\n in reply packet):
           cmd regex: r"RQ.* 18:.* 01:.* 0006 001 00"
-          reply pkt: "RP --- 01:145038 18:013393 --:------ 0006 004 00050135",
+          reply packet: "RP --- 01:145038 18:013393 --:------ 0006 004 00050135",
         :param cmd: Regex pattern for the command.
         :param reply: The reply string to send.
         """
@@ -442,15 +442,15 @@ class VirtualRf(VirtualRfBase):
         self._set_comport_info(port_name, dev_type=fw_type)
 
     async def dump_frames_to_rf(
-        self, pkts: list[bytes], /, timeout: float | None = None
+        self, packets: list[bytes], /, timeout: float | None = None
     ) -> None:  # TODO: WIP - improved to be robust (but still simple) pattern
         """Dump frames as if from a sending port (for mocking).
 
-        :param pkts: List of raw byte packets.
+        :param packets: List of raw byte packets.
         :param timeout: Optional timeout to wait for processing.
         """
 
-        for data in pkts:
+        for data in packets:
             self._log.append(("/dev/mock", "SENT", data))
             self._cast_frame_to_all_ports(
                 "/dev/mock", data

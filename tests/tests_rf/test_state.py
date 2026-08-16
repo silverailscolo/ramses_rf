@@ -28,8 +28,8 @@ class DummyMsg:
         self.code = code
         self.dtm = dt.now()
 
-        self._pkt = MagicMock()
-        self._pkt._ctx = False
+        self._packet = MagicMock()
+        self._packet._ctx = False
         self._expired = False
 
         self._payload_dict = payload_dict
@@ -160,26 +160,26 @@ class TestMessageStore:
     _NONA = "--:------"
     _NOW = dt.now().replace(microsecond=0)
 
-    msg1: Message = Message._from_pkt(
+    msg1: Message = Message._from_packet(
         Packet(
             _NOW,
             "...  I --- 32:166025 --:------ 32:166025 1298 003 007FFF",
         )
     )
-    msg2: Message = Message._from_pkt(
+    msg2: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=10),
             "...  I --- 32:166025 --:------ 32:166025 1298 003 001230",
         )
     )
-    msg3: Message = Message._from_pkt(
+    msg3: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=20),
             "060  I --- 01:087939 --:------ 01:087939 2309 021 "
             "0007D00106400201F40301F40401F40501F40601F4",
         )
     )
-    msg4: Message = Message._from_pkt(
+    msg4: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=30),
             "060  I --- 32:166025 --:------ 32:166025 31DA 030 "
@@ -187,19 +187,19 @@ class TestMessageStore:
             "8500850000",
         )
     )
-    msg5: Message = Message._from_pkt(
+    msg5: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=40),
             "...  I --- 04:189078 --:------ 01:145038 3150 002 0100",
         )
     )
-    msg6: Message = Message._from_pkt(
+    msg6: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=50),
             "061 RP --- 10:078099 01:087939 --:------ 3220 005 00C0110000",
         )
     )
-    msg7: Message = Message._from_pkt(
+    msg7: Message = Message._from_packet(
         Packet(
             _NOW + td(seconds=60),
             "...  I --- 04:189078 --:------ 01:145038 12B0 003 040000",

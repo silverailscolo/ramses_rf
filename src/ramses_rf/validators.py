@@ -115,12 +115,12 @@ def instantiate_devices(gateway: Gateway, msg: Message) -> bool:
 
         # Determining bindings to a controller:
         #  - configury; As per any schema      # codespell:ignore configury
-        #  - discovery: If in 000C pkt, or pkt *to* device where src is a controller
-        #  - eavesdrop: If pkt *from* device where dst is a controller
+        #  - discovery: If in 000C packet, or packet *to* device where src is a controller
+        #  - eavesdrop: If packet *from* device where dst is a controller
 
         # Determining location in a schema (domain/DHW/zone):
         #  - configury; As per any schema      # codespell:ignore configury
-        #  - discovery: If in 000C pkt - unable for 10: & 00: (TRVs)
+        #  - discovery: If in 000C packet - unable for 10: & 00: (TRVs)
         #  - discovery: from packet fingerprint, excl. payloads (only for 10:)
         #  - eavesdrop: from packet fingerprint, incl. payloads
 

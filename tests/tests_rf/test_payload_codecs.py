@@ -58,13 +58,13 @@ def _extract_sample_hex(target_cls: type[base_mod.PayloadBase]) -> str | None:
             return raw_hex
 
     # 3. Match sample packet log hex strings
-    pkt_matches: list[str] = re.findall(
+    packet_matches: list[str] = re.findall(
         r"#.*?\b[0-9A-F]{4}\s+[0-9]{3}\s+([0-9A-F\-]+)",
         docstring,
         re.IGNORECASE,
     )
-    for pkt in pkt_matches:
-        raw_hex_str = str(pkt).replace("-", "").replace(" ", "").strip()
+    for packet in packet_matches:
+        raw_hex_str = str(packet).replace("-", "").replace(" ", "").strip()
         if raw_hex_str and len(raw_hex_str) % 2 == 0:
             return raw_hex_str
 

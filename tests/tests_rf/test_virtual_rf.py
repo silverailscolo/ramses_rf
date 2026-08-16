@@ -192,7 +192,7 @@ async def assert_devices(
     assert sorted(d.id for d in gwy.device_registry.devices) == expected
 
 
-async def assert_this_pkt(
+async def assert_this_packet(
     transport: PortTransport,
     cmd: Command,
     max_sleep: float = DEFAULT_MAX_SLEEP,
@@ -201,13 +201,13 @@ async def assert_this_pkt(
     for _ in range(int(max_sleep / ASSERT_CYCLE_TIME)):
         await asyncio.sleep(ASSERT_CYCLE_TIME)
         if (
-            transport._this_pkt
-            and transport._this_pkt._frame == Packet._from_cmd(cmd)._frame
+            transport._this_packet
+            and transport._this_packet._frame == Packet._from_cmd(cmd)._frame
         ):
             break
     assert (
-        transport._this_pkt
-        and transport._this_pkt._frame == Packet._from_cmd(cmd)._frame
+        transport._this_packet
+        and transport._this_packet._frame == Packet._from_cmd(cmd)._frame
     )
 
 
@@ -275,7 +275,7 @@ async def test_virtual_rf_dev_disc() -> None:
 
 
 @pytest.mark.xdist_group(name="virt_serial")
-async def test_virtual_rf_pkt_flow() -> None:
+async def test_virtual_rf_packet_flow() -> None:
     """Check virtual RF network packet flow."""
     rf: VirtualRf | None = None
     gwy_0: Gateway | None = None
@@ -312,8 +312,8 @@ async def test_virtual_rf_pkt_flow() -> None:
             gwy_0, DeviceIdT("01:022222"), Code._1F09
         )
 
-        await assert_this_pkt(gwy_0._engine._transport, cmd)
-        await assert_this_pkt(gwy_1._engine._transport, cmd)
+        await assert_this_packet(gwy_0._engine._transport, cmd)
+        await assert_this_packet(gwy_1._engine._transport, cmd)
 
     finally:
         if rf:
@@ -378,7 +378,7 @@ async def _test_gwy_device(gwy: Gateway, test_index: int) -> None:
         timeout = 2.0
 
     try:
-        pkt = await gwy._engine._protocol.send_cmd(
+        packet = await gwy._engine._protocol.send_cmd(
             cmd, qos=QosParams(timeout=timeout)
         )
     except exc.ProtocolSendFailed:
@@ -386,17 +386,17 @@ async def _test_gwy_device(gwy: Gateway, test_index: int) -> None:
             return
         raise
 
-    assert pkt is not None
+    assert packet is not None
 
     if is_hgi80 and cmd_str[7:16] != HGI_DEVICE_ID:
-        assert False, pkt
+        assert False, packet
 
     if cmd_str[7:16] == HGI_DEVICE_ID:
-        pkt_str = cmd_str[:7] + gwy.hgi.id + cmd_str[16:]
+        packet_str = cmd_str[:7] + gwy.hgi.id + cmd_str[16:]
     else:
-        pkt_str = cmd_str
+        packet_str = cmd_str
 
-    assert pkt._frame == pkt_str
+    assert packet._frame == packet_str
 
 
 @pytest.fixture()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RAMSES RF - Test the various helper APIs."""
 
-# TODO: add test for ramses_tx.frame.pkt_header()
+# TODO: add test for ramses_tx.frame.packet_header()
 import logging
 from datetime import datetime as dt
 
@@ -40,10 +40,10 @@ WORK_DIR = f"{TEST_DIR}/parser_helpers"
 # --- 22F1 parser scheme detection tests (issue #87) ---
 
 
-def _make_22f1_msg(pkt_str: str) -> Message:
+def _make_22f1_msg(packet_str: str) -> Message:
     """Build a Message from a raw packet string for parser testing."""
-    pkt = Packet.from_file(pkt_str[:26], pkt_str[27:])
-    return Message(pkt.to_dto())
+    packet = Packet.from_file(packet_str[:26], packet_str[27:])
+    return Message(packet.to_dto())
 
 
 def test_22f1_itho_directed_mode_max_04() -> None:
@@ -117,14 +117,14 @@ def test_22f3_orcon_mode_set_04_no_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     # Arrange
-    pkt_str = (
+    packet_str = (
         "2026-07-28T23:49:38.000000 045  I --- 29:162275 32:139370 --:------"
         " 22F3 007 00120F02040404"
     )
 
     # Act
     with caplog.at_level(logging.WARNING):
-        msg = _make_22f1_msg(pkt_str)
+        msg = _make_22f1_msg(packet_str)
         result = msg.payload
 
     # Assert
@@ -360,7 +360,7 @@ def test_helper_field_parsers() -> None:
         assert cent == hex_to_percent(hex_from_percent(cent))
 
 
-def _test_pkt_dev_class() -> None:
+def _test_packet_dev_class() -> None:
     """Check that the device class is correctly inferred from the packet.
 
     Some packets (not all) can be used to determine the domain (Heat vs HVAC) and
@@ -370,36 +370,38 @@ def _test_pkt_dev_class() -> None:
     def proc_log_line(log_line: str) -> None:
         if "#" not in log_line:
             return
-        pkt_line, pkt_eval = log_line.split("#", maxsplit=1)
+        packet_line, packet_eval = log_line.split("#", maxsplit=1)
 
-        if not pkt_line[27:].strip():
+        if not packet_line[27:].strip():
             return
 
-        pkt = Packet.from_file(pkt_line[:26], pkt_line[27:])
+        packet = Packet.from_file(packet_line[:26], packet_line[27:])
 
-        assert pkt.src.type == eval(pkt_eval)  # TODO: finish this test
+        assert packet.src.type == eval(packet_eval)  # TODO: finish this test
 
-    with open(f"{WORK_DIR}/pkt_dev_class.log") as f:
+    with open(f"{WORK_DIR}/packet_dev_class.log") as f:
         while line := (f.readline()):
             if line.strip():
                 proc_log_line(line)
 
 
-def test_pkt_addr_sets() -> None:
+def test_packet_addr_sets() -> None:
     """Check that the address set is correctly inferred from the packet."""
 
     def proc_log_line(log_line: str) -> None:
         if "#" not in log_line:
             return
-        pkt_line, pkt_eval = log_line.split("#", maxsplit=1)
+        packet_line, packet_eval = log_line.split("#", maxsplit=1)
 
-        if not pkt_line[27:].strip():
+        if not packet_line[27:].strip():
             return
-        expected = eval(pkt_eval)
+        expected = eval(packet_eval)
 
         try:
-            pkt = Packet.from_port(dt.now(), f"... {pkt_line[31:].rstrip()}")
-            pkt._validate(strict_checking=True)
+            packet = Packet.from_port(
+                dt.now(), f"... {packet_line[31:].rstrip()}"
+            )
+            packet._validate(strict_checking=True)
         except (CommandInvalid, PacketInvalid) as err:
             assert err.__class__.__name__ in (
                 "CommandInvalid",
@@ -409,13 +411,13 @@ def test_pkt_addr_sets() -> None:
             return
 
         res = {
-            "src": pkt.src.id,
-            "dst": pkt.dst.id,
-            "set": [a.id for a in pkt._addrs],
+            "src": packet.src.id,
+            "dst": packet.dst.id,
+            "set": [a.id for a in packet._addrs],
         }
         assert res == expected
 
-    with open(f"{WORK_DIR}/pkt_addr_set.log") as f:
+    with open(f"{WORK_DIR}/packet_addr_set.log") as f:
         while line := (f.readline()):
             if (line := line.strip()) and line[:1] != "#":
                 proc_log_line(line)

@@ -50,7 +50,7 @@ class ProtocolInterface(ABC, asyncio.Protocol):
         """Pause writing."""
 
     @abstractmethod
-    def pkt_received(self, packet: "Packet") -> None:
+    def packet_received(self, packet: "Packet") -> None:
         """Receive a packet."""
 
     @abstractmethod
@@ -90,7 +90,7 @@ class StateMachineInterface(ABC):
         """Called when the connection is lost."""
 
     @abstractmethod
-    def pkt_received(self, packet: "Packet") -> None:
+    def packet_received(self, packet: "Packet") -> None:
         """Called when a packet is received."""
 
     @abstractmethod

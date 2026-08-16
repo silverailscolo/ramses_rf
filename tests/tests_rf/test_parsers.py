@@ -200,8 +200,8 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
             emit_event_cb=events.append, enable_eavesdrop=True
         )
 
-        mock_pkt = MagicMock()
-        mock_pkt.payload = payload_hex
+        mock_packet = MagicMock()
+        mock_packet.payload = payload_hex
 
         mock_header = MagicMock()
         mock_header.code = Code._1FC9
@@ -211,7 +211,7 @@ def test_1fc9_binary_parsing_parity_with_legacy_parser() -> None:
         topology_msg.header = mock_header
         topology_msg.src = Address(src_id)
         topology_msg.dst = Address(dst_id)
-        topology_msg._dto = mock_pkt
+        topology_msg._dto = mock_packet
 
         asyncio.run(builder.consume(topology_msg))
 
@@ -270,10 +270,10 @@ async def test_regex_inbound_parsing() -> None:
         await gwy_0.start()
         assert gwy_0._engine._protocol._transport
 
-        for cmd, pkt in TESTS_INBOUND.items():
+        for cmd, packet in TESTS_INBOUND.items():
             ser_1.write(bytes(cmd.encode("ascii")) + b"\r\n")
 
-            expected = Packet.from_port(dt.now(), pkt)
+            expected = Packet.from_port(dt.now(), packet)
             for _ in range(100):
                 await asyncio.sleep(0.001)
                 if (

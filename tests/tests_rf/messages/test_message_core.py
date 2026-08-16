@@ -14,7 +14,7 @@ def test_message_enrichment_and_lineage() -> None:
     """Verify Message safely enriches data and preserves audit lineage."""
     src = Address("01:111111")
     dst = Address("04:222222")
-    pkt = PacketDTO(
+    packet = PacketDTO(
         timestamp=dt.now(tz=UTC),
         rssi="-70",
         verb=Verb.I_,
@@ -42,8 +42,8 @@ def test_message_enrichment_and_lineage() -> None:
         src=src,
         dst=dst,
         data={"raw_temp": 45.6},
-        packets=(pkt,),
-        timestamp=pkt.timestamp,
+        packets=(packet,),
+        timestamp=packet.timestamp,
     )
 
     assert len(msg.lineage) == 0

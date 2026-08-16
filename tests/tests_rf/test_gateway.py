@@ -129,7 +129,7 @@ async def test_gateway_stop_closes_listener_in_executor() -> None:
 
     # Mock a packet log listener
     mock_listener = MagicMock()
-    gwy._pkt_log_listener = mock_listener
+    gwy._packet_log_listener = mock_listener
 
     # Use patch.object to avoid Mypy [method-assign] errors
     with (
@@ -157,20 +157,20 @@ async def test_gateway_stop_closes_listener_in_executor() -> None:
 
 
 @pytest.mark.asyncio
-@patch("ramses_rf.lifecycle.set_pkt_logging_config", new_callable=AsyncMock)
+@patch("ramses_rf.lifecycle.set_packet_logging_config", new_callable=AsyncMock)
 async def test_gateway_start_initiates_periodic_flush(
-    mock_set_pkt_logging_config: AsyncMock,
+    mock_set_packet_logging_config: AsyncMock,
 ) -> None:
     """
     Test that starting the Gateway sets up the periodic flush task if
     configured.
 
-    :param mock_set_pkt_logging_config: The patched configuration function.
+    :param mock_set_packet_logging_config: The patched configuration function.
     :returns: None
     """
     mock_listener = MagicMock()
-    # set_pkt_logging_config returns a tuple: (logger, listener)
-    mock_set_pkt_logging_config.return_value = (None, mock_listener)
+    # set_packet_logging_config returns a tuple: (logger, listener)
+    mock_set_packet_logging_config.return_value = (None, mock_listener)
 
     # Configure a flush interval to trigger the task creation
     config = GatewayConfig(
@@ -224,11 +224,13 @@ async def test_gateway_restore_cached_packets_dto() -> None:
         mock_pf.return_value = mock_protocol
 
         # Mock the packet returned by from_dict to bypass strict frame regex
-        mock_pkt = MagicMock()
-        mock_pkt.__class__.__name__ = "Packet"
-        mock_pkt.rssi = "045"
-        mock_pkt._frame = "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
-        mock_from_dict.return_value = mock_pkt
+        mock_packet = MagicMock()
+        mock_packet.__class__.__name__ = "Packet"
+        mock_packet.rssi = "045"
+        mock_packet._frame = (
+            "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+        )
+        mock_from_dict.return_value = mock_packet
 
         # Simulate the new dictionary format provided by ramses_cc
         packets = {
@@ -247,7 +249,7 @@ async def test_gateway_restore_cached_packets_dto() -> None:
         )
 
         # Verify the protocol layer was handed the parsed Packet object directly
-        mock_protocol.pkt_received.assert_called_once_with(mock_pkt)
+        mock_protocol.packet_received.assert_called_once_with(mock_packet)
 
 
 @pytest.mark.asyncio
@@ -267,11 +269,13 @@ async def test_gateway_restore_cached_packets_naive_dtm() -> None:
         mock_protocol = MagicMock()
         mock_pf.return_value = mock_protocol
 
-        mock_pkt = MagicMock()
-        mock_pkt.__class__.__name__ = "Packet"
-        mock_pkt.rssi = "045"
-        mock_pkt._frame = "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
-        mock_from_dict.return_value = mock_pkt
+        mock_packet = MagicMock()
+        mock_packet.__class__.__name__ = "Packet"
+        mock_packet.rssi = "045"
+        mock_packet._frame = (
+            "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+        )
+        mock_from_dict.return_value = mock_packet
 
         # Naive datetime (no Z, no offset) as written by older cache files
         packets = {
@@ -283,7 +287,7 @@ async def test_gateway_restore_cached_packets_naive_dtm() -> None:
 
         await gwy._restore_cached_packets(packets, _clear_state=True)
 
-        mock_protocol.pkt_received.assert_called_once_with(mock_pkt)
+        mock_protocol.packet_received.assert_called_once_with(mock_packet)
 
 
 @pytest.mark.asyncio
@@ -479,9 +483,11 @@ async def test_get_state_frame_key_enables_restore() -> None:
 
     # Assert
     json_roundtrip = json.loads(json.dumps(state))
-    pkt = Packet.from_dict(dtm_str, json_roundtrip[dtm_str])
-    assert pkt.code == Code._1F09
-    assert pkt._frame == " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+    packet = Packet.from_dict(dtm_str, json_roundtrip[dtm_str])
+    assert packet.code == Code._1F09
+    assert (
+        packet._frame == " I --- 01:123456 --:------ 01:123456 1F09 003 0004B5"
+    )
 
 
 @pytest.mark.asyncio
@@ -541,14 +547,14 @@ async def _assert_stack_state(
 ) -> None:
     port_transport = cast(PortTransport, transport)
     assert (
-        port_transport._this_pkt
-        and port_transport._this_pkt.code == Code._PUZZ
+        port_transport._this_packet
+        and port_transport._this_packet.code == Code._PUZZ
     )
-    if hasattr(port_transport._this_pkt, "addr1"):
-        assert port_transport._this_pkt.addr1.id == _STACK_GWY_ID
+    if hasattr(port_transport._this_packet, "addr1"):
+        assert port_transport._this_packet.addr1.id == _STACK_GWY_ID
     else:
-        assert port_transport._this_pkt.src.id == _STACK_GWY_ID
-    assert port_transport._prev_pkt is None
+        assert port_transport._this_packet.src.id == _STACK_GWY_ID
+    assert port_transport._prev_packet is None
     assert port_transport.get_extra_info(SZ_ACTIVE_HGI) == _STACK_GWY_ID
     assert port_transport.get_extra_info(SZ_IS_EVOFW3) is True
 

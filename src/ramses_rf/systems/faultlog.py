@@ -137,7 +137,7 @@ class FaultLogEntry:
         return cls(**kwargs)  # type: ignore[arg-type]
 
     @classmethod
-    def from_pkt(cls, packet: Packet) -> FaultLogEntry:
+    def from_packet(cls, packet: Packet) -> FaultLogEntry:
         """Create a fault log entry from a packet's payload."""
         log_entry = parse_fault_log_entry(packet.raw_payload)
         if log_entry is None or "timestamp" not in log_entry:
@@ -288,12 +288,12 @@ class FaultLog:  # 0418
         # if index != 0:  # there's other (new/changed) entries above this one?
         #     pass
 
-    def _hack_pkt_index(self, orig_msg: Message, log_index: str) -> Message:
+    def _hack_packet_index(self, orig_msg: Message, log_index: str) -> Message:
         """Modify the Message so that it has the expected log index.
 
         If there is no log entry for log_index=<index>, then the headers won't match:
         - expected rx_hdr is 0418|RP|<ctl_id>|<index>
-        - pkt hdr will  0418|RP|<ctl_id>|00    (response from controller)
+        - packet hdr will  0418|RP|<ctl_id>|00    (response from controller)
         """
         assert orig_msg.verb == RP and orig_msg.code == Code._0418
         assert (
@@ -361,12 +361,12 @@ class FaultLog:  # 0418
                     msg._dto.raw_payload
                     == "000000B0000000000000000000007FFFFF7000000000"
                 ):
-                    msg = self._hack_pkt_index(
+                    msg = self._hack_packet_index(
                         msg, f"{log_index:02X}"
                     )  # RPs for null entries have index==00
                     self._process_msg(
                         msg
-                    )  # since pkt via dispatcher aint got index
+                    )  # since packet via dispatcher aint got index
                     break
 
                 self._process_msg(msg)  # JIC dispatcher doesn't do this for us

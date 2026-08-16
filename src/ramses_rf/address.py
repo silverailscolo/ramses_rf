@@ -23,7 +23,7 @@ from ramses_tx.address import (
     hex_id_to_dev_id,
     id_to_address,
     is_valid_dev_id,
-    pkt_addrs,
+    packet_addrs,
 )
 
 DEVICE_LOOKUP: dict[str, str] = {
@@ -50,5 +50,5 @@ __all__ = [
     "hex_id_to_dev_id",
     "id_to_address",
     "is_valid_dev_id",
-    "pkt_addrs",
+    "packet_addrs",
 ]

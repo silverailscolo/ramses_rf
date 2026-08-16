@@ -146,7 +146,7 @@ def is_valid_dev_id(value: str, device_class: None | str = None) -> bool:
 
 
 @lru_cache(maxsize=2048)
-def pkt_addrs(
+def packet_addrs(
     address_fragment: str,
 ) -> tuple[Address, Address, Address, Address, Address]:
     """Parse address fields from a 30-character address fragment.

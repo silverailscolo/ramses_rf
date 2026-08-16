@@ -159,7 +159,7 @@ def test_conversation_manager_accepts_i_for_w_commands() -> None:
     mock_msg.verb = I_
     mock_msg.src.id = "01:216136"  # from the device we sent to
     mock_msg.code.__str__ = lambda self: Code._1F41
-    mock_msg._pkt = MagicMock()
+    mock_msg._packet = MagicMock()
 
     matched = cm.process_msg(mock_msg)
     assert matched is True
@@ -277,8 +277,8 @@ async def test_live_gateway_conversation_manager_integration(
     assert gwy.conversation_manager.pending_count == 1
 
     rp_frame = "000 RP --- 01:078710 18:000730 --:------ 2309 003 000834"
-    rp_pkt = Packet.from_port(dt_now(), rp_frame)
-    reply_msg = Message._from_pkt(rp_pkt)
+    rp_packet = Packet.from_port(dt_now(), rp_frame)
+    reply_msg = Message._from_packet(rp_packet)
 
     gwy.conversation_manager.process_msg(reply_msg)
     msg = await send_task
@@ -314,8 +314,8 @@ async def test_live_dispatcher_process_msg_routes_to_conversation_manager(
     assert gwy.conversation_manager.pending_count == 1
 
     rp_frame = "000 RP --- 01:078710 18:000730 --:------ 2309 003 000834"
-    rp_pkt = Packet.from_port(dt_now(), rp_frame)
-    reply_msg = Message._from_pkt(rp_pkt)
+    rp_packet = Packet.from_port(dt_now(), rp_frame)
+    reply_msg = Message._from_packet(rp_packet)
 
     await process_msg(gwy, reply_msg)
     await send_task

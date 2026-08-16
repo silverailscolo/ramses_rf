@@ -67,7 +67,7 @@ def create_mock_message(tcs: SystemBase, payload: Any) -> MagicMock:
     """Create a mock message that looks like it came from the TCS
     controller.
 
-    Includes internal structures (_pkt, _ctx) required for logging/caching.
+    Includes internal structures (_packet, _ctx) required for logging/caching.
     """
     mock_msg = MagicMock(spec=Message)
     mock_msg.code = Code._3150
@@ -79,8 +79,8 @@ def create_mock_message(tcs: SystemBase, payload: Any) -> MagicMock:
     mock_msg.payload = payload
 
     # Mock the internal packet structure required by Entity logging
-    mock_msg._pkt = MagicMock()
-    mock_msg._pkt._ctx = f"{dt.now().isoformat()}_{tcs.id}"
+    mock_msg._packet = MagicMock()
+    mock_msg._packet._ctx = f"{dt.now().isoformat()}_{tcs.id}"
 
     return mock_msg
 
@@ -98,8 +98,8 @@ async def test_system_handle_msg_3150_real_packet(
     a dict) that the current code can handle.
     """
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
 
     tcs = gwy.tcs
@@ -116,8 +116,8 @@ async def test_system_handle_msg_3150_force_list(fake_evofw3: Gateway) -> None:
     gwy = fake_evofw3
 
     # Bootstrap TCS
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
     tcs = gwy.tcs
     assert tcs is not None  # Ensure TCS exists for Mypy
@@ -144,8 +144,8 @@ async def test_system_handle_msg_3150_force_dict(fake_evofw3: Gateway) -> None:
     gwy = fake_evofw3
 
     # Bootstrap TCS
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)  # Yield to loop to process call_soon callbacks
     tcs = gwy.tcs
     assert tcs is not None  # Ensure TCS exists for Mypy
@@ -168,8 +168,8 @@ async def test_system_handle_msg_3150_list_no_match(
 ) -> None:
     """Verify list payload ignores unrelated domains."""
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
     tcs = gwy.tcs
     assert tcs is not None
@@ -187,8 +187,8 @@ async def test_system_handle_msg_3150_dict_no_match(
 ) -> None:
     """Verify dict payload ignores unrelated domains."""
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
     tcs = gwy.tcs
     assert tcs is not None
@@ -206,8 +206,8 @@ async def test_logbook_setup_discovery_creates_task(
 ) -> None:
     """Verify Logbook actively schedules fault log retrieval on discovery."""
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
 
     tcs = gwy.tcs
@@ -226,8 +226,8 @@ async def test_sysmode_system_mode_async_cache_lookup(
 ) -> None:
     """Verify system_mode retrieves state asynchronously from CQRS read-model."""
     gwy = fake_evofw3
-    pkt = Packet.from_port(dt.now(), PKT_3150)
-    gwy._engine._protocol.pkt_received(pkt)
+    packet = Packet.from_port(dt.now(), PKT_3150)
+    gwy._engine._protocol.packet_received(packet)
     await asyncio.sleep(0)
 
     tcs = gwy.tcs

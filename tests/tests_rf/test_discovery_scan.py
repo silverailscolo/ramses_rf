@@ -78,7 +78,7 @@ def make_mock_gateway(
     gwy._gwy_config = MagicMock()
     gwy._gwy_config.known_list = known_list or {}
     gwy._gwy_config.schema = schema or {}
-    gwy.add_raw_pkt_handler = MagicMock(return_value=lambda: None)
+    gwy.add_raw_packet_handler = MagicMock(return_value=lambda: None)
     return gwy
 
 
@@ -821,13 +821,13 @@ class TestDiscoveryScanLifecycle:
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan.start()
-        assert gwy.add_raw_pkt_handler.called
+        assert gwy.add_raw_packet_handler.called
         assert scan.is_running is True
 
     def test_stop_unregisters_handler(self) -> None:
         gwy = make_mock_gateway()
         removed = MagicMock()
-        gwy.add_raw_pkt_handler = MagicMock(return_value=removed)
+        gwy.add_raw_packet_handler = MagicMock(return_value=removed)
         scan = DiscoveryScan(gwy)
         scan.start()
         scan.stop()
@@ -839,7 +839,7 @@ class TestDiscoveryScanLifecycle:
         scan = DiscoveryScan(gwy)
         scan.start()
         scan.start()  # should not double-register
-        assert gwy.add_raw_pkt_handler.call_count == 1
+        assert gwy.add_raw_packet_handler.call_count == 1
 
     def test_stop_without_start_is_noop(self) -> None:
         gwy = make_mock_gateway()
@@ -1455,7 +1455,7 @@ class TestVirtualRfIntegration:
         # Raw packet frames (evofw3 format: no RSSI, gateway adds it)
         # Must be terminated with \r\n for the virtual RF to process them
         # Payload length must match the declared hex length byte
-        raw_pkts: list[bytes] = [
+        raw_packets: list[bytes] = [
             # CTL broadcasts system mode
             b" I --- 01:145038 18:222222 --:------ 2E04 003 000200\r\n",
             # CTL sends zone device map (000C)
@@ -1508,8 +1508,8 @@ class TestVirtualRfIntegration:
             scan.start()
 
             # Dump packets into the virtual RF (one at a time to avoid buffer overflow)
-            for pkt in raw_pkts:
-                await rf.dump_frames_to_rf([pkt])
+            for packet in raw_packets:
+                await rf.dump_frames_to_rf([packet])
                 await asyncio.sleep(0.05)
             await asyncio.sleep(1)  # let packets fully process
 
@@ -1587,13 +1587,13 @@ class TestVirtualRfIntegration:
         FAN_ID = "32:157747"
 
         # Phase 1 packets: CTL + TRV
-        phase1_pkts: list[bytes] = [
+        phase1_packets: list[bytes] = [
             b" I --- 01:145038 18:333333 --:------ 2E04 003 000200\r\n",
             b" I --- 04:056053 01:145038 --:------ 3150 006 02C800000000\r\n",
         ]
 
         # Phase 2 packets: FAN (new device after "restart")
-        phase2_pkts: list[bytes] = [
+        phase2_packets: list[bytes] = [
             b" I --- 32:157747 --:------ 32:157747 31DA 030 00EF007FFF3A2F04C404E204A904BA68000003C8C80000EFEF20A91F0500\r\n",
         ]
 
@@ -1626,8 +1626,8 @@ class TestVirtualRfIntegration:
 
             scan1 = DiscoveryScan(gwy)
             scan1.start()
-            for pkt in phase1_pkts:
-                await rf.dump_frames_to_rf([pkt])
+            for packet in phase1_packets:
+                await rf.dump_frames_to_rf([packet])
                 await asyncio.sleep(0.05)
             await asyncio.sleep(0.5)
             scan1.stop()
@@ -1659,8 +1659,8 @@ class TestVirtualRfIntegration:
             assert FAN_ID not in imported  # not yet
 
             scan2.start()
-            for pkt in phase2_pkts:
-                await rf.dump_frames_to_rf([pkt])
+            for packet in phase2_packets:
+                await rf.dump_frames_to_rf([packet])
                 await asyncio.sleep(0.05)
             await asyncio.sleep(0.5)
             scan2.stop()
@@ -1692,7 +1692,7 @@ class TestVirtualRfIntegration:
         CO2_ID = "37:111111"
         REM_ID = "37:222222"
 
-        raw_pkts: list[bytes] = [
+        raw_packets: list[bytes] = [
             # CO2 sends air quality (I 1298)
             b" I --- 37:111111 18:444444 --:------ 1298 013 00EF007FFF3A2F04C404E204A9\r\n",
             # REM sends fan mode (I 22F1)
@@ -1727,8 +1727,8 @@ class TestVirtualRfIntegration:
 
             scan = DiscoveryScan(gwy)
             scan.start()
-            for pkt in raw_pkts:
-                await rf.dump_frames_to_rf([pkt])
+            for packet in raw_packets:
+                await rf.dump_frames_to_rf([packet])
                 await asyncio.sleep(0.05)
             await asyncio.sleep(0.5)
             scan.stop()

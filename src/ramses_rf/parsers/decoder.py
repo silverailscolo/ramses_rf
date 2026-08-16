@@ -215,11 +215,11 @@ class _LegacyMessage:
         if self._index_ is not None:
             return self._index_
 
-        result = self._pkt_index()
+        result = self._packet_index()
         self._index_ = result if result is not None else False
         return self._index_
 
-    def _pkt_index(self) -> bool | str | None:
+    def _packet_index(self) -> bool | str | None:
         """Extract the exact index leveraging protocol.ramses definitions.
 
         :return: String or boolean representation if index parsing passes constraints.

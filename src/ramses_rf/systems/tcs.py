@@ -442,7 +442,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
             self, Action.GET_SCHEDULE_VERSION, data={}, wait_for_reply=True
         )
         if packet:
-            self._msg_0006 = Message._from_pkt(packet)
+            self._msg_0006 = Message._from_packet(packet)
 
         return (
             self._msg_0006.payload[SZ_CHANGE_COUNTER],

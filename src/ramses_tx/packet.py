@@ -14,7 +14,7 @@ from typing import Any
 import orjson
 
 from . import exceptions as exc
-from .address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, pkt_addrs
+from .address import ALL_DEV_ADDR, NON_DEV_ADDR, Address, packet_addrs
 from .const import I_, RAW_LINE_REGEX, RP, W_, Code, Verb
 from .dtos import CommandDTO, PacketDTO
 from .logger import getLogger
@@ -162,7 +162,7 @@ class Packet:
                 self.addr1,
                 self.addr2,
                 self.addr3,
-            ) = pkt_addrs(
+            ) = packet_addrs(
                 f"{self._dto.addr1} {self._dto.addr2} {self._dto.addr3}"
             )
             self._addrs = (self.addr1, self.addr2, self.addr3)
@@ -294,7 +294,7 @@ class Packet:
                 packet.addr1,
                 packet.addr2,
                 packet.addr3,
-            ) = pkt_addrs(f"{dto.addr1} {dto.addr2} {dto.addr3}")
+            ) = packet_addrs(f"{dto.addr1} {dto.addr2} {dto.addr3}")
             packet._addrs = (packet.addr1, packet.addr2, packet.addr3)
         except exc.PacketInvalid as err:
             raise exc.PacketInvalid("Bad frame: Invalid address set") from err
@@ -309,7 +309,7 @@ class Packet:
         return packet
 
     @property
-    def _pkt_extra(self) -> dict[str, Any]:
+    def _packet_extra(self) -> dict[str, Any]:
         """Return extra dictionary attributes for PKT_LOGGER logging."""
         return {
             "_frame": getattr(self, "_frame", ""),
@@ -337,7 +337,7 @@ class Packet:
 
             if not strict_checking:
                 if getattr(self, "_frame", "") or self.error_text:
-                    PKT_LOGGER.info("", extra=self._pkt_extra)
+                    PKT_LOGGER.info("", extra=self._packet_extra)
                 return
 
             if self.addr1 == NON_DEV_ADDR:
@@ -358,7 +358,7 @@ class Packet:
                 )
 
             if getattr(self, "_frame", "") or self.error_text:
-                PKT_LOGGER.info("", extra=self._pkt_extra)
+                PKT_LOGGER.info("", extra=self._packet_extra)
 
         except AssertionError as err:
             raise exc.PacketInvalid(
@@ -366,7 +366,7 @@ class Packet:
             ) from err
         except exc.PacketInvalid as err:
             if getattr(self, "_frame", "") or self.error_text:
-                PKT_LOGGER.warning("%s", err, extra=self._pkt_extra)
+                PKT_LOGGER.warning("%s", err, extra=self._packet_extra)
             raise err
 
     def __repr__(self) -> str:
@@ -652,7 +652,7 @@ class Packet:
         if self._hdr_ is not None:
             return self._hdr_
 
-        result = pkt_header(self)
+        result = packet_header(self)
         self._hdr_ = (
             result
             if result is not None
@@ -671,9 +671,9 @@ class Packet:
         """
         fragment, _, comment = raw_line.partition("#")
         fragment, _, error_message = fragment.partition("*")
-        pkt_str, _, _ = fragment.partition("<")  # discard any parser hints
+        packet_str, _, _ = fragment.partition("<")  # discard any parser hints
 
-        parts = tuple(map(str.strip, (pkt_str, error_message, comment)))
+        parts = tuple(map(str.strip, (packet_str, error_message, comment)))
         return parts[0], parts[1], parts[2]
 
     @classmethod
@@ -885,7 +885,7 @@ class Packet:
         )
 
 
-def pkt_header(packet: Packet, /) -> HeaderT | None:
+def packet_header(packet: Packet, /) -> HeaderT | None:
     """Return the QoS header fingerprint of a packet.
 
     :param packet: Packet instance to evaluate

@@ -326,7 +326,7 @@ async def mqtt_evofw3(
     gwy_config: _GwyConfigDictT = request.getfixturevalue(SZ_GWY_CONFIG)
     gwy = await _gateway(mqtt_evofw3_port, gwy_config)
 
-    # HACK: not instantiated: no puzzle pkts sent
+    # HACK: not instantiated: no puzzle packets sent
     gwy.device_registry.get_device(gwy._engine._protocol.hgi_id)
 
     assert isinstance(gwy.hgi, HgiGateway) and gwy.hgi.id not in (

@@ -115,7 +115,7 @@ def test_payload_from_log_file(dir_name: Path) -> None:
     def proc_log_line(log_line: str) -> None:
         if "#" not in log_line:
             return
-        pkt_line, dict_str = log_line.split("#", maxsplit=1)
+        packet_line, dict_str = log_line.split("#", maxsplit=1)
 
         if not dict_str.strip():
             return
@@ -129,8 +129,8 @@ def test_payload_from_log_file(dir_name: Path) -> None:
             expected = expected[0]
 
         try:
-            msg = Message._from_pkt(
-                Packet.from_file(pkt_line[:26], pkt_line[27:])
+            msg = Message._from_packet(
+                Packet.from_file(packet_line[:26], packet_line[27:])
             )
         except exc.PacketInvalid:
             return

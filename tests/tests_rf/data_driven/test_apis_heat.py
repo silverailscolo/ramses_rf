@@ -236,14 +236,14 @@ def _test_api_good(
 ) -> None:  # NOTE: incl. addr_set check
     """Test a verb|code pair that has a Command constructor."""
 
-    for pkt_line in packets:
-        pkt = _create_pkt_from_frame(pkt_line.split("#")[0].rstrip())
-        msg = Message._from_pkt(pkt)
+    for packet_line in packets:
+        packet = _create_packet_from_frame(packet_line.split("#")[0].rstrip())
+        msg = Message._from_packet(packet)
 
-        cmd = _test_api_from_msg(api, msg, pkt)
-        assert cmd.payload == pkt.raw_payload  # aka pkt.raw_payload
+        cmd = _test_api_from_msg(api, msg, packet)
+        assert cmd.payload == packet.raw_payload  # aka packet.raw_payload
 
-        if isinstance(packets, dict) and (payload := packets[pkt_line]):
+        if isinstance(packets, dict) and (payload := packets[packet_line]):
             LEGACY_MAP = {
                 "zone_index": "zone_index",
                 "domain_index": "domain_id",
@@ -262,32 +262,32 @@ def _test_api_fail(
 ) -> None:  # NOTE: incl. addr_set check
     """Test a verb|code pair that has a Command constructor."""
 
-    for pkt_line in packets:
-        pkt = _create_pkt_from_frame(pkt_line.split("#")[0].rstrip())
-        msg = Message._from_pkt(pkt)
+    for packet_line in packets:
+        packet = _create_packet_from_frame(packet_line.split("#")[0].rstrip())
+        msg = Message._from_packet(packet)
 
         try:
-            cmd = _test_api_from_msg(api, msg, pkt)
+            cmd = _test_api_from_msg(api, msg, packet)
         except (AssertionError, TypeError, ValueError):
             cmd = None
         else:
             assert (
-                cmd and cmd.payload == pkt.raw_payload
-            )  # aka pkt.raw_payload
+                cmd and cmd.payload == packet.raw_payload
+            )  # aka packet.raw_payload
 
-        if isinstance(packets, dict) and (payload := packets[pkt_line]):
+        if isinstance(packets, dict) and (payload := packets[packet_line]):
             assert shrink(msg.payload, keep_falsys=True) == eval(payload)
 
 
-def _create_pkt_from_frame(pkt_line: str) -> Packet:
-    """Create a pkt from a pkt_line and assert their frames match."""
+def _create_packet_from_frame(packet_line: str) -> Packet:
+    """Create a packet from a packet_line and assert their frames match."""
 
-    pkt = Packet.from_port(dt.now(), pkt_line)
-    assert str(pkt) == pkt_line[4:]
-    return pkt
+    packet = Packet.from_port(dt.now(), packet_line)
+    assert str(packet) == packet_line[4:]
+    return packet
 
 
-def _test_api_from_msg(api: Callable, msg: Message, pkt: Packet) -> Command:
+def _test_api_from_msg(api: Callable, msg: Message, packet: Packet) -> Command:
     """Create a cmd from a msg and assert their meta-data."""
 
     sig = inspect.signature(api)
@@ -303,12 +303,12 @@ def _test_api_from_msg(api: Callable, msg: Message, pkt: Packet) -> Command:
     cmd: Command = api(msg.dst.id, **kwargs)
 
     if msg.src.id == HGI_DEV_ADDR.id:
-        # assert str(cmd) == str(pkt)
-        assert str(Packet._from_cmd(cmd)._frame) == pkt._frame
-    assert Packet._from_cmd(cmd).dst.id == pkt.dst.id
-    assert cmd.verb == pkt.verb
-    assert cmd.code == pkt.code
-    # assert cmd.payload == pkt.payload
+        # assert str(cmd) == str(packet)
+        assert str(Packet._from_cmd(cmd)._frame) == packet._frame
+    assert Packet._from_cmd(cmd).dst.id == packet.dst.id
+    assert cmd.verb == packet.verb
+    assert cmd.code == packet.code
+    # assert cmd.payload == packet.payload
 
     return cmd
 
@@ -334,20 +334,20 @@ GET_0418_GOOD = {  # NOTE: this constructor is used only for testing
 
 # NOTE: does not use _test_api_good() as main payload is a tuple, and not a dict
 def test_put_0418() -> None:
-    for pkt_line in GET_0418_GOOD:
-        pkt = _create_pkt_from_frame(pkt_line.split("#")[0].rstrip())
-        log_pkt = parse_fault_log_entry(pkt.raw_payload)
+    for packet_line in GET_0418_GOOD:
+        packet = _create_packet_from_frame(packet_line.split("#")[0].rstrip())
+        log_packet = parse_fault_log_entry(packet.raw_payload)
 
-        if SZ_TIMESTAMP not in log_pkt:  # ignore null log entries
+        if SZ_TIMESTAMP not in log_packet:  # ignore null log entries
             continue
 
         cmd = _put_system_log_entry(
-            pkt.src.id,
-            **log_pkt,  # type: ignore[call-arg]
+            packet.src.id,
+            **log_packet,  # type: ignore[call-arg]
         )
         log_cmd = parse_fault_log_entry(cmd.payload)
 
-        assert log_pkt == log_cmd
+        assert log_packet == log_cmd
 
 
 # NOTE: no W|1030 seen in the wild
@@ -387,16 +387,16 @@ SET_1100_GOOD = {
 def test_set_1100() -> None:  # NOTE: bespoke: see params
     packets = SET_1100_GOOD
 
-    for pkt_line in packets:
-        pkt = _create_pkt_from_frame(pkt_line)
-        msg = Message._from_pkt(pkt)
+    for packet_line in packets:
+        packet = _create_packet_from_frame(packet_line)
+        msg = Message._from_packet(packet)
 
         msg.payload[SZ_DOMAIN_ID] = msg.payload.get(SZ_DOMAIN_ID, "00")
 
-        cmd = _test_api_from_msg(_set_tpi_params, msg, pkt)
-        assert cmd.payload == pkt.raw_payload
+        cmd = _test_api_from_msg(_set_tpi_params, msg, packet)
+        assert cmd.payload == packet.raw_payload
 
-        if isinstance(packets, dict) and (payload := packets[pkt_line]):
+        if isinstance(packets, dict) and (payload := packets[packet_line]):
             actual = shrink(msg.payload, keep_falsys=True)
             expected = eval(payload)
             if isinstance(actual, dict) and isinstance(expected, dict):
@@ -432,14 +432,14 @@ SET_2E04_GOOD = {
 def test_set_2e04() -> None:  # NOTE: bespoke: payload
     packets = SET_2E04_GOOD
 
-    for pkt_line in packets:
-        pkt = _create_pkt_from_frame(pkt_line.split("#")[0].rstrip())
-        msg = Message._from_pkt(pkt)
+    for packet_line in packets:
+        packet = _create_packet_from_frame(packet_line.split("#")[0].rstrip())
+        msg = Message._from_packet(packet)
 
-        cmd = _test_api_from_msg(_set_system_mode, msg, pkt)
-        assert cmd.payload == pkt.raw_payload
+        cmd = _test_api_from_msg(_set_system_mode, msg, packet)
+        assert cmd.payload == packet.raw_payload
 
-        if isinstance(packets, dict) and (payload := packets[pkt_line]):
+        if isinstance(packets, dict) and (payload := packets[packet_line]):
             actual = shrink(msg.payload, keep_falsys=True)
             actual.pop("zone_index", None)
             actual.pop("zone_index", None)
@@ -484,16 +484,16 @@ SET_313F_GOOD = (
 
 
 def test_set_313f() -> None:  # NOTE: bespoke: payload
-    for pkt_line in SET_313F_GOOD:
-        pkt = Packet.from_port(dt.now(), pkt_line)
-        assert str(pkt)[:4] == pkt_line[4:8]
-        assert str(pkt)[6:] == pkt_line[10:]
+    for packet_line in SET_313F_GOOD:
+        packet = Packet.from_port(dt.now(), packet_line)
+        assert str(packet)[:4] == packet_line[4:8]
+        assert str(packet)[6:] == packet_line[10:]
 
-        msg = Message._from_pkt(pkt)
+        msg = Message._from_packet(packet)
 
-        cmd = _test_api_from_msg(_set_system_time, msg, pkt)
-        assert cmd.payload[:4] == pkt.raw_payload[:4]
-        assert cmd.payload[6:] == pkt.raw_payload[6:]
+        cmd = _test_api_from_msg(_set_system_time, msg, packet)
+        assert cmd.payload[:4] == packet.raw_payload[:4]
+        assert cmd.payload[6:] == packet.raw_payload[6:]
 
 
 PUT_3EF0_FAIL = ("...  I --- 13:123456 --:------ 13:123456 3EF0 003 00AAFF",)
@@ -514,9 +514,9 @@ PUT_3EF1_GOOD = (  # TODO: needs checking
 
 
 def test_put_3ef1() -> None:  # NOTE: bespoke: params, ?payload
-    for pkt_line in PUT_3EF1_GOOD:
-        pkt = _create_pkt_from_frame(pkt_line)
-        msg = Message._from_pkt(pkt)
+    for packet_line in PUT_3EF1_GOOD:
+        packet = _create_packet_from_frame(packet_line)
+        msg = Message._from_packet(packet)
 
         kwargs = dict(msg.payload)
         modulation_level = kwargs.pop("modulation_level")
@@ -538,9 +538,9 @@ def test_put_3ef1() -> None:  # NOTE: bespoke: params, ?payload
         )
 
         if msg.src.id != HGI_DEV_ADDR.id:
-            assert Packet._from_cmd(cmd).src.id == pkt.src.id
-        assert Packet._from_cmd(cmd).dst.id == pkt.dst.id
-        assert cmd.verb == pkt.verb
-        assert cmd.code == pkt.code
+            assert Packet._from_cmd(cmd).src.id == packet.src.id
+        assert Packet._from_cmd(cmd).dst.id == packet.dst.id
+        assert cmd.verb == packet.verb
+        assert cmd.code == packet.code
 
-        assert cmd.payload[:-2] == pkt.raw_payload[:-2]
+        assert cmd.payload[:-2] == packet.raw_payload[:-2]

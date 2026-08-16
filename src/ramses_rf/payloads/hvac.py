@@ -2478,10 +2478,10 @@ class HvacBypassStatePayload(PayloadBase):
             result["unknown_16"] = self._unknown_16
         if (
             msg is not None
-            and getattr(msg, "_pkt", None)
-            and getattr(msg._pkt, "_seqn", None)
+            and getattr(msg, "_packet", None)
+            and getattr(msg._packet, "_seqn", None)
         ):
-            result["seqx_num"] = msg._pkt._seqn
+            result["seqx_num"] = msg._packet._seqn
         return result
 
 

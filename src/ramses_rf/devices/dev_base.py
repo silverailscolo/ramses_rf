@@ -494,7 +494,7 @@ class Fakeable(DeviceBase):
 
     Impersonation of physical devices simply means sending packets on
     their behalf. This is straight-forward for sensors and remotes
-    (they do not usually receive pkts).
+    (they do not usually receive packets).
 
     Faked (virtual) devices must have any packet addressed to them sent
     to their handle_msg() method by the dispatcher. Impersonated

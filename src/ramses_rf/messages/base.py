@@ -198,7 +198,7 @@ class Message:
         return self._format_frame(getattr(self, "seqn", None))
 
     @classmethod
-    def _from_pkt(cls: type[_MessageT], packet: Any) -> _MessageT:
+    def _from_packet(cls: type[_MessageT], packet: Any) -> _MessageT:
         """Create a Message (or subclass) from a legacy Packet.
 
         :param packet: The legacy packet object.
@@ -516,7 +516,7 @@ class Message:
         except ValueError:
             code_int = 0
 
-        raw_pkt = RawPacket(
+        raw_packet = RawPacket(
             raw_packet=repr(self),
             rssi=str(self.rssi),
             verb=self.verb,
@@ -531,7 +531,7 @@ class Message:
 
         return TransportMessage(
             dtm=self.dtm,
-            source_packets=(raw_pkt,),
+            source_packets=(raw_packet,),
             rssi=int(self.rssi) if str(self.rssi).lstrip("-").isdigit() else 0,
             verb=self.verb,
             device_id_1=DeviceId.from_string(addr1_str),

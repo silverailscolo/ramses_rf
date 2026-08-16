@@ -68,20 +68,20 @@ def track_packet_flow(msg, tcs_id, zone_index=None):
         return
 
     # get the schedule version number
-    if msg._pkt._hdr == f"0006|RQ|{tcs_id}":
+    if msg._packet._hdr == f"0006|RQ|{tcs_id}":
         assert _global_flow_marker == RQ_0006_EXPECTED
         _global_flow_marker = RP_0006_EXPECTED
 
-    elif msg._pkt._hdr == f"0006|RP|{tcs_id}":
+    elif msg._packet._hdr == f"0006|RP|{tcs_id}":
         assert _global_flow_marker == RP_0006_EXPECTED
         _global_flow_marker = RP_0006_RECEIVED  # RQ_0404_FIRST_EXPECTED
 
     # get the first schedule fragment, is possibly the last fragment too
-    elif msg._pkt._hdr == f"0404|RQ|{tcs_id}|{zone_index}01":
+    elif msg._packet._hdr == f"0404|RQ|{tcs_id}|{zone_index}01":
         assert _global_flow_marker in (RQ_0404_FIRST_EXPECTED, RP_0006_RECEIVED)
         _global_flow_marker = RP_0404_FIRST_EXPECTED
 
-    elif msg._pkt._hdr == f"0404|RP|{tcs_id}|{zone_index}01":
+    elif msg._packet._hdr == f"0404|RP|{tcs_id}|{zone_index}01":
         assert _global_flow_marker == RP_0404_FIRST_EXPECTED
         if msg.payload["frag_number"] < msg.payload["total_frags"]:
             _global_flow_marker = RQ_0404_OTHER_EXPECTED
@@ -89,11 +89,11 @@ def track_packet_flow(msg, tcs_id, zone_index=None):
             _global_flow_marker = RP_0404_FINAL_RECEIVED
 
     # get the subsequent schedule fragments, until the last fragment
-    elif msg._pkt._hdr[:20] == f"0404|RQ|{tcs_id}|{zone_index}":
+    elif msg._packet._hdr[:20] == f"0404|RQ|{tcs_id}|{zone_index}":
         assert _global_flow_marker == RQ_0404_OTHER_EXPECTED
         _global_flow_marker = RP_0404_OTHER_EXPECTED
 
-    elif msg._pkt._hdr[:20] == f"0404|RP|{tcs_id}|{zone_index}":
+    elif msg._packet._hdr[:20] == f"0404|RP|{tcs_id}|{zone_index}":
         assert _global_flow_marker == RP_0404_OTHER_EXPECTED
         if msg.payload["frag_number"] < msg.payload["total_frags"]:
             _global_flow_marker = RQ_0404_OTHER_EXPECTED
@@ -101,7 +101,7 @@ def track_packet_flow(msg, tcs_id, zone_index=None):
             _global_flow_marker = RP_0404_FINAL_RECEIVED
 
     # set the first schedule fragment, is possibly the last fragment too
-    elif msg._pkt._hdr == f"0404| W|{tcs_id}|{zone_index}01":
+    elif msg._packet._hdr == f"0404| W|{tcs_id}|{zone_index}01":
         assert _global_flow_marker in (
             W__0404_FIRST_EXPECTED,
             RP_0006_RECEIVED,
@@ -109,7 +109,7 @@ def track_packet_flow(msg, tcs_id, zone_index=None):
         )
         _global_flow_marker = I__0404_FIRST_EXPECTED
 
-    elif msg._pkt._hdr == f"0404| I|{tcs_id}|{zone_index}01":
+    elif msg._packet._hdr == f"0404| I|{tcs_id}|{zone_index}01":
         assert _global_flow_marker == I__0404_FIRST_EXPECTED
         if msg.payload["frag_number"] < msg.payload["total_frags"]:
             _global_flow_marker = W__0404_OTHER_EXPECTED
@@ -117,11 +117,11 @@ def track_packet_flow(msg, tcs_id, zone_index=None):
             _global_flow_marker = I__0404_FINAL_RECEIVED
 
     # set the subsequent schedule fragments, until the last fragment
-    elif msg._pkt._hdr[:20] == f"0404| W|{tcs_id}|{zone_index}":
+    elif msg._packet._hdr[:20] == f"0404| W|{tcs_id}|{zone_index}":
         assert _global_flow_marker == W__0404_OTHER_EXPECTED
         _global_flow_marker = I__0404_OTHER_EXPECTED
 
-    elif msg._pkt._hdr[:20] == f"0404| I|{tcs_id}|{zone_index}":
+    elif msg._packet._hdr[:20] == f"0404| I|{tcs_id}|{zone_index}":
         assert _global_flow_marker == I__0404_OTHER_EXPECTED
         if msg.payload["frag_number"] < msg.payload["total_frags"]:
             _global_flow_marker = W__0404_OTHER_EXPECTED
@@ -246,7 +246,7 @@ async def write_schedule(zone: DhwZone | Zone) -> None:  # uses: flow_marker
 
     sch_new = deepcopy(sch_old)
 
-    # if zone._gateway.pkt_transport.serial.port == MOCKED_PORT:
+    # if zone._gateway.packet_transport.serial.port == MOCKED_PORT:
     #     # change the schedule (doesn't matter to what)
     #     if zone.index == "HW":
     #         sch_new[0][SWITCHPOINTS][0][ENABLED] = not (
@@ -274,7 +274,7 @@ async def write_schedule(zone: DhwZone | Zone) -> None:  # uses: flow_marker
     assert _global_flow_marker == RP_0006_RECEIVED
 
     assert sch_tst == sch_new
-    # if zone._gateway.pkt_transport.serial.port == MOCKED_PORT:
+    # if zone._gateway.packet_transport.serial.port == MOCKED_PORT:
     #     assert sch_tst != sch_old
     #    sch_end = await zone.set_schedule(sch_old)  # put things back
 

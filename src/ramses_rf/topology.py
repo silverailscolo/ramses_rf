@@ -13,7 +13,7 @@ entities, such as the association between a Zone and its Actuators.
 #
 # Determining location in a schema (domain/DHW/zone):
 #  - Config: As per any explicitly loaded schema.
-#  - Discovery: If in 000C pkt - (Note: unable to do this for 10: & 00: TRVs).
+#  - Discovery: If in 000C packet - (Note: unable to do this for 10: & 00: TRVs).
 #  - Discovery: From packet fingerprint, excl. payloads (only for 10:).
 #  - Eavesdrop: From packet fingerprint, incl. payloads.
 #

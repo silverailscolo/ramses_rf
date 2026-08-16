@@ -151,12 +151,12 @@ class EvohomeStub:
 
 def _proc_log_line(log_line: str) -> None:
     try:
-        pkt = Packet.from_file(log_line[:26], log_line[27:])
+        packet = Packet.from_file(log_line[:26], log_line[27:])
     except ValueError:
         return
 
     # Utilize the correct shim to cast directly to PacketDTO
-    msg = Message._from_pkt(pkt)
+    msg = Message._from_packet(packet)
     if msg.code != Code._0418 or not msg.payload.get(SZ_LOG_ENTRY):
         return
 

@@ -32,10 +32,10 @@ def create_dummy_message(seq: int) -> Message:
     # validation in ramses_tx
     # FIX 2: Length field (001) must match payload length
     # ("00" = 1 byte)
-    pkt_line = f"... RQ --- 01:{seq_str} 02:{seq_str} --:------ 1F09 001 00"
+    packet_line = f"... RQ --- 01:{seq_str} 02:{seq_str} --:------ 1F09 001 00"
 
-    pkt = Packet.from_file(ts, pkt_line)
-    return Message(pkt.to_dto())
+    packet = Packet.from_file(ts, packet_line)
+    return Message(packet.to_dto())
 
 
 @pytest.mark.asyncio

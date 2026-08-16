@@ -72,7 +72,7 @@ LOG_COLOURS = {
 }  # default_log_colors
 
 
-class _Logger(logging.Logger):  # use pkt.dtm for the log record timestamp
+class _Logger(logging.Logger):  # use packet.dtm for the log record timestamp
     """Logger instances represent a single logging channel."""
 
     def makeRecord(
@@ -247,7 +247,7 @@ def set_logger_timesource(dtm_now: Callable[..., dt]) -> None:
     logging.setLogRecordFactory(record_factory)
 
 
-def set_pkt_logging(
+def set_packet_logging(
     logger: logging.Logger,
     cc_console: bool = False,
     packet_log_path: str | None = "",
@@ -287,7 +287,7 @@ def set_pkt_logging(
     logger.propagate = False  # log file is distinct from any app/debug logging
     logger.setLevel(logging.DEBUG)  # must be at least .INFO
 
-    # as set_pkt_logging() may be called several times: to avoid duplicates in logs...
+    # as set_packet_logging() may be called several times: to avoid duplicates in logs...
     for (
         handler
     ) in logger.handlers:  # dont use logger.hasHandlers() as not propagating

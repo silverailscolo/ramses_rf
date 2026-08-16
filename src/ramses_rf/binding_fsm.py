@@ -69,7 +69,7 @@ CONFIRM_TIMEOUT_SECS: Final[float] = (
     3  # automatically Bound, from BoundAccepted > this # of seconds
 )
 WAITING_TIMEOUT_SECS: Final[float] = (
-    5  # fail Listen/Offer/Accept if no pkt rcvd > this # of seconds
+    5  # fail Listen/Offer/Accept if no packet rcvd > this # of seconds
 )
 
 # raise a BindTimeoutError if expected Pkt is not received before this number of seconds
@@ -596,8 +596,8 @@ class BindStateBase:
     _attr_role = BindRole.IS_UNKNOWN
 
     _cmds_sent: int = 0  # num of bind cmds sent
-    _pkts_rcvd: int = (
-        0  # num of bind pkts rcvd (incl. any echos of sender's own cmd)
+    _packets_rcvd: int = (
+        0  # num of bind packets rcvd (incl. any echos of sender's own cmd)
     )
 
     _has_wait_timer: bool = False
@@ -806,7 +806,7 @@ class _DevIsWaitingForMsg(BindStateBase):
     Failure occurs when the timer expires (timeout) before receiving the Packet.
     """
 
-    _expected_pkt_phase: BindPhase
+    _expected_packet_phase: BindPhase
 
     _wait_timer_limit: float = 5.1  # WAITING_TIMEOUT_SECS
 
@@ -825,9 +825,9 @@ class _DevIsWaitingForMsg(BindStateBase):
         super()._set_context_state(next_state)
 
     def rcvd_msg(self, msg: Message) -> None:
-        """If the msg is the waited-for pkt, transition to the next state."""
+        """If the msg is the waited-for packet, transition to the next state."""
         if not self._fut.done() and self.is_phase(
-            msg, self._expected_pkt_phase
+            msg, self._expected_packet_phase
         ):
             self._fut.set_result(msg)
 
@@ -899,7 +899,7 @@ class _DevSendCmdUntilReply(_DevIsWaitingForMsg, _DevIsReadyToSendCmd):
     def rcvd_msg(self, msg: Message) -> None:
         """If the msg is the expected reply, transition to the next state."""
         if not self._fut.done() and self.is_phase(
-            msg, self._expected_pkt_phase
+            msg, self._expected_packet_phase
         ):
             self._fut.set_result(msg)
 
@@ -934,7 +934,7 @@ class RespIsWaitingForAddenda(_DevIsWaitingForMsg, BindStateBase):
 
     _attr_role = BindRole.RESPONDENT
 
-    _expected_pkt_phase: BindPhase = BindPhase.RATIFY
+    _expected_packet_phase: BindPhase = BindPhase.RATIFY
     _next_ctx_state: type[BindStateBase] = RespHasBoundAsRespondent
 
     async def wait_for_addenda(self, timeout: float | None = None) -> Message:
@@ -948,7 +948,7 @@ class RespSendAcceptWaitForConfirm(_DevSendCmdUntilReply, BindStateBase):
     _attr_role = BindRole.RESPONDENT
 
     _expected_cmd_phase: BindPhase = BindPhase.ACCEPT
-    _expected_pkt_phase: BindPhase = BindPhase.AFFIRM
+    _expected_packet_phase: BindPhase = BindPhase.AFFIRM
     _next_ctx_state: type[BindStateBase] = (
         RespHasBoundAsRespondent  # or: RespIsWaitingForAddenda
     )
@@ -967,7 +967,7 @@ class RespIsWaitingForOffer(_DevIsWaitingForMsg, BindStateBase):
 
     _attr_role = BindRole.RESPONDENT
 
-    _expected_pkt_phase: BindPhase = BindPhase.TENDER
+    _expected_packet_phase: BindPhase = BindPhase.TENDER
     _next_ctx_state: type[BindStateBase] = RespSendAcceptWaitForConfirm
 
     async def wait_for_offer(self, timeout: float | None = None) -> Message:
@@ -1028,7 +1028,7 @@ class SuppSendOfferWaitForAccept(_DevSendCmdUntilReply, BindStateBase):
     _attr_role = BindRole.SUPPLICANT
 
     _expected_cmd_phase: BindPhase = BindPhase.TENDER
-    _expected_pkt_phase: BindPhase = BindPhase.ACCEPT
+    _expected_packet_phase: BindPhase = BindPhase.ACCEPT
     _next_ctx_state: type[BindStateBase] = SuppIsReadyToSendConfirm
 
     def cast_offer(self, timeout: float | None = None) -> None:

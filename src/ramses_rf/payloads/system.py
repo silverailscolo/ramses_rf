@@ -66,7 +66,7 @@ class SystemClockPayload(PayloadBase):
     Protocol Notes:
       # When in test mode, a 12: will send a W ?every 6 seconds.
       # Sent by a CTL before an rf_check.
-      # Sent by a THM when in signal strength test mode (0505, except 1st pkt).
+      # Sent by a THM when in signal strength test mode (0505, except 1st packet).
       # Loopback (not Tx'd) by a HGI80 whenever its button is pressed.
 
     Sample Packet Logs:
@@ -495,8 +495,8 @@ class SystemFlagPayload(PayloadBase):
     :type flag_value: int
 
     Sample Packet Logs & Protocol Notes:
-    # Sent by THM when in signal strength test mode (0505, except 1st pkt):
-    # sent by a THM when is signal strength test mode (0505, except 1st pkt)
+    # Sent by THM when in signal strength test mode (0505, except 1st packet):
+    # sent by a THM when is signal strength test mode (0505, except 1st packet)
     # .I --- 32:155617 32:155617 --:------ 0016 002 0000
     # .I --- 34:021943 34:021943 --:------ 0016 002 0000
     # 12:40:02.098 061  W --- 12:010740 --:------ 12:010740 0001 005 0000000501

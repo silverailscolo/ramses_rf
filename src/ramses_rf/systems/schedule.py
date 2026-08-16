@@ -536,14 +536,14 @@ class Schedule:  # 0404
         if not isinstance(payload, dict):
             return
 
-        pkt_zone_index = payload.get(
+        packet_zone_index = payload.get(
             SZ_ZONE_INDEX, payload.get(SZ_ZONE_IDX, payload.get("zone_index"))
         )
-        if pkt_zone_index is not None:
+        if packet_zone_index is not None:
             translated_index = _to_protocol_zone_index(self.index)
             if (
-                pkt_zone_index != translated_index
-                and pkt_zone_index != self.index
+                packet_zone_index != translated_index
+                and packet_zone_index != self.index
             ):
                 return
 

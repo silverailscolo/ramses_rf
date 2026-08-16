@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RAMSES RF - RAMSES-II compatible packet transport.
 
-Operates at the pkt layer of: app - msg - pkt - h/w
+Operates at the packet layer of: app - msg - packet - h/w
 
 """
 
