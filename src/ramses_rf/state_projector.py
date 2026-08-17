@@ -21,6 +21,8 @@ from .const import (
     SZ_BYPASS_POSITION,
     SZ_BYPASS_STATE,
     SZ_CO2_LEVEL,
+    SZ_COOLING_DEMAND,
+    SZ_COOLING_MODE,
     SZ_DATETIME,
     SZ_DIFFERENTIAL,
     SZ_DOMAIN_INDEX,
@@ -135,6 +137,7 @@ class StateProjector:
         self._registry.register(Code._0100, _update_system_state)
         self._registry.register(Code._2E04, _update_system_state)
         self._registry.register(Code._313F, _update_system_state)
+        self._registry.register(Code._2D49, _update_system_state)
 
         self._registry.register(Code._10A0, _update_dhw_state)
         self._registry.register(Code._1F41, _update_dhw_state)
@@ -297,10 +300,10 @@ def _resolve_logical_targets(
             if tcs.dhw not in targets:
                 targets.append(tcs.dhw)
 
-    # 6. System-level opcodes (2E04/0100/313F) target the TCS directly.
+    # 6. System-level opcodes (2E04/0100/313F/2D49) target the TCS directly.
     #    These packets have no domain_id/zone_index, so steps 4/5 miss them.
     if (
-        msg.code in (Code._2E04, Code._0100, Code._313F)
+        msg.code in (Code._2E04, Code._0100, Code._313F, Code._2D49)
         and tcs
         and tcs not in targets
     ):
@@ -343,7 +346,8 @@ def _resolve_logical_targets(
 def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     """Translate system configuration opcodes into SystemState.
 
-    Handles 2E04 (system_mode), 0100 (language), and 313F (datetime).
+    Handles 2E04 (system_mode), 0100 (language), 313F (datetime), and
+    2D49 (cooling_mode).
 
     :param target: Target entity (TCS/Evohome) to update.
     :type target: Any
@@ -368,6 +372,9 @@ def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     elif msg.code == Code._313F:
         if SZ_DATETIME in p:
             updates[SZ_DATETIME] = p[SZ_DATETIME]
+    elif msg.code == Code._2D49:
+        if SZ_COOLING_DEMAND in p:
+            updates[SZ_COOLING_MODE] = p[SZ_COOLING_DEMAND]
     else:
         return
 

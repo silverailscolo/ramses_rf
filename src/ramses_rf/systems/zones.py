@@ -168,6 +168,32 @@ class ZoneBase(Child, Parent, Entity):
         """Return the current state."""
         return {}
 
+    async def thermal_mode(self) -> ThermalMode | None:
+        """Return the active thermal mode of the zone.
+
+        :returns: Active ThermalMode or None.
+        :rtype: ThermalMode | None
+        """
+        if self.tcs:
+            return await self.tcs.thermal_mode()
+        return ThermalMode.HEAT
+
+    async def thermal_demand(self) -> ThermalDemandDTO | None:
+        """Return zone thermal demand as a CQRS DTO.
+
+        :returns: ThermalDemandDTO or None.
+        :rtype: ThermalDemandDTO | None
+        """
+        heat_demand_value = self.demand_state.heat_demand
+        if heat_demand_value is None:
+            return None
+        mode = await self.thermal_mode() or ThermalMode.HEAT
+        return ThermalDemandDTO(
+            thermal_demand=heat_demand_value,
+            mode=mode,
+            ufh_index=str(self.index),
+        )
+
 
 class ZoneSchedule(ZoneBase):  # 0404
     """Zone mixin providing schedule retrieval and modification."""
@@ -340,7 +366,7 @@ class DhwZone(ZoneSchedule):  # CS92A
         }
 
     async def setpoint(self) -> float | None:  # 10A0
-        """Return target DHW setpoint temperature in degrees Celsius."""
+        """Return the target DHW setpoint temperature in degrees Celsius."""
         return self.dhw_state.setpoint
 
     async def set_setpoint(self, value: float) -> Message:  # 10A0
@@ -350,32 +376,6 @@ class DhwZone(ZoneSchedule):  # CS92A
     async def temperature(self) -> float | None:  # 1260
         """Return current hot water temperature in degrees Celsius."""
         return self.temp_state.temperature
-
-    async def thermal_mode(self) -> ThermalMode | None:
-        """Return the active thermal mode of the zone.
-
-        :returns: Active ThermalMode or None.
-        :rtype: ThermalMode | None
-        """
-        if self.tcs:
-            return await self.tcs.thermal_mode()
-        return ThermalMode.HEAT
-
-    async def thermal_demand(self) -> ThermalDemandDTO | None:
-        """Return zone thermal demand as a CQRS DTO.
-
-        :returns: ThermalDemandDTO or None.
-        :rtype: ThermalDemandDTO | None
-        """
-        heat_demand_value = self.demand_state.heat_demand
-        if heat_demand_value is None:
-            return None
-        mode = await self.thermal_mode() or ThermalMode.HEAT
-        return ThermalDemandDTO(
-            thermal_demand=heat_demand_value,
-            mode=mode,
-            ufh_index=str(self.index),
-        )
 
     async def heat_demand(self) -> float | None:  # 3150
         """Return the DHW heat demand percentage (0.0 to 1.0)."""

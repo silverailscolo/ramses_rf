@@ -1,6 +1,7 @@
 """Focused HCC100 cooling packet and UFC relay tests."""
 
 from datetime import datetime as dt
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -30,6 +31,9 @@ from ramses_rf.systems.tcs import System
 from ramses_tx.address import Address
 from ramses_tx.const import Code, Verb
 from ramses_tx.dtos import PacketDTO
+from tests_rf.data_driven.helpers import TEST_DIR, load_test_gwy
+
+_SIMPLE_DIR = Path(f"{TEST_DIR}/systems/heat_simple")
 
 
 def _decode(
@@ -362,3 +366,79 @@ async def test_system_thermal_mode_heating_fallback() -> None:
     # Assert
     assert cooling_mode is False
     assert thermal_mode == ThermalMode.HEAT
+
+
+@pytest.mark.asyncio
+async def test_gateway_cached_packet_restore_hcc100_active_cooling() -> None:
+    # Arrange
+    gwy = await load_test_gwy(_SIMPLE_DIR)
+
+    try:
+        tcs = gwy.tcs
+        assert tcs is not None
+        ctl_id = tcs.id
+
+        cached_packets = {
+            "2026-08-15T12:00:00.000000Z": {
+                "rssi": 45,
+                "frame": f" I --- {ctl_id} --:------ {ctl_id} 2D49 003 00C800",
+            },
+        }
+
+        # Act
+        await gwy._restore_cached_packets(cached_packets)
+
+        # Assert
+        assert tcs.system_state.cooling_mode is True
+        assert await tcs.thermal_mode() == ThermalMode.COOL
+        assert len(tcs.zones) > 0
+        assert await tcs.zones[0].thermal_mode() == ThermalMode.COOL
+    finally:
+        await gwy.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_cached_packet_restore_hcc100_inactive_cooling() -> None:
+    # Arrange
+    gwy = await load_test_gwy(_SIMPLE_DIR)
+
+    try:
+        tcs = gwy.tcs
+        assert tcs is not None
+        ctl_id = tcs.id
+
+        cached_packets = {
+            "2026-08-15T12:00:00.000000Z": {
+                "rssi": 45,
+                "frame": f" I --- {ctl_id} --:------ {ctl_id} 2D49 003 010000",
+            },
+        }
+
+        # Act
+        await gwy._restore_cached_packets(cached_packets)
+
+        # Assert
+        assert tcs.system_state.cooling_mode is False
+        assert await tcs.thermal_mode() == ThermalMode.HEAT
+        assert len(tcs.zones) > 0
+        assert await tcs.zones[0].thermal_mode() == ThermalMode.HEAT
+    finally:
+        await gwy.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_cached_packet_restore_heating_only_baseline() -> None:
+    # Arrange
+    gwy = await load_test_gwy(_SIMPLE_DIR)
+
+    try:
+        tcs = gwy.tcs
+        assert tcs is not None
+
+        # Assert
+        assert tcs.system_state.cooling_mode is None
+        assert await tcs.thermal_mode() is None
+        assert len(tcs.zones) > 0
+        assert await tcs.zones[0].thermal_mode() is None
+    finally:
+        await gwy.stop()
