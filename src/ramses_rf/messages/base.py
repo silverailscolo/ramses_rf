@@ -12,6 +12,9 @@ from ramses_rf.address import Address, id_to_address
 from ramses_rf.const import (
     SZ_DHW_INDEX,
     SZ_DOMAIN_INDEX,
+    SZ_HVAC_ID,
+    SZ_MSG_ID,
+    SZ_OTHER_INDEX,
     SZ_UFH_INDEX,
     SZ_ZONE_INDEX,
 )
@@ -416,21 +419,22 @@ class Message:
             return Message._GET_MSG_INDEX_CB(self)
 
         INDEX_NAMES = {
-            Code._0002: "other_index",
+            Code._0002: SZ_OTHER_INDEX,
             Code._10A0: SZ_DHW_INDEX,
             Code._1260: SZ_DHW_INDEX,
             Code._1F41: SZ_DHW_INDEX,
             Code._22C9: SZ_UFH_INDEX,
-            Code._2389: "other_index",
-            Code._2D49: "other_index",
-            Code._31D9: "hvac_id",
-            Code._31DA: "hvac_id",
-            Code._3220: "msg_id",
+            Code._22D9: SZ_DOMAIN_INDEX,
+            Code._2389: SZ_OTHER_INDEX,
+            Code._2D49: SZ_OTHER_INDEX,
+            Code._31D9: SZ_HVAC_ID,
+            Code._31DA: SZ_HVAC_ID,
+            Code._3220: SZ_MSG_ID,
         }  # ALSO: SZ_DOMAIN_INDEX, SZ_ZONE_INDEX
 
         if self.code in (Code._31D9, Code._31DA):
             assert isinstance(self._index_value, str)  # mypy hint
-            return {"hvac_id": self._index_value}
+            return {SZ_HVAC_ID: self._index_value}
 
         if (
             self._index_value in (True, False)
