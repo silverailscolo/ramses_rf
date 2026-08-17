@@ -458,6 +458,32 @@ class StateProjector:
                             err,
                         )
 
+            # Route system-level opcodes (0100/2E04/313F/2D49) to the TCS.
+            # The ingestion loop routes to src_dev (Controller/UFC device),
+            # but the TCS is the system read-model entity whose system_state
+            # / thermal_mode is queried by downstream integrations.
+            # See: https://github.com/ramses-rf/ramses_cc/issues/965
+            if msg.code in (
+                Code._0100,
+                Code._2E04,
+                Code._313F,
+                Code._2D49,
+            ):
+                tcs_target = system_by_id.get(msg.src.id) or getattr(
+                    src_dev, "tcs", None
+                )
+                if tcs_target is None and len(systems) == 1:
+                    tcs_target = systems[0]
+                if tcs_target is not None:
+                    try:
+                        self._update_system_state(tcs_target, payload, msg)
+                    except Exception as err:
+                        _LOGGER.error(
+                            "CQRS extraction failed for TCS %s: %s",
+                            tcs_target.id,
+                            err,
+                        )
+
         # --- CQRS Reactor Hooks ---
         # Automate the legacy Actuator discovery query (3EF1) in response to 3EF0 (I)
         if msg.code == Code._3EF0 and getattr(msg, "verb", "") == I_:

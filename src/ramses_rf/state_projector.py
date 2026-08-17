@@ -21,6 +21,8 @@ from .const import (
     SZ_BYPASS_POSITION,
     SZ_BYPASS_STATE,
     SZ_CO2_LEVEL,
+    SZ_COOLING_DEMAND,
+    SZ_COOLING_MODE,
     SZ_DATETIME,
     SZ_DIFFERENTIAL,
     SZ_DOMAIN_INDEX,
@@ -60,6 +62,7 @@ from .const import (
     SZ_TEMPERATURE,
     SZ_UFH_INDEX,
     SZ_UNTIL,
+    SZ_ZONE_INDEX,
     DevType,
 )
 from .devices.hvac_ventilators import HvacVentilator
@@ -135,6 +138,7 @@ class StateProjector:
         self._registry.register(Code._0100, _update_system_state)
         self._registry.register(Code._2E04, _update_system_state)
         self._registry.register(Code._313F, _update_system_state)
+        self._registry.register(Code._2D49, _update_system_state)
 
         self._registry.register(Code._10A0, _update_dhw_state)
         self._registry.register(Code._1F41, _update_dhw_state)
@@ -274,7 +278,7 @@ def _resolve_logical_targets(
     # 4. Virtual twins (Zones) get updates if explicitly addressed by index.
     # For 30C9, only Controller/UFC broadcasts carry authoritative zone
     # addressing; non-controller 30C9 (sensor broadcasts) is handled in step 8.
-    if "zone_index" in p and tcs:
+    if SZ_ZONE_INDEX in p and tcs:
         is_ctrl_src = src_type in (
             "01",
             "02",
@@ -282,25 +286,26 @@ def _resolve_logical_targets(
             DevType.UFC,
         ) or getattr(msg.src, "id", "") == getattr(tcs, "id", "")
         if msg.code != Code._30C9 or is_ctrl_src:
-            if zone := tcs.zone_by_index.get(p["zone_index"]):
+            if zone := tcs.zone_by_index.get(p[SZ_ZONE_INDEX]):
                 if zone not in targets:
                     targets.append(zone)
 
     # 5. Domain twins (TCS, DHW) get updates.
-    if "domain_id" in p and tcs:
-        domain_id = p["domain_id"]
-        if domain_id == "FC" and tcs not in targets:
+    domain_index = p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")
+    if domain_index and tcs:
+        if domain_index == "FC" and tcs not in targets:
             targets.append(tcs)
         elif (
-            domain_id in ("FA", "F9") and getattr(tcs, "dhw", None) is not None
+            domain_index in ("FA", "F9")
+            and getattr(tcs, "dhw", None) is not None
         ):
             if tcs.dhw not in targets:
                 targets.append(tcs.dhw)
 
-    # 6. System-level opcodes (2E04/0100/313F) target the TCS directly.
+    # 6. System-level opcodes (2E04/0100/313F/2D49) target the TCS directly.
     #    These packets have no domain_id/zone_index, so steps 4/5 miss them.
     if (
-        msg.code in (Code._2E04, Code._0100, Code._313F)
+        msg.code in (Code._2E04, Code._0100, Code._313F, Code._2D49)
         and tcs
         and tcs not in targets
     ):
@@ -343,7 +348,8 @@ def _resolve_logical_targets(
 def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     """Translate system configuration opcodes into SystemState.
 
-    Handles 2E04 (system_mode), 0100 (language), and 313F (datetime).
+    Handles 2E04 (system_mode), 0100 (language), 313F (datetime), and
+    2D49 (cooling_mode).
 
     :param target: Target entity (TCS/Evohome) to update.
     :type target: Any
@@ -368,6 +374,9 @@ def _update_system_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     elif msg.code == Code._313F:
         if SZ_DATETIME in p:
             updates[SZ_DATETIME] = p[SZ_DATETIME]
+    elif msg.code == Code._2D49:
+        if SZ_COOLING_DEMAND in p:
+            updates[SZ_COOLING_MODE] = p[SZ_COOLING_DEMAND]
     else:
         return
 
@@ -606,7 +615,9 @@ def _update_temperature_state(
             updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
 
     if "setpoint" in p:
-        updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+        # Prevent boiler setpoint opcodes (e.g. 22D9) from mutating zone setpoints
+        if msg.code != Code._22D9 or not hasattr(target, "zone_state"):
+            updates[SZ_SETPOINT] = p[SZ_SETPOINT]
 
     if not updates:
         return
@@ -640,11 +651,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
     if SZ_HEAT_DEMAND in p:
         if slug in ("CTL", "UFC"):
-            if (
-                p.get(SZ_DOMAIN_INDEX)
-                or p.get("domain_id")
-                or p.get("domain_index")
-            ) == "FC":
+            if (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")) == "FC":
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
         elif (
             "ufx_index" not in p
@@ -656,12 +663,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if SZ_RELAY_DEMAND in p:
         if (
             slug == "UFC"
-            and (
-                p.get(SZ_DOMAIN_INDEX)
-                or p.get("domain_id")
-                or p.get("domain_index")
-            )
-            != "FC"
+            and (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")) != "FC"
         ):
             pass
         else:

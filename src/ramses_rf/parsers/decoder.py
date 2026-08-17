@@ -12,6 +12,8 @@ from typing import Any
 from ramses_rf.const import (
     SZ_DHW_INDEX,
     SZ_DOMAIN_INDEX,
+    SZ_HVAC_ID,
+    SZ_OTHER_INDEX,
     SZ_UFH_INDEX,
     SZ_ZONE_INDEX,
 )
@@ -329,7 +331,7 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
         return {}
 
     if msg.code in (Code._31D9, Code._31DA):
-        return {"hvac_id": str(msg._index)}
+        return {SZ_HVAC_ID: str(msg._index)}
 
     if msg.code == Code._3220:
         return {}
@@ -369,13 +371,14 @@ def _build_index_dict(msg: _LegacyMessage) -> dict[str, str]:
     )
 
     index_names: dict[Code | str, str] = {
-        Code._0002: "other_index",
+        Code._0002: SZ_OTHER_INDEX,
         Code._10A0: SZ_DHW_INDEX,
         Code._1260: SZ_DHW_INDEX,
         Code._1F41: SZ_DHW_INDEX,
         Code._22C9: SZ_UFH_INDEX,
-        Code._2389: "other_index",
-        Code._2D49: "other_index",
+        Code._22D9: SZ_DOMAIN_INDEX,
+        Code._2389: SZ_OTHER_INDEX,
+        Code._2D49: SZ_OTHER_INDEX,
     }
 
     index_name = index_names.get(msg.code, index_name)

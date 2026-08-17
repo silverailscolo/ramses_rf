@@ -6,7 +6,7 @@ from typing import Final
 
 from ramses_rf.commands.builders.helpers import resolve_addrs
 from ramses_rf.commands.core import Command
-from ramses_rf.const import SZ_MINUTES
+from ramses_rf.const import SZ_HVAC_ID, SZ_MINUTES
 from ramses_rf.models.hvac_schemas import (
     _22F1_MODE_MAX,
     _22F1_SCHEMES,
@@ -483,7 +483,7 @@ def build_get_hvac_fan_31da(intent: Command) -> CommandDTO:
     :returns: A populated CommandDTO containing a serialized state payload.
     :rtype: CommandDTO
     """
-    hvac_id = intent.get("hvac_id")
+    hvac_id = intent.get(SZ_HVAC_ID)
     bypass_position = intent.get("bypass_position")
     air_quality = intent.get("air_quality")
     co2_level = intent.get("co2_level")
