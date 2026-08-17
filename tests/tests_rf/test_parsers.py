@@ -9,13 +9,21 @@ from ramses_rf import Gateway
 from ramses_rf.config import GatewayConfig
 from ramses_rf.const import (
     SZ_BINDINGS,
+    SZ_DOMAIN_INDEX,
+    SZ_HVAC_ID,
     SZ_NAME,
+    SZ_OTHER_INDEX,
     SZ_PHASE,
     SZ_TEMPERATURE,
     SZ_ZONE_INDEX,
 )
 from ramses_rf.messages import Message
 from ramses_rf.models import TopologyChangedEvent
+from ramses_rf.parsers.decoder import (
+    _build_index_dict,
+    _LegacyMessage,
+    decode_packet,
+)
 from ramses_rf.payloads import PayloadBase, get_payload_class
 from ramses_rf.pipeline.topology_builder import TopologyBuilder
 from ramses_tx import Packet
@@ -289,3 +297,92 @@ async def test_regex_inbound_parsing() -> None:
     finally:
         await gwy_0.stop()
         await rf.stop()
+
+
+# --- Opcode 22D9 & Index Resolution Tests ---
+
+
+def test_22d9_index_extraction_resolves_to_domain_index() -> None:
+    """Verify that opcode 22D9 extracts domain_index rather than zone_index."""
+    # Arrange
+    pkt_line = "...  I --- 01:216136 --:------ 01:216136 22D9 003 0003E8"
+    pkt = Packet(dt.now(), pkt_line)
+
+    # Act
+    msg = Message(pkt.to_dto())
+    index_dict = _build_index_dict(_LegacyMessage(pkt.to_dto()))
+    decoded = decode_packet(pkt.to_dto())
+
+    # Assert
+    assert SZ_DOMAIN_INDEX in index_dict
+    assert index_dict[SZ_DOMAIN_INDEX] == "00"
+    assert SZ_ZONE_INDEX not in index_dict
+    assert msg._index == {SZ_DOMAIN_INDEX: "00"}
+    assert isinstance(decoded, dict)
+    assert decoded.get(SZ_DOMAIN_INDEX) == "00"
+    assert SZ_ZONE_INDEX not in decoded
+
+
+def test_22d9_fc_domain_extraction() -> None:
+    """Verify that opcode 22D9 with FC domain extracts domain_index correctly."""
+    # Arrange
+    pkt_line = "...  I --- 01:216136 --:------ 01:216136 22D9 003 FC1964"
+    pkt = Packet(dt.now(), pkt_line)
+
+    # Act
+    msg = Message(pkt.to_dto())
+    index_dict = _build_index_dict(_LegacyMessage(pkt.to_dto()))
+    decoded = decode_packet(pkt.to_dto())
+
+    # Assert
+    assert SZ_DOMAIN_INDEX in index_dict
+    assert index_dict[SZ_DOMAIN_INDEX] == "FC"
+    assert SZ_ZONE_INDEX not in index_dict
+    assert msg._index == {SZ_DOMAIN_INDEX: "FC"}
+    assert isinstance(decoded, dict)
+    assert decoded.get(SZ_DOMAIN_INDEX) == "FC"
+    assert SZ_ZONE_INDEX not in decoded
+
+
+def test_decoder_and_message_index_dict_parity() -> None:
+    """Verify parity between decoder._build_index_dict and Message._index."""
+    # Arrange
+    sample_packets = [
+        "...  I --- 01:216136 --:------ 01:216136 22D9 003 0003E8",
+        "...  I --- 01:216136 --:------ 01:216136 2309 003 0001F4",
+        "...  I --- 01:216136 --:------ 01:216136 2309 003 010708",
+        "...  I --- 01:216136 --:------ 01:216136 10A0 006 00157C0003E8",
+        "...  I --- 01:216136 --:------ 01:216136 1260 003 000FA0",
+        "...  I --- 01:216136 --:------ 01:216136 1F41 006 000000FFFFFF",
+        "...  I --- 01:216136 --:------ 01:216136 0002 004 04180A04",
+        "...  I --- 32:208628 --:------ 32:208628 31DA 003 000102",
+    ]
+
+    for pkt_line in sample_packets:
+        # Act
+        pkt = Packet(dt.now(), pkt_line)
+        msg = Message(pkt.to_dto())
+        dict_from_decoder = _build_index_dict(_LegacyMessage(pkt.to_dto()))
+        dict_from_msg = msg._index
+
+        # Assert
+        assert dict_from_decoder == dict_from_msg
+
+
+def test_hvac_and_other_index_extraction() -> None:
+    """Verify that 0002 extracts other_index and 31DA extracts hvac_id."""
+    # Arrange
+    pkt_0002 = Packet(
+        dt.now(), "...  I --- 01:216136 --:------ 01:216136 0002 004 04180A04"
+    )
+    pkt_31da = Packet(
+        dt.now(), "...  I --- 32:208628 --:------ 32:208628 31DA 003 000102"
+    )
+
+    # Act
+    msg_0002 = Message(pkt_0002.to_dto())
+    msg_31da = Message(pkt_31da.to_dto())
+
+    # Assert
+    assert msg_0002._index == {SZ_OTHER_INDEX: "04"}
+    assert msg_31da._index == {SZ_HVAC_ID: "00"}

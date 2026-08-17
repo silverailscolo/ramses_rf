@@ -62,6 +62,7 @@ from .const import (
     SZ_TEMPERATURE,
     SZ_UFH_INDEX,
     SZ_UNTIL,
+    SZ_ZONE_INDEX,
     DevType,
 )
 from .devices.hvac_ventilators import HvacVentilator
@@ -277,7 +278,7 @@ def _resolve_logical_targets(
     # 4. Virtual twins (Zones) get updates if explicitly addressed by index.
     # For 30C9, only Controller/UFC broadcasts carry authoritative zone
     # addressing; non-controller 30C9 (sensor broadcasts) is handled in step 8.
-    if "zone_index" in p and tcs:
+    if SZ_ZONE_INDEX in p and tcs:
         is_ctrl_src = src_type in (
             "01",
             "02",
@@ -285,17 +286,18 @@ def _resolve_logical_targets(
             DevType.UFC,
         ) or getattr(msg.src, "id", "") == getattr(tcs, "id", "")
         if msg.code != Code._30C9 or is_ctrl_src:
-            if zone := tcs.zone_by_index.get(p["zone_index"]):
+            if zone := tcs.zone_by_index.get(p[SZ_ZONE_INDEX]):
                 if zone not in targets:
                     targets.append(zone)
 
     # 5. Domain twins (TCS, DHW) get updates.
-    if "domain_id" in p and tcs:
-        domain_id = p["domain_id"]
-        if domain_id == "FC" and tcs not in targets:
+    domain_index = p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")
+    if domain_index and tcs:
+        if domain_index == "FC" and tcs not in targets:
             targets.append(tcs)
         elif (
-            domain_id in ("FA", "F9") and getattr(tcs, "dhw", None) is not None
+            domain_index in ("FA", "F9")
+            and getattr(tcs, "dhw", None) is not None
         ):
             if tcs.dhw not in targets:
                 targets.append(tcs.dhw)
@@ -613,7 +615,9 @@ def _update_temperature_state(
             updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
 
     if "setpoint" in p:
-        updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+        # Prevent boiler setpoint opcodes (e.g. 22D9) from mutating zone setpoints
+        if msg.code != Code._22D9 or not hasattr(target, "zone_state"):
+            updates[SZ_SETPOINT] = p[SZ_SETPOINT]
 
     if not updates:
         return
@@ -647,11 +651,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
     if SZ_HEAT_DEMAND in p:
         if slug in ("CTL", "UFC"):
-            if (
-                p.get(SZ_DOMAIN_INDEX)
-                or p.get("domain_id")
-                or p.get("domain_index")
-            ) == "FC":
+            if (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")) == "FC":
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
         elif (
             "ufx_index" not in p
@@ -663,12 +663,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if SZ_RELAY_DEMAND in p:
         if (
             slug == "UFC"
-            and (
-                p.get(SZ_DOMAIN_INDEX)
-                or p.get("domain_id")
-                or p.get("domain_index")
-            )
-            != "FC"
+            and (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")) != "FC"
         ):
             pass
         else:

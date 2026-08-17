@@ -13,6 +13,7 @@ from typing import Any
 
 from ramses_rf.const import (
     SZ_COOLING_DEMAND,
+    SZ_DOMAIN_INDEX,
     SZ_MODULATION_LEVEL,
     SZ_REL_MODULATION_LEVEL,
     SZ_REMAINING_DAYS,
@@ -25,10 +26,13 @@ from ramses_rf.const import (
 from ramses_rf.messages import Message
 from ramses_rf.models import (
     ActuatorState,
+    DhwState,
     HvacState,
     OpenThermState,
     StateUpdatedEvent,
     SystemState,
+    TemperatureState,
+    ZoneState,
 )
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.protocol.opentherm import OtDataId
@@ -107,6 +111,64 @@ class FakeDevice:
             self.act_state = event.state
         elif isinstance(event.state, HvacState):
             self.hvac_state = event.state
+
+
+class FakeZone:
+    """A minimal fake zone entity to act as a state target."""
+
+    def __init__(self, zone_id: str, setpoint: float = 5.0) -> None:
+        """Initialize the fake zone with default state models.
+
+        :param zone_id: The unique zone ID string.
+        :type zone_id: str
+        :param setpoint: Initial setpoint in degrees Celsius.
+        :type setpoint: float
+        """
+        self.id: str = zone_id
+        self.temp_state: TemperatureState = TemperatureState(setpoint=setpoint)
+        self.zone_state: ZoneState = ZoneState(setpoint=setpoint)
+        self.events: list[StateUpdatedEvent] = []
+
+    def apply_state_update(self, event: StateUpdatedEvent) -> None:
+        """Accept an immutable state update event for the zone.
+
+        :param event: The state update event container.
+        :type event: StateUpdatedEvent
+        """
+        self.events.append(event)
+        if isinstance(event.state, TemperatureState):
+            self.temp_state = event.state
+        elif isinstance(event.state, ZoneState):
+            self.zone_state = event.state
+
+
+class FakeDhw:
+    """A minimal fake DHW entity to act as a state target."""
+
+    def __init__(self, dhw_id: str, setpoint: float = 50.0) -> None:
+        """Initialize the fake DHW entity with default state models.
+
+        :param dhw_id: The unique DHW ID string.
+        :type dhw_id: str
+        :param setpoint: Initial DHW setpoint in degrees Celsius.
+        :type setpoint: float
+        """
+        self.id: str = dhw_id
+        self.temp_state: TemperatureState = TemperatureState()
+        self.dhw_state: DhwState = DhwState(setpoint=setpoint)
+        self.events: list[StateUpdatedEvent] = []
+
+    def apply_state_update(self, event: StateUpdatedEvent) -> None:
+        """Accept an immutable state update event for DHW.
+
+        :param event: The state update event container.
+        :type event: StateUpdatedEvent
+        """
+        self.events.append(event)
+        if isinstance(event.state, TemperatureState):
+            self.temp_state = event.state
+        elif isinstance(event.state, DhwState):
+            self.dhw_state = event.state
 
 
 class FakeRegistry:
@@ -496,3 +558,205 @@ def test_state_projector_routes_2d49_inactive_cooling_to_tcs() -> None:
 
     # Assert
     assert mock_tcs.system_state.cooling_mode is False
+
+
+def test_22d9_boiler_setpoint_does_not_mutate_zone_00_setpoint() -> None:
+    # Arrange
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:216136"
+    ctl_dev._SLUG = DevType.CTL
+
+    otb_dev = FakeDevice()
+    otb_dev.id = "10:064873"
+    otb_dev._SLUG = DevType.OTB
+
+    zone_00 = FakeZone("01:216136_00", setpoint=5.0)
+    zone_01 = FakeZone("01:216136_01", setpoint=20.0)
+    dhw = FakeDhw("01:216136_HW", setpoint=50.0)
+
+    class FakeTcs:
+        def __init__(self) -> None:
+            self.id = "01:216136"
+            self.appliance_control = otb_dev
+            self.dhw = dhw
+            self.zone_by_index = {"00": zone_00, "01": zone_01}
+
+    mock_tcs = FakeTcs()
+    registry = FakeRegistry(ctl_dev)
+    registry.device_by_id[otb_dev.id] = otb_dev
+    registry.systems = [mock_tcs]
+
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    # Act 1: Controller broadcasts 22D9 (Boiler Setpoint 10.0C, idle)
+    msg_22d9_idle = MockMessage(
+        code=Code._22D9,
+        verb=Verb.I_,
+        payload={SZ_DOMAIN_INDEX: "00", SZ_SETPOINT: 10.0},
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg_22d9_idle)
+
+    # Assert 1: OTB receives boiler setpoint; Zone 00 remains 5.0C
+    assert otb_dev.opentherm_state.temperatures.boiler_setpoint == 10.0
+    assert zone_00.temp_state.setpoint == 5.0
+    assert zone_01.temp_state.setpoint == 20.0
+    assert dhw.dhw_state.setpoint == 50.0
+
+    # Act 2: Controller broadcasts 22D9 (Boiler Setpoint 60.0C, burn)
+    msg_22d9_burn = MockMessage(
+        code=Code._22D9,
+        verb=Verb.I_,
+        payload={SZ_DOMAIN_INDEX: "00", SZ_SETPOINT: 60.0},
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg_22d9_burn)
+
+    # Assert 2: OTB receives boiler setpoint 60.0C; Zone 00 remains 5.0C
+    assert otb_dev.opentherm_state.temperatures.boiler_setpoint == 60.0
+    assert zone_00.temp_state.setpoint == 5.0
+    assert zone_01.temp_state.setpoint == 20.0
+
+
+def test_2309_and_2349_correctly_update_zones_and_do_not_mutate_appliance_control() -> (
+    None
+):
+    # Arrange
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:216136"
+    ctl_dev._SLUG = DevType.CTL
+
+    otb_dev = FakeDevice()
+    otb_dev.id = "10:064873"
+    otb_dev._SLUG = DevType.OTB
+
+    zone_00 = FakeZone("01:216136_00", setpoint=5.0)
+    zone_01 = FakeZone("01:216136_01", setpoint=20.0)
+
+    class FakeTcs:
+        id = "01:216136"
+        appliance_control = otb_dev
+        zone_by_index = {"00": zone_00, "01": zone_01}
+
+    mock_tcs = FakeTcs()
+    registry = FakeRegistry(ctl_dev)
+    registry.device_by_id[otb_dev.id] = otb_dev
+    registry.systems = [mock_tcs]
+
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    # Initial boiler setpoint
+    msg_22d9 = MockMessage(
+        code=Code._22D9,
+        verb=Verb.I_,
+        payload={SZ_DOMAIN_INDEX: "00", SZ_SETPOINT: 60.0},
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg_22d9)
+    assert otb_dev.opentherm_state.temperatures.boiler_setpoint == 60.0
+
+    # Act 1: Ingest 2309 for Zone 00 (target 18.0C)
+    msg_2309_z00 = MockMessage(
+        code=Code._2309,
+        verb=Verb.I_,
+        payload={SZ_ZONE_INDEX: "00", SZ_SETPOINT: 18.0},
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg_2309_z00)
+
+    # Assert 1: Zone 00 updates to 18.0C, OTB boiler setpoint unchanged
+    assert zone_00.temp_state.setpoint == 18.0
+    assert otb_dev.opentherm_state.temperatures.boiler_setpoint == 60.0
+
+    # Act 2: Ingest 2349 for Zone 01 (target 21.5C)
+    msg_2349_z01 = MockMessage(
+        code=Code._2349,
+        verb=Verb.I_,
+        payload={SZ_ZONE_INDEX: "01", SZ_SETPOINT: 21.5},
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg_2349_z01)
+
+    # Assert 2: Zone 01 updates to 21.5C, Zone 00 remains 18.0C
+    assert zone_01.temp_state.setpoint == 21.5
+    assert zone_00.temp_state.setpoint == 18.0
+    assert otb_dev.opentherm_state.temperatures.boiler_setpoint == 60.0
+
+
+def test_issue_989_interleaved_packet_sequence_no_zone_00_oscillation() -> (
+    None
+):
+    # Arrange: System with Zone 00 ("Garden room") and OTB appliance control
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:216136"
+    ctl_dev._SLUG = DevType.CTL
+
+    otb_dev = FakeDevice()
+    otb_dev.id = "10:064873"
+    otb_dev._SLUG = DevType.OTB
+
+    zone_00 = FakeZone("01:216136_00", setpoint=5.0)
+
+    class FakeTcs:
+        id = "01:216136"
+        appliance_control = otb_dev
+        zone_by_index = {"00": zone_00}
+
+    mock_tcs = FakeTcs()
+    registry = FakeRegistry(ctl_dev)
+    registry.device_by_id[otb_dev.id] = otb_dev
+    registry.systems = [mock_tcs]
+
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    # Act: Replay exact interleaved sequence from issue #989
+    interleaved_msgs = [
+        # 1. 22D9 Boiler setpoint 10.0C (idle)
+        MockMessage(
+            code=Code._22D9,
+            verb=Verb.I_,
+            payload={SZ_DOMAIN_INDEX: "00", SZ_SETPOINT: 10.0},
+            src_id="01:216136",
+            dst_id="--:------",
+        ),
+        # 2. 2309 Zone 00 setpoint sync 5.0C
+        MockMessage(
+            code=Code._2309,
+            verb=Verb.I_,
+            payload={SZ_ZONE_INDEX: "00", SZ_SETPOINT: 5.0},
+            src_id="01:216136",
+            dst_id="--:------",
+        ),
+        # 3. 22D9 Boiler setpoint 60.0C (firing)
+        MockMessage(
+            code=Code._22D9,
+            verb=Verb.I_,
+            payload={SZ_DOMAIN_INDEX: "00", SZ_SETPOINT: 60.0},
+            src_id="01:216136",
+            dst_id="--:------",
+        ),
+        # 4. 22D9 Boiler setpoint 10.0C (idle)
+        MockMessage(
+            code=Code._22D9,
+            verb=Verb.I_,
+            payload={SZ_DOMAIN_INDEX: "00", SZ_SETPOINT: 10.0},
+            src_id="01:216136",
+            dst_id="--:------",
+        ),
+    ]
+
+    for msg in interleaved_msgs:
+        worker.process_message_state(msg)
+        # Assert: Throughout the entire sequence, Zone 00 setpoint NEVER oscillates
+        assert zone_00.temp_state.setpoint == 5.0
