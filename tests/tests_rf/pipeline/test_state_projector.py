@@ -12,10 +12,12 @@ import uuid
 from typing import Any
 
 from ramses_rf.const import (
+    SZ_COOLING_DEMAND,
     SZ_MODULATION_LEVEL,
     SZ_REL_MODULATION_LEVEL,
     SZ_REMAINING_DAYS,
     SZ_SETPOINT,
+    SZ_ZONE_INDEX,
     Code,
     DevType,
     Verb,
@@ -26,6 +28,7 @@ from ramses_rf.models import (
     HvacState,
     OpenThermState,
     StateUpdatedEvent,
+    SystemState,
 )
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.protocol.opentherm import OtDataId
@@ -86,6 +89,7 @@ class FakeDevice:
         self.opentherm_state: OpenThermState = OpenThermState()
         self.act_state: ActuatorState = ActuatorState()
         self.hvac_state: HvacState = HvacState()
+        self.tcs: Any | None = None
         self.events: list[StateUpdatedEvent] = []
 
     def apply_state_update(self, event: StateUpdatedEvent) -> None:
@@ -390,3 +394,105 @@ def test_state_projector_routes_opentherm_3220_data_id_responses() -> None:
     assert device.opentherm_state.temperatures.boiler_return == 41.2
     assert device.opentherm_state.temperatures.dhw_setpoint == 52.0
     assert device.opentherm_state.temperatures.ch_max_setpoint == 75.0
+
+
+def test_state_projector_routes_controller_2d49_to_tcs() -> None:
+    # Arrange
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:054173"
+    ctl_dev._SLUG = DevType.CTL
+
+    class FakeTcs:
+        id = "01:054173"
+        zone_by_index: dict[str, Any] = {}
+        system_state: SystemState = SystemState()
+
+    mock_tcs = FakeTcs()
+    ctl_dev.tcs = mock_tcs
+    registry = FakeRegistry(ctl_dev)
+    registry.systems = [mock_tcs]
+
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    # Act: Controller broadcasts 2D49 (Cooling Active)
+    broadcast_msg = MockMessage(
+        code=Code._2D49,
+        verb=Verb.I_,
+        payload={SZ_ZONE_INDEX: "00", SZ_COOLING_DEMAND: True},
+        src_id="01:054173",
+        dst_id="--:------",
+    )
+    worker.process_message_state(broadcast_msg)
+
+    # Assert
+    assert mock_tcs.system_state.cooling_mode is True
+
+
+def test_state_projector_routes_ufc_2d49_to_tcs() -> None:
+    # Arrange
+    ufc_dev = FakeDevice()
+    ufc_dev.id = "02:123456"
+    ufc_dev._SLUG = DevType.UFC
+
+    class FakeTcs:
+        id = "01:054173"
+        zone_by_index: dict[str, Any] = {}
+        system_state: SystemState = SystemState()
+
+    mock_tcs = FakeTcs()
+    ufc_dev.tcs = mock_tcs
+    registry = FakeRegistry(ufc_dev)
+    registry.systems = [mock_tcs]
+
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    # Act: UFC broadcasts 2D49 (Cooling Active)
+    broadcast_msg = MockMessage(
+        code=Code._2D49,
+        verb=Verb.I_,
+        payload={SZ_ZONE_INDEX: "01", SZ_COOLING_DEMAND: True},
+        src_id="02:123456",
+        dst_id="--:------",
+    )
+    worker.process_message_state(broadcast_msg)
+
+    # Assert
+    assert mock_tcs.system_state.cooling_mode is True
+
+
+def test_state_projector_routes_2d49_inactive_cooling_to_tcs() -> None:
+    # Arrange
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:054173"
+    ctl_dev._SLUG = DevType.CTL
+
+    class FakeTcs:
+        id = "01:054173"
+        zone_by_index: dict[str, Any] = {}
+        system_state: SystemState = SystemState()
+
+    mock_tcs = FakeTcs()
+    ctl_dev.tcs = mock_tcs
+    registry = FakeRegistry(ctl_dev)
+    registry.systems = [mock_tcs]
+
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    # Act: Controller broadcasts 2D49 (Cooling Inactive)
+    broadcast_msg = MockMessage(
+        code=Code._2D49,
+        verb=Verb.I_,
+        payload={SZ_ZONE_INDEX: "00", SZ_COOLING_DEMAND: False},
+        src_id="01:054173",
+        dst_id="--:------",
+    )
+    worker.process_message_state(broadcast_msg)
+
+    # Assert
+    assert mock_tcs.system_state.cooling_mode is False
