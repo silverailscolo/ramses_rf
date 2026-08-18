@@ -2077,14 +2077,14 @@ class HvacFanParamPayload(PayloadBase):
     :type parameter_id: int
     :param data_type: Parameter data type integer.
     :type data_type: int
-    :param value_scaled: Current scaled parameter value integer, or None if sentinel/N/A.
-    :type value_scaled: int | None
-    :param min_value_scaled: Minimum allowed scaled parameter value integer.
-    :type min_value_scaled: int
-    :param max_value_scaled: Maximum allowed scaled parameter value integer.
-    :type max_value_scaled: int
-    :param precision_scaled: Parameter scaling precision integer.
-    :type precision_scaled: int
+    :param value_scaled: Scaled parameter value, or None if sentinel/N/A.
+    :type value_scaled: float | int | None
+    :param min_value_scaled: Minimum allowed scaled parameter value.
+    :type min_value_scaled: float | int | None
+    :param max_value_scaled: Maximum allowed scaled parameter value.
+    :type max_value_scaled: float | int | None
+    :param precision_scaled: Parameter scaling precision.
+    :type precision_scaled: float | int
     :param trailer_bytes: Reserved trailer bytes sequence.
     :type trailer_bytes: bytes
     """
@@ -2093,12 +2093,86 @@ class HvacFanParamPayload(PayloadBase):
 
     parameter_id: int
     data_type: int
-    value_scaled: int | None
-    min_value_scaled: int | None
-    max_value_scaled: int | None
-    precision_scaled: int
+    value_scaled: float | int | None
+    min_value_scaled: float | int | None
+    max_value_scaled: float | int | None
+    precision_scaled: float | int
     trailer_bytes: bytes
     _raw_3b: bytes | None = None
+
+    @staticmethod
+    def _scale_value(
+        raw_val: int | None, data_type: int
+    ) -> float | int | None:
+        """Convert a raw parameter integer to its engineering unit value."""
+        if raw_val is None:
+            return None
+        match data_type:
+            # 0x0F: Fan rate % (raw 200 -> 1.0 = 100%, raw 100 -> 0.5 = 50%)
+            case 0x0F:
+                return raw_val / 200.0
+            # 0x92: Temperature in °C (0.01 °C step, e.g. raw 2000 -> 20.0 °C)
+            case 0x92:
+                return raw_val / 100.0
+            # 0x01: Centile / sensitivity % (0.1% step, e.g. raw 20 -> 2.0%)
+            case 0x01:
+                return raw_val / 10.0
+            # Default: Counters, days, booleans, raw flags (0x00, 0x10, etc.)
+            case _:
+                return raw_val
+
+    @staticmethod
+    def _scale_precision(raw_prec: int, data_type: int) -> float | int:
+        """Convert a raw precision integer to its engineering unit value."""
+        match data_type:
+            # 0x0F: 1 raw step = 0.005 (0.5%)
+            case 0x0F:
+                return raw_prec * 0.005
+            # 0x92: 1 raw step = 0.01 °C
+            case 0x92:
+                return raw_prec / 100.0
+            # 0x01: 1 raw step = 0.1%
+            case 0x01:
+                return raw_prec / 10.0
+            # Default: 1 raw step = 1 integer unit
+            case _:
+                return raw_prec
+
+    @staticmethod
+    def _unscale_value(val: float | int | None, data_type: int) -> int:
+        """Convert an engineering unit value to raw struct integer."""
+        if val is None:
+            return -1
+        match data_type:
+            # 0x0F: Convert 0.0-1.0 fraction back to 0-200 raw integer
+            case 0x0F:
+                return int(round(float(val) * 200.0))
+            # 0x92: Convert °C temperature back to 0.01 °C integer (val * 100)
+            case 0x92:
+                return int(round(float(val) * 100.0))
+            # 0x01: Convert sensitivity % back to 0.1% integer (val * 10)
+            case 0x01:
+                return int(round(float(val) * 10.0))
+            # Default: Unscaled integer
+            case _:
+                return int(val)
+
+    @staticmethod
+    def _unscale_precision(prec: float | int, data_type: int) -> int:
+        """Convert an engineering unit precision to raw struct integer."""
+        match data_type:
+            # 0x0F: Convert 0.005 step back to 1 raw count
+            case 0x0F:
+                return int(round(float(prec) * 200.0))
+            # 0x92: Convert 0.01 °C step back to 1 raw count
+            case 0x92:
+                return int(round(float(prec) * 100.0))
+            # 0x01: Convert 0.1% step back to 1 raw count
+            case 0x01:
+                return int(round(float(prec) * 10.0))
+            # Default: Unscaled integer precision count
+            case _:
+                return int(prec)
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -2137,16 +2211,16 @@ class HvacFanParamPayload(PayloadBase):
             prec_s,
             trailer,
         ) = struct.unpack_from(cls._STRUCT_FMT, parse_data, 0)
-        val_scaled = None if val_s in (0x000000FF, 0xFFFFFFFF, -1) else val_s
-        min_scaled = None if min_s in (0x000000FF, 0xFFFFFFFF, -1) else min_s
-        max_scaled = None if max_s in (0x000000FF, 0xFFFFFFFF, -1) else max_s
+        val_raw = None if val_s in (0x000000FF, 0xFFFFFFFF, -1) else val_s
+        min_raw = None if min_s in (0x000000FF, 0xFFFFFFFF, -1) else min_s
+        max_raw = None if max_s in (0x000000FF, 0xFFFFFFFF, -1) else max_s
         return cls(
             parameter_id=p_id,
             data_type=d_type,
-            value_scaled=val_scaled,
-            min_value_scaled=min_scaled,
-            max_value_scaled=max_scaled,
-            precision_scaled=prec_s,
+            value_scaled=cls._scale_value(val_raw, d_type),
+            min_value_scaled=cls._scale_value(min_raw, d_type),
+            max_value_scaled=cls._scale_value(max_raw, d_type),
+            precision_scaled=cls._scale_precision(prec_s, d_type),
             trailer_bytes=trailer,
         )
 
@@ -2158,9 +2232,10 @@ class HvacFanParamPayload(PayloadBase):
         """
         if self._raw_3b is not None:
             return self._raw_3b
-        val_s = -1 if self.value_scaled is None else self.value_scaled
-        min_s = -1 if self.min_value_scaled is None else self.min_value_scaled
-        max_s = -1 if self.max_value_scaled is None else self.max_value_scaled
+        val_s = self._unscale_value(self.value_scaled, self.data_type)
+        min_s = self._unscale_value(self.min_value_scaled, self.data_type)
+        max_s = self._unscale_value(self.max_value_scaled, self.data_type)
+        prec_s = self._unscale_precision(self.precision_scaled, self.data_type)
         return struct.pack(
             self._STRUCT_FMT,
             0,
@@ -2170,7 +2245,7 @@ class HvacFanParamPayload(PayloadBase):
             val_s,
             min_s,
             max_s,
-            self.precision_scaled,
+            prec_s,
             self.trailer_bytes,
         )
 
