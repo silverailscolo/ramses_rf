@@ -624,8 +624,11 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             action=Action.SET_FAN_MODE,
             data={"fan_mode": fan_mode, "scheme": self._scheme or "orcon"},
         )
+        # Ventilators do not ack 22F1 commands — the REM→FAN direction is
+        # one-way.  wait_for_reply=True causes a timeout on every call
+        # (issue 995).  Fire-and-forget instead.
         return await self._gateway.dispatcher.send(
-            intent, priority=Priority.HIGH, wait_for_reply=True
+            intent, priority=Priority.HIGH, wait_for_reply=False
         )
 
     async def air_quality(self) -> float | None:
