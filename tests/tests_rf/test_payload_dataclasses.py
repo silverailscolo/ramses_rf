@@ -332,6 +332,82 @@ def test_hvac_fan_param_payload_2411_parity() -> None:
     }
 
 
+def test_hvac_fan_param_temperature_scaling_2411() -> None:
+    # Arrange (Param 75 Comfort Temperature, 20.0 °C, 0-30 °C, prec 0.01)
+    raw_hex = "0000750092000007D00000000000000753000000010001"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacFanParamPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    to_dict_res = payload.to_dict()
+
+    # Assert
+    assert payload.parameter_id == 0x75
+    assert payload.data_type == 0x92
+    assert payload.value_scaled == 20.0
+    assert payload.min_value_scaled == 0.0
+    assert payload.max_value_scaled == 18.75  # 0x0753 / 100 = 18.75
+    assert payload.precision_scaled == 0.01
+    assert reencoded == raw_hex
+    assert to_dict_res["parameter"] == "75"
+    assert to_dict_res["value"] == 20.0
+    assert to_dict_res["min_value"] == 0.0
+    assert to_dict_res["precision"] == 0.01
+
+
+def test_hvac_fan_param_percentage_scaling_2411() -> None:
+    # Arrange (Param 41 Medium Fan Rate, 50% = 0.5, 0-100%, prec 0.005)
+    # raw value 100 (0x64) -> 0.5, max value 200 (0xC8) -> 1.0, prec 1 -> 0.005
+    raw_hex = "000041000F0000006400000000000000C8000000010001"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacFanParamPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    to_dict_res = payload.to_dict()
+
+    # Assert
+    assert payload.parameter_id == 0x41
+    assert payload.data_type == 0x0F
+    assert payload.value_scaled == 0.5
+    assert payload.min_value_scaled == 0.0
+    assert payload.max_value_scaled == 1.0
+    assert payload.precision_scaled == 0.005
+    assert reencoded == raw_hex
+    assert to_dict_res["parameter"] == "41"
+    assert to_dict_res["value"] == 0.5
+    assert to_dict_res["min_value"] == 0.0
+    assert to_dict_res["max_value"] == 1.0
+    assert to_dict_res["precision"] == 0.005
+
+
+def test_hvac_fan_param_centile_scaling_2411() -> None:
+    # Arrange (Param 52 Sensor Sensitivity %, 2.0%, 0-25.0%, prec 0.1)
+    # raw value 20 (0x14) -> 2.0, max value 250 (0xFA) -> 25.0, prec 1 -> 0.1
+    raw_hex = "00005200010000001400000000000000FA000000010001"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = HvacFanParamPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+    to_dict_res = payload.to_dict()
+
+    # Assert
+    assert payload.parameter_id == 0x52
+    assert payload.data_type == 0x01
+    assert payload.value_scaled == 2.0
+    assert payload.min_value_scaled == 0.0
+    assert payload.max_value_scaled == 25.0
+    assert payload.precision_scaled == 0.1
+    assert reencoded == raw_hex
+    assert to_dict_res["parameter"] == "52"
+    assert to_dict_res["value"] == 2.0
+    assert to_dict_res["min_value"] == 0.0
+    assert to_dict_res["max_value"] == 25.0
+    assert to_dict_res["precision"] == 0.1
+
+
 def test_co2_payload_1298_parity() -> None:
     # Arrange
     raw_hex = "02D0"
