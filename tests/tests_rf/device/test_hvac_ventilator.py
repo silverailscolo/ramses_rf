@@ -605,6 +605,7 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     # 2. Verify the intent was transmitted with the correct QoS
     dev._gateway.dispatcher.send.assert_awaited_once()
     intent = dev._gateway.dispatcher.send.await_args[0][0]
+    kwargs = dev._gateway.dispatcher.send.await_args.kwargs
 
     from ramses_rf.enums import Action
 
@@ -612,6 +613,8 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     assert intent.src.id == "37:654321"
     assert intent.dst.id == "32:123456"
     assert intent.data == {"fan_mode": "low", "scheme": "orcon"}
+    # Ventilators don't ack 22F1 — fire-and-forget (issue 995)
+    assert kwargs.get("wait_for_reply") is False
     assert result == "mock_packet"
 
 
@@ -634,6 +637,7 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     # Verify the intent was built using the HGI's ID ("18:000730")
     dev._gateway.dispatcher.send.assert_awaited_once()
     intent = dev._gateway.dispatcher.send.await_args[0][0]
+    kwargs = dev._gateway.dispatcher.send.await_args.kwargs
 
     from ramses_rf.enums import Action
 
@@ -641,6 +645,8 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     assert intent.src.id == "18:000730"
     assert intent.dst.id == "32:123456"
     assert intent.data == {"fan_mode": "high", "scheme": "orcon"}
+    # Ventilators don't ack 22F1 — fire-and-forget (issue 995)
+    assert kwargs.get("wait_for_reply") is False
 
 
 async def test_set_fan_mode_no_src_id_raises() -> None:
