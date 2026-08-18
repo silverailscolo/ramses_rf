@@ -72,7 +72,7 @@ def deep_merge(
                 new_dst[key] = list(set(combined))  # will sort
             except TypeError:
                 # Unhashable elements (e.g. dicts) — dedup manually
-                seen: list = []
+                seen: list[Any] = []
                 for item in combined:
                     if item not in seen:
                         seen.append(item)
