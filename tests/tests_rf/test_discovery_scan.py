@@ -1774,10 +1774,18 @@ CO2_37 = "37:126776"  # CO2 sensor that also sends 31E0
 class TestHvacParentInference:
     """Tests for inferring bound_to from HVAC operational traffic.
 
-    A REM sending 22F1 to a FAN is NOT proof of binding — the REM could
-    be a neighbour's remote broadcasting.  The real proof is when the
-    FAN **answers** the REM (RP from 32: to the REM).  This confirms
-    the FAN acknowledges the REM as a paired remote.
+    Two inference directions:
+
+    1. **FAN→REM**: a FAN (32:) sending a directed I/RP to a REM/CO2
+       confirms binding — the FAN is the controller communicating with
+       its paired remote.
+
+    2. **REM→FAN**: a REM/CO2 sending a directed packet (W/RQ/I) to a
+       FAN (32:) confirms binding.  This is more authoritative than
+       FAN→REM — the REM only sends to the FAN it was 1FC9-paired with
+       (not any FAN in range).  A directed I is proof (the REM addresses
+       its paired FAN specifically); a broadcast I (dst = --:------)
+       is NOT proof (the REM could be a neighbour's remote broadcasting).
 
     See schema_architecture.md: "How HVAC topology COULD be derived
     from traffic".
@@ -1785,11 +1793,14 @@ class TestHvacParentInference:
 
     async def test_fan_reply_infers_parent(self) -> None:
         """A FAN (32:) replying RP to a REM should set bound_to on the
-        REM."""
+        REM.  The REM's RQ to the FAN also sets bound_to (REM→FAN
+        inference) — a directed RQ is proof of binding because the REM
+        only queries its 1FC9-paired FAN."""
         scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
-            # REM sends RQ to FAN
+            # REM sends RQ to FAN — REM→FAN inference fires immediately
+            # (RQ is a directed query, not a broadcast)
             dto1 = make_dto(
                 src=REM_29,
                 dst=FAN_ID,
@@ -1800,9 +1811,10 @@ class TestHvacParentInference:
             scan._process_packet(dto1)
             dev = scan.get_device(REM_29)
             assert dev is not None
-            assert dev.bound_to is None  # not yet confirmed
+            assert dev.bound_to == FAN_ID  # REM→FAN inference
 
-            # FAN replies RP to REM — this confirms binding
+            # FAN replies RP to REM — FAN→REM inference would also set
+            # bound_to (but it's already set from the RQ above)
             dto2 = make_dto(
                 src=FAN_ID,
                 dst=REM_29,
@@ -1817,9 +1829,31 @@ class TestHvacParentInference:
         finally:
             scan.stop()
 
-    async def test_rem_sending_to_fan_does_not_infer(self) -> None:
-        """A REM sending I|22F1 to a FAN should NOT set bound_to — the
-        FAN hasn't confirmed the binding."""
+    async def test_rem_broadcast_to_fan_does_not_infer(self) -> None:
+        """A REM sending broadcast I|22F1 (dst = --:------) should NOT
+        set bound_to — a broadcast is not proof of binding (the REM
+        could be a neighbour's remote broadcasting)."""
+        scan = DiscoveryScan(gateway=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src=REM_29,
+                dst="--:------",
+                code=Code._22F1,
+                verb=Verb.I_,
+                payload="000404",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to is None  # NOT confirmed (broadcast I)
+        finally:
+            scan.stop()
+
+    async def test_rem_directed_i_to_fan_infers_parent(self) -> None:
+        """A REM sending directed I|22F1 to a FAN (dst = 32:...) should
+        set bound_to — a directed I is proof because the REM addresses
+        its 1FC9-paired FAN specifically (not a broadcast)."""
         scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
@@ -1833,7 +1867,51 @@ class TestHvacParentInference:
             scan._process_packet(dto)
             dev = scan.get_device(REM_29)
             assert dev is not None
-            assert dev.bound_to is None  # NOT confirmed
+            assert dev.bound_to == FAN_ID  # directed I = proof
+            assert dev.confidence == "high"
+        finally:
+            scan.stop()
+
+    async def test_rem_w_to_fan_infers_parent(self) -> None:
+        """A REM sending W|22F1 to a FAN should set bound_to — a
+        directed W is proof of binding because the REM only sends
+        commands to its 1FC9-paired FAN."""
+        scan = DiscoveryScan(gateway=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src=REM_29,
+                dst=FAN_ID,
+                code=Code._22F1,
+                verb=Verb.W_,
+                payload="000404",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to == FAN_ID  # REM→FAN inference (directed W)
+            assert dev.confidence == "high"
+        finally:
+            scan.stop()
+
+    async def test_rem_rq_to_fan_infers_parent(self) -> None:
+        """A REM sending RQ|2411 to a FAN should set bound_to — a
+        directed RQ is proof of binding (same as W)."""
+        scan = DiscoveryScan(gateway=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src=REM_29,
+                dst=FAN_ID,
+                code=Code._2411,
+                verb=Verb.RQ,
+                payload="00",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to == FAN_ID  # REM→FAN inference (directed RQ)
+            assert dev.confidence == "high"
         finally:
             scan.stop()
 
