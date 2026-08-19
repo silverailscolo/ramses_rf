@@ -556,13 +556,30 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         return DeviceIdT(hgi or self._known_hgi or HGI_DEV_ADDR.id)
 
     def _set_active_hgi(
-        self, device_id: DeviceIdT, by_signature: bool = False
+        self, device_id: DeviceIdT | None, by_signature: bool = False
     ) -> None:
         """Set the Active Gateway (HGI) device_id.
 
         Send a warning if the include list is configured incorrectly.
+
+        If device_id is None (MQTT bridge where the HGI ID isn't known
+        yet — the ramses_esp hasn't sent its "online" LWT message), no
+        warning is emitted.  The transport will update SZ_ACTIVE_HGI
+        when the real ID arrives, and the hgi_id property reads it from
+        there.  See issue 1002.
         """
         assert self._active_hgi is None  # should only be called once
+
+        # MQTT bridges: HGI ID not known yet (ramses_esp hasn't sent
+        # its "online" LWT message).  Defer the check — the transport
+        # will update SZ_ACTIVE_HGI when the real ID arrives.
+        if device_id is None:
+            _LOGGER.debug(
+                "Active gateway ID not yet known (MQTT bridge?), "
+                "deferring known_list check until the device sends "
+                "its online message"
+            )
+            return
 
         msg = f"The active gateway '{device_id}: {{ class: HGI }}' "
         msg += "(by signature)" if by_signature else "(by filter)"
@@ -599,6 +616,15 @@ class _DeviceIdFilterMixin(_BaseProtocol):
         In any one packet, an excluded device_id 'trumps' an included
         device_id.
         """
+        # Deferred HGI check: if _set_active_hgi was called with None
+        # (MQTT bridge, HGI ID not known yet), check now whether the
+        # transport has learned the real HGI ID.  This runs the
+        # known_list check that was skipped during connection_made.
+        # See issue 1002.
+        if self._active_hgi is None and self._transport and not sending:
+            real_hgi = self._transport.get_extra_info(SZ_ACTIVE_HGI)
+            if real_hgi is not None:
+                self._set_active_hgi(real_hgi)
 
         def warn_foreign_hgi(device_id: DeviceIdT) -> None:
             current_date = dt.now().date()
