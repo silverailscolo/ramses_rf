@@ -771,6 +771,34 @@ class DiscoveryScan:
                         code,
                         verb.strip(),
                     )
+                # REM→FAN inference (known device): a REM/CO2 sending a
+                # directed packet (W/RQ/I) to a FAN (32:) confirms
+                # binding.  More authoritative than FAN→REM — the REM
+                # only sends to the FAN it was 1FC9-paired with (not any
+                # FAN in range).  A directed I is proof because the REM
+                # addresses its paired FAN specifically; a broadcast I
+                # (dst = --:------) is filtered out by _is_valid_address.
+                elif (
+                    not is_hgi
+                    and not device.bound_to
+                    and is_source
+                    and destination
+                    and _is_valid_address(destination)
+                    and destination.startswith("32:")
+                    and verb in (Verb.W_, Verb.RQ, Verb.I_)
+                    and code in _HVAC_PARENT_INFERENCE_CODES
+                ):
+                    device.bound_to = destination
+                    device.confidence = "high"
+                    self._dirty = True
+                    _LOGGER.debug(
+                        "DiscoveryScan: HVAC bound_to %s -> %s (known device, "
+                        "REM→FAN, code=%s, verb=%s)",
+                        device_id,
+                        destination,
+                        code,
+                        verb.strip(),
+                    )
                 # DHW topology inference for known devices: directed interaction
                 # between a CTL (01:/23:) and a DHW sensor (07:) confirms binding.
                 elif (
@@ -945,6 +973,23 @@ class DiscoveryScan:
                 and code in _HVAC_PARENT_INFERENCE_CODES
             ):
                 device.bound_to = source
+            # REM→FAN inference (new device): a REM/CO2 sending a
+            # directed packet (W/RQ/I) to a FAN (32:) confirms binding.
+            # More authoritative than FAN→REM — the REM only sends to
+            # its 1FC9-paired FAN.  A directed I is proof (the REM
+            # addresses its paired FAN specifically); a broadcast I
+            # (dst = --:------) is filtered out by _is_valid_address.
+            elif (
+                not is_hgi
+                and is_source
+                and destination
+                and _is_valid_address(destination)
+                and destination.startswith("32:")
+                and verb in (Verb.W_, Verb.RQ, Verb.I_)
+                and code in _HVAC_PARENT_INFERENCE_CODES
+            ):
+                device.bound_to = destination
+                device.confidence = "high"
             # DHW topology inference: directed interaction between CTL and DHW sensor
             elif (
                 not is_hgi
@@ -1059,6 +1104,33 @@ class DiscoveryScan:
         ):
             device.bound_to = source
             changed = True
+        # REM→FAN inference (existing device): a REM/CO2 sending a
+        # directed packet (W/RQ/I) to a FAN (32:) confirms binding.
+        # More authoritative than FAN→REM — the REM only sends to
+        # its 1FC9-paired FAN.  A directed I is proof (the REM
+        # addresses its paired FAN specifically); a broadcast I
+        # (dst = --:------) is filtered out by _is_valid_address.
+        elif (
+            not is_hgi
+            and not device.bound_to
+            and is_source
+            and destination
+            and _is_valid_address(destination)
+            and destination.startswith("32:")
+            and verb in (Verb.W_, Verb.RQ, Verb.I_)
+            and code in _HVAC_PARENT_INFERENCE_CODES
+        ):
+            device.bound_to = destination
+            device.confidence = "high"
+            changed = True
+            _LOGGER.debug(
+                "DiscoveryScan: HVAC bound_to %s -> %s (REM→FAN, "
+                "code=%s, verb=%s)",
+                device_id,
+                destination,
+                code,
+                verb.strip(),
+            )
         # DHW topology inference for existing devices
         elif (
             not is_hgi
