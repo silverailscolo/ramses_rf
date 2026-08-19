@@ -744,6 +744,13 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[Verb, Any]]] = {
         Code._22F1: {I_: {}},
         Code._22F3: {I_: {}},
         Code._22F7: {RQ: {}, W_: {}},  # from a VMI (only?)
+        # TODO: 2411 is listed for REM with "VMI only?" caveat, but a
+        # normal REM does NOT send 2411 — only a DIS does.  The scan
+        # engine and HvacTopologyHandler cannot distinguish DIS from REM
+        # by VC pairs alone (see _HVAC_VC_PAIR_BY_CLASS).  When the
+        # strategy pattern arrives (issue 939), a DisStrategy could use
+        # 2411 frequency to distinguish.  See also: discovery_scan.py
+        # _classify, pipeline/topology_handlers/hvac.py.
         Code._2411: {RQ: {}, W_: {}},  # from a VMI (only?)
         Code._313F: {RQ: {}, W_: {}},  # from a VMI (only?)
         Code._31DA: {RQ: {}},  # to a VMI (only?)
@@ -834,6 +841,16 @@ _HVAC_VC_PAIR_BY_CLASS: dict[DevType, tuple[tuple[Verb, Code], ...]] = {
     DevType.FAN: ((I_, Code._31D9), (I_, Code._31DA), (RP, Code._31DA)),
     DevType.HUM: ((I_, Code._12A0),),
     DevType.REM: ((I_, Code._22F1), (I_, Code._22F3)),
+    # TODO: DIS is not distinguishable from REM by VC pairs alone.
+    # A DIS (Orcon RF15 Display) sends RQ 2411 and RQ 31DA as normal
+    # behavior, but so does a REM (per the protocol table, with "VMI
+    # only?" caveats).  The key difference is that a DIS sends 2411
+    # routinely, while a bound REM only sends it when prompted by a VMI.
+    # The scan engine's _classify cannot distinguish DIS from REM — it
+    # falls to the 37: prefix fallback (REM) for both.  When the strategy
+    # pattern arrives (issue 939), a DisStrategy could use 2411 frequency
+    # or the presence of 1470/042F (DIS-only codes) to distinguish.
+    # See also: discovery_scan.py _classify, hvac.py HvacTopologyHandler.
 }
 HVAC_KLASS_BY_VC_PAIR: dict[tuple[Verb, Code], DevType] = {
     t: k for k, v in _HVAC_VC_PAIR_BY_CLASS.items() for t in v

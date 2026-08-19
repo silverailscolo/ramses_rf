@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
@@ -48,6 +49,8 @@ class TopologyBuilder:
         self,
         emit_event_cb: Callable[[TopologyChangedEvent], None],
         enable_eavesdrop: bool = False,
+        device_class_lookup_cb: Callable[[str], dict[str, Any] | None]
+        | None = None,
     ) -> None:
         """Initialize the TopologyBuilder.
 
@@ -57,6 +60,11 @@ class TopologyBuilder:
         :param enable_eavesdrop: Flag toggling heuristic class promotions.
             If False (default), only explicit configuration rules process.
         :type enable_eavesdrop: bool
+        :param device_class_lookup_cb: Optional callback to look up the
+            current device traits (dict with "class", "locked", etc.)
+            by device_id.  Passed to handlers that need it for
+            contradiction detection.
+        :type device_class_lookup_cb: Callable[[str], dict[str, Any] | None] | None
         :returns: None
         :rtype: None
         """
@@ -83,7 +91,9 @@ class TopologyBuilder:
                 emit_event_cb, enable_eavesdrop=enable_eavesdrop
             ),
             HvacTopologyHandler(
-                emit_event_cb, enable_eavesdrop=enable_eavesdrop
+                emit_event_cb,
+                enable_eavesdrop=enable_eavesdrop,
+                device_class_lookup_cb=device_class_lookup_cb,
             ),
         ]
 

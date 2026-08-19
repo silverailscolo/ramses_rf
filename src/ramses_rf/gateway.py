@@ -206,6 +206,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         # Instantiate the new asynchronous Topology Builder engine
         self._topology_builder = TopologyBuilder(
             emit_event_cb=self._device_registry.handle_topology_event,
+            device_class_lookup_cb=self._lookup_device_class,
         )
 
         self._message_store: MessageStoreInterface | None = None
@@ -237,6 +238,29 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             send_func=lambda dto: self.async_send_cmd(dto),
         )
         self._polling_manager = PollingManager(self, shadow_mode=False)
+
+    def _lookup_device_class(self, device_id: str) -> dict[str, Any] | None:
+        """Look up the current device traits for a device_id.
+
+        Used by topology handlers to detect contradictions between
+        the known_list class and observed message patterns.
+
+        :param device_id: The device ID to look up.
+        :type device_id: str
+        :returns: A dict with keys "class" (device slug) and "locked"
+            (whether the user has locked the class), or None.
+        :rtype: dict[str, Any] | None
+        """
+        device = self._device_registry.device_by_id.get(DeviceIdT(device_id))
+        if not device:
+            return None
+        slug = getattr(device, "_SLUG", None)
+        # Check known_list for _locked trait (user override)
+        known = self._gwy_config.known_list.get(device_id, {})
+        return {
+            "class": slug,
+            "locked": bool(known.get("_locked", False)),
+        }
 
     def __repr__(self) -> str:
         """Return an unambiguous string representation."""

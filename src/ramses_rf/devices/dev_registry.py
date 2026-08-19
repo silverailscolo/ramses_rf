@@ -363,6 +363,15 @@ class DeviceRegistry:
                 f"UPDATED SSOT TRAITS: {event.device_id} class -> {new_class_slug} via {event.causation}"
             )
 
+            # 2. For contradiction-based reclassifications (e.g. a FAN
+            # that is actually a DIS), do NOT auto-swap the device
+            # object at runtime.  The SSOT known_list is updated so the
+            # discovery/config flow can present the suggested class to
+            # the user.  The user accepts the change via the config
+            # flow, which reloads the integration and creates the
+            # correct entities.  This is consistent with how other
+            # promotions work.
+
     def _handle_create_controller(self, event: TopologyChangedEvent) -> None:
         """Instruct a device to initialize its Evohome TCS."""
         if not event.device_id:
