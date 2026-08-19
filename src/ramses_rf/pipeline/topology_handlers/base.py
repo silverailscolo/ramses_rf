@@ -17,6 +17,8 @@ class TopologyHandler(abc.ABC):
         self,
         emit_event_cb: Callable[[TopologyChangedEvent], None],
         enable_eavesdrop: bool = False,
+        device_class_lookup_cb: Callable[[str], dict[str, Any] | None]
+        | None = None,
     ) -> None:
         """Initialize the subsystem topology handler.
 
@@ -24,9 +26,18 @@ class TopologyHandler(abc.ABC):
         :type emit_event_cb: Callable[[TopologyChangedEvent], None]
         :param enable_eavesdrop: If True, heuristic class promotions are enabled.
         :type enable_eavesdrop: bool
+        :param device_class_lookup_cb: Optional callback to look up the
+            current device traits (dict with keys like "class",
+            "locked") by device_id.  Used by handlers that need to
+            detect contradictions between the known_list class and
+            observed message patterns.
+        :type device_class_lookup_cb: Callable[[str], dict[str, Any] | None] | None
         """
         self._emit: Callable[[TopologyChangedEvent], None] = emit_event_cb
         self._enable_eavesdrop: bool = enable_eavesdrop
+        self._device_class_lookup_cb: (
+            Callable[[str], dict[str, Any] | None] | None
+        ) = device_class_lookup_cb
 
     @abc.abstractmethod
     def consume(self, msg: Message) -> None:

@@ -82,6 +82,7 @@ def sch_global_traits_dict_factory(
             ),
             vol.Optional(SZ_IS_BATTERY, default=False): vol.Any(None, bool),
             vol.Optional(vol.Remove("_note")): str,
+            vol.Optional("locked", default=False): vol.Any(None, bool),
         },
         extra=vol.PREVENT_EXTRA,
     )
@@ -171,6 +172,7 @@ _TRAIT_KEY_MAP: Final[dict[str, str]] = {
     "_class": SZ_CLASS,
     "_polling_interval": SZ_POLLING_INTERVAL,
     "_is_battery": SZ_IS_BATTERY,
+    "_locked": "locked",
 }
 
 # _-prefixed keys that are preserved as-is (not stripped/mapped) because

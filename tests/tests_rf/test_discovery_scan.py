@@ -1968,3 +1968,116 @@ class TestHvacParentInference:
             assert dev.bound_to == FAN_ID
         finally:
             scan.stop()
+
+
+class TestEvidenceBasedContradiction:
+    """Tests for evidence-based contradiction re-classification.
+
+    The scan engine re-classifies known devices when source packets
+    contradict the declared class.  But only evidence-based
+    classifications (VC pair matches, CTL-only codes) should count as
+    contradictions — prefix fallbacks (e.g. 37: -> REM) are guesses and
+    should NOT contradict a declared class.
+
+    Without this, a CO2 device (37: prefix) sending generic codes like
+    10E0 would be re-classified as REM just because 37: falls to REM
+    by prefix (false positive on hass).
+    """
+
+    def test_co2_not_reclassified_by_generic_code(self) -> None:
+        """A CO2 device sending 10E0 (generic) should NOT be re-classified.
+
+        37:126776 is declared as CO2 in the known_list.  It sends 10E0
+        (a generic code).  _classify returns REM for 37: prefix fallback,
+        but this is a guess, not evidence -- so it should NOT increment
+        contradiction_count or re-classify the device.
+        """
+        gwy = make_mock_gateway(known_list={"37:126776": {"class": "CO2"}})
+        scan = DiscoveryScan(gwy)
+        # Send 3+ generic 10E0 packets -- would trigger re-classification
+        # if prefix fallbacks counted as contradictions
+        for _ in range(5):
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._10E0, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2  # still CO2
+        assert dev.contradiction_count == 0  # no contradiction counted
+        scan.stop()
+
+    def test_co2_not_reclassified_by_31e0(self) -> None:
+        """A CO2 device sending 31E0 (vent_demand) should NOT be re-classified.
+
+        31E0 is not in _VC_TO_TYPE, so _classify falls to prefix (REM).
+        But 31E0 is a generic HVAC code -- not evidence of REM.
+        """
+        gwy = make_mock_gateway(known_list={"37:126776": {"class": "CO2"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(5):
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._31E0, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2
+        assert dev.contradiction_count == 0
+        scan.stop()
+
+    def test_co2_matching_packet_resets_contradiction(self) -> None:
+        """A CO2 device sending 1298 (CO2 VC pair) resets contradiction count.
+
+        (I, 1298) maps to CO2 in _VC_TO_TYPE -- this is evidence-based
+        and matches the declared class, so it resets the count.
+        """
+        gwy = make_mock_gateway(known_list={"37:126776": {"class": "CO2"}})
+        scan = DiscoveryScan(gwy)
+        # Send a 1298 packet (evidence-based, matches CO2)
+        scan._process_packet(
+            make_dto(src="37:126776", code=Code._1298, verb=Verb.I_)
+        )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2
+        assert dev.contradiction_count == 0
+        scan.stop()
+
+    def test_rem_reclassified_by_co2_evidence(self) -> None:
+        """A REM device sending 1298 (CO2 evidence) IS re-classified to CO2.
+
+        (I, 1298) is a VC pair match for CO2 -- this IS evidence-based.
+        After 3+ such packets, the device should be re-classified.
+        """
+        gwy = make_mock_gateway(known_list={"37:222222": {"class": "REM"}})
+        scan = DiscoveryScan(gwy)
+        # Send 4x 1298 packets (evidence-based, contradicts REM)
+        # First packet creates the device, subsequent packets increment
+        # contradiction_count.  After 3 contradictions (4th packet),
+        # likely_type is updated.
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:222222", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:222222")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2  # re-classified
+        assert dev.confidence == "high"
+        scan.stop()
+
+    def test_fan_reclassified_by_rem_evidence(self) -> None:
+        """A FAN device sending 22F1 (REM evidence) IS re-classified to REM.
+
+        (I, 22F1) is a VC pair match for REM -- this IS evidence-based.
+        After 3+ such packets, the device should be re-classified.
+        """
+        gwy = make_mock_gateway(known_list={"37:333333": {"class": "FAN"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:333333", code=Code._22F1, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:333333")
+        assert dev is not None
+        assert dev.likely_type == DevType.REM  # re-classified
+        assert dev.confidence == "high"
+        scan.stop()
