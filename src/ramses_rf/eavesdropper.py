@@ -612,10 +612,19 @@ class EavesdropEngine:
                 None,
             ):
                 d_temp = await device.temperature()
-                if d_temp is not None:
-                    if d_temp not in testable_sensors_map:
-                        testable_sensors_map[d_temp] = []
-                    testable_sensors_map[d_temp].append(device)
+                if d_temp is None:
+                    continue
+                # Only consider devices that broadcast 30C9 after the
+                # previous controller array — this ensures temporal
+                # correlation within the same polling cycle (issue 1010).
+                d_msgs = await device.entity_state.get_message_log_flat()
+                if Code._30C9 not in d_msgs:
+                    continue
+                if d_msgs[Code._30C9].dtm <= prev.dtm:
+                    continue
+                if d_temp not in testable_sensors_map:
+                    testable_sensors_map[d_temp] = []
+                testable_sensors_map[d_temp].append(device)
 
         unique_sensors: dict[float, Device] = {}
         for temp_val, candidate_devices in testable_sensors_map.items():
@@ -678,12 +687,19 @@ class EavesdropEngine:
     async def _eavesdrop_from_trv_broadcast(
         self, tcs: Any, msg: Message
     ) -> None:
-        """Correlate a new TRV temperature broadcast against known zones."""
+        """Correlate a new TRV temperature broadcast against known zones.
+
+        A TRV can be both an actuator and the designated zone sensor —
+        Evohome lets the user pick which TRV senses temperature for the
+        zone.  Therefore we must NOT skip TRVs that already have a parent
+        zone (issue 1010).
+        """
         if not isinstance(msg.payload, dict):
             return
 
+        # Skip devices that are already a sensor for another zone.
         device = self._gateway.device_registry.device_by_id.get(msg.src.id)
-        if device is not None and getattr(device, "_parent", None) is not None:
+        if device is not None and getattr(device, "_is_sensor", False):
             return
 
         trv_temp = msg.payload.get(SZ_TEMPERATURE)
@@ -697,6 +713,7 @@ class EavesdropEngine:
                 if zone_temp == trv_temp:
                     matching_zones.append(zone)
 
+        # COLLISION ABSTENTION: Bind only if exactly one zone matches
         if len(matching_zones) == 1:
             with contextlib.suppress(
                 exc.DeviceNotFoundError,

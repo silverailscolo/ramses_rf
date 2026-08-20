@@ -44,6 +44,7 @@
             },
             "05": {
                 "class": "radiator_valve",
+                "sensor": "04:230315",
                 "actuators": [
                     "04:230315"
                 ]
