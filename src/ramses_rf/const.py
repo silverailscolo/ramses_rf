@@ -325,6 +325,9 @@ WB_STATUS_CODES: Final[dict[str, str]] = {
 
 # Device Availability Timeouts
 HEARTBEAT_TIMEOUT_DEFAULT = td(hours=1)
+HEARTBEAT_TIMEOUT_BDR = td(
+    hours=24
+)  # BDR91: mains relay, only transmits 3EF0 on state change
 HEARTBEAT_TIMEOUT_DHW = td(
     hours=24
 )  # CS92A: battery DHW sensor, polled every 24h by CTL
