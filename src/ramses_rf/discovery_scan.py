@@ -86,6 +86,19 @@ _CTL_ONLY_CODES_WITH_VERB: dict[Code | str, frozenset[Verb | str]] = {
     ),  # I/RP = CTL broadcasts time; RQ = TRV asks
 }
 
+# Codes used in the HVAC ventilation domain (FAN/REM/DIS).
+# These codes provide evidence about a device's type even when the
+# specific (verb, code) pair is not in _VC_TO_TYPE.  For example,
+# RQ 31DA is not in HVAC_KLASS_BY_VC_PAIR (only I/RP 31DA map to FAN),
+# and 2411 is not in the table at all (both FANs and REMs/DISs use it).
+# But a FAN-classified device sending RQ 31DA or RQ 2411 is evidence
+# that it's NOT a FAN (FANs respond with RP, they don't request).
+# When sent as src by a device classified as a different type, these
+# codes count as evidence-based contradictions.
+_HVAC_DOMAIN_CODES: frozenset[Code | str] = frozenset(
+    {Code._31D9, Code._31DA, Code._22F1, Code._22F3, Code._2411}
+)
+
 # Codes that indicate battery-powered devices.
 _BATTERY_CODES: frozenset[Code | str] = frozenset({Code._1060, Code._1FC9})
 
@@ -143,7 +156,8 @@ def _is_evidence_based(
     """Check if a (verb, code) pair provides evidence-based classification.
 
     Returns True if the pair maps to a specific DevType via _VC_TO_TYPE
-    (a verb+code signature match), or if the code is CTL-only.  These
+    (a verb+code signature match), if the code is CTL-only, or if the
+    code is in the HVAC ventilation domain (_HVAC_DOMAIN_CODES).  These
     are evidence-based classifications that can legitimately contradict
     a declared class.
 
@@ -152,9 +166,17 @@ def _is_evidence_based(
     prefix fallback should NOT count as a contradiction — otherwise a
     CO2 device sending generic codes like 10E0 would be re-classified as
     REM just because 37: falls to REM by prefix.
+
+    The _HVAC_DOMAIN_CODES check catches codes like RQ 31DA and RQ 2411
+    that are not in _VC_TO_TYPE (only I/RP 31DA map to FAN, and 2411 is
+    not in the table at all) but are still strong evidence that a
+    FAN-classified device is actually a REM/DIS (a FAN responds with RP,
+    it doesn't send RQ).
     """
     vc_key = (verb, code)
     if vc_key in _VC_TO_TYPE:
+        return True
+    if is_source and str(code) in {str(c) for c in _HVAC_DOMAIN_CODES}:
         return True
     return bool(
         is_source
