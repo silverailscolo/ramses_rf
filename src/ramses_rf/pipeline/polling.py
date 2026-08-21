@@ -195,11 +195,14 @@ class PollingManager:
         :returns: A dictionary mapping active command codes to interval seconds.
         :rtype: PollingIntervalsT
         """
+        slug = getattr(device, "_SLUG", "DEFAULT")
+        if slug == DevType.HGI:
+            return {}
+
         # Battery devices sleep and cannot receive RF requests; never poll them
         if device.is_battery:
             return {}
 
-        slug = getattr(device, "_SLUG", "DEFAULT")
         fallback_schedule = DEFAULT_POLLING_SCHEDULES.get(
             slug, DEFAULT_POLLING_SCHEDULES["DEFAULT"]
         )
