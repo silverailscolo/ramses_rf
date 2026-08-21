@@ -659,6 +659,12 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             if dev_id[:2] == "18" and dev_id != HGI_DEV_ADDR.id:
                 if dev_id == self._active_hgi:
                     continue
+                # A known/configured HGI (e.g. a second gateway declared
+                # in the known_list, which the discovery_scan config schema
+                # permits) is not a Foreign gateway — suppress the noise
+                # warning for it (issue 1020).
+                if dev_id in self._include:
+                    continue
                 if self._active_hgi:
                     warn_foreign_hgi(dev_id)
                 continue

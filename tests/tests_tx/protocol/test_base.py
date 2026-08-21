@@ -215,6 +215,52 @@ async def test_is_wanted_addrs_foreign_hgi_not_blocked(
     )
 
 
+async def test_is_wanted_addrs_known_hgi_no_foreign_warning(
+    protocol: DummyProtocol,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A known/configured HGI must not be flagged as a Foreign gateway.
+
+    The discovery_scan config schema permits multiple HGIs to be declared
+    in the known_list.  A second HGI that is in the known_list is not
+    foreign — it is a declared gateway — so the 'potentially a Foreign
+    gateway' warning must be suppressed for it (issue 1020).
+    """
+    protocol._active_hgi = DeviceIdT("18:130140")
+    protocol._include = [DeviceIdT("18:154951")]  # second, known HGI
+
+    with caplog.at_level(logging.WARNING):
+        result = protocol._is_wanted_addrs(
+            DeviceIdT("18:154951"), DeviceIdT("01:216136")
+        )
+
+    # Known HGIs are never blocked (foreign-HGI exemption still applies)
+    assert result is True
+    # And no Foreign gateway warning should be emitted for a known HGI
+    assert not any("Foreign gateway" in r.message for r in caplog.records)
+
+
+async def test_is_wanted_addrs_unknown_hgi_still_warns(
+    protocol: DummyProtocol,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unknown HGI (not in the known_list) still triggers the warning.
+
+    Only HGIs declared in the known_list are suppressed (issue 1020); a
+    genuinely unknown 18: device should still produce the Foreign gateway
+    warning so the user can decide whether to configure it.
+    """
+    protocol._active_hgi = DeviceIdT("18:130140")
+    protocol._include = []  # 18:154951 is not known
+
+    with caplog.at_level(logging.WARNING):
+        protocol._is_wanted_addrs(
+            DeviceIdT("18:154951"), DeviceIdT("01:216136")
+        )
+
+    assert any("Foreign gateway" in r.message for r in caplog.records)
+
+
 async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
     protocol: DummyProtocol,
 ) -> None:
