@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import Code, Verb
+from ramses_rf.const import Code, DevType, Verb
 from ramses_rf.devices.dev_base import BatteryState, DeviceBase
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.gateway import Gateway
@@ -111,6 +111,23 @@ def test_polling_manager_custom_trait_override(
     assert schedule[Code._1F41] == 1800
     assert schedule[Code._10E0] == 43200
     assert schedule[Code._313F] == DEFAULT_POLLING_SCHEDULES["CTL"][Code._313F]
+
+
+@pytest.mark.parametrize("device_id", ["18:130140", "18:072981"])
+def test_polling_manager_hgi_device_zero_polling(
+    mock_gateway: MagicMock, device_id: str
+) -> None:
+    hgi = MockDevice(
+        mock_gateway,
+        device_id,
+        slug=DevType.HGI,
+        traits=DeviceTraits(polling_interval={Code._10E0: 60}),
+    )
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+
+    assert poller.resolve_schedule_for_device(hgi) == {}
+    assert poller.update_device_tasks(hgi) == set()
+    assert poller.get_scheduled_cmds() == []
 
 
 def test_polling_manager_battery_device_zero_polling(
