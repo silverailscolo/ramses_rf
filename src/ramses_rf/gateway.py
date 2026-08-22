@@ -516,18 +516,13 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             )
             await self._topology_builder.consume(core_msg)
 
+        await process_msg(self, app_msg)
+
         # Phase 2.95 CQRS Strangler Bridge: Because the Phase 2.99 Async Queue Cutover
         # is currently paused, we must feed the CQRS StateProjector synchronously
         # here so the PR 2 Read-Models get properly hydrated in production.
-        # NOTE: Must run BEFORE process_msg so the CQRS read-model dicts are
-        # populated before SIGNAL_UPDATE is dispatched (which triggers HA
-        # entities to resolve async properties like relay_demands/heat_demands/
-        # tpi_params).  If process_msg runs first, the async properties resolve
-        # to None and the 30s cooldown prevents re-resolution (issue 1102).
         if self.state_projector is not None:
             self.state_projector.process_message_state(app_msg)
-
-        await process_msg(self, app_msg)
 
     def add_msg_handler(
         self,
