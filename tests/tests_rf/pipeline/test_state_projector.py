@@ -14,8 +14,14 @@ from typing import Any
 from ramses_rf.const import (
     SZ_COOLING_DEMAND,
     SZ_DOMAIN_INDEX,
+    SZ_LOCAL_OVERRIDE,
+    SZ_MAX_TEMP,
+    SZ_MIN_TEMP,
     SZ_MODULATION_LEVEL,
+    SZ_MULTIROOM_MODE,
+    SZ_OPENWINDOW_FUNCTION,
     SZ_REL_MODULATION_LEVEL,
+    SZ_RELAY_DEMAND,
     SZ_REMAINING_DAYS,
     SZ_SETPOINT,
     SZ_ZONE_INDEX,
@@ -760,3 +766,162 @@ def test_issue_989_interleaved_packet_sequence_no_zone_00_oscillation() -> (
         worker.process_message_state(msg)
         # Assert: Throughout the entire sequence, Zone 00 setpoint NEVER oscillates
         assert zone_00.temp_state.setpoint == 5.0
+
+
+def test_000A_zone_config_updates_zone_state() -> None:
+    """000A (zone config) populates ZoneState.min_temp/max_temp (issue 1102).
+
+    The CTL broadcasts 000A with zone config arrays.  Without a zone_index
+    in to_dict() and a zone state handler, ZoneState.min_temp/max_temp were
+    permanently None and ramses_cc fell back to hardcoded 5/35°C.
+    """
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:216136"
+    ctl_dev._SLUG = DevType.CTL
+
+    zone_03 = FakeZone("01:216136_03")
+    mock_tcs = type(
+        "FakeTcs",
+        (),
+        {
+            "id": "01:216136",
+            "appliance_control": None,
+            "zone_by_index": {"03": zone_03},
+        },
+    )()
+    registry = FakeRegistry(ctl_dev)
+    registry.systems = [mock_tcs]
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._000A,
+        verb=Verb.I_,
+        payload={
+            SZ_ZONE_INDEX: "03",
+            SZ_MIN_TEMP: 5.0,
+            SZ_MAX_TEMP: 35.0,
+            SZ_LOCAL_OVERRIDE: True,
+            SZ_OPENWINDOW_FUNCTION: True,
+            SZ_MULTIROOM_MODE: False,
+        },
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg)
+
+    assert zone_03.zone_state.min_temp == 5.0
+    assert zone_03.zone_state.max_temp == 35.0
+    assert zone_03.zone_state.local_override is True
+    assert zone_03.zone_state.openwindow_function is True
+    assert zone_03.zone_state.multiroom_mode is False
+
+
+def test_000A_to_dict_includes_zone_index() -> None:
+    """ZoneConfigPayload.to_dict() must include zone_index for routing (issue 1102)."""
+    from ramses_rf.payloads.heating import ZoneConfigPayload
+
+    p = ZoneConfigPayload(
+        zone_index=0x0B, zone_flags=0x00, min_temp=5.0, max_temp=35.0
+    )
+    d = p.to_dict()
+    assert SZ_ZONE_INDEX in d, "zone_index must be in to_dict for routing"
+    assert d[SZ_ZONE_INDEX] == "0B"
+    assert d[SZ_MIN_TEMP] == 5.0
+    assert d[SZ_MAX_TEMP] == 35.0
+
+
+def test_0008_relay_demand_populates_tcs_dict() -> None:
+    """0008 relay demand populates TCS._relay_demands per domain (issue 1102 / ramses_cc#1026).
+
+    The legacy _handle_msg stored 0008 messages keyed by domain in
+    _relay_demands.  After the CQRS migration, the dict was never
+    populated, so tcs.relay_demands always returned None.
+    """
+    from ramses_rf.models import DemandState
+
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:216136"
+    ctl_dev._SLUG = DevType.CTL
+    ctl_dev.demand_state = DemandState()
+
+    class FakeTcsWithDicts:
+        id = "01:216136"
+        appliance_control = None
+        zone_by_index = {}
+        _heat_demands: dict[str, Any] = {}
+        _relay_demands: dict[str, Any] = {}
+        _tpi_params: dict[str, Any] = {}
+
+    mock_tcs = FakeTcsWithDicts()
+    ctl_dev.tcs = mock_tcs
+    registry = FakeRegistry(ctl_dev)
+    registry.systems = [mock_tcs]
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._0008,
+        verb=Verb.I_,
+        payload={SZ_DOMAIN_INDEX: "FC", SZ_RELAY_DEMAND: 50.0},
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg)
+
+    assert "FC" in mock_tcs._relay_demands, (
+        "TCS._relay_demands should be populated with FC domain"
+    )
+
+
+def test_1100_tpi_params_populates_tcs_dict() -> None:
+    """1100 TPI params populate TCS._tpi_params dict (issue 1102 / ramses_cc#1026).
+
+    tcs.tpi_params was using the deprecated entity_state.get_value(Code._1100)
+    which is never hydrated.  Now it reads from _tpi_params populated by
+    the CQRS handler.
+    """
+    from ramses_rf.models import DemandState
+
+    ctl_dev = FakeDevice()
+    ctl_dev.id = "01:216136"
+    ctl_dev._SLUG = DevType.CTL
+    ctl_dev.demand_state = DemandState()
+
+    class FakeTcsWithTpi:
+        id = "01:216136"
+        appliance_control = None
+        zone_by_index = {}
+        _heat_demands: dict[str, Any] = {}
+        _relay_demands: dict[str, Any] = {}
+        _tpi_params: dict[str, Any] = {}
+
+    mock_tcs = FakeTcsWithTpi()
+    ctl_dev.tcs = mock_tcs
+    registry = FakeRegistry(ctl_dev)
+    registry.systems = [mock_tcs]
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._1100,
+        verb=Verb.I_,
+        payload={
+            SZ_DOMAIN_INDEX: "FC",
+            "cycle_rate": 6,
+            "min_on_time": 1.0,
+            "min_off_time": 1.0,
+            "proportional_band_width": None,
+        },
+        src_id="01:216136",
+        dst_id="--:------",
+    )
+    worker.process_message_state(msg)
+
+    assert "FC" in mock_tcs._tpi_params, (
+        "TCS._tpi_params should be populated with FC domain"
+    )
+    assert mock_tcs._tpi_params["FC"]["cycle_rate"] == 6

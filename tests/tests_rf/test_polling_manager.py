@@ -323,11 +323,12 @@ def test_polling_manager_ctl_without_tcs_creates_device_level_0004(
     active_keys = poller.update_device_tasks(ctl_dev)
 
     # ASSERT
-    # 7 device-level tasks: 10E0, 1F41, 2E04, 313F, 0004, 2349, 30C9
-    assert len(active_keys) == 7
+    # 8 device-level tasks: 10E0, 1F41, 2E04, 313F, 1100, 0004, 2349, 30C9
+    assert len(active_keys) == 8
     assert ("01:111111", Code._0004) in active_keys
     assert ("01:111111", Code._2349) in active_keys
     assert ("01:111111", Code._30C9) in active_keys
+    assert ("01:111111", Code._1100) in active_keys
     # No zone-level keys (3-tuples)
     assert all(len(k) == 2 for k in active_keys)
 
@@ -364,11 +365,11 @@ def test_polling_manager_ctl_with_zones_expands_0004_2349_and_30C9_per_zone(
     active_keys = poller.update_device_tasks(ctl_dev)
 
     # ASSERT
-    # 4 device-level tasks (10E0, 1F41, 2E04, 313F)
+    # 5 device-level tasks (10E0, 1F41, 2E04, 313F, 1100)
     # + 2 zone-level 0004 tasks + 2 zone-level 2349 tasks + 2 zone-level 30C9 tasks
     device_level = {k for k in active_keys if len(k) == 2}
     zone_level = {k for k in active_keys if len(k) == 3}
-    assert len(device_level) == 4
+    assert len(device_level) == 5
     assert len(zone_level) == 6
 
     # Zone-level keys for 0004

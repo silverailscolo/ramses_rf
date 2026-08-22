@@ -181,7 +181,19 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         :returns: The TPI parameters dictionary, if available.
         :rtype: PayDictT._1100 | None
         """
-        return await self.entity_state.get_value(Code._1100)
+        # Read from the CQRS-populated dict (issue 1102 / ramses_cc#1026).
+        # The legacy entity_state.get_value(Code._1100) path is deprecated.
+        if self._tpi_params:
+            for params in self._tpi_params.values():
+                return {
+                    "cycle_rate": params.get("cycle_rate"),
+                    "min_on_time": params.get("min_on_time"),
+                    "min_off_time": params.get("min_off_time"),
+                    "proportional_band_width": params.get(
+                        "proportional_band_width"
+                    ),
+                }
+        return None
 
     async def heat_demand(self) -> float | None:  # 3150/FC
         """Return the current heat demand for the system.
@@ -848,6 +860,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         self._heat_demands: dict[str, Any] = {}
         self._relay_demands: dict[str, Any] = {}
         self._relay_failsafes: dict[str, Any] = {}
+        self._tpi_params: dict[str, Any] = {}  # 1100, keyed by domain_id
 
     def _update_schema(self, **schema: Any) -> None:
         """Update a CH/DHW system with new schema attrs.
