@@ -54,11 +54,16 @@ from ramses_rf.const import (
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_LANGUAGE,
+    SZ_LOCAL_OVERRIDE,
     SZ_MAX_REL_MODULATION,
+    SZ_MAX_TEMP,
+    SZ_MIN_TEMP,
     SZ_MINUTES,
     SZ_MODE,
     SZ_MODULATION_LEVEL,
+    SZ_MULTIROOM_MODE,
     SZ_NAME,
+    SZ_OPENWINDOW_FUNCTION,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
     SZ_OVERRUN,
@@ -963,7 +968,7 @@ class StateProjector:
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
         """Translate demand opcodes into DemandState."""
-        if msg.code not in (Code._3150, Code._0008, Code._0009):
+        if msg.code not in (Code._3150, Code._0008, Code._0009, Code._1100):
             return
 
         updates: dict[str, Any] = {}
@@ -1004,6 +1009,22 @@ class StateProjector:
         elif msg.code == Code._0009 and "failsafe_enabled" in p:
             updates[SZ_RELAY_FAILSAFE] = p["failsafe_enabled"]
 
+        # 1100 (TPI params) — populate the TCS's _tpi_params dict (issue 1102).
+        # TPI params don't fit into DemandState; they're stored per-domain on
+        # the TCS and read by tcs.tpi_params.  Handled before the `if not
+        # updates` guard because 1100 has no demand fields.
+        if msg.code == Code._1100 and "cycle_rate" in p:
+            tcs_for_tpi = getattr(target, "tcs", None) or (
+                target if slug in ("CTL", "BDR") else None
+            )
+            if tcs_for_tpi is not None:
+                tpi_dict = getattr(tcs_for_tpi, "_tpi_params", None)
+                if tpi_dict is not None:
+                    domain = (
+                        p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or "FC"
+                    )
+                    tpi_dict[domain] = p
+
         if not updates:
             return
 
@@ -1023,6 +1044,21 @@ class StateProjector:
         )
         if hasattr(target, "apply_state_update"):
             target.apply_state_update(event)
+
+        # Populate the TCS's per-domain demand dicts (issue 1102 / ramses_cc#1026).
+        tcs = getattr(target, "tcs", None) or (
+            target if slug in ("CTL", "UFC") else None
+        )
+        if tcs is not None:
+            domain = p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")
+            if domain and SZ_RELAY_DEMAND in p:
+                relay_dict = getattr(tcs, "_relay_demands", None)
+                if relay_dict is not None:
+                    relay_dict[domain] = msg
+            if domain and SZ_HEAT_DEMAND in p and slug in ("CTL", "UFC"):
+                heat_dict = getattr(tcs, "_heat_demands", None)
+                if heat_dict is not None:
+                    heat_dict[domain] = msg
 
     def _update_ufh_state(
         self, target: Any, p: dict[str, Any], msg: Message
@@ -1167,6 +1203,8 @@ class StateProjector:
 
         Handles:
         - 0004 (zone_name): updates zone_state.name
+        - 000A (zone_config): updates min_temp, max_temp, local_override,
+          openwindow_function, multiroom_mode (issue 1102)
         - 2349 (zone_mode): updates zone_state.mode, setpoint, until
         - 2309 (setpoint): updates zone_state.setpoint
         """
@@ -1175,6 +1213,18 @@ class StateProjector:
         if msg.code == Code._0004:
             if SZ_NAME in p:
                 updates[SZ_NAME] = str(p[SZ_NAME])
+
+        elif msg.code == Code._000A:
+            if SZ_MIN_TEMP in p:
+                updates[SZ_MIN_TEMP] = p[SZ_MIN_TEMP]
+            if SZ_MAX_TEMP in p:
+                updates[SZ_MAX_TEMP] = p[SZ_MAX_TEMP]
+            if SZ_LOCAL_OVERRIDE in p:
+                updates[SZ_LOCAL_OVERRIDE] = p[SZ_LOCAL_OVERRIDE]
+            if SZ_OPENWINDOW_FUNCTION in p:
+                updates[SZ_OPENWINDOW_FUNCTION] = p[SZ_OPENWINDOW_FUNCTION]
+            if SZ_MULTIROOM_MODE in p:
+                updates[SZ_MULTIROOM_MODE] = p[SZ_MULTIROOM_MODE]
 
         elif msg.code == Code._2349:
             if SZ_MODE in p:

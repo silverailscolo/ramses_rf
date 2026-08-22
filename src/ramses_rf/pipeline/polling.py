@@ -45,6 +45,11 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
         Code._1F41: INTERVAL_HOURLY,  # DHW System Mode / Operating State
         Code._2E04: INTERVAL_DAILY,  # Evohome System Mode
         Code._313F: INTERVAL_EVERY_12_HOURS,  # System Time & Date Sync
+        # 1100 (TPI params) — the CTL does not broadcast 1100; it must be
+        # polled.  Without polling, tcs.tpi_params returns None (issue 1102
+        # / ramses_cc#1026).  12h interval: TPI params are set during
+        # installation and rarely change.
+        Code._1100: INTERVAL_EVERY_12_HOURS,  # TPI Params
         # 0004 (zone name) is polled per-zone, not per-device — see
         # update_device_tasks for the zone-level expansion.  The interval
         # here is a marker; actual tasks are keyed by (device_id, "0004",

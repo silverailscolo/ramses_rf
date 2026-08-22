@@ -39,8 +39,14 @@ from .const import (
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_LANGUAGE,
+    SZ_LOCAL_OVERRIDE,
+    SZ_MAX_TEMP,
+    SZ_MIN_TEMP,
     SZ_MINUTES,
     SZ_MODE,
+    SZ_MULTIROOM_MODE,
+    SZ_NAME,
+    SZ_OPENWINDOW_FUNCTION,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
     SZ_OVERRUN,
@@ -632,6 +638,73 @@ def _update_temperature_state(
     target.apply_state_update(event)
 
 
+def _update_zone_state(target: Any, p: dict[str, Any], msg: Message) -> None:
+    """Translate zone configuration opcodes into ZoneState.
+
+    Handles:
+    - 0004 (zone_name): updates zone_state.name
+    - 000A (zone_config): updates min_temp, max_temp, local_override,
+      openwindow_function, multiroom_mode (issue 1102)
+    - 2349 (zone_mode): updates mode, setpoint, until
+    - 2309 (setpoint): updates setpoint
+
+    :param target: Target zone entity to update.
+    :type target: Any
+    :param p: Parsed payload dictionary.
+    :type p: dict[str, Any]
+    :param msg: Message envelope.
+    :type msg: Message
+    """
+    zone_state = getattr(target, "zone_state", None)
+    if zone_state is None or not dataclasses.is_dataclass(zone_state):
+        return
+
+    updates: dict[str, Any] = {}
+
+    if msg.code == Code._0004:
+        if SZ_NAME in p:
+            updates[SZ_NAME] = str(p[SZ_NAME])
+
+    elif msg.code == Code._000A:
+        if SZ_MIN_TEMP in p:
+            updates[SZ_MIN_TEMP] = p[SZ_MIN_TEMP]
+        if SZ_MAX_TEMP in p:
+            updates[SZ_MAX_TEMP] = p[SZ_MAX_TEMP]
+        if SZ_LOCAL_OVERRIDE in p:
+            updates[SZ_LOCAL_OVERRIDE] = p[SZ_LOCAL_OVERRIDE]
+        if SZ_OPENWINDOW_FUNCTION in p:
+            updates[SZ_OPENWINDOW_FUNCTION] = p[SZ_OPENWINDOW_FUNCTION]
+        if SZ_MULTIROOM_MODE in p:
+            updates[SZ_MULTIROOM_MODE] = p[SZ_MULTIROOM_MODE]
+
+    elif msg.code == Code._2349:
+        if SZ_MODE in p:
+            updates[SZ_MODE] = p[SZ_MODE]
+        if SZ_SETPOINT in p:
+            updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+        if SZ_UNTIL in p:
+            updates[SZ_UNTIL] = p[SZ_UNTIL]
+
+    elif msg.code == Code._2309:
+        if SZ_SETPOINT in p:
+            updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+
+    else:
+        return
+
+    if not updates:
+        return
+
+    new_state = dataclasses.replace(target.zone_state, **updates)
+    event = StateUpdatedEvent(
+        entity_id=getattr(target, "id", "unknown"),
+        state=new_state,
+        correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
+        causation_id=getattr(msg, "message_id", uuid.uuid4()),
+    )
+    target.apply_state_update(event)
+
+
 def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     """Translate demand data into a frozen StateUpdatedEvent.
 
@@ -673,6 +746,19 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if getattr(msg, "code", None) == Code._0009 and "failsafe_enabled" in p:
         updates["relay_failsafe"] = p["failsafe_enabled"]
 
+    # 1100 (TPI params) — populate the TCS's _tpi_params dict (issue 1102).
+    # TPI params don't fit into DemandState; they're stored per-domain on the
+    # TCS and read by tcs.tpi_params.
+    if msg.code == Code._1100 and "cycle_rate" in p:
+        tcs_for_tpi = getattr(target, "tcs", None) or (
+            target if slug in ("CTL", "BDR") else None
+        )
+        if tcs_for_tpi is not None:
+            tpi_dict = getattr(tcs_for_tpi, "_tpi_params", None)
+            if tpi_dict is not None:
+                domain = p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or "FC"
+                tpi_dict[domain] = p
+
     if not updates:
         return
 
@@ -684,6 +770,25 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         causation_id=getattr(msg, "message_id", uuid.uuid4()),
     )
     target.apply_state_update(event)
+
+    # Populate the TCS's per-domain demand dicts (issue 1102 / ramses_cc#1026).
+    # The legacy _handle_msg stored 0008/3150 messages keyed by domain/zone
+    # index in _relay_demands/_heat_demands.  The CQRS DemandState only tracks
+    # a single heat_demand/relay_demand, so the per-domain dicts were never
+    # populated after the legacy handler was removed.
+    tcs = getattr(target, "tcs", None) or (
+        target if slug in ("CTL", "UFC") else None
+    )
+    if tcs is not None:
+        domain = p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")
+        if domain and SZ_RELAY_DEMAND in p:
+            relay_dict = getattr(tcs, "_relay_demands", None)
+            if relay_dict is not None:
+                relay_dict[domain] = msg
+        if domain and SZ_HEAT_DEMAND in p and slug in ("CTL", "UFC"):
+            heat_dict = getattr(tcs, "_heat_demands", None)
+            if heat_dict is not None:
+                heat_dict[domain] = msg
 
 
 def _update_faultlog_state(
@@ -879,6 +984,7 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
             _update_system_state(target, payload, msg)
             _update_hvac_state(target, payload, msg)
             _update_dhw_state(target, payload, msg)
+            _update_zone_state(target, payload, msg)
             _update_temperature_state(target, payload, msg)
             _update_demand_state(target, payload, msg)
             _update_faultlog_state(target, payload, msg)
