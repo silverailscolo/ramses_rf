@@ -8,7 +8,7 @@ from datetime import timedelta as td
 from typing import Any, Final
 
 from ramses_rf.const import HEARTBEAT_TIMEOUT_DHW, SZ_TEMPERATURE, DevType
-from ramses_rf.enums import Action
+from ramses_rf.enums import Action, ZoneRole
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
 from ramses_tx import Packet
@@ -99,8 +99,14 @@ class Temperature(DeviceHeat):  # 30C9
         # Determine the zone_index from the parent zone (if bound) so that
         # UFH zone sensors emit 30C9 with the correct zone_index.  Without
         # this, the fake always sends index 00 and the UFC ignores it.
+        # Only UFH zones need the parent's zone index — standard evohome
+        # CTL zones (RAD/ELE/MIX/VAL) must send "00" (issue 929).
         zone_index = "00"
-        if self._parent is not None and hasattr(self._parent, "index"):
+        if (
+            self._parent is not None
+            and hasattr(self._parent, "index")
+            and getattr(self._parent, "_SLUG", None) == ZoneRole.UFH
+        ):
             zone_index = self._parent.index
         return await send_fake_intent(
             self,
