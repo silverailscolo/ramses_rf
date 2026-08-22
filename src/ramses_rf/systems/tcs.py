@@ -7,7 +7,7 @@ import asyncio
 import logging
 from datetime import datetime as dt, timedelta as td
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
@@ -125,6 +125,11 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
     # TODO: check (code so complex, not sure if this is true)
     childs: list[Device]  # type: ignore[assignment]
 
+    # Populated by the CQRS state projector (issue 1102).  Declared here
+    # because tpi_params property is on SystemBase but the dict is only
+    # initialised in System.__init__.
+    _tpi_params: dict[str, Any] = {}
+
     def __init__(self, controller: Controller) -> None:
         """Initialise the TCS base class.
 
@@ -185,14 +190,17 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         # The legacy entity_state.get_value(Code._1100) path is deprecated.
         if self._tpi_params:
             for params in self._tpi_params.values():
-                return {
-                    "cycle_rate": params.get("cycle_rate"),
-                    "min_on_time": params.get("min_on_time"),
-                    "min_off_time": params.get("min_off_time"),
-                    "proportional_band_width": params.get(
-                        "proportional_band_width"
-                    ),
-                }
+                return cast(
+                    PayDictT._1100,
+                    {
+                        "cycle_rate": params.get("cycle_rate"),
+                        "min_on_time": params.get("min_on_time"),
+                        "min_off_time": params.get("min_off_time"),
+                        "proportional_band_width": params.get(
+                            "proportional_band_width"
+                        ),
+                    },
+                )
         return None
 
     async def heat_demand(self) -> float | None:  # 3150/FC

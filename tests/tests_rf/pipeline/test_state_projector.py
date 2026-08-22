@@ -99,6 +99,7 @@ class FakeDevice:
         self.opentherm_state: OpenThermState = OpenThermState()
         self.act_state: ActuatorState = ActuatorState()
         self.hvac_state: HvacState = HvacState()
+        self.demand_state: Any = None  # set by tests that need it
         self.tcs: Any | None = None
         self.events: list[StateUpdatedEvent] = []
 
@@ -849,7 +850,7 @@ def test_0008_relay_demand_populates_tcs_dict() -> None:
     class FakeTcsWithDicts:
         id = "01:216136"
         appliance_control = None
-        zone_by_index = {}
+        zone_by_index: dict[str, Any] = {}
         _heat_demands: dict[str, Any] = {}
         _relay_demands: dict[str, Any] = {}
         _tpi_params: dict[str, Any] = {}
@@ -893,7 +894,7 @@ def test_1100_tpi_params_populates_tcs_dict() -> None:
     class FakeTcsWithTpi:
         id = "01:216136"
         appliance_control = None
-        zone_by_index = {}
+        zone_by_index: dict[str, Any] = {}
         _heat_demands: dict[str, Any] = {}
         _relay_demands: dict[str, Any] = {}
         _tpi_params: dict[str, Any] = {}
