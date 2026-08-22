@@ -312,8 +312,8 @@ def test_polling_manager_ctl_without_tcs_creates_device_level_0004(
 ) -> None:
     """CTL without a TCS (no zones) gets a single device-level 0004 task.
 
-    The MockDevice has no .tcs attribute, so 0004 is not expanded into
-    per-zone tasks.  This verifies the fallback path.
+    The MockDevice has no .tcs attribute, so 0004 and 30C9 are not expanded
+    into per-zone tasks.  This verifies the fallback path.
     """
     # ARRANGE
     poller = PollingManager(mock_gateway, shadow_mode=True)
@@ -323,49 +323,58 @@ def test_polling_manager_ctl_without_tcs_creates_device_level_0004(
     active_keys = poller.update_device_tasks(ctl_dev)
 
     # ASSERT
-    # 5 device-level tasks: 10E0, 1F41, 2E04, 313F, 0004
-    assert len(active_keys) == 5
+    # 6 device-level tasks: 10E0, 1F41, 2E04, 313F, 0004, 30C9
+    assert len(active_keys) == 6
     assert ("01:111111", Code._0004) in active_keys
+    assert ("01:111111", Code._30C9) in active_keys
     # No zone-level keys (3-tuples)
     assert all(len(k) == 2 for k in active_keys)
 
 
-def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
+def test_polling_manager_ctl_with_zones_expands_0004_and_30C9_per_zone(
     mock_gateway: MagicMock,
 ) -> None:
-    """CTL with a TCS and zones gets per-zone 0004 polling tasks.
+    """CTL with a TCS and zones gets per-zone 0004 and 30C9 polling tasks.
 
-    This restores the per-zone zone-name polling that was lost when the
-    legacy DiscoveryService was removed (issue 947 /
-    ramses-rf/ramses_cc#947).  Each zone gets its own 0004 task with
-    the zone_index in the payload.
+    0004 (zone name) is expanded for all zones (issue 947).
+    30C9 (zone temperature) is expanded for zones without a sensor
+    (issue 1013).  In this test, the mock zones have no sensor, so all
+    zones get 30C9 tasks.
     """
     # ARRANGE
     poller = PollingManager(mock_gateway, shadow_mode=True)
     ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
 
-    # Mock a TCS with zones
+    # Mock a TCS with zones (no sensor → 30C9 will be polled)
     zone_03 = MagicMock()
     zone_03.index = "03"
+    zone_03.sensor = None
     zone_07 = MagicMock()
     zone_07.index = "07"
+    zone_07.sensor = None
     mock_tcs = MagicMock()
     mock_tcs.zones = [zone_03, zone_07]
+    mock_tcs.zone_by_index = {"03": zone_03, "07": zone_07}
     ctl_dev.tcs = mock_tcs
 
     # ACT
     active_keys = poller.update_device_tasks(ctl_dev)
 
     # ASSERT
-    # 4 device-level tasks (10E0, 1F41, 2E04, 313F) + 2 zone-level 0004 tasks
+    # 4 device-level tasks (10E0, 1F41, 2E04, 313F)
+    # + 2 zone-level 0004 tasks + 2 zone-level 30C9 tasks
     device_level = {k for k in active_keys if len(k) == 2}
     zone_level = {k for k in active_keys if len(k) == 3}
     assert len(device_level) == 4
-    assert len(zone_level) == 2
+    assert len(zone_level) == 4
 
-    # Zone-level keys are (device_id, "0004", zone_index)
+    # Zone-level keys for 0004
     assert ("01:111111", Code._0004, "03") in zone_level
     assert ("01:111111", Code._0004, "07") in zone_level
+
+    # Zone-level keys for 30C9
+    assert ("01:111111", Code._30C9, "03") in zone_level
+    assert ("01:111111", Code._30C9, "07") in zone_level
 
     # Verify the 0004 tasks have the correct payload (zone_index + "00")
     task_03 = poller._tasks[("01:111111", Code._0004, "03")]
@@ -375,6 +384,15 @@ def test_polling_manager_ctl_with_zones_expands_0004_per_zone(
     task_07 = poller._tasks[("01:111111", Code._0004, "07")]
     assert task_07.payload == "0700"
     assert task_07.code == Code._0004
+
+    # Verify the 30C9 tasks have the correct payload (zone_index only, 1 byte)
+    task_30c9_03 = poller._tasks[("01:111111", Code._30C9, "03")]
+    assert task_30c9_03.payload == "03"
+    assert task_30c9_03.code == Code._30C9
+
+    task_30c9_07 = poller._tasks[("01:111111", Code._30C9, "07")]
+    assert task_30c9_07.payload == "07"
+    assert task_30c9_07.code == Code._30C9
 
     # Device-level tasks have no payload (default "00" in build_rq_cmd)
     task_10e0 = poller._tasks[("01:111111", Code._10E0)]
@@ -430,6 +448,107 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
                 f"Expected 0004 payload '0500' for zone 05, got '{dto.payload}'"
             )
             break
+
+
+def test_polling_manager_30C9_skips_zones_with_sensor(
+    mock_gateway: MagicMock,
+) -> None:
+    """30C9 polling is only created for zones without a dedicated sensor.
+
+    Zones with a sensor receive their temperature via the CTL's 30C9
+    broadcast array, so polling them is redundant.  This test verifies
+    the sensor filter in update_device_tasks (issue 1013).
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+
+    # zone_03 has a sensor → should NOT get 30C9 polling
+    zone_03 = MagicMock()
+    zone_03.index = "03"
+    zone_03.sensor = MagicMock()  # non-None sensor
+
+    # zone_07 has no sensor → SHOULD get 30C9 polling
+    zone_07 = MagicMock()
+    zone_07.index = "07"
+    zone_07.sensor = None
+
+    mock_tcs = MagicMock()
+    mock_tcs.zones = [zone_03, zone_07]
+    mock_tcs.zone_by_index = {"03": zone_03, "07": zone_07}
+    ctl_dev.tcs = mock_tcs
+
+    # ACT
+    active_keys = poller.update_device_tasks(ctl_dev)
+
+    # ASSERT
+    zone_level = {k for k in active_keys if len(k) == 3}
+
+    # 0004 is polled for all zones (no sensor filter)
+    assert ("01:111111", Code._0004, "03") in zone_level
+    assert ("01:111111", Code._0004, "07") in zone_level
+
+    # 30C9 is polled only for zone_07 (no sensor)
+    assert ("01:111111", Code._30C9, "03") not in zone_level
+    assert ("01:111111", Code._30C9, "07") in zone_level
+
+    # Verify the 30C9 task payload is 1 byte (zone_index only)
+    task_30c9_07 = poller._tasks[("01:111111", Code._30C9, "07")]
+    assert task_30c9_07.payload == "07"
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_30C9_zone_uses_payload_in_cmd(
+    mock_gateway: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When polling 30C9 for a zone, the RQ payload is the zone_index (1 byte).
+
+    The legacy Command.get_zone_temp used payload f"{zone_idx:02X}" (1 byte).
+    The PollingManager must do the same — payload "00" would only query
+    zone 00, not the target zone.
+    """
+    # ARRANGE
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+
+    # Mock a TCS with one zone (no sensor → 30C9 will be polled)
+    zone_0B = MagicMock()
+    zone_0B.index = "0B"
+    zone_0B.sensor = None
+    mock_tcs = MagicMock()
+    mock_tcs.zones = [zone_0B]
+    mock_tcs.zone_by_index = {"0B": zone_0B}
+    ctl_dev.tcs = mock_tcs
+
+    mock_gateway.device_registry.devices = [ctl_dev]
+    poller.update_device_tasks(ctl_dev)
+
+    # Fast-forward all tasks to trigger due commands
+    past = dt.now(UTC) - td(seconds=10)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+
+    # ACT
+    await poller.poll_due_commands()
+
+    # ASSERT: find the 30C9 call and check its payload
+    sent_codes = [
+        call.args[0].code
+        for call in mock_gateway.async_send_cmd.call_args_list
+    ]
+    assert Code._30C9 in sent_codes
+
+    for call in mock_gateway.async_send_cmd.call_args_list:
+        dto: CommandDTO = call.args[0]
+        if dto.code == Code._30C9:
+            assert dto.payload == "0B", (
+                f"Expected 30C9 payload '0B' for zone 0B, got '{dto.payload}'"
+            )
+            break
+    else:
+        pytest.fail("No 30C9 command was sent")
 
 
 @pytest.mark.asyncio
