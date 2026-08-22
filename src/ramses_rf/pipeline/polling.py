@@ -58,6 +58,13 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
         # eavesdropper cannot learn a representative TRV sensor without
         # active polling to supply zone.temperature().
         Code._30C9: INTERVAL_ZONE_TEMP,  # Zone Temperature (per-zone, filtered)
+        # 2349 (zone mode) is polled per-zone — the CTL does not broadcast
+        # 2349; it sends it only as I directed to an HGI or as RP in
+        # response to an RQ.  Without polling, zone.mode() returns None
+        # and the zone climate entity cannot display the operating mode
+        # (auto / permanent override / temporary override).  The setpoint
+        # is also in 2349, but 2309 (which IS broadcast) covers that.
+        Code._2349: INTERVAL_ZONE_TEMP,  # Zone Mode (per-zone, all zones)
     },
     # Boiler Relay / Switch
     DevType.BDR: {
@@ -237,6 +244,13 @@ class PollingManager:
         zone-name polling that was lost when the legacy DiscoveryService
         was removed (issue 947 / ramses-rf/ramses_cc#947).
 
+        For CTL devices with zones, the ``2349`` (zone mode) code is
+        expanded into one task per zone, keyed by
+        ``(device_id, "2349", zone_index)``.  The CTL does not broadcast
+        2349 — it sends it only as I directed to an HGI or as RP in
+        response to an RQ.  Without polling, ``zone.mode()`` returns None
+        and the zone climate entity cannot display the operating mode.
+
         For CTL devices with zones, the ``30C9`` (zone temperature) code is
         expanded into one task per zone **that has no dedicated sensor**,
         keyed by ``(device_id, "30C9", zone_index)``.  This restores the
@@ -263,12 +277,14 @@ class PollingManager:
         now = dt.now(UTC)
         active_keys: set[tuple[str, ...]] = set()
 
-        # Collect zone indices for per-zone code expansion (0004, 30C9).
+        # Collect zone indices for per-zone code expansion (0004, 2349, 30C9).
         # CTL devices have a .tcs attribute with .zones list.
         tcs = getattr(device, "tcs", None)
         zone_indexs: list[str] = []
         if (
-            Code._0004 in schedule or Code._30C9 in schedule
+            Code._0004 in schedule
+            or Code._2349 in schedule
+            or Code._30C9 in schedule
         ) and tcs is not None:
             zones = getattr(tcs, "zones", [])
             zone_indexs = [z.index for z in zones if hasattr(z, "index")]
@@ -294,6 +310,25 @@ class PollingManager:
         for code, interval in schedule.items():
             if code == Code._0004 and zone_indexs:
                 # Expand into per-zone tasks
+                for zone_index in zone_indexs:
+                    zkey = (device.id, code, zone_index)
+                    active_keys.add(zkey)
+                    payload = f"{zone_index}00"
+                    if zkey not in self._tasks:
+                        self._tasks[zkey] = PollingTask(
+                            device_id=device.id,
+                            code=code,
+                            interval=interval,
+                            next_due=now + td(seconds=interval),
+                            payload=payload,
+                        )
+                    else:
+                        self._tasks[zkey].interval = interval
+                        self._tasks[zkey].payload = payload
+            elif code == Code._2349 and zone_indexs:
+                # Expand into per-zone tasks (all zones — mode is needed
+                # regardless of whether the zone has a sensor).  2349 RQ
+                # payload is 2 bytes (zone_index + "00"), same as 0004.
                 for zone_index in zone_indexs:
                     zkey = (device.id, code, zone_index)
                     active_keys.add(zkey)
