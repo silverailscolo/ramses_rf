@@ -312,8 +312,8 @@ def test_polling_manager_ctl_without_tcs_creates_device_level_0004(
 ) -> None:
     """CTL without a TCS (no zones) gets a single device-level 0004 task.
 
-    The MockDevice has no .tcs attribute, so 0004 and 30C9 are not expanded
-    into per-zone tasks.  This verifies the fallback path.
+    The MockDevice has no .tcs attribute, so 0004, 2349, and 30C9 are not
+    expanded into per-zone tasks.  This verifies the fallback path.
     """
     # ARRANGE
     poller = PollingManager(mock_gateway, shadow_mode=True)
@@ -323,20 +323,23 @@ def test_polling_manager_ctl_without_tcs_creates_device_level_0004(
     active_keys = poller.update_device_tasks(ctl_dev)
 
     # ASSERT
-    # 6 device-level tasks: 10E0, 1F41, 2E04, 313F, 0004, 30C9
-    assert len(active_keys) == 6
+    # 7 device-level tasks: 10E0, 1F41, 2E04, 313F, 0004, 2349, 30C9
+    assert len(active_keys) == 7
     assert ("01:111111", Code._0004) in active_keys
+    assert ("01:111111", Code._2349) in active_keys
     assert ("01:111111", Code._30C9) in active_keys
     # No zone-level keys (3-tuples)
     assert all(len(k) == 2 for k in active_keys)
 
 
-def test_polling_manager_ctl_with_zones_expands_0004_and_30C9_per_zone(
+def test_polling_manager_ctl_with_zones_expands_0004_2349_and_30C9_per_zone(
     mock_gateway: MagicMock,
 ) -> None:
-    """CTL with a TCS and zones gets per-zone 0004 and 30C9 polling tasks.
+    """CTL with a TCS and zones gets per-zone 0004, 2349, and 30C9 tasks.
 
     0004 (zone name) is expanded for all zones (issue 947).
+    2349 (zone mode) is expanded for all zones — the CTL does not
+    broadcast 2349, so polling is the only way to get zone mode.
     30C9 (zone temperature) is expanded for zones without a sensor
     (issue 1013).  In this test, the mock zones have no sensor, so all
     zones get 30C9 tasks.
@@ -362,15 +365,19 @@ def test_polling_manager_ctl_with_zones_expands_0004_and_30C9_per_zone(
 
     # ASSERT
     # 4 device-level tasks (10E0, 1F41, 2E04, 313F)
-    # + 2 zone-level 0004 tasks + 2 zone-level 30C9 tasks
+    # + 2 zone-level 0004 tasks + 2 zone-level 2349 tasks + 2 zone-level 30C9 tasks
     device_level = {k for k in active_keys if len(k) == 2}
     zone_level = {k for k in active_keys if len(k) == 3}
     assert len(device_level) == 4
-    assert len(zone_level) == 4
+    assert len(zone_level) == 6
 
     # Zone-level keys for 0004
     assert ("01:111111", Code._0004, "03") in zone_level
     assert ("01:111111", Code._0004, "07") in zone_level
+
+    # Zone-level keys for 2349
+    assert ("01:111111", Code._2349, "03") in zone_level
+    assert ("01:111111", Code._2349, "07") in zone_level
 
     # Zone-level keys for 30C9
     assert ("01:111111", Code._30C9, "03") in zone_level
@@ -384,6 +391,15 @@ def test_polling_manager_ctl_with_zones_expands_0004_and_30C9_per_zone(
     task_07 = poller._tasks[("01:111111", Code._0004, "07")]
     assert task_07.payload == "0700"
     assert task_07.code == Code._0004
+
+    # Verify the 2349 tasks have the correct payload (zone_index + "00")
+    task_2349_03 = poller._tasks[("01:111111", Code._2349, "03")]
+    assert task_2349_03.payload == "0300"
+    assert task_2349_03.code == Code._2349
+
+    task_2349_07 = poller._tasks[("01:111111", Code._2349, "07")]
+    assert task_2349_07.payload == "0700"
+    assert task_2349_07.code == Code._2349
 
     # Verify the 30C9 tasks have the correct payload (zone_index only, 1 byte)
     task_30c9_03 = poller._tasks[("01:111111", Code._30C9, "03")]
@@ -488,6 +504,11 @@ def test_polling_manager_30C9_skips_zones_with_sensor(
     assert ("01:111111", Code._0004, "03") in zone_level
     assert ("01:111111", Code._0004, "07") in zone_level
 
+    # 2349 is polled for all zones (no sensor filter — mode is needed
+    # regardless of whether the zone has a sensor)
+    assert ("01:111111", Code._2349, "03") in zone_level
+    assert ("01:111111", Code._2349, "07") in zone_level
+
     # 30C9 is polled only for zone_07 (no sensor)
     assert ("01:111111", Code._30C9, "03") not in zone_level
     assert ("01:111111", Code._30C9, "07") in zone_level
@@ -549,6 +570,59 @@ async def test_polling_manager_30C9_zone_uses_payload_in_cmd(
             break
     else:
         pytest.fail("No 30C9 command was sent")
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_2349_zone_uses_payload_in_cmd(
+    mock_gateway: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When polling 2349 for a zone, the RQ payload is zone_index + "00" (2 bytes).
+
+    The legacy Command.get_zone_mode used payload f"{zone_idx:02X}00" (2 bytes),
+    same as 0004 (zone name).  The PollingManager must do the same.
+    """
+    # ARRANGE
+    monkeypatch.setattr("asyncio.sleep", AsyncMock())
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+
+    # Mock a TCS with one zone (2349 is polled for ALL zones, sensor or not)
+    zone_0B = MagicMock()
+    zone_0B.index = "0B"
+    zone_0B.sensor = MagicMock()  # has a sensor — 2349 still polled
+    mock_tcs = MagicMock()
+    mock_tcs.zones = [zone_0B]
+    mock_tcs.zone_by_index = {"0B": zone_0B}
+    ctl_dev.tcs = mock_tcs
+
+    mock_gateway.device_registry.devices = [ctl_dev]
+    poller.update_device_tasks(ctl_dev)
+
+    # Fast-forward all tasks to trigger due commands
+    past = dt.now(UTC) - td(seconds=10)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+
+    # ACT
+    await poller.poll_due_commands()
+
+    # ASSERT: find the 2349 call and check its payload
+    sent_codes = [
+        call.args[0].code
+        for call in mock_gateway.async_send_cmd.call_args_list
+    ]
+    assert Code._2349 in sent_codes
+
+    for call in mock_gateway.async_send_cmd.call_args_list:
+        dto: CommandDTO = call.args[0]
+        if dto.code == Code._2349:
+            assert dto.payload == "0B00", (
+                f"Expected 2349 payload '0B00' for zone 0B, got '{dto.payload}'"
+            )
+            break
+    else:
+        pytest.fail("No 2349 command was sent")
 
 
 @pytest.mark.asyncio
