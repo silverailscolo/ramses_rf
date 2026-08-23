@@ -38,7 +38,13 @@ from ..exceptions import (
 from ..helpers import dt_now
 from ..interfaces import ProtocolInterface, TransportInterface
 from ..packet import Packet
-from ..schemas import SZ_BLOCK_LIST, SZ_INBOUND, SZ_KNOWN_LIST, SZ_OUTBOUND
+from ..schemas import (
+    SZ_BLOCK_LIST,
+    SZ_INBOUND,
+    SZ_KNOWN_LIST,
+    SZ_OUTBOUND,
+    SZ_SCHEMA,
+)
 from ..typing import DeviceIdT, MsgFilterT, MsgHandlerT, QosParams
 
 if TYPE_CHECKING:
@@ -46,7 +52,7 @@ if TYPE_CHECKING:
 
 
 TIP: Final[str] = (
-    f", configure the {SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
+    f", configure the {SZ_SCHEMA}/{SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
 )
 
 _DBG_FORCE_LOG_PACKETS: Final[bool] = False
