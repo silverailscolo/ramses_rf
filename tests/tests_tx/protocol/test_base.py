@@ -1,7 +1,7 @@
 """Tests for the RAMSES-II base protocol layer."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -215,6 +215,52 @@ async def test_is_wanted_addrs_foreign_hgi_not_blocked(
     )
 
 
+async def test_is_wanted_addrs_known_hgi_no_foreign_warning(
+    protocol: DummyProtocol,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A known/configured HGI must not be flagged as a Foreign gateway.
+
+    The discovery_scan config schema permits multiple HGIs to be declared
+    in the known_list.  A second HGI that is in the known_list is not
+    foreign — it is a declared gateway — so the 'potentially a Foreign
+    gateway' warning must be suppressed for it (issue 1020).
+    """
+    protocol._active_hgi = DeviceIdT("18:130140")
+    protocol._include = [DeviceIdT("18:154951")]  # second, known HGI
+
+    with caplog.at_level(logging.WARNING):
+        result = protocol._is_wanted_addrs(
+            DeviceIdT("18:154951"), DeviceIdT("01:216136")
+        )
+
+    # Known HGIs are never blocked (foreign-HGI exemption still applies)
+    assert result is True
+    # And no Foreign gateway warning should be emitted for a known HGI
+    assert not any("Foreign gateway" in r.message for r in caplog.records)
+
+
+async def test_is_wanted_addrs_unknown_hgi_still_warns(
+    protocol: DummyProtocol,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unknown HGI (not in the known_list) still triggers the warning.
+
+    Only HGIs declared in the known_list are suppressed (issue 1020); a
+    genuinely unknown 18: device should still produce the Foreign gateway
+    warning so the user can decide whether to configure it.
+    """
+    protocol._active_hgi = DeviceIdT("18:130140")
+    protocol._include = []  # 18:154951 is not known
+
+    with caplog.at_level(logging.WARNING):
+        protocol._is_wanted_addrs(
+            DeviceIdT("18:154951"), DeviceIdT("01:216136")
+        )
+
+    assert any("Foreign gateway" in r.message for r in caplog.records)
+
+
 async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
     protocol: DummyProtocol,
 ) -> None:
@@ -229,6 +275,64 @@ async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
         protocol._is_wanted_addrs(DeviceIdT("01:216136"), HGI_DEV_ADDR.id)
         is False
     )
+
+
+async def test_set_active_hgi_none_no_warning(
+    protocol: DummyProtocol,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """_set_active_hgi(None) should not emit a warning (issue 1002).
+
+    MQTT bridges (ramses_esp) don't know the HGI ID at connection time
+    — the ID arrives later via the "online" LWT message.  Calling
+    _set_active_hgi(None) should silently defer, not warn about
+    'None: { class: HGI }' not being in the known_list.
+    """
+    with caplog.at_level(logging.WARNING):
+        protocol._set_active_hgi(None)
+    assert protocol._active_hgi is None  # not set
+    assert not any("None" in r.message for r in caplog.records)
+    assert not any("SHOULD be in" in r.message for r in caplog.records)
+
+
+async def test_set_active_hgi_none_then_deferred_check(
+    protocol: DummyProtocol,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Deferred HGI check fires when transport learns the real ID (issue 1002).
+
+    After _set_active_hgi(None), _is_wanted_addrs should detect the real
+    HGI ID from the transport's extra info and run the known_list check.
+    """
+    from ramses_tx.const import SZ_ACTIVE_HGI
+
+    # Simulate MQTT bridge: _set_active_hgi(None) at connection time
+    protocol._set_active_hgi(None)
+    assert protocol._active_hgi is None
+
+    # Simulate the transport learning the real HGI ID from the online msg
+    protocol._transport = MagicMock()
+    protocol._transport.get_extra_info = MagicMock(
+        side_effect=lambda key: (
+            DeviceIdT("18:130140") if key == SZ_ACTIVE_HGI else None
+        )
+    )
+    protocol._include = [DeviceIdT("01:111111")]
+    protocol.enforce_include = True
+
+    # First call to _is_wanted_addrs should trigger the deferred check
+    with caplog.at_level(logging.WARNING):
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:111111"), DeviceIdT("01:222222")
+        )
+
+    # _active_hgi should now be set — mypy can't track the side effect
+    # through _is_wanted_addrs, so we cast to narrow the type
+    hgi = cast(DeviceIdT, protocol._active_hgi)
+    assert hgi == DeviceIdT("18:130140")
+    # And the warning about the HGI not being in known_list should fire
+    assert any("18:130140" in r.message for r in caplog.records)
+    assert any("SHOULD be in" in r.message for r in caplog.records)
 
 
 # --- INBOUND PACKET TESTS (_packet_received) ---

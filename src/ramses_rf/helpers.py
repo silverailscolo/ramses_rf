@@ -64,7 +64,19 @@ def deep_merge(
             new_dst[key] = source[key]  # not expected, but maybe
 
         else:
-            new_dst[key] = list(set(source[key] + new_dst[key]))  # will sort
+            # Merge lists, deduplicating.  Use set() when elements are
+            # hashable (strings, ints); fall back to manual dedup for
+            # unhashable elements (dicts, like _commands dict templates).
+            combined = source[key] + new_dst[key]
+            try:
+                new_dst[key] = list(set(combined))  # will sort
+            except TypeError:
+                # Unhashable elements (e.g. dicts) — dedup manually
+                seen: list[Any] = []
+                for item in combined:
+                    if item not in seen:
+                        seen.append(item)
+                new_dst[key] = seen
 
     # assert _is_subset(shrink(src), shrink(new_dst))
     return new_dst

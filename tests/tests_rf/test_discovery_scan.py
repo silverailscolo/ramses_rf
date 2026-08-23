@@ -1774,10 +1774,18 @@ CO2_37 = "37:126776"  # CO2 sensor that also sends 31E0
 class TestHvacParentInference:
     """Tests for inferring bound_to from HVAC operational traffic.
 
-    A REM sending 22F1 to a FAN is NOT proof of binding — the REM could
-    be a neighbour's remote broadcasting.  The real proof is when the
-    FAN **answers** the REM (RP from 32: to the REM).  This confirms
-    the FAN acknowledges the REM as a paired remote.
+    Two inference directions:
+
+    1. **FAN→REM**: a FAN (32:) sending a directed I/RP to a REM/CO2
+       confirms binding — the FAN is the controller communicating with
+       its paired remote.
+
+    2. **REM→FAN**: a REM/CO2 sending a directed packet (W/RQ/I) to a
+       FAN (32:) confirms binding.  This is more authoritative than
+       FAN→REM — the REM only sends to the FAN it was 1FC9-paired with
+       (not any FAN in range).  A directed I is proof (the REM addresses
+       its paired FAN specifically); a broadcast I (dst = --:------)
+       is NOT proof (the REM could be a neighbour's remote broadcasting).
 
     See schema_architecture.md: "How HVAC topology COULD be derived
     from traffic".
@@ -1785,11 +1793,14 @@ class TestHvacParentInference:
 
     async def test_fan_reply_infers_parent(self) -> None:
         """A FAN (32:) replying RP to a REM should set bound_to on the
-        REM."""
+        REM.  The REM's RQ to the FAN also sets bound_to (REM→FAN
+        inference) — a directed RQ is proof of binding because the REM
+        only queries its 1FC9-paired FAN."""
         scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
-            # REM sends RQ to FAN
+            # REM sends RQ to FAN — REM→FAN inference fires immediately
+            # (RQ is a directed query, not a broadcast)
             dto1 = make_dto(
                 src=REM_29,
                 dst=FAN_ID,
@@ -1800,9 +1811,10 @@ class TestHvacParentInference:
             scan._process_packet(dto1)
             dev = scan.get_device(REM_29)
             assert dev is not None
-            assert dev.bound_to is None  # not yet confirmed
+            assert dev.bound_to == FAN_ID  # REM→FAN inference
 
-            # FAN replies RP to REM — this confirms binding
+            # FAN replies RP to REM — FAN→REM inference would also set
+            # bound_to (but it's already set from the RQ above)
             dto2 = make_dto(
                 src=FAN_ID,
                 dst=REM_29,
@@ -1817,9 +1829,31 @@ class TestHvacParentInference:
         finally:
             scan.stop()
 
-    async def test_rem_sending_to_fan_does_not_infer(self) -> None:
-        """A REM sending I|22F1 to a FAN should NOT set bound_to — the
-        FAN hasn't confirmed the binding."""
+    async def test_rem_broadcast_to_fan_does_not_infer(self) -> None:
+        """A REM sending broadcast I|22F1 (dst = --:------) should NOT
+        set bound_to — a broadcast is not proof of binding (the REM
+        could be a neighbour's remote broadcasting)."""
+        scan = DiscoveryScan(gateway=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src=REM_29,
+                dst="--:------",
+                code=Code._22F1,
+                verb=Verb.I_,
+                payload="000404",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to is None  # NOT confirmed (broadcast I)
+        finally:
+            scan.stop()
+
+    async def test_rem_directed_i_to_fan_infers_parent(self) -> None:
+        """A REM sending directed I|22F1 to a FAN (dst = 32:...) should
+        set bound_to — a directed I is proof because the REM addresses
+        its 1FC9-paired FAN specifically (not a broadcast)."""
         scan = DiscoveryScan(gateway=make_mock_gateway())
         scan.start()
         try:
@@ -1833,7 +1867,51 @@ class TestHvacParentInference:
             scan._process_packet(dto)
             dev = scan.get_device(REM_29)
             assert dev is not None
-            assert dev.bound_to is None  # NOT confirmed
+            assert dev.bound_to == FAN_ID  # directed I = proof
+            assert dev.confidence == "high"
+        finally:
+            scan.stop()
+
+    async def test_rem_w_to_fan_infers_parent(self) -> None:
+        """A REM sending W|22F1 to a FAN should set bound_to — a
+        directed W is proof of binding because the REM only sends
+        commands to its 1FC9-paired FAN."""
+        scan = DiscoveryScan(gateway=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src=REM_29,
+                dst=FAN_ID,
+                code=Code._22F1,
+                verb=Verb.W_,
+                payload="000404",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to == FAN_ID  # REM→FAN inference (directed W)
+            assert dev.confidence == "high"
+        finally:
+            scan.stop()
+
+    async def test_rem_rq_to_fan_infers_parent(self) -> None:
+        """A REM sending RQ|2411 to a FAN should set bound_to — a
+        directed RQ is proof of binding (same as W)."""
+        scan = DiscoveryScan(gateway=make_mock_gateway())
+        scan.start()
+        try:
+            dto = make_dto(
+                src=REM_29,
+                dst=FAN_ID,
+                code=Code._2411,
+                verb=Verb.RQ,
+                payload="00",
+            )
+            scan._process_packet(dto)
+            dev = scan.get_device(REM_29)
+            assert dev is not None
+            assert dev.bound_to == FAN_ID  # REM→FAN inference (directed RQ)
+            assert dev.confidence == "high"
         finally:
             scan.stop()
 
@@ -1968,3 +2046,116 @@ class TestHvacParentInference:
             assert dev.bound_to == FAN_ID
         finally:
             scan.stop()
+
+
+class TestEvidenceBasedContradiction:
+    """Tests for evidence-based contradiction re-classification.
+
+    The scan engine re-classifies known devices when source packets
+    contradict the declared class.  But only evidence-based
+    classifications (VC pair matches, CTL-only codes) should count as
+    contradictions — prefix fallbacks (e.g. 37: -> REM) are guesses and
+    should NOT contradict a declared class.
+
+    Without this, a CO2 device (37: prefix) sending generic codes like
+    10E0 would be re-classified as REM just because 37: falls to REM
+    by prefix (false positive on hass).
+    """
+
+    def test_co2_not_reclassified_by_generic_code(self) -> None:
+        """A CO2 device sending 10E0 (generic) should NOT be re-classified.
+
+        37:126776 is declared as CO2 in the known_list.  It sends 10E0
+        (a generic code).  _classify returns REM for 37: prefix fallback,
+        but this is a guess, not evidence -- so it should NOT increment
+        contradiction_count or re-classify the device.
+        """
+        gwy = make_mock_gateway(known_list={"37:126776": {"class": "CO2"}})
+        scan = DiscoveryScan(gwy)
+        # Send 3+ generic 10E0 packets -- would trigger re-classification
+        # if prefix fallbacks counted as contradictions
+        for _ in range(5):
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._10E0, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2  # still CO2
+        assert dev.contradiction_count == 0  # no contradiction counted
+        scan.stop()
+
+    def test_co2_not_reclassified_by_31e0(self) -> None:
+        """A CO2 device sending 31E0 (vent_demand) should NOT be re-classified.
+
+        31E0 is not in _VC_TO_TYPE, so _classify falls to prefix (REM).
+        But 31E0 is a generic HVAC code -- not evidence of REM.
+        """
+        gwy = make_mock_gateway(known_list={"37:126776": {"class": "CO2"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(5):
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._31E0, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2
+        assert dev.contradiction_count == 0
+        scan.stop()
+
+    def test_co2_matching_packet_resets_contradiction(self) -> None:
+        """A CO2 device sending 1298 (CO2 VC pair) resets contradiction count.
+
+        (I, 1298) maps to CO2 in _VC_TO_TYPE -- this is evidence-based
+        and matches the declared class, so it resets the count.
+        """
+        gwy = make_mock_gateway(known_list={"37:126776": {"class": "CO2"}})
+        scan = DiscoveryScan(gwy)
+        # Send a 1298 packet (evidence-based, matches CO2)
+        scan._process_packet(
+            make_dto(src="37:126776", code=Code._1298, verb=Verb.I_)
+        )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2
+        assert dev.contradiction_count == 0
+        scan.stop()
+
+    def test_rem_reclassified_by_co2_evidence(self) -> None:
+        """A REM device sending 1298 (CO2 evidence) IS re-classified to CO2.
+
+        (I, 1298) is a VC pair match for CO2 -- this IS evidence-based.
+        After 3+ such packets, the device should be re-classified.
+        """
+        gwy = make_mock_gateway(known_list={"37:222222": {"class": "REM"}})
+        scan = DiscoveryScan(gwy)
+        # Send 4x 1298 packets (evidence-based, contradicts REM)
+        # First packet creates the device, subsequent packets increment
+        # contradiction_count.  After 3 contradictions (4th packet),
+        # likely_type is updated.
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:222222", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:222222")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2  # re-classified
+        assert dev.confidence == "high"
+        scan.stop()
+
+    def test_fan_reclassified_by_rem_evidence(self) -> None:
+        """A FAN device sending 22F1 (REM evidence) IS re-classified to REM.
+
+        (I, 22F1) is a VC pair match for REM -- this IS evidence-based.
+        After 3+ such packets, the device should be re-classified.
+        """
+        gwy = make_mock_gateway(known_list={"37:333333": {"class": "FAN"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:333333", code=Code._22F1, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:333333")
+        assert dev is not None
+        assert dev.likely_type == DevType.REM  # re-classified
+        assert dev.confidence == "high"
+        scan.stop()

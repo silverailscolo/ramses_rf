@@ -86,6 +86,19 @@ _CTL_ONLY_CODES_WITH_VERB: dict[Code | str, frozenset[Verb | str]] = {
     ),  # I/RP = CTL broadcasts time; RQ = TRV asks
 }
 
+# Codes used in the HVAC ventilation domain (FAN/REM/DIS).
+# These codes provide evidence about a device's type even when the
+# specific (verb, code) pair is not in _VC_TO_TYPE.  For example,
+# RQ 31DA is not in HVAC_KLASS_BY_VC_PAIR (only I/RP 31DA map to FAN),
+# and 2411 is not in the table at all (both FANs and REMs/DISs use it).
+# But a FAN-classified device sending RQ 31DA or RQ 2411 is evidence
+# that it's NOT a FAN (FANs respond with RP, they don't request).
+# When sent as src by a device classified as a different type, these
+# codes count as evidence-based contradictions.
+_HVAC_DOMAIN_CODES: frozenset[Code | str] = frozenset(
+    {Code._31D9, Code._31DA, Code._22F1, Code._22F3, Code._2411}
+)
+
 # Codes that indicate battery-powered devices.
 _BATTERY_CODES: frozenset[Code | str] = frozenset({Code._1060, Code._1FC9})
 
@@ -129,6 +142,53 @@ _HVAC_PARENT_INFERENCE_CODES: frozenset[Code | str] = frozenset(
         Code._2411,  # fan_params — FAN RP to REM's RQ, most common directed exchange
     }
 )
+
+# Contradiction threshold: after this many consecutive source packets
+# where _classify disagrees with likely_type (without a matching packet
+# resetting the count), likely_type is updated.  Mirrors the HvacTopologyHandler's
+# threshold (3 non-FAN packets).  Generic — works for any device class.
+_CONTRADICTION_THRESHOLD: int = 3
+
+
+def _is_evidence_based(
+    device_id: str, code: str, verb: str, is_source: bool
+) -> bool:
+    """Check if a (verb, code) pair provides evidence-based classification.
+
+    Returns True if the pair maps to a specific DevType via _VC_TO_TYPE
+    (a verb+code signature match), if the code is CTL-only, or if the
+    code is in the HVAC ventilation domain (_HVAC_DOMAIN_CODES).  These
+    are evidence-based classifications that can legitimately contradict
+    a declared class.
+
+    Returns False for prefix fallbacks (e.g. 37: → REM is a guess based
+    on the device ID prefix, not on what the packet actually says).  A
+    prefix fallback should NOT count as a contradiction — otherwise a
+    CO2 device sending generic codes like 10E0 would be re-classified as
+    REM just because 37: falls to REM by prefix.
+
+    The _HVAC_DOMAIN_CODES check catches codes like RQ 31DA and RQ 2411
+    that are not in _VC_TO_TYPE (only I/RP 31DA map to FAN, and 2411 is
+    not in the table at all) but are still strong evidence that a
+    FAN-classified device is actually a REM/DIS (a FAN responds with RP,
+    it doesn't send RQ).
+    """
+    vc_key = (verb, code)
+    if vc_key in _VC_TO_TYPE:
+        return True
+    if is_source and str(code) in {str(c) for c in _HVAC_DOMAIN_CODES}:
+        return True
+    return bool(
+        is_source
+        and (
+            code in _CTL_ONLY_CODES
+            or (
+                code in _CTL_ONLY_CODES_WITH_VERB
+                and verb in _CTL_ONLY_CODES_WITH_VERB[code]
+            )
+        )
+    )
+
 
 # TPI loop codes broadcast by a BDR (13:) or OTB (10:) acting as the
 # appliance_control (boiler relay).  These are sent as I broadcasts at
@@ -220,6 +280,15 @@ class DiscoveredDevice:
     is_battery: bool = False  # seen sending battery info
     source_count: int = 0  # number of packets where this device was src
     destination_count: int = 0  # number of packets where this device was dst
+    # Contradiction tracking (issue 1000): for known devices, count
+    # source packets where _classify disagrees with the current
+    # likely_type.  After _CONTRADICTION_THRESHOLD consecutive
+    # disagreements (without a matching packet resetting the count),
+    # likely_type is updated to the new classification.  This uses the
+    # existing _classify function — no HVAC-specific logic here.  When
+    # the strategy pattern arrives, _classify becomes
+    # strategy.classify(packet) and this tracking moves with it.
+    contradiction_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict (for JSON export)."""
@@ -335,6 +404,24 @@ class DiscoveryScan:
 
         # Check schema keys (CTL IDs are top-level keys — declared intent)
         return device_id in self._gateway._gwy_config.schema
+
+    def _get_declared_class(self, device_id: str) -> DevType | None:
+        """Get the declared class for a known device from the known_list.
+
+        :param device_id: The device ID to look up.
+        :return: The declared DevType, or None if the device is not in
+            the known_list or has no class.
+        """
+        entry = self._gateway._gwy_config.known_list.get(device_id)
+        if not isinstance(entry, dict):
+            return None
+        cls = entry.get("class")
+        if not isinstance(cls, str) or not cls:
+            return None
+        try:
+            return DevType(cls)
+        except ValueError:
+            return None
 
     def _is_declared_hotwater_valve(self, device_id: str) -> bool:
         """Check if a device is declared as hotwater_valve in the schema.
@@ -552,9 +639,51 @@ class DiscoveryScan:
                 # entry so codes_seen is accumulated (needed for DHW valve
                 # inference via 1100 code, etc.)
                 now = dt.now().isoformat(timespec="seconds")
-                likely_type = _classify(
-                    device_id, code, verb, is_source=is_source
-                )
+                # Use the declared class from the known_list as the
+                # initial likely_type (issue 1000).  The known_list is
+                # derived from the schema, which is authoritative.
+                # This ensures the scan engine starts with the declared
+                # class and only re-classifies after contradiction
+                # threshold is reached.  Without this, a restarted scan
+                # engine creates 37:169161 with likely_type=REM (prefix
+                # fallback) instead of FAN (declared), so no
+                # contradiction is ever detected.
+                declared_class = self._get_declared_class(device_id)
+                if declared_class is not None:
+                    likely_type = declared_class
+                    initial_conf = "high"  # declared class is authoritative
+                else:
+                    likely_type = _classify(
+                        device_id, code, verb, is_source=is_source
+                    )
+                    # Confidence: "high" if evidence-based (VC pair
+                    # match, CTL-only code, or zone binding code),
+                    # "medium" if prefix fallback (37: → REM is a
+                    # guess).  This prevents false-positive class
+                    # mismatches where the scan engine confidently says
+                    # "REM" based on a prefix fallback for a device
+                    # that is actually a CO2.
+                    vc_key = (verb, code)
+                    is_vc_match = (
+                        vc_key in _VC_TO_TYPE
+                        and _VC_TO_TYPE[vc_key]
+                        in _AMBIGUOUS_HVAC_PREFIX_TYPES.get(
+                            device_id[:2], frozenset()
+                        )
+                    ) or (
+                        is_source
+                        and (
+                            code in _CTL_ONLY_CODES
+                            or (
+                                code in _CTL_ONLY_CODES_WITH_VERB
+                                and verb in _CTL_ONLY_CODES_WITH_VERB[code]
+                            )
+                        )
+                    )
+                    is_binding = is_source and code in _ZONE_BINDING_CODES
+                    initial_conf = (
+                        "high" if (is_vc_match or is_binding) else "medium"
+                    )
                 device = DiscoveredDevice(
                     device_id=device_id,
                     first_seen=now,
@@ -562,7 +691,7 @@ class DiscoveryScan:
                     likely_type=likely_type,
                     codes_seen=[code] if code else [],
                     rssi=rssi,
-                    confidence="high",
+                    confidence=initial_conf,
                     is_battery=code in _BATTERY_CODES,
                     source_count=1 if is_source else 0,
                     destination_count=0 if is_source else 1,
@@ -664,6 +793,34 @@ class DiscoveryScan:
                         code,
                         verb.strip(),
                     )
+                # REM→FAN inference (known device): a REM/CO2 sending a
+                # directed packet (W/RQ/I) to a FAN (32:) confirms
+                # binding.  More authoritative than FAN→REM — the REM
+                # only sends to the FAN it was 1FC9-paired with (not any
+                # FAN in range).  A directed I is proof because the REM
+                # addresses its paired FAN specifically; a broadcast I
+                # (dst = --:------) is filtered out by _is_valid_address.
+                elif (
+                    not is_hgi
+                    and not device.bound_to
+                    and is_source
+                    and destination
+                    and _is_valid_address(destination)
+                    and destination.startswith("32:")
+                    and verb in (Verb.W_, Verb.RQ, Verb.I_)
+                    and code in _HVAC_PARENT_INFERENCE_CODES
+                ):
+                    device.bound_to = destination
+                    device.confidence = "high"
+                    self._dirty = True
+                    _LOGGER.debug(
+                        "DiscoveryScan: HVAC bound_to %s -> %s (known device, "
+                        "REM→FAN, code=%s, verb=%s)",
+                        device_id,
+                        destination,
+                        code,
+                        verb.strip(),
+                    )
                 # DHW topology inference for known devices: directed interaction
                 # between a CTL (01:/23:) and a DHW sensor (07:) confirms binding.
                 elif (
@@ -692,6 +849,81 @@ class DiscoveryScan:
                         device.bound_to = destination
                         device.confidence = "high"
                         self._dirty = True
+
+                # Re-classify known devices using the same _classify
+                # function as for new devices (issue 1000).  Without
+                # this, likely_type is frozen at the first packet's
+                # classification, so a FAN-classified device that sends
+                # DIS-like packets (RQ 31DA, I 22F1) never gets
+                # re-classified and check_class_mismatches sees no
+                # mismatch.
+                #
+                # Uses a contradiction counter: consecutive source
+                # packets where _classify disagrees with likely_type
+                # increment the counter; a matching packet resets it.
+                # After _CONTRADICTION_THRESHOLD, likely_type is
+                # updated.  This avoids flapping on a single ambiguous
+                # packet.
+                #
+                # When the strategy pattern arrives, _classify becomes
+                # strategy.classify(packet) — this tracking naturally
+                # moves with it.
+                if is_source and code:
+                    new_type = _classify(
+                        device_id,
+                        code,
+                        verb,
+                        is_source=is_source,
+                        device=device,
+                    )
+                    if (
+                        new_type != DevType.DEV
+                        and new_type != device.likely_type
+                    ):
+                        # Only count evidence-based contradictions
+                        # (VC pair match or CTL-only code).  A prefix
+                        # fallback (e.g. 37: → REM) is a guess, not
+                        # evidence — it should NOT contradict a declared
+                        # class.  Otherwise a CO2 device sending generic
+                        # codes like 10E0 would be re-classified as REM
+                        # just because 37: falls to REM by prefix.
+                        if not _is_evidence_based(
+                            device_id, code, verb, is_source
+                        ):
+                            # Prefix fallback — skip, don't contradict
+                            pass
+                        else:
+                            device.contradiction_count += 1
+                            self._dirty = True
+                            if (
+                                device.contradiction_count
+                                >= _CONTRADICTION_THRESHOLD
+                            ):
+                                _LOGGER.debug(
+                                    "DiscoveryScan: re-classified known "
+                                    "device %s: %s -> %s (after %d "
+                                    "contradictions, code=%s, verb=%s)",
+                                    device_id,
+                                    device.likely_type,
+                                    new_type,
+                                    device.contradiction_count,
+                                    code,
+                                    verb.strip(),
+                                )
+                                device.likely_type = new_type
+                                device.contradiction_count = 0
+                                # Re-classification after threshold is
+                                # evidence-based — set confidence to
+                                # "high" so check_class_mismatches
+                                # trusts it (it skips HVAC devices with
+                                # "medium" confidence prefix-fallback
+                                # classifications).
+                                device.confidence = "high"
+                    elif new_type == device.likely_type:
+                        # Matching packet — reset contradiction count
+                        if device.contradiction_count > 0:
+                            device.contradiction_count = 0
+                            self._dirty = True
             return
 
         now = dt.now().isoformat(timespec="seconds")
@@ -763,6 +995,23 @@ class DiscoveryScan:
                 and code in _HVAC_PARENT_INFERENCE_CODES
             ):
                 device.bound_to = source
+            # REM→FAN inference (new device): a REM/CO2 sending a
+            # directed packet (W/RQ/I) to a FAN (32:) confirms binding.
+            # More authoritative than FAN→REM — the REM only sends to
+            # its 1FC9-paired FAN.  A directed I is proof (the REM
+            # addresses its paired FAN specifically); a broadcast I
+            # (dst = --:------) is filtered out by _is_valid_address.
+            elif (
+                not is_hgi
+                and is_source
+                and destination
+                and _is_valid_address(destination)
+                and destination.startswith("32:")
+                and verb in (Verb.W_, Verb.RQ, Verb.I_)
+                and code in _HVAC_PARENT_INFERENCE_CODES
+            ):
+                device.bound_to = destination
+                device.confidence = "high"
             # DHW topology inference: directed interaction between CTL and DHW sensor
             elif (
                 not is_hgi
@@ -877,6 +1126,33 @@ class DiscoveryScan:
         ):
             device.bound_to = source
             changed = True
+        # REM→FAN inference (existing device): a REM/CO2 sending a
+        # directed packet (W/RQ/I) to a FAN (32:) confirms binding.
+        # More authoritative than FAN→REM — the REM only sends to
+        # its 1FC9-paired FAN.  A directed I is proof (the REM
+        # addresses its paired FAN specifically); a broadcast I
+        # (dst = --:------) is filtered out by _is_valid_address.
+        elif (
+            not is_hgi
+            and not device.bound_to
+            and is_source
+            and destination
+            and _is_valid_address(destination)
+            and destination.startswith("32:")
+            and verb in (Verb.W_, Verb.RQ, Verb.I_)
+            and code in _HVAC_PARENT_INFERENCE_CODES
+        ):
+            device.bound_to = destination
+            device.confidence = "high"
+            changed = True
+            _LOGGER.debug(
+                "DiscoveryScan: HVAC bound_to %s -> %s (REM→FAN, "
+                "code=%s, verb=%s)",
+                device_id,
+                destination,
+                code,
+                verb.strip(),
+            )
         # DHW topology inference for existing devices
         elif (
             not is_hgi
@@ -989,13 +1265,37 @@ class DiscoveryScan:
         """Load a previously exported list (for resume after restart).
 
         Replaces the current in-memory dict.
+
+        For known devices (in the known_list), the declared class
+        overrides the imported likely_type (issue 1000).  This ensures
+        the scan engine always starts from the declared class and only
+        re-classifies after contradiction threshold is reached.  Without
+        this, a restarted scan engine keeps a stale likely_type from a
+        previous VC pair match (e.g. FAN from I 31DA) even though the
+        device is declared as REM in the schema.
         """
         parsed = json.loads(data)
         self._devices = {
             d["device_id"]: DiscoveredDevice.from_dict(d)
             for d in parsed.get("devices", [])
         }
-        self._dirty = False
+        # Override likely_type for known devices with declared class
+        had_overrides = False
+        for device_id, device in self._devices.items():
+            declared = self._get_declared_class(device_id)
+            if declared is not None and device.likely_type != declared:
+                _LOGGER.debug(
+                    "DiscoveryScan: overriding imported likely_type "
+                    "for known device %s: %s -> %s (declared class)",
+                    device_id,
+                    device.likely_type,
+                    declared,
+                )
+                device.likely_type = declared
+                device.contradiction_count = 0
+                device.confidence = "high"
+                had_overrides = True
+        self._dirty = had_overrides
         _LOGGER.info("DiscoveryScan: imported %d devices", len(self._devices))
 
     def device_count(self) -> int:
@@ -1051,6 +1351,15 @@ def _classify(
        accept VC pairs that map to a type valid for that prefix
     4. CH prefix — fallback for heating domain devices
     5. Accumulated codes — re-evaluate with full evidence
+
+    TODO: DIS (Orcon RF15 Display) is not distinguishable from REM by
+    this function.  A DIS sends RQ 2411 and RQ 31DA as normal behavior,
+    but so does a REM (per the protocol table, with "VMI only?" caveats).
+    The scan engine falls to the 37: prefix fallback (REM) for both.
+    When the strategy pattern arrives (issue 939), a DisStrategy could
+    use 2411 frequency or the presence of 1470/042F (DIS-only codes) to
+    distinguish.  See also: protocol/ramses.py _HVAC_VC_PAIR_BY_CLASS,
+    pipeline/topology_handlers/hvac.py HvacTopologyHandler.
     """
     prefix = device_id[:2]
 
@@ -1093,23 +1402,13 @@ def _classify(
                 # only classify as CTL if the current verb matches
                 if verb in ctl_verbs:
                     return DevType.CTL
-        # Check HVAC codes from accumulated data — but only with the
-        # current verb.  Trying all verbs (I, RP, RQ, W) caused
-        # misclassification: a DIS sending RQ 31DA (requesting fan status
-        # from a FAN) was classified as FAN because (I, 31DA) maps to FAN
-        # in _VC_TO_TYPE.  The device never sent I 31DA — it only sent
-        # RQ 31DA — but the loop tried all verbs regardless.
-        #
-        # By only checking the current verb, we ensure:
-        # - RQ 31DA (DIS asking FAN for status) → not in _VC_TO_TYPE → skip
-        # - I 31DA (FAN broadcasting status) → FAN
-        # - RP 31DA (FAN responding to request) → FAN
-        valid_types = _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix)
-        for code_seen in device.codes_seen:
-            if (verb, code_seen) in _VC_TO_TYPE:
-                vc_type = _VC_TO_TYPE[(verb, code_seen)]
-                if valid_types is None or vc_type in valid_types:
-                    return vc_type
+        # NOTE: HVAC VC-pair classification from accumulated codes_seen
+        # was removed — it caused misclassification because codes_seen
+        # doesn't track per-code verbs.  A DIS sending I 22F1 was
+        # classified as FAN because 31DA was in codes_seen (from a
+        # previous RQ 31DA) and (I, 31DA) maps to FAN.  Step 3 above
+        # already checks the current (verb, code) pair, which is
+        # sufficient for correct classification.
 
     # 5. CH prefix fallback
     if prefix in _PREFIX_TO_TYPE:

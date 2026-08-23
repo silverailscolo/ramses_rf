@@ -23,6 +23,7 @@ from .state_projector import (
     _update_schedule_state,
     _update_system_state,
     _update_temperature_state,
+    _update_zone_state,
     process_state_updates,
 )
 from .validators import instantiate_devices, validate_addresses, validate_slugs
@@ -51,6 +52,7 @@ __all__ = [
     "_update_schedule_state",
     "_update_system_state",
     "_update_temperature_state",
+    "_update_zone_state",
     "detect_array_fragment",
     "instantiate_devices",
     "process_msg",

@@ -1273,7 +1273,14 @@ class ZoneConfigPayload(PayloadBase):
         :rtype: dict[str, Any]
         """
         bitmap = self.zone_flags
+        # zone_index is included so that _resolve_logical_targets in
+        # state_projector.py can route the payload to the correct zone.
+        # Without it, 000A packets are never ingested (issue 1102).
+        index = self.zone_index
+        if isinstance(index, int):
+            index = f"{index:02X}"
         return {
+            SZ_ZONE_INDEX: index,
             "min_temp": self.min_temp,
             "max_temp": self.max_temp,
             "local_override": not bool(bitmap & 1),
@@ -2105,7 +2112,14 @@ class RelayDemand2BPayload(RelayDemandPayload):
         :returns: Decoded relay demand dictionary.
         :rtype: dict[str, Any]
         """
-        return {"relay_demand": self.demand_percent}
+        # domain_index is included so that _update_demand_state can
+        # populate the TCS's per-domain _relay_demands dict (issue 1102).
+        idx = self.domain_or_zone_index
+        domain = "FC" if idx == 0xFC else f"{idx:02X}"
+        return {
+            SZ_DOMAIN_INDEX: domain,
+            "relay_demand": self.demand_percent,
+        }
 
 
 # Update VARIANTS property after variants are defined

@@ -1,0 +1,34 @@
+# test: eavesdropping discovers the correct sensor TRV in a multi-TRV zone (issue 984)
+#
+# Zone 00 has two TRVs: 04:200001 (21.0C) and 04:200002 (19.5C)
+# The controller broadcasts 30C9 array showing zone 00 = 21.0C
+# Eavesdropping should bind 04:200001 as the zone sensor, not 04:200002
+#
+# This is the scenario from issue 984: a multi-TRV zone where one of the
+# TRVs is the designated sensor (not the CTL).
+
+# 000C: bind TRVs as actuators to zone 00 (6-byte format with sub_index 00)
+2022-07-08T05:00:00.000000 055 RP --- 01:200001 18:009048 --:------ 000C 012 000800130D41000800130D42
+
+# TRV temperature broadcasts (30C9, 2-byte format: just temperature)
+2022-07-08T05:10:00.000000 055  I --- 04:200001 --:------ 04:200001 30C9 002 0834  # 21.0C
+2022-07-08T05:10:01.000000 055  I --- 04:200002 --:------ 04:200002 30C9 002 07AE  # 19.5C
+
+# Controller broadcasts zone array (30C9, 3-byte per zone) — first array, prev=None
+2022-07-08T05:15:00.000000 067  I --- 01:200001 --:------ 01:200001 1F09 003 FF06EF
+2022-07-08T05:15:00.100000 067  I --- 01:200001 --:------ 01:200001 30C9 003 000834  # zone 00 = 21.0C
+
+# Second cycle — zone 00 temp unchanged (no eavesdrop trigger)
+2022-07-08T05:20:00.000000 067  I --- 01:200001 --:------ 01:200001 1F09 003 FF06EF
+2022-07-08T05:20:00.100000 067  I --- 01:200001 --:------ 01:200001 30C9 003 000834  # zone 00 = 21.0C (same)
+
+# TRV re-broadcasts within the second cycle (after prev.dtm at 05:15)
+2022-07-08T05:20:01.000000 055  I --- 04:200001 --:------ 04:200001 30C9 002 0834  # 21.0C
+2022-07-08T05:20:02.000000 055  I --- 04:200002 --:------ 04:200002 30C9 002 07AE  # 19.5C
+
+# Third cycle — zone 00 temp changes to 21.5C (triggers eavesdrop)
+2022-07-08T05:25:00.000000 067  I --- 01:200001 --:------ 01:200001 1F09 003 FF06EF
+2022-07-08T05:25:00.100000 067  I --- 01:200001 --:------ 01:200001 30C9 003 000866  # zone 00 = 21.5C
+
+# TRV 04:200001 broadcasts 21.5C (matching the changed zone temp, after prev.dtm at 05:20)
+2022-07-08T05:25:01.000000 055  I --- 04:200001 --:------ 04:200001 30C9 002 0866  # 21.5C
