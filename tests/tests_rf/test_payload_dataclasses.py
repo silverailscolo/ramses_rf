@@ -37,6 +37,8 @@ from ramses_rf.payloads.heating import (
 )
 from ramses_rf.payloads.hvac import (
     Co2Payload,
+    Co22BPayload,
+    Co23BPayload,
     FanModePayload,
     HvacAirQualityPayload,
     HvacBypassStatePayload,
@@ -420,8 +422,84 @@ def test_co2_payload_1298_parity() -> None:
 
     # Assert
     assert payload.co2_level == 720
+    assert payload.co2_level_fault is None
     assert reencoded == raw_hex
-    assert as_dict == {"co2_level": 720}
+    assert as_dict == {"co2_level": 720, "co2_level_fault": None}
+    # to_dict() omits the fault key when there is no fault
+    assert payload.to_dict() == {"co2_level": 720}
+
+
+def test_co2_payload_1298_fault_out_of_range_low() -> None:
+    # Arrange — 0x8400 is a sensor fault (out_of_range_low), not 33792 ppm.
+    # See issue ramses-rf/ramses_rf#1105 (Tweakers Orcon CO2 spike report).
+    raw_hex = "8400"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = Co2Payload.from_bytes(raw_bytes)
+    as_dict = payload_to_dict(payload)
+
+    # Assert
+    assert payload.co2_level is None
+    assert payload.co2_level_fault == "out_of_range_low"
+    assert as_dict == {
+        "co2_level": None,
+        "co2_level_fault": "out_of_range_low",
+    }
+    assert payload.to_dict() == {
+        "co2_level": None,
+        "co2_level_fault": "out_of_range_low",
+    }
+
+
+def test_co2_payload_1298_fault_3byte() -> None:
+    # Arrange — 3-byte variant with domain_index + fault high byte.
+    raw_hex = "008300"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = Co2Payload.from_bytes(raw_bytes)
+
+    # Assert
+    assert isinstance(payload, Co23BPayload)
+    assert payload.domain_index == 0
+    assert payload.co2_level is None
+    assert payload.co2_level_fault == "out_of_range_high"
+
+
+@pytest.mark.parametrize(
+    "raw_hex,fault_name",
+    [
+        ("8000", "short_circuit"),
+        ("8100", "open_circuit"),
+        ("8200", "unavailable"),
+        ("8300", "out_of_range_high"),
+        ("8400", "out_of_range_low"),
+        ("8500", "unreliable"),
+    ],
+)
+def test_co2_payload_1298_fault_map(raw_hex: str, fault_name: str) -> None:
+    # Arrange
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = Co22BPayload.from_bytes(raw_bytes)
+
+    # Assert
+    assert payload.co2_level is None
+    assert payload.co2_level_fault == fault_name
+
+
+def test_co2_payload_1298_sentinel_no_fault() -> None:
+    # Arrange — 0x7FFF sentinel means "no reading", not a fault.
+    raw_bytes = (0x7FFF).to_bytes(2, "big")
+
+    # Act
+    payload = Co22BPayload.from_bytes(raw_bytes)
+
+    # Assert
+    assert payload.co2_level is None
+    assert payload.co2_level_fault is None
 
 
 def test_relative_humidity_payload_12a0_parity() -> None:

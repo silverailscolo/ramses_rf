@@ -14,6 +14,7 @@ from ramses_rf.const import (
     SZ_AIR_QUALITY_BASIS,
     SZ_BYPASS_POSITION,
     SZ_CO2_LEVEL,
+    SZ_CO2_LEVEL_FAULT,
     SZ_COOLING_DEMAND,
     SZ_DEWPOINT_TEMP,
     SZ_EXHAUST_FAN_SPEED,
@@ -45,6 +46,39 @@ from ramses_rf.protocol.ramses import (
 
 from .base import PayloadBase
 from .registry import register_payload
+
+# CO2 sensor fault encoding (high byte of uint16 value).
+# Matches the fault scheme used by 31DA's _parse_val for the same
+# sensor family (Orcon/Itho/Nuaire).  See issue ramses-rf/ramses_rf#1105.
+_CO2_FAULT_MAP: dict[int, str] = {
+    0x80: "short_circuit",
+    0x81: "open_circuit",
+    0x82: "unavailable",
+    0x83: "out_of_range_high",
+    0x84: "out_of_range_low",
+    0x85: "unreliable",
+}
+
+
+def _decode_co2_value(raw_val: int) -> tuple[int | None, str | None]:
+    """Decode a raw uint16 CO2 value into (level, fault).
+
+    Sentinels 0x7FFF and 0xFFFF mean "no reading".  A high byte in
+    0x80-0x85 signals a sensor fault; the low byte is ignored and the
+    fault name is returned instead of a ppm value.
+
+    :param raw_val: Raw unsigned 16-bit integer from the payload.
+    :type raw_val: int
+    :returns: Tuple of (co2_level_ppm_or_None, fault_name_or_None).
+    :rtype: tuple[int | None, str | None]
+    """
+    if raw_val in (0x7FFF, 0xFFFF):
+        return None, None
+    hi_byte = raw_val >> 8
+    if hi_byte in _CO2_FAULT_MAP:
+        return None, _CO2_FAULT_MAP[hi_byte]
+    return raw_val, None
+
 
 # ----------------------------------------------------------------------
 
@@ -405,22 +439,36 @@ class Co2Payload(PayloadBase):
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
     co2_level: int | None
+    co2_level_fault: str | None
 
     def __new__(  # type: ignore[misc]
         cls,
         co2_level: int | None = None,
         domain_index: int | None = None,
+        co2_level_fault: str | None = None,
     ) -> "Co22BPayload | Co23BPayload":
         """Construct Co2 payload variant dynamically from arguments."""
         if cls is not Co2Payload:
             return super().__new__(cls)  # type: ignore[return-value]
         if domain_index is not None:
-            return Co23BPayload(domain_index=domain_index, co2_level=co2_level)
-        return Co22BPayload(co2_level=co2_level)
+            return Co23BPayload(
+                domain_index=domain_index,
+                co2_level=co2_level,
+                co2_level_fault=co2_level_fault,
+            )
+        return Co22BPayload(
+            co2_level=co2_level, co2_level_fault=co2_level_fault
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert CO2 payload to legacy dictionary layout."""
-        return {"co2_level": getattr(self, "co2_level", None)}
+        result: dict[str, Any] = {
+            "co2_level": getattr(self, "co2_level", None),
+        }
+        fault = getattr(self, "co2_level_fault", None)
+        if fault is not None:
+            result[SZ_CO2_LEVEL_FAULT] = fault
+        return result
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> "Co2Payload":
@@ -447,6 +495,10 @@ class Co2Payload(PayloadBase):
 class Co22BPayload(Co2Payload):
     """2-byte CO2 sensor reading payload (Opcode 1298).
 
+    Fault encoding: a high byte in 0x80-0x85 signals a sensor fault
+    (e.g. 0x8400 = out_of_range_low).  In that case ``co2_level`` is
+    None and ``co2_level_fault`` holds the fault name.
+
     2-byte CO2 binary layout (Big-Endian):
       Offset  Format  Len  Description                    Sample Hex
       --------------------------------------------------------------
@@ -457,11 +509,14 @@ class Co22BPayload(Co2Payload):
 
     :param co2_level: CO2 concentration level in PPM (parts per million).
     :type co2_level: int | None
+    :param co2_level_fault: Sensor fault name, or None for a valid reading.
+    :type co2_level_fault: str | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">H"
 
     co2_level: int | None
+    co2_level_fault: str | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -471,8 +526,8 @@ class Co22BPayload(Co2Payload):
                 f"Invalid payload length for Co22BPayload: {len(raw_data)}"
             )
         (raw_val,) = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        co2 = None if raw_val in (32767, 0x7FFF, 0xFFFF) else raw_val
-        return cls(co2_level=co2)
+        co2, fault = _decode_co2_value(raw_val)
+        return cls(co2_level=co2, co2_level_fault=fault)
 
     def to_bytes(self) -> bytes:
         """Pack 2-byte CO2 payload."""
@@ -483,6 +538,10 @@ class Co22BPayload(Co2Payload):
 @dataclass(frozen=True, slots=True)
 class Co23BPayload(Co2Payload):
     """3-byte CO2 sensor reading payload (Opcode 1298).
+
+    Fault encoding: a high byte in 0x80-0x85 signals a sensor fault
+    (e.g. 0x8400 = out_of_range_low).  In that case ``co2_level`` is
+    None and ``co2_level_fault`` holds the fault name.
 
     3-byte CO2 binary layout:
       Offset  Format  Len  Description                    Sample Hex
@@ -497,12 +556,15 @@ class Co23BPayload(Co2Payload):
     :type domain_index: int
     :param co2_level: CO2 concentration level in PPM (parts per million).
     :type co2_level: int | None
+    :param co2_level_fault: Sensor fault name, or None for a valid reading.
+    :type co2_level_fault: str | None
     """
 
     _STRUCT_FMT: ClassVar[str] = ">BH"
 
     domain_index: int
     co2_level: int | None
+    co2_level_fault: str | None = None
 
     @classmethod
     def from_bytes(cls, raw_data: bytes) -> Self:
@@ -512,8 +574,8 @@ class Co23BPayload(Co2Payload):
                 f"Invalid payload length for Co23BPayload: {len(raw_data)}"
             )
         hdr, raw_val = struct.unpack_from(cls._STRUCT_FMT, raw_data, 0)
-        co2 = None if raw_val in (32767, 0x7FFF, 0xFFFF) else raw_val
-        return cls(domain_index=hdr, co2_level=co2)
+        co2, fault = _decode_co2_value(raw_val)
+        return cls(domain_index=hdr, co2_level=co2, co2_level_fault=fault)
 
     def to_bytes(self) -> bytes:
         """Pack 3-byte CO2 payload."""

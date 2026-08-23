@@ -13,6 +13,7 @@ class HvacState:
     """The immutable state of an HVAC ventilation or fan entity."""
 
     co2_level: int | None = None
+    co2_level_fault: str | None = None
     air_quality: float | None = None
     air_quality_basis: float | None = None
     bypass_mode: str | None = None

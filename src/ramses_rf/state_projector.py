@@ -21,6 +21,7 @@ from .const import (
     SZ_BYPASS_POSITION,
     SZ_BYPASS_STATE,
     SZ_CO2_LEVEL,
+    SZ_CO2_LEVEL_FAULT,
     SZ_COOLING_DEMAND,
     SZ_COOLING_MODE,
     SZ_DATETIME,
@@ -439,6 +440,7 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
     fields = [
         SZ_CO2_LEVEL,
+        SZ_CO2_LEVEL_FAULT,
         SZ_AIR_QUALITY,
         SZ_AIR_QUALITY_BASIS,
         SZ_BYPASS_MODE,
