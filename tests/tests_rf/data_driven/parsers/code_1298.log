@@ -8,3 +8,8 @@
 
 # from ramses_cc issue 76 by Kars-de-Jong
 2024-10-15T12:33:59.943010 --- RP --- 37:006470 18:071939 --:------ 1298 003 0001C6  # {'co2_level': 454}
+
+# Orcon CO2 sensor fault: 0x8400 high byte = out_of_range_low.
+# Previously misdecoded as 33792 ppm. See issue ramses-rf/ramses_rf#1105.
+2026-08-23T02:14:00.000000 064  I --- 37:154011 --:------ 37:154011 1298 003 008400  # {'co2_level': None, 'co2_level_fault': 'out_of_range_low'}
+2026-08-23T02:15:00.000000 064  I --- 37:154011 --:------ 37:154011 1298 002 8300  # {'co2_level': None, 'co2_level_fault': 'out_of_range_high'}
