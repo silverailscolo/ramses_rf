@@ -636,7 +636,12 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             if device_id in self._foreign_gwys_lst:
                 return
 
-            _LOGGER.warning(
+            # INFO, not WARNING: a foreign HGI is never blocked (the
+            # exemption above skips filtering for all 18: devices), so
+            # this is purely informational.  With multi-HGI setups now
+            # supported by the discovery_scan config schema, an unknown
+            # second HGI is common and not a problem.  See issue 1020.
+            _LOGGER.info(
                 f"Device {device_id} is potentially a Foreign gateway, "
                 f"the Active gateway is {self._active_hgi}, "
                 f"alternatively, is it a HVAC device?{TIP}"
@@ -647,15 +652,19 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             (source_id, destination_id)
         ):  # removes duplicates
             # HGI devices (18:) are gateways, not sensors/actuators.
-            # Foreign HGIs communicate with our controller and the controller's
-            # responses (e.g. 0004 zone names, 2349 zone modes) are addressed
-            # to them.  Blocking a foreign HGI would prevent the active gateway
-            # from eavesdropping on those responses (issue 822).
+            # The active gateway and known HGIs (in the known_list) are
+            # always allowed through.  A foreign HGI that the caller has
+            # explicitly put in the block_list (e.g. ramses_cc marks it
+            # _owner: not-me) is blocked — it belongs to a different
+            # system and won't communicate with our controller.
             #
-            # This check is BEFORE the exclude (block_list) check so that
-            # foreign HGIs are never blocked, even if a caller mistakenly
-            # adds them to the block_list.  HGI_DEV_ADDR (18:000730, the
-            # generic broadcast address) is still subject to the block_list.
+            # An unknown HGI (not in any list) might be our own second
+            # gateway not yet configured.  Its packets are allowed through
+            # so the active gateway can eavesdrop on the controller's
+            # responses to it (issue 822), and an INFO-level message is
+            # logged so the user can decide whether to configure it.
+            # HGI_DEV_ADDR (18:000730, the generic broadcast address) is
+            # always subject to the normal block/include checks below.
             if dev_id[:2] == "18" and dev_id != HGI_DEV_ADDR.id:
                 if dev_id == self._active_hgi:
                     continue
@@ -665,6 +674,13 @@ class _DeviceIdFilterMixin(_BaseProtocol):
                 # warning for it (issue 1020).
                 if dev_id in self._include:
                     continue
+                # A foreign HGI explicitly in the block_list is blocked.
+                # The issue 822 exemption (let unknown HGIs through for
+                # eavesdropping) only applies to HGIs that are not in any
+                # list — a foreign HGI marked as such by the caller should
+                # be filtered out.  See issue 1020.
+                if dev_id in self._exclude:
+                    return False
                 if self._active_hgi:
                     warn_foreign_hgi(dev_id)
                 continue

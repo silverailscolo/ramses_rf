@@ -186,30 +186,59 @@ async def test_is_wanted_addrs_sending_to_hgi(protocol: DummyProtocol) -> None:
     )
 
 
-async def test_is_wanted_addrs_foreign_hgi_not_blocked(
+async def test_is_wanted_addrs_blocked_hgi_is_filtered(
     protocol: DummyProtocol,
 ) -> None:
-    """Foreign HGIs (18:) must not be blocked even if in the exclude list.
+    """A foreign HGI in the block_list is filtered out (issue 1020).
 
-    A foreign HGI communicates with our controller and the controller's
-    responses (e.g. 0004 zone names) are addressed to the foreign HGI.
-    Blocking the foreign HGI would prevent the active gateway from
-    eavesdropping on those responses (issue 822).
+    A foreign HGI (different owner, marked as foreign in ramses_cc →
+    block_list) does not communicate with our controller.  Blocking it
+    is safe and prevents noise.  The issue 822 eavesdropping exemption
+    only applies to unknown HGIs that might be our own second gateway.
     """
     protocol._active_hgi = DeviceIdT("18:191664")
     protocol._exclude = [DeviceIdT("18:072981")]  # foreign HGI in block_list
 
-    # Packet from controller to foreign HGI (e.g. 0004 RP zone name)
+    # Packet from controller to blocked HGI — filtered
     assert (
         protocol._is_wanted_addrs(
             DeviceIdT("01:216136"), DeviceIdT("18:072981")
         )
-        is True
+        is False
     )
-    # Packet from foreign HGI to controller (e.g. 0004 RQ)
+    # Packet from blocked HGI to controller — filtered
     assert (
         protocol._is_wanted_addrs(
             DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
+        is False
+    )
+
+
+async def test_is_wanted_addrs_unknown_hgi_not_blocked(
+    protocol: DummyProtocol,
+) -> None:
+    """An unknown HGI (not in any list) is NOT blocked (issue 822).
+
+    An unknown HGI might be our own second gateway not yet configured.
+    Its packets must pass through so the active gateway can eavesdrop
+    on the controller's responses to it.
+    """
+    protocol._active_hgi = DeviceIdT("18:191664")
+    protocol._exclude = []
+    protocol._include = []
+
+    # Packet from unknown HGI to controller — allowed through
+    assert (
+        protocol._is_wanted_addrs(
+            DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
+        is True
+    )
+    # Packet from controller to unknown HGI — allowed through
+    assert (
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:216136"), DeviceIdT("18:072981")
         )
         is True
     )
@@ -240,25 +269,32 @@ async def test_is_wanted_addrs_known_hgi_no_foreign_warning(
     assert not any("Foreign gateway" in r.message for r in caplog.records)
 
 
-async def test_is_wanted_addrs_unknown_hgi_still_warns(
+async def test_is_wanted_addrs_unknown_hgi_logs_info(
     protocol: DummyProtocol,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """An unknown HGI (not in the known_list) still triggers the warning.
+    """An unknown HGI (not in the known_list) logs at INFO, not WARNING.
 
     Only HGIs declared in the known_list are suppressed (issue 1020); a
-    genuinely unknown 18: device should still produce the Foreign gateway
-    warning so the user can decide whether to configure it.
+    genuinely unknown 18: device still produces the Foreign gateway
+    message so the user can decide whether to configure it, but at INFO
+    level since a foreign HGI is never blocked and the message is purely
+    informational (issue 1020).
     """
     protocol._active_hgi = DeviceIdT("18:130140")
     protocol._include = []  # 18:154951 is not known
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         protocol._is_wanted_addrs(
             DeviceIdT("18:154951"), DeviceIdT("01:216136")
         )
 
-    assert any("Foreign gateway" in r.message for r in caplog.records)
+    # The Foreign gateway message is emitted at INFO level
+    foreign_records = [
+        r for r in caplog.records if "Foreign gateway" in r.message
+    ]
+    assert len(foreign_records) == 1
+    assert foreign_records[0].levelno == logging.INFO
 
 
 async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
