@@ -636,11 +636,12 @@ class _DeviceIdFilterMixin(_BaseProtocol):
             if device_id in self._foreign_gwys_lst:
                 return
 
-            # INFO, not WARNING: a foreign HGI is never blocked (the
-            # exemption above skips filtering for all 18: devices), so
-            # this is purely informational.  With multi-HGI setups now
-            # supported by the discovery_scan config schema, an unknown
-            # second HGI is common and not a problem.  See issue 1020.
+            # INFO, not WARNING: an unknown HGI (not in any list) is
+            # allowed through for eavesdropping (issue 822), so this
+            # message is purely informational.  With multi-HGI setups
+            # now supported by the discovery_scan config schema, an
+            # unknown second HGI is common and not a problem.
+            # See issue 1020.
             _LOGGER.info(
                 f"Device {device_id} is potentially a Foreign gateway, "
                 f"the Active gateway is {self._active_hgi}, "
