@@ -7,11 +7,14 @@ from collections.abc import Callable
 from ramses_rf.exceptions import DeviceNotFoundError
 from ramses_rf.typing import DeviceIdT
 from ramses_tx.address import HGI_DEV_ADDR
-from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_KNOWN_LIST
+from ramses_tx.schemas import SZ_BLOCK_LIST, SZ_SCHEMA
 
 
 class DeviceFilter:
-    """Service to filter devices based on known and blocked lists."""
+    """Service to filter devices based on known and blocked lists.
+
+    Both are generated from the schema or read from a config file.
+    """
 
     def __init__(
         self,
@@ -70,7 +73,7 @@ class DeviceFilter:
             self._unwanted.append(device_id)
             raise DeviceNotFoundError(
                 f"Can't create {device_id}: it is not an allowed device_id"
-                f" (if required, add it to the {SZ_KNOWN_LIST})"
+                f" (if required, add it to the {SZ_SCHEMA})"
             )
 
         if device_id in self._exclude:
