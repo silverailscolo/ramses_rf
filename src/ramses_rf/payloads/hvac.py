@@ -439,6 +439,7 @@ class Co2Payload(PayloadBase):
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
     co2_level: int | None
+    co2_level_fault: str | None
 
     def __new__(  # type: ignore[misc]
         cls,
