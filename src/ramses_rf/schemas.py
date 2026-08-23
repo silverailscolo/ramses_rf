@@ -38,6 +38,7 @@ from ramses_tx.schemas import (  # noqa: F401
     SZ_ENFORCE_KNOWN_LIST,
     SZ_KNOWN_LIST as SZ_KNOWN_LIST,
     SZ_PACKET_LOG,
+    SZ_SCHEMA as SZ_SCHEMA,
     sch_packet_log_dict_factory,
     select_device_filter_mode,
 )
@@ -89,7 +90,6 @@ _LOGGER = logging.getLogger(__name__)
 
 #
 # 0/5: Schema strings
-SZ_SCHEMA: Final = "schema"
 SZ_MAIN_TCS: Final = "main_tcs"
 
 SZ_CONTROLLER = DEV_TYPE_MAP[DevType.CTL]

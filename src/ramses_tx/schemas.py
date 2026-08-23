@@ -207,6 +207,7 @@ def extract_serial_port(
 
 SZ_BLOCK_LIST: Final = "block_list"
 SZ_KNOWN_LIST: Final = "known_list"
+SZ_SCHEMA: Final = "schema"
 
 
 def select_device_filter_mode(
@@ -215,7 +216,7 @@ def select_device_filter_mode(
     block_list: list[str],
 ) -> bool:
     """Determine which device filter to use, if any."""
-    known_warn_line2: Final = "In Ramses RF Config, turn On 'Accept packets from known device IDs only'. "
+    known_warn_line2: Final = f"In Ramses RF Config, accept at least 1 owned device in the {SZ_SCHEMA}. "
     known_warn_line3: str = f"For CLI, add `configure: enforce_{SZ_KNOWN_LIST} = True` to a config file."
 
     if enforce_known_list and not known_list:

@@ -186,30 +186,59 @@ async def test_is_wanted_addrs_sending_to_hgi(protocol: DummyProtocol) -> None:
     )
 
 
-async def test_is_wanted_addrs_foreign_hgi_not_blocked(
+async def test_is_wanted_addrs_blocked_hgi_is_filtered(
     protocol: DummyProtocol,
 ) -> None:
-    """Foreign HGIs (18:) must not be blocked even if in the exclude list.
+    """A foreign HGI in the block_list is filtered out (issue 1020).
 
-    A foreign HGI communicates with our controller and the controller's
-    responses (e.g. 0004 zone names) are addressed to the foreign HGI.
-    Blocking the foreign HGI would prevent the active gateway from
-    eavesdropping on those responses (issue 822).
+    A foreign HGI (different owner, marked as foreign in ramses_cc →
+    block_list) does not communicate with our controller.  Blocking it
+    is safe and prevents noise.  The issue 822 eavesdropping exemption
+    only applies to unknown HGIs that might be our own second gateway.
     """
     protocol._active_hgi = DeviceIdT("18:191664")
     protocol._exclude = [DeviceIdT("18:072981")]  # foreign HGI in block_list
 
-    # Packet from controller to foreign HGI (e.g. 0004 RP zone name)
+    # Packet from controller to blocked HGI — filtered
     assert (
         protocol._is_wanted_addrs(
             DeviceIdT("01:216136"), DeviceIdT("18:072981")
         )
-        is True
+        is False
     )
-    # Packet from foreign HGI to controller (e.g. 0004 RQ)
+    # Packet from blocked HGI to controller — filtered
     assert (
         protocol._is_wanted_addrs(
             DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
+        is False
+    )
+
+
+async def test_is_wanted_addrs_unknown_hgi_not_blocked(
+    protocol: DummyProtocol,
+) -> None:
+    """An unknown HGI (not in any list) is NOT blocked (issue 822).
+
+    An unknown HGI might be our own second gateway not yet configured.
+    Its packets must pass through so the active gateway can eavesdrop
+    on the controller's responses to it.
+    """
+    protocol._active_hgi = DeviceIdT("18:191664")
+    protocol._exclude = []
+    protocol._include = []
+
+    # Packet from unknown HGI to controller — allowed through
+    assert (
+        protocol._is_wanted_addrs(
+            DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
+        is True
+    )
+    # Packet from controller to unknown HGI — allowed through
+    assert (
+        protocol._is_wanted_addrs(
+            DeviceIdT("01:216136"), DeviceIdT("18:072981")
         )
         is True
     )
@@ -240,25 +269,32 @@ async def test_is_wanted_addrs_known_hgi_no_foreign_warning(
     assert not any("Foreign gateway" in r.message for r in caplog.records)
 
 
-async def test_is_wanted_addrs_unknown_hgi_still_warns(
+async def test_is_wanted_addrs_unknown_hgi_logs_info(
     protocol: DummyProtocol,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """An unknown HGI (not in the known_list) still triggers the warning.
+    """An unknown HGI (not in the known_list) logs at INFO, not WARNING.
 
     Only HGIs declared in the known_list are suppressed (issue 1020); a
-    genuinely unknown 18: device should still produce the Foreign gateway
-    warning so the user can decide whether to configure it.
+    genuinely unknown 18: device still produces the Foreign gateway
+    message so the user can decide whether to configure it, but at INFO
+    level since a foreign HGI is never blocked and the message is purely
+    informational (issue 1020).
     """
     protocol._active_hgi = DeviceIdT("18:130140")
     protocol._include = []  # 18:154951 is not known
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.INFO):
         protocol._is_wanted_addrs(
             DeviceIdT("18:154951"), DeviceIdT("01:216136")
         )
 
-    assert any("Foreign gateway" in r.message for r in caplog.records)
+    # The Foreign gateway message is emitted at INFO level
+    foreign_records = [
+        r for r in caplog.records if "Foreign gateway" in r.message
+    ]
+    assert len(foreign_records) == 1
+    assert foreign_records[0].levelno == logging.INFO
 
 
 async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
@@ -274,6 +310,96 @@ async def test_is_wanted_addrs_hgi_dev_addr_still_blocked(
     assert (
         protocol._is_wanted_addrs(DeviceIdT("01:216136"), HGI_DEV_ADDR.id)
         is False
+    )
+
+
+async def test_is_wanted_addrs_blocked_hgi_no_warning(
+    protocol: DummyProtocol,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A blocked HGI must not emit a Foreign gateway log message.
+
+    The block_list check returns False before warn_foreign_hgi() is
+    reached, so the packet is silently filtered — no log noise.
+    """
+    protocol._active_hgi = DeviceIdT("18:191664")
+    protocol._exclude = [DeviceIdT("18:072981")]
+
+    with caplog.at_level(logging.DEBUG):
+        result = protocol._is_wanted_addrs(
+            DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
+
+    assert result is False
+    assert not any("Foreign gateway" in r.message for r in caplog.records)
+
+
+async def test_is_wanted_addrs_hgi_in_both_lists_known_wins(
+    protocol: DummyProtocol,
+) -> None:
+    """An HGI in both block_list and known_list is allowed (known wins).
+
+    For HGI devices, the known_list check runs before the block_list
+    check.  This is intentional: if the user explicitly declared an
+    HGI in the known_list, it should be allowed even if it also
+    appears in the block_list (e.g. due to a config migration).
+    """
+    protocol._active_hgi = DeviceIdT("18:191664")
+    protocol._include = [DeviceIdT("18:072981")]
+    protocol._exclude = [DeviceIdT("18:072981")]
+
+    assert (
+        protocol._is_wanted_addrs(
+            DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
+        is True
+    )
+
+
+async def test_is_wanted_addrs_unknown_hgi_no_active_hgi_silent(
+    protocol: DummyProtocol,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unknown HGI with no active HGI set passes silently.
+
+    If _active_hgi is None (e.g. MQTT bridge before the online
+    message), warn_foreign_hgi() is not called — the packet passes
+    through without a log message.  See issue 1002.
+    """
+    protocol._active_hgi = None
+    protocol._include = []
+    protocol._exclude = []
+
+    with caplog.at_level(logging.DEBUG):
+        result = protocol._is_wanted_addrs(
+            DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
+
+    assert result is True
+    assert not any("Foreign gateway" in r.message for r in caplog.records)
+
+
+async def test_is_wanted_addrs_unknown_hgi_bypasses_enforce_include(
+    protocol: DummyProtocol,
+) -> None:
+    """An unknown HGI bypasses enforce_include (issue 822).
+
+    Even with enforce_include=True (strict filtering), an unknown HGI
+    is allowed through — the 18: exemption continues before reaching
+    the enforce_include check at the bottom of the loop.  The non-HGI
+    device in the packet must still be in the known_list for the
+    packet to pass.
+    """
+    protocol._active_hgi = DeviceIdT("18:191664")
+    protocol._include = [DeviceIdT("01:216136")]
+    protocol._exclude = []
+    protocol.enforce_include = True
+
+    assert (
+        protocol._is_wanted_addrs(
+            DeviceIdT("18:072981"), DeviceIdT("01:216136")
+        )
+        is True
     )
 
 

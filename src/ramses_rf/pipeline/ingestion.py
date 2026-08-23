@@ -32,6 +32,7 @@ from ramses_rf.const import (
     SZ_CH_ENABLED,
     SZ_CH_SETPOINT,
     SZ_CO2_LEVEL,
+    SZ_CO2_LEVEL_FAULT,
     SZ_COOL_ACTIVE,
     SZ_COOLING_DEMAND,
     SZ_COOLING_MODE,
@@ -678,6 +679,7 @@ class StateProjector:
 
         fields = [
             SZ_CO2_LEVEL,
+            SZ_CO2_LEVEL_FAULT,
             SZ_AIR_QUALITY,
             SZ_AIR_QUALITY_BASIS,
             SZ_BYPASS_MODE,
