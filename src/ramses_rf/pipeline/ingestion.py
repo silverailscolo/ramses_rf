@@ -407,6 +407,23 @@ class StateProjector:
                             tcs.id,
                             err,
                         )
+                    # Also route 0008 FC to the BDR (appliance_control)
+                    # so its demand_state.relay_demand is hydrated.
+                    # BDR91s only broadcast 3EF0 I when turning ON, not
+                    # when turning OFF, and don't respond to 3EF1 RQ —
+                    # so without this, the BDR's active state gets stuck
+                    # at the last 3EF0 I value (issue 1042).
+                    if msg.code == Code._0008:
+                        bdr = getattr(tcs, "appliance_control", None)
+                        if bdr is not None and bdr is not src_dev:
+                            try:
+                                self._update_demand_state(bdr, payload, msg)
+                            except Exception as err:
+                                _LOGGER.error(
+                                    "CQRS extraction failed for BDR %s: %s",
+                                    bdr.id,
+                                    err,
+                                )
                 elif (
                     domain_val in ("FA", "F9")
                     and getattr(tcs, "dhw", None) is not None

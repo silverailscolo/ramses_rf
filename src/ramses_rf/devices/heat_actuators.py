@@ -177,11 +177,27 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         """Initialize the BDR switch device."""
         super().__init__(*args, traits=traits, **kwargs)
 
-    async def active(self) -> bool | None:  # 3EF0, 3EF1
-        """Return the actuator's current state."""
+    @property
+    def active(self) -> bool | None:  # 3EF0, 3EF1, 0008
+        """Return the actuator's current state.
+
+        Primary source is ``act_state.modulation_level`` (from 3EF0/3EF1
+        packets sent by the BDR itself).  BDR91s only broadcast 3EF0 I
+        when turning ON, not when turning OFF, and don't respond to 3EF1
+        RQ — so when the BDR goes silent, ``act_state.modulation_level``
+        stays stale and the entity never shows ``off``.
+
+        Fallback: ``demand_state.relay_demand`` (from 0008 packets sent
+        by the CTL).  The ingestion pipeline routes 0008 FC to the BDR
+        (appliance_control) so this value tracks the CTL's relay demand
+        even when the BDR itself is silent (issue 1042).
+        """
         state = getattr(self, "act_state", None)
         if state and state.modulation_level is not None:
             return bool(state.modulation_level)
+        demand = getattr(self, "demand_state", None)
+        if demand and demand.relay_demand is not None:
+            return bool(demand.relay_demand)
         return None
 
     async def relay_demand(self) -> float | None:
@@ -234,7 +250,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         base_status = await super().status()
         return {
             **base_status,
-            self.ACTIVE: await self.active(),
+            self.ACTIVE: self.active,
         }
 
 
