@@ -693,7 +693,13 @@ class Packet:
             f"{command.verb.strip():>2} --- {command.addr1} {command.addr2} {command.addr3} "
             f"{command.code} {int(len(command.payload) / 2):03d} {command.payload}"
         )
-        return cls.from_raw_line(dtm, f"... {raw_line}")
+        # is_echo=True suppresses PKT_LOGGER output in _validate — this
+        # Packet is an internal helper for computing tx_header, not an
+        # actual packet reception, so it must not appear in the packet log.
+        # Without this, every access to CommandDTO.tx_header (which happens
+        # per-incoming-packet in WantEcho.packet_rcvd) logs a spurious
+        # "... RQ" entry (issue 1041).
+        return cls.from_raw_line(dtm, f"... {raw_line}", is_echo=True)
 
     def to_dto(self) -> PacketDTO:
         """Return the internal immutable PacketDTO object in O(1) time.

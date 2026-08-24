@@ -37,6 +37,20 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         # Check if the injected writer was called with the exact frame
         self.mock_writer.assert_awaited_once_with(test_frame)
 
+    async def test_write_frame_logs_tx_packet(self) -> None:
+        """Verify write_frame logs the TX packet for echo detection (issue 1041)."""
+        test_frame = "RQ --- 18:000730 01:195932 --:------ 1F41 001 00"
+
+        await self.transport.write_frame(test_frame)
+
+        # After write_frame, the tx_key should be recorded in _recent_tx_counts
+        # so that _is_recent_tx() can detect echoes
+        self.assertGreater(
+            len(self.transport._recent_tx_counts),
+            0,
+            "TX packet key was not recorded for echo detection",
+        )
+
     async def test_receive_frame_respects_circuit_breaker(self) -> None:
         """Verify inbound frames are gated by pause/resume state."""
         test_frame = "059 RP --- 01:195932 04:017982 --:------ 313F 009 00FC2300C4150C07E9"
@@ -64,10 +78,13 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
 
     async def test_write_error_handling(self) -> None:
         """Verify writer exceptions are wrapped in TransportError."""
+        # Use a valid frame so _log_tx_packet doesn't reject it before
+        # reaching _write_frame where the writer error occurs
+        test_frame = "RQ --- 18:000730 01:195932 --:------ 1F41 001 00"
         self.mock_writer.side_effect = Exception("MQTT Connection Lost")
 
         with self.assertRaises(exc.TransportError):
-            await self.transport.write_frame("test_frame")
+            await self.transport.write_frame(test_frame)
 
     async def test_gateway_integration(self) -> None:
         """Verify the Gateway accepts the transport via IoC."""
@@ -148,12 +165,14 @@ class TestCallbackTransport(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         """Verify asyncio.CancelledError is re-raised during task cancellation."""
-        # Arrange
+        # Arrange — use a valid frame so _log_tx_packet succeeds before
+        # _write_frame triggers the CancelledError
+        test_frame = "RQ --- 18:000730 01:195932 --:------ 1F41 001 00"
         self.mock_writer.side_effect = asyncio.CancelledError()
 
         # Act & Assert
         with self.assertRaises(asyncio.CancelledError):
-            await self.transport.write_frame("test_frame")
+            await self.transport.write_frame(test_frame)
 
     async def test_receive_frame_handles_malformed_packets_gracefully(
         self,

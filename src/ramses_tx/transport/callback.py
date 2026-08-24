@@ -74,23 +74,19 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         if config.autostart:
             self.resume_reading()
 
-    async def write_frame(
-        self, frame: str, disable_tx_limits: bool = False
-    ) -> None:
-        """Process a frame for transmission by passing it to external writer.
+    async def _write_frame(self, frame: str) -> None:
+        """Send frame via the external io_writer callback.
+
+        Overrides _FullTransport._write_frame so that the parent's
+        write_frame() handles _log_tx_packet, _track_transmit_rate, and
+        echo detection — ensuring MQTT transports get the same TX logging
+        and echo suppression as serial transports (issue 1041).
 
         :param frame: The raw string frame to be transmitted.
         :type frame: str
-        :param disable_tx_limits: Flag to bypass transmit rate limits.
-        :type disable_tx_limits: bool
-        :returns: None
-        :rtype: None
-        :raises exc.TransportError: If sending disabled or io_writer fails.
+        :raises exc.TransportError: If io_writer is closed or fails.
         :raises asyncio.CancelledError: If the write task is cancelled.
         """
-        if self._disable_sending:
-            raise exc.TransportError("Sending has been disabled")
-
         if self._io_writer is None:
             raise exc.TransportError("Transport has been closed")
 
@@ -104,10 +100,6 @@ class CallbackTransport(_FullTransport, _CallbackTransportAbstractor):
         except Exception as err:
             _LOGGER.error("External writer failed to send frame: %s", err)
             raise exc.TransportError(f"External writer failed: {err}") from err
-
-    async def _write_frame(self, frame: str) -> None:
-        """Wait for the frame to be written by the external writer."""
-        await self.write_frame(frame)
 
     def receive_frame(self, frame: str, dtm: str | None = None) -> None:
         """Ingest a frame from the external source (Read Path).
