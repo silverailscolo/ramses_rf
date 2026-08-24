@@ -17,7 +17,7 @@
   mypy >= 2.3.0                                 # HA uses  1.19.0a4 !
   types-aiofiles >= 25.1.0.20260518
   types-colorama >= 0.4.15.20260508
-  types-PyYAML >= 6.0.12.20260724               # HA uses 6.0.12.20250516
+  types-PyYAML >= 6.0.12.20260815               # HA uses 6.0.12.20250516
   types-pyserial >= 3.5.0.20260712
   voluptuous >= 0.15.2                           # HA uses 0.15.2
 
