@@ -177,43 +177,12 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         """Initialize the BDR switch device."""
         super().__init__(*args, traits=traits, **kwargs)
 
-    @property
-    def active(self) -> bool | None:  # 3EF0, 3EF1, 0008
-        """Return the actuator's current state.
-
-        Two sources are considered, and the most recently updated one
-        wins:
-
-        - ``act_state.modulation_level`` (from 3EF0/3EF1 packets sent
-          by the BDR itself)
-        - ``demand_state.relay_demand`` (from 0008 packets sent by the
-          CTL and routed to the BDR by the ingestion pipeline)
-
-        BDR91s only broadcast 3EF0 I when turning ON, not when turning
-        OFF, and don't respond to 3EF1 RQ.  When the BDR goes silent,
-        ``act_state`` stays stale.  By comparing ``last_updated``
-        timestamps, the CTL's 0008 relay demand takes over once it is
-        newer than the last 3EF0/3EF1 (issue 1042).
-        """
+    async def active(self) -> bool | None:  # 3EF0, 3EF1
+        """Return the actuator's current state."""
         state = getattr(self, "act_state", None)
-        demand = getattr(self, "demand_state", None)
-
-        mod = state.modulation_level if state else None
-        rel = demand.relay_demand if demand else None
-
-        if mod is None and rel is None:
-            return None
-        if mod is None:
-            return bool(rel)
-        if rel is None:
-            return bool(mod)
-
-        # Both present — prefer the most recently updated
-        state_t = getattr(state, "last_updated", None)
-        demand_t = getattr(demand, "last_updated", None)
-        if demand_t and state_t and demand_t > state_t:
-            return bool(rel)
-        return bool(mod)
+        if state and state.modulation_level is not None:
+            return bool(state.modulation_level)
+        return None
 
     async def relay_demand(self) -> float | None:
         """Return the relay demand of the BDR91."""
@@ -265,7 +234,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
         base_status = await super().status()
         return {
             **base_status,
-            self.ACTIVE: self.active,
+            self.ACTIVE: await self.active(),
         }
 
 
