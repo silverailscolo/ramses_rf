@@ -32,6 +32,7 @@ from ramses_rf.models import (
     PowerState,
     TemperatureState,
 )
+from ramses_rf.models.state_signal import CommunicationQuality, compute_quality
 from ramses_rf.schemas import (
     SZ_ALIAS,
     SZ_CLASS,
@@ -158,6 +159,26 @@ class DeviceBase(Entity):
             now = dt.now()
 
         return bool((now - self._last_msg_dtm) <= self.heartbeat_timeout)
+
+    @property
+    def communication_quality(self) -> CommunicationQuality | None:
+        """Return the device's communication quality snapshot, or None.
+
+        Computes ``best_rssi`` across all HGI RSSI trackers and
+        staleness from the device's last message timestamp.  Returns
+        ``None`` if the gateway has no RSSI tracker (e.g. during
+        tests without a real gateway).
+
+        :return: Communication quality snapshot, or ``None``.
+        :rtype: CommunicationQuality | None
+        """
+        gwy = getattr(self, "_gateway", None)
+        if gwy is None:
+            return None
+        tracker = getattr(gwy, "_rssi_tracker", None)
+        if tracker is None:
+            return None
+        return compute_quality(str(self.id), [tracker])
 
     def _update_traits(self, traits: DeviceTraits) -> None:
         """Update a device with new schema attributes.

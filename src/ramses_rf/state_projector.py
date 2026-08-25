@@ -951,6 +951,13 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
             ):
                 bm.rcvd_msg(msg)
 
+    # Record RSSI for the source device in the HGI's tracker
+    # (issue 1047: transport-layer RSSI tracking per HGI).
+    if tracker := getattr(gateway, "_rssi_tracker", None):
+        src_id = getattr(msg.src, "id", None)
+        if src_id and msg.rssi and msg.rssi not in ("...", "---", "///"):
+            tracker.record(src_id, msg.rssi, msg.dtm)
+
     if not isinstance(msg.payload, (dict, list)):
         return
 

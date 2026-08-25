@@ -23,6 +23,7 @@ from ramses_tx.const import (
 )
 from ramses_tx.dtos import PacketDTO
 from ramses_tx.exceptions import PacketInvalid, ProtocolSendFailed
+from ramses_tx.rssi_tracker import RssiTracker
 from ramses_tx.schemas import (
     SZ_BLOCK_LIST,
     SZ_ENFORCE_KNOWN_LIST,
@@ -203,6 +204,10 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             on_topology_changed_cb=self._on_topology_changed,
         )
 
+        # RSSI tracker for this HGI (transport layer, per issue 1047).
+        # One tracker per gateway/HGI; multi-HGI support will add more.
+        self._rssi_tracker: RssiTracker = RssiTracker()
+
         # Instantiate the new asynchronous Topology Builder engine
         self._topology_builder = TopologyBuilder(
             emit_event_cb=self._device_registry.handle_topology_event,
@@ -275,6 +280,15 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     def device_registry(self) -> DeviceRegistryInterface:
         """Return the active device registry instance."""
         return self._device_registry
+
+    @property
+    def rssi_tracker(self) -> RssiTracker:
+        """Return the RSSI tracker for this HGI (transport layer).
+
+        Tracks the last N RSSI readings per device heard by this
+        gateway's receiver (issue 1047).
+        """
+        return self._rssi_tracker
 
     @property
     def conversation_manager(self) -> ConversationManager:
