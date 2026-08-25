@@ -3118,7 +3118,6 @@
         'zone_index': None,
       }),
       dict({
-        'active': False,
         'battery_low': None,
         'id': '13:032648',
         'is_alive': None,

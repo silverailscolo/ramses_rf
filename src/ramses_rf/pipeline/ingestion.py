@@ -407,23 +407,6 @@ class StateProjector:
                             tcs.id,
                             err,
                         )
-                    # Also route 0008 FC to the BDR (appliance_control)
-                    # so its demand_state.relay_demand is hydrated.
-                    # BDR91s only broadcast 3EF0 I when turning ON, not
-                    # when turning OFF, and don't respond to 3EF1 RQ —
-                    # so without this, the BDR's active state gets stuck
-                    # at the last 3EF0 I value (issue 1042).
-                    if msg.code == Code._0008:
-                        bdr = getattr(tcs, "appliance_control", None)
-                        if bdr is not None and bdr is not src_dev:
-                            try:
-                                self._update_demand_state(bdr, payload, msg)
-                            except Exception as err:
-                                _LOGGER.error(
-                                    "CQRS extraction failed for BDR %s: %s",
-                                    bdr.id,
-                                    err,
-                                )
                 elif (
                     domain_val in ("FA", "F9")
                     and getattr(tcs, "dhw", None) is not None
@@ -436,26 +419,6 @@ class StateProjector:
                             tcs.dhw.id,
                             err,
                         )
-                    # Also route 0008 FA/F9 to the valve BDR (if any)
-                    # so its demand_state.relay_demand is hydrated.
-                    # Same rationale as the FC/appliance_control case
-                    # above (issue 1042): valve BDRs may go silent and
-                    # the CTL's 0008 is the only signal.
-                    if msg.code == Code._0008:
-                        valve = (
-                            getattr(tcs, "hotwater_valve", None)
-                            if domain_val == "FA"
-                            else getattr(tcs, "heating_valve", None)
-                        )
-                        if valve is not None and valve is not src_dev:
-                            try:
-                                self._update_demand_state(valve, payload, msg)
-                            except Exception as err:
-                                _LOGGER.error(
-                                    "CQRS extraction failed for valve %s: %s",
-                                    valve.id,
-                                    err,
-                                )
 
             # Route DHW opcodes (1260/10A0/1F41) to the DhwZone.
             # These payloads carry no zone_index/domain_id, so the block above
