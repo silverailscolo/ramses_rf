@@ -380,7 +380,7 @@ async def test_gateway_cached_packet_restore_hcc100_active_cooling() -> None:
 
         cached_packets = {
             "2026-08-15T12:00:00.000000Z": {
-                "rssi": 45,
+                "rssi": -45,
                 "frame": f" I --- {ctl_id} --:------ {ctl_id} 2D49 003 00C800",
             },
         }
@@ -409,7 +409,7 @@ async def test_gateway_cached_packet_restore_hcc100_inactive_cooling() -> None:
 
         cached_packets = {
             "2026-08-15T12:00:00.000000Z": {
-                "rssi": 45,
+                "rssi": -45,
                 "frame": f" I --- {ctl_id} --:------ {ctl_id} 2D49 003 010000",
             },
         }

@@ -56,7 +56,7 @@ def test_message_attributes(patch_parsers: Any) -> None:
     message = Message(packet.to_dto())
 
     # Validate physical attributes
-    assert message.rssi == "045"
+    assert message.rssi == "-45"
     assert message.dtm == dtm
 
     # Validate payload properties
@@ -79,7 +79,7 @@ def test_message_parsing_and_rssi(patch_parsers: Any) -> None:
     packet = Packet(dtm, FRAME_STR_2)
     message = Message(packet.to_dto())
 
-    assert message.rssi == "095"
+    assert message.rssi == "-95"
     assert message.verb == Verb.I_
     assert message.code == Code._1F09
     assert message.len == 3

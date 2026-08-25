@@ -226,7 +226,7 @@ async def test_gateway_restore_cached_packets_dto() -> None:
         # Mock the packet returned by from_dict to bypass strict frame regex
         mock_packet = MagicMock()
         mock_packet.__class__.__name__ = "Packet"
-        mock_packet.rssi = "045"
+        mock_packet.rssi = "-45"
         mock_packet._frame = (
             "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
         )
@@ -235,7 +235,7 @@ async def test_gateway_restore_cached_packets_dto() -> None:
         # Simulate the new dictionary format provided by ramses_cc
         packets = {
             "2023-01-01T12:00:00.000000Z": {
-                "rssi": 45,
+                "rssi": -45,
                 "frame": "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5",
             }
         }
@@ -271,7 +271,7 @@ async def test_gateway_restore_cached_packets_naive_dtm() -> None:
 
         mock_packet = MagicMock()
         mock_packet.__class__.__name__ = "Packet"
-        mock_packet.rssi = "045"
+        mock_packet.rssi = "-45"
         mock_packet._frame = (
             "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
         )
@@ -280,7 +280,7 @@ async def test_gateway_restore_cached_packets_naive_dtm() -> None:
         # Naive datetime (no Z, no offset) as written by older cache files
         packets = {
             "2023-01-01T12:00:00.000000": {
-                "rssi": 45,
+                "rssi": -45,
                 "frame": "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5",
             }
         }

@@ -38,7 +38,7 @@ def test_packet_properties() -> None:
     packet = Packet(DTM, VALID_FRAME_I, comment="A test comment")
 
     assert packet.dtm == DTM
-    assert packet.rssi == "045"
+    assert packet.rssi == "-45"
     assert packet.comment == "A test comment"
     assert packet.error_text == ""
     assert packet.verb == Verb.I_
@@ -89,22 +89,22 @@ def test_packet_constructors() -> None:
     # Test from_dict with legacy string (backward compatibility)
     packet_dict = Packet.from_dict(dtm_str, f"{VALID_FRAME_I} # my comment")
     assert packet_dict.dtm == DTM
-    assert packet_dict.rssi == "045"
+    assert packet_dict.rssi == "-45"
     assert packet_dict.comment == "my comment"
 
     # Test canonical from_raw_line factory
     packet_line = Packet.from_raw_line(DTM, VALID_FRAME_I)
-    assert packet_line.rssi == "045"
+    assert packet_line.rssi == "-45"
     assert packet_line.verb == Verb.I_
 
     # Test from_file (delegates to from_raw_line)
     packet_file_valid = Packet.from_file(dtm_str, VALID_FRAME_I)
-    assert packet_file_valid.rssi == "045"
+    assert packet_file_valid.rssi == "-45"
     assert packet_file_valid.verb == Verb.I_
 
     # Test from_port (delegates to from_raw_line)
     packet_port = Packet.from_port(DTM, VALID_FRAME_I)
-    assert packet_port.rssi == "045"
+    assert packet_port.rssi == "-45"
 
     # Test _from_cmd
     cmd = MockCommand()
@@ -132,8 +132,8 @@ def test_packet_dto_serialization() -> None:
     assert packet_dict["verb"] == Verb.I_
     assert packet_dict["code"] == Code._1F09
     assert (
-        packet_dict["rssi"] == 45
-    )  # Intentionally mapped to int for legacy downstream compatibility
+        packet_dict["rssi"] == -45
+    )  # Signed dBm (normalised from unsigned 045)
     assert (
         packet_dict["frame"]
         == " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
@@ -149,7 +149,7 @@ def test_packet_dto_serialization() -> None:
 
     assert restored_packet.dtm == DTM.astimezone()
     assert (
-        restored_packet.rssi == "045"
+        restored_packet.rssi == "-45"
     )  # Automatically padded back to 3 chars
     assert restored_packet.verb == Verb.I_
     assert restored_packet._frame == packet._frame
@@ -166,7 +166,7 @@ def test_to_json_from_json_parity() -> None:
     # 2. Test from_json (Deserialization back to Packet)
     restored_packet = Packet.from_json(json_bytes)
     assert restored_packet.dtm == DTM.astimezone()
-    assert restored_packet.rssi == "045"
+    assert restored_packet.rssi == "-45"
     assert restored_packet.verb == Verb.I_
     assert restored_packet._frame == packet._frame
 
@@ -183,7 +183,7 @@ def test_from_dict_raw_packet_dict_format() -> None:
     # Simulate what lifecycle.get_state saves: msg.dto.source_packets[0].__dict__
     raw_packet_dict: dict[str, object] = {
         "raw_packet": " I --- 01:145038 --:------ 01:145038 1F09 003 0004B5",
-        "rssi": "045",
+        "rssi": "-45",
         "verb": Verb.I_,
         "seq": "---",
         "device_id_1": "01:145038",
@@ -195,7 +195,7 @@ def test_from_dict_raw_packet_dict_format() -> None:
     }
 
     packet = Packet.from_dict(dtm_str, raw_packet_dict)
-    assert packet.rssi == "045"
+    assert packet.rssi == "-45"
     assert packet.verb == Verb.I_
     assert packet.code == Code._1F09
     assert (
@@ -269,3 +269,65 @@ def test_packet_heartbeat_payload_bypass() -> None:
     # As explicitly designed to preserve legacy test suite behavior, _has_payload remains
     # False (as it fails the strict regex), but the packet instantiation survives.
     assert packet._has_payload is False
+
+
+def test_rssi_normalisation() -> None:
+    """Test that RSSI values are normalised to signed dBm.
+
+    Covers three input formats (issue ramses-rf/ramses_cc#1046):
+
+    - Unsigned positive (evofw3/ramses_esp/HGI80): ``074`` → ``-74``
+    - Signed-as-unsigned (custom firmware): ``202`` → ``-54``
+    - Already signed dBm: ``-54`` → ``-54``
+
+    :return: None
+    """
+    from ramses_tx.packet import _normalise_rssi
+
+    # Sentinels pass through
+    assert _normalise_rssi("...") == "..."
+    assert _normalise_rssi("---") == "---"
+    assert _normalise_rssi("///") == "///"
+    assert _normalise_rssi("") == ""
+
+    # Unsigned positive (evofw3/HGI80): 074 → -74
+    assert _normalise_rssi("074") == "-74"
+    assert _normalise_rssi("045") == "-45"
+    assert _normalise_rssi("095") == "-95"
+    assert _normalise_rssi("138") == "-138"
+
+    # Signed-as-unsigned (custom firmware): 202 → -54
+    assert _normalise_rssi("202") == "-54"
+    assert _normalise_rssi("200") == "-56"
+    assert _normalise_rssi("256") == "0"
+
+    # Already signed dBm: -54 → -54
+    assert _normalise_rssi("-54") == "-54"
+    assert _normalise_rssi("-72") == "-72"
+
+    # Zero → no signal sentinel
+    assert _normalise_rssi("000") == "..."
+
+
+def test_rssi_signed_in_raw_line() -> None:
+    """Test that signed RSSI values are accepted in raw packet lines.
+
+    Custom firmware may output ``-54`` (with minus sign) instead of
+    the standard unsigned ``074``.  The parser must accept both.
+
+    :return: None
+    """
+    # Signed RSSI in raw line
+    frame = "-54  I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    packet = Packet(DTM, frame)
+    assert packet.rssi == "-54"
+
+    # Unsigned positive in raw line (normalised to signed)
+    frame2 = "074  I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    packet2 = Packet(DTM, frame2)
+    assert packet2.rssi == "-74"
+
+    # Signed-as-unsigned in raw line (normalised to signed)
+    frame3 = "202  I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+    packet3 = Packet(DTM, frame3)
+    assert packet3.rssi == "-54"
