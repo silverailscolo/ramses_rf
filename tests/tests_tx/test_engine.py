@@ -23,7 +23,7 @@ def mock_dto() -> PacketDTO:
     # Create a fresh mock packet DTO for tests
     return PacketDTO(
         timestamp=dt.now(),
-        rssi="045",
+        rssi="-45",
         verb=Verb.RQ,
         seq="---",
         addr1="18:006402",
@@ -254,7 +254,7 @@ async def test_engine_drop_msg(
     # The drop handler safely drops messages and logs them
     dto = PacketDTO(
         timestamp=dt.now(),
-        rssi="045",
+        rssi="-45",
         verb=Verb.RQ,
         seq="---",
         addr1="18:006402",

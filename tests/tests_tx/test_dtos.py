@@ -23,7 +23,7 @@ def test_packet_to_dto_populates_all_fields_accurately() -> None:
     # Assert: Verify all primitive strings are accurately separated
     assert isinstance(dto, PacketDTO)
     assert dto.timestamp == test_dtm
-    assert dto.rssi == "045"
+    assert dto.rssi == "-45"
     assert dto.verb == Verb.RQ
     assert dto.seq == ""
     assert dto.addr1 == "18:000730"
@@ -60,7 +60,7 @@ def test_packet_dto_is_tx_default_and_custom() -> None:
     # Act: Construct default inbound DTO and custom outbound DTO
     inbound_dto = PacketDTO(
         timestamp=test_dtm,
-        rssi="045",
+        rssi="-45",
         verb=Verb.RQ,
         seq="",
         addr1="18:000730",
@@ -72,7 +72,7 @@ def test_packet_dto_is_tx_default_and_custom() -> None:
     )
     outbound_dto = PacketDTO(
         timestamp=test_dtm,
-        rssi="045",
+        rssi="-45",
         verb=Verb.RQ,
         seq="",
         addr1="18:000730",

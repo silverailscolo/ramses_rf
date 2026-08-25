@@ -23,6 +23,42 @@ from .typing import HeaderT, PayloadT
 _LOGGER = logging.getLogger(__name__)
 PKT_LOGGER = getLogger(f"{__name__}_log", packet_log=True)
 
+# evofw3/ramses_esp output unsigned positive (10–138, negated CC1101
+# signed byte).  Values > 138 are signed-as-unsigned from custom
+# firmware (e.g. 202 = -54 dBm).  See ramses-rf/ramses_cc#1046.
+_RSSI_UNSIGNED_MAX = 138
+
+
+def _normalise_rssi(raw: str) -> str:
+    """Normalise an RSSI string to signed dBm.
+
+    Accepts three input formats and returns signed dBm:
+
+    - ``074`` (unsigned positive, evofw3/ramses_esp/HGI80) → ``-74``
+    - ``202`` (signed-as-unsigned, custom firmware) → ``-54``
+    - ``-54`` (already signed dBm) → ``-54``
+
+    Sentinel values (``...``, ``---``, ``///``) are returned as-is.
+
+    :param raw: 3-character RSSI string from the raw packet line.
+    :returns: Normalised RSSI string in signed dBm.
+    """
+    if not raw or raw in ("...", "---", "///"):
+        return raw
+    with contextlib.suppress(ValueError):
+        val = int(raw)
+        if val == 0:
+            return "..."
+        if val > _RSSI_UNSIGNED_MAX:
+            # Signed-as-unsigned (custom firmware): 202 → -54
+            return str(val - 256)
+        if val >= 0:
+            # Unsigned positive (evofw3/ramses_esp/HGI80): 074 → -74
+            return str(-val)
+        # Already signed dBm
+        return raw
+    return raw
+
 
 class Packet:
     """Stateful L3 transport envelope wrapping an immutable PacketDTO.
@@ -221,9 +257,13 @@ class Packet:
         if (
             len(line) >= 4
             and line[3] == " "
-            and (line[:3].isdigit() or line[:3] in ("...", "---", "///"))
+            and (
+                line[:3].isdigit()
+                or line[:3] in ("...", "---", "///")
+                or (line[0] == "-" and line[1:3].isdigit())
+            )
         ):
-            rssi = line[:3]
+            rssi = _normalise_rssi(line[:3])
             raw_line_body = line[4:]
         else:
             rssi = "..."
@@ -794,9 +834,21 @@ class Packet:
 
         rssi_val = state.get("rssi")
         try:
-            rssi = f"{int(rssi_val):03d}" if rssi_val is not None else "..."
+            rssi_int = int(rssi_val) if rssi_val is not None else None
         except (ValueError, TypeError):
+            rssi_int = None
+
+        if rssi_int is None or rssi_int == 0:
             rssi = "..."
+        elif rssi_int > _RSSI_UNSIGNED_MAX:
+            # Signed-as-unsigned (custom firmware): 202 → -54
+            rssi = str(rssi_int - 256)
+        elif rssi_int > 0:
+            # Unsigned positive (evofw3/ramses_esp/HGI80): 74 → -74
+            rssi = str(-rssi_int)
+        else:
+            # Already signed dBm (negative)
+            rssi = str(rssi_int)
 
         frame_body = state.get("frame") or state.get("raw_packet", "")
         raw_line = f"{rssi[:3].ljust(3)} {frame_body}"
@@ -822,7 +874,9 @@ class Packet:
                 )
             dto = PacketDTO(
                 timestamp=dt.fromisoformat(raw["timestamp"]),
-                rssi=raw.get("rssi", ""),
+                rssi=str(raw.get("rssi", ""))
+                if raw.get("rssi") is not None
+                else "",
                 verb=raw.get("verb", ""),
                 seq=raw.get("seq", ""),
                 addr1=raw.get("addr1", ""),
