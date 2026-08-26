@@ -31,7 +31,7 @@ from ramses_tx.schemas import (
 )
 from ramses_tx.typing import PayloadT
 
-from .config import GatewayConfig as GatewayConfig, strip_and_map_schema
+from .config import GatewayConfig as GatewayConfig, strip_traits
 from .const import Code, Verb
 from .devices import (
     DeviceFilter,
@@ -178,8 +178,12 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             )
 
         schema_in = self._gwy_config.schema or {}
+        # Use strip_traits (stage 1 only) to remove _-prefixed keys before
+        # validation.  strip_and_map_schema (stage 1+2) would map _class→class,
+        # but SCH_GLOBAL_SCHEMAS rejects mapped trait names — they are only
+        # valid for the known_list, not the schema validator (issue 1120).
         self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(
-            strip_and_map_schema(schema_in)
+            strip_traits(schema_in)
         )
 
         self._tcs: Evohome | None = None
