@@ -105,8 +105,25 @@ _2411_PARAMS_SCHEMA: dict[str, FanParamInfo] = {
     "52": FanParamInfo(
         "Trickle mode timer (minutes)", 0, 180, 10, "00", "minutes"
     ),
+    "54": FanParamInfo(
+        "Moisture sensor overrun time (mins)", 15, 60, 1, "00", "min"
+    ),
     "64": FanParamInfo("Exhaust temperature limit (°C)", 5, 25, 1, "92", "°C"),
     "65": FanParamInfo("Supply temperature limit (°C)", 5, 25, 1, "92", "°C"),
+    "75": FanParamInfo(
+        "Comfort temperature (°C)", 0.0, 30.0, 0.01, "92", "°C"
+    ),
+    "88": FanParamInfo(
+        "Timer configuration (ClimaRad Ventura)",
+        0,
+        0xFFFFFFFF,
+        1,
+        "10",
+        "",
+    ),
+    "95": FanParamInfo(
+        "Boost mode Supply/exhaust fan rate (%)", 0.0, 1.0, 0.005, "0F", "%"
+    ),
     "C8": FanParamInfo("Bypass mode (auto/manual)", 255, 255, 1, "20", ""),
     "CA": FanParamInfo(
         "Bypass override timer (minutes)", 0, 180, 10, "00", "minutes"
@@ -114,6 +131,9 @@ _2411_PARAMS_SCHEMA: dict[str, FanParamInfo] = {
     "CB": FanParamInfo("Summer mode limit (°C)", 15, 25, 1, "92", "°C"),
     "CE": FanParamInfo("Winter mode limit (°C)", 5, 15, 1, "92", "°C"),
     "CF": FanParamInfo("Bypass hysteresis (°C)", 0.5, 5, 0.5, "92", "°C"),
+    "DA": FanParamInfo(
+        "Unknown (ClimaRad Ventura)", 0, 0xFFFFFFFF, 1, "10", ""
+    ),
     "F5": FanParamInfo("Pre-heater limit (°C)", -15, -5, 1, "92", "°C"),
     "F6": FanParamInfo("Pre-heater hysteresis (°C)", 0.5, 5, 0.5, "92", "°C"),
 }
