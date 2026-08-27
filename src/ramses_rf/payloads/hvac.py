@@ -2594,7 +2594,14 @@ class HvacBypassStatePayload(PayloadBase):
         else:
             fan_mode_map = {0: "off", 5: "auto"}
         result: dict[str, Any] = {}
-        if not (self._unknown_16 is not None and self._unknown_16 != "00"):
+        # exhaust_fan_speed = spd / 200.0 is only meaningful for long
+        # payloads (Itho, ClimaRad) where spd is a raw 0-200 RPM value.
+        # For 4-byte Orcon payloads, spd is a semantic fan mode (0-5),
+        # not a speed — dividing by 200 produces a meaningless 1-2%
+        # reading.  Suppress it for 4-byte payloads.
+        if not is_4b_orcon and not (
+            self._unknown_16 is not None and self._unknown_16 != "00"
+        ):
             result["exhaust_fan_speed"] = None if spd == 0xFF else spd / 200.0
         # For long-payload devices (Orcon, Brofer, etc.), unmapped fan_mode
         # raw bytes (e.g. 0x04, 0xC8, 0xFF) are NOT semantic names and conflict
