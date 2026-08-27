@@ -12,7 +12,7 @@ import re
 from enum import StrEnum
 from typing import TYPE_CHECKING, Final
 
-import voluptuous as vol
+import probatio as vol
 
 from ramses_rf.address import Address
 from ramses_rf.commands.builders import build_dto

@@ -10,7 +10,7 @@ import logging
 from collections.abc import Callable
 from typing import Any, Final, cast
 
-import voluptuous as vol
+import probatio as vol
 
 from .const import (
     DEFAULT_ECHO_TIMEOUT,

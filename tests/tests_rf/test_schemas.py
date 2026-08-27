@@ -1,7 +1,7 @@
-"""Unit tests for voluptuous schema definitions in ramses_rf.schemas."""
+"""Unit tests for probatio schema definitions in ramses_rf.schemas."""
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 
 from ramses_rf.schemas import (
     SCH_DOM_ID,
@@ -56,7 +56,7 @@ def test_sch_ufh_index_validation() -> None:
 
 
 def test_error_renamed_key_raises() -> None:
-    """Verify error_renamed_key validator helper raises voluptuous error."""
+    """Verify error_renamed_key validator helper raises probatio error."""
     validator = error_renamed_key("new_feature_key")
     with pytest.raises(
         vol.Invalid,
