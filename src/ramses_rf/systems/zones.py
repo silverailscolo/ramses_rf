@@ -89,7 +89,7 @@ _TRACE = logging.getLogger("ramses_rf.legacy_trace")
 class ZoneBase(Child, Parent, Entity):
     """The Zone/DHW base class."""
 
-    _SLUG: str | None = None  # type: ignore[assignment]
+    _SLUG: str | None = None
 
     _ROLE_ACTUATORS: str | None = None
     _ROLE_SENSORS: str | None = None
@@ -241,7 +241,7 @@ class ZoneSchedule(ZoneBase):  # 0404
 class DhwZone(ZoneSchedule):  # CS92A
     """The DHW class."""
 
-    _SLUG: str | None = ZoneRole.DHW  # type: ignore[assignment]
+    _SLUG: str | None = ZoneRole.DHW
 
     def __init__(self, tcs: _StoredHwT, zone_index: str = "HW") -> None:
         """Initialize a DhwZone instance."""
@@ -476,7 +476,7 @@ class DhwZone(ZoneSchedule):  # CS92A
 class Zone(ZoneSchedule):
     """The Zone class for all zone types (but not DHW)."""
 
-    _SLUG: str | None = None  # type: ignore[assignment]
+    _SLUG: str | None = None
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.ACT
 
     def __init__(self, tcs: _MultiZoneT, zone_index: str) -> None:

@@ -91,10 +91,10 @@ class ProtocolContext(StateMachineInterface):
         )
 
         self._expiry_timer: asyncio.Task[None] | None = None
-        self._state: _ProtocolStateT = None  # type: ignore[assignment]
+        self._state: _ProtocolStateT = None  # type: ignore[assignment]  # set in start()
 
         self._send_fnc: Callable[[CommandDTO], Coroutine[Any, Any, None]] = (
-            None  # type: ignore[assignment]
+            None  # type: ignore[assignment]  # set in start()
         )
 
         # Track send_fnc_wrapper tasks so they can be cancelled on teardown.

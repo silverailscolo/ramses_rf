@@ -38,6 +38,30 @@ def _normalise(packet_line: str) -> str:
     elif packet_line[:2] in (I_, RQ, RP, W_):
         packet_line = ""
 
+    # evofw3 TX echo: lines starting with "# " followed by a verb
+    # (I, W, RQ, RP) are hardware echoes of transmitted packets.
+    # The "#" is evofw3's TX marker — it occupies the position where
+    # an RSSI value would be in a normal RX frame.  Without this
+    # normalisation, _partition() treats "#" as a comment delimiter,
+    # leaving an empty packet body → PacketInvalid("Null packet").
+    #
+    # The canonical frame format uses " I" / " W" (leading space) for
+    # 1-char verbs, but "RQ" / "RP" (no leading space) for 2-char verbs.
+    # The evofw3 echo uses "# I" / "# W" / "# RQ" / "# RP" (single space
+    # after #).  We normalise to the canonical RSSI-prefixed format:
+    #   "# I --- ..." → "...  I --- ..."  (extra space for 1-char verb)
+    #   "# RQ --- ..." → "... RQ --- ..." (no extra space for 2-char verb)
+    # This produces a frame that parses correctly and can be matched by
+    # _is_recent_tx() as a hardware echo (issue 1131).
+    if packet_line.startswith("# "):
+        _rest = packet_line[2:]
+        # Check for 1-char verbs (I, W) — need extra space to form " I"
+        if _rest.startswith((f"{I_.strip()} ", f"{W_.strip()} ")):
+            packet_line = "...  " + _rest
+        # Check for 2-char verbs (RQ, RP) — no extra space needed
+        elif _rest.startswith((f"{RQ} ", f"{RP} ")):
+            packet_line = "... " + _rest
+
     # pseudo-RAMSES-II packets (encrypted payload?)...
     if (
         packet_line[10:14] in (" 08:", " 31:")
