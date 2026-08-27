@@ -769,13 +769,17 @@ CODES_BY_DEV_SLUG: dict[str, dict[Code, dict[Verb, Any]]] = {
     **{k: v for k, v in _DEV_KLASSES_HEAT.items() if k is not None},
 }
 
-CODES_OF_HEAT_DOMAIN: tuple[Code] = sorted(  # type: ignore[assignment]
-    tuple({c for k in _DEV_KLASSES_HEAT.values() for c in k})
-    + (Code._0B04, Code._2389)
+CODES_OF_HEAT_DOMAIN: tuple[Code, ...] = tuple(
+    sorted(
+        tuple({c for k in _DEV_KLASSES_HEAT.values() for c in k})
+        + (Code._0B04, Code._2389)
+    )
 )
-CODES_OF_HVAC_DOMAIN: tuple[Code] = sorted(  # type: ignore[assignment]
-    tuple({c for k in _DEV_KLASSES_HVAC.values() for c in k})
-    + (Code._22F8, Code._4401, Code._4E01, Code._4E02, Code._4E04)
+CODES_OF_HVAC_DOMAIN: tuple[Code, ...] = tuple(
+    sorted(
+        tuple({c for k in _DEV_KLASSES_HVAC.values() for c in k})
+        + (Code._22F8, Code._4401, Code._4E01, Code._4E02, Code._4E04)
+    )
 )
 CODES_OF_HEAT_DOMAIN_ONLY: tuple[Code, ...] = tuple(
     c for c in sorted(CODES_OF_HEAT_DOMAIN) if c not in CODES_OF_HVAC_DOMAIN

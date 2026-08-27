@@ -35,13 +35,13 @@ from .schemas import (
     select_device_filter_mode,
 )
 from .transport import TransportConfig, transport_factory
-from .typing import PktLogConfigT, PortConfigT, QosParams
+from .typing import DeviceIdT, PktLogConfigT, PortConfigT, QosParams
 
 if TYPE_CHECKING:
     from .config import EngineConfig
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
-    from .typing import DeviceIdT, MsgHandlerT, PayloadT
+    from .typing import MsgHandlerT, PayloadT
 
 
 DEV_MODE = False
@@ -99,7 +99,7 @@ class Engine:
         self._unwanted: list[DeviceIdT] = [
             NON_DEV_ADDR.id,
             ALL_DEV_ADDR.id,
-            "01:000001",  # type: ignore[list-item]  # why this one?
+            DeviceIdT("01:000001"),  # why this one?
         ]
         self._enforce_known_list = select_device_filter_mode(
             self.config.enforce_known_list,
