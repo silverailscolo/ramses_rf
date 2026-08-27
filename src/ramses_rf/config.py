@@ -265,6 +265,13 @@ def strip_and_map_schema(schema: dict[str, Any]) -> dict[str, Any]:
     device's trait dict.  Top-level keys (``main_tcs``, ``orphans_heat``,
     ``controller``, etc.) are passed through unchanged.
 
+    .. note::
+        The output of this function is suitable for building a
+        **known_list** (mapped trait names like ``class``, ``alias``),
+        but **not** for ``SCH_GLOBAL_SCHEMAS`` validation — the schema
+        validator rejects mapped trait names.  For schema validation,
+        use :func:`strip_traits` (stage 1 only) instead.  See issue 1120.
+
     :param schema: A schema dict with device IDs as keys and trait
         dicts as values.
     :return: A new schema dict with ``_`` keys stripped/mapped per device.
