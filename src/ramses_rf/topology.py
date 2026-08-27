@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from ramses_tx.typing import DeviceIdT
 
     from .devices import Controller
-    from .systems.tcs import Evohome
+    from .systems.tcs import SystemBase
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -87,7 +87,7 @@ class Parent:
 
         self._child_id: str = child_id  # type: ignore[assignment]
         self.child_by_id: dict[str, Child] = {}
-        self.childs: list[Child] = []
+        self.childs: list[Any] = []
 
     @property
     def zone_index(self) -> str:
@@ -299,7 +299,7 @@ class Child:
         self._is_sensor = is_sensor
         self._child_id: str | None = None
         self.ctl: Controller | Any = None
-        self.tcs: Evohome | None = None
+        self.tcs: SystemBase | None = None
 
     def _get_parent(
         self,

@@ -407,7 +407,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     def _on_topology_changed(self) -> None:
         """Handle topology change notification from DeviceRegistry."""
-        asyncio.create_task(self._notify_schema_updated())
+        task = asyncio.create_task(self._notify_schema_updated())
+        self.add_task(task)
 
     async def _notify_schema_updated(self) -> None:
         """Invoke registered schema updated callback safely.
