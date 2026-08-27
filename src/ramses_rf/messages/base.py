@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import datetime as dt
-from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, cast
 
 from ramses_rf.address import Address, id_to_address
 from ramses_rf.const import (
@@ -35,11 +35,12 @@ from ..const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     RQ,
     W_,
     Code,
+    Verb,
 )
 
 if TYPE_CHECKING:
     # pylint: disable=unused-import
-    from ..const import IndexT, Verb  # noqa: F401
+    from ..const import IndexT  # noqa: F401
 
 
 __all__ = ["Message"]
@@ -82,13 +83,14 @@ class Message:
         self.rssi: str = dto.rssi
 
         # Cleanly cast properties
-        self.verb: Verb = dto.verb  # type: ignore[assignment]
+        self.verb: Verb = Verb(dto.verb)
         self.seqn: str = dto.seq
 
+        self.code: Code
         try:
-            self.code: Code = Code(dto.code)
+            self.code = Code(dto.code)
         except ValueError:
-            self.code = dto.code  # type: ignore[assignment]
+            self.code = cast(Code, dto.code)
 
         try:
             self.len: int = int(dto.length)
@@ -198,7 +200,7 @@ class Message:
         :returns: The frame string with sequence number included if present.
         :rtype: str
         """
-        return self._format_frame(getattr(self, "seqn", None))
+        return self._format_frame(self.seqn)
 
     @classmethod
     def _from_packet(cls: type[_MessageT], packet: Any) -> _MessageT:
@@ -249,8 +251,6 @@ class Message:
                 context_val = "[..]"
             elif self._index_value is False:
                 context_val = ""
-            elif self._index_value is None:
-                context_val = "??"  # type: ignore[unreachable]
             else:
                 context_val = str(self._index_value)
 
@@ -375,11 +375,7 @@ class Message:
         :return: False if there is no payload (may falsely return True).
         :rtype: bool
         """
-        v_str = (
-            str(getattr(self.verb, "value", str(self.verb)))
-            .split(".")[-1]
-            .strip()
-        )
+        v_str = str(self.verb.value).split(".")[-1].strip()
         if v_str not in (RQ, f"{RQ}_") and self.code in (
             Code._1FC9,
             Code._1F09,
