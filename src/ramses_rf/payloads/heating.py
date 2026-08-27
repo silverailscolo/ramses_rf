@@ -7,7 +7,7 @@ packet payloads.
 import struct
 from dataclasses import dataclass
 from datetime import datetime as dt
-from typing import Any, ClassVar, Self, cast
+from typing import Any, ClassVar, Self
 
 from ramses_rf.const import (
     DEV_ROLE_MAP,
@@ -1104,7 +1104,7 @@ class BindingPayload(PayloadBase):
                 try:
                     bound_dev_id = hex_id_to_dev_id(dev_hex)
                 except ValueError:
-                    bound_dev_id = cast(DeviceIdT, dev_hex)
+                    bound_dev_id = DeviceIdT(dev_hex)
                 bindings.append([domain_id_hex, opcode_hex, bound_dev_id])
         elif len(payload_hex) == 2:
             bindings.append([payload_hex])

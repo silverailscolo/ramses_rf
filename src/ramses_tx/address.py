@@ -54,7 +54,9 @@ class Address:
         """Return True if both addresses are equal."""
         if not hasattr(other, "id"):  # can compare Address with Device
             return NotImplemented
-        return self.id == other.id  # type: ignore[no-any-return]
+        other_id: str = other.id
+        result: bool = self.id == other_id
+        return result
 
     @property
     def hex_id(self) -> str:
