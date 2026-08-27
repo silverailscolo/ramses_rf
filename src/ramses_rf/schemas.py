@@ -225,7 +225,7 @@ SCH_TCS = vol.Schema(
             [SCH_DEVICE_ID_ANY], vol.Unique()
         ),
         vol.Optional(SZ_ZONES, default={}): vol.Any({}, SCH_TCS_ZONES),
-        vol.Optional(vol.Remove("is_tcs")): vol.Coerce(bool),
+        vol.Remove("is_tcs"): vol.Coerce(bool),
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -246,7 +246,7 @@ SCH_VCS_DATA = vol.Schema(
             [SCH_DEVICE_ID_ANY],
             vol.Unique(),  # vol.Length(min=1)
         ),
-        vol.Optional(vol.Remove("is_vcs")): vol.Coerce(bool),
+        vol.Remove("is_vcs"): vol.Coerce(bool),
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -270,9 +270,7 @@ SCH_VCS = vol.All(SCH_VCS_KEYS, SCH_VCS_DATA)
 SCH_GLOBAL_SCHEMAS_DICT = {  # System schemas - can be 0-many Heat/HVAC schemas
     # orphans are devices to create that won't be in a (cached) schema...
     vol.Optional(SZ_MAIN_TCS): vol.Any(None, SCH_DEVICE_ID_CTL),
-    vol.Optional(vol.Remove("main_controller")): vol.Any(
-        None, SCH_DEVICE_ID_CTL
-    ),
+    vol.Remove("main_controller"): vol.Any(None, SCH_DEVICE_ID_CTL),
     vol.Optional(SCH_DEVICE_ID_CTL): vol.Any(SCH_TCS, SCH_VCS),
     vol.Optional(
         SCH_DEVICE_ID_ANY

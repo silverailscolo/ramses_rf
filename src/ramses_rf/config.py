@@ -81,7 +81,7 @@ def sch_global_traits_dict_factory(
                 None, SCH_POLLING_INTERVAL
             ),
             vol.Optional(SZ_IS_BATTERY, default=False): vol.Any(None, bool),
-            vol.Optional(vol.Remove("_note")): str,
+            vol.Remove("_note"): str,
             vol.Optional("locked", default=False): vol.Any(None, bool),
         },
         extra=vol.PREVENT_EXTRA,
@@ -264,6 +264,13 @@ def strip_and_map_schema(schema: dict[str, Any]) -> dict[str, Any]:
     Walks a schema dict and applies the strip+map pipeline to each
     device's trait dict.  Top-level keys (``main_tcs``, ``orphans_heat``,
     ``controller``, etc.) are passed through unchanged.
+
+    .. note::
+        The output of this function is suitable for building a
+        **known_list** (mapped trait names like ``class``, ``alias``),
+        but **not** for ``SCH_GLOBAL_SCHEMAS`` validation — the schema
+        validator rejects mapped trait names.  For schema validation,
+        use :func:`strip_traits` (stage 1 only) instead.  See issue 1120.
 
     :param schema: A schema dict with device IDs as keys and trait
         dicts as values.

@@ -381,3 +381,64 @@ async def test_implicit_hgi_discovery_fallback() -> None:
 
     config = GatewayConfig(known_list=raw_known_list)
     assert config.hgi_id == "18:006402"
+
+
+@pytest.mark.asyncio
+async def test_gateway_accepts_underscore_schema() -> None:
+    """Gateway accepts a schema with _-prefixed trait keys (issue 1120).
+
+    The CLI and ramses_cc both use _-prefixed keys (_class, _alias, etc.)
+    in the schema.  The Gateway must strip them (stage 1) before passing
+    to SCH_GLOBAL_SCHEMAS, which rejects both _-prefixed and mapped
+    trait names.
+    """
+    schema = {
+        "01:234567": {
+            "_class": "CTL",
+            "_alias": "Living Room Controller",
+            "zones": {"01": {"sensor": "01:234567"}},
+        },
+    }
+
+    config = GatewayConfig(schema=schema)
+    loop = asyncio.get_running_loop()
+    gateway = Gateway(port_name="/dev/null", config=config, loop=loop)
+
+    # The schema should be accepted and the _-prefixed keys stripped
+    assert "01:234567" in gateway._schema
+    assert "_class" not in gateway._schema["01:234567"]
+    assert "_alias" not in gateway._schema["01:234567"]
+    # Structural keys should be preserved
+    assert "zones" in gateway._schema["01:234567"]
+
+    with contextlib.suppress(asyncio.CancelledError):
+        await gateway.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_accepts_mixed_schema() -> None:
+    """Gateway accepts a schema mixing _-prefixed and native keys (issue 1120).
+
+    ramses_cc may pass a schema that has already been partially stripped
+    (native keys only) alongside _-prefixed keys.  The Gateway should
+    handle both without error.
+    """
+    schema = {
+        "main_tcs": "01:234567",
+        "01:234567": {
+            "_class": "CTL",
+            "zones": {"01": {"sensor": "01:234567"}},
+        },
+        "orphans_heat": ["04:111111"],
+    }
+
+    config = GatewayConfig(schema=schema)
+    loop = asyncio.get_running_loop()
+    gateway = Gateway(port_name="/dev/null", config=config, loop=loop)
+
+    assert gateway._schema["main_tcs"] == "01:234567"
+    assert "zones" in gateway._schema["01:234567"]
+    assert "_class" not in gateway._schema["01:234567"]
+
+    with contextlib.suppress(asyncio.CancelledError):
+        await gateway.stop()
