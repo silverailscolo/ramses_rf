@@ -125,7 +125,7 @@ class Engine:
             tuple[MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
         ) = None
 
-        self._protocol: RamsesProtocolT = None  # type: ignore[assignment]
+        self._protocol: RamsesProtocolT = None  # type: ignore[assignment]  # set in start()
         self._transport: RamsesTransportT | None = None
 
         # Thread-safe lock for task registry modifications
