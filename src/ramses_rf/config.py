@@ -81,7 +81,7 @@ def sch_global_traits_dict_factory(
                 None, SCH_POLLING_INTERVAL
             ),
             vol.Optional(SZ_IS_BATTERY, default=False): vol.Any(None, bool),
-            vol.Optional(vol.Remove("_note")): str,
+            vol.Remove("_note"): str,
             vol.Optional("locked", default=False): vol.Any(None, bool),
         },
         extra=vol.PREVENT_EXTRA,
