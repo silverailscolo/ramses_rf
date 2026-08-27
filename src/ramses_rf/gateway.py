@@ -182,9 +182,32 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         # validation.  strip_and_map_schema (stage 1+2) would map _class→class,
         # but SCH_GLOBAL_SCHEMAS rejects mapped trait names — they are only
         # valid for the known_list, not the schema validator (issue 1120).
-        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(
-            strip_traits(schema_in)
-        )
+        stripped = strip_traits(schema_in)
+
+        # Preserve _name in zone entries (ramses-rf/ramses_cc#919: zone names
+        # lost after 24h when the MessageStore prunes 0004 packets — the
+        # schema is the only persistent source of the name).  strip_traits
+        # removes _name, so re-add it from the original schema for
+        # SCH_TCS_ZONES_ZON to accept and Zone._update_schema to hydrate.
+        for ctl_id, ctl_entry in schema_in.items():
+            if not isinstance(ctl_entry, dict) or not isinstance(
+                ctl_entry.get("zones"), dict
+            ):
+                continue
+            stripped_ctl = stripped.get(ctl_id)
+            if not isinstance(stripped_ctl, dict) or not isinstance(
+                stripped_ctl.get("zones"), dict
+            ):
+                continue
+            for z_idx, z_entry in ctl_entry["zones"].items():
+                if (
+                    isinstance(z_entry, dict)
+                    and z_entry.get("_name")
+                    and isinstance(stripped_ctl["zones"].get(z_idx), dict)
+                ):
+                    stripped_ctl["zones"][z_idx]["_name"] = z_entry["_name"]
+
+        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(stripped)
 
         self._tcs: Evohome | None = None
         self._eavesdrop_engine: Any = None
