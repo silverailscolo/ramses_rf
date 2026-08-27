@@ -69,7 +69,7 @@ class _Entity:
     and composes the specialized services for state management and discovery.
     """
 
-    _SLUG: str = None  # type: ignore[assignment]
+    _SLUG: str | None = None
 
     def __init__(self, gateway: Gateway) -> None:
         """Initialize the base entity and its composed components.
@@ -78,14 +78,14 @@ class _Entity:
         :type gateway: Gateway
         """
         self._gateway = gateway
-        self.id: DeviceIdT = None  # type: ignore[assignment]
+        self.id: DeviceIdT = None  # type: ignore[assignment]  # set by subclass
         self._qos_tx_count = 0
 
         # Specialized components via Composition
         self.entity_state: EntityState = EntityState(self, self._gateway)
 
         # Context required by children (Zones/Devices)
-        self._z_id: DeviceIdT = None  # type: ignore[assignment]
+        self._z_id: DeviceIdT = None  # type: ignore[assignment]  # set by subclass
         self._z_index: DevIndexT | None = None
         self.ctl: Controller | None = None
         self.tcs: Evohome | None = None

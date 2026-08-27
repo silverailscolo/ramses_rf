@@ -7,7 +7,7 @@ into legacy dictionary formats for parity testing and backward compatibility.
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .base import PayloadBase
@@ -61,7 +61,7 @@ def payload_to_dict(
     :rtype: dict[str, Any]
     :raises TypeError: If the input is not a dataclass instance.
     """
-    if not is_dataclass(cast(object, payload)):
+    if not is_dataclass(type(payload)):
         err_msg = f"Expected dataclass instance, got {type(payload).__name__}"
         raise TypeError(err_msg)
     if legacy:
