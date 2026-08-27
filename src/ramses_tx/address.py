@@ -10,9 +10,9 @@ from . import exceptions as exc
 from .const import DEVICE_ID_REGEX
 from .typing import DeviceIdT
 
-HGI_DEVICE_ID: DeviceIdT = "18:000730"  # type: ignore[assignment]
-NON_DEVICE_ID: DeviceIdT = "--:------"  # type: ignore[assignment]
-ALL_DEVICE_ID: DeviceIdT = "63:262142"  # type: ignore[assignment]
+HGI_DEVICE_ID: DeviceIdT = DeviceIdT("18:000730")
+NON_DEVICE_ID: DeviceIdT = DeviceIdT("--:------")
+ALL_DEVICE_ID: DeviceIdT = DeviceIdT("63:262142")
 
 # NOTE: All debug flags should be False for deployment to end-users
 _DBG_DISABLE_STRICT_CHECKING: Final[bool] = False
@@ -37,7 +37,7 @@ class Address:
         """
         self.id = device_id
         self.type = device_id[:2]  # dex, drops 2nd part, incl. ":"
-        self._hex_id: str = None  # type: ignore[assignment]
+        self._hex_id: str | None = None
 
         if not self.is_valid(device_id):
             raise ValueError(f"Invalid device_id: {device_id}")
@@ -61,7 +61,7 @@ class Address:
         """Return 6-character hex representation of device ID."""
         if self._hex_id is not None:
             return self._hex_id
-        self._hex_id = self.convert_to_hex(self.id)  # type: ignore[unreachable]
+        self._hex_id = self.convert_to_hex(self.id)
         return self._hex_id
 
     @staticmethod
