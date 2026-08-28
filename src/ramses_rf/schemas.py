@@ -82,7 +82,7 @@ from .const import (
 if TYPE_CHECKING:
     from .devices import Device
     from .gateway import Gateway
-    from .systems import Evohome
+    from .systems.tcs import SystemBase
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -485,7 +485,7 @@ def load_fan(
 
 def load_tcs(
     gateway: Gateway, controller_id: DeviceIdT, schema: dict[str, Any]
-) -> Evohome:
+) -> SystemBase:
     """Create a TCS using its schema.
 
     :param gateway: The Gateway instance managing the TCS.
@@ -494,8 +494,8 @@ def load_tcs(
     :type controller_id: DeviceIdT
     :param schema: The schema dictionary for the TCS.
     :type schema: dict[str, Any]
-    :returns: The created or retrieved Evohome TCS instance.
-    :rtype: Evohome
+    :returns: The created or retrieved TCS instance.
+    :rtype: SystemBase
     """
     # print(schema)
     # schema = SCH_TCS_ZONES_ZON(schema)
@@ -505,7 +505,8 @@ def load_tcs(
         raise exc.SchemaInconsistentError(
             f"No TCS assigned to controller {controller.id}"
         )
-    controller.tcs._update_schema(**schema)
+    if hasattr(controller.tcs, "_update_schema"):
+        controller.tcs._update_schema(**schema)
 
     for dev_id in schema.get(SZ_UFH_SYSTEM, {}):  # UFH controllers
         _get_device(gateway, dev_id, parent=controller.tcs)  # , **_schema)

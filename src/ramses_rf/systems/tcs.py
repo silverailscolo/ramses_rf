@@ -7,7 +7,7 @@ import asyncio
 import logging
 from datetime import datetime as dt, timedelta as td
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
@@ -122,7 +122,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
     _SLUG: str | None = None
 
     # TODO: check (code so complex, not sure if this is true)
-    childs: list[Device]  # type: ignore[assignment]  # list[Device] vs list[Child]
+    childs: list[Device]
 
     # Populated by the CQRS state projector (issue 1102).  Declared here
     # because tpi_params property is on SystemBase but the dict is only
@@ -157,7 +157,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         self.id: DeviceIdT = controller.id
 
         self.ctl: Controller = controller
-        self.tcs: Evohome = self  # type: ignore[assignment]
+        self.tcs = self
         self._child_id = FF  # NOTE: domain_id
 
         self._app_cntrl: BdrSwitch | OtbGateway | None = None
@@ -189,17 +189,14 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         # The legacy entity_state.get_value(Code._1100) path is deprecated.
         if self._tpi_params:
             for params in self._tpi_params.values():
-                return cast(
-                    PayDictT._1100,
-                    {
-                        "cycle_rate": params.get("cycle_rate"),
-                        "min_on_time": params.get("min_on_time"),
-                        "min_off_time": params.get("min_off_time"),
-                        "proportional_band_width": params.get(
-                            "proportional_band_width"
-                        ),
-                    },
-                )
+                return {
+                    "cycle_rate": params.get("cycle_rate"),
+                    "min_on_time": params.get("min_on_time"),
+                    "min_off_time": params.get("min_off_time"),
+                    "proportional_band_width": params.get(
+                        "proportional_band_width"
+                    ),
+                }
         return None
 
     async def heat_demand(self) -> float | None:  # 3150/FC

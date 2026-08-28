@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
     from .devices import Controller
     from .gateway import Gateway
-    from .systems.tcs import Evohome
+    from .systems.tcs import SystemBase
 
 
 _QOS_TX_LIMIT = 12
@@ -88,7 +88,7 @@ class _Entity:
         self._z_id: DeviceIdT = None  # type: ignore[assignment]  # set by subclass
         self._z_index: DevIndexT | None = None
         self.ctl: Controller | None = None
-        self.tcs: Evohome | None = None
+        self.tcs: SystemBase | None = None
 
     def __repr__(self) -> str:
         return f"{self.id} ({self._SLUG})"

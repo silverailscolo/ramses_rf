@@ -477,7 +477,7 @@ class _1100(TypedDict):
     cycle_rate: int
     min_on_time: float
     min_off_time: float
-    _unknown_0: str
+    _unknown_0: NotRequired[str]
     proportional_band_width: NotRequired[float | None]
     _unknown_1: NotRequired[str | None]
 
