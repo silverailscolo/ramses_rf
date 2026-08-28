@@ -155,6 +155,40 @@ def test_polling_manager_battery_device_zero_polling(
     assert explicit_schedule == {}
 
 
+def test_polling_manager_faked_device_zero_polling(
+    mock_gateway: MagicMock,
+) -> None:
+    """Faked devices are virtual and must never be polled.
+
+    A faked REM (e.g. 37:999999 created via ramses_cc's add_faked_rem
+    service) does not exist on the RF network.  Polling it with 10E0
+    generates a 20s timeout and log spam (issue 1067).
+    """
+    # ARRANGE — a CTL that would normally get a 10E0 poll, but is faked
+    faked_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    faked_dev._binding_manager = MagicMock()  # is_faked → True
+
+    # A faked HVAC device with no explicit class (DeviceHvac, HVC slug)
+    # — this is the scenario where a faked REM's class trait was lost
+    # during schema migration, leaving it as a generic DeviceHvac.
+    faked_hvc_dev = MockDevice(mock_gateway, "37:999999", slug="HVC")
+    faked_hvc_dev._binding_manager = MagicMock()  # is_faked → True
+
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+
+    # ACT
+    faked_schedule = poller.resolve_schedule_for_device(faked_dev)
+    faked_hvc_schedule = poller.resolve_schedule_for_device(faked_hvc_dev)
+
+    # ASSERT — faked devices get zero polling regardless of their slug
+    assert faked_schedule == {}
+    assert faked_hvc_schedule == {}
+
+    # No tasks should be created for faked devices
+    assert poller.update_device_tasks(faked_dev) == set()
+    assert poller.update_device_tasks(faked_hvc_dev) == set()
+
+
 @pytest.mark.asyncio
 async def test_polling_manager_shadow_execution_parity(
     mock_gateway: MagicMock,
