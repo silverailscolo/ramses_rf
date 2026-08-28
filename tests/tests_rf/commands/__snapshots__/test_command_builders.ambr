@@ -125,6 +125,21 @@
 # name: test_build_set_mix_valve_params
   ' W --- 18:000730 01:111111 --:------ 1030 016 00C80137C9010FCA0196CB010FCC0101'
 # ---
+# name: test_build_set_mode_countdown_override
+  ' W --- 18:000730 01:111111 --:------ 2349 007 0308980300003C'
+# ---
+# name: test_build_set_mode_follow_schedule
+  ' W --- 18:000730 01:111111 --:------ 2349 007 037FFF00FFFFFF'
+# ---
+# name: test_build_set_mode_permanent_override
+  ' W --- 18:000730 01:111111 --:------ 2349 007 03089802FFFFFF'
+# ---
+# name: test_build_set_mode_temporary_override
+  ' W --- 18:000730 01:111111 --:------ 2349 013 03089804FFFFFF000C0F0107EA'
+# ---
+# name: test_build_set_name
+  ' W --- 18:000730 01:111111 --:------ 0004 022 03004C6976696E6720526F6F6D000000000000000000'
+# ---
 # name: test_build_set_schedule_fragment
   ' W --- 18:000730 01:111111 --:------ 0404 012 002000080501030011223344'
 # ---
@@ -133,6 +148,9 @@
 # ---
 # name: test_build_set_system_time
   ' W --- 18:000730 01:111111 --:------ 313F 009 006000000C120707EA'
+# ---
+# name: test_build_set_temperature
+  ' W --- 18:000730 01:111111 --:------ 2309 003 030834'
 # ---
 # name: test_build_set_tpi_params
   ' W --- 18:000730 01:111111 --:------ 1100 008 000C141400009601'
