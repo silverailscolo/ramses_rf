@@ -45,7 +45,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime as dt
 from functools import wraps
 from time import perf_counter, time
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from serial import Serial, SerialException
 
@@ -83,12 +83,42 @@ __all__ = [
     "serial_asyncio",
 ]
 
-try:
-    import serial_asyncio_fast as serial_asyncio  # type: ignore[import-not-found, import-untyped, unused-ignore]
+if TYPE_CHECKING:
+    # pyserial-asyncio has no type stubs — declare the minimal interface
+    # we need.  SerialTransport extends asyncio.transports.Transport but
+    # adds a custom __init__ that takes (loop, protocol, serial_instance).
+    from serial import Serial as _Serial
 
-    _LOGGER.debug("Using pyserial-asyncio-fast in place of pyserial-asyncio")
-except ImportError:
-    import serial_asyncio  # type: ignore[import-not-found, import-untyped, unused-ignore, no-redef]
+    class _SerialTransportBase:
+        """Type-checking stub for serial_asyncio.SerialTransport."""
+
+        serial: _Serial
+
+        def __init__(
+            self,
+            loop: asyncio.AbstractEventLoop,
+            protocol: Any,
+            serial_instance: _Serial,
+        ) -> None:
+            """Initialize serial transport."""
+            self.serial = serial_instance
+
+        def _abort(self, exc: Exception) -> None:
+            """Abort the transport."""
+
+        def _close(self, exc: exc.RamsesException | None = None) -> None:
+            """Close the transport."""
+else:
+    try:
+        import serial_asyncio_fast as serial_asyncio
+
+        _LOGGER.debug(
+            "Using pyserial-asyncio-fast in place of pyserial-asyncio"
+        )
+    except ImportError:
+        import serial_asyncio
+
+    _SerialTransportBase = serial_asyncio.SerialTransport
 
 
 def limit_duty_cycle(
@@ -151,7 +181,7 @@ def limit_duty_cycle(
     return decorator
 
 
-class _PortTransportAbstractor(serial_asyncio.SerialTransport):
+class _PortTransportAbstractor(_SerialTransportBase):
     """Do the bare minimum to abstract a transport from its underlying class."""
 
     serial: Serial
@@ -170,7 +200,7 @@ class _PortTransportAbstractor(serial_asyncio.SerialTransport):
         )
 
 
-class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[misc]
+class PortTransport(_FullTransport, _PortTransportAbstractor):
     """Send/receive packets async to/from evofw3/HGI80 via a serial port.
 
     See: https://github.com/ghoti57/evofw3
@@ -180,6 +210,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
     _init_task: asyncio.Task[None]
 
     _recv_buffer: bytes = b""
+    _max_read_size: int = 1024  # from asyncio.transports.Transport
 
     _tx_bits_in_bucket: float | None = None
     _tx_last_time_bit_added: float | None = None
@@ -360,7 +391,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         """Perform the actual write to the serial port."""
         self.serial.write(data)
 
-    def _abort(self, exc: Exception) -> None:  # type: ignore[override]
+    def _abort(self, exc: Exception) -> None:
         """Abort the transport."""
         super()._abort(exc)
 
@@ -371,9 +402,7 @@ class PortTransport(_FullTransport, _PortTransportAbstractor):  # type: ignore[m
         if conn_task := getattr(self, "_conn_task", None):
             conn_task.cancel()
 
-    def _close(  # type: ignore[override]
-        self, exc: exc.RamsesException | None = None
-    ) -> None:
+    def _close(self, exc: exc.RamsesException | None = None) -> None:
         """Close the transport (cancel any outstanding tasks)."""
         super()._close(exc)
 
