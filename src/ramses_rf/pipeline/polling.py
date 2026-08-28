@@ -208,7 +208,7 @@ class PollingManager:
         """Resolve the effective polling schedule for a given device.
 
         Combines default device schedule tables with SSOT schema trait overrides,
-        ensuring battery-powered devices always resolve to zero polling.
+        ensuring battery-powered and faked devices always resolve to zero polling.
 
         :param device: The target device instance.
         :type device: DeviceBase
@@ -217,6 +217,12 @@ class PollingManager:
         """
         slug = getattr(device, "_SLUG", "DEFAULT")
         if slug == DevType.HGI:
+            return {}
+
+        # Faked devices are virtual — they don't exist on the RF network,
+        # so polling them only generates timeouts and log spam (e.g. a
+        # faked REM created via ramses_cc's add_faked_rem service).
+        if device.is_faked:
             return {}
 
         # Battery devices sleep and cannot receive RF requests; never poll them
