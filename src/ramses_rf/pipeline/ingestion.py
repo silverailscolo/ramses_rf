@@ -228,9 +228,7 @@ class StateProjector:
         :return: None
         :rtype: None
         """
-        if getattr(msg, "verb", "") == RQ or not isinstance(
-            msg.payload, (dict, list)
-        ):
+        if msg.verb == RQ or not isinstance(msg.payload, (dict, list)):
             return
 
         # 2411 parameter messages are owned by the FAN aggregate root: they
@@ -492,7 +490,7 @@ class StateProjector:
 
         # --- CQRS Reactor Hooks ---
         # Automate the legacy Actuator discovery query (3EF1) in response to 3EF0 (I)
-        if msg.code == Code._3EF0 and getattr(msg, "verb", "") == I_:
+        if msg.code == Code._3EF0 and msg.verb == I_:
             src_dev = registry.device_by_id.get(msg.src.id)
             if src_dev and not getattr(src_dev, "is_faked", False):
                 from ramses_rf.devices.helpers import build_rq_cmd
@@ -932,7 +930,7 @@ class StateProjector:
                 # We must ignore Zone temperature syncs sent TO them by the Controller.
                 # Keep same as src/ramses_rf/dispatcher.py#_update_temperature_state
                 target_id = getattr(target, "id", str(target))
-                src_id = getattr(msg.src, "id", str(msg.src))
+                src_id = msg.src.id
 
                 if (
                     getattr(target, "_SLUG", "") in ("TRV", "THM")

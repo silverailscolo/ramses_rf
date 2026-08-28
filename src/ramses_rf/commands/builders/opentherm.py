@@ -22,7 +22,7 @@ def build_get_opentherm_data(intent: Command) -> CommandDTO:
 
     msg_id_int = msg_id if isinstance(msg_id, int) else int(msg_id, 16)
     msg_type = 8 if parity(msg_id_int) else 0
-    payload = OpenThermMsgPayload(
+    payload = OpenThermMsgPayload.create(
         opentherm_index=0,
         msg_id=msg_id_int,
         msg_type=msg_type,

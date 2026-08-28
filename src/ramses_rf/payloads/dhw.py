@@ -259,7 +259,8 @@ class DhwParamsPayload(PayloadBase):
     overrun: int | None = None
     differential: float | None = None
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         dhw_index: int | str = 0,
         setpoint: float | None = None,
@@ -267,8 +268,6 @@ class DhwParamsPayload(PayloadBase):
         differential: float = 0.0,
     ) -> "DhwParams3BPayload | DhwParams6BPayload":
         """Construct DhwParams payload variant dynamically from arguments."""
-        if cls is not DhwParamsPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         index = parse_index(dhw_index)
         if overrun != 0 or differential != 0.0:
             return DhwParams6BPayload(

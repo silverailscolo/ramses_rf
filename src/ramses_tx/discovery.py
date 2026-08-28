@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from functools import partial
-from typing import Protocol, cast
+from typing import Protocol
 
 from serial import SerialException, serial_for_url
 
@@ -46,7 +46,7 @@ if sys.platform == "win32":
         # the signature keeps type-checkers happy because all branches now look
         # identical.
         del include_links, _hide_subsystems
-        return cast(list[_PortInfo], _win_comports())
+        return list(_win_comports())
 
 elif os.name != "posix":
     raise ImportError(
@@ -65,7 +65,7 @@ elif sys.platform.lower()[:5] != "linux":
         # kwargs on macOS/Unix, but exposing them suppresses "definition differs"
         # errors when mypy analyses this file on other platforms.
         del include_links, _hide_subsystems
-        return cast(list[_PortInfo], _posix_comports())
+        return list(_posix_comports())
 
 else:
     from serial.tools.list_ports_linux import SysFS
@@ -105,7 +105,7 @@ else:
             for d in map(SysFS, devices)
             if d.subsystem not in _hide_subsystems
         ]
-        return cast(list[_PortInfo], result)
+        return list(result)
 
 
 async def is_hgi80(serial_port: SerPortNameT) -> bool | None:

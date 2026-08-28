@@ -53,7 +53,8 @@ class HeatDemandPayload(PayloadBase):
     demand_percent: int
     raw_extra: bytes | None
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         domain_or_zone_index: int | None = None,
         demand_percent: int = 0,
@@ -61,8 +62,6 @@ class HeatDemandPayload(PayloadBase):
         _is_array_item: bool = False,
     ) -> "HeatDemand1BPayload | HeatDemand2BPayload":
         """Construct HeatDemand payload variant dynamically."""
-        if cls is not HeatDemandPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if domain_or_zone_index is not None:
             return HeatDemand2BPayload(
                 domain_or_zone_index=domain_or_zone_index,
@@ -289,14 +288,13 @@ class TemperaturePayload(PayloadBase):
     zone_index: int | str | None
     temperature: float | bool | None
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         zone_index: int | str | None = None,
         temperature: float | bool | None = None,
     ) -> "Temperature2BPayload | Temperature3BPayload":
         """Construct Temperature payload variant dynamically from arguments."""
-        if cls is not TemperaturePayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if zone_index is not None:
             return Temperature3BPayload(
                 zone_index=zone_index, temperature=temperature
@@ -719,7 +717,8 @@ class SystemSyncPayload(PayloadBase):
     valve_run_time: int | None
     pump_run_time: int | None
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         sync_flag: int = 0,
         max_flow_setpoint: int | None = None,
@@ -732,8 +731,6 @@ class SystemSyncPayload(PayloadBase):
         _raw_extra: bytes | None = None,
     ) -> "SystemSync1BPayload | SystemSyncVarPayload":
         """Construct SystemSync payload variant dynamically from arguments."""
-        if cls is not SystemSyncPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if any(
             x is not None
             for x in (
@@ -1299,15 +1296,14 @@ class ZoneNamePayload(PayloadBase):
     name: str | None
     setpoint_temp: float | None
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         zone_index: int | str = 0,
         name: str | None = None,
         setpoint_temp: float | None = None,
     ) -> "ZoneName22BPayload | ZoneNameShort3BPayload":
         """Construct ZoneName payload variant dynamically."""
-        if cls is not ZoneNamePayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if setpoint_temp is not None:
             return ZoneNameShort3BPayload(
                 zone_index=zone_index, setpoint_temp=setpoint_temp
@@ -1620,14 +1616,13 @@ class ZoneSetpointPayload(PayloadBase):
     zone_index: int | str
     setpoint_temp: float | bool | None
 
-    def __new__(
+    @classmethod
+    def create(
         cls,
         zone_index: int | str = 0,
         setpoint_temp: float | bool | None = None,
     ) -> "ZoneSetpoint3BPayload":
         """Construct ZoneSetpoint payload variant dynamically."""
-        if cls is not ZoneSetpointPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         return ZoneSetpoint3BPayload(
             zone_index=zone_index, setpoint_temp=setpoint_temp
         )
@@ -1849,15 +1844,14 @@ class SystemZonesPayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    def __new__(
+    @classmethod
+    def create(
         cls,
         zone_type: int = 0,
         zone_mask: int = 0,
         zone_class_id: int = 0,
     ) -> "SystemZones4BPayload":
         """Construct SystemZones payload variant dynamically from arguments."""
-        if cls is not SystemZonesPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         return SystemZones4BPayload(
             zone_type=zone_type,
             zone_mask=zone_mask,
@@ -2008,15 +2002,14 @@ class RelayDemandPayload(PayloadBase):
     demand_percent: float
     raw_extra: bytes | None
 
-    def __new__(
+    @classmethod
+    def create(
         cls,
         domain_or_zone_index: int = 0,
         demand_percent: float = 0.0,
         raw_extra: bytes | None = None,
     ) -> "RelayDemand2BPayload":
         """Construct RelayDemand payload variant dynamically."""
-        if cls is not RelayDemandPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         return RelayDemand2BPayload(
             domain_or_zone_index=domain_or_zone_index,
             demand_percent=demand_percent,
@@ -2150,7 +2143,8 @@ class ZoneDevicesPayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         zone_index_raw: int = 0,
         device_role_id: int = 0,
@@ -2158,8 +2152,6 @@ class ZoneDevicesPayload(PayloadBase):
         sub_index: int = 0,
     ) -> "ZoneDevices5BPayload | ZoneDevices6BPayload":
         """Construct ZoneDevices payload variant dynamically from arguments."""
-        if cls is not ZoneDevicesPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if sub_index != 0:
             return ZoneDevices6BPayload(
                 zone_index_raw=zone_index_raw,
@@ -2890,7 +2882,8 @@ class ZoneModePayload(PayloadBase):
     duration_minutes: int | None
     until_dtm: str | dt | bytes | None
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         zone_index: int | str = 0,
         setpoint_temp: float | None = None,
@@ -2899,8 +2892,6 @@ class ZoneModePayload(PayloadBase):
         until_dtm: str | dt | bytes | None = None,
     ) -> "ZoneMode7BPayload | ZoneMode13BPayload":
         """Construct ZoneMode payload variant dynamically."""
-        if cls is not ZoneModePayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if until_dtm is not None:
             return ZoneMode13BPayload(
                 zone_index=zone_index,
@@ -3677,7 +3668,8 @@ class ActuatorCyclePayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         cycle_countdown_sec: int | None = None,
         actuator_countdown_sec: int | None = None,
@@ -3685,8 +3677,6 @@ class ActuatorCyclePayload(PayloadBase):
         domain_index: int | None = None,
     ) -> "ActuatorCycle6BPayload | ActuatorCycle7BPayload":
         """Construct ActuatorCycle payload variant dynamically from arguments."""
-        if cls is not ActuatorCyclePayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if domain_index is not None:
             return ActuatorCycle7BPayload(
                 domain_index=domain_index,

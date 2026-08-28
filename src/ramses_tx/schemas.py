@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import Any, Final, cast
+from typing import Any, Final
 
 import voluptuous as vol
 
@@ -163,17 +163,17 @@ def sch_serial_port_dict_factory() -> dict[vol.Required, vol.Any]:
     SCH_SERIAL_PORT_NAME = str
 
     def normalise_serial_port_factory() -> Callable[
-        [str | PortConfigT], PortConfigT
+        [str | PortConfigT], dict[str, Any]
     ]:
         def normalise_serial_port(
             node_value: str | PortConfigT,
-        ) -> PortConfigT:
+        ) -> dict[str, Any]:
             if isinstance(node_value, str):
-                return cast(
-                    "PortConfigT",
-                    {SZ_PORT_NAME: node_value} | SCH_SERIAL_PORT_CONFIG({}),
-                )
-            return node_value
+                defaults = SCH_SERIAL_PORT_CONFIG({})
+                return {SZ_PORT_NAME: node_value} | {
+                    k: v for k, v in defaults.items()
+                }
+            return dict(node_value)
 
         return normalise_serial_port
 
@@ -195,9 +195,12 @@ def extract_serial_port(
 ) -> tuple[str, PortConfigT]:
     """Extract serial port and port config tuple from schema."""
     port_name = str(serial_port_dict.get(SZ_PORT_NAME, ""))
-    port_config = cast(
-        "PortConfigT",
-        {k: v for k, v in serial_port_dict.items() if k != SZ_PORT_NAME},
+    port_config = PortConfigT(
+        baudrate=int(serial_port_dict.get(SZ_BAUDRATE, 115200)),
+        dsrdtr=bool(serial_port_dict.get(SZ_DSRDTR, False)),
+        rtscts=bool(serial_port_dict.get(SZ_RTSCTS, False)),
+        timeout=int(serial_port_dict.get(SZ_TIMEOUT, 0)),
+        xonxoff=bool(serial_port_dict.get(SZ_XONXOFF, True)),
     )
     return port_name, port_config
 

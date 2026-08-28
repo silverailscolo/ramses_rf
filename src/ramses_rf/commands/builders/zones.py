@@ -59,7 +59,7 @@ def build_set_temperature(intent: Command) -> CommandDTO:
             "Missing 'zone_index'/'zone_index' or 'setpoint' in intent data"
         )
 
-    payload = ZoneSetpointPayload(
+    payload = ZoneSetpointPayload.create(
         zone_index=zone_index, setpoint_temp=setpoint
     ).hex()
 
@@ -107,7 +107,7 @@ def build_set_mode(intent: Command) -> CommandDTO:
 
     until, duration = normalise_until(mode, setpoint, until, duration)
 
-    payload = ZoneModePayload(
+    payload = ZoneModePayload.create(
         zone_index=zone_index,
         setpoint_temp=setpoint,
         mode_code=mode,
@@ -148,7 +148,7 @@ def build_set_name(intent: Command) -> CommandDTO:
             "Missing 'zone_index'/'zone_index' or 'name' in intent data"
         )
 
-    payload = ZoneNamePayload(zone_index=zone_index, name=name).hex()
+    payload = ZoneNamePayload.create(zone_index=zone_index, name=name).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
