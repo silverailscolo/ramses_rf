@@ -11,7 +11,7 @@ import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Final
 
-import voluptuous as vol
+import probatio as vol
 
 from ramses_rf.const import (
     SZ_ACTUATORS as SZ_ACTUATORS,
@@ -120,11 +120,11 @@ SCH_ZON_INDEX = vol.Match(
 
 
 def error_renamed_key(new_key: str) -> Callable[[Any], None]:
-    """Return a voluptuous validator function raising an invalid key error.
+    """Return a probatio validator function raising an invalid key error.
 
     :param new_key: The new key name to instruct the user to rename to.
     :type new_key: str
-    :returns: A voluptuous validator function.
+    :returns: A probatio validator function.
     :rtype: Callable[[Any], None]
     """
 

@@ -10,8 +10,8 @@ from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 
 from ramses_rf import Gateway
 from ramses_rf.config import SCH_GLOBAL_TRAITS_DICT

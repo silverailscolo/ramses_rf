@@ -256,7 +256,7 @@ async def cli(
     if eavesdrop is not None:
         lib_kwargs[SZ_CONFIG][SZ_ENABLE_EAVESDROP] = eavesdrop
 
-    if config_file:  # TODO: validate file with voluptuous, use YAML
+    if config_file:  # TODO: validate file with probatio, use YAML
         lib_kwargs = deep_merge(
             lib_kwargs, json.load(config_file)
         )  # CLI takes precedence
