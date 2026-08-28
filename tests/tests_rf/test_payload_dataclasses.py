@@ -48,6 +48,7 @@ from ramses_rf.payloads.hvac import (
     HvacTimeOffsetPayload,
     HvacVentilationStatusPayload,
     RelativeHumidityPayload,
+    WindowStatePayload,
 )
 from ramses_rf.payloads.opentherm import (
     OpenThermMsgPayload,
@@ -1657,3 +1658,262 @@ def test_dataclass_buffer_underrun_guards() -> None:
 
     with pytest.raises(ValueError):
         HeatDemandPayload.from_bytes(b"")  # Expected at least 1 byte
+
+
+# ---------------------------------------------------------------------------
+# create() factory method tests (PR4: polymorphic __new__ → create())
+# ---------------------------------------------------------------------------
+
+
+def test_heat_demand_payload_create_1b() -> None:
+    """HeatDemandPayload.create() with no zone_index → 1B variant."""
+    payload = HeatDemandPayload.create(demand_percent=200)
+    assert isinstance(payload, ramses_rf.payloads.heating.HeatDemand1BPayload)
+    assert payload.demand_percent == 200
+    assert payload.to_bytes().hex().upper() == "C8"
+
+
+def test_heat_demand_payload_create_2b() -> None:
+    """HeatDemandPayload.create() with zone_index → 2B variant."""
+    payload = HeatDemandPayload.create(
+        domain_or_zone_index=1, demand_percent=202
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.HeatDemand2BPayload)
+    assert payload.domain_or_zone_index == 1
+    assert payload.demand_percent == 202
+    assert payload.to_bytes().hex().upper() == "01CA"
+
+
+def test_temperature_payload_create_2b() -> None:
+    """TemperaturePayload.create() with no zone_index → 2B variant."""
+    payload = TemperaturePayload.create(temperature=21.5)
+    assert isinstance(payload, ramses_rf.payloads.heating.Temperature2BPayload)
+    assert payload.temperature == 21.5
+    assert payload.to_bytes().hex().upper() == "0866"
+
+
+def test_temperature_payload_create_3b() -> None:
+    """TemperaturePayload.create() with zone_index → 3B variant."""
+    payload = TemperaturePayload.create(zone_index=3, temperature=21.5)
+    assert isinstance(payload, ramses_rf.payloads.heating.Temperature3BPayload)
+    assert payload.zone_index == 3
+    assert payload.temperature == 21.5
+    assert payload.to_bytes().hex().upper() == "030866"
+
+
+def test_zone_name_payload_create_22b() -> None:
+    """ZoneNamePayload.create() with name → 22B variant."""
+    payload = ZoneNamePayload.create(zone_index=3, name="Living Room")
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneName22BPayload)
+    assert payload.zone_index == 3
+    assert payload.name == "Living Room"
+    raw = payload.to_bytes()
+    assert len(raw) == 22
+
+
+def test_zone_name_payload_create_short_3b() -> None:
+    """ZoneNamePayload.create() with setpoint_temp → 3B short variant."""
+    payload = ZoneNamePayload.create(zone_index=3, setpoint_temp=21.0)
+    assert isinstance(
+        payload, ramses_rf.payloads.heating.ZoneNameShort3BPayload
+    )
+    assert payload.zone_index == 3
+    assert payload.setpoint_temp == 21.0
+
+
+def test_zone_setpoint_payload_create() -> None:
+    """ZoneSetpointPayload.create() → 3B variant."""
+    payload = ZoneSetpointPayload.create(zone_index=3, setpoint_temp=21.0)
+    assert isinstance(
+        payload, ramses_rf.payloads.heating.ZoneSetpoint3BPayload
+    )
+    assert payload.zone_index == 3
+    assert payload.setpoint_temp == 21.0
+    assert payload.to_bytes().hex().upper() == "030834"
+
+
+def test_system_zones_payload_create() -> None:
+    """SystemZonesPayload.create() → 4B variant."""
+    from ramses_rf.payloads.heating import SystemZonesPayload
+
+    payload = SystemZonesPayload.create(
+        zone_type=0x0A, zone_mask=0x0001, zone_class_id=0x0A
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.SystemZones4BPayload)
+    assert payload.zone_type == 0x0A
+    assert payload.zone_mask == 0x0001
+    assert payload.to_bytes().hex().upper() == "000A0100"
+
+
+def test_relay_demand_payload_create() -> None:
+    """RelayDemandPayload.create() → 2B variant."""
+    payload = RelayDemandPayload.create(
+        domain_or_zone_index=0xFC, demand_percent=1.0
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.RelayDemand2BPayload)
+    assert payload.domain_or_zone_index == 0xFC
+    assert payload.demand_percent == 1.0
+    assert payload.to_bytes().hex().upper() == "FCC8"
+
+
+def test_zone_devices_payload_create_5b() -> None:
+    """ZoneDevicesPayload.create() without sub_index → 5B variant."""
+    from ramses_rf.payloads.heating import ZoneDevicesPayload
+
+    payload = ZoneDevicesPayload.create(
+        zone_index_raw=0, device_role_id=0, device_id_raw=0x123456
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneDevices5BPayload)
+    assert payload.zone_index_raw == 0
+    assert payload.device_id_raw == 0x123456
+
+
+def test_zone_devices_payload_create_6b() -> None:
+    """ZoneDevicesPayload.create() with sub_index → 6B variant."""
+    from ramses_rf.payloads.heating import ZoneDevicesPayload
+
+    payload = ZoneDevicesPayload.create(
+        zone_index_raw=0, device_role_id=0, sub_index=1, device_id_raw=0x123456
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneDevices6BPayload)
+    assert payload.sub_index == 1
+
+
+def test_zone_mode_payload_create_7b() -> None:
+    """ZoneModePayload.create() without until_dtm → 7B variant."""
+    payload = ZoneModePayload.create(
+        zone_index=3, setpoint_temp=21.0, mode_code=4, duration_minutes=60
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneMode7BPayload)
+    assert payload.zone_index == 3
+    assert payload.setpoint_temp == 21.0
+    assert payload.mode_code == 4
+
+
+def test_zone_mode_payload_create_13b() -> None:
+    """ZoneModePayload.create() with until_dtm → 13B variant."""
+    payload = ZoneModePayload.create(
+        zone_index=3,
+        setpoint_temp=21.0,
+        mode_code=4,
+        until_dtm="2026-01-15-12-00",
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneMode13BPayload)
+    assert payload.zone_index == 3
+
+
+def test_actuator_cycle_payload_create_6b() -> None:
+    """ActuatorCyclePayload.create() without domain_index → 6B variant."""
+    from ramses_rf.payloads.heating import ActuatorCyclePayload
+
+    payload = ActuatorCyclePayload.create(
+        cycle_countdown_sec=0,
+        actuator_countdown_sec=0,
+        modulation_level=0.5,
+    )
+    assert isinstance(
+        payload, ramses_rf.payloads.heating.ActuatorCycle6BPayload
+    )
+    assert payload.modulation_level == 0.5
+
+
+def test_actuator_cycle_payload_create_7b() -> None:
+    """ActuatorCyclePayload.create() with domain_index → 7B variant."""
+    from ramses_rf.payloads.heating import ActuatorCyclePayload
+
+    payload = ActuatorCyclePayload.create(
+        cycle_countdown_sec=0,
+        actuator_countdown_sec=0,
+        modulation_level=0.5,
+        domain_index=1,
+    )
+    assert isinstance(
+        payload, ramses_rf.payloads.heating.ActuatorCycle7BPayload
+    )
+    assert payload.domain_index == 1
+
+
+def test_co2_payload_create_2b() -> None:
+    """Co2Payload.create() without domain_index → 2B variant."""
+    payload = Co2Payload.create(co2_level=450)
+    assert isinstance(payload, Co22BPayload)
+    assert payload.co2_level == 450
+
+
+def test_co2_payload_create_3b() -> None:
+    """Co2Payload.create() with domain_index → 3B variant."""
+    payload = Co2Payload.create(co2_level=450, domain_index=0)
+    assert isinstance(payload, Co23BPayload)
+    assert payload.domain_index == 0
+    assert payload.co2_level == 450
+
+
+def test_window_state_payload_create() -> None:
+    """WindowStatePayload.create() → 3B variant."""
+    payload = WindowStatePayload.create(zone_index=3, window_open=False)
+    assert isinstance(payload, ramses_rf.payloads.hvac.WindowState3BPayload)
+    assert payload.zone_index == 3
+    assert payload.window_open is False
+
+
+def test_hvac_ventilation_demand_payload_create() -> None:
+    """HvacVentilationDemandPayload.create() → 4B variant."""
+    from ramses_rf.payloads.hvac import HvacVentilationDemandPayload
+
+    payload = HvacVentilationDemandPayload.create(flags=0, demand_percent=0.5)
+    assert isinstance(
+        payload, ramses_rf.payloads.hvac.HvacVentilationDemand4BPayload
+    )
+    assert payload.demand_percent == 0.5
+
+
+def test_opentherm_msg_payload_create_4b() -> None:
+    """OpenThermMsgPayload.create() without opentherm_index → 4B variant."""
+    payload = OpenThermMsgPayload.create(
+        msg_id=0x18, msg_type=0, raw_value=b"\x00\x00"
+    )
+    assert isinstance(
+        payload, ramses_rf.payloads.opentherm.OpenThermMsg4BPayload
+    )
+    assert payload.msg_id == 0x18
+
+
+def test_opentherm_msg_payload_create_5b() -> None:
+    """OpenThermMsgPayload.create() with opentherm_index → 5B variant."""
+    payload = OpenThermMsgPayload.create(
+        msg_id=0x18, msg_type=0, raw_value=b"\x00\x00", opentherm_index=1
+    )
+    assert isinstance(
+        payload, ramses_rf.payloads.opentherm.OpenThermMsg5BPayload
+    )
+    assert payload.opentherm_index == 1
+
+
+def test_opentherm_fault_flags_payload_create_2b() -> None:
+    """OpenThermFaultFlagsPayload.create() without hdr → 2B variant."""
+    from ramses_rf.payloads.opentherm import OpenThermFaultFlagsPayload
+
+    payload = OpenThermFaultFlagsPayload.create(fault_code=0, flags=0)
+    assert isinstance(
+        payload, ramses_rf.payloads.opentherm.OpenThermFaultFlags2BPayload
+    )
+
+
+def test_opentherm_fault_flags_payload_create_3b() -> None:
+    """OpenThermFaultFlagsPayload.create() with hdr → 3B variant."""
+    from ramses_rf.payloads.opentherm import OpenThermFaultFlagsPayload
+
+    payload = OpenThermFaultFlagsPayload.create(fault_code=0, flags=0, hdr=1)
+    assert isinstance(
+        payload, ramses_rf.payloads.opentherm.OpenThermFaultFlags3BPayload
+    )
+    assert payload.hdr == 1
+
+
+def test_dhw_params_payload_create() -> None:
+    """DhwParamsPayload.create() → 6B variant (with overrun + differential)."""
+    payload = DhwParamsPayload.create(
+        setpoint=55.0, overrun=8, differential=2.0
+    )
+    assert isinstance(payload, ramses_rf.payloads.dhw.DhwParams6BPayload)
+    assert payload.setpoint == 55.0
