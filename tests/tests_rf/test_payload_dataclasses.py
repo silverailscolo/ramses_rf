@@ -237,7 +237,9 @@ def test_system_sync_payload_1030_parity() -> None:
     }
 
     # Verify programmatic creation on the fly packs parameter bytes dynamically
-    on_fly_payload = SystemSyncPayload(sync_flag=10, max_flow_setpoint=55)
+    on_fly_payload = SystemSyncPayload.create(
+        sync_flag=10, max_flow_setpoint=55
+    )
     assert on_fly_payload.to_bytes().hex().upper() == "0AC80137"
 
 

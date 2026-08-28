@@ -11,7 +11,9 @@ from ramses_tx.dtos import CommandDTO
 def build_put_outdoor_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_OUTDOOR_TEMP intent into a CommandDTO."""
     temperature = intent.get("temperature")
-    payload = TemperaturePayload(zone_index=0, temperature=temperature).hex()
+    payload = TemperaturePayload.create(
+        zone_index=0, temperature=temperature
+    ).hex()
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
 
     return CommandDTO(
@@ -48,7 +50,7 @@ def build_put_sensor_temp(intent: Command) -> CommandDTO:
     """Translate a PUT_SENSOR_TEMP intent into a CommandDTO."""
     temperature = intent.get("temperature")
     zone_index = intent.get("zone_index", 0)
-    payload = TemperaturePayload(
+    payload = TemperaturePayload.create(
         zone_index=zone_index, temperature=temperature
     ).hex()
 

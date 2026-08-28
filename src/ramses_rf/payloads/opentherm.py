@@ -48,7 +48,8 @@ class OpenThermMsgPayload(PayloadBase):
     msg_type: int
     raw_value: bytes
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         msg_id: int = 0,
         msg_type: int = 0,
@@ -56,8 +57,6 @@ class OpenThermMsgPayload(PayloadBase):
         opentherm_index: int | None = None,
     ) -> "OpenThermMsg4BPayload | OpenThermMsg5BPayload":
         """Construct OpenThermMsg payload variant dynamically from arguments."""
-        if cls is not OpenThermMsgPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if opentherm_index is not None:
             return OpenThermMsg5BPayload(
                 opentherm_index=opentherm_index,
@@ -486,15 +485,14 @@ class OpenThermFaultFlagsPayload(PayloadBase):
 
     VARIANTS: ClassVar[tuple[type[PayloadBase], ...]] = ()
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         fault_code: int = 0,
         flags: int = 0,
         hdr: int | None = None,
     ) -> "OpenThermFaultFlags2BPayload | OpenThermFaultFlags3BPayload":
         """Construct OpenThermFaultFlags payload variant dynamically from arguments."""
-        if cls is not OpenThermFaultFlagsPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if hdr is not None:
             return OpenThermFaultFlags3BPayload(
                 hdr=hdr, fault_code=fault_code, flags=flags
