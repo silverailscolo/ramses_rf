@@ -9,7 +9,7 @@ together.
 from __future__ import annotations
 
 import logging
-from typing import Final, TypeAlias
+from typing import Any, Final, TypeAlias
 
 from ..const import (
     DEFAULT_DISABLE_QOS,
@@ -28,7 +28,6 @@ from ..exceptions import (
     ProtocolSendFailed,
     ProtocolTimeoutError,
 )
-from ..interfaces import TransportInterface
 from ..packet import Packet
 from ..typing import DeviceIdT, MsgHandlerT, QosParams
 from .base import DEFAULT_QOS, _DeviceIdFilterMixin
@@ -76,8 +75,8 @@ class ReadProtocol(_DeviceIdFilterMixin):
         )
         self._pause_writing = True
 
-    def connection_made(  # type: ignore[override]
-        self, transport: TransportInterface, /, *, ramses: bool = False
+    def connection_made(
+        self, transport: Any, /, *, ramses: bool = False
     ) -> None:
         """Consume the callback if invoked by SerialTransport rather than PortTransport.
 
@@ -153,8 +152,8 @@ class PortProtocol(_DeviceIdFilterMixin):
         cls = self._context.state.__class__.__name__
         return f"QosProtocol({cls}, len(queue)={self._context.qsize})"
 
-    def connection_made(  # type: ignore[override]
-        self, transport: TransportInterface, /, *, ramses: bool = False
+    def connection_made(
+        self, transport: Any, /, *, ramses: bool = False
     ) -> None:
         """Consume the callback if invoked by SerialTransport rather than PortTransport.
 
@@ -239,7 +238,7 @@ class PortProtocol(_DeviceIdFilterMixin):
         num_repeats: int = DEFAULT_NUM_REPEATS,
         priority: Priority = Priority.DEFAULT,
         qos: QosParams = DEFAULT_QOS,
-    ) -> Packet:
+    ) -> Packet | None:
         """Send a Command with QoS (retries, until success or exception)."""
 
         async def send_cmd(kmd: CommandDTO) -> None:
@@ -257,7 +256,7 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         if _DBG_DISABLE_QOS:
             await send_cmd(command)
-            return None  # type: ignore[return-value]
+            return None
 
         assert self._context
 

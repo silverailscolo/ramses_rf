@@ -3,8 +3,8 @@
 
 from typing import Any
 
+import probatio as vol
 import pytest
-import voluptuous as vol
 import yaml
 
 from ramses_rf.config import SCH_GLOBAL_TRAITS_DICT
@@ -108,7 +108,7 @@ def _test_schema_good(validator: vol.Schema, config: str) -> dict:
     except vol.MultipleInvalid as err:
         test_schemas_good_failed = True
         raise TypeError(
-            f"should parse via voluptuous, but didn't: {config} ({err})"
+            f"should parse via probatio, but didn't: {config} ({err})"
         ) from err
     except yaml.YAMLError as err:
         test_schemas_good_failed = True

@@ -3,7 +3,7 @@
 
 from typing import Any
 
-import voluptuous as vol
+import probatio as vol
 
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
