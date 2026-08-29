@@ -80,7 +80,6 @@ def _proc_log_line(log_line: str) -> None:
             "dhw_index",
             "hvac_id",
             "ufh_index",
-            "ufx_index",
             "log_index",
             "other_index",
         )

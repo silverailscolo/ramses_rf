@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.const import SZ_DOMAIN_ID, SZ_SYSTEM_MODE
+from ramses_rf.const import (
+    SZ_DOMAIN_ID,
+    SZ_HEAT_DEMAND,
+    SZ_SYSTEM_MODE,
+    SZ_UFH_INDEX,
+)
 from ramses_rf.devices import BdrSwitch, Controller, DhwSensor, TrvActuator
 from ramses_rf.dispatcher import (
     _resolve_logical_targets,
@@ -656,7 +661,7 @@ def test_update_demand_state_ufc_ufh_circuit_demand_ignored() -> None:
     target = MockTarget()
     msg = MagicMock()
     msg.code = Code._3150
-    payload = {"heat_demand": 0.81, "ufx_index": "00"}
+    payload = {SZ_HEAT_DEMAND: 0.81, SZ_UFH_INDEX: "00"}
 
     # Act
     _update_demand_state(target, payload, msg)

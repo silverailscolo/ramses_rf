@@ -111,17 +111,17 @@
 2022-02-04T19:53:04.764704 ...  I --- 02:044435 --:------ 02:044435 3150 002 FCB4                  # {'domain_id': 'FC',  'heat_demand': 0.9}
 
 # every ~3 min, only if a HD changes?
-2021-11-28T05:45:14.041552 ...  I --- 02:044435 --:------ 02:044435 3150 006 00AE019C0274          # [{'ufx_index': '00', 'heat_demand': 0.87}, {'ufx_index': '01', 'heat_demand': 0.78}, {'ufx_index': '02', 'heat_demand': 0.58}]
-2021-11-28T05:51:13.993127 ...  I --- 02:044435 --:------ 02:044435 3150 006 00B401A20274          # [{'ufx_index': '00', 'heat_demand': 0.90}, {'ufx_index': '01', 'heat_demand': 0.81}, {'ufx_index': '02', 'heat_demand': 0.58}]
-2021-11-28T05:54:13.973336 ...  I --- 02:044435 --:------ 02:044435 3150 006 00BE01AA0280          # [{'ufx_index': '00', 'heat_demand': 0.95}, {'ufx_index': '01', 'heat_demand': 0.85}, {'ufx_index': '02', 'heat_demand': 0.64}]
+2021-11-28T05:45:14.041552 ...  I --- 02:044435 --:------ 02:044435 3150 006 00AE019C0274          # [{'ufh_index': '00', 'heat_demand': 0.87}, {'ufh_index': '01', 'heat_demand': 0.78}, {'ufh_index': '02', 'heat_demand': 0.58}]
+2021-11-28T05:51:13.993127 ...  I --- 02:044435 --:------ 02:044435 3150 006 00B401A20274          # [{'ufh_index': '00', 'heat_demand': 0.90}, {'ufh_index': '01', 'heat_demand': 0.81}, {'ufh_index': '02', 'heat_demand': 0.58}]
+2021-11-28T05:54:13.973336 ...  I --- 02:044435 --:------ 02:044435 3150 006 00BE01AA0280          # [{'ufh_index': '00', 'heat_demand': 0.95}, {'ufh_index': '01', 'heat_demand': 0.85}, {'ufh_index': '02', 'heat_demand': 0.64}]
 #
-2021-11-28T09:51:37.241039 ...  I --- 02:044446 --:------ 02:044446 3150 010 00AC019C020003000400  # [{'ufx_index': '00', 'heat_demand': 0.86}, {'ufx_index': '01', 'heat_demand': 0.78}, {'ufx_index': '02', 'heat_demand': 0.00}, {'ufx_index': '03', 'heat_demand': 0.0}, {'ufx_index': '04', 'heat_demand': 0.0}]
-2021-11-28T10:18:37.061557 ...  I --- 02:044446 --:------ 02:044446 3150 010 00A8019C020003000400  # [{'ufx_index': '00', 'heat_demand': 0.84}, {'ufx_index': '01', 'heat_demand': 0.78}, {'ufx_index': '02', 'heat_demand': 0.00}, {'ufx_index': '03', 'heat_demand': 0.0}, {'ufx_index': '04', 'heat_demand': 0.0}]
-2021-11-28T10:21:37.040587 ...  I --- 02:044446 --:------ 02:044446 3150 010 00A4019C020003000400  # [{'ufx_index': '00', 'heat_demand': 0.82}, {'ufx_index': '01', 'heat_demand': 0.78}, {'ufx_index': '02', 'heat_demand': 0.00}, {'ufx_index': '03', 'heat_demand': 0.0}, {'ufx_index': '04', 'heat_demand': 0.0}]
+2021-11-28T09:51:37.241039 ...  I --- 02:044446 --:------ 02:044446 3150 010 00AC019C020003000400  # [{'ufh_index': '00', 'heat_demand': 0.86}, {'ufh_index': '01', 'heat_demand': 0.78}, {'ufh_index': '02', 'heat_demand': 0.00}, {'ufh_index': '03', 'heat_demand': 0.0}, {'ufh_index': '04', 'heat_demand': 0.0}]
+2021-11-28T10:18:37.061557 ...  I --- 02:044446 --:------ 02:044446 3150 010 00A8019C020003000400  # [{'ufh_index': '00', 'heat_demand': 0.84}, {'ufh_index': '01', 'heat_demand': 0.78}, {'ufh_index': '02', 'heat_demand': 0.00}, {'ufh_index': '03', 'heat_demand': 0.0}, {'ufh_index': '04', 'heat_demand': 0.0}]
+2021-11-28T10:21:37.040587 ...  I --- 02:044446 --:------ 02:044446 3150 010 00A4019C020003000400  # [{'ufh_index': '00', 'heat_demand': 0.82}, {'ufh_index': '01', 'heat_demand': 0.78}, {'ufh_index': '02', 'heat_demand': 0.00}, {'ufh_index': '03', 'heat_demand': 0.0}, {'ufh_index': '04', 'heat_demand': 0.0}]
 #
-2021-11-28T14:54:25.139800 ...  I --- 02:044328 --:------ 02:044328 3150 006 00A201000200          # [{'ufx_index': '00', 'heat_demand': 0.81}, {'ufx_index': '01', 'heat_demand': 0.00}, {'ufx_index': '02', 'heat_demand': 0.00}]
-2021-11-28T14:57:25.119994 ...  I --- 02:044328 --:------ 02:044328 3150 006 009401000200          # [{'ufx_index': '00', 'heat_demand': 0.74}, {'ufx_index': '01', 'heat_demand': 0.00}, {'ufx_index': '02', 'heat_demand': 0.00}]
-2021-11-28T15:39:24.841454 ...  I --- 02:044328 --:------ 02:044328 3150 006 007201000200          # [{'ufx_index': '00', 'heat_demand': 0.57}, {'ufx_index': '01', 'heat_demand': 0.00}, {'ufx_index': '02', 'heat_demand': 0.00}]
+2021-11-28T14:54:25.139800 ...  I --- 02:044328 --:------ 02:044328 3150 006 00A201000200          # [{'ufh_index': '00', 'heat_demand': 0.81}, {'ufh_index': '01', 'heat_demand': 0.00}, {'ufh_index': '02', 'heat_demand': 0.00}]
+2021-11-28T14:57:25.119994 ...  I --- 02:044328 --:------ 02:044328 3150 006 009401000200          # [{'ufh_index': '00', 'heat_demand': 0.74}, {'ufh_index': '01', 'heat_demand': 0.00}, {'ufh_index': '02', 'heat_demand': 0.00}]
+2021-11-28T15:39:24.841454 ...  I --- 02:044328 --:------ 02:044328 3150 006 007201000200          # [{'ufh_index': '00', 'heat_demand': 0.57}, {'ufh_index': '01', 'heat_demand': 0.00}, {'ufh_index': '02', 'heat_demand': 0.00}]
 
 # every 15 min, first, in ufh_index order... then, HD(FC) is max(HD(circuits)) - 2+ circuits for same zone could differ?
 2021-11-28T15:23:03.909755 ...  I --- 02:044328 --:------ 01:073976 3150 002 0894         #  {'zone_index': '08', 'heat_demand': 0.74}
