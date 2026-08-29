@@ -973,8 +973,11 @@ class RadZone(Zone):  # HR92/HR80
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.RAD
 
 
-class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
-    """For underfloor heating controlled by HCE80/HCC80 (calls for heat)."""
+class UfhZone(Zone):  # HCC80/HCE80/HCC100
+    """For underfloor heating controlled by HCE80/HCC80/HCC100.
+
+    Calls for heat from underfloor heating controllers.
+    """
 
     # NOTE: since zones are promotable, we can't use this here
     # def __init__(self,...
@@ -983,10 +986,16 @@ class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.UFH
 
     async def heat_demand(self) -> float | None:  # 3150
-        """Return the zone's heat demand, estimated from its devices."""
-        if self.demand_state.heat_demand is not None:
-            return _transform(self.demand_state.heat_demand)
-        return None
+        """Return the zone's heat demand, estimated from its devices.
+
+        Underfloor heating wax actuators operate on linear PWM/TPI duty
+        cycles (0.0 to 1.0) and are not subject to TRV pin stroke
+        transformation.
+
+        :returns: Linear heat demand percentage (0.0 to 1.0) or None.
+        :rtype: float | None
+        """
+        return self.demand_state.heat_demand
 
 
 class ValZone(EleZone):  # BDR91A/T
