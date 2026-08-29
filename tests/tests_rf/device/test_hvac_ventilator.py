@@ -83,6 +83,7 @@ class TestHvacVentilator:
         assert hvac_ventilator._param_update_callback is None
         assert hvac_ventilator._hgi is None
         assert hvac_ventilator._bound_devices == {}
+        assert hvac_ventilator._get_configured_strategy() is None
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
@@ -93,8 +94,10 @@ class TestHvacVentilator:
         strategy = IthoStrategy()
 
         hvac_ventilator.set_strategy(strategy)
+        hvac_ventilator._update_traits(DeviceTraits(scheme="orcon"))
 
         assert hvac_ventilator._get_strategy() is strategy
+        assert hvac_ventilator._get_configured_strategy() is strategy
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()
