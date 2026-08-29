@@ -1303,7 +1303,32 @@ def test_pipeline_3150_non_array_preserves_index() -> None:
     # Assert
     assert isinstance(result, dict)
     assert result.get("heat_demand") == 1.0
-    assert result.get("zone_index") == "00" or result.get("zone_index") == "00"
+    assert result.get("zone_index") == "00"
+
+
+def test_pipeline_3150_ufc_emits_canonical_ufh_index() -> None:
+    # Arrange
+    dto = PacketDTO(
+        timestamp=dt.now(),
+        rssi="-70",
+        verb=Verb.I_,
+        seq="001",
+        addr1="02:000921",
+        addr2="--:------",
+        addr3="02:000921",
+        code=Code._3150,
+        length="002",
+        payload="0360",
+    )
+
+    # Act
+    result = decode_packet(dto)
+
+    # Assert
+    assert isinstance(result, dict)
+    assert result.get("ufh_index") == "03"
+    assert "ufx_index" not in result
+    assert result.get("heat_demand") == pytest.approx(0.48, abs=0.01)
 
 
 def test_opentherm_msg_payload_replace_recalculates_parity() -> None:

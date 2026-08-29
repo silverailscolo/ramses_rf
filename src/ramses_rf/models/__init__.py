@@ -7,6 +7,7 @@ from .dto import (
     ActuatorStateDTO,
     ThermalDemandDTO,
     UfhCircuitDemandDTO,
+    UfhCircuitDTO,
     ZoneScheduleDTO,
 )
 from .state_base import (
@@ -54,6 +55,7 @@ __all__ = [
     "TopologyChangedEvent",
     "TrvState",
     "UfhCircuitDemandDTO",
+    "UfhCircuitDTO",
     "UfhCircuitState",
     "UfhState",
     "ZoneScheduleDTO",

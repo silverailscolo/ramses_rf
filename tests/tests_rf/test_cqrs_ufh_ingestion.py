@@ -66,7 +66,7 @@ def _make_msg(code: Code, src: str = "02:000921") -> MagicMock:
 def test_ufh_circuit_state_initialization() -> None:
     # Arrange & Act
     circuit = UfhCircuitState(
-        circuit_index="00",
+        ufh_index="00",
         zone_index="01",
         heat_demand=0.75,
         cooling_demand=0.0,
@@ -78,6 +78,7 @@ def test_ufh_circuit_state_initialization() -> None:
     )
 
     # Assert
+    assert circuit.ufh_index == "00"
     assert circuit.circuit_index == "00"
     assert circuit.zone_index == "01"
     assert circuit.heat_demand == 0.75
