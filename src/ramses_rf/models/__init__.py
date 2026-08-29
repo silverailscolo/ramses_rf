@@ -23,6 +23,7 @@ from .state_climate import (
     SystemState,
     TemperatureState,
     TrvState,
+    UfhCircuitState,
     UfhState,
     ZoneState,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "TopologyChangedEvent",
     "TrvState",
     "UfhCircuitDemandDTO",
+    "UfhCircuitState",
     "UfhState",
     "ZoneScheduleDTO",
     "ZoneState",
