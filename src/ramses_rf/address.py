@@ -8,9 +8,7 @@ from typing import Final
 from ramses_rf.const import DEV_TYPE_MAP
 from ramses_rf.enums import DevType
 
-# TEMPORARY SHIM: We proxy all address logic to the underlying L3 module
-# to ensure 100% test parity while the legacy L7 components transition.
-# This proxy will be completely deleted in Phase 5.
+# Address logic is proxied to the underlying ramses_tx L3 module.
 from ramses_tx.address import (
     ALL_DEV_ADDR,
     ALL_DEVICE_ID,

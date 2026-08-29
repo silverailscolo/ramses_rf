@@ -20,8 +20,6 @@ import pytest
 from ramses_rf import Gateway
 from ramses_rf.devices import Device, DeviceHeat, DeviceHvac
 from ramses_rf.gateway import GatewayConfig
-from ramses_rf.pipeline.dispatcher import CentralDispatcher
-from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.systems import DhwZone, System, Zone
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_READER_TASK
@@ -320,23 +318,9 @@ async def test_read_model_baseline_snapshot(
         ),
     )
 
-    # Initialize the CQRS Pipeline and hook it to the legacy stream
-    pipeline_in_queue: asyncio.Queue[Any] = asyncio.Queue()
-    dispatcher = CentralDispatcher(pipeline_in_queue)
-    worker = StateProjector(gwy, dispatcher.ssot_queue)
-
-    await dispatcher.start()
-    await worker.start()
-
-    legacy_handler = gwy._msg_handler
-
-    async def parallel_strangler_bridge(dto: Any) -> None:
-        await legacy_handler(dto)
-        this_msg = getattr(gwy, "_this_msg", None)
-        if this_msg:
-            pipeline_in_queue.put_nowait(this_msg)
-
-    gwy._engine._set_msg_handler(parallel_strangler_bridge)
+    # The gateway's state_projector is initialised in lifecycle.py
+    # and fed synchronously via gateway._msg_handler (Phase 2.95
+    # CQRS strangler bridge).  No explicit pipeline setup needed.
 
     mock_send = AsyncMock(return_value=None)
 
@@ -349,13 +333,10 @@ async def test_read_model_baseline_snapshot(
             if reader_task:
                 await reader_task
 
-        # CRITICAL 1: Wait for explicit CQRS queues to drain
-        await pipeline_in_queue.join()
-        await dispatcher.ssot_queue.join()
-
-        # CRITICAL 2: The legacy monolithic FSM spawns background tasks (like DHW promotion)
-        # using asyncio.create_task(). We must yield control back to the event loop
-        # to guarantee these legacy tasks finish on slow CI runners before snapshotting.
+        # CRITICAL: The legacy monolithic FSM spawns background tasks (like
+        # DHW promotion) using asyncio.create_task().  We must yield control
+        # back to the event loop to guarantee these tasks finish on slow CI
+        # runners before snapshotting.
         for _ in range(20):
             await asyncio.sleep(0.1)
 
@@ -386,10 +367,7 @@ async def test_read_model_baseline_snapshot(
             if getattr(gwy.tcs, "dhw", None):
                 api_state["dhw"] = await serialize_logical_entity(gwy.tcs.dhw)
 
-        # Shut down the CQRS pipeline cleanly
-        await dispatcher.stop()
-        await worker.stop()
-
+        # Shut down the gateway cleanly
         with contextlib.suppress(asyncio.CancelledError, TransportError):
             await gwy.stop()
 

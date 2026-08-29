@@ -266,8 +266,7 @@ def _resolve_logical_targets(
             targets.append(src_dev)
 
     # 3. Hardware twin (Destination) gets the update.
-    # Legacy routes packets to the destination device's cache. To maintain
-    # strict parity, we mirror this.
+    # Route packets to the destination device's cache.
     # HVAC packets (e.g. 22F1 fan_mode from REM->FAN) target the destination
     # device's hvac_state directly, so we also accept devices that have
     # hvac_state even if they lack apply_state_update.

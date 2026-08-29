@@ -233,8 +233,7 @@ class StateProjector:
 
         :param gateway: The active Gateway facade instance.
         :type gateway: Any
-        :param ssot_queue: Single Source of Truth Queue from
-            CentralDispatcher.
+        :param ssot_queue: Single Source of Truth Queue.
         :type ssot_queue: asyncio.Queue[Message]
         """
         self._gateway = gateway
@@ -297,10 +296,9 @@ class StateProjector:
 
         # 2411 parameter messages are owned by the FAN aggregate root: they
         # set _supports_2411 and fire the initialized callback that ramses_cc
-        # uses to create the ~15 parameter number entities.  Phase 2.95 moved
-        # this out of HvacVentilator._handle_msg; it must be routed here for
-        # the StateProjector path to keep parity with the dispatcher path.
-        # See ramses_cc issue 851.
+        # uses to create the ~15 parameter number entities.  This was moved
+        # from HvacVentilator._handle_msg (removed in Phase 2.95) into the
+        # StateProjector.  See ramses_cc issue 851.
         if msg.code == Code._2411:
             _route_2411_to_fan(self._gateway, msg)
 

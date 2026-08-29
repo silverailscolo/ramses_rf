@@ -304,13 +304,8 @@ async def test_engine_async_send_cmd(dummy_engine: Engine) -> None:
 async def test_engine_msg_handler(
     dummy_engine: Engine, mock_dto: PacketDTO
 ) -> None:
-    # Validates that engine routes the DTO to the registered handler
-    mock_handler = AsyncMock()
-    dummy_engine._handle_msg = mock_handler
-
+    # The default _msg_handler is a no-op (Gateway overrides it)
     await dummy_engine._msg_handler(mock_dto)
-
-    mock_handler.assert_awaited_once_with(mock_dto)
 
 
 def test_application_message_bind_context(mock_dto: PacketDTO) -> None:
