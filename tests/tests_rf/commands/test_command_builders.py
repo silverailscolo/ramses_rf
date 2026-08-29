@@ -263,6 +263,20 @@ def test_set_fan_mode_itho_3byte() -> None:
     assert dto.payload == expected_payload
 
 
+def test_set_fan_mode_climarad_3byte() -> None:
+    """ClimaRad scheme uses the Minibox mode map with mode_max=06."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("37:111111"),
+        action=Action.SET_FAN_MODE,
+        data={"fan_mode": "auto", "scheme": "climarad"},
+    )
+
+    dto = build_dto(intent)
+
+    assert dto.payload == "000506"
+
+
 def test_set_fan_mode_vasco_3byte() -> None:
     """Vasco scheme produces 3-byte payload with mode_max=06."""
     expected_payload = "000406"
