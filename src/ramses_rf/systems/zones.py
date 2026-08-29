@@ -13,6 +13,7 @@ from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
 from ramses_rf.const import (
     DEV_ROLE_MAP,
+    DEV_TYPE_MAP,
     SZ_HEAT_DEMAND,
     SZ_NAME,
     SZ_RELAY_DEMAND,
@@ -42,6 +43,7 @@ from ramses_rf.models import (
     TemperatureState,
     ThermalDemandDTO,
     TrvState,
+    UfhCircuitDTO,
     ZoneState,
 )
 from ramses_rf.schemas import (
@@ -62,6 +64,8 @@ from ..messages import Message
 from .schedule import Schedule
 
 if TYPE_CHECKING:
+    from ramses_rf.devices.heat_controllers import UfhCircuit
+
     from .tcs import Evohome, _MultiZoneT, _StoredHwT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip
@@ -912,6 +916,24 @@ class Zone(ZoneSchedule):
             SZ_HEAT_DEMAND: await self.heat_demand(),
         }
 
+    @property
+    def circuits(self) -> list[UfhCircuitDTO]:
+        """Return the list of UFH circuits bound to this zone.
+
+        :returns: List of immutable UfhCircuitDTO transfer objects.
+        :rtype: list[UfhCircuitDTO]
+        """
+        return []
+
+    @property
+    def circuit_entities(self) -> list[UfhCircuit]:
+        """Return the list of UFH circuit entities bound to this zone.
+
+        :returns: List of UfhCircuit entity instances.
+        :rtype: list[UfhCircuit]
+        """
+        return []
+
 
 class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
     """Electric load controlled by a relay (never calls for heat)."""
@@ -996,6 +1018,37 @@ class UfhZone(Zone):  # HCC80/HCE80/HCC100
         :rtype: float | None
         """
         return self.demand_state.heat_demand
+
+    @property
+    def circuit_entities(self) -> list[UfhCircuit]:
+        """Return the list of UFH circuit entities bound to this UFH zone.
+
+        :returns: List of UfhCircuit entity instances sorted by circuit index.
+        :rtype: list[UfhCircuit]
+        """
+        circuits: list[UfhCircuit] = []
+        tcs = getattr(self, "tcs", None)
+        if tcs:
+            for child in getattr(tcs, "childs", []):
+                if getattr(child, "_SLUG", None) == DevType.UFC or getattr(
+                    child, "type", None
+                ) in (DevType.UFC, DEV_TYPE_MAP.UFC, "02"):
+                    for circuit in getattr(child, "circuits", []):
+                        if (
+                            getattr(circuit, "zone_index", None) == self.index
+                            or getattr(circuit, "_zone", None) is self
+                        ):
+                            circuits.append(circuit)
+        return sorted(circuits, key=lambda circuit: circuit.ufh_index)
+
+    @property
+    def circuits(self) -> list[UfhCircuitDTO]:
+        """Return the list of UFH circuits bound to this UFH zone.
+
+        :returns: List of immutable UfhCircuitDTO transfer objects.
+        :rtype: list[UfhCircuitDTO]
+        """
+        return [circuit.to_dto() for circuit in self.circuit_entities]
 
 
 class ValZone(EleZone):  # BDR91A/T
