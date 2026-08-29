@@ -20,6 +20,7 @@ from ramses_rf.exceptions import (
     SystemSchemaInconsistent,
 )
 from ramses_rf.messages import Message
+from ramses_rf.models import DemandState, StateUpdatedEvent
 from ramses_rf.pipeline.polling import DEFAULT_POLLING_SCHEDULES
 from ramses_rf.systems.tcs import Evohome, SystemBase
 from ramses_rf.systems.zones import (
@@ -408,6 +409,37 @@ def test_zone_schema_promotion(mock_tcs: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
+async def test_ufh_zone_heat_demand_linear_preservation(
+    mock_tcs: MagicMock,
+) -> None:
+    # Arrange
+    zon = Zone(mock_tcs, "01")
+    zon._update_schema(**{"class": "underfloor_heating"})
+    assert isinstance(zon, UfhZone)
+
+    # Act & Assert: None when no demand recorded
+    zon.demand_state = DemandState()
+    assert await zon.heat_demand() is None
+
+    # Act & Assert: Linear demand percentage preserved for all levels
+    for expected_demand in (
+        0.0,
+        0.05,
+        0.10,
+        0.15,
+        0.20,
+        0.25,
+        0.30,
+        0.50,
+        0.75,
+        1.00,
+    ):
+        zon.demand_state = DemandState(heat_demand=expected_demand)
+        actual_demand = await zon.heat_demand()
+        assert actual_demand == expected_demand
+
+
+@pytest.mark.asyncio
 async def test_zone_commands(mock_tcs: MagicMock) -> None:
     """Test command generation overrides for general Zones."""
     zon = Zone(mock_tcs, "01")
@@ -610,9 +642,6 @@ def test_update_system_state_hydrates_from_2e04_packet() -> None:
 
 def test_update_demand_state_ufc_ufh_circuit_demand_ignored() -> None:
     # Arrange
-    from ramses_rf.models import DemandState, StateUpdatedEvent
-    from ramses_tx.const import Code
-
     class MockTarget:
         _SLUG = "UFC"
         id = "02:123456"
@@ -638,9 +667,6 @@ def test_update_demand_state_ufc_ufh_circuit_demand_ignored() -> None:
 
 def test_update_demand_state_ctl_fc_domain_demand_accepted() -> None:
     # Arrange
-    from ramses_rf.models import DemandState, StateUpdatedEvent
-    from ramses_tx.const import Code
-
     class MockTarget:
         _SLUG = "CTL"
         id = "01:123456"
