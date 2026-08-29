@@ -14,59 +14,107 @@ import uuid
 from typing import Any, Final
 
 from ramses_rf import quirks
-from ramses_rf.address import HGI_DEV_ADDR, Address
+from ramses_rf.address import HGI_DEV_ADDR, NON_DEV_ADDR, Address
 from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent_
 from ramses_rf.const import (
+    F9,
+    FA,
+    FC,
     SZ_ACTIVE,
     SZ_ACTUATOR_COUNTDOWN,
     SZ_ACTUATOR_ENABLED,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
+    SZ_BASE,
     SZ_BATTERY_LEVEL,
     SZ_BATTERY_LOW,
+    SZ_BOILER_OUTPUT,
+    SZ_BOILER_RETURN,
+    SZ_BOILER_SETPOINT,
+    SZ_BOOST_TIMER_MINS,
+    SZ_BURNER_FAILED_STARTS,
+    SZ_BURNER_HOURS,
+    SZ_BURNER_STARTS,
     SZ_BYPASS_MODE,
     SZ_BYPASS_POSITION,
     SZ_BYPASS_STATE,
     SZ_CH_ACTIVE,
     SZ_CH_ENABLED,
+    SZ_CH_MAX_SETPOINT,
+    SZ_CH_PUMP_HOURS,
+    SZ_CH_PUMP_STARTS,
     SZ_CH_SETPOINT,
+    SZ_CH_WATER_PRESSURE,
+    SZ_CIRCUIT_INDEX,
+    SZ_CIRCUIT_MODE,
+    SZ_CIRCUIT_MODES,
+    SZ_CIRCUIT_TO_ZONE_MAP,
+    SZ_CIRCUITS,
     SZ_CO2_LEVEL,
     SZ_CO2_LEVEL_FAULT,
     SZ_COOL_ACTIVE,
+    SZ_COOLING_ACTIVE,
     SZ_COOLING_DEMAND,
+    SZ_COOLING_DEMANDS,
+    SZ_COOLING_ENABLED,
     SZ_COOLING_MODE,
+    SZ_COUNTERS,
     SZ_CYCLE_COUNTDOWN,
+    SZ_CYCLE_RATE,
     SZ_DATETIME,
     SZ_DEWPOINT_TEMP,
+    SZ_DHW,
     SZ_DHW_ACTIVE,
+    SZ_DHW_BLOCKING,
+    SZ_DHW_BURNER_HOURS,
+    SZ_DHW_BURNER_STARTS,
+    SZ_DHW_ENABLED,
     SZ_DHW_FLOW_RATE,
     SZ_DHW_INDEX,
+    SZ_DHW_PUMP_HOURS,
+    SZ_DHW_PUMP_STARTS,
+    SZ_DHW_SETPOINT,
     SZ_DIFFERENTIAL,
+    SZ_DOMAIN_ID_WIRE,
     SZ_DOMAIN_INDEX,
+    SZ_DOMAIN_OR_ZONE_INDEX,
     SZ_EXHAUST_FAN_SPEED,
     SZ_EXHAUST_FLOW,
     SZ_EXHAUST_TEMP,
+    SZ_FAILSAFE_ENABLED,
     SZ_FAN_INFO,
     SZ_FAN_MODE,
     SZ_FAN_RATE,
+    SZ_FAULT_PRESENT,
+    SZ_FILTER_REMAINING_DAYS,
+    SZ_FILTER_REMAINING_PERCENT,
+    SZ_FLAGS,
+    SZ_FLAME_ACTIVE,
     SZ_FLAME_ON,
+    SZ_FLAME_SIGNAL_LOW,
     SZ_HEAT_DEMAND,
+    SZ_HEAT_DEMANDS,
     SZ_INDOOR_HUMIDITY,
     SZ_INDOOR_TEMP,
     SZ_LANGUAGE,
+    SZ_LAST_UPDATED,
     SZ_LOCAL_OVERRIDE,
     SZ_MAX_REL_MODULATION,
     SZ_MAX_TEMP,
+    SZ_MESSAGE_ID,
     SZ_MIN_TEMP,
     SZ_MINUTES,
     SZ_MODE,
     SZ_MODULATION_LEVEL,
     SZ_MULTIROOM_MODE,
     SZ_NAME,
+    SZ_OEM_CODE,
     SZ_OPENWINDOW_FUNCTION,
+    SZ_OTC_ACTIVE,
     SZ_OUTDOOR_HUMIDITY,
     SZ_OUTDOOR_TEMP,
+    SZ_OUTSIDE,
     SZ_OVERRUN,
     SZ_POST_HEAT,
     SZ_PRE_HEAT,
@@ -75,26 +123,42 @@ from ramses_rf.const import (
     SZ_PUMP_RELAY_STATE,
     SZ_REL_MODULATION_LEVEL,
     SZ_RELAY_DEMAND,
+    SZ_RELAY_DEMAND_FA,
+    SZ_RELAY_DEMAND_FC,
     SZ_RELAY_FAILSAFE,
     SZ_REMAINING_DAYS,
     SZ_REMAINING_MINS,
     SZ_REMAINING_PERCENT,
+    SZ_REQ_REASON,
+    SZ_REQ_SPEED,
+    SZ_REQUEST_FAN_SPEED,
     SZ_REQUEST_REASON,
     SZ_REQUEST_SPEED,
     SZ_SETPOINT,
     SZ_SETPOINT_BOUNDS,
+    SZ_SETPOINTS,
     SZ_SPEED_CAPABILITIES,
+    SZ_STATE,
+    SZ_SUMMER_MODE,
     SZ_SUPPLY_FAN_SPEED,
     SZ_SUPPLY_FLOW,
     SZ_SUPPLY_TEMP,
     SZ_SYSTEM_MODE,
+    SZ_TEMP_HIGH,
+    SZ_TEMP_LOW,
     SZ_TEMPERATURE,
+    SZ_TEMPERATURES,
+    SZ_TIMESTAMP,
     SZ_UFH_INDEX,
+    SZ_UFX_INDEX,
+    SZ_UNKNOWN,
     SZ_UNTIL,
+    SZ_VALUE,
     SZ_WINDOW_OPEN,
     SZ_ZONE_INDEX,
+    DevType,
 )
-from ramses_rf.enums import Action
+from ramses_rf.enums import Action, PumpRelayState
 from ramses_rf.messages import Message
 from ramses_rf.models import (
     ActuatorState,
@@ -107,6 +171,7 @@ from ramses_rf.models import (
     SystemState,
     TemperatureState,
     TrvState,
+    UfhCircuitState,
     UfhState,
     ZoneState,
 )
@@ -120,40 +185,40 @@ from ramses_tx.const import I_, RQ, Code
 # --- Translation Maps (Static Constant Blocks) ---
 
 RAMSES_HEATING_MAP: Final[dict[Code, tuple[str, str, str]]] = {
-    Code._3200: (SZ_TEMPERATURE, "temperatures", "boiler_output"),
-    Code._3210: (SZ_TEMPERATURE, "temperatures", "boiler_return"),
-    Code._22D9: (SZ_SETPOINT, "temperatures", "boiler_setpoint"),
-    Code._1081: (SZ_SETPOINT, "temperatures", "ch_max_setpoint"),
-    Code._1300: (SZ_PRESSURE, "base", "ch_water_pressure"),
-    Code._12F0: (SZ_DHW_FLOW_RATE, "base", "dhw_flow_rate"),
-    Code._10A0: (SZ_SETPOINT, "temperatures", "dhw_setpoint"),
-    Code._1260: (SZ_TEMPERATURE, "temperatures", "dhw"),
-    Code._1290: (SZ_TEMPERATURE, "temperatures", "outside"),
+    Code._3200: (SZ_TEMPERATURE, SZ_TEMPERATURES, SZ_BOILER_OUTPUT),
+    Code._3210: (SZ_TEMPERATURE, SZ_TEMPERATURES, SZ_BOILER_RETURN),
+    Code._22D9: (SZ_SETPOINT, SZ_TEMPERATURES, SZ_BOILER_SETPOINT),
+    Code._1081: (SZ_SETPOINT, SZ_TEMPERATURES, SZ_CH_MAX_SETPOINT),
+    Code._1300: (SZ_PRESSURE, SZ_BASE, SZ_CH_WATER_PRESSURE),
+    Code._12F0: (SZ_DHW_FLOW_RATE, SZ_BASE, SZ_DHW_FLOW_RATE),
+    Code._10A0: (SZ_SETPOINT, SZ_TEMPERATURES, SZ_DHW_SETPOINT),
+    Code._1260: (SZ_TEMPERATURE, SZ_TEMPERATURES, SZ_DHW),
+    Code._1290: (SZ_TEMPERATURE, SZ_TEMPERATURES, SZ_OUTSIDE),
 }
 
 OPENTHERM_FIELD_MAP: Final[dict[OtDataId, tuple[str, str]]] = {
-    OtDataId.BOILER_OUTPUT_TEMP: ("temperatures", "boiler_output"),
-    OtDataId.BOILER_RETURN_TEMP: ("temperatures", "boiler_return"),
-    OtDataId.CONTROL_SETPOINT: ("temperatures", "boiler_setpoint"),
-    OtDataId.CH_MAX_SETPOINT: ("temperatures", "ch_max_setpoint"),
-    OtDataId.CH_WATER_PRESSURE: ("base", "ch_water_pressure"),
-    OtDataId.DHW_FLOW_RATE: ("base", "dhw_flow_rate"),
-    OtDataId.DHW_SETPOINT: ("temperatures", "dhw_setpoint"),
-    OtDataId.DHW_TEMP: ("temperatures", "dhw"),
-    OtDataId.OEM_CODE: ("base", "oem_code"),
-    OtDataId.OUTSIDE_TEMP: ("temperatures", "outside"),
-    OtDataId.REL_MODULATION_LEVEL: ("base", "rel_modulation_level"),
-    OtDataId._0E: ("base", "max_rel_modulation"),
-    OtDataId.BURNER_HOURS: ("counters", "burner_hours"),
-    OtDataId.BURNER_STARTS: ("counters", "burner_starts"),
-    OtDataId.BURNER_FAILED_STARTS: ("counters", "burner_failed_starts"),
-    OtDataId.CH_PUMP_HOURS: ("counters", "ch_pump_hours"),
-    OtDataId.CH_PUMP_STARTS: ("counters", "ch_pump_starts"),
-    OtDataId.DHW_BURNER_HOURS: ("counters", "dhw_burner_hours"),
-    OtDataId.DHW_BURNER_STARTS: ("counters", "dhw_burner_starts"),
-    OtDataId.DHW_PUMP_HOURS: ("counters", "dhw_pump_hours"),
-    OtDataId.DHW_PUMP_STARTS: ("counters", "dhw_pump_starts"),
-    OtDataId.FLAME_LOW_SIGNALS: ("counters", "flame_signal_low"),
+    OtDataId.BOILER_OUTPUT_TEMP: (SZ_TEMPERATURES, SZ_BOILER_OUTPUT),
+    OtDataId.BOILER_RETURN_TEMP: (SZ_TEMPERATURES, SZ_BOILER_RETURN),
+    OtDataId.CONTROL_SETPOINT: (SZ_TEMPERATURES, SZ_BOILER_SETPOINT),
+    OtDataId.CH_MAX_SETPOINT: (SZ_TEMPERATURES, SZ_CH_MAX_SETPOINT),
+    OtDataId.CH_WATER_PRESSURE: (SZ_BASE, SZ_CH_WATER_PRESSURE),
+    OtDataId.DHW_FLOW_RATE: (SZ_BASE, SZ_DHW_FLOW_RATE),
+    OtDataId.DHW_SETPOINT: (SZ_TEMPERATURES, SZ_DHW_SETPOINT),
+    OtDataId.DHW_TEMP: (SZ_TEMPERATURES, SZ_DHW),
+    OtDataId.OEM_CODE: (SZ_BASE, SZ_OEM_CODE),
+    OtDataId.OUTSIDE_TEMP: (SZ_TEMPERATURES, SZ_OUTSIDE),
+    OtDataId.REL_MODULATION_LEVEL: (SZ_BASE, SZ_REL_MODULATION_LEVEL),
+    OtDataId._0E: (SZ_BASE, SZ_MAX_REL_MODULATION),
+    OtDataId.BURNER_HOURS: (SZ_COUNTERS, SZ_BURNER_HOURS),
+    OtDataId.BURNER_STARTS: (SZ_COUNTERS, SZ_BURNER_STARTS),
+    OtDataId.BURNER_FAILED_STARTS: (SZ_COUNTERS, SZ_BURNER_FAILED_STARTS),
+    OtDataId.CH_PUMP_HOURS: (SZ_COUNTERS, SZ_CH_PUMP_HOURS),
+    OtDataId.CH_PUMP_STARTS: (SZ_COUNTERS, SZ_CH_PUMP_STARTS),
+    OtDataId.DHW_BURNER_HOURS: (SZ_COUNTERS, SZ_DHW_BURNER_HOURS),
+    OtDataId.DHW_BURNER_STARTS: (SZ_COUNTERS, SZ_DHW_BURNER_STARTS),
+    OtDataId.DHW_PUMP_HOURS: (SZ_COUNTERS, SZ_DHW_PUMP_HOURS),
+    OtDataId.DHW_PUMP_STARTS: (SZ_COUNTERS, SZ_DHW_PUMP_STARTS),
+    OtDataId.FLAME_LOW_SIGNALS: (SZ_COUNTERS, SZ_FLAME_SIGNAL_LOW),
 }
 
 _LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
@@ -250,12 +315,10 @@ class StateProjector:
 
             if (
                 SZ_UFH_INDEX not in payload
-                and "ufh_index" not in payload
+                and SZ_UFX_INDEX not in payload
                 and SZ_ZONE_INDEX not in payload
-                and "zone_index" not in payload
-                and "ufx_index" not in payload
                 and SZ_DOMAIN_INDEX not in payload
-                and "domain_id" not in payload
+                and SZ_DOMAIN_ID_WIRE not in payload
                 and all(
                     isinstance(dict_val, dict) for dict_val in payload.values()
                 )
@@ -298,7 +361,7 @@ class StateProjector:
                     )
 
             # Route to Destination Device (Aggregation)
-            if msg.dst.id != "--:------" and msg.dst.id != msg.src.id:
+            if msg.dst.id != NON_DEV_ADDR.id and msg.dst.id != msg.src.id:
                 dst_dev = registry.device_by_id.get(msg.dst.id)
                 if dst_dev:
                     try:
@@ -319,7 +382,7 @@ class StateProjector:
                         )
 
             # Route CQRS state to Systems (TCS) and Zones
-            zone_val = payload.get(SZ_ZONE_INDEX, payload.get("zone_index"))
+            zone_val = payload.get(SZ_ZONE_INDEX, payload.get(SZ_ZONE_INDEX))
             if zone_val is not None and msg.src.id in system_by_id:
                 tcs = system_by_id[msg.src.id]
                 zone = tcs.zone_by_index.get(str(zone_val))
@@ -374,7 +437,7 @@ class StateProjector:
                         except Exception as err:
                             _LOGGER.error(
                                 "CQRS extraction failed for parent zone %s: %s",
-                                getattr(parent, "id", "unknown"),
+                                getattr(parent, "id", SZ_UNKNOWN),
                                 err,
                             )
 
@@ -386,7 +449,7 @@ class StateProjector:
             # See: https://github.com/ramses-rf/ramses_cc/issues/843
             domain_val = payload.get(
                 SZ_DOMAIN_INDEX,
-                payload.get("domain_id", payload.get("domain_index")),
+                payload.get(SZ_DOMAIN_ID_WIRE, payload.get(SZ_DOMAIN_INDEX)),
             )
             if (
                 domain_val is not None
@@ -394,7 +457,7 @@ class StateProjector:
                 and msg.src.id in system_by_id
             ):
                 tcs = system_by_id[msg.src.id]
-                if domain_val == "FC" and tcs is not None:
+                if domain_val == FC and tcs is not None:
                     try:
                         self._update_demand_state(tcs, payload, msg)
                     except Exception as err:
@@ -404,7 +467,7 @@ class StateProjector:
                             err,
                         )
                 elif (
-                    domain_val in ("FA", "F9")
+                    domain_val in (FA, F9)
                     and getattr(tcs, "dhw", None) is not None
                 ):
                     try:
@@ -456,7 +519,7 @@ class StateProjector:
                     except Exception as err:
                         _LOGGER.error(
                             "CQRS extraction failed for appliance_control %s: %s",
-                            getattr(appliance_control, "id", "unknown"),
+                            getattr(appliance_control, "id", SZ_UNKNOWN),
                             err,
                         )
 
@@ -531,7 +594,7 @@ class StateProjector:
         """Translate OpenTherm frames or parallel opcodes into OpenThermState."""
         current_state = getattr(target, "opentherm_state", None)
         if current_state is None:
-            if getattr(target, "_SLUG", "") == "OTB":
+            if getattr(target, "_SLUG", "") == DevType.OTB:
                 current_state = OpenThermState()
             else:
                 return
@@ -542,8 +605,8 @@ class StateProjector:
         upd_count: dict[str, Any] = {}
 
         if msg.code == Code._3220:
-            raw_id = p.get("msg_id")
-            value = p.get("value")
+            raw_id = p.get(SZ_MESSAGE_ID)
+            value = p.get(SZ_VALUE)
 
             if raw_id is None:
                 return
@@ -560,65 +623,65 @@ class StateProjector:
             ):
                 upd_flag.update(
                     {
-                        "ch_enabled": bool(value[0]),
-                        "dhw_enabled": bool(value[1]),
-                        "cooling_enabled": bool(value[2]),
-                        "otc_active": bool(value[3]),
-                        "summer_mode": bool(value[5]),
-                        "dhw_blocking": bool(value[6]),
-                        "fault_present": bool(value[8]),
-                        "ch_active": bool(value[9]),
-                        "dhw_active": bool(value[10]),
-                        "flame_active": bool(value[11]),
-                        "cooling_active": bool(value[12]),
+                        SZ_CH_ENABLED: bool(value[0]),
+                        SZ_DHW_ENABLED: bool(value[1]),
+                        SZ_COOLING_ENABLED: bool(value[2]),
+                        SZ_OTC_ACTIVE: bool(value[3]),
+                        SZ_SUMMER_MODE: bool(value[5]),
+                        SZ_DHW_BLOCKING: bool(value[6]),
+                        SZ_FAULT_PRESENT: bool(value[8]),
+                        SZ_CH_ACTIVE: bool(value[9]),
+                        SZ_DHW_ACTIVE: bool(value[10]),
+                        SZ_FLAME_ACTIVE: bool(value[11]),
+                        SZ_COOLING_ACTIVE: bool(value[12]),
                     }
                 )
             elif value is not None and msg_id in OPENTHERM_FIELD_MAP:
                 category, field_key = OPENTHERM_FIELD_MAP[msg_id]
-                if category == "base":
+                if category == SZ_BASE:
                     upd_base[field_key] = value
-                elif category == "temperatures":
+                elif category == SZ_TEMPERATURES:
                     upd_temp[field_key] = value
-                elif category == "counters":
+                elif category == SZ_COUNTERS:
                     upd_count[field_key] = value
-                elif category == "flags":
+                elif category == SZ_FLAGS:
                     upd_flag[field_key] = value
         else:
             if msg.code in RAMSES_HEATING_MAP:
                 data = RAMSES_HEATING_MAP[msg.code]
                 payload_key, category, state_field = data
                 if payload_key in p:
-                    if category == "base":
+                    if category == SZ_BASE:
                         upd_base[state_field] = p[payload_key]
-                    elif category == "temperatures":
+                    elif category == SZ_TEMPERATURES:
                         upd_temp[state_field] = p[payload_key]
             elif msg.code in (Code._3EF0, Code._3EF1):
                 if SZ_MODULATION_LEVEL in p:
-                    upd_base["rel_modulation_level"] = p[SZ_MODULATION_LEVEL]
+                    upd_base[SZ_REL_MODULATION_LEVEL] = p[SZ_MODULATION_LEVEL]
                 elif SZ_REL_MODULATION_LEVEL in p:
-                    upd_base["rel_modulation_level"] = p[
+                    upd_base[SZ_REL_MODULATION_LEVEL] = p[
                         SZ_REL_MODULATION_LEVEL
                     ]
                 if SZ_MAX_REL_MODULATION in p:
-                    upd_base["max_rel_modulation"] = p[SZ_MAX_REL_MODULATION]
+                    upd_base[SZ_MAX_REL_MODULATION] = p[SZ_MAX_REL_MODULATION]
                 if SZ_CH_SETPOINT in p:
-                    upd_temp["ch_setpoint"] = p[SZ_CH_SETPOINT]
+                    upd_temp[SZ_CH_SETPOINT] = p[SZ_CH_SETPOINT]
                 if SZ_CH_ACTIVE in p:
-                    upd_flag["ch_active"] = p[SZ_CH_ACTIVE]
+                    upd_flag[SZ_CH_ACTIVE] = p[SZ_CH_ACTIVE]
                 if SZ_CH_ENABLED in p:
-                    upd_flag["ch_enabled"] = p[SZ_CH_ENABLED]
+                    upd_flag[SZ_CH_ENABLED] = p[SZ_CH_ENABLED]
                 if SZ_DHW_ACTIVE in p:
-                    upd_flag["dhw_active"] = p[SZ_DHW_ACTIVE]
+                    upd_flag[SZ_DHW_ACTIVE] = p[SZ_DHW_ACTIVE]
                 if SZ_FLAME_ON in p:
                     # NOTE: semantic parser maps this specifically
-                    upd_flag["flame_active"] = p[SZ_FLAME_ON]
+                    upd_flag[SZ_FLAME_ACTIVE] = p[SZ_FLAME_ON]
 
         if not any((upd_base, upd_flag, upd_temp, upd_count)):
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            upd_base["last_updated"] = dtm
+            upd_base[SZ_LAST_UPDATED] = dtm
 
         new_flags = current_state.flags
         if upd_flag:
@@ -642,7 +705,7 @@ class StateProjector:
         target.opentherm_state = new_state
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -659,12 +722,12 @@ class StateProjector:
         middleware) prior to hydration.
         """
         if getattr(target, "_SLUG", "") in (
-            "CTL",
-            "BDR",
-            "TRV",
-            "OTB",
-            "UFC",
-            "DHW",
+            DevType.CTL,
+            DevType.BDR,
+            DevType.TRV,
+            DevType.OTB,
+            DevType.UFC,
+            DevType.DHW,
         ):
             return
 
@@ -739,30 +802,30 @@ class StateProjector:
 
         # Handle non-standard names passed by the semantic parsers
         if SZ_REMAINING_DAYS in p:
-            updates["filter_remaining_days"] = p[SZ_REMAINING_DAYS]
+            updates[SZ_FILTER_REMAINING_DAYS] = p[SZ_REMAINING_DAYS]
         if SZ_REMAINING_PERCENT in p:
-            updates["filter_remaining_percent"] = p[SZ_REMAINING_PERCENT]
+            updates[SZ_FILTER_REMAINING_PERCENT] = p[SZ_REMAINING_PERCENT]
         if SZ_MINUTES in p and msg.code == Code._22F3:
-            updates["boost_timer_mins"] = p[SZ_MINUTES]
-        req_speed = p.get(SZ_REQUEST_SPEED, p.get("req_speed"))
+            updates[SZ_BOOST_TIMER_MINS] = p[SZ_MINUTES]
+        req_speed = p.get(SZ_REQUEST_SPEED, p.get(SZ_REQ_SPEED))
         if req_speed is not None:
-            updates["request_fan_speed"] = req_speed
-        req_reason = p.get(SZ_REQUEST_REASON, p.get("req_reason"))
+            updates[SZ_REQUEST_FAN_SPEED] = req_speed
+        req_reason = p.get(SZ_REQUEST_REASON, p.get(SZ_REQ_REASON))
         if req_reason is not None:
-            updates["request_reason"] = req_reason
+            updates[SZ_REQUEST_REASON] = req_reason
 
         if not updates:
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            updates["last_updated"] = dtm
+            updates[SZ_LAST_UPDATED] = dtm
 
         new_state = dataclasses.replace(current_state, **updates)
         target.hvac_state = new_state
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -784,16 +847,16 @@ class StateProjector:
         if not updates:
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            updates["last_updated"] = dtm
+            updates[SZ_LAST_UPDATED] = dtm
 
         current_state = getattr(target, "power_state", None) or PowerState()
         new_state = dataclasses.replace(current_state, **updates)
         target.power_state = new_state
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -830,16 +893,16 @@ class StateProjector:
         if not updates:
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            updates["last_updated"] = dtm
+            updates[SZ_LAST_UPDATED] = dtm
 
         current_state = getattr(target, "dhw_state", None) or DhwState()
         new_state = dataclasses.replace(current_state, **updates)
         target.dhw_state = new_state
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -873,16 +936,16 @@ class StateProjector:
         if not updates:
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            updates["last_updated"] = dtm
+            updates[SZ_LAST_UPDATED] = dtm
 
         current_state = getattr(target, "system_state", None) or SystemState()
         new_state = dataclasses.replace(current_state, **updates)
         target.system_state = new_state
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -894,19 +957,19 @@ class StateProjector:
         self, target: Any, p: dict[str, Any], msg: Message
     ) -> None:
         """Translate temperature/TRV opcodes into TrvState & TemperatureState."""
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
 
         if msg.code == Code._12B0 and SZ_WINDOW_OPEN in p:
             current_trv = getattr(target, "trv_state", None) or TrvState()
-            trv_updates = {"window_open": p[SZ_WINDOW_OPEN]}
+            trv_updates = {SZ_WINDOW_OPEN: p[SZ_WINDOW_OPEN]}
             if dtm:
-                trv_updates["last_updated"] = dtm
+                trv_updates[SZ_LAST_UPDATED] = dtm
 
             new_trv = dataclasses.replace(current_trv, **trv_updates)
             target.trv_state = new_trv
 
             event = StateUpdatedEvent(
-                entity_id=getattr(target, "id", "unknown"),
+                entity_id=getattr(target, "id", SZ_UNKNOWN),
                 state=new_trv,
                 correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
                 causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -931,7 +994,7 @@ class StateProjector:
                 src_id = msg.src.id
 
                 if (
-                    getattr(target, "_SLUG", "") in ("TRV", "THM")
+                    getattr(target, "_SLUG", "") in (DevType.TRV, DevType.THM)
                     and src_id != target_id
                 ):
                     pass
@@ -943,7 +1006,7 @@ class StateProjector:
 
             if updates:
                 if dtm:
-                    updates["last_updated"] = dtm
+                    updates[SZ_LAST_UPDATED] = dtm
 
                 current_temp = (
                     getattr(target, "temp_state", None) or TemperatureState()
@@ -952,7 +1015,7 @@ class StateProjector:
                 target.temp_state = new_temp
 
                 event = StateUpdatedEvent(
-                    entity_id=getattr(target, "id", "unknown"),
+                    entity_id=getattr(target, "id", SZ_UNKNOWN),
                     state=new_temp,
                     correlation_id=getattr(
                         msg, "correlation_id", uuid.uuid4()
@@ -975,67 +1038,65 @@ class StateProjector:
         if msg.code == Code._3150 and SZ_HEAT_DEMAND in p:
             # Prevent flattened array payloads (e.g., UFH circuit demands)
             # from overwriting the controller's aggregate FC heat demand.
-            if slug in ("CTL", "UFC"):
+            if slug in (DevType.CTL, DevType.UFC):
                 if (
                     p.get(SZ_DOMAIN_INDEX)
-                    or p.get("domain_id")
-                    or p.get("domain_index")
-                ) == "FC":
+                    or p.get(SZ_DOMAIN_ID_WIRE)
+                    or p.get(SZ_DOMAIN_INDEX)
+                ) == FC:
                     updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-            elif (
-                SZ_UFH_INDEX not in p
-                and "ufh_index" not in p
-                and "ufx_index" not in p
-            ):
+            elif SZ_UFH_INDEX not in p and SZ_UFX_INDEX not in p:
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
         elif msg.code == Code._0008 and SZ_RELAY_DEMAND in p:
             # Prevent FA (UFH) relay demands from overwriting FC relay demand
             if (
-                slug == "UFC"
+                slug == DevType.UFC
                 and (
                     p.get(SZ_DOMAIN_INDEX)
-                    or p.get("domain_id")
-                    or p.get("domain_index")
+                    or p.get(SZ_DOMAIN_ID_WIRE)
+                    or p.get(SZ_DOMAIN_INDEX)
                 )
-                != "FC"
+                != FC
             ):
                 pass
             else:
                 updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
 
-        elif msg.code == Code._0009 and "failsafe_enabled" in p:
-            updates[SZ_RELAY_FAILSAFE] = p["failsafe_enabled"]
+        elif msg.code == Code._0009 and SZ_FAILSAFE_ENABLED in p:
+            updates[SZ_RELAY_FAILSAFE] = p[SZ_FAILSAFE_ENABLED]
 
         # 1100 (TPI params) — populate the TCS's _tpi_params dict (issue 1102).
         # TPI params don't fit into DemandState; they're stored per-domain on
         # the TCS and read by tcs.tpi_params.  Handled before the `if not
         # updates` guard because 1100 has no demand fields.
-        if msg.code == Code._1100 and "cycle_rate" in p:
+        if msg.code == Code._1100 and SZ_CYCLE_RATE in p:
             tcs_for_tpi = getattr(target, "tcs", None) or (
-                target if slug in ("CTL", "BDR") else None
+                target if slug in (DevType.CTL, DevType.BDR) else None
             )
             if tcs_for_tpi is not None:
                 tpi_dict = getattr(tcs_for_tpi, "_tpi_params", None)
                 if tpi_dict is not None:
                     domain = (
-                        p.get(SZ_DOMAIN_INDEX) or p.get("domain_id") or "FC"
+                        p.get(SZ_DOMAIN_INDEX)
+                        or p.get(SZ_DOMAIN_ID_WIRE)
+                        or FC
                     )
                     tpi_dict[domain] = p
 
         if not updates:
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            updates["last_updated"] = dtm
+            updates[SZ_LAST_UPDATED] = dtm
 
         current_state = getattr(target, "demand_state", None) or DemandState()
         new_state = dataclasses.replace(current_state, **updates)
         target.demand_state = new_state
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -1045,87 +1106,258 @@ class StateProjector:
 
         # Populate the TCS's per-domain demand dicts (issue 1102 / ramses_cc#1026).
         tcs = getattr(target, "tcs", None) or (
-            target if slug in ("CTL", "UFC") else None
+            target if slug in (DevType.CTL, DevType.UFC) else None
         )
         if tcs is not None:
-            domain = p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")
+            domain = p.get(SZ_DOMAIN_INDEX) or p.get(SZ_DOMAIN_ID_WIRE)
             if domain and SZ_RELAY_DEMAND in p:
                 relay_dict = getattr(tcs, "_relay_demands", None)
                 if relay_dict is not None:
                     relay_dict[domain] = msg
-            if domain and SZ_HEAT_DEMAND in p and slug in ("CTL", "UFC"):
+            if (
+                domain
+                and SZ_HEAT_DEMAND in p
+                and slug in (DevType.CTL, DevType.UFC)
+            ):
                 heat_dict = getattr(tcs, "_heat_demands", None)
                 if heat_dict is not None:
                     heat_dict[domain] = msg
 
     def _update_ufh_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
-        """Translate UFH circuit arrays and bounds into UfhState."""
-        if msg.code not in (Code._3150, Code._0008, Code._22C9):
+        """Translate UFH circuit arrays, demands, and telemetry into UfhState.
+
+        :param target: Target entity or device (e.g. UfhController).
+        :type target: Any
+        :param payload: Decoded payload dictionary.
+        :type payload: dict[str, Any]
+        :param msg: Associated protocol message.
+        :type msg: Message
+        """
+        if getattr(target, "_SLUG", "") != DevType.UFC:
             return
 
-        if getattr(target, "_SLUG", "") != "UFC":
-            return
-
-        current_state = getattr(target, "ufh_state", None) or UfhState()
-        updates: dict[str, Any] = {}
-
-        # Safely extract index matching legacy typo "ufx_index"
-        ufh_index = (
-            p.get("ufx_index")
-            or p.get(SZ_UFH_INDEX)
-            or p.get("ufh_index")
-            or p.get(SZ_ZONE_INDEX)
-            or p.get("zone_index")
+        current_state: UfhState = (
+            getattr(target, "ufh_state", None) or UfhState()
         )
+        updates: dict[str, Any] = {}
+        new_circuits = dict(current_state.circuits)
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
 
-        if (
-            msg.code == Code._3150
-            and ufh_index is not None
-            and SZ_HEAT_DEMAND in p
-        ):
-            new_demands = dict(current_state.heat_demands)
-            new_demands[str(ufh_index)] = p[SZ_HEAT_DEMAND]
-            updates["heat_demands"] = new_demands
-
-        elif (
-            msg.code == Code._0008
-            and (
-                p.get(SZ_DOMAIN_INDEX)
-                or p.get("domain_id")
-                or p.get("domain_index")
+        def _get_circuit(circuit_index: str) -> UfhCircuitState:
+            return new_circuits.get(circuit_index) or UfhCircuitState(
+                circuit_index=circuit_index
             )
-            == "FA"
-            and SZ_RELAY_DEMAND in p
-        ):
-            updates["relay_demand_fa"] = p[SZ_RELAY_DEMAND]
-        elif msg.code == Code._22C9 and ufh_index is not None:
-            new_sp = dict(current_state.setpoints)
-            sp_data = dict(new_sp.get(str(ufh_index), {}))
 
-            # Legacy parsers return an empty dict if no bounds exist.
-            # Only populate the bounds if they are explicitly present.
-            bounds = p.get(SZ_SETPOINT_BOUNDS)
-            if isinstance(bounds, tuple) and len(bounds) == 2:
-                sp_data["temp_low"] = bounds[0]
-                sp_data["temp_high"] = bounds[1]
+        def _get_circuit_index(data: dict[str, Any]) -> str | None:
+            for key in (
+                SZ_UFH_INDEX,
+                SZ_UFX_INDEX,
+                SZ_CIRCUIT_INDEX,
+                SZ_ZONE_INDEX,
+                SZ_DOMAIN_OR_ZONE_INDEX,
+            ):
+                if (raw_index := data.get(key)) is not None:
+                    return (
+                        f"{int(raw_index):02X}"
+                        if isinstance(raw_index, int)
+                        else str(raw_index)
+                    )
+            return None
 
-            new_sp[str(ufh_index)] = sp_data
-            updates["setpoints"] = new_sp
+        match msg.code:
+            case Code._3150:
+                domain = (
+                    payload.get(SZ_DOMAIN_INDEX)
+                    or payload.get(SZ_DOMAIN_ID_WIRE)
+                    or payload.get(SZ_DOMAIN_INDEX)
+                )
+                if domain == FA and SZ_HEAT_DEMAND in payload:
+                    updates[SZ_RELAY_DEMAND_FA] = payload[SZ_HEAT_DEMAND]
+                elif domain == FC and SZ_HEAT_DEMAND in payload:
+                    updates[SZ_RELAY_DEMAND_FC] = payload[SZ_HEAT_DEMAND]
+
+                circuit_index = _get_circuit_index(payload)
+                if circuit_index is not None and SZ_HEAT_DEMAND in payload:
+                    heat_value = (
+                        float(payload[SZ_HEAT_DEMAND])
+                        if payload[SZ_HEAT_DEMAND] is not None
+                        else None
+                    )
+                    new_demands = dict(current_state.heat_demands)
+                    new_demands[circuit_index] = heat_value
+                    updates[SZ_HEAT_DEMANDS] = new_demands
+
+                    circuit = _get_circuit(circuit_index)
+                    circuit_kwargs: dict[str, Any] = {
+                        SZ_HEAT_DEMAND: heat_value
+                    }
+                    if dtm:
+                        circuit_kwargs[SZ_LAST_UPDATED] = dtm
+                    new_circuits[circuit_index] = dataclasses.replace(
+                        circuit, **circuit_kwargs
+                    )
+                    updates[SZ_CIRCUITS] = new_circuits
+
+            case Code._2D49:
+                circuit_index = _get_circuit_index(payload)
+                cooling_value = payload.get(
+                    SZ_COOLING_DEMAND,
+                    payload.get(SZ_STATE, payload.get(SZ_COOLING_ACTIVE)),
+                )
+                if circuit_index is not None and cooling_value is not None:
+                    value_float = (
+                        float(cooling_value)
+                        if isinstance(cooling_value, (int, float))
+                        else (1.0 if cooling_value else 0.0)
+                    )
+                    new_cool = dict(current_state.cooling_demands)
+                    new_cool[circuit_index] = value_float
+                    updates[SZ_COOLING_DEMANDS] = new_cool
+
+                    circuit = _get_circuit(circuit_index)
+                    circuit_kwargs = {SZ_COOLING_DEMAND: value_float}
+                    if dtm:
+                        circuit_kwargs[SZ_LAST_UPDATED] = dtm
+                    new_circuits[circuit_index] = dataclasses.replace(
+                        circuit, **circuit_kwargs
+                    )
+                    updates[SZ_CIRCUITS] = new_circuits
+
+            case Code._2249:
+                circuit_index = _get_circuit_index(payload)
+                mode_value = payload.get(SZ_MODE, payload.get(SZ_MODE))
+                if circuit_index is not None and mode_value is not None:
+                    mode_string = str(mode_value)
+                    new_modes = dict(current_state.circuit_modes)
+                    new_modes[circuit_index] = mode_string
+                    updates[SZ_CIRCUIT_MODES] = new_modes
+
+                    circuit = _get_circuit(circuit_index)
+                    circuit_kwargs = {SZ_CIRCUIT_MODE: mode_string}
+                    if dtm:
+                        circuit_kwargs[SZ_LAST_UPDATED] = dtm
+                    new_circuits[circuit_index] = dataclasses.replace(
+                        circuit, **circuit_kwargs
+                    )
+                    updates[SZ_CIRCUITS] = new_circuits
+
+            case Code._0008:
+                domain = (
+                    payload.get(SZ_DOMAIN_INDEX)
+                    or payload.get(SZ_DOMAIN_ID_WIRE)
+                    or payload.get(SZ_DOMAIN_INDEX)
+                )
+                if domain == FA and SZ_RELAY_DEMAND in payload:
+                    updates[SZ_RELAY_DEMAND_FA] = payload[SZ_RELAY_DEMAND]
+                elif domain == FC and SZ_RELAY_DEMAND in payload:
+                    updates[SZ_RELAY_DEMAND_FC] = payload[SZ_RELAY_DEMAND]
+
+            case Code._000C:
+                circuit_index = _get_circuit_index(payload)
+                zone_index = payload.get(SZ_ZONE_INDEX) or payload.get(
+                    SZ_ZONE_INDEX
+                )
+                if circuit_index is not None:
+                    zone_string = (
+                        str(zone_index) if zone_index is not None else None
+                    )
+                    new_map = dict(current_state.circuit_to_zone_map)
+                    new_map[circuit_index] = zone_string
+                    updates[SZ_CIRCUIT_TO_ZONE_MAP] = new_map
+
+                    circuit = _get_circuit(circuit_index)
+                    circuit_kwargs = {SZ_ZONE_INDEX: zone_string}
+                    if dtm:
+                        circuit_kwargs[SZ_LAST_UPDATED] = dtm
+                    new_circuits[circuit_index] = dataclasses.replace(
+                        circuit, **circuit_kwargs
+                    )
+                    updates[SZ_CIRCUITS] = new_circuits
+
+            case Code._22C9:
+                circuit_index = _get_circuit_index(payload)
+                if circuit_index is not None:
+                    new_setpoints = dict(current_state.setpoints)
+                    setpoint_data = dict(new_setpoints.get(circuit_index, {}))
+
+                    bounds = payload.get(SZ_SETPOINT_BOUNDS)
+                    min_temp = payload.get(SZ_MIN_TEMP)
+                    max_temp = payload.get(SZ_MAX_TEMP)
+                    if isinstance(bounds, tuple) and len(bounds) == 2:
+                        setpoint_data[SZ_TEMP_LOW] = bounds[0]
+                        setpoint_data[SZ_TEMP_HIGH] = bounds[1]
+                        min_temp = min_temp or bounds[0]
+                        max_temp = max_temp or bounds[1]
+
+                    flags = payload.get(SZ_FLAGS) or payload.get(SZ_MODE)
+                    if flags is not None and isinstance(flags, int):
+                        setpoint_data[SZ_FLAGS] = flags
+
+                    new_setpoints[circuit_index] = setpoint_data
+                    updates[SZ_SETPOINTS] = new_setpoints
+
+                    circuit = _get_circuit(circuit_index)
+                    circuit_kwargs = {}
+                    if dtm:
+                        circuit_kwargs[SZ_LAST_UPDATED] = dtm
+                    if min_temp is not None:
+                        circuit_kwargs[SZ_MIN_TEMP] = min_temp
+                    if max_temp is not None:
+                        circuit_kwargs[SZ_MAX_TEMP] = max_temp
+                    if flags is not None and isinstance(flags, int):
+                        circuit_kwargs[SZ_FLAGS] = flags
+
+                    new_circuits[circuit_index] = dataclasses.replace(
+                        circuit, **circuit_kwargs
+                    )
+                    updates[SZ_CIRCUITS] = new_circuits
+
+            case Code._2309:
+                circuit_index = _get_circuit_index(payload)
+                setpoint = payload.get(SZ_SETPOINT)
+                if circuit_index is not None and setpoint is not None:
+                    circuit = _get_circuit(circuit_index)
+                    circuit_kwargs = {SZ_SETPOINT: setpoint}
+                    if dtm:
+                        circuit_kwargs[SZ_LAST_UPDATED] = dtm
+                    new_circuits[circuit_index] = dataclasses.replace(
+                        circuit, **circuit_kwargs
+                    )
+                    updates[SZ_CIRCUITS] = new_circuits
+
+            case Code._3EF0 | Code._3EF1:
+                pump_state = payload.get(
+                    SZ_PUMP_RELAY_STATE, payload.get(SZ_PUMP_RELAY_STATE)
+                )
+                if pump_state is not None:
+                    if isinstance(pump_state, PumpRelayState):
+                        updates[SZ_PUMP_RELAY_STATE] = pump_state
+                    elif isinstance(pump_state, str):
+                        try:
+                            updates[SZ_PUMP_RELAY_STATE] = PumpRelayState(
+                                pump_state
+                            )
+                        except ValueError:
+                            _LOGGER.warning(
+                                "Unknown pump relay state: %s", pump_state
+                            )
+
+            case _:
+                return
 
         if not updates:
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
         if dtm:
-            updates["last_updated"] = dtm
+            updates[SZ_LAST_UPDATED] = dtm
 
         new_state = dataclasses.replace(current_state, **updates)
         target.ufh_state = new_state
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -1157,7 +1389,7 @@ class StateProjector:
             updates[SZ_DHW_ACTIVE] = p[SZ_DHW_ACTIVE]
         if SZ_FLAME_ON in p:
             # NOTE: semantic parser maps this specifically
-            updates["flame_active"] = p[SZ_FLAME_ON]
+            updates[SZ_FLAME_ACTIVE] = p[SZ_FLAME_ON]
             updates[SZ_FLAME_ON] = p[SZ_FLAME_ON]
 
         # Legacy diagnostic payloads restored for backwards compatibility
@@ -1177,16 +1409,16 @@ class StateProjector:
         if not updates:
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            updates["last_updated"] = dtm
+            updates[SZ_LAST_UPDATED] = dtm
 
         current_state = getattr(target, "act_state", None) or ActuatorState()
         new_state = dataclasses.replace(current_state, **updates)
         target.act_state = new_state
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
@@ -1242,15 +1474,15 @@ class StateProjector:
         if not updates:
             return
 
-        dtm = getattr(msg, "dtm", getattr(msg, "timestamp", None))
+        dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            updates["last_updated"] = dtm
+            updates[SZ_LAST_UPDATED] = dtm
 
         current_state = getattr(target, "zone_state", None) or ZoneState()
         new_state = dataclasses.replace(current_state, **updates)
 
         event = StateUpdatedEvent(
-            entity_id=getattr(target, "id", "unknown"),
+            entity_id=getattr(target, "id", SZ_UNKNOWN),
             state=new_state,
             correlation_id=getattr(msg, "correlation_id", uuid.uuid4()),
             causation_id=getattr(msg, "message_id", uuid.uuid4()),
