@@ -261,7 +261,7 @@ class DeviceRegistry:
                     child_id_raw = FC
                 child_dev = self.get_device(
                     event.child_id,
-                    parent=cast("Parent", parent),
+                    parent=cast("Parent[Device]", parent),
                     child_id=str(child_id_raw)
                     if child_id_raw is not None
                     else None,
@@ -519,7 +519,7 @@ class DeviceRegistry:
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: None = None,
@@ -531,7 +531,7 @@ class DeviceRegistry:
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: type[_DeviceT],
@@ -542,7 +542,7 @@ class DeviceRegistry:
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: type[_DeviceT] | None = None,
@@ -638,7 +638,7 @@ class DeviceRegistry:
     @staticmethod
     def _maybe_reparent_bdr(
         device: Device | None,
-        parent: Parent | None,
+        parent: Parent[Device] | None,
         child_id: str | None,
     ) -> None:
         """Re-parent a BDR from hotwater_valve (FA) to appliance_control (FC).

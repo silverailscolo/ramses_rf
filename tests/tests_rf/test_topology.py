@@ -17,6 +17,7 @@ import pytest
 
 import ramses_rf.exceptions as exc
 from ramses_rf.gateway import Gateway, GatewayConfig
+from ramses_rf.interfaces import ControllerInterface, ParentInterface
 from ramses_rf.topology import Child, Parent
 from ramses_tx import DeviceIdT
 from ramses_tx.config import EngineConfig
@@ -156,21 +157,22 @@ async def test_ramses_rf_isolated_topology() -> None:
 # --- Unit Tests for Topology Parent Promotion & Re-binding ---
 
 
-class System(Parent):
+class System(Parent["BdrSwitch"]):
     def __init__(self, sys_id: str) -> None:
-        super().__init__()
+        super().__init__(child_id="00")
         self.id = sys_id
-        self.actuators: list[Any] = []
-        self.actuator_by_id: dict[DeviceIdT, Any] = {}
+        self.actuators: list[BdrSwitch] = []
+        self.actuator_by_id: dict[DeviceIdT, BdrSwitch] = {}
 
 
-class Zone(Parent):
+class Zone(Parent["BdrSwitch"]):
     def __init__(self, index: str) -> None:
-        super().__init__()
+        super().__init__(child_id=index)
         self.index = index
         self.id = index
-        self.actuators: list[Any] = []
-        self.actuator_by_id: dict[DeviceIdT, Any] = {}
+        self.ctl: MockController | None = None
+        self.actuators: list[BdrSwitch] = []
+        self.actuator_by_id: dict[DeviceIdT, BdrSwitch] = {}
 
 
 class BdrSwitch(Child):
@@ -238,3 +240,330 @@ def test_child_set_parent_idempotent() -> None:
 
     # Assert
     assert child._parent is zone_00
+
+
+def test_generic_parent_add_and_detach_child() -> None:
+    # Arrange
+    child = BdrSwitch("13:123456")
+    parent = Zone("00")
+
+    # Act 1: Add child actuator
+    parent._add_child(child, child_id="00")
+
+    # Assert 1
+    assert child in parent.childs
+    assert parent.child_by_id["13:123456"] is child
+    assert child in parent.actuators
+    assert parent.actuator_by_id[DeviceIdT("13:123456")] is child
+
+    # Act 2: Detach child
+    parent._detach_child(child)
+
+    # Assert 2
+    assert child not in parent.childs
+    assert "13:123456" not in parent.child_by_id
+    assert child not in parent.actuators
+    assert DeviceIdT("13:123456") not in parent.actuator_by_id
+    assert child._parent is None
+    assert child._child_id is None
+
+
+def test_child_rejects_none_parent() -> None:
+    # Arrange
+    child = BdrSwitch("13:123456")
+
+    # Act & Assert
+    with pytest.raises(exc.SchemaInconsistentError) as exc_info:
+        child._get_parent(None)
+
+    assert "parent cannot be None" in str(exc_info.value)
+
+
+def test_parent_zone_index_getter_setter() -> None:
+    # Arrange
+    parent = Zone("01")
+
+    # Act & Assert
+    assert parent.zone_index == "01"
+    parent.zone_index = "02"
+    assert parent.zone_index == "02"
+
+
+class MockController(Child):
+    """Mock controller for protocol testing."""
+
+    def __init__(self, dev_id: str) -> None:
+        super().__init__()
+        self.id = DeviceIdT(dev_id)
+        self._SLUG = "01"
+        self.tcs = None
+
+    async def traits(self) -> dict[str, Any]:
+        return {}
+
+
+class EvohomeSystem(Parent[BdrSwitch]):
+    """Mock system parent exposing DHW and heating valve slots."""
+
+    def __init__(self, sys_id: str, ctl: MockController | None = None) -> None:
+        super().__init__(child_id="00")
+        self.id = sys_id
+        self.ctl = ctl
+
+
+class HeatingZone(Parent[BdrSwitch]):
+    """Mock zone parent exposing sensor and actuator slots."""
+
+    def __init__(self, index: str, ctl: MockController | None = None) -> None:
+        super().__init__(child_id=index)
+        self.index = index
+        self.id = index
+        self.actuators: list[BdrSwitch] = []
+        self.actuator_by_id: dict[DeviceIdT, BdrSwitch] = {}
+        self.ctl = ctl
+
+    @property
+    def sensor(self) -> BdrSwitch | None:
+        return self._sensor
+
+
+class MockUfhController(Parent[BdrSwitch]):
+    """Mock UFH controller exposing circuits."""
+
+    _SLUG = "02"
+
+    def __init__(self, dev_id: str) -> None:
+        super().__init__(child_id="FA")
+        self.id = DeviceIdT(dev_id)
+        self.tcs: Any | None = None
+        self.circuits: dict[str, BdrSwitch] = {}
+        self.circuit_by_id: dict[str, BdrSwitch] = {}
+
+    async def traits(self) -> dict[str, Any]:
+        return {}
+
+
+def test_runtime_checkable_protocols() -> None:
+    # Arrange
+    parent_system = EvohomeSystem("01:145038")
+    mock_ctl = MockController("01:145038")
+    ufc = MockUfhController("02:000921")
+
+    # Assert
+    assert isinstance(parent_system, ParentInterface)
+    assert isinstance(mock_ctl, ControllerInterface)
+    assert isinstance(ufc, ParentInterface)
+    assert isinstance(ufc, ControllerInterface)
+
+
+def test_parent_dhw_sensor_slot_and_conflict() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    sensor1 = BdrSwitch("07:111111")
+    sensor2 = BdrSwitch("07:222222")
+
+    # Act 1: Add first DHW sensor
+    sys._add_child(sensor1, child_id="FA", is_sensor=True)
+
+    # Assert 1
+    assert sys._dhw_sensor is sensor1
+
+    # Act 2 & Assert 2: Conflict on re-adding different DHW sensor
+    with pytest.raises(exc.SystemSchemaInconsistent) as exc_info:
+        sys._add_child(sensor2, child_id="FA", is_sensor=True)
+
+    assert "changed dhw_sensor" in str(exc_info.value)
+
+
+def test_parent_dhw_sensor_detach() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    sensor = BdrSwitch("07:111111")
+    sys._add_child(sensor, child_id="FA", is_sensor=True)
+
+    # Act
+    sys._detach_child(sensor)
+
+    # Assert
+    assert sys._dhw_sensor is None
+    assert sensor not in sys.childs
+
+
+def test_parent_htg_valve_slot_and_conflict() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    valve1 = BdrSwitch("13:111111")
+    valve2 = BdrSwitch("13:222222")
+
+    # Act 1: Add heating valve
+    sys._add_child(valve1, child_id="F9")
+
+    # Assert 1
+    assert sys._htg_valve is valve1
+
+    # Act 2 & Assert 2: Conflict on re-adding different heating valve
+    with pytest.raises(exc.SystemSchemaInconsistent) as exc_info:
+        sys._add_child(valve2, child_id="F9")
+
+    assert "changed htg_valve" in str(exc_info.value)
+
+
+def test_parent_htg_valve_detach() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    valve = BdrSwitch("13:111111")
+    sys._add_child(valve, child_id="F9")
+
+    # Act
+    sys._detach_child(valve)
+
+    # Assert
+    assert sys._htg_valve is None
+    assert valve not in sys.childs
+
+
+def test_parent_dhw_valve_slot_and_conflict() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    valve1 = BdrSwitch("13:111111")
+    valve2 = BdrSwitch("13:222222")
+
+    # Act 1: Add DHW valve
+    sys._add_child(valve1, child_id="FA")
+
+    # Assert 1
+    assert sys._dhw_valve is valve1
+
+    # Act 2 & Assert 2: Conflict on re-adding different DHW valve
+    with pytest.raises(exc.SystemSchemaInconsistent) as exc_info:
+        sys._add_child(valve2, child_id="FA")
+
+    assert "changed dhw_valve" in str(exc_info.value)
+
+
+def test_parent_dhw_valve_detach() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    valve = BdrSwitch("13:111111")
+    sys._add_child(valve, child_id="FA")
+
+    # Act
+    sys._detach_child(valve)
+
+    # Assert
+    assert sys._dhw_valve is None
+    assert valve not in sys.childs
+
+
+def test_parent_app_cntrl_slot_and_conflict() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    relay1 = BdrSwitch("10:111111")
+    relay2 = BdrSwitch("10:222222")
+
+    # Act 1: Add appliance control relay
+    sys._add_child(relay1, child_id="FC")
+
+    # Assert 1
+    assert sys._app_cntrl is relay1
+
+    # Act 2 & Assert 2: Conflict on re-adding different appliance control relay
+    with pytest.raises(exc.SystemSchemaInconsistent) as exc_info:
+        sys._add_child(relay2, child_id="FC")
+
+    assert "changed app_cntrl" in str(exc_info.value)
+
+
+def test_parent_app_cntrl_detach() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    relay = BdrSwitch("10:111111")
+    sys._add_child(relay, child_id="FC")
+
+    # Act
+    sys._detach_child(relay)
+
+    # Assert
+    assert sys._app_cntrl is None
+    assert relay not in sys.childs
+
+
+def test_parent_zone_sensor_slot_and_conflict() -> None:
+    # Arrange
+    zone = HeatingZone("00")
+    sensor1 = BdrSwitch("34:111111")
+    sensor2 = BdrSwitch("34:222222")
+
+    # Act 1: Add zone sensor
+    zone._add_child(sensor1, is_sensor=True)
+
+    # Assert 1
+    assert zone._sensor is sensor1
+
+    # Act 2 & Assert 2: Conflict on re-adding different sensor
+    with pytest.raises(exc.SystemSchemaInconsistent) as exc_info:
+        zone._add_child(sensor2, is_sensor=True)
+
+    assert "changed zone sensor" in str(exc_info.value)
+
+
+def test_parent_zone_sensor_detach() -> None:
+    # Arrange
+    zone = HeatingZone("00")
+    sensor = BdrSwitch("34:111111")
+    zone._add_child(sensor, is_sensor=True)
+
+    # Act
+    zone._detach_child(sensor)
+
+    # Assert
+    assert zone._sensor is None
+    assert sensor not in zone.childs
+
+
+def test_parent_circuit_slot_and_detach() -> None:
+    # Arrange
+    ufc = MockUfhController("02:000921")
+    circuit = BdrSwitch("13:123456")
+
+    # Act 1: Add circuit
+    ufc._add_child(circuit, child_id="00")
+
+    # Assert 1
+    assert "13:123456" in ufc.circuit_by_id
+    assert ufc.circuit_by_id["13:123456"] is circuit
+
+    # Act 2: Detach circuit
+    ufc._detach_child(circuit)
+
+    # Assert 2
+    assert "13:123456" not in ufc.circuit_by_id
+    assert circuit not in ufc.childs
+
+
+def test_child_controller_conflict_rejection() -> None:
+    # Arrange
+    ctl1 = MockController("01:111111")
+    ctl2 = MockController("01:222222")
+    zone = Zone("00")
+    zone.ctl = ctl2
+    child = BdrSwitch("13:123456")
+    child.ctl = ctl1
+
+    # Act & Assert: Attempting to link to parent with different controller raises error
+    with pytest.raises(exc.SystemSchemaInconsistent) as exc_info:
+        child._apply_topology_link(zone, child_id="00")
+
+    assert "can't change controller" in str(exc_info.value)
+
+
+def test_parent_invalid_combination_raises() -> None:
+    # Arrange
+    sys = EvohomeSystem("01:145038")
+    child = BdrSwitch("13:123456")
+
+    # Act & Assert: is_sensor=True on parent without sensor slot
+    with pytest.raises(exc.SchemaInconsistentError) as exc_info:
+        sys._add_child(child, is_sensor=True)
+
+    assert "not a valid combination" in str(exc_info.value)

@@ -15,7 +15,7 @@ from ramses_tx import Priority
 
 class _SystemEntity(Protocol):
     @property
-    def ctl(self) -> DeviceInterface: ...
+    def ctl(self) -> DeviceInterface | None: ...
     @property
     def _gateway(self) -> GatewayInterface: ...
 
@@ -30,6 +30,9 @@ async def send_system_intent(
     wait_for_reply: bool | None = None,
 ) -> Message:
     """Dispatch system intent from HGI (or CTL) to the CTL."""
+    if system.ctl is None:
+        raise ValueError(f"{system} has no associated controller")
+
     src_id = system._gateway.hgi.id if system._gateway.hgi else system.ctl.id
     intent = Intent(
         src=Address(src_id),

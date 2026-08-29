@@ -28,8 +28,8 @@ if TYPE_CHECKING:
     from ramses_tx import CommandDTO, Packet
     from ramses_tx.typing import DeviceIdT, DevIndexT
 
-    from .devices import Controller
     from .gateway import Gateway
+    from .interfaces import ControllerInterface
     from .systems.tcs import SystemBase
 
 
@@ -87,7 +87,7 @@ class _Entity:
         # Context required by children (Zones/Devices)
         self._z_id: DeviceIdT = None  # type: ignore[assignment]  # set by subclass
         self._z_index: DevIndexT | None = None
-        self.ctl: Controller | None = None
+        self.ctl: ControllerInterface | None = None
         self.tcs: SystemBase | None = None
 
     def __repr__(self) -> str:

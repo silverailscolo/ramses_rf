@@ -31,245 +31,32 @@ from ramses_tx.const import F9, FA, FC, FF
 from . import exceptions as exc
 from .const import SZ_ACTUATORS, SZ_SENSOR
 from .enums import DevType
+from .interfaces import ControllerInterface, ParentInterface
 from .schemas import SZ_CIRCUITS
 
 
 @runtime_checkable
 class _HasTcs(Protocol):
-    tcs: Parent | None
+    tcs: ParentInterface | None
 
 
 @runtime_checkable
 class _HasZones(Protocol):
     _max_zones: int
 
-    def get_dhw_zone(self) -> Parent: ...
+    def get_dhw_zone(self) -> ParentInterface: ...
 
-    def get_htg_zone(self, zone_index: str) -> Parent: ...
+    def get_htg_zone(self, zone_index: str) -> ParentInterface: ...
 
 
 if TYPE_CHECKING:
     from ramses_tx.typing import DeviceIdT
 
-    from .devices import Controller
     from .systems.tcs import SystemBase
 
 
 _LOGGER = logging.getLogger(__name__)
 _TRACE = logging.getLogger("ramses_rf.legacy_trace")
-
-
-class Parent:
-    """A Parent can be a System (TCS), a heating Zone, or a UFH Controller.
-
-    A Parent maintains a registry of Child entities and validates the
-    relationships based on domain-specific rules.
-    """
-
-    actuator_by_id: dict[DeviceIdT, Any]
-    actuators: list[Any]
-    circuit_by_id: dict[str, Any]
-
-    _app_cntrl: Any
-    _dhw_sensor: Any
-    _dhw_valve: Any
-    _htg_valve: Any
-
-    def __init__(
-        self, *args: Any, child_id: str | None = None, **kwargs: Any
-    ) -> None:
-        """Initialize the Parent relationship manager.
-
-        :param child_id: The domain or zone index for this parent.
-        :type child_id: str | None
-        """
-        super().__init__(*args, **kwargs)
-
-        self._child_id: str = child_id  # type: ignore[assignment]
-        self.child_by_id: dict[str, Child] = {}
-        self.childs: list[Any] = []
-
-    @property
-    def zone_index(self) -> str:
-        """Return the domain or zone index.
-
-        :returns: The index string.
-        :rtype: str
-        """
-        return self._child_id
-
-    @zone_index.setter
-    def zone_index(self, value: str) -> None:
-        """Set the domain or zone index after validation.
-
-        :param value: The new index.
-        :type value: str
-        """
-        self._child_id = value
-
-    def _add_child(
-        self,
-        child: Any,
-        *,
-        child_id: str | None = None,
-        is_sensor: bool | None = None,
-    ) -> None:
-        """Add a child device to this Parent, validating the association.
-
-        :param child: The child entity to add.
-        :type child: Any
-        :param child_id: The specific sub-index (e.g. F9, FA), optional.
-        :type child_id: str | None
-        :param is_sensor: Whether the child acts as a sensor, optional.
-        :type is_sensor: bool | None
-        :raises SystemSchemaInconsistent: If the child contradicts existing schema.
-        :raises SchemaInconsistentError: If the combination is invalid.
-        """
-        if hasattr(self, "childs") and child not in self.childs:
-            pass
-
-        try:
-            if is_sensor and child_id == FA:
-                if (
-                    self._dhw_sensor
-                    and getattr(self._dhw_sensor, "id", None) != child.id
-                ):
-                    raise exc.SystemSchemaInconsistent(
-                        f"{self} changed dhw_sensor (from {self._dhw_sensor} to {child})"
-                    )
-                self._dhw_sensor = child
-
-            elif is_sensor and hasattr(self, SZ_SENSOR):
-                existing_sensor = getattr(self, SZ_SENSOR, None)
-                if (
-                    existing_sensor
-                    and getattr(existing_sensor, "id", None) != child.id
-                    and getattr(existing_sensor, "type", None)
-                    not in ("01", DevType.CTL)
-                ):
-                    raise exc.SystemSchemaInconsistent(
-                        f"{self} changed zone sensor (from {existing_sensor} to {child})"
-                    )
-                self._sensor = child
-
-            elif is_sensor:
-                raise exc.SchemaInconsistentError(
-                    f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
-                )
-
-            elif hasattr(self, SZ_CIRCUITS):
-                if (
-                    child not in self.circuit_by_id
-                    and child.id not in self.circuit_by_id
-                ):
-                    self.circuit_by_id[child.id] = child
-
-            elif hasattr(self, SZ_ACTUATORS):
-                if (
-                    child not in self.actuators
-                    and child.id not in self.actuator_by_id
-                ):
-                    self.actuators.append(child)
-                    self.actuator_by_id[child.id] = child
-
-            elif child_id == F9:
-                if (
-                    self._htg_valve
-                    and getattr(self._htg_valve, "id", None) != child.id
-                ):
-                    raise exc.SystemSchemaInconsistent(
-                        f"{self} changed htg_valve (from {self._htg_valve} to {child})"
-                    )
-                self._htg_valve = child
-
-            elif child_id == FA:
-                if (
-                    self._dhw_valve
-                    and getattr(self._dhw_valve, "id", None) != child.id
-                ):
-                    raise exc.SystemSchemaInconsistent(
-                        f"{self} changed dhw_valve (from {self._dhw_valve} to {child})"
-                    )
-                self._dhw_valve = child
-
-            elif child_id == FC:
-                if self._app_cntrl and self._app_cntrl is not child:
-                    raise exc.SystemSchemaInconsistent(
-                        f"{self} changed app_cntrl (from {self._app_cntrl} to {child})"
-                    )
-                self._app_cntrl = child
-
-            elif child_id == FF:
-                pass
-
-            else:
-                raise exc.SchemaInconsistentError(
-                    f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
-                )
-
-        except (
-            exc.SchemaInconsistentError,
-            exc.SystemSchemaInconsistent,
-        ) as err:
-            _TRACE.error(
-                f"ADD_CHILD EXCEPTION: Validating {child} to parent {self} "
-                f"failed: {err}"
-            )
-            raise
-
-        self.childs.append(child)
-        self.child_by_id[child.id] = child
-
-    def _detach_child(self, child: Child) -> None:
-        """Detach a child device from this Parent, maintaining referential integrity.
-
-        This is the inverse of :meth:`_add_child`. It clears the slot the
-        child occupied (sensor, valve, actuator, circuit, or appliance
-        control), removes the child from the ``childs`` list and
-        ``child_by_id`` registry, and clears the child's back-references.
-
-        :param child: The child entity to detach.
-        :type child: Child
-        """
-        # Clear the slot based on identity (not child_id, which may have
-        # been mutated since the child was added)
-        child_id_: DeviceIdT | None = getattr(child, "id", None)
-
-        if getattr(self, "_dhw_sensor", None) is child:
-            self._dhw_sensor = None
-        elif getattr(self, "_dhw_valve", None) is child:
-            self._dhw_valve = None
-        elif getattr(self, "_htg_valve", None) is child:
-            self._htg_valve = None
-        elif getattr(self, "_app_cntrl", None) is child:
-            self._app_cntrl = None
-        elif (
-            hasattr(self, SZ_SENSOR)
-            and getattr(self, "_sensor", None) is child
-        ):
-            self._sensor = None
-        elif hasattr(self, SZ_ACTUATORS) and child in getattr(
-            self, "actuators", []
-        ):
-            self.actuators.remove(child)
-            if child_id_ is not None:
-                self.actuator_by_id.pop(child_id_, None)
-        elif (
-            child_id_ is not None
-            and hasattr(self, SZ_CIRCUITS)
-            and child_id_ in getattr(self, "circuit_by_id", {})
-        ):
-            self.circuit_by_id.pop(child_id_, None)
-
-        # Remove from child registries
-        if child in self.childs:
-            self.childs.remove(child)
-        if child_id_ is not None:
-            self.child_by_id.pop(child_id_, None)
-
-        # Clear the child's back-references
-        child._parent = None
-        child._child_id = None
 
 
 class Child:
@@ -282,42 +69,42 @@ class Child:
     def __init__(
         self,
         *args: Any,
-        parent: Parent | None = None,
+        parent: ParentInterface | None = None,
         is_sensor: bool | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the Child relationship manager.
 
         :param parent: The parent entity, if known.
-        :type parent: Parent | None
+        :type parent: ParentInterface | None
         :param is_sensor: Whether this entity is a sensor for the parent.
         :type is_sensor: bool | None
         """
         super().__init__(*args, **kwargs)
 
-        self._parent = parent
+        self._parent: ParentInterface | None = parent
         self._is_sensor = is_sensor
         self._child_id: str | None = None
-        self.ctl: Controller | Any = None
+        self.ctl: ControllerInterface | None = None
         self.tcs: SystemBase | None = None
 
     def _get_parent(
         self,
-        parent: Parent | None,
+        parent: ParentInterface | None,
         *,
         child_id: str | None = None,
         is_sensor: bool | None = None,
-    ) -> tuple[Parent, str | None]:
+    ) -> tuple[ParentInterface, str | None]:
         """Validate and retrieve the target parent for this device.
 
         :param parent: The proposed parent.
-        :type parent: Parent | None
+        :type parent: ParentInterface | None
         :param child_id: The specific sub-index (e.g. F9, FA).
         :type child_id: str | None
         :param is_sensor: Whether the child is a sensor.
         :type is_sensor: bool | None
         :returns: A tuple of the validated parent and child_id.
-        :rtype: tuple[Parent, str | None]
+        :rtype: tuple[ParentInterface, str | None]
         :raises SchemaInconsistentError: If validation rules are violated.
         """
         if parent is None:
@@ -487,34 +274,40 @@ class Child:
 
     def _apply_topology_link(
         self,
-        parent: Parent | None,
+        parent: ParentInterface | None,
         *,
         child_id: str | None = None,
         is_sensor: bool | None = None,
-    ) -> Parent:
+    ) -> ParentInterface:
         """Establish a topological link to a parent entity.
 
         This is a protected method that MUST only be called by the
         DeviceRegistry when processing a validated TopologyChangedEvent.
 
         :param parent: The parent to link to.
-        :type parent: Parent | None
+        :type parent: ParentInterface | None
         :param child_id: The specific sub-index.
         :type child_id: str | None
         :param is_sensor: Whether this child is a sensor.
         :type is_sensor: bool | None
         :returns: The validated parent entity.
-        :rtype: Parent
+        :rtype: ParentInterface
         :raises SystemSchemaInconsistent: If a controller conflict occurs.
         """
         try:
             parent, child_id = self._get_parent(
                 parent, child_id=child_id, is_sensor=is_sensor
             )
-            controller = (
+            controller_candidate = (
                 parent
-                if parent.__class__.__name__ == "UfhController"
+                if getattr(parent, "_SLUG", None) == DevType.UFC
+                or parent.__class__.__name__ == "UfhController"
                 else getattr(parent, "ctl", None)
+            )
+            controller: ControllerInterface | None = (
+                controller_candidate
+                if isinstance(controller_candidate, ControllerInterface)
+                else None
             )
 
             if self.ctl and self.ctl is not controller:
@@ -540,3 +333,220 @@ class Child:
         self.tcs = getattr(controller, "tcs", None)
 
         return parent
+
+
+class Parent[ChildT: Child]:
+    """A Parent can be a System (TCS), a heating Zone, or a UFH Controller.
+
+    A Parent maintains a registry of Child entities and validates the
+    relationships based on domain-specific rules.
+    """
+
+    actuator_by_id: dict[DeviceIdT, ChildT]
+    actuators: list[ChildT]
+    circuit_by_id: dict[str, ChildT]
+
+    _app_cntrl: ChildT | None = None
+    _dhw_sensor: ChildT | None = None
+    _dhw_valve: ChildT | None = None
+    _htg_valve: ChildT | None = None
+    _sensor: ChildT | None = None
+
+    def __init__(
+        self, *args: Any, child_id: str | None = None, **kwargs: Any
+    ) -> None:
+        """Initialize the Parent relationship manager.
+
+        :param child_id: The domain or zone index for this parent.
+        :type child_id: str | None
+        """
+        super().__init__(*args, **kwargs)
+
+        self._child_id: str | None = child_id
+        self.child_by_id: dict[str, ChildT] = {}
+        self.childs: list[ChildT] = []
+
+    @property
+    def zone_index(self) -> str | None:
+        """Return the domain or zone index.
+
+        :returns: The index string.
+        :rtype: str | None
+        """
+        return self._child_id
+
+    @zone_index.setter
+    def zone_index(self, value: str | None) -> None:
+        """Set the domain or zone index after validation.
+
+        :param value: The new index.
+        :type value: str | None
+        """
+        self._child_id = value
+
+    def _add_child(
+        self,
+        child: ChildT,
+        *,
+        child_id: str | None = None,
+        is_sensor: bool | None = None,
+    ) -> None:
+        """Add a child device to this Parent, validating the association.
+
+        :param child: The child entity to add.
+        :type child: ChildT
+        :param child_id: The specific sub-index (e.g. F9, FA), optional.
+        :type child_id: str | None
+        :param is_sensor: Whether the child acts as a sensor, optional.
+        :type is_sensor: bool | None
+        :raises SystemSchemaInconsistent: If the child contradicts existing schema.
+        :raises SchemaInconsistentError: If the combination is invalid.
+        """
+        if hasattr(self, "childs") and child not in self.childs:
+            pass
+
+        child_id_val = getattr(child, "id", None)
+
+        try:
+            if is_sensor and child_id == FA:
+                if (
+                    self._dhw_sensor
+                    and getattr(self._dhw_sensor, "id", None) != child_id_val
+                ):
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed dhw_sensor (from {self._dhw_sensor} to {child})"
+                    )
+                self._dhw_sensor = child
+
+            elif is_sensor and hasattr(self, SZ_SENSOR):
+                existing_sensor = getattr(self, SZ_SENSOR, None)
+                if (
+                    existing_sensor
+                    and getattr(existing_sensor, "id", None) != child_id_val
+                    and getattr(existing_sensor, "type", None)
+                    not in ("01", DevType.CTL)
+                ):
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed zone sensor (from {existing_sensor} to {child})"
+                    )
+                self._sensor = child
+
+            elif is_sensor:
+                raise exc.SchemaInconsistentError(
+                    f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
+                )
+
+            elif hasattr(self, SZ_CIRCUITS):
+                circuit_key = str(child_id_val or child)
+                if circuit_key not in self.circuit_by_id:
+                    self.circuit_by_id[circuit_key] = child
+
+            elif hasattr(self, SZ_ACTUATORS):
+                if (
+                    child not in self.actuators
+                    and child_id_val not in self.actuator_by_id
+                ):
+                    self.actuators.append(child)
+                    if child_id_val is not None:
+                        self.actuator_by_id[child_id_val] = child
+
+            elif child_id == F9:
+                if (
+                    self._htg_valve
+                    and getattr(self._htg_valve, "id", None) != child_id_val
+                ):
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed htg_valve (from {self._htg_valve} to {child})"
+                    )
+                self._htg_valve = child
+
+            elif child_id == FA:
+                if (
+                    self._dhw_valve
+                    and getattr(self._dhw_valve, "id", None) != child_id_val
+                ):
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed dhw_valve (from {self._dhw_valve} to {child})"
+                    )
+                self._dhw_valve = child
+
+            elif child_id == FC:
+                if self._app_cntrl and self._app_cntrl is not child:
+                    raise exc.SystemSchemaInconsistent(
+                        f"{self} changed app_cntrl (from {self._app_cntrl} to {child})"
+                    )
+                self._app_cntrl = child
+
+            elif child_id == FF:
+                pass
+
+            else:
+                raise exc.SchemaInconsistentError(
+                    f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
+                )
+
+        except (
+            exc.SchemaInconsistentError,
+            exc.SystemSchemaInconsistent,
+        ) as err:
+            _TRACE.error(
+                "ADD_CHILD EXCEPTION: Validating %s to parent %s failed: %s",
+                child,
+                self,
+                err,
+            )
+            raise
+
+        self.childs.append(child)
+        self.child_by_id[str(child_id_val or child)] = child
+
+    def _detach_child(self, child: ChildT) -> None:
+        """Detach a child device from this Parent, maintaining referential integrity.
+
+        This is the inverse of :meth:`_add_child`. It clears the slot the
+        child occupied (sensor, valve, actuator, circuit, or appliance
+        control), removes the child from the ``childs`` list and
+        ``child_by_id`` registry, and clears the child's back-references.
+
+        :param child: The child entity to detach.
+        :type child: ChildT
+        """
+        # Clear the slot based on identity (not child_id, which may have
+        # been mutated since the child was added)
+        child_id_: DeviceIdT | None = getattr(child, "id", None)
+
+        if getattr(self, "_dhw_sensor", None) is child:
+            self._dhw_sensor = None
+        elif getattr(self, "_dhw_valve", None) is child:
+            self._dhw_valve = None
+        elif getattr(self, "_htg_valve", None) is child:
+            self._htg_valve = None
+        elif getattr(self, "_app_cntrl", None) is child:
+            self._app_cntrl = None
+        elif (
+            hasattr(self, SZ_SENSOR)
+            and getattr(self, "_sensor", None) is child
+        ):
+            self._sensor = None
+        elif hasattr(self, SZ_ACTUATORS) and child in getattr(
+            self, "actuators", []
+        ):
+            self.actuators.remove(child)
+            if child_id_ is not None:
+                self.actuator_by_id.pop(child_id_, None)
+        elif (
+            child_id_ is not None
+            and hasattr(self, SZ_CIRCUITS)
+            and child_id_ in getattr(self, "circuit_by_id", {})
+        ):
+            self.circuit_by_id.pop(child_id_, None)
+
+        # Remove from child registries
+        if child in self.childs:
+            self.childs.remove(child)
+        if child_id_ is not None:
+            self.child_by_id.pop(str(child_id_), None)
+
+        # Clear the child's back-references
+        child._parent = None
+        child._child_id = None
