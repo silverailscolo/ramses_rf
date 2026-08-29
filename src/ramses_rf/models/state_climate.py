@@ -218,9 +218,9 @@ class UfhCircuitState:
     Represents circuit-level telemetry including heat demand, cooling
     demand, operating mode, setpoint temperatures, and zone binding.
 
-    :param circuit_index: Two-character hexadecimal circuit index (e.g.
+    :param ufh_index: Two-character hexadecimal circuit index (e.g.
         '00', '01').
-    :type circuit_index: str
+    :type ufh_index: str
     :param zone_index: Associated heating zone index, or None if unmapped.
     :type zone_index: str | None
     :param heat_demand: Heating demand percentage (0.0 to 1.0), or None.
@@ -245,7 +245,7 @@ class UfhCircuitState:
     :type last_updated: dt
     """
 
-    circuit_index: str
+    ufh_index: str
     zone_index: str | None = None
     heat_demand: float | None = None
     cooling_demand: float | None = None
@@ -255,6 +255,15 @@ class UfhCircuitState:
     max_temp: float | None = None
     flags: int | None = None
     last_updated: dt = field(default_factory=_now_utc)
+
+    @property
+    def circuit_index(self) -> str:
+        """Return the UFH circuit index string.
+
+        :returns: The UFH circuit index.
+        :rtype: str
+        """
+        return self.ufh_index
 
 
 @dataclass(frozen=True, slots=True)

@@ -167,8 +167,6 @@ def test_payload_from_log_file(dir_name: Path) -> None:
         def _norm_dict(
             d: dict[str, Any], exp: dict[str, Any]
         ) -> dict[str, Any]:
-            if "zone_index" in exp and "ufx_index" in d:
-                d["zone_index"] = d.pop("ufx_index")
             res = {LEGACY_KEY_MAP.get(k, k): v for k, v in d.items()}
             for key in (
                 "zone_index",
@@ -176,7 +174,6 @@ def test_payload_from_log_file(dir_name: Path) -> None:
                 "domain_index",
                 "dhw_index",
                 "msg_id",
-                "ufx_index",
                 "ufh_index",
             ):
                 if key not in exp:

@@ -109,6 +109,50 @@ class UfhCircuitDemandDTO:
 
 
 @dataclass(frozen=True, slots=True)
+class UfhCircuitDTO:
+    """CQRS DTO representing a complete UFH circuit snapshot.
+
+    :param ufh_index: Two-character hex circuit identifier.
+    :type ufh_index: str
+    :param zone_index: Associated heating zone index, or None.
+    :type zone_index: str | None
+    :param heat_demand: Heating demand (0.0 to 1.0), or None.
+    :type heat_demand: float | None
+    :param cooling_demand: Cooling demand (0.0 to 1.0), or None.
+    :type cooling_demand: float | None
+    :param circuit_mode: Thermal operating mode or None.
+    :type circuit_mode: ThermalMode | str | None
+    :param setpoint: Target setpoint temperature or None.
+    :type setpoint: float | None
+    :param min_temp: Minimum allowable setpoint or None.
+    :type min_temp: float | None
+    :param max_temp: Maximum allowable setpoint or None.
+    :type max_temp: float | None
+    :param flags: Raw mode/config flags or None.
+    :type flags: int | None
+    """
+
+    ufh_index: str
+    zone_index: str | None = None
+    heat_demand: float | None = None
+    cooling_demand: float | None = None
+    circuit_mode: ThermalMode | str | None = None
+    setpoint: float | None = None
+    min_temp: float | None = None
+    max_temp: float | None = None
+    flags: int | None = None
+
+    @property
+    def circuit_index(self) -> str:
+        """Return the UFH circuit index string.
+
+        :returns: The UFH circuit index.
+        :rtype: str
+        """
+        return self.ufh_index
+
+
+@dataclass(frozen=True, slots=True)
 class ActuatorStateDTO:
     """DTO for heating/boiler actuator state (BDR91/OTB).
 

@@ -150,7 +150,6 @@ from ramses_rf.const import (
     SZ_TEMPERATURES,
     SZ_TIMESTAMP,
     SZ_UFH_INDEX,
-    SZ_UFX_INDEX,
     SZ_UNKNOWN,
     SZ_UNTIL,
     SZ_VALUE,
@@ -317,7 +316,6 @@ class StateProjector:
 
             if (
                 SZ_UFH_INDEX not in payload
-                and SZ_UFX_INDEX not in payload
                 and SZ_ZONE_INDEX not in payload
                 and SZ_DOMAIN_INDEX not in payload
                 and SZ_DOMAIN_ID_WIRE not in payload
@@ -1047,7 +1045,7 @@ class StateProjector:
                     or p.get(SZ_DOMAIN_INDEX)
                 ) == FC:
                     updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-            elif SZ_UFH_INDEX not in p and SZ_UFX_INDEX not in p:
+            elif SZ_UFH_INDEX not in p:
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
         elif msg.code == Code._0008 and SZ_RELAY_DEMAND in p:
@@ -1149,13 +1147,12 @@ class StateProjector:
 
         def _get_circuit(circuit_index: str) -> UfhCircuitState:
             return new_circuits.get(circuit_index) or UfhCircuitState(
-                circuit_index=circuit_index
+                ufh_index=circuit_index
             )
 
         def _get_circuit_index(data: dict[str, Any]) -> str | None:
             for key in (
                 SZ_UFH_INDEX,
-                SZ_UFX_INDEX,
                 SZ_CIRCUIT_INDEX,
                 SZ_ZONE_INDEX,
                 SZ_DOMAIN_OR_ZONE_INDEX,

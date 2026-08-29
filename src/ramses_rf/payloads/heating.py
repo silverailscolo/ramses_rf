@@ -260,7 +260,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
                     "UFC",
                 ):
                     is_ufc = True
-            index_name = "ufx_index" if is_ufc else SZ_ZONE_INDEX
+            index_name = SZ_UFH_INDEX if is_ufc else SZ_ZONE_INDEX
             result[index_name] = f"{index:02X}"
         return result
 

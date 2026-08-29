@@ -12,6 +12,7 @@ from ramses_tx.const import Code
 
 from . import exceptions as exc
 from .const import (
+    SZ_CIRCUIT_INDEX,
     SZ_DOMAIN_INDEX,
     SZ_UFH_INDEX,
     SZ_ZONE_INDEX,
@@ -193,8 +194,7 @@ async def update_topology_schema_state(
             zone_type = p.get("zone_type")
             ufh_index = (
                 p.get(SZ_UFH_INDEX)
-                or p.get("ufh_index")
-                or p.get("circuit_index")
+                or p.get(SZ_CIRCUIT_INDEX)
                 or p.get("cct_index")
             )
 
@@ -389,9 +389,9 @@ async def update_topology_schema_state(
                 ufc_list = list(getattr(tcs, "ufh_controllers", {}).values())
 
             cct_index = (
-                p.get("circuit_index")
+                p.get(SZ_UFH_INDEX)
+                or p.get(SZ_CIRCUIT_INDEX)
                 or p.get("cct_index")
-                or p.get("ufx_index")
             )
             z_index = p.get(SZ_ZONE_INDEX) or p.get("zone_index")
             if cct_index is not None and ufc_list:
