@@ -451,6 +451,15 @@ class UfhCircuit(Child, Entity):
             )
 
     @property
+    def zone(self) -> Zone | None:
+        """Return the associated heating zone entity or None.
+
+        :returns: Associated heating zone entity or None.
+        :rtype: Zone | None
+        """
+        return self._zone
+
+    @property
     def ufh_index(self) -> str:
         """Return the UFH circuit index string.
 

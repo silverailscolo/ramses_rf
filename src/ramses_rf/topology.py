@@ -436,7 +436,7 @@ class Parent[ChildT: Child]:
                     f"not a valid combination for {self}: {child}|{child_id}|{is_sensor}"
                 )
 
-            elif hasattr(self, SZ_CIRCUITS):
+            elif hasattr(self, "circuit_by_id"):
                 circuit_key = str(child_id_val or child)
                 if circuit_key not in self.circuit_by_id:
                     self.circuit_by_id[circuit_key] = child
