@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from ramses_rf.models import HvacState
+from ramses_rf.models.hvac_schemas import _22F1_MODE_ITHO, _22F1_MODE_MAX
 from ramses_rf.strategies.base import HvacStrategyBase
 from ramses_tx.const import Code
 
@@ -20,14 +21,8 @@ class IthoStrategy(HvacStrategyBase):
     """
 
     scheme = "itho"
-    _mode_map = {
-        "00": "off",
-        "01": "trickle",
-        "02": "low",
-        "03": "medium",
-        "04": "high",
-    }
-    _mode_max = "04"
+    _mode_map = _22F1_MODE_ITHO
+    _mode_max = _22F1_MODE_MAX[scheme]
     _binding_codes = (Code._22F1, Code._22F3)
 
     def apply_quirk(

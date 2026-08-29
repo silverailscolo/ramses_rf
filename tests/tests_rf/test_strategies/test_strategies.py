@@ -13,8 +13,12 @@ from __future__ import annotations
 
 import pytest
 
+from ramses_rf.const import SZ_REL_HUMIDITY
+from ramses_rf.quirks import apply_hvac_quirks
 from ramses_rf.strategies import (
     _STRATEGY_BY_SCHEME,
+    ClimaRadStrategy,
+    HvacStrategy,
     IthoStrategy,
     NuaireStrategy,
     OrconStrategy,
@@ -101,6 +105,17 @@ class TestNuaireFanModes:
         assert strategy.mode_max == "0A"
 
 
+class TestClimaRadFanModes:
+    """ClimaRad fan mode mapping."""
+
+    def test_minibox_uses_vasco_mode_map(self) -> None:
+        strategy = ClimaRadStrategy()
+
+        assert strategy.fan_mode_to_hex("off") == "00"
+        assert strategy.fan_mode_to_hex("auto") == "05"
+        assert strategy.mode_max == "06"
+
+
 class TestVascoFanModes:
     """Vasco fan mode mapping."""
 
@@ -167,6 +182,12 @@ class TestOrconDutchAliases:
 class TestBindingCodes:
     """Binding codes per vendor strategy."""
 
+    def test_climarad_binding_codes(self) -> None:
+        codes = ClimaRadStrategy().binding_codes()
+
+        assert Code._22F1 in codes
+        assert Code._22F3 in codes
+
     def test_orcon_binding_codes(self) -> None:
         strategy = OrconStrategy()
         codes = strategy.binding_codes()
@@ -201,6 +222,9 @@ class TestBindingCodes:
 class TestStrategyRegistry:
     """Strategy registry lookup by scheme name."""
 
+    def test_climarad_scheme(self) -> None:
+        assert _STRATEGY_BY_SCHEME["climarad"] is ClimaRadStrategy
+
     def test_orcon_scheme(self) -> None:
         assert _STRATEGY_BY_SCHEME["orcon"] is OrconStrategy
 
@@ -213,8 +237,14 @@ class TestStrategyRegistry:
     def test_vasco_scheme(self) -> None:
         assert _STRATEGY_BY_SCHEME["vasco"] is VascoStrategy
 
-    def test_all_four_schemes_registered(self) -> None:
-        assert len(_STRATEGY_BY_SCHEME) == 4
+    def test_all_configured_schemes_registered(self) -> None:
+        assert set(_STRATEGY_BY_SCHEME) == {
+            "climarad",
+            "itho",
+            "nuaire",
+            "orcon",
+            "vasco",
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -225,24 +255,19 @@ class TestStrategyRegistry:
 class TestProtocolCompliance:
     """Verify all strategies implement the HvacStrategy protocol."""
 
-    def test_orcon_is_hvac_strategy(self) -> None:
-        from ramses_rf.strategies.base import HvacStrategy
+    def test_climarad_is_hvac_strategy(self) -> None:
+        assert isinstance(ClimaRadStrategy(), HvacStrategy)
 
+    def test_orcon_is_hvac_strategy(self) -> None:
         assert isinstance(OrconStrategy(), HvacStrategy)
 
     def test_itho_is_hvac_strategy(self) -> None:
-        from ramses_rf.strategies.base import HvacStrategy
-
         assert isinstance(IthoStrategy(), HvacStrategy)
 
     def test_nuaire_is_hvac_strategy(self) -> None:
-        from ramses_rf.strategies.base import HvacStrategy
-
         assert isinstance(NuaireStrategy(), HvacStrategy)
 
     def test_vasco_is_hvac_strategy(self) -> None:
-        from ramses_rf.strategies.base import HvacStrategy
-
         assert isinstance(VascoStrategy(), HvacStrategy)
 
 
@@ -253,6 +278,9 @@ class TestProtocolCompliance:
 
 class TestSchemeName:
     """Verify each strategy reports the correct scheme name."""
+
+    def test_climarad_scheme_name(self) -> None:
+        assert ClimaRadStrategy().scheme == "climarad"
 
     def test_orcon_scheme_name(self) -> None:
         assert OrconStrategy().scheme == "orcon"
@@ -265,3 +293,36 @@ class TestSchemeName:
 
     def test_vasco_scheme_name(self) -> None:
         assert VascoStrategy().scheme == "vasco"
+
+
+class TestQuirkDispatch:
+    """Verify scheme-specific quirk dispatch."""
+
+    def test_climarad_applies_ventura_12a0_mapping(self) -> None:
+        payload = {
+            "hvac_index": "01",
+            SZ_REL_HUMIDITY: 0.45,
+            "temperature": 18.5,
+        }
+
+        result = apply_hvac_quirks(
+            payload, None, Code._12A0, scheme="climarad"
+        )
+
+        assert SZ_REL_HUMIDITY not in result
+        assert result["supply_temp"] == 18.5
+
+    def test_orcon_does_not_apply_climarad_12a0_mapping(self) -> None:
+        payload = {"hvac_index": "01", "temperature": 18.5}
+
+        result = apply_hvac_quirks(payload, None, Code._12A0, scheme="orcon")
+
+        assert "supply_temp" not in result
+        assert result["temperature"] == 18.5
+
+    def test_unknown_scheme_preserves_legacy_behavior(self) -> None:
+        payload = {"hvac_index": "01", "temperature": 18.5}
+
+        result = apply_hvac_quirks(payload, None, Code._12A0, scheme="unknown")
+
+        assert result["supply_temp"] == 18.5

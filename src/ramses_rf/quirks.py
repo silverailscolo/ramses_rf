@@ -28,18 +28,13 @@ from __future__ import annotations
 from typing import Any
 
 from ramses_rf.models import HvacState
-from ramses_rf.strategies.base import HvacStrategyBase
+from ramses_rf.strategies import _STRATEGY_BY_SCHEME
+from ramses_rf.strategies.climarad import ClimaRadStrategy
 from ramses_rf.strategies.itho import IthoStrategy
-from ramses_rf.strategies.orcon import OrconStrategy
 from ramses_tx.const import Code
 
-# Strategy instances used when no scheme is specified.
-# The current behaviour applies all vendor-specific quirks regardless
-# of vendor.  Step 3 of the roadmap will wire in the scheme parameter
-# so that only the matching strategy's quirks are applied.
-_ORCON = OrconStrategy()
+_CLIMARAD = ClimaRadStrategy()
 _ITHO = IthoStrategy()
-_BASE = HvacStrategyBase()
 
 
 def apply_hvac_quirks(
@@ -70,28 +65,13 @@ def apply_hvac_quirks(
     :return: The safely mutated telemetry dictionary.
     :rtype: dict[str, Any]
     """
-    if scheme is not None:
-        # Use the specific strategy for this scheme
-        from ramses_rf.strategies import _STRATEGY_BY_SCHEME
-
-        strategy_cls = _STRATEGY_BY_SCHEME.get(scheme, HvacStrategyBase)
+    if strategy_cls := _STRATEGY_BY_SCHEME.get(scheme or ""):
         return strategy_cls().apply_quirk(payload, current_state, msg_code)
 
-    # No scheme specified: apply all vendor-specific quirks in order.
-    # This preserves the historical behaviour where all quirks were
-    # applied regardless of vendor.
-    #
-    # Order matters: the 12A0 structural quirk (Orcon) returns early,
-    # so it must be checked first.  Then all-vendor normalisations
-    # (base) are applied, followed by the Itho-specific
-    # exhaust_fan_speed guard.
+    # Preserve the historical scheme-agnostic behavior until Step 3 wires
+    # the device scheme into both call sites. ClimaRad owns the 12A0
+    # structural transformation; Itho adds its 31DA guard after applying
+    # the shared normalizations.
     if msg_code == Code._12A0:
-        return _ORCON.apply_quirk(payload, current_state, msg_code)
-
-    result = _BASE.apply_quirk(payload, current_state, msg_code)
-
-    # Itho-specific: exhaust_fan_speed overwrite prevention
-    if msg_code == Code._31DA and "exhaust_fan_speed" in result:
-        result = _ITHO.apply_quirk(result, current_state, msg_code)
-
-    return result
+        return _CLIMARAD.apply_quirk(payload, current_state, msg_code)
+    return _ITHO.apply_quirk(payload, current_state, msg_code)

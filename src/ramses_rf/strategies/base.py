@@ -23,7 +23,7 @@ class HvacStrategy(Protocol):
     binding codes, and classification heuristics.
     """
 
-    #: Scheme name (``"orcon"``, ``"itho"``, ``"nuaire"``, ``"vasco"``)
+    #: Scheme name (e.g. ``"orcon"``, ``"climarad"``)
     scheme: str
 
     # --- Fan mode mapping ---
@@ -108,7 +108,7 @@ class HvacStrategyBase:
     #: Max mode byte — overridden by subclasses
     _mode_max: str | None = None
 
-    #: Dutch aliases (name → canonical name) — overridden by subclasses
+    #: Aliases (name → canonical name) — overridden by subclasses
     _aliases: dict[str, str] = {}
 
     #: Binding codes — overridden by subclasses

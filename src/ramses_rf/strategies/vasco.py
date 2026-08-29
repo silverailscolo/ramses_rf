@@ -6,6 +6,7 @@ ventilation systems.
 
 from __future__ import annotations
 
+from ramses_rf.models.hvac_schemas import _22F1_MODE_MAX, _22F1_MODE_VASCO
 from ramses_rf.strategies.base import HvacStrategyBase
 from ramses_tx.const import Code
 
@@ -14,13 +15,6 @@ class VascoStrategy(HvacStrategyBase):
     """Strategy for Vasco D60 and ClimaRad Minibox remotes."""
 
     scheme = "vasco"
-    _mode_map = {
-        "00": "off",
-        "01": "away",
-        "02": "low",
-        "03": "medium",
-        "04": "high",
-        "05": "auto",
-    }
-    _mode_max = "06"
+    _mode_map = _22F1_MODE_VASCO
+    _mode_max = _22F1_MODE_MAX[scheme]
     _binding_codes = (Code._22F1, Code._22F3)

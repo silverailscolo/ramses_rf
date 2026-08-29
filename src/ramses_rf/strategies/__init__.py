@@ -10,12 +10,14 @@ See :doc:`roadmap item 5 <https://github.com/ramses-rf/ramses_rf/issues/1093>`.
 from __future__ import annotations
 
 from ramses_rf.strategies.base import HvacStrategy, HvacStrategyBase
+from ramses_rf.strategies.climarad import ClimaRadStrategy
 from ramses_rf.strategies.itho import IthoStrategy
 from ramses_rf.strategies.nuaire import NuaireStrategy
 from ramses_rf.strategies.orcon import OrconStrategy
 from ramses_rf.strategies.vasco import VascoStrategy
 
 __all__ = [
+    "ClimaRadStrategy",
     "HvacStrategy",
     "HvacStrategyBase",
     "IthoStrategy",
@@ -26,8 +28,9 @@ __all__ = [
 
 #: Strategy classes indexed by scheme name
 _STRATEGY_BY_SCHEME: dict[str, type[HvacStrategyBase]] = {
-    "orcon": OrconStrategy,
+    "climarad": ClimaRadStrategy,
     "itho": IthoStrategy,
     "nuaire": NuaireStrategy,
+    "orcon": OrconStrategy,
     "vasco": VascoStrategy,
 }

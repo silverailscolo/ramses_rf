@@ -5,6 +5,7 @@ Vendor-specific behaviour for Nuaire DRI-ECO ventilation systems.
 
 from __future__ import annotations
 
+from ramses_rf.models.hvac_schemas import _22F1_MODE_MAX, _22F1_MODE_NUAIRE
 from ramses_rf.strategies.base import HvacStrategyBase
 from ramses_tx.const import Code
 
@@ -16,12 +17,7 @@ class NuaireStrategy(HvacStrategyBase):
     """
 
     scheme = "nuaire"
-    _mode_map = {
-        "02": "normal",
-        "03": "boost",
-        "09": "heater_off",
-        "0A": "heater_auto",
-    }
-    _mode_max = "0A"
+    _mode_map = _22F1_MODE_NUAIRE
+    _mode_max = _22F1_MODE_MAX[scheme]
     # Nuaire binds with 22F1 only (no 22F3)
     _binding_codes = (Code._22F1,)
