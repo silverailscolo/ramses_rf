@@ -195,6 +195,14 @@ class DeviceBase(Entity):
         """Return the explicit or scheme-selected HVAC strategy."""
         return self._strategy or best_hvac_strategy(self.id, self._scheme)
 
+    def _get_configured_strategy(self) -> HvacStrategy | None:
+        """Return a strategy only when explicitly configured or selected."""
+        if self._strategy:
+            return self._strategy
+        if self._scheme:
+            return best_hvac_strategy(self.id, self._scheme)
+        return None
+
     def _update_traits(self, traits: DeviceTraits) -> None:
         """Update a device with new schema attributes.
 

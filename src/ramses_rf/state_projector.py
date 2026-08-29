@@ -72,6 +72,7 @@ from .const import (
     SZ_ZONE_INDEX,
     DevType,
 )
+from .devices.dev_base import DeviceBase
 from .devices.hvac_ventilators import HvacVentilator
 from .messages import Message
 from .models import StateUpdatedEvent, SystemState
@@ -436,7 +437,9 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         return
 
     strategy = (
-        target._get_strategy() if hasattr(target, "_get_strategy") else None
+        target._get_configured_strategy()
+        if isinstance(target, DeviceBase)
+        else None
     )
     p = quirks.apply_hvac_quirks(
         p, target.hvac_state, msg.code, strategy=strategy
