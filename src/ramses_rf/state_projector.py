@@ -728,11 +728,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         if slug in ("CTL", "UFC"):
             if (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")) == "FC":
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-        elif (
-            "ufx_index" not in p
-            and SZ_UFH_INDEX not in p
-            and "ufh_index" not in p
-        ):
+        elif SZ_UFH_INDEX not in p:
             updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
     if SZ_RELAY_DEMAND in p:

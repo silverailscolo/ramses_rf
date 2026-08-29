@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ramses_rf.const import (
+    DEV_ROLE_MAP,
+    DEV_TYPE_MAP,
+    SZ_CHILD_ID,
+    SZ_DEVICE_ROLE,
+    SZ_DEVICES,
     SZ_UFH_INDEX,
     SZ_ZONE_INDEX,
     SZ_ZONE_TYPE,
@@ -16,6 +22,9 @@ from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
 from ramses_tx.const import Code
+from ramses_tx.typing import DeviceIdT
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class UfhTopologyHandler(TopologyHandler):
@@ -35,31 +44,48 @@ class UfhTopologyHandler(TopologyHandler):
         :returns: None
         :rtype: None
         """
-        is_ufc_src = getattr(msg.src, "type", None) in ("02", DevType.UFC)
-        is_ufc_dst = getattr(msg.dst, "type", None) in ("02", DevType.UFC)
+        is_ufc_src = getattr(msg.src, "type", None) in (
+            DEV_TYPE_MAP.UFC,
+            DevType.UFC,
+            "02",
+        )
+        is_ufc_dst = getattr(msg.dst, "type", None) in (
+            DEV_TYPE_MAP.UFC,
+            DevType.UFC,
+            "02",
+        )
 
-        if not (is_ufc_src or is_ufc_dst):
-            return
-
-        ufc_id = msg.src.id if is_ufc_src else msg.dst.id
+        ufc_id: str | None = (
+            msg.src.id if is_ufc_src else (msg.dst.id if is_ufc_dst else None)
+        )
 
         # Identify the Controller ID if present in the conversation
-        ctl_id = None
-        if getattr(msg.src, "type", None) in ("01", DevType.CTL):
+        ctl_id: str | None = None
+        if getattr(msg.src, "type", None) in (
+            DEV_TYPE_MAP.CTL,
+            DevType.CTL,
+            "01",
+        ):
             ctl_id = msg.src.id
-        elif getattr(msg.dst, "type", None) in ("01", DevType.CTL):
+        elif getattr(msg.dst, "type", None) in (
+            DEV_TYPE_MAP.CTL,
+            DevType.CTL,
+            "01",
+        ):
             ctl_id = msg.dst.id
-        elif getattr(msg.addr3, "type", None) in ("01", DevType.CTL):
+        elif getattr(msg.addr3, "type", None) in (
+            DEV_TYPE_MAP.CTL,
+            DevType.CTL,
+            "01",
+        ):
             ctl_id = msg.addr3.id
 
         # 1. Conversational Binding: Promote and bind if communicating with a Controller
-        if ctl_id and ctl_id != ufc_id:
-            # Explicitly promote to UFC, This prevents HVAC devices from being
-            # falsely flagged and dropped by the strict parser before they can
-            # be routed.
+        if ctl_id and ufc_id and ctl_id != ufc_id:
+            # Explicitly promote to UFC to prevent strict parser dropping
             event_promote = TopologyChangedEvent(
                 action=TopologyAction.UPDATE_DEVICE_CLASS,
-                device_id=ufc_id,
+                device_id=DeviceIdT(ufc_id),
                 metadata={"device_class": DevType.UFC},
                 causation="Rule_UFH_Communication_Promotion",
             )
@@ -68,17 +94,15 @@ class UfhTopologyHandler(TopologyHandler):
             # Bind the UFC to the parent Controller
             event_bind = TopologyChangedEvent(
                 action=TopologyAction.BIND_DEVICE,
-                parent_id=ctl_id,
-                child_id=ufc_id,
-                metadata={"device_role": "ufc"},
+                parent_id=DeviceIdT(ctl_id),
+                child_id=DeviceIdT(ufc_id),
+                metadata={SZ_DEVICE_ROLE: DEV_ROLE_MAP.UFH},
                 causation="Rule_UFH_Communication_Binding",
             )
             self._emit(event_bind)
 
-        # 2. Extract specific circuit topology from 000C configuration packets
-        if is_ufc_src and msg.header.code == Code._000C:
-            # Fallback to direct property check first for legacy compatibility
-            # Bypassing strict typing evaluation by casting to Any
+        # 2. Extract circuit topology from 000C configuration packets
+        if msg.header.code == Code._000C:
             raw_data: Any = msg.data
             zone_type = (
                 raw_data.get(SZ_ZONE_TYPE)
@@ -88,6 +112,7 @@ class UfhTopologyHandler(TopologyHandler):
             if zone_type and zone_type not in (
                 ZON_ROLE_MAP.ACT,
                 ZON_ROLE_MAP.UFH,
+                "09",
             ):
                 return
 
@@ -95,27 +120,37 @@ class UfhTopologyHandler(TopologyHandler):
                 if not isinstance(payload, dict):
                     continue
 
-                ufh_index = payload.get(SZ_UFH_INDEX, payload.get("ufh_index"))
-                zone_index = payload.get(
-                    SZ_ZONE_INDEX, payload.get("zone_index")
-                )
+                target_ufc_id = ufc_id
+                if not target_ufc_id:
+                    for device_id in payload.get(SZ_DEVICES, []):
+                        device_str = str(device_id)
+                        if (
+                            device_str.startswith(f"{DEV_TYPE_MAP.UFC}:")
+                            or device_str.startswith(f"{DevType.UFC}:")
+                            or getattr(device_id, "type", None)
+                            in (DEV_TYPE_MAP.UFC, DevType.UFC, "02")
+                        ):
+                            target_ufc_id = device_str
+                            break
 
-                if ufh_index is not None:
+                ufh_index = payload.get(SZ_UFH_INDEX)
+                zone_index = payload.get(SZ_ZONE_INDEX)
+
+                if target_ufc_id and ufh_index is not None:
+                    zone_index_str = (
+                        str(zone_index) if zone_index is not None else "None"
+                    )
                     event_circuit = TopologyChangedEvent(
                         action=TopologyAction.CREATE_CIRCUIT,
-                        device_id=ufc_id,
+                        device_id=DeviceIdT(target_ufc_id),
                         metadata={
                             SZ_UFH_INDEX: str(ufh_index),
-                            SZ_ZONE_INDEX: str(zone_index)
-                            if zone_index
-                            else "None",
+                            SZ_ZONE_INDEX: zone_index_str,
+                            SZ_CHILD_ID: zone_index_str,
                             "ufh_index": str(ufh_index),
-                            "zone_index": str(zone_index)
-                            if zone_index
-                            else "None",
-                            "child_id": str(zone_index)
-                            if zone_index
-                            else "None",
+                            "zone_index": zone_index_str,
+                            "child_id": zone_index_str,
+                            "tcs_id": str(ctl_id) if ctl_id else "None",
                         },
                         causation="Rule_UFH_000C_Circuit",
                     )
