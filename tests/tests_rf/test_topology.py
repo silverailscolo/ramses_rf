@@ -3,7 +3,7 @@
 """Isolated test to prove ramses_rf Phase 2.95 topology regressions.
 
 This test completely bypasses Home Assistant and ramses_cc to evaluate
-the raw output of the new TopologyBuilder and CentralDispatcher pipelines,
+the raw output of the new TopologyBuilder pipeline,
 using the exact fixtures from the failing CI environment.
 """
 

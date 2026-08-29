@@ -120,8 +120,8 @@ class GatewayLifecycle:
         self.create_sqlite_message_index()
 
         # Initialize the CQRS State Projector with a dummy queue.
-        # We do not call .start() because the Phase 2.75 async cutover is paused.
-        # It will be fed synchronously via the _msg_handler bridge.
+        # The background worker is not started; the projector is fed
+        # synchronously via the gateway._msg_handler bridge.
         if self.state_projector is None:
             self.state_projector = StateProjector(self, asyncio.Queue())
 

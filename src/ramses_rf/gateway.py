@@ -469,7 +469,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         directly from the OSI L7 MessageStore, containing the single most recent
         packet for every unique StateHeader. It strictly maps ``dtm_str`` to a
         dictionary containing ``code``, ``verb``, and ``payload`` to maintain
-        parity with legacy serializers.
+        backward compatibility with downstream consumers.
 
         :param include_expired: Included for backward compatibility, unused.
         :type include_expired: bool
@@ -560,9 +560,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         await process_msg(self, app_msg)
 
-        # Phase 2.95 CQRS Strangler Bridge: Because the Phase 2.99 Async Queue Cutover
-        # is currently paused, we must feed the CQRS StateProjector synchronously
-        # here so the PR 2 Read-Models get properly hydrated in production.
+        # CQRS Strangler Bridge: feed the StateProjector synchronously
+        # so the Read-Models get properly hydrated in production.
         if self.state_projector is not None:
             self.state_projector.process_message_state(app_msg)
 

@@ -413,10 +413,9 @@ class Engine:
         )
 
     async def _msg_handler(self, msg: PacketDTO) -> None:
-        """Process incoming messages from the protocol."""
-        # Safely pass execution to Gateway's extended handling logic
-        handler = getattr(self, "_handle_msg", None)
-        if handler:
-            result = handler(msg)
-            if asyncio.iscoroutine(result):
-                await result
+        """Process incoming messages from the protocol.
+
+        Default no-op handler.  The Gateway overrides this via
+        ``_set_msg_handler`` to route packets through the full
+        inbound pipeline (topology, state projection, etc.).
+        """
