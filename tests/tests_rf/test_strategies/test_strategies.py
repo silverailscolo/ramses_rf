@@ -23,6 +23,7 @@ from ramses_rf.strategies import (
     NuaireStrategy,
     OrconStrategy,
     VascoStrategy,
+    best_hvac_strategy,
 )
 from ramses_tx.const import Code
 
@@ -293,6 +294,37 @@ class TestSchemeName:
 
     def test_vasco_scheme_name(self) -> None:
         assert VascoStrategy().scheme == "vasco"
+
+
+class TestBestHvacStrategy:
+    """Verify HVAC strategy selection."""
+
+    @pytest.mark.parametrize(
+        ("scheme", "strategy_type"),
+        [
+            ("climarad", ClimaRadStrategy),
+            ("itho", IthoStrategy),
+            ("nuaire", NuaireStrategy),
+            ("orcon", OrconStrategy),
+            ("vasco", VascoStrategy),
+        ],
+    )
+    def test_explicit_scheme(
+        self, scheme: str, strategy_type: type[HvacStrategy]
+    ) -> None:
+        strategy = best_hvac_strategy("32:123456", scheme=scheme)
+
+        assert isinstance(strategy, strategy_type)
+
+    def test_default_is_orcon(self) -> None:
+        strategy = best_hvac_strategy("32:123456")
+
+        assert isinstance(strategy, OrconStrategy)
+
+    def test_unknown_scheme_falls_back_to_orcon(self) -> None:
+        strategy = best_hvac_strategy("32:123456", scheme="unknown")
+
+        assert isinstance(strategy, OrconStrategy)
 
 
 class TestQuirkDispatch:
