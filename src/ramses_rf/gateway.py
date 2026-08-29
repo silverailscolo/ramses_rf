@@ -279,8 +279,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         :param device_id: The device ID to look up.
         :type device_id: str
-        :returns: A dict with keys "class" (device slug) and "locked"
-            (whether the user has locked the class), or None.
+        :returns: A dict with keys "class" (device slug), "locked"
+            (whether the user has locked the class), and "faked", or None.
         :rtype: dict[str, Any] | None
         """
         device = self._device_registry.device_by_id.get(DeviceIdT(device_id))
@@ -292,6 +292,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return {
             "class": slug,
             "locked": bool(known.get("_locked", False)),
+            "faked": bool(getattr(device, "is_faked", False)),
         }
 
     def __repr__(self) -> str:
