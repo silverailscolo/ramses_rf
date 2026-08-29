@@ -116,12 +116,11 @@ SYS_KLASS = SimpleNamespace(
 )
 
 
-class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
+class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
     """The TCS base class orchestrating system-level operations."""
 
     _SLUG: str | None = None
 
-    # TODO: check (code so complex, not sure if this is true)
     childs: list[Device]
 
     # Populated by the CQRS state projector (issue 1102).  Declared here

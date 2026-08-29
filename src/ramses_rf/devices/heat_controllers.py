@@ -112,7 +112,7 @@ class RfgGateway(DeviceHeat):  # RFG (30:)
     _STATE_ATTR = None
 
 
-class UfhController(Parent, DeviceHeat):  # UFC (02):
+class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
     """The UFC class, the HCE80 that controls the UFH zones."""
 
     HEAT_DEMAND: Final = SZ_HEAT_DEMAND
@@ -123,9 +123,7 @@ class UfhController(Parent, DeviceHeat):  # UFC (02):
     _child_id = FA
     _iz_controller = True
 
-    childs: list[
-        Child
-    ]  # TODO: check (code so complex, not sure if this is true)
+    childs: list[UfhCircuit]
 
     # 12:27:24.398 067  I --- 02:000921 --:------ 01:191718 3150 002 0360
     # 12:27:24.546 068  I --- 02:000921 --:------ 01:191718 3150 002 065A

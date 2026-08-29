@@ -86,7 +86,7 @@ _LOGGER = logging.getLogger(__name__)
 _TRACE = logging.getLogger("ramses_rf.legacy_trace")
 
 
-class ZoneBase(Child, Parent, Entity):
+class ZoneBase(Child, Parent[Device], Entity):
     """The Zone/DHW base class."""
 
     _SLUG: str | None = None
