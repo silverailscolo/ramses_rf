@@ -16,6 +16,7 @@ class FanParamInfo:
 
 
 _22F1_MODE_MAX: dict[str, str | None] = {
+    "climarad": "06",
     "itho": "04",
     "nuaire": "0A",
     "vasco": "06",
@@ -55,6 +56,7 @@ _22F1_MODE_VASCO: dict[str, str] = {
 }
 
 _22F1_SCHEMES: dict[str, dict[str, str]] = {
+    "climarad": _22F1_MODE_VASCO,
     "itho": _22F1_MODE_ITHO,
     "nuaire": _22F1_MODE_NUAIRE,
     "orcon": _22F1_MODE_ORCON,
