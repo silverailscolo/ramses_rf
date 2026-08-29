@@ -435,7 +435,12 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if hvac_state is None or not dataclasses.is_dataclass(hvac_state):
         return
 
-    p = quirks.apply_hvac_quirks(p, target.hvac_state, msg.code)
+    strategy = (
+        target._get_strategy() if hasattr(target, "_get_strategy") else None
+    )
+    p = quirks.apply_hvac_quirks(
+        p, target.hvac_state, msg.code, strategy=strategy
+    )
 
     fields = [
         SZ_CO2_LEVEL,

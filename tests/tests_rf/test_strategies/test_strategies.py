@@ -338,7 +338,7 @@ class TestQuirkDispatch:
         }
 
         result = apply_hvac_quirks(
-            payload, None, Code._12A0, scheme="climarad"
+            payload, None, Code._12A0, strategy=ClimaRadStrategy()
         )
 
         assert SZ_REL_HUMIDITY not in result
@@ -347,14 +347,16 @@ class TestQuirkDispatch:
     def test_orcon_does_not_apply_climarad_12a0_mapping(self) -> None:
         payload = {"hvac_index": "01", "temperature": 18.5}
 
-        result = apply_hvac_quirks(payload, None, Code._12A0, scheme="orcon")
+        result = apply_hvac_quirks(
+            payload, None, Code._12A0, strategy=OrconStrategy()
+        )
 
         assert "supply_temp" not in result
         assert result["temperature"] == 18.5
 
-    def test_unknown_scheme_preserves_legacy_behavior(self) -> None:
+    def test_no_strategy_preserves_legacy_behavior(self) -> None:
         payload = {"hvac_index": "01", "temperature": 18.5}
 
-        result = apply_hvac_quirks(payload, None, Code._12A0, scheme="unknown")
+        result = apply_hvac_quirks(payload, None, Code._12A0)
 
         assert result["supply_temp"] == 18.5

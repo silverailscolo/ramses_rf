@@ -9,6 +9,7 @@ from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import ZON_MODE_MAP, Code, Verb
 from ramses_rf.enums import Action
+from ramses_rf.strategies import OrconStrategy
 from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.packet import Packet
 
@@ -231,6 +232,20 @@ def test_set_fan_mode_orcon_2byte_default() -> None:
 
     assert dto.payload == expected_payload
     assert str(dto.code) == expected_code
+
+
+def test_set_fan_mode_orcon_strategy_accepts_dutch_alias() -> None:
+    """Orcon strategy accepts Dutch fan mode aliases."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("37:111111"),
+        action=Action.SET_FAN_MODE,
+        data={"fan_mode": "laag", "strategy": OrconStrategy()},
+    )
+
+    dto = build_dto(intent)
+
+    assert dto.payload == "000107"
 
 
 def test_set_fan_mode_orcon_2byte_explicit() -> None:

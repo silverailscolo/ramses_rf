@@ -730,7 +730,14 @@ class StateProjector:
             return
 
         current_state = getattr(target, "hvac_state", None) or HvacState()
-        p = quirks.apply_hvac_quirks(p, current_state, msg.code)
+        strategy = (
+            target._get_strategy()
+            if hasattr(target, "_get_strategy")
+            else None
+        )
+        p = quirks.apply_hvac_quirks(
+            p, current_state, msg.code, strategy=strategy
+        )
 
         updates: dict[str, Any] = {}
 
