@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""RAMSES RF - Unittests for HVAC vendor strategies.
+
+Tests cover:
+- Fan mode mapping (hex ↔ name) for each vendor strategy
+- Dutch aliases for Orcon (bug ramses_cc#995)
+- Binding codes per vendor
+- mode_max per vendor
+- Strategy selection via scheme name
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from ramses_rf.strategies import (
+    _STRATEGY_BY_SCHEME,
+    IthoStrategy,
+    NuaireStrategy,
+    OrconStrategy,
+    VascoStrategy,
+)
+from ramses_tx.const import Code
+
+# ---------------------------------------------------------------------------
+# Fan mode mapping
+# ---------------------------------------------------------------------------
+
+
+class TestOrconFanModes:
+    """Orcon fan mode mapping."""
+
+    @pytest.fixture()
+    def strategy(self) -> OrconStrategy:
+        return OrconStrategy()
+
+    def test_hex_to_fan_mode(self, strategy: OrconStrategy) -> None:
+        assert strategy.hex_to_fan_mode("00") == "away"
+        assert strategy.hex_to_fan_mode("01") == "low"
+        assert strategy.hex_to_fan_mode("06") == "boost"
+        assert strategy.hex_to_fan_mode("07") == "off"
+
+    def test_fan_mode_to_hex(self, strategy: OrconStrategy) -> None:
+        assert strategy.fan_mode_to_hex("away") == "00"
+        assert strategy.fan_mode_to_hex("low") == "01"
+        assert strategy.fan_mode_to_hex("boost") == "06"
+        assert strategy.fan_mode_to_hex("off") == "07"
+
+    def test_mode_max(self, strategy: OrconStrategy) -> None:
+        assert strategy.mode_max == "07"
+
+    def test_fan_modes_dict(self, strategy: OrconStrategy) -> None:
+        modes = strategy.fan_modes
+        assert len(modes) == 8
+        assert "00" in modes
+        assert "07" in modes
+
+    def test_invalid_fan_mode_raises(self, strategy: OrconStrategy) -> None:
+        with pytest.raises(ValueError, match="not valid for scheme 'orcon'"):
+            strategy.fan_mode_to_hex("nonexistent")
+
+
+class TestIthoFanModes:
+    """Itho fan mode mapping."""
+
+    @pytest.fixture()
+    def strategy(self) -> IthoStrategy:
+        return IthoStrategy()
+
+    def test_hex_to_fan_mode(self, strategy: IthoStrategy) -> None:
+        assert strategy.hex_to_fan_mode("00") == "off"
+        assert strategy.hex_to_fan_mode("01") == "trickle"
+        assert strategy.hex_to_fan_mode("04") == "high"
+
+    def test_fan_mode_to_hex(self, strategy: IthoStrategy) -> None:
+        assert strategy.fan_mode_to_hex("off") == "00"
+        assert strategy.fan_mode_to_hex("high") == "04"
+
+    def test_mode_max(self, strategy: IthoStrategy) -> None:
+        assert strategy.mode_max == "04"
+
+
+class TestNuaireFanModes:
+    """Nuaire fan mode mapping."""
+
+    @pytest.fixture()
+    def strategy(self) -> NuaireStrategy:
+        return NuaireStrategy()
+
+    def test_hex_to_fan_mode(self, strategy: NuaireStrategy) -> None:
+        assert strategy.hex_to_fan_mode("02") == "normal"
+        assert strategy.hex_to_fan_mode("03") == "boost"
+        assert strategy.hex_to_fan_mode("09") == "heater_off"
+        assert strategy.hex_to_fan_mode("0A") == "heater_auto"
+
+    def test_fan_mode_to_hex(self, strategy: NuaireStrategy) -> None:
+        assert strategy.fan_mode_to_hex("normal") == "02"
+        assert strategy.fan_mode_to_hex("boost") == "03"
+
+    def test_mode_max(self, strategy: NuaireStrategy) -> None:
+        assert strategy.mode_max == "0A"
+
+
+class TestVascoFanModes:
+    """Vasco fan mode mapping."""
+
+    @pytest.fixture()
+    def strategy(self) -> VascoStrategy:
+        return VascoStrategy()
+
+    def test_hex_to_fan_mode(self, strategy: VascoStrategy) -> None:
+        assert strategy.hex_to_fan_mode("00") == "off"
+        assert strategy.hex_to_fan_mode("01") == "away"
+        assert strategy.hex_to_fan_mode("05") == "auto"
+
+    def test_fan_mode_to_hex(self, strategy: VascoStrategy) -> None:
+        assert strategy.fan_mode_to_hex("off") == "00"
+        assert strategy.fan_mode_to_hex("auto") == "05"
+
+    def test_mode_max(self, strategy: VascoStrategy) -> None:
+        assert strategy.mode_max == "06"
+
+
+# ---------------------------------------------------------------------------
+# Dutch aliases (bug ramses_cc#995)
+# ---------------------------------------------------------------------------
+
+
+class TestOrconDutchAliases:
+    """Orcon Dutch fan mode aliases for bug ramses_cc#995."""
+
+    @pytest.fixture()
+    def strategy(self) -> OrconStrategy:
+        return OrconStrategy()
+
+    def test_dutch_away(self, strategy: OrconStrategy) -> None:
+        assert strategy.fan_mode_to_hex("afwezig") == "00"
+
+    def test_dutch_low(self, strategy: OrconStrategy) -> None:
+        assert strategy.fan_mode_to_hex("laag") == "01"
+
+    def test_dutch_high(self, strategy: OrconStrategy) -> None:
+        assert strategy.fan_mode_to_hex("hoog") == "03"
+
+    def test_dutch_off(self, strategy: OrconStrategy) -> None:
+        assert strategy.fan_mode_to_hex("uit") == "07"
+
+    def test_dutch_medium_is_canonical(self, strategy: OrconStrategy) -> None:
+        # "medium" is the same in Dutch and English
+        assert strategy.fan_mode_to_hex("medium") == "02"
+
+    def test_hex_to_fan_mode_returns_canonical(
+        self, strategy: OrconStrategy
+    ) -> None:
+        # Even if input was a Dutch alias, hex_to_fan_mode returns
+        # the canonical English name
+        hex_code = strategy.fan_mode_to_hex("afwezig")
+        assert hex_code == "00"
+        assert strategy.hex_to_fan_mode(hex_code) == "away"
+
+
+# ---------------------------------------------------------------------------
+# Binding codes
+# ---------------------------------------------------------------------------
+
+
+class TestBindingCodes:
+    """Binding codes per vendor strategy."""
+
+    def test_orcon_binding_codes(self) -> None:
+        strategy = OrconStrategy()
+        codes = strategy.binding_codes()
+        assert Code._22F1 in codes
+        assert Code._22F3 in codes
+
+    def test_itho_binding_codes(self) -> None:
+        strategy = IthoStrategy()
+        codes = strategy.binding_codes()
+        assert Code._22F1 in codes
+        assert Code._22F3 in codes
+
+    def test_nuaire_binding_codes(self) -> None:
+        strategy = NuaireStrategy()
+        codes = strategy.binding_codes()
+        assert Code._22F1 in codes
+        # Nuaire uses 22F1 only (no 22F3)
+        assert Code._22F3 not in codes
+
+    def test_vasco_binding_codes(self) -> None:
+        strategy = VascoStrategy()
+        codes = strategy.binding_codes()
+        assert Code._22F1 in codes
+        assert Code._22F3 in codes
+
+
+# ---------------------------------------------------------------------------
+# Strategy registry
+# ---------------------------------------------------------------------------
+
+
+class TestStrategyRegistry:
+    """Strategy registry lookup by scheme name."""
+
+    def test_orcon_scheme(self) -> None:
+        assert _STRATEGY_BY_SCHEME["orcon"] is OrconStrategy
+
+    def test_itho_scheme(self) -> None:
+        assert _STRATEGY_BY_SCHEME["itho"] is IthoStrategy
+
+    def test_nuaire_scheme(self) -> None:
+        assert _STRATEGY_BY_SCHEME["nuaire"] is NuaireStrategy
+
+    def test_vasco_scheme(self) -> None:
+        assert _STRATEGY_BY_SCHEME["vasco"] is VascoStrategy
+
+    def test_all_four_schemes_registered(self) -> None:
+        assert len(_STRATEGY_BY_SCHEME) == 4
+
+
+# ---------------------------------------------------------------------------
+# Protocol compliance
+# ---------------------------------------------------------------------------
+
+
+class TestProtocolCompliance:
+    """Verify all strategies implement the HvacStrategy protocol."""
+
+    def test_orcon_is_hvac_strategy(self) -> None:
+        from ramses_rf.strategies.base import HvacStrategy
+
+        assert isinstance(OrconStrategy(), HvacStrategy)
+
+    def test_itho_is_hvac_strategy(self) -> None:
+        from ramses_rf.strategies.base import HvacStrategy
+
+        assert isinstance(IthoStrategy(), HvacStrategy)
+
+    def test_nuaire_is_hvac_strategy(self) -> None:
+        from ramses_rf.strategies.base import HvacStrategy
+
+        assert isinstance(NuaireStrategy(), HvacStrategy)
+
+    def test_vasco_is_hvac_strategy(self) -> None:
+        from ramses_rf.strategies.base import HvacStrategy
+
+        assert isinstance(VascoStrategy(), HvacStrategy)
+
+
+# ---------------------------------------------------------------------------
+# Scheme name
+# ---------------------------------------------------------------------------
+
+
+class TestSchemeName:
+    """Verify each strategy reports the correct scheme name."""
+
+    def test_orcon_scheme_name(self) -> None:
+        assert OrconStrategy().scheme == "orcon"
+
+    def test_itho_scheme_name(self) -> None:
+        assert IthoStrategy().scheme == "itho"
+
+    def test_nuaire_scheme_name(self) -> None:
+        assert NuaireStrategy().scheme == "nuaire"
+
+    def test_vasco_scheme_name(self) -> None:
+        assert VascoStrategy().scheme == "vasco"
