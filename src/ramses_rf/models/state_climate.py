@@ -316,7 +316,7 @@ class ActuatorState:
     """State for boiler and heating actuators (e.g., BDR91).
 
     Tracks appliance relay modulation, central heating activation, hot
-    water status, flame sensor telemetry, and pump relays.
+    water status, flame sensor telemetry, and cycle countdowns.
 
     :param modulation_level: Active boiler modulation level (0.0 to
         1.0).
@@ -326,24 +326,11 @@ class ActuatorState:
     :type actuator_enabled: bool | None
     :param ch_active: Flag indicating central heating demand active.
     :type ch_active: bool | None
-    :param ch_enabled: Flag indicating central heating permitted.
-    :type ch_enabled: bool | None
     :param dhw_active: Flag indicating domestic hot water demand
         active.
     :type dhw_active: bool | None
     :param flame_active: Flag indicating active boiler burner flame.
     :type flame_active: bool | None
-    :param ch_setpoint: Central heating supply water setpoint
-        temperature.
-    :type ch_setpoint: float | None
-    :param cool_active: Flag indicating cooling actuation active.
-    :type cool_active: bool | None
-    :param flame_on: Flag indicating burner flame ignition status.
-    :type flame_on: bool | None
-    :param max_rel_modulation: Maximum relative modulation limit.
-    :type max_rel_modulation: float | None
-    :param pump_relay_state: Pump relay operating state enum, or None.
-    :type pump_relay_state: PumpRelayState | None
     :param actuator_countdown: Actuator timeout countdown integer.
     :type actuator_countdown: int | None
     :param cycle_countdown: Heating cycle countdown integer, or None.
@@ -355,15 +342,8 @@ class ActuatorState:
     modulation_level: float | None = None
     actuator_enabled: bool | None = None
     ch_active: bool | None = None
-    ch_enabled: bool | None = None
     dhw_active: bool | None = None
     flame_active: bool | None = None
-    # Legacy payload restorations for ramses_cc backwards compatibility
-    ch_setpoint: float | None = None
-    cool_active: bool | None = None
-    flame_on: bool | None = None
-    max_rel_modulation: float | None = None
-    pump_relay_state: PumpRelayState | None = None
     actuator_countdown: int | None = None
     cycle_countdown: int | None = None
     last_updated: dt = field(default_factory=_now_utc)

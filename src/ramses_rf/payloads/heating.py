@@ -12,28 +12,70 @@ from typing import Any, ClassVar, Self
 from ramses_rf.const import (
     DEV_ROLE_MAP,
     SZ_ACCEPT,
+    SZ_ACTUATOR_COUNTDOWN,
+    SZ_ACTUATOR_SYNC,
     SZ_BINDINGS,
+    SZ_CH_ACTIVE,
+    SZ_CH_ENABLED,
+    SZ_CH_SETPOINT,
     SZ_CONFIRM,
+    SZ_COOLING_ACTIVE,
+    SZ_CYCLE_COUNTDOWN,
+    SZ_CYCLE_RATE,
+    SZ_DEVICE_ROLE,
+    SZ_DEVICES,
+    SZ_DHW_ACTIVE,
     SZ_DOMAIN_INDEX,
+    SZ_DURATION,
+    SZ_FLAME_ACTIVE,
+    SZ_FRAGMENT,
     SZ_FRAGMENT_NUMBER,
+    SZ_HEAT_DEMAND,
+    SZ_HEAT_DEMAND_FAULT,
+    SZ_LOCAL_OVERRIDE,
+    SZ_MAX_FLOW_SETPOINT,
+    SZ_MAX_REL_MODULATION,
+    SZ_MAX_TEMP,
+    SZ_MIN_FLOW_SETPOINT,
+    SZ_MIN_OFF_TIME,
+    SZ_MIN_ON_TIME,
+    SZ_MIN_TEMP,
+    SZ_MODE,
+    SZ_MODULATION_LEVEL,
+    SZ_MULTIROOM_MODE,
+    SZ_NAME,
     SZ_OFFER,
+    SZ_OPENWINDOW_FUNCTION,
     SZ_PHASE,
+    SZ_PRESSURE,
+    SZ_PROPORTIONAL_BAND_WIDTH,
     SZ_PUMP_RELAY_STATE,
+    SZ_PUMP_RUN_TIME,
+    SZ_RELAY_DEMAND,
+    SZ_SETPOINT,
+    SZ_SYNC_FLAG,
+    SZ_TEMPERATURE,
     SZ_TOTAL_FRAGMENTS,
     SZ_UFH_INDEX,
+    SZ_UNTIL,
+    SZ_VALVE_RUN_TIME,
+    SZ_ZONE_CLASS,
     SZ_ZONE_INDEX,
+    SZ_ZONE_MASK,
+    SZ_ZONE_TYPE,
     ZON_MODE_MAP,
     ZON_ROLE_MAP,
     Code,
     Verb,
 )
-from ramses_rf.enums import PumpRelayState
+from ramses_rf.enums import DevType, PumpRelayState
 from ramses_tx.address import (
     ALL_DEV_ADDR,
     NON_DEV_ADDR,
     Address,
     hex_id_to_dev_id,
 )
+from ramses_tx.const import F9, FA, FC
 from ramses_tx.helpers import hex_from_dtm, hex_to_dtm, hex_to_percent
 from ramses_tx.typing import DeviceIdT
 
@@ -161,11 +203,11 @@ class HeatDemand1BPayload(HeatDemandPayload):
         :rtype: dict[str, Any]
         """
         if self.demand_percent == 0xF2:
-            return {"heat_demand_fault": "unavailable"}
+            return {SZ_HEAT_DEMAND_FAULT: "unavailable"}
         value = self.demand_percent / 200.0
         if value == 1.01:
             value = 1.0
-        return {"heat_demand": value}
+        return {SZ_HEAT_DEMAND: value}
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,15 +282,15 @@ class HeatDemand2BPayload(HeatDemandPayload):
         :rtype: dict[str, Any]
         """
         if self.demand_percent == 0xF2:
-            result: dict[str, Any] = {"heat_demand_fault": "unavailable"}
+            result: dict[str, Any] = {SZ_HEAT_DEMAND_FAULT: "unavailable"}
         else:
             value = self.demand_percent / 200.0
             if value == 1.01:
                 value = 1.0
-            result = {"heat_demand": value}
+            result = {SZ_HEAT_DEMAND: value}
         index = self.domain_or_zone_index
         if index >= 0xF0:
-            result[SZ_DOMAIN_INDEX] = "FC" if index == 0xFC else f"{index:02X}"
+            result[SZ_DOMAIN_INDEX] = FC if index == 0xFC else f"{index:02X}"
         else:
             is_ufc = False
             if msg is not None and getattr(msg, "src", None) is not None:
@@ -257,7 +299,7 @@ class HeatDemand2BPayload(HeatDemandPayload):
                     msg.src, "type", ""
                 ) in (
                     "02",
-                    "UFC",
+                    DevType.UFC,
                 ):
                     is_ufc = True
             index_name = SZ_UFH_INDEX if is_ufc else SZ_ZONE_INDEX
@@ -384,7 +426,7 @@ class Temperature2BPayload(TemperaturePayload):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert 2-byte temperature payload to legacy dictionary layout."""
-        return {"temperature": self.temperature}
+        return {SZ_TEMPERATURE: self.temperature}
 
 
 @dataclass(frozen=True, slots=True)
@@ -415,7 +457,7 @@ class Temperature3BPayload(TemperaturePayload):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
 
     @classmethod
@@ -446,7 +488,7 @@ class Temperature3BPayload(TemperaturePayload):
             if isinstance(self.zone_index, int)
             else str(self.zone_index)
         )
-        return {SZ_ZONE_INDEX: index_str, "temperature": self.temperature}
+        return {SZ_ZONE_INDEX: index_str, SZ_TEMPERATURE: self.temperature}
 
 
 # Update VARIANTS property after variants are defined
@@ -501,7 +543,7 @@ class ScheduleFragmentPayload(PayloadBase):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
 
     @classmethod
@@ -579,7 +621,7 @@ class ScheduleFragmentPayload(PayloadBase):
             else None,
         }
         if self.fragment_bytes:
-            result["fragment"] = self.fragment_bytes.hex().upper()
+            result[SZ_FRAGMENT] = self.fragment_bytes.hex().upper()
         return result
 
 
@@ -814,11 +856,11 @@ class SystemSync1BPayload(SystemSyncPayload):
     def to_dict(self) -> dict[str, Any]:
         """Convert 1-byte system sync payload to legacy dictionary layout."""
         return {
-            "sync_flag": self.sync_flag,
-            "max_flow_setpoint": None,
-            "min_flow_setpoint": None,
-            "valve_run_time": None,
-            "pump_run_time": None,
+            SZ_SYNC_FLAG: self.sync_flag,
+            SZ_MAX_FLOW_SETPOINT: None,
+            SZ_MIN_FLOW_SETPOINT: None,
+            SZ_VALVE_RUN_TIME: None,
+            SZ_PUMP_RUN_TIME: None,
         }
 
 
@@ -965,13 +1007,13 @@ class SystemSyncVarPayload(SystemSyncPayload):
 
         result[SZ_ZONE_INDEX] = f"{self.sync_flag:02X}"
         if self.max_flow_setpoint is not None:
-            result["max_flow_setpoint"] = self.max_flow_setpoint
+            result[SZ_MAX_FLOW_SETPOINT] = self.max_flow_setpoint
         if self.min_flow_setpoint is not None:
-            result["min_flow_setpoint"] = self.min_flow_setpoint
+            result[SZ_MIN_FLOW_SETPOINT] = self.min_flow_setpoint
         if self.valve_run_time is not None:
-            result["valve_run_time"] = self.valve_run_time
+            result[SZ_VALVE_RUN_TIME] = self.valve_run_time
         if self.pump_run_time is not None:
-            result["pump_run_time"] = self.pump_run_time
+            result[SZ_PUMP_RUN_TIME] = self.pump_run_time
         if self._boolean_cc is not None:
             result["boolean_cc"] = self._boolean_cc
         return result
@@ -1177,7 +1219,7 @@ class ZoneConfigPayload(PayloadBase):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
 
     @classmethod
@@ -1278,11 +1320,11 @@ class ZoneConfigPayload(PayloadBase):
             index = f"{index:02X}"
         return {
             SZ_ZONE_INDEX: index,
-            "min_temp": self.min_temp,
-            "max_temp": self.max_temp,
-            "local_override": not bool(bitmap & 1),
-            "openwindow_function": not bool(bitmap & 2),
-            "multiroom_mode": not bool(bitmap & 16),
+            SZ_MIN_TEMP: self.min_temp,
+            SZ_MAX_TEMP: self.max_temp,
+            SZ_LOCAL_OVERRIDE: not bool(bitmap & 1),
+            SZ_OPENWINDOW_FUNCTION: not bool(bitmap & 2),
+            SZ_MULTIROOM_MODE: not bool(bitmap & 16),
         }
 
 
@@ -1364,7 +1406,7 @@ class ZoneName22BPayload(ZoneNamePayload):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
 
     @classmethod
@@ -1417,7 +1459,7 @@ class ZoneName22BPayload(ZoneNamePayload):
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
-        return {SZ_ZONE_INDEX: index_str, "name": self.name}
+        return {SZ_ZONE_INDEX: index_str, SZ_NAME: self.name}
 
 
 @dataclass(frozen=True, slots=True)
@@ -1448,7 +1490,7 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
 
     @classmethod
@@ -1491,7 +1533,7 @@ class ZoneNameShort3BPayload(ZoneNamePayload):
             if isinstance(self.zone_index, int)
             else self.zone_index
         )
-        return {SZ_ZONE_INDEX: index_str, "setpoint": self.setpoint_temp}
+        return {SZ_ZONE_INDEX: index_str, SZ_SETPOINT: self.setpoint_temp}
 
 
 # Update VARIANTS property after variants are defined
@@ -1594,7 +1636,7 @@ class OutdoorTempPayload(PayloadBase):
         :returns: Decoded temperature dictionary.
         :rtype: dict[str, Any]
         """
-        result: dict[str, Any] = {"temperature": self.temperature}
+        result: dict[str, Any] = {SZ_TEMPERATURE: self.temperature}
         if self._units is not None:
             result["units"] = {
                 "00": "Celsius",
@@ -1687,7 +1729,7 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
 
     @classmethod
@@ -1744,7 +1786,7 @@ class ZoneSetpoint3BPayload(ZoneSetpointPayload):
         )
         return {
             SZ_ZONE_INDEX: index_str,
-            "setpoint": self.setpoint_temp,
+            SZ_SETPOINT: self.setpoint_temp,
         }
 
 
@@ -1823,7 +1865,7 @@ class FlowTempPayload(PayloadBase):
         :returns: Decoded flow temperature dictionary.
         :rtype: dict[str, Any]
         """
-        return {"temperature": self.temperature}
+        return {SZ_TEMPERATURE: self.temperature}
 
 
 # ----------------------------------------------------------------------
@@ -1862,8 +1904,8 @@ class SystemZonesPayload(PayloadBase):
         self, msg: Any = None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Convert system zones payload to legacy dictionary layout."""
-        z_type = getattr(self, "zone_type", 0)
-        z_mask = getattr(self, "zone_mask", 0)
+        z_type = getattr(self, SZ_ZONE_TYPE, 0)
+        z_mask = getattr(self, SZ_ZONE_MASK, 0)
 
         type_str = f"{z_type:02X}"
         zone_class = ZON_ROLE_MAP.get(
@@ -1873,9 +1915,9 @@ class SystemZonesPayload(PayloadBase):
         bits = [(z_mask >> i) & 1 for i in range(16)]
 
         return {
-            "zone_type": type_str,
-            "zone_mask": bits,
-            "zone_class": zone_class,
+            SZ_ZONE_TYPE: type_str,
+            SZ_ZONE_MASK: bits,
+            SZ_ZONE_CLASS: zone_class,
         }
 
     @classmethod
@@ -2108,10 +2150,10 @@ class RelayDemand2BPayload(RelayDemandPayload):
         # domain_index is included so that _update_demand_state can
         # populate the TCS's per-domain _relay_demands dict (issue 1102).
         idx = self.domain_or_zone_index
-        domain = "FC" if idx == 0xFC else f"{idx:02X}"
+        domain = FC if idx == 0xFC else f"{idx:02X}"
         return {
             SZ_DOMAIN_INDEX: domain,
-            "relay_demand": self.demand_percent,
+            SZ_RELAY_DEMAND: self.demand_percent,
         }
 
 
@@ -2193,8 +2235,8 @@ class ZoneDevicesPayload(PayloadBase):
             device_role = DEV_ROLE_MAP.get(role_hex, role_hex)
 
         result: dict[str, Any] = {
-            "zone_type": role_hex,
-            "device_role": device_role,
+            SZ_ZONE_TYPE: role_hex,
+            SZ_DEVICE_ROLE: device_role,
         }
 
         if role_hex == "09":
@@ -2205,7 +2247,7 @@ class ZoneDevicesPayload(PayloadBase):
                     msg.src, "type", ""
                 ) in (
                     "02",
-                    "UFC",
+                    DevType.UFC,
                 ):
                     is_ufc_device = True
 
@@ -2215,17 +2257,17 @@ class ZoneDevicesPayload(PayloadBase):
             else:
                 result[SZ_ZONE_INDEX] = f"{z_raw:02X}"
         elif role_hex in ("0D", "0E"):
-            result[SZ_DOMAIN_INDEX] = "FA" if z_raw == 0 else "F9"
+            result[SZ_DOMAIN_INDEX] = FA if z_raw == 0 else F9
         elif role_hex == "0F":
-            result[SZ_DOMAIN_INDEX] = "FC"
+            result[SZ_DOMAIN_INDEX] = FC
         else:
             result[SZ_ZONE_INDEX] = f"{z_raw:02X}"
 
         dev_hex = f"{dev_raw:06X}"
         if dev_hex in ("7FFFFF", "FFFFFF", "000000"):
-            result["devices"] = []
+            result[SZ_DEVICES] = []
         else:
-            result["devices"] = [Address.convert_from_hex(dev_hex)]
+            result[SZ_DEVICES] = [Address.convert_from_hex(dev_hex)]
 
         return result
 
@@ -2235,9 +2277,9 @@ class ZoneDevicesPayload(PayloadBase):
         role_id = getattr(self, "device_role_id", 0)
         z_raw = getattr(self, "zone_index_raw", 0)
         if role_id == 0x0F:
-            return "FC"
+            return FC
         if role_id in (0x0E, 0x0D):
-            return "FA" if z_raw == 0 else "F9"
+            return FA if z_raw == 0 else F9
         return None
 
     @property
@@ -2471,7 +2513,7 @@ class MaxChSetpointPayload(PayloadBase):
         :returns: Decoded setpoint dictionary.
         :rtype: dict[str, Any]
         """
-        return {"setpoint": self.setpoint_temp}
+        return {SZ_SETPOINT: self.setpoint_temp}
 
 
 # ----------------------------------------------------------------------
@@ -2675,10 +2717,10 @@ class TpiParams4BPayload(TpiParamsPayload):
         )
         return {
             SZ_DOMAIN_INDEX: dom,
-            "cycle_rate": self.cycle_rate,
-            "min_on_time": self.min_on_time,
-            "min_off_time": self.min_off_time,
-            "proportional_band_width": None,
+            SZ_CYCLE_RATE: self.cycle_rate,
+            SZ_MIN_ON_TIME: self.min_on_time,
+            SZ_MIN_OFF_TIME: self.min_off_time,
+            SZ_PROPORTIONAL_BAND_WIDTH: None,
         }
 
 
@@ -2780,10 +2822,10 @@ class TpiParams8BPayload(TpiParamsPayload):
         )
         return {
             SZ_DOMAIN_INDEX: dom,
-            "cycle_rate": self.cycle_rate,
-            "min_on_time": self.min_on_time,
-            "min_off_time": self.min_off_time,
-            "proportional_band_width": self.proportional_band_width,
+            SZ_CYCLE_RATE: self.cycle_rate,
+            SZ_MIN_ON_TIME: self.min_on_time,
+            SZ_MIN_OFF_TIME: self.min_off_time,
+            SZ_PROPORTIONAL_BAND_WIDTH: self.proportional_band_width,
         }
 
 
@@ -2856,7 +2898,7 @@ class ChPressurePayload(PayloadBase):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert CH pressure payload to legacy dictionary layout."""
-        return {"pressure": self.pressure_bar}
+        return {SZ_PRESSURE: self.pressure_bar}
 
 
 # ----------------------------------------------------------------------
@@ -2965,7 +3007,7 @@ class ZoneMode4BPayload(ZoneModePayload):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
@@ -3029,8 +3071,8 @@ class ZoneMode4BPayload(ZoneModePayload):
         )
         return {
             SZ_ZONE_INDEX: index_str,
-            "mode": mode_str,
-            "setpoint": self.setpoint_temp,
+            SZ_MODE: mode_str,
+            SZ_SETPOINT: self.setpoint_temp,
         }
 
 
@@ -3073,7 +3115,7 @@ class ZoneMode7BPayload(ZoneModePayload):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
@@ -3148,11 +3190,11 @@ class ZoneMode7BPayload(ZoneModePayload):
         )
         result: dict[str, Any] = {
             SZ_ZONE_INDEX: index_str,
-            "mode": mode_str,
-            "setpoint": self.setpoint_temp,
+            SZ_MODE: mode_str,
+            SZ_SETPOINT: self.setpoint_temp,
         }
         if self.duration_minutes is not None:
-            result["duration"] = self.duration_minutes
+            result[SZ_DURATION] = self.duration_minutes
         return result
 
 
@@ -3196,7 +3238,7 @@ class ZoneMode13BPayload(ZoneModePayload):
         """Normalise index arguments."""
         if isinstance(self.zone_index, str):
             object.__setattr__(
-                self, "zone_index", parse_index(self.zone_index)
+                self, SZ_ZONE_INDEX, parse_index(self.zone_index)
             )
         if isinstance(self.mode_code, str):
             object.__setattr__(self, "mode_code", int(self.mode_code, 16))
@@ -3286,13 +3328,13 @@ class ZoneMode13BPayload(ZoneModePayload):
         )
         result: dict[str, Any] = {
             SZ_ZONE_INDEX: index_str,
-            "mode": mode_str,
-            "setpoint": self.setpoint_temp,
+            SZ_MODE: mode_str,
+            SZ_SETPOINT: self.setpoint_temp,
         }
         if self.duration_minutes is not None:
-            result["duration"] = self.duration_minutes
+            result[SZ_DURATION] = self.duration_minutes
         if self.until_dtm is not None:
-            result["until"] = self.until_dtm
+            result[SZ_UNTIL] = self.until_dtm
         return result
 
 
@@ -3373,7 +3415,7 @@ class SetpointOverridePayload(PayloadBase):
         :returns: Decoded setpoint override dictionary.
         :rtype: dict[str, Any]
         """
-        return {"setpoint": self.target_temp}
+        return {SZ_SETPOINT: self.target_temp}
 
 
 # ----------------------------------------------------------------------
@@ -3447,7 +3489,7 @@ class ActuatorSyncPayload(PayloadBase):
         :returns: Decoded actuator sync dictionary.
         :rtype: dict[str, Any]
         """
-        return {"actuator_sync": self.sync_flag in (0xC8, 0xFF)}
+        return {SZ_ACTUATOR_SYNC: self.sync_flag in (0xC8, 0xFF)}
 
 
 # ----------------------------------------------------------------------
@@ -3612,30 +3654,30 @@ class ActuatorStatePayload(PayloadBase):
         :rtype: dict[str, Any]
         """
         result: dict[str, Any] = {
-            "modulation_level": self.modulation_level,
+            SZ_MODULATION_LEVEL: self.modulation_level,
         }
         if self.flags_3 is not None:
             f3 = self.flags_3
             result.update(
                 {
-                    "ch_active": bool(f3 & (1 << 1)),
-                    "dhw_active": bool(f3 & (1 << 2)),
-                    "flame_on": bool(f3 & (1 << 3)),
-                    "cool_active": bool(f3 & (1 << 4)),
+                    SZ_CH_ACTIVE: bool(f3 & (1 << 1)),
+                    SZ_DHW_ACTIVE: bool(f3 & (1 << 2)),
+                    SZ_FLAME_ACTIVE: bool(f3 & (1 << 3)),
+                    SZ_COOLING_ACTIVE: bool(f3 & (1 << 4)),
                 }
             )
         if self.flags_6 is not None:
-            result["ch_enabled"] = bool(self.flags_6 & (1 << 0))
+            result[SZ_CH_ENABLED] = bool(self.flags_6 & (1 << 0))
         if self.ch_setpoint is not None:
-            result["ch_setpoint"] = self.ch_setpoint
+            result[SZ_CH_SETPOINT] = self.ch_setpoint
         if self.max_rel_modulation is not None:
-            result["max_rel_modulation"] = self.max_rel_modulation
+            result[SZ_MAX_REL_MODULATION] = self.max_rel_modulation
 
         if (
             self.unknown_4 is not None
             and self.flags_3 is not None
             and getattr(getattr(msg, "src", None), "type", None)
-            in ("02", "UFC")
+            in ("02", DevType.UFC)
         ):
             relay_byte = self.flags_3
             result[SZ_PUMP_RELAY_STATE] = (
@@ -3693,11 +3735,11 @@ class ActuatorCyclePayload(PayloadBase):
     def to_dict(self, msg: Any = None) -> dict[str, Any]:
         """Convert actuator cycle payload to legacy dictionary layout."""
         return {
-            "cycle_countdown": getattr(self, "cycle_countdown_sec", None),
-            "actuator_countdown": getattr(
+            SZ_CYCLE_COUNTDOWN: getattr(self, "cycle_countdown_sec", None),
+            SZ_ACTUATOR_COUNTDOWN: getattr(
                 self, "actuator_countdown_sec", None
             ),
-            "modulation_level": getattr(self, "modulation_level", None),
+            SZ_MODULATION_LEVEL: getattr(self, SZ_MODULATION_LEVEL, None),
         }
 
     @classmethod

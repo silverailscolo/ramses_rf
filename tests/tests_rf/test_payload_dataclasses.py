@@ -1224,8 +1224,8 @@ def test_actuator_state_payload_3ef0_4byte_parity() -> None:
         "modulation_level": 0.5,
         "ch_active": False,
         "dhw_active": False,
-        "flame_on": False,
-        "cool_active": True,
+        "flame_active": False,
+        "cooling_active": True,
     }
 
 
@@ -1254,8 +1254,8 @@ def test_actuator_state_payload_3ef0_9byte_parity() -> None:
         "modulation_level": 0.5,
         "ch_active": False,
         "dhw_active": False,
-        "flame_on": False,
-        "cool_active": True,
+        "flame_active": False,
+        "cooling_active": True,
         "ch_enabled": True,
         "ch_setpoint": 20,
         "max_rel_modulation": 1.0,
