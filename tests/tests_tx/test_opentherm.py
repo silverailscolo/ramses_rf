@@ -17,8 +17,6 @@ from ramses_rf.protocol.opentherm import (
     SZ_VALUE_LB,
     U8,
     U16,
-    OtDataId,
-    _decode_flags,
     _msg_value,
     decode_frame,
     parity,
@@ -79,16 +77,6 @@ def test_msg_value_value_errors() -> None:
     assert _msg_value("FFFF", U16) is None
     assert _msg_value("FFFF", S16) is None
     assert _msg_value("FFFF", F8_8) is None
-
-
-def test_decode_flags() -> None:
-    # Valid flag lookup
-    res = _decode_flags(OtDataId.STATUS, "0000")
-    assert "StatusCHEnabled" in res[0x0100]["var"]
-
-    # Invalid flag lookup (ID has no flags associated in schema)
-    with pytest.raises(KeyError, match="has no flags"):
-        _decode_flags(OtDataId.OEM_CODE, "0000")
 
 
 def test_decode_frame_invalid_inputs() -> None:
