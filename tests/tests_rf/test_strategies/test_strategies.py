@@ -25,6 +25,7 @@ from ramses_rf.strategies import (
     VascoStrategy,
     best_hvac_strategy,
 )
+from ramses_rf.strategies.base import HvacStrategyBase
 from ramses_tx.const import Code
 
 # ---------------------------------------------------------------------------
@@ -173,6 +174,119 @@ class TestOrconDutchAliases:
         hex_code = strategy.fan_mode_to_hex("afwezig")
         assert hex_code == "00"
         assert strategy.hex_to_fan_mode(hex_code) == "away"
+
+
+# ---------------------------------------------------------------------------
+# alias_language attribute
+# ---------------------------------------------------------------------------
+
+
+class TestAliasLanguage:
+    """Verify alias_language is set and consistent across strategies."""
+
+    @pytest.mark.parametrize(
+        "strategy_cls,expected_lang",
+        [
+            (OrconStrategy, "nl"),
+            (IthoStrategy, "nl"),
+            (NuaireStrategy, "nl"),
+            (VascoStrategy, "nl"),
+            (ClimaRadStrategy, "nl"),
+        ],
+    )
+    def test_alias_language_set(
+        self, strategy_cls: type, expected_lang: str
+    ) -> None:
+        assert strategy_cls().alias_language == expected_lang
+
+    def test_base_alias_language_is_none(self) -> None:
+        assert HvacStrategyBase.alias_language is None
+
+
+# ---------------------------------------------------------------------------
+# Filtered aliases per strategy
+# ---------------------------------------------------------------------------
+
+
+class TestFilteredAliases:
+    """Verify each strategy only has aliases for modes it supports."""
+
+    @pytest.mark.parametrize(
+        "strategy_cls",
+        [
+            OrconStrategy,
+            IthoStrategy,
+            NuaireStrategy,
+            VascoStrategy,
+            ClimaRadStrategy,
+        ],
+    )
+    def test_aliases_resolve_to_existing_modes(
+        self, strategy_cls: type
+    ) -> None:
+        strategy = strategy_cls()
+        mode_names = set(strategy.fan_modes.values())
+        for alias, canonical in strategy._aliases.items():
+            assert canonical in mode_names, (
+                f"{strategy.scheme}: alias '{alias}' -> '{canonical}' "
+                f"but '{canonical}' not in mode_map"
+            )
+
+    def test_orcon_has_dutch_aliases(self) -> None:
+        s = OrconStrategy()
+        assert "laag" in s._aliases
+        assert s._aliases["laag"] == "low"
+        assert "afwezig" in s._aliases
+        assert s._aliases["afwezig"] == "away"
+
+    def test_itho_has_dutch_aliases(self) -> None:
+        s = IthoStrategy()
+        assert "laag" in s._aliases
+        assert s._aliases["laag"] == "low"
+        assert "uit" in s._aliases
+        assert s._aliases["uit"] == "off"
+
+    def test_itho_does_not_have_afwezig(self) -> None:
+        # Itho has no "away" mode, so the Dutch alias should be absent
+        s = IthoStrategy()
+        assert "afwezig" not in s._aliases
+
+    def test_nuaire_has_normaal(self) -> None:
+        s = NuaireStrategy()
+        assert "normaal" in s._aliases
+        assert s._aliases["normaal"] == "normal"
+
+    def test_nuaire_does_not_have_laag(self) -> None:
+        # Nuaire has no "low" mode
+        s = NuaireStrategy()
+        assert "laag" not in s._aliases
+
+    def test_vasco_has_dutch_aliases(self) -> None:
+        s = VascoStrategy()
+        assert "laag" in s._aliases
+        assert "afwezig" in s._aliases
+
+    def test_climarad_shares_vasco_aliases(self) -> None:
+        # ClimaRad uses the same mode map as Vasco
+        s = ClimaRadStrategy()
+        v = VascoStrategy()
+        assert s._aliases == v._aliases
+
+    def test_dutch_aliases_accept_via_fan_mode_to_hex(self) -> None:
+        # All strategies should accept their Dutch aliases
+        for cls in [
+            OrconStrategy,
+            IthoStrategy,
+            NuaireStrategy,
+            VascoStrategy,
+            ClimaRadStrategy,
+        ]:
+            s = cls()
+            for alias in s._aliases:
+                # Should not raise
+                hex_code = s.fan_mode_to_hex(alias)
+                assert isinstance(hex_code, str)
+                assert len(hex_code) == 2
 
 
 # ---------------------------------------------------------------------------
