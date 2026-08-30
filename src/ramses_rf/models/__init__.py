@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from .dto import (
     ActuatorCycleDTO,
-    ActuatorStateDTO,
+    BdrStateDTO,
+    JimStateDTO,
+    OpenThermStateDTO,
     ThermalDemandDTO,
     UfhCircuitDemandDTO,
     UfhCircuitDTO,
@@ -36,7 +38,7 @@ from .state_schedules import DailySchedule, ScheduleState, SwitchPoint
 __all__ = [
     "ActuatorCycleDTO",
     "ActuatorState",
-    "ActuatorStateDTO",
+    "BdrStateDTO",
     "DailySchedule",
     "DemandState",
     "DeviceTraits",
@@ -44,7 +46,9 @@ __all__ = [
     "FaultLogEntry",
     "FaultLogState",
     "HvacState",
+    "JimStateDTO",
     "OpenThermState",
+    "OpenThermStateDTO",
     "PowerState",
     "ScheduleState",
     "StateUpdatedEvent",

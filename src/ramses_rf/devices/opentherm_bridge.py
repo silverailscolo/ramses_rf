@@ -38,26 +38,22 @@ from ramses_rf.const import (
     SZ_FLAME_SIGNAL_LOW,
     SZ_MAX_REL_MODULATION,
     SZ_OEM_CODE,
+    SZ_OPENTHERM_PARAMS,
+    SZ_OPENTHERM_SCHEMA,
+    SZ_OPENTHERM_STATE,
     SZ_OTC_ACTIVE,
     SZ_OUTSIDE_TEMP,
+    SZ_RAMSES_II_PARAMS,
+    SZ_RAMSES_II_SCHEMA,
     SZ_REL_MODULATION_LEVEL,
     SZ_SUMMER_MODE,
     DevType,
 )
-from ramses_rf.models import DeviceTraits, OpenThermState
-from ramses_tx import Priority
-from ramses_tx.const import FC, SZ_NUM_REPEATS, SZ_PRIORITY, Code, MsgId
+from ramses_rf.models import DeviceTraits, OpenThermState, OpenThermStateDTO
+from ramses_tx.const import FC
 from ramses_tx.typing import PayDictT
 
-from ..protocol.opentherm import OtDataId
 from .heat_actuators import Actuator, HeatDemand
-
-QOS_LOW = {SZ_PRIORITY: Priority.LOW}  # FIXME:  deprecate QoS in kwargs
-QOS_MID = {SZ_PRIORITY: Priority.HIGH}  # FIXME: deprecate QoS in kwargs
-QOS_MAX = {
-    SZ_PRIORITY: Priority.HIGH,
-    SZ_NUM_REPEATS: 3,
-}  # FIXME: deprecate QoS...
 
 #
 # NOTE: All debug flags should be False for deployment to end-users
@@ -65,10 +61,6 @@ _DBG_ENABLE_DEPRECATION: Final[bool] = False
 _DBG_EXTRA_OTB_DISCOVERY: Final[bool] = False
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _to_msg_id(data_id: OtDataId) -> MsgId:
-    return f"{data_id:02X}"  # type: ignore[return-value]
 
 
 # NOTE: config.use_native_ot should enforce sends, but not reads from _msgz DB
@@ -81,27 +73,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
     _SLUG = DevType.OTB
     _STATE_ATTR = SZ_REL_MODULATION_LEVEL
 
-    # NOTE: MsgId._0E (max_rel_modulation) and MsgId._11 (rel_modulation)
-    # were historically quarantined via QUARANTINED_OT_MSG_IDS because
-    # real-world OTB hardware transmits unreliable telemetry for these IDs.
-    # See ramses_rf issue #556.
-    OT_TO_RAMSES: dict[MsgId, Code] = {  # TODO: move to opentherm.py
-        MsgId._00: Code._3EF0,  # master/slave status (actuator_state)
-        MsgId._01: Code._22D9,  # boiler_setpoint
-        MsgId._0E: Code._3EF0,  # max_rel_modulation_level (is a PARAM?)
-        MsgId._11: Code._3EF0,  # rel_modulation_level (actuator_state, also Code._3EF1)
-        MsgId._12: Code._1300,  # ch_water_pressure
-        MsgId._13: Code._12F0,  # dhw_flow_rate
-        MsgId._19: Code._3200,  # boiler_output_temp
-        MsgId._1A: Code._1260,  # dhw_temp
-        MsgId._1B: Code._1290,  # outside_temp
-        MsgId._1C: Code._3210,  # boiler_return_temp
-        MsgId._38: Code._10A0,  # dhw_setpoint (is a PARAM)
-        MsgId._39: Code._1081,  # ch_max_setpoint (is a PARAM)
-    }
-    RAMSES_TO_OT: dict[Code, MsgId] = {
-        v: k for k, v in OT_TO_RAMSES.items() if v != Code._3EF0
-    }  # also 10A0?
+    OPENTHERM_STATE: Final = SZ_OPENTHERM_STATE
 
     def __init__(
         self, *args: Any, traits: DeviceTraits | None = None, **kwargs: Any
@@ -296,13 +268,35 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         """Return device traits dictionary."""
         return await super().traits()
 
+    async def opentherm_state_dto(self) -> OpenThermStateDTO | None:
+        """Return the OpenTherm Bridge state as a CQRS DTO.
+
+        :returns: OpenThermStateDTO or None.
+        :rtype: OpenThermStateDTO | None
+        """
+        state = getattr(self, "opentherm_state", None)
+        if not state:
+            return None
+
+        return OpenThermStateDTO(
+            flags=state.flags,
+            temperatures=state.temperatures,
+            counters=state.counters,
+            ch_water_pressure=state.ch_water_pressure,
+            dhw_flow_rate=state.dhw_flow_rate,
+            max_rel_modulation=state.max_rel_modulation,
+            rel_modulation_level=state.rel_modulation_level,
+            oem_code=state.oem_code,
+            last_updated=state.last_updated,
+        )
+
     async def schema(self) -> dict[str, Any]:
         """Return combined device configuration schema."""
         base_schema = await super().schema()
         return {
             **base_schema,
-            "opentherm_schema": await self.opentherm_schema(),
-            "ramses_ii_schema": await self.ramses_schema(),
+            SZ_OPENTHERM_SCHEMA: await self.opentherm_schema(),
+            SZ_RAMSES_II_SCHEMA: await self.ramses_schema(),
         }
 
     async def params(self) -> dict[str, Any]:
@@ -310,8 +304,8 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         base_params = await super().params()
         return {
             **base_params,
-            "opentherm_params": await self.opentherm_params(),
-            "ramses_ii_params": await self.ramses_params(),
+            SZ_OPENTHERM_PARAMS: await self.opentherm_params(),
+            SZ_RAMSES_II_PARAMS: await self.ramses_params(),
         }
 
     async def status(self) -> dict[str, Any]:
@@ -319,6 +313,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         base_status = await super().status()
         return {
             **base_status,  # incl. actuator_cycle, actuator_state
+            self.OPENTHERM_STATE: await self.opentherm_state_dto(),
             SZ_BOILER_OUTPUT_TEMP: await self.boiler_output_temp(),
             SZ_BOILER_RETURN_TEMP: await self.boiler_return_temp(),
             SZ_BOILER_SETPOINT: await self.boiler_setpoint(),

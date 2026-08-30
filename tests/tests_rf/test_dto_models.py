@@ -5,10 +5,17 @@ from datetime import UTC, datetime as dt
 from ramses_rf.enums import ThermalMode
 from ramses_rf.models import (
     ActuatorCycleDTO,
-    ActuatorStateDTO,
+    BdrStateDTO,
+    JimStateDTO,
+    OpenThermStateDTO,
     ThermalDemandDTO,
     UfhCircuitDemandDTO,
     ZoneScheduleDTO,
+)
+from ramses_rf.models.state_opentherm import (
+    OpenThermCounters,
+    OpenThermFlags,
+    OpenThermTemperatures,
 )
 
 
@@ -73,25 +80,108 @@ def test_ufh_circuit_demand_dto() -> None:
     assert dto.cooling_demand == 0.0
 
 
-def test_actuator_state_dto() -> None:
+def test_bdr_state_dto() -> None:
     # Arrange
     now = dt.now(UTC)
 
     # Act
-    dto = ActuatorStateDTO(
+    dto = BdrStateDTO(
         modulation_level=0.45,
         actuator_enabled=True,
-        ch_active=True,
-        flame_active=True,
         last_updated=now,
     )
 
     # Assert
     assert dto.modulation_level == 0.45
     assert dto.actuator_enabled is True
-    assert dto.ch_active is True
-    assert dto.flame_active is True
     assert dto.last_updated == now
+
+
+def test_bdr_state_dto_defaults() -> None:
+    # Arrange & Act
+    dto = BdrStateDTO()
+
+    # Assert
+    assert dto.modulation_level is None
+    assert dto.actuator_enabled is None
+    assert dto.last_updated is None
+
+
+def test_jim_state_dto_inheritance_and_fields() -> None:
+    # Arrange
+    now = dt.now(UTC)
+
+    # Act
+    dto = JimStateDTO(
+        modulation_level=0.75,
+        actuator_enabled=True,
+        ch_active=True,
+        dhw_active=False,
+        flame_active=True,
+        cooling_active=False,
+        last_updated=now,
+    )
+
+    # Assert
+    assert isinstance(dto, BdrStateDTO)
+    assert dto.modulation_level == 0.75
+    assert dto.actuator_enabled is True
+    assert dto.ch_active is True
+    assert dto.dhw_active is False
+    assert dto.flame_active is True
+    assert dto.cooling_active is False
+    assert dto.last_updated == now
+
+
+def test_opentherm_state_dto() -> None:
+    # Arrange
+    now = dt.now(UTC)
+    flags = OpenThermFlags(ch_enabled=True, flame_active=True)
+    temps = OpenThermTemperatures(boiler_output=62.5, dhw=48.0)
+    counters = OpenThermCounters(burner_starts=150, burner_hours=320)
+
+    # Act
+    dto = OpenThermStateDTO(
+        flags=flags,
+        temperatures=temps,
+        counters=counters,
+        ch_water_pressure=1.8,
+        dhw_flow_rate=11.2,
+        max_rel_modulation=1.0,
+        rel_modulation_level=0.65,
+        oem_code=0,
+        last_updated=now,
+    )
+
+    # Assert
+    assert dto.flags.ch_enabled is True
+    assert dto.flags.flame_active is True
+    assert dto.temperatures.boiler_output == 62.5
+    assert dto.temperatures.dhw == 48.0
+    assert dto.counters.burner_starts == 150
+    assert dto.counters.burner_hours == 320
+    assert dto.ch_water_pressure == 1.8
+    assert dto.dhw_flow_rate == 11.2
+    assert dto.max_rel_modulation == 1.0
+    assert dto.rel_modulation_level == 0.65
+    assert dto.oem_code == 0
+    assert dto.last_updated == now
+
+
+def test_opentherm_state_dto_defaults() -> None:
+    # Arrange & Act
+    dto = OpenThermStateDTO()
+
+    # Assert
+    assert isinstance(dto.flags, OpenThermFlags)
+    assert isinstance(dto.temperatures, OpenThermTemperatures)
+    assert isinstance(dto.counters, OpenThermCounters)
+    assert dto.ch_water_pressure is None
+    assert dto.dhw_flow_rate is None
+    assert dto.max_rel_modulation is None
+    assert dto.rel_modulation_level is None
+    assert dto.oem_code is None
+    assert dto.last_updated is None
 
 
 def test_actuator_cycle_dto() -> None:
