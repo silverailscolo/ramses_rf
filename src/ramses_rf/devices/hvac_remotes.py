@@ -16,7 +16,6 @@ from ramses_rf.enums import Action
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Packet
-from ramses_tx.const import Code
 
 from .dev_base import BatteryState, DeviceHvac, Fakeable
 from .helpers import send_fake_intent
@@ -69,9 +68,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         # .I --- 37:155617 32:155617 --:------ 1FC9 001 00
 
         return await super()._initiate_binding_process(
-            Code._22F1
-            if self._scheme == "nuaire"
-            else (Code._22F1, Code._22F3)
+            self._get_strategy().binding_codes()
         )
 
     async def fan_rate(self) -> str | None:

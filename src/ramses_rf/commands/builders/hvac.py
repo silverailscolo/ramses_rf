@@ -13,6 +13,7 @@ from ramses_rf.models.hvac_schemas import (
     _2411_PARAMS_SCHEMA,
 )
 from ramses_rf.protocol.ramses import _31DA_FAN_INFO
+from ramses_rf.strategies import HvacStrategy
 from ramses_tx.address import NON_DEV_ADDR
 from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
@@ -178,19 +179,24 @@ def build_set_fan_mode(intent: Command) -> CommandDTO:
     :raises ValueError: If the fan mode or scheme is not valid.
     """
     fan_mode = intent.get("fan_mode")
-    scheme = intent.get("scheme", "orcon")
+    strategy = intent.get("strategy")
+    if strategy is not None and not isinstance(strategy, HvacStrategy):
+        raise TypeError("strategy must implement HvacStrategy")
+    scheme = strategy.scheme if strategy else intent.get("scheme", "orcon")
     sequence_number = intent.get("seqn")
     index = intent.get("index", "00")
     mode_max = intent.get("mode_max")
     legacy_format = intent.get("legacy_format", False)
 
-    if scheme not in _22F1_SCHEMES:
-        raise ValueError(
-            f"fan_mode scheme is not valid: {scheme} "
-            f"(expected one of: {', '.join(sorted(_22F1_SCHEMES))})"
-        )
-
-    mode_map = _22F1_SCHEMES[scheme]
+    if strategy:
+        mode_map = strategy.fan_modes
+    else:
+        if scheme not in _22F1_SCHEMES:
+            raise ValueError(
+                f"fan_mode scheme is not valid: {scheme} "
+                f"(expected one of: {', '.join(sorted(_22F1_SCHEMES))})"
+            )
+        mode_map = _22F1_SCHEMES[scheme]
     mode_map_r = {v: k for k, v in mode_map.items()}
 
     if fan_mode is None:
@@ -204,13 +210,17 @@ def build_set_fan_mode(intent: Command) -> CommandDTO:
         pass
     elif mode in mode_map_r:
         mode = mode_map_r[mode]
+    elif strategy and isinstance(mode, str):
+        mode = strategy.fan_mode_to_hex(mode)
     else:
         raise ValueError(
             f"fan_mode is not valid for scheme '{scheme}': {fan_mode}"
         )
 
     if mode_max is None:
-        mode_max = _22F1_MODE_MAX.get(scheme)
+        mode_max = (
+            strategy.mode_max if strategy else _22F1_MODE_MAX.get(scheme)
+        )
 
     if legacy_format or not mode_max:
         payload = f"{index}{mode}"

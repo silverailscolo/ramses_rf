@@ -155,6 +155,7 @@ from ramses_rf.const import (
     SZ_ZONE_INDEX,
     DevType,
 )
+from ramses_rf.devices.dev_base import DeviceBase
 from ramses_rf.enums import Action, PumpRelayState
 from ramses_rf.messages import Message
 from ramses_rf.models import (
@@ -731,7 +732,14 @@ class StateProjector:
             return
 
         current_state = getattr(target, "hvac_state", None) or HvacState()
-        payload = quirks.apply_hvac_quirks(payload, current_state, msg.code)
+        strategy = (
+            target._get_configured_strategy()
+            if isinstance(target, DeviceBase)
+            else None
+        )
+        payload = quirks.apply_hvac_quirks(
+            payload, current_state, msg.code, strategy=strategy
+        )
 
         updates: dict[str, Any] = {}
 
