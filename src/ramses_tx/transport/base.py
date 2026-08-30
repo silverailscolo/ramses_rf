@@ -79,7 +79,7 @@ class _BaseTransport:
 class _ReadTransport(_BaseTransport, TransportInterface):
     """Interface for read-only transports."""
 
-    _protocol: RamsesProtocolT = None  # type: ignore[assignment]
+    _protocol: RamsesProtocolT = None  # type: ignore[assignment]  # set by transport_factory
     _loop: asyncio.AbstractEventLoop
 
     _is_hgi80: bool | None = (

@@ -9,13 +9,18 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ramses_tx.const import Code
+from ramses_tx.typing import DeviceIdT
 
 from . import exceptions as exc
 from .const import (
+    DEV_TYPE_MAP,
+    SZ_CIRCUIT_INDEX,
+    SZ_DEVICES,
     SZ_DOMAIN_INDEX,
     SZ_UFH_INDEX,
     SZ_ZONE_INDEX,
     SZ_ZONE_MASK,
+    SZ_ZONE_TYPE,
     ZON_ROLE_MAP,
     DevType,
 )
@@ -82,24 +87,33 @@ async def update_topology_schema_state(
             if ctl_dev := registry.device_by_id.get(ctl_id):
                 tcs = getattr(ctl_dev, "tcs", None)
         else:
-            if (devices := p.get("devices")) and isinstance(devices, list):
+            if (devices := p.get(SZ_DEVICES, p.get("devices"))) and isinstance(
+                devices, list
+            ):
                 for candidate_device in devices:
-                    if (
-                        getattr(
-                            candidate_device, "type", str(candidate_device)[:2]
-                        )
-                        == "01"
-                    ):
+                    candidate_type = getattr(
+                        candidate_device, "type", str(candidate_device)[:2]
+                    )
+                    if candidate_type in ("01", DevType.CTL):
                         ctl_id = str(candidate_device)
-                        if ctl_dev := registry.device_by_id.get(ctl_id):
+                        if ctl_dev := (
+                            registry.device_by_id.get(ctl_id)
+                            or registry.device_by_id.get(DeviceIdT(ctl_id))
+                        ):
                             tcs = getattr(ctl_dev, "tcs", None)
                         break
 
             if tcs is None and hasattr(msg.src, "id"):
-                if src_dev := registry.device_by_id.get(str(msg.src.id)):
+                if src_dev := (
+                    registry.device_by_id.get(str(msg.src.id))
+                    or registry.device_by_id.get(DeviceIdT(str(msg.src.id)))
+                ):
                     tcs = getattr(src_dev, "tcs", None)
             if tcs is None and hasattr(msg.dst, "id"):
-                if dst_dev := registry.device_by_id.get(str(msg.dst.id)):
+                if dst_dev := (
+                    registry.device_by_id.get(str(msg.dst.id))
+                    or registry.device_by_id.get(DeviceIdT(str(msg.dst.id)))
+                ):
                     tcs = getattr(dst_dev, "tcs", None)
 
     if tcs is None and registry:
@@ -108,7 +122,7 @@ async def update_topology_schema_state(
             for d in list(registry.device_by_id.values())
             if (
                 getattr(d, "_SLUG", "") == "CTL"
-                or getattr(d, "type", None) == "01"
+                or getattr(d, "type", None) in ("01", DevType.CTL)
             )
             and hasattr(d, "tcs")
             and d.tcs is not None
@@ -186,15 +200,15 @@ async def update_topology_schema_state(
                 or p.get("domain_id")
                 or p.get("domain_index")
             )
-            devices = p.get("devices", [])
+            devices = p.get(SZ_DEVICES, p.get("devices", []))
             if "device_id" in p and not devices:
                 devices = [p["device_id"]]
 
-            zone_type = p.get("zone_type")
+            zone_type = p.get(SZ_ZONE_TYPE, p.get("zone_type"))
             ufh_index = (
                 p.get(SZ_UFH_INDEX)
+                or p.get(SZ_CIRCUIT_INDEX)
                 or p.get("ufh_index")
-                or p.get("circuit_index")
                 or p.get("cct_index")
             )
 
@@ -212,19 +226,47 @@ async def update_topology_schema_state(
                                 ufc_devs.append(ufc)
 
             if not ufc_devs and registry:
-                if getattr(msg.src, "type", None) in ("02", DevType.UFC):
-                    with contextlib.suppress(exc.DeviceNotFoundError):
-                        ufc_devs.append(registry.get_device(str(msg.src.id)))
-                elif getattr(msg.dst, "type", None) in ("02", DevType.UFC):
-                    with contextlib.suppress(exc.DeviceNotFoundError):
-                        ufc_devs.append(registry.get_device(str(msg.dst.id)))
+                src_type = getattr(msg.src, "type", None)
+                dst_type = getattr(msg.dst, "type", None)
+                if src_type in ("02", DevType.UFC, DEV_TYPE_MAP.UFC):
+                    ufc_instance = (
+                        (
+                            registry.device_by_id.get(str(msg.src.id))
+                            or registry.device_by_id.get(
+                                DeviceIdT(str(msg.src.id))
+                            )
+                        )
+                        if hasattr(registry, "device_by_id")
+                        else None
+                    )
+                    if not ufc_instance and hasattr(registry, "get_device"):
+                        with contextlib.suppress(exc.DeviceNotFoundError):
+                            ufc_instance = registry.get_device(str(msg.src.id))
+                    if ufc_instance and ufc_instance not in ufc_devs:
+                        ufc_devs.append(ufc_instance)
+                elif dst_type in ("02", DevType.UFC, DEV_TYPE_MAP.UFC):
+                    ufc_instance = (
+                        (
+                            registry.device_by_id.get(str(msg.dst.id))
+                            or registry.device_by_id.get(
+                                DeviceIdT(str(msg.dst.id))
+                            )
+                        )
+                        if hasattr(registry, "device_by_id")
+                        else None
+                    )
+                    if not ufc_instance and hasattr(registry, "get_device"):
+                        with contextlib.suppress(exc.DeviceNotFoundError):
+                            ufc_instance = registry.get_device(str(msg.dst.id))
+                    if ufc_instance and ufc_instance not in ufc_devs:
+                        ufc_devs.append(ufc_instance)
 
             if not ufc_devs and tcs:
                 ufc_devs = [
                     d
                     for d in getattr(tcs, "childs", [])
                     if getattr(d, "_SLUG", "") == "UFC"
-                    or getattr(d, "type", None) == "02"
+                    or getattr(d, "type", None) in ("02", DevType.UFC)
                 ]
 
             # Route UFH circuit mappings to UFH controllers
@@ -240,7 +282,15 @@ async def update_topology_schema_state(
                 )
                 for ufc in ufc_devs:
                     if hasattr(ufc, "circuit_by_id"):
-                        ufc.circuit_by_id[ufh_str] = {"zone_index": ufh_z_str}
+                        ufc.circuit_by_id[ufh_str] = {SZ_ZONE_INDEX: ufh_z_str}
+                    if hasattr(ufc, "get_circuit"):
+                        circuit = ufc.get_circuit(ufh_str)
+                        if ufh_z_str and tcs and hasattr(circuit, "set_zone"):
+                            target_zone = getattr(
+                                tcs, "zone_by_index", {}
+                            ).get(ufh_z_str)
+                            if target_zone:
+                                circuit.set_zone(target_zone)
 
             # Map Zone Bindings & Classes
             if (
@@ -389,9 +439,9 @@ async def update_topology_schema_state(
                 ufc_list = list(getattr(tcs, "ufh_controllers", {}).values())
 
             cct_index = (
-                p.get("circuit_index")
+                p.get(SZ_UFH_INDEX)
+                or p.get(SZ_CIRCUIT_INDEX)
                 or p.get("cct_index")
-                or p.get("ufx_index")
             )
             z_index = p.get(SZ_ZONE_INDEX) or p.get("zone_index")
             if cct_index is not None and ufc_list:

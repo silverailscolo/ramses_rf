@@ -18,7 +18,7 @@ from ramses_rf.devices.helpers import build_rq_cmd
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.helpers import schedule_task
 from ramses_rf.protocol.opentherm import (
-    OTB_POLL_DATA_IDS,
+    OPENTHERM_POLL_DATA_IDS,
     encode_opentherm_payload,
 )
 from ramses_rf.typing import DeviceIdT, PollingIntervalsT
@@ -208,7 +208,7 @@ class PollingManager:
         """Resolve the effective polling schedule for a given device.
 
         Combines default device schedule tables with SSOT schema trait overrides,
-        ensuring battery-powered devices always resolve to zero polling.
+        ensuring battery-powered and faked devices always resolve to zero polling.
 
         :param device: The target device instance.
         :type device: DeviceBase
@@ -217,6 +217,12 @@ class PollingManager:
         """
         slug = getattr(device, "_SLUG", "DEFAULT")
         if slug == DevType.HGI:
+            return {}
+
+        # Faked devices are virtual — they don't exist on the RF network,
+        # so polling them only generates timeouts and log spam (e.g. a
+        # faked REM created via ramses_cc's add_faked_rem service).
+        if device.is_faked:
             return {}
 
         # Battery devices sleep and cannot receive RF requests; never poll them
@@ -368,7 +374,7 @@ class PollingManager:
                         self._tasks[zkey].payload = payload
             elif code == Code._3220 and slug == DevType.OTB:
                 # Expand into per-Data-ID OpenTherm query tasks
-                for data_id in OTB_POLL_DATA_IDS:
+                for data_id in OPENTHERM_POLL_DATA_IDS:
                     ot_key = (device.id, code, f"{data_id:02X}")
                     active_keys.add(ot_key)
                     payload = encode_opentherm_payload(data_id)

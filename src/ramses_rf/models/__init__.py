@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from .dto import (
     ActuatorCycleDTO,
-    ActuatorStateDTO,
+    BdrStateDTO,
+    JimStateDTO,
+    OpenThermStateDTO,
     ThermalDemandDTO,
     UfhCircuitDemandDTO,
+    UfhCircuitDTO,
     ZoneScheduleDTO,
 )
 from .state_base import (
@@ -23,18 +26,24 @@ from .state_climate import (
     SystemState,
     TemperatureState,
     TrvState,
+    UfhCircuitState,
     UfhState,
     ZoneState,
 )
 from .state_faults import FaultLogEntry, FaultLogState
 from .state_hvac import HvacState
-from .state_opentherm import OpenThermState
+from .state_opentherm import (
+    OpenThermCounters,
+    OpenThermFlags,
+    OpenThermState,
+    OpenThermTemperatures,
+)
 from .state_schedules import DailySchedule, ScheduleState, SwitchPoint
 
 __all__ = [
     "ActuatorCycleDTO",
     "ActuatorState",
-    "ActuatorStateDTO",
+    "BdrStateDTO",
     "DailySchedule",
     "DemandState",
     "DeviceTraits",
@@ -42,7 +51,12 @@ __all__ = [
     "FaultLogEntry",
     "FaultLogState",
     "HvacState",
+    "JimStateDTO",
+    "OpenThermCounters",
+    "OpenThermFlags",
     "OpenThermState",
+    "OpenThermStateDTO",
+    "OpenThermTemperatures",
     "PowerState",
     "ScheduleState",
     "StateUpdatedEvent",
@@ -53,6 +67,8 @@ __all__ = [
     "TopologyChangedEvent",
     "TrvState",
     "UfhCircuitDemandDTO",
+    "UfhCircuitDTO",
+    "UfhCircuitState",
     "UfhState",
     "ZoneScheduleDTO",
     "ZoneState",

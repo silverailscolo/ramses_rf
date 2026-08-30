@@ -54,7 +54,7 @@ def build_set_dhw_params(intent: Command) -> CommandDTO:
         raise ValueError(f"Out of range, differential: {differential}")
 
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
-    payload = DhwParamsPayload(
+    payload = DhwParamsPayload.create(
         dhw_index=dhw_index,
         setpoint=setpoint,
         overrun=overrun,

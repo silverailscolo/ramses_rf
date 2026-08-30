@@ -11,7 +11,7 @@ import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Final
 
-import voluptuous as vol
+import probatio as vol
 
 from ramses_rf.const import (
     SZ_ACTUATORS as SZ_ACTUATORS,
@@ -82,7 +82,7 @@ from .const import (
 if TYPE_CHECKING:
     from .devices import Device
     from .gateway import Gateway
-    from .systems import Evohome
+    from .systems.tcs import SystemBase
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -120,11 +120,11 @@ SCH_ZON_INDEX = vol.Match(
 
 
 def error_renamed_key(new_key: str) -> Callable[[Any], None]:
-    """Return a voluptuous validator function raising an invalid key error.
+    """Return a probatio validator function raising an invalid key error.
 
     :param new_key: The new key name to instruct the user to rename to.
     :type new_key: str
-    :returns: A voluptuous validator function.
+    :returns: A probatio validator function.
     :rtype: Callable[[Any], None]
     """
 
@@ -225,7 +225,7 @@ SCH_TCS = vol.Schema(
             [SCH_DEVICE_ID_ANY], vol.Unique()
         ),
         vol.Optional(SZ_ZONES, default={}): vol.Any({}, SCH_TCS_ZONES),
-        vol.Optional(vol.Remove("is_tcs")): vol.Coerce(bool),
+        vol.Remove("is_tcs"): vol.Coerce(bool),
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -246,7 +246,7 @@ SCH_VCS_DATA = vol.Schema(
             [SCH_DEVICE_ID_ANY],
             vol.Unique(),  # vol.Length(min=1)
         ),
-        vol.Optional(vol.Remove("is_vcs")): vol.Coerce(bool),
+        vol.Remove("is_vcs"): vol.Coerce(bool),
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -270,9 +270,7 @@ SCH_VCS = vol.All(SCH_VCS_KEYS, SCH_VCS_DATA)
 SCH_GLOBAL_SCHEMAS_DICT = {  # System schemas - can be 0-many Heat/HVAC schemas
     # orphans are devices to create that won't be in a (cached) schema...
     vol.Optional(SZ_MAIN_TCS): vol.Any(None, SCH_DEVICE_ID_CTL),
-    vol.Optional(vol.Remove("main_controller")): vol.Any(
-        None, SCH_DEVICE_ID_CTL
-    ),
+    vol.Remove("main_controller"): vol.Any(None, SCH_DEVICE_ID_CTL),
     vol.Optional(SCH_DEVICE_ID_CTL): vol.Any(SCH_TCS, SCH_VCS),
     vol.Optional(
         SCH_DEVICE_ID_ANY
@@ -487,7 +485,7 @@ def load_fan(
 
 def load_tcs(
     gateway: Gateway, controller_id: DeviceIdT, schema: dict[str, Any]
-) -> Evohome:
+) -> SystemBase:
     """Create a TCS using its schema.
 
     :param gateway: The Gateway instance managing the TCS.
@@ -496,8 +494,8 @@ def load_tcs(
     :type controller_id: DeviceIdT
     :param schema: The schema dictionary for the TCS.
     :type schema: dict[str, Any]
-    :returns: The created or retrieved Evohome TCS instance.
-    :rtype: Evohome
+    :returns: The created or retrieved TCS instance.
+    :rtype: SystemBase
     """
     # print(schema)
     # schema = SCH_TCS_ZONES_ZON(schema)
@@ -507,7 +505,8 @@ def load_tcs(
         raise exc.SchemaInconsistentError(
             f"No TCS assigned to controller {controller.id}"
         )
-    controller.tcs._update_schema(**schema)
+    if hasattr(controller.tcs, "_update_schema"):
+        controller.tcs._update_schema(**schema)
 
     for dev_id in schema.get(SZ_UFH_SYSTEM, {}):  # UFH controllers
         _get_device(gateway, dev_id, parent=controller.tcs)  # , **_schema)

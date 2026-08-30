@@ -182,9 +182,32 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         # validation.  strip_and_map_schema (stage 1+2) would map _class→class,
         # but SCH_GLOBAL_SCHEMAS rejects mapped trait names — they are only
         # valid for the known_list, not the schema validator (issue 1120).
-        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(
-            strip_traits(schema_in)
-        )
+        stripped = strip_traits(schema_in)
+
+        # Preserve _name in zone entries (ramses-rf/ramses_cc#919: zone names
+        # lost after 24h when the MessageStore prunes 0004 packets — the
+        # schema is the only persistent source of the name).  strip_traits
+        # removes _name, so re-add it from the original schema for
+        # SCH_TCS_ZONES_ZON to accept and Zone._update_schema to hydrate.
+        for ctl_id, ctl_entry in schema_in.items():
+            if not isinstance(ctl_entry, dict) or not isinstance(
+                ctl_entry.get("zones"), dict
+            ):
+                continue
+            stripped_ctl = stripped.get(ctl_id)
+            if not isinstance(stripped_ctl, dict) or not isinstance(
+                stripped_ctl.get("zones"), dict
+            ):
+                continue
+            for z_idx, z_entry in ctl_entry["zones"].items():
+                if (
+                    isinstance(z_entry, dict)
+                    and z_entry.get("_name")
+                    and isinstance(stripped_ctl["zones"].get(z_idx), dict)
+                ):
+                    stripped_ctl["zones"][z_idx]["_name"] = z_entry["_name"]
+
+        self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(stripped)
 
         self._tcs: Evohome | None = None
         self._eavesdrop_engine: Any = None
@@ -256,8 +279,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         :param device_id: The device ID to look up.
         :type device_id: str
-        :returns: A dict with keys "class" (device slug) and "locked"
-            (whether the user has locked the class), or None.
+        :returns: A dict with keys "class" (device slug), "locked"
+            (whether the user has locked the class), and "faked", or None.
         :rtype: dict[str, Any] | None
         """
         device = self._device_registry.device_by_id.get(DeviceIdT(device_id))
@@ -269,6 +292,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return {
             "class": slug,
             "locked": bool(known.get("_locked", False)),
+            "faked": bool(getattr(device, "is_faked", False)),
         }
 
     def __repr__(self) -> str:
@@ -384,7 +408,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
     def _on_topology_changed(self) -> None:
         """Handle topology change notification from DeviceRegistry."""
-        asyncio.create_task(self._notify_schema_updated())
+        task = asyncio.create_task(self._notify_schema_updated())
+        self.add_task(task)
 
     async def _notify_schema_updated(self) -> None:
         """Invoke registered schema updated callback safely.
@@ -445,7 +470,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         directly from the OSI L7 MessageStore, containing the single most recent
         packet for every unique StateHeader. It strictly maps ``dtm_str`` to a
         dictionary containing ``code``, ``verb``, and ``payload`` to maintain
-        parity with legacy serializers.
+        backward compatibility with downstream consumers.
 
         :param include_expired: Included for backward compatibility, unused.
         :type include_expired: bool
@@ -536,9 +561,8 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         await process_msg(self, app_msg)
 
-        # Phase 2.95 CQRS Strangler Bridge: Because the Phase 2.99 Async Queue Cutover
-        # is currently paused, we must feed the CQRS StateProjector synchronously
-        # here so the PR 2 Read-Models get properly hydrated in production.
+        # CQRS Strangler Bridge: feed the StateProjector synchronously
+        # so the Read-Models get properly hydrated in production.
         if self.state_projector is not None:
             self.state_projector.process_message_state(app_msg)
 

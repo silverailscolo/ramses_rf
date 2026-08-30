@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import math
+from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, Self, TypeVar
 
@@ -13,6 +14,7 @@ from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
 from ramses_rf.const import (
     DEV_ROLE_MAP,
+    DEV_TYPE_MAP,
     SZ_HEAT_DEMAND,
     SZ_NAME,
     SZ_RELAY_DEMAND,
@@ -42,6 +44,7 @@ from ramses_rf.models import (
     TemperatureState,
     ThermalDemandDTO,
     TrvState,
+    UfhCircuitDTO,
     ZoneState,
 )
 from ramses_rf.schemas import (
@@ -62,6 +65,8 @@ from ..messages import Message
 from .schedule import Schedule
 
 if TYPE_CHECKING:
+    from ramses_rf.devices.heat_controllers import UfhCircuit
+
     from .tcs import Evohome, _MultiZoneT, _StoredHwT
 
 from ramses_rf.const import (  # noqa: F401, isort: skip
@@ -86,10 +91,10 @@ _LOGGER = logging.getLogger(__name__)
 _TRACE = logging.getLogger("ramses_rf.legacy_trace")
 
 
-class ZoneBase(Child, Parent, Entity):
+class ZoneBase(Child, Parent[Device], Entity):
     """The Zone/DHW base class."""
 
-    _SLUG: str | None = None  # type: ignore[assignment]
+    _SLUG: str | None = None
 
     _ROLE_ACTUATORS: str | None = None
     _ROLE_SENSORS: str | None = None
@@ -212,9 +217,15 @@ class ZoneSchedule(ZoneBase):  # 0404
         return self.schedule
 
     async def set_schedule(
-        self, schedule: WeeklySchedule
+        self, schedule: WeeklySchedule | Mapping[str, Any]
     ) -> WeeklySchedule | None:
-        """Upload a weekly schedule to the controller."""
+        """Upload a weekly schedule to the controller.
+
+        :param schedule: 7-day schedule array or outer dictionary payload.
+        :type schedule: WeeklySchedule | Mapping[str, Any]
+        :returns: The updated WeeklySchedule array.
+        :rtype: WeeklySchedule | None
+        """
         return await self._schedule.set_schedule(schedule)
 
     @property
@@ -241,7 +252,7 @@ class ZoneSchedule(ZoneBase):  # 0404
 class DhwZone(ZoneSchedule):  # CS92A
     """The DHW class."""
 
-    _SLUG: str | None = ZoneRole.DHW  # type: ignore[assignment]
+    _SLUG: str | None = ZoneRole.DHW
 
     def __init__(self, tcs: _StoredHwT, zone_index: str = "HW") -> None:
         """Initialize a DhwZone instance."""
@@ -476,7 +487,7 @@ class DhwZone(ZoneSchedule):  # CS92A
 class Zone(ZoneSchedule):
     """The Zone class for all zone types (but not DHW)."""
 
-    _SLUG: str | None = None  # type: ignore[assignment]
+    _SLUG: str | None = None
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.ACT
 
     def __init__(self, tcs: _MultiZoneT, zone_index: str) -> None:
@@ -912,6 +923,24 @@ class Zone(ZoneSchedule):
             SZ_HEAT_DEMAND: await self.heat_demand(),
         }
 
+    @property
+    def circuits(self) -> list[UfhCircuitDTO]:
+        """Return the list of UFH circuits bound to this zone.
+
+        :returns: List of immutable UfhCircuitDTO transfer objects.
+        :rtype: list[UfhCircuitDTO]
+        """
+        return []
+
+    @property
+    def circuit_entities(self) -> list[UfhCircuit]:
+        """Return the list of UFH circuit entities bound to this zone.
+
+        :returns: List of UfhCircuit entity instances.
+        :rtype: list[UfhCircuit]
+        """
+        return []
+
 
 class EleZone(Zone):  # BDR91A/T  # TODO: 0008/0009/3150
     """Electric load controlled by a relay (never calls for heat)."""
@@ -973,8 +1002,11 @@ class RadZone(Zone):  # HR92/HR80
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.RAD
 
 
-class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
-    """For underfloor heating controlled by HCE80/HCC80 (calls for heat)."""
+class UfhZone(Zone):  # HCC80/HCE80/HCC100
+    """For underfloor heating controlled by HCE80/HCC80/HCC100.
+
+    Calls for heat from underfloor heating controllers.
+    """
 
     # NOTE: since zones are promotable, we can't use this here
     # def __init__(self,...
@@ -983,10 +1015,47 @@ class UfhZone(Zone):  # HCC80/HCE80  # TODO: needs checking
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.UFH
 
     async def heat_demand(self) -> float | None:  # 3150
-        """Return the zone's heat demand, estimated from its devices."""
-        if self.demand_state.heat_demand is not None:
-            return _transform(self.demand_state.heat_demand)
-        return None
+        """Return the zone's heat demand, estimated from its devices.
+
+        Underfloor heating wax actuators operate on linear PWM/TPI duty
+        cycles (0.0 to 1.0) and are not subject to TRV pin stroke
+        transformation.
+
+        :returns: Linear heat demand percentage (0.0 to 1.0) or None.
+        :rtype: float | None
+        """
+        return self.demand_state.heat_demand
+
+    @property
+    def circuit_entities(self) -> list[UfhCircuit]:
+        """Return the list of UFH circuit entities bound to this UFH zone.
+
+        :returns: List of UfhCircuit entity instances sorted by circuit index.
+        :rtype: list[UfhCircuit]
+        """
+        circuits: list[UfhCircuit] = []
+        tcs = getattr(self, "tcs", None)
+        if tcs:
+            for child in getattr(tcs, "childs", []):
+                if getattr(child, "_SLUG", None) == DevType.UFC or getattr(
+                    child, "type", None
+                ) in (DevType.UFC, DEV_TYPE_MAP.UFC, "02"):
+                    for circuit in getattr(child, "circuits", []):
+                        if (
+                            getattr(circuit, "zone_index", None) == self.index
+                            or getattr(circuit, "_zone", None) is self
+                        ):
+                            circuits.append(circuit)
+        return sorted(circuits, key=lambda circuit: circuit.ufh_index)
+
+    @property
+    def circuits(self) -> list[UfhCircuitDTO]:
+        """Return the list of UFH circuits bound to this UFH zone.
+
+        :returns: List of immutable UfhCircuitDTO transfer objects.
+        :rtype: list[UfhCircuitDTO]
+        """
+        return [circuit.to_dto() for circuit in self.circuit_entities]
 
 
 class ValZone(EleZone):  # BDR91A/T

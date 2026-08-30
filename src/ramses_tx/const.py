@@ -97,6 +97,11 @@ def slug(string: str) -> str:
 
 
 # TODO: FIXME: This is a mess - needs converting to StrEnum
+# NOTE: Kept as plain `dict` (not `dict[str, Any]`) because ramses_rf/const.py
+# uses `None` as a sentinel key in 13 dict literals (e.g. `DevRole.HT1: {None:
+# "heating_valve"}`).  Typing as `dict[str, Any]` would expose 13 `dict-item`
+# errors at those call sites.  Replacing `None` with `""` would be a runtime
+# change (sentinel semantics), which is out of scope for Wave 0 mechanical PRs.
 class AttrDict(dict):  # type: ignore[type-arg]
     """A read-only dictionary that supports dot-access and two-way lookup.
 
@@ -144,7 +149,9 @@ class AttrDict(dict):  # type: ignore[type-arg]
         self._readonly()
 
     def __init__(
-        self, main_table: dict[str, dict[str, Any]], attr_table: dict[str, Any]
+        self,
+        main_table: dict[str, dict],  # type: ignore[type-arg]  # None keys
+        attr_table: dict[str, Any],
     ) -> None:
         """Initialize the AttrDict.
 
@@ -155,7 +162,7 @@ class AttrDict(dict):  # type: ignore[type-arg]
         self._attr_table = attr_table
         self._attr_table[self._SZ_SLUGS] = tuple(sorted(main_table.keys()))
 
-        self._slug_lookup: dict = {  # type: ignore[type-arg]
+        self._slug_lookup: dict[str | None, str] = {
             None: slug  # noqa: B035
             for slug, table in main_table.items()
             for k in table.values()
@@ -235,7 +242,8 @@ class AttrDict(dict):  # type: ignore[type-arg]
         :return: The 2-byte hex string identifier.
         """
         if key in self._main_table:
-            return list(self._main_table[key].keys())[0]
+            hex_key: str = list(self._main_table[key].keys())[0] or ""
+            return hex_key
         if key in self._reverse:
             return self._reverse[key]
         raise KeyError(key)
@@ -248,9 +256,10 @@ class AttrDict(dict):  # type: ignore[type-arg]
         :return: The human-readable slug string.
         """
         if key in self._main_table:
-            return list(self._main_table[key].values())[0]  # type: ignore[no-any-return]
+            result: str = list(self._main_table[key].values())[0]
+            return result
         if key in self:
-            return self[key]  # type: ignore[no-any-return]
+            return str(self[key])
         raise KeyError(key)
 
     # def values(self):
@@ -267,19 +276,20 @@ class AttrDict(dict):  # type: ignore[type-arg]
         slug_ = self._slug_lookup[key]
         # if slug_ in self._attr_table["_TRANSFORMS"]:
         #     return self._attr_table["_TRANSFORMS"][slug_]
-        return slug_  # type: ignore[no-any-return]
+        return str(slug_)
 
     def slugs(self) -> tuple[str]:
         """Return the slugs from the main table.
 
         :return: A tuple of all available slugs.
         """
-        return self._attr_table[self._SZ_SLUGS]  # type: ignore[no-any-return]
+        slugs: tuple[str] = self._attr_table[self._SZ_SLUGS]
+        return slugs
 
 
 def attr_dict_factory(
-    main_table: dict[str, dict],  # type: ignore[type-arg]
-    attr_table: dict | None = None,  # type: ignore[type-arg]
+    main_table: dict[str, dict],  # type: ignore[type-arg]  # None keys in ramses_rf/const.py
+    attr_table: dict[str, Any] | None = None,
 ) -> AttrDict:  # is: SlottedAttrDict
     """Create a new AttrDict instance with a slotted subclass.
 

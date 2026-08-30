@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime as dt
 from typing import Any
 
 from ramses_rf.enums import ThermalMode
+
+from .state_opentherm import (
+    OpenThermCounters,
+    OpenThermFlags,
+    OpenThermTemperatures,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,31 +115,132 @@ class UfhCircuitDemandDTO:
 
 
 @dataclass(frozen=True, slots=True)
-class ActuatorStateDTO:
-    """DTO for heating/boiler actuator state (BDR91/OTB).
+class UfhCircuitDTO:
+    """CQRS DTO representing a complete UFH circuit snapshot.
 
-    :param modulation_level: Active modulation level percentage (0.0 to 1.0).
+    :param ufh_index: Two-character hex circuit identifier.
+    :type ufh_index: str
+    :param zone_index: Associated heating zone index, or None.
+    :type zone_index: str | None
+    :param heat_demand: Heating demand (0.0 to 1.0), or None.
+    :type heat_demand: float | None
+    :param cooling_demand: Cooling demand (0.0 to 1.0), or None.
+    :type cooling_demand: float | None
+    :param circuit_mode: Thermal operating mode or None.
+    :type circuit_mode: ThermalMode | str | None
+    :param setpoint: Target setpoint temperature or None.
+    :type setpoint: float | None
+    :param min_temp: Minimum allowable setpoint or None.
+    :type min_temp: float | None
+    :param max_temp: Maximum allowable setpoint or None.
+    :type max_temp: float | None
+    :param flags: Raw mode/config flags or None.
+    :type flags: int | None
+    """
+
+    ufh_index: str
+    zone_index: str | None = None
+    heat_demand: float | None = None
+    cooling_demand: float | None = None
+    circuit_mode: ThermalMode | str | None = None
+    setpoint: float | None = None
+    min_temp: float | None = None
+    max_temp: float | None = None
+    flags: int | None = None
+
+    @property
+    def circuit_index(self) -> str:
+        """Return the UFH circuit index string.
+
+        :returns: The UFH circuit index.
+        :rtype: str
+        """
+        return self.ufh_index
+
+
+@dataclass(frozen=True, slots=True)
+class BdrStateDTO:
+    """DTO for physical relay actuator state (BDR91 / 13:xxxxxx).
+
+    :param modulation_level: Active TPI modulation duty cycle (0.0 to
+        1.0).
     :type modulation_level: float | None
-    :param actuator_enabled: True if actuator output is enabled.
+    :param actuator_enabled: True if relay contact output is
+        closed/energized.
     :type actuator_enabled: bool | None
-    :param ch_active: True if central heating call is active.
-    :type ch_active: bool | None
-    :param ch_enabled: True if central heating mode is enabled.
-    :type ch_enabled: bool | None
-    :param dhw_active: True if domestic hot water call is active.
-    :type dhw_active: bool | None
-    :param flame_active: True if boiler flame is active.
-    :type flame_active: bool | None
     :param last_updated: Timestamp of last state update.
     :type last_updated: dt | None
     """
 
     modulation_level: float | None = None
     actuator_enabled: bool | None = None
+    last_updated: dt | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class JimStateDTO(BdrStateDTO):
+    """DTO for Jasper Interface Module actuator state (JIM / 08:xxxxxx).
+
+    :param modulation_level: Active modulation percentage (0.0 to
+        1.0).
+    :type modulation_level: float | None
+    :param actuator_enabled: True if appliance interface is enabled.
+    :type actuator_enabled: bool | None
+    :param ch_active: True if central heating demand is active.
+    :type ch_active: bool | None
+    :param dhw_active: True if domestic hot water call is active.
+    :type dhw_active: bool | None
+    :param flame_active: True if burner flame is detected.
+    :type flame_active: bool | None
+    :param cooling_active: True if cooling mode is active.
+    :type cooling_active: bool | None
+    :param last_updated: Timestamp of last state update.
+    :type last_updated: dt | None
+    """
+
     ch_active: bool | None = None
-    ch_enabled: bool | None = None
     dhw_active: bool | None = None
     flame_active: bool | None = None
+    cooling_active: bool | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OpenThermStateDTO:
+    """DTO for OpenTherm Bridge telemetry and status (OTB / 10:xxxxxx).
+
+    :param flags: OpenTherm master and slave status flags.
+    :type flags: OpenThermFlags
+    :param temperatures: Boiler supply, return, DHW, and outside
+        temperatures.
+    :type temperatures: OpenThermTemperatures
+    :param counters: Runtime hours and burner ignition counters.
+    :type counters: OpenThermCounters
+    :param ch_water_pressure: Central heating water pressure in bar.
+    :type ch_water_pressure: float | None
+    :param dhw_flow_rate: Domestic hot water flow rate in L/min.
+    :type dhw_flow_rate: float | None
+    :param max_rel_modulation: Maximum relative modulation limit
+        (0.0 to 1.0).
+    :type max_rel_modulation: float | None
+    :param rel_modulation_level: Relative burner modulation level
+        (0.0 to 1.0).
+    :type rel_modulation_level: float | None
+    :param oem_code: OEM diagnostic fault code.
+    :type oem_code: str | int | None
+    :param last_updated: Timestamp of last telemetry update.
+    :type last_updated: dt | None
+    """
+
+    flags: OpenThermFlags = field(default_factory=OpenThermFlags)
+    temperatures: OpenThermTemperatures = field(
+        default_factory=OpenThermTemperatures
+    )
+    counters: OpenThermCounters = field(default_factory=OpenThermCounters)
+    ch_water_pressure: float | None = None
+    dhw_flow_rate: float | None = None
+    max_rel_modulation: float | None = None
+    rel_modulation_level: float | None = None
+    oem_code: str | int | None = None
     last_updated: dt | None = None
 
 

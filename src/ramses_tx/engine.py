@@ -35,13 +35,13 @@ from .schemas import (
     select_device_filter_mode,
 )
 from .transport import TransportConfig, transport_factory
-from .typing import PktLogConfigT, PortConfigT, QosParams
+from .typing import DeviceIdT, PktLogConfigT, PortConfigT, QosParams
 
 if TYPE_CHECKING:
     from .config import EngineConfig
     from .protocol import RamsesProtocolT
     from .transport import RamsesTransportT
-    from .typing import DeviceIdT, MsgHandlerT, PayloadT
+    from .typing import MsgHandlerT, PayloadT
 
 
 DEV_MODE = False
@@ -99,7 +99,7 @@ class Engine:
         self._unwanted: list[DeviceIdT] = [
             NON_DEV_ADDR.id,
             ALL_DEV_ADDR.id,
-            "01:000001",  # type: ignore[list-item]  # why this one?
+            DeviceIdT("01:000001"),  # why this one?
         ]
         self._enforce_known_list = select_device_filter_mode(
             self.config.enforce_known_list,
@@ -125,7 +125,7 @@ class Engine:
             tuple[MsgHandlerT | None, bool | None, *tuple[Any, ...]] | None
         ) = None
 
-        self._protocol: RamsesProtocolT = None  # type: ignore[assignment]
+        self._protocol: RamsesProtocolT = None  # type: ignore[assignment]  # set in start()
         self._transport: RamsesTransportT | None = None
 
         # Thread-safe lock for task registry modifications
@@ -413,10 +413,9 @@ class Engine:
         )
 
     async def _msg_handler(self, msg: PacketDTO) -> None:
-        """Process incoming messages from the protocol."""
-        # Safely pass execution to Gateway's extended handling logic
-        handler = getattr(self, "_handle_msg", None)
-        if handler:
-            result = handler(msg)
-            if asyncio.iscoroutine(result):
-                await result
+        """Process incoming messages from the protocol.
+
+        Default no-op handler.  The Gateway overrides this via
+        ``_set_msg_handler`` to route packets through the full
+        inbound pipeline (topology, state projection, etc.).
+        """

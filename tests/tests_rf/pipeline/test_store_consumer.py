@@ -54,7 +54,7 @@ async def test_store_queue_consumer() -> None:
     # Initialize the SSOT store with background loops enabled
     store = MessageStore(maintain=True, db_path=":memory:")
 
-    # Create the simulated CentralDispatcher ssot_queue
+    # Create a simulated ssot_queue (formerly fed by CentralDispatcher)
     ssot_queue: asyncio.Queue[CoreMessage] = asyncio.Queue()
 
     # Wire the SSOT to listen to the queue

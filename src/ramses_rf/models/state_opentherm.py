@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime as dt
 
-from .state_base import _now_utc
-
 
 @dataclass(frozen=True)
 class OpenThermFlags:
@@ -59,7 +57,7 @@ class OpenThermCounters:
 class OpenThermState:
     """The immutable state of an OpenTherm Bridge (OTB) boiler matrix."""
 
-    last_updated: dt = field(default_factory=_now_utc)
+    last_updated: dt | None = None
     flags: OpenThermFlags = field(default_factory=OpenThermFlags)
     temperatures: OpenThermTemperatures = field(
         default_factory=OpenThermTemperatures

@@ -17,13 +17,14 @@ from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import (
     SZ_FRAGMENT_NUMBER,
     SZ_LOG_INDEX,
+    SZ_MESSAGE_ID,
     SZ_SCHEDULE,
     SZ_TOTAL_FRAGMENTS,
     SZ_ZONE_INDEX,
 )
 from ramses_rf.devices import Controller, Fakeable
 from ramses_rf.enums import Action
-from ramses_rf.protocol.opentherm import OTB_DATA_IDS
+from ramses_rf.protocol.opentherm import OPENTHERM_DATA_IDS
 from ramses_rf.protocol.ramses import CODE_NAME_LOOKUP, RQ_NO_PAYLOAD
 from ramses_tx import CommandDTO, DeviceIdT, Priority
 from ramses_tx.address import NON_DEV_ADDR
@@ -615,13 +616,13 @@ async def script_scan_otb(gateway: Gateway, device_id: DeviceIdT) -> None:
     """
     _LOGGER.warning("script_scan_otb_full invoked - expect a lot of nonsense")
 
-    for msg_id in OTB_DATA_IDS:
+    for msg_id in OPENTHERM_DATA_IDS:
         command = build_dto(
             Intent(
                 src=HGI_DEV_ADDR,
                 dst=Address(device_id),
                 action=Action.GET_OPENTHERM_DATA,
-                data={"msg_id": msg_id},
+                data={SZ_MESSAGE_ID: msg_id},
             )
         )
         gateway.send_cmd(command)

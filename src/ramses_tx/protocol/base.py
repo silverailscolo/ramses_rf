@@ -194,12 +194,23 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         return del_handler
 
-    def connection_made(self, transport: TransportInterface) -> None:  # type: ignore[override]
+    def connection_made(
+        self, transport: Any, /, *, ramses: bool = False
+    ) -> None:
         """Establish connection to the Transport.
 
         The argument is the transport representing the pipe connection.
         To receive data, wait for packet_received() calls. When the
         connection is closed, connection_lost() is called.
+
+        The ``ramses`` keyword is accepted for compatibility with
+        ``ProtocolInterface.connection_made`` but ignored here —
+        ``PortTransport`` calls this directly after signature echo.
+
+        ``transport`` is typed ``Any`` to satisfy mypy's Liskov check
+        against ``asyncio.BaseProtocol.connection_made`` (which expects
+        ``BaseTransport``).  At runtime it is always a
+        ``TransportInterface``.
         """
         if self._wait_connection_made.done():
             return
@@ -391,6 +402,10 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
             qos=qos or DEFAULT_QOS,
         )
 
+        if packet is None:
+            raise ProtocolSendFailed(
+                f"Failed to send command: {patched_cmd} (no packet returned)"
+            )
         return packet
 
     async def _send_cmd(
@@ -402,7 +417,7 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         num_repeats: int = DEFAULT_NUM_REPEATS,
         priority: Priority = Priority.DEFAULT,
         qos: QosParams = DEFAULT_QOS,
-    ) -> Packet:  # only cmd, no args, kwargs
+    ) -> Packet | None:  # only cmd, no args, kwargs
         raise NotImplementedError(f"{self}: Unexpected error")
 
     async def _send_frame(

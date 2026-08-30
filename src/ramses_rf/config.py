@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Final, Literal, Never, TypeVar
 
-import voluptuous as vol
+import probatio as vol
 
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import DEVICE_ID_REGEX
@@ -23,7 +23,7 @@ _T = TypeVar("_T")
 def convert_null_to_dict() -> Callable[[_T | None], _T | dict[Never, Never]]:
     """Return validator converting a null node value to an empty dict.
 
-    :returns: A callable validator function for voluptuous schemas.
+    :returns: A callable validator function for probatio schemas.
     :rtype: Callable[[_T | None], _T | dict[Never, Never]]
     """
 
@@ -81,7 +81,7 @@ def sch_global_traits_dict_factory(
                 None, SCH_POLLING_INTERVAL
             ),
             vol.Optional(SZ_IS_BATTERY, default=False): vol.Any(None, bool),
-            vol.Optional(vol.Remove("_note")): str,
+            vol.Remove("_note"): str,
             vol.Optional("locked", default=False): vol.Any(None, bool),
         },
         extra=vol.PREVENT_EXTRA,

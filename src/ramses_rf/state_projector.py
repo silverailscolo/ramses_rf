@@ -72,6 +72,7 @@ from .const import (
     SZ_ZONE_INDEX,
     DevType,
 )
+from .devices.dev_base import DeviceBase
 from .devices.hvac_ventilators import HvacVentilator
 from .messages import Message
 from .models import StateUpdatedEvent, SystemState
@@ -266,8 +267,7 @@ def _resolve_logical_targets(
             targets.append(src_dev)
 
     # 3. Hardware twin (Destination) gets the update.
-    # Legacy routes packets to the destination device's cache. To maintain
-    # strict parity, we mirror this.
+    # Route packets to the destination device's cache.
     # HVAC packets (e.g. 22F1 fan_mode from REM->FAN) target the destination
     # device's hvac_state directly, so we also accept devices that have
     # hvac_state even if they lack apply_state_update.
@@ -436,7 +436,14 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
     if hvac_state is None or not dataclasses.is_dataclass(hvac_state):
         return
 
-    p = quirks.apply_hvac_quirks(p, target.hvac_state, msg.code)
+    strategy = (
+        target._get_configured_strategy()
+        if isinstance(target, DeviceBase)
+        else None
+    )
+    p = quirks.apply_hvac_quirks(
+        p, target.hvac_state, msg.code, strategy=strategy
+    )
 
     fields = [
         SZ_CO2_LEVEL,
@@ -728,11 +735,7 @@ def _update_demand_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         if slug in ("CTL", "UFC"):
             if (p.get(SZ_DOMAIN_INDEX) or p.get("domain_id")) == "FC":
                 updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-        elif (
-            "ufx_index" not in p
-            and SZ_UFH_INDEX not in p
-            and "ufh_index" not in p
-        ):
+        elif SZ_UFH_INDEX not in p:
             updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
 
     if SZ_RELAY_DEMAND in p:

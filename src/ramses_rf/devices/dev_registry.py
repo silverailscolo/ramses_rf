@@ -11,7 +11,13 @@ from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ramses_rf.address import Address, is_valid_dev_id
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import DEV_TYPE_MAP, SZ_DEVICES, DevType
+from ramses_rf.const import (
+    DEV_TYPE_MAP,
+    SZ_DEVICES,
+    SZ_UFH_INDEX,
+    SZ_ZONE_INDEX,
+    DevType,
+)
 from ramses_rf.devices.dev_base import DeviceHeat, DeviceHvac, Fakeable
 from ramses_rf.enums import TopologyAction
 from ramses_rf.exceptions import (
@@ -261,7 +267,7 @@ class DeviceRegistry:
                     child_id_raw = FC
                 child_dev = self.get_device(
                     event.child_id,
-                    parent=cast("Parent", parent),
+                    parent=cast("Parent[Device]", parent),
                     child_id=str(child_id_raw)
                     if child_id_raw is not None
                     else None,
@@ -389,12 +395,23 @@ class DeviceRegistry:
             return
         ufc = self.device_by_id.get(event.device_id)
         if ufc and hasattr(ufc, "get_circuit"):
-            ufh_index = str(event.metadata.get("ufh_index"))
+            ufh_index = str(
+                event.metadata.get(
+                    SZ_UFH_INDEX, event.metadata.get("ufh_index")
+                )
+            )
             circuit = ufc.get_circuit(ufh_index)
 
             # REVERSE BINDING: Hydrate the Zone Read-Model with the circuit actuator!
-            zone_index = event.metadata.get("zone_index")
+            zone_index = event.metadata.get(
+                SZ_ZONE_INDEX, event.metadata.get("zone_index")
+            )
             tcs = getattr(ufc, "tcs", None)
+            if not tcs and event.metadata.get("tcs_id"):
+                tcs_dev = self.device_by_id.get(
+                    DeviceIdT(str(event.metadata["tcs_id"]))
+                )
+                tcs = getattr(tcs_dev, "tcs", None)
 
             # Prevent AttributeError: Only hydrate if the UFC is securely bound to a TCS
             if (
@@ -403,6 +420,10 @@ class DeviceRegistry:
                 and tcs
                 and hasattr(tcs, "id")
             ):
+                zone = getattr(tcs, "zone_by_index", {}).get(str(zone_index))
+                if zone and hasattr(circuit, "set_zone"):
+                    circuit.set_zone(zone)
+
                 z_key = f"{tcs.id}_{zone_index}"
                 cqrs_acts: dict[str, set[str]] = getattr(
                     self, "_cqrs_actuators", {}
@@ -411,7 +432,10 @@ class DeviceRegistry:
                 self._cqrs_actuators = cqrs_acts
 
             _LOGGER.debug(
-                f"Created Circuit {ufh_index} on {ufc.id} via {event.causation}"
+                "Created Circuit %s on %s via %s",
+                ufh_index,
+                ufc.id,
+                event.causation,
             )
 
     def _handle_update_traits(self, event: TopologyChangedEvent) -> None:
@@ -519,7 +543,7 @@ class DeviceRegistry:
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: None = None,
@@ -531,7 +555,7 @@ class DeviceRegistry:
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: type[_DeviceT],
@@ -542,7 +566,7 @@ class DeviceRegistry:
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: type[_DeviceT] | None = None,
@@ -638,7 +662,7 @@ class DeviceRegistry:
     @staticmethod
     def _maybe_reparent_bdr(
         device: Device | None,
-        parent: Parent | None,
+        parent: Parent[Device] | None,
         child_id: str | None,
     ) -> None:
         """Re-parent a BDR from hotwater_valve (FA) to appliance_control (FC).

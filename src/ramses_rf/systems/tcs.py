@@ -7,7 +7,7 @@ import asyncio
 import logging
 from datetime import datetime as dt, timedelta as td
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
@@ -60,13 +60,12 @@ from ramses_tx.typing import PayDictT
 from ..messages import Message
 from .faultlog import FaultLog
 from .helpers import send_system_intent
-from .zones import zone_factory
+from .zones import DhwZone, Zone, zone_factory
 
 if TYPE_CHECKING:
     from ramses_rf.address import Address
 
     from .faultlog import FaultIdxT, FaultLogEntry
-    from .zones import DhwZone, Zone
 
 
 # TODO: refactor packet routing (filter *before* routing)
@@ -117,13 +116,12 @@ SYS_KLASS = SimpleNamespace(
 )
 
 
-class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
+class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
     """The TCS base class orchestrating system-level operations."""
 
-    _SLUG: str = None  # type: ignore[assignment]
+    _SLUG: str | None = None
 
-    # TODO: check (code so complex, not sure if this is true)
-    childs: list[Device]  # type: ignore[assignment]
+    childs: list[Device]
 
     # Populated by the CQRS state projector (issue 1102).  Declared here
     # because tpi_params property is on SystemBase but the dict is only
@@ -158,7 +156,7 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         self.id: DeviceIdT = controller.id
 
         self.ctl: Controller = controller
-        self.tcs: Evohome = self  # type: ignore[assignment]
+        self.tcs = self
         self._child_id = FF  # NOTE: domain_id
 
         self._app_cntrl: BdrSwitch | OtbGateway | None = None
@@ -190,17 +188,14 @@ class SystemBase(Parent, Entity):  # 3B00 (multi-relay)
         # The legacy entity_state.get_value(Code._1100) path is deprecated.
         if self._tpi_params:
             for params in self._tpi_params.values():
-                return cast(
-                    PayDictT._1100,
-                    {
-                        "cycle_rate": params.get("cycle_rate"),
-                        "min_on_time": params.get("min_on_time"),
-                        "min_off_time": params.get("min_off_time"),
-                        "proportional_band_width": params.get(
-                            "proportional_band_width"
-                        ),
-                    },
-                )
+                return {
+                    "cycle_rate": params.get("cycle_rate"),
+                    "min_on_time": params.get("min_on_time"),
+                    "min_off_time": params.get("min_off_time"),
+                    "proportional_band_width": params.get(
+                        "proportional_band_width"
+                    ),
+                }
         return None
 
     async def heat_demand(self) -> float | None:  # 3150/FC
@@ -374,9 +369,15 @@ class MultiZone(SystemBase):  # 0005 (+/- 000C?)
         # Zone._update_schema for hydration (ramses-rf/ramses_cc#919).
         schema = shrink(SCH_TCS_ZONES_ZON(schema), keep_hints=True)
 
-        zon: Zone = self.zone_by_index.get(zone_index)  # type: ignore[assignment]
+        zon: Zone | None = self.zone_by_index.get(zone_index)
         if zon is None:  # not found in tcs, create it
-            zon = zone_factory(self, zone_index, msg=msg, **schema)  # type: ignore[unreachable]
+            created = zone_factory(self, zone_index, msg=msg, **schema)
+            if not isinstance(created, Zone):
+                raise TypeError(
+                    f"zone_factory returned {type(created).__name__}, "
+                    f"expected Zone for zone_index={zone_index}"
+                )
+            zon = created
             self.zone_by_index[zon.index] = zon
             self.zones.append(zon)
 
@@ -429,7 +430,7 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         """Initialise schedule synchronisation."""
         super().__init__(*args, **kwargs)
 
-        self._msg_0006: Message = None  # type: ignore[assignment]
+        self._msg_0006: Message | None = None
 
     async def _schedule_version(
         self, *, force_io: bool = False
@@ -463,6 +464,11 @@ class ScheduleSync(SystemBase):  # 0006 (+/- 0404?)
         )
         if packet:
             self._msg_0006 = Message._from_packet(packet)
+
+        if self._msg_0006 is None:
+            raise RuntimeError(
+                "No schedule version available after GET_SCHEDULE_VERSION"
+            )
 
         return (
             self._msg_0006.payload[SZ_CHANGE_COUNTER],
@@ -532,11 +538,11 @@ class Logbook(SystemBase):  # 0418
         """Initialise the fault logbook."""
         super().__init__(*args, **kwargs)
 
-        self._prev_event: Message = None  # type: ignore[assignment]
-        self._this_event: Message = None  # type: ignore[assignment]
+        self._prev_event: Message | None = None
+        self._this_event: Message | None = None
 
-        self._prev_fault: Message = None  # type: ignore[assignment]
-        self._this_fault: Message = None  # type: ignore[assignment]
+        self._prev_fault: Message | None = None
+        self._this_fault: Message | None = None
 
         self._faultlog: FaultLog = FaultLog(self)
 
@@ -614,7 +620,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialise the StoredHw system."""
         super().__init__(*args, **kwargs)
-        self._dhw: DhwZone = None  # type: ignore[assignment]
+        self._dhw: DhwZone | None = None
 
     # TODO: should be a private method
     def get_dhw_zone(
@@ -636,11 +642,18 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
         schema = shrink(SCH_TCS_DHW(schema))
 
         if not self._dhw:
-            self._dhw = zone_factory(self, "HW", msg=msg, **schema)  # type: ignore[assignment]
+            created = zone_factory(self, "HW", msg=msg, **schema)
+            if not isinstance(created, DhwZone):
+                raise TypeError(
+                    f"zone_factory returned {type(created).__name__}, "
+                    "expected DhwZone for DHW zone"
+                )
+            self._dhw = created
 
         elif schema:
             self._dhw._update_schema(**schema)
 
+        assert self._dhw is not None  # set above or was already set
         return self._dhw
 
     def _remove_dhw_zone(self) -> bool:
@@ -665,7 +678,7 @@ class StoredHw(SystemBase):  # 10A0, 1260, 1F41
             and self._dhw.heating_valve is None
             and not self._dhw.childs
         ):
-            self._dhw = None  # type: ignore[assignment]
+            self._dhw = None
             return True
         return False
 
@@ -902,16 +915,18 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
                     f"SUPPRESSED in System._update_schema (app_cntrl): {err}"
                 )
 
-        if _schema := (schema.get(SZ_DHW_SYSTEM)):  # type: ignore[assignment]
-            self.get_dhw_zone(**_schema)  # self._dhw = ...
+        _dhw_schema: Any = schema.get(SZ_DHW_SYSTEM)
+        if _dhw_schema:
+            self.get_dhw_zone(**_dhw_schema)  # self._dhw = ...
 
         if not isinstance(self, MultiZone):
             return
 
-        if _schema := (schema.get(SZ_ZONES)):  # type: ignore[assignment]
+        _zones_schema: Any = schema.get(SZ_ZONES)
+        if _zones_schema:
             [
                 self.get_htg_zone(zone_index, **s)
-                for zone_index, s in _schema.items()
+                for zone_index, s in _zones_schema.items()
             ]
 
     @classmethod
@@ -1100,7 +1115,7 @@ def system_factory(
         :returns: The appropriate system class type.
         :rtype: type[System]
         """
-        klass: str = schema.get(SZ_CLASS)  # type: ignore[assignment]
+        klass: str | None = schema.get(SZ_CLASS)
 
         # a specified system class always takes precedence (even if it is wrong)...
         if klass and (cls := SYS_CLASS_BY_SLUG.get(klass)):

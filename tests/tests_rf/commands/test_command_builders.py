@@ -9,6 +9,7 @@ from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import ZON_MODE_MAP, Code, Verb
 from ramses_rf.enums import Action
+from ramses_rf.strategies import OrconStrategy
 from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.packet import Packet
 
@@ -233,6 +234,20 @@ def test_set_fan_mode_orcon_2byte_default() -> None:
     assert str(dto.code) == expected_code
 
 
+def test_set_fan_mode_orcon_strategy_accepts_dutch_alias() -> None:
+    """Orcon strategy accepts Dutch fan mode aliases."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("37:111111"),
+        action=Action.SET_FAN_MODE,
+        data={"fan_mode": "laag", "strategy": OrconStrategy()},
+    )
+
+    dto = build_dto(intent)
+
+    assert dto.payload == "000107"
+
+
 def test_set_fan_mode_orcon_2byte_explicit() -> None:
     """Explicit orcon scheme with mode_max='' produces legacy 2-byte payload."""
     expected_payload = Code._0001
@@ -261,6 +276,20 @@ def test_set_fan_mode_itho_3byte() -> None:
     dto = build_dto(intent)
 
     assert dto.payload == expected_payload
+
+
+def test_set_fan_mode_climarad_3byte() -> None:
+    """ClimaRad scheme uses the Minibox mode map with mode_max=06."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("37:111111"),
+        action=Action.SET_FAN_MODE,
+        data={"fan_mode": "auto", "scheme": "climarad"},
+    )
+
+    dto = build_dto(intent)
+
+    assert dto.payload == "000506"
 
 
 def test_set_fan_mode_vasco_3byte() -> None:
@@ -1184,3 +1213,162 @@ def test_build_put_outdoor_temp(snapshot: Any) -> None:
     )
     dto = build_dto(intent)
     assert str(Packet._from_cmd(dto)._frame) == snapshot
+
+
+# ---------------------------------------------------------------------------
+# Builder tests for set_temperature, set_mode, set_name (PR4 coverage)
+# ---------------------------------------------------------------------------
+
+
+def test_build_set_temperature(snapshot: Any) -> None:
+    """build_set_temperature → W 2309 with ZoneSetpointPayload.create()."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_TEMPERATURE,
+        data={"zone_index": 3, "setpoint": 21.0},
+    )
+    dto = build_dto(intent)
+    assert dto.code == Code._2309
+    assert dto.verb == Verb.W_
+    assert str(Packet._from_cmd(dto)._frame) == snapshot
+
+
+def test_build_set_temperature_invalid_missing_zone() -> None:
+    """build_set_temperature raises ValueError when zone_index is missing."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_TEMPERATURE,
+        data={"setpoint": 21.0},
+    )
+    with pytest.raises(ValueError, match="zone_index"):
+        build_dto(intent)
+
+
+def test_build_set_temperature_invalid_missing_setpoint() -> None:
+    """build_set_temperature raises ValueError when setpoint is missing."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_TEMPERATURE,
+        data={"zone_index": 3},
+    )
+    with pytest.raises(ValueError, match="setpoint"):
+        build_dto(intent)
+
+
+def test_build_set_mode_follow_schedule(snapshot: Any) -> None:
+    """build_set_mode with mode=follow_schedule → W 2349 (no setpoint needed)."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_MODE,
+        data={"zone_index": 3, "mode": "follow_schedule"},
+    )
+    dto = build_dto(intent)
+    assert dto.code == Code._2349
+    assert dto.verb == Verb.W_
+    assert str(Packet._from_cmd(dto)._frame) == snapshot
+
+
+def test_build_set_mode_permanent_override(snapshot: Any) -> None:
+    """build_set_mode with mode=permanent_override + setpoint → W 2349 7B."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_MODE,
+        data={"zone_index": 3, "mode": "permanent_override", "setpoint": 22.0},
+    )
+    dto = build_dto(intent)
+    assert dto.code == Code._2349
+    assert dto.verb == Verb.W_
+    assert str(Packet._from_cmd(dto)._frame) == snapshot
+
+
+def test_build_set_mode_countdown_override(snapshot: Any) -> None:
+    """build_set_mode with mode=countdown_override + setpoint + duration → W 2349 7B."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_MODE,
+        data={
+            "zone_index": 3,
+            "mode": "countdown_override",
+            "setpoint": 22.0,
+            "duration": 60,
+        },
+    )
+    dto = build_dto(intent)
+    assert dto.code == Code._2349
+    assert dto.verb == Verb.W_
+    assert str(Packet._from_cmd(dto)._frame) == snapshot
+
+
+def test_build_set_mode_temporary_override(snapshot: Any) -> None:
+    """build_set_mode with mode=temporary_override + setpoint + until → W 2349 13B."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_MODE,
+        data={
+            "zone_index": 3,
+            "mode": "temporary_override",
+            "setpoint": 22.0,
+            "until": "2026-01-15-12-00",
+        },
+    )
+    dto = build_dto(intent)
+    assert dto.code == Code._2349
+    assert dto.verb == Verb.W_
+    assert str(Packet._from_cmd(dto)._frame) == snapshot
+
+
+def test_build_set_mode_invalid_missing_zone() -> None:
+    """build_set_mode raises ValueError when zone_index is missing."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_MODE,
+        data={"mode": "follow_schedule"},
+    )
+    with pytest.raises(ValueError, match="zone_index"):
+        build_dto(intent)
+
+
+def test_build_set_name(snapshot: Any) -> None:
+    """build_set_name → W 0004 with ZoneNamePayload.create()."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_ZONE_NAME,
+        data={"zone_index": 3, "name": "Living Room"},
+    )
+    dto = build_dto(intent)
+    assert dto.code == Code._0004
+    assert dto.verb == Verb.W_
+    assert str(Packet._from_cmd(dto)._frame) == snapshot
+
+
+def test_build_set_name_invalid_missing_zone() -> None:
+    """build_set_name raises ValueError when zone_index is missing."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_ZONE_NAME,
+        data={"name": "Living Room"},
+    )
+    with pytest.raises(ValueError, match="zone_index"):
+        build_dto(intent)
+
+
+def test_build_set_name_invalid_missing_name() -> None:
+    """build_set_name raises ValueError when name is missing."""
+    intent = Intent(
+        src=Address("18:000730"),
+        dst=Address("01:111111"),
+        action=Action.SET_ZONE_NAME,
+        data={"zone_index": 3},
+    )
+    with pytest.raises(ValueError, match="name"):
+        build_dto(intent)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import enum
 from datetime import UTC, datetime as dt_type
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -13,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from ramses_rf import Gateway
-from ramses_rf.devices import DeviceHeat, DeviceHvac
+from ramses_rf.devices import DeviceHeat
 from ramses_rf.gateway import GatewayConfig
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_READER_TASK
@@ -31,6 +32,8 @@ FIXTURE_FILE = (
 def _normalize_val(val: Any) -> Any:
     if isinstance(val, dt_type):
         return val.replace(tzinfo=UTC)
+    if isinstance(val, enum.Enum):
+        return val.value
     if dataclasses.is_dataclass(val):
         return {
             k: _normalize_val(v)
@@ -74,10 +77,11 @@ async def _get_attr_value(obj: Any, attr: str) -> Any:
 
 
 async def serialize_device(dev: Any) -> dict[str, Any]:
-    """Helper to serialize a device's state for snapshotting.
+    """Helper to serialize a device's state and configuration for snapshotting.
 
-    Identifies attributes based on device type (Heat vs HVAC) and existence
-    of properties to create a deterministic state snapshot.
+    Uses `await dev.status()` and `await dev.params()` to obtain authoritative
+    domain telemetry and configuration parameters, combining with base device
+    identity and topology attributes.
     """
     # Base attributes for all devices
     data: dict[str, Any] = {
@@ -87,9 +91,8 @@ async def serialize_device(dev: Any) -> dict[str, Any]:
         "battery_low": await _get_attr_value(dev, "battery_low"),
     }
 
-    # Capture specific state for Heating devices
+    # Capture specific topology for Heating devices
     if isinstance(dev, DeviceHeat):
-        # Topology
         zone = getattr(dev, "zone", None)
         tcs = getattr(dev, "tcs", None)
 
@@ -100,103 +103,23 @@ async def serialize_device(dev: Any) -> dict[str, Any]:
             }
         )
 
-        # General Heating Attributes
-        # We iterate and try to access each attribute.
-        # Properties in ramses_rf might raise TypeError/ValueError if state is inconsistent
-        # or if the library has a bug. We capture these errors in the snapshot
-        # rather than crashing the entire test suite.
-        for attr in (
-            "active",  # BDR Switch
-            "actuator_cycle",  # Actuators
-            "actuator_state",
-            "heat_demand",  # Many heat devices
-            "heat_demands",  # UFC
-            "modulation_level",  # OTB/Actuators
-            "relay_demand",  # BDR/UFC
-            "setpoint",  # Thermostats/TRVs
-            "setpoints",  # UFC
-            "temperature",  # Sensors
-            "window_open",  # TRV
-        ):
-            try:
-                # getattr triggers the @property logic
-                val = await _get_attr_value(dev, attr)
-                if val is not None:
-                    data[attr] = val
-            except AttributeError:
-                continue  # Attribute strictly does not exist on this object
-            except Exception as err:
-                # Capture functional regressions (bugs) in the library code as string data
-                # e.g. "setpoints": "<TypeError: string indices must be integers...>"
-                data[attr] = f"<{type(err).__name__}: {err}>"
+    # Authoritative device status dictionary
+    status = await dev.status()
+    for k, v in status.items():
+        if v is not None:
+            data[k] = _normalize_val(v)
 
-        # OpenTherm Bridge (OTB) Specifics
-        if getattr(dev, "_SLUG", None) == "OTB":
-            for attr in (
-                "boiler_output_temp",
-                "boiler_return_temp",
-                "boiler_setpoint",
-                "ch_max_setpoint",
-                "ch_water_pressure",
-                "dhw_flow_rate",
-                "dhw_setpoint",
-                "dhw_temp",
-                "fault_present",
-                "flame_active",
-                "max_rel_modulation",
-                "oem_code",
-                "otc_active",
-                "outside_temp",
-                "rel_modulation_level",
-            ):
-                try:
-                    val = await _get_attr_value(dev, attr)
-                    if val is not None:
-                        data[attr] = val
-                except AttributeError:
-                    continue
-                except Exception as err:
-                    data[attr] = f"<{type(err).__name__}: {err}>"
+    # Authoritative device configuration parameters
+    params = await dev.params()
+    for k, v in params.items():
+        if v is not None and v != {}:
+            data[k] = _normalize_val(v)
 
-    # Capture specific state for HVAC devices
-    if isinstance(dev, DeviceHvac):
-        for attr in (
-            "air_quality",
-            "air_quality_base",
-            "boost_timer",
-            "bypass_mode",
-            "bypass_position",
-            "bypass_state",
-            "co2_level",
-            "dewpoint_temp",
-            "exhaust_fan_speed",
-            "exhaust_flow",
-            "exhaust_temp",
-            "fan_info",
-            "fan_mode",
-            "fan_rate",
-            "filter_remaining",
-            "indoor_humidity",
-            "indoor_temp",
-            "outdoor_humidity",
-            "outdoor_temp",
-            "post_heat",
-            "pre_heat",
-            "presence_detected",
-            "remaining_mins",
-            "speed_cap",
-            "supply_fan_speed",
-            "supply_flow",
-            "supply_temp",
-        ):
-            try:
-                val = await _get_attr_value(dev, attr)
-                if val is not None:
-                    data[attr] = val
-            except AttributeError:
-                continue
-            except Exception as err:
-                data[attr] = f"<{type(err).__name__}: {err}>"
+    # UFH Circuit demands (if UFH controller)
+    if hasattr(dev, "thermal_demands"):
+        demands = await dev.thermal_demands()
+        if demands:
+            data["thermal_demands"] = _normalize_val(demands)
 
     # Return sorted dictionary for deterministic snapshots
     return {k: v for k, v in sorted(data.items())}

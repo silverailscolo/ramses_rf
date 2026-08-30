@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Protocol,
+    TypeVar,
+    overload,
+    runtime_checkable,
+)
 
 from ramses_tx import CommandDTO, Packet, Priority, QosParams
 
@@ -186,6 +193,60 @@ class DeviceInterface(Protocol):
         """
 
 
+@runtime_checkable
+class ControllerInterface(DeviceInterface, Protocol):
+    """Interface for a RAMSES controller entity."""
+
+    @property
+    def tcs(self) -> Any:
+        """Return the parent heating system associated with this controller.
+
+        :returns: The parent system, or None if unassociated.
+        :rtype: Any
+        """
+        ...
+
+
+@runtime_checkable
+class ParentInterface(Protocol):
+    """Structural interface representing any Parent entity (System, Zone, UFC)."""
+
+    @property
+    def zone_index(self) -> str | None:
+        """Return the domain or zone index string.
+
+        :returns: The domain or zone index string.
+        :rtype: str | None
+        """
+        ...
+
+    def _add_child(
+        self,
+        child: Any,
+        *,
+        child_id: str | None = None,
+        is_sensor: bool | None = None,
+    ) -> None:
+        """Add a child entity to this parent registry.
+
+        :param child: The child entity instance to attach.
+        :type child: Any
+        :param child_id: The specific sub-index (e.g. F9, FA), optional.
+        :type child_id: str | None
+        :param is_sensor: Whether the child acts as a sensor, optional.
+        :type is_sensor: bool | None
+        """
+        ...
+
+    def _detach_child(self, child: Any) -> None:
+        """Detach a child device from this Parent, maintaining referential integrity.
+
+        :param child: The child entity to detach.
+        :type child: Any
+        """
+        ...
+
+
 class DeviceFilterInterface(Protocol):
     """Interface for the Device Filter service."""
 
@@ -230,7 +291,7 @@ class DeviceRegistryInterface(Protocol):
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: None = None,
@@ -242,7 +303,7 @@ class DeviceRegistryInterface(Protocol):
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: type[_DeviceT],
@@ -253,7 +314,7 @@ class DeviceRegistryInterface(Protocol):
         device_id: DeviceIdT | str,
         *,
         msg: Message | None = None,
-        parent: Parent | None = None,
+        parent: Parent[Device] | None = None,
         child_id: str | None = None,
         is_sensor: bool | None = None,
         cls: type[_DeviceT] | None = None,

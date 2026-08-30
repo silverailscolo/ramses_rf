@@ -8,11 +8,18 @@ from typing import Any, Final
 from ramses_rf.const import (
     DOMAIN_TYPE_MAP,
     HEARTBEAT_TIMEOUT_BDR,
+    SZ_BDR_STATE,
     SZ_HEAT_DEMAND,
+    SZ_JIM_STATE,
     SZ_RELAY_DEMAND,
     DevType,
 )
-from ramses_rf.models import ActuatorCycleDTO, ActuatorStateDTO, DeviceTraits
+from ramses_rf.models import (
+    ActuatorCycleDTO,
+    BdrStateDTO,
+    DeviceTraits,
+    JimStateDTO,
+)
 from ramses_tx import Priority
 from ramses_tx.const import SZ_PRIORITY, Code
 from ramses_tx.typing import PayDictT
@@ -58,31 +65,29 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
             modulation_level=state.modulation_level,
         )
 
-    async def actuator_state(self) -> ActuatorStateDTO | None:  # 3EF0
-        """Return the actuator modulation state as a CQRS DTO.
+    async def bdr_state(self) -> BdrStateDTO | None:  # 3EF0
+        """Return the BDR actuator modulation state as a CQRS DTO.
 
-        :returns: ActuatorStateDTO or None.
-        :rtype: ActuatorStateDTO | None
+        :returns: BdrStateDTO or None.
+        :rtype: BdrStateDTO | None
         """
         state = getattr(self, "act_state", None)
         if not state:
             return None
 
-        flame_status = (
-            state.flame_on
-            if state.flame_on is not None
-            else state.flame_active
-        )
-
-        return ActuatorStateDTO(
+        return BdrStateDTO(
             modulation_level=state.modulation_level,
             actuator_enabled=state.actuator_enabled,
-            ch_active=state.ch_active,
-            ch_enabled=state.ch_enabled,
-            dhw_active=state.dhw_active,
-            flame_active=flame_status,
             last_updated=state.last_updated,
         )
+
+    async def actuator_state(self) -> BdrStateDTO | None:  # 3EF0
+        """Return the actuator modulation state as a CQRS DTO.
+
+        :returns: BdrStateDTO or None.
+        :rtype: BdrStateDTO | None
+        """
+        return await self.bdr_state()
 
     async def status(self) -> dict[str, Any]:
         """Return the current operating status dictionary."""
@@ -155,6 +160,7 @@ class BdrSwitch(Actuator, RelayDemand):  # BDR (13):
     """
 
     ACTIVE: Final = "active"
+    BDR_STATE: Final = SZ_BDR_STATE
     TPI_PARAMS: Final = "tpi_params"
 
     _SLUG = DevType.BDR
@@ -244,6 +250,8 @@ class JimDevice(Actuator):  # BDR (08):
     _SLUG: str = DevType.JIM
     _STATE_ATTR: str | None = None
 
+    JIM_STATE: Final = SZ_JIM_STATE
+
     @property
     def heartbeat_timeout(self) -> td:
         """Return the timeout before the device is considered unavailable.
@@ -259,6 +267,34 @@ class JimDevice(Actuator):  # BDR (08):
     ) -> None:
         """Initialize the JIM device."""
         super().__init__(*args, traits=traits, **kwargs)
+
+    async def jim_state(self) -> JimStateDTO | None:  # 3EF0
+        """Return the JIM appliance interface state as a CQRS DTO.
+
+        :returns: JimStateDTO or None.
+        :rtype: JimStateDTO | None
+        """
+        state = getattr(self, "act_state", None)
+        if not state:
+            return None
+
+        return JimStateDTO(
+            modulation_level=state.modulation_level,
+            actuator_enabled=state.actuator_enabled,
+            ch_active=state.ch_active,
+            dhw_active=state.dhw_active,
+            flame_active=state.flame_active,
+            cooling_active=getattr(state, "cooling_active", None),
+            last_updated=state.last_updated,
+        )
+
+    async def status(self) -> dict[str, Any]:
+        """Return the current operating status dictionary."""
+        base_status = await super().status()
+        return {
+            **base_status,
+            self.ACTUATOR_STATE: await self.jim_state(),
+        }
 
 
 class JstDevice(RelayDemand):  # BDR (31):

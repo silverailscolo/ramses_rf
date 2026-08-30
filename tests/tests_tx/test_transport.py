@@ -510,6 +510,92 @@ async def test_is_recent_tx_rejects_unrelated_frame() -> None:
 
 
 @pytest.mark.asyncio
+async def test_normalise_evofw3_tx_echo_hash_prefix() -> None:
+    """_normalise must convert evofw3 '# '-prefixed TX echoes to parseable frames.
+
+    evofw3 sends TX echoes with a '#' prefix (e.g. '# I --- ...').
+    Without normalisation, _partition() treats '#' as a comment delimiter,
+    leaving an empty packet body → PacketInvalid("Null packet").
+
+    The fix converts '# I --- ...' → '...  I --- ...' (1-char verbs get
+    an extra space to form the canonical ' I') and '# RQ --- ...' →
+    '... RQ --- ...' (2-char verbs need no extra space).
+
+    See: https://github.com/ramses-rf/ramses_cc/issues/1067
+    """
+    from datetime import datetime as dt
+
+    from ramses_tx.packet import Packet
+    from ramses_tx.transport.helpers import _normalise
+
+    test_cases = [
+        "# I --- 37:123789 32:161442 --:------ 22F1 003 000207",
+        "# I --- 37:123789 32:161442 --:------ 22F3 007 00120F03040404",
+        "# W --- 37:123789 32:161442 --:------ 22F7 003 00FFEF",
+        "# RQ --- 37:123789 32:161442 --:------ 10D0 001 00",
+        "# RP --- 37:123789 32:161442 --:------ 10D0 002 00FF",
+    ]
+
+    for raw in test_cases:
+        normalised = _normalise(raw)
+        # Must not start with # (comment delimiter)
+        assert not normalised.startswith("#"), (
+            f"Normalised line still starts with #: {normalised!r}"
+        )
+        # Must parse as a valid packet
+        pkt = Packet.from_file(dt.now().isoformat(), normalised, is_echo=True)
+        dto = pkt.to_dto()
+        assert dto.addr1 == "37:123789"
+        assert dto.addr2 == "32:161442"
+
+
+@pytest.mark.asyncio
+async def test_normalise_evofw3_tx_echo_is_recent_tx_match() -> None:
+    """_is_recent_tx must match evofw3 '# '-prefixed echoes after normalisation.
+
+    After _normalise converts the '#' prefix, the echo frame must be
+    detectable by _is_recent_tx so the FSM recognises it as a hardware
+    echo and doesn't retry or timeout.
+
+    See: https://github.com/ramses-rf/ramses_cc/issues/1067
+    """
+    from ramses_tx.transport.base import TransportConfig, _FullTransport
+    from ramses_tx.transport.helpers import _normalise
+
+    class DummyTransport(_FullTransport):
+        def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+            super().__init__(
+                config=TransportConfig(disable_sending=False), loop=loop
+            )
+            self._protocol = Mock()
+
+        async def _write_frame(self, frame: str) -> None:
+            pass
+
+    loop = asyncio.get_event_loop()
+    transport = DummyTransport(loop)
+
+    # TX frame as sent by the protocol layer
+    tx_frame = " I --- 37:123789 32:161442 --:------ 22F1 003 000207"
+    await transport.write_frame(tx_frame)
+
+    # evofw3 echo arrives with '# ' prefix
+    echo_raw = "# I --- 37:123789 32:161442 --:------ 22F1 003 000207"
+    echo_normalised = _normalise(echo_raw)
+    assert transport._is_recent_tx(echo_normalised) is True
+
+
+@pytest.mark.asyncio
+async def test_normalise_does_not_affect_comment_lines() -> None:
+    """_normalise must not alter lines starting with '#' that are not verb echoes."""
+    from ramses_tx.transport.helpers import _normalise
+
+    # Non-verb lines starting with # should be unchanged
+    assert _normalise("# This is a comment") == "# This is a comment"
+    assert _normalise("# Checksum error") == "# Checksum error"
+
+
+@pytest.mark.asyncio
 async def test_limit_duty_cycle_deducts_frame_bits() -> None:
     """Verify limit_duty_cycle tracks and deducts frame bits from bucket."""
     from ramses_tx.transport.port import limit_duty_cycle

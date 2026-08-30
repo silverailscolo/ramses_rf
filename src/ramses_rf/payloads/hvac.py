@@ -441,15 +441,14 @@ class Co2Payload(PayloadBase):
     co2_level: int | None
     co2_level_fault: str | None
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         co2_level: int | None = None,
         domain_index: int | None = None,
         co2_level_fault: str | None = None,
     ) -> "Co22BPayload | Co23BPayload":
         """Construct Co2 payload variant dynamically from arguments."""
-        if cls is not Co2Payload:
-            return super().__new__(cls)  # type: ignore[return-value]
         if domain_index is not None:
             return Co23BPayload(
                 domain_index=domain_index,
@@ -2594,7 +2593,14 @@ class HvacBypassStatePayload(PayloadBase):
         else:
             fan_mode_map = {0: "off", 5: "auto"}
         result: dict[str, Any] = {}
-        if not (self._unknown_16 is not None and self._unknown_16 != "00"):
+        # exhaust_fan_speed = spd / 200.0 is only meaningful for long
+        # payloads (Itho, ClimaRad) where spd is a raw 0-200 RPM value.
+        # For 4-byte Orcon payloads, spd is a semantic fan mode (0-5),
+        # not a speed — dividing by 200 produces a meaningless 1-2%
+        # reading.  Suppress it for 4-byte payloads.
+        if not is_4b_orcon and not (
+            self._unknown_16 is not None and self._unknown_16 != "00"
+        ):
             result["exhaust_fan_speed"] = None if spd == 0xFF else spd / 200.0
         # For long-payload devices (Orcon, Brofer, etc.), unmapped fan_mode
         # raw bytes (e.g. 0x04, 0xC8, 0xFF) are NOT semantic names and conflict
@@ -3400,14 +3406,13 @@ class WindowStatePayload(PayloadBase):
     zone_index: int
     window_open: bool | None
 
-    def __new__(  # type: ignore[misc]
+    @classmethod
+    def create(
         cls,
         zone_index: int = 0,
         window_open: bool | None = None,
     ) -> "WindowState2BPayload | WindowState3BPayload":
         """Construct WindowState payload variant dynamically from arguments."""
-        if cls is not WindowStatePayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         return WindowState3BPayload(
             zone_index=zone_index, window_open=window_open
         )
@@ -3546,14 +3551,13 @@ class HvacVentilationDemandPayload(PayloadBase):
     flags: int
     demand_percent: float
 
-    def __new__(
+    @classmethod
+    def create(
         cls,
         flags: int = 0,
         demand_percent: float = 0.0,
     ) -> "HvacVentilationDemand4BPayload":
         """Construct HvacVentilationDemand payload variant dynamically from arguments."""
-        if cls is not HvacVentilationDemandPayload:
-            return super().__new__(cls)  # type: ignore[return-value]
         return HvacVentilationDemand4BPayload(
             flags=flags, demand_percent=demand_percent
         )

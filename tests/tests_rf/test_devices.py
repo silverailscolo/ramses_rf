@@ -9,11 +9,20 @@ import pytest
 
 from ramses_rf import Gateway
 from ramses_rf.config import GatewayConfig
-from ramses_rf.const import SZ_BATTERY_LEVEL, SZ_BATTERY_LOW, SZ_BATTERY_STATE
+from ramses_rf.const import (
+    SZ_BATTERY_LEVEL,
+    SZ_BATTERY_LOW,
+    SZ_BATTERY_STATE,
+    SZ_OPENTHERM_PARAMS,
+    SZ_OPENTHERM_SCHEMA,
+    SZ_RAMSES_II_PARAMS,
+    SZ_RAMSES_II_SCHEMA,
+)
 from ramses_rf.devices import (
     BdrSwitch,
     Controller,
     DhwSensor,
+    JimDevice,
     OtbGateway,
     OutSensor,
     Thermostat,
@@ -22,7 +31,14 @@ from ramses_rf.devices import (
 from ramses_rf.devices.dev_base import BatteryState
 from ramses_rf.exceptions import DeviceNotFaked
 from ramses_rf.messages import Message
-from ramses_rf.models import PowerState
+from ramses_rf.models import (
+    ActuatorState,
+    BdrStateDTO,
+    JimStateDTO,
+    OpenThermState,
+    OpenThermStateDTO,
+    PowerState,
+)
 from ramses_rf.payloads import get_payload_class
 from ramses_rf.pipeline.polling import PollingManager
 from ramses_rf.protocol.opentherm import (
@@ -621,6 +637,39 @@ async def test_otb_gateway_ignores_unknown_data_id(
 
 
 @pytest.mark.asyncio
+async def test_otb_gateway_opentherm_state_dto_and_accessors(
+    mock_gwy: MagicMock, mock_addr: MagicMock
+) -> None:
+    """Test OtbGateway property accessors and DTO generation from OpenThermState."""
+    # Arrange
+    device = OtbGateway(mock_gwy, mock_addr)
+    device.opentherm_state = replace(
+        device.opentherm_state,
+        rel_modulation_level=0.45,
+        max_rel_modulation=0.85,
+        oem_code=115,
+        ch_water_pressure=1.8,
+    )
+
+    # Act
+    state = device.opentherm_state
+    oem = await device.oem_code()
+    mod = await device.rel_modulation_level()
+    max_mod = await device.max_rel_modulation()
+    pressure = await device.ch_water_pressure()
+
+    # Assert
+    assert state.rel_modulation_level == 0.45
+    assert state.max_rel_modulation == 0.85
+    assert state.oem_code == 115
+    assert state.ch_water_pressure == 1.8
+    assert oem == 115
+    assert mod == 0.45
+    assert max_mod == 0.85
+    assert pressure == 1.8
+
+
+@pytest.mark.asyncio
 async def test_controller_discovers_system_mode(mock_gwy: MagicMock) -> None:
     """Test that the Controller actively polls for system_mode (2E04) on startup.
 
@@ -831,3 +880,121 @@ def test_parser_31d9_orcon_prevents_speed_collision() -> None:
     assert cls is not None
     instance = cls.from_bytes(bytes.fromhex(payload_hex))
     assert instance is not None
+
+
+# --- PR 2 Hardware-Pure DTO Accessor Tests ---
+
+
+@pytest.mark.asyncio
+async def test_bdr_switch_bdr_state_accessor(mock_gwy: MagicMock) -> None:
+    # Arrange
+    addr = MagicMock(spec=Address)
+    addr.id = "13:123456"
+    addr.type = "13"
+    bdr = BdrSwitch(mock_gwy, addr)
+    bdr.act_state = ActuatorState(modulation_level=0.55, actuator_enabled=True)
+
+    # Act
+    dto = await bdr.bdr_state()
+    actuator_dto = await bdr.actuator_state()
+
+    # Assert
+    assert isinstance(dto, BdrStateDTO)
+    assert dto.modulation_level == 0.55
+    assert dto.actuator_enabled is True
+    assert actuator_dto == dto
+
+
+@pytest.mark.asyncio
+async def test_jim_device_jim_state_accessor(mock_gwy: MagicMock) -> None:
+    # Arrange
+    addr = MagicMock(spec=Address)
+    addr.id = "08:123456"
+    addr.type = "08"
+    jim = JimDevice(mock_gwy, addr)
+    jim.act_state = ActuatorState(
+        modulation_level=0.80,
+        actuator_enabled=True,
+        ch_active=True,
+        dhw_active=False,
+        flame_active=True,
+    )
+
+    # Act
+    dto = await jim.jim_state()
+    status = await jim.status()
+
+    # Assert
+    assert isinstance(dto, JimStateDTO)
+    assert isinstance(dto, BdrStateDTO)
+    assert dto.modulation_level == 0.80
+    assert dto.actuator_enabled is True
+    assert dto.ch_active is True
+    assert dto.dhw_active is False
+    assert dto.flame_active is True
+    assert dto.cooling_active is None
+    assert status[jim.ACTUATOR_STATE] == dto
+
+
+@pytest.mark.asyncio
+async def test_otb_gateway_opentherm_state_dto_accessor(
+    mock_gwy: MagicMock,
+) -> None:
+    # Arrange
+    addr = MagicMock(spec=Address)
+    addr.id = "10:123456"
+    addr.type = "10"
+    otb = OtbGateway(mock_gwy, addr)
+    otb.opentherm_state = OpenThermState(
+        ch_water_pressure=1.9,
+        dhw_flow_rate=10.5,
+        max_rel_modulation=1.0,
+        rel_modulation_level=0.40,
+    )
+
+    # Act
+    dto = await otb.opentherm_state_dto()
+    status = await otb.status()
+
+    # Assert
+    assert isinstance(dto, OpenThermStateDTO)
+    assert dto.ch_water_pressure == 1.9
+    assert dto.dhw_flow_rate == 10.5
+    assert dto.max_rel_modulation == 1.0
+    assert dto.rel_modulation_level == 0.40
+    assert status[otb.OPENTHERM_STATE] == dto
+
+
+@pytest.mark.asyncio
+async def test_otb_gateway_schema_and_params_constants(
+    mock_gwy: MagicMock,
+) -> None:
+    # Arrange
+    addr = MagicMock(spec=Address)
+    addr.id = "10:654321"
+    addr.type = "10"
+    otb = OtbGateway(mock_gwy, addr)
+
+    # Act
+    with (
+        patch.object(
+            otb, "opentherm_schema", new_callable=AsyncMock, return_value={}
+        ),
+        patch.object(
+            otb, "ramses_schema", new_callable=AsyncMock, return_value={}
+        ),
+        patch.object(
+            otb, "opentherm_params", new_callable=AsyncMock, return_value={}
+        ),
+        patch.object(
+            otb, "ramses_params", new_callable=AsyncMock, return_value={}
+        ),
+    ):
+        schema = await otb.schema()
+        params = await otb.params()
+
+    # Assert
+    assert SZ_OPENTHERM_SCHEMA in schema
+    assert SZ_RAMSES_II_SCHEMA in schema
+    assert SZ_OPENTHERM_PARAMS in params
+    assert SZ_RAMSES_II_PARAMS in params

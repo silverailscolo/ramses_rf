@@ -8,7 +8,18 @@ import ramses_rf.payloads.heating
 import ramses_rf.payloads.hvac
 import ramses_rf.payloads.system
 import ramses_tx.const as tx_const
-from ramses_rf.const import Code, Verb
+from ramses_rf.const import (
+    SZ_DIAGNOSTIC_CODE,
+    SZ_FLAGS,
+    SZ_FRAME_CODE,
+    SZ_HEAT_DEMAND,
+    SZ_STATUS_CODE,
+    SZ_TEMPERATURE,
+    SZ_TICKER,
+    SZ_VALUE,
+    Code,
+    Verb,
+)
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.dhw import (
@@ -48,11 +59,20 @@ from ramses_rf.payloads.hvac import (
     HvacTimeOffsetPayload,
     HvacVentilationStatusPayload,
     RelativeHumidityPayload,
+    WindowStatePayload,
 )
 from ramses_rf.payloads.opentherm import (
+    OpenThermBridgeStatusPayload,
+    OpenThermDiagnosticsPayload,
+    OpenThermFaultFlags2BPayload,
+    OpenThermFaultFlags3BPayload,
+    OpenThermFaultFlagsPayload,
+    OpenThermFrameExPayload,
     OpenThermMsgPayload,
+    OpenThermParamsPayload,
     OpenThermSetpointPayload,
     OpenThermStatusPayload,
+    ReturnTempPayload,
 )
 from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
 from ramses_rf.payloads.system import (
@@ -237,7 +257,9 @@ def test_system_sync_payload_1030_parity() -> None:
     }
 
     # Verify programmatic creation on the fly packs parameter bytes dynamically
-    on_fly_payload = SystemSyncPayload(sync_flag=10, max_flow_setpoint=55)
+    on_fly_payload = SystemSyncPayload.create(
+        sync_flag=10, max_flow_setpoint=55
+    )
     assert on_fly_payload.to_bytes().hex().upper() == "0AC80137"
 
 
@@ -909,17 +931,16 @@ def test_return_temp_payload_3210_parity() -> None:
     # Arrange
     raw_hex = "001388"
     raw_bytes = bytes.fromhex(raw_hex)
-    from ramses_rf.payloads.opentherm import ReturnTempPayload
 
     # Act
     payload = ReturnTempPayload.from_bytes(raw_bytes)
     reencoded = payload.to_bytes().hex().upper()
-    as_dict = payload_to_dict(payload)
 
     # Assert
     assert payload.return_temp == 50.0
     assert reencoded == raw_hex
-    assert as_dict == {"return_temp": 50.0}
+    assert payload_to_dict(payload) == {"return_temp": 50.0}
+    assert payload.to_dict() == {SZ_TEMPERATURE: 50.0}
 
 
 def test_relay_demand_payload_0008_jasper_13byte_parity() -> None:
@@ -1221,8 +1242,8 @@ def test_actuator_state_payload_3ef0_4byte_parity() -> None:
         "modulation_level": 0.5,
         "ch_active": False,
         "dhw_active": False,
-        "flame_on": False,
-        "cool_active": True,
+        "flame_active": False,
+        "cooling_active": True,
     }
 
 
@@ -1251,8 +1272,8 @@ def test_actuator_state_payload_3ef0_9byte_parity() -> None:
         "modulation_level": 0.5,
         "ch_active": False,
         "dhw_active": False,
-        "flame_on": False,
-        "cool_active": True,
+        "flame_active": False,
+        "cooling_active": True,
         "ch_enabled": True,
         "ch_setpoint": 20,
         "max_rel_modulation": 1.0,
@@ -1300,7 +1321,32 @@ def test_pipeline_3150_non_array_preserves_index() -> None:
     # Assert
     assert isinstance(result, dict)
     assert result.get("heat_demand") == 1.0
-    assert result.get("zone_index") == "00" or result.get("zone_index") == "00"
+    assert result.get("zone_index") == "00"
+
+
+def test_pipeline_3150_ufc_emits_canonical_ufh_index() -> None:
+    # Arrange
+    dto = PacketDTO(
+        timestamp=dt.now(),
+        rssi="-70",
+        verb=Verb.I_,
+        seq="001",
+        addr1="02:000921",
+        addr2="--:------",
+        addr3="02:000921",
+        code=Code._3150,
+        length="002",
+        payload="0360",
+    )
+
+    # Act
+    result = decode_packet(dto)
+
+    # Assert
+    assert isinstance(result, dict)
+    assert result.get("ufh_index") == "03"
+    assert "ufx_index" not in result
+    assert result.get("heat_demand") == pytest.approx(0.48, abs=0.01)
 
 
 def test_opentherm_msg_payload_replace_recalculates_parity() -> None:
@@ -1655,3 +1701,363 @@ def test_dataclass_buffer_underrun_guards() -> None:
 
     with pytest.raises(ValueError):
         HeatDemandPayload.from_bytes(b"")  # Expected at least 1 byte
+
+
+# ---------------------------------------------------------------------------
+# create() factory method tests (PR4: polymorphic __new__ → create())
+# ---------------------------------------------------------------------------
+
+
+def test_heat_demand_payload_create_1b() -> None:
+    """HeatDemandPayload.create() with no zone_index → 1B variant."""
+    payload = HeatDemandPayload.create(demand_percent=200)
+    assert isinstance(payload, ramses_rf.payloads.heating.HeatDemand1BPayload)
+    assert payload.demand_percent == 200
+    assert payload.to_bytes().hex().upper() == "C8"
+
+
+def test_heat_demand_payload_create_2b() -> None:
+    """HeatDemandPayload.create() with zone_index → 2B variant."""
+    payload = HeatDemandPayload.create(
+        domain_or_zone_index=1, demand_percent=202
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.HeatDemand2BPayload)
+    assert payload.domain_or_zone_index == 1
+    assert payload.demand_percent == 202
+    assert payload.to_bytes().hex().upper() == "01CA"
+
+
+def test_temperature_payload_create_2b() -> None:
+    """TemperaturePayload.create() with no zone_index → 2B variant."""
+    payload = TemperaturePayload.create(temperature=21.5)
+    assert isinstance(payload, ramses_rf.payloads.heating.Temperature2BPayload)
+    assert payload.temperature == 21.5
+    assert payload.to_bytes().hex().upper() == "0866"
+
+
+def test_temperature_payload_create_3b() -> None:
+    """TemperaturePayload.create() with zone_index → 3B variant."""
+    payload = TemperaturePayload.create(zone_index=3, temperature=21.5)
+    assert isinstance(payload, ramses_rf.payloads.heating.Temperature3BPayload)
+    assert payload.zone_index == 3
+    assert payload.temperature == 21.5
+    assert payload.to_bytes().hex().upper() == "030866"
+
+
+def test_zone_name_payload_create_22b() -> None:
+    """ZoneNamePayload.create() with name → 22B variant."""
+    payload = ZoneNamePayload.create(zone_index=3, name="Living Room")
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneName22BPayload)
+    assert payload.zone_index == 3
+    assert payload.name == "Living Room"
+    raw = payload.to_bytes()
+    assert len(raw) == 22
+
+
+def test_zone_name_payload_create_short_3b() -> None:
+    """ZoneNamePayload.create() with setpoint_temp → 3B short variant."""
+    payload = ZoneNamePayload.create(zone_index=3, setpoint_temp=21.0)
+    assert isinstance(
+        payload, ramses_rf.payloads.heating.ZoneNameShort3BPayload
+    )
+    assert payload.zone_index == 3
+    assert payload.setpoint_temp == 21.0
+
+
+def test_zone_setpoint_payload_create() -> None:
+    """ZoneSetpointPayload.create() → 3B variant."""
+    payload = ZoneSetpointPayload.create(zone_index=3, setpoint_temp=21.0)
+    assert isinstance(
+        payload, ramses_rf.payloads.heating.ZoneSetpoint3BPayload
+    )
+    assert payload.zone_index == 3
+    assert payload.setpoint_temp == 21.0
+    assert payload.to_bytes().hex().upper() == "030834"
+
+
+def test_system_zones_payload_create() -> None:
+    """SystemZonesPayload.create() → 4B variant."""
+    from ramses_rf.payloads.heating import SystemZonesPayload
+
+    payload = SystemZonesPayload.create(
+        zone_type=0x0A, zone_mask=0x0001, zone_class_id=0x0A
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.SystemZones4BPayload)
+    assert payload.zone_type == 0x0A
+    assert payload.zone_mask == 0x0001
+    assert payload.to_bytes().hex().upper() == "000A0100"
+
+
+def test_relay_demand_payload_create() -> None:
+    """RelayDemandPayload.create() → 2B variant."""
+    payload = RelayDemandPayload.create(
+        domain_or_zone_index=0xFC, demand_percent=1.0
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.RelayDemand2BPayload)
+    assert payload.domain_or_zone_index == 0xFC
+    assert payload.demand_percent == 1.0
+    assert payload.to_bytes().hex().upper() == "FCC8"
+
+
+def test_zone_devices_payload_create_5b() -> None:
+    """ZoneDevicesPayload.create() without sub_index → 5B variant."""
+    from ramses_rf.payloads.heating import ZoneDevicesPayload
+
+    payload = ZoneDevicesPayload.create(
+        zone_index_raw=0, device_role_id=0, device_id_raw=0x123456
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneDevices5BPayload)
+    assert payload.zone_index_raw == 0
+    assert payload.device_id_raw == 0x123456
+
+
+def test_zone_devices_payload_create_6b() -> None:
+    """ZoneDevicesPayload.create() with sub_index → 6B variant."""
+    from ramses_rf.payloads.heating import ZoneDevicesPayload
+
+    payload = ZoneDevicesPayload.create(
+        zone_index_raw=0, device_role_id=0, sub_index=1, device_id_raw=0x123456
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneDevices6BPayload)
+    assert payload.sub_index == 1
+
+
+def test_zone_mode_payload_create_7b() -> None:
+    """ZoneModePayload.create() without until_dtm → 7B variant."""
+    payload = ZoneModePayload.create(
+        zone_index=3, setpoint_temp=21.0, mode_code=4, duration_minutes=60
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneMode7BPayload)
+    assert payload.zone_index == 3
+    assert payload.setpoint_temp == 21.0
+    assert payload.mode_code == 4
+
+
+def test_zone_mode_payload_create_13b() -> None:
+    """ZoneModePayload.create() with until_dtm → 13B variant."""
+    payload = ZoneModePayload.create(
+        zone_index=3,
+        setpoint_temp=21.0,
+        mode_code=4,
+        until_dtm="2026-01-15-12-00",
+    )
+    assert isinstance(payload, ramses_rf.payloads.heating.ZoneMode13BPayload)
+    assert payload.zone_index == 3
+
+
+def test_actuator_cycle_payload_create_6b() -> None:
+    """ActuatorCyclePayload.create() without domain_index → 6B variant."""
+    from ramses_rf.payloads.heating import ActuatorCyclePayload
+
+    payload = ActuatorCyclePayload.create(
+        cycle_countdown_sec=0,
+        actuator_countdown_sec=0,
+        modulation_level=0.5,
+    )
+    assert isinstance(
+        payload, ramses_rf.payloads.heating.ActuatorCycle6BPayload
+    )
+    assert payload.modulation_level == 0.5
+
+
+def test_actuator_cycle_payload_create_7b() -> None:
+    """ActuatorCyclePayload.create() with domain_index → 7B variant."""
+    from ramses_rf.payloads.heating import ActuatorCyclePayload
+
+    payload = ActuatorCyclePayload.create(
+        cycle_countdown_sec=0,
+        actuator_countdown_sec=0,
+        modulation_level=0.5,
+        domain_index=1,
+    )
+    assert isinstance(
+        payload, ramses_rf.payloads.heating.ActuatorCycle7BPayload
+    )
+    assert payload.domain_index == 1
+
+
+def test_co2_payload_create_2b() -> None:
+    """Co2Payload.create() without domain_index → 2B variant."""
+    payload = Co2Payload.create(co2_level=450)
+    assert isinstance(payload, Co22BPayload)
+    assert payload.co2_level == 450
+
+
+def test_co2_payload_create_3b() -> None:
+    """Co2Payload.create() with domain_index → 3B variant."""
+    payload = Co2Payload.create(co2_level=450, domain_index=0)
+    assert isinstance(payload, Co23BPayload)
+    assert payload.domain_index == 0
+    assert payload.co2_level == 450
+
+
+def test_window_state_payload_create() -> None:
+    """WindowStatePayload.create() → 3B variant."""
+    payload = WindowStatePayload.create(zone_index=3, window_open=False)
+    assert isinstance(payload, ramses_rf.payloads.hvac.WindowState3BPayload)
+    assert payload.zone_index == 3
+    assert payload.window_open is False
+
+
+def test_hvac_ventilation_demand_payload_create() -> None:
+    """HvacVentilationDemandPayload.create() → 4B variant."""
+    from ramses_rf.payloads.hvac import HvacVentilationDemandPayload
+
+    payload = HvacVentilationDemandPayload.create(flags=0, demand_percent=0.5)
+    assert isinstance(
+        payload, ramses_rf.payloads.hvac.HvacVentilationDemand4BPayload
+    )
+    assert payload.demand_percent == 0.5
+
+
+def test_opentherm_msg_payload_create_4b() -> None:
+    """OpenThermMsgPayload.create() without opentherm_index → 4B variant."""
+    payload = OpenThermMsgPayload.create(
+        msg_id=0x18, msg_type=0, raw_value=b"\x00\x00"
+    )
+    assert isinstance(
+        payload, ramses_rf.payloads.opentherm.OpenThermMsg4BPayload
+    )
+    assert payload.msg_id == 0x18
+
+
+def test_opentherm_msg_payload_create_5b() -> None:
+    """OpenThermMsgPayload.create() with opentherm_index → 5B variant."""
+    payload = OpenThermMsgPayload.create(
+        msg_id=0x18, msg_type=0, raw_value=b"\x00\x00", opentherm_index=1
+    )
+    assert isinstance(
+        payload, ramses_rf.payloads.opentherm.OpenThermMsg5BPayload
+    )
+    assert payload.opentherm_index == 1
+
+
+def test_opentherm_fault_flags_payload_create_2b() -> None:
+    """OpenThermFaultFlagsPayload.create() without hdr → 2B variant."""
+    payload = OpenThermFaultFlagsPayload.create(fault_code=0, flags=0)
+    assert isinstance(payload, OpenThermFaultFlags2BPayload)
+
+
+def test_opentherm_fault_flags_payload_create_3b() -> None:
+    """OpenThermFaultFlagsPayload.create() with hdr → 3B variant."""
+    payload = OpenThermFaultFlagsPayload.create(fault_code=0, flags=0, hdr=1)
+    assert isinstance(payload, OpenThermFaultFlags3BPayload)
+    assert payload.hdr == 1
+
+
+def test_dhw_params_payload_create() -> None:
+    """DhwParamsPayload.create() → 6B variant (with overrun + differential)."""
+    payload = DhwParamsPayload.create(
+        setpoint=55.0, overrun=8, differential=2.0
+    )
+    assert isinstance(payload, ramses_rf.payloads.dhw.DhwParams6BPayload)
+    assert payload.setpoint == 55.0
+
+
+def test_opentherm_diagnostics_payload_1fd0_parity() -> None:
+    # Arrange
+    raw_hex = "7300"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenThermDiagnosticsPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+
+    # Assert
+    assert payload.diagnostic_code == 115
+    assert payload.flags == 0
+    assert reencoded == raw_hex
+    assert payload_to_dict(payload) == {"diagnostic_code": 115, "flags": 0}
+    assert payload.to_dict() == {SZ_DIAGNOSTIC_CODE: 115, SZ_FLAGS: 0}
+
+
+def test_opentherm_diagnostics_payload_1fd0_length_guard() -> None:
+    # Arrange
+    raw_bytes = b"\x73"
+
+    # Act & Assert
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        OpenThermDiagnosticsPayload.from_bytes(raw_bytes)
+
+
+def test_opentherm_fault_flags_payload_1fd4_2b_parity() -> None:
+    # Arrange
+    raw_hex = "5AFE"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenThermFaultFlagsPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+
+    # Assert
+    assert isinstance(payload, OpenThermFaultFlags2BPayload)
+    assert payload.fault_code == 90
+    assert payload.flags == 254
+    assert reencoded == raw_hex
+    assert payload_to_dict(payload) == {"fault_code": 90, "flags": 254}
+    assert payload.to_dict() == {SZ_TICKER: (90 << 8) | 254}
+
+
+def test_opentherm_fault_flags_payload_1fd4_3b_parity() -> None:
+    # Arrange
+    raw_hex = "005AFE"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenThermFaultFlagsPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+
+    # Assert
+    assert isinstance(payload, OpenThermFaultFlags3BPayload)
+    assert payload.hdr == 0
+    assert payload.fault_code == 90
+    assert payload.flags == 254
+    assert reencoded == raw_hex
+    assert payload_to_dict(payload) == {
+        "hdr": 0,
+        "fault_code": 90,
+        "flags": 254,
+    }
+    assert payload.to_dict() == {SZ_TICKER: (90 << 8) | 254}
+
+
+def test_opentherm_fault_flags_payload_1fd4_length_guard() -> None:
+    # Arrange & Act & Assert
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        OpenThermFaultFlagsPayload.from_bytes(b"\x5a")
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        OpenThermFaultFlags2BPayload.from_bytes(b"\x5a")
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        OpenThermFaultFlags3BPayload.from_bytes(b"\x00\x5a")
+
+
+def test_opentherm_frame_ex_payload_3221_parity() -> None:
+    # Arrange & Act & Assert
+    p_zero = OpenThermFrameExPayload.from_bytes(bytes.fromhex("0000"))
+    assert payload_to_dict(p_zero) == {"frame_code": 0, "flags": 0}
+    assert p_zero.to_dict() == {SZ_VALUE: 0}
+
+    p_flags = OpenThermFrameExPayload.from_bytes(bytes.fromhex("010F"))
+    assert payload_to_dict(p_flags) == {"frame_code": 1, "flags": 15}
+    assert p_flags.to_dict() == {SZ_FRAME_CODE: 1, SZ_FLAGS: 15}
+
+
+def test_opentherm_bridge_status_payload_3223_parity() -> None:
+    # Arrange & Act & Assert
+    p_zero = OpenThermBridgeStatusPayload.from_bytes(bytes.fromhex("0000"))
+    assert payload_to_dict(p_zero) == {"status_code": 0, "flags": 0}
+    assert p_zero.to_dict() == {SZ_VALUE: 0}
+
+    p_status = OpenThermBridgeStatusPayload.from_bytes(bytes.fromhex("0201"))
+    assert payload_to_dict(p_status) == {"status_code": 2, "flags": 1}
+    assert p_status.to_dict() == {SZ_STATUS_CODE: 2, SZ_FLAGS: 1}
+
+
+def test_opentherm_params_payload_2401_parity() -> None:
+    # Arrange & Act & Assert
+    payload = OpenThermParamsPayload.from_bytes(bytes.fromhex("00CA"))
+    assert payload_to_dict(payload) == {
+        "parameter_index": 0,
+        "parameter_value": 202,
+    }
+    assert payload.to_dict() == {SZ_HEAT_DEMAND: 1.0}

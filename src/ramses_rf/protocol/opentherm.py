@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """RAMSES RF - Opentherm processor."""
 
-# TODO: a fnc to translate OT flags into a list of strs
-
 from __future__ import annotations
 
 from collections.abc import Callable
 from enum import EnumCheck, IntEnum, StrEnum, verify
 from typing import Any, Final, TypeAlias
+
+from ramses_tx.const import Code
 
 _DataValueT: TypeAlias = float | int | list[int] | str | None
 _FrameT: TypeAlias = str
@@ -118,8 +118,7 @@ SCHEMA_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = {
     #
     OtDataId._7F: "Slave product version number and type",  # .                           # 127
     #
-    # TODO: deprecate 71-2, 74-7B, as appears that always value=None
-    # # These are STATUS seen RQ'd by 01:/30:, but here to retrieve less frequently
+    # NOTE: Diagnostic counters seen requested in traces (01:/30:), but return None on bridges:
     # 0x71: "Number of un-successful burner starts",  # .                           # 113
     # 0x72: "Number of times flame signal was too low",  # .                        # 114
     # 0x74: "Number of starts burner",  # .                                         # 116
@@ -175,7 +174,7 @@ STATUS_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = {
     OtDataId._73: "OEM diagnostic code",  # .                                             # 115
 }
 
-OTB_STATUS_DATA_IDS: Final[tuple[int, ...]] = (
+OPENTHERM_STATUS_DATA_IDS: Final[tuple[int, ...]] = (
     int(OtDataId.STATUS),
     int(OtDataId.BOILER_OUTPUT_TEMP),
     int(OtDataId.BOILER_RETURN_TEMP),
@@ -187,7 +186,7 @@ Includes Master/Slave status (0x00), Boiler Flow Temp (0x19),
 Return Temp (0x1C), and CH Water Temp Setpoint (0x01).
 """
 
-OTB_PARAMS_DATA_IDS: Final[tuple[int, ...]] = (
+OPENTHERM_PARAMS_DATA_IDS: Final[tuple[int, ...]] = (
     int(OtDataId.DHW_SETPOINT),
     int(OtDataId.CH_MAX_SETPOINT),
 )
@@ -196,10 +195,49 @@ OTB_PARAMS_DATA_IDS: Final[tuple[int, ...]] = (
 Includes DHW Setpoint (0x38) and Max CH Setpoint (0x39).
 """
 
-OTB_POLL_DATA_IDS: Final[tuple[int, ...]] = (
-    OTB_STATUS_DATA_IDS + OTB_PARAMS_DATA_IDS
+OPENTHERM_POLL_DATA_IDS: Final[tuple[int, ...]] = (
+    OPENTHERM_STATUS_DATA_IDS + OPENTHERM_PARAMS_DATA_IDS
 )
-"""Combined tuple of all periodic OpenTherm Data-IDs polled for bridge devices."""
+"""Combined tuple of all periodic OpenTherm Data-IDs polled for bridge devices.
+
+Excludes Relative Modulation Level (0x11) and Maximum Relative Modulation
+Level (0x0E) to prevent hardware polling jitter on R8810A bridges; active
+modulation demand is authoritatively broadcast by controllers via 3EF0/3EF1.
+"""
+
+# Authoritative reference mapping between OpenTherm Data-IDs and RAMSES Opcodes.
+# NOTE: Active ingestion uses OPENTHERM_FIELD_MAP to project directly into
+# OpenThermState.
+OPENTHERM_TO_RAMSES_MAP: Final[dict[OtDataId, Code]] = {
+    OtDataId.STATUS: Code._3EF0,
+    OtDataId.CONTROL_SETPOINT: Code._22D9,
+    OtDataId.REL_MODULATION_LEVEL: Code._3EF0,
+    OtDataId.CH_WATER_PRESSURE: Code._1300,
+    OtDataId.DHW_FLOW_RATE: Code._12F0,
+    OtDataId.BOILER_OUTPUT_TEMP: Code._3200,
+    OtDataId.DHW_TEMP: Code._1260,
+    OtDataId.OUTSIDE_TEMP: Code._1290,
+    OtDataId.BOILER_RETURN_TEMP: Code._3210,
+    OtDataId.DHW_SETPOINT: Code._10A0,
+    OtDataId.CH_MAX_SETPOINT: Code._1081,
+}
+
+RAMSES_TO_OPENTHERM_MAP: Final[dict[Code, tuple[OtDataId, ...]]] = {
+    Code._1081: (OtDataId.CH_MAX_SETPOINT,),
+    Code._10A0: (OtDataId.DHW_SETPOINT,),
+    Code._1260: (OtDataId.DHW_TEMP,),
+    Code._1290: (OtDataId.OUTSIDE_TEMP,),
+    Code._12F0: (OtDataId.DHW_FLOW_RATE,),
+    Code._1300: (OtDataId.CH_WATER_PRESSURE,),
+    Code._22D9: (OtDataId.CONTROL_SETPOINT,),
+    Code._3200: (OtDataId.BOILER_OUTPUT_TEMP,),
+    Code._3210: (OtDataId.BOILER_RETURN_TEMP,),
+    Code._3EF0: (
+        OtDataId.STATUS,
+        OtDataId.REL_MODULATION_LEVEL,
+    ),
+    Code._3EF1: (OtDataId.REL_MODULATION_LEVEL,),
+}
 
 WRITE_DATA_IDS: Final[
     dict[_OtDataIdT, _MsgStrT]
@@ -222,7 +260,7 @@ WRITE_DATA_IDS: Final[
     OtDataId._7E: "Master product version number and type",  # .                          # 126
 }
 
-OTB_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = (
+OPENTHERM_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = (
     SCHEMA_DATA_IDS
     | PARAMS_DATA_IDS
     | STATUS_DATA_IDS
@@ -1052,16 +1090,6 @@ _OPENTHERM_MESSAGES: Final[dict[int, _OtMsgSchemaT]] = {
     },
 }
 
-# These must have either a FLAGS (preferred) or a VAR for their message name
-_OT_FLAG_LOOKUP: Final[dict[str, _FlagsSchemaT]] = {
-    SZ_STATUS_FLAGS: _STATUS_FLAGS,
-    SZ_MASTER_CONFIG_FLAGS: _MASTER_CONFIG_FLAGS,
-    SZ_SLAVE_CONFIG_FLAGS: _SLAVE_CONFIG_FLAGS,
-    SZ_FAULT_FLAGS: _FAULT_FLAGS,
-    SZ_REMOTE_FLAGS: _REMOTE_FLAGS,
-    # SZ_MESSAGES: OPENTHERM_MESSAGES,
-}
-
 # R8810A 1018 v4: https://www.opentherm.eu/request-details/?post_ids=2944
 # as at: 2021/06/28
 
@@ -1072,7 +1100,17 @@ _OT_FLAG_LOOKUP: Final[dict[str, _FlagsSchemaT]] = {
 
 
 def parity(x: int) -> int:
-    """Make this the docstring."""
+    """Calculate the even parity bit for an integer bit pattern.
+
+    Computes the single-bit parity (0 or 1) by iteratively folding
+    and XOR-ing powers-of-two bit shifts, ensuring the total count of
+    1-bits across the 32-bit word plus parity bit is even.
+
+    :param x: Integer bit pattern to compute parity for.
+    :type x: int
+    :returns: 1 if odd number of set bits (parity bit to make even), 0 if already even.
+    :rtype: int
+    """
     shiftamount = 1
     while x >> shiftamount:
         x ^= x >> shiftamount
@@ -1098,7 +1136,20 @@ def encode_opentherm_payload(data_id: int) -> str:
 
 
 def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
-    """Make this the docstring."""
+    """Decode a raw 2-byte or 4-byte hexadecimal sequence into a typed data value.
+
+    Dispatches parsing to the appropriate converter function based on
+    the declared OpenTherm value type (FLAG8, U8, S8, F8_8, U16, S16).
+    Returns None when sentinels (e.g. 0xFFFF) or invalid values are encountered.
+
+    :param value_sequence: 2-character or 4-character hexadecimal byte string.
+    :type value_sequence: str
+    :param value_type: OpenTherm data type specifier (e.g. "flag8", "u8", "s8", "f8.8", "u16", "s16").
+    :type value_type: str
+    :returns: Decoded value (float, int, list[int], str), or None if invalid/sentinel.
+    :rtype: _DataValueT
+    :raises AssertionError: If value_sequence length is not 2 or 4 characters.
+    """
     assert len(value_sequence) in (2, 4), (
         f"Invalid value sequence: {value_sequence}"
     )
@@ -1106,27 +1157,62 @@ def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
     # based upon: https://github.com/mvn23/pyotgw/blob/master/pyotgw/protocol.py
 
     def flag8(byte: str, *args: str) -> list[int]:
-        """Split a byte (as a str) into a list of 8 bits.
+        """Split a 1-byte hex string into a list of 8 binary flag bits.
 
-        In the original payload (the OT specification), the lsb is bit 0 (the last bit),
-        so the order of bits is reversed here, giving flags[0] (the 1st bit in the
-        array) as the lsb.
+        The OpenTherm specification defines bit 0 (the least significant bit)
+        as the rightmost bit of the byte. The resulting list is ordered LSB-first
+        such that ``flags[0]`` corresponds to bit 0.
+
+        :param byte: 2-character hexadecimal string representing 1 byte.
+        :type byte: str
+        :param args: Unused trailing positional arguments for dispatch compatibility.
+        :type args: str
+        :returns: List of 8 integer bits (0 or 1), ordered from bit 0 (LSB) to bit 7 (MSB).
+        :rtype: list[int]
         """
         assert len(args) == 0 or (len(args) == 1 and args[0] == "")
         return [(bytes.fromhex(byte)[0] & (1 << x)) >> x for x in range(8)]
 
     def u8(byte: str, *args: str) -> int:
-        """Convert a byte (as a str) into an unsigned int."""
+        """Convert a 1-byte hex string into an unsigned 8-bit integer.
+
+        :param byte: 2-character hexadecimal string.
+        :type byte: str
+        :param args: Unused trailing positional arguments for dispatch compatibility.
+        :type args: str
+        :returns: Unsigned integer in the range 0 to 255.
+        :rtype: int
+        """
         assert len(args) == 0 or (len(args) == 1 and args[0] == "")
         return int(byte, 16)
 
     def s8(byte: str, *args: str) -> int:
-        """Convert a byte (as a str) into a signed int."""
+        """Convert a 1-byte hex string into a signed 8-bit two's-complement integer.
+
+        :param byte: 2-character hexadecimal string.
+        :type byte: str
+        :param args: Unused trailing positional arguments for dispatch compatibility.
+        :type args: str
+        :returns: Signed integer in the range -128 to 127.
+        :rtype: int
+        """
         assert len(args) == 0 or (len(args) == 1 and args[0] == "")
         return int.from_bytes(bytes.fromhex(byte), "big", signed=True)
 
     def f8_8(high_byte: str, low_byte: str) -> float | None:
-        """Convert 2 bytes (as strs) into an OpenTherm f8_8 value."""
+        """Convert a 2-byte hex sequence into an OpenTherm signed fixed-point (f8.8) float.
+
+        Interprets the 16-bit word as a signed two's complement integer divided
+        by 256.0. Handles sentinel values (0xFFFF, 0x47AB, 0x1980) representing
+        unsupported or invalid sensor measurements by returning None.
+
+        :param high_byte: High byte 2-character hex string.
+        :type high_byte: str
+        :param low_byte: Low byte 2-character hex string.
+        :type low_byte: str
+        :returns: Floating point decimal value, or None if sentinel.
+        :rtype: float | None
+        """
         if high_byte == low_byte == "FF" or high_byte + low_byte in (
             "47AB",
             "1980",
@@ -1135,14 +1221,32 @@ def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
         return float(s16(high_byte, low_byte) / 256)
 
     def u16(high_byte: str, low_byte: str) -> int:
-        """Convert 2 bytes (as strs) into an unsigned int."""
-        if high_byte == low_byte == "FF":  # TODO: move up to parser?
+        """Convert a 2-byte hex sequence into an unsigned 16-bit integer.
+
+        :param high_byte: High byte 2-character hex string.
+        :type high_byte: str
+        :param low_byte: Low byte 2-character hex string.
+        :type low_byte: str
+        :returns: Unsigned integer in the range 0 to 65535.
+        :rtype: int
+        :raises ValueError: If both high and low bytes are 0xFF (sentinel).
+        """
+        if high_byte == low_byte == "FF":
             raise ValueError()
         return int(high_byte + low_byte, 16)
 
     def s16(high_byte: str, low_byte: str) -> int:
-        """Convert 2 bytes (as strs) into a signed int."""
-        if high_byte == low_byte == "FF":  # TODO: move up to parser?
+        """Convert a 2-byte hex sequence into a signed 16-bit two's-complement integer.
+
+        :param high_byte: High byte 2-character hex string.
+        :type high_byte: str
+        :param low_byte: Low byte 2-character hex string.
+        :type low_byte: str
+        :returns: Signed integer in the range -32768 to 32767.
+        :rtype: int
+        :raises ValueError: If both high and low bytes are 0xFF (sentinel).
+        """
+        if high_byte == low_byte == "FF":
             raise ValueError()
         return int.from_bytes(
             bytes.fromhex(high_byte + low_byte), "big", signed=True
@@ -1157,14 +1261,6 @@ def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
         S16: s16,
     }
 
-    # assert not [
-    #     k
-    #     for k, v in OPENTHERM_MESSAGES.items()
-    #     if not isinstance(v[VAL], dict)
-    #     and not isinstance(v.get(VAR), dict)
-    #     and v[VAL] not in DATA_TYPES
-    # ], "Corrupt OPENTHERM_MESSAGES schema"
-
     try:
         fnc = DATA_TYPES[value_type]
     except KeyError:
@@ -1177,26 +1273,26 @@ def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
         return None
 
 
-# FIXME: this is not finished...
-def _decode_flags(
-    data_id: OtDataId, flags: str
-) -> _FlagsSchemaT:  # TBA: list[str]:
-    try:  # FIXME: don't use _OT_FLAG_LOOKUP
-        flag_schema: _FlagsSchemaT = _OT_FLAG_LOOKUP[
-            OPENTHERM_MESSAGES[data_id][FLAGS]
-        ]
-
-    except KeyError as err:
-        raise KeyError(f"Invalid data-id: 0x{data_id}: has no flags") from err
-
-    return flag_schema
-
-
-# ot_type, ot_id, ot_value, ot_schema = decode_frame(payload[2:10])
 def decode_frame(
     frame: _FrameT,
 ) -> tuple[OtMsgType, OtDataId, dict[str, Any], _OtMsgSchemaT]:
-    """Decode a 3220 payload."""
+    """Decode an 8-character hexadecimal OpenTherm protocol frame.
+
+    Validates frame integrity including length, even parity on bit 31,
+    and spare bits 24-27. Extracts the message type (Read-Data, Write-Data,
+    Read-Ack, Write-Ack, Data-Invalid, Unknown-DataId), resolves the Data-ID
+    against the OpenTherm schema, decodes the payload bytes into typed values,
+    and applies sensor unit scaling (percentage to 0.0-1.0, pressure to 0.1 bar,
+    flow rate to 0.01 l/min, temperature to 0.01 °C).
+
+    :param frame: 8-character hexadecimal OpenTherm frame string.
+    :type frame: str
+    :returns: A 4-tuple of (msg_type, data_id, data_value_dict, msg_schema).
+    :rtype: tuple[OtMsgType, OtDataId, dict[str, Any], dict[str, Any]]
+    :raises TypeError: If frame is not a string or has length != 8.
+    :raises ValueError: If parity check fails or spare bits are non-zero.
+    :raises KeyError: If Data-ID is not recognized in the OpenTherm schema.
+    """
     if not isinstance(frame, str) or len(frame) != 8:
         raise TypeError(f"Invalid frame (type or length): {frame}")
 
@@ -1210,22 +1306,16 @@ def decode_frame(
 
     msg_type = (int(frame[:2], 16) & 0x70) >> 4
 
-    # if msg_type == 0b011:  # NOTE: this msg-type may no longer be reserved (R8820?)
-    #     raise ValueError(f"Reserved msg-type (0b{msg_type:03b})")
-
     data_id: OtDataId = int(frame[2:4], 16)  # type: ignore[assignment]
     try:
         msg_schema = OPENTHERM_MESSAGES[data_id]
     except KeyError as err:
         raise KeyError(f"Unknown data-id: 0x{frame[2:4]} ({data_id})") from err
 
-    # There are five msg_id with FLAGS - the following is not 100% correct...
+    # There are five msg_id with FLAGS
     data_value = {SZ_MSG_NAME: msg_schema.get(FLAGS, msg_schema.get(VAR))}
 
     if msg_type in (0b000, 0b010, 0b011, 0b110, 0b111):
-        # if frame[4:] != "0000":  # NOTE: this is not a hard rule, even for 0b000
-        #     raise ValueError(f"Invalid data-value for msg-type: 0x{frame[4:]}")
-
         # Ensure expected value keys are populated to prevent KeyErrors upstream
         if not msg_schema:
             data_value[SZ_VALUE] = None
@@ -1275,7 +1365,7 @@ def decode_frame(
     elif msg_schema[VAL] != F8_8:  # shouldn't reach here
         data_value[SZ_VALUE] = _msg_value(frame[4:8], U16)
 
-    elif msg_schema[VAL] == F8_8:  # TODO: needs finishing
+    elif msg_schema[VAL] == F8_8:
         result: float | None = _msg_value(frame[4:8], msg_schema[VAL])  # type: ignore[assignment]
 
         if result is None:

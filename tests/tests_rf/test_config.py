@@ -268,7 +268,7 @@ class TestSchTraitsHvacBound:
 
         SCH_TRAITS_HVAC defaults ``class`` to ``DevType.HVC`` when absent,
         but that default value must itself pass the class validator, or
-        voluptuous falls through to SCH_TRAITS_HEAT (which rejects
+        probatio falls through to SCH_TRAITS_HEAT (which rejects
         ``bound``) and raises a generic, hard-to-diagnose "not a valid
         value @ data['bound']" error for any HVAC device that has a
         ``bound`` trait but no ``class`` (e.g. a REM/FAN discovered from
