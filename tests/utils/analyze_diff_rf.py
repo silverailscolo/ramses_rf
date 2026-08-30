@@ -32,7 +32,6 @@ Usage:
 
 from __future__ import annotations
 
-import ast
 import asyncio
 import contextlib
 import datetime
@@ -45,11 +44,17 @@ from pathlib import Path
 from typing import Any, Final, cast
 from unittest.mock import AsyncMock, patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from ramses_rf import Gateway
-from ramses_rf.devices import DeviceHeat, DeviceHvac
 from ramses_rf.gateway import GatewayConfig
+from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_READER_TASK
 from ramses_tx.exceptions import TransportError
+from tests_rf.test_regression_rf import (
+    drain_cqrs_queues,
+    serialize_device,
+)
 
 # --- Configuration ---
 PACKET_LOG: Final[Path] = Path("tests/fixtures/regression_packets_sorted.txt")
@@ -57,136 +62,6 @@ SNAPSHOT_FILE: Final[Path] = Path(
     "tests/tests_rf/__snapshots__/test_regression_rf.ambr"
 )
 TARGET_SNAPSHOT_KEY: Final[str] = "test_gateway_replay_regression"
-
-
-def serialize_device(dev: Any) -> dict[str, Any]:
-    """Helper to serialize a device's state for snapshotting.
-
-    Identifies attributes based on device type (Heat vs HVAC) and existence
-    of properties to create a deterministic state snapshot.
-
-    :param dev: The device object to serialize.
-    :type dev: Any
-    :return: A dictionary representing the device state.
-    :rtype: dict[str, Any]
-    """
-    # Base attributes for all devices
-    data: dict[str, Any] = {
-        "id": dev.id,
-        "type": type(dev).__name__,
-        "is_alive": getattr(dev, "_is_alive", None),
-        "battery_low": getattr(dev, "battery_low", None),
-    }
-
-    # Capture specific state for Heating devices
-    if isinstance(dev, DeviceHeat):
-        # Topology
-        zone = getattr(dev, "zone", None)
-        tcs = getattr(dev, "tcs", None)
-
-        data.update(
-            {
-                "tcs_id": tcs.id if tcs else None,
-                "zone_index": getattr(zone, "index", None),
-            }
-        )
-
-        # General Heating Attributes
-        # We iterate and try to access each attribute.
-        for attr in (
-            "active",  # BDR Switch
-            "actuator_cycle",  # Actuators
-            "actuator_state",
-            "heat_demand",  # Many heat devices
-            "heat_demands",  # UFC
-            "modulation_level",  # OTB/Actuators
-            "relay_demand",  # BDR/UFC
-            "setpoint",  # Thermostats/TRVs
-            "setpoints",  # UFC
-            "temperature",  # Sensors
-            "window_open",  # TRV
-        ):
-            try:
-                # getattr triggers the @property logic
-                val = getattr(dev, attr, None)
-                if val is not None:
-                    data[attr] = val
-            except AttributeError:
-                continue  # Attribute strictly does not exist on this object
-            except Exception as err:
-                # Capture functional regressions (bugs) in the library code as string data
-                data[attr] = f"<{type(err).__name__}: {err}>"
-
-        # OpenTherm Bridge (OTB) Specifics
-        if getattr(dev, "_SLUG", None) == "OTB":
-            for attr in (
-                "boiler_output_temp",
-                "boiler_return_temp",
-                "boiler_setpoint",
-                "ch_max_setpoint",
-                "ch_water_pressure",
-                "dhw_flow_rate",
-                "dhw_setpoint",
-                "dhw_temp",
-                "fault_present",
-                "flame_active",
-                "max_rel_modulation",
-                "oem_code",
-                "otc_active",
-                "outside_temp",
-                "rel_modulation_level",
-            ):
-                try:
-                    val = getattr(dev, attr, None)
-                    if val is not None:
-                        data[attr] = val
-                except AttributeError:
-                    continue
-                except Exception as err:
-                    data[attr] = f"<{type(err).__name__}: {err}>"
-
-    # Capture specific state for HVAC devices
-    if isinstance(dev, DeviceHvac):
-        for attr in (
-            "air_quality",
-            "air_quality_base",
-            "boost_timer",
-            "bypass_mode",
-            "bypass_position",
-            "bypass_state",
-            "co2_level",
-            "dewpoint_temp",
-            "exhaust_fan_speed",
-            "exhaust_flow",
-            "exhaust_temp",
-            "fan_info",
-            "fan_mode",
-            "fan_rate",
-            "filter_remaining",
-            "indoor_humidity",
-            "indoor_temp",
-            "outdoor_humidity",
-            "outdoor_temp",
-            "post_heat",
-            "pre_heat",
-            "presence_detected",
-            "remaining_mins",
-            "speed_cap",
-            "supply_fan_speed",
-            "supply_flow",
-            "supply_temp",
-        ):
-            try:
-                val = getattr(dev, attr, None)
-                if val is not None:
-                    data[attr] = val
-            except AttributeError:
-                continue
-            except Exception as err:
-                data[attr] = f"<{type(err).__name__}: {err}>"
-
-    # Return sorted dictionary for deterministic snapshots
-    return {k: v for k, v in sorted(data.items())}
 
 
 async def generate_actual_state() -> dict[str, Any]:
@@ -197,12 +72,14 @@ async def generate_actual_state() -> dict[str, Any]:
     """
     gwy = Gateway(
         None,
-        input_file=str(PACKET_LOG),
         config=GatewayConfig(
             disable_discovery=True,
             reduce_processing=0,
+            engine=EngineConfig(
+                disable_sending=True,
+                input_file=str(PACKET_LOG),
+            ),
         ),
-        disable_sending=True,
     )
 
     # Replicate the test environment: Patch sending methods to prevent Read-Only errors.
@@ -219,30 +96,36 @@ async def generate_actual_state() -> dict[str, Any]:
             if reader_task:
                 await reader_task
 
+        # Drain CQRS Event Bus to hydrate all read-models prior to assertion
+        await drain_cqrs_queues(gwy)
+
+        if gwy.message_store:
+            gwy.message_store.flush()
+
         # 3. Extract State for Snapshot (Matches test_regression_rf.py flow)
+        devices_data = []
+        for d in sorted(gwy.device_registry.devices, key=lambda x: x.id):
+            devices_data.append(await serialize_device(d))
+
         system_state: dict[str, Any] = {
-            "schema": gwy.schema,
-            "devices": [
-                serialize_device(d)
-                for d in sorted(
-                    gwy.device_registry.devices, key=lambda x: x.id
-                )
-            ],
+            "schema": await gwy.schema(),
+            "devices": devices_data,
         }
 
         # Add specific System (TCS) details if a TCS was discovered
         if gwy.tcs:
+            zones_data = {}
+            for z in sorted(gwy.tcs.zones, key=lambda x: x.index):
+                zones_data[z.index] = {
+                    "name": await z.name(),
+                    "type": type(z).__name__,
+                    "sensor": z.sensor.id if z.sensor else None,
+                    "actuators": sorted([a.id for a in z.actuators]),
+                }
+
             system_state["tcs"] = {
                 "id": gwy.tcs.id,
-                "zones": {
-                    z.index: {
-                        "name": z.name,
-                        "type": type(z).__name__,
-                        "sensor": z.sensor.id if z.sensor else None,
-                        "actuators": sorted([a.id for a in z.actuators]),
-                    }
-                    for z in sorted(gwy.tcs.zones, key=lambda x: x.index)
-                },
+                "zones": zones_data,
             }
 
         # 4. Stop Gateway
@@ -283,7 +166,19 @@ def load_expected_state() -> dict[str, Any]:
     py_literal = raw_value.replace("dict({", "{").replace("list([", "[")
     py_literal = py_literal.replace("})", "}").replace("])", "]")
 
-    return cast(dict[str, Any], ast.literal_eval(py_literal))
+    # Safely evaluate snapshot dictionary containing datetime objects
+    return cast(
+        dict[str, Any],
+        eval(  # noqa: S307
+            py_literal,
+            {
+                "__builtins__": {},
+                "datetime": datetime,
+                "dict": dict,
+                "list": list,
+            },
+        ),
+    )
 
 
 def find_diffs(
