@@ -32,7 +32,12 @@ from .state_climate import (
 )
 from .state_faults import FaultLogEntry, FaultLogState
 from .state_hvac import HvacState
-from .state_opentherm import OpenThermState
+from .state_opentherm import (
+    OpenThermCounters,
+    OpenThermFlags,
+    OpenThermState,
+    OpenThermTemperatures,
+)
 from .state_schedules import DailySchedule, ScheduleState, SwitchPoint
 
 __all__ = [
@@ -47,8 +52,11 @@ __all__ = [
     "FaultLogState",
     "HvacState",
     "JimStateDTO",
+    "OpenThermCounters",
+    "OpenThermFlags",
     "OpenThermState",
     "OpenThermStateDTO",
+    "OpenThermTemperatures",
     "PowerState",
     "ScheduleState",
     "StateUpdatedEvent",

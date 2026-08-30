@@ -49,11 +49,18 @@ from ramses_rf.const import (
     SZ_SUMMER_MODE,
     DevType,
 )
-from ramses_rf.models import DeviceTraits, OpenThermState, OpenThermStateDTO
+from ramses_rf.models import (
+    DeviceTraits,
+    OpenThermCounters,
+    OpenThermFlags,
+    OpenThermState,
+    OpenThermStateDTO,
+    OpenThermTemperatures,
+)
 from ramses_tx.const import FC
 from ramses_tx.typing import PayDictT
 
-from .heat_actuators import Actuator, HeatDemand
+from .heat_actuators import HeatDemand
 
 #
 # NOTE: All debug flags should be False for deployment to end-users
@@ -63,8 +70,8 @@ _DBG_EXTRA_OTB_DISCOVERY: Final[bool] = False
 _LOGGER = logging.getLogger(__name__)
 
 
-# NOTE: config.use_native_ot should enforce sends, but not reads from _msgz DB
-class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
+# NOTE: Telemetry is read from self.opentherm_state; use_native_ot applies to command dispatching
+class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
     """The OTB class, specifically an OpenTherm Bridge (R8810A Bridge)."""
 
     # see: https://www.opentherm.eu/request-details/?post_ids=2944
@@ -98,6 +105,33 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         :rtype: td
         """
         return HEARTBEAT_TIMEOUT_OTB
+
+    @property
+    def flags(self) -> OpenThermFlags:
+        """Return the immutable OpenTherm status flags.
+
+        :return: The OpenThermFlags dataclass.
+        :rtype: OpenThermFlags
+        """
+        return self.opentherm_state.flags
+
+    @property
+    def temperatures(self) -> OpenThermTemperatures:
+        """Return the immutable OpenTherm temperature telemetry.
+
+        :return: The OpenThermTemperatures dataclass.
+        :rtype: OpenThermTemperatures
+        """
+        return self.opentherm_state.temperatures
+
+    @property
+    def counters(self) -> OpenThermCounters:
+        """Return the immutable OpenTherm diagnostic runtime counters.
+
+        :return: The OpenThermCounters dataclass.
+        :rtype: OpenThermCounters
+        """
+        return self.opentherm_state.counters
 
     async def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
         """Return boiler output temperature in degrees Celsius."""
@@ -312,7 +346,7 @@ class OtbGateway(Actuator, HeatDemand):  # OTB (10): 3220 (22D9, others)
         """Return combined operational status dictionary."""
         base_status = await super().status()
         return {
-            **base_status,  # incl. actuator_cycle, actuator_state
+            **base_status,  # incl. heat_demand
             self.OPENTHERM_STATE: await self.opentherm_state_dto(),
             SZ_BOILER_OUTPUT_TEMP: await self.boiler_output_temp(),
             SZ_BOILER_RETURN_TEMP: await self.boiler_return_temp(),
