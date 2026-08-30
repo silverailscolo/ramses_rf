@@ -637,6 +637,39 @@ async def test_otb_gateway_ignores_unknown_data_id(
 
 
 @pytest.mark.asyncio
+async def test_otb_gateway_opentherm_state_dto_and_accessors(
+    mock_gwy: MagicMock, mock_addr: MagicMock
+) -> None:
+    """Test OtbGateway property accessors and DTO generation from OpenThermState."""
+    # Arrange
+    device = OtbGateway(mock_gwy, mock_addr)
+    device.opentherm_state = replace(
+        device.opentherm_state,
+        rel_modulation_level=0.45,
+        max_rel_modulation=0.85,
+        oem_code=115,
+        ch_water_pressure=1.8,
+    )
+
+    # Act
+    state = device.opentherm_state
+    oem = await device.oem_code()
+    mod = await device.rel_modulation_level()
+    max_mod = await device.max_rel_modulation()
+    pressure = await device.ch_water_pressure()
+
+    # Assert
+    assert state.rel_modulation_level == 0.45
+    assert state.max_rel_modulation == 0.85
+    assert state.oem_code == 115
+    assert state.ch_water_pressure == 1.8
+    assert oem == 115
+    assert mod == 0.45
+    assert max_mod == 0.85
+    assert pressure == 1.8
+
+
+@pytest.mark.asyncio
 async def test_controller_discovers_system_mode(mock_gwy: MagicMock) -> None:
     """Test that the Controller actively polls for system_mode (2E04) on startup.
 

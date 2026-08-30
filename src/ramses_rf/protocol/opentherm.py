@@ -177,7 +177,7 @@ STATUS_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = {
     OtDataId._73: "OEM diagnostic code",  # .                                             # 115
 }
 
-OTB_STATUS_DATA_IDS: Final[tuple[int, ...]] = (
+OPENTHERM_STATUS_DATA_IDS: Final[tuple[int, ...]] = (
     int(OtDataId.STATUS),
     int(OtDataId.BOILER_OUTPUT_TEMP),
     int(OtDataId.BOILER_RETURN_TEMP),
@@ -189,7 +189,7 @@ Includes Master/Slave status (0x00), Boiler Flow Temp (0x19),
 Return Temp (0x1C), and CH Water Temp Setpoint (0x01).
 """
 
-OTB_PARAMS_DATA_IDS: Final[tuple[int, ...]] = (
+OPENTHERM_PARAMS_DATA_IDS: Final[tuple[int, ...]] = (
     int(OtDataId.DHW_SETPOINT),
     int(OtDataId.CH_MAX_SETPOINT),
 )
@@ -198,10 +198,15 @@ OTB_PARAMS_DATA_IDS: Final[tuple[int, ...]] = (
 Includes DHW Setpoint (0x38) and Max CH Setpoint (0x39).
 """
 
-OTB_POLL_DATA_IDS: Final[tuple[int, ...]] = (
-    OTB_STATUS_DATA_IDS + OTB_PARAMS_DATA_IDS
+OPENTHERM_POLL_DATA_IDS: Final[tuple[int, ...]] = (
+    OPENTHERM_STATUS_DATA_IDS + OPENTHERM_PARAMS_DATA_IDS
 )
-"""Combined tuple of all periodic OpenTherm Data-IDs polled for bridge devices."""
+"""Combined tuple of all periodic OpenTherm Data-IDs polled for bridge devices.
+
+Excludes Relative Modulation Level (0x11) and Maximum Relative Modulation
+Level (0x0E) to prevent hardware polling jitter on R8810A bridges; active
+modulation demand is authoritatively broadcast by controllers via 3EF0/3EF1.
+"""
 
 # Authoritative reference mapping between OpenTherm Data-IDs and RAMSES Opcodes.
 # NOTE: Active ingestion uses OPENTHERM_FIELD_MAP to project directly into
@@ -258,7 +263,7 @@ WRITE_DATA_IDS: Final[
     OtDataId._7E: "Master product version number and type",  # .                          # 126
 }
 
-OTB_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = (
+OPENTHERM_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = (
     SCHEMA_DATA_IDS
     | PARAMS_DATA_IDS
     | STATUS_DATA_IDS

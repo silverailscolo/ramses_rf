@@ -17,9 +17,9 @@ from ramses_rf.pipeline.polling import (
     PollingManager,
 )
 from ramses_rf.protocol.opentherm import (
-    OTB_PARAMS_DATA_IDS,
-    OTB_POLL_DATA_IDS,
-    OTB_STATUS_DATA_IDS,
+    OPENTHERM_PARAMS_DATA_IDS,
+    OPENTHERM_POLL_DATA_IDS,
+    OPENTHERM_STATUS_DATA_IDS,
     encode_opentherm_payload,
 )
 from ramses_rf.schemas import SCH_GLOBAL_CONFIG, strip_and_map_traits
@@ -787,9 +787,11 @@ def test_sch_polling_interval_rejects_negative() -> None:
 
 def test_encode_opentherm_payload_parity() -> None:
     # Arrange & Act & Assert
-    assert OTB_STATUS_DATA_IDS == (0x00, 0x19, 0x1C, 0x01)
-    assert OTB_PARAMS_DATA_IDS == (0x38, 0x39)
-    assert OTB_POLL_DATA_IDS == (0x00, 0x19, 0x1C, 0x01, 0x38, 0x39)
+    assert OPENTHERM_STATUS_DATA_IDS == (0x00, 0x19, 0x1C, 0x01)
+    assert OPENTHERM_PARAMS_DATA_IDS == (0x38, 0x39)
+    assert OPENTHERM_POLL_DATA_IDS == (0x00, 0x19, 0x1C, 0x01, 0x38, 0x39)
+    assert 0x0E not in OPENTHERM_POLL_DATA_IDS
+    assert 0x11 not in OPENTHERM_POLL_DATA_IDS
 
     assert encode_opentherm_payload(0x00) == "0000000000"
     assert encode_opentherm_payload(0x19) == "0080190000"

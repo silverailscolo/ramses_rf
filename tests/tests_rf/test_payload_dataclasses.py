@@ -8,7 +8,18 @@ import ramses_rf.payloads.heating
 import ramses_rf.payloads.hvac
 import ramses_rf.payloads.system
 import ramses_tx.const as tx_const
-from ramses_rf.const import Code, Verb
+from ramses_rf.const import (
+    SZ_DIAGNOSTIC_CODE,
+    SZ_FLAGS,
+    SZ_FRAME_CODE,
+    SZ_HEAT_DEMAND,
+    SZ_STATUS_CODE,
+    SZ_TEMPERATURE,
+    SZ_TICKER,
+    SZ_VALUE,
+    Code,
+    Verb,
+)
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.adapters import payload_to_dict
 from ramses_rf.payloads.dhw import (
@@ -51,9 +62,17 @@ from ramses_rf.payloads.hvac import (
     WindowStatePayload,
 )
 from ramses_rf.payloads.opentherm import (
+    OpenThermBridgeStatusPayload,
+    OpenThermDiagnosticsPayload,
+    OpenThermFaultFlags2BPayload,
+    OpenThermFaultFlags3BPayload,
+    OpenThermFaultFlagsPayload,
+    OpenThermFrameExPayload,
     OpenThermMsgPayload,
+    OpenThermParamsPayload,
     OpenThermSetpointPayload,
     OpenThermStatusPayload,
+    ReturnTempPayload,
 )
 from ramses_rf.payloads.registry import PAYLOAD_REGISTRY
 from ramses_rf.payloads.system import (
@@ -912,17 +931,16 @@ def test_return_temp_payload_3210_parity() -> None:
     # Arrange
     raw_hex = "001388"
     raw_bytes = bytes.fromhex(raw_hex)
-    from ramses_rf.payloads.opentherm import ReturnTempPayload
 
     # Act
     payload = ReturnTempPayload.from_bytes(raw_bytes)
     reencoded = payload.to_bytes().hex().upper()
-    as_dict = payload_to_dict(payload)
 
     # Assert
     assert payload.return_temp == 50.0
     assert reencoded == raw_hex
-    assert as_dict == {"return_temp": 50.0}
+    assert payload_to_dict(payload) == {"return_temp": 50.0}
+    assert payload.to_dict() == {SZ_TEMPERATURE: 50.0}
 
 
 def test_relay_demand_payload_0008_jasper_13byte_parity() -> None:
@@ -1916,22 +1934,14 @@ def test_opentherm_msg_payload_create_5b() -> None:
 
 def test_opentherm_fault_flags_payload_create_2b() -> None:
     """OpenThermFaultFlagsPayload.create() without hdr → 2B variant."""
-    from ramses_rf.payloads.opentherm import OpenThermFaultFlagsPayload
-
     payload = OpenThermFaultFlagsPayload.create(fault_code=0, flags=0)
-    assert isinstance(
-        payload, ramses_rf.payloads.opentherm.OpenThermFaultFlags2BPayload
-    )
+    assert isinstance(payload, OpenThermFaultFlags2BPayload)
 
 
 def test_opentherm_fault_flags_payload_create_3b() -> None:
     """OpenThermFaultFlagsPayload.create() with hdr → 3B variant."""
-    from ramses_rf.payloads.opentherm import OpenThermFaultFlagsPayload
-
     payload = OpenThermFaultFlagsPayload.create(fault_code=0, flags=0, hdr=1)
-    assert isinstance(
-        payload, ramses_rf.payloads.opentherm.OpenThermFaultFlags3BPayload
-    )
+    assert isinstance(payload, OpenThermFaultFlags3BPayload)
     assert payload.hdr == 1
 
 
@@ -1942,3 +1952,112 @@ def test_dhw_params_payload_create() -> None:
     )
     assert isinstance(payload, ramses_rf.payloads.dhw.DhwParams6BPayload)
     assert payload.setpoint == 55.0
+
+
+def test_opentherm_diagnostics_payload_1fd0_parity() -> None:
+    # Arrange
+    raw_hex = "7300"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenThermDiagnosticsPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+
+    # Assert
+    assert payload.diagnostic_code == 115
+    assert payload.flags == 0
+    assert reencoded == raw_hex
+    assert payload_to_dict(payload) == {"diagnostic_code": 115, "flags": 0}
+    assert payload.to_dict() == {SZ_DIAGNOSTIC_CODE: 115, SZ_FLAGS: 0}
+
+
+def test_opentherm_diagnostics_payload_1fd0_length_guard() -> None:
+    # Arrange
+    raw_bytes = b"\x73"
+
+    # Act & Assert
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        OpenThermDiagnosticsPayload.from_bytes(raw_bytes)
+
+
+def test_opentherm_fault_flags_payload_1fd4_2b_parity() -> None:
+    # Arrange
+    raw_hex = "5AFE"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenThermFaultFlagsPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+
+    # Assert
+    assert isinstance(payload, OpenThermFaultFlags2BPayload)
+    assert payload.fault_code == 90
+    assert payload.flags == 254
+    assert reencoded == raw_hex
+    assert payload_to_dict(payload) == {"fault_code": 90, "flags": 254}
+    assert payload.to_dict() == {SZ_TICKER: (90 << 8) | 254}
+
+
+def test_opentherm_fault_flags_payload_1fd4_3b_parity() -> None:
+    # Arrange
+    raw_hex = "005AFE"
+    raw_bytes = bytes.fromhex(raw_hex)
+
+    # Act
+    payload = OpenThermFaultFlagsPayload.from_bytes(raw_bytes)
+    reencoded = payload.to_bytes().hex().upper()
+
+    # Assert
+    assert isinstance(payload, OpenThermFaultFlags3BPayload)
+    assert payload.hdr == 0
+    assert payload.fault_code == 90
+    assert payload.flags == 254
+    assert reencoded == raw_hex
+    assert payload_to_dict(payload) == {
+        "hdr": 0,
+        "fault_code": 90,
+        "flags": 254,
+    }
+    assert payload.to_dict() == {SZ_TICKER: (90 << 8) | 254}
+
+
+def test_opentherm_fault_flags_payload_1fd4_length_guard() -> None:
+    # Arrange & Act & Assert
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        OpenThermFaultFlagsPayload.from_bytes(b"\x5a")
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        OpenThermFaultFlags2BPayload.from_bytes(b"\x5a")
+    with pytest.raises(ValueError, match="Invalid payload length"):
+        OpenThermFaultFlags3BPayload.from_bytes(b"\x00\x5a")
+
+
+def test_opentherm_frame_ex_payload_3221_parity() -> None:
+    # Arrange & Act & Assert
+    p_zero = OpenThermFrameExPayload.from_bytes(bytes.fromhex("0000"))
+    assert payload_to_dict(p_zero) == {"frame_code": 0, "flags": 0}
+    assert p_zero.to_dict() == {SZ_VALUE: 0}
+
+    p_flags = OpenThermFrameExPayload.from_bytes(bytes.fromhex("010F"))
+    assert payload_to_dict(p_flags) == {"frame_code": 1, "flags": 15}
+    assert p_flags.to_dict() == {SZ_FRAME_CODE: 1, SZ_FLAGS: 15}
+
+
+def test_opentherm_bridge_status_payload_3223_parity() -> None:
+    # Arrange & Act & Assert
+    p_zero = OpenThermBridgeStatusPayload.from_bytes(bytes.fromhex("0000"))
+    assert payload_to_dict(p_zero) == {"status_code": 0, "flags": 0}
+    assert p_zero.to_dict() == {SZ_VALUE: 0}
+
+    p_status = OpenThermBridgeStatusPayload.from_bytes(bytes.fromhex("0201"))
+    assert payload_to_dict(p_status) == {"status_code": 2, "flags": 1}
+    assert p_status.to_dict() == {SZ_STATUS_CODE: 2, SZ_FLAGS: 1}
+
+
+def test_opentherm_params_payload_2401_parity() -> None:
+    # Arrange & Act & Assert
+    payload = OpenThermParamsPayload.from_bytes(bytes.fromhex("00CA"))
+    assert payload_to_dict(payload) == {
+        "parameter_index": 0,
+        "parameter_value": 202,
+    }
+    assert payload.to_dict() == {SZ_HEAT_DEMAND: 1.0}
