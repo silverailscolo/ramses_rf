@@ -109,8 +109,10 @@ async def serialize_device(dev: Any) -> dict[str, Any]:
             "active",  # BDR Switch
             "actuator_cycle",  # Actuators
             "actuator_state",
+            "bdr_state",  # BDR Switch DTO
             "heat_demand",  # Many heat devices
             "heat_demands",  # UFC
+            "jim_state",  # JIM Device DTO
             "modulation_level",  # OTB/Actuators
             "relay_demand",  # BDR/UFC
             "setpoint",  # Thermostats/TRVs
@@ -136,8 +138,14 @@ async def serialize_device(dev: Any) -> dict[str, Any]:
                 "boiler_output_temp",
                 "boiler_return_temp",
                 "boiler_setpoint",
+                "ch_active",
+                "ch_enabled",
                 "ch_max_setpoint",
                 "ch_water_pressure",
+                "cooling_active",
+                "cooling_enabled",
+                "dhw_active",
+                "dhw_enabled",
                 "dhw_flow_rate",
                 "dhw_setpoint",
                 "dhw_temp",
@@ -145,9 +153,11 @@ async def serialize_device(dev: Any) -> dict[str, Any]:
                 "flame_active",
                 "max_rel_modulation",
                 "oem_code",
+                "opentherm_state_dto",
                 "otc_active",
                 "outside_temp",
                 "rel_modulation_level",
+                "summer_mode",
             ):
                 try:
                     val = await _get_attr_value(dev, attr)

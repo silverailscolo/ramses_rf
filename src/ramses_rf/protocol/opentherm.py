@@ -9,6 +9,8 @@ from collections.abc import Callable
 from enum import EnumCheck, IntEnum, StrEnum, verify
 from typing import Any, Final, TypeAlias
 
+from ramses_tx.const import Code
+
 _DataValueT: TypeAlias = float | int | list[int] | str | None
 _FrameT: TypeAlias = str
 _MsgStrT: TypeAlias = str
@@ -200,6 +202,40 @@ OTB_POLL_DATA_IDS: Final[tuple[int, ...]] = (
     OTB_STATUS_DATA_IDS + OTB_PARAMS_DATA_IDS
 )
 """Combined tuple of all periodic OpenTherm Data-IDs polled for bridge devices."""
+
+# Authoritative reference mapping between OpenTherm Data-IDs and RAMSES Opcodes.
+# NOTE: Active ingestion uses OPENTHERM_FIELD_MAP to project directly into
+# OpenThermState.
+OPENTHERM_TO_RAMSES_MAP: Final[dict[OtDataId, Code]] = {
+    OtDataId.STATUS: Code._3EF0,
+    OtDataId.CONTROL_SETPOINT: Code._22D9,
+    OtDataId.REL_MODULATION_LEVEL: Code._3EF0,
+    OtDataId.CH_WATER_PRESSURE: Code._1300,
+    OtDataId.DHW_FLOW_RATE: Code._12F0,
+    OtDataId.BOILER_OUTPUT_TEMP: Code._3200,
+    OtDataId.DHW_TEMP: Code._1260,
+    OtDataId.OUTSIDE_TEMP: Code._1290,
+    OtDataId.BOILER_RETURN_TEMP: Code._3210,
+    OtDataId.DHW_SETPOINT: Code._10A0,
+    OtDataId.CH_MAX_SETPOINT: Code._1081,
+}
+
+RAMSES_TO_OPENTHERM_MAP: Final[dict[Code, tuple[OtDataId, ...]]] = {
+    Code._1081: (OtDataId.CH_MAX_SETPOINT,),
+    Code._10A0: (OtDataId.DHW_SETPOINT,),
+    Code._1260: (OtDataId.DHW_TEMP,),
+    Code._1290: (OtDataId.OUTSIDE_TEMP,),
+    Code._12F0: (OtDataId.DHW_FLOW_RATE,),
+    Code._1300: (OtDataId.CH_WATER_PRESSURE,),
+    Code._22D9: (OtDataId.CONTROL_SETPOINT,),
+    Code._3200: (OtDataId.BOILER_OUTPUT_TEMP,),
+    Code._3210: (OtDataId.BOILER_RETURN_TEMP,),
+    Code._3EF0: (
+        OtDataId.STATUS,
+        OtDataId.REL_MODULATION_LEVEL,
+    ),
+    Code._3EF1: (OtDataId.REL_MODULATION_LEVEL,),
+}
 
 WRITE_DATA_IDS: Final[
     dict[_OtDataIdT, _MsgStrT]

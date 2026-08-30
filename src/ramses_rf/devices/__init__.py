@@ -64,6 +64,8 @@ __all__ = [
     "BdrSwitch",
     "Controller",
     "DhwSensor",
+    "JimDevice",
+    "JstDevice",
     "OtbGateway",
     "OutSensor",
     "RfgGateway",
