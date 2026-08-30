@@ -14,9 +14,16 @@ from typing import TYPE_CHECKING, Any, Final, Self
 
 from ramses_rf import exceptions as exc
 from ramses_rf.const import (
+    HW,
+    SZ_CHANGE_COUNTER,
+    SZ_DAY_OF_WEEK,
+    SZ_ENABLED,
     SZ_FRAGMENT,
     SZ_FRAGMENT_NUMBER,
+    SZ_HEAT_SETPOINT,
     SZ_SCHEDULE,
+    SZ_SWITCHPOINTS,
+    SZ_TIME_OF_DAY,
     SZ_TOTAL_FRAGMENTS,
     SZ_ZONE_IDX,
     SZ_ZONE_INDEX,
@@ -38,7 +45,7 @@ from ramses_rf.typing import (
     WeeklySchedule,
     WeeklyScheduleDict,
 )
-from ramses_tx.const import Code
+from ramses_tx.const import FA, Code
 from ramses_tx.exceptions import ProtocolSendFailed
 
 from ..enums import Action
@@ -47,14 +54,6 @@ from .helpers import send_system_intent
 if TYPE_CHECKING:
     from ramses_rf.systems.zones import DhwZone, Zone
 
-
-# Constants
-SZ_DAY_OF_WEEK: Final = "day_of_week"
-
-SZ_HEAT_SETPOINT: Final = "heat_setpoint"
-SZ_SWITCHPOINTS: Final = "switchpoints"
-SZ_TIME_OF_DAY: Final = "time_of_day"
-SZ_ENABLED: Final = "enabled"
 
 SWITCHPOINT_STRUCT_SIZE: Final = 20
 FRAGMENT_HEX_LENGTH: Final = 82
@@ -210,7 +209,7 @@ class ScheduleData:
 
     def __post_init__(self) -> None:
         """Validate zone index and day array bounds."""
-        if self.zone_index != "HW" and not (
+        if self.zone_index != HW and not (
             len(self.zone_index) == 2 and 0 <= int(self.zone_index, 16) <= 15
         ):
             raise ValueError(f"Invalid zone_index: {self.zone_index!r}")
@@ -287,7 +286,7 @@ class ScheduleData:
         """
         schedule: WeeklySchedule = []
         for day in self.days:
-            switchpoints: list[SwitchPointDhw | SwitchPointZon] = []
+            switchpoints: list[SwitchPointT] = []
             for sp in day.switchpoints:
                 if sp.heat_setpoint is not None:
                     sp_zon: SwitchPointZon = {
@@ -319,46 +318,49 @@ def fragments_to_full_schedule(
 ) -> WeeklyScheduleDict:
     """Convert a tuple of fragments strs (a blob) into a schedule.
 
-    :param fragments: An iterable of hexadecimal string fragments.
+    :param fragments: Iterable collection of hex fragment strings.
     :type fragments: Iterable[FragmentT]
-    :returns: A parsed WeeklyScheduleDict dictionary representation.
+    :returns: Fully assembled and parsed schedule dictionary.
     :rtype: WeeklyScheduleDict
-    :raises zlib.error: On invalid payload compression stream.
+    :raises exc.ScheduleError: If decompression fails or binary payload is invalid.
     """
-    raw_schedule = zlib.decompress(bytearray.fromhex("".join(fragments)))
-
-    current_day_of_week = 0
-    zone_index = 0
+    decompressed = zlib.decompress(
+        bytearray.fromhex("".join(f for f in fragments if f))
+    )
     schedule: WeeklySchedule = []
     switchpoints: list[SwitchPointT] = []
+    zone_index: int = 0
+    current_day_of_week: int = 0
 
-    for i in range(0, len(raw_schedule), SWITCHPOINT_STRUCT_SIZE):
-        switchpoint_payload = ScheduleSwitchpointPayload.from_bytes(
-            raw_schedule[i : i + SWITCHPOINT_STRUCT_SIZE]
-        )
-        if not isinstance(switchpoint_payload, ScheduleSwitchpointPayload):
-            raise ValueError(
-                f"Invalid schedule switchpoint binary block: {raw_schedule[i : i + SWITCHPOINT_STRUCT_SIZE]!r}"
+    for offset in range(0, len(decompressed), SWITCHPOINT_STRUCT_SIZE):
+        chunk = decompressed[offset : offset + SWITCHPOINT_STRUCT_SIZE]
+        if len(chunk) < SWITCHPOINT_STRUCT_SIZE:
+            raise exc.ScheduleError(
+                f"Invalid schedule switchpoint binary block: {chunk.hex()}"
             )
 
-        zone_index = switchpoint_payload.zone_index
-        day_of_week = switchpoint_payload.day_of_week
-        time_of_day = switchpoint_payload.time_of_day_mins
-        value = switchpoint_payload.setpoint_value
+        payload = ScheduleSwitchpointPayload.from_bytes(chunk)
+        if not isinstance(payload, ScheduleSwitchpointPayload):
+            raise exc.ScheduleError(
+                f"Invalid schedule switchpoint binary block: {chunk.hex()}"
+            )
 
-        if day_of_week > current_day_of_week:
+        zone_index = payload.zone_index
+
+        if payload.day_of_week > current_day_of_week:
             schedule.append(
                 {
                     SZ_DAY_OF_WEEK: current_day_of_week,
                     SZ_SWITCHPOINTS: switchpoints,
                 }
             )
-            current_day_of_week, switchpoints = day_of_week, []
+            current_day_of_week, switchpoints = payload.day_of_week, []
 
-        hours, mins = divmod(time_of_day, 60)
+        hours, mins = divmod(payload.time_of_day_mins, 60)
         time_str = dtm_time(hour=hours, minute=mins).isoformat(
             timespec="minutes"
         )
+        value = payload.setpoint_value
         if value in (0, 1):
             switchpoint_dhw: SwitchPointDhw = {
                 SZ_TIME_OF_DAY: time_str,
@@ -399,7 +401,7 @@ def full_schedule_to_fragments(
     schedule_data = ScheduleData.from_dict(full_schedule)
     zone_index = (
         int(schedule_data.zone_index, 16)
-        if schedule_data.zone_index != "HW"
+        if schedule_data.zone_index != HW
         else 0xFA
     )
     for day in schedule_data.days:
@@ -444,7 +446,7 @@ def _to_protocol_zone_index(zone_index: str) -> str:
     :returns: RAMSES RF protocol zone index ('00'-'0F').
     :rtype: str
     """
-    return "00" if zone_index == "HW" else zone_index
+    return "00" if zone_index == HW else zone_index
 
 
 class Schedule:  # 0404
@@ -519,7 +521,7 @@ class Schedule:  # 0404
         """
         if msg.code == Code._0006:
             if isinstance(msg.payload, dict):
-                change_counter = msg.payload.get("change_counter")
+                change_counter = msg.payload.get(SZ_CHANGE_COUNTER)
                 if (
                     isinstance(change_counter, int)
                     and change_counter > self._schedule_version
@@ -794,9 +796,9 @@ class Schedule:  # 0404
                 "Failed to decompress schedule fragments"
             ) from err
 
-        if self.index == "HW":
-            schedule[SZ_ZONE_INDEX] = "HW"
-            schedule[SZ_ZONE_IDX] = "HW"
+        if self.index == HW:
+            schedule[SZ_ZONE_INDEX] = HW
+            schedule[SZ_ZONE_IDX] = HW
         self._full_schedule = schedule
         self._set_state(ScheduleIsSynchronised)
 
@@ -881,26 +883,45 @@ class Schedule:  # 0404
                 SZ_ZONE_INDEX: self.index,
                 SZ_FRAGMENT_NUMBER: fragment_number,
                 SZ_TOTAL_FRAGMENTS: total_fragments,
-                "fragment": fragment,
+                SZ_FRAGMENT: fragment,
             },
             wait_for_reply=True,
         )
 
     def _normalise_and_validate(
-        self, schedule: WeeklySchedule
+        self, schedule: WeeklySchedule | Mapping[str, Any]
     ) -> WeeklyScheduleDict:
         """Normalise and validate schedule dictionary structure.
 
-        :param schedule: 7-day schedule array to validate.
-        :type schedule: WeeklySchedule
+        :param schedule: 7-day schedule array or outer dictionary payload.
+        :type schedule: WeeklySchedule | Mapping[str, Any]
         :returns: Validated WeeklyScheduleDict payload.
         :rtype: WeeklyScheduleDict
         :raises exc.ScheduleError: On validation failure.
         """
+        raw_list: Any = schedule
+        if isinstance(schedule, Mapping):
+            provided_index = schedule.get(
+                SZ_ZONE_INDEX,
+                schedule.get(SZ_ZONE_IDX, schedule.get("zone_index")),
+            )
+            if provided_index is not None:
+                match_hw = self.index == HW and str(provided_index) in (
+                    HW,
+                    "00",
+                    FA,
+                )
+                if str(provided_index) != str(self.index) and not match_hw:
+                    raise exc.ScheduleError(
+                        f"Zone index mismatch: expected {self.index!r}, "
+                        f"got {provided_index!r}"
+                    )
+            raw_list = schedule.get(SZ_SCHEDULE, schedule)
+
         full_schedule: WeeklyScheduleDict = {
             SZ_ZONE_INDEX: self.index,
             SZ_ZONE_IDX: self.index,
-            SZ_SCHEDULE: schedule,
+            SZ_SCHEDULE: raw_list,
         }
 
         try:
@@ -909,7 +930,7 @@ class Schedule:  # 0404
         except (ValueError, KeyError, TypeError) as err:
             raise exc.ScheduleError(f"failed to set schedule: {err}") from err
 
-        if self.index == "HW":
+        if self.index == HW:
             # Translate DHW domain index 'HW' to protocol zone index '00'
             validated[SZ_ZONE_INDEX] = _to_protocol_zone_index(self.index)
             validated[SZ_ZONE_IDX] = _to_protocol_zone_index(self.index)
@@ -917,13 +938,15 @@ class Schedule:  # 0404
         return validated
 
     async def set_schedule(
-        self, schedule: WeeklySchedule, force_refresh: bool = False
+        self,
+        schedule: WeeklySchedule | Mapping[str, Any],
+        force_refresh: bool = False,
     ) -> WeeklySchedule | None:
         """Set the schedule of a zone.
 
         :param schedule: The array representing the days of the week
-            schedule.
-        :type schedule: WeeklySchedule
+            schedule, or an outer dictionary payload.
+        :type schedule: WeeklySchedule | Mapping[str, Any]
         :param force_refresh: True to query and retrieve the new
             schedule directly after setting.
         :type force_refresh: bool
