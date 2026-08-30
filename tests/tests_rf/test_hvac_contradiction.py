@@ -79,6 +79,98 @@ def _make_lookup(class_map: dict[str, dict[str, Any]]) -> Any:
 # --- Tests for contradiction detection ---
 
 
+def _display_events(
+    emitted: list[TopologyChangedEvent],
+) -> list[TopologyChangedEvent]:
+    """Return direct 2411 display-classification events."""
+    return [
+        event
+        for event in emitted
+        if event.causation == "Rule_HVAC_2411_Request_Source_to_DIS"
+    ]
+
+
+def test_non_faked_rem_requesting_2411_is_display() -> None:
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:169161": {
+                "class": DevType.REM,
+                "locked": False,
+                "faked": False,
+            },
+            "32:153289": {"class": DevType.FAN},
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    handler.consume(_FakeMsg("37:169161", "32:153289", Verb.RQ, Code._2411))
+
+    assert len(_display_events(emitted)) == 1
+    assert _display_events(emitted)[0].metadata["device_class"] == DevType.DIS
+
+
+def test_faked_rem_requesting_2411_is_not_display_evidence() -> None:
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:169161": {
+                "class": DevType.REM,
+                "locked": False,
+                "faked": True,
+            },
+            "32:153289": {"class": DevType.FAN},
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    for _ in range(3):
+        handler.consume(
+            _FakeMsg("37:169161", "32:153289", Verb.RQ, Code._2411)
+        )
+
+    assert _display_events(emitted) == []
+    assert handler._evidence["37:169161"]["non_fan"] == 0
+
+
+def test_locked_rem_requesting_2411_is_not_reclassified() -> None:
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:169161": {
+                "class": DevType.REM,
+                "locked": True,
+                "faked": False,
+            },
+            "32:153289": {"class": DevType.FAN},
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    handler.consume(_FakeMsg("37:169161", "32:153289", Verb.RQ, Code._2411))
+
+    assert _display_events(emitted) == []
+
+
+def test_normal_rem_fan_mode_command_is_not_display_evidence() -> None:
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:169161": {
+                "class": DevType.REM,
+                "locked": False,
+                "faked": False,
+            },
+            "32:153289": {"class": DevType.FAN},
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    handler.consume(_FakeMsg("37:169161", "32:153289", Verb.I_, Code._22F1))
+
+    assert _display_events(emitted) == []
+
+
 def test_contradiction_detected_after_threshold() -> None:
     """A FAN-classified device sending only non-FAN packets triggers DIS reclassification."""
     emitted: list[TopologyChangedEvent] = []

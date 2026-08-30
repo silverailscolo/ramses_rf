@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import math
+from collections.abc import Mapping
 from datetime import datetime as dt, timedelta as td
 from typing import TYPE_CHECKING, Any, Self, TypeVar
 
@@ -216,9 +217,15 @@ class ZoneSchedule(ZoneBase):  # 0404
         return self.schedule
 
     async def set_schedule(
-        self, schedule: WeeklySchedule
+        self, schedule: WeeklySchedule | Mapping[str, Any]
     ) -> WeeklySchedule | None:
-        """Upload a weekly schedule to the controller."""
+        """Upload a weekly schedule to the controller.
+
+        :param schedule: 7-day schedule array or outer dictionary payload.
+        :type schedule: WeeklySchedule | Mapping[str, Any]
+        :returns: The updated WeeklySchedule array.
+        :rtype: WeeklySchedule | None
+        """
         return await self._schedule.set_schedule(schedule)
 
     @property

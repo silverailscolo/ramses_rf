@@ -17,7 +17,9 @@ from ramses_rf.devices import (  # initiate_binding_process  # initiate_binding_
 from ramses_rf.devices.dev_base import (
     Fakeable,  # initiate_binding_, wait_for_binding_
 )
+from ramses_rf.models import DeviceTraits
 from ramses_rf.state import MessageStore
+from ramses_rf.strategies import NuaireStrategy
 from ramses_tx.address import Address
 from ramses_tx.const import Code
 
@@ -105,3 +107,22 @@ async def test_initiate_binding_process(dev_class: type[Fakeable]) -> None:
             mocked_method.assert_called_once_with(codes)
         else:
             mocked_method.assert_called_once()
+
+        if isinstance(dev, HvacRemote):
+            mocked_method.reset_mock()
+            dev.set_strategy(NuaireStrategy())
+
+            await dev.initiate_binding_process()
+
+            mocked_method.assert_called_once_with((Code._22F1,))
+
+            mocked_method.reset_mock()
+            configured_dev = HvacRemote(
+                gwy,
+                Address("33:123457"),
+                traits=DeviceTraits(scheme="nuaire"),
+            )
+
+            await configured_dev.initiate_binding_process()
+
+            mocked_method.assert_called_once_with((Code._22F1,))
