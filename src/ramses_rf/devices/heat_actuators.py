@@ -68,19 +68,12 @@ class Actuator(DeviceHeat):  # 3EF0, 3EF1 (for 10:/13:)
         if not state:
             return None
 
-        flame_status = (
-            state.flame_on
-            if state.flame_on is not None
-            else state.flame_active
-        )
-
         return ActuatorStateDTO(
             modulation_level=state.modulation_level,
             actuator_enabled=state.actuator_enabled,
             ch_active=state.ch_active,
-            ch_enabled=state.ch_enabled,
             dhw_active=state.dhw_active,
-            flame_active=flame_status,
+            flame_active=state.flame_active,
             last_updated=state.last_updated,
         )
 

@@ -14,7 +14,7 @@ from ramses_rf.const import (
 )
 from ramses_rf.devices.heat_controllers import Controller, UfhController
 from ramses_rf.enums import PumpRelayState, ThermalMode
-from ramses_rf.models.state_climate import ActuatorState, SystemState
+from ramses_rf.models.state_climate import SystemState, UfhState
 from ramses_rf.parsers.decoder import decode_packet
 from ramses_rf.payloads.heating import (
     ActuatorStatePayload,
@@ -292,8 +292,8 @@ def test_3ef0_standard_opentherm_payload_is_preserved() -> None:
         "modulation_level": 0.5,
         "ch_active": False,
         "dhw_active": False,
-        "flame_on": False,
-        "cool_active": True,
+        "flame_active": False,
+        "cooling_active": True,
         "ch_enabled": True,
         "ch_setpoint": 20,
         "max_rel_modulation": 1.0,
@@ -321,7 +321,7 @@ async def test_ufh_controller_pump_relay_state_read_model() -> None:
     gateway = MagicMock()
     address = MagicMock()
     ufc = UfhController(gateway, address)
-    ufc.act_state = ActuatorState(pump_relay_state=PumpRelayState.COOLING)
+    ufc.ufh_state = UfhState(pump_relay_state=PumpRelayState.COOLING)
 
     # Act
     state = await ufc.pump_relay_state()
