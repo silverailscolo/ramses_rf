@@ -15,6 +15,7 @@ from ramses_rf.gateway import Gateway
 from ramses_rf.models.state_base import DeviceTraits
 from ramses_rf.models.state_hvac import HvacState
 from ramses_rf.state import MessageStore
+from ramses_rf.strategies import IthoStrategy, OrconStrategy
 from ramses_tx import Address
 from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
@@ -82,9 +83,24 @@ class TestHvacVentilator:
         assert hvac_ventilator._param_update_callback is None
         assert hvac_ventilator._hgi is None
         assert hvac_ventilator._bound_devices == {}
+        assert hvac_ventilator._get_configured_strategy() is None
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()  # close sqlite3 connection
+
+    def test_set_strategy_overrides_scheme(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        strategy = IthoStrategy()
+
+        hvac_ventilator.set_strategy(strategy)
+        hvac_ventilator._update_traits(DeviceTraits(scheme="orcon"))
+
+        assert hvac_ventilator._get_strategy() is strategy
+        assert hvac_ventilator._get_configured_strategy() is strategy
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
 
     def test_set_initialized_callback_clear(
         self, hvac_ventilator: HvacVentilator
@@ -591,6 +607,7 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     dev = MagicMock(spec=HvacVentilator)
     dev.id = "32:123456"
     dev._scheme = "orcon"
+    dev._get_strategy.return_value = OrconStrategy()
     dev.get_bound_rem.return_value = "37:654321"
 
     dev._gateway = MagicMock()
@@ -612,7 +629,8 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     assert intent.action == Action.SET_FAN_MODE
     assert intent.src.id == "37:654321"
     assert intent.dst.id == "32:123456"
-    assert intent.data == {"fan_mode": "low", "scheme": "orcon"}
+    assert intent.data["fan_mode"] == "low"
+    assert isinstance(intent.data["strategy"], OrconStrategy)
     # Ventilators don't ack 22F1 — fire-and-forget (issue 995)
     assert kwargs.get("wait_for_reply") is False
     assert result == "mock_packet"
@@ -623,6 +641,7 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     dev = MagicMock(spec=HvacVentilator)
     dev.id = "32:123456"
     dev._scheme = "orcon"
+    dev._get_strategy.return_value = OrconStrategy()
     dev.get_bound_rem.return_value = None
 
     # Simulate an available HGI
@@ -644,7 +663,8 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     assert intent.action == Action.SET_FAN_MODE
     assert intent.src.id == "18:000730"
     assert intent.dst.id == "32:123456"
-    assert intent.data == {"fan_mode": "high", "scheme": "orcon"}
+    assert intent.data["fan_mode"] == "high"
+    assert isinstance(intent.data["strategy"], OrconStrategy)
     # Ventilators don't ack 22F1 — fire-and-forget (issue 995)
     assert kwargs.get("wait_for_reply") is False
 

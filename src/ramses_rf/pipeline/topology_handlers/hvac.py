@@ -133,25 +133,17 @@ class HvacTopologyHandler(TopologyHandler):
         # as FAN only sends RQ 31DA (non-FAN behavior) and never sends
         # I/RP 31DA or I 31D9 (FAN behavior), it is likely a DIS or REM
         #
-        # TODO: The reclassification target is always DIS, but we cannot
-        # reliably distinguish DIS from REM yet.  A DIS (Orcon RF15
-        # Display) sends RQ 2411 and RQ 31DA as normal behavior, while a
-        # bound REM only sends 2411 when prompted by a VMI.  The protocol
-        # table (_DEV_KLASSES_HVAC) lists 2411 for both REM and DIS with
-        # "VMI only?" caveats for REM.  When the strategy pattern arrives
-        # (issue 939), a DisStrategy could use 2411 frequency or the
-        # presence of 1470/042F (DIS-only codes) to distinguish.
-        # See also: discovery_scan.py _classify,
-        # protocol/ramses.py _HVAC_VC_PAIR_BY_CLASS.
-        # that was wrongly promoted to FAN.
+        # A physical REM has no display and does not request 2411
+        # parameters. A directed RQ 2411 from a non-faked device is direct
+        # DIS evidence. Faked REMs remain excluded because integrations may
+        # use them as a compatibility source for FAN parameter commands.
+        # See ramses_rf issue 1160.
+        #
+        # Other non-FAN evidence still uses the contradiction threshold for
+        # devices that were wrongly promoted to FAN.
         if msg.src.id != "--:------":
             src_id = msg.src.id
             vc = (msg_verb, msg.header.code)
-            ev = self._evidence.setdefault(src_id, {"fan": 0, "non_fan": 0})
-            if vc in _FAN_EVIDENCE:
-                ev["fan"] += 1
-            elif vc in _NON_FAN_EVIDENCE:
-                ev["non_fan"] += 1
 
             # Check for contradiction: device is typed FAN but behaves
             # like a DIS/REM.  We look up the current device traits via
@@ -164,6 +156,40 @@ class HvacTopologyHandler(TopologyHandler):
             )
             current_class = traits.get("class") if traits else None
             is_locked = bool(traits.get("locked")) if traits else False
+            is_faked = bool(traits.get("faked")) if traits else False
+
+            ev = self._evidence.setdefault(src_id, {"fan": 0, "non_fan": 0})
+            if vc in _FAN_EVIDENCE:
+                ev["fan"] += 1
+            elif vc in _NON_FAN_EVIDENCE and not (
+                vc == (Verb.RQ, Code._2411) and is_faked
+            ):
+                ev["non_fan"] += 1
+            dst_traits = (
+                self._device_class_lookup_cb(msg.dst.id)
+                if self._device_class_lookup_cb and msg.dst.id != "--:------"
+                else None
+            )
+            is_fan_target = (
+                dst_traits is not None
+                and dst_traits.get("class") == DevType.FAN
+            ) or msg.dst.id.startswith("32:")
+
+            is_physical_display_request = (
+                vc == (Verb.RQ, Code._2411)
+                and current_class == DevType.REM
+                and is_fan_target
+                and not is_faked
+            )
+            if is_physical_display_request and not is_locked:
+                self._emit(
+                    TopologyChangedEvent(
+                        action=TopologyAction.UPDATE_DEVICE_CLASS,
+                        device_id=src_id,
+                        metadata={"device_class": DevType.DIS},
+                        causation="Rule_HVAC_2411_Request_Source_to_DIS",
+                    )
+                )
 
             if (
                 current_class == DevType.FAN

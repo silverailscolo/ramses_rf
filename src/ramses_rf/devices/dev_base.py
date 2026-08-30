@@ -40,6 +40,7 @@ from ramses_rf.schemas import (
     SZ_IS_BATTERY,
     SZ_POLLING_INTERVAL,
 )
+from ramses_rf.strategies import HvacStrategy, best_hvac_strategy
 from ramses_rf.topology import Child
 from ramses_tx import CommandDTO, Packet, Priority, QosParams
 from ramses_tx.const import Code
@@ -111,6 +112,7 @@ class DeviceBase(Entity):
         )  # DEX  # TODO: remove this attr? use SLUG?
 
         self._scheme: str | None = traits.scheme if traits else None
+        self._strategy: HvacStrategy | None = None
         self._polling_interval: PollingIntervalsT | None = (
             traits.polling_interval if traits else None
         )
@@ -179,6 +181,27 @@ class DeviceBase(Entity):
         if tracker is None:
             return None
         return compute_quality(str(self.id), [tracker])
+
+    def set_strategy(self, strategy: HvacStrategy) -> None:
+        """Set the HVAC strategy for this device.
+
+        :param strategy: Vendor-specific HVAC strategy.
+        :type strategy: HvacStrategy
+        :rtype: None
+        """
+        self._strategy = strategy
+
+    def _get_strategy(self) -> HvacStrategy:
+        """Return the explicit or scheme-selected HVAC strategy."""
+        return self._strategy or best_hvac_strategy(self.id, self._scheme)
+
+    def _get_configured_strategy(self) -> HvacStrategy | None:
+        """Return a strategy only when explicitly configured or selected."""
+        if self._strategy:
+            return self._strategy
+        if self._scheme:
+            return best_hvac_strategy(self.id, self._scheme)
+        return None
 
     def _update_traits(self, traits: DeviceTraits) -> None:
         """Update a device with new schema attributes.

@@ -28,7 +28,7 @@ from __future__ import annotations
 from typing import Any
 
 from ramses_rf.models import HvacState
-from ramses_rf.strategies import _STRATEGY_BY_SCHEME
+from ramses_rf.strategies import HvacStrategy
 from ramses_rf.strategies.climarad import ClimaRadStrategy
 from ramses_rf.strategies.itho import IthoStrategy
 from ramses_tx.const import Code
@@ -41,7 +41,7 @@ def apply_hvac_quirks(
     payload: dict[str, Any],
     current_state: HvacState | None,
     msg_code: Code | str,
-    scheme: str | None = None,
+    strategy: HvacStrategy | None = None,
 ) -> dict[str, Any]:
     """Resolve stateful FSM conflicts and structural anomalies for HVAC packets.
 
@@ -49,10 +49,8 @@ def apply_hvac_quirks(
     intercepted by comparing the incoming packet payload to the existing
     CQRS state immediately prior to hydration.
 
-    When ``scheme`` is ``None`` (the default), all vendor-specific quirks
-    are applied.  This preserves the historical behaviour where the caller
-    did not know the vendor.  When ``scheme`` is provided, only the
-    matching strategy's quirks are applied.
+    When ``strategy`` is ``None``, all historically scheme-agnostic quirks
+    are applied. When provided, only that strategy's quirks are applied.
 
     :param payload: The flattened, canonical telemetry dictionary.
     :type payload: dict[str, Any]
@@ -60,18 +58,17 @@ def apply_hvac_quirks(
     :type current_state: HvacState | None
     :param msg_code: The hex opcode of the incoming message.
     :type msg_code: Code | str
-    :param scheme: The vendor scheme (``"orcon"``, ``"itho"``, etc.).
-    :type scheme: str | None
+    :param strategy: The selected vendor strategy, if known.
+    :type strategy: HvacStrategy | None
     :return: The safely mutated telemetry dictionary.
     :rtype: dict[str, Any]
     """
-    if strategy_cls := _STRATEGY_BY_SCHEME.get(scheme or ""):
-        return strategy_cls().apply_quirk(payload, current_state, msg_code)
+    if strategy:
+        return strategy.apply_quirk(payload, current_state, msg_code)
 
-    # Preserve the historical scheme-agnostic behavior until Step 3 wires
-    # the device scheme into both call sites. ClimaRad owns the 12A0
-    # structural transformation; Itho adds its 31DA guard after applying
-    # the shared normalizations.
+    # Preserve the historical scheme-agnostic behavior for callers without
+    # a device strategy. ClimaRad owns the 12A0 structural transformation;
+    # Itho adds its 31DA guard after applying the shared normalizations.
     if msg_code == Code._12A0:
         return _CLIMARAD.apply_quirk(payload, current_state, msg_code)
     return _ITHO.apply_quirk(payload, current_state, msg_code)
