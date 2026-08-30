@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import datetime as dt
 from typing import Any
 
 from ramses_rf.const import (
@@ -20,11 +21,14 @@ from ramses_rf.const import (
     SZ_COOLING_DEMAND,
     SZ_CYCLE_COUNTDOWN,
     SZ_DHW_ACTIVE,
+    SZ_DIAGNOSTIC_CODE,
     SZ_DOMAIN_INDEX,
+    SZ_FLAGS,
     SZ_FLAME_ACTIVE,
     SZ_LOCAL_OVERRIDE,
     SZ_MAX_REL_MODULATION,
     SZ_MAX_TEMP,
+    SZ_MESSAGE_ID,
     SZ_MIN_TEMP,
     SZ_MODULATION_LEVEL,
     SZ_MULTIROOM_MODE,
@@ -33,6 +37,8 @@ from ramses_rf.const import (
     SZ_RELAY_DEMAND,
     SZ_REMAINING_DAYS,
     SZ_SETPOINT,
+    SZ_TICKER,
+    SZ_VALUE,
     SZ_ZONE_INDEX,
     Code,
     DevType,
@@ -75,6 +81,7 @@ class MockMessage:
         payload: dict[str, Any],
         src_id: str,
         dst_id: str = "--:------",
+        dtm: dt | None = None,
     ) -> None:
         """Initialize the mock message wrapper envelope.
 
@@ -88,12 +95,15 @@ class MockMessage:
         :type src_id: str
         :param dst_id: The destination hardware ID string.
         :type dst_id: str
+        :param dtm: The timestamp of the message.
+        :type dtm: dt | None
         """
         self.code: Code = code
         self.verb: str = verb
         self.payload: dict[str, Any] = payload
         self.src: MockAddr = MockAddr(src_id)
         self.dst: MockAddr = MockAddr(dst_id)
+        self.dtm: dt = dtm or dt.now()
         self.correlation_id: uuid.UUID = uuid.uuid4()
         self.message_id: uuid.UUID = uuid.uuid4()
 
@@ -127,6 +137,28 @@ class FakeDevice:
             self.act_state = event.state
         elif isinstance(event.state, HvacState):
             self.hvac_state = event.state
+
+
+class FakeNonOtbDevice:
+    """A minimal fake device twin for non-OTB actuators."""
+
+    def __init__(self, slug: str) -> None:
+        """Initialize the fake non-OTB device.
+
+        :param slug: The device type slug.
+        :type slug: str
+        """
+        self.id: str = "13:064873"
+        self._SLUG: str = slug
+        self.events: list[StateUpdatedEvent] = []
+
+    def apply_state_update(self, event: StateUpdatedEvent) -> None:
+        """Accept an immutable state event.
+
+        :param event: The state update event container.
+        :type event: StateUpdatedEvent
+        """
+        self.events.append(event)
 
 
 class FakeZone:
@@ -225,7 +257,10 @@ def test_worker_opentherm_modulation_parsing() -> None:
     mock_msg = MockMessage(
         code=Code._3220,
         verb=Verb.RP,
-        payload={"msg_id": int(OtDataId.REL_MODULATION_LEVEL), "value": 42.5},
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.REL_MODULATION_LEVEL),
+            SZ_VALUE: 0.425,
+        },
         src_id=device.id,
     )
 
@@ -233,7 +268,7 @@ def test_worker_opentherm_modulation_parsing() -> None:
     worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
 
     # Assert
-    assert device.opentherm_state.rel_modulation_level == 42.5
+    assert device.opentherm_state.rel_modulation_level == 0.425
     assert len(device.events) == 1
     assert device.events[0].entity_id == device.id
 
@@ -252,7 +287,7 @@ def test_worker_opentherm_status_flag_parsing() -> None:
     mock_msg = MockMessage(
         code=Code._3220,
         verb=Verb.RP,
-        payload={"msg_id": int(OtDataId.STATUS), "value": status_array},
+        payload={SZ_MESSAGE_ID: int(OtDataId.STATUS), SZ_VALUE: status_array},
         src_id=device.id,
     )
 
@@ -440,25 +475,37 @@ def test_state_projector_routes_opentherm_3220_data_id_responses() -> None:
     msg_flow_temp = MockMessage(
         code=Code._3220,
         verb=Verb.RP,
-        payload={"msg_id": int(OtDataId.BOILER_OUTPUT_TEMP), "value": 58.5},
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.BOILER_OUTPUT_TEMP),
+            SZ_VALUE: 58.5,
+        },
         src_id=device.id,
     )
     msg_return_temp = MockMessage(
         code=Code._3220,
         verb=Verb.RP,
-        payload={"msg_id": int(OtDataId.BOILER_RETURN_TEMP), "value": 41.2},
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.BOILER_RETURN_TEMP),
+            SZ_VALUE: 41.2,
+        },
         src_id=device.id,
     )
     msg_dhw_setpoint = MockMessage(
         code=Code._3220,
         verb=Verb.RP,
-        payload={"msg_id": int(OtDataId.DHW_SETPOINT), "value": 52.0},
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.DHW_SETPOINT),
+            SZ_VALUE: 52.0,
+        },
         src_id=device.id,
     )
     msg_ch_max_setpoint = MockMessage(
         code=Code._3220,
         verb=Verb.RP,
-        payload={"msg_id": int(OtDataId.CH_MAX_SETPOINT), "value": 75.0},
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.CH_MAX_SETPOINT),
+            SZ_VALUE: 75.0,
+        },
         src_id=device.id,
     )
 
@@ -1021,3 +1068,320 @@ def test_3ef0_opentherm_state_projection() -> None:
     assert device.opentherm_state.flags.ch_enabled is True
     assert device.opentherm_state.flags.dhw_active is False
     assert device.opentherm_state.flags.flame_active is True
+
+
+def test_opentherm_modulation_bounds_validation() -> None:
+    """Verify that valid 3220 modulation values (0.0 <= val <= 1.0) are projected."""
+    # Arrange
+    device = FakeDevice()
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg_rel = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.REL_MODULATION_LEVEL),
+            SZ_VALUE: 0.75,
+        },
+        src_id=device.id,
+    )
+    msg_max = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId._0E),
+            SZ_VALUE: 1.0,
+        },
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_opentherm_state(device, msg_rel.payload, msg_rel)
+    worker._update_opentherm_state(device, msg_max.payload, msg_max)
+
+    # Assert
+    assert device.opentherm_state.rel_modulation_level == 0.75
+    assert device.opentherm_state.max_rel_modulation == 1.0
+
+
+def test_opentherm_modulation_out_of_bounds_rejected() -> None:
+    """Verify that out-of-bounds 3220 modulation values are rejected without mutating state."""
+    # Arrange
+    device = FakeDevice()
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    # Set clean baseline
+    device.opentherm_state = OpenThermState(rel_modulation_level=0.5)
+
+    for bad_value in (-0.01, 1.01, 42.5, 100.0):
+        mock_msg = MockMessage(
+            code=Code._3220,
+            verb=Verb.RP,
+            payload={
+                SZ_MESSAGE_ID: int(OtDataId.REL_MODULATION_LEVEL),
+                SZ_VALUE: bad_value,
+            },
+            src_id=device.id,
+        )
+
+        # Act
+        worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
+
+        # Assert
+        assert device.opentherm_state.rel_modulation_level == 0.5
+
+
+def test_opentherm_modulation_invalid_types_rejected() -> None:
+    """Verify that non-numeric or boolean types for modulation are rejected."""
+    # Arrange
+    device = FakeDevice()
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    device.opentherm_state = OpenThermState(rel_modulation_level=0.5)
+
+    bad_values: list[Any] = [None, True, False, "0.5", [], {}]
+    for bad_value in bad_values:
+        mock_msg = MockMessage(
+            code=Code._3220,
+            verb=Verb.RP,
+            payload={
+                SZ_MESSAGE_ID: int(OtDataId.REL_MODULATION_LEVEL),
+                SZ_VALUE: bad_value,
+            },
+            src_id=device.id,
+        )
+
+        # Act
+        worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
+
+        # Assert
+        assert device.opentherm_state.rel_modulation_level == 0.5
+
+
+def test_controller_3ef0_precedence_over_invalid_3220() -> None:
+    """Verify that controller 3EF0 modulation is retained when invalid 3220 arrives."""
+    # Arrange
+    device = FakeDevice()
+    device.id = "10:064873"
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg_3ef0 = MockMessage(
+        code=Code._3EF0,
+        verb=Verb.I_,
+        payload={SZ_MODULATION_LEVEL: 0.65},
+        src_id="10:064873",
+    )
+    msg_invalid_3220 = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.REL_MODULATION_LEVEL),
+            SZ_VALUE: 42.5,
+        },
+        src_id="10:064873",
+    )
+    msg_valid_3220 = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.REL_MODULATION_LEVEL),
+            SZ_VALUE: 0.40,
+        },
+        src_id="10:064873",
+    )
+
+    # Act & Assert 1: Controller broadcast establishes 0.65
+    worker.process_message_state(msg_3ef0)
+    assert device.opentherm_state.rel_modulation_level == 0.65
+
+    # Act & Assert 2: Invalid 3220 frame is rejected, retaining 0.65
+    worker.process_message_state(msg_invalid_3220)
+    assert device.opentherm_state.rel_modulation_level == 0.65
+
+    # Act & Assert 3: Valid 3220 frame updates to 0.40
+    worker.process_message_state(msg_valid_3220)
+    assert device.opentherm_state.rel_modulation_level == 0.40
+
+
+def test_opentherm_1fd0_diagnostics_projection() -> None:
+    """Verify that Opcode 1FD0 diagnostic code updates oem_code and last_updated."""
+    # Arrange
+    device = FakeDevice()
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._1FD0,
+        verb=Verb.I_,
+        payload={SZ_DIAGNOSTIC_CODE: 115, SZ_FLAGS: 0},
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_opentherm_state(device, msg.payload, msg)
+
+    # Assert
+    assert device.opentherm_state.oem_code == 115
+    assert len(device.events) == 1
+    assert device.events[0].entity_id == device.id
+
+
+def test_opentherm_1fd4_ticker_projection() -> None:
+    """Verify that Opcode 1FD4 slave ticker refreshes OpenThermState.last_updated."""
+    # Arrange
+    device = FakeDevice()
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._1FD4,
+        verb=Verb.I_,
+        payload={SZ_TICKER: 23294},
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_opentherm_state(device, msg.payload, msg)
+
+    # Assert
+    assert len(device.events) == 1
+    assert device.events[0].entity_id == device.id
+
+
+def test_opentherm_ingestion_ignores_non_otb_devices() -> None:
+    """Verify that non-OTB devices (BDR, TRV, UFC, FAN) are untouched by OpenTherm ingestion."""
+    # Arrange
+    for slug in (DevType.BDR, DevType.TRV, DevType.UFC, DevType.FAN):
+        device = FakeNonOtbDevice(slug)
+        registry = FakeRegistry(device)
+        gwy_adapter = FakeGatewayAdapter(registry)
+        queue: asyncio.Queue[Message] = asyncio.Queue()
+        worker = StateProjector(gwy_adapter, queue)
+
+        msg_3220 = MockMessage(
+            code=Code._3220,
+            verb=Verb.RP,
+            payload={
+                SZ_MESSAGE_ID: int(OtDataId.REL_MODULATION_LEVEL),
+                SZ_VALUE: 0.5,
+            },
+            src_id=device.id,
+        )
+        msg_1fd0 = MockMessage(
+            code=Code._1FD0,
+            verb=Verb.I_,
+            payload={SZ_DIAGNOSTIC_CODE: 115, SZ_FLAGS: 0},
+            src_id=device.id,
+        )
+
+        # Act
+        worker._update_opentherm_state(device, msg_3220.payload, msg_3220)
+        worker._update_opentherm_state(device, msg_1fd0.payload, msg_1fd0)
+
+        # Assert
+        assert not hasattr(device, "opentherm_state")
+        assert len(device.events) == 0
+
+
+def test_controller_3ef1_broadcast_ingestion() -> None:
+    """Verify that controller 3EF1 broadcasts update modulation, setpoints, and flags."""
+    # Arrange
+    device = FakeDevice()
+    device.id = "10:064873"
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._3EF1,
+        verb=Verb.I_,
+        payload={
+            SZ_MODULATION_LEVEL: 0.45,
+            SZ_CH_ACTIVE: True,
+            SZ_CH_ENABLED: True,
+            SZ_DHW_ACTIVE: True,
+            SZ_FLAME_ACTIVE: True,
+            SZ_CH_SETPOINT: 55.0,
+            SZ_MAX_REL_MODULATION: 0.9,
+        },
+        src_id="10:064873",
+        dst_id="--:------",
+    )
+
+    # Act
+    worker.process_message_state(msg)
+
+    # Assert
+    assert device.opentherm_state.rel_modulation_level == 0.45
+    assert device.opentherm_state.max_rel_modulation == 0.9
+    assert device.opentherm_state.temperatures.ch_setpoint == 55.0
+    assert device.opentherm_state.flags.ch_active is True
+    assert device.opentherm_state.flags.ch_enabled is True
+    assert device.opentherm_state.flags.dhw_active is True
+    assert device.opentherm_state.flags.flame_active is True
+
+
+def test_opentherm_counters_projection() -> None:
+    """Verify that Opcode 3220 counter messages update OpenThermState.counters."""
+    # Arrange
+    device = FakeDevice()
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg_burner_starts = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.BURNER_STARTS),
+            SZ_VALUE: 1250,
+        },
+        src_id=device.id,
+    )
+    msg_pump_hours = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.CH_PUMP_HOURS),
+            SZ_VALUE: 340,
+        },
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_opentherm_state(
+        device, msg_burner_starts.payload, msg_burner_starts
+    )
+    worker._update_opentherm_state(
+        device, msg_pump_hours.payload, msg_pump_hours
+    )
+
+    # Assert
+    assert device.opentherm_state.counters.burner_starts == 1250
+    assert device.opentherm_state.counters.ch_pump_hours == 340

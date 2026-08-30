@@ -18,7 +18,7 @@ from ramses_rf.devices.helpers import build_rq_cmd
 from ramses_rf.exceptions import RamsesException
 from ramses_rf.helpers import schedule_task
 from ramses_rf.protocol.opentherm import (
-    OTB_POLL_DATA_IDS,
+    OPENTHERM_POLL_DATA_IDS,
     encode_opentherm_payload,
 )
 from ramses_rf.typing import DeviceIdT, PollingIntervalsT
@@ -374,7 +374,7 @@ class PollingManager:
                         self._tasks[zkey].payload = payload
             elif code == Code._3220 and slug == DevType.OTB:
                 # Expand into per-Data-ID OpenTherm query tasks
-                for data_id in OTB_POLL_DATA_IDS:
+                for data_id in OPENTHERM_POLL_DATA_IDS:
                     ot_key = (device.id, code, f"{data_id:02X}")
                     active_keys.add(ot_key)
                     payload = encode_opentherm_payload(data_id)

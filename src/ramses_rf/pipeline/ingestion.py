@@ -74,6 +74,7 @@ from ramses_rf.const import (
     SZ_DHW_PUMP_HOURS,
     SZ_DHW_PUMP_STARTS,
     SZ_DHW_SETPOINT,
+    SZ_DIAGNOSTIC_CODE,
     SZ_DIFFERENTIAL,
     SZ_DOMAIN_ID_WIRE,
     SZ_DOMAIN_INDEX,
@@ -596,111 +597,137 @@ class StateProjector:
             else:
                 return
 
-        upd_base: dict[str, Any] = {}
-        upd_flag: dict[str, Any] = {}
-        upd_temp: dict[str, Any] = {}
-        upd_count: dict[str, Any] = {}
+        base_updates: dict[str, Any] = {}
+        flag_updates: dict[str, Any] = {}
+        temperature_updates: dict[str, Any] = {}
+        counter_updates: dict[str, Any] = {}
 
-        if msg.code == Code._3220:
-            raw_id = payload.get(SZ_MESSAGE_ID)
-            value = payload.get(SZ_VALUE)
+        match msg.code:
+            case Code._3220:
+                raw_id = payload.get(SZ_MESSAGE_ID)
+                value = payload.get(SZ_VALUE)
 
-            if raw_id is None:
-                return
+                if raw_id is None:
+                    return
 
-            try:
-                msg_id = OtDataId(raw_id)
-            except ValueError:
-                return
+                try:
+                    msg_id = OtDataId(raw_id)
+                except ValueError:
+                    return
 
-            if (
-                msg_id == OtDataId.STATUS
-                and isinstance(value, (list, tuple))
-                and len(value) >= 13
-            ):
-                upd_flag.update(
-                    {
-                        SZ_CH_ENABLED: bool(value[0]),
-                        SZ_DHW_ENABLED: bool(value[1]),
-                        SZ_COOLING_ENABLED: bool(value[2]),
-                        SZ_OTC_ACTIVE: bool(value[3]),
-                        SZ_SUMMER_MODE: bool(value[5]),
-                        SZ_DHW_BLOCKING: bool(value[6]),
-                        SZ_FAULT_PRESENT: bool(value[8]),
-                        SZ_CH_ACTIVE: bool(value[9]),
-                        SZ_DHW_ACTIVE: bool(value[10]),
-                        SZ_FLAME_ACTIVE: bool(value[11]),
-                        SZ_COOLING_ACTIVE: bool(value[12]),
-                    }
+                if (
+                    msg_id == OtDataId.STATUS
+                    and isinstance(value, (list, tuple))
+                    and len(value) >= 13
+                ):
+                    flag_updates.update(
+                        {
+                            SZ_CH_ENABLED: bool(value[0]),
+                            SZ_DHW_ENABLED: bool(value[1]),
+                            SZ_COOLING_ENABLED: bool(value[2]),
+                            SZ_OTC_ACTIVE: bool(value[3]),
+                            SZ_SUMMER_MODE: bool(value[5]),
+                            SZ_DHW_BLOCKING: bool(value[6]),
+                            SZ_FAULT_PRESENT: bool(value[8]),
+                            SZ_CH_ACTIVE: bool(value[9]),
+                            SZ_DHW_ACTIVE: bool(value[10]),
+                            SZ_FLAME_ACTIVE: bool(value[11]),
+                            SZ_COOLING_ACTIVE: bool(value[12]),
+                        }
+                    )
+                elif value is not None and msg_id in OPENTHERM_FIELD_MAP:
+                    category, field_key = OPENTHERM_FIELD_MAP[msg_id]
+                    match category:
+                        case "base":
+                            if field_key in (
+                                SZ_REL_MODULATION_LEVEL,
+                                SZ_MAX_REL_MODULATION,
+                            ):
+                                if (
+                                    isinstance(value, (int, float))
+                                    and not isinstance(value, bool)
+                                    and 0.0 <= value <= 1.0
+                                ):
+                                    base_updates[field_key] = value
+                            else:
+                                base_updates[field_key] = value
+                        case "temperatures":
+                            temperature_updates[field_key] = value
+                        case "counters":
+                            counter_updates[field_key] = value
+                        case "flags":
+                            flag_updates[field_key] = value
+
+            case Code._1FD0:
+                diagnostic_code = payload.get(
+                    SZ_DIAGNOSTIC_CODE, payload.get(SZ_OEM_CODE)
                 )
-            elif value is not None and msg_id in OPENTHERM_FIELD_MAP:
-                category, field_key = OPENTHERM_FIELD_MAP[msg_id]
-                if category == SZ_BASE:
-                    upd_base[field_key] = value
-                elif category == SZ_TEMPERATURES:
-                    upd_temp[field_key] = value
-                elif category == SZ_COUNTERS:
-                    upd_count[field_key] = value
-                elif category == SZ_FLAGS:
-                    upd_flag[field_key] = value
-        else:
-            if msg.code in RAMSES_HEATING_MAP:
-                data = RAMSES_HEATING_MAP[msg.code]
-                payload_key, category, state_field = data
-                if payload_key in payload:
-                    if category == SZ_BASE:
-                        upd_base[state_field] = payload[payload_key]
-                    elif category == SZ_TEMPERATURES:
-                        upd_temp[state_field] = payload[payload_key]
-            elif msg.code in (Code._3EF0, Code._3EF1):
-                if SZ_MODULATION_LEVEL in payload:
-                    upd_base[SZ_REL_MODULATION_LEVEL] = payload[
-                        SZ_MODULATION_LEVEL
-                    ]
-                elif SZ_REL_MODULATION_LEVEL in payload:
-                    upd_base[SZ_REL_MODULATION_LEVEL] = payload[
-                        SZ_REL_MODULATION_LEVEL
-                    ]
+                if isinstance(diagnostic_code, int):
+                    base_updates[SZ_OEM_CODE] = diagnostic_code
+
+            case Code._1FD4:
+                dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
+                if dtm:
+                    base_updates[SZ_LAST_UPDATED] = dtm
+
+            case Code._3EF0 | Code._3EF1:
+                mod_val = payload.get(
+                    SZ_MODULATION_LEVEL, payload.get(SZ_REL_MODULATION_LEVEL)
+                )
+                if mod_val is not None:
+                    base_updates[SZ_REL_MODULATION_LEVEL] = mod_val
                 if SZ_MAX_REL_MODULATION in payload:
-                    upd_base[SZ_MAX_REL_MODULATION] = payload[
+                    base_updates[SZ_MAX_REL_MODULATION] = payload[
                         SZ_MAX_REL_MODULATION
                     ]
                 if SZ_CH_SETPOINT in payload:
-                    upd_temp[SZ_CH_SETPOINT] = payload[SZ_CH_SETPOINT]
-                if SZ_CH_ACTIVE in payload:
-                    upd_flag[SZ_CH_ACTIVE] = payload[SZ_CH_ACTIVE]
-                if SZ_CH_ENABLED in payload:
-                    upd_flag[SZ_CH_ENABLED] = payload[SZ_CH_ENABLED]
-                if SZ_DHW_ACTIVE in payload:
-                    upd_flag[SZ_DHW_ACTIVE] = payload[SZ_DHW_ACTIVE]
-                if SZ_FLAME_ACTIVE in payload:
-                    upd_flag[SZ_FLAME_ACTIVE] = payload[SZ_FLAME_ACTIVE]
+                    temperature_updates[SZ_CH_SETPOINT] = payload[
+                        SZ_CH_SETPOINT
+                    ]
+                for key in (
+                    SZ_CH_ACTIVE,
+                    SZ_CH_ENABLED,
+                    SZ_DHW_ACTIVE,
+                    SZ_FLAME_ACTIVE,
+                ):
+                    if key in payload:
+                        flag_updates[key] = payload[key]
 
-        if not any((upd_base, upd_flag, upd_temp, upd_count)):
+            case code if code in RAMSES_HEATING_MAP:
+                payload_key, category, state_field = RAMSES_HEATING_MAP[code]
+                if payload_key in payload:
+                    if category == SZ_BASE:
+                        base_updates[state_field] = payload[payload_key]
+                    elif category == SZ_TEMPERATURES:
+                        temperature_updates[state_field] = payload[payload_key]
+
+        if not any(
+            (base_updates, flag_updates, temperature_updates, counter_updates)
+        ):
             return
 
         dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
-            upd_base[SZ_LAST_UPDATED] = dtm
+            base_updates[SZ_LAST_UPDATED] = dtm
 
         new_flags = current_state.flags
-        if upd_flag:
-            new_flags = dataclasses.replace(new_flags, **upd_flag)
+        if flag_updates:
+            new_flags = dataclasses.replace(new_flags, **flag_updates)
 
         new_temps = current_state.temperatures
-        if upd_temp:
-            new_temps = dataclasses.replace(new_temps, **upd_temp)
+        if temperature_updates:
+            new_temps = dataclasses.replace(new_temps, **temperature_updates)
 
         new_counters = current_state.counters
-        if upd_count:
-            new_counters = dataclasses.replace(new_counters, **upd_count)
+        if counter_updates:
+            new_counters = dataclasses.replace(new_counters, **counter_updates)
 
         new_state = dataclasses.replace(
             current_state,
             flags=new_flags,
             temperatures=new_temps,
             counters=new_counters,
-            **upd_base,
+            **base_updates,
         )
         target.opentherm_state = new_state
 
