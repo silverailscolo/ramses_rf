@@ -19,7 +19,7 @@
   types-colorama >= 0.4.15.20260508
   types-PyYAML >= 6.0.12.20260815                # HA uses 6.0.12.20250516
   types-pyserial >= 3.5.0.20260712
-  probatio >= 0.11.2                             # HA uses 0.11.2 since 2026.9.0-b
+  probatio >= 0.11.4                             # HA uses 0.11.4 since 2026.9.0-b4
 
 # used for testing
   pytest >= 9.1.1                                # HA uses 8.4.2
