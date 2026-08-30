@@ -10,15 +10,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ramses_rf import exceptions as exc
-from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_IDX, SZ_ZONE_INDEX, Code
+from ramses_rf.const import (
+    HW,
+    SZ_ENABLED,
+    SZ_HEAT_SETPOINT,
+    SZ_SCHEDULE,
+    SZ_SWITCHPOINTS,
+    SZ_TIME_OF_DAY,
+    SZ_ZONE_IDX,
+    SZ_ZONE_INDEX,
+    Code,
+)
 from ramses_rf.messages import Message
 from ramses_rf.models import ScheduleState, StateUpdatedEvent
 from ramses_rf.payloads.heating import ScheduleSwitchpointPayload
 from ramses_rf.systems.schedule import (
-    SZ_ENABLED,
-    SZ_HEAT_SETPOINT,
-    SZ_SWITCHPOINTS,
-    SZ_TIME_OF_DAY,
     DaySchedule,
     Schedule,
     ScheduleData,
@@ -38,13 +44,11 @@ from .helpers import TEST_DIR
 WORK_DIR = f"{TEST_DIR}/schedules"
 
 VALID_FULL_SCHEDULE: Final[WeeklyScheduleDict] = {
-    SZ_ZONE_IDX: "00",
-    SZ_SCHEDULE: [
+    "zone_index": "00",
+    "schedule": [
         {
             "day_of_week": 0,
-            SZ_SWITCHPOINTS: [
-                {SZ_TIME_OF_DAY: "06:00", SZ_HEAT_SETPOINT: 21.0}
-            ],
+            "switchpoints": [{"time_of_day": "06:00", "heat_setpoint": 21.0}],
         }
     ],
 }
@@ -347,7 +351,7 @@ def test_day_schedule_dataclass_validation() -> None:
 def test_schedule_data_dataclass_validation_and_dict_conversion() -> None:
     """Verify ScheduleData validation, from_dict parsing, and to_dict serialization."""
     raw_schedule = {
-        SZ_ZONE_IDX: "HW",
+        SZ_ZONE_IDX: HW,
         SZ_SCHEDULE: [
             {
                 "day_of_week": 0,
@@ -360,14 +364,14 @@ def test_schedule_data_dataclass_validation_and_dict_conversion() -> None:
     sched_data = ScheduleData.from_dict(raw_schedule)
 
     # Assert
-    assert sched_data.zone_index == "HW"
+    assert sched_data.zone_index == HW
     assert len(sched_data.days) == 1
     assert sched_data.days[0].day_of_week == 0
     assert sched_data.days[0].switchpoints[0].enabled is True
 
     # Round-trip serialization
     serialized = sched_data.to_dict()
-    assert serialized[SZ_ZONE_IDX] == "HW"
+    assert serialized[SZ_ZONE_IDX] == HW
     sp_dict = serialized[SZ_SCHEDULE][0][SZ_SWITCHPOINTS][0]
     assert isinstance(sp_dict, dict)
     assert sp_dict.get(SZ_ENABLED) is True
@@ -402,3 +406,177 @@ def test_schedule_switchpoint_payload_from_switchpoint() -> None:
     assert sp2.day_of_week == 1
     assert sp2.time_of_day_mins == 480
     assert sp2.setpoint_value == 1
+
+
+def test_schedule_normalise_and_validate_with_list() -> None:
+    """Verify _normalise_and_validate accepts pure WeeklySchedule list."""
+    # Arrange
+    mock_zone = MagicMock()
+    mock_zone.id = "01:123456_01"
+    mock_zone.index = "01"
+    sched = Schedule(mock_zone)
+
+    schedule_list = [
+        {
+            "day_of_week": 0,
+            SZ_SWITCHPOINTS: [
+                {SZ_TIME_OF_DAY: "06:30", SZ_HEAT_SETPOINT: 21.0}
+            ],
+        }
+    ]
+
+    # Act
+    result = sched._normalise_and_validate(schedule_list)
+
+    # Assert
+    assert result[SZ_ZONE_INDEX] == "01"
+    assert result[SZ_SCHEDULE] == schedule_list
+
+
+def test_schedule_normalise_and_validate_with_full_dict() -> None:
+    """Verify _normalise_and_validate accepts full WeeklyScheduleDict."""
+    # Arrange
+    mock_zone = MagicMock()
+    mock_zone.id = "01:123456_01"
+    mock_zone.index = "01"
+    sched = Schedule(mock_zone)
+
+    schedule_dict = {
+        SZ_ZONE_INDEX: "01",
+        SZ_SCHEDULE: [
+            {
+                "day_of_week": 0,
+                SZ_SWITCHPOINTS: [
+                    {SZ_TIME_OF_DAY: "06:30", SZ_HEAT_SETPOINT: 21.0}
+                ],
+            }
+        ],
+    }
+
+    # Act
+    result = sched._normalise_and_validate(schedule_dict)
+
+    # Assert
+    assert result[SZ_ZONE_INDEX] == "01"
+    assert result[SZ_SCHEDULE] == schedule_dict[SZ_SCHEDULE]
+
+
+def test_schedule_normalise_and_validate_with_schedule_key_dict() -> None:
+    """Verify _normalise_and_validate accepts dict without zone_index."""
+    # Arrange
+    mock_zone = MagicMock()
+    mock_zone.id = "01:123456_01"
+    mock_zone.index = "01"
+    sched = Schedule(mock_zone)
+
+    schedule_dict = {
+        SZ_SCHEDULE: [
+            {
+                "day_of_week": 0,
+                SZ_SWITCHPOINTS: [
+                    {SZ_TIME_OF_DAY: "07:00", SZ_HEAT_SETPOINT: 20.5}
+                ],
+            }
+        ]
+    }
+
+    # Act
+    result = sched._normalise_and_validate(schedule_dict)
+
+    # Assert
+    assert result[SZ_ZONE_INDEX] == "01"
+    assert result[SZ_SCHEDULE] == schedule_dict[SZ_SCHEDULE]
+
+
+def test_schedule_normalise_and_validate_dhw_dict() -> None:
+    """Verify _normalise_and_validate handles DHW HW index translation."""
+    # Arrange
+    mock_zone = MagicMock()
+    mock_zone.id = f"01:123456_{HW}"
+    mock_zone.index = HW
+    sched = Schedule(mock_zone)
+
+    schedule_dict = {
+        SZ_ZONE_INDEX: HW,
+        SZ_SCHEDULE: [
+            {
+                "day_of_week": 0,
+                SZ_SWITCHPOINTS: [{SZ_TIME_OF_DAY: "06:00", SZ_ENABLED: True}],
+            }
+        ],
+    }
+
+    # Act
+    result = sched._normalise_and_validate(schedule_dict)
+
+    # Assert
+    assert result[SZ_ZONE_INDEX] == "00"
+    assert result[SZ_ZONE_IDX] == "00"
+    sp_dict = result[SZ_SCHEDULE][0][SZ_SWITCHPOINTS][0]
+    assert isinstance(sp_dict, dict)
+    assert sp_dict.get(SZ_ENABLED) is True
+
+
+def test_schedule_normalise_and_validate_mismatched_index() -> None:
+    """Verify _normalise_and_validate rejects mismatched zone index."""
+    # Arrange
+    mock_zone = MagicMock()
+    mock_zone.id = "01:123456_01"
+    mock_zone.index = "01"
+    sched = Schedule(mock_zone)
+
+    schedule_dict = {
+        SZ_ZONE_INDEX: "02",
+        SZ_SCHEDULE: [
+            {
+                "day_of_week": 0,
+                SZ_SWITCHPOINTS: [
+                    {SZ_TIME_OF_DAY: "06:30", SZ_HEAT_SETPOINT: 21.0}
+                ],
+            }
+        ],
+    }
+
+    # Act & Assert
+    with pytest.raises(exc.ScheduleError, match="Zone index mismatch"):
+        sched._normalise_and_validate(schedule_dict)
+
+
+@pytest.mark.asyncio
+async def test_schedule_set_schedule_accepts_dictionary() -> None:
+    """Verify set_schedule accepts a dictionary and sends fragments."""
+    # Arrange
+    mock_zone = MagicMock()
+    mock_zone.id = "01:123456_01"
+    mock_zone.index = "01"
+    sched = Schedule(mock_zone)
+
+    schedule_dict = {
+        SZ_ZONE_INDEX: "01",
+        SZ_SCHEDULE: [
+            {
+                "day_of_week": 0,
+                SZ_SWITCHPOINTS: [
+                    {SZ_TIME_OF_DAY: "06:30", SZ_HEAT_SETPOINT: 21.0}
+                ],
+            }
+        ],
+    }
+
+    # Act
+    with (
+        patch.object(
+            sched, "_send_fragment", new=AsyncMock(return_value=None)
+        ) as mock_send,
+        patch.object(
+            sched.tcs,
+            "_schedule_version",
+            new=AsyncMock(return_value=(2, True)),
+        ),
+    ):
+        result = await sched.set_schedule(schedule_dict)
+
+    # Assert
+    assert mock_send.called
+    assert result == schedule_dict[SZ_SCHEDULE]
+    assert sched.state == ScheduleStateEnum.SYNCHRONISED
