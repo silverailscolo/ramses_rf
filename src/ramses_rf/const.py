@@ -87,6 +87,8 @@ SZ_DEVICES: Final = "devices"
 SZ_DHW_INDEX: Final = "dhw_index"
 SZ_DHW_IDX: Final = SZ_DHW_INDEX
 SZ_DIAGNOSTIC_CODE: Final = "diagnostic_code"
+HW: Final = "HW"
+DOMAIN_ID_HW: Final = HW
 SZ_DIFFERENTIAL: Final = "differential"
 SZ_DOMAIN_INDEX: Final = "domain_index"
 SZ_DOMAIN_ID: Final = SZ_DOMAIN_INDEX
@@ -101,6 +103,7 @@ SZ_HEAT_DEMAND: Final = "heat_demand"
 SZ_HEAT_DEMANDS: Final = "heat_demands"
 SZ_HEAT_DEMAND_FAULT: Final = "heat_demand_fault"
 SZ_HEAT_MODE: Final = "heat_mode"
+SZ_HEAT_SETPOINT: Final = "heat_setpoint"
 SZ_HVAC_ID: Final = "hvac_id"
 SZ_IS_DAYLIGHT_SAVING: Final = "is_daylight_saving"
 SZ_IS_DST: Final = SZ_IS_DAYLIGHT_SAVING
@@ -213,6 +216,10 @@ SZ_TOTAL_FRAGS: Final = SZ_TOTAL_FRAGMENTS
 
 SZ_SCHEDULE: Final = "schedule"
 SZ_CHANGE_COUNTER: Final = "change_counter"
+SZ_DAY_OF_WEEK: Final = "day_of_week"
+SZ_SWITCHPOINTS: Final = "switchpoints"
+SZ_TIME_OF_DAY: Final = "time_of_day"
+SZ_ENABLED: Final = "enabled"
 
 SZ_SENSOR_FAULT: Final = "sensor_fault"
 
