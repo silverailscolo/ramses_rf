@@ -316,11 +316,7 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
             pump_state = state.pump_relay_state
             if isinstance(pump_state, PumpRelayState):
                 return pump_state
-        fallback_state = getattr(self, "act_state", None) or getattr(
-            self, "demand_state", None
-        )
-        res = getattr(fallback_state, "pump_relay_state", None)
-        return res if isinstance(res, PumpRelayState) else None
+        return None
 
     async def setpoints(self) -> dict[str, Any] | None:  # 22C9|ufh_index array
         """Return the UFH setpoints dictionary.

@@ -53,7 +53,6 @@ from ramses_rf.const import (
     SZ_CIRCUITS,
     SZ_CO2_LEVEL,
     SZ_CO2_LEVEL_FAULT,
-    SZ_COOL_ACTIVE,
     SZ_COOLING_ACTIVE,
     SZ_COOLING_DEMAND,
     SZ_COOLING_DEMANDS,
@@ -91,7 +90,6 @@ from ramses_rf.const import (
     SZ_FILTER_REMAINING_PERCENT,
     SZ_FLAGS,
     SZ_FLAME_ACTIVE,
-    SZ_FLAME_ON,
     SZ_FLAME_SIGNAL_LOW,
     SZ_HEAT_DEMAND,
     SZ_HEAT_DEMANDS,
@@ -588,7 +586,7 @@ class StateProjector:
                     )
 
     def _update_opentherm_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate OpenTherm frames or parallel opcodes into OpenThermState."""
         current_state = getattr(target, "opentherm_state", None)
@@ -604,8 +602,8 @@ class StateProjector:
         upd_count: dict[str, Any] = {}
 
         if msg.code == Code._3220:
-            raw_id = p.get(SZ_MESSAGE_ID)
-            value = p.get(SZ_VALUE)
+            raw_id = payload.get(SZ_MESSAGE_ID)
+            value = payload.get(SZ_VALUE)
 
             if raw_id is None:
                 return
@@ -649,31 +647,34 @@ class StateProjector:
             if msg.code in RAMSES_HEATING_MAP:
                 data = RAMSES_HEATING_MAP[msg.code]
                 payload_key, category, state_field = data
-                if payload_key in p:
+                if payload_key in payload:
                     if category == SZ_BASE:
-                        upd_base[state_field] = p[payload_key]
+                        upd_base[state_field] = payload[payload_key]
                     elif category == SZ_TEMPERATURES:
-                        upd_temp[state_field] = p[payload_key]
+                        upd_temp[state_field] = payload[payload_key]
             elif msg.code in (Code._3EF0, Code._3EF1):
-                if SZ_MODULATION_LEVEL in p:
-                    upd_base[SZ_REL_MODULATION_LEVEL] = p[SZ_MODULATION_LEVEL]
-                elif SZ_REL_MODULATION_LEVEL in p:
-                    upd_base[SZ_REL_MODULATION_LEVEL] = p[
+                if SZ_MODULATION_LEVEL in payload:
+                    upd_base[SZ_REL_MODULATION_LEVEL] = payload[
+                        SZ_MODULATION_LEVEL
+                    ]
+                elif SZ_REL_MODULATION_LEVEL in payload:
+                    upd_base[SZ_REL_MODULATION_LEVEL] = payload[
                         SZ_REL_MODULATION_LEVEL
                     ]
-                if SZ_MAX_REL_MODULATION in p:
-                    upd_base[SZ_MAX_REL_MODULATION] = p[SZ_MAX_REL_MODULATION]
-                if SZ_CH_SETPOINT in p:
-                    upd_temp[SZ_CH_SETPOINT] = p[SZ_CH_SETPOINT]
-                if SZ_CH_ACTIVE in p:
-                    upd_flag[SZ_CH_ACTIVE] = p[SZ_CH_ACTIVE]
-                if SZ_CH_ENABLED in p:
-                    upd_flag[SZ_CH_ENABLED] = p[SZ_CH_ENABLED]
-                if SZ_DHW_ACTIVE in p:
-                    upd_flag[SZ_DHW_ACTIVE] = p[SZ_DHW_ACTIVE]
-                if SZ_FLAME_ON in p:
-                    # NOTE: semantic parser maps this specifically
-                    upd_flag[SZ_FLAME_ACTIVE] = p[SZ_FLAME_ON]
+                if SZ_MAX_REL_MODULATION in payload:
+                    upd_base[SZ_MAX_REL_MODULATION] = payload[
+                        SZ_MAX_REL_MODULATION
+                    ]
+                if SZ_CH_SETPOINT in payload:
+                    upd_temp[SZ_CH_SETPOINT] = payload[SZ_CH_SETPOINT]
+                if SZ_CH_ACTIVE in payload:
+                    upd_flag[SZ_CH_ACTIVE] = payload[SZ_CH_ACTIVE]
+                if SZ_CH_ENABLED in payload:
+                    upd_flag[SZ_CH_ENABLED] = payload[SZ_CH_ENABLED]
+                if SZ_DHW_ACTIVE in payload:
+                    upd_flag[SZ_DHW_ACTIVE] = payload[SZ_DHW_ACTIVE]
+                if SZ_FLAME_ACTIVE in payload:
+                    upd_flag[SZ_FLAME_ACTIVE] = payload[SZ_FLAME_ACTIVE]
 
         if not any((upd_base, upd_flag, upd_temp, upd_count)):
             return
@@ -713,7 +714,7 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_hvac_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate complex multi-opcode ventilation payloads into HvacState.
 
@@ -736,8 +737,8 @@ class StateProjector:
             if isinstance(target, DeviceBase)
             else None
         )
-        p = quirks.apply_hvac_quirks(
-            p, current_state, msg.code, strategy=strategy
+        payload = quirks.apply_hvac_quirks(
+            payload, current_state, msg.code, strategy=strategy
         )
 
         updates: dict[str, Any] = {}
@@ -782,9 +783,9 @@ class StateProjector:
         )
 
         for field_name in fields:
-            if field_name not in p:
+            if field_name not in payload:
                 continue
-            field_val = p[field_name]
+            field_val = payload[field_name]
             # None = "not implemented" (e.g. EF in bypass_position)
             if field_val is None:
                 continue
@@ -807,16 +808,18 @@ class StateProjector:
             updates[field_name] = field_val
 
         # Handle non-standard names passed by the semantic parsers
-        if SZ_REMAINING_DAYS in p:
-            updates[SZ_FILTER_REMAINING_DAYS] = p[SZ_REMAINING_DAYS]
-        if SZ_REMAINING_PERCENT in p:
-            updates[SZ_FILTER_REMAINING_PERCENT] = p[SZ_REMAINING_PERCENT]
-        if SZ_MINUTES in p and msg.code == Code._22F3:
-            updates[SZ_BOOST_TIMER_MINS] = p[SZ_MINUTES]
-        req_speed = p.get(SZ_REQUEST_SPEED, p.get(SZ_REQ_SPEED))
+        if SZ_REMAINING_DAYS in payload:
+            updates[SZ_FILTER_REMAINING_DAYS] = payload[SZ_REMAINING_DAYS]
+        if SZ_REMAINING_PERCENT in payload:
+            updates[SZ_FILTER_REMAINING_PERCENT] = payload[
+                SZ_REMAINING_PERCENT
+            ]
+        if SZ_MINUTES in payload and msg.code == Code._22F3:
+            updates[SZ_BOOST_TIMER_MINS] = payload[SZ_MINUTES]
+        req_speed = payload.get(SZ_REQUEST_SPEED, payload.get(SZ_REQ_SPEED))
         if req_speed is not None:
             updates[SZ_REQUEST_FAN_SPEED] = req_speed
-        req_reason = p.get(SZ_REQUEST_REASON, p.get(SZ_REQ_REASON))
+        req_reason = payload.get(SZ_REQUEST_REASON, payload.get(SZ_REQ_REASON))
         if req_reason is not None:
             updates[SZ_REQUEST_REASON] = req_reason
 
@@ -840,15 +843,15 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_power_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate battery opcodes into PowerState."""
         updates: dict[str, Any] = {}
         if msg.code == Code._1060:
-            if SZ_BATTERY_LOW in p:
-                updates[SZ_BATTERY_LOW] = p[SZ_BATTERY_LOW]
-            if SZ_BATTERY_LEVEL in p:
-                updates[SZ_BATTERY_LEVEL] = p[SZ_BATTERY_LEVEL]
+            if SZ_BATTERY_LOW in payload:
+                updates[SZ_BATTERY_LOW] = payload[SZ_BATTERY_LOW]
+            if SZ_BATTERY_LEVEL in payload:
+                updates[SZ_BATTERY_LEVEL] = payload[SZ_BATTERY_LEVEL]
 
         if not updates:
             return
@@ -871,7 +874,7 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_dhw_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate DHW opcodes into DhwState."""
         if msg.code not in (Code._10A0, Code._1260, Code._1F41):
@@ -879,22 +882,22 @@ class StateProjector:
 
         updates: dict[str, Any] = {}
         if msg.code == Code._10A0:
-            if SZ_SETPOINT in p:
-                updates[SZ_SETPOINT] = p[SZ_SETPOINT]
-            if SZ_OVERRUN in p:
-                updates[SZ_OVERRUN] = p[SZ_OVERRUN]
-            if SZ_DIFFERENTIAL in p:
-                updates[SZ_DIFFERENTIAL] = p[SZ_DIFFERENTIAL]
+            if SZ_SETPOINT in payload:
+                updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
+            if SZ_OVERRUN in payload:
+                updates[SZ_OVERRUN] = payload[SZ_OVERRUN]
+            if SZ_DIFFERENTIAL in payload:
+                updates[SZ_DIFFERENTIAL] = payload[SZ_DIFFERENTIAL]
         elif msg.code == Code._1260:
-            if SZ_TEMPERATURE in p:
-                updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
+            if SZ_TEMPERATURE in payload:
+                updates[SZ_TEMPERATURE] = payload[SZ_TEMPERATURE]
         elif msg.code == Code._1F41:
-            if SZ_MODE in p:
-                updates[SZ_MODE] = p[SZ_MODE]
-            if SZ_ACTIVE in p:
-                updates[SZ_ACTIVE] = p[SZ_ACTIVE]
-            if SZ_UNTIL in p:
-                updates[SZ_UNTIL] = p[SZ_UNTIL]
+            if SZ_MODE in payload:
+                updates[SZ_MODE] = payload[SZ_MODE]
+            if SZ_ACTIVE in payload:
+                updates[SZ_ACTIVE] = payload[SZ_ACTIVE]
+            if SZ_UNTIL in payload:
+                updates[SZ_UNTIL] = payload[SZ_UNTIL]
 
         if not updates:
             return
@@ -917,7 +920,7 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_system_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate system configuration opcodes into SystemState."""
         if msg.code not in (Code._0100, Code._2E04, Code._313F, Code._2D49):
@@ -925,19 +928,19 @@ class StateProjector:
 
         updates: dict[str, Any] = {}
         if msg.code == Code._0100:
-            if SZ_LANGUAGE in p:
-                updates[SZ_LANGUAGE] = p[SZ_LANGUAGE]
+            if SZ_LANGUAGE in payload:
+                updates[SZ_LANGUAGE] = payload[SZ_LANGUAGE]
         elif msg.code == Code._2E04:
-            if SZ_SYSTEM_MODE in p:
-                updates[SZ_SYSTEM_MODE] = p[SZ_SYSTEM_MODE]
-            if SZ_UNTIL in p:
-                updates[SZ_UNTIL] = p[SZ_UNTIL]
+            if SZ_SYSTEM_MODE in payload:
+                updates[SZ_SYSTEM_MODE] = payload[SZ_SYSTEM_MODE]
+            if SZ_UNTIL in payload:
+                updates[SZ_UNTIL] = payload[SZ_UNTIL]
         elif msg.code == Code._313F:
-            if SZ_DATETIME in p:
-                updates[SZ_DATETIME] = p[SZ_DATETIME]
+            if SZ_DATETIME in payload:
+                updates[SZ_DATETIME] = payload[SZ_DATETIME]
         elif msg.code == Code._2D49:
-            if SZ_COOLING_DEMAND in p:
-                updates[SZ_COOLING_MODE] = p[SZ_COOLING_DEMAND]
+            if SZ_COOLING_DEMAND in payload:
+                updates[SZ_COOLING_MODE] = payload[SZ_COOLING_DEMAND]
 
         if not updates:
             return
@@ -960,14 +963,14 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_temperature_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate temperature/TRV opcodes into TrvState & TemperatureState."""
         dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
 
-        if msg.code == Code._12B0 and SZ_WINDOW_OPEN in p:
+        if msg.code == Code._12B0 and SZ_WINDOW_OPEN in payload:
             current_trv = getattr(target, "trv_state", None) or TrvState()
-            trv_updates = {SZ_WINDOW_OPEN: p[SZ_WINDOW_OPEN]}
+            trv_updates = {SZ_WINDOW_OPEN: payload[SZ_WINDOW_OPEN]}
             if dtm:
                 trv_updates[SZ_LAST_UPDATED] = dtm
 
@@ -992,7 +995,7 @@ class StateProjector:
             Code._2349,
         ):
             updates: dict[str, Any] = {}
-            if SZ_TEMPERATURE in p:
+            if SZ_TEMPERATURE in payload:
                 # Legacy Parity: Physical sensors only track their own local sensor readings.
                 # We must ignore Zone temperature syncs sent TO them by the Controller.
                 # Keep same as src/ramses_rf/dispatcher.py#_update_temperature_state
@@ -1005,10 +1008,10 @@ class StateProjector:
                 ):
                     pass
                 else:
-                    updates[SZ_TEMPERATURE] = p[SZ_TEMPERATURE]
+                    updates[SZ_TEMPERATURE] = payload[SZ_TEMPERATURE]
 
-            if SZ_SETPOINT in p:
-                updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+            if SZ_SETPOINT in payload:
+                updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
 
             if updates:
                 if dtm:
@@ -1032,7 +1035,7 @@ class StateProjector:
                     target.apply_state_update(event)
 
     def _update_demand_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate demand opcodes into DemandState."""
         if msg.code not in (Code._3150, Code._0008, Code._0009, Code._1100):
@@ -1041,42 +1044,42 @@ class StateProjector:
         updates: dict[str, Any] = {}
         slug = getattr(target, "_SLUG", "")
 
-        if msg.code == Code._3150 and SZ_HEAT_DEMAND in p:
+        if msg.code == Code._3150 and SZ_HEAT_DEMAND in payload:
             # Prevent flattened array payloads (e.g., UFH circuit demands)
             # from overwriting the controller's aggregate FC heat demand.
             if slug in (DevType.CTL, DevType.UFC):
                 if (
-                    p.get(SZ_DOMAIN_INDEX)
-                    or p.get(SZ_DOMAIN_ID_WIRE)
-                    or p.get(SZ_DOMAIN_INDEX)
+                    payload.get(SZ_DOMAIN_INDEX)
+                    or payload.get(SZ_DOMAIN_ID_WIRE)
+                    or payload.get(SZ_DOMAIN_INDEX)
                 ) == FC:
-                    updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
-            elif SZ_UFH_INDEX not in p:
-                updates[SZ_HEAT_DEMAND] = p[SZ_HEAT_DEMAND]
+                    updates[SZ_HEAT_DEMAND] = payload[SZ_HEAT_DEMAND]
+            elif SZ_UFH_INDEX not in payload:
+                updates[SZ_HEAT_DEMAND] = payload[SZ_HEAT_DEMAND]
 
-        elif msg.code == Code._0008 and SZ_RELAY_DEMAND in p:
+        elif msg.code == Code._0008 and SZ_RELAY_DEMAND in payload:
             # Prevent FA (UFH) relay demands from overwriting FC relay demand
             if (
                 slug == DevType.UFC
                 and (
-                    p.get(SZ_DOMAIN_INDEX)
-                    or p.get(SZ_DOMAIN_ID_WIRE)
-                    or p.get(SZ_DOMAIN_INDEX)
+                    payload.get(SZ_DOMAIN_INDEX)
+                    or payload.get(SZ_DOMAIN_ID_WIRE)
+                    or payload.get(SZ_DOMAIN_INDEX)
                 )
                 != FC
             ):
                 pass
             else:
-                updates[SZ_RELAY_DEMAND] = p[SZ_RELAY_DEMAND]
+                updates[SZ_RELAY_DEMAND] = payload[SZ_RELAY_DEMAND]
 
-        elif msg.code == Code._0009 and SZ_FAILSAFE_ENABLED in p:
-            updates[SZ_RELAY_FAILSAFE] = p[SZ_FAILSAFE_ENABLED]
+        elif msg.code == Code._0009 and SZ_FAILSAFE_ENABLED in payload:
+            updates[SZ_RELAY_FAILSAFE] = payload[SZ_FAILSAFE_ENABLED]
 
         # 1100 (TPI params) — populate the TCS's _tpi_params dict (issue 1102).
         # TPI params don't fit into DemandState; they're stored per-domain on
         # the TCS and read by tcs.tpi_params.  Handled before the `if not
         # updates` guard because 1100 has no demand fields.
-        if msg.code == Code._1100 and SZ_CYCLE_RATE in p:
+        if msg.code == Code._1100 and SZ_CYCLE_RATE in payload:
             tcs_for_tpi = getattr(target, "tcs", None) or (
                 target if slug in (DevType.CTL, DevType.BDR) else None
             )
@@ -1084,11 +1087,11 @@ class StateProjector:
                 tpi_dict = getattr(tcs_for_tpi, "_tpi_params", None)
                 if tpi_dict is not None:
                     domain = (
-                        p.get(SZ_DOMAIN_INDEX)
-                        or p.get(SZ_DOMAIN_ID_WIRE)
+                        payload.get(SZ_DOMAIN_INDEX)
+                        or payload.get(SZ_DOMAIN_ID_WIRE)
                         or FC
                     )
-                    tpi_dict[domain] = p
+                    tpi_dict[domain] = payload
 
         if not updates:
             return
@@ -1115,14 +1118,16 @@ class StateProjector:
             target if slug in (DevType.CTL, DevType.UFC) else None
         )
         if tcs is not None:
-            domain = p.get(SZ_DOMAIN_INDEX) or p.get(SZ_DOMAIN_ID_WIRE)
-            if domain and SZ_RELAY_DEMAND in p:
+            domain = payload.get(SZ_DOMAIN_INDEX) or payload.get(
+                SZ_DOMAIN_ID_WIRE
+            )
+            if domain and SZ_RELAY_DEMAND in payload:
                 relay_dict = getattr(tcs, "_relay_demands", None)
                 if relay_dict is not None:
                     relay_dict[domain] = msg
             if (
                 domain
-                and SZ_HEAT_DEMAND in p
+                and SZ_HEAT_DEMAND in payload
                 and slug in (DevType.CTL, DevType.UFC)
             ):
                 heat_dict = getattr(tcs, "_heat_demands", None)
@@ -1371,45 +1376,32 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_actuator_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate actuator state opcodes into ActuatorState."""
         if msg.code not in (Code._3EF0, Code._3EF1):
             return
 
         updates: dict[str, Any] = {}
-        if SZ_MODULATION_LEVEL in p:
+        if SZ_MODULATION_LEVEL in payload:
             # NOTE: semantic parser custom keys
-            updates[SZ_MODULATION_LEVEL] = p[SZ_MODULATION_LEVEL]
-        elif SZ_REL_MODULATION_LEVEL in p:
-            updates[SZ_MODULATION_LEVEL] = p[SZ_REL_MODULATION_LEVEL]
+            updates[SZ_MODULATION_LEVEL] = payload[SZ_MODULATION_LEVEL]
+        elif SZ_REL_MODULATION_LEVEL in payload:
+            updates[SZ_MODULATION_LEVEL] = payload[SZ_REL_MODULATION_LEVEL]
 
-        if SZ_ACTUATOR_ENABLED in p:
-            updates[SZ_ACTUATOR_ENABLED] = p[SZ_ACTUATOR_ENABLED]
-        if SZ_CH_ACTIVE in p:
-            updates[SZ_CH_ACTIVE] = p[SZ_CH_ACTIVE]
-        if SZ_CH_ENABLED in p:
-            updates[SZ_CH_ENABLED] = p[SZ_CH_ENABLED]
-        if SZ_DHW_ACTIVE in p:
-            updates[SZ_DHW_ACTIVE] = p[SZ_DHW_ACTIVE]
-        if SZ_FLAME_ON in p:
-            # NOTE: semantic parser maps this specifically
-            updates[SZ_FLAME_ACTIVE] = p[SZ_FLAME_ON]
-            updates[SZ_FLAME_ON] = p[SZ_FLAME_ON]
+        if SZ_ACTUATOR_ENABLED in payload:
+            updates[SZ_ACTUATOR_ENABLED] = payload[SZ_ACTUATOR_ENABLED]
+        if SZ_CH_ACTIVE in payload:
+            updates[SZ_CH_ACTIVE] = payload[SZ_CH_ACTIVE]
+        if SZ_DHW_ACTIVE in payload:
+            updates[SZ_DHW_ACTIVE] = payload[SZ_DHW_ACTIVE]
+        if SZ_FLAME_ACTIVE in payload:
+            updates[SZ_FLAME_ACTIVE] = payload[SZ_FLAME_ACTIVE]
 
-        # Legacy diagnostic payloads restored for backwards compatibility
-        if SZ_CH_SETPOINT in p:
-            updates[SZ_CH_SETPOINT] = p[SZ_CH_SETPOINT]
-        if SZ_MAX_REL_MODULATION in p:
-            updates[SZ_MAX_REL_MODULATION] = p[SZ_MAX_REL_MODULATION]
-        if SZ_COOL_ACTIVE in p:
-            updates[SZ_COOL_ACTIVE] = p[SZ_COOL_ACTIVE]
-        if SZ_ACTUATOR_COUNTDOWN in p:
-            updates[SZ_ACTUATOR_COUNTDOWN] = p[SZ_ACTUATOR_COUNTDOWN]
-        if SZ_CYCLE_COUNTDOWN in p:
-            updates[SZ_CYCLE_COUNTDOWN] = p[SZ_CYCLE_COUNTDOWN]
-        if SZ_PUMP_RELAY_STATE in p:
-            updates[SZ_PUMP_RELAY_STATE] = p[SZ_PUMP_RELAY_STATE]
+        if SZ_ACTUATOR_COUNTDOWN in payload:
+            updates[SZ_ACTUATOR_COUNTDOWN] = payload[SZ_ACTUATOR_COUNTDOWN]
+        if SZ_CYCLE_COUNTDOWN in payload:
+            updates[SZ_CYCLE_COUNTDOWN] = payload[SZ_CYCLE_COUNTDOWN]
 
         if not updates:
             return
@@ -1432,7 +1424,7 @@ class StateProjector:
             target.apply_state_update(event)
 
     def _update_zone_state(
-        self, target: Any, p: dict[str, Any], msg: Message
+        self, target: Any, payload: dict[str, Any], msg: Message
     ) -> None:
         """Translate zone configuration opcodes into ZoneState.
 
@@ -1446,32 +1438,34 @@ class StateProjector:
         updates: dict[str, Any] = {}
 
         if msg.code == Code._0004:
-            if SZ_NAME in p:
-                updates[SZ_NAME] = str(p[SZ_NAME])
+            if SZ_NAME in payload:
+                updates[SZ_NAME] = str(payload[SZ_NAME])
 
         elif msg.code == Code._000A:
-            if SZ_MIN_TEMP in p:
-                updates[SZ_MIN_TEMP] = p[SZ_MIN_TEMP]
-            if SZ_MAX_TEMP in p:
-                updates[SZ_MAX_TEMP] = p[SZ_MAX_TEMP]
-            if SZ_LOCAL_OVERRIDE in p:
-                updates[SZ_LOCAL_OVERRIDE] = p[SZ_LOCAL_OVERRIDE]
-            if SZ_OPENWINDOW_FUNCTION in p:
-                updates[SZ_OPENWINDOW_FUNCTION] = p[SZ_OPENWINDOW_FUNCTION]
-            if SZ_MULTIROOM_MODE in p:
-                updates[SZ_MULTIROOM_MODE] = p[SZ_MULTIROOM_MODE]
+            if SZ_MIN_TEMP in payload:
+                updates[SZ_MIN_TEMP] = payload[SZ_MIN_TEMP]
+            if SZ_MAX_TEMP in payload:
+                updates[SZ_MAX_TEMP] = payload[SZ_MAX_TEMP]
+            if SZ_LOCAL_OVERRIDE in payload:
+                updates[SZ_LOCAL_OVERRIDE] = payload[SZ_LOCAL_OVERRIDE]
+            if SZ_OPENWINDOW_FUNCTION in payload:
+                updates[SZ_OPENWINDOW_FUNCTION] = payload[
+                    SZ_OPENWINDOW_FUNCTION
+                ]
+            if SZ_MULTIROOM_MODE in payload:
+                updates[SZ_MULTIROOM_MODE] = payload[SZ_MULTIROOM_MODE]
 
         elif msg.code == Code._2349:
-            if SZ_MODE in p:
-                updates[SZ_MODE] = p[SZ_MODE]
-            if SZ_SETPOINT in p:
-                updates[SZ_SETPOINT] = p[SZ_SETPOINT]
-            if SZ_UNTIL in p:
-                updates[SZ_UNTIL] = p[SZ_UNTIL]
+            if SZ_MODE in payload:
+                updates[SZ_MODE] = payload[SZ_MODE]
+            if SZ_SETPOINT in payload:
+                updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
+            if SZ_UNTIL in payload:
+                updates[SZ_UNTIL] = payload[SZ_UNTIL]
 
         elif msg.code == Code._2309:
-            if SZ_SETPOINT in p:
-                updates[SZ_SETPOINT] = p[SZ_SETPOINT]
+            if SZ_SETPOINT in payload:
+                updates[SZ_SETPOINT] = payload[SZ_SETPOINT]
 
         else:
             return
