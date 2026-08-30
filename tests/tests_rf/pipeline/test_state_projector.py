@@ -12,9 +12,18 @@ import uuid
 from typing import Any
 
 from ramses_rf.const import (
+    SZ_ACTUATOR_COUNTDOWN,
+    SZ_ACTUATOR_ENABLED,
+    SZ_CH_ACTIVE,
+    SZ_CH_ENABLED,
+    SZ_CH_SETPOINT,
     SZ_COOLING_DEMAND,
+    SZ_CYCLE_COUNTDOWN,
+    SZ_DHW_ACTIVE,
     SZ_DOMAIN_INDEX,
+    SZ_FLAME_ACTIVE,
     SZ_LOCAL_OVERRIDE,
+    SZ_MAX_REL_MODULATION,
     SZ_MAX_TEMP,
     SZ_MIN_TEMP,
     SZ_MODULATION_LEVEL,
@@ -926,3 +935,89 @@ def test_1100_tpi_params_populates_tcs_dict() -> None:
         "TCS._tpi_params should be populated with FC domain"
     )
     assert mock_tcs._tpi_params["FC"]["cycle_rate"] == 6
+
+
+def test_3ef0_actuator_state_pure_projection() -> None:
+    # Arrange
+    device = FakeDevice()
+    device.id = "13:123456"
+    device._SLUG = DevType.BDR
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._3EF0,
+        verb=Verb.I_,
+        payload={
+            SZ_MODULATION_LEVEL: 0.75,
+            SZ_ACTUATOR_ENABLED: True,
+            SZ_CH_ACTIVE: True,
+            SZ_DHW_ACTIVE: False,
+            SZ_FLAME_ACTIVE: True,
+            SZ_ACTUATOR_COUNTDOWN: 120,
+            SZ_CYCLE_COUNTDOWN: 600,
+            # OpenTherm fields that should NOT be set on ActuatorState
+            SZ_CH_SETPOINT: 55.0,
+            SZ_MAX_REL_MODULATION: 1.0,
+            SZ_CH_ENABLED: True,
+        },
+        src_id="13:123456",
+        dst_id="--:------",
+    )
+
+    # Act
+    worker.process_message_state(msg)
+
+    # Assert
+    assert device.act_state.modulation_level == 0.75
+    assert device.act_state.actuator_enabled is True
+    assert device.act_state.ch_active is True
+    assert device.act_state.dhw_active is False
+    assert device.act_state.flame_active is True
+    assert device.act_state.actuator_countdown == 120
+    assert device.act_state.cycle_countdown == 600
+    assert not hasattr(device.act_state, "ch_setpoint")
+    assert not hasattr(device.act_state, "ch_enabled")
+    assert not hasattr(device.act_state, "cool_active")
+    assert not hasattr(device.act_state, "flame_on")
+
+
+def test_3ef0_opentherm_state_projection() -> None:
+    # Arrange
+    device = FakeDevice()
+    device.id = "10:064873"
+    device._SLUG = DevType.OTB
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+    worker = StateProjector(gwy_adapter, queue)
+
+    msg = MockMessage(
+        code=Code._3EF0,
+        verb=Verb.I_,
+        payload={
+            SZ_MODULATION_LEVEL: 0.6,
+            SZ_CH_ACTIVE: True,
+            SZ_CH_ENABLED: True,
+            SZ_DHW_ACTIVE: False,
+            SZ_FLAME_ACTIVE: True,
+            SZ_CH_SETPOINT: 60.0,
+            SZ_MAX_REL_MODULATION: 0.8,
+        },
+        src_id="10:064873",
+        dst_id="--:------",
+    )
+
+    # Act
+    worker.process_message_state(msg)
+
+    # Assert
+    assert device.opentherm_state.rel_modulation_level == 0.6
+    assert device.opentherm_state.max_rel_modulation == 0.8
+    assert device.opentherm_state.temperatures.ch_setpoint == 60.0
+    assert device.opentherm_state.flags.ch_active is True
+    assert device.opentherm_state.flags.ch_enabled is True
+    assert device.opentherm_state.flags.dhw_active is False
+    assert device.opentherm_state.flags.flame_active is True

@@ -154,16 +154,15 @@ class UfhCircuitDTO:
 
 @dataclass(frozen=True, slots=True)
 class ActuatorStateDTO:
-    """DTO for heating/boiler actuator state (BDR91/OTB).
+    """DTO for heating relay actuator state (e.g. BDR91).
 
-    :param modulation_level: Active modulation level percentage (0.0 to 1.0).
+    :param modulation_level: Active modulation level percentage (0.0
+        to 1.0).
     :type modulation_level: float | None
     :param actuator_enabled: True if actuator output is enabled.
     :type actuator_enabled: bool | None
     :param ch_active: True if central heating call is active.
     :type ch_active: bool | None
-    :param ch_enabled: True if central heating mode is enabled.
-    :type ch_enabled: bool | None
     :param dhw_active: True if domestic hot water call is active.
     :type dhw_active: bool | None
     :param flame_active: True if boiler flame is active.
@@ -175,7 +174,6 @@ class ActuatorStateDTO:
     modulation_level: float | None = None
     actuator_enabled: bool | None = None
     ch_active: bool | None = None
-    ch_enabled: bool | None = None
     dhw_active: bool | None = None
     flame_active: bool | None = None
     last_updated: dt | None = None

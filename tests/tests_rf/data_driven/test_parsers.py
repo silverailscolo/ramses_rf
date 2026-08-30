@@ -104,6 +104,8 @@ def _proc_log_line(log_line: str) -> None:
             "req_reason": "request_reason",
             "req_speed": "request_speed",
             "is_dst": "is_daylight_saving",
+            "flame_on": "flame_active",
+            "cool_active": "cooling_active",
         }
 
         def _normalize_dict(d: dict[str, Any]) -> dict[str, Any]:
@@ -158,15 +160,39 @@ def _proc_log_line_pair_4e15(
     except PacketInvalid:
         return None
 
-    if not prev_msg or prev_msg.code != Code._4E15:
-        return this_msg
+    if (
+        prev_msg
+        and prev_msg.code == Code._4E15
+        and this_msg.code == Code._3EF0
+    ):
+        LEGACY_KEY_MAP = {
+            "req_reason": "request_reason",
+            "req_speed": "request_speed",
+            "is_dst": "is_daylight_saving",
+            "flame_on": "flame_active",
+            "cool_active": "cooling_active",
+        }
+        keys_to_strip = (
+            "zone_index",
+            "domain_id",
+            "domain_index",
+            "dhw_index",
+            "hvac_id",
+            "ufh_index",
+            "log_index",
+            "other_index",
+        )
 
-    if this_msg.code != Code._3EF0:
-        return None
+        def _normalize_dict(d: dict[str, Any]) -> dict[str, Any]:
+            norm = {LEGACY_KEY_MAP.get(k, k): v for k, v in d.items()}
+            return {k: v for k, v in norm.items() if k not in keys_to_strip}
 
-    assert prev_msg.payload["is_cooling"] == this_msg.payload["cool_active"]
-    assert prev_msg.payload["is_heating"] == this_msg.payload["ch_active"]
-    assert prev_msg.payload["is_dhw_ing"] == this_msg.payload["dhw_active"]
+        assert (
+            prev_msg.payload["is_cooling"]
+            == this_msg.payload["cooling_active"]
+        )
+        assert prev_msg.payload["is_heating"] == this_msg.payload["ch_active"]
+        assert prev_msg.payload["is_dhw_ing"] == this_msg.payload["dhw_active"]
 
     return this_msg
 

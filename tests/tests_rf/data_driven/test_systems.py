@@ -162,6 +162,8 @@ def test_payload_from_log_file(dir_name: Path) -> None:
             "ufh_index": "ufh_index",
             "log_index": "log_index",
             "is_daylight_saving": "is_dst",
+            "flame_active": "flame_on",
+            "cooling_active": "cool_active",
         }
 
         def _norm_dict(
