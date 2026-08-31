@@ -4,7 +4,7 @@
 import asyncio
 from functools import partial
 from typing import Any
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -293,19 +293,18 @@ async def test_packet_read_raises_transport_error_when_loop_closed() -> None:
     after the asyncio loop has been closed, and call_soon_threadsafe would
     raise RuntimeError('Event loop is closed').
     """
-    loop = asyncio.get_event_loop()
-    transport = _make_read_transport(loop)
+    mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
+    mock_loop.is_closed.return_value = True
+    transport = _make_read_transport(mock_loop)
 
-    # Simulate a closed loop
-    with patch.object(type(loop), "is_closed", return_value=True):
-        from ramses_tx import Packet
+    from ramses_tx import Packet
 
-        packet = Packet.from_file(
-            "2026-07-13T04:40:36",
-            "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
-        )
-        with pytest.raises(exc.TransportError, match="Event loop is closed"):
-            transport._packet_read(packet)
+    packet = Packet.from_file(
+        "2026-07-13T04:40:36",
+        "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
+    )
+    with pytest.raises(exc.TransportError, match="Event loop is closed"):
+        transport._packet_read(packet)
 
 
 async def test_packet_read_raises_transport_error_on_runtime_error() -> None:
@@ -315,8 +314,12 @@ async def test_packet_read_raises_transport_error_on_runtime_error() -> None:
     and the call (race condition). The RuntimeError is caught and re-raised
     as TransportError so the MQTT _on_message handler can suppress it.
     """
-    loop = asyncio.get_event_loop()
-    transport = _make_read_transport(loop)
+    mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
+    mock_loop.is_closed.return_value = False
+    mock_loop.call_soon_threadsafe.side_effect = RuntimeError(
+        "Event loop is closed"
+    )
+    transport = _make_read_transport(mock_loop)
 
     from ramses_tx import Packet
 
@@ -325,30 +328,18 @@ async def test_packet_read_raises_transport_error_on_runtime_error() -> None:
         "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
     )
 
-    try:
-        # is_closed() returns False, but call_soon_threadsafe raises RuntimeError
-        with (
-            patch.object(type(loop), "is_closed", return_value=False),
-            patch.object(
-                loop,
-                "call_soon_threadsafe",
-                side_effect=RuntimeError("Event loop is closed"),
-            ),
-            pytest.raises(exc.TransportError, match="Event loop is closed"),
-        ):
-            transport._packet_read(packet)
-    finally:
-        await asyncio.sleep(0.01)
+    with pytest.raises(exc.TransportError, match="Event loop is closed"):
+        transport._packet_read(packet)
 
 
 async def test_close_does_not_crash_when_loop_closed() -> None:
     """_close() does not raise when the event loop is already closed."""
-    loop = asyncio.get_event_loop()
-    transport = _make_read_transport(loop)
+    mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
+    mock_loop.is_closed.return_value = True
+    transport = _make_read_transport(mock_loop)
 
-    with patch.object(type(loop), "is_closed", return_value=True):
-        # Should not raise
-        transport._close(None)
+    # Should not raise
+    transport._close(None)
 
     assert transport._closing is True
     # protocol.connection_lost should NOT have been called

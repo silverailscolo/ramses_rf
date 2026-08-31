@@ -355,10 +355,7 @@ async def _test_gwy_device(gwy: Gateway, test_index: int) -> None:
     """Check GWY address/type detection, and behaviour of its treatment of addr0."""
     assert gwy._engine._loop is asyncio.get_running_loop()
 
-    if (
-        not isinstance(gwy._engine._protocol, PortProtocol)
-        or not gwy._engine._protocol._context
-    ):
+    if not isinstance(gwy._engine._protocol, PortProtocol):
         assert False, "QoS protocol not enabled"
 
     assert gwy.hgi

@@ -15,6 +15,7 @@ from .factory import (
     transport_factory as transport_factory,
 )
 from .file import FileTransport as FileTransport
+from .mqtt import MqttTransport as MqttTransport
 from .port import PortTransport as PortTransport
 from .zigbee import ZigbeeTransport as ZigbeeTransport
 
@@ -22,6 +23,7 @@ __all__ = [
     "CallbackTransport",
     "FileTransport",
     "is_hgi80",
+    "MqttTransport",
     "PortTransport",
     "RamsesTransportT",
     "TransportConfig",

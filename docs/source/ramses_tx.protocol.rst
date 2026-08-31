@@ -28,22 +28,6 @@ ramses\_tx.protocol.factory module
    :show-inheritance:
    :undoc-members:
 
-ramses\_tx.protocol.fsm module
-------------------------------
-
-.. automodule:: ramses_tx.protocol.fsm
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-ramses\_tx.protocol.qos module
-------------------------------
-
-.. automodule:: ramses_tx.protocol.qos
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Module contents
 ---------------
 

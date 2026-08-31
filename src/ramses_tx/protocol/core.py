@@ -2,21 +2,26 @@
 """RAMSES RF - RAMSES-II compatible packet protocol implementations.
 
 This module provides the concrete Protocol classes (ReadProtocol and
-PortProtocol) that bind the transport, state machine, and base filters
-together.
+PortProtocol) that bind the transport, command transmission, and base
+filters together.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Final, TypeAlias
 
+from ..address import HGI_DEVICE_ID
 from ..const import (
     DEFAULT_DISABLE_QOS,
+    DEFAULT_ECHO_TIMEOUT,
     DEFAULT_GAP_DURATION,
     DEFAULT_NUM_REPEATS,
     MAX_GAP_DURATION,
     MAX_NUM_REPEATS,
+    MAX_RETRY_LIMIT,
+    MAX_SEND_TIMEOUT,
     RQ,
     SZ_ACTIVE_HGI,
     SZ_IS_EVOFW3,
@@ -24,14 +29,15 @@ from ..const import (
 )
 from ..dtos import CommandDTO
 from ..exceptions import (
+    PacketPayloadInvalid,
     ProtocolError,
     ProtocolSendFailed,
     ProtocolTimeoutError,
+    TransportError,
 )
 from ..packet import Packet
-from ..typing import DeviceIdT, MsgHandlerT, QosParams
+from ..typing import DeviceIdT, HeaderT, MsgHandlerT, QosParams
 from .base import DEFAULT_QOS, _DeviceIdFilterMixin
-from .fsm import ProtocolContext
 
 _DBG_DISABLE_IMPERSONATION_ALERTS: Final[bool] = False
 _DBG_DISABLE_QOS: Final[bool] = False
@@ -40,7 +46,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class ReadProtocol(_DeviceIdFilterMixin):
-    """A protocol that can only receive Packets."""
+    """A protocol that can only receive Packets.
+
+    This protocol operates in read-only mode and rejects any attempts
+    to transmit commands or resume writing.
+    """
 
     def __init__(
         self,
@@ -54,15 +64,17 @@ class ReadProtocol(_DeviceIdFilterMixin):
     ) -> None:
         """Initialize the Read-Only protocol.
 
-        :param msg_handler: The callback invoked when a valid message is processed.
+        :param msg_handler: The callback invoked when a valid message
+            is processed.
         :type msg_handler: MsgHandlerT
-        :param enforce_include_list: Flag to strictly enforce the include list.
+        :param enforce_include_list: Flag to enforce include list
+            strictly.
         :type enforce_include_list: bool
         :param exclude_list: List of device IDs to block.
         :type exclude_list: list[str] | None
         :param include_list: List of device IDs to allow.
         :type include_list: list[str] | None
-        :param hgi_id: The active HGI device ID.
+        :param hgi_id: Active HGI device ID.
         :type hgi_id: str | None
         """
         super().__init__(
@@ -78,15 +90,26 @@ class ReadProtocol(_DeviceIdFilterMixin):
     def connection_made(
         self, transport: Any, /, *, ramses: bool = False
     ) -> None:
-        """Consume the callback if invoked by SerialTransport rather than PortTransport.
+        """Consume callback if invoked by SerialTransport rather than PortTransport.
 
-        Our PortTransport wraps SerialTransport and will wait for the signature echo
-        to be received (c.f. FileTransport) before calling connection_made(ramses=True).
+        Our PortTransport wraps SerialTransport and will wait for the signature
+        echo to be received (c.f. FileTransport) before calling
+        connection_made(ramses=True).
+
+        :param transport: The underlying transport instance.
+        :type transport: Any
+        :param ramses: Flag indicating if invoked by PortTransport after
+            handshake.
+        :type ramses: bool
         """
         super().connection_made(transport)
 
     def resume_writing(self) -> None:
-        """Raise an exception as the Protocol cannot send Commands."""
+        """Raise an exception as the Protocol cannot send Commands.
+
+        :raises NotImplementedError: Always raised as ReadProtocol is
+            read-only.
+        """
         raise NotImplementedError(f"{self}: The chosen Protocol is Read-Only")
 
     async def send_cmd(
@@ -99,14 +122,35 @@ class ReadProtocol(_DeviceIdFilterMixin):
         priority: Priority = Priority.DEFAULT,
         qos: QosParams | None = None,
     ) -> Packet:
-        """Raise an exception as the Protocol cannot send Commands."""
+        """Raise an exception as the Protocol cannot send Commands.
+
+        :param command: Outbound command DTO attempted to send.
+        :type command: CommandDTO
+        :param gap_duration: Duration between repeat frames in seconds.
+        :type gap_duration: float
+        :param num_repeats: Number of repeat frames.
+        :type num_repeats: int
+        :param priority: Transmission priority.
+        :type priority: Priority
+        :param qos: QoS parameters.
+        :type qos: QosParams | None
+        :returns: Never returns normally.
+        :rtype: Packet
+        :raises NotImplementedError: Always raised as ReadProtocol is
+            read-only.
+        """
         raise NotImplementedError(
             f"{command.verb}|{command.code}: < this Protocol is Read-Only"
         )
 
 
 class PortProtocol(_DeviceIdFilterMixin):
-    """A protocol that can receive Packets and send Commands +/- QoS (using a FSM)."""
+    """A protocol that can receive Packets and transmit Commands with QoS.
+
+    Implements a priority-queued transceiver that coordinates outbound
+    command transmission, link-layer exponential backoff retries, and
+    matching hardware echo packet correlation.
+    """
 
     def __init__(
         self,
@@ -118,21 +162,33 @@ class PortProtocol(_DeviceIdFilterMixin):
         exclude_list: list[str] | None = None,
         include_list: list[str] | None = None,
         hgi_id: str | None = None,
+        echo_timeout: float = DEFAULT_ECHO_TIMEOUT,
+        max_retry_limit: int = MAX_RETRY_LIMIT,
+        send_timeout_limit: float = MAX_SEND_TIMEOUT,
     ) -> None:
-        """Add a FSM to the Protocol, to provide QoS.
+        """Initialize the PortProtocol transceiver.
 
-        :param msg_handler: The callback invoked when a valid message is processed.
+        :param msg_handler: The callback invoked when a valid message
+            is processed.
         :type msg_handler: MsgHandlerT
         :param disable_qos: Flag to globally disable QoS capabilities.
         :type disable_qos: bool | None
-        :param enforce_include_list: Flag to strictly enforce the include list.
+        :param enforce_include_list: Flag to enforce include list
+            strictly.
         :type enforce_include_list: bool
         :param exclude_list: List of device IDs to block.
         :type exclude_list: list[str] | None
         :param include_list: List of device IDs to allow.
         :type include_list: list[str] | None
-        :param hgi_id: The active HGI device ID.
+        :param hgi_id: Active HGI device ID.
         :type hgi_id: str | None
+        :param echo_timeout: Default timeout in seconds for echo packet.
+        :type echo_timeout: float
+        :param max_retry_limit: Maximum number of link-layer retries.
+        :type max_retry_limit: int
+        :param send_timeout_limit: Maximum global timeout duration in
+            seconds.
+        :type send_timeout_limit: float
         """
         super().__init__(
             msg_handler,
@@ -142,33 +198,120 @@ class PortProtocol(_DeviceIdFilterMixin):
             include_list=include_list,
             hgi_id=hgi_id,
         )
-        self._context = ProtocolContext(self)
         self._disable_qos = disable_qos
+        self._echo_timeout = echo_timeout
+        self._max_retry_limit = max_retry_limit
+        self._send_timeout_limit = send_timeout_limit
+
+        self._queue: asyncio.PriorityQueue[
+            tuple[
+                int,
+                int,
+                CommandDTO,
+                float,
+                int,
+                QosParams,
+                asyncio.Future[Packet],
+            ]
+        ] = asyncio.PriorityQueue()
+        self._seq = 0
+
+        self._is_active = False
+        self._tx_worker_task: asyncio.Task[None] | None = None
+        self._resume_event = asyncio.Event()
+
+        self._pending_cmd: CommandDTO | None = None
+        self._pending_fut: asyncio.Future[Packet] | None = None
 
     def __repr__(self) -> str:
-        """Return an unambiguous string representation of this object."""
-        if not self._context:
-            return super().__repr__()
-        cls = self._context.state.__class__.__name__
-        return f"QosProtocol({cls}, len(queue)={self._context.qsize})"
+        """Return an unambiguous string representation of this object.
+
+        :returns: String representation of the PortProtocol instance.
+        :rtype: str
+        """
+        status = "Active" if getattr(self, "_is_active", False) else "Inactive"
+        q_size = self.qsize if hasattr(self, "_queue") else 0
+        return f"PortProtocol({status}, qsize={q_size})"
+
+    @property
+    def qsize(self) -> int:
+        """Return the current number of queued commands.
+
+        :returns: Number of commands currently queued for transmission.
+        :rtype: int
+        """
+        return self._queue.qsize()
+
+    @property
+    def is_sending(self) -> bool:
+        """Return True if currently waiting for command echo transmission.
+
+        :returns: True if a command is actively awaiting an echo packet.
+        :rtype: bool
+        """
+        return self._pending_fut is not None and not self._pending_fut.done()
+
+    @property
+    def echo_timeout(self) -> float:
+        """Return default echo timeout in seconds.
+
+        :returns: Default timeout duration in seconds for echo packets.
+        :rtype: float
+        """
+        return self._echo_timeout
+
+    @echo_timeout.setter
+    def echo_timeout(self, value: float) -> None:
+        self._echo_timeout = value
+
+    @property
+    def max_retry_limit(self) -> int:
+        """Return maximum link-layer retries allowed.
+
+        :returns: Maximum number of retry attempts for transmission.
+        :rtype: int
+        """
+        return self._max_retry_limit
+
+    @max_retry_limit.setter
+    def max_retry_limit(self, value: int) -> None:
+        self._max_retry_limit = value
+
+    @property
+    def send_timeout_limit(self) -> float:
+        """Return maximum overall send timeout limit.
+
+        :returns: Upper bound for send timeout in seconds.
+        :rtype: float
+        """
+        return self._send_timeout_limit
 
     def connection_made(
         self, transport: Any, /, *, ramses: bool = False
     ) -> None:
-        """Consume the callback if invoked by SerialTransport rather than PortTransport.
+        """Consume callback if invoked by SerialTransport rather than PortTransport.
 
-        Our PortTransport wraps SerialTransport and will wait for the signature echo
-        to be received (c.f. FileTransport) before calling connection_made(ramses=True).
+        Our PortTransport wraps SerialTransport and will wait for the signature
+        echo to be received (c.f. FileTransport) before calling
+        connection_made(ramses=True).
+
+        :param transport: The underlying transport instance.
+        :type transport: Any
+        :param ramses: Flag indicating if invoked by PortTransport after
+            handshake.
+        :type ramses: bool
         """
         if not ramses:
             return None
 
         super().connection_made(transport)
 
-        # ROBUSTNESS FIX: Ensure self._transport is set even if the wait future was cancelled
+        # ROBUSTNESS FIX: Ensure self._transport is set even if the wait
+        # future was cancelled
         if self._transport is None:
             _LOGGER.warning(
-                f"{self}: Transport bound after wait cancelled (late connection)"
+                "%s: Transport bound after wait cancelled (late connection)",
+                self,
             )
             self._transport = transport
 
@@ -177,111 +320,195 @@ class PortProtocol(_DeviceIdFilterMixin):
             self._set_active_hgi(self._transport.get_extra_info(SZ_ACTIVE_HGI))
             self._is_evofw3 = self._transport.get_extra_info(SZ_IS_EVOFW3)
 
-        if not self._context:
-            return
+        self._is_active = True
+        self._resume_event.set()
 
-        self._context.connection_made(transport)
-
-        if self._pause_writing:
-            self._context.pause_writing()
-        else:
-            self._context.resume_writing()
+        if self._tx_worker_task is None or self._tx_worker_task.done():
+            self._tx_worker_task = self._loop.create_task(
+                self._tx_worker(), name="PortProtocol._tx_worker()"
+            )
 
     def connection_lost(self, error: Exception | None) -> None:
-        """Inform the FSM that the connection with the Transport has been lost."""
+        """Handle transport connection lost event and clean up queue.
+
+        :param error: The exception causing connection loss, or None if
+            closed cleanly.
+        :type error: Exception | None
+        """
         super().connection_lost(error)
-        if self._context:
-            self._context.connection_lost(error)
+        self._is_active = False
+        self._resume_event.clear()
+
+        if self._tx_worker_task and not self._tx_worker_task.done():
+            self._tx_worker_task.cancel()
+            self._tx_worker_task = None
+
+        exc_val = TransportError("Connection lost") if error is None else error
+
+        if self._pending_fut and not self._pending_fut.done():
+            self._pending_fut.set_exception(exc_val)
+            self._pending_fut = None
+            self._pending_cmd = None
+
+        while not self._queue.empty():
+            try:
+                *_, fut = self._queue.get_nowait()
+                if not fut.done():
+                    fut.set_exception(exc_val)
+                self._queue.task_done()
+            except asyncio.QueueEmpty:
+                break
 
     def pause_writing(self) -> None:
-        """Inform the FSM that the Protocol has been paused."""
+        """Pause writing when transport buffer is full."""
         super().pause_writing()
-        if self._context:
-            self._context.pause_writing()
+        self._resume_event.clear()
 
     def resume_writing(self) -> None:
-        """Inform the FSM that the Protocol has been resumed."""
+        """Resume writing when transport buffer drains."""
         super().resume_writing()
-        if self._context:
-            self._context.resume_writing()
+        if self._is_active:
+            self._resume_event.set()
 
     def _packet_received(self, packet: Packet) -> None:
-        """Pass any valid/wanted packets to the callback."""
+        """Handle received packet and resolve pending echo future."""
         super()._packet_received(packet)
-        if self._context:
-            self._context.packet_received(packet)
 
-    async def _send_impersonation_alert(self, command: CommandDTO) -> None:
-        """Send a puzzle packet warning that impersonation is occurring."""
-        if _DBG_DISABLE_IMPERSONATION_ALERTS:
+        if self._pending_fut is None or self._pending_fut.done():
             return
 
-        msg = f"{self}: Impersonating device: {command.addr1}, for packet: {str(command)}"
-        if self._is_evofw3 is False:
-            _LOGGER.error(
-                "%s, NB: non-evofw3 gateways can't impersonate!", msg
+        if self._pending_cmd is None:
+            return
+
+        if getattr(packet, "_is_echo", False) or self._is_matching_echo(
+            packet, self._pending_cmd
+        ):
+            self._pending_fut.set_result(packet)
+
+    def _is_matching_echo(
+        self, packet: Packet, expected_cmd: CommandDTO
+    ) -> bool:
+        """Check if incoming packet matches the pending command echo."""
+        try:
+            packet_hdr = packet._hdr
+        except PacketPayloadInvalid:
+            return False
+
+        if HGI_DEVICE_ID in packet_hdr:
+            assert packet._hdr_ is not None
+            packet__hdr = HeaderT(
+                packet._hdr_.replace(HGI_DEVICE_ID, self.hgi_id)
             )
         else:
-            _LOGGER.info(msg)
+            packet__hdr = packet_hdr
 
-        # Puzzle packet creation for impersonation alert was originally here
-        # It's omitted since LegacyCommandShim is removed; typically we don't
-        # need to send a puzzle packet just for logging, or we can send a custom DTO.
-        _LOGGER.warning("Impersonation puzzle packet sending is deprecated.")
+        return packet__hdr == expected_cmd.tx_header
 
-    async def _send_cmd(
+    async def _tx_worker(self) -> None:
+        """Worker loop processing queued commands sequentially."""
+        while self._is_active:
+            try:
+                await self._resume_event.wait()
+
+                (
+                    priority_val,
+                    seq,
+                    cmd,
+                    gap_duration,
+                    num_repeats,
+                    qos,
+                    fut,
+                ) = await self._queue.get()
+
+                if fut.cancelled():
+                    self._queue.task_done()
+                    continue
+
+                await self._process_tx_item(
+                    cmd, gap_duration, num_repeats, qos, fut
+                )
+                self._queue.task_done()
+            except asyncio.CancelledError:
+                break
+            except Exception as err:
+                _LOGGER.exception("Unexpected error in tx worker: %s", err)
+
+    async def _process_tx_item(
         self,
-        command: CommandDTO,
-        /,
-        *,
-        gap_duration: float = DEFAULT_GAP_DURATION,
-        num_repeats: int = DEFAULT_NUM_REPEATS,
-        priority: Priority = Priority.DEFAULT,
-        qos: QosParams = DEFAULT_QOS,
-    ) -> Packet | None:
-        """Send a Command with QoS (retries, until success or exception)."""
+        cmd: CommandDTO,
+        gap_duration: float,
+        num_repeats: int,
+        qos: QosParams,
+        fut: asyncio.Future[Packet],
+    ) -> None:
+        """Transmit a command with link-layer echo backoff retries."""
+        self._pending_cmd = cmd
+        self._pending_fut = fut
 
-        async def send_cmd(kmd: CommandDTO) -> None:
-            """Send the Command via self._send_frame(cmd)."""
-            await self._send_frame(
-                str(kmd), gap_duration=gap_duration, num_repeats=num_repeats
-            )
+        max_retries = (
+            qos.max_retries
+            if qos.max_retries is not None
+            else self._max_retry_limit
+        )
+        echo_timeout = (
+            qos.timeout if qos.timeout is not None else self._echo_timeout
+        )
+        backoff_factor = getattr(qos, "backoff", 1.5) or 1.5
 
-        qos = qos or DEFAULT_QOS
-
-        if command.verb.strip() == RQ or (
-            qos is not None and qos.max_retries > 0
-        ):
-            num_repeats = 0
-
-        if _DBG_DISABLE_QOS:
-            await send_cmd(command)
-            return None
-
-        assert self._context
+        tx_count = 0
+        current_timeout = echo_timeout
 
         try:
-            return await self._context.send_cmd(
-                send_cmd, command, priority, qos
-            )
-        except ProtocolTimeoutError as err:
-            _LOGGER.warning(
-                "%s: Send timed out for %s|%s: %s",
-                self,
-                command.verb,
-                command.code,
-                err,
-            )
-            raise
-        except ProtocolError as err:
-            _LOGGER.info(
-                "%s: Failed to send %s|%s: %s",
-                self,
-                command.verb,
-                command.code,
-                err,
-            )
-            raise
+            while tx_count <= max_retries:
+                if fut.cancelled() or not self._is_active:
+                    break
+
+                tx_count += 1
+                try:
+                    await self._send_frame(
+                        str(cmd),
+                        num_repeats=num_repeats,
+                        gap_duration=gap_duration,
+                    )
+                except Exception as send_err:
+                    if not fut.done():
+                        fut.set_exception(
+                            ProtocolSendFailed(
+                                f"Failed to transmit frame: {send_err}"
+                            )
+                        )
+                    return
+
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(fut), timeout=current_timeout
+                    )
+                    return
+                except TimeoutError:
+                    if tx_count <= max_retries:
+                        current_timeout = min(
+                            current_timeout * backoff_factor,
+                            self._send_timeout_limit,
+                        )
+                        _LOGGER.info(
+                            "Echo timeout for %s (attempt %s/%s), retrying in %s s",
+                            cmd,
+                            tx_count,
+                            max_retries,
+                            current_timeout,
+                        )
+                        continue
+
+                    if not fut.done():
+                        fut.set_exception(
+                            ProtocolTimeoutError(
+                                f"Echo timeout expired after {max_retries} retries for {cmd}"
+                            )
+                        )
+                    return
+        finally:
+            self._pending_cmd = None
+            self._pending_fut = None
 
     async def send_cmd(
         self,
@@ -293,30 +520,38 @@ class PortProtocol(_DeviceIdFilterMixin):
         priority: Priority = Priority.DEFAULT,
         qos: QosParams | None = None,
     ) -> Packet:
-        """Send a Command with Qos (with retries, until success or ProtocolError).
+        """Send a Command with QoS (with retries, until success or ProtocolError).
 
         Returns the Command's response Packet or the Command echo.
 
-        num_repeats is # of times to send the Command, in addition to the first transmit,
-        with gap_duration seconds between each transmission.
+        num_repeats is the number of times to send the Command, in addition to
+        the first transmit, with gap_duration seconds between each transmission.
 
-        Commands are queued and sent FIFO, except higher-priority Commands are always
-        sent first.
+        Commands are queued and sent FIFO, except higher-priority Commands are
+        always sent first.
 
-        Will raise:
-            ProtocolTimeoutError: global send timer expired before getting echo/reply.
-            ProtocolSendFailed:   tried to Tx Command, but didn't get echo/reply.
-            ProtocolError:        didn't attempt to Tx Command for some reason.
+        :param command: Outbound command DTO to transmit.
+        :type command: CommandDTO
+        :param gap_duration: Duration in seconds between duplicate frame sends.
+        :type gap_duration: float
+        :param num_repeats: Number of repeat frames to send.
+        :type num_repeats: int
+        :param priority: Hardware queue priority for transmission.
+        :type priority: Priority
+        :param qos: Quality of service configuration parameters.
+        :type qos: QosParams | None
+        :returns: Echo packet returned by the hardware transceiver.
+        :rtype: Packet
+        :raises ProtocolTimeoutError: If global send timer expires before
+            receiving echo packet.
+        :raises ProtocolSendFailed: If hardware fails to transmit frame or
+            packet is not returned.
+        :raises ProtocolError: If command is excluded by device ID filtering.
         """
         assert 0 <= gap_duration <= MAX_GAP_DURATION, (
             "Out of range: gap_duration"
         )
         assert 0 <= num_repeats <= MAX_NUM_REPEATS, "Out of range: num_repeats"
-
-        if qos and not self._context:
-            _LOGGER.warning(
-                "%s < QoS is currently disabled by this Protocol", command
-            )
 
         # Patch command with actual HGI ID if it uses the default placeholder.
         # PortProtocol.send_cmd overrides _BaseProtocol.send_cmd (which does this
@@ -324,6 +559,10 @@ class PortProtocol(_DeviceIdFilterMixin):
         # all commands go out with the 18:000730 placeholder instead of the real
         # HGI ID. See ramses_cc#757.
         patched_cmd = self._patch_cmd_if_needed(command)
+
+        # Check if impersonation alert is needed when addr1 is not the active HGI
+        if patched_cmd.addr1 != self.hgi_id:
+            await self._send_impersonation_alert(patched_cmd)
 
         # Manual filter check to avoid calling super().send_cmd(), which fails
         if not self._is_wanted_addrs(
@@ -335,20 +574,62 @@ class PortProtocol(_DeviceIdFilterMixin):
                 f"Command excluded by device_id filter: {patched_cmd}"
             )
 
-        packet = await self._send_cmd(
-            patched_cmd,
-            gap_duration=gap_duration,
-            num_repeats=num_repeats,
-            priority=priority,
-            qos=qos or DEFAULT_QOS,
+        qos = qos or DEFAULT_QOS
+        # RQ commands and commands with QoS retry limits don't use repeat blasts
+        if patched_cmd.verb.strip() == RQ or (
+            qos is not None and qos.max_retries > 0
+        ):
+            num_repeats = 0
+
+        if _DBG_DISABLE_QOS:
+            await self._send_frame(
+                str(patched_cmd),
+                num_repeats=num_repeats,
+                gap_duration=gap_duration,
+            )
+            return None  # type: ignore[return-value]
+
+        fut: asyncio.Future[Packet] = self._loop.create_future()
+        self._seq += 1
+
+        priority_order = {
+            Priority.HIGH: 0,
+            Priority.DEFAULT: 1,
+            Priority.LOW: 2,
+        }.get(priority, 1)
+
+        await self._queue.put(
+            (
+                priority_order,
+                self._seq,
+                patched_cmd,
+                gap_duration,
+                num_repeats,
+                qos,
+                fut,
+            )
         )
 
-        if not packet:
-            raise ProtocolSendFailed(
-                f"Failed to send command: {patched_cmd} (REPORT THIS)"
+        try:
+            return await fut
+        except ProtocolTimeoutError as err:
+            _LOGGER.warning(
+                "%s: Send timed out for %s|%s: %s",
+                self,
+                patched_cmd.verb,
+                patched_cmd.code,
+                err,
             )
-
-        return packet
+            raise
+        except ProtocolError as err:
+            _LOGGER.info(
+                "%s: Failed to send %s|%s: %s",
+                self,
+                patched_cmd.verb,
+                patched_cmd.code,
+                err,
+            )
+            raise
 
 
 RamsesProtocolT: TypeAlias = PortProtocol | ReadProtocol
