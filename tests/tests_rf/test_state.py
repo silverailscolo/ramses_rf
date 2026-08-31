@@ -312,3 +312,21 @@ class TestMessageStore:
         assert res[0].payload == self.msg4.payload
 
         msg_db.stop()
+
+    @pytest.mark.asyncio
+    async def test_message_store_memory_mode(self) -> None:
+        """Verify MessageStore with disk_path=None initializes purely in RAM."""
+        # Arrange
+        store = MessageStore(maintain=False, disk_path=None)
+
+        # Act
+        store.add(self.msg1)
+        res = await store.get(code=Code._1298)
+
+        # Assert
+        assert store._worker is None
+        assert len(res) == 1
+        assert res[0].code == Code._1298
+        assert self.msg1.state_header in store.state_cache
+
+        store.stop()
