@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Final
 import probatio as vol
 
 from ramses_rf.address import Address
-from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.enums import Action, DevType
 from ramses_tx import (
@@ -35,6 +34,8 @@ from .const import (  # noqa: F401, isort: skip, pylint: disable=unused-import
     RP,
     RQ,
     W_,
+    SZ_OEM_CODE,
+    SZ_PHASE,
     Code,
 )
 
@@ -45,9 +46,6 @@ if TYPE_CHECKING:
 
     from .interfaces import CommandDispatcher, DeviceInterface
 
-#
-# NOTE: All debug flags should be False for deployment to end-users
-_DBG_DISABLE_PHASE_ASSERTS: Final[bool] = False
 _DBG_MAINTAIN_STATE_CHAIN: Final[bool] = False  # maintain Context._prev_state
 
 _LOGGER = logging.getLogger(__name__)
@@ -153,13 +151,13 @@ class BindRole(StrEnum):
 
 
 SCHEME_LOOKUP = {
-    Vendor.ITHO: {"oem_code": "01"},
-    Vendor.BROFER: {"oem_code": "6A"},
-    Vendor.NUAIRE: {"oem_code": "6C"},
-    Vendor.CLIMARAD: {"oem_code": "65"},
-    Vendor.VASCO: {"oem_code": "66"},
-    Vendor.ORCON: {"oem_code": "67", "offer_to": ALL_DEVICE_ID},
-    Vendor.DEFAULT: {"oem_code": None},
+    Vendor.ITHO: {SZ_OEM_CODE: "01"},
+    Vendor.BROFER: {SZ_OEM_CODE: "6A"},
+    Vendor.NUAIRE: {SZ_OEM_CODE: "6C"},
+    Vendor.CLIMARAD: {SZ_OEM_CODE: "65"},
+    Vendor.VASCO: {SZ_OEM_CODE: "66"},
+    Vendor.ORCON: {SZ_OEM_CODE: "67", "offer_to": ALL_DEVICE_ID},
+    Vendor.DEFAULT: {SZ_OEM_CODE: None},
 }
 
 
@@ -308,7 +306,7 @@ class BindingManagerRespondent(BindingManagerBase):
         *,
         zone_index: IndexT = "00",
         require_ratify: bool = False,
-    ) -> tuple[Message, Packet, Message, Message | None]:
+    ) -> tuple[Message, Message, Message, Message | None]:
         """Device starts binding as a Respondent, by listening for an Offer.
 
         Returns the Supplicant's Offer or raises an exception if the binding is
@@ -359,42 +357,35 @@ class BindingManagerRespondent(BindingManagerBase):
 
     async def _accept_offer(
         self, tender: Message, codes: Iterable[Code], zone_index: IndexT = "00"
-    ) -> Packet:
-        """Resp sends an Accept on the basis of a rcvd Offer & returns the Confirm.
+    ) -> Message:
+        """Resp sends an Accept on the basis of a rcvd Offer & returns the sent message.
 
         :param tender: The received offer message.
         :param codes: Iterable of codes accepted.
         :param zone_index: The bound index.
-        :return: The sent accept packet.
+        :return: The sent accept message.
         """
-        command = build_dto(
-            Intent(
-                src=Address(self._dev.id),
-                dst=Address(tender.src.id),
-                action=Action.PUT_BIND,
-                data={"verb": W_, "codes": codes, "index": zone_index},
-            )
+        intent = Intent(
+            src=Address(self._dev.id),
+            dst=Address(tender.src.id),
+            action=Action.PUT_BIND,
+            data={"verb": W_, "codes": codes, "index": zone_index},
         )
-        if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert (
-                Message._from_cmd(command).payload["phase"] == BindPhase.ACCEPT
-            )
-
-        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
-            command, priority=Priority.HIGH, qos=BINDING_QOS
+        msg: Message = await self._dispatcher.send(
+            intent, priority=Priority.HIGH
         )
 
         self.state.cast_accept_offer()
-        return packet
+        return msg
 
     async def _wait_for_confirm(
         self,
-        accept: Packet,
+        accept: Message | Packet,
         timeout: float = _AFFIRM_WAIT_TIME,
     ) -> Message:
         """Resp waits timeout seconds for a Confirm to arrive & returns it.
 
-        :param accept: The accept packet previously sent.
+        :param accept: The accept message or packet previously sent.
         :param timeout: Time to wait in seconds.
         :return: The confirm message.
         """
@@ -402,12 +393,12 @@ class BindingManagerRespondent(BindingManagerBase):
 
     async def _wait_for_addenda(
         self,
-        accept: Packet,
+        accept: Message | Packet,
         timeout: float = _RATIFY_WAIT_TIME,
     ) -> Message:
         """Resp waits timeout seconds for an Addenda to arrive & returns it.
 
-        :param accept: The accept packet previously sent.
+        :param accept: The accept message or packet previously sent.
         :param timeout: Time to wait in seconds.
         :return: The addenda message.
         """
@@ -426,7 +417,7 @@ class BindingManagerSupplicant(BindingManagerBase):
         *,
         confirm_code: Code | None = None,
         ratify_command: CommandDTO | None = None,
-    ) -> tuple[Packet, Message, Packet, Packet | None]:
+    ) -> tuple[Message, Message, Message, Packet | None]:
         """Device starts binding as a Supplicant, by sending an Offer.
 
         Returns the Respondent's Accept, or raises an exception if the binding is
@@ -464,9 +455,9 @@ class BindingManagerSupplicant(BindingManagerBase):
         affirm = await self._confirm_accept(accept, confirm_code=confirm_code)
 
         # Step S3: Supplicant sends an Addenda (optional)
-        if vendor_code:
+        if vendor_code and ratify_command is not None:
             self.set_state(SuppIsReadyToSendAddenda)  # HACK: easiest way
-            ratify = await self._cast_addenda(accept, ratify_command)  # type: ignore[arg-type]
+            ratify = await self._cast_addenda(accept, ratify_command)
         else:
             ratify = None
 
@@ -477,50 +468,43 @@ class BindingManagerSupplicant(BindingManagerBase):
         self,
         codes: Iterable[Code],
         vendor_code: str | None = None,
-    ) -> Packet:
-        """Supp sends an Offer & returns the corresponding Packet.
+    ) -> Message:
+        """Supp sends an Offer & returns the corresponding Message.
 
         :param codes: Codes to offer.
         :param vendor_code: Optional vendor specific code block.
-        :return: The sent offer packet.
+        :return: The sent offer message.
         """
         # if vendor_code, send an 10E0
 
         # state = self.state
-        command = build_dto(
-            Intent(
-                src=Address(self._dev.id),
-                dst=Address(self._dev.id),
-                action=Action.PUT_BIND,
-                data={
-                    "verb": I_,
-                    "codes": codes,
-                    "vendor_code": vendor_code,
-                    "oem_code": vendor_code,
-                },
-            )
+        intent = Intent(
+            src=Address(self._dev.id),
+            dst=Address(self._dev.id),
+            action=Action.PUT_BIND,
+            data={
+                "verb": I_,
+                "codes": codes,
+                "vendor_code": vendor_code,
+                SZ_OEM_CODE: vendor_code,
+            },
         )
-        if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert (
-                Message._from_cmd(command).payload["phase"] == BindPhase.TENDER
-            )
-
-        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
-            command, priority=Priority.HIGH, qos=BINDING_QOS
+        msg: Message = await self._dispatcher.send(
+            intent, priority=Priority.HIGH
         )
 
         # await state._fut
         self.state.cast_offer()
-        return packet
+        return msg
 
     async def _wait_for_accept(
         self,
-        tender: Packet,
+        tender: Message | Packet,
         timeout: float = _ACCEPT_WAIT_TIME,
     ) -> Message:
         """Supp waits timeout seconds for an Accept to arrive & returns it.
 
-        :param tender: The previously sent offer packet.
+        :param tender: The previously sent offer message or packet.
         :param timeout: Time to wait in seconds.
         :return: The accept message.
         """
@@ -528,12 +512,12 @@ class BindingManagerSupplicant(BindingManagerBase):
 
     async def _confirm_accept(
         self, accept: Message, confirm_code: Code | None = None
-    ) -> Packet:
+    ) -> Message:
         """Supp casts a Confirm on the basis of a rcvd Accept & returns the Confirm.
 
         :param accept: The received accept message.
         :param confirm_code: The code to confirm with.
-        :return: The sent confirm packet.
+        :return: The sent confirm message.
         """
         # HACK assumes all index same
         if accept.payload and hasattr(accept.payload, "index"):
@@ -546,25 +530,18 @@ class BindingManagerSupplicant(BindingManagerBase):
         target_id = (
             accept.dst.id if accept.src.id == self._dev.id else accept.src.id
         )
-        command = build_dto(
-            Intent(
-                src=Address(self._dev.id),
-                dst=Address(target_id),
-                action=Action.PUT_BIND,
-                data={"verb": I_, "codes": confirm_code, "index": index},
-            )
+        intent = Intent(
+            src=Address(self._dev.id),
+            dst=Address(target_id),
+            action=Action.PUT_BIND,
+            data={"verb": I_, "codes": confirm_code, "index": index},
         )
-        if not _DBG_DISABLE_PHASE_ASSERTS:  # TODO: should be in test suite
-            assert (
-                Message._from_cmd(command).payload["phase"] == BindPhase.AFFIRM
-            )
-
-        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
-            command, priority=Priority.HIGH, qos=BINDING_QOS
+        msg: Message = await self._dispatcher.send(
+            intent, priority=Priority.HIGH
         )
 
         await self.state.cast_confirm_accept()
-        return packet
+        return msg
 
     async def _cast_addenda(
         self, accept: Message, command: CommandDTO
@@ -575,9 +552,19 @@ class BindingManagerSupplicant(BindingManagerBase):
         :param command: The ratify command to cast.
         :return: The sent addenda packet.
         """
-        packet: Packet = await self._dispatcher(  # type: ignore[assignment]
-            command, priority=Priority.HIGH, qos=BINDING_QOS
-        )
+        gateway = getattr(self._dev, "_gateway", None)
+        if gateway is not None:
+            packet: Packet = await gateway._async_send_dto(
+                command, priority=Priority.HIGH
+            )
+        else:
+            send_dto = getattr(self._dispatcher, "_async_send_dto", None)
+            if send_dto is not None:
+                packet = await send_dto(command, priority=Priority.HIGH)
+            else:
+                raise RuntimeError(
+                    "No gateway or dispatcher available to send DTO"
+                )
 
         await self.state.cast_addenda()
         return packet

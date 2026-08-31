@@ -8,7 +8,7 @@ from datetime import timedelta as td
 from typing import Any
 
 from ramses_rf import exceptions as exc
-from ramses_rf.address import Address
+from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import (
     HEARTBEAT_TIMEOUT_FILTER,
@@ -48,7 +48,6 @@ from ramses_rf.helpers import shrink
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Priority
-from ramses_tx.const import Code, Verb
 from ramses_tx.typing import DeviceIdT
 
 from .dev_base import DeviceHvac
@@ -374,20 +373,18 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
 
         # Send RQ for param 0x01 to probe support
         try:
-            from ramses_tx.dtos import CommandDTO
-
-            from_id = self.hgi.id if self.hgi else "18:000730"
-            cmd = CommandDTO(
-                verb=Verb.RQ,
-                addr1=from_id,
-                addr2=self.id,
-                addr3="--:------",
-                code=Code._2411,
-                payload="000001",  # Param 0x01 (common across Orcon/Itho)
+            intent = Intent(
+                src=Address(self.hgi.id) if self.hgi else HGI_DEV_ADDR,
+                dst=Address(self.id),
+                action=Action.GET_FAN_PARAM,
+                data={
+                    "param_id": "01"
+                },  # Param 0x01 (common across Orcon/Itho)
             )
-            await self._gateway.async_send_cmd(cmd)
+            await self._gateway.dispatcher.send(intent)
             _LOGGER.debug("Sent 2411 discovery probe to %s", self.id)
             return True
+
         except Exception as ex:
             _LOGGER.debug("Failed to send 2411 probe to %s: %s", self.id, ex)
             return False

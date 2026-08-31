@@ -32,7 +32,7 @@ from ramses_tx.schemas import (
 from ramses_tx.typing import PayloadT
 
 from .config import GatewayConfig as GatewayConfig, strip_traits
-from .const import Code, Verb
+from .const import SZ_PAYLOAD, SZ_ZONES, Code, Verb
 from .devices import (
     DeviceFilter,
     DeviceRegistry,
@@ -192,21 +192,21 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         # SCH_TCS_ZONES_ZON to accept and Zone._update_schema to hydrate.
         for ctl_id, ctl_entry in schema_in.items():
             if not isinstance(ctl_entry, dict) or not isinstance(
-                ctl_entry.get("zones"), dict
+                ctl_entry.get(SZ_ZONES), dict
             ):
                 continue
             stripped_ctl = stripped.get(ctl_id)
             if not isinstance(stripped_ctl, dict) or not isinstance(
-                stripped_ctl.get("zones"), dict
+                stripped_ctl.get(SZ_ZONES), dict
             ):
                 continue
-            for z_idx, z_entry in ctl_entry["zones"].items():
+            for z_idx, z_entry in ctl_entry[SZ_ZONES].items():
                 if (
                     isinstance(z_entry, dict)
                     and z_entry.get("_name")
-                    and isinstance(stripped_ctl["zones"].get(z_idx), dict)
+                    and isinstance(stripped_ctl[SZ_ZONES].get(z_idx), dict)
                 ):
-                    stripped_ctl["zones"][z_idx]["_name"] = z_entry["_name"]
+                    stripped_ctl[SZ_ZONES][z_idx]["_name"] = z_entry["_name"]
 
         self._schema: dict[str, Any] = SCH_GLOBAL_SCHEMAS(stripped)
 
@@ -269,7 +269,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._dispatcher = CommandDispatcher(self)
         self._conversation_manager = ConversationManager(
             loop=loop,
-            send_func=lambda dto: self.async_send_cmd(dto),
+            send_func=self._async_send_dto,
         )
         self._polling_manager = PollingManager(self, shadow_mode=False)
 
@@ -502,7 +502,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
                 "addr2": msg._addrs[1].id,  # <-- Exact raw addr2
                 "addr3": msg._addrs[2].id,  # <-- Exact raw addr3
                 "code": str(msg.code),
-                "payload": _payload_to_serialisable(msg.payload),
+                SZ_PAYLOAD: _payload_to_serialisable(msg.payload),
                 # Frame string is required by _restore_cached_packets /
                 # Packet.from_dict to reconstruct the Packet on warm restart.
                 # Without it, from_dict gets an empty frame body and raises
@@ -541,7 +541,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         # NEW: Feed the async TopologyBuilder so it can structurally map the
         # graph *before* the message state is ingested by the Read-Models.
         payload_data = getattr(app_msg, "data", None) or getattr(
-            app_msg, "payload", None
+            app_msg, SZ_PAYLOAD, None
         )
 
         if payload_data is not None:
@@ -618,37 +618,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             **kwargs,
         )
 
-    def send_cmd(
-        self,
-        command: CommandDTO,
-        /,
-        *,
-        gap_duration: float = DEFAULT_GAP_DURATION,
-        num_repeats: int = DEFAULT_NUM_REPEATS,
-        priority: Priority = Priority.DEFAULT,
-        timeout: float = DEFAULT_SEND_TIMEOUT,
-        max_retries: int = DEFAULT_MAX_RETRIES,
-    ) -> asyncio.Task[Packet]:
-        """Schedule command transmission as a background task."""
-        coro = self.async_send_cmd(
-            command,
-            gap_duration=gap_duration,
-            num_repeats=num_repeats,
-            priority=priority,
-            timeout=timeout,
-            max_retries=max_retries,
-        )
-        task = self._engine._loop.create_task(coro)
-
-        def _clear_exc(fut: asyncio.Task[Any]) -> None:
-            if not fut.cancelled() and fut.exception():
-                _LOGGER.debug("Background task failed: %s", fut.exception())
-
-        task.add_done_callback(_clear_exc)
-        self.add_task(task)
-        return task
-
-    async def async_send_cmd(
+    async def async_send_raw_command(
         self,
         command: CommandDTO,
         /,
@@ -659,7 +629,45 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         timeout: float = DEFAULT_SEND_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
     ) -> Packet:
-        """Transmit a command and wait for response packet."""
+        """Transmit a raw command DTO for diagnostics and developer tools.
+
+        :param command: The compiled CommandDTO packet to transmit.
+        :type command: CommandDTO
+        :param gap_duration: Inter-frame gap in seconds.
+        :type gap_duration: float
+        :param num_repeats: Number of transmission retries.
+        :type num_repeats: int
+        :param priority: QoS transmission priority.
+        :type priority: Priority
+        :param timeout: Maximum await duration in seconds.
+        :type timeout: float
+        :param max_retries: Maximum protocol retransmissions.
+        :type max_retries: int
+        :returns: The acknowledged echo packet.
+        :rtype: Packet
+        :raises ProtocolSendFailed: If transmission fails or is cancelled.
+        """
+        return await self._async_send_dto(
+            command,
+            gap_duration=gap_duration,
+            num_repeats=num_repeats,
+            priority=priority,
+            timeout=timeout,
+            max_retries=max_retries,
+        )
+
+    async def _async_send_dto(
+        self,
+        command: CommandDTO,
+        /,
+        *,
+        gap_duration: float = DEFAULT_GAP_DURATION,
+        num_repeats: int = DEFAULT_NUM_REPEATS,
+        priority: Priority = Priority.DEFAULT,
+        timeout: float = DEFAULT_SEND_TIMEOUT,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+    ) -> Packet:
+        """Transmit a command DTO over the L3 engine and return the echo packet."""
         try:
             return await self._engine.async_send_cmd(
                 command,
