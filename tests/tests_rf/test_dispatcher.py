@@ -823,7 +823,7 @@ class TestCommandDispatcherSend:
         mock_conv_mgr = MagicMock()
         mock_conv_mgr.track_intent = AsyncMock(return_value=fut)
         mock_gateway.conversation_manager = mock_conv_mgr
-        mock_gateway.async_send_cmd = AsyncMock(return_value=packet)
+        mock_gateway._async_send_dto = AsyncMock(return_value=packet)
 
         # Act
         result = await cmd_dispatcher.send(intent, wait_for_reply=True)
@@ -855,7 +855,7 @@ class TestCommandDispatcherSend:
             "000  I --- 18:000730 01:078710 --:------ 313F 009 00000400041C0A07E3",
         )
         mock_gateway.conversation_manager = None
-        mock_gateway.async_send_cmd = AsyncMock(return_value=packet)
+        mock_gateway._async_send_dto = AsyncMock(return_value=packet)
 
         # Act
         result = await cmd_dispatcher.send(intent, wait_for_reply=False)
@@ -863,6 +863,72 @@ class TestCommandDispatcherSend:
         # Assert
         assert isinstance(result, Message)
         assert result.code == Code._313F
+
+    @pytest.mark.asyncio
+    async def test_send_background_creates_task(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify send_background schedules transmission via event loop task."""
+        # Arrange
+        import asyncio
+
+        from ramses_rf.commands.core import Command
+        from ramses_rf.commands.dispatcher import CommandDispatcher
+        from ramses_rf.enums import Action
+
+        cmd_dispatcher = CommandDispatcher(mock_gateway)
+        intent = Command(
+            src=Address("18:000730"),
+            dst=Address("01:078710"),
+            action=Action.GET_SYSTEM_TIME,
+            data={},
+        )
+        packet = Packet.from_port(
+            dt.now(),
+            "000  I --- 18:000730 01:078710 --:------ 313F 009 00000400041C0A07E3",
+        )
+        mock_gateway.conversation_manager = None
+        mock_gateway._loop = asyncio.get_running_loop()
+        mock_gateway._async_send_dto = AsyncMock(return_value=packet)
+        mock_gateway.add_task = MagicMock()
+
+        # Act
+        task = cmd_dispatcher.send_background(intent, wait_for_reply=False)
+
+        # Assert
+        assert isinstance(task, asyncio.Task)
+        mock_gateway.add_task.assert_called_once_with(task)
+        result = await task
+        assert isinstance(result, Message)
+
+    @pytest.mark.asyncio
+    async def test_send_deprecated_device_raises_protocol_send_failed(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify sending to a deprecated device raises ProtocolSendFailed."""
+        # Arrange
+        from ramses_rf.commands.core import Command
+        from ramses_rf.commands.dispatcher import CommandDispatcher
+        from ramses_rf.enums import Action
+        from ramses_tx.exceptions import ProtocolSendFailed
+
+        target_dev = MagicMock()
+        target_dev._qos_tx_count = 15
+        mock_registry = MagicMock()
+        mock_registry.device_by_id = {"01:078710": target_dev}
+        mock_gateway.device_registry = mock_registry
+
+        cmd_dispatcher = CommandDispatcher(mock_gateway)
+        intent = Command(
+            src=Address("18:000730"),
+            dst=Address("01:078710"),
+            action=Action.GET_SYSTEM_TIME,
+            data={},
+        )
+
+        # Act & Assert
+        with pytest.raises(ProtocolSendFailed, match="Sending deprecated"):
+            await cmd_dispatcher.send(intent)
 
     @pytest.mark.asyncio
     async def test_dispatcher_state_cache_update(

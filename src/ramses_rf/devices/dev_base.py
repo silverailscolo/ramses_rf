@@ -6,7 +6,6 @@ Base for all devices.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime as dt, timedelta as td
@@ -42,7 +41,7 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.strategies import HvacStrategy, best_hvac_strategy
 from ramses_rf.topology import Child
-from ramses_tx import CommandDTO, Packet, Priority, QosParams
+from ramses_tx import Packet
 from ramses_tx.const import Code
 
 from ..messages import Message
@@ -54,6 +53,7 @@ if TYPE_CHECKING:
     from ramses_rf.models import DeviceTraits
     from ramses_rf.systems import Zone
     from ramses_rf.typing import PollingIntervalsT
+    from ramses_tx import CommandDTO
     from ramses_tx.const import IndexT
     from ramses_tx.typing import DeviceIdT
 
@@ -251,23 +251,6 @@ class DeviceBase(Entity):
         if traits:
             device._update_traits(traits)
         return device
-
-    def _send_cmd(
-        self, command: CommandDTO, **kwargs: Any
-    ) -> asyncio.Task[Any] | None:
-        """Send a command from this device."""
-        if (
-            isinstance(self, BatteryState)
-            and not self.is_faked
-            and command.addr2 == self.id
-        ):
-            _LOGGER.info(
-                "%s < Sending inadvisable for %s (it has a battery)",
-                command,
-                self,
-            )
-
-        return super()._send_cmd(command, **kwargs)
 
     async def has_battery(self) -> None | bool:  # 1060
         """Return True if the device is battery powered.
@@ -577,30 +560,13 @@ class Fakeable(DeviceBase):
         if self._binding_manager:
             return
 
-        self._binding_manager = BindingManager(self, self._async_send_cmd)
+        self._binding_manager = BindingManager(self, self._gateway.dispatcher)
         if self.id not in self._gateway.config.known_list:
             self._gateway.config.known_list[self.id] = {}
         self._gateway.config.known_list[self.id][SZ_FAKED] = (
             True  # TODO: remove this
         )
         _LOGGER.info("Faking now enabled for: %s", self)
-
-    async def _async_send_cmd(
-        self,
-        command: CommandDTO,
-        priority: Priority | None = None,
-        qos: QosParams | None = None,
-    ) -> Packet | None:
-        """Send a command and forward to the binding context if binding."""
-        if self._binding_manager and self._binding_manager.is_binding:
-            # cmd.code in (Code._1FC9, Code._10E0)
-            self._binding_manager.sent_cmd(
-                command
-            )  # other codes needed for edge cases
-
-        return await super()._async_send_cmd(
-            command, priority=priority, qos=qos
-        )
 
     async def _wait_for_binding_request(
         self,
@@ -609,7 +575,7 @@ class Fakeable(DeviceBase):
         *,
         zone_index: IndexT = "00",
         require_ratify: bool = False,
-    ) -> tuple[Message, Packet, Message, Message | None]:
+    ) -> tuple[Message, Message, Message, Message | None]:
         """Listen for a binding and return the Offer packets.
 
         :param accept_codes: The codes allowed for this binding.
@@ -619,7 +585,7 @@ class Fakeable(DeviceBase):
         :param require_ratify: Whether ratification is required.
         :type require_ratify: bool
         :return: A tuple of the four binding transaction packets.
-        :rtype: tuple[Message, Packet, Message, Message | None]
+        :rtype: tuple[Message, Message, Message, Message | None]
         """
         if not self._binding_manager:
             raise DeviceNotFaked(f"Device is not fakeable: {self}")
@@ -635,7 +601,7 @@ class Fakeable(DeviceBase):
         *,
         zone_index: IndexT = "00",
         require_ratify: bool = False,
-    ) -> tuple[Message, Packet, Message, Message | None]:
+    ) -> tuple[Message, Message, Message, Message | None]:
         """Listen for a binding and return the Offer packets.
 
         :param accept_codes: The codes allowed for this binding.
@@ -645,7 +611,7 @@ class Fakeable(DeviceBase):
         :param require_ratify: Whether ratification is required.
         :type require_ratify: bool
         :return: A tuple of the four binding transaction packets.
-        :rtype: tuple[Message, Packet, Message, Message | None]
+        :rtype: tuple[Message, Message, Message, Message | None]
         :raises NotImplementedError: Subclasses must implement this.
         """
         raise NotImplementedError
@@ -657,7 +623,7 @@ class Fakeable(DeviceBase):
         *,
         confirm_code: Code | None = None,
         ratify_command: CommandDTO | None = None,
-    ) -> tuple[Packet, Message, Packet, Packet | None]:
+    ) -> tuple[Message, Message, Message, Packet | None]:
         """Start a binding and return the Accept, or raise an exception.
 
         :param offer_codes: Codes to offer during the binding process.
@@ -667,7 +633,7 @@ class Fakeable(DeviceBase):
         :param ratify_command: An optional ratification command to send.
         :type ratify_command: CommandDTO | None
         :return: A tuple of the binding transaction packets.
-        :rtype: tuple[Packet, Message, Packet, Packet | None]
+        :rtype: tuple[Message, Message, Message, Packet | None]
         :raises DeviceNotFaked: If faking is not enabled.
         """
         # confirm_code can be FFFF.
@@ -686,11 +652,11 @@ class Fakeable(DeviceBase):
 
     async def initiate_binding_process(
         self,
-    ) -> tuple[Packet, Message, Packet, Packet | None]:
+    ) -> tuple[Message, Message, Message, Packet | None]:
         """Start a binding and return the Accept, or raise an exception.
 
         :return: A tuple of the binding transaction packets.
-        :rtype: tuple[Packet, Message, Packet, Packet | None]
+        :rtype: tuple[Message, Message, Message, Packet | None]
         :raises NotImplementedError: Subclasses must implement this.
         """
         raise NotImplementedError

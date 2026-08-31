@@ -68,11 +68,11 @@ class AwareDatetime(dt):
 
 @pytest.fixture(autouse=True)
 def global_test_patches() -> Generator[None, None, None]:
-    original_async_send_cmd = Gateway.async_send_cmd
+    original_async_send_dto = Gateway._async_send_dto
 
-    async def patched_async_send_cmd(*args: Any, **kwargs: Any) -> Any:
+    async def patched_async_send_dto(*args: Any, **kwargs: Any) -> Any:
         try:
-            return await original_async_send_cmd(*args, **kwargs)
+            return await original_async_send_dto(*args, **kwargs)
         except NotImplementedError as err:
             if "this Protocol is Read-Only" in str(err):
                 return None
@@ -83,8 +83,8 @@ def global_test_patches() -> Generator[None, None, None]:
         patch("ramses_tx.engine.dt", AwareDatetime),
         patch("ramses_tx.packet.dt", AwareDatetime),
         patch(
-            "ramses_rf.gateway.Gateway.async_send_cmd",
-            patched_async_send_cmd,
+            "ramses_rf.gateway.Gateway._async_send_dto",
+            patched_async_send_dto,
         ),
     ):
         yield

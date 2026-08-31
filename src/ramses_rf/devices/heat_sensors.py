@@ -158,7 +158,7 @@ class DhwSensor(
 
     async def initiate_binding_process(
         self,
-    ) -> tuple[Packet, Message, Packet, Packet | None]:
+    ) -> tuple[Message, Message, Message, Packet | None]:
         """Initiate the RF binding handshake for the DHW sensor."""
         return await super()._initiate_binding_process(Code._1260)
 

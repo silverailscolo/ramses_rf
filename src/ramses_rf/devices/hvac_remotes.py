@@ -61,7 +61,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
 
     async def initiate_binding_process(
         self,
-    ) -> tuple[Packet, Message, Packet, Packet | None]:
+    ) -> tuple[Message, Message, Message, Packet | None]:
         """Initiate the RF binding handshake for the HVAC remote."""
         # .I --- 37:155617 --:------ 37:155617 1FC9 024 00-22F1-965FE1 00-22F3-965FE1 67-10E09-65FE1 00-1FC9-965FE1
         # .W --- 32:155617 37:155617 --:------ 1FC9 012 00-31D9-825FE1 00-31DA-825FE1

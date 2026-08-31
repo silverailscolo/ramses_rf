@@ -56,7 +56,7 @@ class Thermostat(BatteryState, Setpoint, Fakeable):  # THM (..):
 
     async def initiate_binding_process(
         self,
-    ) -> tuple[Packet, Message, Packet, Packet | None]:
+    ) -> tuple[Message, Message, Message, Packet | None]:
         """Initiate the RF binding handshake for the thermostat."""
         return await super()._initiate_binding_process(
             (Code._2309, Code._30C9, Code._0008)

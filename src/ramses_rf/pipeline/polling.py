@@ -513,7 +513,7 @@ class PollingManager:
                     task.device_id, task.code, payload=task.payload or "00"
                 )
                 try:
-                    await self._gateway.async_send_cmd(cmd_dto)
+                    await self._gateway._async_send_dto(cmd_dto)
                 except (RamsesException, TimeoutError) as err:
                     _LOGGER.warning(
                         "PollingManager failed to send command %s to %s: %s",

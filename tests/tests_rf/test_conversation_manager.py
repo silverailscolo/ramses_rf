@@ -259,7 +259,7 @@ async def test_live_gateway_conversation_manager_integration(
     gwy = Gateway("/dev/null")
     mock_packet = MagicMock(spec=Packet)
     monkeypatch.setattr(
-        gwy, "async_send_cmd", AsyncMock(return_value=mock_packet)
+        gwy, "_async_send_dto", AsyncMock(return_value=mock_packet)
     )
 
     intent = Command(
@@ -297,7 +297,7 @@ async def test_live_dispatcher_process_msg_routes_to_conversation_manager(
     gwy = Gateway("/dev/null")
     mock_packet = MagicMock(spec=Packet)
     monkeypatch.setattr(
-        gwy, "async_send_cmd", AsyncMock(return_value=mock_packet)
+        gwy, "_async_send_dto", AsyncMock(return_value=mock_packet)
     )
 
     intent = Command(

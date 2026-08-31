@@ -13,7 +13,7 @@ import asyncio
 from collections.abc import Generator
 from datetime import UTC, datetime as dt
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -22,12 +22,17 @@ from ramses_rf.binding_fsm import (
     SZ_RESPONDENT,
     SZ_SUPPLICANT,
     BindingManager,
+    BindPhase,
     BindStateBase,
     _BindStates,
 )
+from ramses_rf.commands.builders import build_dto
+from ramses_rf.commands.core import Command
+from ramses_rf.const import SZ_OEM_CODE, SZ_PHASE
 from ramses_rf.devices import Fakeable
+from ramses_rf.enums import Action
 from ramses_rf.gateway import GatewayConfig
-from ramses_tx import Priority, QosParams
+from ramses_tx import Address, Verb
 from ramses_tx.dtos import CommandDTO
 from ramses_tx.protocol import PortProtocol
 
@@ -169,6 +174,8 @@ def patch_port_transport_delays() -> Generator[None, None, None]:
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Parametrize tests dynamically based on TEST_SUITE_300."""
+    if "test_set" not in metafunc.fixturenames:
+        return
 
     def id_fnc(test_set: dict[str, Any]) -> str:
         """Generate a test ID based on the test set."""
@@ -227,25 +234,10 @@ def _setup_fakeable_device(gwy: Gateway, device_id: str) -> Fakeable:
     fake_dev = cast(Fakeable, dev)
 
     if not getattr(fake_dev, "_binding_manager", None):
-
-        async def _dispatcher(
-            cmd: CommandDTO,
-            *,
-            priority: Priority | None = None,
-            qos: QosParams | None = None,
-        ) -> Packet | None:
-            """Adapter mapping CommandDispatcher signature to Gateway.async_send_cmd."""
-            kwargs: dict[str, Any] = {}
-            if priority is not None:
-                kwargs["priority"] = priority
-            if qos is not None:
-                kwargs["max_retries"] = qos.max_retries
-                kwargs["timeout"] = qos.timeout
-
-            return await gwy.async_send_cmd(cmd, **kwargs)
-
         setattr(  # noqa: B010
-            fake_dev, "_binding_manager", BindingManager(fake_dev, _dispatcher)
+            fake_dev,
+            "_binding_manager",
+            BindingManager(fake_dev, gwy.dispatcher),
         )
 
     fake_dev._make_fake()
@@ -270,17 +262,24 @@ async def assert_context_state(
 # ### TESTS ############################################################################
 
 
-def _assert_l7_parity(msg: Message, cmd: Packet | CommandDTO) -> None:
+def _assert_l7_parity(
+    msg: Message, cmd: Packet | CommandDTO | Message
+) -> None:
     """Assert that a received L7 Message matches a transmitted L3/L4 Packet."""
     assert msg.verb == cmd.verb
     assert str(msg.code) == str(cmd.code)
-    if isinstance(cmd, CommandDTO):
+    if isinstance(cmd, Message):
+        assert msg.src.id == cmd.src.id
+        assert msg.dst.id == cmd.dst.id
+        assert msg.payload == cmd.payload
+    elif isinstance(cmd, CommandDTO):
         assert cmd.addr1 in (msg.src.id, msg.dst.id, "--:------")
         assert cmd.addr2 in (msg.src.id, msg.dst.id, "--:------")
+        assert msg._dto.payload == cmd.payload
     else:
         assert msg.src.id == cmd.src.id
         assert msg.dst.id == cmd.dst.id
-    assert msg._dto.payload == cmd.payload
+        assert msg._dto.payload == cmd.payload
 
 
 # TODO: test addenda phase of binding handshake
@@ -540,3 +539,133 @@ async def test_flow_200(test_set: dict[str, Any]) -> None:
             await gwy.stop()
         await rf.stop()
         await asyncio.sleep(0)
+
+
+def test_binding_phase_tender_intent() -> None:
+    """Verify PUT_BIND offer intent constructs a TENDER phase payload."""
+    # Arrange
+    supplicant_id = "34:259472"
+    codes = [Code._2309, Code._30C9]
+    vendor_code = "01"
+    intent = Command(
+        src=Address(supplicant_id),
+        dst=Address(supplicant_id),
+        action=Action.PUT_BIND,
+        data={
+            "verb": Verb.I_,
+            "codes": codes,
+            "vendor_code": vendor_code,
+            SZ_OEM_CODE: vendor_code,
+        },
+    )
+
+    # Act
+    dto = build_dto(intent)
+    msg = Message._from_cmd(dto)
+
+    # Assert
+    assert msg.payload[SZ_PHASE] == BindPhase.TENDER
+
+
+def test_binding_phase_accept_intent() -> None:
+    """Verify PUT_BIND accept intent constructs an ACCEPT phase payload."""
+    # Arrange
+    respondent_id = "01:220768"
+    supplicant_id = "34:259472"
+    codes = [Code._2309]
+    zone_index = "01"
+    intent = Command(
+        src=Address(respondent_id),
+        dst=Address(supplicant_id),
+        action=Action.PUT_BIND,
+        data={"verb": Verb.W_, "codes": codes, "index": zone_index},
+    )
+
+    # Act
+    dto = build_dto(intent)
+    msg = Message._from_cmd(dto)
+
+    # Assert
+    assert msg.payload[SZ_PHASE] == BindPhase.ACCEPT
+
+
+def test_binding_phase_affirm_intent() -> None:
+    """Verify PUT_BIND confirm intent constructs an AFFIRM phase payload."""
+    # Arrange
+    supplicant_id = "34:259472"
+    respondent_id = "01:220768"
+    confirm_code = Code._2309
+    index = "01"
+    intent = Command(
+        src=Address(supplicant_id),
+        dst=Address(respondent_id),
+        action=Action.PUT_BIND,
+        data={"verb": Verb.I_, "codes": confirm_code, "index": index},
+    )
+
+    # Act
+    dto = build_dto(intent)
+    msg = Message._from_cmd(dto)
+
+    # Assert
+    assert msg.payload[SZ_PHASE] == BindPhase.AFFIRM
+
+
+@pytest.mark.asyncio
+async def test_binding_manager_cast_methods_phase_parity() -> None:
+    """Verify BindingManager cast methods produce intents matching expected BindPhases."""
+    # Arrange
+    mock_dev = MagicMock()
+    mock_dev.id = "34:259472"
+    mock_dev._gateway = MagicMock()
+    mock_dispatcher = MagicMock()
+
+    sent_intents: list[Command] = []
+
+    async def _mock_send(intent: Command, **kwargs: Any) -> Message:
+        sent_intents.append(intent)
+        dto = build_dto(intent)
+        return Message._from_cmd(dto)
+
+    mock_dispatcher.send = AsyncMock(side_effect=_mock_send)
+    mgr = BindingManager(mock_dev, mock_dispatcher)
+    mgr._state = MagicMock()
+    mgr._state.cast_confirm_accept = AsyncMock()
+
+    # Act 1: Cast Offer (Tender)
+    await mgr._make_offer(codes=[Code._2309, Code._30C9], vendor_code="01")
+
+    # Assert 1
+    assert len(sent_intents) == 1
+    msg1 = Message._from_cmd(build_dto(sent_intents[0]))
+    assert msg1.payload[SZ_PHASE] == BindPhase.TENDER
+
+    # Act 2: Accept Offer (Accept)
+    offer_packet = Packet.from_port(
+        dt.now(UTC),
+        "000  I --- 34:259472 --:------ 34:259472 1FC9 012 0023098BF5900030C98BF590",
+    )
+    tender_msg = Message._from_packet(offer_packet)
+    mock_dev.id = "01:220768"
+    await mgr._accept_offer(
+        tender=tender_msg, codes=[Code._2309], zone_index="01"
+    )
+
+    # Assert 2
+    assert len(sent_intents) == 2
+    msg2 = Message._from_cmd(build_dto(sent_intents[1]))
+    assert msg2.payload[SZ_PHASE] == BindPhase.ACCEPT
+
+    # Act 3: Confirm Accept (Affirm)
+    accept_packet = Packet.from_port(
+        dt.now(UTC),
+        "000  W --- 01:220768 34:259472 --:------ 1FC9 006 012309075E60",
+    )
+    accept_msg = Message._from_packet(accept_packet)
+    mock_dev.id = "34:259472"
+    await mgr._confirm_accept(accept=accept_msg, confirm_code=Code._2309)
+
+    # Assert 3
+    assert len(sent_intents) == 3
+    msg3 = Message._from_cmd(build_dto(sent_intents[2]))
+    assert msg3.payload[SZ_PHASE] == BindPhase.AFFIRM

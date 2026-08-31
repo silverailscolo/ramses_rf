@@ -324,7 +324,7 @@ async def test_read_model_baseline_snapshot(
 
     mock_send = AsyncMock(return_value=None)
 
-    with patch.object(gwy, "async_send_cmd", mock_send):
+    with patch.object(gwy, "_async_send_dto", mock_send):
         with contextlib.suppress(TransportError):
             await gwy.start()
 
