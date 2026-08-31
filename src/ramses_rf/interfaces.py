@@ -665,6 +665,37 @@ class GatewayInterface(Protocol):
         """
         ...
 
+    async def async_send_raw_command(
+        self,
+        command: CommandDTO,
+        /,
+        *,
+        gap_duration: float = 0.02,
+        num_repeats: int = 1,
+        priority: Priority = Priority.DEFAULT,
+        timeout: float = 3.0,
+        max_retries: int = 3,
+    ) -> Packet:
+        """Transmit a raw command DTO for diagnostics and developer tools.
+
+        :param command: The compiled CommandDTO packet to transmit.
+        :type command: CommandDTO
+        :param gap_duration: Inter-frame gap in seconds.
+        :type gap_duration: float
+        :param num_repeats: Number of transmission retries.
+        :type num_repeats: int
+        :param priority: QoS transmission priority.
+        :type priority: Priority
+        :param timeout: Maximum await duration in seconds.
+        :type timeout: float
+        :param max_retries: Maximum protocol retransmissions.
+        :type max_retries: int
+        :returns: The acknowledged echo packet.
+        :rtype: Packet
+        :raises ProtocolSendFailed: If transmission fails or is cancelled.
+        """
+        ...
+
     async def _async_send_dto(
         self,
         command: CommandDTO,
