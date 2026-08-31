@@ -13,7 +13,7 @@ from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import PollingManager
-from ramses_tx import I_, RP, RQ
+from ramses_tx import I_, RP, RQ, CommandDTO, Priority
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.packet import Packet
@@ -587,3 +587,71 @@ async def test_create_stack_integration(index: str) -> None:
         transport.close()
     finally:
         await rf.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_get_state_in_memory() -> None:
+    """Verify Gateway.get_state extracts state from in-memory state_cache with 0 disk I/O."""
+    # Arrange
+    gateway = Gateway("/dev/null", config=GatewayConfig(database_path=None))
+    packet = Packet.from_port(
+        dt.now(),
+        "000  I --- 01:145038 --:------ 01:145038 1F09 003 0007D0",
+    )
+    msg = Message._from_packet(packet)
+    gateway._state_cache[msg.state_header] = msg
+
+    # Act
+    schema, packets = await gateway.get_state()
+
+    # Assert
+    assert isinstance(schema, dict)
+    assert isinstance(packets, dict)
+    assert len(packets) == 1
+    packet_data = next(iter(packets.values()))
+    assert packet_data["code"] == Code._1F09
+    assert packet_data["verb"] == I_
+    assert packet_data["src"] == "01:145038"
+
+
+@pytest.mark.asyncio
+async def test_gateway_async_send_raw_command() -> None:
+    """Verify Gateway.async_send_raw_command forwards CommandDTO to engine."""
+    # Arrange
+    gateway = Gateway("/dev/null", config=GatewayConfig(database_path=None))
+    mock_packet = MagicMock(spec=Packet)
+
+    command = CommandDTO(
+        verb=RQ,
+        addr1="18:000730",
+        addr2="01:145038",
+        addr3="--:------",
+        code=Code._10E0,
+        payload="00",
+    )
+
+    with patch.object(
+        gateway._engine, "async_send_cmd", new_callable=AsyncMock
+    ) as mock_engine_send:
+        mock_engine_send.return_value = mock_packet
+
+        # Act
+        result = await gateway.async_send_raw_command(
+            command,
+            gap_duration=0.05,
+            num_repeats=2,
+            priority=Priority.HIGH,
+            timeout=5.0,
+            max_retries=2,
+        )
+
+        # Assert
+        assert result is mock_packet
+        mock_engine_send.assert_awaited_once_with(
+            command,
+            gap_duration=0.05,
+            num_repeats=2,
+            priority=Priority.HIGH,
+            max_retries=2,
+            timeout=5.0,
+        )

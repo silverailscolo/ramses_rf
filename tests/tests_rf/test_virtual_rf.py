@@ -249,7 +249,7 @@ async def test_virtual_rf_dev_disc() -> None:
         cmd = Command.from_cli(
             " I --- 01:010000 --:------ 01:010000 1F09 003 0004B5"
         )
-        gwy_0.send_cmd(cmd)
+        ser_2.write(bytes(f"{cmd}\r\n".encode("ascii")))
 
         await assert_devices(gwy_0, ["01:010000", "18:000000", "18:111111"])
         await assert_devices(gwy_1, ["01:010000", "18:000000", "18:111111"])
@@ -303,7 +303,7 @@ async def test_virtual_rf_packet_flow() -> None:
         cmd = Command.from_cli(
             " I --- 01:022222 --:------ 01:022222 1F09 003 0004B5"
         )
-        gwy_0.send_cmd(cmd, num_repeats=1)
+        await gwy_0._async_send_dto(cmd, num_repeats=1)
 
         await assert_devices(
             gwy_0, ["01:022222", "18:000000", "18:111111", "40:000000"]
@@ -355,10 +355,7 @@ async def _test_gwy_device(gwy: Gateway, test_index: int) -> None:
     """Check GWY address/type detection, and behaviour of its treatment of addr0."""
     assert gwy._engine._loop is asyncio.get_running_loop()
 
-    if (
-        not isinstance(gwy._engine._protocol, PortProtocol)
-        or not gwy._engine._protocol._context
-    ):
+    if not isinstance(gwy._engine._protocol, PortProtocol):
         assert False, "QoS protocol not enabled"
 
     assert gwy.hgi

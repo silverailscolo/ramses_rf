@@ -57,9 +57,8 @@ class GatewayStub:
 
         # Explicitly type as Any to prevent strict mode from complaining about missing mock attributes
         self._engine: Any = unittest.mock.MagicMock()
-        self._engine._include = {}
-        self._engine._enforce_known_list = False
-
+        self.dispatcher = unittest.mock.MagicMock()
+        self.dispatcher.send = unittest.mock.AsyncMock()
         self.message_store = MessageStore(maintain=False)
 
     @property

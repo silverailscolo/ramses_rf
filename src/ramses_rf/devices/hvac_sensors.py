@@ -253,11 +253,11 @@ class HvacCarbonDioxideSensor(CarbonDioxide, Fakeable):  # CO2: I/1298
 
     async def initiate_binding_process(
         self,
-    ) -> tuple[Packet, Message, Packet, Packet | None]:
+    ) -> tuple[Message, Message, Message, Packet | None]:
         """Initiate the binding process for the CO2 sensor.
 
-        :return: The packet sent to initiate binding
-        :rtype: tuple[Packet, Message, Packet, Packet | None]
+        :return: The packets/messages generated during the binding process.
+        :rtype: tuple[Message, Message, Message, Packet | None]
         :raises exc.BindingError: If binding fails
         """
         return await super()._initiate_binding_process(

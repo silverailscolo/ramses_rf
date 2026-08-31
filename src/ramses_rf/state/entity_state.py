@@ -18,7 +18,7 @@ from ramses_rf.const import SZ_DHW_INDEX, SZ_DOMAIN_INDEX, SZ_ZONE_INDEX
 from ramses_tx.address import ALL_DEVICE_ID
 
 # noqa: F401, isort: skip, pylint: disable=unused-import
-from ramses_tx.const import I_, RP, RQ, Code, Verb
+from ramses_tx.const import F9, FA, FC, I_, RP, RQ, Code, Verb
 from ramses_tx.typing import PayDictT
 
 from .. import exceptions as exc
@@ -548,7 +548,7 @@ class EntityState:
                 in_dict = isinstance(msg.payload, dict)
                 in_list = isinstance(msg.payload, list)
                 if (
-                    context_value in ("FC", "FA", "F9", "FA")
+                    context_value in (FC, FA, F9)
                     or (
                         in_dict
                         and (
@@ -657,12 +657,12 @@ class EntityState:
                 in_list = isinstance(msg.payload, list)
                 if not (
                     str(context_value) == str(dhw_index)
-                    or context_value in ("FC", "FA", "F9", "FA")
-                    or (in_dict and "dhw_index" in msg.payload)
+                    or context_value in (FC, FA, F9)
+                    or (in_dict and SZ_DHW_INDEX in msg.payload)
                     or (
                         in_list
                         and any(
-                            isinstance(d, dict) and "dhw_index" in d
+                            isinstance(d, dict) and SZ_DHW_INDEX in d
                             for d in msg.payload
                         )
                     )

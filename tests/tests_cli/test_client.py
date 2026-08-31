@@ -53,9 +53,10 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     # Fix: Explicitly assign a MagicMock to __str__ and tell mypy to ignore the method assignment
     gateway.__str__ = MagicMock(return_value="Gateway")  # type: ignore[method-assign]
 
-    gateway.send_cmd = AsyncMock()
+    gateway._async_send_dto = AsyncMock()
     gateway.dispatcher = MagicMock()
-    gateway.dispatcher.send = MagicMock()
+    gateway.dispatcher.send = AsyncMock()
+    gateway.dispatcher.send_background = MagicMock()
     gateway.start = AsyncMock()
     gateway.stop = AsyncMock()
     gateway.get_state = AsyncMock(return_value=({}, {}))
