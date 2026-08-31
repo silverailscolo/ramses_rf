@@ -136,19 +136,9 @@ async def test_factory_passes_config_to_standard_transport() -> None:
     mock_protocol.wait_for_connection_made = AsyncMock()
 
     # We patch where they are USED (factory.py), not where they are DEFINED
-    with (
-        patch(
-            "ramses_tx.transport.factory.PortTransport"
-        ) as MockPortTransport,
-        patch(
-            "ramses_tx.transport.factory.serial_for_url"
-        ) as mock_serial_for_url,
-    ):
-        # Setup the mock serial object to pass validity checks
-        mock_serial = Mock()
-        mock_serial.portstr = "/dev/ttyUSB0"
-        mock_serial_for_url.return_value = mock_serial
-
+    with patch(
+        "ramses_tx.transport.factory.PortTransport"
+    ) as MockPortTransport:
         # valid-looking config so factory enters the Serial branch
         port_config: Any = {}
         transport_config = TransportConfig(autostart=True)
@@ -208,31 +198,21 @@ async def test_port_transport_close_robustness() -> None:
     mock_protocol = Mock()
     mock_serial = Mock()
 
-    # Define a side_effect for SerialTransport.__init__ that sets required attributes
-    # PortTransport expects _loop to be set by the parent class
-    def mock_init(
-        self: Any, loop: Any, protocol: Any, serial_instance: Any
-    ) -> None:
-        self._loop = loop or asyncio.get_event_loop()
-        self._protocol = protocol
-        self._serial = serial_instance  # Set backing attribute directly
+    transport = PortTransport(
+        mock_serial, mock_protocol, config=TransportConfig()
+    )
 
-    # Patch SerialTransport.__init__ using 'new' to replace it with the function directly.
-    # This ensures 'self' is passed correctly, which doesn't happen with a standard Mock side_effect.
-    with patch(
-        "ramses_tx.transport.port.serial_asyncio.SerialTransport.__init__",
-        new=mock_init,
-    ):
-        transport = PortTransport(
-            mock_serial, mock_protocol, config=TransportConfig()
-        )
+    # Cancel auto-started connection task to avoid unawaited task warnings
+    for task in asyncio.all_tasks():
+        if task.get_name() == "PortTransport._create_connection()":
+            task.cancel()
 
-        # Pre-condition: _init_task is created asynchronously, so it shouldn't exist yet
-        # because we haven't yielded to the event loop
-        assert not hasattr(transport, "_init_task")
+    # Pre-condition: _init_task is created asynchronously, so it shouldn't exist yet
+    # because we haven't yielded to the event loop
+    assert not hasattr(transport, "_init_task")
 
-        # Execute close - should not raise AttributeError
-        transport.close()
+    # Execute close - should not raise AttributeError
+    transport.close()
 
 
 async def test_is_hgi80_async_file_check() -> None:

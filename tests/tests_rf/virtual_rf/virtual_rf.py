@@ -14,7 +14,8 @@ from io import FileIO
 from types import TracebackType
 from typing import Final, Self, TypeAlias, TypedDict
 
-from serial import Serial, serial_for_url
+import serialx
+from serialx import serial_for_url
 
 from .const import MAX_NUM_PORTS, HgiFwTypes
 
@@ -59,6 +60,7 @@ class VirtualComPortInfo:
         :param dev_type: The firmware type to emulate.
         """
         self.device: _PN = port_name  # e.g. /dev/pts/2 (a la /dev/ttyUSB0)
+        self.resolved_device: str = port_name
         self.name: str = port_name[5:]  # e.g.      pts/2 (a la      ttyUSB0)
 
         # Access attributes directly from the Enum member's value (NamedTuple)
@@ -139,6 +141,15 @@ class VirtualRfBase:
         """Use this method to monkey patch serial.tools.list_ports.comports().
 
         :param include_links: Ignored, present for signature compatibility.
+        :return: A list of VirtualComPortInfo objects.
+        """
+        return list(self._port_info_list.values())
+
+    async def async_comports(
+        self,
+    ) -> list[VirtualComPortInfo]:
+        """Return a list of VirtualComPortInfo objects asynchronously.
+
         :return: A list of VirtualComPortInfo objects.
         """
         return list(self._port_info_list.values())
@@ -540,9 +551,11 @@ async def main() -> None:
     async with VirtualRf(num_ports) as rf:
         print(f"Ports are: {rf.ports}")
 
-        sers: list[Serial] = [
+        sers: list[serialx.BaseSerial] = [
             serial_for_url(rf.ports[i]) for i in range(num_ports)
         ]
+        for s in sers:
+            s.open()
 
         for i in range(num_ports):
             sers[i].write(bytes(f"Hello World {i}! ", "utf-8"))
@@ -555,7 +568,7 @@ async def main() -> None:
                 if sers[i].in_waiting > 0:
                     break
 
-            print(f"{sers[i].name}: {sers[i].read(sers[i].in_waiting)!r}")
+            print(f"{sers[i].port}: {sers[i].read(sers[i].in_waiting)!r}")
             sers[i].close()
 
 
