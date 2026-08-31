@@ -3,7 +3,7 @@ from datetime import datetime as dt
 from unittest.mock import MagicMock
 
 import pytest
-import serial
+import serialx as serial
 
 from ramses_rf import Gateway
 from ramses_rf.config import GatewayConfig
@@ -272,7 +272,8 @@ async def test_regex_inbound_parsing() -> None:
             ),
         ),
     )
-    ser_1 = serial.Serial(rf.ports[1])
+    ser_1 = serial.serial_for_url(rf.ports[1])
+    ser_1.open()
 
     try:
         await gwy_0.start()
@@ -295,6 +296,7 @@ async def test_regex_inbound_parsing() -> None:
             )
 
     finally:
+        ser_1.close()
         await gwy_0.stop()
         await rf.stop()
 

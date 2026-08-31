@@ -7,7 +7,7 @@ from typing import Any, Final
 from unittest.mock import MagicMock, patch
 
 import pytest
-import serial
+import serialx as serial
 
 from ramses_rf import Address, CommandDTO as Command, Gateway
 from ramses_rf.gateway import GatewayConfig
@@ -235,7 +235,8 @@ async def test_virtual_rf_dev_disc() -> None:
         gwy_1 = Gateway(rf.ports[1], config=gwy_config)
         await assert_devices(gwy_1, [])
 
-        ser_2 = serial.Serial(rf.ports[2])
+        ser_2 = serial.serial_for_url(rf.ports[2])
+        ser_2.open()
 
         await gwy_0.start()
         assert gwy_0._engine._protocol._transport
@@ -267,6 +268,7 @@ async def test_virtual_rf_dev_disc() -> None:
         )
 
     finally:
+        ser_2.close()
         if gwy_0:
             await gwy_0.stop()
         if gwy_1:

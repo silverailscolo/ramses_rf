@@ -64,6 +64,7 @@ SZ_ACTIVE_HGI: Final = SZ_ACTIVE_GATEWAY
 SZ_SIGNATURE: Final = "signature"
 SZ_IS_EVOFW3: Final = "is_evofw3"
 SZ_READER_TASK: Final[str] = "reader_task"
+SZ_NAME: Final[str] = "name"
 
 # MQTT topic
 SZ_RAMSES_GATEWAY: Final[str] = "RAMSES/GATEWAY"

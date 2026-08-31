@@ -13,7 +13,7 @@ from typing import cast
 from unittest.mock import patch
 
 import pytest
-import serial
+import serialx as serial
 
 from ramses_rf import Message, Packet
 from ramses_rf.address import HGI_DEV_ADDR, Address
@@ -141,55 +141,59 @@ async def protocol(rf: VirtualRf) -> AsyncGenerator[PortProtocol, None]:
 async def _test_flow_30x(protocol: PortProtocol) -> None:
     assert protocol._transport is not None
     rf: VirtualRf = protocol._transport.get_extra_info("virtual_rf")
-    ser = serial.Serial(rf.ports[1])
+    ser = serial.serial_for_url(rf.ports[1])
+    ser.open()
 
-    qos = QosParams()
+    try:
+        qos = QosParams()
 
-    # STEP 1: Send an I cmd (no reply)...
-    task = rf._loop.create_task(
-        protocol.send_cmd(II_CMD_0, qos=qos), name="send_1"
-    )
-    _assert_packet_eq_cmd(await task, II_CMD_0)
+        # STEP 1: Send an I cmd (no reply)...
+        task = rf._loop.create_task(
+            protocol.send_cmd(II_CMD_0, qos=qos), name="send_1"
+        )
+        _assert_packet_eq_cmd(await task, II_CMD_0)
 
-    # STEP 2: Send an RQ cmd (returns echo at L3)...
-    task = rf._loop.create_task(
-        protocol.send_cmd(RQ_CMD_0, qos=qos), name="send_2"
-    )
-    protocol._loop.call_later(
-        CALL_LATER_DELAY,
-        ser.write,
-        bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n",
-    )
-    _assert_packet_eq_cmd(await task, RQ_CMD_0)
+        # STEP 2: Send an RQ cmd (returns echo at L3)...
+        task = rf._loop.create_task(
+            protocol.send_cmd(RQ_CMD_0, qos=qos), name="send_2"
+        )
+        protocol._loop.call_later(
+            CALL_LATER_DELAY,
+            ser.write,
+            bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n",
+        )
+        _assert_packet_eq_cmd(await task, RQ_CMD_0)
 
-    # STEP 3: Send an I cmd (no reply) *twice*...
-    task = rf._loop.create_task(
-        protocol.send_cmd(II_CMD_0, qos=qos), name="send_3A"
-    )
-    _assert_packet_eq_cmd(await task, II_CMD_0)
+        # STEP 3: Send an I cmd (no reply) *twice*...
+        task = rf._loop.create_task(
+            protocol.send_cmd(II_CMD_0, qos=qos), name="send_3A"
+        )
+        _assert_packet_eq_cmd(await task, II_CMD_0)
 
-    task = rf._loop.create_task(
-        protocol.send_cmd(II_CMD_0, qos=qos), name="send_3B"
-    )
-    _assert_packet_eq_cmd(await task, II_CMD_0)
+        task = rf._loop.create_task(
+            protocol.send_cmd(II_CMD_0, qos=qos), name="send_3B"
+        )
+        _assert_packet_eq_cmd(await task, II_CMD_0)
 
-    # STEP 4: Send an RQ cmd (returns echo at L3)...
-    task = rf._loop.create_task(
-        protocol.send_cmd(RQ_CMD_1, qos=qos), name="send_4A"
-    )
+        # STEP 4: Send an RQ cmd (returns echo at L3)...
+        task = rf._loop.create_task(
+            protocol.send_cmd(RQ_CMD_1, qos=qos), name="send_4A"
+        )
 
-    protocol._loop.call_later(
-        CALL_LATER_DELAY,
-        ser.write,
-        bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n",
-    )
-    protocol._loop.call_later(
-        CALL_LATER_DELAY,
-        ser.write,
-        bytes(str(RP_PKT_1).encode("ascii")) + b"\r\n",
-    )
+        protocol._loop.call_later(
+            CALL_LATER_DELAY,
+            ser.write,
+            bytes(str(RP_PKT_0).encode("ascii")) + b"\r\n",
+        )
+        protocol._loop.call_later(
+            CALL_LATER_DELAY,
+            ser.write,
+            bytes(str(RP_PKT_1).encode("ascii")) + b"\r\n",
+        )
 
-    _assert_packet_eq_cmd(await task, RQ_CMD_1)
+        _assert_packet_eq_cmd(await task, RQ_CMD_1)
+    finally:
+        ser.close()
 
 
 async def _test_flow_401(protocol: PortProtocol) -> None:
