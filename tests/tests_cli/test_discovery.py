@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import asyncio
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -35,7 +39,7 @@ DEV_ID = "01:123456"
 
 
 @pytest.fixture
-def mock_gateway() -> MagicMock:
+async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     """Create a mock Gateway instance."""
     gateway = MagicMock(spec=Gateway)
     # Important: Set the class so isinstance(gwy, Gateway) returns True
@@ -49,6 +53,10 @@ def mock_gateway() -> MagicMock:
     gateway._engine = MagicMock()
     gateway._engine._tasks = []
     gateway._engine.ser_name = "/dev/ttyUSB0"
+    gateway._engine._loop = asyncio.get_running_loop()
+    gateway.add_task = MagicMock(
+        side_effect=lambda task: gateway._engine._tasks.append(task)
+    )
 
     # Mock device retrieval
     mock_dev = MagicMock()
@@ -75,7 +83,11 @@ def mock_gateway() -> MagicMock:
     gateway.config.disable_discovery = False
     gateway.config.enable_eavesdrop = False
 
-    return gateway
+    yield gateway
+
+    for task in gateway._engine._tasks:
+        if not task.done():
+            task.cancel()
 
 
 @pytest.mark.asyncio
