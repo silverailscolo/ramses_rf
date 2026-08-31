@@ -90,6 +90,21 @@ class HvacStrategy(Protocol):
         """
         ...
 
+    @property
+    def builtin_commands(self) -> dict[str, dict[str, str]]:
+        """Vendor-specific commands hardcoded in the strategy.
+
+        Each entry is a command name → dict template (with ``verb``,
+        ``code``, ``payload``, and ``type`` keys).  The ``type`` field
+        classifies the command (``"mode"``, ``"bypass"``, ``"filter"``,
+        etc.) so consumers can filter which commands appear in which
+        UI context.
+
+        :returns: Dict of command name → template.
+        :rtype: dict[str, dict[str, str]]
+        """
+        ...
+
 
 class HvacStrategyBase:
     """Base implementation with all-vendor normalisations.
@@ -122,6 +137,8 @@ class HvacStrategyBase:
         "laag": "low",
         "hoog": "high",
         "gemiddeld": "medium",
+        "midden": "medium",
+        "minimaal": "trickle",
         "uit": "off",
         "afwezig": "away",
         "normaal": "normal",
@@ -279,3 +296,39 @@ class HvacStrategyBase:
         :rtype: tuple[Code, ...]
         """
         return self._binding_codes
+
+    #: Vendor-specific commands hardcoded in the strategy.
+    #: Subclasses override with vendor-specific commands (bypass, filter
+    #: reset, etc.).  Each entry is a command name → dict template with
+    #: ``verb``, ``code``, ``payload``, and ``type`` keys.
+    #:
+    #: The ``type`` field classifies the command so consumers can filter
+    #: which commands appear in which UI context (e.g. only ``"mode"``
+    #: commands in the fan_modes dropdown).  Valid types:
+    #:
+    #: - ``"mode"``        — 22F1: fan speed modes (away, low, high, boost, ...)
+    #: - ``"config"``      — 2411: configuration parameters (fan rates %, filter
+    #:                       time, moisture sensitivity, comfort temp, ...)
+    #: - ``"bypass"``      — 22F7: bypass valve control (auto, open, closed)
+    #: - ``"boost_timer"`` — 22F3: timed boost (high for N minutes)
+    #: - ``"info"``        — 10D0, 31DA: filter status/reset, ventilation state
+    #: - ``"other"``       — anything not in the standard code map
+    _builtin_commands: dict[str, dict[str, str]] = {}
+
+    @property
+    def builtin_commands(self) -> dict[str, dict[str, str]]:
+        """Vendor-specific commands hardcoded in the strategy.
+
+        Each entry is a command name → dict template (with ``verb``,
+        ``code``, ``payload``, and ``type`` keys).  The ``type`` field
+        classifies the command (``"mode"``, ``"bypass"``, ``"filter"``,
+        etc.) so consumers can filter which commands appear in which
+        UI context.
+
+        Base implementation returns an empty dict — subclasses override
+        to add vendor-specific commands.
+
+        :returns: Dict of command name → template.
+        :rtype: dict[str, dict[str, str]]
+        """
+        return dict(self._builtin_commands)
