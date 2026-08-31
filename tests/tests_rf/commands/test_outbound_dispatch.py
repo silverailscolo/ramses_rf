@@ -10,13 +10,16 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ramses_rf.address import Address
+from ramses_rf.commands.core import Command
 from ramses_rf.commands.dispatcher import CommandDispatcher
 from ramses_rf.const import SYS_MODE_MAP, ZON_MODE_MAP
 from ramses_rf.devices import Controller, HvacVentilator
+from ramses_rf.enums import Action
 from ramses_rf.gateway import Gateway
 from ramses_rf.messages import Message
 from ramses_rf.systems import DhwZone, Evohome, Zone
 from ramses_tx import Code, Packet
+from ramses_tx.const import RQ
 from ramses_tx.dtos import CommandDTO
 
 
@@ -211,3 +214,95 @@ async def test_tcs_set_mode_dispatches_intent(
     assert mock_gateway._async_send_dto.await_count == 1
     call_dto: CommandDTO = mock_gateway._async_send_dto.call_args[0][0]
     assert call_dto.code == Code._2E04
+
+
+@pytest.mark.asyncio
+async def test_tcs_get_faultlog_dispatches_intent(
+    mock_gateway: MagicMock,
+) -> None:
+    """Verify System.get_faultlog dispatches Action.GET_FAULTLOG_ENTRY via CommandDispatcher."""
+    # Arrange
+    mock_gateway.hgi = MagicMock()
+    mock_gateway.hgi.id = "18:000730"
+    ctl = Controller(mock_gateway, Address("01:078710"))
+    tcs = Evohome(ctl)
+    packet = Packet.from_port(
+        dt.now(),
+        "000  I --- 18:000730 01:078710 --:------ 0418 003 000000",
+    )
+    mock_gateway._async_send_dto.return_value = packet
+
+    # Act
+    faultlog = await tcs.get_faultlog(limit=1, force_refresh=True)
+
+    # Assert
+    assert isinstance(faultlog, dict)
+    assert mock_gateway._async_send_dto.await_count == 1
+    call_dto: CommandDTO = mock_gateway._async_send_dto.call_args[0][0]
+    assert call_dto.code == Code._0418
+    assert call_dto.verb == RQ
+    assert call_dto.addr2 == "01:078710"
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_get_system_mode_intent(
+    mock_gateway: MagicMock,
+) -> None:
+    """Verify CommandDispatcher dispatches Action.GET_SYSTEM_MODE intent."""
+    # Arrange
+    dispatcher: CommandDispatcher = mock_gateway.dispatcher
+    packet = Packet.from_port(
+        dt.now(),
+        "000  I --- 18:000730 01:078710 --:------ 2E04 005 0000000000",
+    )
+    mock_gateway._async_send_dto.return_value = packet
+    intent = Command(
+        action=Action.GET_SYSTEM_MODE,
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        data={},
+    )
+
+    # Act
+    result = await dispatcher.send(intent)
+
+    # Assert
+    assert isinstance(result, Message)
+    assert mock_gateway._async_send_dto.await_count == 1
+    call_dto: CommandDTO = mock_gateway._async_send_dto.call_args[0][0]
+    assert call_dto.code == Code._2E04
+    assert call_dto.verb == RQ
+    assert call_dto.addr2 == "01:078710"
+    assert call_dto.payload == "FF"
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_get_zone_mode_intent(
+    mock_gateway: MagicMock,
+) -> None:
+    """Verify CommandDispatcher dispatches Action.GET_MODE intent for zone."""
+    # Arrange
+    dispatcher: CommandDispatcher = mock_gateway.dispatcher
+    packet = Packet.from_port(
+        dt.now(),
+        "000  I --- 18:000730 01:078710 --:------ 2349 007 0107D000FFFFFF",
+    )
+    mock_gateway._async_send_dto.return_value = packet
+    intent = Command(
+        action=Action.GET_MODE,
+        src=Address("18:000730"),
+        dst=Address("01:078710"),
+        data={"zone_index": "01"},
+    )
+
+    # Act
+    result = await dispatcher.send(intent)
+
+    # Assert
+    assert isinstance(result, Message)
+    assert mock_gateway._async_send_dto.await_count == 1
+    call_dto: CommandDTO = mock_gateway._async_send_dto.call_args[0][0]
+    assert call_dto.code == Code._2349
+    assert call_dto.verb == RQ
+    assert call_dto.addr2 == "01:078710"
+    assert call_dto.payload == "01"
