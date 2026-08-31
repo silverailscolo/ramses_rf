@@ -12,7 +12,7 @@ from ramses_rf.enums import Action, ZoneRole
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
 from ramses_tx import Packet
-from ramses_tx.const import FA, Code
+from ramses_tx.const import FA, RQ, Code
 from ramses_tx.typing import PayDictT
 
 from .dev_base import BatteryState, DeviceHeat, Fakeable
@@ -164,7 +164,9 @@ class DhwSensor(
 
     async def dhw_params(self) -> PayDictT._10A0 | None:
         """Return the DHW parameters (10A0) payload or None."""
-        return await self.entity_state.get_value(Code._10A0)
+        return await self.entity_state.get_value(
+            Code._10A0, verb=RQ
+        ) or await self.entity_state.get_value(Code._10A0)
 
     async def params(self) -> dict[str, Any]:
         """Return the device parameter dictionary."""

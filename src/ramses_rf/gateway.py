@@ -53,6 +53,7 @@ from .messages import ApplicationMessage, Message as rf_msg
 from .pipeline.conversation import ConversationManager
 from .pipeline.polling import PollingManager
 from .pipeline.topology_builder import TopologyBuilder
+from .routing import StateHeader
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
     SZ_CONFIG,
@@ -250,6 +251,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
 
         self._prev_msg: ApplicationMessage | None = None
         self._this_msg: ApplicationMessage | None = None
+        self._state_cache: dict[StateHeader, rf_msg] = {}
         self._history_lock = threading.Lock()
 
         # 1. Controller Knowledge Bridge
@@ -367,6 +369,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         with self._history_lock:
             self._prev_msg = None
             self._this_msg = None
+            self._state_cache.clear()
 
     @property
     def tcs(self) -> Evohome | None:
@@ -478,30 +481,34 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         :rtype: tuple[dict[str, Any], dict[str, Any]]
         """
         state_dict: dict[str, Any] = {}
-        if self.message_store is not None:
+        with self._history_lock:
+            cached_messages = list(self._state_cache.values())
+
+        if not cached_messages and self.message_store is not None:
             # Use getattr fallback in case interface strictly lacks state_cache mapping
-            state_cache = getattr(self.message_store, "state_cache", {})
+            state_cache_map = getattr(self.message_store, "state_cache", {})
+            cached_messages = list(state_cache_map.values())
 
-            for msg in state_cache.values():
-                if msg.verb not in (I_, RP):
-                    continue
+        for msg in cached_messages:
+            if msg.verb not in (I_, RP):
+                continue
 
-                dtm_str = msg.dtm.isoformat(timespec="microseconds")
-                state_dict[dtm_str] = {
-                    "verb": msg.verb,
-                    "src": msg.src.id,  # Keep for downstream legacy parsers
-                    "dst": msg.dst.id,  # Keep for downstream legacy parsers
-                    "addr1": msg._addrs[0].id,  # <-- Exact raw addr1
-                    "addr2": msg._addrs[1].id,  # <-- Exact raw addr2
-                    "addr3": msg._addrs[2].id,  # <-- Exact raw addr3
-                    "code": str(msg.code),
-                    "payload": _payload_to_serialisable(msg.payload),
-                    # Frame string is required by _restore_cached_packets /
-                    # Packet.from_dict to reconstruct the Packet on warm restart.
-                    # Without it, from_dict gets an empty frame body and raises
-                    # "Bad frame: Invalid structure: >>><<<" (issue 812).
-                    "frame": getattr(msg, "raw_frame", ""),
-                }
+            dtm_str = msg.dtm.isoformat(timespec="microseconds")
+            state_dict[dtm_str] = {
+                "verb": msg.verb,
+                "src": msg.src.id,  # Keep for downstream legacy parsers
+                "dst": msg.dst.id,  # Keep for downstream legacy parsers
+                "addr1": msg._addrs[0].id,  # <-- Exact raw addr1
+                "addr2": msg._addrs[1].id,  # <-- Exact raw addr2
+                "addr3": msg._addrs[2].id,  # <-- Exact raw addr3
+                "code": str(msg.code),
+                "payload": _payload_to_serialisable(msg.payload),
+                # Frame string is required by _restore_cached_packets /
+                # Packet.from_dict to reconstruct the Packet on warm restart.
+                # Without it, from_dict gets an empty frame body and raises
+                # "Bad frame: Invalid structure: >>><<<" (issue 812).
+                "frame": getattr(msg, "raw_frame", ""),
+            }
 
         schema_dict = await self.schema()
         return schema_dict, state_dict
@@ -516,11 +523,13 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         app_msg.bind_context(self)  # noqa: B010
         self.update_message_history(app_msg)
 
-        assert self._this_msg
-
-        if self._prev_msg and detect_array_fragment(
-            self._this_msg,
-            self._prev_msg,
+        if (
+            self._this_msg
+            and self._prev_msg
+            and detect_array_fragment(
+                self._this_msg,
+                self._prev_msg,
+            )
         ):
             app_msg._force_has_array()
             app_msg._payload = self._prev_msg.payload + (

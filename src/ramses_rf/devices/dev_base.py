@@ -277,13 +277,10 @@ class DeviceBase(Entity):
         :return: True if the device has a battery, False otherwise.
         :rtype: None | bool
         """
-        if self._gateway.message_store:
-            code_list = await self.entity_state._msg_dev_qry()
-            return isinstance(self, BatteryState) or (
-                code_list is not None and Code._1060 in code_list
-            )  # TODO(eb): clean up next line Q1 2026
-        msgs = await self.entity_state.get_message_log_flat()
-        return isinstance(self, BatteryState) or Code._1060 in msgs
+        return isinstance(self, BatteryState) or (
+            self.power_state.battery_low is not None
+            or self.power_state.battery_level is not None
+        )
 
     @property
     def polling_interval(self) -> PollingIntervalsT | None:

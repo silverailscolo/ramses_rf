@@ -499,6 +499,22 @@ async def test_zone_name_from_cqrs_state(mock_tcs: MagicMock) -> None:
     mock_tcs._gateway.message_store.get.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_zone_name_fallback_to_schema_name(mock_tcs: MagicMock) -> None:
+    """Test zone name falls back to _name when zone_state.name is None."""
+    # Arrange
+    zon = Zone(mock_tcs, "01")
+    zon._name = "Kitchen"
+    mock_tcs._gateway.message_store = AsyncMock()
+
+    # Act
+    result = await zon.name()
+
+    # Assert
+    assert result == "Kitchen"
+    mock_tcs._gateway.message_store.get.assert_not_called()
+
+
 # --- Window Open State Aggregation Tests ---
 
 

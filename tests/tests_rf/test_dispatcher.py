@@ -2,6 +2,7 @@
 """RAMSES RF - Unittests for dispatcher."""
 
 import logging
+import threading
 from collections.abc import Generator
 from datetime import datetime as dt, timedelta as td
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -862,3 +863,27 @@ class TestCommandDispatcherSend:
         # Assert
         assert isinstance(result, Message)
         assert result.code == Code._313F
+
+    @pytest.mark.asyncio
+    async def test_dispatcher_state_cache_update(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify process_msg updates state_cache and message_store on valid message ingestion."""
+        # Arrange
+        mock_gateway.message_store = MagicMock()
+        mock_gateway.message_store.add = MagicMock()
+        mock_gateway.state_projector = MagicMock()
+        mock_gateway._state_cache = {}
+        mock_gateway._history_lock = threading.Lock()
+        packet = Packet(
+            dt.now(),
+            "...  I --- 04:189078 --:------ 01:145038 3150 002 0100",
+        )
+        msg = Message._from_packet(packet)
+
+        # Act
+        await dispatcher.process_msg(mock_gateway, msg)
+
+        # Assert
+        assert msg.state_header in mock_gateway._state_cache
+        mock_gateway.message_store.add.assert_called_once_with(msg)
