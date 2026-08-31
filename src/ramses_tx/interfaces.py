@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .const import Priority
     from .dtos import CommandDTO
     from .packet import Packet
     from .typing import QosParams
@@ -76,29 +75,3 @@ class ProtocolInterface(ABC, asyncio.Protocol):
     @abstractmethod
     def set_regex_rules(self, rules: Any) -> None:
         """Set regex rules on the protocol."""
-
-
-class StateMachineInterface(ABC):
-    """Interface for the Protocol State Machine."""
-
-    @abstractmethod
-    def connection_made(self, transport: TransportInterface) -> None:
-        """Handle connection made event."""
-
-    @abstractmethod
-    def connection_lost(self, error: Exception | None) -> None:
-        """Handle connection lost event."""
-
-    @abstractmethod
-    def packet_received(self, packet: "Packet") -> None:
-        """Handle received packet event."""
-
-    @abstractmethod
-    async def send_cmd(
-        self,
-        send_fnc: Any,
-        command: "CommandDTO",
-        priority: "Priority",
-        qos: "QosParams",
-    ) -> "Packet":
-        """Send a command."""
