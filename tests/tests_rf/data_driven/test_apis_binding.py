@@ -116,12 +116,24 @@ async def test_initiate_binding_process(dev_class: type[Fakeable]) -> None:
             mocked_method.assert_called_once_with((Code._22F1,))
 
             mocked_method.reset_mock()
-            configured_dev = HvacRemote(
+            configured_remote = HvacRemote(
                 gwy,
                 Address("33:123457"),
                 traits=DeviceTraits(scheme="nuaire"),
             )
 
-            await configured_dev.initiate_binding_process()
+            await configured_remote.initiate_binding_process()
 
             mocked_method.assert_called_once_with((Code._22F1,))
+
+        if isinstance(dev, HvacCarbonDioxideSensor):
+            mocked_method.reset_mock()
+            configured_sensor = HvacCarbonDioxideSensor(
+                gwy,
+                Address("29:123458"),
+                traits=DeviceTraits(scheme="orcon"),
+            )
+            await configured_sensor.initiate_binding_process()
+            mocked_method.assert_called_once_with(
+                (("00", Code._31E0), ("01", Code._31E0), ("00", Code._1298))
+            )

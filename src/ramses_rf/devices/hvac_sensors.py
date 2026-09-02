@@ -260,6 +260,10 @@ class HvacCarbonDioxideSensor(CarbonDioxide, Fakeable):  # CO2: I/1298
         :rtype: tuple[Message, Message, Message, Packet | None]
         :raises exc.BindingError: If binding fails
         """
+        if self._scheme == "orcon":
+            return await super()._initiate_binding_process(
+                (("00", Code._31E0), ("01", Code._31E0), ("00", Code._1298))
+            )
         return await super()._initiate_binding_process(
             (Code._31E0, Code._1298, Code._2E10)
         )
