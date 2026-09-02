@@ -618,7 +618,7 @@ class Fakeable(DeviceBase):
 
     async def _initiate_binding_process(
         self,
-        offer_codes: Code | Iterable[Code],
+        offer_codes: Code | Iterable[Code | tuple[IndexT, Code]],
         /,
         *,
         confirm_code: Code | None = None,
@@ -642,7 +642,7 @@ class Fakeable(DeviceBase):
             raise DeviceNotFaked(f"Device is not fakeable: {self}")
 
         if isinstance(offer_codes, str):
-            codes: tuple[Code, ...] = (offer_codes,)
+            codes: tuple[Code | tuple[IndexT, Code], ...] = (offer_codes,)
         else:
             codes = tuple(offer_codes)
 

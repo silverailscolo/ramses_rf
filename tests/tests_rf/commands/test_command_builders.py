@@ -1056,6 +1056,27 @@ def test_build_put_bind_offer(snapshot: Any) -> None:
     assert str(Packet._from_cmd(dto)._frame) == snapshot
 
 
+def test_build_put_bind_offer_with_indexed_duplicate_codes() -> None:
+    intent = Intent(
+        src=Address("29:150156"),
+        dst=Address("29:150156"),
+        action=Action.PUT_BIND,
+        data={
+            "verb": Verb.I_,
+            "codes": [
+                ("00", Code._31E0),
+                ("01", Code._31E0),
+                ("00", Code._1298),
+            ],
+            "oem_code": "67",
+        },
+    )
+    dto = build_dto(intent)
+    assert dto.payload == (
+        "0031E0764A8C0131E0764A8C001298764A8C6710E0764A8C001FC9764A8C"
+    )
+
+
 def test_build_put_bind_accept(snapshot: Any) -> None:
     intent = Intent(
         src=Address("01:111111"),
