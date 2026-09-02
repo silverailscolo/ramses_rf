@@ -414,6 +414,43 @@ def test_build_put_co2_level(snapshot: Any) -> None:
     assert dto.payload == "000190"
 
 
+@pytest.mark.parametrize(
+    ("demand", "payload"),
+    [
+        (0.0, "0000000001000000"),
+        (0.5, "0000640001000000"),
+        (1.0, "0000C80001000000"),
+    ],
+)
+def test_build_put_orcon_ventilation_demand(
+    demand: float, payload: str
+) -> None:
+    intent = Intent(
+        src=Address("29:111111"),
+        dst=Address("32:222222"),
+        action=Action.PUT_VENTILATION_DEMAND,
+        data={"ventilation_demand": demand, "scheme": "orcon"},
+    )
+    dto = build_dto(intent)
+    assert str(dto.verb) == Verb.I_
+    assert str(dto.code) == Code._31E0
+    assert dto.payload == payload
+
+
+@pytest.mark.parametrize("demand", [-0.01, 1.01])
+def test_build_put_orcon_ventilation_demand_rejects_range(
+    demand: float,
+) -> None:
+    intent = Intent(
+        src=Address("29:111111"),
+        dst=Address("32:222222"),
+        action=Action.PUT_VENTILATION_DEMAND,
+        data={"ventilation_demand": demand, "scheme": "orcon"},
+    )
+    with pytest.raises(ValueError, match="between 0.0 and 1.0"):
+        build_dto(intent)
+
+
 def test_build_put_indoor_humidity(snapshot: Any) -> None:
     intent = Intent(
         src=Address("32:111111"),

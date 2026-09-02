@@ -21,6 +21,7 @@ from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits, HvacState
 from ramses_tx import Packet, Priority
 from ramses_tx.const import Code
+from ramses_tx.typing import DeviceIdT
 
 from .dev_base import BatteryState, DeviceHvac, Fakeable
 
@@ -266,4 +267,33 @@ class HvacCarbonDioxideSensor(CarbonDioxide, Fakeable):  # CO2: I/1298
             )
         return await super()._initiate_binding_process(
             (Code._31E0, Code._1298, Code._2E10)
+        )
+
+    async def set_ventilation_demand(
+        self, fan_id: DeviceIdT, value: float
+    ) -> Message | None:
+        """Send a transient ventilation demand to a bound Orcon fan.
+
+        :param fan_id: The device ID of the destination fan.
+        :type fan_id: DeviceIdT
+        :param value: The demand as a value from 0.0 to 1.0.
+        :type value: float
+        :returns: The resulting message, if one was generated.
+        :rtype: Message | None
+        :raises exc.DeviceNotFaked: If faking is not enabled.
+        """
+        if not self.is_faked:
+            raise exc.DeviceNotFaked(f"{self}: Faking is not enabled")
+
+        intent = Intent(
+            src=Address(self.id),
+            dst=Address(fan_id),
+            action=Action.PUT_VENTILATION_DEMAND,
+            data={
+                "ventilation_demand": value,
+                "scheme": "orcon",
+            },
+        )
+        return await self._gateway.dispatcher.send(
+            intent, priority=Priority.HIGH
         )

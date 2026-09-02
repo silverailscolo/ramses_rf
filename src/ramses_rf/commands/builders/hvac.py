@@ -146,6 +146,49 @@ def build_put_co2_level(intent: Command) -> CommandDTO:
     )
 
 
+def build_put_ventilation_demand(intent: Command) -> CommandDTO:
+    """Translate a transient ventilation demand into an Orcon 31E0 DTO.
+
+    Orcon HRC-350 CO2 controllers send two four-byte demand domains in one
+    message.  The first carries a standard RAMSES high-resolution percentage
+    (0-200) and the second is inactive::
+
+        00 00 DD 00 01 00 00 00
+
+    HRC-400 community implementations have been observed using the second
+    domain with a literal 0-100 byte.  Keep this HRC-350 encoding explicitly
+    vendor/model-specific until a capability discriminator is available.
+
+    :param intent: The command intent containing the demand and scheme.
+    :type intent: Command
+    :returns: The encoded Orcon demand command.
+    :rtype: CommandDTO
+    :raises ValueError: If the demand or scheme is unsupported.
+    """
+    demand = float(intent.get("ventilation_demand"))
+    if not 0.0 <= demand <= 1.0:
+        raise ValueError("ventilation_demand must be between 0.0 and 1.0")
+
+    scheme = intent.get("scheme")
+    if scheme != "orcon":
+        raise ValueError(
+            "put_ventilation_demand is currently supported only for Orcon"
+        )
+
+    demand_raw = round(demand * 200)
+    addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
+    return CommandDTO(
+        verb=I_,
+        addr1=addr1,
+        addr2=addr2,
+        addr3=addr3,
+        code=Code._31E0,
+        payload=f"0000{demand_raw:02X}0001000000",
+        priority=Priority.DEFAULT,
+        num_repeats=DEFAULT_NUM_REPEATS,
+    )
+
+
 def build_put_indoor_humidity(intent: Command) -> CommandDTO:
     """Translate a PUT_INDOOR_HUMIDITY intent into a CommandDTO.
 
