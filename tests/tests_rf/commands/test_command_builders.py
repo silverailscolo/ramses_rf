@@ -9,7 +9,7 @@ from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import ZON_MODE_MAP, Code, Verb
 from ramses_rf.enums import Action
-from ramses_rf.strategies import OrconStrategy
+from ramses_rf.strategies import OrconHrc350Strategy, OrconStrategy
 from ramses_tx.const import FaultDeviceClass, FaultState, FaultType
 from ramses_tx.packet import Packet
 
@@ -429,12 +429,33 @@ def test_build_put_orcon_ventilation_demand(
         src=Address("29:111111"),
         dst=Address("32:222222"),
         action=Action.PUT_VENTILATION_DEMAND,
-        data={"ventilation_demand": demand, "scheme": "orcon"},
+        data={
+            "ventilation_demand": demand,
+            "strategy": OrconHrc350Strategy(),
+        },
     )
     dto = build_dto(intent)
     assert str(dto.verb) == Verb.I_
     assert str(dto.code) == Code._31E0
     assert dto.payload == payload
+
+
+def test_build_put_orcon_second_domain_ventilation_demand() -> None:
+    """Regress the real VMD-15RMS86-2 packet reported in PR 1187."""
+    intent = Intent(
+        src=Address("37:126776"),
+        dst=Address("32:153289"),
+        action=Action.PUT_VENTILATION_DEMAND,
+        data={
+            "ventilation_demand": 0.3,
+            "strategy": OrconStrategy(),
+        },
+    )
+    dto = build_dto(intent)
+    assert dto.payload == "0000000001001E00"
+    assert str(Packet._from_cmd(dto)._frame) == (
+        " I --- 37:126776 32:153289 --:------ 31E0 008 0000000001001E00"
+    )
 
 
 @pytest.mark.parametrize("demand", [-0.01, 1.01])
@@ -445,7 +466,10 @@ def test_build_put_orcon_ventilation_demand_rejects_range(
         src=Address("29:111111"),
         dst=Address("32:222222"),
         action=Action.PUT_VENTILATION_DEMAND,
-        data={"ventilation_demand": demand, "scheme": "orcon"},
+        data={
+            "ventilation_demand": demand,
+            "strategy": OrconHrc350Strategy(),
+        },
     )
     with pytest.raises(ValueError, match="between 0.0 and 1.0"):
         build_dto(intent)

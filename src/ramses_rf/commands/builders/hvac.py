@@ -13,7 +13,7 @@ from ramses_rf.models.hvac_schemas import (
     _2411_PARAMS_SCHEMA,
 )
 from ramses_rf.protocol.ramses import _31DA_FAN_INFO
-from ramses_rf.strategies import HvacStrategy
+from ramses_rf.strategies import HvacStrategy, VentilationControlStrategy
 from ramses_tx.address import NON_DEV_ADDR
 from ramses_tx.const import DEFAULT_NUM_REPEATS, I_, RQ, W_, Code, Priority
 from ramses_tx.dtos import CommandDTO
@@ -147,35 +147,24 @@ def build_put_co2_level(intent: Command) -> CommandDTO:
 
 
 def build_put_ventilation_demand(intent: Command) -> CommandDTO:
-    """Translate a transient ventilation demand into an Orcon 31E0 DTO.
+    """Translate a transient ventilation demand into a 31E0 DTO.
 
-    Orcon HRC-350 CO2 controllers send two four-byte demand domains in one
-    message.  The first carries a standard RAMSES high-resolution percentage
-    (0-200) and the second is inactive::
-
-        00 00 DD 00 01 00 00 00
-
-    HRC-400 community implementations have been observed using the second
-    domain with a literal 0-100 byte.  Keep this HRC-350 encoding explicitly
-    vendor/model-specific until a capability discriminator is available.
-
-    :param intent: The command intent containing the demand and scheme.
+    :param intent: The command intent containing the demand and strategy.
     :type intent: Command
     :returns: The encoded Orcon demand command.
     :rtype: CommandDTO
-    :raises ValueError: If the demand or scheme is unsupported.
+    :raises TypeError: If no HVAC strategy is provided.
+    :raises ValueError: If the demand or strategy is unsupported.
     """
     demand = float(intent.get("ventilation_demand"))
     if not 0.0 <= demand <= 1.0:
         raise ValueError("ventilation_demand must be between 0.0 and 1.0")
 
-    scheme = intent.get("scheme")
-    if scheme != "orcon":
-        raise ValueError(
-            "put_ventilation_demand is currently supported only for Orcon"
-        )
+    strategy = intent.get("strategy")
+    if not isinstance(strategy, VentilationControlStrategy):
+        raise TypeError("strategy must implement VentilationControlStrategy")
 
-    demand_raw = round(demand * 200)
+    payload = strategy.ventilation_demand_payload(demand)
     addr1, addr2, addr3 = resolve_addrs(intent.src, intent.dst)
     return CommandDTO(
         verb=I_,
@@ -183,7 +172,7 @@ def build_put_ventilation_demand(intent: Command) -> CommandDTO:
         addr2=addr2,
         addr3=addr3,
         code=Code._31E0,
-        payload=f"0000{demand_raw:02X}0001000000",
+        payload=payload,
         priority=Priority.DEFAULT,
         num_repeats=DEFAULT_NUM_REPEATS,
     )
