@@ -99,6 +99,21 @@ TEST_SUITE_300 = [
         ),
     },
     #
+    {  # CO2 to FAN (orcon)
+        SZ_RESPONDENT: {
+            "32:134044": {"class": "FAN", "scheme": "orcon"},
+        },
+        SZ_SUPPLICANT: {
+            "29:150156": {"class": "CO2", "scheme": "orcon", "faked": True}
+        },
+        PKT_FLOW: (
+            " I --- 29:150156 --:------ 29:150156 1FC9 030 00-31E0-764A8C 00-1298-764A8C 00-2E10-764A8C 67-10E0-764A8C 00-1FC9-764A8C",
+            " W --- 32:134044 29:150156 --:------ 1FC9 012 00-31D9-820B9C 00-31DA-820B9C",
+            " I --- 29:150156 32:134044 --:------ 1FC9 001 00",
+            " I --- 29:150156 63:262142 --:------ 10E0 038 00-0001C8500B01-67-FEFFFFFFFFFF090307E1564D532D31354331360000000000000000000000",
+        ),
+    },
+    #
     {  # REM to FAN (nuaire)
         SZ_RESPONDENT: {  # "_note": "ECO-HEAT-HC"
             "30:098165": {"class": "FAN", "scheme": "nuaire"},
