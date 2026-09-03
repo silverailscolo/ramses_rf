@@ -744,6 +744,19 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             )
         except asyncio.CancelledError:
             raise
+        except ImportError as err:
+            _LOGGER.error(
+                "zigpy is required for Zigbee transport but is not "
+                "installed: %s. Install zigpy (e.g. via the ZHA "
+                "integration) or use a different transport.",
+                err,
+            )
+            self._close(
+                exc.TransportZigbeeError(
+                    f"zigpy is required for Zigbee transport: {err}. "
+                    "Install it or use a different transport."
+                )
+            )
         except Exception as err:
             _LOGGER.exception("Failed to initialize Zigbee transport: %s", err)
             self._close(exc.TransportZigbeeError(str(err)))
