@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime as dt, timedelta as td
@@ -39,6 +40,7 @@ from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ..helpers import dt_now
 from ..interfaces import ProtocolInterface, TransportInterface
 from ..packet import Packet
+from ..routing import RoutedCommand, RouteRequest, SourcePolicy, WriteOutcome
 from ..rssi_tracker import POOL_TTL, POOL_WINDOW_SIZE, RssiTracker
 from ..typing import DeviceIdT, RamsesProtocolT
 from .base import TransportConfig
@@ -539,40 +541,136 @@ class PooledTransport(TransportInterface):
         """Send a frame via a selected child transport."""
         await self.write_frame(frame)
 
+    # -- Pre-serialization routing contract (PR 2) ----------------------
+
+    def prepare_command(self, request: RouteRequest) -> RoutedCommand:
+        """Select a child and resolve the source address before serialization.
+
+        Extracts the target device from the command's positional
+        addresses using the authoritative ``packet_addrs()`` helper,
+        selects the best child using RSSI/cold-start fallback, and
+        resolves the source address based on ``SourcePolicy`` and the
+        selected child's evofw3/HGI80 capability.
+
+        :param request: Immutable route request.
+        :returns: Routed command with pinned child ID and final DTO.
+        :raises TransportError: If no child is sendable.
+        """
+        cmd = request.command
+
+        # Extract target device from the command's positional addresses.
+        # addr2 is the destination in standard RAMSES frames.
+        target_device = cmd.addr2 if cmd.addr2 != "--:------" else None
+
+        child = self._select_child(target_device)
+        if child is None:
+            raise exc.TransportError(
+                "No connected child transport available for send"
+            )
+
+        # Resolve source address based on SourcePolicy.
+        final_cmd = cmd
+        if request.source_policy is SourcePolicy.GATEWAY:
+            child_hgi = child.hgi_id
+            if (
+                child_hgi
+                and cmd.addr1[:2] == "18"
+                and cmd.addr1 != HGI_DEV_ADDR.id
+                and cmd.addr1 != str(child_hgi)
+            ):
+                # evofw3: patch source to the selected child's HGI ID.
+                final_cmd = dataclasses.replace(cmd, addr1=str(child_hgi))
+                _LOGGER.debug(
+                    "PooledTransport.prepare_command: patched source "
+                    "%s -> %s for child %d (evofw3)",
+                    cmd.addr1,
+                    child_hgi,
+                    child.child_id,
+                )
+            # HGI80: leave 18:000730 placeholder as-is — the firmware
+            # substitutes its own ID during transmission.
+        # SourcePolicy.PRESERVE: never modify the source.
+
+        _LOGGER.debug(
+            "PooledTransport.prepare_command: selected child %d "
+            "(hgi=%s) for target %s, source_policy=%s",
+            child.child_id,
+            child.hgi_id,
+            target_device,
+            request.source_policy.name,
+        )
+
+        return RoutedCommand(child_id=str(child.child_id), command=final_cmd)
+
+    async def write_routed(
+        self,
+        routed: RoutedCommand,
+        frame: str,
+        *,
+        disable_tx_limits: bool = False,
+    ) -> WriteOutcome:
+        """Dispatch a routed command to the pinned child.
+
+        Looks up the child by ``routed.child_id`` and dispatches the
+        pre-serialized frame.  Transport-level repeats reuse the same
+        child and frame.
+
+        :param routed: The routed command from ``prepare_command()``.
+        :param frame: The serialized frame (from ``str(routed.command)``).
+        :param disable_tx_limits: If True, bypass per-child rate
+            limiting.
+        :returns: Conservative write outcome classification.
+        """
+        try:
+            child = self._child_by_id(int(routed.child_id))
+        except (IndexError, ValueError):
+            return WriteOutcome.NOT_SUBMITTED
+        if child is None or child.transport is None:
+            return WriteOutcome.NOT_SUBMITTED
+
+        write = getattr(child.transport, "write_frame", None)
+        if write is None:
+            try:
+                await child.transport.send_frame(frame)
+                return WriteOutcome.SUBMITTED
+            except Exception:
+                return WriteOutcome.AMBIGUOUS
+
+        try:
+            await write(frame, disable_tx_limits=disable_tx_limits)
+            return WriteOutcome.SUBMITTED
+        except TypeError:
+            # Child's write_frame doesn't accept disable_tx_limits.
+            try:
+                await write(frame)
+                return WriteOutcome.SUBMITTED
+            except Exception:
+                return WriteOutcome.AMBIGUOUS
+        except Exception:
+            return WriteOutcome.AMBIGUOUS
+
     async def write_frame(
         self, frame: str, disable_tx_limits: bool = False
     ) -> None:
-        """Route an outbound frame to a selected child transport.
+        """Legacy outbound dispatch — delegates to the routing API.
 
-        Selection uses the highest rolling-average RSSI among
-        connected, sendable children for the target device (if known
-        from the frame), falling back to aggregate RSSI, then
-        round-robin when no RSSI data is available.
+        This method is kept for backward compatibility with callers
+        that still use ``write_frame()`` directly (e.g. ``send_frame()``
+        or third-party code).  The preferred path is
+        ``prepare_command()`` + ``write_routed()``.
 
-        The frame's source address (addr1) is re-patched to match the
-        selected child's HGI ID before forwarding.  This is needed
-        because the protocol patches addr1 to the pool's "active" HGI
-        (the first connected child), but the pool may route the frame
-        to a different child with better RSSI.  Without re-patching,
-        the frame would be transmitted by the wrong HGI with the wrong
-        source ID.
-
-        For HGI80 children (``_is_evofw3`` is False), the protocol
-        patches addr1 to the placeholder ``18:000730`` and the HGI80
-        firmware substitutes its own hardware ID during transmission.
-        In this case, re-patching is skipped — the placeholder is
-        correct for any HGI80 child.
+        When called directly, the frame is parsed to extract the target
+        device, a child is selected, and the frame is dispatched.  Source
+        re-patching is done on the serialized frame as a fallback.
 
         :param frame: The raw ASCII frame to transmit.
         :param disable_tx_limits: If True, bypass per-child rate
             limiting.
         """
-        # Parse the frame to extract target device and source address.
+        # Parse the frame to extract target device for child selection.
         target_device: str | None = None
-        src_addr: str | None = None
         parts = frame.split()
         if len(parts) >= 4:
-            src_addr = parts[2]
             target_device = parts[3]
 
         child = self._select_child(target_device)
@@ -581,34 +679,31 @@ class PooledTransport(TransportInterface):
                 "No connected child transport available for send"
             )
 
+        # Fallback source re-patching on the serialized frame.
+        # The preferred path (prepare_command) does this on the DTO
+        # before serialization.
+        src_addr = parts[2] if len(parts) >= 4 else None
         child_hgi = child.hgi_id
-
-        # Re-patch the frame's source address to match the selected
-        # child's HGI ID.  See docstring for conditions.
         if (
             child_hgi
             and src_addr
-            and src_addr[:2] == "18"  # only re-patch HGI sources
+            and src_addr[:2] == "18"
             and src_addr != HGI_DEV_ADDR.id
             and src_addr != str(child_hgi)
         ):
             parts[2] = str(child_hgi)
-            # Preserve leading whitespace (verb can be ' I' with a
-            # leading space in RAMSES frames).
             leading = ""
             if frame and frame[0].isspace():
                 leading = frame[0]
             frame = leading + " ".join(parts)
             _LOGGER.debug(
-                "PooledTransport: re-patched frame source %s -> %s "
-                "for child %d",
+                "PooledTransport.write_frame: re-patched source %s -> %s "
+                "for child %d (legacy path)",
                 src_addr,
                 child_hgi,
                 child.child_id,
             )
 
-        # Child transports accept disable_tx_limits even though
-        # TransportInterface doesn't declare it.
         write = getattr(child.transport, "write_frame", None)
         if write is None:
             await child.transport.send_frame(frame)  # type: ignore[union-attr]
@@ -616,7 +711,6 @@ class PooledTransport(TransportInterface):
             try:
                 await write(frame, disable_tx_limits=disable_tx_limits)
             except TypeError:
-                # Child's write_frame doesn't accept disable_tx_limits.
                 await write(frame)
 
     # -- Internal: inbound dedup + forward -------------------------------
