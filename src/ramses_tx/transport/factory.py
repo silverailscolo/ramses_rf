@@ -242,15 +242,17 @@ async def pooled_transport_factory(
         protocol.set_regex_rules(config.use_regex)
 
     # Create the pool first so we can create child proxies.
+    # Pre-allocate children with None transports; successful children
+    # are injected after creation.
+    num_children = len(port_names)
     pool = PooledTransport(
         protocol,
-        [],  # filled in below
+        [None] * num_children,  # placeholders, replaced below
         config=config,
         loop=loop,
         dedup_window=dedup_window,
+        port_names=[str(p) for p in port_names],
     )
-
-    child_transports: list[TransportInterface] = []
 
     for i, pname in enumerate(port_names):
         proxy = _ChildProtocolProxy(pool, i)
@@ -258,22 +260,30 @@ async def pooled_transport_factory(
 
         # Create the child transport via the standard factory, but
         # with the proxy protocol instead of the real one.
-        child = await _create_single_child(
-            proxy,
-            config=config,
-            port_name=pname,
-            port_config=pconfig,
-            extra=extra,
-            loop=loop,
-        )
-        child_transports.append(child)
+        # Tolerate individual child failures — the pool can operate
+        # with a subset of children (e.g. if a USB HGI is unplugged
+        # or in use by another process).
+        try:
+            child = await _create_single_child(
+                proxy,
+                config=config,
+                port_name=pname,
+                port_config=pconfig,
+                extra=extra,
+                loop=loop,
+            )
+        except Exception as err:
+            _LOGGER.warning(
+                "PooledTransport: child %d (%s) failed to connect: %s — "
+                "continuing with remaining children",
+                i,
+                pname,
+                err,
+            )
+            continue
 
-    # Inject the child transports into the pool.
-    pool._transports = child_transports
-    pool._child_connected = [False] * len(child_transports)
-    pool._child_hgi = [None] * len(child_transports)
-    pool._child_transport_objs = [None] * len(child_transports)
-    pool._pkts_received = [0] * len(child_transports)
+        # Replace the placeholder with the real transport.
+        pool._children[i].transport = child
 
     # Wait for at least one child to connect.
     await pool._wait_for_any_connection(
