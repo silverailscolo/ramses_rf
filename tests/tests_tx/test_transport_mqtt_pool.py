@@ -554,9 +554,7 @@ def test_broker_loss_affects_all_mqtt_children() -> None:
 # -- write_routed is_sendable guard (fact-check fix) ----------------------
 
 
-async def test_write_routed_offline_callback_child_returns_not_submitted() -> (
-    None,
-):
+async def test_write_routed_offline_callback_child_returns_not_submitted() -> None:
     """write_routed for an offline callback-driven child returns
     NOT_SUBMITTED (is_sendable guard)."""
     pool, adapter, outbound = _make_callback_pool()
