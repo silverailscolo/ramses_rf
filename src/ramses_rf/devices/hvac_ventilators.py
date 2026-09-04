@@ -198,9 +198,8 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         lightweight, HVAC-specific membership list that records which
         REM/CO2 devices belong to this FAN.
 
-        Also sets ``_parent_fan`` on each child device (6d) so that
-        ramses_cc can use it for ``via_device`` grouping in the HA
-        device registry.
+        Also sets ``_parent_fan`` if applicable, so that
+        ramses_cc can group them using the schema.
 
         :param schema: Keyword arguments representing the FAN schema
                        (expects ``remotes`` and/or ``sensors`` keys).
