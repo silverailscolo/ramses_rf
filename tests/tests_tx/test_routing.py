@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses as dataclasses_mod
 from datetime import datetime as dt
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -111,7 +112,7 @@ class TestRoutingTypes:
 
     def test_source_policy_enum_values(self) -> None:
         """SourcePolicy has GATEWAY and PRESERVE values."""
-        assert SourcePolicy.GATEWAY is not SourcePolicy.PRESERVE
+        assert len({SourcePolicy.GATEWAY, SourcePolicy.PRESERVE}) == 2
         assert SourcePolicy.GATEWAY.name == "GATEWAY"
         assert SourcePolicy.PRESERVE.name == "PRESERVE"
 
@@ -119,7 +120,7 @@ class TestRoutingTypes:
         """RouteRequest is immutable."""
         req = RouteRequest(command=_make_cmd())
         with pytest.raises(dataclasses_FrozenInstanceError):
-            req.command = _make_cmd()  # type: ignore[misc]
+            req.command = _make_cmd()
 
     def test_route_request_default_source_policy(self) -> None:
         """RouteRequest defaults to GATEWAY source policy."""
@@ -130,13 +131,20 @@ class TestRoutingTypes:
         """RoutedCommand is immutable."""
         rc = RoutedCommand(child_id="0", command=_make_cmd())
         with pytest.raises(dataclasses_FrozenInstanceError):
-            rc.child_id = "1"  # type: ignore[misc]
+            rc.child_id = "1"
 
     def test_write_outcome_enum_values(self) -> None:
         """WriteOutcome has SUBMITTED, NOT_SUBMITTED, AMBIGUOUS."""
-        assert WriteOutcome.SUBMITTED is not WriteOutcome.NOT_SUBMITTED
-        assert WriteOutcome.AMBIGUOUS is not WriteOutcome.SUBMITTED
-        assert WriteOutcome.NOT_SUBMITTED is not WriteOutcome.AMBIGUOUS
+        assert (
+            len(
+                {
+                    WriteOutcome.SUBMITTED,
+                    WriteOutcome.NOT_SUBMITTED,
+                    WriteOutcome.AMBIGUOUS,
+                }
+            )
+            == 3
+        )
 
 
 dataclasses_FrozenInstanceError = dataclasses_mod.FrozenInstanceError
@@ -321,7 +329,9 @@ class TestWriteRouted:
         # accept it without the kwarg.
         call_count = 0
 
-        async def _write_frame_side_effect(frame, **kwargs):
+        async def _write_frame_side_effect(
+            frame: str, **kwargs: object
+        ) -> None:
             nonlocal call_count
             call_count += 1
             if "disable_tx_limits" in kwargs:
@@ -356,7 +366,7 @@ class TestDefaultTransportInterface:
             def close(self) -> None:
                 pass
 
-            def get_extra_info(self, name: str, default=None):
+            def get_extra_info(self, name: str, default: Any = None) -> Any:
                 return default
 
             async def send_frame(self, frame: str) -> None:
@@ -378,13 +388,13 @@ class TestDefaultTransportInterface:
         from ramses_tx.interfaces import TransportInterface
 
         class _DummyTransport(TransportInterface):
-            def __init__(self):
+            def __init__(self) -> None:
                 self.write_called = False
 
             def close(self) -> None:
                 pass
 
-            def get_extra_info(self, name: str, default=None):
+            def get_extra_info(self, name: str, default: Any = None) -> Any:
                 return default
 
             async def send_frame(self, frame: str) -> None:
@@ -408,7 +418,7 @@ class TestDefaultTransportInterface:
             def close(self) -> None:
                 pass
 
-            def get_extra_info(self, name: str, default=None):
+            def get_extra_info(self, name: str, default: Any = None) -> Any:
                 return default
 
             async def send_frame(self, frame: str) -> None:
