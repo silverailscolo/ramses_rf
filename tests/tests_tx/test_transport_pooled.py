@@ -948,7 +948,7 @@ def test_quiet_serial_child_stays_connected(
 ) -> None:
     """A quiet connected serial child stays connected/online while
     its route evidence expires (RSSI TTL)."""
-    from ramses_tx.rssi_tracker import DEFAULT_TTL
+    from ramses_tx.rssi_tracker import POOL_TTL
 
     proto = _make_mock_protocol()
     t0 = _make_mock_transport(hgi="18:001111")
@@ -958,7 +958,7 @@ def test_quiet_serial_child_stays_connected(
     _connect_and_ready(pool, 0, t0)
 
     # Record RSSI with an old timestamp (beyond TTL) for a distinct device.
-    old_time = dt.now() - DEFAULT_TTL - td(seconds=1)
+    old_time = dt.now() - POOL_TTL - td(seconds=1)
     pool._children[0].rssi_tracker.record("04:999999", -50, old_time)
 
     # The RSSI should be expired on access.

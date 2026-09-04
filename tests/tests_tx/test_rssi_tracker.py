@@ -244,9 +244,9 @@ class TestRssiTrackerTtl:
         assert "04:111111" not in known
         assert "04:222222" in known
 
-    def test_default_ttl_is_5_minutes(self) -> None:
-        """DEFAULT_TTL is 5 minutes."""
-        assert td(minutes=5) == DEFAULT_TTL
+    def test_default_ttl_is_none(self) -> None:
+        """DEFAULT_TTL is None (no automatic expiry for gateway trackers)."""
+        assert DEFAULT_TTL is None
 
     def test_ttl_mixed_tz_aware_and_naive(self) -> None:
         """TTL expiry handles mixed tz-aware and naive timestamps.

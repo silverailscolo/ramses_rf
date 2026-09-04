@@ -28,12 +28,18 @@ DEFAULT_WINDOW_SIZE: Final[int] = 3
 # policy (issue 1119, PR 2 spec).
 POOL_WINDOW_SIZE: Final[int] = 5
 
-# Default TTL for RSSI readings.  Readings older than this are expired
-# automatically on access.  5 minutes (300 s) is conservative enough
-# to capture gradual changes while keeping stale evidence from
-# persisting after a device moves or a dongle is relocated.
+# Default TTL for RSSI readings.  ``None`` means no automatic expiry —
+# the gateway's communication-quality tracker retains readings and flags
+# them stale via ``stale_warn_seconds`` in ``compute_quality``.
+# Pool route-quality trackers override this to 5 minutes (300 s) so stale
+# evidence does not influence outbound child selection.
 # See: multi-hgi-plan.md, "RSSI TTL — initial default selected".
-DEFAULT_TTL: Final[td] = td(minutes=5)
+DEFAULT_TTL: Final[td | None] = None
+
+# Pool route-quality TTL: 5 minutes is conservative enough to capture
+# gradual changes while keeping stale evidence from persisting after a
+# device moves or a dongle is relocated.
+POOL_TTL: Final[td] = td(minutes=5)
 
 # Sentinel RSSI values that carry no signal information.
 _RSSI_SENTINELS: Final[frozenset[str]] = frozenset({"", "...", "---", "///"})

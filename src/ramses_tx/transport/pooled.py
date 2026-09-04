@@ -39,7 +39,7 @@ from ..const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ..helpers import dt_now
 from ..interfaces import ProtocolInterface, TransportInterface
 from ..packet import Packet
-from ..rssi_tracker import POOL_WINDOW_SIZE, RssiTracker
+from ..rssi_tracker import POOL_TTL, POOL_WINDOW_SIZE, RssiTracker
 from ..typing import DeviceIdT, RamsesProtocolT
 from .base import TransportConfig
 
@@ -125,7 +125,7 @@ class PoolChild:
     hgi_id: DeviceIdT | None = None
     accepted: bool = True
     rssi_tracker: RssiTracker = field(
-        default_factory=lambda: RssiTracker(POOL_WINDOW_SIZE)
+        default_factory=lambda: RssiTracker(POOL_WINDOW_SIZE, ttl=POOL_TTL)
     )
     last_pkt_time: dt | None = None
     consecutive_errors: int = 0
