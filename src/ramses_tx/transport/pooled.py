@@ -549,6 +549,10 @@ class PooledTransport(TransportInterface):
                     val = c.transport_obj.get_extra_info(SZ_IS_EVOFW3, False)
                     if val:
                         return True
+            # Callback-driven children (e.g. ramses_esp via MQTT)
+            # are treated as evofw3-compatible.
+            if any(c.is_connected and c.callback_driven for c in self._children):
+                return True
             return default
         if name == "pool_stats":
             return {
