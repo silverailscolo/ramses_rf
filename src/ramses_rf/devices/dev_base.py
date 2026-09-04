@@ -891,8 +891,7 @@ class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
         self._child_id = "hv"  # TODO: domain_id/deprecate
         # 6d: bidirectional parent link — set by HvacVentilator._update_schema()
         # when this device is added to a FAN's remotes[]/sensors[] list.
-        # Used by ramses_cc's via_device logic to group REM/CO2 under their
-        # FAN in the HA device registry.
+        # Used by ramses_cc to group independent devices based on the schema.
         self._parent_fan: HvacVentilator | None = None
 
 
