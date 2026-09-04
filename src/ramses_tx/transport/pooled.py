@@ -670,6 +670,8 @@ class PooledTransport(TransportInterface):
         # Callback-driven children (PR 4A): publish through the
         # outbound publisher instead of a per-child transport.
         if child.callback_driven and child.transport is None:
+            if not child.is_sendable:
+                return WriteOutcome.NOT_SUBMITTED
             if self._outbound_publisher is None or child.hgi_id is None:
                 return WriteOutcome.NOT_SUBMITTED
             try:

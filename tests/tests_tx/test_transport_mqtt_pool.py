@@ -203,21 +203,25 @@ def test_on_child_online_marks_child_connected_and_sendable() -> None:
     assert child.send_ready is True
 
 
-def test_on_child_online_notifies_protocol_on_first_connection() -> None:
+async def test_on_child_online_notifies_protocol_on_first_connection() -> None:
     """First child online triggers protocol.connection_made."""
     proto = _make_mock_protocol()
     _, adapter, _ = _make_callback_pool(proto=proto)
     adapter.on_child_online("18:001111")
+    # connection_made is dispatched via call_soon_threadsafe.
+    await asyncio.sleep(0.01)
     assert proto.connection_made.called
 
 
-def test_on_child_online_does_not_renotify_protocol() -> None:
+async def test_on_child_online_does_not_renotify_protocol() -> None:
     """Second child online does not re-trigger protocol.connection_made."""
     proto = _make_mock_protocol()
     _, adapter, _ = _make_callback_pool(proto=proto)
     adapter.on_child_online("18:001111")
+    await asyncio.sleep(0.01)  # drain call_soon_threadsafe
     proto.connection_made.reset_mock()
     adapter.on_child_online("18:002222")
+    await asyncio.sleep(0.01)
     assert not proto.connection_made.called
 
 
@@ -367,8 +371,9 @@ def test_on_unknown_hgi_does_not_create_child() -> None:
 # -- on_broker_disconnected ------------------------------------------------
 
 
-def test_on_broker_disconnected_marks_children_stale() -> None:
-    """Broker disconnect marks all callback-driven children as stale."""
+def test_on_broker_disconnected_marks_children_disconnected() -> None:
+    """Broker disconnect marks all callback-driven children as
+    disconnected and non-sendable."""
     pool, adapter, _ = _make_callback_pool(hgi_ids=["18:001111", "18:002222"])
     adapter.on_child_online("18:001111")
     adapter.on_child_online("18:002222")
@@ -376,6 +381,10 @@ def test_on_broker_disconnected_marks_children_stale() -> None:
     for child in pool._children:
         if child.callback_driven:
             assert child.availability is NodeAvailability.STALE
+            assert not child.is_connected
+            assert not child.is_sendable
+            # RSSI quarantined during broker outage.
+            assert not child.rssi_tracker._readings
 
 
 def test_on_broker_connected_is_safe() -> None:
@@ -474,3 +483,102 @@ def test_child_by_hgi_id_returns_none_for_unknown() -> None:
     pool, _, _ = _make_callback_pool()
     child = pool._child_by_hgi_id("18:999999")
     assert child is None
+
+
+# -- Unknown HGI side effects (fact-check gap) -----------------------------
+
+
+def test_unknown_hgi_does_not_forward_rf_frames() -> None:
+    """Unknown HGI on wildcard does not forward RF frames."""
+    proto = _make_mock_protocol()
+    _, adapter, _ = _make_callback_pool(proto=proto)
+    adapter.on_child_online("18:001111")
+    # Simulate a packet from an unknown HGI on the wildcard topic.
+    # The adapter's on_unknown_hgi is called instead of on_child_packet.
+    adapter.on_unknown_hgi(DeviceIdT("18:999999"))
+    # No packet was forwarded because on_unknown_hgi does not route
+    # packets — it only fires the discovery callback.
+    assert proto.packet_received.call_count == 0
+
+
+def test_unknown_hgi_does_not_mutate_registry() -> None:
+    """Unknown HGI does not add a child to the registry."""
+    pool, adapter, _ = _make_callback_pool()
+    initial_count = len(pool._children)
+    adapter.on_unknown_hgi(DeviceIdT("18:999999"))
+    assert len(pool._children) == initial_count
+    # No child has HGI 18:999999.
+    assert pool._child_by_hgi_id("18:999999") is None
+
+
+def test_unknown_hgi_does_not_become_sendable() -> None:
+    """Unknown HGI does not appear as a sendable child."""
+    pool, adapter, _ = _make_callback_pool()
+    adapter.on_unknown_hgi(DeviceIdT("18:999999"))
+    for child in pool._children:
+        assert child.hgi_id != DeviceIdT("18:999999")
+        assert not child.is_sendable or child.hgi_id != DeviceIdT("18:999999")
+
+
+# -- LWT vs broker distinction (fact-check gap) ---------------------------
+
+
+def test_lwt_offline_affects_only_target_child() -> None:
+    """LWT offline removes only the affected ESP from eligibility;
+    other children remain sendable."""
+    pool, adapter, _ = _make_callback_pool(hgi_ids=["18:001111", "18:002222"])
+    adapter.on_child_online("18:001111")
+    adapter.on_child_online("18:002222")
+    # LWT offline on child 0 only.
+    adapter.on_child_offline("18:001111", definitive=True)
+    child0 = pool._child_by_id(0)
+    child1 = pool._child_by_id(1)
+    assert not child0.is_sendable
+    assert not child0.is_connected
+    assert child1.is_sendable
+    assert child1.is_connected
+
+
+def test_broker_loss_affects_all_mqtt_children() -> None:
+    """Broker loss affects all MQTT children, not just one."""
+    pool, adapter, _ = _make_callback_pool(hgi_ids=["18:001111", "18:002222"])
+    adapter.on_child_online("18:001111")
+    adapter.on_child_online("18:002222")
+    adapter.on_broker_disconnected()
+    for child in pool._children:
+        if child.callback_driven:
+            assert not child.is_sendable
+            assert not child.is_connected
+
+
+# -- write_routed is_sendable guard (fact-check fix) ----------------------
+
+
+async def test_write_routed_offline_callback_child_returns_not_submitted() -> (
+    None,
+):
+    """write_routed for an offline callback-driven child returns
+    NOT_SUBMITTED (is_sendable guard)."""
+    pool, adapter, outbound = _make_callback_pool()
+    adapter.on_child_online("18:001111")
+    adapter.on_child_offline("18:001111", definitive=True)
+    from ramses_tx.routing import RoutedCommand
+
+    routed = RoutedCommand(child_id="0", command=MagicMock())
+    outcome = await pool.write_routed(routed, "frame")
+    assert outcome.name == "NOT_SUBMITTED"
+    assert len(outbound.published) == 0
+
+
+async def test_write_routed_broker_down_returns_not_submitted() -> None:
+    """write_routed for a callback-driven child after broker
+    disconnect returns NOT_SUBMITTED."""
+    pool, adapter, outbound = _make_callback_pool()
+    adapter.on_child_online("18:001111")
+    adapter.on_broker_disconnected()
+    from ramses_tx.routing import RoutedCommand
+
+    routed = RoutedCommand(child_id="0", command=MagicMock())
+    outcome = await pool.write_routed(routed, "frame")
+    assert outcome.name == "NOT_SUBMITTED"
+    assert len(outbound.published) == 0

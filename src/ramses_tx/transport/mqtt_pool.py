@@ -21,6 +21,7 @@ in ``ramses_cc`` using ``homeassistant.components.mqtt``.
 from __future__ import annotations
 
 import contextlib
+import functools
 import logging
 
 from ..helpers import dt_now
@@ -132,9 +133,18 @@ class MqttCallbackPoolAdapter:
             child.hgi_id = hgi_id
 
         # Notify the real protocol if this is the first connection.
+        # Use call_soon_threadsafe for thread safety — the adapter
+        # may be invoked from a non-event-loop MQTT callback thread.
         if not self._pool._protocol_connected:
             self._pool._protocol_connected = True
-            self._pool._protocol.connection_made(self._pool, ramses=True)
+            with contextlib.suppress(RuntimeError):
+                self._pool._loop.call_soon_threadsafe(
+                    functools.partial(
+                        self._pool._protocol.connection_made,
+                        self._pool,
+                        ramses=True,
+                    )
+                )
         # Resolve the connection future if waiting.
         if (
             self._pool._conn_fut is not None
@@ -289,11 +299,28 @@ class MqttCallbackPoolAdapter:
     def on_broker_disconnected(self) -> None:
         """Signal that the MQTT broker connection is lost.
 
-        Marks all callback-driven children as stale (not offline)
-        since the broker outage is transient and affects all MQTT
-        children.
+        Marks all callback-driven children as disconnected and
+        non-sendable, since without a broker connection no MQTT
+        child can send or receive.  This is distinct from LWT
+        offline (which affects a single node) — broker loss
+        affects all MQTT children simultaneously.
+
+        If no children remain connected, notifies the real
+        protocol via ``connection_lost``.
         """
         _LOGGER.warning("MqttCallbackPool: broker disconnected")
         for child in self._pool._children:
             if child.callback_driven and child.is_connected:
+                child.connection_state = ConnectionState.DISCONNECTED
                 child.availability = NodeAvailability.STALE
+                child.send_ready = False
+                # Quarantine RSSI — no valid evidence during outage.
+                child.rssi_tracker.clear()
+
+        # If no children are connected, notify the real protocol.
+        if not self._pool._connected_children and not self._pool._closing:
+            self._pool._protocol_connected = False
+            with contextlib.suppress(RuntimeError):
+                self._pool._loop.call_soon_threadsafe(
+                    self._pool._protocol.connection_lost, None
+                )
