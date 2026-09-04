@@ -112,7 +112,7 @@ class TestRoutingTypes:
 
     def test_source_policy_enum_values(self) -> None:
         """SourcePolicy has GATEWAY and PRESERVE values."""
-        assert SourcePolicy.GATEWAY != SourcePolicy.PRESERVE
+        assert len({SourcePolicy.GATEWAY, SourcePolicy.PRESERVE}) == 2
         assert SourcePolicy.GATEWAY.name == "GATEWAY"
         assert SourcePolicy.PRESERVE.name == "PRESERVE"
 
@@ -120,7 +120,7 @@ class TestRoutingTypes:
         """RouteRequest is immutable."""
         req = RouteRequest(command=_make_cmd())
         with pytest.raises(dataclasses_FrozenInstanceError):
-            req.command = _make_cmd()  # type: ignore[misc]
+            req.command = _make_cmd()
 
     def test_route_request_default_source_policy(self) -> None:
         """RouteRequest defaults to GATEWAY source policy."""
@@ -131,13 +131,20 @@ class TestRoutingTypes:
         """RoutedCommand is immutable."""
         rc = RoutedCommand(child_id="0", command=_make_cmd())
         with pytest.raises(dataclasses_FrozenInstanceError):
-            rc.child_id = "1"  # type: ignore[misc]
+            rc.child_id = "1"
 
     def test_write_outcome_enum_values(self) -> None:
         """WriteOutcome has SUBMITTED, NOT_SUBMITTED, AMBIGUOUS."""
-        assert WriteOutcome.SUBMITTED != WriteOutcome.NOT_SUBMITTED
-        assert WriteOutcome.AMBIGUOUS != WriteOutcome.SUBMITTED
-        assert WriteOutcome.NOT_SUBMITTED != WriteOutcome.AMBIGUOUS
+        assert (
+            len(
+                {
+                    WriteOutcome.SUBMITTED,
+                    WriteOutcome.NOT_SUBMITTED,
+                    WriteOutcome.AMBIGUOUS,
+                }
+            )
+            == 3
+        )
 
 
 dataclasses_FrozenInstanceError = dataclasses_mod.FrozenInstanceError
@@ -313,7 +320,9 @@ class TestWriteRouted:
         call_kwargs = child0.transport.write_frame.call_args
         assert call_kwargs.kwargs.get("disable_tx_limits") is True
 
-    async def test_write_routed_falls_back_when_no_disable_tx_limits(self) -> None:
+    async def test_write_routed_falls_back_when_no_disable_tx_limits(
+        self,
+    ) -> None:
         """write_routed falls back when child doesn't accept disable_tx_limits."""
         child0 = _make_child(0, "18:111111")
         # Make write_frame raise TypeError for disable_tx_limits, then
@@ -357,9 +366,7 @@ class TestDefaultTransportInterface:
             def close(self) -> None:
                 pass
 
-            def get_extra_info(
-                self, name: str, default: Any = None
-            ) -> Any:
+            def get_extra_info(self, name: str, default: Any = None) -> Any:
                 return default
 
             async def send_frame(self, frame: str) -> None:
@@ -387,9 +394,7 @@ class TestDefaultTransportInterface:
             def close(self) -> None:
                 pass
 
-            def get_extra_info(
-                self, name: str, default: Any = None
-            ) -> Any:
+            def get_extra_info(self, name: str, default: Any = None) -> Any:
                 return default
 
             async def send_frame(self, frame: str) -> None:
@@ -413,9 +418,7 @@ class TestDefaultTransportInterface:
             def close(self) -> None:
                 pass
 
-            def get_extra_info(
-                self, name: str, default: Any = None
-            ) -> Any:
+            def get_extra_info(self, name: str, default: Any = None) -> Any:
                 return default
 
             async def send_frame(self, frame: str) -> None:
