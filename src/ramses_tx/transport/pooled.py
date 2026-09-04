@@ -54,7 +54,7 @@ _DEFAULT_DEDUP_WINDOW: float = 0.5
 _MAX_DEDUP_KEYS: int = 512
 
 #: RSSI value used when a child has no data yet (treated as neutral).
-_RSSI_UNKNOWN: int = 0
+_RSSI_UNKNOWN: int = -999  # Sentinel: no RSSI data (worse than any real dBm)
 
 #: Default health-check interval in seconds.  A child that has not
 #: received any packets for this duration is marked unhealthy.
