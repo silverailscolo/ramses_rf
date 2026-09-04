@@ -15,7 +15,6 @@ from typing import Any, Final
 
 from ramses_rf import quirks
 from ramses_rf.address import HGI_DEV_ADDR, NON_DEV_ADDR, Address
-from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent_
 from ramses_rf.const import (
     F9,
@@ -179,6 +178,7 @@ from ramses_rf.state_projector import (
     _get_dhw_zone_from_msg,
     _route_2411_to_fan,
 )
+from ramses_tx import Priority
 from ramses_tx.const import I_, RQ, Code
 
 # --- Translation Maps (Static Constant Blocks) ---
@@ -552,12 +552,16 @@ class StateProjector:
         if msg.code == Code._3EF0 and msg.verb == I_:
             src_dev = registry.device_by_id.get(msg.src.id)
             if src_dev and not getattr(src_dev, "is_faked", False):
-                from ramses_rf.devices.helpers import build_rq_cmd
-                from ramses_tx import Priority
-
                 try:
-                    command = build_rq_cmd(msg.src.id, Code._3EF1, "00")
-                    self._gateway.send_cmd(command, priority=Priority.LOW)
+                    intent_3ef1 = Intent_(
+                        src=HGI_DEV_ADDR,
+                        dst=Address(msg.src.id),
+                        action=Action.GET_RELAY_DEMAND,
+                        data={SZ_DOMAIN_INDEX: "00"},
+                    )
+                    self._gateway.dispatcher.send_background(
+                        intent_3ef1, priority=Priority.LOW
+                    )
                 except Exception as err:
                     _LOGGER.error(
                         "Failed to trigger CQRS 3EF1 reactor for %s: %s",
@@ -570,15 +574,13 @@ class StateProjector:
             src_dev = registry.device_by_id.get(msg.src.id)
             if src_dev and getattr(src_dev, "ctl", None):
                 try:
-                    dto = build_dto(
-                        Intent_(
-                            src=HGI_DEV_ADDR,
-                            dst=Address(src_dev.ctl.id),
-                            action=Action.GET_DHW_TEMP,
-                            data={SZ_DHW_INDEX: 0},
-                        )
+                    intent_1260 = Intent_(
+                        src=HGI_DEV_ADDR,
+                        dst=Address(src_dev.ctl.id),
+                        action=Action.GET_DHW_TEMP,
+                        data={SZ_DHW_INDEX: 0},
                     )
-                    self._gateway.send_cmd(dto)
+                    self._gateway.dispatcher.send_background(intent_1260)
                 except Exception as err:
                     _LOGGER.error(
                         "Failed to trigger CQRS 1260 reactor for %s: %s",

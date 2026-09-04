@@ -173,11 +173,11 @@ def shrink_dict(old_dict: Any, keys: tuple[str, ...]) -> Any:
 
 async def test_ports() -> dict[str, Any]:
     """Test the comports."""
-    import serial.tools.list_ports
+    import serialx
 
     return {
         p.device: p.description
-        for p in serial.tools.list_ports.comports()
+        for p in serialx.list_serial_ports()
         if p.description != "n/a"
     }
 

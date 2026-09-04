@@ -20,7 +20,6 @@ from ramses_rf.const import (
     SZ_RELAY_DEMAND,
     SZ_SETPOINT,
     SZ_TEMPERATURE,
-    SZ_ZONE_IDX,
     SZ_ZONE_INDEX,
     ZON_MODE_MAP,
     ZON_ROLE_MAP,
@@ -675,48 +674,15 @@ class Zone(ZoneSchedule):
         return str(ZON_ROLE_MAP[slug])
 
     async def name(self) -> str | None:  # 0004
-        """Get the name of the zone."""
-        # Primary check against the active CQRS State Projector
-        if self.zone_state.name is not None:
-            return self.zone_state.name
+        """Get the name of the zone.
 
-        # Retroactive Event-Sourced Hydration: Bypasses the soon-to-be-deleted
-        # EntityState by hydrating late-instantiated entities directly from the Store
-        if self._gateway.message_store:
-            msgs = await self._gateway.message_store.get(
-                code=Code._0004, source=self._z_id
-            )
-            for msg in reversed(msgs):
-                p_load = msg.payload
-                if isinstance(p_load, dict):
-                    if (
-                        str(p_load.get(SZ_ZONE_INDEX, p_load.get(SZ_ZONE_IDX)))
-                        == self.index
-                        and SZ_NAME in p_load
-                    ):
-                        self.zone_state = dataclasses.replace(
-                            self.zone_state, name=str(p_load[SZ_NAME])
-                        )
-                        return self.zone_state.name
-                elif isinstance(p_load, list):
-                    for item in p_load:
-                        if isinstance(item, dict):
-                            if (
-                                str(
-                                    item.get(
-                                        SZ_ZONE_INDEX, item.get(SZ_ZONE_IDX)
-                                    )
-                                )
-                                == self.index
-                                and SZ_NAME in item
-                            ):
-                                self.zone_state = dataclasses.replace(
-                                    self.zone_state, name=str(item[SZ_NAME])
-                                )
-                                return self.zone_state.name
+        Prefers live CQRS ZoneState from RF packets (0004), falling back to
+        static schema configuration (_name).
 
-        # Legacy fallback logic pending the F4-PR2 Lobotomy
-        return self._name
+        :returns: The zone name, or None if not set.
+        :rtype: str | None
+        """
+        return self.zone_state.name or self._name
 
     async def config(self) -> dict[str, Any] | None:  # 000A
         """Return zone configuration dictionary."""

@@ -20,9 +20,10 @@ from ramses_tx import Code, DeviceIdT, Packet
 def mock_gateway() -> Generator[MagicMock, None, None]:
     """Create a mock Gateway instance for testing."""
     gateway = MagicMock(spec=Gateway)
-    gateway.send_cmd = AsyncMock()
+    gateway._async_send_dto = AsyncMock()
     gateway.dispatcher = MagicMock()
-    gateway.dispatcher.send = MagicMock()
+    gateway.dispatcher.send = AsyncMock()
+    gateway.dispatcher.send_background = MagicMock()
 
     # Add required attributes
     gateway.config = MagicMock()

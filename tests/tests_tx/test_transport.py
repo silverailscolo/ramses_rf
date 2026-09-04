@@ -4,7 +4,7 @@
 import asyncio
 from functools import partial
 from typing import Any
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -136,19 +136,9 @@ async def test_factory_passes_config_to_standard_transport() -> None:
     mock_protocol.wait_for_connection_made = AsyncMock()
 
     # We patch where they are USED (factory.py), not where they are DEFINED
-    with (
-        patch(
-            "ramses_tx.transport.factory.PortTransport"
-        ) as MockPortTransport,
-        patch(
-            "ramses_tx.transport.factory.serial_for_url"
-        ) as mock_serial_for_url,
-    ):
-        # Setup the mock serial object to pass validity checks
-        mock_serial = Mock()
-        mock_serial.portstr = "/dev/ttyUSB0"
-        mock_serial_for_url.return_value = mock_serial
-
+    with patch(
+        "ramses_tx.transport.factory.PortTransport"
+    ) as MockPortTransport:
         # valid-looking config so factory enters the Serial branch
         port_config: Any = {}
         transport_config = TransportConfig(autostart=True)
@@ -208,31 +198,21 @@ async def test_port_transport_close_robustness() -> None:
     mock_protocol = Mock()
     mock_serial = Mock()
 
-    # Define a side_effect for SerialTransport.__init__ that sets required attributes
-    # PortTransport expects _loop to be set by the parent class
-    def mock_init(
-        self: Any, loop: Any, protocol: Any, serial_instance: Any
-    ) -> None:
-        self._loop = loop or asyncio.get_event_loop()
-        self._protocol = protocol
-        self._serial = serial_instance  # Set backing attribute directly
+    transport = PortTransport(
+        mock_serial, mock_protocol, config=TransportConfig()
+    )
 
-    # Patch SerialTransport.__init__ using 'new' to replace it with the function directly.
-    # This ensures 'self' is passed correctly, which doesn't happen with a standard Mock side_effect.
-    with patch(
-        "ramses_tx.transport.port.serial_asyncio.SerialTransport.__init__",
-        new=mock_init,
-    ):
-        transport = PortTransport(
-            mock_serial, mock_protocol, config=TransportConfig()
-        )
+    # Cancel auto-started connection task to avoid unawaited task warnings
+    for task in asyncio.all_tasks():
+        if task.get_name() == "PortTransport._create_connection()":
+            task.cancel()
 
-        # Pre-condition: _init_task is created asynchronously, so it shouldn't exist yet
-        # because we haven't yielded to the event loop
-        assert not hasattr(transport, "_init_task")
+    # Pre-condition: _init_task is created asynchronously, so it shouldn't exist yet
+    # because we haven't yielded to the event loop
+    assert not hasattr(transport, "_init_task")
 
-        # Execute close - should not raise AttributeError
-        transport.close()
+    # Execute close - should not raise AttributeError
+    transport.close()
 
 
 async def test_is_hgi80_async_file_check() -> None:
@@ -293,19 +273,18 @@ async def test_packet_read_raises_transport_error_when_loop_closed() -> None:
     after the asyncio loop has been closed, and call_soon_threadsafe would
     raise RuntimeError('Event loop is closed').
     """
-    loop = asyncio.get_event_loop()
-    transport = _make_read_transport(loop)
+    mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
+    mock_loop.is_closed.return_value = True
+    transport = _make_read_transport(mock_loop)
 
-    # Simulate a closed loop
-    with patch.object(type(loop), "is_closed", return_value=True):
-        from ramses_tx import Packet
+    from ramses_tx import Packet
 
-        packet = Packet.from_file(
-            "2026-07-13T04:40:36",
-            "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
-        )
-        with pytest.raises(exc.TransportError, match="Event loop is closed"):
-            transport._packet_read(packet)
+    packet = Packet.from_file(
+        "2026-07-13T04:40:36",
+        "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
+    )
+    with pytest.raises(exc.TransportError, match="Event loop is closed"):
+        transport._packet_read(packet)
 
 
 async def test_packet_read_raises_transport_error_on_runtime_error() -> None:
@@ -315,8 +294,12 @@ async def test_packet_read_raises_transport_error_on_runtime_error() -> None:
     and the call (race condition). The RuntimeError is caught and re-raised
     as TransportError so the MQTT _on_message handler can suppress it.
     """
-    loop = asyncio.get_event_loop()
-    transport = _make_read_transport(loop)
+    mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
+    mock_loop.is_closed.return_value = False
+    mock_loop.call_soon_threadsafe.side_effect = RuntimeError(
+        "Event loop is closed"
+    )
+    transport = _make_read_transport(mock_loop)
 
     from ramses_tx import Packet
 
@@ -325,30 +308,18 @@ async def test_packet_read_raises_transport_error_on_runtime_error() -> None:
         "045  I --- 18:130140 32:022222 --:------ 22F2 001 00",
     )
 
-    try:
-        # is_closed() returns False, but call_soon_threadsafe raises RuntimeError
-        with (
-            patch.object(type(loop), "is_closed", return_value=False),
-            patch.object(
-                loop,
-                "call_soon_threadsafe",
-                side_effect=RuntimeError("Event loop is closed"),
-            ),
-            pytest.raises(exc.TransportError, match="Event loop is closed"),
-        ):
-            transport._packet_read(packet)
-    finally:
-        await asyncio.sleep(0.01)
+    with pytest.raises(exc.TransportError, match="Event loop is closed"):
+        transport._packet_read(packet)
 
 
 async def test_close_does_not_crash_when_loop_closed() -> None:
     """_close() does not raise when the event loop is already closed."""
-    loop = asyncio.get_event_loop()
-    transport = _make_read_transport(loop)
+    mock_loop = MagicMock(spec=asyncio.AbstractEventLoop)
+    mock_loop.is_closed.return_value = True
+    transport = _make_read_transport(mock_loop)
 
-    with patch.object(type(loop), "is_closed", return_value=True):
-        # Should not raise
-        transport._close(None)
+    # Should not raise
+    transport._close(None)
 
     assert transport._closing is True
     # protocol.connection_lost should NOT have been called

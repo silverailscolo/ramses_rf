@@ -808,41 +808,25 @@ async def print_summary(gateway: Gateway, **kwargs: Any) -> None:
             for d in gateway.device_registry.devices
             if d.type == DEV_TYPE_MAP.CTL
         ]:
-            if gateway.message_store:
-                for msg in await gateway.message_store.get(
-                    source=device.id, code=Code._0005
-                ):
-                    print(f"{msg}")
-                for msg in await gateway.message_store.get(
-                    source=device.id, code=Code._000C
-                ):
-                    print(f"{msg}")
-            else:  # TODO(eb): replace next block by
-                #  raise NotImplementedError
-                for msg_code, verbs in (
-                    await device.entity_state.get_state_cache_nested()
-                ).items():
-                    if msg_code in (Code._0005, Code._000C):
-                        for verb in verbs.values():
-                            for packet in verb.values():
-                                print(f"{packet}")
+            for msg_code, verbs in (
+                await device.entity_state.get_state_cache_nested()
+            ).items():
+                if msg_code in (Code._0005, Code._000C):
+                    for verb in verbs.values():
+                        for packet in verb.values():
+                            print(f"{packet}")
             print()
         for device in [
             d
             for d in gateway.device_registry.devices
             if d.type == DEV_TYPE_MAP.UFC
         ]:
-            if gateway.message_store:
-                for msg in await gateway.message_store.get(source=device.id):
-                    print(f"{msg}")
-            else:  # TODO(eb): Q1 2026 replace next legacy block by
-                #  raise NotImplementedError
-                for cd in (
-                    await device.entity_state.get_state_cache_nested()
-                ).values():
-                    for verb in cd.values():
-                        for packet in verb.values():
-                            print(f"{packet}")
+            for cd in (
+                await device.entity_state.get_state_cache_nested()
+            ).values():
+                for verb in cd.values():
+                    for packet in verb.values():
+                        print(f"{packet}")
             print()
 
 

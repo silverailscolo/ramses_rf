@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, Protocol, runtime_checkable
 
 from ramses_rf.models import HvacState
-from ramses_tx.const import Code
+from ramses_tx.const import Code, IndexT
 
 
 @runtime_checkable
@@ -90,6 +90,47 @@ class HvacStrategy(Protocol):
         """
         ...
 
+    @property
+    def builtin_commands(self) -> dict[str, dict[str, str]]:
+        """Vendor-specific commands hardcoded in the strategy.
+
+        Each entry is a command name → dict template (with ``verb``,
+        ``code``, ``payload``, and ``type`` keys).  The ``type`` field
+        classifies the command (``"mode"``, ``"bypass"``, ``"filter"``,
+        etc.) so consumers can filter which commands appear in which
+        UI context.
+
+        :returns: Dict of command name → template.
+        :rtype: dict[str, dict[str, str]]
+        """
+        ...
+
+
+@runtime_checkable
+class VentilationControlStrategy(Protocol):
+    """Capability interface for CO2 binding and demand control."""
+
+    def co2_binding_codes(
+        self,
+    ) -> tuple[Code | tuple[IndexT, Code], ...]:
+        """Codes and domains offered by a CO2 sensor.
+
+        :returns: Ordered CO2 binding codes, optionally with domain indices.
+        :rtype: tuple[Code | tuple[IndexT, Code], ...]
+        """
+        ...
+
+    def ventilation_demand_payload(self, value: float) -> str:
+        """Encode a ventilation demand for this device capability.
+
+        :param value: Demand as a value from 0.0 to 1.0.
+        :type value: float
+        :returns: Encoded 31E0 payload.
+        :rtype: str
+        :raises ValueError: If this strategy does not support demand control.
+        """
+        ...
+
 
 class HvacStrategyBase:
     """Base implementation with all-vendor normalisations.
@@ -122,6 +163,8 @@ class HvacStrategyBase:
         "laag": "low",
         "hoog": "high",
         "gemiddeld": "medium",
+        "midden": "medium",
+        "minimaal": "trickle",
         "uit": "off",
         "afwezig": "away",
         "normaal": "normal",
@@ -279,3 +322,51 @@ class HvacStrategyBase:
         :rtype: tuple[Code, ...]
         """
         return self._binding_codes
+
+    def co2_binding_codes(
+        self,
+    ) -> tuple[Code | tuple[IndexT, Code], ...]:
+        """Return the generic CO2 sensor binding offer."""
+        return (Code._31E0, Code._1298, Code._2E10)
+
+    def ventilation_demand_payload(self, value: float) -> str:
+        """Reject ventilation demand when the capability is unknown."""
+        raise ValueError(
+            f"ventilation demand is not supported for scheme '{self.scheme}'"
+        )
+
+    #: Vendor-specific commands hardcoded in the strategy.
+    #: Subclasses override with vendor-specific commands (bypass, filter
+    #: reset, etc.).  Each entry is a command name → dict template with
+    #: ``verb``, ``code``, ``payload``, and ``type`` keys.
+    #:
+    #: The ``type`` field classifies the command so consumers can filter
+    #: which commands appear in which UI context (e.g. only ``"mode"``
+    #: commands in the fan_modes dropdown).  Valid types:
+    #:
+    #: - ``"mode"``        — 22F1: fan speed modes (away, low, high, boost, ...)
+    #: - ``"config"``      — 2411: configuration parameters (fan rates %, filter
+    #:                       time, moisture sensitivity, comfort temp, ...)
+    #: - ``"bypass"``      — 22F7: bypass valve control (auto, open, closed)
+    #: - ``"boost_timer"`` — 22F3: timed boost (high for N minutes)
+    #: - ``"info"``        — 10D0, 31DA: filter status/reset, ventilation state
+    #: - ``"other"``       — anything not in the standard code map
+    _builtin_commands: dict[str, dict[str, str]] = {}
+
+    @property
+    def builtin_commands(self) -> dict[str, dict[str, str]]:
+        """Vendor-specific commands hardcoded in the strategy.
+
+        Each entry is a command name → dict template (with ``verb``,
+        ``code``, ``payload``, and ``type`` keys).  The ``type`` field
+        classifies the command (``"mode"``, ``"bypass"``, ``"filter"``,
+        etc.) so consumers can filter which commands appear in which
+        UI context.
+
+        Base implementation returns an empty dict — subclasses override
+        to add vendor-specific commands.
+
+        :returns: Dict of command name → template.
+        :rtype: dict[str, dict[str, str]]
+        """
+        return dict(self._builtin_commands)

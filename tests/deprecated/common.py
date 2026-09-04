@@ -6,8 +6,7 @@ import logging
 import warnings
 from pathlib import Path
 
-from serial.serialutil import SerialException
-from serial.tools import list_ports
+from serialx import SerialException, list_serial_ports
 
 from ramses_rf import Gateway
 from ramses_rf.schemas import SCH_GLOBAL_CONFIG
@@ -24,7 +23,7 @@ TEST_DIR = Path(__file__).resolve().parent
 
 test_ports = {MOCKED_PORT: MockGateway}
 if ports := [
-    c for c in list_ports.comports() if c.device[-7:-1] in ("ttyACM", "ttyUSB")
+    c for c in list_serial_ports() if c.device[-7:-1] in ("ttyACM", "ttyUSB")
 ]:
     test_ports[ports[0].device] = Gateway
 

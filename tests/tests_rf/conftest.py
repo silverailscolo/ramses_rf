@@ -10,8 +10,7 @@ from typing import Any, Final, NoReturn, TypeAlias, TypedDict, cast
 from unittest.mock import patch
 
 import pytest
-import serial as ser
-from serial.tools.list_ports import comports
+import serialx as ser
 
 from ramses_rf import Gateway
 from ramses_rf.devices import HgiGateway
@@ -19,6 +18,7 @@ from ramses_rf.gateway import GatewayConfig
 from ramses_tx import exceptions as exc
 from ramses_tx.address import HGI_DEVICE_ID
 from ramses_tx.config import EngineConfig
+from ramses_tx.discovery import comports
 from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import DeviceIdT
 from tests_rf.virtual_rf import HgiFwTypes, VirtualRf
@@ -158,7 +158,9 @@ async def real_evofw3_port() -> PortStrT | NoReturn:
         return port_names[0]
 
     if port_names := [
-        p.device for p in comports() if p.name[:6] == "ttyACM"
+        p.device
+        for p in comports()
+        if os.path.basename(p.device)[:6] == "ttyACM"
     ]:  # HACK: evofw3-esp
         _LOGGER.warning("Assuming %s is evofw3-compatible", port_names[0])
         return port_names[0]
@@ -233,7 +235,10 @@ async def _fake_gateway(
 ) -> Gateway:
     """Wrapper to instantiate a virtual gateway."""
 
-    with patch("ramses_tx.discovery.comports", rf.comports):
+    with (
+        patch("ramses_tx.discovery.comports", rf.comports),
+        patch("serialx.async_list_serial_ports", rf.async_comports),
+    ):
         gwy = await _gateway(gwy_port, gwy_config)
 
     assert gwy._engine._transport  # mypy

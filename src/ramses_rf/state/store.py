@@ -101,7 +101,15 @@ class MessageStore(MessageStoreInterface):
         db_path: str = ":memory:",
         disk_path: str | None = "ramses.db",
     ) -> None:
-        """Instantiate a message database/index."""
+        """Instantiate a message database/index.
+
+        :param maintain: Whether to run background housekeeping/pruning loops.
+        :type maintain: bool
+        :param db_path: Database connection URI or path.
+        :type db_path: str
+        :param disk_path: Target disk path for SQLite DB, or None for in-memory only.
+        :type disk_path: str | None
+        """
         self.maintain = maintain
         # In-memory RAM caches (Filled & cleaned up in housekeeping_loop)
         # stores all messages for retrieval.

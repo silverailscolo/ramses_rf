@@ -66,7 +66,7 @@ def mock_gateway() -> MagicMock:
     gwy = MagicMock()
     gwy.config = GatewayConfig()
     gwy.device_registry.devices = []
-    gwy.async_send_cmd = AsyncMock()
+    gwy._async_send_dto = AsyncMock()
     gwy.add_task = MagicMock()
     return gwy
 
@@ -211,7 +211,7 @@ async def test_polling_manager_shadow_execution_parity(
     # ASSERT
     assert processed_count == len(DEFAULT_POLLING_SCHEDULES["CTL"])
     # Crucial Shadow Mode Guarantee: Zero RF network transmissions
-    mock_gateway.async_send_cmd.assert_not_called()
+    mock_gateway._async_send_dto.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -229,7 +229,7 @@ async def test_polling_manager_disabled_config_parity(
 
     # ASSERT
     assert processed_count == 0
-    mock_gateway.async_send_cmd.assert_not_called()
+    mock_gateway._async_send_dto.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -262,7 +262,7 @@ async def test_polling_manager_send_cmd_exception_handling(
     poller = PollingManager(mock_gateway, shadow_mode=False)
     bdr_dev = MockDevice(mock_gateway, "13:222222", slug="BDR")
     mock_gateway.device_registry.devices = [bdr_dev]
-    mock_gateway.async_send_cmd.side_effect = RamsesException(
+    mock_gateway._async_send_dto.side_effect = RamsesException(
         "Transmission failure"
     )
 
@@ -276,7 +276,7 @@ async def test_polling_manager_send_cmd_exception_handling(
 
     # ASSERT
     assert processed_count == 1
-    mock_gateway.async_send_cmd.assert_called_once()
+    mock_gateway._async_send_dto.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -332,9 +332,9 @@ async def test_polling_manager_live_dispatch_cutover(
 
     # ASSERT
     assert processed_count == len(DEFAULT_POLLING_SCHEDULES["CTL"])
-    assert mock_gateway.async_send_cmd.call_count == processed_count
+    assert mock_gateway._async_send_dto.call_count == processed_count
 
-    call_args = mock_gateway.async_send_cmd.call_args_list[0][0]
+    call_args = mock_gateway._async_send_dto.call_args_list[0][0]
     sent_dto: CommandDTO = call_args[0]
     assert sent_dto.verb == Verb.RQ
     assert sent_dto.addr1 == "18:000730"
@@ -487,12 +487,12 @@ async def test_polling_manager_0004_zone_uses_payload_in_cmd(
     # ASSERT: find the 0004 call and check its payload
     sent_codes = [
         call.args[0].code
-        for call in mock_gateway.async_send_cmd.call_args_list
+        for call in mock_gateway._async_send_dto.call_args_list
     ]
     assert Code._0004 in sent_codes
 
     # Find the 0004 call and verify payload contains zone_index
-    for call in mock_gateway.async_send_cmd.call_args_list:
+    for call in mock_gateway._async_send_dto.call_args_list:
         dto: CommandDTO = call.args[0]
         if dto.code == Code._0004:
             assert dto.payload == "0500", (
@@ -592,11 +592,11 @@ async def test_polling_manager_30C9_zone_uses_payload_in_cmd(
     # ASSERT: find the 30C9 call and check its payload
     sent_codes = [
         call.args[0].code
-        for call in mock_gateway.async_send_cmd.call_args_list
+        for call in mock_gateway._async_send_dto.call_args_list
     ]
     assert Code._30C9 in sent_codes
 
-    for call in mock_gateway.async_send_cmd.call_args_list:
+    for call in mock_gateway._async_send_dto.call_args_list:
         dto: CommandDTO = call.args[0]
         if dto.code == Code._30C9:
             assert dto.payload == "0B", (
@@ -645,11 +645,11 @@ async def test_polling_manager_2349_zone_uses_payload_in_cmd(
     # ASSERT: find the 2349 call and check its payload
     sent_codes = [
         call.args[0].code
-        for call in mock_gateway.async_send_cmd.call_args_list
+        for call in mock_gateway._async_send_dto.call_args_list
     ]
     assert Code._2349 in sent_codes
 
-    for call in mock_gateway.async_send_cmd.call_args_list:
+    for call in mock_gateway._async_send_dto.call_args_list:
         dto: CommandDTO = call.args[0]
         if dto.code == Code._2349:
             assert dto.payload == "0B00", (
@@ -868,11 +868,11 @@ async def test_polling_manager_otb_live_dispatch_transmits_data_id_payloads(
     # Assert
     # 2 device-level tasks + 6 Data-ID tasks = 8 total
     assert processed_count == 8
-    assert mock_gateway.async_send_cmd.call_count == 8
+    assert mock_gateway._async_send_dto.call_count == 8
 
     # Extract all 3220 commands sent
     sent_3220_payloads: set[str] = set()
-    for call in mock_gateway.async_send_cmd.call_args_list:
+    for call in mock_gateway._async_send_dto.call_args_list:
         dto: CommandDTO = call.args[0]
         assert dto.addr2 == "10:048122"
         assert dto.verb == Verb.RQ

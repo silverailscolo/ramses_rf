@@ -12,9 +12,10 @@ from typing import TYPE_CHECKING, Any, Final
 
 from ramses_rf import exceptions as exc
 from ramses_rf.address import HGI_DEV_ADDR, Address
-from ramses_rf.commands.builders import build_dto
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import (
+    FC,
+    HW,
     SZ_FRAGMENT_NUMBER,
     SZ_LOG_INDEX,
     SZ_MESSAGE_ID,
@@ -26,7 +27,7 @@ from ramses_rf.devices import Controller, Fakeable
 from ramses_rf.enums import Action
 from ramses_rf.protocol.opentherm import OPENTHERM_DATA_IDS
 from ramses_rf.protocol.ramses import CODE_NAME_LOOKUP, RQ_NO_PAYLOAD
-from ramses_tx import CommandDTO, DeviceIdT, Priority
+from ramses_tx import CommandDTO, DeviceIdT, Packet, Priority
 from ramses_tx.address import NON_DEV_ADDR
 from ramses_tx.const import RQ, W_, Code
 
@@ -50,6 +51,31 @@ SCAN_XXXX: Final = "scan_xxxx"
 _LOGGER = logging.getLogger(__name__)
 
 
+def _send_probe_dto(
+    gateway: Gateway,
+    command: CommandDTO,
+    /,
+    *,
+    priority: Priority = Priority.DEFAULT,
+    num_repeats: int = 1,
+) -> asyncio.Task[Packet]:
+    """Schedule low-level command transmission as a background task for CLI discovery scripts."""
+    coro = gateway._async_send_dto(
+        command, priority=priority, num_repeats=num_repeats
+    )
+    task = gateway._engine._loop.create_task(coro)
+
+    def _clear_exc(fut: asyncio.Task[Any]) -> None:
+        if not fut.cancelled() and fut.exception():
+            _LOGGER.debug(
+                "Background discovery task failed: %s", fut.exception()
+            )
+
+    task.add_done_callback(_clear_exc)
+    gateway.add_task(task)
+    return task
+
+
 def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
     """Decorate a script to broadcast 'Script begins:' and 'Script done.' messages.
 
@@ -59,28 +85,26 @@ def script_decorator(fnc: Callable[..., Any]) -> Callable[..., Any]:
 
     @functools.wraps(fnc)
     async def wrapper(gateway: Gateway, *args: Any, **kwargs: Any) -> None:
-        command = build_dto(
-            Intent(
-                src=HGI_DEV_ADDR,
-                dst=HGI_DEV_ADDR,
-                action=Action.SEND_PUZZLE,
-                data={"message": "Script begins:"},
-            )
+        start_intent = Intent(
+            src=HGI_DEV_ADDR,
+            dst=HGI_DEV_ADDR,
+            action=Action.SEND_PUZZLE,
+            data={"message": "Script begins:"},
         )
-        gateway.send_cmd(command, priority=Priority.HIGHEST, num_repeats=3)
+        gateway.dispatcher.send_background(
+            start_intent, priority=Priority.HIGHEST
+        )
 
         await fnc(gateway, *args, **kwargs)
 
-        finish_command = build_dto(
-            Intent(
-                src=HGI_DEV_ADDR,
-                dst=HGI_DEV_ADDR,
-                action=Action.SEND_PUZZLE,
-                data={"message": "Script done."},
-            )
+        finish_intent = Intent(
+            src=HGI_DEV_ADDR,
+            dst=HGI_DEV_ADDR,
+            action=Action.SEND_PUZZLE,
+            data={"message": "Script done."},
         )
-        gateway.send_cmd(
-            finish_command, priority=Priority.LOWEST, num_repeats=3
+        gateway.dispatcher.send_background(
+            finish_intent, priority=Priority.LOWEST
         )
 
     return wrapper
@@ -140,7 +164,7 @@ async def exec_cmd(gateway: Gateway, **kwargs: Any) -> None:
     :param kwargs: CLI parameters containing the 'EXEC_CMD' string.
     """
     command = CommandDTO.from_cli(kwargs[EXEC_CMD])
-    await gateway.async_send_cmd(command, priority=Priority.HIGH)
+    await gateway._async_send_dto(command, priority=Priority.HIGH)
 
 
 async def get_faults(
@@ -173,73 +197,74 @@ async def get_schedule(
     """Retrieve the zone schedule for a specific zone under a controller.
 
     :param gateway: The gateway instance.
-    :param controller_id: The device ID of the controller.
-    :param zone_index: The zone index string (e.g. "00" or "HW").
+    :param controller_id: The device ID of the controller to query.
+    :param zone_index: The zone index to fetch schedule for.
     """
     controller = gateway.device_registry.get_device(
         controller_id, cls=Controller
     )
-    if not controller.tcs:
-        _LOGGER.error("get_schedule(): Controller has no TCS active.")
-        return
-
-    zone = controller.tcs.get_htg_zone(zone_index)
 
     try:
-        await zone.get_schedule()
+        if zone_index == HW:
+            if controller.tcs and controller.tcs.dhw:
+                await controller.tcs.dhw.get_schedule()
+        elif controller.tcs:
+            zone = controller.tcs.get_htg_zone(zone_index)
+            if zone:
+                await zone.get_schedule()
     except exc.ExpiredCallbackError as err:
         _LOGGER.error("get_schedule(): Function timed out: %s", err)
 
 
 async def set_schedule(
-    gateway: Gateway, controller_id: DeviceIdT, schedule: str
+    gateway: Gateway, controller_id: DeviceIdT, schedule_input: str | Any
 ) -> None:
     """Set the zone schedule for a specific zone under a controller via JSON payload.
 
     :param gateway: The gateway instance.
-    :param controller_id: The device ID of the controller.
-    :param schedule: A JSON string describing the full schedule dictionary.
+    :param controller_id: The device ID of the controller to command.
+    :param schedule_input: A JSON string, file-like object, or file path describing the schedule.
     """
-    schedule_ = json.loads(schedule)
-    zone_index = schedule_.get(SZ_ZONE_INDEX, schedule_.get("zone_index"))
+    if hasattr(schedule_input, "read"):
+        schedule_ = json.load(schedule_input)
+    elif isinstance(schedule_input, str):
+        try:
+            schedule_ = json.loads(schedule_input)
+        except json.JSONDecodeError:
+            with open(schedule_input) as schedule_file:  # noqa: ASYNC230
+                schedule_ = json.load(schedule_file)
+    else:
+        schedule_ = schedule_input
+
+    zone_index = schedule_.get(
+        SZ_ZONE_INDEX, schedule_.get("zone_index", "00")
+    )
+    schedule = schedule_.get(SZ_SCHEDULE, schedule_)
 
     controller = gateway.device_registry.get_device(
         controller_id, cls=Controller
     )
-    if not controller.tcs:
-        _LOGGER.error("set_schedule(): Controller has no TCS active.")
-        return
-
-    zone = controller.tcs.get_htg_zone(zone_index)
 
     try:
-        await zone.set_schedule(schedule_[SZ_SCHEDULE])  # 0404
+        if zone_index == HW:
+            if controller.tcs and controller.tcs.dhw:
+                await controller.tcs.dhw.set_schedule(schedule)
+        elif controller.tcs:
+            zone = controller.tcs.get_htg_zone(zone_index)
+            if zone:
+                await zone.set_schedule(schedule)
+
     except exc.ExpiredCallbackError as err:
         _LOGGER.error("set_schedule(): Function timed out: %s", err)
 
 
-async def script_bind_req(
-    gateway: Gateway, device_id: DeviceIdT, code: Code = Code._2309
-) -> None:
-    """Make the targeted device artificially enter a supplicant bind phase.
-
-    :param gateway: The gateway instance.
-    :param device_id: The device ID to transition to binding state.
-    :param code: The code to offer during the bind request.
-    """
-    device = gateway.device_registry.get_device(device_id)
-    assert isinstance(device, Fakeable)  # mypy
-    device._make_fake()
-    await device._initiate_binding_process([code])
-
-
-async def script_bind_wait(
+async def script_bind_device(
     gateway: Gateway,
     device_id: DeviceIdT,
-    code: Code = Code._2309,
+    code: Code,
     zone_index: IndexT = "00",
 ) -> None:
-    """Make the targeted device artificially enter a respondent bind phase.
+    """Put a device into binding mode and wait for binding packets to exchange.
 
     :param gateway: The gateway instance.
     :param device_id: The device ID to transition to binding state.
@@ -270,7 +295,7 @@ def script_poll_device(
     ) -> None:
         async def periodic_(interval_: float) -> None:
             await asyncio.sleep(interval_)
-            gateway.send_cmd(command, priority=Priority.LOW)
+            _send_probe_dto(gateway, command, priority=Priority.LOW)
 
         if interval is None:
             interval = 0 if count == 1 else 60
@@ -325,16 +350,15 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
     """
     _LOGGER.warning("scan_full() invoked - expect a lot of Warnings")
 
-    gateway.send_cmd(
-        (
-            CommandDTO(
-                verb=RQ,
-                addr1=HGI_DEV_ADDR.id,
-                addr2=device_id,
-                addr3=NON_DEV_ADDR.id,
-                code=Code._0016,
-                payload="0000",
-            )
+    _send_probe_dto(
+        gateway,
+        CommandDTO(
+            verb=RQ,
+            addr1=HGI_DEV_ADDR.id,
+            addr2=device_id,
+            addr3=NON_DEV_ADDR.id,
+            code=Code._0016,
+            payload="0000",
         ),
         num_repeats=3,
     )
@@ -342,7 +366,8 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
     for code in sorted(CODE_NAME_LOOKUP):
         if code == Code._0005:
             for zone_type in range(20):  # known up to 18
-                gateway.send_cmd(
+                _send_probe_dto(
+                    gateway,
                     CommandDTO(
                         verb=RQ,
                         addr1=HGI_DEV_ADDR.id,
@@ -350,12 +375,13 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         addr3=NON_DEV_ADDR.id,
                         code=code,
                         payload=f"00{zone_type:02X}",
-                    )
+                    ),
                 )
 
         elif code == Code._000C:
             for zone_index in range(16):  # also: FA-FF?
-                gateway.send_cmd(
+                _send_probe_dto(
+                    gateway,
                     CommandDTO(
                         verb=RQ,
                         addr1=HGI_DEV_ADDR.id,
@@ -363,15 +389,16 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         addr3=NON_DEV_ADDR.id,
                         code=code,
                         payload=f"{zone_index:02X}00",
-                    )
+                    ),
                 )
 
         elif code == Code._0016:
             continue
 
         elif code in (Code._01D0, Code._01E9):
-            for str_zone_index in ("00", "01", "FC"):
-                gateway.send_cmd(
+            for str_zone_index in ("00", "01", FC):
+                _send_probe_dto(
+                    gateway,
                     CommandDTO(
                         verb=W_,
                         addr1=HGI_DEV_ADDR.id,
@@ -379,9 +406,10 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         addr3=NON_DEV_ADDR.id,
                         code=code,
                         payload=f"{str_zone_index}00",
-                    )
+                    ),
                 )
-                gateway.send_cmd(
+                _send_probe_dto(
+                    gateway,
                     CommandDTO(
                         verb=W_,
                         addr1=HGI_DEV_ADDR.id,
@@ -389,88 +417,77 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                         addr3=NON_DEV_ADDR.id,
                         code=code,
                         payload=f"{str_zone_index}03",
-                    )
+                    ),
                 )
 
         elif code == Code._0404:  # FIXME
-            cmd1 = build_dto(
-                Intent(
-                    src=HGI_DEV_ADDR,
-                    dst=Address(device_id),
-                    action=Action.GET_SCHEDULE_FRAGMENT,
-                    data={
-                        SZ_ZONE_INDEX: "HW",
-                        SZ_FRAGMENT_NUMBER: 1,
-                        SZ_TOTAL_FRAGMENTS: 0,
-                    },
-                )
+            intent1 = Intent(
+                src=HGI_DEV_ADDR,
+                dst=Address(device_id),
+                action=Action.GET_SCHEDULE_FRAGMENT,
+                data={
+                    SZ_ZONE_INDEX: HW,
+                    SZ_FRAGMENT_NUMBER: 1,
+                    SZ_TOTAL_FRAGMENTS: 0,
+                },
             )
-            gateway.send_cmd(cmd1)
-            cmd2 = build_dto(
-                Intent(
-                    src=HGI_DEV_ADDR,
-                    dst=Address(device_id),
-                    action=Action.GET_SCHEDULE_FRAGMENT,
-                    data={
-                        SZ_ZONE_INDEX: "00",
-                        SZ_FRAGMENT_NUMBER: 1,
-                        SZ_TOTAL_FRAGMENTS: 0,
-                    },
-                )
+            gateway.dispatcher.send_background(intent1)
+            intent2 = Intent(
+                src=HGI_DEV_ADDR,
+                dst=Address(device_id),
+                action=Action.GET_SCHEDULE_FRAGMENT,
+                data={
+                    SZ_ZONE_INDEX: "00",
+                    SZ_FRAGMENT_NUMBER: 1,
+                    SZ_TOTAL_FRAGMENTS: 0,
+                },
             )
-            gateway.send_cmd(cmd2)
+            gateway.dispatcher.send_background(intent2)
 
         elif code == Code._0418:
             for log_index in range(2):
-                cmd3 = build_dto(
-                    Intent(
-                        src=HGI_DEV_ADDR,
-                        dst=Address(device_id),
-                        action=Action.GET_FAULTLOG_ENTRY,
-                        data={SZ_LOG_INDEX: log_index},
-                    )
+                intent3 = Intent(
+                    src=HGI_DEV_ADDR,
+                    dst=Address(device_id),
+                    action=Action.GET_FAULTLOG_ENTRY,
+                    data={SZ_LOG_INDEX: log_index},
                 )
-                gateway.send_cmd(cmd3)
+                gateway.dispatcher.send_background(intent3)
 
         elif code == Code._1100:
-            cmd4 = build_dto(
-                Intent(
-                    src=HGI_DEV_ADDR,
-                    dst=Address(device_id),
-                    action=Action.GET_TPI_PARAMS,
-                    data={},
-                )
+            intent4 = Intent(
+                src=HGI_DEV_ADDR,
+                dst=Address(device_id),
+                action=Action.GET_TPI_PARAMS,
+                data={},
             )
-            gateway.send_cmd(cmd4)
+            gateway.dispatcher.send_background(intent4)
 
         elif code == Code._2E04:
-            command = build_dto(
-                Intent(
-                    src=HGI_DEV_ADDR,
-                    dst=Address(device_id),
-                    action=Action.GET_SYSTEM_MODE,
-                    data={},
-                )
+            intent_mode = Intent(
+                src=HGI_DEV_ADDR,
+                dst=Address(device_id),
+                action=Action.GET_SYSTEM_MODE,
+                data={},
             )
-            gateway.send_cmd(command)
+            gateway.dispatcher.send_background(intent_mode)
 
         elif code == Code._3220:
             for data_id in (0, 3):  # these are mandatory READ_DATA data_ids
-                command = build_dto(
-                    Intent(
-                        src=HGI_DEV_ADDR,
-                        dst=Address(device_id),
-                        action=Action.GET_OPENTHERM_DATA,
-                        data={"msg_id": data_id},
-                    )
+                intent_ot = Intent(
+                    src=HGI_DEV_ADDR,
+                    dst=Address(device_id),
+                    action=Action.GET_OPENTHERM_DATA,
+                    data={SZ_MESSAGE_ID: data_id},
                 )
-                gateway.send_cmd(command)
+                gateway.dispatcher.send_background(intent_ot)
 
         elif code == Code._PUZZ:
             continue
 
         elif code in RQ_NO_PAYLOAD:
-            gateway.send_cmd(
+            _send_probe_dto(
+                gateway,
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
@@ -478,11 +495,12 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                     addr3=NON_DEV_ADDR.id,
                     code=code,
                     payload="00",
-                )
+                ),
             )
 
         else:
-            gateway.send_cmd(
+            _send_probe_dto(
+                gateway,
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
@@ -490,12 +508,13 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                     addr3=NON_DEV_ADDR.id,
                     code=code,
                     payload="0000",
-                )
+                ),
             )
 
     # these are possible/difficult codes
     for code in (Code._0150, Code._2389):
-        gateway.send_cmd(
+        _send_probe_dto(
+            gateway,
             CommandDTO(
                 verb=RQ,
                 addr1=HGI_DEV_ADDR.id,
@@ -503,7 +522,7 @@ async def script_scan_full(gateway: Gateway, device_id: DeviceIdT) -> None:
                 addr3=NON_DEV_ADDR.id,
                 code=code,
                 payload="0000",
-            )
+            ),
         )
 
 
@@ -522,16 +541,14 @@ async def script_scan_hard(
     start_code = start_code or 0
 
     for code in range(start_code, 0x5000):
-        await gateway.async_send_cmd(
-            (
-                CommandDTO(
-                    verb=RQ,
-                    addr1=HGI_DEV_ADDR.id,
-                    addr2=device_id,
-                    addr3=NON_DEV_ADDR.id,
-                    code=f"{code:04X}",
-                    payload="0000",
-                )
+        await gateway._async_send_dto(
+            CommandDTO(
+                verb=RQ,
+                addr1=HGI_DEV_ADDR.id,
+                addr2=device_id,
+                addr3=NON_DEV_ADDR.id,
+                code=f"{code:04X}",
+                payload="0000",
             ),
             priority=Priority.LOW,
         )
@@ -557,7 +574,8 @@ async def script_scan_fan(gateway: Gateway, device_id: DeviceIdT) -> None:
         c for k in _DEV_KLASSES_HVAC.values() for c in k if c not in OUT_CODES
     )
     for code in OLD_CODES:
-        gateway.send_cmd(
+        _send_probe_dto(
+            gateway,
             CommandDTO(
                 verb=RQ,
                 addr1=HGI_DEV_ADDR.id,
@@ -565,7 +583,7 @@ async def script_scan_fan(gateway: Gateway, device_id: DeviceIdT) -> None:
                 addr3=NON_DEV_ADDR.id,
                 code=code,
                 payload="00",
-            )
+            ),
         )
 
     NEW_CODES = (
@@ -595,7 +613,8 @@ async def script_scan_fan(gateway: Gateway, device_id: DeviceIdT) -> None:
 
     for code in NEW_CODES:
         if code not in OLD_CODES and code not in OUT_CODES:
-            gateway.send_cmd(
+            _send_probe_dto(
+                gateway,
                 CommandDTO(
                     verb=RQ,
                     addr1=HGI_DEV_ADDR.id,
@@ -603,7 +622,7 @@ async def script_scan_fan(gateway: Gateway, device_id: DeviceIdT) -> None:
                     addr3=NON_DEV_ADDR.id,
                     code=code,
                     payload="00",
-                )
+                ),
             )
 
 
@@ -617,15 +636,13 @@ async def script_scan_otb(gateway: Gateway, device_id: DeviceIdT) -> None:
     _LOGGER.warning("script_scan_otb_full invoked - expect a lot of nonsense")
 
     for msg_id in OPENTHERM_DATA_IDS:
-        command = build_dto(
-            Intent(
-                src=HGI_DEV_ADDR,
-                dst=Address(device_id),
-                action=Action.GET_OPENTHERM_DATA,
-                data={SZ_MESSAGE_ID: msg_id},
-            )
+        intent = Intent(
+            src=HGI_DEV_ADDR,
+            dst=Address(device_id),
+            action=Action.GET_OPENTHERM_DATA,
+            data={SZ_MESSAGE_ID: msg_id},
         )
-        gateway.send_cmd(command)
+        gateway.dispatcher.send_background(intent)
 
 
 @script_decorator
@@ -638,15 +655,13 @@ async def script_scan_otb_hard(gateway: Gateway, device_id: DeviceIdT) -> None:
     _LOGGER.warning("script_scan_otb_hard invoked - expect a lot of nonsense")
 
     for msg_id in range(0x80):
-        command = build_dto(
-            Intent(
-                src=HGI_DEV_ADDR,
-                dst=Address(device_id),
-                action=Action.GET_OPENTHERM_DATA,
-                data={"msg_id": msg_id},
-            )
+        intent = Intent(
+            src=HGI_DEV_ADDR,
+            dst=Address(device_id),
+            action=Action.GET_OPENTHERM_DATA,
+            data={SZ_MESSAGE_ID: msg_id},
         )
-        gateway.send_cmd(command, priority=Priority.LOW)
+        gateway.dispatcher.send_background(intent, priority=Priority.LOW)
 
 
 @script_decorator
@@ -672,28 +687,25 @@ async def script_scan_otb_map(gateway: Gateway, device_id: DeviceIdT) -> None:
     }
 
     for code, msg_id in RAMSES_TO_OPENTHERM.items():
-        gateway.send_cmd(
-            (
-                CommandDTO(
-                    verb=RQ,
-                    addr1=HGI_DEV_ADDR.id,
-                    addr2=device_id,
-                    addr3=NON_DEV_ADDR.id,
-                    code=code,
-                    payload="00",
-                )
+        _send_probe_dto(
+            gateway,
+            CommandDTO(
+                verb=RQ,
+                addr1=HGI_DEV_ADDR.id,
+                addr2=device_id,
+                addr3=NON_DEV_ADDR.id,
+                code=code,
+                payload="00",
             ),
             priority=Priority.LOW,
         )
-        command = build_dto(
-            Intent(
-                src=HGI_DEV_ADDR,
-                dst=Address(device_id),
-                action=Action.GET_OPENTHERM_DATA,
-                data={"msg_id": msg_id},
-            )
+        intent = Intent(
+            src=HGI_DEV_ADDR,
+            dst=Address(device_id),
+            action=Action.GET_OPENTHERM_DATA,
+            data={SZ_MESSAGE_ID: msg_id},
         )
-        gateway.send_cmd(command, priority=Priority.LOW)
+        gateway.dispatcher.send_background(intent, priority=Priority.LOW)
 
 
 @script_decorator
@@ -725,7 +737,7 @@ async def script_scan_otb_ramses(
         Code._1260,  # dhw temp               / DHWTemperature
         Code._1290,  # outdoor temp           / OutsideTemperature
         Code._3200,  # boiler output temp     / BoilerWaterTemperature
-        Code._3210,  # boiler return temp     / ReturnWaterTemperature
+        Code._3210,  # boiler return temp     / BoilerWaterTemperature
         Code._0150,
         Code._12F0,  # dhw flow rate          / DHWFlowRate
         Code._1098,
@@ -737,16 +749,15 @@ async def script_scan_otb_ramses(
     )
 
     for code in _CODES:
-        gateway.send_cmd(
-            (
-                CommandDTO(
-                    verb=RQ,
-                    addr1=HGI_DEV_ADDR.id,
-                    addr2=device_id,
-                    addr3=NON_DEV_ADDR.id,
-                    code=code,
-                    payload="00",
-                )
+        _send_probe_dto(
+            gateway,
+            CommandDTO(
+                verb=RQ,
+                addr1=HGI_DEV_ADDR.id,
+                addr2=device_id,
+                addr3=NON_DEV_ADDR.id,
+                code=code,
+                payload="00",
             ),
             priority=Priority.LOW,
         )

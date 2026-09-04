@@ -998,3 +998,31 @@ async def test_otb_gateway_schema_and_params_constants(
     assert SZ_RAMSES_II_SCHEMA in schema
     assert SZ_OPENTHERM_PARAMS in params
     assert SZ_RAMSES_II_PARAMS in params
+
+
+@pytest.mark.asyncio
+async def test_has_battery_read_model(
+    mock_gwy: MagicMock, mock_addr: MagicMock
+) -> None:
+    """Verify has_battery correctly checks BatteryState and power_state."""
+    # Arrange
+    thm = Thermostat(mock_gwy, mock_addr)
+    bdr_addr = MagicMock(spec=Address)
+    bdr_addr.id = "13:123456"
+    bdr_addr.type = "13"
+    bdr = BdrSwitch(mock_gwy, bdr_addr)
+
+    # Act
+    thm_has_bat = await thm.has_battery()
+    bdr_has_bat = await bdr.has_battery()
+
+    # Assert
+    assert thm_has_bat is True
+    assert bdr_has_bat is False
+
+    # Act 2 - Non-BatteryState device with power_state hydrated
+    bdr.power_state = replace(bdr.power_state, battery_low=False)
+    bdr_hydrated_bat = await bdr.has_battery()
+
+    # Assert 2
+    assert bdr_hydrated_bat is True

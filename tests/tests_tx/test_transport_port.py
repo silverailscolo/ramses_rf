@@ -5,20 +5,25 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from serial import SerialException
+from serialx import BaseSerialTransport, SerialException
 
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_SIGNATURE, Code
 from ramses_tx.exceptions import TransportSerialError
-from ramses_tx.transport.port import PortTransport, limit_duty_cycle
+from ramses_tx.transport.port import (
+    PortTransport,
+    _PortBridgeProtocol,
+    limit_duty_cycle,
+)
 
 pytestmark = pytest.mark.asyncio
 
 
 def _get_transport() -> PortTransport:
     # Helper to instantiate a PortTransport with safely mocked deps
-    mock_serial = MagicMock()
+    mock_serial = MagicMock(spec=BaseSerialTransport)
+    mock_serial.serial = MagicMock()
     mock_serial.name = "/dev/ttyUSB0"
-    mock_serial.fileno.return_value = 1  # Prevent dummy FD errors
+    mock_serial.serial.name = "/dev/ttyUSB0"
     mock_protocol = MagicMock()
     mock_config = MagicMock()
 
@@ -57,41 +62,43 @@ async def test_limit_duty_cycle_decorator_limits_execution() -> None:
             pass
 
     transport = DummyTransport()
+    transport._tx_bits_in_bucket = 10.0
+    from time import perf_counter
 
-    # The first write should initialize and partially empty the bucket
-    await transport.write("1" * 50)
-    assert transport._tx_bits_in_bucket is not None
-    assert transport._tx_last_time_bit_added is not None
+    transport._tx_last_time_bit_added = perf_counter()
+
+    # Passing a frame larger than bucket capacity should trigger sleep
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        await transport.write("000 " * 50)
+        mock_sleep.assert_called_once()
 
 
 async def test_limit_duty_cycle_decorator_null_wrapper() -> None:
-    # Dummy class to test when limits are disabled (<= 0)
+    # Test duty cycle = 0 or <= 0 returns null_wrapper
     class DummyTransport:
         @limit_duty_cycle(0)
         async def write(self, frame: str) -> None:
             pass
 
     transport = DummyTransport()
-    # Should safely execute without setting any duty cycle bucket limits
-    await transport.write("1" * 50)
-    assert not hasattr(transport, "_tx_bits_in_bucket")
+    with patch("asyncio.sleep", AsyncMock()) as mock_sleep:
+        await transport.write("000 " * 50)
+        mock_sleep.assert_not_called()
 
 
-async def test_port_transport_init_initializes_future_immediately() -> None:
-    # Issue #583 Fix Test: Ensure future exists before I/O fires
+async def test_initialization_sets_up_queues_and_callbacks() -> None:
+    # Test PortTransport creation and default states
     transport = _get_transport()
-
-    assert hasattr(transport, "_init_fut")
-    assert isinstance(transport._init_fut, asyncio.Future)
+    assert transport._port_name == "/dev/ttyUSB0"
+    assert transport._serial_transport is not None
+    assert transport._init_fut is not None
     assert not transport._init_fut.done()
 
-    # Simulate read_ready firing immediately before any connection tasks
-    transport.serial.read.return_value = b"000 00:000000 00:000000 00\r\n"
+    # Simulate data_received firing immediately before any connection tasks
     transport._frame_read = MagicMock()
+    transport._data_received(b"000 00:000000 00:000000 00\r\n")
 
-    # This previously raised AttributeError: 'PortTransport' has no _init_fut
-    transport._read_ready()
-
+    assert transport._frame_read.call_count == 1
     transport._close()
 
 
@@ -101,8 +108,11 @@ async def test_create_connection_sans_signature() -> None:
     transport._disable_sending = True
     transport._make_connection = MagicMock()
 
-    with patch("ramses_tx.transport.port.is_hgi80", AsyncMock()):
+    with patch(
+        "ramses_tx.transport.port.is_hgi80", AsyncMock(return_value=False)
+    ):
         await transport._create_connection()
+        assert transport._init_task is not None
         await transport._init_task  # Await the actual initialization task
 
     assert transport._init_fut.done()
@@ -133,13 +143,16 @@ async def test_create_connection_with_signature_success() -> None:
     transport._write_frame.side_effect = delayed_resolve
 
     with (
-        patch("ramses_tx.transport.port.is_hgi80", AsyncMock()),
+        patch(
+            "ramses_tx.transport.port.is_hgi80", AsyncMock(return_value=False)
+        ),
         patch(
             "ramses_tx.transport.port.CommandDTO",
             return_value=mock_sig,
         ),
     ):
         await transport._create_connection()
+        assert transport._init_task is not None
         await transport._init_task  # Await the actual initialization task
 
     assert transport._init_fut.done()
@@ -149,41 +162,72 @@ async def test_create_connection_with_signature_success() -> None:
 
 
 async def test_create_connection_with_signature_timeout() -> None:
-    # Test timeout raising TransportSerialError when no signature replies
+    # Test timeout falling back to connect_sans_signature when no signature replies
     transport = _get_transport()
     transport._disable_sending = False
+    transport._make_connection = MagicMock()
+    transport._write_frame = AsyncMock()
 
     with (
-        patch("ramses_tx.transport.port.is_hgi80", AsyncMock()),
+        patch(
+            "ramses_tx.transport.port.is_hgi80", AsyncMock(return_value=False)
+        ),
         patch("ramses_tx.transport.port.CommandDTO", MagicMock()),
-        patch("asyncio.wait_for", side_effect=TimeoutError),
-        pytest.raises(TransportSerialError),
+        patch("ramses_tx.transport.port._SIGNATURE_MAX_TRYS", 2),
+        patch("ramses_tx.transport.port._SIGNATURE_GAP_SECS", 0.001),
     ):
         await transport._create_connection()
+        assert transport._init_task is not None
+        await transport._init_task
 
+    assert transport._init_fut.done()
+    assert transport._init_fut.result() is None
+    transport._make_connection.assert_called_once_with(gateway_id=None)
     transport._close()
 
 
-async def test_read_ready_processes_buffer_lines() -> None:
+async def test_create_connection_serial_exception_fails() -> None:
+    # Test serial connection error raises TransportSerialError
+    mock_protocol = MagicMock()
+    mock_config = MagicMock()
+
+    with (
+        patch(
+            "serialx.create_serial_connection",
+            side_effect=SerialException("Port error"),
+        ),
+    ):
+        transport = PortTransport(
+            "/dev/ttyUSB99",
+            mock_protocol,
+            config=mock_config,
+        )
+        await transport._create_connection()
+
+    assert transport._init_fut.done()
+    with pytest.raises(TransportSerialError):
+        transport._init_fut.result()
+    transport._close()
+
+
+async def test_data_received_processes_buffer_lines() -> None:
     # Test byte buffer accumulation and splitting on newlines
     transport = _get_transport()
     transport._frame_read = MagicMock()
     transport._dt_now = MagicMock()
 
     # Split lines to ensure buffer concatenates properly
-    transport.serial.read.side_effect = [b"000 ", b"18:111111 00\r\n", b""]
-
-    transport._read_ready()
+    transport._data_received(b"000 ")
     transport._frame_read.assert_not_called()  # No newline, no call
 
-    transport._read_ready()
+    transport._data_received(b"18:111111 00\r\n")
     assert transport._frame_read.call_count == 1  # Reached newline
 
     transport._close()
 
 
-async def test_read_ready_handles_serial_exception() -> None:
-    # Test safe abortion on serial disconnection
+async def test_read_ready_compatibility_handles_serial_exception() -> None:
+    # Test safe abortion on serial disconnection via read_ready
     transport = _get_transport()
     transport._close = MagicMock()
     transport._closing = False
@@ -198,6 +242,41 @@ async def test_read_ready_handles_serial_exception() -> None:
     transport._closing = True
     transport._read_ready()
     transport._close.assert_not_called()
+
+
+async def test_connection_lost_handles_error() -> None:
+    # Test connection_lost callback closing the transport
+    transport = _get_transport()
+    transport._close = MagicMock()
+    transport._closing = False
+
+    transport._connection_lost(SerialException("Connection Reset"))
+    transport._close.assert_called_once()
+    transport._close.reset_mock()
+
+    transport._closing = True
+    transport._connection_lost(None)
+    transport._close.assert_not_called()
+
+
+async def test_bridge_protocol_callbacks() -> None:
+    # Test _PortBridgeProtocol delegating to PortTransport
+    transport = _get_transport()
+    bridge = _PortBridgeProtocol(transport)
+
+    mock_serial_transport = MagicMock(spec=BaseSerialTransport)
+    bridge.connection_made(mock_serial_transport)
+    assert transport._serial_transport == mock_serial_transport
+
+    transport._data_received = MagicMock()
+    bridge.data_received(b"test data\r\n")
+    transport._data_received.assert_called_once_with(b"test data\r\n")
+
+    transport._connection_lost = MagicMock()
+    bridge.connection_lost(None)
+    transport._connection_lost.assert_called_once_with(None)
+
+    transport._close()
 
 
 async def test_packet_read_resolves_init_fut_on_signature_echo() -> None:
@@ -262,11 +341,7 @@ async def test_abort_and_close_cancels_tasks() -> None:
     mock_init_task.cancel.assert_called_once()
     mock_leaker_task.cancel.assert_called_once()
 
-    # Patch the _abort method residing on the _PortTransportAbstractor class
-    with patch(
-        "ramses_tx.transport.port._PortTransportAbstractor._abort", create=True
-    ):
-        transport._abort(SerialException("Fatal"))
+    transport._abort(SerialException("Fatal"))
 
     assert mock_init_task.cancel.call_count == 2
     assert mock_leaker_task.cancel.call_count == 2

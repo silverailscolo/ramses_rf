@@ -4,112 +4,46 @@
 from __future__ import annotations
 
 import asyncio
-import glob
 import logging
 import os
-import sys
-from functools import partial
-from typing import Protocol
 
-from serial import SerialException, serial_for_url
+import serialx
+from serialx import SerialException, serial_for_url
 
 from . import exceptions as exc
 from .typing import SerPortNameT
 
 _LOGGER = logging.getLogger(__name__)
 
-
-# NOTE: The upstream pyserial stubs expose different concrete types per
-# platform (Windows/Posix/Linux).  We consolidate the common attributes we
-# rely on inside a tiny Protocol so that mypy sees one consistent shape whatever
-# the host OS is, and (importantly) so that our comports() wrapper can keep a
-# single signature across the conditional branches below.
-class _PortInfo(Protocol):
-    device: str
-    product: str | None
-    vid: int | None
-    name: str
-
-
 __all__ = ["comports", "is_hgi80"]
 
-# OS-Specific imports and overrides
-if sys.platform == "win32":
-    from serial.tools.list_ports_windows import comports as _win_comports
 
-    def comports(
-        include_links: bool = False,
-        _hide_subsystems: list[str] | None = None,
-    ) -> list[_PortInfo]:
-        """Return a list of available serial comports on Windows."""
-        # Windows ignores the Linux-only keyword arguments, but keeping them in
-        # the signature keeps type-checkers happy because all branches now look
-        # identical.
-        del include_links, _hide_subsystems
-        return list(_win_comports())
+def comports(
+    include_links: bool = False,
+    _hide_subsystems: list[str] | None = None,
+) -> list[serialx.SerialPortInfo]:
+    """Return a list of available serial port info objects.
 
-elif os.name != "posix":
-    raise ImportError(
-        f"Sorry: no implementation for your platform ('{os.name}') available"
-    )
-
-elif sys.platform.lower()[:5] != "linux":
-    from serial.tools.list_ports_posix import comports as _posix_comports
-
-    def comports(
-        include_links: bool = False,
-        _hide_subsystems: list[str] | None = None,
-    ) -> list[_PortInfo]:
-        """Return a list of available serial comports on POSIX/macOS."""
-        # Same reasoning as the Windows branch: pyserial does not take these
-        # kwargs on macOS/Unix, but exposing them suppresses "definition differs"
-        # errors when mypy analyses this file on other platforms.
-        del include_links, _hide_subsystems
-        return list(_posix_comports())
-
-else:
-    from serial.tools.list_ports_linux import SysFS
-
-    def list_links(devices: set[str]) -> list[str]:
-        """Search for symlinks to ports already listed in devices."""
-        links: list[str] = []
-        for device in glob.glob("/dev/*") + glob.glob("/dev/serial/by-id/*"):
-            if os.path.islink(device) and os.path.realpath(device) in devices:
-                links.append(device)
-        return links
-
-    def comports(
-        include_links: bool = False,
-        _hide_subsystems: list[str] | None = None,
-    ) -> list[_PortInfo]:
-        """Return a list of Serial objects for all known serial ports."""
-        if _hide_subsystems is None:
-            _hide_subsystems = ["platform"]
-
-        devices = set()
-        with open("/proc/tty/drivers") as file:
-            drivers = file.readlines()
-            for driver in drivers:
-                items = driver.strip().split()
-                if items[4] == "serial":
-                    devices.update(glob.glob(items[1] + "*"))
-
-        if include_links:
-            devices.update(list_links(devices))
-
-        # map(SysFS, ...) yields SysFS objects lazily; the cast at the end tells
-        # the type-checker that every branch of comports() ultimately returns
-        # something satisfying _PortInfo.
-        result: list[SysFS] = [
-            d
-            for d in map(SysFS, devices)
-            if d.subsystem not in _hide_subsystems
-        ]
-        return list(result)
+    :param include_links: Ignored, retained for backwards compatibility.
+    :type include_links: bool
+    :param _hide_subsystems: Ignored, retained for backwards compatibility.
+    :type _hide_subsystems: list[str] | None
+    :returns: List of serial port information objects.
+    :rtype: list[serialx.SerialPortInfo]
+    """
+    del include_links, _hide_subsystems
+    return serialx.list_serial_ports()
 
 
 async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
-    """Return True if device has attributes of a Honeywell HGI80."""
+    """Return True if device has attributes of a Honeywell HGI80.
+
+    :param serial_port: Name or URL of the serial port to inspect.
+    :type serial_port: SerPortNameT
+    :returns: True if HGI80, False if evofw3/FTDI, None if unknown.
+    :rtype: bool | None
+    :raises exc.TransportSerialError: If port does not exist or URL invalid.
+    """
     if serial_port[:7] == "mqtt://":
         return False  # ramses_esp
 
@@ -133,10 +67,8 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
             return False
 
     try:
-        komports = await loop.run_in_executor(
-            None, partial(comports, include_links=True)
-        )
-    except ImportError as err:
+        komports = await serialx.async_list_serial_ports()
+    except (SerialException, OSError) as err:
         raise exc.TransportSerialError(
             f"Unable to find {serial_port}: {err}"
         ) from err
@@ -150,9 +82,7 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
     elif vid in (0x0403, 0x1B4F):  # FTDI, SparkFun
         return False
 
-    product = {x.device: getattr(x, "product", None) for x in komports}.get(
-        serial_port
-    )
+    product = {x.device: x.product for x in komports}.get(serial_port)
 
     if not product:
         pass
@@ -162,12 +92,12 @@ async def is_hgi80(serial_port: SerPortNameT) -> bool | None:
         return False
 
     _LOGGER.warning(
-        f"{serial_port}: the gateway type is not determinable, "
-        "will assume evofw3"
-        + (
+        "%s: the gateway type is not determinable, will assume evofw3%s",
+        serial_port,
+        (
             ", TIP: specify the serial port by-id (i.e. /dev/serial/by-id/usb-...)"
             if "by-id" not in serial_port
             else ""
-        )
+        ),
     )
     return None

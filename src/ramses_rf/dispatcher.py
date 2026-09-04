@@ -133,9 +133,14 @@ async def process_msg(gateway: Gateway, msg: Message) -> None:
 
     else:
         _log_message(gateway, msg)
+        if hasattr(gateway, "_state_cache") and hasattr(
+            gateway, "_history_lock"
+        ):
+            with gateway._history_lock:
+                gateway._state_cache[msg.state_header] = msg
         if gateway.message_store:
+            # Asynchronous background logging sink if SQLite is enabled
             gateway.message_store.add(msg)
-            # why add it? enable for evohome
 
 
 # TODO: this needs cleaning up (e.g. handle intervening packet)

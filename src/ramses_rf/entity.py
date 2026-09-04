@@ -3,13 +3,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from inspect import getmembers, isclass
 from sys import modules
 from typing import TYPE_CHECKING, Any
-
-from ramses_tx import Priority, QosParams
 
 from .models import (
     DemandState,
@@ -25,7 +22,7 @@ from .models import (
 from .state import EntityState
 
 if TYPE_CHECKING:
-    from ramses_tx import CommandDTO, Packet
+    from ramses_tx import Packet
     from ramses_tx.typing import DeviceIdT, DevIndexT
 
     from .gateway import Gateway
@@ -153,60 +150,6 @@ class _Entity:
             self, "power_state"
         ):
             setattr(self, "power_state", event.state)  # noqa: B010
-
-    def _send_cmd(
-        self, command: CommandDTO, **kwargs: Any
-    ) -> asyncio.Task[Any] | None:
-        """Proxy command sending to the Gateway.
-
-        :param command: The command to send.
-        :type command: CommandDTO
-        :param kwargs: Optional sending parameters (e.g., priority).
-        :type kwargs: Any
-        :returns: The corresponding asyncio Task or None.
-        :rtype: asyncio.Task[Any] | None
-        """
-        if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.info("%s < Sending was deprecated for %s", command, self)
-            return None
-
-        return self._gateway.send_cmd(command, **kwargs)
-
-    async def _async_send_cmd(
-        self,
-        command: CommandDTO,
-        priority: Priority | None = None,
-        qos: QosParams | None = None,
-    ) -> Packet | None:
-        """Proxy asynchronous command sending to the Gateway.
-
-        :param command: The command to send.
-        :type command: CommandDTO
-        :param priority: Transmission priority, defaults to None.
-        :type priority: Priority | None, optional
-        :param qos: Quality of Service parameters, defaults to None.
-        :type qos: QosParams | None, optional
-        :returns: The response or echo packet.
-        :rtype: Packet | None
-        """
-        if self._qos_tx_count > _QOS_TX_LIMIT:
-            _LOGGER.warning(
-                "%s < Sending was deprecated for %s", command, self
-            )
-            return None
-
-        # Build kwargs dynamically to prevent passing `None` to strict Gateway args
-        kwargs: dict[str, Any] = {}
-        if priority is not None:
-            kwargs["priority"] = priority
-
-        if qos:
-            if hasattr(qos, "max_retries") and qos.max_retries is not None:
-                kwargs["max_retries"] = qos.max_retries
-            if hasattr(qos, "timeout") and qos.timeout is not None:
-                kwargs["timeout"] = qos.timeout
-
-        return await self._gateway.async_send_cmd(command, **kwargs)
 
 
 class Entity(_Entity):

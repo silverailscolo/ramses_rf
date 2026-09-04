@@ -1,6 +1,8 @@
-#!/usr/bin/env python3
-"""Unittests for the ramses_cli discovery.py module."""
+from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncGenerator
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,8 +16,7 @@ from ramses_cli.discovery import (
     exec_cmd,
     get_faults,
     get_schedule,
-    script_bind_req,
-    script_bind_wait,
+    script_bind_device,
     script_decorator,
     script_poll_device,
     script_scan_disc,
@@ -31,25 +32,31 @@ from ramses_cli.discovery import (
 )
 from ramses_rf.const import SZ_SCHEDULE, SZ_ZONE_INDEX
 from ramses_rf.gateway import Gateway
+from ramses_tx.const import Code
 
 # Constants for testing
 DEV_ID = "01:123456"
 
 
 @pytest.fixture
-def mock_gateway() -> MagicMock:
+async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     """Create a mock Gateway instance."""
     gateway = MagicMock(spec=Gateway)
     # Important: Set the class so isinstance(gwy, Gateway) returns True
     gateway.__class__ = Gateway  # type: ignore[assignment]
 
-    gateway.send_cmd = MagicMock()
-    gateway.async_send_cmd = AsyncMock()
+    gateway._async_send_dto = AsyncMock()
+    gateway.dispatcher = MagicMock()
+    gateway.dispatcher.send_background = MagicMock()
 
     # Fix: explicitly attach the _engine mock to bypass the spec
     gateway._engine = MagicMock()
     gateway._engine._tasks = []
     gateway._engine.ser_name = "/dev/ttyUSB0"
+    gateway._engine._loop = asyncio.get_running_loop()
+    gateway.add_task = MagicMock(
+        side_effect=lambda task: gateway._engine._tasks.append(task)
+    )
 
     # Mock device retrieval
     mock_dev = MagicMock()
@@ -76,7 +83,11 @@ def mock_gateway() -> MagicMock:
     gateway.config.disable_discovery = False
     gateway.config.enable_eavesdrop = False
 
-    return gateway
+    yield gateway
+
+    for task in gateway._engine._tasks:
+        if not task.done():
+            task.cancel()
 
 
 @pytest.mark.asyncio
@@ -146,7 +157,7 @@ async def test_execution_of_exec_cmd(mock_gateway: MagicMock) -> None:
     """Test execution of exec_cmd logic."""
     kwargs = {EXEC_CMD: "RQ --- 01:123456 --:------ 01:123456 1F09 00"}
     await exec_cmd(mock_gateway, **kwargs)
-    mock_gateway.async_send_cmd.assert_awaited()
+    mock_gateway._async_send_dto.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -167,10 +178,13 @@ async def test_execution_of_get_schedule(mock_gateway: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_execution_of_set_schedule(mock_gateway: MagicMock) -> None:
+async def test_execution_of_set_schedule(
+    mock_gateway: MagicMock, tmp_path: Path
+) -> None:
     """Test execution of set_schedule logic."""
-    sched_json = f'{{"{SZ_ZONE_INDEX}": "01", "{SZ_SCHEDULE}": []}}'
-    await set_schedule(mock_gateway, DEV_ID, sched_json)  # type: ignore[arg-type]
+    sched_file = tmp_path / "sched.json"
+    sched_file.write_text(f'{{"{SZ_ZONE_INDEX}": "01", "{SZ_SCHEDULE}": []}}')
+    await set_schedule(mock_gateway, DEV_ID, str(sched_file))  # type: ignore[arg-type]
     mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
     mock_zone = mock_dev.tcs.get_htg_zone("01")
     mock_zone.set_schedule.assert_awaited_once()
@@ -179,9 +193,6 @@ async def test_execution_of_set_schedule(mock_gateway: MagicMock) -> None:
 @pytest.mark.asyncio
 async def test_script_decorator_behavior(mock_gateway: MagicMock) -> None:
     """Test that script decorator sends start/end commands and executes body."""
-
-    # We define a dummy script to decorate, so we test the decorator logic itself
-    # rather than patching create_task inside it (which was incorrect)
     mock_body = AsyncMock()
 
     @script_decorator
@@ -192,8 +203,7 @@ async def test_script_decorator_behavior(mock_gateway: MagicMock) -> None:
     await dummy_script(mock_gateway, DEV_ID)
 
     # Verify: Puzzle Start -> Body -> Puzzle End
-    # We expect 2 sync send_cmd calls (puzzles) and the body to be awaited
-    assert mock_gateway.send_cmd.call_count == 2
+    assert mock_gateway.dispatcher.send_background.call_count == 2
     mock_body.assert_awaited_once_with(mock_gateway, DEV_ID)
 
 
@@ -214,7 +224,10 @@ async def test_script_scan_full(mock_gateway: MagicMock) -> None:
     with patch("ramses_cli.discovery.range", return_value=iter([1])):
         await script_scan_full(mock_gateway, DEV_ID)
 
-    assert mock_gateway.send_cmd.called
+    assert (
+        mock_gateway._async_send_dto.called
+        or mock_gateway.dispatcher.send_background.called
+    )
 
 
 @pytest.mark.asyncio
@@ -224,14 +237,14 @@ async def test_script_scan_hard(mock_gateway: MagicMock) -> None:
     with patch("ramses_cli.discovery.range", return_value=iter([0x4FFF])):
         await script_scan_hard(mock_gateway, DEV_ID)
 
-    assert mock_gateway.send_cmd.called or mock_gateway.async_send_cmd.called
+    assert mock_gateway._async_send_dto.called
 
 
 @pytest.mark.asyncio
 async def test_script_scan_fan(mock_gateway: MagicMock) -> None:
     """Test script_scan_fan."""
     await script_scan_fan(mock_gateway, DEV_ID)
-    assert mock_gateway.send_cmd.called
+    assert mock_gateway._async_send_dto.called
 
 
 @pytest.mark.asyncio
@@ -244,7 +257,11 @@ async def test_script_scan_otb_group(mock_gateway: MagicMock) -> None:
         await script_scan_otb_ramses(mock_gateway, DEV_ID)
         await script_scan_otb_hard(mock_gateway, DEV_ID)
 
-    assert mock_gateway.send_cmd.call_count > 5
+    assert (
+        mock_gateway._async_send_dto.call_count
+        + mock_gateway.dispatcher.send_background.call_count
+        > 5
+    )
 
 
 @pytest.mark.asyncio
@@ -259,11 +276,8 @@ async def test_script_binding(mock_gateway: MagicMock) -> None:
     )
 
     with patch("ramses_cli.discovery.Fakeable", MockFakeable):
-        await script_bind_req(mock_gateway, DEV_ID)  # type: ignore[arg-type]
+        await script_bind_device(mock_gateway, DEV_ID, Code._2309)  # type: ignore[arg-type]
         mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
-        mock_dev._initiate_binding_process.assert_awaited()
-
-        await script_bind_wait(mock_gateway, DEV_ID)  # type: ignore[arg-type]
         mock_dev._wait_for_binding_request.assert_awaited()
 
 
@@ -279,7 +293,7 @@ async def test_script_binding_fail(mock_gateway: MagicMock) -> None:
         patch("ramses_cli.discovery.Fakeable", RealFakeable),
         pytest.raises((AssertionError, TypeError)),
     ):
-        await script_bind_req(mock_gateway, DEV_ID)  # type: ignore[arg-type]
+        await script_bind_device(mock_gateway, DEV_ID, Code._2309)  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio

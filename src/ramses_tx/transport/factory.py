@@ -4,13 +4,10 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import os
 from collections.abc import Awaitable, Callable
-from typing import Any, Final, TypeAlias
-
-from serial import Serial, SerialException, serial_for_url
+from typing import Final, TypeAlias
 
 from .. import exceptions as exc
 from ..interfaces import TransportInterface
@@ -41,7 +38,7 @@ async def transport_factory(
     packet_dict: dict[str, str] | None = None,
     transport_constructor: Callable[..., Awaitable[RamsesTransportT]]
     | None = None,
-    extra: dict[str, Any] | None = None,
+    extra: dict[str, object] | None = None,
     loop: asyncio.AbstractEventLoop | None = None,
 ) -> RamsesTransportT:
     """Create and return a Ramses-specific async packet Transport.
@@ -84,53 +81,14 @@ async def transport_factory(
             loop=loop,
         )
 
-    def get_serial_instance(
-        ser_name: SerPortNameT, ser_config: PortConfigT | None
-    ) -> Serial:
-        """Return a Serial instance for the given port name and config.
-
-        May: raise TransportSourceInvalid("Unable to open serial port...")
-
-        :param ser_name: Name of the serial port.
-        :type ser_name: SerPortNameT
-        :param ser_config: Configuration for the serial port.
-        :type ser_config: PortConfigT | None
-        :return: Configured Serial object.
-        :rtype: Serial
-        :raises exc.TransportSourceInvalid: If the serial port cannot be opened.
-        """
-        # For example:
-        # - python client.py monitor 'rfc2217://localhost:5001'
-        # - python client.py monitor 'alt:///dev/ttyUSB0?class=PosixPollSerial'
-
-        ser_config = SCH_SERIAL_PORT_CONFIG(ser_config or {})
-
-        try:
-            ser_obj = serial_for_url(ser_name, **ser_config)
-        except SerialException as err:
-            _LOGGER.error(
-                "Failed to open %s (config: %s): %s", ser_name, ser_config, err
-            )
-            raise exc.TransportSourceInvalid(
-                f"Unable to open the serial port: {ser_name}"
-            ) from err
-
-        # FTDI on Posix/Linux would be a common environment for this library...
-        with contextlib.suppress(
-            AttributeError, NotImplementedError, ValueError
-        ):
-            ser_obj.set_low_latency_mode(True)
-
-        return ser_obj
-
     def issue_warning() -> None:
         """Warn of the perils of semi-supported configurations."""
         _LOGGER.warning(
-            f"{'Windows' if os.name == 'nt' else 'This type of serial interface'} "
-            "is not fully supported by this library: "
+            "%s is not fully supported by this library: "
             "please don't report any Transport/Protocol errors/warnings, "
             "unless they are reproducible with a standard configuration "
-            "(e.g. linux with a local serial port)"
+            "(e.g. linux with a local serial port)",
+            "Windows" if os.name == "nt" else "This type of serial interface",
         )
 
     if (
@@ -138,7 +96,10 @@ async def transport_factory(
         != 1
     ):
         _LOGGER.warning(
-            f"Input: packet_dict: {packet_dict}, packet_log: {packet_log}, port_name: {port_name}"
+            "Input: packet_dict: %s, packet_log: %s, port_name: %s",
+            packet_dict,
+            packet_log,
+            port_name,
         )
         raise exc.TransportSourceInvalid(
             "Packet source must be exactly one of: packet_dict, packet_log, port_name"
@@ -197,25 +158,31 @@ async def transport_factory(
         return transport
 
     # Serial
-    ser_instance = get_serial_instance(port_name, port_config)
+    ser_config = SCH_SERIAL_PORT_CONFIG(port_config)
 
-    if os.name == "nt" or (
-        ser_instance.portstr
-        and ser_instance.portstr[:7] in ("rfc2217", "socket:")
-    ):
-        issue_warning()  # TODO: add tests for these...
+    if os.name == "nt" or port_name.startswith(("rfc2217://", "socket://")):
+        issue_warning()
 
     transport_port = PortTransport(
-        ser_instance,
+        port_name,
         protocol,
+        port_config=ser_config,
         config=config,
         extra=extra,
         loop=loop,
     )
 
-    # TODO: remove this? better to invoke timeout after factory returns?
-    await protocol.wait_for_connection_made(
-        timeout=config.timeout or _DEFAULT_TIMEOUT_PORT
-    )
-    # pytest-cov times out in virtual_rf.py when set below 30.0 on GitHub Actions
+    try:
+        await protocol.wait_for_connection_made(
+            timeout=config.timeout or _DEFAULT_TIMEOUT_PORT
+        )
+    except exc.TransportSerialError as err:
+        transport_port.close()
+        raise exc.TransportSourceInvalid(
+            f"Unable to open the serial port {port_name}: {err}"
+        ) from err
+    except Exception:
+        transport_port.close()
+        raise
+
     return transport_port

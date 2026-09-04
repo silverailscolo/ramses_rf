@@ -15,7 +15,7 @@ import re
 from collections import deque
 from collections.abc import Callable
 from datetime import datetime as dt, timedelta as td
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 
 from ..address import ALL_DEV_ADDR, HGI_DEV_ADDR, NON_DEV_ADDR
 from ..const import (
@@ -47,10 +47,6 @@ from ..schemas import (
 )
 from ..typing import DeviceIdT, MsgFilterT, MsgHandlerT, QosParams
 
-if TYPE_CHECKING:
-    from .fsm import ProtocolContext
-
-
 TIP: Final[str] = (
     f", configure the {SZ_SCHEMA}/{SZ_KNOWN_LIST}/{SZ_BLOCK_LIST} as required"
 )
@@ -81,7 +77,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._handler_tasks: set[asyncio.Task[Any]] = set()
 
         self._transport: TransportInterface | None = None
-        self._loop = asyncio.get_running_loop()
+
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = asyncio.get_event_loop()
 
         # Start in R/O mode; wait for connection_made() to resume writing
         self._pause_writing: bool = True
@@ -96,7 +96,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._is_evofw3: bool | None = None
 
         self._active_hgi: DeviceIdT | None = None
-        self._context: ProtocolContext | None = None
 
         # regex rules and sync trackers
         self._inbound_regex: dict[str, str] = {}
@@ -385,11 +384,6 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
 
         # Patch command with actual HGI ID if it uses the default placeholder
         patched_cmd = self._patch_cmd_if_needed(command)
-
-        if qos and not self._context:
-            _LOGGER.warning(
-                "%s < QoS is currently disabled by this Protocol", patched_cmd
-            )
 
         if patched_cmd.addr1 != self.hgi_id:  # Was HGI_DEV_ADDR.id
             await self._send_impersonation_alert(patched_cmd)

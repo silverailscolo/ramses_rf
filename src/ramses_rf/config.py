@@ -314,7 +314,7 @@ class GatewayConfig:
     :type debug_mode: bool
     :param gateway_timeout: Custom timeout threshold in minutes.
     :type gateway_timeout: int | None
-    :param database_path: Target disk path for the SQLite DB.
+    :param database_path: Target disk path for SQLite DB logging, or None to disable.
     :type database_path: str | None
     :param known_list: A list of known device IDs and their traits.
     :type known_list: dict[str, Any]

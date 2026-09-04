@@ -155,8 +155,9 @@ async def test_gateway_replay_regression(snapshot: SnapshotAssertion) -> None:
     # We use AsyncMock to ensure a proper coroutine is returned for asyncio.create_task.
     mock_send = AsyncMock(return_value=None)
 
-    with patch.object(gwy, "async_send_cmd", mock_send):
+    with patch.object(gwy, "_async_send_dto", mock_send):
         # 3. Start the Gateway (spawns the reader task)
+
         # The library's `start()` method has a strict 1s timeout for file parsing.
         # Large regression files take longer, raising TransportError.
         # We catch this expected timeout gracefully.
