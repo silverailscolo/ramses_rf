@@ -551,7 +551,9 @@ class PooledTransport(TransportInterface):
                         return True
             # Callback-driven children (e.g. ramses_esp via MQTT)
             # are treated as evofw3-compatible.
-            if any(c.is_connected and c.callback_driven for c in self._children):
+            if any(
+                c.is_connected and c.callback_driven for c in self._children
+            ):
                 return True
             return default
         if name == "pool_stats":
