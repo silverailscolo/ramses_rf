@@ -117,6 +117,7 @@ def _make_callback_pool(
     hgi_ids: list[str] | None = None,
     outbound: _FakeOutbound | None = None,
     discovery: _FakeDiscovery | None = None,
+    accepted_hgi_ids: set[str] | None = None,
 ) -> tuple[PooledTransport, MqttCallbackPoolAdapter, _FakeOutbound]:
     """Create a PooledTransport with a callback adapter."""
     proto = proto or _make_mock_protocol()
@@ -144,6 +145,7 @@ def _make_callback_pool(
         hgi_ids,
         outbound,
         discovery_callback=discovery,
+        accepted_hgi_ids=accepted_hgi_ids,
     )
     return pool, adapter, outbound
 
@@ -580,3 +582,88 @@ async def test_write_routed_broker_down_returns_not_submitted() -> None:
     outcome = await pool.write_routed(routed, "frame")
     assert outcome.name == "NOT_SUBMITTED"
     assert len(outbound.published) == 0
+
+
+# -- accepted_hgi_ids: ownerless discovery candidates are receive-only ------
+
+
+def test_accepted_hgi_ids_marks_ownerless_as_not_accepted(
+    event_loop: asyncio.AbstractEventLoop,
+) -> None:
+    """Ownerless discovery candidates have accepted=False."""
+    pool, adapter, _ = _make_callback_pool(
+        event_loop=event_loop,
+        hgi_ids=["18:001111", "18:002222"],
+        accepted_hgi_ids={"18:001111"},  # only 18:001111 is accepted
+    )
+    child0 = pool._child_by_id(0)
+    child1 = pool._child_by_id(1)
+    assert child0.accepted is True  # accepted
+    assert child1.accepted is False  # ownerless discovery candidate
+
+
+def test_ownerless_candidate_not_sendable_even_when_online(
+    event_loop: asyncio.AbstractEventLoop,
+) -> None:
+    """An ownerless candidate that is online is NOT sendable."""
+    pool, adapter, _ = _make_callback_pool(
+        event_loop=event_loop,
+        hgi_ids=["18:001111", "18:002222"],
+        accepted_hgi_ids={"18:001111"},
+    )
+    # Bring the ownerless candidate online.
+    adapter.on_child_online("18:002222")
+    child1 = pool._child_by_id(1)
+    assert child1.is_connected
+    assert child1.send_ready
+    assert not child1.accepted
+    assert not child1.is_sendable  # accepted=False blocks sendable
+
+
+def test_ownerless_candidate_not_selected_for_outbound(
+    event_loop: asyncio.AbstractEventLoop,
+) -> None:
+    """An ownerless candidate is not selected for outbound routing."""
+    pool, adapter, outbound = _make_callback_pool(
+        event_loop=event_loop,
+        hgi_ids=["18:001111", "18:002222"],
+        accepted_hgi_ids={"18:001111"},
+    )
+    # Bring both children online.
+    adapter.on_child_online("18:001111")
+    adapter.on_child_online("18:002222")
+    # _select_child should only return accepted children.
+    selected = pool._select_child("04:123456")
+    assert selected is not None
+    assert selected.child_id == 0  # only the accepted child
+
+
+async def test_ownerless_candidate_cannot_transmit(
+    event_loop: asyncio.AbstractEventLoop,
+) -> None:
+    """write_routed for an ownerless candidate returns NOT_SUBMITTED."""
+    pool, adapter, outbound = _make_callback_pool(
+        event_loop=event_loop,
+        hgi_ids=["18:001111", "18:002222"],
+        accepted_hgi_ids={"18:001111"},
+    )
+    adapter.on_child_online("18:002222")  # ownerless candidate online
+    from ramses_tx.routing import RoutedCommand
+
+    routed = RoutedCommand(child_id="1", command=MagicMock())
+    outcome = await pool.write_routed(routed, "frame")
+    assert outcome.name == "NOT_SUBMITTED"
+    assert len(outbound.published) == 0
+
+
+def test_no_accepted_hgi_ids_means_all_accepted(
+    event_loop: asyncio.AbstractEventLoop,
+) -> None:
+    """When accepted_hgi_ids is None, all children are accepted (backward compat)."""
+    pool, _, _ = _make_callback_pool(
+        event_loop=event_loop,
+        hgi_ids=["18:001111", "18:002222"],
+        accepted_hgi_ids=None,
+    )
+    assert pool._child_by_id(0).accepted is True
+    assert pool._child_by_id(1).accepted is True

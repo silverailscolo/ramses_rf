@@ -56,6 +56,10 @@ class MqttCallbackPoolAdapter:
     :param outbound: The outbound publisher for frame delivery.
     :param discovery_callback: Optional callback for unknown HGIs
         observed on the wildcard topic.
+    :param accepted_hgi_ids: Optional set of HGI IDs that are
+        accepted pool members (may transmit).  HGIs not in this
+        set are receive-only discovery candidates.  If ``None``,
+        all configured HGIs are accepted (backward-compatible).
     """
 
     def __init__(
@@ -65,6 +69,7 @@ class MqttCallbackPoolAdapter:
         outbound: MqttPoolOutbound,
         *,
         discovery_callback: MqttDiscoveryCallback | None = None,
+        accepted_hgi_ids: set[str] | None = None,
     ) -> None:
         """Initialise the callback pool adapter."""
         self._pool = pool
@@ -84,10 +89,17 @@ class MqttCallbackPoolAdapter:
             child = pool._child_by_id(i)
             child.hgi_id = DeviceIdT(hgi_id)
             child.callback_driven = True
+            # Ownerless discovery candidates are receive-only.
+            # They can receive packets but cannot be selected for
+            # outbound transmission until the user accepts them.
+            if accepted_hgi_ids is not None:
+                child.accepted = hgi_id in accepted_hgi_ids
             _LOGGER.debug(
-                "MqttCallbackPool: pre-created child %d for HGI %s",
+                "MqttCallbackPool: pre-created child %d for HGI %s "
+                "(accepted=%s)",
                 i,
                 hgi_id,
+                child.accepted,
             )
 
     def _lookup(self, child_id: str) -> PoolChild | None:
