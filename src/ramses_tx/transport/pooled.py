@@ -44,6 +44,7 @@ from ..routing import RoutedCommand, RouteRequest, SourcePolicy, WriteOutcome
 from ..rssi_tracker import POOL_TTL, POOL_WINDOW_SIZE, RssiTracker
 from ..typing import DeviceIdT, RamsesProtocolT
 from .base import TransportConfig
+from .callbacks import MqttPoolOutbound
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -116,6 +117,10 @@ class PoolChild:
     :param transport: The child transport, or ``None`` if construction
         failed or the child was removed.
     :param accepted: Whether this child's HGI is in the accepted set.
+    :param callback_driven: If True, this child is driven by MQTT
+        callbacks (PR 4A) rather than a per-child transport.  No
+        ``transport`` instance is created; outbound frames go
+        through the pool's outbound publisher.
     """
 
     child_id: int
@@ -126,6 +131,7 @@ class PoolChild:
     availability: NodeAvailability = NodeAvailability.OFFLINE
     hgi_id: DeviceIdT | None = None
     accepted: bool = True
+    callback_driven: bool = False
     rssi_tracker: RssiTracker = field(
         default_factory=lambda: RssiTracker(POOL_WINDOW_SIZE, ttl=POOL_TTL)
     )
@@ -150,12 +156,15 @@ class PoolChild:
 
         A child is sendable when it is connected, accepted, and
         send-ready (has identity or has received at least one packet).
+        Callback-driven children (PR 4A) do not require a transport
+        instance — outbound frames go through the pool's outbound
+        publisher.
         """
         return (
             self.is_connected
             and self.accepted
             and self.send_ready
-            and self.transport is not None
+            and (self.transport is not None or self.callback_driven)
         )
 
     def mark_connected(self, transport_obj: Any) -> None:
@@ -432,12 +441,21 @@ class PooledTransport(TransportInterface):
         self._pkts_deduped: int = 0
         self._pkts_forwarded: int = 0
 
+        # Outbound publisher for callback-driven children (PR 4A).
+        # When set, children with ``callback_driven=True`` and no
+        # transport instance publish frames through this callback.
+        self._outbound_publisher: MqttPoolOutbound | None = None
+
     # -- Child access ----------------------------------------------------
 
     @property
     def _active_children(self) -> list[PoolChild]:
-        """Return children with a non-None transport."""
-        return [c for c in self._children if c.transport is not None]
+        """Return children with a transport or callback-driven."""
+        return [
+            c
+            for c in self._children
+            if c.transport is not None or c.callback_driven
+        ]
 
     @property
     def _connected_children(self) -> list[PoolChild]:
@@ -464,6 +482,29 @@ class PooledTransport(TransportInterface):
         :raises IndexError: If the ID is out of range.
         """
         return self._children[child_id]
+
+    def _child_by_hgi_id(self, hgi_id: str) -> PoolChild | None:
+        """Return the child with the given HGI ID.
+
+        :param hgi_id: The HGI device ID to look up.
+        :returns: The matching PoolChild, or ``None`` if not found.
+        """
+        for child in self._children:
+            if child.hgi_id is not None and str(child.hgi_id) == hgi_id:
+                return child
+        return None
+
+    def set_outbound_publisher(self, publisher: MqttPoolOutbound) -> None:
+        """Set the outbound publisher for callback-driven children.
+
+        When set, children with ``callback_driven=True`` and no
+        transport instance publish frames through this callback
+        instead of a per-child transport.
+
+        :param publisher: The outbound publisher implementing
+            :class:`~ramses_tx.transport.callbacks.MqttPoolOutbound`.
+        """
+        self._outbound_publisher = publisher
 
     # -- TransportInterface ---------------------------------------------
 
@@ -508,6 +549,12 @@ class PooledTransport(TransportInterface):
                     val = c.transport_obj.get_extra_info(SZ_IS_EVOFW3, False)
                     if val:
                         return True
+            # Callback-driven children (e.g. ramses_esp via MQTT)
+            # are treated as evofw3-compatible.
+            if any(
+                c.is_connected and c.callback_driven for c in self._children
+            ):
+                return True
             return default
         if name == "pool_stats":
             return {
@@ -625,7 +672,23 @@ class PooledTransport(TransportInterface):
             child = self._child_by_id(int(routed.child_id))
         except (IndexError, ValueError):
             return WriteOutcome.NOT_SUBMITTED
-        if child is None or child.transport is None:
+
+        # Callback-driven children (PR 4A): publish through the
+        # outbound publisher instead of a per-child transport.
+        if child.callback_driven and child.transport is None:
+            if not child.is_sendable:
+                return WriteOutcome.NOT_SUBMITTED
+            if self._outbound_publisher is None or child.hgi_id is None:
+                return WriteOutcome.NOT_SUBMITTED
+            try:
+                await self._outbound_publisher.publish_frame(
+                    str(child.hgi_id), frame
+                )
+                return WriteOutcome.SUBMITTED
+            except Exception:
+                return WriteOutcome.AMBIGUOUS
+
+        if child.transport is None:
             return WriteOutcome.NOT_SUBMITTED
 
         write = getattr(child.transport, "write_frame", None)
@@ -1025,7 +1088,7 @@ class PooledTransport(TransportInterface):
         now = dt_now()
 
         for child in self._children:
-            if child.transport is None:
+            if child.transport is None and not child.callback_driven:
                 continue
             if not child.is_connected:
                 continue
