@@ -106,12 +106,15 @@ class ReadProtocol(_DeviceIdFilterMixin):
         super().connection_made(transport)
 
     def resume_writing(self) -> None:
-        """Raise an exception as the Protocol cannot send Commands.
+        """No-op for read-only protocols.
 
-        :raises NotImplementedError: Always raised as ReadProtocol is
-            read-only.
+        ``asyncio`` calls this when the transport's write buffer drains.
+        Read-only protocols (eavesdrop/listen mode) never write, but the
+        transport may still call this during connection setup. Silently
+        ignore rather than raising — the exception broke CLI listen mode
+        over MQTT.
         """
-        raise NotImplementedError(f"{self}: The chosen Protocol is Read-Only")
+        _LOGGER.debug("%s: resume_writing (read-only, ignoring)", self)
 
     async def send_cmd(
         self,
