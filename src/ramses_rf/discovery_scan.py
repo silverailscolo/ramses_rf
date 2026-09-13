@@ -276,7 +276,7 @@ class DiscoveredDevice:
     # Issue 931.
     is_authoritative_domain: bool = False
     rssi: float | None = None  # running average
-    confidence: str = "low"  # high, medium, low
+    confidence: str = "low"  # high, medium, low, declared
     is_battery: bool = False  # seen sending battery info
     source_count: int = 0  # number of packets where this device was src
     destination_count: int = 0  # number of packets where this device was dst
@@ -651,7 +651,9 @@ class DiscoveryScan:
                 declared_class = self._get_declared_class(device_id)
                 if declared_class is not None:
                     likely_type = declared_class
-                    initial_conf = "high"  # declared class is authoritative
+                    initial_conf = (
+                        "declared"  # declared class is authoritative
+                    )
                 else:
                     likely_type = _classify(
                         device_id, code, verb, is_source=is_source
@@ -921,7 +923,27 @@ class DiscoveryScan:
                                 device.confidence = "high"
                     elif new_type == device.likely_type:
                         # Matching packet — reset contradiction count
-                        if device.contradiction_count > 0:
+                        # only when the current classification is
+                        # evidence-based (confidence == "high").
+                        #
+                        # When the current classification is from a
+                        # prefix fallback (confidence != "high"), do
+                        # NOT reset — otherwise a hybrid device (e.g.
+                        # a CO2 sensor with integrated remote buttons
+                        # that sends both I 1298 and I 22F1) can never
+                        # accumulate enough contradictions to trigger
+                        # re-classification, because the matching
+                        # packets reset the count on every cycle.
+                        #
+                        # After re-classification (confidence becomes
+                        # "high"), the reset is re-enabled, which
+                        # prevents flapping: the matching packets for
+                        # the new type keep resetting the count before
+                        # it can reach the threshold for the old type.
+                        if (
+                            device.contradiction_count > 0
+                            and device.confidence == "high"
+                        ):
                             device.contradiction_count = 0
                             self._dirty = True
             return
@@ -1293,7 +1315,7 @@ class DiscoveryScan:
                 )
                 device.likely_type = declared
                 device.contradiction_count = 0
-                device.confidence = "high"
+                device.confidence = "declared"
                 had_overrides = True
         self._dirty = had_overrides
         _LOGGER.info("DiscoveryScan: imported %d devices", len(self._devices))

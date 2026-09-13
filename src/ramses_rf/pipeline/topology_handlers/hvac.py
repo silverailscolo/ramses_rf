@@ -43,8 +43,25 @@ _NON_FAN_EVIDENCE: frozenset[tuple[Verb, Code]] = frozenset(
     }
 )
 
+# VC pairs that are definitive evidence a device is a CO2 sensor.
+# I 1298 is the CO2 level broadcast — no other HVAC device type sends it.
+# A CO2 sensor with integrated remote buttons sends both I 1298 (CO2)
+# and RQ 2411 / I 22F1 (remote).  The CO2 evidence must take precedence
+# over the DIS/REM evidence to avoid mis-promoting a CO2 to DIS.
+_CO2_EVIDENCE: frozenset[tuple[Verb, Code]] = frozenset(
+    {(Verb.I_, Code._1298)}
+)
+
 # Minimum number of contradictory packets before reclassifying.
 _RECLASSIFY_THRESHOLD: int = 3
+
+# HVAC device types that a CO2 sensor could be mistaken for.  The
+# direct CO2 promotion rule (I 1298) only fires for these types —
+# not the generic "hvac_device" or unknown devices, which are left
+# to the standard eavesdrop-gated VC pair promotion.
+_CO2_PROMOTABLE: frozenset[DevType] = frozenset(
+    {DevType.REM, DevType.DIS, DevType.FAN, DevType.HUM}
+)
 
 
 class HvacTopologyHandler(TopologyHandler):
@@ -71,7 +88,8 @@ class HvacTopologyHandler(TopologyHandler):
             enable_eavesdrop=enable_eavesdrop,
             device_class_lookup_cb=device_class_lookup_cb,
         )
-        # Per-device evidence: {device_id: {"fan": int, "non_fan": int}}
+        # Per-device evidence: {device_id: {"fan": int, "non_fan": int,
+        # "co2": int}}
         self._evidence: dict[str, dict[str, int]] = {}
 
     def consume(self, msg: Message) -> None:
@@ -158,13 +176,42 @@ class HvacTopologyHandler(TopologyHandler):
             is_locked = bool(traits.get("locked")) if traits else False
             is_faked = bool(traits.get("faked")) if traits else False
 
-            ev = self._evidence.setdefault(src_id, {"fan": 0, "non_fan": 0})
+            ev = self._evidence.setdefault(
+                src_id, {"fan": 0, "non_fan": 0, "co2": 0}
+            )
             if vc in _FAN_EVIDENCE:
                 ev["fan"] += 1
+            elif vc in _CO2_EVIDENCE:
+                ev["co2"] += 1
             elif vc in _NON_FAN_EVIDENCE and not (
                 vc == (Verb.RQ, Code._2411) and is_faked
             ):
                 ev["non_fan"] += 1
+
+            # --- Direct CO2 promotion ---
+            # I 1298 is the definitive CO2 signature — no other HVAC
+            # device type sends it.  If a device sends I 1298, promote
+            # it to CO2 regardless of its current class (REM, DIS, FAN,
+            # etc.).  This handles the case where the device was
+            # already promoted to DIS (e.g. via RQ 2411 active probing)
+            # before the first I 1298 was received.
+            # Only fires for devices with a specific HVAC class (REM,
+            # DIS, FAN, HUM) — not the generic "hvac_device" or unknown
+            # devices, which are left to the standard eavesdrop-gated
+            # VC pair promotion.
+            if (
+                vc in _CO2_EVIDENCE
+                and not is_locked
+                and current_class in _CO2_PROMOTABLE
+            ):
+                self._emit(
+                    TopologyChangedEvent(
+                        action=TopologyAction.UPDATE_DEVICE_CLASS,
+                        device_id=src_id,
+                        metadata={"device_class": DevType.CO2},
+                        causation="Rule_HVAC_1298_Signature_to_CO2",
+                    )
+                )
             dst_traits = (
                 self._device_class_lookup_cb(msg.dst.id)
                 if self._device_class_lookup_cb and msg.dst.id != "--:------"
@@ -182,12 +229,24 @@ class HvacTopologyHandler(TopologyHandler):
                 and not is_faked
             )
             if is_physical_display_request and not is_locked:
+                # A CO2 sensor with integrated remote buttons sends both
+                # I 1298 (CO2 level) and RQ 2411 (display request).  The
+                # CO2 evidence is definitive — no other HVAC device type
+                # sends I 1298.  Promote to CO2 instead of DIS when CO2
+                # evidence has been seen, to avoid mis-classifying a
+                # hybrid CO2+REM as a display.
+                target_class = DevType.CO2 if ev["co2"] > 0 else DevType.DIS
+                causation = (
+                    "Rule_HVAC_2411_Request_Source_to_CO2"
+                    if ev["co2"] > 0
+                    else "Rule_HVAC_2411_Request_Source_to_DIS"
+                )
                 self._emit(
                     TopologyChangedEvent(
                         action=TopologyAction.UPDATE_DEVICE_CLASS,
                         device_id=src_id,
-                        metadata={"device_class": DevType.DIS},
-                        causation="Rule_HVAC_2411_Request_Source_to_DIS",
+                        metadata={"device_class": target_class},
+                        causation=causation,
                     )
                 )
 
@@ -212,6 +271,16 @@ class HvacTopologyHandler(TopologyHandler):
                         )
                         ev["warned_locked"] = True
                 else:
+                    # If CO2 evidence is present, promote to CO2
+                    # instead of DIS — I 1298 is definitive for CO2.
+                    target_class = (
+                        DevType.CO2 if ev["co2"] > 0 else DevType.DIS
+                    )
+                    causation = (
+                        "Rule_HVAC_Contradiction_FAN_to_CO2"
+                        if ev["co2"] > 0
+                        else "Rule_HVAC_Contradiction_FAN_to_DIS"
+                    )
                     # Emit the reclassification event every time (the
                     # SSOT update is idempotent, and this ensures the
                     # discovery/config flow sees the suggestion even
@@ -220,8 +289,8 @@ class HvacTopologyHandler(TopologyHandler):
                         TopologyChangedEvent(
                             action=TopologyAction.UPDATE_DEVICE_CLASS,
                             device_id=src_id,
-                            metadata={"device_class": DevType.DIS},
-                            causation="Rule_HVAC_Contradiction_FAN_to_DIS",
+                            metadata={"device_class": target_class},
+                            causation=causation,
                         )
                     )
                     # Warn only once per session to avoid log spam.
