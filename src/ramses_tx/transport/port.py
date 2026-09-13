@@ -503,7 +503,14 @@ class PortTransport(_FullTransport):
             original_frame_read = self._frame_read
 
             def _frame_read_intercept(dtm_str: str, frame: str) -> None:
-                """Intercept ``#`` lines before the packet parser."""
+                r"""Intercept ``#`` lines before the packet parser.
+
+                Also handles the case where the evofw3 ``#`` prompt is
+                appended to the end of a regular packet on the same line
+                (no ``\r\n`` separator).  Since ``#`` is never valid in
+                a RAMSES packet, we split on the first ``#`` and handle
+                each part independently.
+                """
                 stripped = frame.strip()
                 if stripped.startswith("#"):
                     _check_id_response(stripped)
@@ -512,6 +519,22 @@ class PortTransport(_FullTransport):
                         stripped,
                     )
                     return  # Don't feed to packet parser (Gap F)
+                # Check for ``#`` appended to a regular packet (e.g.
+                # ``060 ... 004808A77FFF00# !I``).  The ``#`` is the
+                # evofw3 prompt echo, not part of the payload.
+                if "#" in stripped:
+                    packet_part, _, debug_part = stripped.partition("#")
+                    debug_line = "#" + debug_part
+                    _check_id_response(debug_line)
+                    _LOGGER.debug(
+                        "PortTransport: evofw3 debug response (appended): %s",
+                        debug_line,
+                    )
+                    # Feed the packet part (before ``#``) to the parser
+                    # if it's non-empty.
+                    if packet_part.strip():
+                        original_frame_read(dtm_str, packet_part + "\r\n")
+                    return
                 original_frame_read(dtm_str, frame)
 
             self._frame_read = _frame_read_intercept  # type: ignore[method-assign]
