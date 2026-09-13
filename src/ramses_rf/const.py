@@ -500,6 +500,9 @@ DEV_TYPE_MAP = attr_dict_factory(
             DevType.HUM: "rh_sensor",
             DevType.RFS: "hvac_gateway",
             DevType.REM: "switch",
+            DevType.DIS: "switch_display",
+            DevType.SW2: "switch_variant",
+            DevType.PIR: "presence_sensor",
         },
     },
 )

@@ -278,6 +278,28 @@ class TestSchTraitsHvacBound:
         assert result["bound"] == "37:168270"
         assert result["class"] == "HVC"
 
+    def test_dis_class_accepts_bound(self) -> None:
+        """DIS (switch_display) is an HVAC class and accepts bound.
+
+        DIS was previously missing from HVVAC_SLUGS, which caused
+        SCH_TRAITS_HVAC to reject it and SCH_TRAITS_HEAT to accept it
+        (without bound).  Now DIS is in HVVAC_SLUGS and accepts bound.
+        """
+        result = SCH_TRAITS({"class": "DIS", "bound": "32:153289"})
+        assert result["class"] == "DIS"
+        assert result["bound"] == "32:153289"
+
+    def test_sw2_class_accepts_bound(self) -> None:
+        """SW2 (switch_variant) is an HVAC class and accepts bound."""
+        result = SCH_TRAITS({"class": "SW2", "bound": "32:153289"})
+        assert result["class"] == "SW2"
+        assert result["bound"] == "32:153289"
+
+    def test_pir_class_is_hvac(self) -> None:
+        """PIR (presence_sensor) is an HVAC class."""
+        result = SCH_TRAITS({"class": "PIR"})
+        assert result["class"] == "PIR"
+
 
 class TestStripTraits:
     """Unit tests for strip_traits() (stage 1 only — strip, no mapping)."""
