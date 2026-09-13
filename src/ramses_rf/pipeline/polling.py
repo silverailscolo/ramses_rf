@@ -90,7 +90,10 @@ DEFAULT_POLLING_SCHEDULES: Final[dict[str, dict[Code | str, int | None]]] = {
     DevType.FAN: {
         Code._10E0: INTERVAL_DAILY,  # Device Specification / Info
         Code._10D0: INTERVAL_DAILY,  # Filter Change Sensor Status
-        Code._3150: INTERVAL_HOURLY,  # Fan Speed / Airflow Status
+        # 3150 (fan speed / heat demand) is NOT polled — FANs broadcast
+        # I/3150 unsolicited but do not respond to RQ/3150.  Polling them
+        # generates "Unexpected verb/code for dst (FAN) to Rx" warnings
+        # (issue 1187).
     },
     # HVAC Carbon Dioxide Sensor (mains-powered)
     DevType.CO2: {
