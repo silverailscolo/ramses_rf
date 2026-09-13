@@ -218,8 +218,10 @@ class TestHvacVentilator:
         assert Code._10D0 in schedule, (
             "Filter change (10D0) not scheduled for FAN"
         )
-        assert Code._3150 in schedule, (
-            "Fan speed status (3150) not scheduled for FAN"
+        # 3150 (fan speed) is NOT polled — FANs broadcast I/3150 but do not
+        # respond to RQ/3150 (issue 1187).
+        assert Code._3150 not in schedule, (
+            "Fan speed status (3150) should not be polled for FAN (issue 1187)"
         )
 
         if hvac_ventilator._gateway.message_store:
