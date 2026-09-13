@@ -15,6 +15,7 @@ from ramses_rf.address import Address
 from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
+    SZ_CIRCUITS,
     SZ_HEAT_DEMAND,
     SZ_NAME,
     SZ_RELAY_DEMAND,
@@ -188,7 +189,11 @@ class ZoneBase(Child, Parent[Device], Entity):
         :returns: ThermalDemandDTO or None.
         :rtype: ThermalDemandDTO | None
         """
-        heat_demand_value = self.demand_state.heat_demand
+        heat_demand_value = (
+            await self.heat_demand()
+            if hasattr(self, "heat_demand")
+            else self.demand_state.heat_demand
+        )
         if heat_demand_value is None:
             return None
         mode = await self.thermal_mode() or ThermalMode.HEAT
@@ -388,12 +393,39 @@ class DhwZone(ZoneSchedule):  # CS92A
         return self.temp_state.temperature
 
     async def heat_demand(self) -> float | None:  # 3150
-        """Return the DHW heat demand percentage (0.0 to 1.0)."""
-        return self.demand_state.heat_demand
+        """Return the DHW heat demand percentage (0.0 to 1.0).
+
+        The controller does not broadcast 3150|FA for DHW, so
+        ``demand_state.heat_demand`` is typically None.  Fall back to
+        the hotwater_valve BDR's relay_demand, which is the closest
+        proxy for DHW heat demand (ramses-rf/ramses_cc issue 1130).
+
+        :returns: Heat demand as a fraction (0.0 to 1.0), or None.
+        :rtype: float | None
+        """
+        if self.demand_state.heat_demand is not None:
+            return self.demand_state.heat_demand
+        if self._dhw_valve is not None:
+            return await self._dhw_valve.relay_demand()
+        return None
 
     async def relay_demand(self) -> float | None:  # 0008
-        """Return the DHW relay demand percentage (0.0 to 1.0)."""
-        return self.demand_state.relay_demand
+        """Return the DHW relay demand percentage (0.0 to 1.0).
+
+        The controller's 0008|FA packet usually carries 0% — the real
+        DHW relay state is tracked by the hotwater_valve BDR via its
+        3EF0 actuator state.  Fall back to the BDR's relay_demand when
+        ``demand_state.relay_demand`` is not populated
+        (ramses-rf/ramses_cc issue 1130).
+
+        :returns: Relay demand as a fraction (0.0 to 1.0), or None.
+        :rtype: float | None
+        """
+        if self.demand_state.relay_demand is not None:
+            return self.demand_state.relay_demand
+        if self._dhw_valve is not None:
+            return await self._dhw_valve.relay_demand()
+        return None
 
     async def relay_failsafe(self) -> float | None:  # 0009
         """Return DHW relay failsafe demand percentage (0.0 to 1.0)."""
@@ -981,7 +1013,7 @@ class UfhZone(Zone):  # HCC80/HCE80/HCC100
     _ROLE_ACTUATORS: str = DEV_ROLE_MAP.UFH
 
     async def heat_demand(self) -> float | None:  # 3150
-        """Return the zone's heat demand, estimated from its devices.
+        """Return the zone's heat demand aggregated from bound UFH circuits.
 
         Underfloor heating wax actuators operate on linear PWM/TPI duty
         cycles (0.0 to 1.0) and are not subject to TRV pin stroke
@@ -990,6 +1022,14 @@ class UfhZone(Zone):  # HCC80/HCE80/HCC100
         :returns: Linear heat demand percentage (0.0 to 1.0) or None.
         :rtype: float | None
         """
+        if self.circuit_entities:
+            demands = [
+                circuit.heat_demand
+                for circuit in self.circuit_entities
+                if circuit.heat_demand is not None
+            ]
+            if demands:
+                return max(demands)
         return self.demand_state.heat_demand
 
     @property
@@ -1006,11 +1046,11 @@ class UfhZone(Zone):  # HCC80/HCE80/HCC100
                 if getattr(child, "_SLUG", None) == DevType.UFC or getattr(
                     child, "type", None
                 ) in (DevType.UFC, DEV_TYPE_MAP.UFC, "02"):
-                    for circuit in getattr(child, "circuits", []):
+                    for circuit in getattr(child, SZ_CIRCUITS, []):
                         if (
-                            getattr(circuit, "zone_index", None) == self.index
+                            getattr(circuit, SZ_ZONE_INDEX, None) == self.index
                             or getattr(circuit, "_zone", None) is self
-                        ):
+                        ) and circuit not in circuits:
                             circuits.append(circuit)
         return sorted(circuits, key=lambda circuit: circuit.ufh_index)
 
