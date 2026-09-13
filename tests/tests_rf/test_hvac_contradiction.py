@@ -398,3 +398,226 @@ def test_warning_emitted_once_per_session(
         f"Events should continue to fire after first warning, "
         f"got {len(contradiction_events)} total contradiction events"
     )
+
+
+# --- Tests for CO2 promotion (hybrid CO2+REM devices) ---
+
+
+def test_dis_promoted_to_co2_when_1298_received() -> None:
+    """A DIS-classified device sending I 1298 is promoted to CO2.
+
+    If the device was already promoted to DIS (e.g. via RQ 2411 active
+    probing) before the first I 1298 was received, the direct CO2
+    promotion rule should still fire when I 1298 arrives and promote
+    the device from DIS to CO2.
+    """
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:126776": {
+                "class": DevType.DIS,
+                "locked": False,
+                "faked": False,
+            },
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    # Send I 1298 — should promote directly to CO2
+    handler.consume(_FakeMsg("37:126776", "--:------", Verb.I_, Code._1298))
+
+    co2_events = [
+        e for e in emitted if e.causation == "Rule_HVAC_1298_Signature_to_CO2"
+    ]
+    assert len(co2_events) == 1, (
+        f"Expected 1 CO2 promotion from DIS, got {len(co2_events)}"
+    )
+    assert co2_events[0].metadata["device_class"] == DevType.CO2
+
+
+def test_rem_promoted_to_co2_when_1298_received() -> None:
+    """A REM-classified device sending I 1298 is promoted directly to CO2.
+
+    I 1298 is the definitive CO2 signature — no other HVAC device type
+    sends it.  The direct promotion rule fires immediately, without
+    waiting for the REM→DIS rule or the contradiction threshold.
+    """
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:126776": {
+                "class": DevType.REM,
+                "locked": False,
+                "faked": False,
+            },
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    handler.consume(_FakeMsg("37:126776", "--:------", Verb.I_, Code._1298))
+
+    co2_events = [
+        e for e in emitted if e.causation == "Rule_HVAC_1298_Signature_to_CO2"
+    ]
+    assert len(co2_events) == 1
+    assert co2_events[0].metadata["device_class"] == DevType.CO2
+
+
+def test_locked_suppresses_direct_co2_promotion() -> None:
+    """A _locked device should NOT be promoted to CO2 by I 1298."""
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:126776": {
+                "class": DevType.REM,
+                "locked": True,
+                "faked": False,
+            },
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    handler.consume(_FakeMsg("37:126776", "--:------", Verb.I_, Code._1298))
+
+    co2_events = [
+        e for e in emitted if e.causation == "Rule_HVAC_1298_Signature_to_CO2"
+    ]
+    assert len(co2_events) == 0, "Locked device should not be promoted to CO2"
+
+
+def test_co2_not_re_promoted_when_already_co2() -> None:
+    """A CO2-classified device sending I 1298 should NOT re-promote."""
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:126776": {
+                "class": DevType.CO2,
+                "locked": False,
+                "faked": False,
+            },
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    handler.consume(_FakeMsg("37:126776", "--:------", Verb.I_, Code._1298))
+
+    co2_events = [
+        e for e in emitted if e.causation == "Rule_HVAC_1298_Signature_to_CO2"
+    ]
+    assert len(co2_events) == 0, "Device already CO2 should not be re-promoted"
+
+
+def test_rem_with_co2_evidence_promoted_to_co2_not_dis() -> None:
+    """A REM sending both I 1298 (CO2) and RQ 2411 (display) is promoted
+    to CO2, not DIS.
+
+    A CO2 sensor with integrated remote buttons sends both I 1298
+    (CO2 level — definitive CO2 signature) and RQ 2411 (display
+    request).  The REM→DIS rule fires on RQ 2411, but CO2 evidence
+    must take precedence.
+    """
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:126776": {
+                "class": DevType.REM,
+                "locked": False,
+                "faked": False,
+            },
+            "32:153289": {"class": DevType.FAN},
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    # Send I 1298 first (CO2 evidence)
+    handler.consume(_FakeMsg("37:126776", "--:------", Verb.I_, Code._1298))
+    # Then send RQ 2411 to FAN (would trigger REM→DIS)
+    handler.consume(_FakeMsg("37:126776", "32:153289", Verb.RQ, Code._2411))
+
+    co2_events = [
+        e
+        for e in emitted
+        if e.causation == "Rule_HVAC_2411_Request_Source_to_CO2"
+    ]
+    dis_events = [
+        e
+        for e in emitted
+        if e.causation == "Rule_HVAC_2411_Request_Source_to_DIS"
+    ]
+    assert len(co2_events) == 1, (
+        f"Expected 1 CO2 promotion event, got {len(co2_events)}"
+    )
+    assert len(dis_events) == 0, (
+        f"Expected 0 DIS promotion events, got {len(dis_events)}"
+    )
+    assert co2_events[0].metadata["device_class"] == DevType.CO2
+
+
+def test_rem_without_co2_evidence_promoted_to_dis() -> None:
+    """A REM sending only RQ 2411 (no CO2 evidence) is promoted to DIS."""
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {
+            "37:169161": {
+                "class": DevType.REM,
+                "locked": False,
+                "faked": False,
+            },
+            "32:153289": {"class": DevType.FAN},
+        }
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    handler.consume(_FakeMsg("37:169161", "32:153289", Verb.RQ, Code._2411))
+
+    dis_events = [
+        e
+        for e in emitted
+        if e.causation == "Rule_HVAC_2411_Request_Source_to_DIS"
+    ]
+    co2_events = [
+        e
+        for e in emitted
+        if e.causation == "Rule_HVAC_2411_Request_Source_to_CO2"
+    ]
+    assert len(dis_events) == 1
+    assert len(co2_events) == 0
+    assert dis_events[0].metadata["device_class"] == DevType.DIS
+
+
+def test_fan_with_co2_evidence_promoted_to_co2_not_dis() -> None:
+    """A FAN sending I 1298 (CO2) + non-FAN packets is promoted to CO2,
+    not DIS."""
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {"37:126776": {"class": DevType.FAN, "locked": False}}
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    # I 1298 (CO2 evidence) + 3 non-FAN packets (threshold)
+    packets = [
+        _FakeMsg("37:126776", "32:153289", Verb.I_, Code._1298),
+        _FakeMsg("37:126776", "32:153289", Verb.RQ, Code._31DA),
+        _FakeMsg("37:126776", "32:153289", Verb.I_, Code._22F1),
+        _FakeMsg("37:126776", "32:153289", Verb.RQ, Code._2411),
+    ]
+    for msg in packets:
+        handler.consume(msg)
+
+    co2_events = [
+        e
+        for e in emitted
+        if e.causation == "Rule_HVAC_Contradiction_FAN_to_CO2"
+    ]
+    dis_events = [
+        e
+        for e in emitted
+        if e.causation == "Rule_HVAC_Contradiction_FAN_to_DIS"
+    ]
+    assert len(co2_events) >= 1, (
+        f"Expected at least 1 CO2 promotion, got {len(co2_events)}"
+    )
+    assert len(dis_events) == 0, (
+        f"Expected 0 DIS promotions, got {len(dis_events)}"
+    )
+    assert co2_events[0].metadata["device_class"] == DevType.CO2
