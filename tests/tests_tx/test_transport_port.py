@@ -918,6 +918,51 @@ async def test_evofw3_debug_response_does_not_block_ramses() -> None:
     transport._close()
 
 
+async def test_evofw3_debug_appended_to_packet_during_id_command() -> None:
+    """evofw3 ``#`` prompt appended to a packet is split, not rejected.
+
+    When ``!I`` is sent while a packet is being received, the evofw3
+    ``#`` prompt echo can appear on the same line as the packet payload
+    (no ``\\r\\n`` separator).  The intercept should split on ``#`` and
+    feed the packet part to the parser separately.
+    """
+    transport = _get_transport()
+    transport._disable_sending = False
+    transport._configured_hgi_id = "18:006402"
+    transport._startup_grace = 0.0
+    transport._make_connection = MagicMock()
+    transport._write = MagicMock()
+
+    # Simulate a packet with ``# !I`` appended (the evofw3 prompt echo
+    # concatenated with a regular packet on the same line).
+    def simulate_appended_prompt() -> None:
+        transport._data_received(
+            b"060  I --- 37:153226 --:------ 37:153226"
+            b" 12A0 021 004808A77FFF00# !I\r\n"
+        )
+
+    loop = asyncio.get_running_loop()
+    loop.call_later(0.02, simulate_appended_prompt)
+
+    with (
+        patch(
+            "ramses_tx.transport.port.is_hgi80",
+            AsyncMock(return_value=False),
+        ),
+        patch("ramses_tx.transport.port._ID_COMMAND_TIMEOUT", 0.1),
+    ):
+        transport._signature_policy = SignaturePolicy.ID_COMMAND
+        await transport._create_connection()
+        assert transport._init_task is not None
+        await transport._init_task
+
+    # Should fall back to configured_hgi_id (the !I didn't return a
+    # valid # CC:IIIIII response — the # was just the prompt echo).
+    assert transport._init_fut.done()
+    transport._make_connection.assert_called_once_with(gateway_id="18:006402")
+    transport._close()
+
+
 # ---------------------------------------------------------------------------
 # Gap D: per_child_config_overrides in pooled_transport_factory
 # ---------------------------------------------------------------------------
