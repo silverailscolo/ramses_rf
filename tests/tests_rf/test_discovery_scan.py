@@ -2176,3 +2176,73 @@ class TestEvidenceBasedContradiction:
         assert dev.likely_type == DevType.REM  # re-classified
         assert dev.confidence == "high"
         scan.stop()
+
+    def test_hybrid_co2_rem_reclassified_despite_rem_matches(self) -> None:
+        """A hybrid CO2+REM device is re-classified to CO2 despite
+        interleaved REM-matching packets.
+
+        A CO2 sensor with integrated remote buttons sends both
+        I 1298 (CO2 VC pair) and I 22F1 (REM VC pair).  The device
+        was initially classified as REM via prefix fallback
+        (confidence="medium").  The REM-matching packets (I 22F1)
+        must NOT reset the contradiction count while the current
+        classification is from a prefix fallback, otherwise the
+        CO2 evidence can never accumulate to the threshold.
+
+        After re-classification to CO2 (confidence="high"), the
+        reset is re-enabled, which prevents flapping: the CO2
+        matches keep resetting the REM contradiction count.
+        """
+        gwy = make_mock_gateway(known_list={"37:126776": {"class": "REM"}})
+        scan = DiscoveryScan(gwy)
+        # Interleave CO2 and REM packets 4 times.
+        # Without the fix, each I 22F1 resets the count to 0,
+        # so the count never reaches 3.
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._1298, verb=Verb.I_)
+            )
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._22F1, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2  # re-classified
+        assert dev.confidence == "high"
+        scan.stop()
+
+    def test_hybrid_co2_rem_no_flapping_after_promotion(self) -> None:
+        """After promotion to CO2, interleaved REM packets do NOT
+        cause flapping back to REM.
+
+        Once re-classified to CO2 with confidence="high", the
+        reset is re-enabled.  The I 1298 (CO2) matches reset the
+        REM contradiction count before it can reach the threshold,
+        so the device stays CO2.
+        """
+        gwy = make_mock_gateway(known_list={"37:126776": {"class": "REM"}})
+        scan = DiscoveryScan(gwy)
+        # Promote to CO2 first (4x 1298 without interleaving)
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2
+        assert dev.confidence == "high"
+
+        # Now interleave REM and CO2 packets.
+        # The CO2 matches should reset the REM contradiction count,
+        # preventing re-classification back to REM.
+        for _ in range(5):
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._22F1, verb=Verb.I_)
+            )
+            scan._process_packet(
+                make_dto(src="37:126776", code=Code._1298, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:126776")
+        assert dev is not None
+        assert dev.likely_type == DevType.CO2  # no flapping
+        scan.stop()
