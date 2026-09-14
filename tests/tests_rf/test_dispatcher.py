@@ -133,6 +133,44 @@ class Test_dispatcher_gateway:
         assert dispatcher.detect_array_fragment(msg2, msg1)
         assert not dispatcher.detect_array_fragment(msg3, msg1)
 
+    def test_sliding_window_survives_intervening_packet(self) -> None:
+        """Sliding window reassembly survives an intervening packet.
+
+        The 2-slot _prev_msg approach dropped the array when an unrelated
+        packet arrived between fragment 1 and fragment 2.  The sliding
+        window (keyed by src_id + code) preserves the pending fragment.
+        """
+
+        # Fragment 1: long 000A with _has_array=True
+        frag1: Message = Message._from_packet(
+            Packet(
+                self._NOW,
+                "...  I --- 01:158182 --:------ 01:158182 000A 048 001001F40BB8011101F40BB8021101F40BB8031001F40BB8041101F40BB8051101F40BB8061101F40BB8071001F40BB8",
+            )
+        )
+        # Intervening packet from a different source (would corrupt 2-slot)
+        intervening: Message = Message._from_packet(
+            Packet(
+                self._NOW + td(seconds=0.5),
+                "...  I --- 02:222222 --:------ 02:222222 30C9 003 000800",
+            )
+        )
+        # Fragment 2: short 000A, same source as fragment 1
+        frag2: Message = Message._from_packet(
+            Packet(
+                self._NOW + td(seconds=1),
+                "...  I --- 01:158182 --:------ 01:158182 000A 006 081001F409C4",
+            )
+        )
+
+        assert frag1._has_array
+        # Simulate the sliding window: store frag1, then check frag2
+        # In the 2-slot approach, _prev_msg would be `intervening`, not
+        # frag1, so detect_array_fragment(frag2, intervening) would be
+        # False.  With the sliding window, frag1 is still available.
+        assert dispatcher.detect_array_fragment(frag2, frag1)
+        assert not dispatcher.detect_array_fragment(frag2, intervening)
+
 
 class TestDispatcherErrorHandling:
     """Test Dispatcher exception handling logic."""
