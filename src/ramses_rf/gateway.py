@@ -70,6 +70,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+#: RAMSES codes that transmit multi-packet arrays and need reassembly.
+#: Matches the list in dispatcher.detect_array_fragment (issue 669).
+_ARRAY_CODES: tuple[Code, ...] = (Code._000A, Code._22C9)
+
 
 def _payload_to_serialisable(payload: Any) -> Any:
     """Convert a payload object to a JSON-serialisable form.
@@ -255,6 +259,13 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._state_cache: dict[StateHeader, rf_msg] = {}
         self._history_lock = threading.Lock()
 
+        # Sync sliding-window buffer for multi-packet array reassembly.
+        # Keyed by (src_id, code) so that intervening packets from other
+        # sources no longer abort an in-flight array (issue 669).  Replaces
+        # the single-slot _prev_msg approach which dropped arrays whenever
+        # an unrelated packet arrived between fragment 1 and fragment 2.
+        self._pending_arrays: dict[tuple[str, Code], ApplicationMessage] = {}
+
         # 1. Controller Knowledge Bridge
         def is_controller(device_id: str) -> bool:
             device = self._device_registry.device_by_id.get(
@@ -371,6 +382,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             self._prev_msg = None
             self._this_msg = None
             self._state_cache.clear()
+            self._pending_arrays.clear()
 
     @property
     def tcs(self) -> Evohome | None:
@@ -524,20 +536,25 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         app_msg.bind_context(self)  # noqa: B010
         self.update_message_history(app_msg)
 
-        if (
-            self._this_msg
-            and self._prev_msg
-            and detect_array_fragment(
-                self._this_msg,
-                self._prev_msg,
-            )
-        ):
-            app_msg._force_has_array()
-            app_msg._payload = self._prev_msg.payload + (
-                app_msg.payload
-                if isinstance(app_msg.payload, list)
-                else [app_msg.payload]
-            )
+        # Sliding-window array reassembly: look up the pending fragment
+        # by (src_id, code) so that intervening packets from other sources
+        # no longer abort an in-flight array (issue 669).  Fragment 1
+        # (has _has_array=True) is stored; fragment 2 is merged onto it.
+        if app_msg.verb == I_ and app_msg.code in _ARRAY_CODES:
+            key = (app_msg.src.id, app_msg.code)
+            pending = self._pending_arrays.get(key)
+            if pending is not None and detect_array_fragment(app_msg, pending):
+                app_msg._force_has_array()
+                app_msg._payload = pending.payload + (
+                    app_msg.payload
+                    if isinstance(app_msg.payload, list)
+                    else [app_msg.payload]
+                )
+                del self._pending_arrays[key]
+            elif app_msg._has_array:
+                # Store fragment 1 for a potential merge with fragment 2.
+                # Overwrites any stale entry (e.g. fragment 2 never arrived).
+                self._pending_arrays[key] = app_msg
 
         # NEW: Feed the async TopologyBuilder so it can structurally map the
         # graph *before* the message state is ingested by the Read-Models.
