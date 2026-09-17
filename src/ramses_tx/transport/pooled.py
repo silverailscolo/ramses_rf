@@ -187,6 +187,12 @@ class PoolChild:
         self.connection_state = ConnectionState.CONNECTED
         self.availability = NodeAvailability.ONLINE
         self.transport_obj = transport_obj
+        # A child that failed at construction has no transport (the
+        # factory only assigns it on successful connect).  Restore it on
+        # reconnect so is_sendable can become True again.  Callback
+        # children keep transport=None — outbound goes via the adapter.
+        if self.transport is None and not self.callback_driven:
+            self.transport = transport_obj
         # Read HGI identity from the transport if available.
         hgi = transport_obj.get_extra_info(SZ_ACTIVE_HGI)
         if hgi is not None:

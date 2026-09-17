@@ -1518,5 +1518,251 @@ class TestResolveHgiId(unittest.TestCase):
             self.assertNotIn("ff:fe", hgi_id)
 
 
+# ---------------------------------------------------------------------------
+# 21. Availability tracking (offline detection + reconnect)
+# ---------------------------------------------------------------------------
+
+
+def _transport_with_device(
+    *, last_seen_age: float | None = None, available: bool = True
+) -> ZigbeeTransport:
+    """Return a transport with a connected mock device at a known state."""
+    import time as _time
+
+    t = _make_transport()
+    t._device_online = True
+
+    device = MagicMock()
+    device.available = available
+    device.on_network = available
+    device.last_seen = (
+        None if last_seen_age is None else _time.time() - last_seen_age
+    )
+    device._zigpy_device = MagicMock(last_seen=device.last_seen)
+    t._device = device
+
+    zha_data = MagicMock()
+    zha_data.gateway_proxy.gateway = MagicMock()
+    # resolve_device() looks up by IEEE string when zigpy is absent.
+    zha_data.gateway_proxy.gateway.devices = {t._ieee: device}
+    zha_data.gateway_proxy.gateway.application_controller = None
+    t._hass = MagicMock()
+    t._hass.data = {"zha": zha_data}
+    t._zha_gateway = zha_data.gateway_proxy.gateway
+    return t
+
+
+class TestAvailabilityOfflineDetection(unittest.IsolatedAsyncioTestCase):
+    """Tests for ``_check_online_health`` offline transitions."""
+
+    async def test_gateway_gone_marks_offline(self) -> None:
+        t = _transport_with_device()
+        t._hass.data = {}  # no zha data at all
+        await t._check_online_health()
+        self.assertFalse(t._device_online)
+
+    async def test_fresh_traffic_keeps_online(self) -> None:
+        t = _transport_with_device(last_seen_age=5.0)
+        await t._check_online_health()
+        self.assertTrue(t._device_online)
+
+    async def test_fresh_traffic_overrides_unavailable_flag(self) -> None:
+        # ZHA flag lags behind reality; fresh RX is stronger evidence.
+        t = _transport_with_device(last_seen_age=5.0, available=False)
+        await t._check_online_health()
+        self.assertTrue(t._device_online)
+
+    async def test_zha_unavailable_marks_offline(self) -> None:
+        t = _transport_with_device(last_seen_age=9999.0, available=False)
+        await t._check_online_health()
+        self.assertFalse(t._device_online)
+
+    async def test_stale_traffic_and_failed_ping_marks_offline(self) -> None:
+        t = _transport_with_device(last_seen_age=9999.0)
+        t._connection_mgr.ping_device = AsyncMock(return_value=False)
+        await t._check_online_health()
+        self.assertFalse(t._device_online)
+
+    async def test_stale_traffic_but_ping_ok_stays_online(self) -> None:
+        t = _transport_with_device(last_seen_age=9999.0)
+        t._connection_mgr.ping_device = AsyncMock(return_value=True)
+        await t._check_online_health()
+        self.assertTrue(t._device_online)
+
+    async def test_stale_traffic_and_no_basic_stays_online(self) -> None:
+        # ping_device returns None (no Basic cluster) → trust ZHA flag.
+        t = _transport_with_device(last_seen_age=9999.0)
+        t._connection_mgr.ping_device = AsyncMock(return_value=None)
+        await t._check_online_health()
+        self.assertTrue(t._device_online)
+
+    async def test_no_last_seen_and_available_stays_online(self) -> None:
+        t = _transport_with_device(last_seen_age=None)
+        await t._check_online_health()
+        self.assertTrue(t._device_online)
+
+
+class TestMarkDeviceOffline(unittest.TestCase):
+    """Tests for ``_mark_device_offline`` and the ZHA event hook."""
+
+    def test_marks_offline_and_notifies_protocol(self) -> None:
+        t = _transport_with_device()
+        t._mark_device_offline("test reason")
+        self.assertFalse(t._device_online)
+        t._loop.call_soon_threadsafe.assert_called()
+        partial = t._loop.call_soon_threadsafe.call_args.args[0]
+        self.assertIs(partial.func, t._protocol.connection_lost)
+        self.assertIsInstance(partial.args[0], exc.TransportZigbeeError)
+
+    def test_second_offline_is_noop(self) -> None:
+        t = _transport_with_device()
+        t._mark_device_offline("first")
+        t._loop.call_soon_threadsafe.reset_mock()
+        t._mark_device_offline("second")
+        t._loop.call_soon_threadsafe.assert_not_called()
+
+    def test_offline_event_schedules_mark(self) -> None:
+        t = _transport_with_device()
+        t._handle_device_offline_event()
+        t._loop.call_soon_threadsafe.assert_called_once()
+        partial = t._loop.call_soon_threadsafe.call_args.args[0]
+        self.assertEqual(partial.func, t._mark_device_offline)
+
+
+class TestTryReconnect(unittest.IsolatedAsyncioTestCase):
+    """Tests for ``_try_reconnect`` recovery transitions."""
+
+    def _offline_transport(self) -> ZigbeeTransport:
+        t = _transport_with_device(last_seen_age=9999.0)
+        t._device_online = False
+        t._attach_clusters = MagicMock()
+        t._bind_and_configure = AsyncMock()
+        t._make_connection = MagicMock()
+        return t
+
+    async def test_no_gateway_no_reconnect(self) -> None:
+        t = self._offline_transport()
+        t._hass.data = {}
+        await t._try_reconnect()
+        t._make_connection.assert_not_called()
+        self.assertFalse(t._device_online)
+
+    async def test_fresh_last_seen_reconnects(self) -> None:
+        t = self._offline_transport()
+        t._device.last_seen = __import__("time").time()  # fresh
+        await t._try_reconnect()
+        t._make_connection.assert_called_once()
+        self.assertTrue(t._device_online)
+        t._attach_clusters.assert_called_once()
+
+    async def test_stale_but_ping_ok_reconnects(self) -> None:
+        t = self._offline_transport()
+        t._connection_mgr.ping_device = AsyncMock(return_value=True)
+        await t._try_reconnect()
+        t._make_connection.assert_called_once()
+        self.assertTrue(t._device_online)
+
+    async def test_stale_and_ping_fail_stays_offline(self) -> None:
+        t = self._offline_transport()
+        t._connection_mgr.ping_device = AsyncMock(return_value=False)
+        await t._try_reconnect()
+        t._make_connection.assert_not_called()
+        self.assertFalse(t._device_online)
+
+    async def test_attach_failure_stays_offline(self) -> None:
+        t = self._offline_transport()
+        t._device.last_seen = __import__("time").time()
+        t._attach_clusters.side_effect = exc.TransportZigbeeError("no ep")
+        await t._try_reconnect()
+        t._make_connection.assert_not_called()
+        self.assertFalse(t._device_online)
+
+    async def test_reconnect_resubscribes_offline_event(self) -> None:
+        t = self._offline_transport()
+        t._device.last_seen = __import__("time").time()
+        old_unsub = MagicMock()
+        t._availability_unsub = old_unsub
+        await t._try_reconnect()
+        old_unsub.assert_called_once()
+
+
+class TestSubscribeDeviceOffline(unittest.TestCase):
+    """Tests for ``subscribe_device_offline``."""
+
+    def test_registers_zha_event_listener(self) -> None:
+        t = _make_transport()
+        device = MagicMock()
+        t._device = device
+        unsub = t._connection_mgr.subscribe_device_offline(MagicMock())
+        device.on_event.assert_called_once()
+        self.assertEqual(device.on_event.call_args.args[0], "zha_event")
+        self.assertIsNotNone(unsub)
+
+    def test_no_on_event_returns_none(self) -> None:
+        t = _make_transport()
+        t._device = object()  # no on_event
+        self.assertIsNone(
+            t._connection_mgr.subscribe_device_offline(MagicMock())
+        )
+
+    def test_listener_fires_on_device_offline(self) -> None:
+        t = _make_transport()
+        device = MagicMock()
+        captured: list[Any] = []
+        device.on_event.side_effect = lambda _ev, cb: captured.append(cb)
+        t._device = device
+        callback = MagicMock()
+        t._connection_mgr.subscribe_device_offline(callback)
+
+        event = MagicMock()
+        event.data = {"device_event_type": "device_offline"}
+        captured[0](event)
+        callback.assert_called_once()
+
+    def test_listener_ignores_other_events(self) -> None:
+        t = _make_transport()
+        device = MagicMock()
+        captured: list[Any] = []
+        device.on_event.side_effect = lambda _ev, cb: captured.append(cb)
+        t._device = device
+        callback = MagicMock()
+        t._connection_mgr.subscribe_device_offline(callback)
+
+        event = MagicMock()
+        event.data = {"device_event_type": "zha_trigger"}
+        captured[0](event)
+        callback.assert_not_called()
+
+
+class TestPingDevice(unittest.IsolatedAsyncioTestCase):
+    """Tests for ``ping_device``."""
+
+    async def test_no_basic_cluster_returns_none(self) -> None:
+        t = _transport_with_device()
+        t._device.basic_cluster = None
+        self.assertIsNone(await t._connection_mgr.ping_device())
+
+    async def test_successful_read_returns_true(self) -> None:
+        t = _transport_with_device()
+        t._device.basic_cluster.read_attributes = AsyncMock(
+            return_value=({"manufacturer": "x"}, {})
+        )
+        self.assertTrue(await t._connection_mgr.ping_device())
+
+    async def test_failed_read_returns_false(self) -> None:
+        t = _transport_with_device()
+        t._device.basic_cluster.read_attributes = AsyncMock(
+            side_effect=TimeoutError
+        )
+        self.assertFalse(await t._connection_mgr.ping_device())
+
+    async def test_empty_success_map_returns_false(self) -> None:
+        t = _transport_with_device()
+        t._device.basic_cluster.read_attributes = AsyncMock(
+            return_value=({}, {"manufacturer": 1})
+        )
+        self.assertFalse(await t._connection_mgr.ping_device())
+
+
 if __name__ == "__main__":
     unittest.main()
