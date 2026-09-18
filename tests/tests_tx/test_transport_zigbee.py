@@ -7,7 +7,7 @@ import asyncio
 import unittest
 from datetime import timedelta as td
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from ramses_tx import exceptions as exc
 from ramses_tx.address import HGI_DEV_ADDR
@@ -1632,6 +1632,40 @@ class TestAvailabilityOfflineDetection(unittest.IsolatedAsyncioTestCase):
         t = _transport_with_device(last_seen_age=None)
         await t._check_online_health()
         self.assertTrue(t._device_online)
+
+    async def test_initial_unavailable_device_requires_live_ping(self) -> None:
+        t = _transport_with_device(last_seen_age=5.0, available=False)
+        t._connection_mgr.ping_device = AsyncMock(return_value=False)
+        await t._check_initial_health()
+        self.assertFalse(t._device_online)
+
+    async def test_initial_unavailable_device_accepts_live_ping(self) -> None:
+        t = _transport_with_device(last_seen_age=5.0, available=False)
+        t._connection_mgr.ping_device = AsyncMock(return_value=True)
+        await t._check_initial_health()
+        self.assertTrue(t._device_online)
+
+    async def test_availability_loop_checks_before_first_sleep(self) -> None:
+        t = _transport_with_device(last_seen_age=5.0)
+        events: list[str] = []
+
+        async def stop_after_check() -> None:
+            events.append("check")
+            t._closing = True
+
+        async def record_sleep(_delay: float) -> None:
+            events.append("sleep")
+
+        t._check_initial_health = AsyncMock(side_effect=stop_after_check)
+        with patch(
+            "ramses_tx.transport.zigbee.transport.asyncio.sleep",
+            new_callable=AsyncMock,
+            side_effect=record_sleep,
+        ):
+            await t._availability_loop()
+
+        t._check_initial_health.assert_awaited_once_with()
+        self.assertEqual(events, ["check", "sleep"])
 
 
 class TestMarkDeviceOffline(unittest.TestCase):

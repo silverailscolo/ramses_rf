@@ -882,17 +882,36 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
     async def _availability_loop(self) -> None:
         """Periodically verify device health and drive reconnection."""
+        initial_check = True
         while not self._closing:
-            await asyncio.sleep(self._AVAILABILITY_CHECK_INTERVAL)
             try:
                 if self._device_online:
-                    await self._check_online_health()
+                    if initial_check:
+                        await self._check_initial_health()
+                    else:
+                        await self._check_online_health()
                 else:
                     await self._try_reconnect()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 _LOGGER.exception("Zigbee availability check failed")
+            initial_check = False
+            await asyncio.sleep(self._AVAILABILITY_CHECK_INTERVAL)
+
+    async def _check_initial_health(self) -> None:
+        """Verify cached ZHA state when availability monitoring starts."""
+        if not self._connection_mgr.gateway_present():
+            self._mark_device_offline("ZHA gateway not available")
+            return
+        if self._connection_mgr.device_available():
+            await self._check_online_health()
+            return
+        if await self._connection_mgr.ping_device() is True:
+            return
+        self._mark_device_offline(
+            "ZHA reports device unavailable or off-network at startup"
+        )
 
     async def _check_online_health(self) -> None:
         """Look for evidence the device has gone away.
