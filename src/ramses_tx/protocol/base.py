@@ -274,6 +274,11 @@ class _BaseProtocol(ProtocolInterface, asyncio.Protocol):
         self._wait_connection_made = self._loop.create_future()
         if error:
             self._wait_connection_lost.set_exception(error)
+            # Retrieve the exception now so asyncio doesn't log "Future
+            # exception was never retrieved" when nothing awaits this
+            # future (e.g. pool children whose connection_lost is only
+            # consumed by the pool).  A later await still raises it.
+            self._wait_connection_lost.exception()
         else:
             self._wait_connection_lost.set_result(None)
 

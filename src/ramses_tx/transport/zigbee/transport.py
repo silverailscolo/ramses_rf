@@ -819,6 +819,16 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     "Install it or use a different transport."
                 )
             )
+        except exc.TransportZigbeeError as err:
+            # Expected, retriable conditions (ZHA integration down,
+            # device not yet in the gateway's registry): warn without a
+            # traceback — the caller decides whether to retry/rejoin.
+            _LOGGER.warning(
+                "Zigbee transport not available: %s — child stays "
+                "offline until ZHA recovers",
+                err,
+            )
+            self._close(err)
         except Exception as err:
             _LOGGER.exception("Failed to initialize Zigbee transport: %s", err)
             self._close(exc.TransportZigbeeError(str(err)))
