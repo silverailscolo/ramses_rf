@@ -742,9 +742,6 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     except asyncio.CancelledError:
                         raise
                     except Exception as err:
-                        _LOGGER.exception(
-                            "Target cluster command failed: %s", err
-                        )
                         raise exc.TransportZigbeeError(
                             f"Target cluster command failed: {err}"
                         ) from err
@@ -753,8 +750,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 await asyncio.sleep(0.01)
         except asyncio.CancelledError:
             raise
-        except Exception as err:
-            _LOGGER.exception("Zigbee unacked send failed: %s", err)
+        except exc.TransportZigbeeError as err:
+            # Expected transient conditions (device re-joined, offline,
+            # delivery failure) — the packet is dropped, not fatal
+            _LOGGER.warning("Zigbee unacked send failed: %s", err)
+        except Exception:
+            _LOGGER.exception("Zigbee unacked send failed")
 
     def _track_task(self, task: asyncio.Task[Any]) -> None:
         """Add a task to the registry to prevent garbage collection."""
