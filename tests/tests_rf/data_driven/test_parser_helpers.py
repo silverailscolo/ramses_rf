@@ -173,7 +173,7 @@ def test_2411_data_type_11_ventura_param_da() -> None:
     )
     result = msg.payload
     assert result["parameter"] == "DA"
-    assert result["description"] == "Unknown (ClimaRad Ventura)"
+    assert result["description"] == "Unknown parameter DA (ClimaRad Ventura)"
     assert result["value"] == 1000  # 0x000003E8 = 1000
     assert result["min_value"] == 0
     assert result["max_value"] == 5000  # 0x00001388
@@ -205,7 +205,7 @@ def test_2411_unknown_param_ids_ventura() -> None:
     )
     result = msg.payload
     assert result["parameter"] == "4C"
-    assert result["description"] == "Unknown (ClimaRad Ventura)"
+    assert result["description"] == "Unknown parameter 4C (ClimaRad Ventura)"
     assert "_unknown_data_type" not in result
 
     # param 88, data_type 10 (4-byte counter)
@@ -225,7 +225,7 @@ def test_2411_unknown_param_ids_ventura() -> None:
     )
     result = msg.payload
     assert result["parameter"] == "DA"
-    assert result["description"] == "Unknown (ClimaRad Ventura)"
+    assert result["description"] == "Unknown parameter DA (ClimaRad Ventura)"
     assert "_unknown_data_type" not in result
 
 

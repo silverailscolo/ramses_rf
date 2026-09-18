@@ -1052,7 +1052,7 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_DATA_UNIT: "",
     },
     "4C": {
-        SZ_DESCRIPTION: "Unknown (ClimaRad Ventura)",
+        SZ_DESCRIPTION: "Unknown parameter 4C (ClimaRad Ventura)",
         SZ_MIN_VALUE: 0,
         SZ_MAX_VALUE: 0xFFFFFFFF,
         SZ_PRECISION: 1,
@@ -1068,7 +1068,7 @@ _2411_PARAMS_SCHEMA: dict[str, dict[str, Any]] = {
         SZ_DATA_UNIT: "",
     },
     "DA": {
-        SZ_DESCRIPTION: "Unknown (ClimaRad Ventura)",
+        SZ_DESCRIPTION: "Unknown parameter DA (ClimaRad Ventura)",
         SZ_MIN_VALUE: 0,
         SZ_MAX_VALUE: 0xFFFFFFFF,
         SZ_PRECISION: 1,
