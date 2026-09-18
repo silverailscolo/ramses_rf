@@ -745,6 +745,38 @@ class TestWaitForGateway(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(exc.TransportZigbeeError):
             await t._wait_for_gateway()
 
+    async def test_fails_fast_when_zha_entry_retrying(self) -> None:
+        """SETUP_RETRY ZHA entries can't yield a gateway this cycle."""
+        t = await self._make()
+        mock_entry = MagicMock()
+        mock_entry.state.value = "setup_retry"
+        mock_hass = MagicMock()
+        mock_hass.data = {}
+        mock_hass.config_entries.async_entries.return_value = [mock_entry]
+        t._hass = mock_hass
+        # Many attempts + long interval: fail-fast must not reach them
+        t._GATEWAY_POLL_ATTEMPTS = 30
+        t._GATEWAY_POLL_INTERVAL = 60.0
+
+        with self.assertRaises(exc.TransportZigbeeError):
+            await t._wait_for_gateway()
+
+    async def test_polls_while_zha_entry_pending(self) -> None:
+        """A SETUP_IN_PROGRESS entry keeps the historical poll alive."""
+        t = await self._make()
+        mock_entry = MagicMock()
+        mock_entry.state.value = "setup_in_progress"
+        mock_hass = MagicMock()
+        mock_hass.data = {}
+        mock_hass.config_entries.async_entries.return_value = [mock_entry]
+        t._hass = mock_hass
+        t._GATEWAY_POLL_ATTEMPTS = 2
+        t._GATEWAY_POLL_INTERVAL = 0.001
+
+        with self.assertRaises(exc.TransportZigbeeError) as cm:
+            await t._wait_for_gateway()
+        self.assertNotIn("pending load", str(cm.exception))
+
 
 # ---------------------------------------------------------------------------
 # 13. _send_command  (async)

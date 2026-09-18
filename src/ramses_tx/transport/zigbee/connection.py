@@ -69,25 +69,49 @@ class ZigbeeConnectionManager:
         return self._write_cluster
 
     async def wait_for_gateway(self) -> Any:
-        """Poll the Home Assistant environment for the ZHA gateway."""
+        """Poll the Home Assistant environment for the ZHA gateway.
+
+        Fails fast when no ZHA config entry could produce a gateway this
+        boot (no entry at all, or every entry in a failed/retrying
+        state) — waiting the full poll is pointless while ZHA backs off
+        for minutes.  A pending watcher (ramses_cc ``_schedule_zigbee_
+        rejoin``) reloads the entry once ZHA does come up.
+        """
         for _attempt in range(self._GATEWAY_POLL_ATTEMPTS):
-            zha_data = (
-                self._hass.data.get("zha")
-                if self._hass and hasattr(self._hass, "data")
-                else None
-            )
-            gateway_proxy = (
-                getattr(zha_data, "gateway_proxy", None) if zha_data else None
-            )
-            gateway = (
-                getattr(gateway_proxy, "gateway", None)
-                if gateway_proxy
-                else None
-            )
+            gateway = self._current_gateway()
             if gateway:
                 return gateway
+            if not self._zha_may_come_up():
+                raise exc.TransportZigbeeError(
+                    "ZHA gateway proxy not found "
+                    "(no ZHA config entry pending load)"
+                )
             await asyncio.sleep(self._GATEWAY_POLL_INTERVAL)
         raise exc.TransportZigbeeError("ZHA gateway proxy not found")
+
+    def _zha_may_come_up(self) -> bool:
+        """Return True while a ZHA config entry may still yield a gateway.
+
+        Entries in ``not_loaded``/``setup_in_progress``/``loaded`` may
+        still initialise the gateway proxy; entries in retry/error
+        states will not within this poll window.  Unknown hass mocks
+        keep the historical poll-and-wait behaviour.
+        """
+        config_entries = getattr(self._hass, "config_entries", None)
+        async_entries = getattr(config_entries, "async_entries", None)
+        if async_entries is None:
+            return True
+        try:
+            entries = async_entries("zha")
+            if not entries:
+                return False
+            pending = {"not_loaded", "setup_in_progress", "loaded"}
+            return any(
+                getattr(getattr(e, "state", None), "value", None) in pending
+                for e in entries
+            )
+        except Exception:  # noqa: BLE001 — mocked hass in tests
+            return True
 
     def _current_gateway(self) -> Any | None:
         """Return the live ZHA gateway object, or None if ZHA is down."""
