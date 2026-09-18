@@ -884,8 +884,6 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         """Periodically verify device health and drive reconnection."""
         while not self._closing:
             await asyncio.sleep(self._AVAILABILITY_CHECK_INTERVAL)
-            if self._closing:
-                break
             try:
                 if self._device_online:
                     await self._check_online_health()

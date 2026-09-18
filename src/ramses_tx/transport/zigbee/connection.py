@@ -178,7 +178,7 @@ class ZigbeeConnectionManager:
             last_seen = getattr(zigpy_device, "last_seen", None)
         if last_seen is None:
             return None
-        return time.time() - last_seen
+        return float(time.time() - last_seen)
 
     async def ping_device(self) -> bool | None:
         """Actively verify device liveness via the Basic cluster.
@@ -226,10 +226,11 @@ class ZigbeeConnectionManager:
                 callback()
 
         try:
-            return on_event("zha_event", _listener)
+            unsub = on_event("zha_event", _listener)
         except Exception as err:
             _LOGGER.debug("Failed to subscribe to device events: %s", err)
             return None
+        return unsub if callable(unsub) else None
 
     async def wait_for_device_ready(self, device: Any, ieee: Any) -> None:
         """Wait for target Zigbee device to be fully initialised."""

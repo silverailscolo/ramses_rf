@@ -541,9 +541,11 @@ async def test_reconnect_restores_transport_for_failed_child() -> None:
     pool = PooledTransport(proto, [t0, t1], config=TransportConfig())
     _connect_and_ready(pool, 1, t1)
 
-    # Simulate a child whose transport never connected at startup.
+    # Simulate a child whose transport never connected at startup
+    # (__dict__ poke: direct assignment narrows the attr to None for
+    # mypy, making the post-reconnect asserts "unreachable")
     child = pool._children[0]
-    child.transport = None
+    child.__dict__["transport"] = None
     assert not child.is_sendable
 
     # Reconnect: mark_connected must re-attach the transport object.
