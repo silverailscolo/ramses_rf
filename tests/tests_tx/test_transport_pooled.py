@@ -531,6 +531,41 @@ async def test_disconnect_only_affects_one_child() -> None:
     assert not pool._children[0].is_connected
 
 
+async def test_reconnect_restores_transport_for_failed_child() -> None:
+    """A child that failed at construction has transport=None; a later
+    connection_made (e.g. Zigbee availability reconnect) must restore it
+    or is_sendable stays False forever."""
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    t1 = _make_mock_transport(hgi="18:002222")
+    pool = PooledTransport(proto, [t0, t1], config=TransportConfig())
+    _connect_and_ready(pool, 1, t1)
+
+    # Simulate a child whose transport never connected at startup
+    # (__dict__ poke: direct assignment narrows the attr to None for
+    # mypy, making the post-reconnect asserts "unreachable")
+    child = pool._children[0]
+    child.__dict__["transport"] = None
+    assert not child.is_sendable
+
+    # Reconnect: mark_connected must re-attach the transport object.
+    pool._on_child_connected(0, t0)
+    assert child.is_connected
+    assert child.transport is t0
+    assert child.is_sendable
+
+
+def test_callback_child_reconnect_does_not_store_transport() -> None:
+    """Callback-driven children keep transport=None — outbound frames
+    go through the pool's adapter, not a per-child transport."""
+    cb = PoolChild(
+        child_id=0, port_name="mqtt_ha://18:001111", callback_driven=True
+    )
+    cb.mark_connected(_make_mock_transport(hgi="18:001111"))
+    assert cb.transport is None
+    assert cb.is_connected
+
+
 # -- get_extra_info --------------------------------------------------------
 
 

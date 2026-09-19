@@ -19,6 +19,7 @@ class ZigbeeConnectionManager:
     _GATEWAY_POLL_INTERVAL: float = 1.0
     _GATEWAY_POLL_ATTEMPTS: int = 30
     _DEVICE_READY_TIMEOUT: float = 60.0
+    _PING_TIMEOUT: float = 10.0
 
     def __init__(
         self,
@@ -68,25 +69,168 @@ class ZigbeeConnectionManager:
         return self._write_cluster
 
     async def wait_for_gateway(self) -> Any:
-        """Poll the Home Assistant environment for the ZHA gateway."""
+        """Poll the Home Assistant environment for the ZHA gateway.
+
+        Fails fast when no ZHA config entry could produce a gateway this
+        boot (no entry at all, or every entry in a failed/retrying
+        state) — waiting the full poll is pointless while ZHA backs off
+        for minutes.  A pending watcher (ramses_cc ``_schedule_zigbee_
+        rejoin``) reloads the entry once ZHA does come up.
+        """
         for _attempt in range(self._GATEWAY_POLL_ATTEMPTS):
-            zha_data = (
-                self._hass.data.get("zha")
-                if self._hass and hasattr(self._hass, "data")
-                else None
-            )
-            gateway_proxy = (
-                getattr(zha_data, "gateway_proxy", None) if zha_data else None
-            )
-            gateway = (
-                getattr(gateway_proxy, "gateway", None)
-                if gateway_proxy
-                else None
-            )
+            gateway = self._current_gateway()
             if gateway:
                 return gateway
+            if not self._zha_may_come_up():
+                raise exc.TransportZigbeeError(
+                    "ZHA gateway proxy not found "
+                    "(no ZHA config entry pending load)"
+                )
             await asyncio.sleep(self._GATEWAY_POLL_INTERVAL)
         raise exc.TransportZigbeeError("ZHA gateway proxy not found")
+
+    def _zha_may_come_up(self) -> bool:
+        """Return True while a ZHA config entry may still yield a gateway.
+
+        Entries in ``not_loaded``/``setup_in_progress``/``loaded`` may
+        still initialise the gateway proxy; entries in retry/error
+        states will not within this poll window.  Unknown hass mocks
+        keep the historical poll-and-wait behaviour.
+        """
+        config_entries = getattr(self._hass, "config_entries", None)
+        async_entries = getattr(config_entries, "async_entries", None)
+        if async_entries is None:
+            return True
+        try:
+            entries = async_entries("zha")
+            if not entries:
+                return False
+            pending = {"not_loaded", "setup_in_progress", "loaded"}
+            return any(
+                getattr(getattr(e, "state", None), "value", None) in pending
+                for e in entries
+            )
+        except Exception:  # noqa: BLE001 — mocked hass in tests
+            return True
+
+    def _current_gateway(self) -> Any | None:
+        """Return the live ZHA gateway object, or None if ZHA is down."""
+        zha_data = (
+            self._hass.data.get("zha")
+            if self._hass and hasattr(self._hass, "data")
+            else None
+        )
+        gateway_proxy = (
+            getattr(zha_data, "gateway_proxy", None) if zha_data else None
+        )
+        return (
+            getattr(gateway_proxy, "gateway", None) if gateway_proxy else None
+        )
+
+    def gateway_present(self) -> bool:
+        """Return True if the ZHA gateway is reachable; refresh the handle."""
+        gateway = self._current_gateway()
+        if gateway is None:
+            return False
+        self._zha_gateway = gateway
+        return True
+
+    def resolve_device(self) -> Any | None:
+        """Re-resolve the ZHA device for our IEEE (survives ZHA reloads)."""
+        gateway = self._zha_gateway or self._current_gateway()
+        if gateway is None:
+            return None
+        try:
+            from zigpy.types import EUI64
+
+            ieee = EUI64.convert(self._ieee)
+        except ImportError:
+            ieee = self._ieee
+
+        devices = getattr(gateway, "devices", None)
+        if devices and ieee in devices:
+            return devices[ieee]
+        controller = getattr(gateway, "application_controller", None)
+        if controller is not None:
+            return getattr(controller, "devices", {}).get(ieee)
+        return None
+
+    def device_available(self) -> bool:
+        """Return the ZHA-reported availability of the bound device."""
+        device = self._device
+        if device is None:
+            return False
+        return bool(
+            getattr(device, "available", True)
+            and getattr(device, "on_network", True)
+        )
+
+    def last_seen_age(self) -> float | None:
+        """Seconds since the Zigbee device last reported, or None if unknown."""
+        import time
+
+        device = self._device
+        last_seen = getattr(device, "last_seen", None)
+        if last_seen is None:
+            zigpy_device = getattr(device, "_zigpy_device", None) or getattr(
+                device, "zigpy_device", None
+            )
+            last_seen = getattr(zigpy_device, "last_seen", None)
+        if last_seen is None:
+            return None
+        return float(time.time() - last_seen)
+
+    async def ping_device(self) -> bool | None:
+        """Actively verify device liveness via the Basic cluster.
+
+        Mirrors ZHA's own availability check: read the manufacturer
+        attribute.  Returns None when no usable Basic cluster exists
+        (liveness cannot be verified actively).
+        """
+        device = self._device
+        basic = getattr(device, "basic_cluster", None)
+        read = getattr(basic, "read_attributes", None)
+        if basic is None or not callable(read):
+            return None
+        try:
+            result = await asyncio.wait_for(
+                read(["manufacturer"], allow_cache=False),
+                timeout=self._PING_TIMEOUT,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return False
+        success = result[0] if isinstance(result, (tuple, list)) else result
+        return bool(success)
+
+    def subscribe_device_offline(
+        self, callback: Callable[[], None]
+    ) -> Callable[[], None] | None:
+        """Subscribe to the device's zha_event stream for offline events.
+
+        ZHA emits ``{"device_event_type": "device_offline"}`` when it
+        marks a device unavailable — an early signal that does not wait
+        for the next availability poll.
+        """
+        on_event = getattr(self._device, "on_event", None)
+        if not callable(on_event):
+            return None
+
+        def _listener(event: Any = None, *_args: Any, **_kwargs: Any) -> None:
+            data = getattr(event, "data", event)
+            if (
+                isinstance(data, dict)
+                and data.get("device_event_type") == "device_offline"
+            ):
+                callback()
+
+        try:
+            unsub = on_event("zha_event", _listener)
+        except Exception as err:
+            _LOGGER.debug("Failed to subscribe to device events: %s", err)
+            return None
+        return unsub if callable(unsub) else None
 
     async def wait_for_device_ready(self, device: Any, ieee: Any) -> None:
         """Wait for target Zigbee device to be fully initialised."""
