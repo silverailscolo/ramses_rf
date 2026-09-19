@@ -14,6 +14,7 @@ from ramses_rf.gateway import Gateway
 from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import (
     DEFAULT_POLLING_SCHEDULES,
+    POLL_REPLY_TIMEOUT,
     PollingManager,
 )
 from ramses_rf.protocol.opentherm import (
@@ -898,3 +899,115 @@ async def test_polling_manager_otb_live_dispatch_transmits_data_id_payloads(
         "0000120000",
     }
     assert sent_3220_payloads == expected_payloads
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_counts_missed_polls(
+    mock_gateway: MagicMock,
+) -> None:
+    # ARRANGE — a FAN whose previous polls went unanswered
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    fan_dev = MockDevice(mock_gateway, "32:333333", slug="FAN")
+    mock_gateway.device_registry.devices = [fan_dev]
+    mock_gateway.device_registry.device_by_id = {fan_dev.id: fan_dev}
+
+    poller.update_device_tasks(fan_dev)
+    past = dt.now(UTC) - td(seconds=POLL_REPLY_TIMEOUT + 60)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+        task.last_polled = past - td(seconds=10)
+
+    # ACT
+    await poller.poll_due_commands()
+
+    # ASSERT — each unanswered poll counted once per task
+    tasks = poller.get_scheduled_cmds()
+    assert fan_dev.consecutive_missed_polls == len(tasks)
+    assert all(t.failures == 1 for t in tasks)
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_answered_poll_not_missed(
+    mock_gateway: MagicMock,
+) -> None:
+    # ARRANGE — the device transmitted since the previous poll was sent
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    fan_dev = MockDevice(mock_gateway, "32:333333", slug="FAN")
+    mock_gateway.device_registry.devices = [fan_dev]
+    mock_gateway.device_registry.device_by_id = {fan_dev.id: fan_dev}
+    fan_dev._last_msg_dtm = dt.now(UTC)
+
+    poller.update_device_tasks(fan_dev)
+    past = dt.now(UTC) - td(seconds=POLL_REPLY_TIMEOUT + 60)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+        task.last_polled = past - td(seconds=10)
+
+    # ACT
+    await poller.poll_due_commands()
+
+    # ASSERT — polls answered by any device traffic are not missed
+    tasks = poller.get_scheduled_cmds()
+    assert fan_dev.consecutive_missed_polls == 0
+    assert all(t.failures == 0 for t in tasks)
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_missed_poll_counted_once(
+    mock_gateway: MagicMock,
+) -> None:
+    # ARRANGE — a silent FAN; each poll must be counted exactly once
+    poller = PollingManager(mock_gateway, shadow_mode=False)
+    fan_dev = MockDevice(mock_gateway, "32:333333", slug="FAN")
+    mock_gateway.device_registry.devices = [fan_dev]
+    mock_gateway.device_registry.device_by_id = {fan_dev.id: fan_dev}
+
+    poller.update_device_tasks(fan_dev)
+    past = dt.now(UTC) - td(seconds=POLL_REPLY_TIMEOUT + 60)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+        task.last_polled = past - td(seconds=10)
+
+    # ACT — first cycle counts a miss for the previous unanswered poll
+    await poller.poll_due_commands()
+    tasks = poller.get_scheduled_cmds()
+    assert all(t.failures == 1 for t in tasks)
+
+    # ACT — next cycle: the just-sent poll is still within the reply
+    # window, so nothing is re-counted
+    for task in tasks:
+        task.next_due = dt.now(UTC) + td(hours=1)
+    await poller.poll_due_commands()
+    assert all(t.failures == 1 for t in tasks)
+
+    # ACT — the poll ages past the reply window still unanswered
+    for task in tasks:
+        task.last_polled = dt.now(UTC) - td(seconds=POLL_REPLY_TIMEOUT + 60)
+    await poller.poll_due_commands()
+    assert all(t.failures == 2 for t in tasks)
+    assert fan_dev.consecutive_missed_polls == len(tasks) * 2
+
+
+@pytest.mark.asyncio
+async def test_polling_manager_shadow_mode_no_missed_polls(
+    mock_gateway: MagicMock,
+) -> None:
+    # ARRANGE — shadow mode never sends, so nothing may count as missed
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    fan_dev = MockDevice(mock_gateway, "32:333333", slug="FAN")
+    mock_gateway.device_registry.devices = [fan_dev]
+    mock_gateway.device_registry.device_by_id = {fan_dev.id: fan_dev}
+
+    poller.update_device_tasks(fan_dev)
+    past = dt.now(UTC) - td(seconds=POLL_REPLY_TIMEOUT + 60)
+    for task in poller.get_scheduled_cmds():
+        task.next_due = past
+        task.last_polled = past - td(seconds=10)
+
+    # ACT
+    await poller.poll_due_commands()
+
+    # ASSERT
+    tasks = poller.get_scheduled_cmds()
+    assert fan_dev.consecutive_missed_polls == 0
+    assert all(t.failures == 0 for t in tasks)

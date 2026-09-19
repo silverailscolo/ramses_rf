@@ -11,6 +11,7 @@ from ramses_rf import exceptions as exc
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent
 from ramses_rf.const import (
+    HEARTBEAT_TIMEOUT_FAN,
     HEARTBEAT_TIMEOUT_FILTER,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
@@ -189,6 +190,18 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
         self.__dict__.setdefault("_sensor_ids", set())
         if not hasattr(self, "hvac_state"):
             self.hvac_state = HvacState()
+
+    @property
+    def heartbeat_timeout(self) -> td:
+        """Return the timeout before the device is considered unavailable.
+
+        FANs broadcast 31D9/31DA every ~90 seconds, so 15 minutes of
+        silence (~10 missed broadcasts) indicates the device is offline.
+
+        :return: The timeout duration.
+        :rtype: td
+        """
+        return HEARTBEAT_TIMEOUT_FAN
 
     def _update_schema(self, **schema: Any) -> None:
         """Update this FAN with its remotes/sensors membership from schema.

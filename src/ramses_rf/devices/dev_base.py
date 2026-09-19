@@ -42,7 +42,7 @@ from ramses_rf.schemas import (
 from ramses_rf.strategies import HvacStrategy, best_hvac_strategy
 from ramses_rf.topology import Child
 from ramses_tx import Packet
-from ramses_tx.const import Code
+from ramses_tx.const import SZ_ACTIVE_HGI, Code
 
 from ..messages import Message
 from ..protocol.ramses import CODES_BY_DEV_SLUG
@@ -118,6 +118,7 @@ class DeviceBase(Entity):
         )
         self._is_battery: bool | None = traits.is_battery if traits else None
         self._last_msg_dtm: dt | None = None
+        self._missed_polls: int = 0
 
         self.power_state = PowerState()
 
@@ -161,6 +162,72 @@ class DeviceBase(Entity):
             now = dt.now()
 
         return bool((now - self._last_msg_dtm) <= self.heartbeat_timeout)
+
+    @property
+    def last_seen(self) -> dt | None:
+        """Return the timestamp of the last message sent by this device.
+
+        Only messages with this device as the source count; messages
+        merely addressed to the device do not prove it is reachable.
+
+        :return: The timestamp, or ``None`` if never heard from.
+        :rtype: dt | None
+        """
+        return self._last_msg_dtm
+
+    @property
+    def consecutive_missed_polls(self) -> int:
+        """Return the number of consecutive polls the device did not answer.
+
+        Incremented by the polling manager when a poll is due and no
+        message has been received from the device since the previous
+        poll was sent.  Reset to zero by any message received from the
+        device (see ``state_projector``).
+
+        :return: The count of consecutive unanswered polls.
+        :rtype: int
+        """
+        return self._missed_polls
+
+    @property
+    def rssi_per_hgi(self) -> dict[str, int]:
+        """Return the best recent RSSI for this device per connected HGI.
+
+        For pooled transports this maps each connected child HGI ID to
+        the best RSSI it has observed for this device.  For a single
+        transport the map has at most one entry, keyed by the active
+        HGI.
+
+        :return: Mapping of HGI device ID to best RSSI (dBm), possibly
+            empty if no RSSI has been recorded for this device.
+        :rtype: dict[str, int]
+        """
+        gwy = getattr(self, "_gateway", None)
+        if gwy is None:
+            return {}
+        engine = getattr(gwy, "_engine", None)
+        transport = getattr(engine, "_transport", None) if engine else None
+        if transport is not None:
+            by_hgi = transport.get_extra_info("pool_rssi_by_hgi")
+            if by_hgi:
+                result: dict[str, int] = {}
+                for hgi_id, tracker in by_hgi.items():
+                    rssi = tracker.best_rssi_for(str(self.id))
+                    if rssi is not None:
+                        result[hgi_id] = rssi
+                return result
+        tracker = getattr(gwy, "_rssi_tracker", None)
+        if tracker is None:
+            return {}
+        rssi = tracker.best_rssi_for(str(self.id))
+        if rssi is None:
+            return {}
+        hgi_id = (
+            transport.get_extra_info(SZ_ACTIVE_HGI)
+            if transport is not None
+            else None
+        )
+        return {str(hgi_id): rssi} if hgi_id else {}
 
     @property
     def communication_quality(self) -> CommunicationQuality | None:

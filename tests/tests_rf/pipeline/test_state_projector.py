@@ -12,6 +12,8 @@ import uuid
 from datetime import datetime as dt
 from typing import Any
 
+import pytest
+
 from ramses_rf.const import (
     SZ_ACTUATOR_COUNTDOWN,
     SZ_ACTUATOR_ENABLED,
@@ -57,6 +59,7 @@ from ramses_rf.models import (
 )
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.protocol.opentherm import OtDataId
+from ramses_rf.state_projector import process_state_updates
 
 
 class MockAddr:
@@ -1385,3 +1388,59 @@ def test_opentherm_counters_projection() -> None:
     # Assert
     assert device.opentherm_state.counters.burner_starts == 1250
     assert device.opentherm_state.counters.ch_pump_hours == 340
+
+
+class _LivenessDevice:
+    """A minimal device exposing the liveness attributes under test."""
+
+    def __init__(self, device_id: str, missed_polls: int = 0) -> None:
+        """Initialize the device with liveness tracking attributes.
+
+        :param device_id: The hardware ID string.
+        :type device_id: str
+        :param missed_polls: Initial consecutive missed poll count.
+        :type missed_polls: int
+        """
+        self.id: str = device_id
+        self._SLUG: str = DevType.FAN
+        self._last_msg_dtm: dt | None = None
+        self._missed_polls: int = missed_polls
+
+
+@pytest.mark.asyncio
+async def test_process_state_updates_src_only_liveness() -> None:
+    """Only the source device proves liveness; the destination does not."""
+    # Arrange — a FAN with pending missed polls
+    fan_dev = _LivenessDevice("32:153289", missed_polls=3)
+    registry = FakeRegistry(fan_dev)
+    gwy_adapter = FakeGatewayAdapter(registry)
+
+    # Act — a message merely addressed to the FAN (e.g. a poll echo)
+    echo_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RQ,
+        payload={},
+        src_id="18:130236",
+        dst_id="32:153289",
+    )
+    echo_msg.payload = None  # early return; liveness block already ran
+    await process_state_updates(gwy_adapter, echo_msg)
+
+    # Assert — destination involvement does not prove the FAN is alive
+    assert fan_dev._last_msg_dtm is None
+    assert fan_dev._missed_polls == 3
+
+    # Act — a message transmitted by the FAN itself
+    reply_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RP,
+        payload={},
+        src_id="32:153289",
+        dst_id="18:130236",
+    )
+    reply_msg.payload = None
+    await process_state_updates(gwy_adapter, reply_msg)
+
+    # Assert — source involvement proves liveness and resets the count
+    assert fan_dev._last_msg_dtm == reply_msg.dtm
+    assert fan_dev._missed_polls == 0

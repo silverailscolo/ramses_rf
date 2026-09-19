@@ -2,6 +2,7 @@
 """Unittests for the HvacVentilator class."""
 
 from collections.abc import Generator
+from datetime import UTC, datetime as dt, timedelta as td
 from enum import Enum
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
@@ -71,6 +72,18 @@ def hvac_ventilator(mock_gateway: MagicMock) -> HvacVentilator:
 
 class TestHvacVentilator:
     """Test HvacVentilator class."""
+
+    def test_fan_heartbeat_timeout(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """FANs go unavailable after ~15 minutes of broadcast silence."""
+        assert hvac_ventilator.heartbeat_timeout == td(minutes=15)
+
+        hvac_ventilator._last_msg_dtm = dt.now(UTC) - td(minutes=14)
+        assert hvac_ventilator.is_available
+
+        hvac_ventilator._last_msg_dtm = dt.now(UTC) - td(minutes=16)
+        assert not hvac_ventilator.is_available
 
     def test_initialization(self, hvac_ventilator: HvacVentilator) -> None:
         """Test that the ventilator initializes correctly.
