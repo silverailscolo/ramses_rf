@@ -282,17 +282,25 @@ def _resolve_logical_targets(
         ):
             targets.append(dst_dev)
 
-    # 4. Virtual twins (Zones) get updates if explicitly addressed by index.
-    # For 30C9, only Controller/UFC broadcasts carry authoritative zone
-    # addressing; non-controller 30C9 (sensor broadcasts) is handled in step 8.
+    # 4. Virtual twins (Zones) get updates if explicitly addressed by index,
+    # but only when the Controller is the source or the destination: a
+    # self-addressed broadcast (e.g. a DTS92 announcing its own setpoint,
+    # `I --- 22:xxx --:------ 22:xxx`) carries a device-local idx that must
+    # not be read as a controller zone index.  See:
+    # https://github.com/ramses-rf/ramses_cc/issues/1208
+    # Non-controller 30C9 (sensor broadcasts) is handled in step 8.
     if SZ_ZONE_INDEX in p and tcs:
-        is_ctrl_src = src_type in (
+        tcs_id = getattr(tcs, "id", "")
+        is_ctl_idx = src_type in (
             "01",
             "02",
             DevType.CTL,
             DevType.UFC,
-        ) or getattr(msg.src, "id", "") == getattr(tcs, "id", "")
-        if msg.code != Code._30C9 or is_ctrl_src:
+        ) or tcs_id in (
+            getattr(msg.src, "id", ""),
+            getattr(msg.dst, "id", ""),
+        )
+        if is_ctl_idx:
             if zone := tcs.zone_by_index.get(p[SZ_ZONE_INDEX]):
                 if zone not in targets:
                     targets.append(zone)

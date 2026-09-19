@@ -825,6 +825,90 @@ class TestResolveLogicalTargets:
         assert mock_zone not in targets
         assert mock_trv1 in targets
 
+    def test_sensor_setpoint_does_not_route_to_zone(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify a sensor's self-addressed 2309 never reaches a TCS zone.
+
+        Regression test for ramses-rf/ramses_cc#1208: a DTS92 broadcasts
+        its own (device-local) setpoint with idx 00, which is not the
+        controller's zone index and must not overwrite zone 00's setpoint.
+        """
+        # Arrange
+        mock_zone = MagicMock()
+        mock_zone.temp_state = MagicMock()
+        mock_zone.zone_state = MagicMock()
+
+        mock_sensor = MagicMock()
+        mock_sensor.id = "22:038387"
+        mock_sensor.type = "22"
+        mock_sensor._parent = mock_zone
+        mock_sensor.tcs = None
+
+        mock_tcs = MagicMock()
+        mock_tcs.id = "01:168186"
+        mock_tcs.zone_by_index = {"00": mock_zone}
+        mock_gateway.tcs = mock_tcs
+
+        mock_zone.sensor = mock_sensor
+        mock_zone.actuators = []
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_sensor.id: mock_sensor,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_sensor.id
+        msg.dst.id = "--:------"
+        msg.code = Code._2309
+        msg._has_array = False
+        payload = {"zone_index": "00", "setpoint": 11.0}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert: the sensor's device-local idx must not resolve to a zone
+        assert mock_zone not in targets
+        assert mock_sensor in targets
+
+    def test_ctl_setpoint_routes_to_zone(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify a controller's 2309 broadcast still routes to the zone."""
+        # Arrange
+        mock_zone = MagicMock()
+
+        mock_tcs = MagicMock()
+        mock_tcs.id = "01:168186"
+        mock_tcs.zone_by_index = {"00": mock_zone}
+        mock_gateway.tcs = mock_tcs
+
+        mock_ctl = MagicMock()
+        mock_ctl.id = "01:168186"
+        mock_ctl.type = "01"
+        mock_ctl.tcs = mock_tcs
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_ctl.id: mock_ctl,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_ctl.id
+        msg.dst.id = mock_ctl.id
+        msg.code = Code._2309
+        msg._has_array = False
+        payload = {"zone_index": "00", "setpoint": 24.0}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_zone in targets
+
 
 class TestCommandDispatcherSend:
     """Test CommandDispatcher.send returns Message instances consistently."""
