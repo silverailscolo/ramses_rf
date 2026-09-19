@@ -103,7 +103,7 @@ class MockMessage:
         """
         self.code: Code = code
         self.verb: str = verb
-        self.payload: dict[str, Any] = payload
+        self.payload: dict[str, Any] | None = payload
         self.src: MockAddr = MockAddr(src_id)
         self.dst: MockAddr = MockAddr(dst_id)
         self.dtm: dt = dtm or dt.now()
