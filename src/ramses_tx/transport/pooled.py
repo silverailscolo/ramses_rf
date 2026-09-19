@@ -682,7 +682,8 @@ class PooledTransport(TransportInterface):
 
         Preserves the compatibility keys consumed by ``ramses_rf`` and
         ``ramses_cc``: ``pool_hgi_ids``, ``pool_rssi_trackers``,
-        ``pool_stats``, ``SZ_ACTIVE_HGI``, ``SZ_IS_EVOFW3``.
+        ``pool_rssi_by_hgi``, ``pool_stats``, ``SZ_ACTIVE_HGI``,
+        ``SZ_IS_EVOFW3``.
         """
         if name == "pool_rssi_trackers":
             return [c.rssi_tracker for c in self._children if c.is_connected]
@@ -697,6 +698,12 @@ class PooledTransport(TransportInterface):
                 for c in self._children
                 if c.is_connected and c.hgi_id is not None
             ]
+        if name == "pool_rssi_by_hgi":
+            return {
+                str(c.hgi_id): c.rssi_tracker
+                for c in self._children
+                if c.is_connected and c.hgi_id is not None
+            }
         if name == SZ_IS_EVOFW3:
             for c in self._children:
                 if c.is_connected and c.transport_obj is not None:

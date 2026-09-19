@@ -941,15 +941,22 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
     :param msg: Message envelope containing payload.
     :type msg: Message
     """
-    # Notify candidate devices of _last_msg_dtm and all binding devices of rcvd_msg
+    # Notify candidate devices of _last_msg_dtm and all binding devices of
+    # rcvd_msg.  Only the source device is updated: a message merely
+    # addressed to a device does not prove that device is reachable (our
+    # own poll echoes would otherwise mask a silent device forever).
     if registry := getattr(gateway, "device_registry", None):
         for device in list(registry.device_by_id.values()):
-            if device.id in (
-                getattr(msg.src, "id", None),
-                getattr(msg.dst, "id", None),
-            ):
+            src_id = getattr(msg.src, "id", None)
+            if device.id == src_id:
                 if hasattr(device, "_last_msg_dtm"):
                     device._last_msg_dtm = msg.dtm
+                if hasattr(device, "_missed_polls"):
+                    device._missed_polls = 0
+            if device.id in (
+                src_id,
+                getattr(msg.dst, "id", None),
+            ):
                 # Fire the initialized callback on the first message from/to
                 # a FAN device.  Phase 2.95 removed the _handle_msg override
                 # that used to do this; without it, ramses_cc never sends the
