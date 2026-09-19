@@ -8,7 +8,7 @@ import pytest
 from serialx import BaseSerialTransport, SerialException
 
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_SIGNATURE, Code
-from ramses_tx.exceptions import TransportSerialError
+from ramses_tx.exceptions import TransportError, TransportSerialError
 from ramses_tx.transport.base import SignaturePolicy, TransportConfig
 from ramses_tx.transport.port import (
     PortTransport,
@@ -991,6 +991,70 @@ async def test_per_child_config_overrides_validation() -> None:
                 }
             ],
             per_child_config_overrides=[{}, {}],  # length mismatch
+        )
+
+
+async def test_pooled_factory_survives_all_transport_children_failed() -> None:
+    """pooled_transport_factory returns a pool even when every transport
+    child fails, as long as callback-driven children are reserved.
+
+    Regression: a hybrid pool whose only viable members are external
+    callback children (e.g. MQTT HGIs behind a bridge that attaches
+    after the factory returns) must not hard-fail in
+    _wait_for_any_connection — observed when a Zigbee child could not
+    connect because ZHA was unavailable.
+    """
+    from ramses_tx.transport.factory import pooled_transport_factory
+
+    mock_protocol = MagicMock()
+    config = TransportConfig(timeout=0.05)
+
+    with patch(
+        "ramses_tx.transport.factory._create_single_child",
+        new=AsyncMock(side_effect=TransportError("no ZHA")),
+    ):
+        pool = await pooled_transport_factory(
+            mock_protocol,
+            config=config,
+            port_names=[
+                SerPortNameT(
+                    "zigbee://aa:bb:cc:dd:ee:ff:00:11/"
+                    "0xfc00/0x0000/10/0xfc01/0x0000/10"
+                )
+            ],
+            callback_port_names=["mqtt_ha://18:130236"],
+        )
+
+    assert pool is not None
+    assert len(pool._children) == 2
+    assert pool._children[0].transport is None  # failed zigbee child
+    assert not pool._connected_children
+    pool.close()
+
+
+async def test_pooled_factory_fails_without_callback_children() -> None:
+    """Without callback-driven children, total transport failure raises."""
+    from ramses_tx.transport.factory import pooled_transport_factory
+
+    mock_protocol = MagicMock()
+    config = TransportConfig(timeout=0.05)
+
+    with (
+        patch(
+            "ramses_tx.transport.factory._create_single_child",
+            new=AsyncMock(side_effect=TransportError("no ZHA")),
+        ),
+        pytest.raises(TransportError),
+    ):
+        await pooled_transport_factory(
+            mock_protocol,
+            config=config,
+            port_names=[
+                SerPortNameT(
+                    "zigbee://aa:bb:cc:dd:ee:ff:00:11/"
+                    "0xfc00/0x0000/10/0xfc01/0x0000/10"
+                )
+            ],
         )
 
 

@@ -360,10 +360,23 @@ async def pooled_transport_factory(
             num_children - 1,
         )
 
-    # Wait for at least one child to connect.
-    await pool._wait_for_any_connection(
-        timeout=config.timeout or _DEFAULT_TIMEOUT_POOL
-    )
+    # Wait for at least one child to connect.  Callback-driven
+    # children are attached by an external adapter (e.g. an MQTT pool
+    # bridge) only after this factory returns, so a pool whose
+    # transport children all failed must not hard-fail here when
+    # callback children are still reserved — the adapter will mark
+    # them connected once it subscribes.
+    if not pool._connected_children and callback_port_names:
+        _LOGGER.warning(
+            "PooledTransport: no transport child connected; %d "
+            "callback-driven children reserved for an external "
+            "adapter — continuing",
+            len(callback_port_names),
+        )
+    else:
+        await pool._wait_for_any_connection(
+            timeout=config.timeout or _DEFAULT_TIMEOUT_POOL
+        )
 
     return pool
 
