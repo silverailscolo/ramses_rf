@@ -40,6 +40,11 @@ class PacketDTO:
     :type payload: Any | None
     :param is_tx: True if outbound transmission, False if inbound.
     :type is_tx: bool
+    :param is_echo: True if this frame is an echo of our own
+        transmission (serial hardware echo or over-air copy of a
+        packet we sent), carrying no evidence about the real source
+        device.
+    :type is_echo: bool
     """
 
     timestamp: dt
@@ -54,6 +59,7 @@ class PacketDTO:
     payload: "PayloadBase | list[PayloadBase] | str | None" = None
     raw_payload: str = ""
     is_tx: bool = False
+    is_echo: bool = False
     comment: str = ""
 
     def __post_init__(self) -> None:

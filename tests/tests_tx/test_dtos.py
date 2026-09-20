@@ -89,6 +89,36 @@ def test_packet_dto_is_tx_default_and_custom() -> None:
     assert outbound_dto.is_tx is True
 
 
+def test_packet_dto_is_echo_from_construction() -> None:
+    """is_echo set at packet construction reaches the DTO."""
+    test_dtm = dt(2023, 10, 25, 12, 0, 0, tzinfo=UTC)
+    raw_frame = "045 RQ --- 18:000730 01:145038 --:------ 000A 002 0800"
+
+    packet = Packet(test_dtm, raw_frame, is_echo=True)
+    assert packet.to_dto().is_echo is True
+
+    packet = Packet(test_dtm, raw_frame)
+    assert packet.to_dto().is_echo is False
+
+
+def test_packet_dto_is_echo_marked_post_construction() -> None:
+    """is_echo marked after construction reaches the DTO.
+
+    The pooled transport detects over-air echoes after the PacketDTO
+    already exists (it marks ``packet._is_echo`` on the Packet).  The
+    flag must still propagate through to_dto() so consumers like the
+    discovery scan can ignore echoes (issue 1185).
+    """
+    test_dtm = dt(2023, 10, 25, 12, 0, 0, tzinfo=UTC)
+    raw_frame = "045 RQ --- 18:000730 01:145038 --:------ 000A 002 0800"
+
+    packet = Packet(test_dtm, raw_frame)
+    assert packet.to_dto().is_echo is False
+
+    packet._is_echo = True  # echo detected by transport post-hoc
+    assert packet.to_dto().is_echo is True
+
+
 # ── Positional addressing: addr1/addr2/addr3 → src/dst resolution ──────
 # RAMSES II positional addressing rules (issue 639):
 #   I  broadcast:  addr1=src, addr2=--:------, addr3=src (same device)

@@ -99,6 +99,26 @@ _HVAC_DOMAIN_CODES: frozenset[Code | str] = frozenset(
     {Code._31D9, Code._31DA, Code._22F1, Code._22F3, Code._2411}
 )
 
+# Codes whose RQ is sent "from a VMI (only?)" per the REM klass table
+# in protocol/ramses.py — a VMI unit (display, DevType.DIS) polls the
+# FAN for parameters (2411), status (31DA), filter info (10D0), etc.
+# A FAN answers these requests (RP), it does not send them, and a
+# bound REM does not routinely send them either.  A source RQ on one
+# of these codes is therefore the DIS signature: a device that only
+# ever sends RQ/I — never RP/W — is a display.
+# NOTE: 313F is deliberately excluded — although its RQ is also tagged
+# 'VMI only?', a plain time request is too generic (TRVs send it too).
+_VMI_REQUEST_CODES: frozenset[Code | str] = frozenset(
+    {
+        Code._10D0,
+        Code._10E0,
+        Code._1470,
+        Code._22F7,
+        Code._2411,
+        Code._31DA,
+    }
+)
+
 # Codes that indicate battery-powered devices.
 _BATTERY_CODES: frozenset[Code | str] = frozenset({Code._1060, Code._1FC9})
 
@@ -177,6 +197,12 @@ def _is_evidence_based(
     if vc_key in _VC_TO_TYPE:
         return True
     if is_source and str(code) in {str(c) for c in _HVAC_DOMAIN_CODES}:
+        return True
+    # A source RQ on a 'VMI only' request code is evidence the sender
+    # is a display (DIS) — mirrors the _classify step-3 rule.  Covers
+    # VMI codes that are not in _HVAC_DOMAIN_CODES (10D0, 10E0, 1470,
+    # 22F7).
+    if is_source and verb == Verb.RQ and code in _VMI_REQUEST_CODES:
         return True
     return bool(
         is_source
@@ -267,6 +293,9 @@ class DiscoveredDevice:
     last_seen: str  # ISO timestamp
     likely_type: str  # DevType value (e.g. "CTL", "TRV")
     codes_seen: list[str] = field(default_factory=list)  # sorted, deduplicated
+    # Verbs sent as source (sorted, deduplicated).  Distinguishes a
+    # DIS (RQ/I only, never RP/W) from a responder/writer (RP/W).
+    verbs_seen: list[str] = field(default_factory=list)
     bound_to: str | None = None  # parent device ID (CTL for TRV, FAN for REM)
     zone_index: str | None = None  # zone index if known from payload
     domain_id: str | None = None  # domain ID if known (FC=appliance_control)
@@ -470,6 +499,13 @@ class DiscoveryScan:
         Called for every valid packet from the gateway. Must be fast —
         just dict lookups and updates.
         """
+        # Echo packets are our own transmissions heard back (issue
+        # 1185) — e.g. FAN-parameter requests sent with a spoofed
+        # from_id.  They carry no evidence about the real device, so
+        # they must not feed classification, counters, or verb history.
+        if dto.is_echo:
+            return
+
         # Extract device IDs from the packet
         source = dto.addr1.strip()
         destination = dto.addr2.strip()
@@ -529,6 +565,17 @@ class DiscoveryScan:
                 is_source=True,
                 destination=destination,
             )
+            # Track the source verb — needed by _classify to tell a
+            # pure display (DIS: RQ/I only) from a writer/responder.
+            src_device = self._devices.get(source)
+            if (
+                src_device is not None
+                and verb
+                and verb not in src_device.verbs_seen
+            ):
+                src_device.verbs_seen.append(verb)
+                src_device.verbs_seen.sort()
+                self._dirty = True
 
         # destination: lower-confidence (device is being talked to)
         if destination and _is_valid_address(destination):
@@ -1374,13 +1421,12 @@ def _classify(
     4. CH prefix — fallback for heating domain devices
     5. Accumulated codes — re-evaluate with full evidence
 
-    TODO: DIS (Orcon RF15 Display) is not distinguishable from REM by
-    this function.  A DIS sends RQ 2411 and RQ 31DA as normal behavior,
-    but so does a REM (per the protocol table, with "VMI only?" caveats).
-    The scan engine falls to the 37: prefix fallback (REM) for both.
-    When the strategy pattern arrives (issue 939), a DisStrategy could
-    use 2411 frequency or the presence of 1470/042F (DIS-only codes) to
-    distinguish.  See also: protocol/ramses.py _HVAC_VC_PAIR_BY_CLASS,
+    TODO: DIS (Orcon RF15 Display) is only partially distinguishable:
+    a source RQ on a 'VMI only' request code maps to DIS (step 3),
+    unless the device has already sent W/RP as source (not a pure
+    display).  Deeper REM-vs-DIS separation (e.g. 1470/042F DIS-only
+    codes, request frequency) still awaits the strategy pattern
+    (issue 939).  See also: protocol/ramses.py _HVAC_VC_PAIR_BY_CLASS,
     pipeline/topology_handlers/hvac.py HvacTopologyHandler.
     """
     prefix = device_id[:2]
@@ -1417,6 +1463,27 @@ def _classify(
             valid_types = _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix)
             if valid_types is None or vc_type in valid_types:
                 return vc_type
+        # A source RQ on a 'VMI only' request code is the DIS
+        # signature: a display polls the FAN for parameters/status
+        # (RQ 2411, RQ 31DA, RQ 10D0), while the FAN answers (RP) and
+        # a bound REM does not routinely send these requests (per the
+        # 'VMI only' notes in the REM klass table).  A device that has
+        # already sent W/RP as source is a writer/responder, not a
+        # pure display, so its RQ falls through to normal handling.
+        if (
+            verb == Verb.RQ
+            and code in _VMI_REQUEST_CODES
+            and DevType.DIS
+            in _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix, frozenset())
+            and not (
+                device is not None
+                and (
+                    Verb.W_ in device.verbs_seen
+                    or Verb.RP in device.verbs_seen
+                )
+            )
+        ):
+            return DevType.DIS
 
     # 4. Check accumulated codes if we have a device
     if device and is_source:
