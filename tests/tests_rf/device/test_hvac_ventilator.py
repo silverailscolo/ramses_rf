@@ -16,7 +16,11 @@ from ramses_rf.gateway import Gateway
 from ramses_rf.models.state_base import DeviceTraits
 from ramses_rf.models.state_hvac import HvacState
 from ramses_rf.state import MessageStore
-from ramses_rf.strategies import IthoStrategy, OrconStrategy
+from ramses_rf.strategies import (
+    IthoStrategy,
+    OrconHrc350Strategy,
+    OrconStrategy,
+)
 from ramses_tx import Address
 from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
@@ -111,6 +115,60 @@ class TestHvacVentilator:
 
         assert hvac_ventilator._get_strategy() is strategy
         assert hvac_ventilator._get_configured_strategy() is strategy
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_public_strategy_accessors(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """Public scheme/strategy accessors mirror the private state."""
+        # unconfigured: no scheme, no strategy — resolved falls back to Orcon
+        assert hvac_ventilator.scheme is None
+        assert hvac_ventilator.strategy is None
+        assert hvac_ventilator.get_configured_strategy() is None
+        assert isinstance(hvac_ventilator.get_strategy(), OrconStrategy)
+
+        # scheme trait only: configured strategy is scheme-derived
+        hvac_ventilator._update_traits(DeviceTraits(scheme="itho"))
+        assert hvac_ventilator.scheme == "itho"
+        assert hvac_ventilator.strategy is None
+        assert isinstance(
+            hvac_ventilator.get_configured_strategy(), IthoStrategy
+        )
+        assert isinstance(hvac_ventilator.get_strategy(), IthoStrategy)
+
+        # explicit strategy wins over scheme
+        strategy = OrconStrategy()
+        hvac_ventilator.set_strategy(strategy)
+        assert hvac_ventilator.strategy is strategy
+        assert hvac_ventilator.get_strategy() is strategy
+        assert hvac_ventilator.get_configured_strategy() is strategy
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_get_strategy_model_selects_hrc350(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """model= selects OrconHrc350Strategy for VMD-15RMS64 units."""
+        hvac_ventilator._update_traits(DeviceTraits(scheme="orcon"))
+
+        # VMD-15RMS64 model reports select the HRC-350 strategy
+        assert isinstance(
+            hvac_ventilator.get_strategy(model="VMD-15RMS64"),
+            OrconHrc350Strategy,
+        )
+        assert isinstance(
+            hvac_ventilator.get_configured_strategy(model="vmd-15rms64"),
+            OrconHrc350Strategy,
+        )
+
+        # other models / no model keep the generic Orcon strategy
+        assert isinstance(
+            hvac_ventilator.get_strategy(model="other"), OrconStrategy
+        )
+        assert isinstance(hvac_ventilator.get_strategy(), OrconStrategy)
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()
@@ -621,8 +679,7 @@ async def test_set_fan_mode_with_bound_rem() -> None:
     """Test set_fan_mode uses the bound REM as the source ID."""
     dev = MagicMock(spec=HvacVentilator)
     dev.id = "32:123456"
-    dev._scheme = "orcon"
-    dev._get_strategy.return_value = OrconStrategy()
+    dev.get_strategy.return_value = OrconStrategy()
     dev.get_bound_rem.return_value = "37:654321"
 
     dev._gateway = MagicMock()
@@ -655,8 +712,7 @@ async def test_set_fan_mode_with_hgi_fallback() -> None:
     """Test set_fan_mode falls back to the HGI if no REM is bound."""
     dev = MagicMock(spec=HvacVentilator)
     dev.id = "32:123456"
-    dev._scheme = "orcon"
-    dev._get_strategy.return_value = OrconStrategy()
+    dev.get_strategy.return_value = OrconStrategy()
     dev.get_bound_rem.return_value = None
 
     # Simulate an available HGI

@@ -68,7 +68,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         # .I --- 37:155617 32:155617 --:------ 1FC9 001 00
 
         return await super()._initiate_binding_process(
-            self._get_strategy().binding_codes()
+            self.get_strategy().binding_codes()
         )
 
     async def fan_rate(self) -> str | None:
@@ -101,7 +101,7 @@ class HvacRemote(BatteryState, Fakeable, HvacRemoteBase):  # REM: I/22F[138]
         return await send_fake_intent(
             self,
             Action.SET_FAN_MODE,
-            {"fan_mode": int(4 * value), "scheme": self._scheme or "orcon"},
+            {"fan_mode": int(4 * value), "scheme": self.scheme or "orcon"},
             wait_for_reply=True,
         )
 

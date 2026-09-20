@@ -135,8 +135,8 @@ async def test_initiate_binding_process(dev_class: type[Fakeable]) -> None:
             fan_id = "32:123459"
             gwy.device_by_id[fan_id] = SimpleNamespace(
                 id=fan_id,
-                _scheme="orcon",
-                _strategy=None,
+                scheme="orcon",
+                strategy=None,
                 entity_state=SimpleNamespace(
                     get_value=unittest.mock.AsyncMock(return_value=None)
                 ),

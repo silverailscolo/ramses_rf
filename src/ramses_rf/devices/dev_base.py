@@ -264,6 +264,31 @@ class DeviceBase(Entity):
                 trackers = pool_trackers
         return compute_quality(str(self.id), trackers)
 
+    @property
+    def scheme(self) -> str | None:
+        """Return the configured vendor scheme, if any.
+
+        The scheme (from the ``_scheme`` schema trait) selects the HVAC
+        vendor strategy — e.g. ``"orcon"``, ``"itho"``, ``"vasco"``.
+
+        :return: The configured scheme name, or ``None``.
+        :rtype: str | None
+        """
+        return self._scheme
+
+    @property
+    def strategy(self) -> HvacStrategy | None:
+        """Return the explicitly assigned HVAC strategy, if any.
+
+        Only a strategy set via :meth:`set_strategy` is returned;
+        scheme-derived selection is applied by :meth:`get_strategy`
+        and :meth:`get_configured_strategy` instead.
+
+        :return: The explicit strategy, or ``None``.
+        :rtype: HvacStrategy | None
+        """
+        return self._strategy
+
     def set_strategy(self, strategy: HvacStrategy) -> None:
         """Set the HVAC strategy for this device.
 
@@ -273,17 +298,49 @@ class DeviceBase(Entity):
         """
         self._strategy = strategy
 
-    def _get_strategy(self) -> HvacStrategy:
-        """Return the explicit or scheme-selected HVAC strategy."""
-        return self._strategy or best_hvac_strategy(self.id, self._scheme)
+    def get_strategy(self, model: str | None = None) -> HvacStrategy:
+        """Return the explicit or scheme-selected HVAC strategy.
 
-    def _get_configured_strategy(self) -> HvacStrategy | None:
-        """Return a strategy only when explicitly configured or selected."""
+        Falls back to :func:`best_hvac_strategy` (Orcon) when neither
+        an explicit strategy nor a scheme is configured.
+
+        :param model: Device model reported by 10E0, if known; used by
+            :func:`best_hvac_strategy` for model-level selection.
+        :type model: str | None
+        :return: The resolved HVAC strategy (never ``None``).
+        :rtype: HvacStrategy
+        """
+        return self._strategy or best_hvac_strategy(
+            self.id, self._scheme, model=model
+        )
+
+    def get_configured_strategy(
+        self, model: str | None = None
+    ) -> HvacStrategy | None:
+        """Return a strategy only when explicitly configured or selected.
+
+        Unlike :meth:`get_strategy`, returns ``None`` when neither an
+        explicit strategy nor a scheme is configured, so callers can
+        distinguish "no vendor configured" from the Orcon fallback.
+
+        :param model: Device model reported by 10E0, if known.
+        :type model: str | None
+        :return: The configured strategy, or ``None``.
+        :rtype: HvacStrategy | None
+        """
         if self._strategy:
             return self._strategy
         if self._scheme:
-            return best_hvac_strategy(self.id, self._scheme)
+            return best_hvac_strategy(self.id, self._scheme, model=model)
         return None
+
+    def _get_strategy(self) -> HvacStrategy:
+        """Return the explicit or scheme-selected HVAC strategy."""
+        return self.get_strategy()
+
+    def _get_configured_strategy(self) -> HvacStrategy | None:
+        """Return a strategy only when explicitly configured or selected."""
+        return self.get_configured_strategy()
 
     def _update_traits(self, traits: DeviceTraits) -> None:
         """Update a device with new schema attributes.
