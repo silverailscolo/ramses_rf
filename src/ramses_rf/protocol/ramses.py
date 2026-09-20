@@ -791,6 +791,13 @@ VMI_WRITE_CODES: frozenset[Code] = frozenset(
     {Code._22F7, Code._2411, Code._313F}
 )
 
+# Codes whose RP is housekeeping, not class evidence: every addressable
+# device answers RQ 10E0 (device info, polled by the gateway for
+# enumeration) — including a display.  An RP on any other code proves
+# the device services requests like a FAN (the HVAC endpoint) and does
+# disqualify the pure-display (DIS) signature.
+HOUSEKEEPING_REPLY_CODES: frozenset[Code] = frozenset({Code._10E0})
+
 CODES_BY_DEV_SLUG: dict[str, dict[Code, dict[Verb, Any]]] = {
     DevType.HGI: {  # HGI80: RF to (USB) serial gateway interface
         Code._PUZZ: {I_: {}, RQ: {}, W_: {}},

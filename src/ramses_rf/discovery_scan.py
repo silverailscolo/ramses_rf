@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from ramses_rf.const import Code, DevType, Verb
 from ramses_rf.protocol.ramses import (
+    HOUSEKEEPING_REPLY_CODES,
     HVAC_KLASS_BY_VC_PAIR,
     VMI_REQUEST_CODES,
     VMI_WRITE_CODES,
@@ -262,11 +263,14 @@ def _is_display_signature(device: DiscoveredDevice | None) -> bool:
     """Check whether a device could still be a pure display (DIS).
 
     Returns False once the device has sent, as source, a packet a
-    display cannot send: any RP (a responder), or a W on a code that
-    is not a 'VMI only' write (e.g. W 22F1, a REM writing fan mode).
-    A W on a VMI write code (2411, 22F7, 313F) is display-consistent —
-    the display user edits parameters — so it does not disqualify.
-    Unknown devices (device=None) are treated as display-capable.
+    display cannot send: an RP on an HVAC-domain code (a responder —
+    servicing requests like a FAN), or a W on a code that is not a
+    'VMI only' write (e.g. W 22F1, a REM writing fan mode).  An RP on
+    a housekeeping code (10E0, device info) is display-consistent —
+    every addressable device answers the gateway's enumeration polls —
+    as is a W on a VMI write code (2411, 22F7, 313F): the display user
+    edits parameters.  Unknown devices (device=None) are treated as
+    display-capable.
 
     :param device: The tracked device, or None for a first sighting.
     :type device: DiscoveredDevice | None
@@ -277,7 +281,7 @@ def _is_display_signature(device: DiscoveredDevice | None) -> bool:
         return True
     for pair in device.verb_codes_seen:
         verb, _, code_seen = pair.partition(":")
-        if verb == Verb.RP:
+        if verb == Verb.RP and code_seen not in HOUSEKEEPING_REPLY_CODES:
             return False
         if verb == Verb.W_ and code_seen not in VMI_WRITE_CODES:
             return False

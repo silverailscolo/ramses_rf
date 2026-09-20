@@ -756,6 +756,28 @@ class TestClassifyDis:
         )
         assert result != DevType.DIS
 
+    def test_37_rq_31da_with_rp_10e0_history_is_dis(self) -> None:
+        """An RP 10E0 (device-info answer) does not disqualify DIS.
+
+        Every addressable device answers the gateway's RQ 10E0
+        enumeration poll — including a display.  A 37: that polls the
+        FAN (RQ 1470/31DA) and merely answers housekeeping stays DIS;
+        only an RP servicing an HVAC-domain request (e.g. RP 31DA)
+        marks it an endpoint.
+        """
+        dev = DiscoveredDevice(
+            device_id="37:169161",
+            first_seen="2026-07-01T10:00:00",
+            last_seen="2026-07-01T10:00:00",
+            likely_type="REM",
+            codes_seen=[Code._10E0, Code._1470, Code._31DA],
+            verb_codes_seen=["RP:10E0", "RQ:1470", " W:2411"],
+        )
+        result = _classify(
+            "37:169161", Code._31DA, Verb.RQ, is_source=True, device=dev
+        )
+        assert result == DevType.DIS
+
     def test_29_rq_2411_with_w_history_not_dis(self) -> None:
         """A device that has sent W is a writer, not a pure display."""
         dev = DiscoveredDevice(
