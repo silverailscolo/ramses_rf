@@ -483,10 +483,12 @@ class PooledTransport(TransportInterface):
         self._outbound_publisher: MqttPoolOutbound | None = None
 
         # Recent TX recording for echo detection (issue 1185).
-        # Callback-driven (MQTT) children bypass _FullTransport.write_frame,
-        # so _log_tx_packet is never called and the pool's RX path can't
-        # recognise echoes of our own TX.  Record TX keys here and mark
-        # matching inbound packets as echoes before forwarding.
+        # Every outbound frame is recorded here: an over-air copy can
+        # arrive via a different child than the one that transmitted it
+        # (e.g. a remote MQTT-connected HGI hears a zigbee TX), and
+        # callback-driven (MQTT) children bypass _FullTransport
+        # entirely.  Matching inbound packets are marked as echoes
+        # before forwarding.
         self._recent_tx_queue: deque[tuple[dt, tuple[str, ...]]] = deque(
             maxlen=20
         )
@@ -562,11 +564,14 @@ class PooledTransport(TransportInterface):
     def _record_tx(self, frame: str) -> None:
         """Record an outbound frame for echo detection.
 
-        Callback-driven (MQTT) children bypass
-        :meth:`_FullTransport.write_frame`, so
-        :meth:`_FullTransport._log_tx_packet` is never called and the
-        pool's RX path cannot recognise echoes of our own TX.  Record
-        a content key here so :meth:`_on_child_packet` can mark
+        Every outbound frame is recorded at the pool level, not only
+        MQTT-published ones: RF is a shared medium, so an over-air copy
+        of a frame transmitted by one child can arrive via ANY other
+        child (e.g. a remote MQTT-connected HGI hears a zigbee or USB
+        TX).  For callback-driven children the child's own
+        :meth:`_FullTransport._log_tx_packet` is never called at all;
+        for transport children it only covers that child's local echo.
+        Record a content key here so :meth:`_on_child_packet` can mark
         matching inbound packets as echoes before forwarding.
 
         :param frame: The serialized RAMSES frame string.
@@ -602,6 +607,11 @@ class PooledTransport(TransportInterface):
         dict lookup.  HGI80 echoes arrive with the real HGI ID as
         addr1, but the TX frame used the placeholder 18:000730 —
         both variants are checked (issue 835).
+
+        The match is not consumed: in a multi-HGI pool a single TX is
+        heard by several receivers (each child that picks up the frame
+        over the air reports its own copy), and every copy must be
+        marked as an echo.  Entries expire via the TTL prune above.
 
         :param packet: The inbound packet to check.
         :returns: True if the packet is an echo of a recent TX.
@@ -641,17 +651,8 @@ class PooledTransport(TransportInterface):
                 dto.addr3,
                 dto.raw_payload,
             )
-            if rx_key not in self._recent_tx_counts:
-                continue
-            if self._recent_tx_counts[rx_key] <= 1:
-                del self._recent_tx_counts[rx_key]
-            else:
-                self._recent_tx_counts[rx_key] -= 1
-            for idx, (_, queued_key) in enumerate(self._recent_tx_queue):
-                if queued_key == rx_key:
-                    del self._recent_tx_queue[idx]
-                    break
-            return True
+            if rx_key in self._recent_tx_counts:
+                return True
         return False
 
     # -- TransportInterface ---------------------------------------------
@@ -940,6 +941,13 @@ class PooledTransport(TransportInterface):
         if child.transport is None:
             return WriteOutcome.NOT_SUBMITTED
 
+        # Record TX for echo detection — an over-air copy of a frame
+        # transmitted by this child can arrive via ANY other child
+        # (e.g. a remote MQTT-connected HGI hears a zigbee TX), and only
+        # the pool-level table is consulted for those inbound packets.
+        # The child's own _log_tx_packet only covers its local echo.
+        self._record_tx(frame)
+
         write = getattr(child.transport, "write_frame", None)
         if write is None:
             try:
@@ -978,6 +986,10 @@ class PooledTransport(TransportInterface):
         that still use ``write_frame()`` directly (e.g. ``send_frame()``
         or third-party code).  The preferred path is
         ``prepare_command()`` + ``write_routed()``.
+
+        TODO: deprecate once every caller routes through
+        ``prepare_command()``/``write_routed()`` — this legacy path only
+        exists for direct ``write_frame()`` callers.
 
         When called directly, the frame is parsed to extract the target
         device, a child is selected, and the frame is dispatched.  Source
@@ -1061,6 +1073,10 @@ class PooledTransport(TransportInterface):
                 child_hgi,
                 child.child_id,
             )
+
+        # Record TX for echo detection (issue 1185) — see write_routed:
+        # an over-air copy can return via a different child.
+        self._record_tx(frame)
 
         write = getattr(child.transport, "write_frame", None)
         if write is None:
@@ -1178,7 +1194,9 @@ class PooledTransport(TransportInterface):
 
         # Echo detection (issue 1185): callback-driven (MQTT) children
         # bypass _FullTransport._frame_read, so the transport-level
-        # _is_recent_tx check never runs.  Check here and mark the
+        # _is_recent_tx check never runs; likewise an over-air copy of
+        # our TX can arrive via a different child than the one that
+        # transmitted it.  Check the pool-level table here and mark the
         # packet as an echo so the protocol's WantEcho FSM can resolve
         # — and skip dedup for echoes so they are forwarded upstream.
         if self._is_recent_tx(packet):
