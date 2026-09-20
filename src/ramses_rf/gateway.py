@@ -562,7 +562,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             app_msg, SZ_PAYLOAD, None
         )
 
-        if payload_data is not None:
+        # Echo packets are our own transmissions heard back (issue 1185)
+        # — e.g. parameter polls sent with a spoofed from_id.  They are
+        # not observed device behaviour: a spoofed RQ 2411 would wrongly
+        # promote the spoofed REM to DIS in the topology handlers.
+        if payload_data is not None and not dto.is_echo:
             # Bridge the payload to satisfy core.Message strict dict typing
             if isinstance(payload_data, dict):
                 core_data = payload_data

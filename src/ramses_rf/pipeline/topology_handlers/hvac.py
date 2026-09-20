@@ -11,19 +11,31 @@ from ramses_rf.enums import TopologyAction
 from ramses_rf.messages.core import Message
 from ramses_rf.models import TopologyChangedEvent
 from ramses_rf.pipeline.topology_handlers.base import TopologyHandler
-from ramses_rf.protocol.ramses import HVAC_KLASS_BY_VC_PAIR
+from ramses_rf.protocol.ramses import (
+    HOUSEKEEPING_REPLY_CODES,
+    HVAC_KLASS_BY_VC_PAIR,
+    VMI_REQUEST_CODES,
+)
 from ramses_tx.const import Code, Verb
 
 _LOGGER = logging.getLogger(__name__)
 
 # VC pairs that are strong evidence a device is a FAN (broadcasts/responds
-# with ventilation status).  A real FAN sends these as src.
+# with ventilation status).  A real FAN sends these as src.  An RP on a
+# 'VMI only' request code is also FAN evidence — the device is servicing
+# display-type queries, i.e. it is the endpoint (housekeeping replies
+# such as RP 10E0 are excluded: every addressable device sends those).
 _FAN_EVIDENCE: frozenset[tuple[Verb, Code]] = frozenset(
     {
         (Verb.I_, Code._31D9),
         (Verb.I_, Code._31DA),
         (Verb.RP, Code._31DA),
         (Verb.RP, Code._2411),  # FAN responds to 2411 parameter requests
+    }
+    | {
+        (Verb.RP, code)
+        for code in VMI_REQUEST_CODES
+        if code not in HOUSEKEEPING_REPLY_CODES
     }
 )
 
@@ -59,8 +71,13 @@ _RECLASSIFY_THRESHOLD: int = 3
 # direct CO2 promotion rule (I 1298) only fires for these types —
 # not the generic "hvac_device" or unknown devices, which are left
 # to the standard eavesdrop-gated VC pair promotion.
+# FAN is deliberately excluded: a FAN with an integrated CO2 sensor
+# (e.g. an Orcon HRV) legitimately broadcasts I 1298 while remaining
+# a FAN.  A FAN-typed device that is really a CO2+remote hybrid (sends
+# I 1298 plus only non-FAN traffic) still reaches CO2 via the
+# FAN-contradiction path below.
 _CO2_PROMOTABLE: frozenset[DevType] = frozenset(
-    {DevType.REM, DevType.DIS, DevType.FAN, DevType.HUM}
+    {DevType.REM, DevType.DIS, DevType.HUM}
 )
 
 
@@ -100,6 +117,22 @@ class HvacTopologyHandler(TopologyHandler):
         """
         msg_verb = msg.header.verb
         msg_code = str(msg.header.code)
+        src_id = msg.src.id
+        has_src = src_id != "--:------"
+
+        # Look up the source device's current traits and accumulated
+        # evidence once — used by both the eavesdrop promotions below
+        # and the contradiction/CO2 rules.  A FAN-typed device, or one
+        # that has already shown FAN behaviour, broadcasts I 1298 as a
+        # FAN feature (integrated CO2 sensor), not a CO2 signature.
+        src_traits = (
+            self._device_class_lookup_cb(src_id)
+            if has_src and self._device_class_lookup_cb
+            else None
+        )
+        src_is_fan = (
+            src_traits is not None and src_traits.get("class") == DevType.FAN
+        ) or self._evidence.get(src_id, {}).get("fan", 0) > 0
 
         # --- Standard promotion via VC pair lookup ---
         # Only run heuristic promotions when eavesdrop is enabled.
@@ -116,11 +149,11 @@ class HvacTopologyHandler(TopologyHandler):
                     break
 
             if dev_class:
-                if msg.src.id != "--:------" and getattr(
-                    msg.src, "type", None
-                ) not in (
-                    "01",
-                    DevType.CTL,
+                if (
+                    has_src
+                    and getattr(msg.src, "type", None)
+                    not in ("01", DevType.CTL)
+                    and not (dev_class == DevType.CO2 and src_is_fan)
                 ):
                     self._emit(
                         TopologyChangedEvent(
@@ -159,22 +192,16 @@ class HvacTopologyHandler(TopologyHandler):
         #
         # Other non-FAN evidence still uses the contradiction threshold for
         # devices that were wrongly promoted to FAN.
-        if msg.src.id != "--:------":
-            src_id = msg.src.id
+        if has_src:
             vc = (msg_verb, msg.header.code)
 
             # Check for contradiction: device is typed FAN but behaves
             # like a DIS/REM.  We look up the current device traits via
             # the callback (msg.src.type is only the address prefix,
             # not the device class).
-            traits = (
-                self._device_class_lookup_cb(src_id)
-                if self._device_class_lookup_cb
-                else None
-            )
-            current_class = traits.get("class") if traits else None
-            is_locked = bool(traits.get("locked")) if traits else False
-            is_faked = bool(traits.get("faked")) if traits else False
+            current_class = src_traits.get("class") if src_traits else None
+            is_locked = bool(src_traits.get("locked")) if src_traits else False
+            is_faked = bool(src_traits.get("faked")) if src_traits else False
 
             ev = self._evidence.setdefault(
                 src_id, {"fan": 0, "non_fan": 0, "co2": 0}
@@ -189,20 +216,25 @@ class HvacTopologyHandler(TopologyHandler):
                 ev["non_fan"] += 1
 
             # --- Direct CO2 promotion ---
-            # I 1298 is the definitive CO2 signature — no other HVAC
-            # device type sends it.  If a device sends I 1298, promote
-            # it to CO2 regardless of its current class (REM, DIS, FAN,
-            # etc.).  This handles the case where the device was
+            # I 1298 is the CO2 level broadcast.  A standalone CO2
+            # sensor sends it, but so does a FAN with an integrated
+            # CO2 sensor (e.g. an Orcon HRV) — for those the broadcast
+            # is a FAN feature, not a reclassification signature.
+            # Promote to CO2 only when the device has never shown FAN
+            # behaviour (fan broadcasts or servicing display-type
+            # requests).  This handles the case where the device was
             # already promoted to DIS (e.g. via RQ 2411 active probing)
             # before the first I 1298 was received.
             # Only fires for devices with a specific HVAC class (REM,
-            # DIS, FAN, HUM) — not the generic "hvac_device" or unknown
-            # devices, which are left to the standard eavesdrop-gated
-            # VC pair promotion.
+            # DIS, HUM) — not the generic "hvac_device", unknown
+            # devices, or FAN-typed devices, which are left to the
+            # standard eavesdrop-gated VC pair promotion and the
+            # FAN-contradiction path below.
             if (
                 vc in _CO2_EVIDENCE
                 and not is_locked
                 and current_class in _CO2_PROMOTABLE
+                and ev["fan"] == 0
             ):
                 self._emit(
                     TopologyChangedEvent(

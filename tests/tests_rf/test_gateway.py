@@ -615,6 +615,38 @@ async def test_gateway_get_state_in_memory() -> None:
 
 
 @pytest.mark.asyncio
+async def test_msg_handler_skips_topology_for_echo_packets() -> None:
+    """Echo packets (our own TXs) must not feed the TopologyBuilder.
+
+    Reproduces the live failure: parameter polls sent with a spoofed
+    from_id (e.g. from_id=29:176861, a real REM) are heard back as
+    echoes.  Feeding them to the topology handlers made the handler's
+    Rule_HVAC_2411_Request_Source_to_DIS promote the REM to DIS
+    (issue 1185).
+    """
+    gateway = Gateway("/dev/null", config=GatewayConfig(database_path=None))
+
+    frame = "RQ --- 29:176861 32:153289 --:------ 2411 003 000001"
+    echo_dto = Packet.from_port(
+        dt.now(), f"-60 {frame}", is_echo=True
+    ).to_dto()
+    real_dto = Packet.from_port(dt.now(), f"-60 {frame}").to_dto()
+
+    with patch.object(
+        gateway._topology_builder, "consume", new_callable=AsyncMock
+    ) as mock_consume:
+        # An echo copy of our own spoofed-source request carries no
+        # device evidence — the TopologyBuilder must not see it.
+        await gateway._msg_handler(echo_dto)
+        mock_consume.assert_not_called()
+
+        # The identical frame received as a genuine packet still feeds
+        # it.
+        await gateway._msg_handler(real_dto)
+        mock_consume.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_gateway_async_send_raw_command() -> None:
     """Verify Gateway.async_send_raw_command forwards CommandDTO to engine."""
     # Arrange
