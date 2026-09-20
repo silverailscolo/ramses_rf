@@ -625,7 +625,6 @@ async def test_msg_handler_skips_topology_for_echo_packets() -> None:
     (issue 1185).
     """
     gateway = Gateway("/dev/null", config=GatewayConfig(database_path=None))
-    gateway._topology_builder.consume = AsyncMock()
 
     frame = "RQ --- 29:176861 32:153289 --:------ 2411 003 000001"
     echo_dto = Packet.from_port(
@@ -633,14 +632,18 @@ async def test_msg_handler_skips_topology_for_echo_packets() -> None:
     ).to_dto()
     real_dto = Packet.from_port(dt.now(), f"-60 {frame}").to_dto()
 
-    # An echo copy of our own spoofed-source request carries no device
-    # evidence — the TopologyBuilder must not see it.
-    await gateway._msg_handler(echo_dto)
-    gateway._topology_builder.consume.assert_not_called()
+    with patch.object(
+        gateway._topology_builder, "consume", new_callable=AsyncMock
+    ) as mock_consume:
+        # An echo copy of our own spoofed-source request carries no
+        # device evidence — the TopologyBuilder must not see it.
+        await gateway._msg_handler(echo_dto)
+        mock_consume.assert_not_called()
 
-    # The identical frame received as a genuine packet still feeds it.
-    await gateway._msg_handler(real_dto)
-    gateway._topology_builder.consume.assert_called_once()
+        # The identical frame received as a genuine packet still feeds
+        # it.
+        await gateway._msg_handler(real_dto)
+        mock_consume.assert_called_once()
 
 
 @pytest.mark.asyncio
