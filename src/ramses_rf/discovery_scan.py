@@ -105,7 +105,8 @@ _HVAC_DOMAIN_CODES: frozenset[Code | str] = frozenset(
 # A FAN answers these requests (RP), it does not send them, and a
 # bound REM does not routinely send them either.  A source RQ on one
 # of these codes is therefore the DIS signature: a device that only
-# ever sends RQ/I — never RP/W — is a display.
+# ever sends RQ/I — never RP, and no W except on _VMI_WRITE_CODES —
+# is a display.
 # NOTE: 313F is deliberately excluded — although its RQ is also tagged
 # 'VMI only?', a plain time request is too generic (TRVs send it too).
 _VMI_REQUEST_CODES: frozenset[Code | str] = frozenset(
