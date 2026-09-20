@@ -1783,9 +1783,10 @@ async def test_tx_heard_by_multiple_children_all_copies_marked() -> None:
     await asyncio.sleep(0.01)
     assert rx_pkt1._is_echo is True
     assert rx_pkt2._is_echo is True
-    # Echoes bypass dedup: both copies are forwarded upstream so the
-    # protocol's WantEcho FSM can resolve.
-    assert proto.packet_received.call_count == 2
+    # Every copy is marked, but echo copies dedupe among themselves:
+    # only the first is forwarded upstream — enough for the protocol's
+    # WantEcho FSM — while repeat copies are dropped.
+    assert proto.packet_received.call_count == 1
 
 
 async def test_unrelated_frame_is_not_marked_as_echo() -> None:

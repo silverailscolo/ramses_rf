@@ -441,6 +441,12 @@ class PooledTransport(TransportInterface):
         # Dict-backed dedup cache: key -> timestamp.
         # O(1) lookup instead of O(N) deque scan.
         self._dedup_cache: dict[_DedupKeyT, dt] = {}
+        # Separate cache for echo copies: every receiver's copy of a TX
+        # echo is marked, but only the first is forwarded upstream
+        # (enough for the protocol's WantEcho FSM).  Keeping it apart
+        # from _dedup_cache means echoes can never suppress a genuine
+        # frame, and a genuine frame can never suppress a needed echo.
+        self._echo_dedup_cache: dict[_DedupKeyT, dt] = {}
 
         # Build immutable child registry.
         self._children: list[PoolChild] = []
@@ -1197,8 +1203,9 @@ class PooledTransport(TransportInterface):
         # _is_recent_tx check never runs; likewise an over-air copy of
         # our TX can arrive via a different child than the one that
         # transmitted it.  Check the pool-level table here and mark the
-        # packet as an echo so the protocol's WantEcho FSM can resolve
-        # — and skip dedup for echoes so they are forwarded upstream.
+        # packet as an echo so the protocol's WantEcho FSM can resolve.
+        # Echoes dedupe against a separate cache: every copy is marked,
+        # but only the first is forwarded upstream.
         if self._is_recent_tx(packet):
             packet._is_echo = True
             _LOGGER.debug(
@@ -1206,39 +1213,38 @@ class PooledTransport(TransportInterface):
                 child_id,
                 packet,
             )
+            dedup_cache = self._echo_dedup_cache
         else:
-            # Dict-backed dedup with sequence-aware key.
-            key = self._dedup_key(packet)
-            now = dt_now()
+            dedup_cache = self._dedup_cache
 
-            # Purge stale entries from the dedup cache.
-            cutoff = now - self._dedup_window
-            # Collect stale keys (can't modify dict during iteration).
-            stale_keys = [
-                k for k, t in self._dedup_cache.items() if t < cutoff
-            ]
-            for k in stale_keys:
-                del self._dedup_cache[k]
+        # Dict-backed dedup with sequence-aware key.
+        key = self._dedup_key(packet)
+        now = dt_now()
 
-            # Check for duplicate — O(1) dict lookup.
-            if key in self._dedup_cache:
-                self._pkts_deduped += 1
-                _LOGGER.debug(
-                    "PooledTransport: deduped packet from child %d: %s",
-                    child_id,
-                    packet,
-                )
-                return
+        # Purge stale entries from the dedup cache.
+        cutoff = now - self._dedup_window
+        # Collect stale keys (can't modify dict during iteration).
+        stale_keys = [k for k, t in dedup_cache.items() if t < cutoff]
+        for k in stale_keys:
+            del dedup_cache[k]
 
-            # Not a duplicate — record and forward.
-            self._dedup_cache[key] = now
-            # Enforce max cache size.
-            if len(self._dedup_cache) > _MAX_DEDUP_KEYS:
-                # Evict oldest entry (linear scan, but rare).
-                oldest_key = min(
-                    self._dedup_cache, key=lambda k: self._dedup_cache[k]
-                )
-                del self._dedup_cache[oldest_key]
+        # Check for duplicate — O(1) dict lookup.
+        if key in dedup_cache:
+            self._pkts_deduped += 1
+            _LOGGER.debug(
+                "PooledTransport: deduped packet from child %d: %s",
+                child_id,
+                packet,
+            )
+            return
+
+        # Not a duplicate — record and forward.
+        dedup_cache[key] = now
+        # Enforce max cache size.
+        if len(dedup_cache) > _MAX_DEDUP_KEYS:
+            # Evict oldest entry (linear scan, but rare).
+            oldest_key = min(dedup_cache, key=lambda k: dedup_cache[k])
+            del dedup_cache[oldest_key]
 
         self._pkts_forwarded += 1
 
