@@ -25,7 +25,11 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING, Any
 
 from ramses_rf.const import Code, DevType, Verb
-from ramses_rf.protocol.ramses import HVAC_KLASS_BY_VC_PAIR
+from ramses_rf.protocol.ramses import (
+    HVAC_KLASS_BY_VC_PAIR,
+    VMI_REQUEST_CODES,
+    VMI_WRITE_CODES,
+)
 from ramses_tx.const import SZ_ACTIVE_HGI
 
 if TYPE_CHECKING:
@@ -97,37 +101,6 @@ _CTL_ONLY_CODES_WITH_VERB: dict[Code | str, frozenset[Verb | str]] = {
 # codes count as evidence-based contradictions.
 _HVAC_DOMAIN_CODES: frozenset[Code | str] = frozenset(
     {Code._31D9, Code._31DA, Code._22F1, Code._22F3, Code._2411}
-)
-
-# Codes whose RQ is sent "from a VMI (only?)" per the REM klass table
-# in protocol/ramses.py — a VMI unit (display, DevType.DIS) polls the
-# FAN for parameters (2411), status (31DA), filter info (10D0), etc.
-# A FAN answers these requests (RP), it does not send them, and a
-# bound REM does not routinely send them either.  A source RQ on one
-# of these codes is therefore the DIS signature: a device that only
-# ever sends RQ/I — never RP, and no W except on _VMI_WRITE_CODES —
-# is a display.
-# NOTE: 313F is deliberately excluded — although its RQ is also tagged
-# 'VMI only?', a plain time request is too generic (TRVs send it too).
-_VMI_REQUEST_CODES: frozenset[Code | str] = frozenset(
-    {
-        Code._10D0,
-        Code._10E0,
-        Code._1470,
-        Code._22F7,
-        Code._2411,
-        Code._31DA,
-    }
-)
-
-# Codes whose W is also attributed to a VMI in the REM klass table
-# (a display user editing a parameter writes W 2411, etc.).  A source
-# W on one of these does NOT disqualify a device from being a DIS —
-# only a W on other codes (e.g. W 22F1, a REM writing fan mode) does.
-# NOTE: 10D0 W is excluded — the table attributes it to a REM
-# (resetting the filter count).
-_VMI_WRITE_CODES: frozenset[Code | str] = frozenset(
-    {Code._22F7, Code._2411, Code._313F}
 )
 
 # Codes that indicate battery-powered devices.
@@ -213,7 +186,7 @@ def _is_evidence_based(
     # is a display (DIS) — mirrors the _classify step-3 rule.  Covers
     # VMI codes that are not in _HVAC_DOMAIN_CODES (10D0, 10E0, 1470,
     # 22F7).
-    if is_source and verb == Verb.RQ and code in _VMI_REQUEST_CODES:
+    if is_source and verb == Verb.RQ and code in VMI_REQUEST_CODES:
         return True
     return bool(
         is_source
@@ -306,7 +279,7 @@ def _is_display_signature(device: DiscoveredDevice | None) -> bool:
         verb, _, code_seen = pair.partition(":")
         if verb == Verb.RP:
             return False
-        if verb == Verb.W_ and code_seen not in _VMI_WRITE_CODES:
+        if verb == Verb.W_ and code_seen not in VMI_WRITE_CODES:
             return False
     return True
 
@@ -1512,7 +1485,7 @@ def _classify(
         # handling.
         if (
             verb == Verb.RQ
-            and code in _VMI_REQUEST_CODES
+            and code in VMI_REQUEST_CODES
             and DevType.DIS
             in _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix, frozenset())
             and _is_display_signature(device)

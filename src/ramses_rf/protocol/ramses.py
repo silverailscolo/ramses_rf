@@ -761,6 +761,36 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[Verb, Any]]] = {
     # },
 }
 
+# Codes whose RQ is annotated "from a VMI (only?)" in the REM klass
+# table above — a VMI unit (display, DevType.DIS) polls the FAN for
+# parameters (2411), status (31DA), filter info (10D0), etc.  A FAN
+# answers these requests (RP), it does not send them, and a bound REM
+# does not routinely send them either.  A source RQ on one of these
+# codes is therefore the DIS signature: a device that only ever sends
+# RQ/I — never RP, and no W except on VMI_WRITE_CODES — is a display.
+# NOTE: 313F is deliberately excluded — although its RQ is also tagged
+# 'VMI only?', a plain time request is too generic (TRVs send it too).
+VMI_REQUEST_CODES: frozenset[Code] = frozenset(
+    {
+        Code._10D0,
+        Code._10E0,
+        Code._1470,
+        Code._22F7,
+        Code._2411,
+        Code._31DA,
+    }
+)
+
+# Codes whose W is also attributed to a VMI in the REM klass table
+# (a display user editing a parameter writes W 2411, etc.).  A source
+# W on one of these does NOT disqualify a device from being a DIS —
+# only a W on other codes (e.g. W 22F1, a REM writing fan mode) does.
+# NOTE: 10D0 W is excluded — the table attributes it to a REM
+# (resetting the filter count).
+VMI_WRITE_CODES: frozenset[Code] = frozenset(
+    {Code._22F7, Code._2411, Code._313F}
+)
+
 CODES_BY_DEV_SLUG: dict[str, dict[Code, dict[Verb, Any]]] = {
     DevType.HGI: {  # HGI80: RF to (USB) serial gateway interface
         Code._PUZZ: {I_: {}, RQ: {}, W_: {}},
