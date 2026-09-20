@@ -749,7 +749,7 @@ class TestClassifyDis:
             last_seen="2026-07-01T10:00:00",
             likely_type="FAN",
             codes_seen=[Code._2411, Code._31DA],
-            verbs_seen=[Verb.RP],
+            verb_codes_seen=["RP:31DA"],
         )
         result = _classify(
             "29:176861", Code._2411, Verb.RQ, is_source=True, device=dev
@@ -764,12 +764,32 @@ class TestClassifyDis:
             last_seen="2026-07-01T10:00:00",
             likely_type="REM",
             codes_seen=[Code._22F1, Code._2411],
-            verbs_seen=[Verb.W_],
+            verb_codes_seen=[" W:22F1"],
         )
         result = _classify(
             "29:176861", Code._2411, Verb.RQ, is_source=True, device=dev
         )
         assert result != DevType.DIS
+
+    def test_29_rq_2411_with_vmi_w_history_is_dis(self) -> None:
+        """A W on a VMI write code (2411) does NOT disqualify DIS.
+
+        The REM klass table attributes W 2411 'from a VMI' — a display
+        user editing a parameter.  Only W on non-VMI codes (e.g.
+        W 22F1, a REM writing fan mode) disqualifies the signature.
+        """
+        dev = DiscoveredDevice(
+            device_id="29:176861",
+            first_seen="2026-07-01T10:00:00",
+            last_seen="2026-07-01T10:00:00",
+            likely_type="DIS",
+            codes_seen=[Code._2411],
+            verb_codes_seen=[" W:2411", "RQ:2411"],
+        )
+        result = _classify(
+            "29:176861", Code._2411, Verb.RQ, is_source=True, device=dev
+        )
+        assert result == DevType.DIS
 
     def test_29_rq_2411_with_rq_i_history_is_dis(self) -> None:
         """RQ/I-only history is the pure-display signature — still DIS."""
@@ -779,7 +799,7 @@ class TestClassifyDis:
             last_seen="2026-07-01T10:00:00",
             likely_type="FAN",
             codes_seen=[Code._22F1, Code._2411, Code._31DA],
-            verbs_seen=[Verb.RQ, Verb.I_],
+            verb_codes_seen=["RQ:2411", " I:22F1"],
         )
         result = _classify(
             "29:176861", Code._2411, Verb.RQ, is_source=True, device=dev
@@ -2388,7 +2408,7 @@ class TestDisClassification:
         dev = scan.get_device("29:176861")
         assert dev is not None
         assert dev.likely_type == DevType.DIS
-        assert dev.verbs_seen == [Verb.RQ]
+        assert dev.verb_codes_seen == ["RQ:2411"]
         scan.stop()
 
     def test_known_rem_reclassified_to_dis_by_rq_traffic(self) -> None:
@@ -2416,7 +2436,7 @@ class TestDisClassification:
         assert dev is not None
         assert dev.likely_type == DevType.DIS  # re-classified
         assert dev.confidence == "high"
-        assert Verb.RQ in dev.verbs_seen
+        assert "RQ:2411" in dev.verb_codes_seen
         scan.stop()
 
     def test_dis_classification_survives_i_22f1(self) -> None:
@@ -2497,7 +2517,7 @@ class TestDisClassification:
         dev = scan.get_device("29:176861")
         assert dev is not None
         assert dev.source_count == 1
-        assert dev.verbs_seen == [Verb.I_]
+        assert dev.verb_codes_seen == [" I:22F1"]
         # Now our spoofed RQ 2411 echo arrives — must be ignored, so
         # it cannot count as DIS evidence against the declared REM.
         scan._process_packet(
@@ -2512,13 +2532,13 @@ class TestDisClassification:
         dev = scan.get_device("29:176861")
         assert dev is not None
         assert dev.source_count == 1  # unchanged
-        assert dev.verbs_seen == [Verb.I_]  # unchanged
+        assert dev.verb_codes_seen == [" I:22F1"]  # unchanged
         assert dev.contradiction_count == 0
         assert dev.likely_type == DevType.REM
         scan.stop()
 
-    def test_verbs_seen_tracked_per_device(self) -> None:
-        """verbs_seen accumulates deduplicated source verbs."""
+    def test_verb_codes_seen_tracked_per_device(self) -> None:
+        """verb_codes_seen accumulates deduplicated verb+code pairs."""
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         for verb, code in (
@@ -2536,12 +2556,16 @@ class TestDisClassification:
             )
         dev = scan.get_device("29:176861")
         assert dev is not None
-        assert sorted(set(dev.verbs_seen)) == dev.verbs_seen
-        assert set(dev.verbs_seen) == {Verb.I_, Verb.RQ}
+        assert sorted(set(dev.verb_codes_seen)) == dev.verb_codes_seen
+        assert set(dev.verb_codes_seen) == {
+            " I:22F1",
+            "RQ:2411",
+            "RQ:31DA",
+        }
         scan.stop()
 
-    def test_verbs_seen_round_trip(self) -> None:
-        """verbs_seen survives JSON export/import."""
+    def test_verb_codes_seen_round_trip(self) -> None:
+        """verb_codes_seen survives JSON export/import."""
         gwy = make_mock_gateway()
         scan = DiscoveryScan(gwy)
         scan._process_packet(
@@ -2558,13 +2582,13 @@ class TestDisClassification:
         scan2.import_json(exported)
         dev = scan2.get_device("29:176861")
         assert dev is not None
-        assert dev.verbs_seen == [Verb.RQ]
+        assert dev.verb_codes_seen == ["RQ:2411"]
         assert dev.likely_type == DevType.DIS
         scan.stop()
         scan2.stop()
 
-    def test_import_without_verbs_seen(self) -> None:
-        """Older exports without verbs_seen still import cleanly."""
+    def test_import_without_verb_codes_seen(self) -> None:
+        """Older exports without verb_codes_seen still import cleanly."""
         data = json.dumps(
             {
                 "version": 1,
@@ -2583,5 +2607,5 @@ class TestDisClassification:
         scan.import_json(data)
         dev = scan.get_device("29:176861")
         assert dev is not None
-        assert dev.verbs_seen == []
+        assert dev.verb_codes_seen == []
         scan.stop()

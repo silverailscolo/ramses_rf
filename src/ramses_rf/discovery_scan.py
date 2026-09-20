@@ -119,6 +119,16 @@ _VMI_REQUEST_CODES: frozenset[Code | str] = frozenset(
     }
 )
 
+# Codes whose W is also attributed to a VMI in the REM klass table
+# (a display user editing a parameter writes W 2411, etc.).  A source
+# W on one of these does NOT disqualify a device from being a DIS —
+# only a W on other codes (e.g. W 22F1, a REM writing fan mode) does.
+# NOTE: 10D0 W is excluded — the table attributes it to a REM
+# (resetting the filter count).
+_VMI_WRITE_CODES: frozenset[Code | str] = frozenset(
+    {Code._22F7, Code._2411, Code._313F}
+)
+
 # Codes that indicate battery-powered devices.
 _BATTERY_CODES: frozenset[Code | str] = frozenset({Code._1060, Code._1FC9})
 
@@ -274,6 +284,32 @@ _AMBIGUOUS_HVAC_PREFIX_TYPES: dict[str, frozenset[DevType]] = {
 }
 
 
+def _is_display_signature(device: DiscoveredDevice | None) -> bool:
+    """Check whether a device could still be a pure display (DIS).
+
+    Returns False once the device has sent, as source, a packet a
+    display cannot send: any RP (a responder), or a W on a code that
+    is not a 'VMI only' write (e.g. W 22F1, a REM writing fan mode).
+    A W on a VMI write code (2411, 22F7, 313F) is display-consistent —
+    the display user edits parameters — so it does not disqualify.
+    Unknown devices (device=None) are treated as display-capable.
+
+    :param device: The tracked device, or None for a first sighting.
+    :type device: DiscoveredDevice | None
+    :return: True if nothing observed rules out DIS.
+    :rtype: bool
+    """
+    if device is None:
+        return True
+    for pair in device.verb_codes_seen:
+        verb, _, code_seen = pair.partition(":")
+        if verb == Verb.RP:
+            return False
+        if verb == Verb.W_ and code_seen not in _VMI_WRITE_CODES:
+            return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Data class
 # ---------------------------------------------------------------------------
@@ -293,9 +329,11 @@ class DiscoveredDevice:
     last_seen: str  # ISO timestamp
     likely_type: str  # DevType value (e.g. "CTL", "TRV")
     codes_seen: list[str] = field(default_factory=list)  # sorted, deduplicated
-    # Verbs sent as source (sorted, deduplicated).  Distinguishes a
-    # DIS (RQ/I only, never RP/W) from a responder/writer (RP/W).
-    verbs_seen: list[str] = field(default_factory=list)
+    # Verb+code pairs sent as source (sorted, deduplicated, e.g.
+    # "RQ:2411").  Distinguishes a pure display (DIS: only RQ/I, or W
+    # on 'VMI only' codes) from a responder/writer (any RP, or W on a
+    # non-VMI code like W 22F1).
+    verb_codes_seen: list[str] = field(default_factory=list)
     bound_to: str | None = None  # parent device ID (CTL for TRV, FAN for REM)
     zone_index: str | None = None  # zone index if known from payload
     domain_id: str | None = None  # domain ID if known (FC=appliance_control)
@@ -565,17 +603,16 @@ class DiscoveryScan:
                 is_source=True,
                 destination=destination,
             )
-            # Track the source verb — needed by _classify to tell a
-            # pure display (DIS: RQ/I only) from a writer/responder.
+            # Track the source verb+code pair — needed by _classify to
+            # tell a pure display (DIS: RQ/I only, or VMI-code writes)
+            # from a responder/writer (RP, or W on other codes).
             src_device = self._devices.get(source)
-            if (
-                src_device is not None
-                and verb
-                and verb not in src_device.verbs_seen
-            ):
-                src_device.verbs_seen.append(verb)
-                src_device.verbs_seen.sort()
-                self._dirty = True
+            if src_device is not None and verb and code:
+                signature = f"{verb}:{code}"
+                if signature not in src_device.verb_codes_seen:
+                    src_device.verb_codes_seen.append(signature)
+                    src_device.verb_codes_seen.sort()
+                    self._dirty = True
 
         # destination: lower-confidence (device is being talked to)
         if destination and _is_valid_address(destination):
@@ -1423,10 +1460,11 @@ def _classify(
 
     TODO: DIS (Orcon RF15 Display) is only partially distinguishable:
     a source RQ on a 'VMI only' request code maps to DIS (step 3),
-    unless the device has already sent W/RP as source (not a pure
-    display).  Deeper REM-vs-DIS separation (e.g. 1470/042F DIS-only
-    codes, request frequency) still awaits the strategy pattern
-    (issue 939).  See also: protocol/ramses.py _HVAC_VC_PAIR_BY_CLASS,
+    unless the device has already sent RP, or W on a non-VMI code
+    (not a pure display — see _is_display_signature).  Deeper
+    REM-vs-DIS separation (e.g. 042F DIS-only codes, request
+    frequency) still awaits the strategy pattern (issue 939).
+    See also: protocol/ramses.py _HVAC_VC_PAIR_BY_CLASS,
     pipeline/topology_handlers/hvac.py HvacTopologyHandler.
     """
     prefix = device_id[:2]
@@ -1468,20 +1506,15 @@ def _classify(
         # (RQ 2411, RQ 31DA, RQ 10D0), while the FAN answers (RP) and
         # a bound REM does not routinely send these requests (per the
         # 'VMI only' notes in the REM klass table).  A device that has
-        # already sent W/RP as source is a writer/responder, not a
-        # pure display, so its RQ falls through to normal handling.
+        # already sent RP (responder) or W on a non-VMI code (writer)
+        # is not a pure display — its RQ falls through to normal
+        # handling.
         if (
             verb == Verb.RQ
             and code in _VMI_REQUEST_CODES
             and DevType.DIS
             in _AMBIGUOUS_HVAC_PREFIX_TYPES.get(prefix, frozenset())
-            and not (
-                device is not None
-                and (
-                    Verb.W_ in device.verbs_seen
-                    or Verb.RP in device.verbs_seen
-                )
-            )
+            and _is_display_signature(device)
         ):
             return DevType.DIS
 
