@@ -93,7 +93,9 @@ class TestDeviceBase:
         dev._last_msg = msg
         dev._missed_polls = 2
         assert dev.last_seen == seen_dtm
-        assert dev.last_command is msg
+        # == not is: `is` is provably-false for mypy after the earlier
+        # `is None` assert narrows the member (unreachable error)
+        assert dev.last_command == msg
         assert dev.consecutive_missed_polls == 2
 
     def test_rssi_per_hgi_single_transport(

@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime as dt
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -1445,5 +1445,7 @@ async def test_process_state_updates_src_only_liveness() -> None:
 
     # Assert — source involvement proves liveness and resets the count
     assert fan_dev._last_msg_dtm == reply_msg.dtm
-    assert fan_dev._last_msg is reply_msg
+    # cast to object: the earlier `is None` assert narrows the member to
+    # None, and mypy marks any `is`/`==` with reply_msg as unreachable
+    assert cast(object, fan_dev._last_msg) is reply_msg
     assert fan_dev._missed_polls == 0
