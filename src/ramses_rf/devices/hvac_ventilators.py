@@ -631,7 +631,7 @@ class HvacVentilator(FilterChange):  # FAN: RP/31DA, I/31D[9A], 2411
             src=Address(DeviceIdT(src_id)),
             dst=Address(self.id),
             action=Action.SET_FAN_MODE,
-            data={"fan_mode": fan_mode, "strategy": self._get_strategy()},
+            data={"fan_mode": fan_mode, "strategy": self.get_strategy()},
         )
         # Ventilators do not ack 22F1 commands — the REM→FAN direction is
         # one-way.  wait_for_reply=True causes a timeout on every call

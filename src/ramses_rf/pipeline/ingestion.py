@@ -751,7 +751,7 @@ class StateProjector:
 
         current_state = getattr(target, "hvac_state", None) or HvacState()
         strategy = (
-            target._get_configured_strategy()
+            target.get_configured_strategy()
             if isinstance(target, DeviceBase)
             else None
         )

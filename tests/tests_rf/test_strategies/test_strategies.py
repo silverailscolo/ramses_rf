@@ -289,6 +289,22 @@ class TestFilteredAliases:
                 assert isinstance(hex_code, str)
                 assert len(hex_code) == 2
 
+    def test_public_alias_accessors(self) -> None:
+        """Public aliases/boost_aliases expose the private maps."""
+        s = OrconStrategy()
+        assert s.aliases == s._aliases
+        assert s.aliases["laag"] == "low"
+        assert s.boost_aliases == s._boost_aliases
+        # returned dicts are copies — mutating them is safe
+        s.aliases["x"] = "y"
+        assert "x" not in s._aliases
+
+    def test_base_strategy_has_empty_aliases(self) -> None:
+        """The base class exposes empty alias maps, not None."""
+        s = HvacStrategyBase()
+        assert s.aliases == {}
+        assert s.boost_aliases == {}
+
 
 # ---------------------------------------------------------------------------
 # Binding codes

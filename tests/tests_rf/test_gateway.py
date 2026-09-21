@@ -13,11 +13,13 @@ from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import PollingManager
+from ramses_rf.schemas import SZ_MAIN_TCS
 from ramses_tx import I_, RP, RQ, CommandDTO, Priority
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.packet import Packet
 from ramses_tx.protocol import RamsesProtocolT, create_stack
+from ramses_tx.schemas import SZ_KNOWN_LIST
 from ramses_tx.transport import RamsesTransportT, TransportConfig
 from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import PktLogConfigT
@@ -687,3 +689,40 @@ async def test_gateway_async_send_raw_command() -> None:
             max_retries=2,
             timeout=5.0,
         )
+
+
+@pytest.mark.asyncio
+async def test_gateway_diagnostics_accessors() -> None:
+    """Public diagnostics accessors replace the private reads.
+
+    ``Gateway.config_snapshot()`` and ``Gateway.transport_info`` back the
+    ramses_cc diagnostics platform (ramses-rf/ramses_cc issue 1214); the
+    private ``_config`` remains as a delegating alias.
+    """
+    gwy = Gateway("/dev/null", config=GatewayConfig(disable_discovery=True))
+
+    # no transport bound yet
+    assert gwy.transport_info == {}
+
+    snapshot = await gwy.config_snapshot()
+    assert snapshot[SZ_MAIN_TCS] is None
+    assert snapshot[SZ_KNOWN_LIST] == {}
+    # the private alias returns the same snapshot
+    assert await gwy._config() == snapshot
+
+    transport = cast(
+        RamsesTransportT,
+        MagicMock(
+            get_extra_info=lambda name, default=None: {
+                SZ_ACTIVE_HGI: "18:000730",
+                "tx_rate": 0.5,
+            }.get(name, default)
+        ),
+    )
+    gwy._engine._transport = transport
+
+    info = gwy.transport_info
+    assert info["type"] == "MagicMock"
+    assert info[SZ_ACTIVE_HGI] == "18:000730"
+    assert info["pool_hgi_ids"] is None
+    assert info["tx_rate"] == 0.5

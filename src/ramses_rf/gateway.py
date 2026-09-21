@@ -391,7 +391,38 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             self._tcs = self.device_registry.systems[0]
         return self._tcs
 
-    async def _config(self) -> dict[str, Any]:
+    @property
+    def transport_info(self) -> dict[str, Any]:
+        """Return a snapshot of the bound transport for diagnostics.
+
+        Includes the transport class name, the active HGI id, the pool
+        HGI ids (when pooled) and the recent tx rate.  Returns an empty
+        dict when no transport is bound (e.g. before start).
+
+        :returns: Transport info dict.
+        :rtype: dict[str, Any]
+        """
+        transport = self._engine._transport
+        if transport is None:
+            return {}
+        return {
+            "type": type(transport).__name__,
+            SZ_ACTIVE_HGI: transport.get_extra_info(SZ_ACTIVE_HGI),
+            "pool_hgi_ids": transport.get_extra_info("pool_hgi_ids"),
+            "tx_rate": transport.get_extra_info("tx_rate"),
+        }
+
+    async def config_snapshot(self) -> dict[str, Any]:
+        """Return a snapshot of the gateway configuration.
+
+        Covers the active HGI, the main controller, the known/block
+        lists and gateway config flags — the data ramses_cc diagnostics
+        previously read via the private ``_config`` (ramses-rf/ramses_cc
+        issue 1214).
+
+        :returns: Configuration snapshot dict.
+        :rtype: dict[str, Any]
+        """
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
@@ -402,6 +433,10 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             SZ_BLOCK_LIST: self.config.engine.block_list or [],
             "_unwanted": sorted(self._engine._unwanted),
         }
+
+    async def _config(self) -> dict[str, Any]:
+        """Backward-compatible alias of :meth:`config_snapshot`."""
+        return await self.config_snapshot()
 
     @property
     def schema_updated_callback(self) -> SchemaUpdatedCallback | None:
@@ -469,12 +504,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     async def status(self) -> dict[str, Any]:
         """Return operational status across all registered devices."""
         status_dict = await self.device_registry.status()
-        tx_rate = (
-            self._engine._transport.get_extra_info("tx_rate")
-            if self._engine._transport
-            else None
-        )
-        status_dict["_tx_rate"] = tx_rate
+        status_dict["_tx_rate"] = self.transport_info.get("tx_rate")
         return status_dict
 
     async def get_state(

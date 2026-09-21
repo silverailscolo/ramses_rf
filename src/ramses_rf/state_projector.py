@@ -445,7 +445,7 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         return
 
     strategy = (
-        target._get_configured_strategy()
+        target.get_configured_strategy()
         if isinstance(target, DeviceBase)
         else None
     )
