@@ -453,6 +453,27 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         p, target.hvac_state, msg.code, strategy=strategy
     )
 
+    # The parser names 22F1 modes via a mode_max heuristic, which
+    # mis-decodes real Orcon remotes (e.g. VMN-15LF01 sends
+    # mode_max=04 -> "itho" names, so index 01 "low" displays as
+    # "auto").  A remote has no scheme of its own: its commands use the
+    # bound FAN's vocabulary, so fall back to the parent fan's
+    # configured scheme.  See ramses-rf/ramses_cc issue 1216.
+    if (
+        msg.code == Code._22F1
+        and SZ_FAN_MODE in p
+        and p.get("_mode_index") is not None
+    ):
+        mode_strategy = strategy
+        if mode_strategy is None and isinstance(target, DeviceBase):
+            parent_fan = getattr(target, "_parent_fan", None)
+            if isinstance(parent_fan, DeviceBase):
+                mode_strategy = parent_fan._get_configured_strategy()
+        if mode_strategy is not None:
+            mapped = mode_strategy.fan_modes.get(str(p["_mode_index"]))
+            if mapped is not None:
+                p[SZ_FAN_MODE] = mapped
+
     fields = [
         SZ_CO2_LEVEL,
         SZ_CO2_LEVEL_FAULT,
@@ -540,6 +561,9 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
     if not updates:
         return
+
+    if SZ_FAN_MODE in updates and hasattr(target, "_last_fan_mode_dtm"):
+        target._last_fan_mode_dtm = msg.dtm
 
     new_state = dataclasses.replace(target.hvac_state, **updates)
     target.hvac_state = new_state
@@ -951,6 +975,8 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
             if device.id == src_id:
                 if hasattr(device, "_last_msg_dtm"):
                     device._last_msg_dtm = msg.dtm
+                if hasattr(device, "_last_msg"):
+                    device._last_msg = msg
                 if hasattr(device, "_missed_polls"):
                     device._missed_polls = 0
             if device.id in (

@@ -8,6 +8,7 @@ which all reside in ramses_rf/device/base.py.
 from __future__ import annotations
 
 from datetime import UTC, datetime as dt, timedelta as td
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,6 +16,7 @@ import pytest
 from ramses_rf.const import GATEWAY_MESSAGE_TIMEOUT
 from ramses_rf.devices.dev_base import BatteryState, DeviceBase, HgiGateway
 from ramses_rf.gateway import Gateway
+from ramses_rf.messages import Message
 from ramses_tx import Address
 from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.rssi_tracker import RssiTracker
@@ -82,12 +84,18 @@ class TestDeviceBase:
         dev = DeviceBase(mock_gateway, Address("34:123456"))
 
         assert dev.last_seen is None
+        assert dev.last_command is None
         assert dev.consecutive_missed_polls == 0
 
         seen_dtm = dt.now(UTC)
+        msg = cast(Message, MagicMock(dtm=seen_dtm))
         dev._last_msg_dtm = seen_dtm
+        dev._last_msg = msg
         dev._missed_polls = 2
         assert dev.last_seen == seen_dtm
+        # == not is: `is` is provably-false for mypy after the earlier
+        # `is None` assert narrows the member (unreachable error)
+        assert dev.last_command == msg
         assert dev.consecutive_missed_polls == 2
 
     def test_rssi_per_hgi_single_transport(
