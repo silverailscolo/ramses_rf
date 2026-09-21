@@ -303,6 +303,12 @@ class _ReadTransport(_BaseTransport, TransportInterface):
         serial command responses (version, ID, config), not RAMSES
         packets.
 
+        A ``#`` later in the line is an evofw3 command echo spliced
+        into the frame (e.g. ``!I`` during HGI discovery): the
+        fragment before it is corrupt by construction, so a
+        ``PacketInvalid`` on it is logged at debug level, not
+        warning (ramses-rf/ramses_cc#1219).
+
         :param dtm_str: Timestamp string from the transport.
         :type dtm_str: str
         :param frame: Raw ASCII frame string from transport.
@@ -327,7 +333,15 @@ class _ReadTransport(_BaseTransport, TransportInterface):
             _LOGGER.debug("%s < PacketInvalid(%s)", frame, err)
             return
         except exc.PacketInvalid as err:
-            _LOGGER.warning("%s < PacketInvalid(%s)", frame, err)
+            # A '#' in the frame is an evofw3 command echo spliced
+            # into the line (or a log-file comment): the fragment
+            # before it is corrupt by construction and cannot be
+            # salvaged, so log at debug level (ramses-rf/ramses_cc
+            # issue 1219).
+            if "#" in frame:
+                _LOGGER.debug("%s < PacketInvalid(%s)", frame, err)
+            else:
+                _LOGGER.warning("%s < PacketInvalid(%s)", frame, err)
             return
 
         try:
