@@ -119,18 +119,24 @@ class TestHvacVentilator:
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()
 
-    def test_public_strategy_accessors(
+    def test_strategy_accessors_unconfigured(
         self, hvac_ventilator: HvacVentilator
     ) -> None:
-        """Public scheme/strategy accessors mirror the private state."""
-        # unconfigured: no scheme, no strategy — resolved falls back to Orcon
+        """Unconfigured device: no scheme/strategy, Orcon fallback."""
         assert hvac_ventilator.scheme is None
         assert hvac_ventilator.strategy is None
         assert hvac_ventilator.get_configured_strategy() is None
         assert isinstance(hvac_ventilator.get_strategy(), OrconStrategy)
 
-        # scheme trait only: configured strategy is scheme-derived
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_strategy_accessors_scheme_derived(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """A scheme trait yields a scheme-derived configured strategy."""
         hvac_ventilator._update_traits(DeviceTraits(scheme="itho"))
+
         assert hvac_ventilator.scheme == "itho"
         assert hvac_ventilator.strategy is None
         assert isinstance(
@@ -138,9 +144,17 @@ class TestHvacVentilator:
         )
         assert isinstance(hvac_ventilator.get_strategy(), IthoStrategy)
 
-        # explicit strategy wins over scheme
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_strategy_accessors_explicit_wins(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """An explicit strategy wins over the configured scheme."""
+        hvac_ventilator._update_traits(DeviceTraits(scheme="itho"))
         strategy = OrconStrategy()
         hvac_ventilator.set_strategy(strategy)
+
         assert hvac_ventilator.strategy is strategy
         assert hvac_ventilator.get_strategy() is strategy
         assert hvac_ventilator.get_configured_strategy() is strategy
