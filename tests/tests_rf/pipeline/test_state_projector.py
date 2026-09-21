@@ -11,6 +11,7 @@ import asyncio
 import uuid
 from datetime import datetime as dt
 from typing import Any, cast
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -25,6 +26,7 @@ from ramses_rf.const import (
     SZ_DHW_ACTIVE,
     SZ_DIAGNOSTIC_CODE,
     SZ_DOMAIN_INDEX,
+    SZ_FAN_MODE,
     SZ_FLAGS,
     SZ_FLAME_ACTIVE,
     SZ_LOCAL_OVERRIDE,
@@ -46,6 +48,9 @@ from ramses_rf.const import (
     DevType,
     Verb,
 )
+from ramses_rf.devices.hvac_remotes import HvacRemote
+from ramses_rf.devices.hvac_ventilators import HvacVentilator
+from ramses_rf.gateway import Gateway
 from ramses_rf.messages import Message
 from ramses_rf.models import (
     ActuatorState,
@@ -59,7 +64,12 @@ from ramses_rf.models import (
 )
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.protocol.opentherm import OtDataId
-from ramses_rf.state_projector import process_state_updates
+from ramses_rf.state_projector import (
+    _update_hvac_state,
+    process_state_updates,
+)
+from ramses_rf.strategies.orcon import OrconStrategy
+from ramses_tx import Address
 
 
 class MockAddr:
@@ -1449,3 +1459,168 @@ async def test_process_state_updates_src_only_liveness() -> None:
     # None, and mypy marks any `is`/`==` with reply_msg as unreachable
     assert cast(object, fan_dev._last_msg) is reply_msg
     assert fan_dev._missed_polls == 0
+
+
+# --- 22F1 scheme-aware mode remap + last_fan_mode_dtm (issue 1216) ---
+
+
+def _hvac_gateway() -> MagicMock:
+    """Return a minimal mocked Gateway for real HVAC device twins.
+
+    :return: A MagicMock specced to Gateway.
+    :rtype: MagicMock
+    """
+    gwy = MagicMock(spec=Gateway)
+    gwy.tzinfo = None
+    return gwy
+
+
+def update_hvac_state(
+    target: Any, payload: dict[str, Any], msg: Message
+) -> None:
+    """Feed a payload through both live hvac-state ingestion paths.
+
+    Production runs the state_projector module function (via
+    ``process_state_updates``) and then the ingestion StateProjector
+    method, so the fix must hold under both.
+
+    :param target: The device twin to update.
+    :type target: Any
+    :param payload: The decoded payload dict.
+    :type payload: dict[str, Any]
+    :param msg: The message envelope.
+    :type msg: Message
+    :rtype: None
+    """
+    _update_hvac_state(target, payload, msg)
+    worker = StateProjector(
+        FakeGatewayAdapter(FakeRegistry(FakeDevice())), asyncio.Queue()
+    )
+    worker._update_hvac_state(target, payload, msg)
+
+
+def _22f1_payload(mode_index: str, mode_max: str = "04") -> dict[str, Any]:
+    """Return a 22F1 payload as the mode_max heuristic parser emits it.
+
+    :param mode_index: The transmitted mode index hex byte.
+    :type mode_index: str
+    :param mode_max: The transmitted mode_max byte ("04" => itho names).
+    :type mode_max: str
+    :return: A payload dict shaped like HvacFanModePayload.to_dict().
+    :rtype: dict[str, Any]
+    """
+    heuristic_names = {
+        ("01", "04"): "auto",
+        ("02", "04"): "low",
+        ("03", "07"): "high",
+    }
+    return {
+        SZ_FAN_MODE: heuristic_names.get((mode_index, mode_max), mode_index),
+        "_mode_index": mode_index,
+        "_mode_max": mode_max,
+        "_scheme": "itho" if mode_max == "04" else "orcon",
+    }
+
+
+def _22f1_msg(payload: dict[str, Any], src_id: str) -> MockMessage:
+    """Return a 22F1 command message sourced by a remote.
+
+    :param payload: The decoded payload dict.
+    :type payload: dict[str, Any]
+    :param src_id: The remote's device ID.
+    :type src_id: str
+    :return: A MockMessage envelope.
+    :rtype: MockMessage
+    """
+    return MockMessage(
+        code=Code._22F1,
+        verb=Verb.I_,
+        payload=payload,
+        src_id=src_id,
+        dst_id="32:153289",
+    )
+
+
+def test_22f1_fan_target_uses_configured_scheme() -> None:
+    """A configured FAN scheme overrides the mode_max name heuristic."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    fan.set_strategy(OrconStrategy())
+
+    for mode_index, expected in (("01", "low"), ("02", "medium")):
+        msg = _22f1_msg(_22f1_payload(mode_index), "29:176861")
+        update_hvac_state(fan, dict(msg.payload), msg)
+        assert fan.hvac_state.fan_mode == expected
+
+
+def test_22f1_remote_target_uses_bound_fan_scheme() -> None:
+    """A remote's own state uses the bound FAN's scheme vocabulary."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    fan.set_strategy(OrconStrategy())
+    rem = HvacRemote(_hvac_gateway(), Address("29:176861"))
+    rem._parent_fan = fan
+
+    msg = _22f1_msg(_22f1_payload("01"), rem.id)
+    update_hvac_state(rem, dict(msg.payload), msg)
+    assert rem.hvac_state.fan_mode == "low"
+
+    msg = _22f1_msg(_22f1_payload("02"), rem.id)
+    update_hvac_state(rem, dict(msg.payload), msg)
+    assert rem.hvac_state.fan_mode == "medium"
+
+
+def test_22f1_remote_without_scheme_keeps_heuristic() -> None:
+    """Without a configured scheme the mode_max heuristic is unchanged."""
+    rem = HvacRemote(_hvac_gateway(), Address("29:176861"))
+
+    msg = _22f1_msg(_22f1_payload("01"), rem.id)
+    update_hvac_state(rem, dict(msg.payload), msg)
+    assert rem.hvac_state.fan_mode == "auto"  # mode_max=04 => itho map
+
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    msg = _22f1_msg(_22f1_payload("01"), "29:176861")
+    update_hvac_state(fan, dict(msg.payload), msg)
+    assert fan.hvac_state.fan_mode == "auto"
+
+
+def test_22f1_mode_max_07_still_decodes_orcon() -> None:
+    """mode_max=07 already maps to orcon names; scheme remap is a no-op."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    fan.set_strategy(OrconStrategy())
+
+    msg = _22f1_msg(_22f1_payload("03", mode_max="07"), "37:168270")
+    update_hvac_state(fan, dict(msg.payload), msg)
+    assert fan.hvac_state.fan_mode == "high"
+
+
+def test_22f1_unknown_index_keeps_heuristic_name() -> None:
+    """An index absent from the scheme map keeps the parsed name."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    fan.set_strategy(OrconStrategy())
+
+    payload = _22f1_payload("09")
+    payload[SZ_FAN_MODE] = "09"  # heuristic falls back to raw hex
+    msg = _22f1_msg(payload, "29:176861")
+    update_hvac_state(fan, dict(msg.payload), msg)
+    # "09" is not in the orcon map; the raw-hex fan_mode is then dropped
+    # by the non-semantic hex filter, leaving the previous value (None)
+    assert fan.hvac_state.fan_mode is None
+
+
+def test_last_fan_mode_dtm_stamped_on_fan_mode_update() -> None:
+    """_last_fan_mode_dtm tracks only messages that write fan_mode."""
+    rem = HvacRemote(_hvac_gateway(), Address("29:176861"))
+    assert rem.last_fan_mode_dtm is None
+
+    msg = _22f1_msg(_22f1_payload("01"), rem.id)
+    update_hvac_state(rem, dict(msg.payload), msg)
+    assert rem.last_fan_mode_dtm == msg.dtm
+
+    # a non-fan_mode HVAC payload must not move the stamp
+    msg2 = MockMessage(
+        code=Code._22F3,
+        verb=Verb.I_,
+        payload={"remaining_mins": 15},
+        src_id=rem.id,
+    )
+    update_hvac_state(rem, dict(msg2.payload), msg2)
+    assert rem.last_fan_mode_dtm == msg.dtm

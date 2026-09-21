@@ -119,6 +119,7 @@ class DeviceBase(Entity):
         self._is_battery: bool | None = traits.is_battery if traits else None
         self._last_msg_dtm: dt | None = None
         self._last_msg: Message | None = None
+        self._last_fan_mode_dtm: dt | None = None
         self._missed_polls: int = 0
 
         self.power_state = PowerState()
@@ -191,6 +192,19 @@ class DeviceBase(Entity):
         :rtype: Message | None
         """
         return self._last_msg
+
+    @property
+    def last_fan_mode_dtm(self) -> dt | None:
+        """Return the timestamp of the last message that set ``fan_mode``.
+
+        For a REM/DIS this is when the device last transmitted a fan mode
+        command ("last mode sent"); for a FAN it is when its reported or
+        commanded mode was last updated.
+
+        :return: The timestamp, or ``None`` if never set.
+        :rtype: dt | None
+        """
+        return self._last_fan_mode_dtm
 
     @property
     def consecutive_missed_polls(self) -> int:

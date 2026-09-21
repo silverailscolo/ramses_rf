@@ -759,6 +759,29 @@ class StateProjector:
             payload, current_state, msg.code, strategy=strategy
         )
 
+        # The parser names 22F1 modes via a mode_max heuristic, which
+        # mis-decodes real Orcon remotes (e.g. VMN-15LF01 sends
+        # mode_max=04 -> "itho" names, so index 01 "low" displays as
+        # "auto").  A remote has no scheme of its own: its commands use
+        # the bound FAN's vocabulary, so fall back to the parent fan's
+        # configured scheme.  See ramses-rf/ramses_cc issue 1216.
+        if (
+            msg.code == Code._22F1
+            and SZ_FAN_MODE in payload
+            and payload.get("_mode_index") is not None
+        ):
+            mode_strategy = strategy
+            if mode_strategy is None and isinstance(target, DeviceBase):
+                parent_fan = getattr(target, "_parent_fan", None)
+                if isinstance(parent_fan, DeviceBase):
+                    mode_strategy = parent_fan._get_configured_strategy()
+            if mode_strategy is not None:
+                mapped = mode_strategy.fan_modes.get(
+                    str(payload["_mode_index"])
+                )
+                if mapped is not None:
+                    payload[SZ_FAN_MODE] = mapped
+
         updates: dict[str, Any] = {}
 
         fields = [
@@ -843,6 +866,11 @@ class StateProjector:
 
         if not updates:
             return
+
+        if SZ_FAN_MODE in updates and hasattr(target, "_last_fan_mode_dtm"):
+            target._last_fan_mode_dtm = getattr(
+                msg, "dtm", getattr(msg, SZ_TIMESTAMP, None)
+            )
 
         dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:
