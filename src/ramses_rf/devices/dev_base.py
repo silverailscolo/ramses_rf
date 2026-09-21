@@ -118,6 +118,7 @@ class DeviceBase(Entity):
         )
         self._is_battery: bool | None = traits.is_battery if traits else None
         self._last_msg_dtm: dt | None = None
+        self._last_msg: Message | None = None
         self._missed_polls: int = 0
 
         self.power_state = PowerState()
@@ -174,6 +175,22 @@ class DeviceBase(Entity):
         :rtype: dt | None
         """
         return self._last_msg_dtm
+
+    @property
+    def last_command(self) -> Message | None:
+        """Return the last message sent by this device.
+
+        Only messages with this device as the source count; messages
+        merely addressed to the device do not update this value.  This
+        covers every verb (I/RP/RQ/W), so it also captures commands a
+        remote transmits that are not reflected in trait properties such
+        as ``fan_mode`` (e.g. a 22F3 timed boost or a 2411 parameter set).
+
+        :return: The most recent :class:`Message` sourced by the device,
+            or ``None`` if never heard from.
+        :rtype: Message | None
+        """
+        return self._last_msg
 
     @property
     def consecutive_missed_polls(self) -> int:

@@ -1404,6 +1404,7 @@ class _LivenessDevice:
         self.id: str = device_id
         self._SLUG: str = DevType.FAN
         self._last_msg_dtm: dt | None = None
+        self._last_msg: MockMessage | None = None
         self._missed_polls: int = missed_polls
 
 
@@ -1428,6 +1429,7 @@ async def test_process_state_updates_src_only_liveness() -> None:
 
     # Assert — destination involvement does not prove the FAN is alive
     assert fan_dev._last_msg_dtm is None
+    assert fan_dev._last_msg is None
     assert fan_dev._missed_polls == 3
 
     # Act — a message transmitted by the FAN itself
@@ -1443,4 +1445,5 @@ async def test_process_state_updates_src_only_liveness() -> None:
 
     # Assert — source involvement proves liveness and resets the count
     assert fan_dev._last_msg_dtm == reply_msg.dtm
+    assert fan_dev._last_msg is reply_msg
     assert fan_dev._missed_polls == 0

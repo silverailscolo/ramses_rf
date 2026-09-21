@@ -951,6 +951,8 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
             if device.id == src_id:
                 if hasattr(device, "_last_msg_dtm"):
                     device._last_msg_dtm = msg.dtm
+                if hasattr(device, "_last_msg"):
+                    device._last_msg = msg
                 if hasattr(device, "_missed_polls"):
                     device._missed_polls = 0
             if device.id in (
