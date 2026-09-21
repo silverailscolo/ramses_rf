@@ -13,6 +13,7 @@ from ramses_rf import exceptions as exc
 from ramses_rf.const import DevType, Verb
 from ramses_rf.devices import HvacVentilator
 from ramses_rf.gateway import Gateway
+from ramses_rf.messages import Message
 from ramses_rf.models.state_base import DeviceTraits
 from ramses_rf.models.state_hvac import HvacState
 from ramses_rf.state import MessageStore
@@ -21,7 +22,7 @@ from ramses_rf.strategies import (
     OrconHrc350Strategy,
     OrconStrategy,
 )
-from ramses_tx import Address
+from ramses_tx import Address, Packet
 from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
 
@@ -183,6 +184,63 @@ class TestHvacVentilator:
             hvac_ventilator.get_strategy(model="other"), OrconStrategy
         )
         assert isinstance(hvac_ventilator.get_strategy(), OrconStrategy)
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_model_property_none_without_10e0(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """model is None when no 10E0 message has been seen."""
+        assert hvac_ventilator.model is None
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_model_property_from_10e0(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """The 10E0 description is exposed via the sync model property."""
+        msg = Message._from_packet(
+            Packet(
+                dt.now(UTC),
+                "...  I --- 32:123456 63:262142 --:------ 10E0 038 "
+                "000001C87D130D67FEFFFFFFFFFF1C0207E3564D442D3135524D533634"
+                "000000000000000000",  # description='VMD-15RMS64'
+            )
+        )
+        hvac_ventilator.entity_state.update_state(msg)
+
+        assert hvac_ventilator.model == "VMD-15RMS64"
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
+    def test_strategy_accessors_use_cached_model(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """Once 10E0 lands, model-aware resolution needs no model= arg."""
+        hvac_ventilator._update_traits(DeviceTraits(scheme="orcon"))
+        hvac_ventilator.entity_state.update_state(
+            Message._from_packet(
+                Packet(
+                    dt.now(UTC),
+                    "...  I --- 32:123456 63:262142 --:------ 10E0 038 "
+                    "000001C87D130D67FEFFFFFFFFFF1C0207E3564D442D3135524D533634"
+                    "000000000000000000",  # description='VMD-15RMS64'
+                )
+            )
+        )
+
+        assert isinstance(
+            hvac_ventilator.get_configured_strategy(), OrconHrc350Strategy
+        )
+        assert isinstance(hvac_ventilator.get_strategy(), OrconHrc350Strategy)
+        # an explicit model= still wins over the cached model
+        assert isinstance(
+            hvac_ventilator.get_configured_strategy(model="other"),
+            OrconStrategy,
+        )
 
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()

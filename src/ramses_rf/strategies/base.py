@@ -59,6 +59,16 @@ class HvacStrategy(Protocol):
         """All valid fan modes for this scheme (hex → name)."""
         ...
 
+    @property
+    def aliases(self) -> dict[str, str]:
+        """Vendor fan-mode aliases (alias → canonical name)."""
+        ...
+
+    @property
+    def boost_aliases(self) -> dict[str, str]:
+        """Vendor boost-timer aliases (alias → canonical name)."""
+        ...
+
     # --- Payload quirks ---
 
     def apply_quirk(
@@ -221,6 +231,25 @@ class HvacStrategyBase:
     def fan_modes(self) -> dict[str, str]:
         """All valid fan modes for this scheme (hex → name)."""
         return dict(self._mode_map)
+
+    @property
+    def aliases(self) -> dict[str, str]:
+        """Vendor fan-mode aliases (alias → canonical name).
+
+        Aliases (e.g. Dutch ``laag`` for ``low``) are always accepted
+        by :meth:`fan_mode_to_hex`; this accessor exposes them for
+        consumers that display localised mode names.
+        """
+        return dict(self._aliases)
+
+    @property
+    def boost_aliases(self) -> dict[str, str]:
+        """Vendor boost-timer aliases (alias → canonical name).
+
+        Aliases for the timed boost commands in
+        :attr:`builtin_commands` (e.g. ``laag_15`` for ``low_15``).
+        """
+        return dict(self._boost_aliases)
 
     # --- Payload quirks ---
 

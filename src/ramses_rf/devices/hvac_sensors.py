@@ -263,9 +263,7 @@ class HvacCarbonDioxideSensor(CarbonDioxide, Fakeable):  # CO2: I/1298
         if isinstance(explicit, VentilationControlStrategy):
             return explicit
 
-        info = await fan.entity_state.get_value(Code._10E0)
-        model = info.get("description") if isinstance(info, dict) else None
-        strategy = best_hvac_strategy(fan.id, fan.scheme, model=model)
+        strategy = best_hvac_strategy(fan.id, fan.scheme, model=fan.model)
         if not isinstance(strategy, VentilationControlStrategy):
             raise ValueError(f"{fan}: ventilation demand is not supported")
         return strategy

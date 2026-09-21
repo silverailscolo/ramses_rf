@@ -98,6 +98,12 @@ class Test_entity_base:
             Code._3220: self.msg6,
         }, "base message_log_flat wrong"
 
+        # sync get_cached_value reads the same in-memory state
+        assert dev.entity_state.get_cached_value(
+            Code._3150
+        ) == await dev.entity_state.get_value(Code._3150)
+        assert dev.entity_state.get_cached_value(Code._10E0) is None
+
         # find our Codes
         assert sorted(await dev.entity_state._msg_dev_qry() or []) == sorted(
             [

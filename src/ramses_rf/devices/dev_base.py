@@ -289,6 +289,20 @@ class DeviceBase(Entity):
         """
         return self._strategy
 
+    @property
+    def model(self) -> str | None:
+        """Return the device model reported by the latest 10E0, if seen.
+
+        Read synchronously from the in-memory entity state, so it can
+        be used by consumers that cannot await (e.g. properties).
+
+        :return: The 10E0 ``description`` (e.g. ``"VMD-15RMS64"``), or
+            ``None`` if no 10E0 message has been received.
+        :rtype: str | None
+        """
+        info = self.entity_state.get_cached_value(Code._10E0)
+        return info.get("description") if isinstance(info, dict) else None
+
     def set_strategy(self, strategy: HvacStrategy) -> None:
         """Set the HVAC strategy for this device.
 
@@ -304,14 +318,16 @@ class DeviceBase(Entity):
         Falls back to :func:`best_hvac_strategy` (Orcon) when neither
         an explicit strategy nor a scheme is configured.
 
-        :param model: Device model reported by 10E0, if known; used by
+        :param model: Device model override; used by
             :func:`best_hvac_strategy` for model-level selection.
+            Defaults to the model last reported via 10E0
+            (:attr:`model`).
         :type model: str | None
         :return: The resolved HVAC strategy (never ``None``).
         :rtype: HvacStrategy
         """
         return self._strategy or best_hvac_strategy(
-            self.id, self._scheme, model=model
+            self.id, self._scheme, model=model or self.model
         )
 
     def get_configured_strategy(
@@ -323,7 +339,8 @@ class DeviceBase(Entity):
         explicit strategy nor a scheme is configured, so callers can
         distinguish "no vendor configured" from the Orcon fallback.
 
-        :param model: Device model reported by 10E0, if known.
+        :param model: Device model override; defaults to the model last
+            reported via 10E0 (:attr:`model`).
         :type model: str | None
         :return: The configured strategy, or ``None``.
         :rtype: HvacStrategy | None
@@ -331,7 +348,9 @@ class DeviceBase(Entity):
         if self._strategy:
             return self._strategy
         if self._scheme:
-            return best_hvac_strategy(self.id, self._scheme, model=model)
+            return best_hvac_strategy(
+                self.id, self._scheme, model=model or self.model
+            )
         return None
 
     def _get_strategy(self) -> HvacStrategy:

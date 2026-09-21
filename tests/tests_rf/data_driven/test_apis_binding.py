@@ -137,9 +137,7 @@ async def test_initiate_binding_process(dev_class: type[Fakeable]) -> None:
                 id=fan_id,
                 scheme="orcon",
                 strategy=None,
-                entity_state=SimpleNamespace(
-                    get_value=unittest.mock.AsyncMock(return_value=None)
-                ),
+                model=None,
             )
             configured_sensor = HvacCarbonDioxideSensor(
                 gwy,
