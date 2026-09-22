@@ -1099,6 +1099,18 @@ class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
         # Used by ramses_cc to group independent devices based on the schema.
         self._parent_fan: HvacVentilator | None = None
 
+    @property
+    def parent_fan(self) -> HvacVentilator | None:
+        """Return the bound HVAC ventilator (FAN), if any.
+
+        Set when this device (e.g. a REM or CO2 sensor) is listed in a
+        FAN's ``remotes``/``sensors`` schema section.
+
+        :return: The bound ventilator, or ``None`` if unbound.
+        :rtype: HvacVentilator | None
+        """
+        return self._parent_fan
+
 
 # e.g. {"HGI": HgiGateway}
 BASE_CLASS_BY_SLUG: dict[str, type[Device]] = class_by_attr(__name__, "_SLUG")

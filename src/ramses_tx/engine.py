@@ -156,6 +156,54 @@ class Engine:
         )
         return timesource()
 
+    @property
+    def transport(self) -> RamsesTransportT | None:
+        """Return the active transport, or None before start().
+
+        :return: The bound transport instance.
+        :rtype: RamsesTransportT | None
+        """
+        return self._transport
+
+    @property
+    def hgi_id(self) -> str | None:
+        """Return the configured HGI device ID, if any.
+
+        :return: The HGI device ID, or None if not set.
+        :rtype: str | None
+        """
+        return self._hgi_id
+
+    @property
+    def include_list(self) -> list[str]:
+        """Return the live include (known) device list.
+
+        The returned list is the engine's actual list, so mutating it
+        (e.g. appending a bound device) takes effect immediately.
+
+        :return: The list of included device IDs.
+        :rtype: list[str]
+        """
+        return self._include
+
+    @property
+    def enforce_known_list(self) -> bool:
+        """Return whether the include list is strictly enforced.
+
+        :return: True if only known devices are accepted.
+        :rtype: bool
+        """
+        return bool(self._enforce_known_list)
+
+    @property
+    def packet_log(self) -> PktLogConfigT | dict[Any, Any]:
+        """Return the packet logging configuration.
+
+        :return: The packet log configuration mapping.
+        :rtype: PktLogConfigT | dict
+        """
+        return self._packet_log
+
     def _set_msg_handler(self, msg_handler: MsgHandlerT) -> None:
         """Create an appropriate protocol for the packet source."""
         self._protocol = protocol_factory(

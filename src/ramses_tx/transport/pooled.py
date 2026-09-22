@@ -503,6 +503,15 @@ class PooledTransport(TransportInterface):
     # -- Child access ----------------------------------------------------
 
     @property
+    def children(self) -> tuple[PoolChild, ...]:
+        """Return the pool's child transports as an immutable snapshot.
+
+        :return: The registered child transports.
+        :rtype: tuple[PoolChild, ...]
+        """
+        return tuple(self._children)
+
+    @property
     def _active_children(self) -> list[PoolChild]:
         """Return children with a transport or callback-driven."""
         return [

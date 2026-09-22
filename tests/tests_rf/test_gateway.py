@@ -726,3 +726,25 @@ async def test_gateway_diagnostics_accessors() -> None:
     assert info[SZ_ACTIVE_HGI] == "18:000730"
     assert info["pool_hgi_ids"] is None
     assert info["tx_rate"] == 0.5
+
+
+async def test_gateway_engine_accessors() -> None:
+    """Public engine/device-filter accessors replace private reads.
+
+    ``Gateway.engine`` and ``Gateway.device_filter`` plus the Engine
+    properties back the ramses_cc call sites that previously reached
+    into ``_engine._transport``/``_include``/``_hgi_id`` and friends.
+    """
+    gwy = Gateway("/dev/null", config=GatewayConfig(disable_discovery=True))
+
+    assert gwy.engine is gwy._engine
+    assert gwy.device_filter is gwy._device_filter
+
+    engine = gwy.engine
+    assert engine.transport is None  # not started
+    assert engine.hgi_id is None
+    assert engine.include_list == []
+    assert engine.enforce_known_list is False
+    assert engine.packet_log == {}
+
+    assert gwy.device_filter.include_list == []

@@ -1819,3 +1819,20 @@ async def test_unrelated_frame_is_not_marked_as_echo() -> None:
     await asyncio.sleep(0.01)
     assert rx_pkt._is_echo is False
     assert proto.packet_received.call_count == 1
+
+
+async def test_pool_children_accessor() -> None:
+    """``children`` exposes an immutable snapshot of the pool registry.
+
+    Backs the ramses_cc zigbee/children iteration that previously read
+    the private ``_children`` list.
+    """
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    t1 = _make_mock_transport(hgi="18:002222")
+    pool = PooledTransport(proto, [t0, t1], config=TransportConfig())
+
+    children = pool.children
+    assert isinstance(children, tuple)
+    assert len(children) == 2
+    assert [c.child_id for c in children] == [0, 1]

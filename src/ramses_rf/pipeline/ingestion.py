@@ -772,7 +772,7 @@ class StateProjector:
         ):
             mode_strategy = strategy
             if mode_strategy is None and isinstance(target, DeviceBase):
-                parent_fan = getattr(target, "_parent_fan", None)
+                parent_fan = getattr(target, "parent_fan", None)
                 if isinstance(parent_fan, DeviceBase):
                     mode_strategy = parent_fan._get_configured_strategy()
             if mode_strategy is not None:

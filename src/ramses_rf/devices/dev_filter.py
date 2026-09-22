@@ -43,6 +43,18 @@ class DeviceFilter:
         self._enforce_known_list = enforce_known_list
         self._hgi_id_provider = hgi_id_provider
 
+    @property
+    def include_list(self) -> list[DeviceIdT]:
+        """Return the live include (known) device list.
+
+        The returned list is the filter's actual list, so mutating it
+        takes effect immediately.
+
+        :return: The list of included device IDs.
+        :rtype: list[DeviceIdT]
+        """
+        return self._include
+
     def check_filter_lists(self, device_id: DeviceIdT) -> None:
         """Raise a DeviceNotFoundError if a device_id is filtered out by a list.
 

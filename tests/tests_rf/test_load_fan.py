@@ -36,10 +36,13 @@ def mock_gateway() -> Generator[MagicMock, None, None]:
     gateway.message_store = MessageStore(maintain=False)
 
     engine = MagicMock()
+    engine.enforce_known_list = False
     engine._enforce_known_list = False
     engine._exclude = {}
     engine._include = {}
+    engine.include_list = {}
     gateway._engine = engine
+    gateway.engine = engine
 
     registry = MagicMock()
     registry.device_by_id = {}

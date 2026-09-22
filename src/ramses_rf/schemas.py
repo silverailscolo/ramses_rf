@@ -388,8 +388,8 @@ def _get_device(
         """Raise a DeviceNotFoundError if a device_id is filtered out by a list."""
         err_msg = None
         if (
-            gateway._engine._enforce_known_list
-            and device_id not in gateway._engine._include
+            gateway.engine.enforce_known_list
+            and device_id not in gateway.engine.include_list
         ):
             err_msg = (
                 f"it is in the {SZ_SCHEMA}, but not in the {SZ_KNOWN_LIST}"

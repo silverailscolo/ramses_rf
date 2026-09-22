@@ -88,6 +88,15 @@ class Child:
         self.ctl: ControllerInterface | None = None
         self.tcs: SystemBase | None = None
 
+    @property
+    def parent(self) -> ParentInterface | None:
+        """Return the parent entity (System, Zone, or UFH Controller).
+
+        :return: The parent entity, or None if unassigned.
+        :rtype: ParentInterface | None
+        """
+        return self._parent
+
     def _get_parent(
         self,
         parent: ParentInterface | None,
