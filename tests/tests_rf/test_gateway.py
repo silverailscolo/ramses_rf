@@ -748,3 +748,17 @@ async def test_gateway_engine_accessors() -> None:
     assert engine.packet_log == {}
 
     assert gwy.device_filter.include_list == []
+
+
+async def test_include_list_mutators() -> None:
+    """add_to_include/remove_from_include mutate the live lists idempotently."""
+    gwy = Gateway("/dev/null", config=GatewayConfig(disable_discovery=True))
+
+    for owner in (gwy.engine, gwy.device_filter):
+        owner.add_to_include("01:000001")
+        owner.add_to_include("01:000001")  # no duplicate
+        assert owner.include_list == ["01:000001"]
+
+        owner.remove_from_include("01:000001")
+        owner.remove_from_include("01:000001")  # no error
+        assert owner.include_list == []

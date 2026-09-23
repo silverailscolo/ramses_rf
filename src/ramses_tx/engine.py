@@ -186,6 +186,28 @@ class Engine:
         """
         return self._include
 
+    def add_to_include(self, device_id: str) -> None:
+        """Add a device ID to the include list if not already present.
+
+        :param device_id: The device identifier to include.
+        :type device_id: str
+        :returns: None
+        :rtype: None
+        """
+        if device_id not in self._include:
+            self._include.append(device_id)
+
+    def remove_from_include(self, device_id: str) -> None:
+        """Remove a device ID from the include list if present.
+
+        :param device_id: The device identifier to remove.
+        :type device_id: str
+        :returns: None
+        :rtype: None
+        """
+        if device_id in self._include:
+            self._include.remove(device_id)
+
     @property
     def enforce_known_list(self) -> bool:
         """Return whether the include list is strictly enforced.
