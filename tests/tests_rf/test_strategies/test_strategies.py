@@ -589,3 +589,119 @@ class TestBuiltinBoostCommands:
         assert cmds["high_60"]["payload"] == "00123C03040404"
         assert cmds["low_15"]["payload"] == "00120F01040404"
         assert cmds["medium_30"]["payload"] == "00121E02040404"
+
+
+# ---------------------------------------------------------------------------
+# Orcon 3-byte 31D9 mode decode (ramses-rf/ramses_cc#1231, MVS-15)
+# ---------------------------------------------------------------------------
+
+
+class TestOrcon31D9ModeQuirk:
+    """Remap the generic 3-byte 31D9 decode to Orcon mode names."""
+
+    @pytest.fixture()
+    def strategy(self) -> OrconStrategy:
+        return OrconStrategy()
+
+    @staticmethod
+    def _31d9_payload(fan_mode: str) -> dict:
+        """Shape the payload like the generic 3-byte parser emits it."""
+        return {
+            "hvac_id": "00",
+            "exhaust_fan_speed": 0.005,
+            "fan_mode": fan_mode,
+            "passive": False,
+            "damper_only": False,
+            "filter_dirty": False,
+            "frost_cycle": False,
+            "has_fault": False,
+        }
+
+    @pytest.mark.parametrize(
+        ("parsed_mode", "expected"),
+        [
+            ("off", "away"),  # 0x00
+            ("1 (trickle)", "low"),  # 0x01
+            ("2 (low)", "medium"),  # 0x02
+            ("3 (medium)", "high"),  # 0x03 — also the timed-boost report
+            ("4 (boost)", "auto"),  # 0x04
+            ("auto", "auto_alt"),  # 0x05
+            ("01", "low"),  # raw hex (bound-REM/fall-back branches)
+            ("06", "boost"),  # 0x06 — unmapped by the generic map
+            ("07", "off"),  # 0x07 — unmapped by the generic map
+        ],
+    )
+    def test_remapped_fan_mode(
+        self, strategy: OrconStrategy, parsed_mode: str, expected: str
+    ) -> None:
+        result = apply_hvac_quirks(
+            self._31d9_payload(parsed_mode),
+            None,
+            Code._31D9,
+            strategy=strategy,
+        )
+
+        assert result["fan_mode"] == expected
+        assert result["exhaust_fan_speed"] is None
+
+    def test_suppresses_speed_for_unmapped_byte(
+        self, strategy: OrconStrategy
+    ) -> None:
+        """A non-mode byte still loses its bogus spd/200 fan speed."""
+        result = apply_hvac_quirks(
+            self._31d9_payload("III (boost)"),
+            None,
+            Code._31D9,
+            strategy=strategy,
+        )
+
+        assert result["fan_mode"] == "III (boost)"
+        assert result["exhaust_fan_speed"] is None
+
+    def test_4byte_orcon_decode_untouched(
+        self, strategy: OrconStrategy
+    ) -> None:
+        """4-byte payloads carry no exhaust_fan_speed — no remap.
+
+        Guards the 'auto' ambiguity: 4-byte 0x04 must stay 'auto', not
+        become 'auto_alt' (which is 3-byte 0x05).
+        """
+        result = apply_hvac_quirks(
+            {"fan_mode": "auto", "has_fault": False},
+            None,
+            Code._31D9,
+            strategy=strategy,
+        )
+
+        assert result["fan_mode"] == "auto"
+
+    def test_other_codes_untouched(self, strategy: OrconStrategy) -> None:
+        payload = {"fan_mode": "1 (trickle)", "exhaust_fan_speed": 0.5}
+
+        result = apply_hvac_quirks(
+            payload, None, Code._31DA, strategy=strategy
+        )
+
+        assert result["fan_mode"] == "1 (trickle)"
+        assert result["exhaust_fan_speed"] == 0.5
+
+    def test_no_strategy_preserves_generic_decode(self) -> None:
+        """Without a configured scheme the Vasco-style names remain."""
+        result = apply_hvac_quirks(
+            self._31d9_payload("1 (trickle)"), None, Code._31D9
+        )
+
+        assert result["fan_mode"] == "1 (trickle)"
+        assert result["exhaust_fan_speed"] == 0.005
+
+    def test_vasco_strategy_untouched(self) -> None:
+        """A Vasco-scheme device keeps its genuine 31D9 decode."""
+        result = apply_hvac_quirks(
+            self._31d9_payload("4 (boost)"),
+            None,
+            Code._31D9,
+            strategy=VascoStrategy(),
+        )
+
+        assert result["fan_mode"] == "4 (boost)"
+        assert result["exhaust_fan_speed"] == 0.005
