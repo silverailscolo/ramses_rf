@@ -409,6 +409,35 @@ class ParentInterface(Protocol):
 class DeviceFilterInterface(Protocol):
     """Interface for the Device Filter service."""
 
+    @property
+    def include_list(self) -> list[DeviceIdT]:
+        """Return the live include (known) device list.
+
+        :returns: The list of included device IDs.
+        :rtype: list[DeviceIdT]
+        """
+        ...
+
+    def add_to_include(self, device_id: DeviceIdT) -> None:
+        """Add a device ID to the include list if not already present.
+
+        :param device_id: The device identifier to include.
+        :type device_id: DeviceIdT
+        :returns: None
+        :rtype: None
+        """
+        ...
+
+    def remove_from_include(self, device_id: DeviceIdT) -> None:
+        """Remove a device ID from the include list if present.
+
+        :param device_id: The device identifier to remove.
+        :type device_id: DeviceIdT
+        :returns: None
+        :rtype: None
+        """
+        ...
+
     def check_filter_lists(self, device_id: DeviceIdT) -> None:
         """Raise a DeviceNotFoundError if a device_id is filtered out.
 

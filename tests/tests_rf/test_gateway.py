@@ -726,3 +726,39 @@ async def test_gateway_diagnostics_accessors() -> None:
     assert info[SZ_ACTIVE_HGI] == "18:000730"
     assert info["pool_hgi_ids"] is None
     assert info["tx_rate"] == 0.5
+
+
+async def test_gateway_engine_accessors() -> None:
+    """Public engine/device-filter accessors replace private reads.
+
+    ``Gateway.engine`` and ``Gateway.device_filter`` plus the Engine
+    properties back the ramses_cc call sites that previously reached
+    into ``_engine._transport``/``_include``/``_hgi_id`` and friends.
+    """
+    gwy = Gateway("/dev/null", config=GatewayConfig(disable_discovery=True))
+
+    assert gwy.engine is gwy._engine
+    assert gwy.device_filter is gwy._device_filter
+
+    engine = gwy.engine
+    assert engine.transport is None  # not started
+    assert engine.hgi_id is None
+    assert engine.include_list == []
+    assert engine.enforce_known_list is False
+    assert engine.packet_log == {}
+
+    assert gwy.device_filter.include_list == []
+
+
+async def test_include_list_mutators() -> None:
+    """add_to_include/remove_from_include mutate the live lists idempotently."""
+    gwy = Gateway("/dev/null", config=GatewayConfig(disable_discovery=True))
+
+    for owner in (gwy.engine, gwy.device_filter):
+        owner.add_to_include("01:000001")
+        owner.add_to_include("01:000001")  # no duplicate
+        assert owner.include_list == ["01:000001"]
+
+        owner.remove_from_include("01:000001")
+        owner.remove_from_include("01:000001")  # no error
+        assert owner.include_list == []

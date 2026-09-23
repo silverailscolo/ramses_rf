@@ -353,6 +353,16 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return self._gwy_config
 
     @property
+    def engine(self) -> Engine:
+        """Return the underlying packet engine."""
+        return self._engine
+
+    @property
+    def device_filter(self) -> DeviceFilterInterface:
+        """Return the device filter service."""
+        return self._device_filter
+
+    @property
     def message_store(self) -> MessageStoreInterface | None:
         """Return the SQLite message store instance or None."""
         return self._message_store
@@ -364,9 +374,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     @property
     def hgi(self) -> HgiGateway | None:
         """Return the HGI gateway device interface or None."""
-        if not self._engine._transport:
+        if not self._engine.transport:
             return None
-        if device_id := self._engine._transport.get_extra_info(SZ_ACTIVE_HGI):
+        if device_id := self._engine.transport.get_extra_info(SZ_ACTIVE_HGI):
             return self.device_registry.device_by_id.get(device_id)
         return None
 
@@ -402,7 +412,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         :returns: Transport info dict.
         :rtype: dict[str, Any]
         """
-        transport = self._engine._transport
+        transport = self._engine.transport
         if transport is None:
             return {}
         return {

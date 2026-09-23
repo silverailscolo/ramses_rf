@@ -91,13 +91,13 @@ class GatewayLifecycle:
         """Start the Gateway."""
         _, self._packet_log_listener = await set_packet_logging_config(
             cc_console=(self.config.reduce_processing >= DONT_CREATE_MESSAGES),
-            **self._engine._packet_log,
-        )  # type: ignore[arg-type]
+            **self._engine.packet_log,
+        )
 
         if self._packet_log_listener:
             self._packet_log_listener.start()
 
-            packet_log_config: dict[str, Any] = dict(self._engine._packet_log)
+            packet_log_config: dict[str, Any] = dict(self._engine.packet_log)
             if flush_interval := packet_log_config.get("flush_interval", 0):
 
                 async def _periodic_flush() -> None:
@@ -151,8 +151,8 @@ class GatewayLifecycle:
         # If the underlying transport dynamically discovered the hardware adapter
         # (e.g. from parsing the first frames of a log file stream), sync the
         # configuration state and explicitly register it into the graph.
-        if self._engine._transport:
-            if hgi_id := self._engine._transport.get_extra_info(SZ_ACTIVE_HGI):
+        if self._engine.transport:
+            if hgi_id := self._engine.transport.get_extra_info(SZ_ACTIVE_HGI):
                 hgi_str = str(hgi_id)
                 if not self.config.hgi_id:
                     self.config.hgi_id = hgi_str
@@ -301,7 +301,7 @@ class GatewayLifecycle:
             clear_state()
 
         enforce_include_list = bool(
-            self._engine._enforce_known_list and self.config.hgi_id
+            self._engine.enforce_known_list and self.config.hgi_id
         )
 
         tmp_protocol = protocol_factory(
@@ -309,7 +309,7 @@ class GatewayLifecycle:
             disable_sending=True,
             enforce_include_list=enforce_include_list,
             exclude_list=self._engine._exclude,
-            include_list=self._engine._include,
+            include_list=self._engine.include_list,
         )
 
         cutoff_dtm = dt.now(tz=UTC) - td(hours=1)

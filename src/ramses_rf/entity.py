@@ -87,6 +87,24 @@ class _Entity:
         self.ctl: ControllerInterface | None = None
         self.tcs: SystemBase | None = None
 
+    @property
+    def gateway(self) -> Gateway:
+        """Return the Gateway this entity is bound to.
+
+        :return: The gateway orchestrator.
+        :rtype: Gateway
+        """
+        return self._gateway
+
+    @property
+    def slug(self) -> str | None:
+        """Return the device-class slug (e.g. ``FAN``, ``REM``, ``CTL``).
+
+        :return: The class slug, or ``None`` for the abstract base.
+        :rtype: str | None
+        """
+        return self._SLUG
+
     def __repr__(self) -> str:
         return f"{self.id} ({self._SLUG})"
 

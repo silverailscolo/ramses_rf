@@ -39,6 +39,9 @@ def _make_mock_ufh_system(
     gateway.config.max_zones = 16
     gateway.device_registry.system_by_id = {}
     gateway.device_registry._cqrs_actuators = {}
+    gateway.engine = gateway._engine
+    gateway.engine.enforce_known_list = False
+    gateway.engine.include_list = []
     gateway._engine._enforce_known_list = False
     gateway._engine._exclude = []
     gateway._engine._include = []
