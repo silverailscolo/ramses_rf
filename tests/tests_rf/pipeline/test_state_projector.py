@@ -62,6 +62,7 @@ from ramses_rf.models import (
     TemperatureState,
     ZoneState,
 )
+from ramses_rf.payloads.hvac import HvacBypassStatePayload
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.protocol.opentherm import OtDataId
 from ramses_rf.state_projector import (
@@ -1624,3 +1625,62 @@ def test_last_fan_mode_dtm_stamped_on_fan_mode_update() -> None:
     )
     update_hvac_state(rem, dict(msg2.payload), msg2)
     assert rem.last_fan_mode_dtm == msg.dtm
+
+
+# --- 31D9 Orcon 3-byte mode decode (ramses-rf/ramses_cc#1231, MVS-15) ---
+
+
+def _31d9_msg(speed_byte: int, src_id: str) -> MockMessage:
+    """Return a 3-byte 31D9 broadcast decoded by the real parser.
+
+    :param speed_byte: The third payload byte (mode index on Orcon).
+    :type speed_byte: int
+    :param src_id: The FAN's device ID.
+    :type src_id: str
+    :return: A MockMessage envelope carrying the parsed payload.
+    :rtype: MockMessage
+    """
+    msg = MockMessage(
+        code=Code._31D9,
+        verb=Verb.I_,
+        payload={},
+        src_id=src_id,
+        dst_id=src_id,
+    )
+    msg.payload = HvacBypassStatePayload.from_bytes(
+        bytes((0x00, 0x00, speed_byte))
+    ).to_dict(msg)
+    return msg
+
+
+@pytest.mark.parametrize(
+    ("speed_byte", "expected"),
+    [
+        (0x00, "away"),
+        (0x01, "low"),
+        (0x02, "medium"),
+        (0x03, "high"),  # also what a timed boost reports
+        (0x04, "auto"),
+    ],
+)
+def test_31d9_orcon_3byte_modes(speed_byte: int, expected: str) -> None:
+    """A configured Orcon FAN decodes 3-byte 31D9 via its mode map."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:231021"))
+    fan.set_strategy(OrconStrategy())
+
+    msg = _31d9_msg(speed_byte, fan.id)
+    update_hvac_state(fan, dict(msg.payload), msg)
+
+    assert fan.hvac_state.fan_mode == expected
+    assert fan.hvac_state.exhaust_fan_speed is None
+
+
+def test_31d9_3byte_without_scheme_keeps_generic_decode() -> None:
+    """Unconfigured FANs keep the Vasco-style 31D9 decode."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:231021"))
+
+    msg = _31d9_msg(0x01, fan.id)
+    update_hvac_state(fan, dict(msg.payload), msg)
+
+    assert fan.hvac_state.fan_mode == "1 (trickle)"
+    assert fan.hvac_state.exhaust_fan_speed == 0.005
