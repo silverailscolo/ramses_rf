@@ -389,6 +389,45 @@ async def test_dhw_commands(mock_tcs: MagicMock) -> None:
 
 
 @pytest.mark.asyncio
+async def test_zone_set_mode_src_when_hgi_unknown(
+    mock_tcs: MagicMock,
+) -> None:
+    """Intent src falls back to the HGI placeholder when the gateway
+    device is not yet known, never to the CTL.
+
+    A CTL source produces a self-addressed frame (src == dst) that
+    gateways silently drop, so the write times out (issue 1237).
+    """
+    # Arrange: gateway device not yet registered (early startup)
+    mock_tcs._gateway.hgi = None
+    zon = Zone(mock_tcs, "02")
+
+    # Act
+    await zon.set_mode(mode="temporary_override", setpoint=19.0)
+
+    # Assert
+    intent = mock_tcs._gateway.dispatcher.send.call_args.args[0]
+    assert intent.src.id == HGI_DEVICE_ID
+    assert intent.src.id != intent.dst.id
+    assert intent.dst.id == mock_tcs.ctl.id
+
+
+@pytest.mark.asyncio
+async def test_zone_set_mode_src_uses_hgi(mock_tcs: MagicMock) -> None:
+    """Intent src uses the active gateway id when it is known."""
+    # Arrange
+    zon = Zone(mock_tcs, "02")
+
+    # Act
+    await zon.set_mode(mode="permanent_override", setpoint=19.0)
+
+    # Assert
+    intent = mock_tcs._gateway.dispatcher.send.call_args.args[0]
+    assert intent.src.id == mock_tcs._gateway.hgi.id
+    assert intent.dst.id == mock_tcs.ctl.id
+
+
+@pytest.mark.asyncio
 async def test_zone_initialization(mock_tcs: MagicMock) -> None:
     """Test standard Zone initialisation and validation rules."""
     zon = Zone(mock_tcs, "00")

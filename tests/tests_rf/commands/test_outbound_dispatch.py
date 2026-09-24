@@ -75,7 +75,11 @@ async def test_zone_set_temperature_dispatches_intent(
     assert mock_gateway._async_send_dto.await_count == 1
     call_dto: CommandDTO = mock_gateway._async_send_dto.call_args[0][0]
     assert call_dto.code == Code._2309
-    assert call_dto.addr3 == "01:078710"
+    # hgi is None in this fixture: the intent src falls back to the HGI
+    # placeholder, never to the CTL (a self-addressed frame, issue 1237)
+    assert call_dto.addr1 == "18:000730"
+    assert call_dto.addr2 == "01:078710"
+    assert call_dto.addr3 == "--:------"
 
 
 @pytest.mark.asyncio
