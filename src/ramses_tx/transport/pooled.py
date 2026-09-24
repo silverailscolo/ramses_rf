@@ -187,6 +187,12 @@ class PoolChild:
         self.connection_state = ConnectionState.CONNECTED
         self.availability = NodeAvailability.ONLINE
         self.transport_obj = transport_obj
+        # A child that failed at construction has no transport (the
+        # factory only assigns it on successful connect).  Restore it on
+        # reconnect so is_sendable can become True again.  Callback
+        # children keep transport=None — outbound goes via the adapter.
+        if self.transport is None and not self.callback_driven:
+            self.transport = transport_obj
         # Read HGI identity from the transport if available.
         hgi = transport_obj.get_extra_info(SZ_ACTIVE_HGI)
         if hgi is not None:
@@ -286,6 +292,7 @@ class _ChildProtocolProxy(ProtocolInterface):
         self._child_id = child_id
         self._connected: bool = False
         self._conn_event: asyncio.Event = asyncio.Event()
+        self._conn_error: Exception | None = None
 
     # -- ProtocolInterface ----------------------------------------------
 
@@ -294,13 +301,18 @@ class _ChildProtocolProxy(ProtocolInterface):
     ) -> None:
         """Forward connection_made to the pool for tracking."""
         self._connected = True
+        self._conn_error = None
         self._conn_event.set()
         self._pool._on_child_connected(self._child_id, transport)
 
     def connection_lost(self, error: Exception | None) -> None:
         """Forward connection_lost to the pool for tracking."""
         self._connected = False
-        self._conn_event.clear()
+        self._conn_error = error
+        # Wake waiters so a failed child surfaces its error immediately
+        # instead of stalling pool creation for the full timeout
+        # (e.g. a Zigbee child that cannot reach ZHA).
+        self._conn_event.set()
         self._pool._on_child_disconnected(self._child_id, error)
 
     def packet_received(
@@ -344,6 +356,11 @@ class _ChildProtocolProxy(ProtocolInterface):
                 f"Child transport {self._child_id} did not connect "
                 f"within {timeout}s"
             ) from err
+        if not self._connected:
+            raise exc.TransportError(
+                f"Child transport {self._child_id} failed to connect: "
+                f"{self._conn_error}"
+            ) from self._conn_error
         # Return the pool — callers just need a TransportInterface.
         return self._pool
 
@@ -424,6 +441,12 @@ class PooledTransport(TransportInterface):
         # Dict-backed dedup cache: key -> timestamp.
         # O(1) lookup instead of O(N) deque scan.
         self._dedup_cache: dict[_DedupKeyT, dt] = {}
+        # Separate cache for echo copies: every receiver's copy of a TX
+        # echo is marked, but only the first is forwarded upstream
+        # (enough for the protocol's WantEcho FSM).  Keeping it apart
+        # from _dedup_cache means echoes can never suppress a genuine
+        # frame, and a genuine frame can never suppress a needed echo.
+        self._echo_dedup_cache: dict[_DedupKeyT, dt] = {}
 
         # Build immutable child registry.
         self._children: list[PoolChild] = []
@@ -466,16 +489,27 @@ class PooledTransport(TransportInterface):
         self._outbound_publisher: MqttPoolOutbound | None = None
 
         # Recent TX recording for echo detection (issue 1185).
-        # Callback-driven (MQTT) children bypass _FullTransport.write_frame,
-        # so _log_tx_packet is never called and the pool's RX path can't
-        # recognise echoes of our own TX.  Record TX keys here and mark
-        # matching inbound packets as echoes before forwarding.
+        # Every outbound frame is recorded here: an over-air copy can
+        # arrive via a different child than the one that transmitted it
+        # (e.g. a remote MQTT-connected HGI hears a zigbee TX), and
+        # callback-driven (MQTT) children bypass _FullTransport
+        # entirely.  Matching inbound packets are marked as echoes
+        # before forwarding.
         self._recent_tx_queue: deque[tuple[dt, tuple[str, ...]]] = deque(
             maxlen=20
         )
         self._recent_tx_counts: dict[tuple[str, ...], int] = {}
 
     # -- Child access ----------------------------------------------------
+
+    @property
+    def children(self) -> tuple[PoolChild, ...]:
+        """Return the pool's child transports as an immutable snapshot.
+
+        :return: The registered child transports.
+        :rtype: tuple[PoolChild, ...]
+        """
+        return tuple(self._children)
 
     @property
     def _active_children(self) -> list[PoolChild]:
@@ -545,11 +579,14 @@ class PooledTransport(TransportInterface):
     def _record_tx(self, frame: str) -> None:
         """Record an outbound frame for echo detection.
 
-        Callback-driven (MQTT) children bypass
-        :meth:`_FullTransport.write_frame`, so
-        :meth:`_FullTransport._log_tx_packet` is never called and the
-        pool's RX path cannot recognise echoes of our own TX.  Record
-        a content key here so :meth:`_on_child_packet` can mark
+        Every outbound frame is recorded at the pool level, not only
+        MQTT-published ones: RF is a shared medium, so an over-air copy
+        of a frame transmitted by one child can arrive via ANY other
+        child (e.g. a remote MQTT-connected HGI hears a zigbee or USB
+        TX).  For callback-driven children the child's own
+        :meth:`_FullTransport._log_tx_packet` is never called at all;
+        for transport children it only covers that child's local echo.
+        Record a content key here so :meth:`_on_child_packet` can mark
         matching inbound packets as echoes before forwarding.
 
         :param frame: The serialized RAMSES frame string.
@@ -585,6 +622,11 @@ class PooledTransport(TransportInterface):
         dict lookup.  HGI80 echoes arrive with the real HGI ID as
         addr1, but the TX frame used the placeholder 18:000730 —
         both variants are checked (issue 835).
+
+        The match is not consumed: in a multi-HGI pool a single TX is
+        heard by several receivers (each child that picks up the frame
+        over the air reports its own copy), and every copy must be
+        marked as an echo.  Entries expire via the TTL prune above.
 
         :param packet: The inbound packet to check.
         :returns: True if the packet is an echo of a recent TX.
@@ -624,17 +666,8 @@ class PooledTransport(TransportInterface):
                 dto.addr3,
                 dto.raw_payload,
             )
-            if rx_key not in self._recent_tx_counts:
-                continue
-            if self._recent_tx_counts[rx_key] <= 1:
-                del self._recent_tx_counts[rx_key]
-            else:
-                self._recent_tx_counts[rx_key] -= 1
-            for idx, (_, queued_key) in enumerate(self._recent_tx_queue):
-                if queued_key == rx_key:
-                    del self._recent_tx_queue[idx]
-                    break
-            return True
+            if rx_key in self._recent_tx_counts:
+                return True
         return False
 
     # -- TransportInterface ---------------------------------------------
@@ -665,7 +698,8 @@ class PooledTransport(TransportInterface):
 
         Preserves the compatibility keys consumed by ``ramses_rf`` and
         ``ramses_cc``: ``pool_hgi_ids``, ``pool_rssi_trackers``,
-        ``pool_stats``, ``SZ_ACTIVE_HGI``, ``SZ_IS_EVOFW3``.
+        ``pool_rssi_by_hgi``, ``pool_stats``, ``SZ_ACTIVE_HGI``,
+        ``SZ_IS_EVOFW3``.
         """
         if name == "pool_rssi_trackers":
             return [c.rssi_tracker for c in self._children if c.is_connected]
@@ -680,6 +714,12 @@ class PooledTransport(TransportInterface):
                 for c in self._children
                 if c.is_connected and c.hgi_id is not None
             ]
+        if name == "pool_rssi_by_hgi":
+            return {
+                str(c.hgi_id): c.rssi_tracker
+                for c in self._children
+                if c.is_connected and c.hgi_id is not None
+            }
         if name == SZ_IS_EVOFW3:
             for c in self._children:
                 if c.is_connected and c.transport_obj is not None:
@@ -916,6 +956,13 @@ class PooledTransport(TransportInterface):
         if child.transport is None:
             return WriteOutcome.NOT_SUBMITTED
 
+        # Record TX for echo detection — an over-air copy of a frame
+        # transmitted by this child can arrive via ANY other child
+        # (e.g. a remote MQTT-connected HGI hears a zigbee TX), and only
+        # the pool-level table is consulted for those inbound packets.
+        # The child's own _log_tx_packet only covers its local echo.
+        self._record_tx(frame)
+
         write = getattr(child.transport, "write_frame", None)
         if write is None:
             try:
@@ -954,6 +1001,10 @@ class PooledTransport(TransportInterface):
         that still use ``write_frame()`` directly (e.g. ``send_frame()``
         or third-party code).  The preferred path is
         ``prepare_command()`` + ``write_routed()``.
+
+        TODO: deprecate once every caller routes through
+        ``prepare_command()``/``write_routed()`` — this legacy path only
+        exists for direct ``write_frame()`` callers.
 
         When called directly, the frame is parsed to extract the target
         device, a child is selected, and the frame is dispatched.  Source
@@ -1037,6 +1088,10 @@ class PooledTransport(TransportInterface):
                 child_hgi,
                 child.child_id,
             )
+
+        # Record TX for echo detection (issue 1185) — see write_routed:
+        # an over-air copy can return via a different child.
+        self._record_tx(frame)
 
         write = getattr(child.transport, "write_frame", None)
         if write is None:
@@ -1154,9 +1209,12 @@ class PooledTransport(TransportInterface):
 
         # Echo detection (issue 1185): callback-driven (MQTT) children
         # bypass _FullTransport._frame_read, so the transport-level
-        # _is_recent_tx check never runs.  Check here and mark the
-        # packet as an echo so the protocol's WantEcho FSM can resolve
-        # — and skip dedup for echoes so they are forwarded upstream.
+        # _is_recent_tx check never runs; likewise an over-air copy of
+        # our TX can arrive via a different child than the one that
+        # transmitted it.  Check the pool-level table here and mark the
+        # packet as an echo so the protocol's WantEcho FSM can resolve.
+        # Echoes dedupe against a separate cache: every copy is marked,
+        # but only the first is forwarded upstream.
         if self._is_recent_tx(packet):
             packet._is_echo = True
             _LOGGER.debug(
@@ -1164,39 +1222,38 @@ class PooledTransport(TransportInterface):
                 child_id,
                 packet,
             )
+            dedup_cache = self._echo_dedup_cache
         else:
-            # Dict-backed dedup with sequence-aware key.
-            key = self._dedup_key(packet)
-            now = dt_now()
+            dedup_cache = self._dedup_cache
 
-            # Purge stale entries from the dedup cache.
-            cutoff = now - self._dedup_window
-            # Collect stale keys (can't modify dict during iteration).
-            stale_keys = [
-                k for k, t in self._dedup_cache.items() if t < cutoff
-            ]
-            for k in stale_keys:
-                del self._dedup_cache[k]
+        # Dict-backed dedup with sequence-aware key.
+        key = self._dedup_key(packet)
+        now = dt_now()
 
-            # Check for duplicate — O(1) dict lookup.
-            if key in self._dedup_cache:
-                self._pkts_deduped += 1
-                _LOGGER.debug(
-                    "PooledTransport: deduped packet from child %d: %s",
-                    child_id,
-                    packet,
-                )
-                return
+        # Purge stale entries from the dedup cache.
+        cutoff = now - self._dedup_window
+        # Collect stale keys (can't modify dict during iteration).
+        stale_keys = [k for k, t in dedup_cache.items() if t < cutoff]
+        for k in stale_keys:
+            del dedup_cache[k]
 
-            # Not a duplicate — record and forward.
-            self._dedup_cache[key] = now
-            # Enforce max cache size.
-            if len(self._dedup_cache) > _MAX_DEDUP_KEYS:
-                # Evict oldest entry (linear scan, but rare).
-                oldest_key = min(
-                    self._dedup_cache, key=lambda k: self._dedup_cache[k]
-                )
-                del self._dedup_cache[oldest_key]
+        # Check for duplicate — O(1) dict lookup.
+        if key in dedup_cache:
+            self._pkts_deduped += 1
+            _LOGGER.debug(
+                "PooledTransport: deduped packet from child %d: %s",
+                child_id,
+                packet,
+            )
+            return
+
+        # Not a duplicate — record and forward.
+        dedup_cache[key] = now
+        # Enforce max cache size.
+        if len(dedup_cache) > _MAX_DEDUP_KEYS:
+            # Evict oldest entry (linear scan, but rare).
+            oldest_key = min(dedup_cache, key=lambda k: dedup_cache[k])
+            del dedup_cache[oldest_key]
 
         self._pkts_forwarded += 1
 

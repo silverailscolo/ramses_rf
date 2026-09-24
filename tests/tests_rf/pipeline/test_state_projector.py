@@ -10,7 +10,10 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime as dt
-from typing import Any
+from typing import Any, cast
+from unittest.mock import MagicMock
+
+import pytest
 
 from ramses_rf.const import (
     SZ_ACTUATOR_COUNTDOWN,
@@ -23,6 +26,7 @@ from ramses_rf.const import (
     SZ_DHW_ACTIVE,
     SZ_DIAGNOSTIC_CODE,
     SZ_DOMAIN_INDEX,
+    SZ_FAN_MODE,
     SZ_FLAGS,
     SZ_FLAME_ACTIVE,
     SZ_LOCAL_OVERRIDE,
@@ -44,6 +48,9 @@ from ramses_rf.const import (
     DevType,
     Verb,
 )
+from ramses_rf.devices.hvac_remotes import HvacRemote
+from ramses_rf.devices.hvac_ventilators import HvacVentilator
+from ramses_rf.gateway import Gateway
 from ramses_rf.messages import Message
 from ramses_rf.models import (
     ActuatorState,
@@ -55,8 +62,15 @@ from ramses_rf.models import (
     TemperatureState,
     ZoneState,
 )
+from ramses_rf.payloads.hvac import HvacBypassStatePayload
 from ramses_rf.pipeline.ingestion import StateProjector
 from ramses_rf.protocol.opentherm import OtDataId
+from ramses_rf.state_projector import (
+    _update_hvac_state,
+    process_state_updates,
+)
+from ramses_rf.strategies.orcon import OrconStrategy
+from ramses_tx import Address
 
 
 class MockAddr:
@@ -100,7 +114,7 @@ class MockMessage:
         """
         self.code: Code = code
         self.verb: str = verb
-        self.payload: dict[str, Any] = payload
+        self.payload: dict[str, Any] | None = payload
         self.src: MockAddr = MockAddr(src_id)
         self.dst: MockAddr = MockAddr(dst_id)
         self.dtm: dt = dtm or dt.now()
@@ -1385,3 +1399,288 @@ def test_opentherm_counters_projection() -> None:
     # Assert
     assert device.opentherm_state.counters.burner_starts == 1250
     assert device.opentherm_state.counters.ch_pump_hours == 340
+
+
+class _LivenessDevice:
+    """A minimal device exposing the liveness attributes under test."""
+
+    def __init__(self, device_id: str, missed_polls: int = 0) -> None:
+        """Initialize the device with liveness tracking attributes.
+
+        :param device_id: The hardware ID string.
+        :type device_id: str
+        :param missed_polls: Initial consecutive missed poll count.
+        :type missed_polls: int
+        """
+        self.id: str = device_id
+        self._SLUG: str = DevType.FAN
+        self._last_msg_dtm: dt | None = None
+        self._last_msg: MockMessage | None = None
+        self._missed_polls: int = missed_polls
+
+
+@pytest.mark.asyncio
+async def test_process_state_updates_src_only_liveness() -> None:
+    """Only the source device proves liveness; the destination does not."""
+    # Arrange — a FAN with pending missed polls
+    fan_dev = _LivenessDevice("32:153289", missed_polls=3)
+    registry = FakeRegistry(fan_dev)
+    gwy_adapter = FakeGatewayAdapter(registry)
+
+    # Act — a message merely addressed to the FAN (e.g. a poll echo)
+    echo_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RQ,
+        payload={},
+        src_id="18:130236",
+        dst_id="32:153289",
+    )
+    echo_msg.payload = None  # early return; liveness block already ran
+    await process_state_updates(gwy_adapter, echo_msg)
+
+    # Assert — destination involvement does not prove the FAN is alive
+    assert fan_dev._last_msg_dtm is None
+    assert fan_dev._last_msg is None
+    assert fan_dev._missed_polls == 3
+
+    # Act — a message transmitted by the FAN itself
+    reply_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RP,
+        payload={},
+        src_id="32:153289",
+        dst_id="18:130236",
+    )
+    reply_msg.payload = None
+    await process_state_updates(gwy_adapter, reply_msg)
+
+    # Assert — source involvement proves liveness and resets the count
+    assert fan_dev._last_msg_dtm == reply_msg.dtm
+    # cast to object: the earlier `is None` assert narrows the member to
+    # None, and mypy marks any `is`/`==` with reply_msg as unreachable
+    assert cast(object, fan_dev._last_msg) is reply_msg
+    assert fan_dev._missed_polls == 0
+
+
+# --- 22F1 scheme-aware mode remap + last_fan_mode_dtm (issue 1216) ---
+
+
+def _hvac_gateway() -> MagicMock:
+    """Return a minimal mocked Gateway for real HVAC device twins.
+
+    :return: A MagicMock specced to Gateway.
+    :rtype: MagicMock
+    """
+    gwy = MagicMock(spec=Gateway)
+    gwy.tzinfo = None
+    return gwy
+
+
+def update_hvac_state(
+    target: Any, payload: dict[str, Any], msg: Message
+) -> None:
+    """Feed a payload through both live hvac-state ingestion paths.
+
+    Production runs the state_projector module function (via
+    ``process_state_updates``) and then the ingestion StateProjector
+    method, so the fix must hold under both.
+
+    :param target: The device twin to update.
+    :type target: Any
+    :param payload: The decoded payload dict.
+    :type payload: dict[str, Any]
+    :param msg: The message envelope.
+    :type msg: Message
+    :rtype: None
+    """
+    _update_hvac_state(target, payload, msg)
+    worker = StateProjector(
+        FakeGatewayAdapter(FakeRegistry(FakeDevice())), asyncio.Queue()
+    )
+    worker._update_hvac_state(target, payload, msg)
+
+
+def _22f1_payload(mode_index: str, mode_max: str = "04") -> dict[str, Any]:
+    """Return a 22F1 payload as the mode_max heuristic parser emits it.
+
+    :param mode_index: The transmitted mode index hex byte.
+    :type mode_index: str
+    :param mode_max: The transmitted mode_max byte ("04" => itho names).
+    :type mode_max: str
+    :return: A payload dict shaped like HvacFanModePayload.to_dict().
+    :rtype: dict[str, Any]
+    """
+    heuristic_names = {
+        ("01", "04"): "auto",
+        ("02", "04"): "low",
+        ("03", "07"): "high",
+    }
+    return {
+        SZ_FAN_MODE: heuristic_names.get((mode_index, mode_max), mode_index),
+        "_mode_index": mode_index,
+        "_mode_max": mode_max,
+        "_scheme": "itho" if mode_max == "04" else "orcon",
+    }
+
+
+def _22f1_msg(payload: dict[str, Any], src_id: str) -> MockMessage:
+    """Return a 22F1 command message sourced by a remote.
+
+    :param payload: The decoded payload dict.
+    :type payload: dict[str, Any]
+    :param src_id: The remote's device ID.
+    :type src_id: str
+    :return: A MockMessage envelope.
+    :rtype: MockMessage
+    """
+    return MockMessage(
+        code=Code._22F1,
+        verb=Verb.I_,
+        payload=payload,
+        src_id=src_id,
+        dst_id="32:153289",
+    )
+
+
+def test_22f1_fan_target_uses_configured_scheme() -> None:
+    """A configured FAN scheme overrides the mode_max name heuristic."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    fan.set_strategy(OrconStrategy())
+
+    for mode_index, expected in (("01", "low"), ("02", "medium")):
+        msg = _22f1_msg(_22f1_payload(mode_index), "29:176861")
+        update_hvac_state(fan, dict(msg.payload), msg)
+        assert fan.hvac_state.fan_mode == expected
+
+
+def test_22f1_remote_target_uses_bound_fan_scheme() -> None:
+    """A remote's own state uses the bound FAN's scheme vocabulary."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    fan.set_strategy(OrconStrategy())
+    rem = HvacRemote(_hvac_gateway(), Address("29:176861"))
+    rem._parent_fan = fan
+
+    msg = _22f1_msg(_22f1_payload("01"), rem.id)
+    update_hvac_state(rem, dict(msg.payload), msg)
+    assert rem.hvac_state.fan_mode == "low"
+
+    msg = _22f1_msg(_22f1_payload("02"), rem.id)
+    update_hvac_state(rem, dict(msg.payload), msg)
+    assert rem.hvac_state.fan_mode == "medium"
+
+
+def test_22f1_remote_without_scheme_keeps_heuristic() -> None:
+    """Without a configured scheme the mode_max heuristic is unchanged."""
+    rem = HvacRemote(_hvac_gateway(), Address("29:176861"))
+
+    msg = _22f1_msg(_22f1_payload("01"), rem.id)
+    update_hvac_state(rem, dict(msg.payload), msg)
+    assert rem.hvac_state.fan_mode == "auto"  # mode_max=04 => itho map
+
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    msg = _22f1_msg(_22f1_payload("01"), "29:176861")
+    update_hvac_state(fan, dict(msg.payload), msg)
+    assert fan.hvac_state.fan_mode == "auto"
+
+
+def test_22f1_mode_max_07_still_decodes_orcon() -> None:
+    """mode_max=07 already maps to orcon names; scheme remap is a no-op."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    fan.set_strategy(OrconStrategy())
+
+    msg = _22f1_msg(_22f1_payload("03", mode_max="07"), "37:168270")
+    update_hvac_state(fan, dict(msg.payload), msg)
+    assert fan.hvac_state.fan_mode == "high"
+
+
+def test_22f1_unknown_index_keeps_heuristic_name() -> None:
+    """An index absent from the scheme map keeps the parsed name."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:153289"))
+    fan.set_strategy(OrconStrategy())
+
+    payload = _22f1_payload("09")
+    payload[SZ_FAN_MODE] = "09"  # heuristic falls back to raw hex
+    msg = _22f1_msg(payload, "29:176861")
+    update_hvac_state(fan, dict(msg.payload), msg)
+    # "09" is not in the orcon map; the raw-hex fan_mode is then dropped
+    # by the non-semantic hex filter, leaving the previous value (None)
+    assert fan.hvac_state.fan_mode is None
+
+
+def test_last_fan_mode_dtm_stamped_on_fan_mode_update() -> None:
+    """_last_fan_mode_dtm tracks only messages that write fan_mode."""
+    rem = HvacRemote(_hvac_gateway(), Address("29:176861"))
+    assert rem.last_fan_mode_dtm is None
+
+    msg = _22f1_msg(_22f1_payload("01"), rem.id)
+    update_hvac_state(rem, dict(msg.payload), msg)
+    assert rem.last_fan_mode_dtm == msg.dtm
+
+    # a non-fan_mode HVAC payload must not move the stamp
+    msg2 = MockMessage(
+        code=Code._22F3,
+        verb=Verb.I_,
+        payload={"remaining_mins": 15},
+        src_id=rem.id,
+    )
+    update_hvac_state(rem, dict(msg2.payload), msg2)
+    assert rem.last_fan_mode_dtm == msg.dtm
+
+
+# --- 31D9 Orcon 3-byte mode decode (ramses-rf/ramses_cc#1231, MVS-15) ---
+
+
+def _31d9_msg(speed_byte: int, src_id: str) -> MockMessage:
+    """Return a 3-byte 31D9 broadcast decoded by the real parser.
+
+    :param speed_byte: The third payload byte (mode index on Orcon).
+    :type speed_byte: int
+    :param src_id: The FAN's device ID.
+    :type src_id: str
+    :return: A MockMessage envelope carrying the parsed payload.
+    :rtype: MockMessage
+    """
+    msg = MockMessage(
+        code=Code._31D9,
+        verb=Verb.I_,
+        payload={},
+        src_id=src_id,
+        dst_id=src_id,
+    )
+    msg.payload = HvacBypassStatePayload.from_bytes(
+        bytes((0x00, 0x00, speed_byte))
+    ).to_dict(msg)
+    return msg
+
+
+@pytest.mark.parametrize(
+    ("speed_byte", "expected"),
+    [
+        (0x00, "away"),
+        (0x01, "low"),
+        (0x02, "medium"),
+        (0x03, "high"),  # also what a timed boost reports
+        (0x04, "auto"),
+    ],
+)
+def test_31d9_orcon_3byte_modes(speed_byte: int, expected: str) -> None:
+    """A configured Orcon FAN decodes 3-byte 31D9 via its mode map."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:231021"))
+    fan.set_strategy(OrconStrategy())
+
+    msg = _31d9_msg(speed_byte, fan.id)
+    update_hvac_state(fan, dict(msg.payload), msg)
+
+    assert fan.hvac_state.fan_mode == expected
+    assert fan.hvac_state.exhaust_fan_speed is None
+
+
+def test_31d9_3byte_without_scheme_keeps_generic_decode() -> None:
+    """Unconfigured FANs keep the Vasco-style 31D9 decode."""
+    fan = HvacVentilator(_hvac_gateway(), Address("32:231021"))
+
+    msg = _31d9_msg(0x01, fan.id)
+    update_hvac_state(fan, dict(msg.payload), msg)
+
+    assert fan.hvac_state.fan_mode == "1 (trickle)"
+    assert fan.hvac_state.exhaust_fan_speed == 0.005

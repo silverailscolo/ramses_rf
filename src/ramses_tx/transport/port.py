@@ -506,10 +506,13 @@ class PortTransport(_FullTransport):
                 r"""Intercept ``#`` lines before the packet parser.
 
                 Also handles the case where the evofw3 ``#`` prompt is
-                appended to the end of a regular packet on the same line
-                (no ``\r\n`` separator).  Since ``#`` is never valid in
-                a RAMSES packet, we split on the first ``#`` and handle
-                each part independently.
+                appended to (or spliced into) a regular packet on the
+                same line (no ``\r\n`` separator).  The ``#`` suffix is
+                checked here for the ``!I`` response; the whole frame is
+                passed through unchanged — ``Packet._partition`` strips
+                the echo itself, and a splice-truncated fragment is
+                logged at debug level by ``_frame_read``
+                (ramses-rf/ramses_cc issue 1219).
                 """
                 stripped = frame.strip()
                 if stripped.startswith("#"):
@@ -519,22 +522,18 @@ class PortTransport(_FullTransport):
                         stripped,
                     )
                     return  # Don't feed to packet parser (Gap F)
-                # Check for ``#`` appended to a regular packet (e.g.
-                # ``060 ... 004808A77FFF00# !I``).  The ``#`` is the
-                # evofw3 prompt echo, not part of the payload.
+                # Check for ``#`` appended to (or spliced into) a
+                # regular packet (e.g. ``060 ... 004808A77FFF00# !I``).
+                # The ``#`` is the evofw3 prompt echo, not part of the
+                # payload.
                 if "#" in stripped:
-                    packet_part, _, debug_part = stripped.partition("#")
+                    _, _, debug_part = stripped.partition("#")
                     debug_line = "#" + debug_part
                     _check_id_response(debug_line)
                     _LOGGER.debug(
                         "PortTransport: evofw3 debug response (appended): %s",
                         debug_line,
                     )
-                    # Feed the packet part (before ``#``) to the parser
-                    # if it's non-empty.
-                    if packet_part.strip():
-                        original_frame_read(dtm_str, packet_part + "\r\n")
-                    return
                 original_frame_read(dtm_str, frame)
 
             self._frame_read = _frame_read_intercept  # type: ignore[method-assign]

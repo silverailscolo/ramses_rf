@@ -282,17 +282,25 @@ def _resolve_logical_targets(
         ):
             targets.append(dst_dev)
 
-    # 4. Virtual twins (Zones) get updates if explicitly addressed by index.
-    # For 30C9, only Controller/UFC broadcasts carry authoritative zone
-    # addressing; non-controller 30C9 (sensor broadcasts) is handled in step 8.
+    # 4. Virtual twins (Zones) get updates if explicitly addressed by index,
+    # but only when the Controller is the source or the destination: a
+    # self-addressed broadcast (e.g. a DTS92 announcing its own setpoint,
+    # `I --- 22:xxx --:------ 22:xxx`) carries a device-local idx that must
+    # not be read as a controller zone index.  See:
+    # https://github.com/ramses-rf/ramses_cc/issues/1208
+    # Non-controller 30C9 (sensor broadcasts) is handled in step 8.
     if SZ_ZONE_INDEX in p and tcs:
-        is_ctrl_src = src_type in (
+        tcs_id = getattr(tcs, "id", "")
+        is_ctl_idx = src_type in (
             "01",
             "02",
             DevType.CTL,
             DevType.UFC,
-        ) or getattr(msg.src, "id", "") == getattr(tcs, "id", "")
-        if msg.code != Code._30C9 or is_ctrl_src:
+        ) or tcs_id in (
+            getattr(msg.src, "id", ""),
+            getattr(msg.dst, "id", ""),
+        )
+        if is_ctl_idx:
             if zone := tcs.zone_by_index.get(p[SZ_ZONE_INDEX]):
                 if zone not in targets:
                     targets.append(zone)
@@ -437,13 +445,34 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
         return
 
     strategy = (
-        target._get_configured_strategy()
+        target.get_configured_strategy()
         if isinstance(target, DeviceBase)
         else None
     )
     p = quirks.apply_hvac_quirks(
         p, target.hvac_state, msg.code, strategy=strategy
     )
+
+    # The parser names 22F1 modes via a mode_max heuristic, which
+    # mis-decodes real Orcon remotes (e.g. VMN-15LF01 sends
+    # mode_max=04 -> "itho" names, so index 01 "low" displays as
+    # "auto").  A remote has no scheme of its own: its commands use the
+    # bound FAN's vocabulary, so fall back to the parent fan's
+    # configured scheme.  See ramses-rf/ramses_cc issue 1216.
+    if (
+        msg.code == Code._22F1
+        and SZ_FAN_MODE in p
+        and p.get("_mode_index") is not None
+    ):
+        mode_strategy = strategy
+        if mode_strategy is None and isinstance(target, DeviceBase):
+            parent_fan = getattr(target, "parent_fan", None)
+            if isinstance(parent_fan, DeviceBase):
+                mode_strategy = parent_fan._get_configured_strategy()
+        if mode_strategy is not None:
+            mapped = mode_strategy.fan_modes.get(str(p["_mode_index"]))
+            if mapped is not None:
+                p[SZ_FAN_MODE] = mapped
 
     fields = [
         SZ_CO2_LEVEL,
@@ -532,6 +561,9 @@ def _update_hvac_state(target: Any, p: dict[str, Any], msg: Message) -> None:
 
     if not updates:
         return
+
+    if SZ_FAN_MODE in updates and hasattr(target, "_last_fan_mode_dtm"):
+        target._last_fan_mode_dtm = msg.dtm
 
     new_state = dataclasses.replace(target.hvac_state, **updates)
     target.hvac_state = new_state
@@ -933,15 +965,24 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
     :param msg: Message envelope containing payload.
     :type msg: Message
     """
-    # Notify candidate devices of _last_msg_dtm and all binding devices of rcvd_msg
+    # Notify candidate devices of _last_msg_dtm and all binding devices of
+    # rcvd_msg.  Only the source device is updated: a message merely
+    # addressed to a device does not prove that device is reachable (our
+    # own poll echoes would otherwise mask a silent device forever).
     if registry := getattr(gateway, "device_registry", None):
         for device in list(registry.device_by_id.values()):
-            if device.id in (
-                getattr(msg.src, "id", None),
-                getattr(msg.dst, "id", None),
-            ):
+            src_id = getattr(msg.src, "id", None)
+            if device.id == src_id:
                 if hasattr(device, "_last_msg_dtm"):
                     device._last_msg_dtm = msg.dtm
+                if hasattr(device, "_last_msg"):
+                    device._last_msg = msg
+                if hasattr(device, "_missed_polls"):
+                    device._missed_polls = 0
+            if device.id in (
+                src_id,
+                getattr(msg.dst, "id", None),
+            ):
                 # Fire the initialized callback on the first message from/to
                 # a FAN device.  Phase 2.95 removed the _handle_msg override
                 # that used to do this; without it, ramses_cc never sends the

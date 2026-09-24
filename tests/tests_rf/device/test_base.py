@@ -8,14 +8,22 @@ which all reside in ramses_rf/device/base.py.
 from __future__ import annotations
 
 from datetime import UTC, datetime as dt, timedelta as td
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
 
 from ramses_rf.const import GATEWAY_MESSAGE_TIMEOUT
-from ramses_rf.devices.dev_base import BatteryState, DeviceBase, HgiGateway
+from ramses_rf.devices.dev_base import (
+    BatteryState,
+    DeviceBase,
+    DeviceHvac,
+    HgiGateway,
+)
 from ramses_rf.gateway import Gateway
+from ramses_rf.messages import Message
 from ramses_tx import Address
+from ramses_tx.const import SZ_ACTIVE_HGI
 from ramses_tx.rssi_tracker import RssiTracker
 
 
@@ -75,6 +83,89 @@ class TestDeviceBase:
         expired_dtm = dt.now(UTC) - td(hours=1, seconds=1)
         dev._last_msg_dtm = expired_dtm
         assert not dev.is_available
+
+    def test_public_topology_accessors(
+        self, mock_gateway: MagicMock, hgi_gateway: HgiGateway
+    ) -> None:
+        """Public accessors expose the backing private members.
+
+        These back ramses_cc call sites that previously reached into
+        private attributes (_gateway, _SLUG, _parent, _parent_fan).
+        """
+        dev = DeviceBase(mock_gateway, Address("34:123456"))
+
+        assert dev.gateway is mock_gateway
+        assert dev.slug == "DEV"
+
+        # Child.parent is on the Child mixin (Device subclasses only)
+        assert hgi_gateway.parent is None
+        assert hgi_gateway.slug == "HGI"
+        assert hgi_gateway.gateway is mock_gateway
+
+        hvac = DeviceHvac(mock_gateway, Address("29:123456"))
+        assert hvac.parent_fan is None
+        fan = MagicMock()
+        hvac._parent_fan = fan
+        assert hvac.parent_fan is fan
+
+    def test_last_seen_and_missed_polls(self, mock_gateway: MagicMock) -> None:
+        """Test the device liveness accessors used by status entities."""
+        dev = DeviceBase(mock_gateway, Address("34:123456"))
+
+        assert dev.last_seen is None
+        assert dev.last_command is None
+        assert dev.consecutive_missed_polls == 0
+
+        seen_dtm = dt.now(UTC)
+        msg = cast(Message, MagicMock(dtm=seen_dtm))
+        dev._last_msg_dtm = seen_dtm
+        dev._last_msg = msg
+        dev._missed_polls = 2
+        assert dev.last_seen == seen_dtm
+        # == not is: `is` is provably-false for mypy after the earlier
+        # `is None` assert narrows the member (unreachable error)
+        assert dev.last_command == msg
+        assert dev.consecutive_missed_polls == 2
+
+    def test_rssi_per_hgi_single_transport(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Test rssi_per_hgi with a single (non-pooled) transport."""
+        dev = DeviceBase(mock_gateway, Address("34:123456"))
+
+        tracker = MagicMock(spec=RssiTracker)
+        tracker.best_rssi_for.return_value = -62
+        mock_gateway._rssi_tracker = tracker
+
+        transport = MagicMock()
+        transport.get_extra_info.side_effect = lambda name, default=None: (
+            "18:123456" if name == SZ_ACTIVE_HGI else default
+        )
+        mock_gateway._engine._transport = transport
+
+        assert dev.rssi_per_hgi == {"18:123456": -62}
+        tracker.best_rssi_for.assert_called_once_with("34:123456")
+
+    def test_rssi_per_hgi_pooled_transport(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Test rssi_per_hgi maps each pool child HGI to its best RSSI."""
+        dev = DeviceBase(mock_gateway, Address("34:123456"))
+
+        tracker_a = MagicMock(spec=RssiTracker)
+        tracker_a.best_rssi_for.return_value = -60
+        tracker_b = MagicMock(spec=RssiTracker)
+        tracker_b.best_rssi_for.return_value = None  # never heard device
+
+        transport = MagicMock()
+        transport.get_extra_info.side_effect = lambda name, default=None: (
+            {"18:111111": tracker_a, "18:222222": tracker_b}
+            if name == "pool_rssi_by_hgi"
+            else default
+        )
+        mock_gateway._engine._transport = transport
+
+        assert dev.rssi_per_hgi == {"18:111111": -60}
 
     def test_device_promotion_prevention(
         self, mock_gateway: MagicMock

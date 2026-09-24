@@ -42,7 +42,7 @@ from ramses_rf.schemas import (
 from ramses_rf.strategies import HvacStrategy, best_hvac_strategy
 from ramses_rf.topology import Child
 from ramses_tx import Packet
-from ramses_tx.const import Code
+from ramses_tx.const import SZ_ACTIVE_HGI, Code
 
 from ..messages import Message
 from ..protocol.ramses import CODES_BY_DEV_SLUG
@@ -118,6 +118,9 @@ class DeviceBase(Entity):
         )
         self._is_battery: bool | None = traits.is_battery if traits else None
         self._last_msg_dtm: dt | None = None
+        self._last_msg: Message | None = None
+        self._last_fan_mode_dtm: dt | None = None
+        self._missed_polls: int = 0
 
         self.power_state = PowerState()
 
@@ -163,6 +166,101 @@ class DeviceBase(Entity):
         return bool((now - self._last_msg_dtm) <= self.heartbeat_timeout)
 
     @property
+    def last_seen(self) -> dt | None:
+        """Return the timestamp of the last message sent by this device.
+
+        Only messages with this device as the source count; messages
+        merely addressed to the device do not prove it is reachable.
+
+        :return: The timestamp, or ``None`` if never heard from.
+        :rtype: dt | None
+        """
+        return self._last_msg_dtm
+
+    @property
+    def last_command(self) -> Message | None:
+        """Return the last message sent by this device.
+
+        Only messages with this device as the source count; messages
+        merely addressed to the device do not update this value.  This
+        covers every verb (I/RP/RQ/W), so it also captures commands a
+        remote transmits that are not reflected in trait properties such
+        as ``fan_mode`` (e.g. a 22F3 timed boost or a 2411 parameter set).
+
+        :return: The most recent :class:`Message` sourced by the device,
+            or ``None`` if never heard from.
+        :rtype: Message | None
+        """
+        return self._last_msg
+
+    @property
+    def last_fan_mode_dtm(self) -> dt | None:
+        """Return the timestamp of the last message that set ``fan_mode``.
+
+        For a REM/DIS this is when the device last transmitted a fan mode
+        command ("last mode sent"); for a FAN it is when its reported or
+        commanded mode was last updated.
+
+        :return: The timestamp, or ``None`` if never set.
+        :rtype: dt | None
+        """
+        return self._last_fan_mode_dtm
+
+    @property
+    def consecutive_missed_polls(self) -> int:
+        """Return the number of consecutive polls the device did not answer.
+
+        Incremented by the polling manager when a poll is due and no
+        message has been received from the device since the previous
+        poll was sent.  Reset to zero by any message received from the
+        device (see ``state_projector``).
+
+        :return: The count of consecutive unanswered polls.
+        :rtype: int
+        """
+        return self._missed_polls
+
+    @property
+    def rssi_per_hgi(self) -> dict[str, int]:
+        """Return the best recent RSSI for this device per connected HGI.
+
+        For pooled transports this maps each connected child HGI ID to
+        the best RSSI it has observed for this device.  For a single
+        transport the map has at most one entry, keyed by the active
+        HGI.
+
+        :return: Mapping of HGI device ID to best RSSI (dBm), possibly
+            empty if no RSSI has been recorded for this device.
+        :rtype: dict[str, int]
+        """
+        gwy = getattr(self, "_gateway", None)
+        if gwy is None:
+            return {}
+        engine = getattr(gwy, "_engine", None)
+        transport = getattr(engine, "_transport", None) if engine else None
+        if transport is not None:
+            by_hgi = transport.get_extra_info("pool_rssi_by_hgi")
+            if by_hgi:
+                result: dict[str, int] = {}
+                for hgi_id, tracker in by_hgi.items():
+                    rssi = tracker.best_rssi_for(str(self.id))
+                    if rssi is not None:
+                        result[hgi_id] = rssi
+                return result
+        tracker = getattr(gwy, "_rssi_tracker", None)
+        if tracker is None:
+            return {}
+        rssi = tracker.best_rssi_for(str(self.id))
+        if rssi is None:
+            return {}
+        hgi_id = (
+            transport.get_extra_info(SZ_ACTIVE_HGI)
+            if transport is not None
+            else None
+        )
+        return {str(hgi_id): rssi} if hgi_id else {}
+
+    @property
     def communication_quality(self) -> CommunicationQuality | None:
         """Return the device's communication quality snapshot, or None.
 
@@ -197,6 +295,45 @@ class DeviceBase(Entity):
                 trackers = pool_trackers
         return compute_quality(str(self.id), trackers)
 
+    @property
+    def scheme(self) -> str | None:
+        """Return the configured vendor scheme, if any.
+
+        The scheme (from the ``_scheme`` schema trait) selects the HVAC
+        vendor strategy — e.g. ``"orcon"``, ``"itho"``, ``"vasco"``.
+
+        :return: The configured scheme name, or ``None``.
+        :rtype: str | None
+        """
+        return self._scheme
+
+    @property
+    def strategy(self) -> HvacStrategy | None:
+        """Return the explicitly assigned HVAC strategy, if any.
+
+        Only a strategy set via :meth:`set_strategy` is returned;
+        scheme-derived selection is applied by :meth:`get_strategy`
+        and :meth:`get_configured_strategy` instead.
+
+        :return: The explicit strategy, or ``None``.
+        :rtype: HvacStrategy | None
+        """
+        return self._strategy
+
+    @property
+    def model(self) -> str | None:
+        """Return the device model reported by the latest 10E0, if seen.
+
+        Read synchronously from the in-memory entity state, so it can
+        be used by consumers that cannot await (e.g. properties).
+
+        :return: The 10E0 ``description`` (e.g. ``"VMD-15RMS64"``), or
+            ``None`` if no 10E0 message has been received.
+        :rtype: str | None
+        """
+        info = self.entity_state.get_cached_value(Code._10E0)
+        return info.get("description") if isinstance(info, dict) else None
+
     def set_strategy(self, strategy: HvacStrategy) -> None:
         """Set the HVAC strategy for this device.
 
@@ -206,17 +343,54 @@ class DeviceBase(Entity):
         """
         self._strategy = strategy
 
-    def _get_strategy(self) -> HvacStrategy:
-        """Return the explicit or scheme-selected HVAC strategy."""
-        return self._strategy or best_hvac_strategy(self.id, self._scheme)
+    def get_strategy(self, model: str | None = None) -> HvacStrategy:
+        """Return the explicit or scheme-selected HVAC strategy.
 
-    def _get_configured_strategy(self) -> HvacStrategy | None:
-        """Return a strategy only when explicitly configured or selected."""
+        Falls back to :func:`best_hvac_strategy` (Orcon) when neither
+        an explicit strategy nor a scheme is configured.
+
+        :param model: Device model override; used by
+            :func:`best_hvac_strategy` for model-level selection.
+            Defaults to the model last reported via 10E0
+            (:attr:`model`).
+        :type model: str | None
+        :return: The resolved HVAC strategy (never ``None``).
+        :rtype: HvacStrategy
+        """
+        return self._strategy or best_hvac_strategy(
+            self.id, self._scheme, model=model or self.model
+        )
+
+    def get_configured_strategy(
+        self, model: str | None = None
+    ) -> HvacStrategy | None:
+        """Return a strategy only when explicitly configured or selected.
+
+        Unlike :meth:`get_strategy`, returns ``None`` when neither an
+        explicit strategy nor a scheme is configured, so callers can
+        distinguish "no vendor configured" from the Orcon fallback.
+
+        :param model: Device model override; defaults to the model last
+            reported via 10E0 (:attr:`model`).
+        :type model: str | None
+        :return: The configured strategy, or ``None``.
+        :rtype: HvacStrategy | None
+        """
         if self._strategy:
             return self._strategy
         if self._scheme:
-            return best_hvac_strategy(self.id, self._scheme)
+            return best_hvac_strategy(
+                self.id, self._scheme, model=model or self.model
+            )
         return None
+
+    def _get_strategy(self) -> HvacStrategy:
+        """Return the explicit or scheme-selected HVAC strategy."""
+        return self.get_strategy()
+
+    def _get_configured_strategy(self) -> HvacStrategy | None:
+        """Return a strategy only when explicitly configured or selected."""
+        return self.get_configured_strategy()
 
     def _update_traits(self, traits: DeviceTraits) -> None:
         """Update a device with new schema attributes.
@@ -924,6 +1098,18 @@ class DeviceHvac(Device):  # HVAC domain: ventilation, PIV, MV/HR
         # when this device is added to a FAN's remotes[]/sensors[] list.
         # Used by ramses_cc to group independent devices based on the schema.
         self._parent_fan: HvacVentilator | None = None
+
+    @property
+    def parent_fan(self) -> HvacVentilator | None:
+        """Return the bound HVAC ventilator (FAN), if any.
+
+        Set when this device (e.g. a REM or CO2 sensor) is listed in a
+        FAN's ``remotes``/``sensors`` schema section.
+
+        :return: The bound ventilator, or ``None`` if unbound.
+        :rtype: HvacVentilator | None
+        """
+        return self._parent_fan
 
 
 # e.g. {"HGI": HgiGateway}

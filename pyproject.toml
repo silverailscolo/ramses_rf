@@ -1,6 +1,6 @@
 #
 ### project ##########################################################################
-# last checked/updated: 2026-09-10
+# last checked/updated: 2026-09-14
 #
 
 [project]
@@ -46,6 +46,10 @@
     "serialx>=1.8.2",               # Roadmap Item 9 / Issue #606 (HA container baseline; 1.8.1 fixed fd leak, Win32 race, USB string descriptors)
     "probatio >= 0.11.2"            # latest
   ]
+
+#
+[project.optional-dependencies]
+zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by ZHA inside HA
 
 #
 [project.urls]

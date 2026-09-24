@@ -70,6 +70,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+#: RAMSES codes that transmit multi-packet arrays and need reassembly.
+#: Matches the list in dispatcher.detect_array_fragment (issue 669).
+_ARRAY_CODES: tuple[Code, ...] = (Code._000A, Code._22C9)
+
 
 def _payload_to_serialisable(payload: Any) -> Any:
     """Convert a payload object to a JSON-serialisable form.
@@ -255,6 +259,13 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         self._state_cache: dict[StateHeader, rf_msg] = {}
         self._history_lock = threading.Lock()
 
+        # Sync sliding-window buffer for multi-packet array reassembly.
+        # Keyed by (src_id, code) so that intervening packets from other
+        # sources no longer abort an in-flight array (issue 669).  Replaces
+        # the single-slot _prev_msg approach which dropped arrays whenever
+        # an unrelated packet arrived between fragment 1 and fragment 2.
+        self._pending_arrays: dict[tuple[str, Code], ApplicationMessage] = {}
+
         # 1. Controller Knowledge Bridge
         def is_controller(device_id: str) -> bool:
             device = self._device_registry.device_by_id.get(
@@ -342,6 +353,16 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         return self._gwy_config
 
     @property
+    def engine(self) -> Engine:
+        """Return the underlying packet engine."""
+        return self._engine
+
+    @property
+    def device_filter(self) -> DeviceFilterInterface:
+        """Return the device filter service."""
+        return self._device_filter
+
+    @property
     def message_store(self) -> MessageStoreInterface | None:
         """Return the SQLite message store instance or None."""
         return self._message_store
@@ -353,9 +374,9 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     @property
     def hgi(self) -> HgiGateway | None:
         """Return the HGI gateway device interface or None."""
-        if not self._engine._transport:
+        if not self._engine.transport:
             return None
-        if device_id := self._engine._transport.get_extra_info(SZ_ACTIVE_HGI):
+        if device_id := self._engine.transport.get_extra_info(SZ_ACTIVE_HGI):
             return self.device_registry.device_by_id.get(device_id)
         return None
 
@@ -371,6 +392,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             self._prev_msg = None
             self._this_msg = None
             self._state_cache.clear()
+            self._pending_arrays.clear()
 
     @property
     def tcs(self) -> Evohome | None:
@@ -379,7 +401,38 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             self._tcs = self.device_registry.systems[0]
         return self._tcs
 
-    async def _config(self) -> dict[str, Any]:
+    @property
+    def transport_info(self) -> dict[str, Any]:
+        """Return a snapshot of the bound transport for diagnostics.
+
+        Includes the transport class name, the active HGI id, the pool
+        HGI ids (when pooled) and the recent tx rate.  Returns an empty
+        dict when no transport is bound (e.g. before start).
+
+        :returns: Transport info dict.
+        :rtype: dict[str, Any]
+        """
+        transport = self._engine.transport
+        if transport is None:
+            return {}
+        return {
+            "type": type(transport).__name__,
+            SZ_ACTIVE_HGI: transport.get_extra_info(SZ_ACTIVE_HGI),
+            "pool_hgi_ids": transport.get_extra_info("pool_hgi_ids"),
+            "tx_rate": transport.get_extra_info("tx_rate"),
+        }
+
+    async def config_snapshot(self) -> dict[str, Any]:
+        """Return a snapshot of the gateway configuration.
+
+        Covers the active HGI, the main controller, the known/block
+        lists and gateway config flags — the data ramses_cc diagnostics
+        previously read via the private ``_config`` (ramses-rf/ramses_cc
+        issue 1214).
+
+        :returns: Configuration snapshot dict.
+        :rtype: dict[str, Any]
+        """
         return {
             "_gateway_id": self.hgi.id if self.hgi else None,
             SZ_MAIN_TCS: self.tcs.id if self.tcs else None,
@@ -390,6 +443,10 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             SZ_BLOCK_LIST: self.config.engine.block_list or [],
             "_unwanted": sorted(self._engine._unwanted),
         }
+
+    async def _config(self) -> dict[str, Any]:
+        """Backward-compatible alias of :meth:`config_snapshot`."""
+        return await self.config_snapshot()
 
     @property
     def schema_updated_callback(self) -> SchemaUpdatedCallback | None:
@@ -457,12 +514,7 @@ class Gateway(GatewayLifecycle, GatewayInterface):
     async def status(self) -> dict[str, Any]:
         """Return operational status across all registered devices."""
         status_dict = await self.device_registry.status()
-        tx_rate = (
-            self._engine._transport.get_extra_info("tx_rate")
-            if self._engine._transport
-            else None
-        )
-        status_dict["_tx_rate"] = tx_rate
+        status_dict["_tx_rate"] = self.transport_info.get("tx_rate")
         return status_dict
 
     async def get_state(
@@ -524,20 +576,25 @@ class Gateway(GatewayLifecycle, GatewayInterface):
         app_msg.bind_context(self)  # noqa: B010
         self.update_message_history(app_msg)
 
-        if (
-            self._this_msg
-            and self._prev_msg
-            and detect_array_fragment(
-                self._this_msg,
-                self._prev_msg,
-            )
-        ):
-            app_msg._force_has_array()
-            app_msg._payload = self._prev_msg.payload + (
-                app_msg.payload
-                if isinstance(app_msg.payload, list)
-                else [app_msg.payload]
-            )
+        # Sliding-window array reassembly: look up the pending fragment
+        # by (src_id, code) so that intervening packets from other sources
+        # no longer abort an in-flight array (issue 669).  Fragment 1
+        # (has _has_array=True) is stored; fragment 2 is merged onto it.
+        if app_msg.verb == I_ and app_msg.code in _ARRAY_CODES:
+            key = (app_msg.src.id, app_msg.code)
+            pending = self._pending_arrays.get(key)
+            if pending is not None and detect_array_fragment(app_msg, pending):
+                app_msg._force_has_array()
+                app_msg._payload = pending.payload + (
+                    app_msg.payload
+                    if isinstance(app_msg.payload, list)
+                    else [app_msg.payload]
+                )
+                del self._pending_arrays[key]
+            elif app_msg._has_array:
+                # Store fragment 1 for a potential merge with fragment 2.
+                # Overwrites any stale entry (e.g. fragment 2 never arrived).
+                self._pending_arrays[key] = app_msg
 
         # NEW: Feed the async TopologyBuilder so it can structurally map the
         # graph *before* the message state is ingested by the Read-Models.
@@ -545,7 +602,11 @@ class Gateway(GatewayLifecycle, GatewayInterface):
             app_msg, SZ_PAYLOAD, None
         )
 
-        if payload_data is not None:
+        # Echo packets are our own transmissions heard back (issue 1185)
+        # — e.g. parameter polls sent with a spoofed from_id.  They are
+        # not observed device behaviour: a spoofed RQ 2411 would wrongly
+        # promote the spoofed REM to DIS in the topology handlers.
+        if payload_data is not None and not dto.is_echo:
             # Bridge the payload to satisfy core.Message strict dict typing
             if isinstance(payload_data, dict):
                 core_data = payload_data

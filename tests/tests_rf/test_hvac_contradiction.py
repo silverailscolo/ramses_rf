@@ -621,3 +621,55 @@ def test_fan_with_co2_evidence_promoted_to_co2_not_dis() -> None:
         f"Expected 0 DIS promotions, got {len(dis_events)}"
     )
     assert co2_events[0].metadata["device_class"] == DevType.CO2
+
+
+def test_fan_broadcasting_1298_is_not_promoted_to_co2() -> None:
+    """A FAN-typed device broadcasting I 1298 stays FAN.
+
+    A FAN with an integrated CO2 sensor (e.g. an Orcon HRV)
+    legitimately broadcasts I 1298 — it is a FAN feature, not a CO2
+    signature.  Neither the direct CO2 rule nor the eavesdrop VC-pair
+    promotion may reclassify it.
+    """
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {"32:150000": {"class": DevType.FAN, "locked": False}}
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    # I 1298 first (cached-packet replay order), then the fan status
+    # broadcast — the device must stay FAN in both cases.
+    handler.consume(_FakeMsg("32:150000", "--:------", Verb.I_, Code._1298))
+    handler.consume(_FakeMsg("32:150000", "--:------", Verb.I_, Code._31DA))
+    handler.consume(_FakeMsg("32:150000", "--:------", Verb.I_, Code._1298))
+
+    co2_events = [
+        e
+        for e in emitted
+        if e.device_id == "32:150000"
+        and e.metadata.get("device_class") == DevType.CO2
+    ]
+    assert co2_events == []
+
+
+def test_fan_evidence_blocks_co2_promotion() -> None:
+    """A REM-typed device with FAN evidence is a mistyped FAN-with-CO2,
+    not a CO2 sensor — I 1298 must not promote it."""
+    emitted: list[TopologyChangedEvent] = []
+    lookup = _make_lookup(
+        {"37:126776": {"class": DevType.REM, "locked": False}}
+    )
+    handler = _make_handler(emitted, device_class_lookup_cb=lookup)
+
+    # The device services a display-type query (FAN behaviour), then
+    # broadcasts CO2 — it is a FAN with an integrated CO2 sensor.
+    handler.consume(_FakeMsg("37:126776", "29:176861", Verb.RP, Code._31DA))
+    handler.consume(_FakeMsg("37:126776", "--:------", Verb.I_, Code._1298))
+
+    co2_events = [
+        e
+        for e in emitted
+        if e.device_id == "37:126776"
+        and e.metadata.get("device_class") == DevType.CO2
+    ]
+    assert co2_events == []

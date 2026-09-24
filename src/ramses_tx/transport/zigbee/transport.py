@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 import re
 from collections.abc import Callable
@@ -21,6 +22,35 @@ from .connection import ZigbeeConnectionManager
 from .framing import ZigbeeFramingHandler
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _hgi_id_from_ieee(ieee: str) -> str | None:
+    """Derive the ramses_esp gateway ID from a Zigbee IEEE address.
+
+    ramses_esp derives its gateway ID from the last three bytes of the
+    base MAC address::
+
+        DevId = (mac[3]<<16 | mac[4]<<8 | mac[5]) & 0x3FFFF
+
+    The device's IEEE (EUI-64) address is the 48-bit base MAC expanded
+    by inserting ``ff:fe`` in the middle, so ``mac[3:6] == ieee[5:8]``
+    and the derivation is reversible.
+
+    :param ieee: The IEEE address, e.g. ``10:bd:a3:ff:fe:a7:e0:dc``.
+    :returns: The HGI device ID (e.g. ``18:254172``), or None if the
+        IEEE is not a standard EUI-64 expansion of the base MAC.
+    """
+    parts = ieee.split(":")
+    if len(parts) != 8:
+        return None
+    try:
+        octets = [int(p, 16) for p in parts]
+    except ValueError:
+        return None
+    if octets[3] != 0xFF or octets[4] != 0xFE:
+        return None  # not a MAC-with-ff:fe EUI-64 — can't derive safely
+    dev_id = ((octets[5] << 16) | (octets[6] << 8) | octets[7]) & 0x3FFFF
+    return f"18:{dev_id:06d}"
 
 
 class _ZigbeeTransportAbstractor:
@@ -56,6 +86,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
     _MAX_CHAR_STRING_LEN_CMD: Final[int] = 63
     _CHUNK_BODY_LEN_CMD: Final[int] = 32
     _CHUNK_TIMEOUT: Final[float] = ZigbeeFramingHandler._CHUNK_TIMEOUT
+    _AVAILABILITY_CHECK_INTERVAL: Final[float] = 30.0
+    _LAST_SEEN_STALE_AFTER: Final[float] = 600.0
 
     def __init__(
         self,
@@ -126,6 +158,8 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
         self._extra[SZ_IS_EVOFW3] = True
         self._hass = config.app_context
         self._tasks: set[asyncio.Task[Any]] = set()
+        self._device_online: bool = False
+        self._availability_unsub: Callable[[], None] | None = None
 
         self._framing = ZigbeeFramingHandler(
             max_char_len=max_char_len,
@@ -350,6 +384,30 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
 
     async def _wait_for_device_ready(self, device: Any, ieee: Any) -> None:
         await self._connection_mgr.wait_for_device_ready(device, ieee)
+
+    def _resolve_hgi_id(self) -> str:
+        """Resolve the RAMSES HGI device ID for this gateway.
+
+        The IEEE address is NOT a RAMSES HGI ID and must never be used
+        as one — it would cause device_id filter exceptions and
+        incorrect outbound packet patching. Precedence:
+
+        1. ``configured_hgi_id`` (explicit override) wins.
+        2. Derive from the IEEE: ramses_esp derives its gateway ID from
+           the last three bytes of the base MAC, and the IEEE address is
+           the base MAC expanded to EUI-64 via an ``ff:fe`` insertion —
+           so the derivation is reversible (see ``_hgi_id_from_ieee``).
+        3. Fall back to the unknown-HGI sentinel (``18:000730``); the
+           child is then receive-only until RF traffic reveals the real
+           ID.
+        """
+        from ...address import HGI_DEV_ADDR
+
+        return (
+            self._configured_hgi_id
+            or _hgi_id_from_ieee(self._ieee)
+            or HGI_DEV_ADDR.id
+        )
 
     def _get_cluster(
         self,
@@ -684,9 +742,6 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     except asyncio.CancelledError:
                         raise
                     except Exception as err:
-                        _LOGGER.exception(
-                            "Target cluster command failed: %s", err
-                        )
                         raise exc.TransportZigbeeError(
                             f"Target cluster command failed: {err}"
                         ) from err
@@ -695,8 +750,12 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                 await asyncio.sleep(0.01)
         except asyncio.CancelledError:
             raise
-        except Exception as err:
-            _LOGGER.exception("Zigbee unacked send failed: %s", err)
+        except exc.TransportZigbeeError as err:
+            # Expected transient conditions (device re-joined, offline,
+            # delivery failure) — the packet is dropped, not fatal
+            _LOGGER.warning("Zigbee unacked send failed: %s", err)
+        except Exception:
+            _LOGGER.exception("Zigbee unacked send failed")
 
     def _track_task(self, task: asyncio.Task[Any]) -> None:
         """Add a task to the registry to prevent garbage collection."""
@@ -734,14 +793,18 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             self._attach_clusters(device)
             await self._bind_and_configure()
 
-            self._extra[SZ_ACTIVE_HGI] = self._ieee
-            self._make_connection(gateway_id=DeviceIdT(str(self._ieee)))
+            hgi_id = self._resolve_hgi_id()
+            self._extra[SZ_ACTIVE_HGI] = hgi_id
+            self._make_connection(gateway_id=DeviceIdT(hgi_id))
             _LOGGER.info(
-                "Zigbee transport ready: ieee=%s cluster=0x%04x attr=0x%04x",
+                "Zigbee transport ready: ieee=%s cluster=0x%04x attr=0x%04x "
+                "(hgi_id=%s)",
                 self._ieee,
                 self._cluster_id,
                 self._attr_id,
+                hgi_id,
             )
+            self._start_availability_monitor()
         except asyncio.CancelledError:
             raise
         except ImportError as err:
@@ -757,9 +820,180 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
                     "Install it or use a different transport."
                 )
             )
+        except exc.TransportZigbeeError as err:
+            # Expected, retriable conditions (ZHA integration down,
+            # device not yet in the gateway's registry): warn without a
+            # traceback — the caller decides whether to retry/rejoin.
+            _LOGGER.warning(
+                "Zigbee transport not available: %s — child stays "
+                "offline until ZHA recovers",
+                err,
+            )
+            self._close(err)
         except Exception as err:
             _LOGGER.exception("Failed to initialize Zigbee transport: %s", err)
             self._close(exc.TransportZigbeeError(str(err)))
+
+    def _start_availability_monitor(self) -> None:
+        """Start watching the ZHA device for online/offline transitions."""
+        self._device_online = True
+        self._availability_unsub = (
+            self._connection_mgr.subscribe_device_offline(
+                self._handle_device_offline_event
+            )
+        )
+        self._track_task(
+            self._loop.create_task(
+                self._availability_loop(),
+                name="ZigbeeTransport._availability_loop()",
+            )
+        )
+
+    def _handle_device_offline_event(self) -> None:
+        """Handle ZHA's device_offline event (early offline signal)."""
+        with contextlib.suppress(RuntimeError):
+            self._loop.call_soon_threadsafe(
+                functools.partial(
+                    self._mark_device_offline,
+                    "ZHA reported device offline",
+                )
+            )
+
+    def _mark_device_offline(self, reason: str) -> None:
+        """Disconnect the child without closing; the monitor keeps running."""
+        if self._closing or not self._device_online:
+            return
+        self._device_online = False
+        _LOGGER.warning(
+            "Zigbee device %s unavailable (%s) — child disconnected, "
+            "monitoring for recovery",
+            self._ieee,
+            reason,
+        )
+        with contextlib.suppress(RuntimeError):
+            self._loop.call_soon_threadsafe(
+                functools.partial(
+                    self._protocol.connection_lost,
+                    exc.TransportZigbeeError(
+                        f"Zigbee device {self._ieee} offline: {reason}"
+                    ),
+                )
+            )
+
+    async def _availability_loop(self) -> None:
+        """Periodically verify device health and drive reconnection."""
+        initial_check = True
+        while not self._closing:
+            try:
+                if self._device_online:
+                    if initial_check:
+                        await self._check_initial_health()
+                    else:
+                        await self._check_online_health()
+                else:
+                    await self._try_reconnect()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _LOGGER.exception("Zigbee availability check failed")
+            initial_check = False
+            await asyncio.sleep(self._AVAILABILITY_CHECK_INTERVAL)
+
+    async def _check_initial_health(self) -> None:
+        """Verify cached ZHA state when availability monitoring starts."""
+        if not self._connection_mgr.gateway_present():
+            self._mark_device_offline("ZHA gateway not available")
+            return
+        if self._connection_mgr.device_available():
+            await self._check_online_health()
+            return
+        if await self._connection_mgr.ping_device() is True:
+            return
+        self._mark_device_offline(
+            "ZHA reports device unavailable or off-network at startup"
+        )
+
+    async def _check_online_health(self) -> None:
+        """Look for evidence the device has gone away.
+
+        ZHA's own unavailable timeout is hours for mains devices, so the
+        primary signal is traffic freshness (``last_seen``) backed up by
+        an active ping, plus ZHA's explicit unavailable flag.
+        """
+        if not self._connection_mgr.gateway_present():
+            self._mark_device_offline("ZHA gateway not available")
+            return
+
+        age = self._connection_mgr.last_seen_age()
+        if age is not None and age <= self._LAST_SEEN_STALE_AFTER:
+            return  # fresh traffic — alive regardless of flags
+
+        if not self._connection_mgr.device_available():
+            self._mark_device_offline(
+                "ZHA reports device unavailable or off-network"
+            )
+            return
+
+        if age is None:
+            return  # no staleness data; ZHA's flag is all we have
+
+        ping = await self._connection_mgr.ping_device()
+        if ping is False:
+            self._mark_device_offline(
+                f"no Zigbee traffic for {int(age)}s and ping failed"
+            )
+        # ping True → alive; ping None → cannot verify, trust ZHA's flag
+
+    async def _try_reconnect(self) -> None:
+        """Re-attach and reconnect when the device shows signs of life."""
+        if not self._connection_mgr.gateway_present():
+            return
+        device = self._connection_mgr.resolve_device()
+        if device is None:
+            return
+        self._device = device
+
+        age = self._connection_mgr.last_seen_age()
+        alive = age is not None and age <= self._LAST_SEEN_STALE_AFTER
+        if not alive:
+            ping = await self._connection_mgr.ping_device()
+            alive = (
+                ping
+                if ping is not None
+                else self._connection_mgr.device_available()
+            )
+        if not alive:
+            return
+
+        try:
+            self._attach_clusters(device)
+            await self._bind_and_configure()
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            _LOGGER.debug(
+                "Zigbee device %s re-attach failed: %s", self._ieee, err
+            )
+            return
+
+        if self._availability_unsub is not None:
+            with contextlib.suppress(Exception):
+                self._availability_unsub()
+        self._availability_unsub = (
+            self._connection_mgr.subscribe_device_offline(
+                self._handle_device_offline_event
+            )
+        )
+
+        self._device_online = True
+        hgi_id = self._resolve_hgi_id()
+        self._extra[SZ_ACTIVE_HGI] = hgi_id
+        self._make_connection(gateway_id=DeviceIdT(hgi_id))
+        _LOGGER.info(
+            "Zigbee device %s recovered — child reconnected (hgi_id=%s)",
+            self._ieee,
+            hgi_id,
+        )
 
     def attribute_updated(self, attrid: int, value: Any) -> None:
         """Handle updates to a bound cluster attribute."""
@@ -922,19 +1156,20 @@ class ZigbeeTransport(_FullTransport, _ZigbeeTransportAbstractor):
             ) as err:
                 _LOGGER.exception("Failed to remove listener: %s", err)
 
-        unsub = getattr(self, "_device_ready_unsub", None)
-        if unsub is not None:
-            try:
-                unsub()
-            except (
-                KeyError,
-                ValueError,
-                TypeError,
-                AttributeError,
-                RuntimeError,
-                exc.RamsesException,
-            ) as err:
-                _LOGGER.exception("Failed to unsubscribe: %s", err)
-            self._device_ready_unsub = None
+        for attr in ("_device_ready_unsub", "_availability_unsub"):
+            unsub = getattr(self, attr, None)
+            if unsub is not None:
+                try:
+                    unsub()
+                except (
+                    KeyError,
+                    ValueError,
+                    TypeError,
+                    AttributeError,
+                    RuntimeError,
+                    exc.RamsesException,
+                ) as err:
+                    _LOGGER.exception("Failed to unsubscribe: %s", err)
+                setattr(self, attr, None)
 
         super().close()

@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
+from ramses_tx import exceptions as exc
 from ramses_tx.const import I_, SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.transport.base import TransportConfig
 from ramses_tx.transport.pooled import (
@@ -250,8 +251,13 @@ async def test_dedup_key_fallback_when_sequence_absent() -> None:
     assert proto.packet_received.call_count == 1
 
 
-async def test_recent_tx_match_is_consumed() -> None:
-    """One recorded transmission must classify only one matching echo."""
+async def test_recent_tx_match_is_not_consumed() -> None:
+    """One recorded TX must classify every matching copy as an echo.
+
+    RF is a shared medium: a single transmission is heard by every
+    receiver in the pool, so N inbound copies of the same frame must
+    all be marked as echoes until the TTL expires (issue 1185).
+    """
     proto = _make_mock_protocol()
     pool = PooledTransport(proto, [None], config=TransportConfig())
     packet = _make_packet()
@@ -268,10 +274,12 @@ async def test_recent_tx_match_is_consumed() -> None:
     pool._recent_tx_queue.append((now, key))
     pool._recent_tx_counts[key] = 1
 
+    # Every receiver's copy of the same TX matches — the key is not
+    # consumed by the first match.
     assert pool._is_recent_tx(packet) is True
-    assert pool._is_recent_tx(packet) is False
-    assert not pool._recent_tx_queue
-    assert key not in pool._recent_tx_counts
+    assert pool._is_recent_tx(packet) is True
+    assert pool._recent_tx_queue
+    assert key in pool._recent_tx_counts
 
 
 async def test_dedup_cache_is_dict_backed() -> None:
@@ -386,6 +394,56 @@ async def test_unaccepted_serial_child_is_receive_only() -> None:
     proto.packet_received.assert_called_once()
 
 
+async def test_sentinel_hgi_zigbee_child_is_receive_only() -> None:
+    """A child reporting the unknown-HGI sentinel is never selected for TX.
+
+    Zigbee transports fall back to ``18:000730`` when the real HGI ID
+    cannot be derived or configured. Unless that sentinel is itself in
+    ``accepted_hgis`` (HGI80 placeholder setups), the child must remain
+    receive-only and must not be chosen by ``_select_child``.
+    """
+    proto = _make_mock_protocol()
+    zigbee_child = _make_mock_transport(hgi="18:000730")
+    mqtt_child = _make_mock_transport(hgi="18:001111")
+    pool = PooledTransport(
+        proto,
+        [zigbee_child, mqtt_child],
+        config=TransportConfig(),
+        accepted_hgis={"18:001111"},
+    )
+
+    _connect_and_ready(pool, 0, zigbee_child)
+    _connect_and_ready(pool, 1, mqtt_child)
+    await asyncio.sleep(0.01)
+
+    assert pool._children[0].accepted is False
+    assert pool._children[0].is_sendable is False
+    assert pool._select_child() is pool._children[1]
+
+
+async def test_child_connection_lost_fails_wait_promptly() -> None:
+    """A child that fails to connect surfaces the error, not a timeout.
+
+    Regression: ``wait_for_connection_made`` previously only woke on
+    ``connection_made`` — a child whose transport fails during init
+    (e.g. a zigbee:// child with no ZHA) stalled pool construction for
+    the full per-child timeout.  ``connection_lost`` must now wake the
+    waiter with the real error.
+    """
+    proto = _make_mock_protocol()
+    pool = PooledTransport(proto, [None], config=TransportConfig())
+    proxy = _ChildProtocolProxy(pool, 0)
+
+    # Simulate a child transport failing during async init.
+    proxy.connection_lost(exc.TransportZigbeeError("no ZHA gateway"))
+
+    start = dt.now()
+    with pytest.raises(exc.TransportError, match="failed to connect"):
+        await proxy.wait_for_connection_made(timeout=60.0)
+    # Must fail fast — not after the 60s timeout.
+    assert (dt.now() - start).total_seconds() < 5.0
+
+
 async def test_outbound_fails_when_no_child_connected() -> None:
     """write_frame raises when no child is connected."""
     from ramses_tx import exceptions as exc
@@ -478,6 +536,41 @@ async def test_disconnect_only_affects_one_child() -> None:
     assert pool._children[1].is_sendable
     # Child 0 should be disconnected.
     assert not pool._children[0].is_connected
+
+
+async def test_reconnect_restores_transport_for_failed_child() -> None:
+    """A child that failed at construction has transport=None; a later
+    connection_made (e.g. Zigbee availability reconnect) must restore it
+    or is_sendable stays False forever."""
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    t1 = _make_mock_transport(hgi="18:002222")
+    pool = PooledTransport(proto, [t0, t1], config=TransportConfig())
+    _connect_and_ready(pool, 1, t1)
+
+    # Simulate a child whose transport never connected at startup
+    # (__dict__ poke: direct assignment narrows the attr to None for
+    # mypy, making the post-reconnect asserts "unreachable")
+    child = pool._children[0]
+    child.__dict__["transport"] = None
+    assert not child.is_sendable
+
+    # Reconnect: mark_connected must re-attach the transport object.
+    pool._on_child_connected(0, t0)
+    assert child.is_connected
+    assert child.transport is t0
+    assert child.is_sendable
+
+
+def test_callback_child_reconnect_does_not_store_transport() -> None:
+    """Callback-driven children keep transport=None — outbound frames
+    go through the pool's adapter, not a per-child transport."""
+    cb = PoolChild(
+        child_id=0, port_name="mqtt_ha://18:001111", callback_driven=True
+    )
+    cb.mark_connected(_make_mock_transport(hgi="18:001111"))
+    assert cb.transport is None
+    assert cb.is_connected
 
 
 # -- get_extra_info --------------------------------------------------------
@@ -1603,3 +1696,143 @@ async def test_write_routed_callback_driven_marks_child_online() -> None:
     assert outcome is WriteOutcome.SUBMITTED
     availability: NodeAvailability = pool._children[0].availability
     assert availability is NodeAvailability.ONLINE
+
+
+# -- Cross-child echo detection (issue 1185) -------------------------------
+
+
+async def test_tx_via_transport_child_echo_via_callback_child() -> None:
+    """An over-air copy arriving via another child is marked as echo.
+
+    Reproduces the live failure: a spoofed-source parameter poll was
+    transmitted by a serial/zigbee child and heard over the air by a
+    remote MQTT-connected HGI.  The MQTT copy reached the pool without
+    an echo mark because only MQTT-published TXs were recorded in the
+    pool's recent-TX table.
+    """
+    from ramses_tx.packet import Packet
+    from ramses_tx.routing import RoutedCommand, WriteOutcome
+
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:254172")  # serial/zigbee child
+    pool = PooledTransport(proto, [t0, None], config=TransportConfig())
+    _connect_and_ready(pool, 0, t0)
+    # Child 1 is callback-driven (remote MQTT-connected HGI).
+    pool._children[1].callback_driven = True
+    pool._children[1].hgi_id = DeviceIdT("18:130236")
+    pool._children[1].accepted = True
+    pool._children[1].send_ready = True
+
+    tx_frame = "RQ --- 29:176861 32:153289 --:------ 2411 003 000001"
+    routed = RoutedCommand(child_id="0", command=MagicMock())
+    outcome = await pool.write_routed(routed, tx_frame)
+    assert outcome is WriteOutcome.SUBMITTED
+    t0.write_frame.assert_called_once()
+
+    # The remote MQTT HGI hears the frame over the air and forwards it.
+    await asyncio.sleep(0.01)  # flush pending forwards, then reset
+    proto.packet_received.reset_mock()
+    rx_pkt = Packet.from_port(
+        dt.now(), "000 RQ --- 29:176861 32:153289 --:------ 2411 003 000001"
+    )
+    pool._on_child_packet(1, rx_pkt)
+
+    await asyncio.sleep(0.01)
+    assert rx_pkt._is_echo is True
+    assert proto.packet_received.call_count == 1
+
+
+async def test_tx_heard_by_multiple_children_all_copies_marked() -> None:
+    """Every receiver's copy of one TX is marked as an echo.
+
+    A single transmission is heard by every receiver in the pool;
+    consuming the recent-TX match on the first copy would leak the
+    remaining copies upstream as genuine traffic.
+    """
+    from ramses_tx.packet import Packet
+    from ramses_tx.routing import RoutedCommand, WriteOutcome
+
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:254172")
+    t1 = _make_mock_transport(hgi="18:149488")
+    pool = PooledTransport(
+        proto, [t0, t1, None], config=TransportConfig(), dedup_window=60.0
+    )
+    _connect_and_ready(pool, 0, t0)
+    _connect_and_ready(pool, 1, t1)
+    pool._children[2].callback_driven = True
+    pool._children[2].hgi_id = DeviceIdT("18:130236")
+    pool._children[2].accepted = True
+    pool._children[2].send_ready = True
+
+    tx_frame = "RQ --- 29:176861 32:153289 --:------ 2411 003 000001"
+    routed = RoutedCommand(child_id="0", command=MagicMock())
+    outcome = await pool.write_routed(routed, tx_frame)
+    assert outcome is WriteOutcome.SUBMITTED
+
+    # Both the other serial child and the remote MQTT HGI report the
+    # same over-air frame.
+    await asyncio.sleep(0.01)  # flush pending forwards, then reset
+    proto.packet_received.reset_mock()
+    rx_line = "000 RQ --- 29:176861 32:153289 --:------ 2411 003 000001"
+    rx_pkt1 = Packet.from_port(dt.now(), rx_line)
+    rx_pkt2 = Packet.from_port(dt.now(), rx_line)
+    pool._on_child_packet(1, rx_pkt1)
+    pool._on_child_packet(2, rx_pkt2)
+
+    await asyncio.sleep(0.01)
+    assert rx_pkt1._is_echo is True
+    assert rx_pkt2._is_echo is True
+    # Every copy is marked, but echo copies dedupe among themselves:
+    # only the first is forwarded upstream — enough for the protocol's
+    # WantEcho FSM — while repeat copies are dropped.
+    assert proto.packet_received.call_count == 1
+
+
+async def test_unrelated_frame_is_not_marked_as_echo() -> None:
+    """A packet that does not match a recent TX is not marked echo."""
+    from ramses_tx.packet import Packet
+    from ramses_tx.routing import RoutedCommand, WriteOutcome
+
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:254172")
+    pool = PooledTransport(proto, [t0, None], config=TransportConfig())
+    _connect_and_ready(pool, 0, t0)
+    pool._children[1].callback_driven = True
+    pool._children[1].hgi_id = DeviceIdT("18:130236")
+    pool._children[1].accepted = True
+    pool._children[1].send_ready = True
+
+    tx_frame = "RQ --- 29:176861 32:153289 --:------ 2411 003 000001"
+    routed = RoutedCommand(child_id="0", command=MagicMock())
+    outcome = await pool.write_routed(routed, tx_frame)
+    assert outcome is WriteOutcome.SUBMITTED
+
+    # Different payload — a genuine inbound packet, not our echo.
+    await asyncio.sleep(0.01)  # flush pending forwards, then reset
+    proto.packet_received.reset_mock()
+    rx_pkt = Packet.from_port(
+        dt.now(), "000 RQ --- 29:176861 32:153289 --:------ 2411 003 00003E"
+    )
+    pool._on_child_packet(1, rx_pkt)
+
+    await asyncio.sleep(0.01)
+    assert rx_pkt._is_echo is False
+    assert proto.packet_received.call_count == 1
+
+
+async def test_pool_children_accessor() -> None:
+    """``children`` exposes an immutable snapshot of the pool registry.
+
+    Backs the ramses_cc zigbee/children iteration that previously read
+    the private ``_children`` list.
+    """
+    proto = _make_mock_protocol()
+    t0 = _make_mock_transport(hgi="18:001111")
+    t1 = _make_mock_transport(hgi="18:002222")
+    pool = PooledTransport(proto, [t0, t1], config=TransportConfig())
+
+    children = pool.children
+    assert isinstance(children, tuple)
+    assert len(children) == 2
+    assert [c.child_id for c in children] == [0, 1]

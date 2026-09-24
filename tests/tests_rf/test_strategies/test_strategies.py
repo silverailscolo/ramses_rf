@@ -289,6 +289,22 @@ class TestFilteredAliases:
                 assert isinstance(hex_code, str)
                 assert len(hex_code) == 2
 
+    def test_public_alias_accessors(self) -> None:
+        """Public aliases/boost_aliases expose the private maps."""
+        s = OrconStrategy()
+        assert s.aliases == s._aliases
+        assert s.aliases["laag"] == "low"
+        assert s.boost_aliases == s._boost_aliases
+        # returned dicts are copies — mutating them is safe
+        s.aliases["x"] = "y"
+        assert "x" not in s._aliases
+
+    def test_base_strategy_has_empty_aliases(self) -> None:
+        """The base class exposes empty alias maps, not None."""
+        s = HvacStrategyBase()
+        assert s.aliases == {}
+        assert s.boost_aliases == {}
+
 
 # ---------------------------------------------------------------------------
 # Binding codes
@@ -489,3 +505,203 @@ class TestQuirkDispatch:
         result = apply_hvac_quirks(payload, None, Code._12A0)
 
         assert result["supply_temp"] == 18.5
+
+
+# ---------------------------------------------------------------------------
+# Builtin boost_timer commands (issue 1113)
+# ---------------------------------------------------------------------------
+
+
+class TestBuiltinBoostCommands:
+    """Builtin boost_timer commands per vendor strategy."""
+
+    def test_orcon_has_boost_timer_commands(self) -> None:
+        cmds = OrconStrategy().builtin_commands
+        boost = {
+            k: v for k, v in cmds.items() if v.get("type") == "boost_timer"
+        }
+        assert len(boost) == 9
+        assert "low_15" in boost
+        assert "medium_30" in boost
+        assert "high_60" in boost
+        # All use 22F3
+        for cmd in boost.values():
+            assert cmd["code"] == Code._22F3
+            assert cmd["verb"] == "I"
+
+    def test_orcon_boost_aliases(self) -> None:
+        strategy = OrconStrategy()
+        assert strategy._boost_aliases == {
+            "laag_15": "low_15",
+            "laag_30": "low_30",
+            "laag_60": "low_60",
+            "middel_15": "medium_15",
+            "middel_30": "medium_30",
+            "middel_60": "medium_60",
+            "hoog_15": "high_15",
+            "hoog_30": "high_30",
+            "hoog_60": "high_60",
+        }
+
+    def test_itho_has_simple_boost_commands(self) -> None:
+        cmds = IthoStrategy().builtin_commands
+        boost = {
+            k: v for k, v in cmds.items() if v.get("type") == "boost_timer"
+        }
+        assert len(boost) == 3
+        assert "boost_10" in boost
+        assert "boost_20" in boost
+        assert "boost_30" in boost
+        # Itho uses 3-byte payload (no speed selection)
+        for cmd in boost.values():
+            assert cmd["code"] == Code._22F3
+            assert len(cmd["payload"]) == 6  # 3 bytes
+
+    def test_itho_has_no_boost_aliases(self) -> None:
+        strategy = IthoStrategy()
+        assert strategy._boost_aliases == {}
+
+    def test_vasco_has_boost_timer_commands(self) -> None:
+        cmds = VascoStrategy().builtin_commands
+        boost = {
+            k: v for k, v in cmds.items() if v.get("type") == "boost_timer"
+        }
+        assert len(boost) == 9
+        assert "low_15" in boost
+        assert "high_60" in boost
+
+    def test_climarad_shares_vasco_boost_commands(self) -> None:
+        v_cmds = VascoStrategy().builtin_commands
+        c_cmds = ClimaRadStrategy().builtin_commands
+        assert v_cmds == c_cmds
+
+    def test_nuaire_has_no_boost_commands(self) -> None:
+        cmds = NuaireStrategy().builtin_commands
+        assert len(cmds) == 0
+
+    def test_orcon_boost_payload_matches_user_config(self) -> None:
+        """Verify Orcon boost payloads match the user's config from
+        issue 500 (the reference payloads for this feature).
+        """
+        cmds = OrconStrategy().builtin_commands
+        assert cmds["high_15"]["payload"] == "00120F03040404"
+        assert cmds["high_30"]["payload"] == "00121E03040404"
+        assert cmds["high_60"]["payload"] == "00123C03040404"
+        assert cmds["low_15"]["payload"] == "00120F01040404"
+        assert cmds["medium_30"]["payload"] == "00121E02040404"
+
+
+# ---------------------------------------------------------------------------
+# Orcon 3-byte 31D9 mode decode (ramses-rf/ramses_cc#1231, MVS-15)
+# ---------------------------------------------------------------------------
+
+
+class TestOrcon31D9ModeQuirk:
+    """Remap the generic 3-byte 31D9 decode to Orcon mode names."""
+
+    @pytest.fixture()
+    def strategy(self) -> OrconStrategy:
+        return OrconStrategy()
+
+    @staticmethod
+    def _31d9_payload(fan_mode: str) -> dict:
+        """Shape the payload like the generic 3-byte parser emits it."""
+        return {
+            "hvac_id": "00",
+            "exhaust_fan_speed": 0.005,
+            "fan_mode": fan_mode,
+            "passive": False,
+            "damper_only": False,
+            "filter_dirty": False,
+            "frost_cycle": False,
+            "has_fault": False,
+        }
+
+    @pytest.mark.parametrize(
+        ("parsed_mode", "expected"),
+        [
+            ("off", "away"),  # 0x00
+            ("1 (trickle)", "low"),  # 0x01
+            ("2 (low)", "medium"),  # 0x02
+            ("3 (medium)", "high"),  # 0x03 — also the timed-boost report
+            ("4 (boost)", "auto"),  # 0x04
+            ("auto", "auto_alt"),  # 0x05
+            ("01", "low"),  # raw hex (bound-REM/fall-back branches)
+            ("06", "boost"),  # 0x06 — unmapped by the generic map
+            ("07", "off"),  # 0x07 — unmapped by the generic map
+        ],
+    )
+    def test_remapped_fan_mode(
+        self, strategy: OrconStrategy, parsed_mode: str, expected: str
+    ) -> None:
+        result = apply_hvac_quirks(
+            self._31d9_payload(parsed_mode),
+            None,
+            Code._31D9,
+            strategy=strategy,
+        )
+
+        assert result["fan_mode"] == expected
+        assert result["exhaust_fan_speed"] is None
+
+    def test_suppresses_speed_for_unmapped_byte(
+        self, strategy: OrconStrategy
+    ) -> None:
+        """A non-mode byte still loses its bogus spd/200 fan speed."""
+        result = apply_hvac_quirks(
+            self._31d9_payload("III (boost)"),
+            None,
+            Code._31D9,
+            strategy=strategy,
+        )
+
+        assert result["fan_mode"] == "III (boost)"
+        assert result["exhaust_fan_speed"] is None
+
+    def test_4byte_orcon_decode_untouched(
+        self, strategy: OrconStrategy
+    ) -> None:
+        """4-byte payloads carry no exhaust_fan_speed — no remap.
+
+        Guards the 'auto' ambiguity: 4-byte 0x04 must stay 'auto', not
+        become 'auto_alt' (which is 3-byte 0x05).
+        """
+        result = apply_hvac_quirks(
+            {"fan_mode": "auto", "has_fault": False},
+            None,
+            Code._31D9,
+            strategy=strategy,
+        )
+
+        assert result["fan_mode"] == "auto"
+
+    def test_other_codes_untouched(self, strategy: OrconStrategy) -> None:
+        payload = {"fan_mode": "1 (trickle)", "exhaust_fan_speed": 0.5}
+
+        result = apply_hvac_quirks(
+            payload, None, Code._31DA, strategy=strategy
+        )
+
+        assert result["fan_mode"] == "1 (trickle)"
+        assert result["exhaust_fan_speed"] == 0.5
+
+    def test_no_strategy_preserves_generic_decode(self) -> None:
+        """Without a configured scheme the Vasco-style names remain."""
+        result = apply_hvac_quirks(
+            self._31d9_payload("1 (trickle)"), None, Code._31D9
+        )
+
+        assert result["fan_mode"] == "1 (trickle)"
+        assert result["exhaust_fan_speed"] == 0.005
+
+    def test_vasco_strategy_untouched(self) -> None:
+        """A Vasco-scheme device keeps its genuine 31D9 decode."""
+        result = apply_hvac_quirks(
+            self._31d9_payload("4 (boost)"),
+            None,
+            Code._31D9,
+            strategy=VascoStrategy(),
+        )
+
+        assert result["fan_mode"] == "4 (boost)"
+        assert result["exhaust_fan_speed"] == 0.005

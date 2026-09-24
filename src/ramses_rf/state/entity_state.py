@@ -223,6 +223,32 @@ class EntityState:
         cache = await self._build_state_cache()
         return cache.get_all()
 
+    def get_cached_value(self, code: Code | str, key: str | None = "*") -> Any:
+        """Return the newest cached payload for a code — synchronously.
+
+        Unlike the async :meth:`get_value`, this reads only the
+        in-memory state (after an incremental sync from the message
+        log) and performs no database queries, so it is safe to call
+        from synchronous contexts (e.g. properties).
+
+        :param code: The packet code to look up (e.g. ``Code._10E0``).
+        :type code: Code | str
+        :param key: Payload key to extract; ``"*"`` (default) returns
+            the full payload dict.
+        :type key: str | None
+        :return: The value from the most recent I/RP message for the
+            code, or ``None`` if none has been seen.
+        :rtype: Any
+        """
+        self._sync_state()
+        msgs = [
+            m
+            for m in self._current_state.values()
+            if m.code == code and m.verb in (I_, RP)
+        ]
+        msg = max(msgs, key=lambda m: m.dtm) if msgs else None
+        return self._msg_value_msg(msg, key=key)
+
     _msg_list = get_all_messages
 
     def _add_record(

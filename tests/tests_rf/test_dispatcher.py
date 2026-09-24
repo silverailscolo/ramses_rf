@@ -133,6 +133,44 @@ class Test_dispatcher_gateway:
         assert dispatcher.detect_array_fragment(msg2, msg1)
         assert not dispatcher.detect_array_fragment(msg3, msg1)
 
+    def test_sliding_window_survives_intervening_packet(self) -> None:
+        """Sliding window reassembly survives an intervening packet.
+
+        The 2-slot _prev_msg approach dropped the array when an unrelated
+        packet arrived between fragment 1 and fragment 2.  The sliding
+        window (keyed by src_id + code) preserves the pending fragment.
+        """
+
+        # Fragment 1: long 000A with _has_array=True
+        frag1: Message = Message._from_packet(
+            Packet(
+                self._NOW,
+                "...  I --- 01:158182 --:------ 01:158182 000A 048 001001F40BB8011101F40BB8021101F40BB8031001F40BB8041101F40BB8051101F40BB8061101F40BB8071001F40BB8",
+            )
+        )
+        # Intervening packet from a different source (would corrupt 2-slot)
+        intervening: Message = Message._from_packet(
+            Packet(
+                self._NOW + td(seconds=0.5),
+                "...  I --- 02:222222 --:------ 02:222222 30C9 003 000800",
+            )
+        )
+        # Fragment 2: short 000A, same source as fragment 1
+        frag2: Message = Message._from_packet(
+            Packet(
+                self._NOW + td(seconds=1),
+                "...  I --- 01:158182 --:------ 01:158182 000A 006 081001F409C4",
+            )
+        )
+
+        assert frag1._has_array
+        # Simulate the sliding window: store frag1, then check frag2
+        # In the 2-slot approach, _prev_msg would be `intervening`, not
+        # frag1, so detect_array_fragment(frag2, intervening) would be
+        # False.  With the sliding window, frag1 is still available.
+        assert dispatcher.detect_array_fragment(frag2, frag1)
+        assert not dispatcher.detect_array_fragment(frag2, intervening)
+
 
 class TestDispatcherErrorHandling:
     """Test Dispatcher exception handling logic."""
@@ -786,6 +824,90 @@ class TestResolveLogicalTargets:
         # Assert
         assert mock_zone not in targets
         assert mock_trv1 in targets
+
+    def test_sensor_setpoint_does_not_route_to_zone(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify a sensor's self-addressed 2309 never reaches a TCS zone.
+
+        Regression test for ramses-rf/ramses_cc#1208: a DTS92 broadcasts
+        its own (device-local) setpoint with idx 00, which is not the
+        controller's zone index and must not overwrite zone 00's setpoint.
+        """
+        # Arrange
+        mock_zone = MagicMock()
+        mock_zone.temp_state = MagicMock()
+        mock_zone.zone_state = MagicMock()
+
+        mock_sensor = MagicMock()
+        mock_sensor.id = "22:038387"
+        mock_sensor.type = "22"
+        mock_sensor._parent = mock_zone
+        mock_sensor.tcs = None
+
+        mock_tcs = MagicMock()
+        mock_tcs.id = "01:168186"
+        mock_tcs.zone_by_index = {"00": mock_zone}
+        mock_gateway.tcs = mock_tcs
+
+        mock_zone.sensor = mock_sensor
+        mock_zone.actuators = []
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_sensor.id: mock_sensor,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_sensor.id
+        msg.dst.id = "--:------"
+        msg.code = Code._2309
+        msg._has_array = False
+        payload = {"zone_index": "00", "setpoint": 11.0}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert: the sensor's device-local idx must not resolve to a zone
+        assert mock_zone not in targets
+        assert mock_sensor in targets
+
+    def test_ctl_setpoint_routes_to_zone(
+        self, mock_gateway: MagicMock
+    ) -> None:
+        """Verify a controller's 2309 broadcast still routes to the zone."""
+        # Arrange
+        mock_zone = MagicMock()
+
+        mock_tcs = MagicMock()
+        mock_tcs.id = "01:168186"
+        mock_tcs.zone_by_index = {"00": mock_zone}
+        mock_gateway.tcs = mock_tcs
+
+        mock_ctl = MagicMock()
+        mock_ctl.id = "01:168186"
+        mock_ctl.type = "01"
+        mock_ctl.tcs = mock_tcs
+
+        mock_gateway.device_registry.device_by_id = {
+            mock_ctl.id: mock_ctl,
+        }
+
+        msg = MagicMock()
+        msg.src.id = mock_ctl.id
+        msg.dst.id = mock_ctl.id
+        msg.code = Code._2309
+        msg._has_array = False
+        payload = {"zone_index": "00", "setpoint": 24.0}
+
+        # Act
+        targets = dispatcher._resolve_logical_targets(
+            mock_gateway, msg, payload
+        )
+
+        # Assert
+        assert mock_zone in targets
 
 
 class TestCommandDispatcherSend:

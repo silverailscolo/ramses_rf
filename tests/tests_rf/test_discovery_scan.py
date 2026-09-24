@@ -31,6 +31,7 @@ from ramses_rf.discovery_scan import (
     _extract_zone_index_from_payload,
     _initial_confidence,
     _is_appliance_control_signal,
+    _is_evidence_based,
     _is_valid_address,
     _recompute_confidence,
     _should_update_domain_id,
@@ -50,6 +51,7 @@ def make_dto(
     verb: str = Verb.I_,
     payload: str = "02C8",
     rssi: str = "-72",
+    is_echo: bool = False,
 ) -> PacketDTO:
     """Create a PacketDTO for testing."""
     return PacketDTO(
@@ -63,6 +65,7 @@ def make_dto(
         code=code,
         length="006",
         raw_payload=payload,
+        is_echo=is_echo,
     )
 
 
@@ -691,6 +694,161 @@ class TestClassify:
         """37: sending I 31DA (broadcast) IS FAN — it's broadcasting status."""
         result = _classify("37:169161", Code._31DA, Verb.I_, is_source=True)
         assert result == DevType.FAN
+
+
+class TestClassifyDis:
+    """Tests for DIS (display) classification via 'VMI only' RQ codes.
+
+    A display polls the FAN for parameters/status — RQ 2411, RQ 31DA,
+    RQ 10D0 — while a FAN answers (RP) and a bound REM does not
+    routinely send these requests.  For ambiguous prefixes (29:, 37:)
+    a source RQ on a 'VMI only' code is the DIS signature, unless the
+    device has already sent W/RP (a writer/responder, not a display).
+    """
+
+    def test_29_rq_2411_is_dis(self) -> None:
+        """29: sending RQ 2411 is a DIS, not a FAN — FANs don't request."""
+        result = _classify("29:176861", Code._2411, Verb.RQ, is_source=True)
+        assert result == DevType.DIS
+
+    def test_29_rq_31da_is_dis(self) -> None:
+        """29: sending RQ 31DA is a DIS polling the FAN for status."""
+        result = _classify("29:176861", Code._31DA, Verb.RQ, is_source=True)
+        assert result == DevType.DIS
+
+    def test_29_rq_10d0_is_dis(self) -> None:
+        """29: sending RQ 10D0 is a DIS polling the FAN for filter info."""
+        result = _classify("29:176861", Code._10D0, Verb.RQ, is_source=True)
+        assert result == DevType.DIS
+
+    def test_37_rq_2411_is_dis(self) -> None:
+        """37: sending RQ 2411 is a DIS — stronger than the REM fallback."""
+        result = _classify("37:169161", Code._2411, Verb.RQ, is_source=True)
+        assert result == DevType.DIS
+
+    def test_32_rq_2411_is_still_fan(self) -> None:
+        """32: is unambiguous — the prefix wins over the DIS signature."""
+        result = _classify("32:153289", Code._2411, Verb.RQ, is_source=True)
+        assert result == DevType.FAN
+
+    def test_04_rq_2411_is_not_dis(self) -> None:
+        """A non-HVAC prefix cannot be a DIS — falls back to TRV."""
+        result = _classify("04:056053", Code._2411, Verb.RQ, is_source=True)
+        assert result == DevType.TRV
+
+    def test_29_rq_2411_as_dst_is_not_dis(self) -> None:
+        """The DIS signature only applies to the sender, not the receiver."""
+        result = _classify("29:176861", Code._2411, Verb.RQ, is_source=False)
+        assert result != DevType.DIS
+
+    def test_29_rq_2411_with_rp_history_not_dis(self) -> None:
+        """A device that has sent RP is a responder, not a pure display."""
+        dev = DiscoveredDevice(
+            device_id="29:176861",
+            first_seen="2026-07-01T10:00:00",
+            last_seen="2026-07-01T10:00:00",
+            likely_type="FAN",
+            codes_seen=[Code._2411, Code._31DA],
+            verb_codes_seen=["RP:31DA"],
+        )
+        result = _classify(
+            "29:176861", Code._2411, Verb.RQ, is_source=True, device=dev
+        )
+        assert result != DevType.DIS
+
+    def test_37_rq_31da_with_rp_10e0_history_is_dis(self) -> None:
+        """An RP 10E0 (device-info answer) does not disqualify DIS.
+
+        Every addressable device answers the gateway's RQ 10E0
+        enumeration poll — including a display.  A 37: that polls the
+        FAN (RQ 1470/31DA) and merely answers housekeeping stays DIS;
+        only an RP servicing an HVAC-domain request (e.g. RP 31DA)
+        marks it an endpoint.
+        """
+        dev = DiscoveredDevice(
+            device_id="37:169161",
+            first_seen="2026-07-01T10:00:00",
+            last_seen="2026-07-01T10:00:00",
+            likely_type="REM",
+            codes_seen=[Code._10E0, Code._1470, Code._31DA],
+            verb_codes_seen=["RP:10E0", "RQ:1470", " W:2411"],
+        )
+        result = _classify(
+            "37:169161", Code._31DA, Verb.RQ, is_source=True, device=dev
+        )
+        assert result == DevType.DIS
+
+    def test_29_rq_2411_with_w_history_not_dis(self) -> None:
+        """A device that has sent W is a writer, not a pure display."""
+        dev = DiscoveredDevice(
+            device_id="29:176861",
+            first_seen="2026-07-01T10:00:00",
+            last_seen="2026-07-01T10:00:00",
+            likely_type="REM",
+            codes_seen=[Code._22F1, Code._2411],
+            verb_codes_seen=[" W:22F1"],
+        )
+        result = _classify(
+            "29:176861", Code._2411, Verb.RQ, is_source=True, device=dev
+        )
+        assert result != DevType.DIS
+
+    def test_29_rq_2411_with_vmi_w_history_is_dis(self) -> None:
+        """A W on a VMI write code (2411) does NOT disqualify DIS.
+
+        The REM klass table attributes W 2411 'from a VMI' — a display
+        user editing a parameter.  Only W on non-VMI codes (e.g.
+        W 22F1, a REM writing fan mode) disqualifies the signature.
+        """
+        dev = DiscoveredDevice(
+            device_id="29:176861",
+            first_seen="2026-07-01T10:00:00",
+            last_seen="2026-07-01T10:00:00",
+            likely_type="DIS",
+            codes_seen=[Code._2411],
+            verb_codes_seen=[" W:2411", "RQ:2411"],
+        )
+        result = _classify(
+            "29:176861", Code._2411, Verb.RQ, is_source=True, device=dev
+        )
+        assert result == DevType.DIS
+
+    def test_29_rq_2411_with_rq_i_history_is_dis(self) -> None:
+        """RQ/I-only history is the pure-display signature — still DIS."""
+        dev = DiscoveredDevice(
+            device_id="29:176861",
+            first_seen="2026-07-01T10:00:00",
+            last_seen="2026-07-01T10:00:00",
+            likely_type="FAN",
+            codes_seen=[Code._22F1, Code._2411, Code._31DA],
+            verb_codes_seen=["RQ:2411", " I:22F1"],
+        )
+        result = _classify(
+            "29:176861", Code._2411, Verb.RQ, is_source=True, device=dev
+        )
+        assert result == DevType.DIS
+
+    def test_29_i_22f1_still_rem(self) -> None:
+        """The DIS signature must not break the REM VC pair."""
+        result = _classify("29:176861", Code._22F1, Verb.I_, is_source=True)
+        assert result == DevType.REM
+
+    def test_29_i_31da_still_fan(self) -> None:
+        """The DIS signature must not break the FAN VC pair."""
+        result = _classify("29:176861", Code._31DA, Verb.I_, is_source=True)
+        assert result == DevType.FAN
+
+    def test_rq_2411_is_evidence_based(self) -> None:
+        """A source RQ on a 'VMI only' code counts as evidence."""
+        assert _is_evidence_based("29:176861", Code._2411, Verb.RQ, True)
+
+    def test_rq_10d0_is_evidence_based(self) -> None:
+        """10D0 is not in _HVAC_DOMAIN_CODES — covered by the VMI rule."""
+        assert _is_evidence_based("29:176861", Code._10D0, Verb.RQ, True)
+
+    def test_rq_2411_as_dst_not_evidence(self) -> None:
+        """A packet the device only received is not evidence."""
+        assert not _is_evidence_based("29:176861", Code._2411, Verb.RQ, False)
 
 
 class TestConfidence:
@@ -2245,4 +2403,231 @@ class TestEvidenceBasedContradiction:
         dev = scan.get_device("37:126776")
         assert dev is not None
         assert dev.likely_type == DevType.CO2  # no flapping
+        scan.stop()
+
+
+class TestDisClassification:
+    """Packet-level tests for DIS classification and echo filtering.
+
+    A DIS (display, e.g. Orcon RF15/VMI) polls the FAN with RQ 2411,
+    RQ 31DA, RQ 10D0 and sends occasional I packets — but never RP/W.
+    Echo packets (our own transmissions heard back, e.g. service calls
+    sent with a spoofed from_id) must not feed any of this.
+    """
+
+    def test_29_rq_traffic_discovers_dis(self) -> None:
+        """A 29: device seen only sending RQ 2411 is classified DIS."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="32:153289",
+                code=Code._2411,
+                verb=Verb.RQ,
+            )
+        )
+        dev = scan.get_device("29:176861")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS
+        assert dev.verb_codes_seen == ["RQ:2411"]
+        scan.stop()
+
+    def test_known_rem_reclassified_to_dis_by_rq_traffic(self) -> None:
+        """A known REM sending only RQ polls is re-classified as DIS.
+
+        29:176861 declared REM in the schema; its real traffic is RQ
+        2411/31DA/10D0 + occasional I 22F1 — never RP/W.  The RQ
+        packets are evidence-based contradictions (the DIS signature),
+        so after the threshold the device re-classifies to DIS.
+        """
+        gwy = make_mock_gateway(known_list={"29:176861": {"class": "REM"}})
+        scan = DiscoveryScan(gwy)
+        # First packet creates the entry with the declared class.
+        # Three more RQ packets reach the contradiction threshold.
+        for code in (Code._2411, Code._31DA, Code._10D0, Code._2411):
+            scan._process_packet(
+                make_dto(
+                    src="29:176861",
+                    dst="32:153289",
+                    code=code,
+                    verb=Verb.RQ,
+                )
+            )
+        dev = scan.get_device("29:176861")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS  # re-classified
+        assert dev.confidence == "high"
+        assert "RQ:2411" in dev.verb_codes_seen
+        scan.stop()
+
+    def test_dis_classification_survives_i_22f1(self) -> None:
+        """After promotion to DIS, an I 22F1 does not flap it to REM.
+
+        A display also broadcasts I 22F1 (mode display, itho scheme),
+        which maps to REM — but the RQ-dominant traffic keeps
+        resetting the contradiction count.
+        """
+        gwy = make_mock_gateway(known_list={"29:176861": {"class": "REM"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(
+                    src="29:176861",
+                    dst="32:153289",
+                    code=Code._2411,
+                    verb=Verb.RQ,
+                )
+            )
+        dev = scan.get_device("29:176861")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS
+
+        # Interleaved I 22F1 (REM VC pair) between RQ polls — no flap.
+        for _ in range(3):
+            scan._process_packet(
+                make_dto(
+                    src="29:176861",
+                    dst="32:153289",
+                    code=Code._22F1,
+                    verb=Verb.I_,
+                )
+            )
+            scan._process_packet(
+                make_dto(
+                    src="29:176861",
+                    dst="32:153289",
+                    code=Code._2411,
+                    verb=Verb.RQ,
+                )
+            )
+        dev = scan.get_device("29:176861")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS  # no flapping
+        scan.stop()
+
+    def test_echo_packet_is_ignored(self) -> None:
+        """Echo packets carry no evidence — nothing is tracked."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="32:153289",
+                code=Code._2411,
+                verb=Verb.RQ,
+                is_echo=True,
+            )
+        )
+        assert scan.get_device("29:176861") is None
+        assert scan.device_count() == 0
+        scan.stop()
+
+    def test_echo_packet_does_not_feed_existing_device(self) -> None:
+        """An echo of a spoofed send must not inflate counters/verbs."""
+        gwy = make_mock_gateway(known_list={"29:176861": {"class": "REM"}})
+        scan = DiscoveryScan(gwy)
+        # Real traffic: one I 22F1 broadcast.
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="--:------",
+                code=Code._22F1,
+                verb=Verb.I_,
+            )
+        )
+        dev = scan.get_device("29:176861")
+        assert dev is not None
+        assert dev.source_count == 1
+        assert dev.verb_codes_seen == [" I:22F1"]
+        # Now our spoofed RQ 2411 echo arrives — must be ignored, so
+        # it cannot count as DIS evidence against the declared REM.
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="32:153289",
+                code=Code._2411,
+                verb=Verb.RQ,
+                is_echo=True,
+            )
+        )
+        dev = scan.get_device("29:176861")
+        assert dev is not None
+        assert dev.source_count == 1  # unchanged
+        assert dev.verb_codes_seen == [" I:22F1"]  # unchanged
+        assert dev.contradiction_count == 0
+        assert dev.likely_type == DevType.REM
+        scan.stop()
+
+    def test_verb_codes_seen_tracked_per_device(self) -> None:
+        """verb_codes_seen accumulates deduplicated verb+code pairs."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        for verb, code in (
+            (Verb.I_, Code._22F1),
+            (Verb.RQ, Code._2411),
+            (Verb.RQ, Code._31DA),
+        ):
+            scan._process_packet(
+                make_dto(
+                    src="29:176861",
+                    dst="32:153289",
+                    code=code,
+                    verb=verb,
+                )
+            )
+        dev = scan.get_device("29:176861")
+        assert dev is not None
+        assert sorted(set(dev.verb_codes_seen)) == dev.verb_codes_seen
+        assert set(dev.verb_codes_seen) == {
+            " I:22F1",
+            "RQ:2411",
+            "RQ:31DA",
+        }
+        scan.stop()
+
+    def test_verb_codes_seen_round_trip(self) -> None:
+        """verb_codes_seen survives JSON export/import."""
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        scan._process_packet(
+            make_dto(
+                src="29:176861",
+                dst="32:153289",
+                code=Code._2411,
+                verb=Verb.RQ,
+            )
+        )
+        exported = scan.export_json()
+
+        scan2 = DiscoveryScan(make_mock_gateway())
+        scan2.import_json(exported)
+        dev = scan2.get_device("29:176861")
+        assert dev is not None
+        assert dev.verb_codes_seen == ["RQ:2411"]
+        assert dev.likely_type == DevType.DIS
+        scan.stop()
+        scan2.stop()
+
+    def test_import_without_verb_codes_seen(self) -> None:
+        """Older exports without verb_codes_seen still import cleanly."""
+        data = json.dumps(
+            {
+                "version": 1,
+                "devices": [
+                    {
+                        "device_id": "29:176861",
+                        "first_seen": "2026-07-01T10:00:00",
+                        "last_seen": "2026-07-01T10:01:00",
+                        "likely_type": "REM",
+                        "codes_seen": [Code._22F1, Code._2411],
+                    }
+                ],
+            }
+        )
+        scan = DiscoveryScan(make_mock_gateway())
+        scan.import_json(data)
+        dev = scan.get_device("29:176861")
+        assert dev is not None
+        assert dev.verb_codes_seen == []
         scan.stop()

@@ -302,33 +302,22 @@ class StateProjector:
         if msg.code == Code._2411:
             _route_2411_to_fan(self._gateway, msg)
 
-        payloads = (
+        # Normalise payload to a list of dicts.  Array payloads (e.g. 000A,
+        # 22C9) arrive as list[dict] after to_dict() conversion on the
+        # base.py:Message.payload property; single payloads arrive as dict.
+        # The legacy dict-of-dicts unfolding (for {'00': {...}, '01': {...}}
+        # structures) has been removed — no PayloadBase.to_dict() method
+        # produces nested dicts after the Phase 6 dataclass migration
+        # (issue 1039).  All array payloads now arrive as list[dict] with
+        # the index key (zone_index, ufh_index, etc.) embedded in each
+        # element by the dataclass's to_dict().
+        payloads: list[dict[str, Any]] = []
+        raw_payloads = (
             msg.payload if isinstance(msg.payload, list) else [msg.payload]
         )
-
-        # Unfold dict-of-dicts arrays (e.g. {'00': {'temp_low': 10}})
-        unfolded_payloads: list[dict[str, Any]] = []
-        for payload in payloads:
-            if not isinstance(payload, dict):
-                continue
-
-            if (
-                SZ_UFH_INDEX not in payload
-                and SZ_ZONE_INDEX not in payload
-                and SZ_DOMAIN_INDEX not in payload
-                and SZ_DOMAIN_ID_WIRE not in payload
-                and all(
-                    isinstance(dict_val, dict) for dict_val in payload.values()
-                )
-            ):
-                for key, value in payload.items():
-                    if isinstance(value, dict):
-                        # Inject the outer index key so it isn't lost during unfold
-                        value_copy = dict(value)
-                        value_copy[SZ_UFH_INDEX] = key
-                        unfolded_payloads.append(value_copy)
-            else:
-                unfolded_payloads.append(payload)
+        for payload in raw_payloads:
+            if isinstance(payload, dict):
+                payloads.append(payload)
 
         registry = getattr(self._gateway, "device_registry", None)
         if not registry:
@@ -337,7 +326,7 @@ class StateProjector:
         systems = getattr(registry, "systems", [])
         system_by_id = {s.id: s for s in systems}
 
-        for payload in unfolded_payloads:
+        for payload in payloads:
             # Hexagonal Boundary Enforcement: Route telemetry to Source
             src_dev = registry.device_by_id.get(msg.src.id)
             if src_dev:
@@ -762,13 +751,36 @@ class StateProjector:
 
         current_state = getattr(target, "hvac_state", None) or HvacState()
         strategy = (
-            target._get_configured_strategy()
+            target.get_configured_strategy()
             if isinstance(target, DeviceBase)
             else None
         )
         payload = quirks.apply_hvac_quirks(
             payload, current_state, msg.code, strategy=strategy
         )
+
+        # The parser names 22F1 modes via a mode_max heuristic, which
+        # mis-decodes real Orcon remotes (e.g. VMN-15LF01 sends
+        # mode_max=04 -> "itho" names, so index 01 "low" displays as
+        # "auto").  A remote has no scheme of its own: its commands use
+        # the bound FAN's vocabulary, so fall back to the parent fan's
+        # configured scheme.  See ramses-rf/ramses_cc issue 1216.
+        if (
+            msg.code == Code._22F1
+            and SZ_FAN_MODE in payload
+            and payload.get("_mode_index") is not None
+        ):
+            mode_strategy = strategy
+            if mode_strategy is None and isinstance(target, DeviceBase):
+                parent_fan = getattr(target, "parent_fan", None)
+                if isinstance(parent_fan, DeviceBase):
+                    mode_strategy = parent_fan._get_configured_strategy()
+            if mode_strategy is not None:
+                mapped = mode_strategy.fan_modes.get(
+                    str(payload["_mode_index"])
+                )
+                if mapped is not None:
+                    payload[SZ_FAN_MODE] = mapped
 
         updates: dict[str, Any] = {}
 
@@ -854,6 +866,11 @@ class StateProjector:
 
         if not updates:
             return
+
+        if SZ_FAN_MODE in updates and hasattr(target, "_last_fan_mode_dtm"):
+            target._last_fan_mode_dtm = getattr(
+                msg, "dtm", getattr(msg, SZ_TIMESTAMP, None)
+            )
 
         dtm = getattr(msg, "dtm", getattr(msg, SZ_TIMESTAMP, None))
         if dtm:

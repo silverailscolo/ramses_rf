@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -8,7 +9,7 @@ import pytest
 from serialx import BaseSerialTransport, SerialException
 
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_SIGNATURE, Code
-from ramses_tx.exceptions import TransportSerialError
+from ramses_tx.exceptions import TransportError, TransportSerialError
 from ramses_tx.transport.base import SignaturePolicy, TransportConfig
 from ramses_tx.transport.port import (
     PortTransport,
@@ -963,6 +964,114 @@ async def test_evofw3_debug_appended_to_packet_during_id_command() -> None:
     transport._close()
 
 
+async def test_evofw3_echo_spliced_mid_packet_during_id_command(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A ``#`` echo spliced mid-payload is dropped quietly, no WARNING.
+
+    When ``!I`` is sent while a packet is being received, the evofw3
+    prompt echo can be spliced into the *middle* of the packet's
+    payload print (ramses-rf/ramses_cc issue 1219) — the frame is
+    truncated firmware-side and cannot be salvaged.  The resulting
+    ``PacketInvalid`` must be logged at debug level, not warning.
+    """
+    transport = _get_transport()
+    transport._disable_sending = False
+    transport._configured_hgi_id = "18:006402"
+    transport._startup_grace = 0.0
+    transport._make_connection = MagicMock()
+    transport._write = MagicMock()
+
+    # Matches the live capture: len 021 declares 3x7-byte 12A0 records,
+    # but the '# !I' echo cut the payload off after the first record.
+    def simulate_spliced_echo() -> None:
+        transport._data_received(
+            b"060  I --- 37:153226 --:------ 37:153226"
+            b" 12A0 021 003E07E07FFF00# !I\r\n"
+        )
+
+    loop = asyncio.get_running_loop()
+    loop.call_later(0.02, simulate_spliced_echo)
+
+    with (
+        caplog.at_level(logging.DEBUG, logger="ramses_tx.transport"),
+        patch(
+            "ramses_tx.transport.port.is_hgi80",
+            AsyncMock(return_value=False),
+        ),
+        patch("ramses_tx.transport.port._ID_COMMAND_TIMEOUT", 0.1),
+    ):
+        transport._signature_policy = SignaturePolicy.ID_COMMAND
+        await transport._create_connection()
+        assert transport._init_task is not None
+        await transport._init_task
+
+    # The truncated fragment must not surface as a PacketInvalid
+    # warning; the !I timeout warning is expected and unrelated.
+    assert not any(
+        "PacketInvalid" in r.message and r.levelno >= logging.WARNING
+        for r in caplog.records
+    )
+    assert any(
+        "PacketInvalid" in r.message and r.levelno == logging.DEBUG
+        for r in caplog.records
+    )
+    assert transport._init_fut.done()
+    transport._make_connection.assert_called_once_with(gateway_id="18:006402")
+    transport._close()
+
+
+async def test_evofw3_echo_spliced_mid_packet_outside_id_command(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The same splice outside the ``!I`` window is also debug-level.
+
+    ``Packet._partition`` strips the ``#`` suffix itself, so a spliced
+    frame reaching the plain ``_frame_read`` path hits the same
+    corrupt-by-construction case (ramses-rf/ramses_cc issue 1219).
+    """
+    transport = _get_transport()
+    transport._protocol.packet_received = MagicMock()
+
+    with caplog.at_level(logging.DEBUG, logger="ramses_tx.transport"):
+        transport._data_received(
+            b"060  I --- 37:153226 --:------ 37:153226"
+            b" 12A0 021 003E07E07FFF00# !I\r\n"
+        )
+    await asyncio.sleep(0.01)
+
+    assert not any(
+        "PacketInvalid" in r.message and r.levelno >= logging.WARNING
+        for r in caplog.records
+    )
+    assert any(
+        "PacketInvalid" in r.message and r.levelno == logging.DEBUG
+        for r in caplog.records
+    )
+    transport._protocol.packet_received.assert_not_called()
+    transport._close()
+
+
+async def test_evofw3_echo_appended_to_valid_packet_is_parsed() -> None:
+    """A complete packet with a ``#`` echo appended is still forwarded.
+
+    The echo lands *after* a complete payload: ``Packet._partition``
+    strips it and the packet is processed normally.
+    """
+    transport = _get_transport()
+    transport._protocol.packet_received = MagicMock()
+
+    transport._data_received(
+        b"000  I --- 01:123456 18:000730 --:------ 30C9 001 00# !I\r\n"
+    )
+    await asyncio.sleep(0.01)
+
+    transport._protocol.packet_received.assert_called_once()
+    packet = transport._protocol.packet_received.call_args[0][0]
+    assert packet.code == Code._30C9
+    transport._close()
+
+
 # ---------------------------------------------------------------------------
 # Gap D: per_child_config_overrides in pooled_transport_factory
 # ---------------------------------------------------------------------------
@@ -991,6 +1100,70 @@ async def test_per_child_config_overrides_validation() -> None:
                 }
             ],
             per_child_config_overrides=[{}, {}],  # length mismatch
+        )
+
+
+async def test_pooled_factory_survives_all_transport_children_failed() -> None:
+    """pooled_transport_factory returns a pool even when every transport
+    child fails, as long as callback-driven children are reserved.
+
+    Regression: a hybrid pool whose only viable members are external
+    callback children (e.g. MQTT HGIs behind a bridge that attaches
+    after the factory returns) must not hard-fail in
+    _wait_for_any_connection — observed when a Zigbee child could not
+    connect because ZHA was unavailable.
+    """
+    from ramses_tx.transport.factory import pooled_transport_factory
+
+    mock_protocol = MagicMock()
+    config = TransportConfig(timeout=0.05)
+
+    with patch(
+        "ramses_tx.transport.factory._create_single_child",
+        new=AsyncMock(side_effect=TransportError("no ZHA")),
+    ):
+        pool = await pooled_transport_factory(
+            mock_protocol,
+            config=config,
+            port_names=[
+                SerPortNameT(
+                    "zigbee://aa:bb:cc:dd:ee:ff:00:11/"
+                    "0xfc00/0x0000/10/0xfc01/0x0000/10"
+                )
+            ],
+            callback_port_names=["mqtt_ha://18:130236"],
+        )
+
+    assert pool is not None
+    assert len(pool._children) == 2
+    assert pool._children[0].transport is None  # failed zigbee child
+    assert not pool._connected_children
+    pool.close()
+
+
+async def test_pooled_factory_fails_without_callback_children() -> None:
+    """Without callback-driven children, total transport failure raises."""
+    from ramses_tx.transport.factory import pooled_transport_factory
+
+    mock_protocol = MagicMock()
+    config = TransportConfig(timeout=0.05)
+
+    with (
+        patch(
+            "ramses_tx.transport.factory._create_single_child",
+            new=AsyncMock(side_effect=TransportError("no ZHA")),
+        ),
+        pytest.raises(TransportError),
+    ):
+        await pooled_transport_factory(
+            mock_protocol,
+            config=config,
+            port_names=[
+                SerPortNameT(
+                    "zigbee://aa:bb:cc:dd:ee:ff:00:11/"
+                    "0xfc00/0x0000/10/0xfc01/0x0000/10"
+                )
+            ],
         )
 
 

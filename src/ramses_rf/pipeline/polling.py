@@ -115,6 +115,9 @@ POLL_INTER_CMD_GAP: Final[float] = (
     0.5  # Rate limit gap between consecutive TX commands
 )
 DEFAULT_POLL_CYCLE_SECS: Final[float] = 300.0  # 5 minutes maximum idle sleep
+POLL_REPLY_TIMEOUT: Final[float] = (
+    300.0  # Poll counts as missed if the device stays silent this long
+)
 
 
 def _ensure_aware(dtm: dt) -> dt:
@@ -146,6 +149,8 @@ class PollingTask:
     :type last_polled: dt | None
     :param failures: Count of consecutive polling failures.
     :type failures: int
+    :param last_missed_at: Datetime of the last poll counted as missed.
+    :type last_missed_at: dt | None
     :param payload: Optional payload suffix (e.g., zone_index for 0004).
     :type payload: str | None
     """
@@ -156,6 +161,7 @@ class PollingTask:
     next_due: dt
     last_polled: dt | None = None
     failures: int = 0
+    last_missed_at: dt | None = None
     payload: str | None = None
 
 
@@ -486,6 +492,37 @@ class PollingManager:
                 del self._tasks[key]
 
         now = dt.now(UTC)
+
+        # Count unanswered polls.  A poll is missed once POLL_REPLY_TIMEOUT
+        # has elapsed without the device transmitting; any message from the
+        # device (broadcast or reply) clears the count via state_projector.
+        if not self.shadow_mode:
+            for task in self._tasks.values():
+                if (
+                    task.last_polled is None
+                    or task.last_missed_at == task.last_polled
+                    or (now - task.last_polled).total_seconds()
+                    < POLL_REPLY_TIMEOUT
+                ):
+                    continue
+                task.last_missed_at = task.last_polled
+                device = self._gateway.device_registry.device_by_id.get(
+                    task.device_id
+                )
+                last_seen = getattr(device, "_last_msg_dtm", None)
+                if not isinstance(last_seen, dt) or (
+                    last_seen <= task.last_polled
+                ):
+                    task.failures += 1
+                    if device is not None and hasattr(device, "_missed_polls"):
+                        device._missed_polls += 1
+                        _LOGGER.debug(
+                            "Poll %s to %s unanswered (missed=%s)",
+                            task.code,
+                            task.device_id,
+                            device._missed_polls,
+                        )
+
         processed_count = 0
 
         for task in list(self._tasks.values()):

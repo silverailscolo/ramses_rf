@@ -164,6 +164,8 @@ class Packet:
             self.addr2 = constructed.addr2
             self.addr3 = constructed.addr3
             self._addrs = constructed._addrs
+            self._is_echo = constructed._is_echo
+            self._is_tx = constructed._is_tx
             self.comment = constructed.comment
             self.error_text = constructed.error_text
             self.raw_line = constructed.raw_line
@@ -214,6 +216,8 @@ class Packet:
         self._repr = None
         self._lifespan = False
         self._ingress_hgi_id = None
+        self._is_echo = is_echo or dto_or_dtm.is_echo
+        self._is_tx = is_tx or dto_or_dtm.is_tx
 
         self._validate(strict_checking=False)
 
@@ -313,6 +317,7 @@ class Packet:
             length=len_,
             raw_payload=payload,
             is_tx=is_tx,
+            is_echo=is_echo,
         )
 
         packet = cls.__new__(cls)
@@ -768,7 +773,8 @@ class Packet:
         if ts.tzinfo is None:
             ts = ts.astimezone()
 
-        if self._dto.timestamp != ts:
+        is_echo = getattr(self, "_is_echo", False)
+        if self._dto.timestamp != ts or is_echo != self._dto.is_echo:
             return PacketDTO(
                 timestamp=ts,
                 rssi=self._dto.rssi,
@@ -782,6 +788,7 @@ class Packet:
                 raw_payload=self._dto.raw_payload,
                 payload=self._dto.payload,
                 is_tx=self._dto.is_tx,
+                is_echo=is_echo,
             )
         return self._dto
 

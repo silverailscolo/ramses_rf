@@ -13,11 +13,13 @@ from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.messages import Message
 from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import PollingManager
+from ramses_rf.schemas import SZ_MAIN_TCS
 from ramses_tx import I_, RP, RQ, CommandDTO, Priority
 from ramses_tx.config import EngineConfig
 from ramses_tx.const import SZ_ACTIVE_HGI, SZ_IS_EVOFW3, Code
 from ramses_tx.packet import Packet
 from ramses_tx.protocol import RamsesProtocolT, create_stack
+from ramses_tx.schemas import SZ_KNOWN_LIST
 from ramses_tx.transport import RamsesTransportT, TransportConfig
 from ramses_tx.transport.port import PortTransport
 from ramses_tx.typing import PktLogConfigT
@@ -615,6 +617,38 @@ async def test_gateway_get_state_in_memory() -> None:
 
 
 @pytest.mark.asyncio
+async def test_msg_handler_skips_topology_for_echo_packets() -> None:
+    """Echo packets (our own TXs) must not feed the TopologyBuilder.
+
+    Reproduces the live failure: parameter polls sent with a spoofed
+    from_id (e.g. from_id=29:176861, a real REM) are heard back as
+    echoes.  Feeding them to the topology handlers made the handler's
+    Rule_HVAC_2411_Request_Source_to_DIS promote the REM to DIS
+    (issue 1185).
+    """
+    gateway = Gateway("/dev/null", config=GatewayConfig(database_path=None))
+
+    frame = "RQ --- 29:176861 32:153289 --:------ 2411 003 000001"
+    echo_dto = Packet.from_port(
+        dt.now(), f"-60 {frame}", is_echo=True
+    ).to_dto()
+    real_dto = Packet.from_port(dt.now(), f"-60 {frame}").to_dto()
+
+    with patch.object(
+        gateway._topology_builder, "consume", new_callable=AsyncMock
+    ) as mock_consume:
+        # An echo copy of our own spoofed-source request carries no
+        # device evidence — the TopologyBuilder must not see it.
+        await gateway._msg_handler(echo_dto)
+        mock_consume.assert_not_called()
+
+        # The identical frame received as a genuine packet still feeds
+        # it.
+        await gateway._msg_handler(real_dto)
+        mock_consume.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_gateway_async_send_raw_command() -> None:
     """Verify Gateway.async_send_raw_command forwards CommandDTO to engine."""
     # Arrange
@@ -655,3 +689,76 @@ async def test_gateway_async_send_raw_command() -> None:
             max_retries=2,
             timeout=5.0,
         )
+
+
+@pytest.mark.asyncio
+async def test_gateway_diagnostics_accessors() -> None:
+    """Public diagnostics accessors replace the private reads.
+
+    ``Gateway.config_snapshot()`` and ``Gateway.transport_info`` back the
+    ramses_cc diagnostics platform (ramses-rf/ramses_cc issue 1214); the
+    private ``_config`` remains as a delegating alias.
+    """
+    gwy = Gateway("/dev/null", config=GatewayConfig(disable_discovery=True))
+
+    # no transport bound yet
+    assert gwy.transport_info == {}
+
+    snapshot = await gwy.config_snapshot()
+    assert snapshot[SZ_MAIN_TCS] is None
+    assert snapshot[SZ_KNOWN_LIST] == {}
+    # the private alias returns the same snapshot
+    assert await gwy._config() == snapshot
+
+    transport = cast(
+        RamsesTransportT,
+        MagicMock(
+            get_extra_info=lambda name, default=None: {
+                SZ_ACTIVE_HGI: "18:000730",
+                "tx_rate": 0.5,
+            }.get(name, default)
+        ),
+    )
+    gwy._engine._transport = transport
+
+    info = gwy.transport_info
+    assert info["type"] == "MagicMock"
+    assert info[SZ_ACTIVE_HGI] == "18:000730"
+    assert info["pool_hgi_ids"] is None
+    assert info["tx_rate"] == 0.5
+
+
+async def test_gateway_engine_accessors() -> None:
+    """Public engine/device-filter accessors replace private reads.
+
+    ``Gateway.engine`` and ``Gateway.device_filter`` plus the Engine
+    properties back the ramses_cc call sites that previously reached
+    into ``_engine._transport``/``_include``/``_hgi_id`` and friends.
+    """
+    gwy = Gateway("/dev/null", config=GatewayConfig(disable_discovery=True))
+
+    assert gwy.engine is gwy._engine
+    assert gwy.device_filter is gwy._device_filter
+
+    engine = gwy.engine
+    assert engine.transport is None  # not started
+    assert engine.hgi_id is None
+    assert engine.include_list == []
+    assert engine.enforce_known_list is False
+    assert engine.packet_log == {}
+
+    assert gwy.device_filter.include_list == []
+
+
+async def test_include_list_mutators() -> None:
+    """add_to_include/remove_from_include mutate the live lists idempotently."""
+    gwy = Gateway("/dev/null", config=GatewayConfig(disable_discovery=True))
+
+    for owner in (gwy.engine, gwy.device_filter):
+        owner.add_to_include("01:000001")
+        owner.add_to_include("01:000001")  # no duplicate
+        assert owner.include_list == ["01:000001"]
+
+        owner.remove_from_include("01:000001")
+        owner.remove_from_include("01:000001")  # no error
+        assert owner.include_list == []

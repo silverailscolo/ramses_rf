@@ -310,6 +310,14 @@ class PortProtocol(_DeviceIdFilterMixin):
         if not ramses:
             return None
 
+        if self._wait_connection_made.done():
+            # Duplicate connection_made while still connected (e.g. a
+            # second pool child came online, or a pool-level reconnect
+            # raced a queued connection_lost).  The transport binding is
+            # unchanged — do not re-run HGI detection or reset
+            # connection-scoped state.
+            return None
+
         super().connection_made(transport)
 
         # ROBUSTNESS FIX: Ensure self._transport is set even if the wait
@@ -355,6 +363,10 @@ class PortProtocol(_DeviceIdFilterMixin):
 
         if self._pending_fut and not self._pending_fut.done():
             self._pending_fut.set_exception(exc_val)
+            # Retrieve now — a cancelled send_cmd() will never await this
+            # future, which would otherwise log "Future exception was
+            # never retrieved".  A live waiter still raises it on await.
+            self._pending_fut.exception()
             self._pending_fut = None
             self._pending_cmd = None
             self._pending_routed = None
@@ -364,6 +376,7 @@ class PortProtocol(_DeviceIdFilterMixin):
                 *_, fut, _sp = self._queue.get_nowait()
                 if not fut.done():
                     fut.set_exception(exc_val)
+                    fut.exception()  # see comment above
                 self._queue.task_done()
             except asyncio.QueueEmpty:
                 break
