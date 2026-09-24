@@ -321,18 +321,37 @@ class DeviceBase(Entity):
         return self._strategy
 
     @property
+    def info(self) -> dict[str, Any] | None:
+        """Return the latest 10E0 payload sent by this device, if seen.
+
+        Read synchronously from the in-memory entity state, so it can
+        be used by consumers that cannot await (e.g. properties).  Only
+        10E0 messages *sent by* this device count: replies addressed to
+        the device (e.g. the HGI's RQ|10E0 polls) describe their sender.
+
+        :return: The 10E0 payload (``description``, ``oem_code``,
+            ``manufacturer_sub_id``, ``product_id``, ``date_1``,
+            ``date_2``), or ``None`` if no 10E0 message has been
+            received.
+        :rtype: dict[str, Any] | None
+        """
+        info = self.entity_state.get_cached_value(Code._10E0, src_id=self.id)
+        return info if isinstance(info, dict) else None
+
+    @property
     def model(self) -> str | None:
         """Return the device model reported by the latest 10E0, if seen.
 
         Read synchronously from the in-memory entity state, so it can
-        be used by consumers that cannot await (e.g. properties).
+        be used by consumers that cannot await (e.g. properties).  Only
+        10E0 messages *sent by* this device count: replies addressed to
+        the device (e.g. the HGI's RQ|10E0 polls) describe their sender.
 
         :return: The 10E0 ``description`` (e.g. ``"VMD-15RMS64"``), or
             ``None`` if no 10E0 message has been received.
         :rtype: str | None
         """
-        info = self.entity_state.get_cached_value(Code._10E0)
-        return info.get("description") if isinstance(info, dict) else None
+        return (self.info or {}).get("description")
 
     def set_strategy(self, strategy: HvacStrategy) -> None:
         """Set the HVAC strategy for this device.
@@ -679,7 +698,7 @@ class DeviceInfo(DeviceBase):  # 10E0
         :return: A dictionary of device information.
         :rtype: dict[str, Any] | None
         """
-        result = await self.entity_state.get_value(Code._10E0)
+        result = await self.entity_state.get_value(Code._10E0, src_id=self.id)
         return result if isinstance(result, dict) else None
 
     async def traits(self) -> dict[str, Any]:
