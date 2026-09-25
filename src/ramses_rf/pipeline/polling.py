@@ -34,6 +34,12 @@ INTERVAL_EVERY_6_HOURS: Final[int] = 21600  # 6 hours in seconds
 INTERVAL_EVERY_12_HOURS: Final[int] = 43200  # 12 hours in seconds
 INTERVAL_DAILY: Final[int] = 86400  # 24 hours in seconds
 INTERVAL_ZONE_TEMP: Final[int] = 900  # 15 minutes — zone temperature polling
+# First-poll delay for the Evohome system mode (2E04).  Cached 2E04
+# packets are no longer replayed on restore (a stale mode would be
+# presented as authoritative), so the real mode is fetched shortly
+# after startup rather than after a full daily interval
+# (https://github.com/ramses-rf/ramses_cc/issues/1242).
+INTERVAL_STARTUP_2E04: Final[int] = 60  # seconds after task registration
 
 # Master default polling schedules table for all device classes.
 # Battery-powered devices (TRV, THM, DHW, REM, HUM) set intervals to None
@@ -402,11 +408,20 @@ class PollingManager:
                 dkey = (device.id, code)
                 active_keys.add(dkey)
                 if dkey not in self._tasks:
+                    # 2E04 gets an early first poll so the real system
+                    # mode is hydrated shortly after startup instead of
+                    # after a full daily interval (issue
+                    # ramses-rf/ramses_cc#1242).
+                    delay = (
+                        INTERVAL_STARTUP_2E04
+                        if code == Code._2E04
+                        else interval
+                    )
                     self._tasks[dkey] = PollingTask(
                         device_id=device.id,
                         code=code,
                         interval=interval,
-                        next_due=now + td(seconds=interval),
+                        next_due=now + td(seconds=delay),
                     )
                 else:
                     self._tasks[dkey].interval = interval
