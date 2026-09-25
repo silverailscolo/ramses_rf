@@ -318,6 +318,23 @@ class GatewayLifecycle:
             if i > 0 and i % 100 == 0:
                 await asyncio.sleep(0)
 
+            # Never restore a cached 2E04 (system mode): a stale cached
+            # mode is presented as authoritative while a real refresh can
+            # be up to a day away.  The true mode is fetched by an early
+            # startup poll of the controller instead (issue:
+            # https://github.com/ramses-rf/ramses_cc/issues/1242).
+            if isinstance(state, dict):
+                frame_str = str(
+                    state.get("frame") or state.get("raw_packet") or ""
+                )
+                is_system_mode = state.get("code") == Code._2E04 or (
+                    f" {Code._2E04} " in frame_str
+                )
+            else:
+                is_system_mode = f" {Code._2E04} " in str(state)
+            if is_system_mode:
+                continue
+
             try:
                 clean_dtm = dtm.replace("Z", "+00:00")
                 packet_dtm = dt.fromisoformat(clean_dtm)

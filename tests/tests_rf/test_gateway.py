@@ -293,6 +293,74 @@ async def test_gateway_restore_cached_packets_naive_dtm() -> None:
 
 
 @pytest.mark.asyncio
+async def test_gateway_restore_skips_cached_2e04() -> None:
+    """Cached 2E04 (system mode) packets are never replayed on restore.
+
+    Regression for https://github.com/ramses-rf/ramses_cc/issues/1242:
+    a stale cached system mode was replayed on every reload and then
+    presented as authoritative, while a real refresh could be hours
+    away.  Other cached packets must still be replayed normally.
+    """
+    config = GatewayConfig(disable_discovery=True)
+    gwy = Gateway("/dev/null", config=config)
+
+    with (
+        patch("ramses_rf.lifecycle.protocol_factory") as mock_pf,
+        patch("ramses_rf.lifecycle.Packet.from_dict") as mock_from_dict,
+    ):
+        mock_protocol = MagicMock()
+        mock_pf.return_value = mock_protocol
+
+        mock_packet = MagicMock()
+        mock_packet.__class__.__name__ = "Packet"
+        mock_packet.rssi = "-45"
+        mock_packet._frame = (
+            "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+        )
+        mock_from_dict.return_value = mock_packet
+
+        packets = {
+            # dict form with explicit code key (RawPacket.__dict__ shape)
+            "2023-01-01T12:00:00.000000Z": {
+                "rssi": -45,
+                "code": Code._2E04,
+                "raw_packet": (
+                    "I --- 01:223036 18:005567 --:------ 2E04 008 "
+                    "04FFFFFFFFFFFF00"
+                ),
+            },
+            # dict form carrying only a frame string
+            "2023-01-01T12:01:00.000000Z": {
+                "rssi": -45,
+                "frame": (
+                    "I --- 01:223036 18:005567 --:------ 2E04 008 "
+                    "04FFFFFFFFFFFF00"
+                ),
+            },
+            # legacy string form
+            "2023-01-01T12:02:00.000000Z": (
+                "I --- 01:223036 18:005567 --:------ 2E04 008 04FFFFFFFFFFFF00"
+            ),
+            # a normal packet must still be replayed
+            "2023-01-01T12:03:00.000000Z": {
+                "rssi": -45,
+                "frame": (
+                    "I --- 01:145038 --:------ 01:145038 1F09 003 0004B5"
+                ),
+            },
+        }
+
+        await gwy._restore_cached_packets(packets, _clear_state=True)
+
+        # Only the 1F09 packet reaches the protocol; all 2E04 are skipped
+        mock_from_dict.assert_called_once_with(
+            "2023-01-01T12:03:00.000000Z",
+            packets["2023-01-01T12:03:00.000000Z"],
+        )
+        mock_protocol.packet_received.assert_called_once_with(mock_packet)
+
+
+@pytest.mark.asyncio
 async def test_gateway_legacy_kwargs_deprecation() -> None:
     """Test that legacy kwargs are gracefully mapped to config objects.
 

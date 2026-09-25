@@ -14,6 +14,8 @@ from ramses_rf.gateway import Gateway
 from ramses_rf.models import DeviceTraits
 from ramses_rf.pipeline.polling import (
     DEFAULT_POLLING_SCHEDULES,
+    INTERVAL_DAILY,
+    INTERVAL_STARTUP_2E04,
     POLL_REPLY_TIMEOUT,
     PollingManager,
 )
@@ -449,6 +451,36 @@ def test_polling_manager_ctl_with_zones_expands_0004_2349_and_30C9_per_zone(
     # Device-level tasks have no payload (default "00" in build_rq_cmd)
     task_10e0 = poller._tasks[("01:111111", Code._10E0)]
     assert task_10e0.payload is None
+
+
+def test_polling_manager_2e04_first_poll_is_early(
+    mock_gateway: MagicMock,
+) -> None:
+    """The CTL's first 2E04 poll is due shortly after registration.
+
+    Cached 2E04 packets are no longer replayed on restore (issue
+    ramses-rf/ramses_cc#1242), so the real system mode must be fetched
+    early instead of after a full daily interval.  Other codes keep
+    their regular first-poll delay.
+    """
+    # ARRANGE
+    poller = PollingManager(mock_gateway, shadow_mode=True)
+    ctl_dev = MockDevice(mock_gateway, "01:111111", slug="CTL")
+    now = dt.now(UTC)
+
+    # ACT
+    poller.update_device_tasks(ctl_dev)
+    after = dt.now(UTC)
+
+    # ASSERT
+    tasks = {t.code: t for t in poller.get_scheduled_cmds()}
+    assert tasks[Code._2E04].interval == INTERVAL_DAILY
+    assert (
+        now + td(seconds=INTERVAL_STARTUP_2E04)
+        <= tasks[Code._2E04].next_due
+        <= after + td(seconds=INTERVAL_STARTUP_2E04)
+    )
+    assert tasks[Code._10E0].next_due - now > td(hours=23)
 
 
 @pytest.mark.asyncio
