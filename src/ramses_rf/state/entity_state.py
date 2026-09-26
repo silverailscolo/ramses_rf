@@ -223,7 +223,13 @@ class EntityState:
         cache = await self._build_state_cache()
         return cache.get_all()
 
-    def get_cached_value(self, code: Code | str, key: str | None = "*") -> Any:
+    def get_cached_value(
+        self,
+        code: Code | str,
+        key: str | None = "*",
+        *,
+        src_id: str | None = None,
+    ) -> Any:
         """Return the newest cached payload for a code — synchronously.
 
         Unlike the async :meth:`get_value`, this reads only the
@@ -236,15 +242,23 @@ class EntityState:
         :param key: Payload key to extract; ``"*"`` (default) returns
             the full payload dict.
         :type key: str | None
-        :return: The value from the most recent I/RP message for the
-            code, or ``None`` if none has been seen.
+        :param src_id: When given, only consider messages *sent by* this
+            device id.  Replies addressed to the entity (dst match) are
+            relevant to its state cache but describe the sender, not the
+            entity — e.g. a gateway's RQ|10E0 poll makes every device's
+            RP|10E0 land in the HGI's cache.
+        :type src_id: str | None
+        :return: The value from the most recent matching I/RP message
+            for the code, or ``None`` if none has been seen.
         :rtype: Any
         """
         self._sync_state()
         msgs = [
             m
             for m in self._current_state.values()
-            if m.code == code and m.verb in (I_, RP)
+            if m.code == code
+            and m.verb in (I_, RP)
+            and (src_id is None or m.src.id == src_id)
         ]
         msg = max(msgs, key=lambda m: m.dtm) if msgs else None
         return self._msg_value_msg(msg, key=key)
@@ -416,6 +430,7 @@ class EntityState:
         )
 
         self._sync_state()
+        src_id = kwargs.pop("src_id", None)
 
         if verb:
             if verb == Verb.RQ:
@@ -425,7 +440,7 @@ class EntityState:
                 key = None
             try:
                 cd = await self.find_latest_code(
-                    code, key, **kwargs, verb=verb
+                    code, key, src_id=src_id, **kwargs, verb=verb
                 )
                 if cd:
                     cache = await self._build_state_cache()
@@ -453,11 +468,19 @@ class EntityState:
                 msg = None
         elif isinstance(code, tuple):
             msgs_dict = await self.get_message_log_flat()
-            msgs_list = [m for m in msgs_dict.values() if m.code in code]
+            msgs_list = [
+                m
+                for m in msgs_dict.values()
+                if m.code in code and (src_id is None or m.src.id == src_id)
+            ]
             msg = max(msgs_list, key=lambda m: m.dtm) if msgs_list else None
         else:
             msgs_dict = await self.get_message_log_flat()
             msg = msgs_dict.get(code)
+            if src_id is not None and msg is not None and msg.src.id != src_id:
+                # The newest cached msg for this code is a reply
+                # addressed to us (dst-matched), sent by another device.
+                msg = None
 
         return self._msg_value_msg(msg, key=key, **kwargs)
 
@@ -644,10 +667,14 @@ class EntityState:
             if kwargs.get("verb") in (I_, RP)
             else (I_, RP)
         )
+        src_id = kwargs.get("src_id")
 
         cache = await self._build_state_cache()
 
         for cd, verb, context_value, msg in cache.get_records():
+            if src_id is not None and msg.src.id != src_id:
+                continue
+
             if code is not None:
                 if isinstance(code, tuple) and cd not in code:
                     continue

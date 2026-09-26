@@ -216,6 +216,30 @@ class TestHvacVentilator:
         if hvac_ventilator._gateway.message_store:
             hvac_ventilator._gateway.message_store.stop()
 
+    def test_model_property_ignores_10e0_addressed_to_device(
+        self, hvac_ventilator: HvacVentilator
+    ) -> None:
+        """A 10E0 reply addressed to the device is not its own model.
+
+        RP|10E0 replies to an RQ are dst-matched into the requester's
+        entity state (e.g. the HGI's cache holds every polled device's
+        reply).  model must only count messages sent by the device.
+        """
+        msg = Message._from_packet(
+            Packet(
+                dt.now(UTC),
+                "... RP --- 32:099999 32:123456 --:------ 10E0 038 "
+                "000001C87D130D67FEFFFFFFFFFF1C0207E3564D442D3135524D533634"
+                "000000000000000000",  # description='VMD-15RMS64'
+            )
+        )
+        hvac_ventilator.entity_state.update_state(msg)
+
+        assert hvac_ventilator.model is None
+
+        if hvac_ventilator._gateway.message_store:
+            hvac_ventilator._gateway.message_store.stop()
+
     def test_strategy_accessors_use_cached_model(
         self, hvac_ventilator: HvacVentilator
     ) -> None:
