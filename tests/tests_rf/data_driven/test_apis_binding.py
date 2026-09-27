@@ -17,6 +17,7 @@ from ramses_rf.devices import (  # initiate_binding_process  # initiate_binding_
 from ramses_rf.devices.dev_base import (
     Fakeable,  # initiate_binding_, wait_for_binding_
 )
+from ramses_rf.exceptions import DeviceNotFaked
 from ramses_rf.models import DeviceTraits
 from ramses_rf.state import MessageStore
 from ramses_rf.strategies import NuaireStrategy
@@ -148,3 +149,63 @@ async def test_initiate_binding_process(dev_class: type[Fakeable]) -> None:
             mocked_method.assert_called_once_with(
                 (("00", Code._31E0), ("01", Code._31E0), ("00", Code._1298))
             )
+
+
+async def test_initiate_binding_process_with(
+    dev_class: type[Fakeable],
+) -> None:
+    """The parameterized supplicant API delegates to the engine."""
+    gwy = GatewayStub()
+    dev_addr = Address(ADDR_CLASS_MAP[dev_class])
+
+    with unittest.mock.patch.object(
+        Fakeable, "_initiate_binding_process", return_value=None
+    ) as mocked_method:
+        gwy._engine._include[dev_addr.id] = {}
+
+        dev = dev_class(gwy, dev_addr)
+        dev._make_fake()
+
+        _ = await dev.initiate_binding_process_with(
+            (Code._1260,), confirm_code=Code._10E0
+        )
+
+        mocked_method.assert_called_once_with(
+            (Code._1260,), confirm_code=Code._10E0, ratify_command=None
+        )
+
+
+async def test_initiate_binding_process_with_not_faked(
+    dev_class: type[Fakeable],
+) -> None:
+    """The parameterized supplicant API raises when not faked."""
+    gwy = GatewayStub()
+    dev_addr = Address(ADDR_CLASS_MAP[dev_class])
+    gwy._engine._include[dev_addr.id] = {}
+
+    dev = dev_class(gwy, dev_addr)
+
+    with pytest.raises(DeviceNotFaked):
+        await dev.initiate_binding_process_with((Code._1260,))
+
+
+async def test_wait_for_binding_request(dev_class: type[Fakeable]) -> None:
+    """The parameterized respondent API delegates to the engine."""
+    gwy = GatewayStub()
+    dev_addr = Address(ADDR_CLASS_MAP[dev_class])
+
+    with unittest.mock.patch.object(
+        Fakeable, "_wait_for_binding_request", return_value=None
+    ) as mocked_method:
+        gwy._engine._include[dev_addr.id] = {}
+
+        dev = dev_class(gwy, dev_addr)
+        dev._make_fake()
+
+        _ = await dev.wait_for_binding_request(
+            (Code._1260,), zone_index="01", require_ratify=True
+        )
+
+        mocked_method.assert_called_once_with(
+            (Code._1260,), zone_index="01", require_ratify=True
+        )
