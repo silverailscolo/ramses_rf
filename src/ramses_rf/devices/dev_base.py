@@ -820,9 +820,11 @@ class Fakeable(DeviceBase):
         :type require_ratify: bool
         :return: A tuple of the four binding transaction packets.
         :rtype: tuple[Message, Message, Message, Message | None]
-        :raises NotImplementedError: Subclasses must implement this.
+        :raises DeviceNotFaked: If faking is not enabled.
         """
-        raise NotImplementedError
+        return await self._wait_for_binding_request(
+            accept_codes, zone_index=zone_index, require_ratify=require_ratify
+        )
 
     async def _initiate_binding_process(
         self,
@@ -868,6 +870,36 @@ class Fakeable(DeviceBase):
         :raises NotImplementedError: Subclasses must implement this.
         """
         raise NotImplementedError
+
+    async def initiate_binding_process_with(
+        self,
+        offer_codes: Code | Iterable[Code | tuple[IndexT, Code]],
+        /,
+        *,
+        confirm_code: Code | None = None,
+        ratify_command: CommandDTO | None = None,
+    ) -> tuple[Message, Message, Message, Packet | None]:
+        """Start a binding with custom codes and return the Accept.
+
+        Unlike :meth:`initiate_binding_process`, which uses the device's
+        standard offer codes, this method lets the caller specify the
+        offer, confirm and ratify codes explicitly.
+
+        :param offer_codes: Codes to offer during the binding process.
+        :type offer_codes: Code | Iterable[Code | tuple[IndexT, Code]]
+        :param confirm_code: The code required to confirm the bind.
+        :type confirm_code: Code | None
+        :param ratify_command: An optional ratification command to send.
+        :type ratify_command: CommandDTO | None
+        :return: A tuple of the binding transaction packets.
+        :rtype: tuple[Message, Message, Message, Packet | None]
+        :raises DeviceNotFaked: If faking is not enabled.
+        """
+        return await self._initiate_binding_process(
+            offer_codes,
+            confirm_code=confirm_code,
+            ratify_command=ratify_command,
+        )
 
     async def _wait_for_binding_accept(
         self, offer: Message, /, *, zone_index: IndexT = "00"

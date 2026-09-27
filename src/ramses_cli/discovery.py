@@ -274,7 +274,7 @@ async def script_bind_device(
     device = gateway.device_registry.get_device(device_id)
     assert isinstance(device, Fakeable)  # mypy
     device._make_fake()
-    await device._wait_for_binding_request([code], zone_index=zone_index)
+    await device.wait_for_binding_request([code], zone_index=zone_index)
 
 
 def script_poll_device(
