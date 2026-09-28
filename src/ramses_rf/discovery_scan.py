@@ -966,6 +966,14 @@ class DiscoveryScan:
                         new_type != DevType.DEV
                         and new_type != device.likely_type
                     ):
+                        # REM evidence never contradicts a DIS — a
+                        # display IS a remote plus display requests, so
+                        # REM-class behaviour is a subset of DIS.
+                        # Flagging a DIS as REM would be a downgrade.
+                        rem_subset_of_dis = (
+                            new_type == DevType.REM
+                            and device.likely_type == DevType.DIS
+                        )
                         # Only count evidence-based contradictions
                         # (VC pair match or CTL-only code).  A prefix
                         # fallback (e.g. 37: → REM) is a guess, not
@@ -973,10 +981,10 @@ class DiscoveryScan:
                         # class.  Otherwise a CO2 device sending generic
                         # codes like 10E0 would be re-classified as REM
                         # just because 37: falls to REM by prefix.
-                        if not _is_evidence_based(
+                        if rem_subset_of_dis or not _is_evidence_based(
                             device_id, code, verb, is_source
                         ):
-                            # Prefix fallback — skip, don't contradict
+                            # Compatible — not a contradiction
                             pass
                         else:
                             device.contradiction_count += 1
