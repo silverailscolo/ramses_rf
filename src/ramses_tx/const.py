@@ -367,7 +367,6 @@ DOMAIN_TYPE_MAP: dict[str, str] = {
     FC: "appliance_control",  # appliance_control
     FD: "domain_fd",  # seen with hometronics
     # "FE": ???
-    # FF: "system",  # TODO: remove this, is not a domain
 }  # "21": "Ventilation", "88": ???
 
 # DOMAIN_TYPE_LOOKUP = {v: k for k, v in DOMAIN_TYPE_MAP.items() if k != FF}  # obsolete?
