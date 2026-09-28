@@ -125,9 +125,6 @@ def test_payload_from_log_file(dir_name: Path) -> None:
         except SyntaxError:
             return
 
-        if isinstance(expected, tuple):  # TODO: deprecate tuple
-            expected = expected[0]
-
         try:
             msg = Message._from_packet(
                 Packet.from_file(packet_line[:26], packet_line[27:])
