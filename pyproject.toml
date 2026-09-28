@@ -90,7 +90,6 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
   testpaths = [
     "tests/"
   ]
-  norecursedirs = "deprecated/*"
 
   # Kill hanging tests after 60 seconds
   # Without this, a hung test runs until GitHub Actions kills the job.
@@ -140,7 +139,6 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
   ]
   exclude = [
     "src/ramses_cli/utils",
-    "tests/deprecated",
     "tests/wip",
   ]
 
@@ -275,7 +273,6 @@ zigbee = ["zigpy>=2.0.0"]           # ZigbeeTransport (Phase 3) — provided by 
 
 [tool.ruff]
   line-length = 79
-  exclude = ["tests/deprecated/*.py"]
   src = ["src", "tests"]
   target-version = "py312"
 

@@ -14,7 +14,6 @@ from ramses_tx.const import (
     DOMAIN_TYPE_MAP as DOMAIN_TYPE_MAP,
     F9 as F9,
     FA as FA,
-    FAN_MODE as FAN_MODE,  # deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
     FAULT_DEVICE_CLASS as FAULT_DEVICE_CLASS,
     FAULT_STATE as FAULT_STATE,
     FAULT_TYPE as FAULT_TYPE,
@@ -119,7 +118,6 @@ SZ_MIN_FLOW_SETPOINT: Final = "min_flow_setpoint"
 SZ_MIN_OFF_TIME: Final = "min_off_time"
 SZ_MIN_ON_TIME: Final = "min_on_time"
 SZ_MIN_TEMP: Final = "min_temp"
-# SZ_MIX_CONFIG: Final = "mix_config"  # obsolete?
 SZ_MODE: Final = "mode"
 SZ_MODULATION_LEVEL: Final = "modulation_level"
 SZ_MULTIROOM_MODE: Final = "multiroom_mode"
@@ -140,7 +138,6 @@ SZ_PARAM_IDX: Final = SZ_PARAMETER_INDEX
 SZ_PARAMETER_VALUE: Final = "parameter_value"
 SZ_PARAM_VAL: Final = SZ_PARAMETER_VALUE
 SZ_PAYLOAD: Final = "payload"
-# SZ_PERCENTAGE: Final = "percentage"  # obsolete?
 SZ_PRESSURE: Final = "pressure"
 SZ_PROPORTIONAL_BAND_WIDTH: Final = "proportional_band_width"
 SZ_PUMP_RUN_TIME: Final = "pump_run_time"
@@ -159,7 +156,6 @@ SZ_SETPOINTS: Final = "setpoints"
 SZ_SETPOINT_BOUNDS: Final = "setpoint_bounds"
 SZ_SETPOINT_INDEX: Final = "setpoint_index"
 SZ_SETPOINT_IDX: Final = SZ_SETPOINT_INDEX
-# SZ_SLUG: Final = "_SLUG"  # obsolete?
 SZ_STATE: Final = "state"
 SZ_STATUS_CODE: Final = "status_code"
 SZ_SYSTEM_MODE: Final = "system_mode"
