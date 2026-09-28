@@ -717,24 +717,6 @@ class MessageStore(MessageStoreInterface):
 
         return [Code(str(c)) for c in codes]
 
-    async def qry(
-        self, sql: str, parameters: tuple[str, ...]
-    ) -> tuple[Message, ...]:
-        """Return empty tuple for legacy callers (deprecated)."""
-        _LOGGER.warning(
-            "Legacy qry (SQL) called. Returning empty in CQRS architecture."
-        )
-        return ()
-
-    async def qry_field(
-        self, sql: str, parameters: tuple[str, ...]
-    ) -> list[tuple[dt | str, str]]:
-        """Return empty list for legacy callers (deprecated)."""
-        _LOGGER.warning(
-            "Legacy qry_field (SQL) called. Returning empty in CQRS architecture."
-        )
-        return []
-
     async def all(self, include_expired: bool = False) -> tuple[Message, ...]:
         """Get all messages from the index."""
         return self.log_by_dtm
