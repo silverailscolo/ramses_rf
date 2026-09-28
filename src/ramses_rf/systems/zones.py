@@ -12,13 +12,16 @@ from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 from ramses_rf import exceptions as exc
 from ramses_rf.address import Address
+from ramses_rf.config import SZ_CLASS
 from ramses_rf.const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
+    SZ_ACTUATORS,
     SZ_CIRCUITS,
     SZ_HEAT_DEMAND,
     SZ_NAME,
     SZ_RELAY_DEMAND,
+    SZ_SENSOR,
     SZ_SETPOINT,
     SZ_TEMPERATURE,
     SZ_ZONE_INDEX,
@@ -50,11 +53,8 @@ from ramses_rf.models import (
 from ramses_rf.schemas import (
     SCH_TCS_DHW,
     SCH_TCS_ZONES_ZON,
-    SZ_ACTUATORS,
-    SZ_CLASS,
     SZ_DHW_VALVE,
     SZ_HTG_VALVE,
-    SZ_SENSOR,
 )
 from ramses_rf.topology import Child, Parent
 from ramses_rf.typing import DeviceIdT, DevIndexT, WeeklySchedule

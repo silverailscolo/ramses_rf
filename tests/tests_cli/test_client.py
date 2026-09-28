@@ -31,10 +31,13 @@ from ramses_cli.client import (
     split_kwargs,
 )
 from ramses_rf import GracefulExit
-from ramses_rf.const import DEV_TYPE_MAP
+from ramses_rf.const import (
+    DEV_TYPE_MAP,
+    SZ_CONFIG,
+    SZ_DISABLE_DISCOVERY,
+)
 from ramses_rf.gateway import Gateway, GatewayConfig
 from ramses_rf.messages import Message
-from ramses_rf.schemas import SZ_CONFIG, SZ_DISABLE_DISCOVERY
 from ramses_rf.state import MessageStore
 from ramses_tx import exceptions as exc
 from ramses_tx.const import I_, Code
@@ -1064,7 +1067,10 @@ def test_print_scan_results_export_to_file(
 async def test_scan_command_disables_sending_and_discovery() -> None:
     """Test that the scan command callback forces disable_sending and disable_discovery."""
     from ramses_cli.client import SCAN, cli
-    from ramses_rf.schemas import SZ_CONFIG, SZ_DISABLE_DISCOVERY
+    from ramses_rf.const import (
+        SZ_CONFIG,
+        SZ_DISABLE_DISCOVERY,
+    )
 
     lib_config: dict[str, Any] = {SZ_CONFIG: {}}
     cli_config: dict[str, Any] = {}
