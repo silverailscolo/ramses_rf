@@ -24,8 +24,6 @@ _LOGGER = logging.getLogger(__name__)
 class Weather(DeviceHeat):  # 0002
     """Outdoor weather / temperature sensor base class."""
 
-    TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
-
     async def temperature(self) -> float | None:  # 0002
         """Return the current outdoor temperature in degrees Celsius."""
         return self.temp_state.temperature
@@ -46,14 +44,12 @@ class Weather(DeviceHeat):  # 0002
         base_status = await super().status()
         return {
             **base_status,
-            self.TEMPERATURE: await self.temperature(),
+            SZ_TEMPERATURE: await self.temperature(),
         }
 
 
 class DhwTemperature(DeviceHeat):  # 1260
     """Domestic hot water temperature sensor mixin class."""
-
-    TEMPERATURE: Final = SZ_TEMPERATURE  # TODO: deprecate
 
     async def temperature(self) -> float | None:  # 1260
         """Return the current DHW temperature in degrees Celsius."""
@@ -75,7 +71,7 @@ class DhwTemperature(DeviceHeat):  # 1260
         base_status = await super().status()
         return {
             **base_status,
-            self.TEMPERATURE: await self.temperature(),
+            SZ_TEMPERATURE: await self.temperature(),
         }
 
 
@@ -134,7 +130,7 @@ class DhwSensor(
     DHW_PARAMS: Final = "dhw_params"
 
     _SLUG: str = DevType.DHW
-    _STATE_ATTR = DhwTemperature.TEMPERATURE
+    _STATE_ATTR = SZ_TEMPERATURE
 
     @property
     def heartbeat_timeout(self) -> td:
