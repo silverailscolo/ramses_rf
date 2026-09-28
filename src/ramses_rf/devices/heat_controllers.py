@@ -250,14 +250,6 @@ class UfhController(Parent["UfhCircuit"], DeviceHeat):  # UFC (02):
             ]
         return None
 
-    async def heat_demands(self) -> list[UfhCircuitDemandDTO] | None:
-        """Return the UFH heat demands (deprecated alias for thermal_demands).
-
-        :returns: List of circuit demand DTOs or None.
-        :rtype: list[UfhCircuitDemandDTO] | None
-        """
-        return await self.thermal_demands()
-
     async def cooling_demands(self) -> list[UfhCircuitDemandDTO] | None:
         """Return the UFH circuit cooling demands as CQRS DTOs.
 
