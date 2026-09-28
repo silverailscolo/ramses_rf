@@ -56,15 +56,6 @@ class ThermalDemandDTO:
             return None
         return self.thermal_demand if self.mode == ThermalMode.COOL else 0.0
 
-    @property
-    def heat_demand(self) -> float | None:
-        """Deprecated backward compatibility alias for heating_demand.
-
-        :returns: Demand magnitude for heating mode.
-        :rtype: float | None
-        """
-        return self.heating_demand
-
 
 @dataclass(frozen=True, slots=True)
 class UfhCircuitDemandDTO:
@@ -103,15 +94,6 @@ class UfhCircuitDemandDTO:
         if self.thermal_demand is None:
             return None
         return self.thermal_demand if self.mode == ThermalMode.COOL else 0.0
-
-    @property
-    def heat_demand(self) -> float | None:
-        """Deprecated backward compatibility alias for heating_demand.
-
-        :returns: Demand magnitude for heating mode.
-        :rtype: float | None
-        """
-        return self.heating_demand
 
 
 @dataclass(frozen=True, slots=True)

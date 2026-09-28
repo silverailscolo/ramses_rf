@@ -32,7 +32,6 @@ def test_thermal_demand_dto_heat_mode() -> None:
     assert dto.mode == ThermalMode.HEAT
     assert dto.heating_demand == 0.75
     assert dto.cooling_demand == 0.0
-    assert dto.heat_demand == 0.75
     assert dto.ufh_index == "01"
 
 
@@ -49,7 +48,6 @@ def test_thermal_demand_dto_cool_mode() -> None:
     assert dto.mode == ThermalMode.COOL
     assert dto.heating_demand == 0.0
     assert dto.cooling_demand == 0.50
-    assert dto.heat_demand == 0.0
 
 
 def test_thermal_demand_dto_none_magnitude() -> None:
