@@ -468,6 +468,19 @@ class DiscoveryScan:
         except ValueError:
             return None
 
+    def _is_declared_faked(self, device_id: str) -> bool:
+        """Check if a known device is declared faked in the known_list.
+
+        A faked device is impersonated by the integration itself —
+        packets are transmitted with its address as the source, so
+        observed traffic cannot contradict the declared class.
+
+        :param device_id: The device ID to look up.
+        :return: True if the known_list entry has ``faked: True``.
+        """
+        entry = self._gateway._gwy_config.known_list.get(device_id)
+        return isinstance(entry, dict) and entry.get("faked") is True
+
     def _is_declared_hotwater_valve(self, device_id: str) -> bool:
         """Check if a device is declared as hotwater_valve in the schema.
 
@@ -932,7 +945,16 @@ class DiscoveryScan:
                 # When the strategy pattern arrives, _classify becomes
                 # strategy.classify(packet) — this tracking naturally
                 # moves with it.
-                if is_source and code:
+                #
+                # Faked devices are never re-classified: the
+                # integration transmits packets with their address as
+                # the source, so observed packet evidence cannot
+                # contradict the declared class.
+                if (
+                    is_source
+                    and code
+                    and not self._is_declared_faked(device_id)
+                ):
                     new_type = _classify(
                         device_id,
                         code,
@@ -944,6 +966,14 @@ class DiscoveryScan:
                         new_type != DevType.DEV
                         and new_type != device.likely_type
                     ):
+                        # REM evidence never contradicts a DIS — a
+                        # display IS a remote plus display requests, so
+                        # REM-class behaviour is a subset of DIS.
+                        # Flagging a DIS as REM would be a downgrade.
+                        rem_subset_of_dis = (
+                            new_type == DevType.REM
+                            and device.likely_type == DevType.DIS
+                        )
                         # Only count evidence-based contradictions
                         # (VC pair match or CTL-only code).  A prefix
                         # fallback (e.g. 37: → REM) is a guess, not
@@ -951,10 +981,10 @@ class DiscoveryScan:
                         # class.  Otherwise a CO2 device sending generic
                         # codes like 10E0 would be re-classified as REM
                         # just because 37: falls to REM by prefix.
-                        if not _is_evidence_based(
+                        if rem_subset_of_dis or not _is_evidence_based(
                             device_id, code, verb, is_source
                         ):
-                            # Prefix fallback — skip, don't contradict
+                            # Compatible — not a contradiction
                             pass
                         else:
                             device.contradiction_count += 1

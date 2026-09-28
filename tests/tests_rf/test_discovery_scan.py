@@ -2335,6 +2335,70 @@ class TestEvidenceBasedContradiction:
         assert dev.confidence == "high"
         scan.stop()
 
+    def test_faked_device_not_reclassified(self) -> None:
+        """A faked device is never re-classified by packet evidence.
+
+        37:168270 is declared as DIS with faked=True — the integration
+        itself transmits packets with the device's address as the
+        source (e.g. spoofed I 22F1 fan-mode commands).  Observed REM
+        evidence cannot contradict the declared class.
+        """
+        gwy = make_mock_gateway(
+            known_list={"37:168270": {"class": "DIS", "faked": True}}
+        )
+        scan = DiscoveryScan(gwy)
+        # Send 4x 22F1 packets (REM evidence) — would re-classify a
+        # non-faked DIS device to REM after the contradiction threshold
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:168270", code=Code._22F1, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:168270")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS  # declared class wins
+        assert dev.contradiction_count == 0
+        scan.stop()
+
+    def test_rem_evidence_not_a_contradiction_for_dis(self) -> None:
+        """REM-class packets never re-classify a DIS device.
+
+        A DIS (display) IS a remote plus display requests — I 22F1 /
+        I 22F3 are compatible with DIS, not contradicting.  A DIS being
+        flagged as REM would be a downgrade: the REM class is a subset
+        of what a DIS does.
+        """
+        gwy = make_mock_gateway(known_list={"37:168270": {"class": "DIS"}})
+        scan = DiscoveryScan(gwy)
+        # 4x I 22F1 (REM VC-pair evidence) — enough to re-classify a
+        # FAN to REM, but must not downgrade a DIS
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:168270", code=Code._22F1, verb=Verb.I_)
+            )
+        dev = scan.get_device("37:168270")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS  # no downgrade
+        assert dev.contradiction_count == 0
+        scan.stop()
+
+    def test_rem_upgrade_to_dis_still_works(self) -> None:
+        """A declared REM sending display requests IS re-classified to DIS.
+
+        The subset rule only blocks the downgrade direction — a REM
+        that sends routine VMI requests (RQ 2411) does something a REM
+        cannot do, so upgrading to DIS is legitimate evidence.
+        """
+        gwy = make_mock_gateway(known_list={"37:222222": {"class": "REM"}})
+        scan = DiscoveryScan(gwy)
+        for _ in range(4):
+            scan._process_packet(
+                make_dto(src="37:222222", code=Code._2411, verb=Verb.RQ)
+            )
+        dev = scan.get_device("37:222222")
+        assert dev is not None
+        assert dev.likely_type == DevType.DIS  # upgraded
+        scan.stop()
+
     def test_hybrid_co2_rem_reclassified_despite_rem_matches(self) -> None:
         """A hybrid CO2+REM device is re-classified to CO2 despite
         interleaved REM-matching packets.
