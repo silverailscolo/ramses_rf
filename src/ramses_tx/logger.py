@@ -208,10 +208,7 @@ def getLogger(  # permits a bespoke Logger class
         return logging.getLogger(name)
 
     # Acquire lock, so no-one else uses our Logger class
-    try:  # TODO: remove this ASAP
-        logging._acquireLock()  # type: ignore[attr-defined]
-    except AttributeError:  # Python 3.13+
-        logging._lock.acquire()  # type: ignore[attr-defined]
+    logging._lock.acquire()  # type: ignore[attr-defined]
 
     klass = logging.getLoggerClass()
     logging.setLoggerClass(_Logger)
@@ -220,10 +217,7 @@ def getLogger(  # permits a bespoke Logger class
 
     logging.setLoggerClass(klass)
 
-    try:  # TODO: remove this ASAP
-        logging._releaseLock()  # type: ignore[attr-defined]
-    except AttributeError:  # Python 3.13+
-        logging._lock.release()  # type: ignore[attr-defined]
+    logging._lock.release()  # type: ignore[attr-defined]
 
     return logger
 

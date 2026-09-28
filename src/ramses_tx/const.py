@@ -48,10 +48,6 @@ DEFAULT_NUM_REPEATS: Final[int] = 0
 MIN_NUM_REPEATS: Final[int] = 1  # used in ramses_cc Action schema
 MAX_NUM_REPEATS: Final[int] = 5  # used in ramses_cc Action schema
 
-# SZ_QOS: Final = "qos"  # obsolete?
-
-# SZ_CALLBACK: Final = "callback"  # obsolete?
-# SZ_GAP_DURATION: Final = "gap_duration"  # obsolete?
 SZ_REPEAT_COUNT: Final = "repeat_count"
 SZ_NUM_REPEATS: Final = SZ_REPEAT_COUNT
 SZ_PRIORITY: Final = "priority"
@@ -369,16 +365,6 @@ DOMAIN_TYPE_MAP: dict[str, str] = {
     # "FE": ???
 }  # "21": "Ventilation", "88": ???
 
-# DOMAIN_TYPE_LOOKUP = {v: k for k, v in DOMAIN_TYPE_MAP.items() if k != FF}  # obsolete?
-
-# DHW_STATE_MAP: dict[str, str] = {"00": "off", "01": "on"}  # obsolete?
-# DHW_STATE_LOOKUP = {v: k for k, v in DHW_STATE_MAP.items()}  # obsolete?
-
-# DTM_LONG_REGEX = re.compile(
-#     r"\d{4}-[01]\d-[0-3]\d(T| )[0-2]\d:[0-5]\d:[0-5]\d\.\d{6} ?"
-# )  # 2020-11-30T13:15:00.123456  # obsolete?
-# DTM_TIME_REGEX = re.compile(r"[0-2]\d:[0-5]\d:[0-5]\d\.\d{3} ?")  # 13:15:00.123  # obsolete?
-
 # Used by Packet.from_raw_line to validate unparsed ASCII line structures
 r = r"(-{3}|\d{3}|\.{3})"  # RSSI, '...' was used by an older version of evofw3
 v = r"( I|RP|RQ| W)"  # verb
@@ -468,10 +454,6 @@ class SystemType(StrEnum):
 
 
 # used by 22Fx parser, and FanSwitch devices
-# SZ_BOOST_TIMER:Final = "boost_timer"  # minutes, e.g. 10, 20, 30 minutes
-# HEATER_MODE: Final = "heater_mode"  # e.g. auto, off  # obsolete?
-FAN_MODE: Final = "fan_mode"  # e.g. low. high   # .     deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
-FAN_RATE: Final = "fan_rate"  # percentage, 0.0 - 1.0  # deprecated, use SZ_FAN_MODE, to be removed in Q1 2026
 
 
 # RP --- 01:054173 18:006402 --:------ 0005 004 00100000  # before adding RFG100
