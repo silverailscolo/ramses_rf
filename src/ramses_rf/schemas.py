@@ -14,33 +14,26 @@ from typing import TYPE_CHECKING, Any, Final
 import probatio as vol
 
 from ramses_rf.const import (
-    SZ_ACTUATORS as SZ_ACTUATORS,
-    SZ_CONFIG as SZ_CONFIG,
-    SZ_DEVICES as SZ_DEVICES,
+    SZ_ACTUATORS,
+    SZ_CIRCUITS,
+    SZ_CONFIG,
+    SZ_DEVICES,
+    SZ_DISABLE_DISCOVERY,
+    SZ_DISABLE_POLLING,
     SZ_NAME,
-    SZ_SENSOR as SZ_SENSOR,
+    SZ_SENSOR,
     SZ_ZONE_INDEX,
     SZ_ZONE_TYPE,
     SZ_ZONES,
 )
 from ramses_rf.typing import DeviceIdT, DeviceListT
-
-# TODO: deprecate re-exporting (via as) in favour of direct imports
-# TODO: deprecate re-exporting (via as) in favour of direct imports
-from ramses_tx.const import (
-    DEFAULT_MAX_ZONES as DEFAULT_MAX_ZONES,
-    DEVICE_ID_REGEX as DEVICE_ID_REGEX,
-)
-from ramses_tx.schemas import (  # noqa: F401
+from ramses_tx.const import DEFAULT_MAX_ZONES, DEVICE_ID_REGEX
+from ramses_tx.schemas import (
     SCH_ENGINE_DICT,
     SZ_BLOCK_LIST,
-    SZ_DISABLE_SENDING,
-    SZ_ENFORCE_KNOWN_LIST,
-    SZ_KNOWN_LIST as SZ_KNOWN_LIST,
-    SZ_PACKET_LOG,
-    SZ_SCHEMA as SZ_SCHEMA,
+    SZ_KNOWN_LIST,
+    SZ_SCHEMA,
     sch_packet_log_dict_factory,
-    select_device_filter_mode,
 )
 
 from . import exceptions as exc
@@ -55,24 +48,13 @@ from .config import (
     SCH_DEVICE_ID_SEN,
     SCH_DEVICE_ID_UFC,
     SCH_GLOBAL_TRAITS_DICT,
-    SCH_TRAITS as SCH_TRAITS,
-    SZ_ALIAS as SZ_ALIAS,
-    SZ_BOUND_TO as SZ_BOUND_TO,
-    SZ_CLASS as SZ_CLASS,
-    SZ_FAKED as SZ_FAKED,
-    SZ_SCHEME as SZ_SCHEME,
-    strip_and_map_schema as strip_and_map_schema,
-    strip_and_map_traits as strip_and_map_traits,
-    strip_traits as strip_traits,
+    SZ_CLASS,
+    SZ_FAKED,
 )
 from .const import (
     DEV_ROLE_MAP,
     DEV_TYPE_MAP,
     DONT_CREATE_MESSAGES,
-    SZ_DISABLE_DISCOVERY as SZ_DISABLE_DISCOVERY,
-    SZ_DISABLE_POLLING as SZ_DISABLE_POLLING,
-    SZ_IS_BATTERY as SZ_IS_BATTERY,
-    SZ_POLLING_INTERVAL as SZ_POLLING_INTERVAL,
     ZON_ROLE_MAP,
     DevRole,
     DevType,
@@ -108,7 +90,6 @@ SZ_SENSOR_FAKED: Final = "sensor_faked"
 
 SZ_UFH_SYSTEM: Final = "underfloor_heating"
 SZ_UFH_CTL = DEV_TYPE_MAP[DevType.UFC]  # ufh_controller
-SZ_CIRCUITS: Final = "circuits"
 
 HEAT_ZONES_STRS = tuple(ZON_ROLE_MAP[t] for t in ZON_ROLE_MAP.HEAT_ZONES)
 
@@ -570,3 +551,70 @@ def load_tcs(
     #     print(dst)
 
     return controller.tcs
+
+
+#
+# Deprecated re-exports — kept resolvable for backward compatibility while
+# downstream consumers migrate to direct imports (issue 1257, item 3.12).
+# Names still imported above for internal use resolve silently; the rest
+# emit a DeprecationWarning via __getattr__.
+_DEPRECATED_IMPORTS: Final = {
+    # ramses_rf.const
+    "SZ_ACTUATORS": "ramses_rf.const",
+    "SZ_CONFIG": "ramses_rf.const",
+    "SZ_DEVICES": "ramses_rf.const",
+    "SZ_DISABLE_DISCOVERY": "ramses_rf.const",
+    "SZ_DISABLE_POLLING": "ramses_rf.const",
+    "SZ_IS_BATTERY": "ramses_rf.const",
+    "SZ_POLLING_INTERVAL": "ramses_rf.const",
+    "SZ_SENSOR": "ramses_rf.const",
+    "SZ_ZONES": "ramses_rf.const",
+    # ramses_rf.config
+    "SCH_TRAITS": "ramses_rf.config",
+    "SZ_ALIAS": "ramses_rf.config",
+    "SZ_BOUND_TO": "ramses_rf.config",
+    "SZ_CLASS": "ramses_rf.config",
+    "SZ_FAKED": "ramses_rf.config",
+    "SZ_SCHEME": "ramses_rf.config",
+    "strip_and_map_schema": "ramses_rf.config",
+    "strip_and_map_traits": "ramses_rf.config",
+    "strip_traits": "ramses_rf.config",
+    # ramses_tx.const
+    "DEFAULT_MAX_ZONES": "ramses_tx.const",
+    "DEVICE_ID_REGEX": "ramses_tx.const",
+    # ramses_tx.schemas
+    "SCH_ENGINE_DICT": "ramses_tx.schemas",
+    "SZ_BLOCK_LIST": "ramses_tx.schemas",
+    "SZ_DISABLE_SENDING": "ramses_tx.schemas",
+    "SZ_ENFORCE_KNOWN_LIST": "ramses_tx.schemas",
+    "SZ_KNOWN_LIST": "ramses_tx.schemas",
+    "SZ_PACKET_LOG": "ramses_tx.schemas",
+    "SZ_SCHEMA": "ramses_tx.schemas",
+    "sch_packet_log_dict_factory": "ramses_tx.schemas",
+    "select_device_filter_mode": "ramses_tx.schemas",
+}
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve deprecated re-exports with a warning.
+
+    :param name: The name of the attribute to retrieve.
+    :type name: str
+    :return: The requested object from its canonical module.
+    :rtype: Any
+    :raises AttributeError: If the requested attribute is not exported.
+    """
+    if name in _DEPRECATED_IMPORTS:
+        import importlib
+        import warnings
+
+        module = _DEPRECATED_IMPORTS[name]
+        warnings.warn(
+            f"ramses_rf.schemas.{name} is deprecated and will be removed "
+            f"in a future release; import it from {module} instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return getattr(importlib.import_module(module), name)
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

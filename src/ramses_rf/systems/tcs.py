@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
+from ramses_rf.config import SZ_CLASS
 from ramses_rf.const import (
     DEV_TYPE_MAP,
     SYS_MODE_MAP,
@@ -41,12 +42,10 @@ from ramses_rf.exceptions import (
 from ramses_rf.helpers import shrink
 from ramses_rf.models import DemandState, SystemState, ThermalDemandDTO
 from ramses_rf.schemas import (
-    DEFAULT_MAX_ZONES,
     SCH_TCS,
     SCH_TCS_DHW,
     SCH_TCS_ZONES_ZON,
     SZ_APPLIANCE_CONTROL,
-    SZ_CLASS,
     SZ_DHW_SYSTEM,
     SZ_MAX_ZONES,
     SZ_ORPHANS,
@@ -55,6 +54,7 @@ from ramses_rf.schemas import (
 )
 from ramses_rf.topology import Parent
 from ramses_tx import DeviceIdT, Priority
+from ramses_tx.const import DEFAULT_MAX_ZONES
 from ramses_tx.typing import PayDictT
 
 from ..messages import Message

@@ -13,6 +13,11 @@ from typing import TYPE_CHECKING, Any, Self
 
 from ramses_rf.address import Address
 from ramses_rf.binding_fsm import BindingManager
+from ramses_rf.config import (
+    SZ_ALIAS,
+    SZ_CLASS,
+    SZ_FAKED,
+)
 from ramses_rf.const import (
     DEV_TYPE_MAP,
     GATEWAY_MESSAGE_TIMEOUT,
@@ -20,7 +25,9 @@ from ramses_rf.const import (
     SZ_BATTERY_LEVEL,
     SZ_BATTERY_LOW,
     SZ_BATTERY_STATE,
+    SZ_IS_BATTERY,
     SZ_OEM_CODE,
+    SZ_POLLING_INTERVAL,
     DevType,
 )
 from ramses_rf.entity import Entity, class_by_attr
@@ -32,13 +39,6 @@ from ramses_rf.models import (
     TemperatureState,
 )
 from ramses_rf.models.state_signal import CommunicationQuality, compute_quality
-from ramses_rf.schemas import (
-    SZ_ALIAS,
-    SZ_CLASS,
-    SZ_FAKED,
-    SZ_IS_BATTERY,
-    SZ_POLLING_INTERVAL,
-)
 from ramses_rf.strategies import HvacStrategy, best_hvac_strategy
 from ramses_rf.topology import Child
 from ramses_tx import Packet
