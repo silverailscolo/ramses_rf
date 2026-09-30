@@ -337,7 +337,11 @@ class PortProtocol(_DeviceIdFilterMixin):
         self._is_active = True
         self._resume_event.set()
 
-        if self._tx_worker_task is None or self._tx_worker_task.done():
+        if (
+            self._tx_worker_task is None
+            or self._tx_worker_task.done()
+            or self._tx_worker_task.cancelling()
+        ):
             self._tx_worker_task = self._loop.create_task(
                 self._tx_worker(), name="PortProtocol._tx_worker()"
             )
@@ -547,6 +551,19 @@ class PortProtocol(_DeviceIdFilterMixin):
                         asyncio.shield(fut), timeout=current_timeout
                     )
                     return
+                except asyncio.CancelledError:
+                    # The caller cancelled its send_cmd() (e.g. an
+                    # upstream wait_for timed out): the queue item's
+                    # future is cancelled, which surfaces here as
+                    # CancelledError via the shield.  Treat it as an
+                    # aborted item, not a worker shutdown — the worker
+                    # must keep draining the queue (issue 1241).  A
+                    # genuine cancellation of the worker task itself is
+                    # re-raised to end the loop.
+                    task = asyncio.current_task()
+                    if task is not None and task.cancelling():
+                        raise
+                    return
                 except TimeoutError:
                     if tx_count <= max_retries:
                         current_timeout = min(
@@ -734,6 +751,18 @@ class PortProtocol(_DeviceIdFilterMixin):
                 source_policy,
             )
         )
+
+        # Self-heal: if the tx worker died while the protocol stayed
+        # active (e.g. a swallowed cancellation), recreate it so queued
+        # commands cannot stall forever (issue 1241).
+        if self._is_active and (
+            self._tx_worker_task is None
+            or self._tx_worker_task.done()
+            or self._tx_worker_task.cancelling()
+        ):
+            self._tx_worker_task = self._loop.create_task(
+                self._tx_worker(), name="PortProtocol._tx_worker()"
+            )
 
         try:
             return await fut

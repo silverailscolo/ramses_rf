@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ramses_rf import Device, dispatcher
+from ramses_rf import Device, dispatcher, exceptions as exc
 from ramses_rf.const import (
     SZ_BYPASS_POSITION,
     SZ_FAN_MODE,
@@ -106,6 +106,74 @@ class Test_dispatcher_gateway:
     def test_validate_slugs(self, mock_gateway: MagicMock) -> None:
         """Test destination slug validation via pipeline stage."""
         dispatcher.validate_slugs(mock_gateway, self.msg5)
+
+
+class TestValidateSlugsDisRemParity:
+    """The DIS slug table must cover every REM verb/code — a display is
+    a remote plus display/VMI requests — except 1060 (battery state):
+    a DIS is mains-powered.
+
+    Regression: a declared-DIS device (e.g. a _faked 37: remote/display)
+    sending RQ 10D0 to its FAN was dropped by validate_slugs as
+    PacketInvalid, and the FAN's RP 10D0 reply was dropped too.
+    """
+
+    _DIS = "37:168270"
+    _FAN = "32:153289"
+    _NOW = dt.now().replace(microsecond=0)
+
+    @pytest.fixture(autouse=True)
+    def _devices(self, mock_gateway: MagicMock) -> None:
+        dis_dev = MagicMock(spec=Device)
+        dis_dev._SLUG = DevType.DIS
+        fan_dev = MagicMock(spec=Device)
+        fan_dev._SLUG = DevType.FAN
+        mock_gateway.device_registry.device_by_id = {
+            self._DIS: dis_dev,
+            self._FAN: fan_dev,
+        }
+        mock_gateway.hgi.id = "18:000730"
+
+    @pytest.mark.parametrize(
+        "packet_line",
+        [
+            # DIS polls the FAN for filter status (VMI request)
+            "... RQ --- 37:168270 32:153289 --:------ 10D0 001 00",
+            # DIS resets the FAN's filter counter
+            "...  W --- 37:168270 32:153289 --:------ 10D0 002 00FF",
+            # DIS writes the datetime (VMI write)
+            "...  W --- 37:168270 32:153289 --:------ 313F 009 "
+            "006000320C040207E6",
+        ],
+    )
+    def test_dis_source_codes_accepted(
+        self, mock_gateway: MagicMock, packet_line: str
+    ) -> None:
+        """A DIS may Tx the REM's request/write codes."""
+        msg = Message._from_packet(Packet(self._NOW, packet_line))
+        assert dispatcher.validate_slugs(mock_gateway, msg) is True
+
+    def test_dis_10d0_reply_accepted(self, mock_gateway: MagicMock) -> None:
+        """The FAN's RP 10D0 reply to a DIS must not be dropped."""
+        msg = Message._from_packet(
+            Packet(
+                self._NOW,
+                "... RP --- 32:153289 37:168270 --:------ 10D0 006 "
+                "0000B4000000",
+            )
+        )
+        assert dispatcher.validate_slugs(mock_gateway, msg) is True
+
+    def test_dis_1060_rejected(self, mock_gateway: MagicMock) -> None:
+        """A DIS has no battery — I 1060 from a DIS stays invalid."""
+        msg = Message._from_packet(
+            Packet(
+                self._NOW,
+                "...  I --- 37:168270 --:------ 37:168270 1060 003 00C800",
+            )
+        )
+        with pytest.raises(exc.PacketInvalid):
+            dispatcher.validate_slugs(mock_gateway, msg)
 
     def test_detect_array_fragment(self) -> None:
         """Test detection of array fragments."""

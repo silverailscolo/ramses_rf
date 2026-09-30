@@ -7,7 +7,7 @@ import asyncio
 import logging
 from datetime import datetime as dt, timedelta as td
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from ramses_rf.address import HGI_DEV_ADDR, Address
 from ramses_rf.commands.core import Command as Intent_
@@ -229,13 +229,6 @@ class SystemBase(Parent[Device], Entity):  # 3B00 (multi-relay)
         if mode is None:
             return None
         return mode == ThermalMode.COOL
-
-    async def is_calling_for_heat(self) -> NoReturn:
-        """Check if the system is actively calling for heat (Deprecated)."""
-        raise NotImplementedError(
-            f"{self}: is_calling_for_heat attr is deprecated, "
-            "use bool(await heat_demand())"
-        )
 
     async def schema(self) -> dict[str, Any]:
         """Return the system's schema.
@@ -977,15 +970,6 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         }
 
     @property
-    def heat_demands(self) -> dict[str, ThermalDemandDTO] | None:
-        """Return the current heat demands per domain (deprecated alias for thermal_demands).
-
-        :returns: Dictionary mapping domain ID to ThermalDemandDTO or None.
-        :rtype: dict[str, ThermalDemandDTO] | None
-        """
-        return self.thermal_demands
-
-    @property
     def relay_demands(self) -> dict[str, Any] | None:  # 0008
         """Return the current relay demands per domain."""
         # FC: 00-C8, F9: 00-C8, FA: 00 or C8 only (01: all 3, 02: FC/FA only)
@@ -1012,7 +996,7 @@ class System(StoredHw, Datetime, Logbook, SystemBase):
         status = await super().status()
         # assert SZ_SYSTEM in status  # TODO: removeme
 
-        status[SZ_SYSTEM]["heat_demands"] = self.heat_demands
+        status[SZ_SYSTEM]["heat_demands"] = self.thermal_demands
         status[SZ_SYSTEM]["relay_demands"] = self.relay_demands
         status[SZ_SYSTEM]["relay_failsafes"] = self.relay_failsafes
 

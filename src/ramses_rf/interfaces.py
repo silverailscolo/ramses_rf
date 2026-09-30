@@ -275,34 +275,6 @@ class MessageStoreInterface(Protocol):
         """Clear all indexed messages from the store."""
         ...
 
-    async def qry(
-        self, sql: str, parameters: tuple[str, ...]
-    ) -> tuple[Any, ...]:
-        """Execute custom SQL query on store.
-
-        :param sql: The SQL query statement.
-        :type sql: str
-        :param parameters: The tuple of SQL parameter values.
-        :type parameters: tuple[str, ...]
-        :returns: A tuple of query results.
-        :rtype: tuple[Any, ...]
-        """
-        ...
-
-    async def qry_field(
-        self, sql: str, parameters: tuple[str, ...]
-    ) -> list[tuple[Any, ...]]:
-        """Execute custom SQL query returning field values.
-
-        :param sql: The SQL query statement.
-        :type sql: str
-        :param parameters: The tuple of SQL parameter values.
-        :type parameters: tuple[str, ...]
-        :returns: A list of result tuples.
-        :rtype: list[tuple[Any, ...]]
-        """
-        ...
-
     @property
     def log_by_dtm(self) -> tuple[Message, ...]:
         """Return in-memory log dictionary keyed by timestamp.

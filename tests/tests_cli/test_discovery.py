@@ -74,7 +74,7 @@ async def mock_gateway() -> AsyncGenerator[MagicMock, None]:
     # Mock fakeable for binding tests
     mock_dev._make_fake = MagicMock()
     mock_dev._initiate_binding_process = AsyncMock()
-    mock_dev._wait_for_binding_request = AsyncMock()
+    mock_dev.wait_for_binding_request = AsyncMock()
 
     gateway.device_registry.get_device.return_value = mock_dev
 
@@ -278,7 +278,7 @@ async def test_script_binding(mock_gateway: MagicMock) -> None:
     with patch("ramses_cli.discovery.Fakeable", MockFakeable):
         await script_bind_device(mock_gateway, DEV_ID, Code._2309)  # type: ignore[arg-type]
         mock_dev = mock_gateway.device_registry.get_device(DEV_ID)
-        mock_dev._wait_for_binding_request.assert_awaited()
+        mock_dev.wait_for_binding_request.assert_awaited()
 
 
 @pytest.mark.asyncio

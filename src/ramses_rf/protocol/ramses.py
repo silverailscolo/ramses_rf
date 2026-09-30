@@ -645,9 +645,15 @@ _DEV_KLASSES_HEAT: dict[str, dict[Code, dict[Verb, Any]]] = {
 }
 # TODO: add 1FC9 everywhere?
 _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[Verb, Any]]] = {
-    DevType.DIS: {  # Orcon RF15 Display: ?a superset of a REM
+    DevType.DIS: {  # Orcon RF15 Display: a superset of a REM
         Code._0001: {RQ: {}},
         Code._042F: {I_: {}},
+        # 1060 is omitted: a DIS is mains-powered, it has no battery.
+        Code._10D0: {
+            RP: {},
+            RQ: {},
+            W_: {},
+        },  # RQ/RP filter status (VMI), W=reset filter count — REM parity
         Code._10E0: {I_: {}, RQ: {}},
         Code._1470: {RQ: {}},
         Code._1FC9: {I_: {}, W_: {}},
@@ -657,7 +663,7 @@ _DEV_KLASSES_HVAC: dict[str, dict[Code, dict[Verb, Any]]] = {
         Code._22F7: {RQ: {}, W_: {}},
         Code._22B0: {W_: {}},
         Code._2411: {RQ: {}, W_: {}},
-        Code._313F: {RQ: {}},
+        Code._313F: {RQ: {}, W_: {}},
         Code._31DA: {RQ: {}},
     },
     DevType.RFS: {  # Itho spIDer: RF to Internet gateway (like a RFG100)
