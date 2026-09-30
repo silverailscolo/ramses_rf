@@ -10,7 +10,13 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ramses_rf.address import Address, is_valid_dev_id
-from ramses_rf.config import GatewayConfig
+from ramses_rf.config import (
+    SCH_TRAITS,
+    SZ_ALIAS,
+    SZ_CLASS,
+    SZ_FAKED,
+    GatewayConfig,
+)
 from ramses_rf.const import (
     DEV_TYPE_MAP,
     SZ_DEVICES,
@@ -29,7 +35,6 @@ from ramses_rf.exceptions import (
 )
 from ramses_rf.interfaces import DeviceFilterInterface
 from ramses_rf.models import DeviceTraits, TopologyChangedEvent
-from ramses_rf.schemas import SCH_TRAITS, SZ_ALIAS, SZ_CLASS, SZ_FAKED
 from ramses_rf.topology import Parent
 from ramses_rf.typing import DeviceIdT, DeviceListT
 from ramses_tx.const import FA, FC

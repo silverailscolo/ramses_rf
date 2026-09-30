@@ -26,13 +26,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from ramses_rf.const import SZ_CIRCUITS
 from ramses_tx.const import F9, FA, FC, FF
 
 from . import exceptions as exc
 from .const import SZ_ACTUATORS, SZ_SENSOR
 from .enums import DevType
 from .interfaces import ControllerInterface, ParentInterface
-from .schemas import SZ_CIRCUITS
 
 
 @runtime_checkable

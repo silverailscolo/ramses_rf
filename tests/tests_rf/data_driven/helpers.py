@@ -17,7 +17,10 @@ from ramses_rf import Gateway
 from ramses_rf.config import SCH_GLOBAL_TRAITS_DICT
 from ramses_rf.gateway import GatewayConfig
 from ramses_rf.helpers import shrink
-from ramses_rf.schemas import SCH_GLOBAL_CONFIG, SCH_GLOBAL_SCHEMAS
+from ramses_rf.schemas import (
+    SCH_GLOBAL_CONFIG,
+    SCH_GLOBAL_SCHEMAS,
+)
 from ramses_rf.state import MessageStore
 from ramses_tx.config import EngineConfig
 

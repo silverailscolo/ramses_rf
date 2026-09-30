@@ -8,6 +8,7 @@ import dataclasses
 import logging
 from typing import TYPE_CHECKING, Any
 
+from ramses_rf.config import SZ_CLASS
 from ramses_tx.const import Code
 from ramses_tx.typing import DeviceIdT
 
@@ -26,7 +27,6 @@ from .const import (
 )
 from .eavesdropper import EavesdropEngine
 from .messages import Message
-from .schemas import SZ_CLASS
 
 if TYPE_CHECKING:
     from .gateway import Gateway

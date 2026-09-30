@@ -12,6 +12,7 @@ from logging.handlers import QueueListener
 from typing import TYPE_CHECKING, Any
 
 from ramses_rf.commands.dispatcher import CommandDispatcher
+from ramses_rf.const import SZ_CONFIG
 from ramses_tx import I_, RP, CommandDTO, Engine, Packet
 from ramses_tx.const import (
     DEFAULT_GAP_DURATION,
@@ -57,7 +58,6 @@ from .pipeline.topology_builder import TopologyBuilder
 from .routing import StateHeader
 from .schemas import (
     SCH_GLOBAL_SCHEMAS,
-    SZ_CONFIG,
     SZ_ENABLE_EAVESDROP,
     SZ_MAIN_TCS,
     SZ_ORPHANS,

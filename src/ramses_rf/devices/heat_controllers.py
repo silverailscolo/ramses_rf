@@ -5,7 +5,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
-from ramses_rf.const import SZ_HEAT_DEMAND, SZ_RELAY_DEMAND, DevType
+from ramses_rf.const import (
+    SZ_CIRCUITS,
+    SZ_HEAT_DEMAND,
+    SZ_RELAY_DEMAND,
+    DevType,
+)
 from ramses_rf.entity import Entity
 from ramses_rf.enums import PumpRelayState, ThermalMode
 from ramses_rf.models import (
@@ -15,7 +20,6 @@ from ramses_rf.models import (
     UfhCircuitState,
     UfhState,
 )
-from ramses_rf.schemas import SZ_CIRCUITS
 from ramses_rf.topology import Child, Parent
 from ramses_tx.const import FA
 from ramses_tx.typing import DeviceIdT, DevIndexT

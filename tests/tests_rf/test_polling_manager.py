@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from ramses_rf.config import GatewayConfig
+from ramses_rf.config import GatewayConfig, strip_and_map_traits
 from ramses_rf.const import Code, DevType, Verb
 from ramses_rf.devices.dev_base import BatteryState, DeviceBase
 from ramses_rf.exceptions import RamsesException
@@ -25,7 +25,7 @@ from ramses_rf.protocol.opentherm import (
     OPENTHERM_STATUS_DATA_IDS,
     encode_opentherm_payload,
 )
-from ramses_rf.schemas import SCH_GLOBAL_CONFIG, strip_and_map_traits
+from ramses_rf.schemas import SCH_GLOBAL_CONFIG
 from ramses_rf.typing import DeviceIdT
 from ramses_tx import CommandDTO
 
