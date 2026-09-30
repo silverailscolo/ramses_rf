@@ -13,7 +13,6 @@ from ramses_rf.const import (
 )
 from ramses_rf.entity import Entity
 from ramses_rf.enums import PumpRelayState, ThermalMode
-from ramses_rf.helpers import shrink
 from ramses_rf.models import (
     DeviceTraits,
     UfhCircuitDemandDTO,
@@ -21,7 +20,6 @@ from ramses_rf.models import (
     UfhCircuitState,
     UfhState,
 )
-from ramses_rf.schemas import SCH_TCS
 from ramses_rf.topology import Child, Parent
 from ramses_tx.const import FA
 from ramses_tx.typing import DeviceIdT, DevIndexT
@@ -65,48 +63,26 @@ class Controller(DeviceHeat):  # CTL (01):
         )  # NOTE: must create_from_schema first
 
     def _make_tcs_controller(
-        self, *, msg: Message | None = None, **schema: Any
+        self, *, msg: Message | None = None, **_schema: Any
     ) -> None:  # CH/DHW
-        """Attach a TCS (create/update as required) after passing it any msg."""
+        """Attach a TCS (create it if required) after passing it any msg.
 
-        def get_system(
-            *, msg: Message | None = None, **schema: Any
-        ) -> Evohome:
-            """Return a TCS (temperature control system), create it if required.
+        Schema kwargs are accepted for backwards compatibility but ignored:
+        schema hydration is performed by load_tcs() calling
+        tcs._update_schema() directly — no caller passes schema here.
+        """
+        super()._make_tcs_controller(msg=None, **_schema)
 
-            Use the schema to create/update it, then pass it any msg to handle.
+        # Deferred import to prevent circular dependency at module load time
+        # DO NOT MOVE to module level.
+        from ramses_rf.systems import Evohome, system_factory
 
-            TCSs are uniquely identified by a controller ID.
-            If a TCS is created, attach it to this device (which should be a CTL).
-            """
-            # Deferred import to prevent circular dependency at module load time
-            # DO NOT MOVE to module level.
-            from ramses_rf.systems import Evohome, system_factory
+        if not self.tcs:
+            tcs = system_factory(self, msg=msg)
+            if isinstance(tcs, Evohome):
+                self.tcs = tcs
 
-            # TODO: This code path is probably obsolete — load_tcs() calls
-            # ctl.tcs._update_schema(**schema) directly, bypassing this
-            # method.  The only callers (_handle_create_controller,
-            # JIT creation in dev_registry) invoke _make_tcs_controller()
-            # without schema kwargs.  Needs a check to confirm whether any
-            # code path passes zone schema through here.  If not, this
-            # method can be simplified to just the create/update logic
-            # without the schema processing.
-            schema = shrink(SCH_TCS(schema))
-
-            if not self.tcs:
-                tcs = system_factory(self, msg=msg, **schema)
-                if isinstance(tcs, Evohome):
-                    self.tcs = tcs
-
-            elif schema and self.tcs:
-                self.tcs._update_schema(**schema)
-
-            assert self.tcs is not None
-            return self.tcs
-
-        super()._make_tcs_controller(msg=None, **schema)
-
-        self.tcs = get_system(msg=msg, **schema)
+        assert self.tcs is not None
 
 
 class Programmer(Controller):  # PRG (23):
