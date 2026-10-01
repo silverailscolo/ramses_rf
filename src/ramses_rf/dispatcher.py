@@ -14,6 +14,7 @@ from .const import I_, RQ, Code
 from .messages import Message
 from .state_projector import (
     _get_dhw_zone_from_msg,
+    _is_newer_dtm,
     _resolve_logical_targets,
     _route_2411_to_fan,
     _update_demand_state,
@@ -110,7 +111,13 @@ def _mark_src_device_alive(gateway: Gateway, msg: Message) -> None:
     if registry is None:
         return
     device = registry.device_by_id.get(msg.src.id)
-    if device is not None and hasattr(device, "_last_msg_dtm"):
+    if (
+        device is not None
+        and hasattr(device, "_last_msg_dtm")
+        # Monotonic stamp: out-of-order handler tasks (e.g. cached-packet
+        # replay at restore) must not regress liveness — ramses_cc 1278.
+        and _is_newer_dtm(msg.dtm, device._last_msg_dtm)
+    ):
         device._last_msg_dtm = msg.dtm
 
 

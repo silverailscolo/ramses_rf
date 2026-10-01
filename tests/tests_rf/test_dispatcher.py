@@ -452,6 +452,41 @@ class TestDispatcherHeartbeats:
         # ...but the source device was still marked alive before the drop
         assert mock_dev._last_msg_dtm == msg.dtm
 
+    async def test_liveness_stamp_is_monotonic(
+        self,
+        mock_gateway: MagicMock,
+    ) -> None:
+        """A stale packet completing out of order must not regress
+        _last_msg_dtm (ramses_cc issue 1278): cached-packet replay feeds
+        packets through fire-and-forget handler tasks whose completion
+        order does not match packet order, so last-write-wins would leave
+        the device stamped with the oldest cached packet's dtm.
+        """
+        fresh_dtm = dt.now()
+        stale_dtm = fresh_dtm - td(hours=3)
+
+        packet_line = "045 RQ --- 32:153289 29:123160 --:------ 31DA 001 00"
+        fresh_msg = Message(Packet(fresh_dtm, packet_line).to_dto())
+        stale_msg = Message(Packet(stale_dtm, packet_line).to_dto())
+
+        mock_dev = MagicMock(spec=Device)
+        mock_dev.id = "32:153289"
+        mock_dev._SLUG = DevType.FAN
+        mock_dev._is_binding = False
+        mock_dev.is_faked = False
+        mock_dev._last_msg_dtm = None
+
+        mock_gateway.device_registry.device_by_id["32:153289"] = mock_dev
+        mock_gateway.device_registry.get_device.return_value = mock_dev
+        mock_gateway.hgi.id = "18:000730"
+
+        # Replay completion order: the old cached packet finishes last
+        await dispatcher.process_msg(mock_gateway, fresh_msg)
+        assert mock_dev._last_msg_dtm == fresh_msg.dtm
+
+        await dispatcher.process_msg(mock_gateway, stale_msg)
+        assert mock_dev._last_msg_dtm == fresh_msg.dtm
+
 
 class TestHvacStateNullMarkerFiltering:
     """Test that _update_hvac_state does not overwrite good state with
