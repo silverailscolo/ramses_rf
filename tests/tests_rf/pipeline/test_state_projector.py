@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime as dt
+from datetime import datetime as dt, timedelta as td
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -1459,6 +1459,55 @@ async def test_process_state_updates_src_only_liveness() -> None:
     # cast to object: the earlier `is None` assert narrows the member to
     # None, and mypy marks any `is`/`==` with reply_msg as unreachable
     assert cast(object, fan_dev._last_msg) is reply_msg
+    assert fan_dev._missed_polls == 0
+
+
+@pytest.mark.asyncio
+async def test_process_state_updates_liveness_is_monotonic() -> None:
+    """A stale packet completing out of order must not regress liveness.
+
+    Cached-packet replay at gateway restore feeds packets through
+    fire-and-forget handler tasks whose completion order does not match
+    packet order; without the monotonic guard the oldest packet's stamp
+    wins, leaving ``_last_msg_dtm`` stale and flapping the device to
+    unavailable until the next live broadcast (ramses_cc issue 1278).
+    """
+    # Arrange — a FAN that already holds a fresh stamp
+    fresh_dtm = dt.now()
+    stale_dtm = fresh_dtm - td(hours=3)
+    fan_dev = _LivenessDevice("32:153289", missed_polls=3)
+    fan_dev._last_msg_dtm = fresh_dtm
+    gwy_adapter = FakeGatewayAdapter(FakeRegistry(fan_dev))
+
+    # Act — an older packet completes after the fresh one
+    stale_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RP,
+        payload={},
+        src_id="32:153289",
+        dtm=stale_dtm,
+    )
+    stale_msg.payload = None
+    await process_state_updates(gwy_adapter, stale_msg)
+
+    # Assert — the liveness triple is not rolled back
+    assert fan_dev._last_msg_dtm == fresh_dtm
+    assert fan_dev._last_msg is None
+    assert fan_dev._missed_polls == 3
+
+    # Act — a fresher packet still updates normally
+    newer_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RP,
+        payload={},
+        src_id="32:153289",
+        dtm=fresh_dtm + td(minutes=1),
+    )
+    newer_msg.payload = None
+    await process_state_updates(gwy_adapter, newer_msg)
+
+    assert fan_dev._last_msg_dtm == newer_msg.dtm
+    assert cast(object, fan_dev._last_msg) is newer_msg
     assert fan_dev._missed_polls == 0
 
 
