@@ -385,6 +385,73 @@ class TestDispatcherHeartbeats:
         # 4. Assert the message was explicitly processed and timestamp updated
         assert mock_dev._last_msg_dtm == msg.dtm
 
+    @pytest.mark.parametrize(
+        ("packet_line", "src_id", "dev_type"),
+        [
+            # FAN may never Tx an RQ (issue 1255 regression)
+            (
+                "045 RQ --- 32:155617 29:123160 --:------ 31DA 001 00",
+                "32:155617",
+                "FAN",
+            ),
+            # FAN's 22F3 entry has no permitted Tx verbs
+            (
+                "045  I --- 32:155617 --:------ 32:155617 22F3 007 "
+                "00023C03040000",
+                "32:155617",
+                "FAN",
+            ),
+            # REM may never Tx an RP
+            (
+                "045 RP --- 37:170000 32:155617 --:------ 22F1 003 000204",
+                "37:170000",
+                "REM",
+            ),
+            # TRV may only RQ/W_ 2349, not Tx it
+            (
+                "045  I --- 04:123456 --:------ 04:123456 2349 007 "
+                "00070800FFFFFF",
+                "04:123456",
+                "TRV",
+            ),
+        ],
+    )
+    async def test_dropped_packet_still_refreshes_liveness(
+        self,
+        mock_gateway: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+        packet_line: str,
+        src_id: str,
+        dev_type: str,
+    ) -> None:
+        """A packet rejected by validate_slugs still proves its source
+        device is transmitting, so it must refresh the liveness timestamp
+        (issue 1255): a FAN that only ever sends 'unexpected' frames would
+        otherwise flap to unavailable every HEARTBEAT_TIMEOUT_FAN (15 min).
+        """
+        dtm = dt.now()
+        packet = Packet(dtm, packet_line)
+        msg = Message(packet.to_dto())
+
+        mock_dev = MagicMock(spec=Device)
+        mock_dev.id = src_id
+        mock_dev._SLUG = dev_type
+        mock_dev._is_binding = False
+        mock_dev.is_faked = False
+        mock_dev._last_msg_dtm = None
+
+        mock_gateway.device_registry.device_by_id[src_id] = mock_dev
+        mock_gateway.device_registry.get_device.return_value = mock_dev
+        mock_gateway.hgi.id = "18:000730"
+
+        with caplog.at_level(logging.WARNING):
+            await dispatcher.process_msg(mock_gateway, msg)
+
+        # The packet was rejected at slug validation (PacketInvalid)...
+        assert "PacketInvalid" in caplog.text
+        # ...but the source device was still marked alive before the drop
+        assert mock_dev._last_msg_dtm == msg.dtm
+
 
 class TestHvacStateNullMarkerFiltering:
     """Test that _update_hvac_state does not overwrite good state with
