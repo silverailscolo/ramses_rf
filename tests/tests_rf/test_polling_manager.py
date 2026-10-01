@@ -820,19 +820,37 @@ def test_sch_polling_interval_rejects_negative() -> None:
 
 def test_encode_opentherm_payload_parity() -> None:
     # Arrange & Act & Assert
-    assert OPENTHERM_STATUS_DATA_IDS == (0x00, 0x19, 0x1C, 0x01, 0x12)
+    assert OPENTHERM_STATUS_DATA_IDS == (
+        0x00,
+        0x01,
+        0x05,
+        0x11,
+        0x12,
+        0x13,
+        0x19,
+        0x1A,
+        0x1B,
+        0x1C,
+        0x21,
+    )
     assert OPENTHERM_PARAMS_DATA_IDS == (0x38, 0x39)
     assert OPENTHERM_POLL_DATA_IDS == (
         0x00,
-        0x19,
-        0x1C,
         0x01,
+        0x05,
+        0x11,
         0x12,
+        0x13,
+        0x19,
+        0x1A,
+        0x1B,
+        0x1C,
+        0x21,
         0x38,
         0x39,
     )
     assert 0x0E not in OPENTHERM_POLL_DATA_IDS
-    assert 0x11 not in OPENTHERM_POLL_DATA_IDS
+    assert 0x11 in OPENTHERM_POLL_DATA_IDS
 
     assert encode_opentherm_payload(0x00) == "0000000000"
     assert encode_opentherm_payload(0x19) == "0080190000"
@@ -853,7 +871,7 @@ def test_polling_manager_otb_expands_3220_data_id_tasks(
     active_keys = poller.update_device_tasks(otb_dev)
 
     # Assert
-    # 2 device-level tasks (10E0, 3EF0) + 6 Data-ID 3220 tasks
+    # 2 device-level tasks (10E0, 3EF0) + 13 Data-ID 3220 tasks
     device_level = {k for k in active_keys if len(k) == 2}
     ot_level = {k for k in active_keys if len(k) == 3}
 
@@ -861,8 +879,22 @@ def test_polling_manager_otb_expands_3220_data_id_tasks(
     assert ("10:048122", Code._10E0) in device_level
     assert ("10:048122", Code._3EF0) in device_level
 
-    assert len(ot_level) == 7
-    expected_data_ids = ("00", "19", "1C", "01", "12", "38", "39")
+    assert len(ot_level) == 13
+    expected_data_ids = (
+        "00",
+        "01",
+        "05",
+        "11",
+        "12",
+        "13",
+        "19",
+        "1A",
+        "1B",
+        "1C",
+        "21",
+        "38",
+        "39",
+    )
     for data_id_hex in expected_data_ids:
         assert ("10:048122", Code._3220, data_id_hex) in ot_level
 
@@ -907,9 +939,9 @@ async def test_polling_manager_otb_live_dispatch_transmits_data_id_payloads(
     processed_count = await poller.poll_due_commands()
 
     # Assert
-    # 2 device-level tasks + 7 Data-ID tasks = 9 total
-    assert processed_count == 9
-    assert mock_gateway._async_send_dto.call_count == 9
+    # 2 device-level tasks + 13 Data-ID tasks = 15 total
+    assert processed_count == 15
+    assert mock_gateway._async_send_dto.call_count == 15
 
     # Extract all 3220 commands sent
     sent_3220_payloads: set[str] = set()
@@ -923,12 +955,18 @@ async def test_polling_manager_otb_live_dispatch_transmits_data_id_payloads(
 
     expected_payloads = {
         "0000000000",
-        "0080190000",
-        "00801C0000",
         "0080010000",
+        "0000050000",
+        "0000110000",
+        "0000120000",
+        "0080130000",
+        "0080190000",
+        "00801A0000",
+        "00001B0000",
+        "00801C0000",
+        "0000210000",
         "0080380000",
         "0000390000",
-        "0000120000",
     }
     assert sent_3220_payloads == expected_payloads
 

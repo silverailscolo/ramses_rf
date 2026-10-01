@@ -64,7 +64,11 @@ from ramses_rf.models import (
 )
 from ramses_rf.payloads.hvac import HvacBypassStatePayload
 from ramses_rf.pipeline.ingestion import StateProjector
-from ramses_rf.protocol.opentherm import OtDataId
+from ramses_rf.protocol.opentherm import (
+    SZ_VALUE_HB,
+    SZ_VALUE_LB,
+    OtDataId,
+)
 from ramses_rf.state_projector import (
     _update_hvac_state,
     process_state_updates,
@@ -312,6 +316,68 @@ def test_worker_opentherm_status_flag_parsing() -> None:
     assert device.opentherm_state.flags.ch_active is True
     assert device.opentherm_state.flags.flame_active is True
     assert device.opentherm_state.flags.ch_enabled is False
+
+
+def test_worker_opentherm_fault_flag_parsing() -> None:
+    """Verify msg_id 0x05 populates fault flags and the OEM fault code."""
+    # Arrange
+    device = FakeDevice()
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+
+    worker = StateProjector(gwy_adapter, queue)
+
+    mock_msg = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.OEM_FAULTS),
+            SZ_VALUE_HB: [1, 0, 1, 0, 0, 1, 0, 0],
+            SZ_VALUE_LB: 42,
+        },
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
+
+    # Assert
+    faults = device.opentherm_state.faults
+    assert faults.service_request is True
+    assert faults.lockout_reset is False
+    assert faults.low_water_pressure is True
+    assert faults.gas_flame_fault is False
+    assert faults.air_pressure_fault is False
+    assert faults.water_over_temperature is True
+    assert device.opentherm_state.oem_fault_code == 42
+
+
+def test_worker_opentherm_exhaust_temp_parsing() -> None:
+    """Verify msg_id 0x21 populates the boiler exhaust temperature."""
+    # Arrange
+    device = FakeDevice()
+    registry = FakeRegistry(device)
+    gwy_adapter = FakeGatewayAdapter(registry)
+    queue: asyncio.Queue[Message] = asyncio.Queue()
+
+    worker = StateProjector(gwy_adapter, queue)
+
+    mock_msg = MockMessage(
+        code=Code._3220,
+        verb=Verb.RP,
+        payload={
+            SZ_MESSAGE_ID: int(OtDataId.BOILER_EXHAUST_TEMP),
+            SZ_VALUE: 58,
+        },
+        src_id=device.id,
+    )
+
+    # Act
+    worker._update_opentherm_state(device, mock_msg.payload, mock_msg)
+
+    # Assert
+    assert device.opentherm_state.temperatures.boiler_exhaust == 58
 
 
 def test_worker_hvac_state_parsing() -> None:

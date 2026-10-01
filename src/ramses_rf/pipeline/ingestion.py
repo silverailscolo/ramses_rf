@@ -23,11 +23,13 @@ from ramses_rf.const import (
     SZ_ACTIVE,
     SZ_ACTUATOR_COUNTDOWN,
     SZ_ACTUATOR_ENABLED,
+    SZ_AIR_PRESSURE_FAULT,
     SZ_AIR_QUALITY,
     SZ_AIR_QUALITY_BASIS,
     SZ_BASE,
     SZ_BATTERY_LEVEL,
     SZ_BATTERY_LOW,
+    SZ_BOILER_EXHAUST,
     SZ_BOILER_OUTPUT,
     SZ_BOILER_RETURN,
     SZ_BOILER_SETPOINT,
@@ -91,6 +93,7 @@ from ramses_rf.const import (
     SZ_FLAGS,
     SZ_FLAME_ACTIVE,
     SZ_FLAME_SIGNAL_LOW,
+    SZ_GAS_FLAME_FAULT,
     SZ_HEAT_DEMAND,
     SZ_HEAT_DEMANDS,
     SZ_INDOOR_HUMIDITY,
@@ -98,6 +101,8 @@ from ramses_rf.const import (
     SZ_LANGUAGE,
     SZ_LAST_UPDATED,
     SZ_LOCAL_OVERRIDE,
+    SZ_LOCKOUT_RESET,
+    SZ_LOW_WATER_PRESSURE,
     SZ_MAX_REL_MODULATION,
     SZ_MAX_TEMP,
     SZ_MESSAGE_ID,
@@ -108,6 +113,7 @@ from ramses_rf.const import (
     SZ_MULTIROOM_MODE,
     SZ_NAME,
     SZ_OEM_CODE,
+    SZ_OEM_FAULT_CODE,
     SZ_OPENWINDOW_FUNCTION,
     SZ_OTC_ACTIVE,
     SZ_OUTDOOR_HUMIDITY,
@@ -132,6 +138,7 @@ from ramses_rf.const import (
     SZ_REQUEST_FAN_SPEED,
     SZ_REQUEST_REASON,
     SZ_REQUEST_SPEED,
+    SZ_SERVICE_REQUEST,
     SZ_SETPOINT,
     SZ_SETPOINT_BOUNDS,
     SZ_SETPOINTS,
@@ -151,6 +158,7 @@ from ramses_rf.const import (
     SZ_UNKNOWN,
     SZ_UNTIL,
     SZ_VALUE,
+    SZ_WATER_OVER_TEMPERATURE,
     SZ_WINDOW_OPEN,
     SZ_ZONE_INDEX,
     DevType,
@@ -173,7 +181,11 @@ from ramses_rf.models import (
     UfhState,
     ZoneState,
 )
-from ramses_rf.protocol.opentherm import OtDataId
+from ramses_rf.protocol.opentherm import (
+    SZ_VALUE_HB,
+    SZ_VALUE_LB,
+    OtDataId,
+)
 from ramses_rf.state_projector import (
     _get_dhw_zone_from_msg,
     _route_2411_to_fan,
@@ -198,6 +210,7 @@ RAMSES_HEATING_MAP: Final[dict[Code, tuple[str, str, str]]] = {
 OPENTHERM_FIELD_MAP: Final[dict[OtDataId, tuple[str, str]]] = {
     OtDataId.BOILER_OUTPUT_TEMP: (SZ_TEMPERATURES, SZ_BOILER_OUTPUT),
     OtDataId.BOILER_RETURN_TEMP: (SZ_TEMPERATURES, SZ_BOILER_RETURN),
+    OtDataId.BOILER_EXHAUST_TEMP: (SZ_TEMPERATURES, SZ_BOILER_EXHAUST),
     OtDataId.CONTROL_SETPOINT: (SZ_TEMPERATURES, SZ_BOILER_SETPOINT),
     OtDataId.CH_MAX_SETPOINT: (SZ_TEMPERATURES, SZ_CH_MAX_SETPOINT),
     OtDataId.CH_WATER_PRESSURE: (SZ_BASE, SZ_CH_WATER_PRESSURE),
@@ -590,6 +603,7 @@ class StateProjector:
 
         base_updates: dict[str, Any] = {}
         flag_updates: dict[str, Any] = {}
+        fault_updates: dict[str, Any] = {}
         temperature_updates: dict[str, Any] = {}
         counter_updates: dict[str, Any] = {}
 
@@ -626,6 +640,31 @@ class StateProjector:
                             SZ_COOLING_ACTIVE: bool(value[12]),
                         }
                     )
+                elif msg_id == OtDataId.OEM_FAULTS:
+                    # HB: application-specific fault flags (bits 0-5,
+                    # LSB-first); LB: OEM fault code (no universal "none"
+                    # sentinel — 0x00 on ATAG, 0xFF on Vaillant/VR33).
+                    value_hb = payload.get(SZ_VALUE_HB)
+                    if (
+                        isinstance(value_hb, (list, tuple))
+                        and len(value_hb) >= 6
+                    ):
+                        fault_updates.update(
+                            {
+                                SZ_SERVICE_REQUEST: bool(value_hb[0]),
+                                SZ_LOCKOUT_RESET: bool(value_hb[1]),
+                                SZ_LOW_WATER_PRESSURE: bool(value_hb[2]),
+                                SZ_GAS_FLAME_FAULT: bool(value_hb[3]),
+                                SZ_AIR_PRESSURE_FAULT: bool(value_hb[4]),
+                                SZ_WATER_OVER_TEMPERATURE: bool(value_hb[5]),
+                            }
+                        )
+                    value_lb = payload.get(SZ_VALUE_LB)
+                    if isinstance(value_lb, int) and not isinstance(
+                        value_lb, bool
+                    ):
+                        base_updates[SZ_OEM_FAULT_CODE] = value_lb
+
                 elif value is not None and msg_id in OPENTHERM_FIELD_MAP:
                     category, field_key = OPENTHERM_FIELD_MAP[msg_id]
                     match category:
@@ -693,7 +732,13 @@ class StateProjector:
                         temperature_updates[state_field] = payload[payload_key]
 
         if not any(
-            (base_updates, flag_updates, temperature_updates, counter_updates)
+            (
+                base_updates,
+                flag_updates,
+                fault_updates,
+                temperature_updates,
+                counter_updates,
+            )
         ):
             return
 
@@ -704,6 +749,10 @@ class StateProjector:
         new_flags = current_state.flags
         if flag_updates:
             new_flags = dataclasses.replace(new_flags, **flag_updates)
+
+        new_faults = current_state.faults
+        if fault_updates:
+            new_faults = dataclasses.replace(new_faults, **fault_updates)
 
         new_temps = current_state.temperatures
         if temperature_updates:
@@ -716,6 +765,7 @@ class StateProjector:
         new_state = dataclasses.replace(
             current_state,
             flags=new_flags,
+            faults=new_faults,
             temperatures=new_temps,
             counters=new_counters,
             **base_updates,

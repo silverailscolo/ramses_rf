@@ -8,6 +8,8 @@ from typing import Any, Final
 
 from ramses_rf.const import (
     HEARTBEAT_TIMEOUT_OTB,
+    SZ_AIR_PRESSURE_FAULT,
+    SZ_BOILER_EXHAUST_TEMP,
     SZ_BOILER_OUTPUT_TEMP,
     SZ_BOILER_RETURN_TEMP,
     SZ_BOILER_SETPOINT,
@@ -36,8 +38,12 @@ from ramses_rf.const import (
     SZ_FAULT_PRESENT,
     SZ_FLAME_ACTIVE,
     SZ_FLAME_SIGNAL_LOW,
+    SZ_GAS_FLAME_FAULT,
+    SZ_LOCKOUT_RESET,
+    SZ_LOW_WATER_PRESSURE,
     SZ_MAX_REL_MODULATION,
     SZ_OEM_CODE,
+    SZ_OEM_FAULT_CODE,
     SZ_OPENTHERM_PARAMS,
     SZ_OPENTHERM_SCHEMA,
     SZ_OPENTHERM_STATE,
@@ -46,12 +52,15 @@ from ramses_rf.const import (
     SZ_RAMSES_II_PARAMS,
     SZ_RAMSES_II_SCHEMA,
     SZ_REL_MODULATION_LEVEL,
+    SZ_SERVICE_REQUEST,
     SZ_SUMMER_MODE,
+    SZ_WATER_OVER_TEMPERATURE,
     DevType,
 )
 from ramses_rf.models import (
     DeviceTraits,
     OpenThermCounters,
+    OpenThermFaultFlags,
     OpenThermFlags,
     OpenThermState,
     OpenThermStateDTO,
@@ -116,6 +125,15 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
         return self.opentherm_state.flags
 
     @property
+    def faults(self) -> OpenThermFaultFlags:
+        """Return the immutable OpenTherm application fault flags.
+
+        :return: The OpenThermFaultFlags dataclass.
+        :rtype: OpenThermFaultFlags
+        """
+        return self.opentherm_state.faults
+
+    @property
     def temperatures(self) -> OpenThermTemperatures:
         """Return the immutable OpenTherm temperature telemetry.
 
@@ -132,6 +150,12 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
         :rtype: OpenThermCounters
         """
         return self.opentherm_state.counters
+
+    async def boiler_exhaust_temp(
+        self,
+    ) -> float | None:  # 3220|21, no known RAMSES equivalent
+        """Return boiler exhaust temperature in degrees Celsius."""
+        return self.opentherm_state.temperatures.boiler_exhaust
 
     async def boiler_output_temp(self) -> float | None:  # 3220|19, or 3200
         """Return boiler output temperature in degrees Celsius."""
@@ -186,6 +210,16 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
         if self.opentherm_state and self.opentherm_state.oem_code is not None:
             return float(self.opentherm_state.oem_code)
         return None
+
+    async def oem_fault_code(
+        self,
+    ) -> int | None:  # 3220|05 (LB), no known RAMSES equivalent
+        """Return the OEM fault code from msg_id 0x05.
+
+        The baseline for "no fault" is vendor-specific (0 on ATAG,
+        255 on Vaillant/VR33), so the raw code is exposed as-is.
+        """
+        return self.opentherm_state.oem_fault_code
 
     async def outside_temp(self) -> float | None:  # 3220|1B, 1290
         """Return outside air temperature in degrees Celsius."""
@@ -263,6 +297,42 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
         """Return whether summer mode is active."""
         return self.opentherm_state.flags.summer_mode
 
+    async def service_request(
+        self,
+    ) -> bool | None:  # 3220|05 (HB0), no known RAMSES
+        """Return whether the boiler requests a service."""
+        return self.opentherm_state.faults.service_request
+
+    async def lockout_reset(
+        self,
+    ) -> bool | None:  # 3220|05 (HB1), no known RAMSES
+        """Return whether remote lockout-reset is enabled."""
+        return self.opentherm_state.faults.lockout_reset
+
+    async def low_water_pressure(
+        self,
+    ) -> bool | None:  # 3220|05 (HB2), no known RAMSES
+        """Return whether the boiler reports low water pressure."""
+        return self.opentherm_state.faults.low_water_pressure
+
+    async def gas_flame_fault(
+        self,
+    ) -> bool | None:  # 3220|05 (HB3), no known RAMSES
+        """Return whether the boiler reports a gas/flame fault."""
+        return self.opentherm_state.faults.gas_flame_fault
+
+    async def air_pressure_fault(
+        self,
+    ) -> bool | None:  # 3220|05 (HB4), no known RAMSES
+        """Return whether the boiler reports an air pressure fault."""
+        return self.opentherm_state.faults.air_pressure_fault
+
+    async def water_over_temperature(
+        self,
+    ) -> bool | None:  # 3220|05 (HB5), no known RAMSES
+        """Return whether the boiler reports a water over-temperature."""
+        return self.opentherm_state.faults.water_over_temperature
+
     async def opentherm_schema(self) -> dict[str, Any]:
         """Return OpenTherm topology configuration schema."""
         return {}
@@ -314,6 +384,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
 
         return OpenThermStateDTO(
             flags=state.flags,
+            faults=state.faults,
             temperatures=state.temperatures,
             counters=state.counters,
             ch_water_pressure=state.ch_water_pressure,
@@ -321,6 +392,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
             max_rel_modulation=state.max_rel_modulation,
             rel_modulation_level=state.rel_modulation_level,
             oem_code=state.oem_code,
+            oem_fault_code=state.oem_fault_code,
             last_updated=state.last_updated,
         )
 
@@ -348,6 +420,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
         return {
             **base_status,  # incl. heat_demand
             self.OPENTHERM_STATE: await self.opentherm_state_dto(),
+            SZ_BOILER_EXHAUST_TEMP: await self.boiler_exhaust_temp(),
             SZ_BOILER_OUTPUT_TEMP: await self.boiler_output_temp(),
             SZ_BOILER_RETURN_TEMP: await self.boiler_return_temp(),
             SZ_BOILER_SETPOINT: await self.boiler_setpoint(),
@@ -358,6 +431,7 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_DHW_SETPOINT: await self.dhw_setpoint(),
             SZ_DHW_TEMP: await self.dhw_temp(),
             SZ_OEM_CODE: await self.oem_code(),
+            SZ_OEM_FAULT_CODE: await self.oem_fault_code(),
             SZ_OUTSIDE_TEMP: await self.outside_temp(),
             SZ_REL_MODULATION_LEVEL: await self.rel_modulation_level(),
             SZ_CH_ACTIVE: await self.ch_active(),
@@ -371,4 +445,10 @@ class OtbGateway(HeatDemand):  # OTB (10): 3220 (22D9, others)
             SZ_FLAME_ACTIVE: await self.flame_active(),
             SZ_SUMMER_MODE: await self.summer_mode(),
             SZ_OTC_ACTIVE: await self.otc_active(),
+            SZ_SERVICE_REQUEST: await self.service_request(),
+            SZ_LOCKOUT_RESET: await self.lockout_reset(),
+            SZ_LOW_WATER_PRESSURE: await self.low_water_pressure(),
+            SZ_GAS_FLAME_FAULT: await self.gas_flame_fault(),
+            SZ_AIR_PRESSURE_FAULT: await self.air_pressure_fault(),
+            SZ_WATER_OVER_TEMPERATURE: await self.water_over_temperature(),
         }
