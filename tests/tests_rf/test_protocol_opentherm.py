@@ -111,9 +111,20 @@ def test_constant_data_id_sets() -> None:
     assert OtDataId.DHW_SETPOINT in OPENTHERM_PARAMS_DATA_IDS
     assert OtDataId.CH_MAX_SETPOINT in OPENTHERM_PARAMS_DATA_IDS
 
-    # Ensure modulation IDs are strictly excluded from periodic polling
-    assert OtDataId.REL_MODULATION_LEVEL not in OPENTHERM_POLL_DATA_IDS
+    # 0x0E (write-only) is excluded from periodic polling; 0x11 is polled
+    # alongside the 3EF0/3EF1 broadcast feed (ramses-rf/ramses_cc issue 1180)
+    assert OtDataId.REL_MODULATION_LEVEL in OPENTHERM_POLL_DATA_IDS
     assert OtDataId._0E not in OPENTHERM_POLL_DATA_IDS
+
+    # Extended telemetry IDs added for ramses-rf/ramses_cc issue 1180
+    for data_id in (
+        OtDataId.OEM_FAULTS,
+        OtDataId.DHW_FLOW_RATE,
+        OtDataId.DHW_TEMP,
+        OtDataId.OUTSIDE_TEMP,
+        OtDataId.BOILER_EXHAUST_TEMP,
+    ):
+        assert data_id in OPENTHERM_POLL_DATA_IDS
 
 
 def test_parity_calculations() -> None:
@@ -190,10 +201,11 @@ def test_msg_value_f8_8() -> None:
     assert _msg_value("1400", F8_8) == 20.0
     assert _msg_value("FF00", F8_8) == -1.0
 
-    # Sentinels resolve to None
+    # Only the global sentinel resolves to None; the per-msg_id bogus
+    # echoes are filtered in decode_frame (_INVALID_F8_8_VALUES)
     assert _msg_value("FFFF", F8_8) is None
-    assert _msg_value("47AB", F8_8) is None
-    assert _msg_value("1980", F8_8) is None
+    assert _msg_value("47AB", F8_8) == pytest.approx(71.668)
+    assert _msg_value("1980", F8_8) == 25.5
 
 
 def test_msg_value_validation_and_unsupported_types() -> None:
@@ -317,6 +329,48 @@ def test_decode_frame_read_ack_telemetry() -> None:
     # 10. DataId 0x18 with sentinel "FFFF" -> None
     _, _, data_temp_null, _ = decode_frame(build_frame(0b100, 0x18, "FFFF"))
     assert data_temp_null[SZ_VALUE] is None
+
+
+def test_decode_frame_invalid_value_echoes() -> None:
+    """Bogus values echoed by bridges for unsupported msg_ids are filtered
+    per msg_id (_INVALID_F8_8_VALUES); the same word is a valid reading
+    on other IDs (ramses-rf/ramses_cc issue 1180)."""
+    # Arrange & Act & Assert: observed bogus echoes resolve to None
+    for data_id, bogus in (
+        (0x12, "1980"),  # 25.5 bar CH pressure
+        (0x12, "47AB"),  # 71.67 bar
+        (0x13, "1980"),  # 25.5 L/min DHW flow
+        (0x13, "47AB"),  # 71.67 L/min
+        (0x18, "47AB"),  # 71.67 °C room temp
+        (0x19, "47AB"),  # 71.67 °C boiler temp (bogus echo observed)
+        (0x1A, "47AB"),  # 71.67 °C DHW temp (bogus echo observed)
+        (0x1B, "47AB"),  # 71.67 °C outside temp
+        (0x1C, "47AB"),  # 71.67 °C return temp (bogus echo observed)
+    ):
+        _, _, data, _ = decode_frame(build_frame(0b100, data_id, bogus))
+        assert data[SZ_VALUE] is None, f"id 0x{data_id:02X} {bogus}"
+
+    # 0x1980 on 0x1B is a genuine 25.5 °C outside temperature
+    _, _, data, _ = decode_frame(build_frame(0b100, 0x1B, "1980"))
+    assert data[SZ_VALUE] == 25.5
+
+
+def test_decode_frame_extended_telemetry_ids() -> None:
+    """Data-IDs added for ramses-rf/ramses_cc issue 1180."""
+    # DataId 0x05: fault flags (FLAG8 HB) + OEM fault code (U8 LB)
+    _, data_id, data, _ = decode_frame(build_frame(0b100, 0x05, "0305"))
+    assert data_id == OtDataId.OEM_FAULTS
+    assert data[SZ_VALUE_HB] == [1, 1, 0, 0, 0, 0, 0, 0]
+    assert data[SZ_VALUE_LB] == 5
+
+    # DataId 0x21: boiler exhaust temperature (S16, not f8.8)
+    _, _, data, _ = decode_frame(build_frame(0b100, 0x21, Code._0100))
+    assert data[SZ_VALUE] == 256
+
+    # Unknown-DataId (0b111) / Data-Invalid (0b110) yield a null value
+    for msg_type in (0b110, 0b111):
+        _, _, data, _ = decode_frame(build_frame(msg_type, 0x21, "0000"))
+        assert data[SZ_VALUE] is None
 
 
 def test_decode_frame_fallback_handling() -> None:

@@ -34,6 +34,7 @@ from .state_faults import FaultLogEntry, FaultLogState
 from .state_hvac import HvacState
 from .state_opentherm import (
     OpenThermCounters,
+    OpenThermFaultFlags,
     OpenThermFlags,
     OpenThermState,
     OpenThermTemperatures,
@@ -53,6 +54,7 @@ __all__ = [
     "HvacState",
     "JimStateDTO",
     "OpenThermCounters",
+    "OpenThermFaultFlags",
     "OpenThermFlags",
     "OpenThermState",
     "OpenThermStateDTO",

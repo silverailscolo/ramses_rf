@@ -10,6 +10,7 @@ from ramses_rf.enums import ThermalMode
 
 from .state_opentherm import (
     OpenThermCounters,
+    OpenThermFaultFlags,
     OpenThermFlags,
     OpenThermTemperatures,
 )
@@ -192,6 +193,8 @@ class OpenThermStateDTO:
 
     :param flags: OpenTherm master and slave status flags.
     :type flags: OpenThermFlags
+    :param faults: OpenTherm application-specific fault flags.
+    :type faults: OpenThermFaultFlags
     :param temperatures: Boiler supply, return, DHW, and outside
         temperatures.
     :type temperatures: OpenThermTemperatures
@@ -209,11 +212,14 @@ class OpenThermStateDTO:
     :type rel_modulation_level: float | None
     :param oem_code: OEM diagnostic fault code.
     :type oem_code: str | int | None
+    :param oem_fault_code: OEM fault code (msg_id 0x05 low byte).
+    :type oem_fault_code: int | None
     :param last_updated: Timestamp of last telemetry update.
     :type last_updated: dt | None
     """
 
     flags: OpenThermFlags = field(default_factory=OpenThermFlags)
+    faults: OpenThermFaultFlags = field(default_factory=OpenThermFaultFlags)
     temperatures: OpenThermTemperatures = field(
         default_factory=OpenThermTemperatures
     )
@@ -223,6 +229,7 @@ class OpenThermStateDTO:
     max_rel_modulation: float | None = None
     rel_modulation_level: float | None = None
     oem_code: str | int | None = None
+    oem_fault_code: int | None = None
     last_updated: dt | None = None
 
 
