@@ -25,7 +25,7 @@ class TestIsHgiId:
 
     @pytest.mark.parametrize("value", [None, 123, b"18:000730", ""])
     def test_non_string_values(self, value: object) -> None:
-        assert not is_hgi_id(value)  # type: ignore[arg-type]
+        assert not is_hgi_id(value)
 
 
 class TestAddressHgi:
