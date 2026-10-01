@@ -40,6 +40,7 @@ class OtDataId(IntEnum):
     DHW_TEMP = 0x1A
     OUTSIDE_TEMP = 0x1B
     BOILER_RETURN_TEMP = 0x1C
+    BOILER_EXHAUST_TEMP = 0x21
     DHW_BOUNDS = 0x30
     CH_BOUNDS = 0x31
     DHW_SETPOINT = 0x38
@@ -77,6 +78,7 @@ class OtDataId(IntEnum):
     _1A = 0x1A
     _1B = 0x1B
     _1C = 0x1C
+    _21 = 0x21
     _30 = 0x30
     _31 = 0x31
     _38 = 0x38
@@ -176,15 +178,28 @@ STATUS_DATA_IDS: Final[dict[_OtDataIdT, _MsgStrT]] = {
 
 OPENTHERM_STATUS_DATA_IDS: Final[tuple[int, ...]] = (
     int(OtDataId.STATUS),
-    int(OtDataId.BOILER_OUTPUT_TEMP),
-    int(OtDataId.BOILER_RETURN_TEMP),
     int(OtDataId.CONTROL_SETPOINT),
+    int(OtDataId.OEM_FAULTS),
+    int(OtDataId.REL_MODULATION_LEVEL),
     int(OtDataId.CH_WATER_PRESSURE),
+    int(OtDataId.DHW_FLOW_RATE),
+    int(OtDataId.BOILER_OUTPUT_TEMP),
+    int(OtDataId.DHW_TEMP),
+    int(OtDataId.OUTSIDE_TEMP),
+    int(OtDataId.BOILER_RETURN_TEMP),
+    int(OtDataId.BOILER_EXHAUST_TEMP),
 )
 """OpenTherm status and telemetry Data-IDs queried for bridge devices.
 
-Includes Master/Slave status (0x00), Boiler Flow Temp (0x19),
-Return Temp (0x1C), CH Water Temp Setpoint (0x01) and CH Water Pressure (0x12).
+Includes Master/Slave status (0x00), CH Water Temp Setpoint (0x01),
+Fault Flags & OEM code (0x05), Relative Modulation Level (0x11),
+CH Water Pressure (0x12), DHW Flow Rate (0x13), Boiler Flow Temp (0x19),
+DHW Temp (0x1A), Outside Temp (0x1B), Return Temp (0x1C) and Boiler
+Exhaust Temp (0x21).
+
+Not all boilers/bridges support every Data-ID: unsupported IDs simply
+return Unknown-DataId (or Data-Invalid) and are skipped during ingestion,
+so polling them is harmless (ramses-rf/ramses_cc issue 1180).
 """
 
 OPENTHERM_PARAMS_DATA_IDS: Final[tuple[int, ...]] = (
@@ -201,9 +216,11 @@ OPENTHERM_POLL_DATA_IDS: Final[tuple[int, ...]] = (
 )
 """Combined tuple of all periodic OpenTherm Data-IDs polled for bridge devices.
 
-Excludes Relative Modulation Level (0x11) and Maximum Relative Modulation
-Level (0x0E) to prevent hardware polling jitter on R8810A bridges; active
-modulation demand is authoritatively broadcast by controllers via 3EF0/3EF1.
+Excludes Maximum Relative Modulation Level (0x0E), which is write-only.
+Active modulation demand (0x11) is also authoritatively broadcast by
+controllers via 3EF0/3EF1; it is polled here as well for systems without
+such broadcasts — direct probes against R8810A bridges returned clean
+Read-Acks (ramses-rf/ramses_cc issue 1180).
 """
 
 # Authoritative reference mapping between OpenTherm Data-IDs and RAMSES Opcodes.
@@ -676,6 +693,13 @@ OPENTHERM_MESSAGES: Final[dict[_OtDataIdT, _OtMsgSchemaT]] = {
         VAR: "ReturnWaterTemperature",
         SENSOR: Sensor.TEMPERATURE,
     },
+    OtDataId._21: {  # 33, Boiler Exhaust Temperature
+        EN: "Boiler exhaust temperature",
+        DIR: READ_ONLY,
+        VAL: S16,
+        VAR: "BoilerExhaustTemperature",
+        SENSOR: Sensor.TEMPERATURE,
+    },
     OtDataId._30: {  # 48, DHW Boundaries
         EN: "DHW setpoint boundaries",
         DIR: READ_ONLY,
@@ -888,13 +912,6 @@ _OPENTHERM_MESSAGES: Final[dict[int, _OtMsgSchemaT]] = {
         DIR: READ_ONLY,
         VAL: F8_8,
         VAR: "DHW2Temperature",
-        SENSOR: Sensor.TEMPERATURE,
-    },
-    0x21: {  # 33, Boiler Exhaust Temperature
-        EN: "Boiler exhaust temperature",
-        DIR: READ_ONLY,
-        VAL: S16,
-        VAR: "BoilerExhaustTemperature",
         SENSOR: Sensor.TEMPERATURE,
     },
     0x32: {  # 50, OTC Boundaries
@@ -1204,8 +1221,8 @@ def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
         """Convert a 2-byte hex sequence into an OpenTherm signed fixed-point (f8.8) float.
 
         Interprets the 16-bit word as a signed two's complement integer divided
-        by 256.0. Handles sentinel values (0xFFFF, 0x47AB, 0x1980) representing
-        unsupported or invalid sensor measurements by returning None.
+        by 256.0. Handles the 0xFFFF sentinel, representing an unsupported or
+        invalid measurement, by returning None.
 
         :param high_byte: High byte 2-character hex string.
         :type high_byte: str
@@ -1214,10 +1231,7 @@ def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
         :returns: Floating point decimal value, or None if sentinel.
         :rtype: float | None
         """
-        if high_byte == low_byte == "FF" or high_byte + low_byte in (
-            "47AB",
-            "1980",
-        ):
+        if high_byte == low_byte == "FF":
             return None
         return float(s16(high_byte, low_byte) / 256)
 
@@ -1272,6 +1286,22 @@ def _msg_value(value_sequence: str, value_type: str) -> _DataValueT:
         return result
     except ValueError:
         return None
+
+
+# Bogus f8.8 values observed echoed by bridges for unsupported msg_ids;
+# each is physically impossible for that ID (25.5 bar, 71.67 L/min,
+# 71.67 °C room temp).  Scoped per msg_id because the same word can be a
+# legitimate reading on another ID — 0x1980 is a real 25.5 °C outside
+# temperature (ramses-rf/ramses_cc issue 1180).
+_INVALID_F8_8_VALUES: Final[dict[int, frozenset[str]]] = {
+    int(OtDataId.CH_WATER_PRESSURE): frozenset({"1980", "47AB"}),
+    int(OtDataId.DHW_FLOW_RATE): frozenset({"1980", "47AB"}),
+    int(OtDataId.ROOM_TEMP): frozenset({"47AB"}),
+    int(OtDataId.BOILER_OUTPUT_TEMP): frozenset({"47AB"}),
+    int(OtDataId.DHW_TEMP): frozenset({"47AB"}),
+    int(OtDataId.OUTSIDE_TEMP): frozenset({"47AB"}),
+    int(OtDataId.BOILER_RETURN_TEMP): frozenset({"47AB"}),
+}
 
 
 def decode_frame(
@@ -1367,7 +1397,10 @@ def decode_frame(
         data_value[SZ_VALUE] = _msg_value(frame[4:8], U16)
 
     elif msg_schema[VAL] == F8_8:
-        result: float | None = _msg_value(frame[4:8], msg_schema[VAL])  # type: ignore[assignment]
+        if frame[4:8] in _INVALID_F8_8_VALUES.get(int(data_id), ()):
+            result: float | None = None
+        else:
+            result = _msg_value(frame[4:8], msg_schema[VAL])  # type: ignore[assignment]
 
         if result is None:
             data_value[SZ_VALUE] = result

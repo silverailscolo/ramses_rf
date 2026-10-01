@@ -55,7 +55,8 @@ class OpenThermMsgPayload(PayloadBase):
 
     Domain Notes & Sample Packet Logs:
       # RQs have a context: msg_id and data_id.
-      # Note: data IDs 0x47AB and 0x1980 represent transient invalid ranges.
+      # Note: 0x47AB/0x1980 are bogus echos for some unsupported msg_ids —
+      # they are filtered per msg_id in decode_frame (_INVALID_F8_8_VALUES).
       # NOTE: Unknown-DataId isn't an invalid payload & is useful to train the OTB device
       # 2021-11-05T06:25:20.669382 066 RP --- 10:023327 18:131597 --:------ 3220 005 00C01307C0
       # 2021-11-05T06:35:20.721228 066 RP --- 10:023327 18:131597 --:------ 3220 005 0040130059

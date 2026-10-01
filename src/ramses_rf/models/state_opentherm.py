@@ -24,9 +24,25 @@ class OpenThermFlags:
 
 
 @dataclass(frozen=True)
+class OpenThermFaultFlags:
+    """Immutable representation of OpenTherm application fault flags.
+
+    Mirrors msg_id 0x05 high-byte bits 0-5 (LSB-first).
+    """
+
+    service_request: bool | None = None
+    lockout_reset: bool | None = None
+    low_water_pressure: bool | None = None
+    gas_flame_fault: bool | None = None
+    air_pressure_fault: bool | None = None
+    water_over_temperature: bool | None = None
+
+
+@dataclass(frozen=True)
 class OpenThermTemperatures:
     """Immutable representation of OpenTherm temperatures."""
 
+    boiler_exhaust: float | None = None
     boiler_output: float | None = None
     boiler_return: float | None = None
     boiler_setpoint: float | None = None
@@ -59,6 +75,7 @@ class OpenThermState:
 
     last_updated: dt | None = None
     flags: OpenThermFlags = field(default_factory=OpenThermFlags)
+    faults: OpenThermFaultFlags = field(default_factory=OpenThermFaultFlags)
     temperatures: OpenThermTemperatures = field(
         default_factory=OpenThermTemperatures
     )
@@ -68,3 +85,4 @@ class OpenThermState:
     max_rel_modulation: float | None = None
     rel_modulation_level: float | None = None
     oem_code: int | None = None
+    oem_fault_code: int | None = None
