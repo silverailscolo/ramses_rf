@@ -1411,6 +1411,106 @@ class TestDiscoveryScanPacketHandling:
         assert scan.is_dirty is False
 
 
+class TestDiscoveryScanNewDeviceCallback:
+    """Tests for set_new_device_callback (ramses-rf/ramses_cc issue
+    1257 item 2.1 — real-time discovery notification)."""
+
+    def test_fires_for_new_device(self) -> None:
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        seen: list[DiscoveredDevice] = []
+        scan.set_new_device_callback(seen.append)
+        scan._process_packet(
+            make_dto(src="04:056053", dst="--:------", code=Code._3150)
+        )
+        assert len(seen) == 1
+        assert seen[0].device_id == "04:056053"
+
+    def test_fires_once_per_device(self) -> None:
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        seen: list[DiscoveredDevice] = []
+        scan.set_new_device_callback(seen.append)
+        scan._process_packet(
+            make_dto(src="04:056053", dst="--:------", code=Code._3150)
+        )
+        scan._process_packet(
+            make_dto(src="04:056053", dst="--:------", code=Code._1060)
+        )
+        assert [d.device_id for d in seen] == ["04:056053"]
+
+    def test_fires_for_each_new_device(self) -> None:
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        seen: list[DiscoveredDevice] = []
+        scan.set_new_device_callback(seen.append)
+        scan._process_packet(
+            make_dto(src="04:056053", dst="01:145038", code=Code._3150)
+        )
+        assert sorted(d.device_id for d in seen) == [
+            "01:145038",
+            "04:056053",
+        ]
+
+    def test_not_fired_for_known_device(self) -> None:
+        gwy = make_mock_gateway(known_list={"04:056053": {"class": "TRV"}})
+        scan = DiscoveryScan(gwy)
+        seen: list[DiscoveredDevice] = []
+        scan.set_new_device_callback(seen.append)
+        scan._process_packet(
+            make_dto(src="04:056053", dst="--:------", code=Code._3150)
+        )
+        assert seen == []
+        # device is still tracked in the scan (minimal entry)
+        assert scan.get_device("04:056053") is not None
+
+    def test_not_fired_for_known_hgi(self) -> None:
+        gwy = make_mock_gateway(known_list={"18:130236": {"class": "HGI"}})
+        scan = DiscoveryScan(gwy)
+        seen: list[DiscoveredDevice] = []
+        scan.set_new_device_callback(seen.append)
+        scan._process_packet(
+            make_dto(src="18:130236", dst="--:------", code=Code._22F1)
+        )
+        assert seen == []
+        assert scan.get_device("18:130236") is not None
+
+    def test_fires_for_unknown_hgi(self) -> None:
+        # A foreign HGI is a genuine new discovery
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        seen: list[DiscoveredDevice] = []
+        scan.set_new_device_callback(seen.append)
+        scan._process_packet(
+            make_dto(src="18:999999", dst="--:------", code=Code._22F1)
+        )
+        assert [d.device_id for d in seen] == ["18:999999"]
+
+    def test_callback_exception_does_not_break_scan(self) -> None:
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+
+        def bad_callback(device: DiscoveredDevice) -> None:
+            raise RuntimeError("consumer bug")
+
+        scan.set_new_device_callback(bad_callback)
+        scan._process_packet(
+            make_dto(src="04:056053", dst="--:------", code=Code._3150)
+        )
+        assert scan.get_device("04:056053") is not None
+
+    def test_clear_callback(self) -> None:
+        gwy = make_mock_gateway()
+        scan = DiscoveryScan(gwy)
+        seen: list[DiscoveredDevice] = []
+        scan.set_new_device_callback(seen.append)
+        scan.set_new_device_callback(None)
+        scan._process_packet(
+            make_dto(src="04:056053", dst="--:------", code=Code._3150)
+        )
+        assert seen == []
+
+
 class TestDiscoveryScanGetDevices:
     """Tests for get_devices with filters."""
 

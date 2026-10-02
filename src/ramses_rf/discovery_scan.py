@@ -373,6 +373,9 @@ class DiscoveryScan:
         self._devices: dict[str, DiscoveredDevice] = {}
         self._dirty: bool = False
         self._remove_handler: Callable[[], None] | None = None
+        self._new_device_callback: (
+            Callable[[DiscoveredDevice], None] | None
+        ) = None
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -411,6 +414,26 @@ class DiscoveryScan:
     def clear_dirty(self) -> None:
         """Reset the dirty flag (call after successful persistence)."""
         self._dirty = False
+
+    def set_new_device_callback(
+        self, callback: Callable[[DiscoveredDevice], None] | None
+    ) -> None:
+        """Set the callback invoked when a new device is first seen.
+
+        The callback is invoked synchronously, once per device, at the
+        moment a previously-unknown device is added to the in-memory
+        dict.  It does NOT fire for devices already declared in the
+        schema/known_list when they are first tracked — only genuine
+        new discoveries trigger it.  Consumers needing async work
+        (e.g. ramses_cc scheduling a discovery checkpoint) must
+        schedule it themselves; exceptions raised by the callback are
+        logged and swallowed so packet processing is never disrupted.
+
+        :param callback: Sync callback accepting the new
+            DiscoveredDevice, or None to clear.
+        :type callback: Callable[[DiscoveredDevice], None] | None
+        """
+        self._new_device_callback = callback
 
     # -- known device check --------------------------------------------------
 
@@ -1157,6 +1180,14 @@ class DiscoveryScan:
                 likely_type,
                 device.confidence,
             )
+            if self._new_device_callback is not None:
+                try:
+                    self._new_device_callback(device)
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception(
+                        "DiscoveryScan: new-device callback failed for %s",
+                        device_id,
+                    )
             return
 
         # Existing device — enrich
