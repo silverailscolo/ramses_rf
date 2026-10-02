@@ -1004,8 +1004,14 @@ async def process_state_updates(gateway: Gateway, msg: Message) -> None:
                 # The whole liveness triple updates atomically and only
                 # for a fresher message: an out-of-order cached/late
                 # packet must not roll these back (ramses_cc issue 1278).
-                if _is_newer_dtm(
-                    msg.dtm, getattr(device, "_last_msg_dtm", None)
+                # NB: _mark_src_device_alive() already stamped
+                # _last_msg_dtm with this msg's dtm upstream, so the
+                # stored stamp may EQUAL msg.dtm — allow equality or
+                # _last_msg and _missed_polls are never updated for
+                # live packets (ramses_rf issue 1262).
+                stored_dtm = getattr(device, "_last_msg_dtm", None)
+                if _is_newer_dtm(msg.dtm, stored_dtm) or (
+                    stored_dtm is not None and stored_dtm == msg.dtm
                 ):
                     if hasattr(device, "_last_msg_dtm"):
                         device._last_msg_dtm = msg.dtm

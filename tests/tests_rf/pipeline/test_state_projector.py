@@ -1577,6 +1577,38 @@ async def test_process_state_updates_liveness_is_monotonic() -> None:
     assert fan_dev._missed_polls == 0
 
 
+@pytest.mark.asyncio
+async def test_process_state_updates_prestamped_dtm_still_stamps() -> None:
+    """An equal stored stamp must not block the rest of the triple.
+
+    ``_mark_src_device_alive()`` in the dispatcher stamps
+    ``_last_msg_dtm`` before validation, so when a live packet reaches
+    ``process_state_updates`` the stored stamp already equals
+    ``msg.dtm``; a strictly-newer gate then leaves ``_last_msg`` unset
+    and ``_missed_polls`` counting up forever (ramses_rf issue 1262).
+    """
+    # Arrange — the dispatcher's early liveness stamp has already run
+    fan_dev = _LivenessDevice("32:153289", missed_polls=3)
+    live_msg = MockMessage(
+        code=Code._10E0,
+        verb=Verb.RP,
+        payload={},
+        src_id="32:153289",
+        dst_id="18:130236",
+    )
+    live_msg.payload = None
+    fan_dev._last_msg_dtm = live_msg.dtm
+    gwy_adapter = FakeGatewayAdapter(FakeRegistry(fan_dev))
+
+    # Act — the same live packet completes the state-update path
+    await process_state_updates(gwy_adapter, live_msg)
+
+    # Assert — the remainder of the liveness triple still applies
+    assert fan_dev._last_msg_dtm == live_msg.dtm
+    assert cast(object, fan_dev._last_msg) is live_msg
+    assert fan_dev._missed_polls == 0
+
+
 # --- 22F1 scheme-aware mode remap + last_fan_mode_dtm (issue 1216) ---
 
 
